@@ -1,0 +1,15 @@
+[package]
+name = "lattice-storage"
+description = "Atomic file materialization and crash-recovery journal for Lattice"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+rusqlite.workspace = true
+sha2.workspace = true
+hex.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
