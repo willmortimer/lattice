@@ -1,0 +1,12 @@
+---
+/**
+ * Overrides Starlight's ThemeSelect. Lattice ships a single, coherent dark
+ * theme, so the light/dark toggle is removed and dark is pinned before paint.
+ */
+---
+<script is:inline>
+  document.documentElement.dataset.theme = 'dark';
+  try {
+    localStorage.setItem('starlight-theme', 'dark');
+  } catch (e) {}
+</script>

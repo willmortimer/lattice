@@ -1,0 +1,123 @@
+---
+/**
+ * "One command core": every surface — GUI, CLI, API, MCP, agents — feeds one
+ * command-and-transaction core, which is the only thing that writes the files.
+ * Marching-ant flow lines animate via CSS.
+ */
+const clients = ['Desktop GUI', 'CLI', 'Local API', 'MCP', 'Agents & scripts'];
+const outputs = [
+  { label: '*.md', y: 96 },
+  { label: '*.sqlite', y: 150 },
+  { label: '*.parquet', y: 204 },
+  { label: '*.canvas', y: 258 },
+];
+const W = 640;
+const H = 360;
+const coreX = 258;
+const coreW = 128;
+const coreY = 118;
+const coreH = 124;
+const coreCx = coreX + coreW / 2;
+const coreCy = coreY + coreH / 2;
+const clientX = 24;
+const clientW = 150;
+const clientH = 40;
+const clientGap = 14;
+const clientTop = (H - (clients.length * clientH + (clients.length - 1) * clientGap)) / 2;
+const outX = W - 150;
+const outW = 128;
+---
+
+<svg
+  class="cmd-core"
+  viewBox={`0 0 ${W} ${H}`}
+  fill="none"
+  role="img"
+  aria-label="Every surface feeds one command and transaction core that writes the files"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <style>
+    .cmd-core { width: 100%; height: auto; }
+    .cmd-core .lbl { font-family: var(--l-font-body); font-size: 13.5px; fill: var(--l-text-soft); font-weight: 500; }
+    .cmd-core .mono { font-family: var(--l-font-mono); font-size: 12.5px; fill: var(--l-amber-bright); }
+    .cmd-core .core-lbl { font-family: var(--l-font-display); font-size: 15px; fill: var(--l-text); }
+    .cmd-core .flow { stroke: var(--l-amber); stroke-width: 1.5; stroke-dasharray: 5 7; opacity: 0.75; animation: march 1.1s linear infinite; }
+    .cmd-core .flow.out { stroke-dasharray: 5 7; animation: marchout 1.1s linear infinite; }
+    @keyframes march { to { stroke-dashoffset: -24; } }
+    @keyframes marchout { to { stroke-dashoffset: -24; } }
+    .cmd-core .box { fill: var(--l-panel); stroke: var(--l-border); stroke-width: 1.2; }
+    .cmd-core .core { fill: var(--l-amber-wash); stroke: var(--l-amber); stroke-width: 1.6; }
+  </style>
+
+  <!-- flow lines: clients -> core -->
+  {
+    clients.map((_, i) => {
+      const cy = clientTop + i * (clientH + clientGap) + clientH / 2;
+      const sx = clientX + clientW;
+      return (
+        <path
+          class="flow"
+          d={`M${sx} ${cy} C ${sx + 40} ${cy}, ${coreX - 40} ${coreCy}, ${coreX} ${coreCy}`}
+        />
+      );
+    })
+  }
+  <!-- flow lines: core -> outputs -->
+  {
+    outputs.map((o) => {
+      const sx = coreX + coreW;
+      return (
+        <path
+          class="flow out"
+          d={`M${sx} ${coreCy} C ${sx + 44} ${coreCy}, ${outX - 44} ${o.y + 18}, ${outX} ${o.y + 18}`}
+        />
+      );
+    })
+  }
+
+  <!-- client boxes -->
+  {
+    clients.map((c, i) => {
+      const y = clientTop + i * (clientH + clientGap);
+      return (
+        <g>
+          <rect class="box" x={clientX} y={y} width={clientW} height={clientH} rx="9" />
+          <text class="lbl" x={clientX + clientW / 2} y={y + clientH / 2 + 5} text-anchor="middle">
+            {c}
+          </text>
+        </g>
+      );
+    })
+  }
+
+  <!-- core -->
+  <rect class="core" x={coreX} y={coreY} width={coreW} height={coreH} rx="14" />
+  <circle cx={coreCx} cy={coreCy - 20} r="9" fill="none" stroke="var(--l-amber)" stroke-width="1.5" />
+  <path
+    d={`M${coreCx - 4} ${coreCy - 20} l3 3 l6 -6`}
+    stroke="var(--l-amber-bright)"
+    stroke-width="1.6"
+    fill="none"
+    transform={`translate(-1 0)`}
+  />
+  <text class="core-lbl" x={coreCx} y={coreCy + 12} text-anchor="middle">Command</text>
+  <text class="core-lbl" x={coreCx} y={coreCy + 32} text-anchor="middle">+ Transaction</text>
+
+  <!-- output file chips -->
+  {
+    outputs.map((o) => (
+      <g>
+        <rect class="box" x={outX} y={o.y} width={outW} height={36} rx="8" />
+        <path
+          d={`M${outX + 14} ${o.y + 10} h10 l5 5 v11 h-15 z`}
+          fill="rgba(140,162,196,0.08)"
+          stroke="var(--l-amber)"
+          stroke-width="1.1"
+        />
+        <text class="mono" x={outX + 44} y={o.y + 23} >
+          {o.label}
+        </text>
+      </g>
+    ))
+  }
+</svg>

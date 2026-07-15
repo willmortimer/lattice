@@ -1,0 +1,165 @@
+---
+/**
+ * Animated hero lattice: a fine grid whose node intersections light up and
+ * connect. Pure CSS animation (no SMIL, no JS) so the global
+ * prefers-reduced-motion rule in theme.css neutralises all motion.
+ */
+const cols = 7;
+const rows = 5;
+const gap = 76;
+const ox = 44;
+const oy = 44;
+
+const nodes = [];
+for (let r = 0; r < rows; r++) {
+  for (let c = 0; c < cols; c++) {
+    nodes.push({ x: ox + c * gap, y: oy + r * gap, r, c });
+  }
+}
+// A few "active" nodes that glow brighter, and connecting paths between them.
+// Each entry is [row, col] within rows (0..4) and cols (0..6).
+const active = [
+  [1, 1],
+  [0, 3],
+  [1, 5],
+  [2, 3],
+  [3, 1],
+  [4, 3],
+  [3, 5],
+];
+const idx = (r, c) => nodes.find((n) => n.r === r && n.c === c);
+const links = [
+  [active[0], active[1]],
+  [active[1], active[2]],
+  [active[1], active[3]],
+  [active[3], active[4]],
+  [active[3], active[5]],
+  [active[4], active[6]],
+  [active[4], active[2]],
+];
+const W = ox * 2 + (cols - 1) * gap;
+const H = oy * 2 + (rows - 1) * gap;
+---
+
+<svg
+  class="hero-lattice"
+  viewBox={`0 0 ${W} ${H}`}
+  fill="none"
+  role="img"
+  aria-label="A lattice of nodes lighting up and connecting"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <defs>
+    <radialGradient id="nodeGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="var(--l-amber-bright)" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="var(--l-amber)" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+
+  <!-- faint grid -->
+  <g stroke="var(--l-line-strong)" stroke-width="1">
+    {
+      Array.from({ length: rows }).map((_, r) => (
+        <line x1={ox} y1={oy + r * gap} x2={ox + (cols - 1) * gap} y2={oy + r * gap} />
+      ))
+    }
+    {
+      Array.from({ length: cols }).map((_, c) => (
+        <line x1={ox + c * gap} y1={oy} x2={ox + c * gap} y2={oy + (rows - 1) * gap} />
+      ))
+    }
+  </g>
+
+  <!-- animated connecting paths -->
+  <g stroke="var(--l-amber)" stroke-width="1.6" stroke-linecap="round">
+    {
+      links.map(([a, b], i) => {
+        const na = idx(a[0], a[1]);
+        const nb = idx(b[0], b[1]);
+        return (
+          <line
+            class="link"
+            x1={na.x}
+            y1={na.y}
+            x2={nb.x}
+            y2={nb.y}
+            style={`--d:${(i * 0.42).toFixed(2)}s`}
+          />
+        );
+      })
+    }
+  </g>
+
+  <!-- base nodes -->
+  <g fill="var(--l-faint)">
+    {nodes.map((n) => <circle cx={n.x} cy={n.y} r="2.1" />)}
+  </g>
+
+  <!-- active glowing nodes -->
+  <g>
+    {
+      active.map(([r, c], i) => {
+        const n = idx(r, c);
+        return (
+          <g class="node" style={`--d:${(i * 0.34).toFixed(2)}s`}>
+            <circle cx={n.x} cy={n.y} r="16" fill="url(#nodeGlow)" class="node-glow" />
+            <circle cx={n.x} cy={n.y} r="3.4" fill="var(--l-amber-bright)" />
+          </g>
+        );
+      })
+    }
+  </g>
+</svg>
+
+<style>
+  .hero-lattice {
+    width: 100%;
+    height: auto;
+  }
+  .link {
+    stroke-dasharray: 220;
+    stroke-dashoffset: 220;
+    opacity: 0;
+    animation: draw 2.6s ease forwards, linkpulse 4s ease-in-out infinite;
+    animation-delay: var(--d), calc(var(--d) + 2.6s);
+  }
+  @keyframes draw {
+    0% {
+      stroke-dashoffset: 220;
+      opacity: 0;
+    }
+    30% {
+      opacity: 0.85;
+    }
+    100% {
+      stroke-dashoffset: 0;
+      opacity: 0.85;
+    }
+  }
+  @keyframes linkpulse {
+    0%,
+    100% {
+      opacity: 0.45;
+    }
+    50% {
+      opacity: 0.95;
+    }
+  }
+  .node-glow {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: glowpulse 3.4s ease-in-out infinite;
+    animation-delay: var(--d);
+  }
+  @keyframes glowpulse {
+    0%,
+    100% {
+      opacity: 0.35;
+      transform: scale(0.7);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.1);
+    }
+  }
+</style>
