@@ -1,0 +1,155 @@
+/* ============================================================================
+   Lattice — Starlight theme override
+   Re-skins the docs so they share the marketing identity: blue-slate ground,
+   amber accent, Fraunces display + Space Grotesk body + JetBrains mono.
+   ========================================================================== */
+
+:root,
+:root[data-theme='dark'] {
+  /* Accent (amber) ------------------------------------------------------- */
+  --sl-color-accent-low: #3a2905;
+  --sl-color-accent: #d98615;
+  --sl-color-accent-high: #ffce8a;
+
+  /* Neutral blue-slate scale -------------------------------------------- */
+  --sl-color-white: #f2f5fb;
+  --sl-color-gray-1: #e7ecf5;
+  --sl-color-gray-2: #b9c2d4;
+  --sl-color-gray-3: #8791a6;
+  --sl-color-gray-4: #5f6a80;
+  --sl-color-gray-5: #313a4d;
+  --sl-color-gray-6: #1a2233;
+  --sl-color-gray-7: #141b29;
+
+  --sl-color-black: #0a0d13;
+  --sl-color-bg: #0a0d13;
+  --sl-color-bg-nav: color-mix(in srgb, #0a0d13 82%, transparent);
+  --sl-color-bg-sidebar: #0c1017;
+  --sl-color-bg-inline-code: rgba(245, 166, 35, 0.1);
+  --sl-color-hairline: rgba(140, 162, 196, 0.12);
+  --sl-color-hairline-light: rgba(140, 162, 196, 0.14);
+  --sl-color-hairline-shade: rgba(140, 162, 196, 0.1);
+
+  --sl-color-text: #cdd5e3;
+  --sl-color-text-accent: #ffce8a;
+
+  /* Typography ----------------------------------------------------------- */
+  --sl-font: 'Space Grotesk Variable', 'Space Grotesk', system-ui, sans-serif;
+  --sl-font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, Menlo, monospace;
+
+  --sl-shadow-md: 0 20px 50px -30px rgba(0, 0, 0, 0.85);
+  --sl-shadow-lg: 0 40px 80px -40px rgba(0, 0, 0, 0.85);
+}
+
+/* Subtle lattice grid behind the docs, matching the marketing backdrop. */
+body {
+  background-color: var(--sl-color-bg);
+  background-image:
+    linear-gradient(rgba(140, 162, 196, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(140, 162, 196, 0.05) 1px, transparent 1px);
+  background-size: 34px 34px;
+  background-attachment: fixed;
+}
+
+/* Display serif for docs headings. */
+.sl-markdown-content h1,
+.sl-markdown-content h2,
+.sl-markdown-content h3,
+.content-panel h1,
+h1#_top {
+  font-family: 'Fraunces Variable', 'Fraunces', Georgia, serif;
+  font-weight: 560;
+  letter-spacing: -0.015em;
+}
+.sl-markdown-content h1,
+.content-panel h1,
+h1#_top {
+  font-size: clamp(30px, 4vw, 44px);
+  line-height: 1.08;
+}
+
+/* Header bar */
+.header {
+  border-bottom: 1px solid var(--sl-color-hairline);
+  backdrop-filter: blur(12px);
+}
+.site-title {
+  font-family: 'Fraunces Variable', 'Fraunces', Georgia, serif;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-size: 20px;
+  color: var(--sl-color-white);
+}
+
+/* Sidebar */
+.sidebar {
+  border-inline-end: 1px solid var(--sl-color-hairline);
+}
+.sidebar-content a[aria-current='page'],
+.sidebar-content a[aria-current='page']:hover {
+  background: rgba(245, 166, 35, 0.13);
+  color: var(--sl-color-text-accent);
+  border-radius: 7px;
+  font-weight: 600;
+}
+.sidebar-content a:hover {
+  border-radius: 7px;
+}
+.sidebar-content summary .group-label span,
+.sidebar-content h2 {
+  font-family: var(--sl-font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-4);
+}
+
+/* Links in prose */
+.sl-markdown-content a:not(:where(.not-content *)) {
+  color: var(--sl-color-text-accent);
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(245, 166, 35, 0.4);
+}
+.sl-markdown-content a:hover:not(:where(.not-content *)) {
+  text-decoration-color: var(--sl-color-accent);
+}
+
+/* Inline code + file paths feel product-native. */
+.sl-markdown-content code:not(:where(.not-content *)) {
+  color: var(--sl-color-accent-high);
+  border: 1px solid rgba(245, 166, 35, 0.2);
+  border-radius: 5px;
+  padding: 0.1em 0.4em;
+  font-size: 0.86em;
+}
+.sl-markdown-content pre {
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: 10px;
+}
+.sl-markdown-content pre code {
+  border: 0;
+  color: inherit;
+  padding: 0;
+}
+
+/* Blockquotes as editorial callouts */
+.sl-markdown-content blockquote:not(:where(.not-content *)) {
+  border-inline-start: 2px solid var(--sl-color-accent);
+  background: rgba(245, 166, 35, 0.05);
+  border-radius: 0 8px 8px 0;
+  padding: 2px 18px;
+  font-family: 'Fraunces Variable', 'Fraunces', Georgia, serif;
+  font-style: italic;
+  color: var(--sl-color-gray-1);
+}
+
+/* Tables */
+.sl-markdown-content th {
+  color: var(--sl-color-white);
+  border-bottom: 1px solid var(--sl-color-hairline-light);
+}
+
+/* Hero (on the docs index, if used) */
+.hero .tagline {
+  color: var(--sl-color-gray-2);
+}
