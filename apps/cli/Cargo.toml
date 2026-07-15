@@ -1,0 +1,22 @@
+[package]
+name = "lattice-cli"
+description = "Headless CLI for Lattice workspaces"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "lattice"
+path = "src/main.rs"
+
+[dependencies]
+lattice-core.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"
