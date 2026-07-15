@@ -1,0 +1,249 @@
+:root {
+  color-scheme: dark;
+  --bg: #1a1a1d;
+  --bg-elevated: #202023;
+  --bg-hover: #2a2a2e;
+  --border: #333338;
+  --text: #e6e6e8;
+  --text-muted: #8b8b92;
+  --accent: #5b8cff;
+  --accent-text: #0b0d14;
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+/* Empty state */
+
+.empty-state {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.primary-button {
+  background: var(--accent);
+  color: var(--accent-text);
+  border: none;
+  border-radius: 6px;
+  padding: 10px 18px;
+  font-weight: 600;
+}
+
+.primary-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.secondary-button {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  width: 100%;
+}
+
+.secondary-button:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+.error-text {
+  color: #ff8080;
+  font-size: 13px;
+  max-width: 480px;
+  text-align: center;
+}
+
+/* App shell */
+
+.shell {
+  display: flex;
+  height: 100%;
+}
+
+.sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  background: var(--bg-elevated);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.workspace-title {
+  padding: 14px 12px;
+  font-weight: 600;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.resource-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.resource-list-empty {
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 10px 8px;
+}
+
+.resource-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 8px;
+  color: var(--text);
+  text-align: left;
+  width: 100%;
+}
+
+.resource-item:hover {
+  background: var(--bg-hover);
+}
+
+.resource-item-active {
+  background: var(--bg-hover);
+  outline: 1px solid var(--border);
+}
+
+.resource-kind-badge {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+.resource-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+}
+
+.sidebar-footer {
+  padding: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.main-pane {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 40px;
+}
+
+.placeholder {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* Markdown rendering */
+
+.markdown-body {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3 {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+
+.markdown-body a {
+  color: var(--accent);
+}
+
+.markdown-body code {
+  font-family: var(--font-mono);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 0.9em;
+}
+
+.markdown-body pre {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  overflow-x: auto;
+}
+
+.markdown-body pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.markdown-body blockquote {
+  border-left: 3px solid var(--border);
+  margin: 0;
+  padding-left: 14px;
+  color: var(--text-muted);
+}
+
+.markdown-body table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.markdown-body img {
+  max-width: 100%;
+}

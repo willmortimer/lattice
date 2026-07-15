@@ -1,0 +1,18 @@
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+// Tauri expects a fixed dev server port and a build that ignores its own
+// src-tauri directory. See https://v2.tauri.app/start/frontend/vite/
+export default defineConfig(async () => ({
+  plugins: [react()],
+
+  clearScreen: false,
+  server: {
+    port: 5173,
+    strictPort: true,
+  },
+  envPrefix: ["VITE_", "TAURI_"],
+  build: {
+    sourcemap: !!process.env.TAURI_ENV_DEBUG,
+  },
+}));
