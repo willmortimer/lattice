@@ -10,7 +10,6 @@ node_modules/
 dist/
 *.tsbuildinfo
 .astro/
-pnpm-lock.yaml
 
 # Site: generated docs content (synced from /docs by scripts/sync-docs.mjs)
 site/src/content/docs/
