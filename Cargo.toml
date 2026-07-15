@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "apps/cli",
     "crates/lattice-core",
+    "apps/desktop/src-tauri",
 ]
 
 [workspace.package]
