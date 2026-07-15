@@ -38,6 +38,11 @@ With Nix (recommended):
 nix develop        # rust toolchain, node, pnpm, tauri prerequisites
 ```
 
+Requires flakes; if not enabled globally, add
+`experimental-features = nix-command flakes` to `~/.config/nix/nix.conf`
+or pass `--extra-experimental-features 'nix-command flakes'`. Direnv users
+can `direnv allow` to load the shell automatically via `.envrc`.
+
 Or bring your own toolchain: stable Rust, Node.js ≥ 22, pnpm ≥ 9, and Xcode
 Command Line Tools on macOS (required for Tauri bundling either way).
 
