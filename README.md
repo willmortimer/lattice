@@ -46,6 +46,10 @@ can `direnv allow` to load the shell automatically via `.envrc`.
 Common tasks are exposed as flake apps (self-contained — they bring their
 own toolchain, so they work outside the dev shell too):
 
+Inside the dev shell the same tasks are plain commands (`lattice-test`,
+`lattice-check`, …). Full workflow guide: [docs/dev/nix-workflows.md](docs/dev/nix-workflows.md).
+Environment variables (currently none required): [docs/dev/environment.md](docs/dev/environment.md).
+
 ```sh
 nix run .#test           # cargo test --workspace
 nix run .#lint           # clippy -D warnings + rustfmt check

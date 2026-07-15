@@ -30,32 +30,26 @@
         openssl
       ];
 
-      # A task is a shell script run with the full toolchain on PATH:
-      #   nix run .#<name>
-      mkTasks = pkgs: tasks:
-        builtins.mapAttrs
-          (name: script: {
-            type = "app";
-            program = pkgs.lib.getExe (pkgs.writeShellApplication {
-              name = "lattice-${name}";
-              runtimeInputs = toolchain pkgs;
-              text = script;
-            });
-          })
-          tasks;
-    in
-    {
-      devShells = forAllSystems (pkgs: {
-        default = pkgs.mkShell {
-          packages = toolchain pkgs;
-          shellHook = ''
-            echo "lattice dev shell — rust $(rustc --version | cut -d' ' -f2), node $(node --version), pnpm $(pnpm --version)"
-            echo "tasks: nix run .#{test,lint,fmt,check,site-dev,site-build,desktop-dev,desktop-build,docs-sync}"
-          '';
-        };
-      });
+      # Each task is a shell script with the full toolchain on PATH. They are
+      # exposed twice: as flake apps (`nix run .#<name>`) and as `lattice-<name>`
+      # commands inside the dev shell (which need no flakes-enabled nix at all).
+      taskScripts = pkgs: builtins.mapAttrs
+        (name: script: pkgs.writeShellApplication {
+          name = "lattice-${name}";
+          runtimeInputs = toolchain pkgs;
+          text = script;
+        })
+        (tasks pkgs);
 
-      apps = forAllSystems (pkgs: mkTasks pkgs {
+      mkApps = pkgs:
+        builtins.mapAttrs
+          (name: drv: {
+            type = "app";
+            program = pkgs.lib.getExe drv;
+          })
+          (taskScripts pkgs);
+
+      tasks = pkgs: {
         # Rust workspace
         test = "cargo test --workspace";
         lint = ''
@@ -82,6 +76,20 @@
         # Desktop shell
         desktop-dev = "pnpm install && pnpm --filter @lattice/desktop tauri dev";
         desktop-build = "pnpm install && pnpm --filter @lattice/desktop tauri build --no-bundle";
+      };
+    in
+    {
+      devShells = forAllSystems (pkgs: {
+        default = pkgs.mkShell {
+          packages = toolchain pkgs ++ builtins.attrValues (taskScripts pkgs);
+          shellHook = ''
+            echo "lattice dev shell — rust $(rustc --version | cut -d' ' -f2), node $(node --version), pnpm $(pnpm --version)"
+            echo "tasks: lattice-{test,lint,fmt,check,site-dev,site-build,desktop-dev,desktop-build,docs-sync}"
+            echo "       (equivalently: nix run .#<task> from anywhere)"
+          '';
+        };
       });
+
+      apps = forAllSystems mkApps;
     };
 }
