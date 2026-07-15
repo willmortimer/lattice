@@ -10,6 +10,11 @@ node_modules/
 dist/
 *.tsbuildinfo
 .astro/
+pnpm-lock.yaml
+
+# Site: generated docs content (synced from /docs by scripts/sync-docs.mjs)
+site/src/content/docs/
+site/src/generated/
 
 # Tauri
 apps/desktop/src-tauri/gen/
