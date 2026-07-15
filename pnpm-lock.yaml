@@ -10,6 +10,15 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@fontsource-variable/fraunces':
+        specifier: ^5.2.9
+        version: 5.2.9
+      '@fontsource-variable/jetbrains-mono':
+        specifier: ^5.2.8
+        version: 5.2.8
+      '@fontsource-variable/space-grotesk':
+        specifier: ^5.2.10
+        version: 5.2.10
       '@tauri-apps/api':
         specifier: ^2.11.1
         version: 2.11.1
