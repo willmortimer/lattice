@@ -1,0 +1,34 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Rust
+target/
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+.astro/
+
+# Tauri
+apps/desktop/src-tauri/gen/
+
+# Nix / direnv
+.direnv/
+result
+
+# Editors
+.idea/
+*.swp
+
+# Local env & secrets
+.env
+.env.*
+!.env.example
+
+# Lattice workspace operational state (test workspaces)
+.lattice/
+
+# Logs
+*.log
