@@ -1,0 +1,97 @@
+---
+/**
+ * "A real directory": a stylized workspace file tree with resource-kind badges.
+ * Rows fade/slide in via CSS when the figure enters view (staggered).
+ */
+const rows = [
+  { indent: 0, name: 'Engineering Workspace/', kind: 'folder', badge: '' },
+  { indent: 1, name: 'lattice.yaml', kind: 'manifest', badge: 'manifest' },
+  { indent: 1, name: 'README.md', kind: 'doc', badge: 'markdown' },
+  { indent: 1, name: 'Notes/', kind: 'folder', badge: 'pages' },
+  { indent: 1, name: 'CRM.data/', kind: 'data', badge: 'data app · sqlite' },
+  { indent: 1, name: 'Usage.dataset/', kind: 'dataset', badge: 'parquet · duckdb' },
+  { indent: 1, name: 'Strategy.canvas', kind: 'canvas', badge: 'json canvas' },
+  { indent: 1, name: 'Analysis.ipynb', kind: 'notebook', badge: 'jupyter' },
+  { indent: 1, name: 'Architecture.ink/', kind: 'ink', badge: 'ink · arrow' },
+  { indent: 1, name: '.lattice/', kind: 'hidden', badge: 'derived' },
+];
+const rowH = 34;
+const top = 22;
+const W = 520;
+const H = top * 2 + rows.length * rowH;
+
+function icon(kind) {
+  // returns a small path/shape descriptor per kind
+  return kind;
+}
+---
+
+<svg
+  class="dir-tree"
+  viewBox={`0 0 ${W} ${H}`}
+  fill="none"
+  role="img"
+  aria-label="A workspace shown as an ordinary directory of open files"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <style>
+    .dir-tree { width: 100%; height: auto; }
+    .dir-tree .fname { font-family: var(--l-font-mono); font-size: 14px; fill: var(--l-text-soft); }
+    .dir-tree .froot { fill: var(--l-text); }
+    .dir-tree .fbadge { font-family: var(--l-font-mono); font-size: 10.5px; letter-spacing: 0.04em; fill: var(--l-muted); }
+    .dir-tree .row { opacity: 0; transform: translateX(-10px); }
+    .reveal.in .dir-tree .row { animation: rowin 0.5s ease forwards; }
+    @keyframes rowin { to { opacity: 1; transform: none; } }
+  </style>
+
+  {
+    rows.map((row, i) => {
+      const y = top + i * rowH;
+      const x = 22 + row.indent * 26;
+      const cy = y + rowH / 2;
+      const isFolder = row.name.endsWith('/');
+      const accent = ['data', 'dataset', 'canvas', 'notebook', 'ink'].includes(row.kind);
+      return (
+        <g class="row" style={`animation-delay:${(i * 0.06).toFixed(2)}s`}>
+          {i > 0 && (
+            <line
+              x1={22 + 6}
+              y1={y - rowH + rowH / 2}
+              x2={22 + 6}
+              y2={cy}
+              stroke="var(--l-line-strong)"
+              stroke-width="1"
+            />
+          )}
+          {row.indent > 0 && (
+            <line x1={28} y1={cy} x2={x - 6} y2={cy} stroke="var(--l-line-strong)" stroke-width="1" />
+          )}
+          {/* icon */}
+          {isFolder ? (
+            <path
+              d={`M${x} ${cy - 6} h7 l2 3 h9 v10 h-18 z`}
+              fill={accent ? 'var(--l-amber-wash)' : 'rgba(140,162,196,0.12)'}
+              stroke={accent ? 'var(--l-amber)' : 'var(--l-muted)'}
+              stroke-width="1.1"
+            />
+          ) : (
+            <path
+              d={`M${x} ${cy - 7} h11 l5 5 v11 h-16 z`}
+              fill="rgba(140,162,196,0.08)"
+              stroke={accent ? 'var(--l-amber)' : 'var(--l-muted)'}
+              stroke-width="1.1"
+            />
+          )}
+          <text class={`fname ${row.indent === 0 ? 'froot' : ''}`} x={x + 26} y={cy + 5}>
+            {row.name}
+          </text>
+          {row.badge && (
+            <text class="fbadge" x={W - 22} y={cy + 4} text-anchor="end">
+              {row.badge}
+            </text>
+          )}
+        </g>
+      );
+    })
+  }
+</svg>

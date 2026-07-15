@@ -1,0 +1,307 @@
+---
+import Layout from '../layouts/Layout.astro';
+import HeroLattice from '../components/HeroLattice.astro';
+import DirectoryTree from '../components/DirectoryTree.astro';
+import CommandCore from '../components/CommandCore.astro';
+import DataChart from '../components/DataChart.astro';
+
+const promises = [
+  {
+    title: 'The workspace is a real directory',
+    body: 'Canonical content lives in Finder, Explorer, a terminal, Git, and any editor. Not a database you can only reach through one app.',
+    icon: 'folder',
+  },
+  {
+    title: 'Offline is the normal state',
+    body: 'Open, edit, search, query, draw, and run approved local tasks with no server in the loop. Connectivity is an option, never a requirement.',
+    icon: 'offline',
+  },
+  {
+    title: 'Every GUI action is a command',
+    body: 'Desktop UI, CLI, local API, MCP, scripts, and agents share one semantic mutation core — with transactions, review, and history.',
+    icon: 'command',
+  },
+  {
+    title: 'No lock-in, only open formats',
+    body: 'Markdown, SQLite, Parquet, JSON Canvas, and ipynb. Rich composition references independent resources instead of trapping them.',
+    icon: 'open',
+  },
+  {
+    title: 'Large data is first-class',
+    body: 'SQLite for mutable application data, Parquet and DuckDB for analytics, Arrow to move tabular data fast — right on your machine.',
+    icon: 'data',
+  },
+  {
+    title: 'AI-legible, no bundled brain',
+    body: 'Legible and editable by any external agent through files, commands, CLI, API, and MCP — with no proprietary model or hidden memory graph.',
+    icon: 'ai',
+  },
+];
+
+const thesis = [
+  { who: 'Obsidian', what: "files" },
+  { who: 'OneNote', what: 'canvas' },
+  { who: 'Notion', what: 'polish' },
+  { who: 'Airtable', what: 'data model' },
+  { who: 'Jupyter', what: 'compute' },
+  { who: 'Power BI', what: 'dashboards' },
+];
+
+const phases = [
+  { n: 'Phase 0', title: 'Specifications & headless core', body: 'Manifests, command + transaction model, permissions, Rust storage, CLI.', current: true },
+  { n: 'Phase 1', title: 'Fast local notebook', body: 'Tauri shell, editor, links, backlinks, basic canvas, external-edit reconciliation.' },
+  { n: 'Phase 2', title: 'Data applications', body: 'SQLite, typed fields and relations, grid, board/list/gallery/calendar/form views.' },
+  { n: 'Phase 3', title: 'Analytical data', body: 'Native DuckDB, Parquet datasets, Arrow transport, charts and dashboards.' },
+  { n: 'Phase 4', title: 'Programmable workspace', body: 'Local HTTP API, MCP server, proposed transactions, Python, Jupyter, artifacts.' },
+  { n: 'Phase 5', title: 'Automation & daemon', body: 'Typed events, workflow YAML, scheduler, latticed, durable jobs and lineage.' },
+  { n: 'Phase 6', title: 'Remote data & BI', body: 'ADBC connectors, live/extract/composite modes, semantic models, cross-filtering.' },
+  { n: 'Phase 7', title: 'Lattice Apps & publishing', body: 'Full app packages, UI kit, static and connected publishing, docs adapters.' },
+  { n: 'Phase 8', title: 'Plugins & capability packs', body: 'WASI component runtime, WIT interfaces, sandboxed UI, registry, packs.' },
+  { n: 'Phase 9', title: 'Sync & collaboration', body: 'Operation outbox, Rust sync server, text/canvas collaboration, team permissions.' },
+  { n: 'Phase 10', title: 'Mobile & native ink', body: 'iPad reader/editor, PencilKit overlay, Lattice Ink, handwriting search.' },
+];
+---
+
+<Layout>
+  <!-- ===================== HERO ===================== -->
+  <section class="hero">
+    <div class="wrap">
+      <div class="hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">The open information studio</p>
+          <h1>
+            One workspace for<br />everything, kept as<br /><span class="accent">plain files.</span>
+          </h1>
+          <p class="lede">
+            Lattice is a fast, local-first, open-native workspace for documents, relational data
+            apps, analytical datasets, notebooks, canvases, ink, dashboards, and inspectable
+            automations — all in a real directory, driven by one command core.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="/docs/">Read the docs</a>
+            <a class="btn btn-ghost" href="/#directory">See how it works</a>
+          </div>
+          <div class="hero-meta">
+            <span class="path">lattice.yaml</span>
+            <span class="path">CRM.data/</span>
+            <span class="path">Usage.dataset/</span>
+            <span class="path">Strategy.canvas</span>
+          </div>
+        </div>
+        <div class="hero-figure">
+          <HeroLattice />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== PROMISES ===================== -->
+  <section class="section" id="promises">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <p class="eyebrow">Core promises</p>
+        <h2>The best ideas from many tools, without inheriting their limits.</h2>
+        <p>
+          Lattice combines normal files, spatial canvas, polished editing, a relational data model,
+          real compute, and dashboards — composed through open formats and one semantic runtime.
+        </p>
+      </div>
+      <div class="card-grid reveal">
+        {
+          promises.map((p) => (
+            <article class="card">
+              <svg class="card-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                {p.icon === 'folder' && (
+                  <path d="M3 6 h6 l2 2 h10 v10 a1 1 0 0 1 -1 1 H4 a1 1 0 0 1 -1 -1 Z" stroke="currentColor" stroke-width="1.5" />
+                )}
+                {p.icon === 'offline' && (
+                  <g stroke="currentColor" stroke-width="1.5">
+                    <path d="M4 13 a8 8 0 0 1 16 0" />
+                    <path d="M8 16 a5 5 0 0 1 8 0" />
+                    <circle cx="12" cy="19" r="1.2" fill="currentColor" stroke="none" />
+                  </g>
+                )}
+                {p.icon === 'command' && (
+                  <g stroke="currentColor" stroke-width="1.5">
+                    <rect x="4" y="4" width="16" height="16" rx="3" />
+                    <path d="M8 10 l3 2 l-3 2 M13 14 h4" />
+                  </g>
+                )}
+                {p.icon === 'open' && (
+                  <g stroke="currentColor" stroke-width="1.5">
+                    <path d="M7 8 a5 5 0 0 1 0 8 M17 16 a5 5 0 0 1 0 -8" />
+                    <path d="M9 12 h6" />
+                  </g>
+                )}
+                {p.icon === 'data' && (
+                  <g stroke="currentColor" stroke-width="1.5">
+                    <ellipse cx="12" cy="6" rx="7" ry="3" />
+                    <path d="M5 6 v12 a7 3 0 0 0 14 0 V6 M5 12 a7 3 0 0 0 14 0" />
+                  </g>
+                )}
+                {p.icon === 'ai' && (
+                  <g stroke="currentColor" stroke-width="1.5">
+                    <rect x="5" y="7" width="14" height="11" rx="2.5" />
+                    <path d="M12 4 v3 M9 12 h.01 M15 12 h.01 M9 15 h6" />
+                  </g>
+                )}
+              </svg>
+              <h3>{p.title}</h3>
+              <p>{p.body}</p>
+            </article>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== DIRECTORY ===================== -->
+  <section class="section" id="directory">
+    <div class="wrap">
+      <div class="feature">
+        <div class="feature-body reveal">
+          <p class="eyebrow">A real directory</p>
+          <h3>Your workspace is files you already understand.</h3>
+          <p>
+            Canonical content is visible in Finder, Explorer, terminals, Git, editors, and backup
+            tools. Different information keeps an appropriate native format — Markdown is never
+            forced to impersonate a database, canvas, notebook, or app.
+          </p>
+          <ul class="feature-list">
+            <li>Names and paths communicate purpose, with a readable manifest and README.</li>
+            <li>Rich resources ship portable previews and honest fallbacks.</li>
+            <li>Deleting the hidden <span class="path">.lattice/</span> never destroys your work.</li>
+          </ul>
+        </div>
+        <div class="figure reveal">
+          <DirectoryTree />
+          <p class="figure-caption">An illustrative Lattice workspace on disk</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== COMMAND CORE ===================== -->
+  <section class="section" id="command">
+    <div class="wrap">
+      <div class="feature reverse">
+        <div class="feature-body reveal">
+          <p class="eyebrow">One command core</p>
+          <h3>Every surface speaks the same semantic language.</h3>
+          <p>
+            Desktop UI, CLI, local API, MCP, scripts, workflows, plugins, and agents all flow
+            through one command-and-transaction core. That core is the only thing that writes your
+            files — so changes are consistent, reviewable, and reversible.
+          </p>
+          <ul class="feature-list">
+            <li>Proposed transactions can be reviewed before they touch disk.</li>
+            <li>Automation, permissions, logs, and lineage stay visible and versionable.</li>
+            <li>External edits are reconciled as honest revisions, not silent overwrites.</li>
+          </ul>
+        </div>
+        <div class="figure reveal">
+          <CommandCore />
+          <p class="figure-caption">GUI · CLI · API · MCP · agents → core → files</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== DATA ===================== -->
+  <section class="section" id="data">
+    <div class="wrap">
+      <div class="feature">
+        <div class="feature-body reveal">
+          <p class="eyebrow">Large data is first-class</p>
+          <h3>Analysis far beyond SaaS table limits — locally.</h3>
+          <p>
+            SQLite serves mutable application data; Parquet and DuckDB serve analytical workloads;
+            Arrow moves tabular data efficiently between them. Datasets that would hit a hosted
+            row ceiling stay fast on your own machine.
+          </p>
+          <ul class="feature-list">
+            <li>Partitioned Parquet datasets with a queryable semantic model.</li>
+            <li>DuckDB queries and Vega-Lite charts over local and remote sources.</li>
+            <li>Annotation overlays keep analysis attached without mutating source data.</li>
+          </ul>
+        </div>
+        <div class="figure reveal">
+          <DataChart />
+          <p class="figure-caption">Illustrative — not a benchmark</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== THESIS ===================== -->
+  <section class="section" id="thesis">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <p class="eyebrow">The missing intersection</p>
+        <h2>The product thesis, in one row.</h2>
+        <p>
+          Not another block editor with more blocks. Lattice occupies the intersection that no
+          single tool covers today.
+        </p>
+      </div>
+      <div class="thesis reveal">
+        {
+          thesis.map((t) => (
+            <div class="cell">
+              <p class="who">{t.who}</p>
+              <p class="what">
+                <b>{t.what}</b>
+              </p>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== ROADMAP ===================== -->
+  <section class="section" id="roadmap">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <p class="eyebrow">Roadmap</p>
+        <h2>Architecture commitments, staged delivery.</h2>
+        <p>
+          Long-term capabilities are documented now so early choices never foreclose them. Eleven
+          phases move from a headless core to native ink on mobile.
+        </p>
+      </div>
+      <div class="roadmap-scroll reveal">
+        <div class="roadmap">
+          {
+            phases.map((p) => (
+              <div class={`phase ${p.current ? 'done' : ''}`}>
+                <span class="dot" />
+                <p class="pnum">{p.n}</p>
+                <h4>{p.title}</h4>
+                <p>{p.body}</p>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== CTA ===================== -->
+  <section class="section" id="cta">
+    <div class="wrap">
+      <div class="cta-band reveal">
+        <p class="eyebrow" style="justify-content:center;">Specification-stage · open by design</p>
+        <h2>Read the architecture behind Lattice.</h2>
+        <p>
+          Thirty-eight architecture documents and a full set of decision records describe the
+          formats, command model, data engine, and roadmap in depth.
+        </p>
+        <div class="cta-actions">
+          <a class="btn btn-primary" href="/docs/">Open the documentation</a>
+          <a class="btn btn-ghost" href="/docs/decisions/">Browse decisions</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</Layout>
