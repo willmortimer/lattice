@@ -1,0 +1,16 @@
+[package]
+name = "lattice-core"
+description = "Workspace discovery, manifests, resource model, and validation for Lattice"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_yaml.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+walkdir.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
