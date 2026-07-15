@@ -43,6 +43,21 @@ Requires flakes; if not enabled globally, add
 or pass `--extra-experimental-features 'nix-command flakes'`. Direnv users
 can `direnv allow` to load the shell automatically via `.envrc`.
 
+Common tasks are exposed as flake apps (self-contained — they bring their
+own toolchain, so they work outside the dev shell too):
+
+```sh
+nix run .#test           # cargo test --workspace
+nix run .#lint           # clippy -D warnings + rustfmt check
+nix run .#fmt            # rustfmt
+nix run .#check          # everything CI would run (rust + both frontends)
+nix run .#site-dev       # astro dev server for the site
+nix run .#site-build     # static site build
+nix run .#docs-sync      # regenerate site docs content from docs/
+nix run .#desktop-dev    # tauri dev (native window)
+nix run .#desktop-build  # tauri release build, unbundled
+```
+
 Or bring your own toolchain: stable Rust, Node.js ≥ 22, pnpm ≥ 9, and Xcode
 Command Line Tools on macOS (required for Tauri bundling either way).
 
