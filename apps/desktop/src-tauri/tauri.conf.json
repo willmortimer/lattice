@@ -14,7 +14,12 @@
       {
         "title": "Lattice",
         "width": 1200,
-        "height": 800
+        "height": 800,
+        "minWidth": 720,
+        "minHeight": 480,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "backgroundColor": "#0a0d13"
       }
     ],
     "security": {
