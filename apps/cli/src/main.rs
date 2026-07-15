@@ -1,9 +1,12 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use anyhow::{Context, Result};
+use std::time::SystemTime;
+
+use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use lattice_core::{Diagnostic, Resource, Severity, Workspace};
+use lattice_storage::{NativeWorkspaceStore, RecoveryJournal, WorkspaceStore};
 
 #[derive(Parser)]
 #[command(
@@ -47,6 +50,34 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Inspect and replay the crash-recovery journal.
+    Recover {
+        #[command(subcommand)]
+        command: RecoverCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum RecoverCommand {
+    /// List pending (unmaterialized) journal entries.
+    List {
+        /// Path inside the workspace to discover from. Defaults to the current directory.
+        path: Option<PathBuf>,
+    },
+    /// Materialize a pending entry's content to its path.
+    Apply {
+        /// Journal entry id (from `recover list`).
+        id: i64,
+        /// Path inside the workspace to discover from. Defaults to the current directory.
+        path: Option<PathBuf>,
+    },
+    /// Drop a pending entry without materializing it.
+    Discard {
+        /// Journal entry id (from `recover list`).
+        id: i64,
+        /// Path inside the workspace to discover from. Defaults to the current directory.
+        path: Option<PathBuf>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -66,6 +97,11 @@ fn run(command: Command) -> Result<ExitCode> {
         Command::Info { path } => cmd_info(path),
         Command::Ls { path, json } => cmd_ls(path, json),
         Command::Validate { path, json } => cmd_validate(path, json),
+        Command::Recover { command } => match command {
+            RecoverCommand::List { path } => cmd_recover_list(path),
+            RecoverCommand::Apply { id, path } => cmd_recover_apply(id, path),
+            RecoverCommand::Discard { id, path } => cmd_recover_discard(id, path),
+        },
     }
 }
 
@@ -163,6 +199,95 @@ fn cmd_validate(path: Option<PathBuf>, json: bool) -> Result<ExitCode> {
 
 fn print_diagnostic(diagnostic: &Diagnostic) {
     println!("{diagnostic}");
+}
+
+fn cmd_recover_list(path: Option<PathBuf>) -> Result<ExitCode> {
+    let start = cwd_or(path)?;
+    let ws = Workspace::discover(&start)?;
+    let journal = RecoveryJournal::open(ws.root())?;
+    let pending = journal.pending()?;
+    if pending.is_empty() {
+        println!("no pending recovery entries");
+        return Ok(ExitCode::SUCCESS);
+    }
+    for entry in &pending {
+        println!(
+            "{:>4}  {:<10} {:>8}  {:<16} {}",
+            entry.id,
+            format_age(entry.created_at),
+            format!("{} B", entry.content.len()),
+            entry.session_id,
+            entry.path.display(),
+        );
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_recover_apply(id: i64, path: Option<PathBuf>) -> Result<ExitCode> {
+    let start = cwd_or(path)?;
+    let ws = Workspace::discover(&start)?;
+    let journal = RecoveryJournal::open(ws.root())?;
+    let store = NativeWorkspaceStore::new(ws.root());
+
+    let entry = journal
+        .pending()?
+        .into_iter()
+        .find(|e| e.id == id)
+        .with_context(|| format!("no pending recovery entry with id {id}"))?;
+
+    // Warn (but proceed) if the base the edit was made against no longer
+    // matches what is on disk: applying may overwrite an external change.
+    let current = match store.metadata(&entry.path) {
+        Ok(meta) => Some(meta.revision.hash),
+        Err(_) => None,
+    };
+    if current.as_deref() != entry.base_revision.as_deref() {
+        eprintln!(
+            "warning: base revision mismatch for {} (expected {:?}, found {:?}); applying anyway",
+            entry.path.display(),
+            entry.base_revision,
+            current,
+        );
+    }
+
+    let revision = store.write_atomic(&entry.path, &entry.content)?;
+    journal.discard(entry.id)?;
+    println!(
+        "applied entry {} to {} ({})",
+        entry.id,
+        entry.path.display(),
+        revision.hash,
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_recover_discard(id: i64, path: Option<PathBuf>) -> Result<ExitCode> {
+    let start = cwd_or(path)?;
+    let ws = Workspace::discover(&start)?;
+    let journal = RecoveryJournal::open(ws.root())?;
+    if !journal.pending()?.iter().any(|e| e.id == id) {
+        bail!("no pending recovery entry with id {id}");
+    }
+    journal.discard(id)?;
+    println!("discarded entry {id}");
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Render the age of a journal entry as a coarse human-readable duration.
+fn format_age(created_at: SystemTime) -> String {
+    let secs = SystemTime::now()
+        .duration_since(created_at)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    if secs < 60 {
+        format!("{secs}s ago")
+    } else if secs < 3600 {
+        format!("{}m ago", secs / 60)
+    } else if secs < 86_400 {
+        format!("{}h ago", secs / 3600)
+    } else {
+        format!("{}d ago", secs / 86_400)
+    }
 }
 
 fn print_json<T: serde::Serialize>(value: &T) -> Result<()> {
