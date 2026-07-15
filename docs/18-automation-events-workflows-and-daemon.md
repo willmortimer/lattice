@@ -1,0 +1,177 @@
+# Automation, Events, Workflows, and Daemon
+
+## Why automation belongs in the platform
+
+Leaving scheduling and hooks entirely to shell scripts would recreate plugin chaos. Lattice should provide a small generic automation kernel while keeping domain workflows external and inspectable.
+
+## Execution modes
+
+- Manual command.
+- Event-triggered workflow.
+- Scheduled job.
+- Derived-resource build.
+- External webhook or connector event.
+- On-next-open fallback.
+- Remote worker execution.
+
+## Event model
+
+Core events:
+
+```text
+workspace.opened
+workspace.synced
+resource.created
+resource.changed
+resource.deleted
+external-file.changed
+page.tagged
+dataset.record-inserted
+dataset.record-updated
+dataset.schema-changed
+form.submitted
+artifact.event
+notebook.executed
+query.completed
+telemetry.received
+schedule.fired
+```
+
+Events are typed, versioned, and do not expose private UI implementation details.
+
+## Hook categories
+
+### Validators
+
+Run before commit and may accept, reject, or warn. They must be bounded and should not perform unrelated writes.
+
+### Transaction transforms
+
+Add related operations to a proposed transaction, such as creating a page when a record is inserted.
+
+### Post-commit subscribers
+
+Run after canonical commit. Failures do not roll back the user's saved edit.
+
+### Scheduled jobs
+
+Durable independent execution.
+
+### File watchers
+
+React to external changes after stable-write detection.
+
+## Workflow format
+
+```yaml
+format: lattice-workflow
+version: 1
+name: Create company research page
+trigger:
+  type: dataset.record-created
+  dataset: ../Data/CRM.data/database.sqlite
+  table: companies
+conditions:
+  - expression: record.research_page_id == null
+steps:
+  - id: create-page
+    action: page.create-from-template
+    with:
+      template: ../Templates/company-research.md
+  - id: link-page
+    action: dataset.update-record
+    with:
+      page_id: $steps.create-page.resource_id
+```
+
+## BPMN and DMN
+
+Support BPMN as an optional open visual workflow model and DMN for decision tables. Lattice YAML remains the simple native automation format. Adapters map supported BPMN/DMN constructs to the execution kernel.
+
+## Scheduler
+
+Support:
+
+- One-time jobs.
+- Intervals.
+- Cron.
+- Calendar-aware recurrence.
+- Named time zones.
+- Missed-run policy.
+- Run-on-next-open.
+- Local daemon, server, or remote worker target.
+
+## Local daemon
+
+`latticed` handles:
+
+- Long-lived schedules.
+- File watching while UI is closed.
+- Local API and MCP.
+- Connector refreshes.
+- Data extracts.
+- Artifact/app builds.
+- Jupyter kernel and job supervision.
+- OTLP ingestion.
+- Sync.
+
+The daemon is optional for ordinary editing.
+
+## Task runtimes
+
+- Python with `uv`.
+- Jupyter notebook or kernel.
+- Node/TypeScript.
+- Native executable.
+- Shell/PowerShell.
+- Nix environment.
+- Container.
+- WASI component.
+- Remote runner.
+
+Each task declares inputs, outputs, capabilities, environment, limits, and execution target.
+
+## Derived resources
+
+A derived resource declares inputs and builder:
+
+```yaml
+format: lattice-derived-resource
+version: 1
+output: ./dist/index.html
+inputs:
+  - ../../Data/Companies.data/database.sqlite
+  - ./queries/summary.sql
+  - ./src/**
+builder:
+  task: ./Build Dashboard.task/task.yaml
+refresh:
+  mode: on-demand
+```
+
+Lattice tracks current/stale/building/failed state.
+
+## Failure handling
+
+- Durable job record.
+- Structured logs and trace.
+- Retry policy.
+- Dead-letter/failed queue.
+- Cancellation.
+- Timeout.
+- Last-known-good output.
+- No silent failure.
+
+## Approval policy
+
+Workflows may require:
+
+- Every-run approval.
+- First-run approval.
+- Proposed transaction review.
+- Auto-approval under path/row-count limits.
+- Trusted signed pack policy.
+
+## Visual workflow builder
+
+The visual builder edits the same YAML or BPMN resource. It is not a separate opaque workflow database.
