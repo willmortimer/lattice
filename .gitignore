@@ -32,3 +32,6 @@ result
 
 # Logs
 *.log
+
+# Local worktrees
+.worktrees/
