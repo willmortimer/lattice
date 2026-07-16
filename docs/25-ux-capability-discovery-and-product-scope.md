@@ -10,7 +10,25 @@ Principle:
 
 ## Initial experience
 
-A new workspace prominently offers:
+Workspace creation begins with a small, purpose-based gallery:
+
+```text
+Personal     capture, projects, areas, library, journal
+Project      one finite outcome with mixed working resources
+Research     questions, sources, notes, experiments, outputs
+Data Lab     sources, data, queries, notebooks, dashboards, reports
+Blank        manifest only
+```
+
+Personal is recommended. Each choice shows a one-sentence outcome and a small
+structural preview rather than a feature inventory. Sample workspaces are
+offered separately from organizational templates.
+
+The second creation step asks only for title, location, and whether the new
+workspace should become the user-level default. Templates initialize the
+workspace once and never retain ownership of user content.
+
+After creation, a workspace prominently offers:
 
 ```text
 New page
