@@ -10,6 +10,7 @@ use lattice_core::{
     ensure_lattice_home, init_with_template, Diagnostic, Resource, Severity, Workspace,
     WorkspaceTemplate,
 };
+use lattice_data::{CellValue, DataApp};
 use lattice_index::{Backlink, SearchHit, WorkspaceIndex};
 use lattice_storage::{NativeWorkspaceStore, RecoveryJournal, WorkspaceStore};
 
@@ -72,6 +73,16 @@ enum Command {
     Page {
         #[command(subcommand)]
         command: PageCommand,
+    },
+    /// Create and inspect `.data` table packages.
+    Table {
+        #[command(subcommand)]
+        command: TableCommand,
+    },
+    /// Insert, update, and delete rows in `.data` packages.
+    Record {
+        #[command(subcommand)]
+        command: RecordCommand,
     },
     /// Rename a resource, or move it into an existing directory.
     Mv {
@@ -185,6 +196,81 @@ enum RecoverCommand {
     },
 }
 
+#[derive(Subcommand)]
+enum TableCommand {
+    /// Create a new `.data` package.
+    Create {
+        /// Workspace path of the package (e.g. CRM.data).
+        path: PathBuf,
+        /// Human-readable package title.
+        #[arg(long)]
+        title: String,
+        /// Default table name inside the package.
+        #[arg(long)]
+        table: String,
+    },
+    /// Show package metadata, columns, and sample rows.
+    Show {
+        /// Workspace path of the package.
+        path: PathBuf,
+        /// Emit output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum RecordCommand {
+    /// Insert a row.
+    Insert {
+        /// Workspace path of the `.data` package.
+        path: PathBuf,
+        /// Table name.
+        #[arg(long)]
+        table: String,
+        /// Field values as a JSON object.
+        #[arg(long, conflicts_with = "field")]
+        json: Option<String>,
+        /// Field value as `name=value` (repeatable).
+        #[arg(long = "field")]
+        fields: Vec<String>,
+    },
+    /// Update a row.
+    Update {
+        /// Workspace path of the `.data` package.
+        path: PathBuf,
+        /// Table name.
+        #[arg(long)]
+        table: String,
+        /// Row id.
+        #[arg(long)]
+        id: String,
+        /// Field values as a JSON object.
+        #[arg(long, conflicts_with = "field")]
+        json: Option<String>,
+        /// Field value as `name=value` (repeatable).
+        #[arg(long = "field")]
+        fields: Vec<String>,
+        /// Base package revision (`sha256:...`). Defaults to the current revision.
+        #[arg(long)]
+        base: Option<String>,
+    },
+    /// Delete a row.
+    Delete {
+        /// Workspace path of the `.data` package.
+        path: PathBuf,
+        /// Table name.
+        #[arg(long)]
+        table: String,
+        /// Row id.
+        #[arg(long)]
+        id: String,
+        /// Base package revision (`sha256:...`). Defaults to the current revision.
+        #[arg(long)]
+        base: Option<String>,
+    },
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match run(cli.command) {
@@ -222,6 +308,32 @@ fn run(command: Command) -> Result<ExitCode> {
                 stdin,
             } => cmd_page_create(path, content, stdin),
             PageCommand::Update { path, stdin, base } => cmd_page_update(path, stdin, base),
+        },
+        Command::Table { command } => match command {
+            TableCommand::Create { path, title, table } => cmd_table_create(path, title, table),
+            TableCommand::Show { path, json } => cmd_table_show(path, json),
+        },
+        Command::Record { command } => match command {
+            RecordCommand::Insert {
+                path,
+                table,
+                json,
+                fields,
+            } => cmd_record_insert(path, table, json, fields),
+            RecordCommand::Update {
+                path,
+                table,
+                id,
+                json,
+                fields,
+                base,
+            } => cmd_record_update(path, table, id, json, fields, base),
+            RecordCommand::Delete {
+                path,
+                table,
+                id,
+                base,
+            } => cmd_record_delete(path, table, id, base),
         },
         Command::Mv { from, to } => cmd_mv(from, to),
         Command::Rm { path } => cmd_rm(path),
@@ -525,6 +637,255 @@ fn cmd_page_update(path: PathBuf, stdin: bool, base: Option<String>) -> Result<E
     ))?;
     println!(
         "updated {} ({})",
+        rel.display(),
+        receipt.outcomes[0]
+            .resulting_revision
+            .as_deref()
+            .unwrap_or("?")
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_table_create(path: PathBuf, title: String, table: String) -> Result<ExitCode> {
+    let (ws, mut engine) = open_engine()?;
+    let rel = workspace_relative(&ws, &path)?;
+    let receipt = engine.apply(Transaction::new(
+        format!("Create table package {}", rel.display()),
+        vec![Semantic::TableCreate {
+            path: rel.clone(),
+            title,
+            table_name: table,
+        }],
+    ))?;
+    println!(
+        "created {} ({})",
+        rel.display(),
+        receipt.outcomes[0]
+            .resulting_revision
+            .as_deref()
+            .unwrap_or("?")
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+#[derive(serde::Serialize)]
+struct TableShowOutput {
+    path: PathBuf,
+    title: String,
+    default_table: String,
+    tables: Vec<String>,
+    columns: Vec<TableColumnOutput>,
+    rows: Vec<TableRowOutput>,
+    package_revision: String,
+}
+
+#[derive(serde::Serialize)]
+struct TableColumnOutput {
+    name: String,
+    field_type: String,
+}
+
+#[derive(serde::Serialize)]
+struct TableRowOutput {
+    id: String,
+    values: std::collections::BTreeMap<String, CellValue>,
+}
+
+fn cmd_table_show(path: PathBuf, json: bool) -> Result<ExitCode> {
+    let start = std::env::current_dir().context("failed to determine current directory")?;
+    let ws = Workspace::discover(&start)?;
+    let rel = workspace_relative(&ws, &path)?;
+    let app = DataApp::open(&ws.root().join(&rel))?;
+    let table = app.default_table().to_string();
+    let columns = app
+        .columns(&table)?
+        .into_iter()
+        .map(|column| TableColumnOutput {
+            name: column.name,
+            field_type: column.field_type.to_string(),
+        })
+        .collect::<Vec<_>>();
+    let rows = app
+        .list_rows(&table, 20, 0)?
+        .into_iter()
+        .map(|row| TableRowOutput {
+            id: row.id,
+            values: row.values,
+        })
+        .collect::<Vec<_>>();
+    let output = TableShowOutput {
+        path: rel.clone(),
+        title: app.title().to_string(),
+        default_table: table,
+        tables: app.list_tables()?,
+        columns,
+        rows,
+        package_revision: app.package_revision()?,
+    };
+
+    if json {
+        print_json(&output)?;
+    } else {
+        println!("{}  {}", output.path.display(), output.title);
+        println!("default table: {}", output.default_table);
+        println!("revision: {}", output.package_revision);
+        println!("columns:");
+        for column in &output.columns {
+            println!("  {} ({})", column.name, column.field_type);
+        }
+        if output.rows.is_empty() {
+            println!("rows: (none)");
+        } else {
+            println!("rows:");
+            for row in &output.rows {
+                println!("  {}  {:?}", row.id, row.values);
+            }
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn parse_record_values(
+    json: Option<String>,
+    fields: Vec<String>,
+) -> Result<std::collections::BTreeMap<String, CellValue>> {
+    use std::collections::BTreeMap;
+
+    if let Some(json_text) = json {
+        let raw: BTreeMap<String, serde_json::Value> =
+            serde_json::from_str(&json_text).context("failed to parse --json as an object")?;
+        return raw
+            .into_iter()
+            .map(|(key, value)| Ok((key, json_to_cell(value)?)))
+            .collect();
+    }
+    if fields.is_empty() {
+        bail!("provide --json or one or more --field name=value arguments");
+    }
+    let mut values = BTreeMap::new();
+    for field in fields {
+        let (name, value) = field
+            .split_once('=')
+            .with_context(|| format!("invalid --field {field:?}; expected name=value"))?;
+        values.insert(name.to_string(), CellValue::Text(value.to_string()));
+    }
+    Ok(values)
+}
+
+fn json_to_cell(value: serde_json::Value) -> Result<CellValue> {
+    match value {
+        serde_json::Value::Null => Ok(CellValue::Null),
+        serde_json::Value::Bool(boolean) => Ok(CellValue::Boolean(boolean)),
+        serde_json::Value::Number(number) => {
+            if let Some(integer) = number.as_i64() {
+                Ok(CellValue::Integer(integer))
+            } else if let Some(decimal) = number.as_f64() {
+                Ok(CellValue::Decimal(decimal))
+            } else {
+                bail!("unsupported JSON number {number}");
+            }
+        }
+        serde_json::Value::String(text) => Ok(CellValue::Text(text)),
+        serde_json::Value::Object(object) => {
+            serde_json::from_value(serde_json::Value::Object(object))
+                .context("failed to parse typed cell value object")
+        }
+        serde_json::Value::Array(_) => bail!("array cell values are not supported"),
+    }
+}
+
+fn package_revision(ws: &Workspace, package: &Path) -> Result<String> {
+    Ok(DataApp::open(&ws.root().join(package))?.package_revision()?)
+}
+
+fn cmd_record_insert(
+    path: PathBuf,
+    table: String,
+    json: Option<String>,
+    fields: Vec<String>,
+) -> Result<ExitCode> {
+    let (ws, mut engine) = open_engine()?;
+    let rel = workspace_relative(&ws, &path)?;
+    let values = parse_record_values(json, fields)?;
+    let receipt = engine.apply(Transaction::new(
+        format!("Insert row into {}.{}", rel.display(), table),
+        vec![Semantic::RecordInsert {
+            path: rel.clone(),
+            table,
+            values,
+            id: None,
+        }],
+    ))?;
+    println!(
+        "inserted row into {} ({})",
+        rel.display(),
+        receipt.outcomes[0]
+            .resulting_revision
+            .as_deref()
+            .unwrap_or("?")
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_record_update(
+    path: PathBuf,
+    table: String,
+    id: String,
+    json: Option<String>,
+    fields: Vec<String>,
+    base: Option<String>,
+) -> Result<ExitCode> {
+    let (ws, mut engine) = open_engine()?;
+    let rel = workspace_relative(&ws, &path)?;
+    let base_revision = match base {
+        Some(base) => base,
+        None => package_revision(&ws, &rel)?,
+    };
+    let values = parse_record_values(json, fields)?;
+    let receipt = engine.apply(Transaction::new(
+        format!("Update row {} in {}.{}", id, rel.display(), table),
+        vec![Semantic::RecordUpdate {
+            path: rel.clone(),
+            table,
+            id,
+            values,
+            base_revision,
+        }],
+    ))?;
+    println!(
+        "updated row in {} ({})",
+        rel.display(),
+        receipt.outcomes[0]
+            .resulting_revision
+            .as_deref()
+            .unwrap_or("?")
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_record_delete(
+    path: PathBuf,
+    table: String,
+    id: String,
+    base: Option<String>,
+) -> Result<ExitCode> {
+    let (ws, mut engine) = open_engine()?;
+    let rel = workspace_relative(&ws, &path)?;
+    let base_revision = match base {
+        Some(base) => base,
+        None => package_revision(&ws, &rel)?,
+    };
+    let receipt = engine.apply(Transaction::new(
+        format!("Delete row {} from {}.{}", id, rel.display(), table),
+        vec![Semantic::RecordDelete {
+            path: rel.clone(),
+            table,
+            id,
+            base_revision,
+        }],
+    ))?;
+    println!(
+        "deleted row from {} ({})",
         rel.display(),
         receipt.outcomes[0]
             .resulting_revision

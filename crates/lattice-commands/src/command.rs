@@ -1,6 +1,8 @@
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
+use lattice_data::CellValue;
 use serde::{Deserialize, Serialize};
 
 /// The v0 semantic command set.
@@ -16,7 +18,7 @@ use serde::{Deserialize, Serialize};
 /// ```json
 /// { "type": "page-update", "path": "Notes/A.md", "content": "…", "base-revision": "sha256:…" }
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum Command {
     /// Create a page at `path` with `content`. Precondition: `path` is absent.
@@ -47,6 +49,53 @@ pub enum Command {
     /// single files so undo can restore without touching the Trash).
     /// Precondition: `path` present.
     ResourceDelete { path: PathBuf },
+
+    /// Create a `.data` package at `path`. Precondition: `path` is absent.
+    TableCreate {
+        path: PathBuf,
+        title: String,
+        #[serde(rename = "table-name")]
+        table_name: String,
+    },
+
+    /// Insert a row into a table inside a `.data` package. When `id` is set
+    /// (recorded in history after the first apply), the row is restored with
+    /// that id instead of generating a new one.
+    RecordInsert {
+        path: PathBuf,
+        table: String,
+        values: BTreeMap<String, CellValue>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
+    },
+
+    /// Update a row. Precondition: package `database.sqlite` revision equals
+    /// `base_revision`.
+    RecordUpdate {
+        path: PathBuf,
+        table: String,
+        id: String,
+        values: BTreeMap<String, CellValue>,
+        #[serde(rename = "base-revision")]
+        base_revision: String,
+    },
+
+    /// Delete a row. Precondition: package revision equals `base_revision`.
+    RecordDelete {
+        path: PathBuf,
+        table: String,
+        id: String,
+        #[serde(rename = "base-revision")]
+        base_revision: String,
+    },
+
+    /// Write or replace `views/{view_name}.yaml` inside a `.data` package.
+    ViewSave {
+        path: PathBuf,
+        #[serde(rename = "view-name")]
+        view_name: String,
+        content: String,
+    },
 }
 
 impl Command {
@@ -62,6 +111,13 @@ impl Command {
             Command::ResourceRename { to, .. } => to.clone(),
             Command::ResourceMove { from, to_dir } => to_dir.join(file_name(from)),
             Command::ResourceDelete { path } => path.clone(),
+            Command::TableCreate { path, .. } => path.clone(),
+            Command::RecordInsert { path, .. }
+            | Command::RecordUpdate { path, .. }
+            | Command::RecordDelete { path, .. } => path.clone(),
+            Command::ViewSave {
+                path, view_name, ..
+            } => view_file_path(path, view_name),
         }
     }
 
@@ -76,8 +132,20 @@ impl Command {
                 vec![from.clone(), to_dir.join(file_name(from))]
             }
             Command::ResourceDelete { path } => vec![path.clone()],
+            Command::TableCreate { path, .. } => vec![path.clone()],
+            Command::RecordInsert { path, .. }
+            | Command::RecordUpdate { path, .. }
+            | Command::RecordDelete { path, .. } => vec![path.clone()],
+            Command::ViewSave {
+                path, view_name, ..
+            } => vec![view_file_path(path, view_name)],
         }
     }
+}
+
+/// Workspace-relative path to a view YAML inside a `.data` package.
+pub(crate) fn view_file_path(package: &std::path::Path, view_name: &str) -> PathBuf {
+    package.join("views").join(format!("{view_name}.yaml"))
 }
 
 /// The final path component of `path`, or the whole path if it has none.

@@ -89,6 +89,9 @@ pub enum Error {
 
     #[error(transparent)]
     Core(#[from] lattice_core::Error),
+
+    #[error(transparent)]
+    Data(#[from] lattice_data::Error),
 }
 
 impl Error {
