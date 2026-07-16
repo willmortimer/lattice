@@ -1,4 +1,4 @@
-import type { WorkspaceSnapshot } from "./types";
+import type { SearchHit, WorkspaceSnapshot } from "./types";
 
 /**
  * Dev-only stand-in used when the frontend runs in a plain browser
@@ -187,3 +187,23 @@ FROM read_parquet('Analytics/Usage.dataset/facts/**/*.parquet')
 GROUP BY 1 ORDER BY 2 DESC;
 \`\`\`
 `;
+
+/**
+ * The demo shell's stand-in for `search_workspace`: a plain path-substring
+ * match over the fixture resources, since only `demoPage` has real body
+ * text to search. Good enough to review the search pane's UI without a
+ * real workspace.
+ */
+export function demoSearch(query: string): SearchHit[] {
+  const trimmed = query.trim().toLowerCase();
+  if (!trimmed) return [];
+
+  return demoSnapshot.resources
+    .filter((resource) => resource.kind === "page" && resource.path.toLowerCase().includes(trimmed))
+    .map((resource) => ({
+      path: resource.path,
+      title: resource.path.split("/").pop() ?? resource.path,
+      snippet: null,
+      rank: 0,
+    }));
+}

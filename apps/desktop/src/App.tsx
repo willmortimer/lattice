@@ -1,11 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
+import { openPath } from "@tauri-apps/plugin-opener";
 import type { Resource, WorkspaceChangeEvent, WorkspaceSnapshot } from "./types";
 import { KindMark, KIND_LABELS } from "./KindMark";
-import { demoCanvas, demoPage, demoSnapshot, demoStartEmpty, inBrowser } from "./demo";
+import { demoCanvas, demoPage, demoSearch, demoSnapshot, demoStartEmpty, inBrowser } from "./demo";
 import { CanvasViewer } from "./canvas/CanvasViewer";
+import { BacklinksFooter } from "./BacklinksFooter";
+import { CommandPalette, type PaletteItem } from "./CommandPalette";
+import { AssetContextProvider } from "./editor/AssetContext";
 import { ConflictEnvelope } from "./editor/ConflictEnvelope";
 import {
   PageEditor,
@@ -15,6 +19,9 @@ import {
   type SaveState,
 } from "./editor/PageEditor";
 import { createDemoPageIO, createNativePageIO, type PageIO } from "./editor/pageIO";
+import { fileTimestamp, quickNotePath } from "./lib/timestamp";
+import { ResourceTree } from "./ResourceTree";
+import { SearchPane } from "./SearchPane";
 
 interface PageState {
   resource: Resource;
@@ -26,6 +33,12 @@ interface PageState {
 /** An external edit landed while this page had unsaved local edits (ADR 0028). */
 interface ExternalConflict {
   path: string;
+}
+
+/** `Notes/Idea.md` -> `Notes`; a top-level path (no `/`) -> `""` (the workspace root). */
+function dirnameOf(path: string): string {
+  const slash = path.lastIndexOf("/");
+  return slash >= 0 ? path.slice(0, slash) : "";
 }
 
 /** Build the "keep both" sibling path: `Notes/Idea.md` -> `Notes/Idea (conflict 2026-07-15).md`. */
@@ -84,6 +97,13 @@ export default function App() {
    * resolution) without tying remounts to `page.revision`, which would
    * otherwise remount on every autosave. */
   const [reloadToken, setReloadToken] = useState(0);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [searchPaneOpen, setSearchPaneOpen] = useState(false);
+
+  /** The root read-view embeds and search/backlinks commands resolve
+   * against — `null` in the in-browser demo shell, which has no real
+   * workspace on disk even when `snapshot` holds fixture data. */
+  const assetRoot = inBrowser ? null : snapshot?.root ?? null;
 
   // Refs mirroring state read inside the workspace-changed listener, which
   // subscribes once and must not see stale closures over fast-changing state.
@@ -253,6 +273,80 @@ export default function App() {
     }
   }
 
+  /**
+   * Create a new blank page at `relPath` and open it — shared by the
+   * command palette's "New page" and the Cmd/Ctrl+N quick-note shortcut.
+   * Unlike `handleSelect`, the demo shell gets a genuinely blank page
+   * rather than the `demoPage` fixture, since this is meant to look like
+   * a freshly created note.
+   */
+  async function createAndOpenPage(relPath: string) {
+    const resource: Resource = { path: relPath, kind: "page" };
+
+    if (inBrowser) {
+      setSnapshot((prev) => (prev ? { ...prev, resources: [...prev.resources, resource] } : prev));
+      setSelected(resource);
+      setError(null);
+      setCanvas(null);
+      setExternalConflict(null);
+      setSaveState({ status: "idle" });
+      setReloadToken((t) => t + 1);
+      currentPageRevisionRef.current = "demo:0";
+      setPage({ resource, content: "", revision: "demo:0", io: createDemoPageIO("") });
+      return;
+    }
+
+    if (!snapshot) return;
+    setBusy(true);
+    try {
+      await invoke("create_page", { root: snapshot.root, relPath, content: "" });
+      await refreshSidebar();
+      await handleSelect(resource);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Cmd/Ctrl+N: a new page in `Inbox/`, named by timestamp (docs/07's
+   * "Quick-note mode"). */
+  function handleQuickNote() {
+    void createAndOpenPage(quickNotePath());
+  }
+
+  /** Command palette "New page": in the folder of the currently selected
+   * resource, or the workspace root if nothing is selected. */
+  function handleNewPage() {
+    const dir = selected ? dirnameOf(selected.path) : "";
+    const name = `Untitled ${fileTimestamp()}.md`;
+    void createAndOpenPage(dir ? `${dir}/${name}` : name);
+  }
+
+  /** Command palette "Undo last change": reverts the workspace's most
+   * recent transaction. Any files it touches are picked up by the
+   * regular `workspace-changed` reconciliation, same as an external edit. */
+  async function handleUndo() {
+    if (!snapshot) return;
+    try {
+      await invoke<string | null>("undo_last", { root: snapshot.root });
+      await refreshSidebar();
+    } catch (err) {
+      setError(String(err));
+    }
+  }
+
+  /** Placeholder view's "Open externally" button, for resource kinds with
+   * no built-in viewer (PDFs, images, and other binary embeds). */
+  async function handleOpenExternally(resource: Resource) {
+    if (!snapshot) return;
+    try {
+      await openPath(`${snapshot.root}/${resource.path}`);
+    } catch (err) {
+      setError(String(err));
+    }
+  }
+
   async function handleSelect(resource: Resource) {
     setSelected(resource);
     setError(null);
@@ -313,6 +407,67 @@ export default function App() {
     if (resource) handleSelect(resource);
   }
 
+  const paletteItems = useMemo<PaletteItem[]>(() => {
+    const actions: PaletteItem[] = [
+      { id: "action:new-page", label: "New page", run: handleNewPage },
+      { id: "action:quick-note", label: "Quick note", hint: "Cmd+N", run: handleQuickNote },
+      { id: "action:open-workspace", label: "Open workspace…", run: () => void handleOpenWorkspace() },
+      {
+        id: "action:search",
+        label: "Search workspace…",
+        hint: "Cmd+Shift+F",
+        run: () => setSearchPaneOpen(true),
+      },
+    ];
+    if (!inBrowser) {
+      actions.push({ id: "action:undo", label: "Undo last change", run: () => void handleUndo() });
+    }
+
+    const files: PaletteItem[] = (snapshot?.resources ?? []).map((resource) => ({
+      id: `file:${resource.path}`,
+      label: resource.path.split("/").pop() ?? resource.path,
+      hint: resource.path,
+      kind: resource.kind,
+      run: () => handleSelect(resource),
+    }));
+
+    return [...actions, ...files];
+    // Actions and file entries close over `selected`/`snapshot` through the
+    // handlers above, which are plain functions recreated every render —
+    // depending on the underlying data (not the handlers themselves) keeps
+    // this from recomputing on every keystroke without going stale.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshot, selected]);
+
+  // Cmd/Ctrl+P (palette), Cmd/Ctrl+N (quick note), Cmd/Ctrl+Shift+F (search) —
+  // subscribed once via a ref to the latest quick-note handler, the same
+  // pattern `PageEditor` uses for its Cmd/Ctrl+S shortcut.
+  const handleQuickNoteRef = useRef(handleQuickNote);
+  handleQuickNoteRef.current = handleQuickNote;
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (!(event.metaKey || event.ctrlKey)) return;
+      const key = event.key.toLowerCase();
+
+      if (key === "p") {
+        event.preventDefault();
+        setSearchPaneOpen(false);
+        setPaletteOpen(true);
+      } else if (key === "f" && event.shiftKey) {
+        event.preventDefault();
+        setPaletteOpen(false);
+        setSearchPaneOpen(true);
+      } else if (key === "n" && !event.shiftKey) {
+        event.preventDefault();
+        setPaletteOpen(false);
+        handleQuickNoteRef.current();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   if (!snapshot) {
     return (
       <div className="empty-state" data-tauri-drag-region>
@@ -343,24 +498,11 @@ export default function App() {
           <div className="workspace-root">{`⁦${snapshot.root}⁩`}</div>
         </header>
         <nav className="resource-list">
-          {snapshot.resources.length === 0 && (
-            <div className="resource-list-empty">
-              This folder is empty. Files you add appear here.
-            </div>
-          )}
-          {snapshot.resources.map((resource) => (
-            <button
-              key={resource.path}
-              className={
-                "resource-item" + (selected?.path === resource.path ? " resource-item-active" : "")
-              }
-              aria-label={`${KIND_LABELS[resource.kind]}: ${resource.path}`}
-              onClick={() => handleSelect(resource)}
-            >
-              <KindMark kind={resource.kind} />
-              <span className="resource-path">{resource.path}</span>
-            </button>
-          ))}
+          <ResourceTree
+            resources={snapshot.resources}
+            selectedPath={selected?.path ?? null}
+            onSelect={handleSelect}
+          />
         </nav>
         <div className="sidebar-footer">
           <button className="secondary-button" onClick={handleOpenWorkspace} disabled={busy}>
@@ -418,16 +560,23 @@ export default function App() {
                     ]}
                   />
                 )}
-                <PageEditor
-                  key={`${page.resource.path}#${reloadToken}`}
-                  ref={pageEditorRef}
-                  raw={page.content}
-                  revision={page.revision}
-                  io={page.io}
-                  onSaveStateChange={setSaveState}
-                  onRevisionChange={(revision) => {
-                    currentPageRevisionRef.current = revision;
-                  }}
+                <AssetContextProvider value={{ root: assetRoot, pagePath: page.resource.path }}>
+                  <PageEditor
+                    key={`${page.resource.path}#${reloadToken}`}
+                    ref={pageEditorRef}
+                    raw={page.content}
+                    revision={page.revision}
+                    io={page.io}
+                    onSaveStateChange={setSaveState}
+                    onRevisionChange={(revision) => {
+                      currentPageRevisionRef.current = revision;
+                    }}
+                  />
+                </AssetContextProvider>
+                <BacklinksFooter
+                  root={assetRoot}
+                  path={page.resource.path}
+                  onOpenFile={handleOpenFile}
                 />
               </>
             )}
@@ -442,11 +591,34 @@ export default function App() {
                 <p className="placeholder-sub">
                   The file stays yours — open <code>{selected.path}</code> in any tool.
                 </p>
+                {!inBrowser && (
+                  <button
+                    className="secondary-button placeholder-open-button"
+                    onClick={() => void handleOpenExternally(selected)}
+                  >
+                    Open externally
+                  </button>
+                )}
               </div>
             )}
           </div>
         )}
       </main>
+
+      {paletteOpen && (
+        <CommandPalette items={paletteItems} onClose={() => setPaletteOpen(false)} />
+      )}
+      {searchPaneOpen && (
+        <SearchPane
+          root={assetRoot}
+          demoSearch={inBrowser ? demoSearch : () => []}
+          onOpenFile={(path) => {
+            setSearchPaneOpen(false);
+            handleOpenFile(path);
+          }}
+          onClose={() => setSearchPaneOpen(false)}
+        />
+      )}
     </div>
   );
 }

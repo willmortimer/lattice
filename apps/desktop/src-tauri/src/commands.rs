@@ -180,6 +180,18 @@ pub fn create_page(root: String, rel_path: String, content: String) -> Result<St
         .ok_or_else(|| "page create did not produce a resulting revision".to_string())
 }
 
+/// Undo the most recent transaction recorded in this workspace's history,
+/// if any. Used by the command palette's "Undo" action.
+///
+/// Returns the summary of the transaction that was undone, or `None` if
+/// there was nothing left to undo.
+#[tauri::command]
+pub fn undo_last(root: String) -> Result<Option<String>, String> {
+    let mut engine = CommandEngine::open(Path::new(&root)).map_err(command_error_to_string)?;
+    let report = engine.undo().map_err(command_error_to_string)?;
+    Ok(report.map(|r| r.summary))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -318,6 +330,32 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.contains("already exists"));
+    }
+
+    #[test]
+    fn undo_last_reverts_the_most_recent_transaction() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        create_page(
+            root.clone(),
+            "Inbox/Note.md".to_string(),
+            "# Note\n".to_string(),
+        )
+        .unwrap();
+        assert!(dir.path().join("Inbox/Note.md").exists());
+
+        let summary = undo_last(root).unwrap();
+        assert_eq!(summary, Some("Create page Inbox/Note.md".to_string()));
+        assert!(!dir.path().join("Inbox/Note.md").exists());
+    }
+
+    #[test]
+    fn undo_last_returns_none_when_history_is_empty() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        assert_eq!(undo_last(root).unwrap(), None);
     }
 
     #[test]
