@@ -7,10 +7,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { EditorContent, useEditor } from "@tiptap/react";
+import type { Extensions } from "@tiptap/core";
+import { EditorContent, ReactNodeViewRenderer, useEditor } from "@tiptap/react";
 
+import { CodeBlockView } from "./CodeBlockView";
 import { ConflictEnvelope } from "./ConflictEnvelope";
 import { editorExtensions } from "./extensions";
+import { ImageView } from "./ImageView";
 import {
   joinFrontmatter,
   parseMarkdownToJSON,
@@ -22,6 +25,23 @@ import { StaleRevisionError, type PageIO } from "./pageIO";
 const AUTOSAVE_DELAY_MS = 800;
 /** How long the "Saved" indicator lingers before fading back to idle. */
 const SAVED_INDICATOR_MS = 1500;
+
+/**
+ * The live editor's extension list: `editorExtensions` (the schema
+ * `markdown.ts` also builds from — see its doc comment) with read-view
+ * node views layered on for `image` and `codeBlock`. `.extend()` only
+ * adds `addNodeView`, so the schema itself — what a document can contain —
+ * stays identical between live editing and the standalone codec.
+ */
+const liveExtensions: Extensions = editorExtensions.map((extension) => {
+  if (extension.name === "image") {
+    return extension.extend({ addNodeView: () => ReactNodeViewRenderer(ImageView) });
+  }
+  if (extension.name === "codeBlock") {
+    return extension.extend({ addNodeView: () => ReactNodeViewRenderer(CodeBlockView) });
+  }
+  return extension;
+});
 
 export type SaveState =
   | { status: "idle" }
@@ -130,7 +150,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
   }, []);
 
   const editor = useEditor({
-    extensions: editorExtensions,
+    extensions: liveExtensions,
     content: initialDoc,
     onUpdate: () => {
       setSaveState((prev) => (prev.status === "conflict" ? prev : { status: "dirty" }));
