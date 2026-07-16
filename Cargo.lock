@@ -1787,6 +1787,7 @@ dependencies = [
  "clap",
  "lattice-commands",
  "lattice-core",
+ "lattice-index",
  "lattice-storage",
  "predicates",
  "serde",
@@ -1832,6 +1833,22 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-dialog",
  "tempfile",
+]
+
+[[package]]
+name = "lattice-index"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "lattice-core",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+ "walkdir",
 ]
 
 [[package]]
