@@ -2154,6 +2154,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "serde_yaml",
  "tempfile",
  "thiserror 2.0.18",
  "trash",
@@ -2165,6 +2166,7 @@ name = "lattice-core"
 version = "0.1.0"
 dependencies = [
  "dirs",
+ "lattice-profile",
  "lattice-storage",
  "notify",
  "notify-debouncer-full",
@@ -2199,6 +2201,7 @@ dependencies = [
  "lattice-core",
  "lattice-data",
  "lattice-index",
+ "lattice-profile",
  "lattice-storage",
  "lattice-theme",
  "notify",
@@ -2206,6 +2209,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "serde_yaml",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
@@ -2231,6 +2235,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-profile"
+version = "0.1.0"
+dependencies = [
+ "dirs",
+ "hex",
+ "lattice-storage",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "lattice-storage"
 version = "0.1.0"
 dependencies = [
@@ -2239,6 +2259,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "thiserror 2.0.18",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2247,6 +2268,7 @@ version = "0.1.0"
 dependencies = [
  "dirs",
  "lattice-core",
+ "lattice-profile",
  "serde",
  "serde_json",
  "serde_yaml",

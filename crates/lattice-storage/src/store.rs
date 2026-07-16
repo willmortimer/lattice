@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::SystemTime;
 
+use crate::atomic_write_file;
 use crate::revision::ResourceRevision;
 use crate::{Error, Result};
 
@@ -52,18 +52,6 @@ pub(crate) fn normalize_relative(path: &Path) -> Result<PathBuf> {
     Ok(out)
 }
 
-/// Process-unique-ish suffix for temp files, so concurrent writers in the
-/// same directory never collide on the sibling temp name.
-fn temp_suffix() -> String {
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let nanos = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("{}-{}-{}", std::process::id(), nanos, seq)
-}
-
 // -------------------------------------------------------------------------
 // NativeWorkspaceStore
 // -------------------------------------------------------------------------
@@ -109,53 +97,7 @@ impl WorkspaceStore for NativeWorkspaceStore {
 
     fn write_atomic(&self, path: &Path, data: &[u8]) -> Result<ResourceRevision> {
         let full = self.resolve(path)?;
-        let parent = full.parent().ok_or_else(|| Error::OutsideWorkspace {
-            path: path.to_path_buf(),
-        })?;
-        std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
-
-        let name =
-            full.file_name()
-                .and_then(|n| n.to_str())
-                .ok_or_else(|| Error::OutsideWorkspace {
-                    path: path.to_path_buf(),
-                })?;
-
-        // Permissions of the file being replaced, so an atomic replace does
-        // not silently reset the mode a user or tool set.
-        let existing_permissions = std::fs::metadata(&full).ok().map(|m| m.permissions());
-
-        let temp = parent.join(format!(".{name}.lattice-tmp-{}", temp_suffix()));
-
-        // Write the temp file, flush its bytes to disk, then rename over the
-        // target. A crash before the rename leaves the target untouched.
-        let write_result = (|| -> std::io::Result<()> {
-            use std::io::Write;
-            let mut file = std::fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&temp)?;
-            file.write_all(data)?;
-            if let Some(permissions) = &existing_permissions {
-                file.set_permissions(permissions.clone())?;
-            }
-            file.sync_all()?;
-            Ok(())
-        })();
-        if let Err(e) = write_result {
-            let _ = std::fs::remove_file(&temp);
-            return Err(Error::io(&temp, e));
-        }
-
-        if let Err(e) = std::fs::rename(&temp, &full) {
-            let _ = std::fs::remove_file(&temp);
-            return Err(Error::io(&full, e));
-        }
-
-        // Best-effort durability of the directory entry itself.
-        if let Ok(dir) = std::fs::File::open(parent) {
-            let _ = dir.sync_all();
-        }
+        atomic_write_file(&full, data)?;
 
         let modified = std::fs::metadata(&full)
             .and_then(|m| m.modified())
