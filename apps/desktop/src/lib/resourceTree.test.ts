@@ -59,4 +59,16 @@ describe("buildResourceTree", () => {
   it("returns an empty tree for no resources", () => {
     expect(buildResourceTree([])).toEqual([]);
   });
+
+  it("shows empty folders from kind=folder resources", () => {
+    const tree = buildResourceTree([
+      { path: "Inbox", kind: "folder" },
+      { path: "Projects", kind: "folder" },
+      page("Home.md"),
+    ]);
+    expect(tree.map((n) => n.name)).toEqual(["Inbox", "Projects", "Home.md"]);
+    const inbox = tree[0] as TreeFolder;
+    expect(inbox.type).toBe("folder");
+    expect(inbox.children).toEqual([]);
+  });
 });

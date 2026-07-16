@@ -12,6 +12,7 @@ export type ResourceKind =
   | "app"
   | "workflow"
   | "task"
+  | "folder"
   | "file";
 
 export interface Resource {

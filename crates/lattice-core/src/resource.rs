@@ -30,6 +30,10 @@ pub enum ResourceKind {
     Workflow,
     /// Executable task package (`.task/`).
     Task,
+    /// An ordinary directory (scaffolding / navigation). Empty folders from
+    /// templates appear as this so the sidebar tree can show them before
+    /// they contain pages.
+    Folder,
     /// Any ordinary content without a special native model.
     File,
 }
