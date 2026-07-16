@@ -7,6 +7,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use lattice_commands::{Command as Semantic, CommandEngine, Transaction};
 use lattice_core::{Diagnostic, Resource, Severity, Workspace};
+use lattice_index::{Backlink, SearchHit, WorkspaceIndex};
 use lattice_storage::{NativeWorkspaceStore, RecoveryJournal, WorkspaceStore};
 
 #[derive(Parser)]
@@ -84,6 +85,34 @@ enum Command {
     Undo,
     /// Redo the most recently undone transaction.
     Redo,
+    /// Rebuild the workspace search index.
+    Index {
+        /// Path inside the workspace to discover from. Defaults to the current directory.
+        path: Option<PathBuf>,
+    },
+    /// Full-text search over indexed pages.
+    Search {
+        /// Search query.
+        query: String,
+        /// Path inside the workspace to discover from. Defaults to the current directory.
+        path: Option<PathBuf>,
+        /// Maximum number of hits to return.
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+        /// Emit hits as a JSON array.
+        #[arg(long)]
+        json: bool,
+    },
+    /// List resources that link to a page.
+    Backlinks {
+        /// Workspace path of the target page.
+        target: PathBuf,
+        /// Path inside the workspace to discover from. Defaults to the current directory.
+        path: Option<PathBuf>,
+        /// Emit backlinks as a JSON array.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -172,6 +201,14 @@ fn run(command: Command) -> Result<ExitCode> {
         Command::History { limit } => cmd_history(limit),
         Command::Undo => cmd_undo(),
         Command::Redo => cmd_redo(),
+        Command::Index { path } => cmd_index(path),
+        Command::Search {
+            query,
+            path,
+            limit,
+            json,
+        } => cmd_search(query, path, limit, json),
+        Command::Backlinks { target, path, json } => cmd_backlinks(target, path, json),
     }
 }
 
@@ -524,6 +561,78 @@ fn cmd_redo() -> Result<ExitCode> {
         None => println!("nothing to redo"),
     }
     Ok(ExitCode::SUCCESS)
+}
+
+fn open_index(path: Option<PathBuf>) -> Result<(Workspace, WorkspaceIndex)> {
+    let start = cwd_or(path)?;
+    let ws = Workspace::discover(&start)?;
+    let index = WorkspaceIndex::open(ws.root())?;
+    Ok((ws, index))
+}
+
+fn cmd_index(path: Option<PathBuf>) -> Result<ExitCode> {
+    let (ws, index) = open_index(path)?;
+    let stats = index.rebuild(ws.root())?;
+    println!(
+        "indexed {} page(s), removed {} stale entr{}",
+        stats.pages_indexed,
+        stats.pages_removed,
+        if stats.pages_removed == 1 { "y" } else { "ies" }
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_search(query: String, path: Option<PathBuf>, limit: usize, json: bool) -> Result<ExitCode> {
+    let (_ws, index) = open_index(path)?;
+    let hits = index.search(&query, limit)?;
+    if json {
+        print_json(&hits)?;
+    } else if hits.is_empty() {
+        println!("no matches");
+    } else {
+        for hit in &hits {
+            print_search_hit(hit);
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn print_search_hit(hit: &SearchHit) {
+    match &hit.snippet {
+        Some(snippet) => println!("{}  {}  {}", hit.path.display(), hit.title, snippet),
+        None => println!("{}  {}", hit.path.display(), hit.title),
+    }
+}
+
+fn cmd_backlinks(target: PathBuf, path: Option<PathBuf>, json: bool) -> Result<ExitCode> {
+    let (ws, index) = open_index(path)?;
+    let rel = workspace_relative(&ws, &target)?;
+    let backlinks = index.backlinks(&rel)?;
+    if json {
+        print_json(&backlinks)?;
+    } else if backlinks.is_empty() {
+        println!("no backlinks to {}", rel.display());
+    } else {
+        for link in &backlinks {
+            print_backlink(link);
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn print_backlink(link: &Backlink) {
+    let anchor = link
+        .anchor
+        .as_deref()
+        .map(|a| format!("#{a}"))
+        .unwrap_or_default();
+    println!(
+        "{}  {:?} -> {}{}",
+        link.source_path.display(),
+        link.kind,
+        link.target,
+        anchor
+    );
 }
 
 /// Render the age of a journal entry as a coarse human-readable duration.
