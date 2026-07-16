@@ -15,20 +15,29 @@ Full product and architecture specification: [docs/00-overview.md](docs/00-overv
 ```text
 lattice/
 ├── apps/
-│   ├── cli/          # `lattice` headless CLI (init, validate, ls)
-│   └── desktop/      # Tauri 2 desktop shell (React 19 + Vite + TypeScript)
+│   ├── cli/              # `lattice` headless CLI
+│   └── desktop/          # Tauri 2 shell (React 19 + Vite + TypeScript)
 ├── crates/
-│   └── lattice-core/ # workspace discovery, manifests, resource model, validation
-├── docs/             # architecture specification and ADRs
-├── site/             # Astro marketing + documentation site
-└── flake.nix         # Nix dev shell
+│   ├── lattice-core/     # workspace model, manifest, watcher, home layout
+│   ├── lattice-storage/  # filesystem store + recovery journal
+│   ├── lattice-commands/ # semantic command / transaction engine
+│   ├── lattice-index/    # FTS5 search + backlinks
+│   ├── lattice-data/     # `.data` table packages (SQLite + views)
+│   └── lattice-theme/    # theme YAML, appearance settings, CSS flattening
+├── themes/               # built-in themes (Lattice Slate, Lattice Paper)
+├── scripts/              # compile-theme and related generators
+├── docs/                 # architecture specification and ADRs
+├── design/               # brand mark / visual identity notes
+├── site/                 # Astro marketing + Starlight docs
+└── flake.nix             # Nix dev shell and task runners
 ```
 
 ## Status
 
-Early scaffold implementing the start of [roadmap](docs/29-roadmap.md)
-Phase 0 (headless core + CLI) and Phase 1 (minimal desktop shell). The
-specification in `docs/` is intentionally far broader than the current code.
+Active Phase 0–1 scaffold: headless core + CLI, desktop shell (pages, search,
+data tables, theming), and the marketing/docs site. The specification in
+`docs/` is intentionally broader than the current code — see
+[roadmap](docs/29-roadmap.md).
 
 ## Development
 
@@ -43,34 +52,31 @@ Requires flakes; if not enabled globally, add
 or pass `--extra-experimental-features 'nix-command flakes'`. Direnv users
 can `direnv allow` to load the shell automatically via `.envrc`.
 
-Common tasks are exposed as flake apps (self-contained — they bring their
-own toolchain, so they work outside the dev shell too):
-
-Inside the dev shell the same tasks are plain commands (`lattice-test`,
-`lattice-check`, …). Full workflow guide: [docs/dev/nix-workflows.md](docs/dev/nix-workflows.md).
-Environment variables (currently none required): [docs/dev/environment.md](docs/dev/environment.md).
+Common tasks are flake apps (and `lattice-<task>` inside the dev shell).
+Full guide: [docs/dev/nix-workflows.md](docs/dev/nix-workflows.md).
+Environment variables: [docs/dev/environment.md](docs/dev/environment.md).
 
 ```sh
-nix run .#test           # cargo test --workspace
-nix run .#lint           # clippy -D warnings + rustfmt check
-nix run .#fmt            # rustfmt
-nix run .#check          # everything CI would run (rust + both frontends)
-nix run .#site-dev       # Astro marketing/docs site (not the app)
-nix run .#site-build     # static site build
-nix run .#docs-sync      # regenerate site docs content from docs/
-nix run .#desktop-dev    # Tauri native window + Vite HMR on :5173
-nix run .#desktop-build  # tauri release build, unbundled
+nix run .#test            # cargo test --workspace
+nix run .#lint            # clippy -D warnings + rustfmt check
+nix run .#fmt             # rustfmt
+nix run .#check           # everything CI would run (rust + both frontends)
+nix run .#compile-theme   # themes/*.theme.yaml → CSS/TS tokens
+nix run .#site-dev        # Astro marketing/docs site
+nix run .#site-build      # static site build
+nix run .#docs-sync       # regenerate site docs content from docs/
+nix run .#desktop-dev     # Tauri native window + Vite HMR on :5173
+nix run .#desktop-web     # browser-only demo UI
+nix run .#desktop         # native without Vite (reuses dist)
+nix run .#desktop-build   # tauri release build, unbundled
 ```
 
-`desktop-dev` starts **both** the native app and Vite on :5173 (Tauri loads the UI from Vite in dev). Opening :5173 in a browser is a demo-only shell — see [docs/dev/nix-workflows.md](docs/dev/nix-workflows.md).
+`desktop-dev` starts **both** the native app and Vite on :5173. Opening :5173
+in a browser is a demo-only shell — see the nix workflows doc.
 
-First-run home: `lattice home ensure` creates `~/Lattice/{Workspaces,Settings}` and seeds `Workspaces/Personal`. New workspaces: `lattice init --template personal|team|demo|blank`.
-
-```sh
-nix run .#desktop-dev    # native + Vite HMR
-nix run .#desktop-web    # browser-only demo UI
-nix run .#desktop        # native without Vite (reuses dist)
-```
+First-run home: `lattice home ensure` creates `~/Lattice/{Workspaces,Settings}`
+and seeds `Workspaces/Personal`. New workspaces:
+`lattice init --template personal|team|demo|blank`.
 
 Or bring your own toolchain: stable Rust, Node.js ≥ 22, pnpm ≥ 9, and Xcode
 Command Line Tools on macOS (required for Tauri bundling either way).
@@ -87,10 +93,13 @@ pnpm --filter @lattice/desktop tauri dev
 
 # marketing/docs site
 pnpm --filter @lattice/site dev
+
+# theme tokens (also runs on desktop/site predev)
+pnpm compile-theme
 ```
 
 ## License
 
 Not yet licensed for redistribution; a licensing split (permissive specs,
-copyleft client) is planned — see
+copyleft client/server) is planned — see
 [docs/35-licensing-governance-and-sustainability.md](docs/35-licensing-governance-and-sustainability.md).
