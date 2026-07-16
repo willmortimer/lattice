@@ -1,0 +1,80 @@
+/* GENERATED from themes/lattice-slate.theme.yaml — do not edit by hand.
+   Recompile: pnpm compile-theme (or nix run .#compile-theme)
+   Theme: Lattice Slate (lattice-slate) */
+
+:root {
+  color-scheme: dark;
+
+  /* Roles */
+  --lt-bg: #0a0d13;
+  --lt-bg-raise: #0e1320;
+  --lt-panel: #131a29;
+  --lt-slate: #8ca2c4;
+  --lt-text: #e7ecf5;
+  --lt-text-soft: #b9c2d4;
+  --lt-muted: #8791a6;
+  --lt-faint: #5f6a80;
+  --lt-accent: #f5a623;
+  --lt-accent-bright: #ffce8a;
+  --lt-accent-deep: #d98615;
+  --lt-danger: #ff9d8a;
+  --lt-shadow: #000000;
+  --lt-on-accent: #201403;
+  --lt-surface: var(--lt-panel);
+
+  /* Derived — color-mix keeps washes/glows in lockstep with roles */
+  --lt-hover: color-mix(in oklch, var(--lt-slate) 7%, transparent);
+  --lt-line: color-mix(in oklch, var(--lt-slate) 12%, transparent);
+  --lt-line-strong: color-mix(in oklch, var(--lt-slate) 22%, transparent);
+  --lt-border: color-mix(in oklch, var(--lt-slate) 18%, transparent);
+  --lt-accent-wash: color-mix(in oklch, var(--lt-accent) 10%, transparent);
+  --lt-accent-glow: color-mix(in oklch, var(--lt-accent) 55%, transparent);
+  --lt-accent-glow-soft: color-mix(in oklch, var(--lt-accent) 35%, transparent);
+  --lt-accent-glow-mid: color-mix(in oklch, var(--lt-accent) 22%, transparent);
+  --lt-accent-glow-strong: color-mix(in oklch, var(--lt-accent) 45%, transparent);
+  --lt-accent-underline: color-mix(in oklch, var(--lt-accent) 35%, transparent);
+  --lt-node-dot: color-mix(in oklch, var(--lt-slate) 26%, transparent);
+  --lt-node-dot-soft: color-mix(in oklch, var(--lt-slate) 20%, transparent);
+  --lt-scrim: color-mix(in oklch, var(--lt-bg) 60%, transparent);
+  --lt-scrim-deep: color-mix(in oklch, var(--lt-bg) 72%, #06080c);
+  --lt-shadow-md: color-mix(in oklch, var(--lt-shadow) 35%, transparent);
+  --lt-shadow-lg: color-mix(in oklch, var(--lt-shadow) 45%, transparent);
+
+  /* Fonts */
+  --lt-font-display: "Fraunces Variable", "Fraunces", Georgia, serif;
+  --lt-font-ui: "Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif;
+  --lt-font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Shape */
+  --lt-radius: 9px;
+  --lt-radius-sm: 6px;
+  --lt-radius-lg: 14px;
+  --lt-grid: 34px;
+  --lt-titlebar: 38px;
+  --lt-max-width: 1140px;
+
+  /* Site aliases (--l-*) — same roles, legacy names used by marketing CSS */
+  --l-bg: var(--lt-bg);
+  --l-bg-2: var(--lt-bg-raise);
+  --l-panel: var(--lt-panel);
+  --l-panel-2: var(--lt-panel);
+  --l-line: var(--lt-line);
+  --l-line-strong: var(--lt-line-strong);
+  --l-border: var(--lt-border);
+  --l-text: var(--lt-text);
+  --l-text-soft: var(--lt-text-soft);
+  --l-muted: var(--lt-muted);
+  --l-faint: var(--lt-faint);
+  --l-amber: var(--lt-accent);
+  --l-amber-bright: var(--lt-accent-bright);
+  --l-amber-deep: var(--lt-accent-deep);
+  --l-amber-glow: var(--lt-accent-glow);
+  --l-amber-wash: var(--lt-accent-wash);
+  --l-font-display: var(--lt-font-display);
+  --l-font-body: var(--lt-font-ui);
+  --l-font-mono: var(--lt-font-mono);
+  --l-maxw: var(--lt-max-width);
+  --l-radius: var(--lt-radius-lg);
+  --l-radius-sm: var(--lt-radius);
+  --l-grid-size: var(--lt-grid);
+}

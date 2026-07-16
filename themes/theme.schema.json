@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lattice.dev/schemas/theme.schema.json",
+  "title": "Lattice theme",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "id", "appearance", "palette", "roles", "fonts", "shape"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "appearance": { "enum": ["dark", "light"] },
+    "palette": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    },
+    "roles": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    },
+    "fonts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["display", "ui", "mono"],
+      "properties": {
+        "display": { "type": "string" },
+        "ui": { "type": "string" },
+        "mono": { "type": "string" }
+      }
+    },
+    "shape": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["radius", "radius_sm", "radius_lg", "grid", "titlebar", "max_width"],
+      "properties": {
+        "radius": { "type": "string" },
+        "radius_sm": { "type": "string" },
+        "radius_lg": { "type": "string" },
+        "grid": { "type": "string" },
+        "titlebar": { "type": "string" },
+        "max_width": { "type": "string" }
+      }
+    }
+  }
+}

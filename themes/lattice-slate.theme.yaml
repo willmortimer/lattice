@@ -1,0 +1,58 @@
+# Lattice Slate — default built-in theme.
+#
+# Themes are plain YAML files (same ethos as lattice.yaml). Components never
+# read this file at runtime in v0 of the engine: a compile step flattens it
+# to CSS custom properties (`--lt-*`) consumed by desktop and the site.
+#
+# Schema (roles): surface tiers, lines, text tiers, accent, danger, fonts,
+# radii, grid. Derived washes/hovers are computed in CSS via color-mix so
+# a theme author only sets the raw palette + role assignments.
+
+name: Lattice Slate
+id: lattice-slate
+appearance: dark
+
+palette:
+  ground: "#0a0d13"
+  ground_raise: "#0e1320"
+  panel: "#131a29"
+  slate: "#8ca2c4"
+  text: "#e7ecf5"
+  text_soft: "#b9c2d4"
+  muted: "#8791a6"
+  faint: "#5f6a80"
+  accent: "#f5a623"
+  accent_bright: "#ffce8a"
+  accent_deep: "#d98615"
+  danger: "#ff9d8a"
+  ink_shadow: "#000000"
+  on_accent: "#201403"
+
+roles:
+  bg: $ground
+  bg_raise: $ground_raise
+  panel: $panel
+  # Slate is the cool neutral used to derive lines/hovers.
+  slate: $slate
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $accent
+  accent_bright: $accent_bright
+  accent_deep: $accent_deep
+  danger: $danger
+  shadow: $ink_shadow
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 9px
+  radius_sm: 6px
+  radius_lg: 14px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px
