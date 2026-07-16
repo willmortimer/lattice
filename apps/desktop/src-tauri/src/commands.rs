@@ -3,7 +3,9 @@ use std::path::{Path, PathBuf};
 use lattice_commands::{
     Command as SemanticCommand, CommandEngine, Error as CommandError, Transaction,
 };
-use lattice_core::{Resource, Workspace};
+use lattice_core::{
+    ensure_lattice_home, init_with_template, Resource, Workspace, WorkspaceTemplate,
+};
 use lattice_storage::{NativeWorkspaceStore, WorkspaceStore};
 use serde::Serialize;
 
@@ -190,6 +192,90 @@ pub fn undo_last(root: String) -> Result<Option<String>, String> {
     let mut engine = CommandEngine::open(Path::new(&root)).map_err(command_error_to_string)?;
     let report = engine.undo().map_err(command_error_to_string)?;
     Ok(report.map(|r| r.summary))
+}
+
+/// Snapshot of `~/Lattice` after ensuring the layout exists.
+#[derive(Debug, Serialize)]
+pub struct LatticeHomeInfo {
+    pub root: String,
+    pub workspaces: String,
+    pub settings: String,
+    pub default_workspace: Option<WorkspaceSnapshot>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TemplateInfo {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+}
+
+fn snapshot_from_workspace(workspace: &Workspace) -> Result<WorkspaceSnapshot, String> {
+    let resources = workspace.scan().map_err(|err| err.to_string())?;
+    let manifest = workspace.manifest();
+    Ok(WorkspaceSnapshot {
+        root: workspace.root().to_string_lossy().into_owned(),
+        title: manifest.title.clone(),
+        id: manifest.id.clone(),
+        resources,
+    })
+}
+
+/// Ensure `~/Lattice/{Workspaces,Settings}` exists and seed `Workspaces/Personal`
+/// when Workspaces is empty. Returns paths plus the default workspace
+/// snapshot when it exists.
+#[tauri::command]
+pub fn ensure_home() -> Result<LatticeHomeInfo, String> {
+    let home = ensure_lattice_home().map_err(|err| err.to_string())?;
+    let default_path = home.default_workspace();
+    let default_workspace = if default_path.join("lattice.yaml").exists() {
+        let ws = Workspace::open(&default_path).map_err(|err| err.to_string())?;
+        Some(snapshot_from_workspace(&ws)?)
+    } else {
+        None
+    };
+    Ok(LatticeHomeInfo {
+        root: home.root.to_string_lossy().into_owned(),
+        workspaces: home.workspaces.to_string_lossy().into_owned(),
+        settings: home.settings.to_string_lossy().into_owned(),
+        default_workspace,
+    })
+}
+
+/// Create a new workspace at `path` (folder may already exist, but must not
+/// already contain `lattice.yaml`), apply `template`, and return a snapshot.
+#[tauri::command]
+pub fn create_workspace(
+    path: String,
+    title: Option<String>,
+    template: String,
+) -> Result<WorkspaceSnapshot, String> {
+    let root = PathBuf::from(&path);
+    let title = title.unwrap_or_else(|| {
+        root.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("Workspace")
+            .to_string()
+    });
+    let template = WorkspaceTemplate::parse(&template).ok_or_else(|| {
+        format!("unknown template {template:?}; expected personal, team, demo, or blank")
+    })?;
+    let ws = init_with_template(&root, title, template).map_err(|err| err.to_string())?;
+    snapshot_from_workspace(&ws)
+}
+
+/// Built-in workspace templates for the New Workspace UI.
+#[tauri::command]
+pub fn list_templates() -> Vec<TemplateInfo> {
+    WorkspaceTemplate::all()
+        .iter()
+        .copied()
+        .map(|t| TemplateInfo {
+            id: t.id().to_string(),
+            name: t.display_name().to_string(),
+            description: t.description().to_string(),
+        })
+        .collect()
 }
 
 #[cfg(test)]
