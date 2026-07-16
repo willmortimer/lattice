@@ -20,9 +20,9 @@ export type TreeNode = TreeFolder | TreeFile;
 /**
  * Build a collapsible folder tree from a flat resource listing (as
  * returned by `list_resources`), grouping by `/`-separated path segments.
- * Within each folder, subfolders sort before files, and both sort
- * alphabetically (case-insensitive) — the sidebar's ordering is otherwise
- * unspecified by the backend scan.
+ * Resources with kind `folder` ensure an empty folder node exists without
+ * adding a file leaf. Within each folder, subfolders sort before files,
+ * and both sort alphabetically (case-insensitive).
  */
 export function buildResourceTree(resources: readonly Resource[]): TreeNode[] {
   const root: TreeFolder = { type: "folder", name: "", path: "", children: [] };
@@ -30,6 +30,23 @@ export function buildResourceTree(resources: readonly Resource[]): TreeNode[] {
   for (const resource of resources) {
     const segments = resource.path.split("/").filter((segment) => segment.length > 0);
     if (segments.length === 0) continue;
+
+    if (resource.kind === "folder") {
+      let cursor = root;
+      for (let depth = 0; depth < segments.length; depth++) {
+        const name = segments[depth];
+        const path = segments.slice(0, depth + 1).join("/");
+        let folder = cursor.children.find(
+          (node): node is TreeFolder => node.type === "folder" && node.name === name,
+        );
+        if (!folder) {
+          folder = { type: "folder", name, path, children: [] };
+          cursor.children.push(folder);
+        }
+        cursor = folder;
+      }
+      continue;
+    }
 
     let cursor = root;
     for (let depth = 0; depth < segments.length - 1; depth++) {

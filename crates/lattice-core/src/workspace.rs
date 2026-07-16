@@ -95,18 +95,26 @@ impl Workspace {
             }
             let is_dir = entry.file_type().is_dir();
             let kind = ResourceKind::classify(entry.path(), is_dir);
-            if is_dir {
-                if kind == ResourceKind::File {
-                    continue; // ordinary folder: descend, not a resource
-                }
-                walker.skip_current_dir(); // package: single resource
-            }
             let rel = entry
                 .path()
                 .strip_prefix(&self.root)
                 .expect("walked paths are under root")
                 .to_path_buf();
             if rel.as_os_str() == WORKSPACE_MANIFEST_FILENAME {
+                continue;
+            }
+            if is_dir {
+                if kind.is_package() {
+                    walker.skip_current_dir();
+                    resources.push(Resource { path: rel, kind });
+                } else {
+                    // Ordinary folder: list it (so empty template dirs appear
+                    // in the sidebar) and keep descending for children.
+                    resources.push(Resource {
+                        path: rel,
+                        kind: ResourceKind::Folder,
+                    });
+                }
                 continue;
             }
             resources.push(Resource { path: rel, kind });

@@ -86,6 +86,12 @@ const MARKS: Record<ResourceKind, JSX.Element> = {
       <path d="m7.5 10 1.8 1.8L13 8.2" />
     </>
   ),
+  // Folder: an open frame on the grid.
+  folder: (
+    <>
+      <path d="M3.5 7.5h4l1.5-2h7.5v10.5h-13z" />
+    </>
+  ),
   // Any ordinary file: one honest node on the grid.
   file: (
     <>
@@ -125,5 +131,6 @@ export const KIND_LABELS: Record<ResourceKind, string> = {
   app: "App",
   workflow: "Workflow",
   task: "Task",
+  folder: "Folder",
   file: "File",
 };
