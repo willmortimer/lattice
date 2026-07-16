@@ -105,6 +105,7 @@ button {
    ========================================================================== */
 
 .empty-state {
+  position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -113,11 +114,32 @@ button {
   gap: 14px;
   padding: 24px;
   text-align: center;
+}
+
+/* Grid backdrop with node dots at the intersections, fading out toward the
+   edges so the mark sits in a pool of structure (same language as the site). */
+.empty-state::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
   background-image:
+    radial-gradient(circle at 0 0, rgba(140, 162, 196, 0.26) 1px, transparent 1.6px),
+    radial-gradient(460px 340px at 50% 40%, var(--amber-wash), transparent 72%),
     linear-gradient(var(--line) 1px, transparent 1px),
     linear-gradient(90deg, var(--line) 1px, transparent 1px);
-  background-size: 34px 34px;
+  background-size:
+    34px 34px,
+    100% 100%,
+    34px 34px,
+    34px 34px;
   background-position: center;
+  -webkit-mask-image: radial-gradient(ellipse 75% 65% at 50% 42%, #000 30%, transparent 100%);
+  mask-image: radial-gradient(ellipse 75% 65% at 50% 42%, #000 30%, transparent 100%);
+}
+
+.empty-state > * {
+  position: relative;
 }
 
 .brand-mark {
@@ -304,6 +326,7 @@ button {
 .resource-item-active:hover {
   background: var(--amber-wash);
   color: var(--text);
+  box-shadow: inset 2px 0 0 var(--amber);
 }
 
 .resource-item-active .kind-mark,
@@ -570,6 +593,13 @@ button {
   border-radius: 50%;
   background: var(--amber);
   flex-shrink: 0;
+  animation: dot-breathe 2.4s ease-in-out infinite;
+}
+
+@keyframes dot-breathe {
+  50% {
+    opacity: 0.45;
+  }
 }
 
 .save-state {
@@ -577,6 +607,7 @@ button {
   font-size: 10.5px;
   letter-spacing: 0.02em;
   color: var(--faint);
+  transition: color 200ms ease;
 }
 
 .save-state-saving {
@@ -595,6 +626,7 @@ button {
 /* Conflict banner */
 
 .conflict-banner {
+  animation: banner-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -606,6 +638,13 @@ button {
   border-radius: var(--radius);
   color: var(--text-soft);
   font-size: 13px;
+}
+
+@keyframes banner-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
 }
 
 .conflict-banner-actions {
@@ -664,6 +703,7 @@ button {
   position: relative;
   overflow: hidden;
   background-image:
+    radial-gradient(circle at 0 0, rgba(140, 162, 196, 0.2) 1px, transparent 1.6px),
     linear-gradient(var(--line) 1px, transparent 1px),
     linear-gradient(90deg, var(--line) 1px, transparent 1px);
   background-size: 34px 34px;
@@ -745,11 +785,20 @@ button {
   position: fixed;
   inset: 0;
   background: rgba(10, 13, 19, 0.6);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
   display: flex;
   align-items: flex-start;
   justify-content: center;
   padding-top: 14vh;
   z-index: 50;
+  animation: overlay-in 130ms ease;
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
 }
 
 .palette {
@@ -762,6 +811,14 @@ button {
   border-radius: var(--radius);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
   overflow: hidden;
+  animation: palette-in 170ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes palette-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.985);
+  }
 }
 
 .palette-input {
@@ -924,4 +981,18 @@ button {
 
 .mermaid-error {
   margin-top: 8px;
+}
+
+/* ============================================================================
+   Reduced motion — neutralise all decorative animation
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }
