@@ -1,0 +1,49 @@
+# Lattice Vellum — warm archival paper with oxblood signal.
+
+name: Lattice Vellum
+id: lattice-vellum
+appearance: light
+
+palette:
+  ground: "#f3ecdc"
+  ground_raise: "#ebe1ce"
+  panel: "#fbf7ed"
+  slate: "#766f66"
+  text: "#2b241d"
+  text_soft: "#554b40"
+  muted: "#786d61"
+  faint: "#9a8d7d"
+  accent: "#9f3f35"
+  accent_bright: "#7d2d27"
+  accent_deep: "#6b211d"
+  danger: "#a62f2a"
+  ink_shadow: "#2b241d"
+  on_accent: "#fff8ee"
+
+roles:
+  bg: $ground
+  bg_raise: $ground_raise
+  panel: $panel
+  slate: $slate
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $accent
+  accent_bright: $accent_bright
+  accent_deep: $accent_deep
+  danger: $danger
+  shadow: $ink_shadow
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 8px
+  radius_sm: 5px
+  radius_lg: 12px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px

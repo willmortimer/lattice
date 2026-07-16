@@ -105,6 +105,131 @@ function parseCssRootVars(css: string): Record<string, string> {
 
 const SLATE_VARS = parseCssRootVars(slateCss);
 
+function variantVars(overrides: Record<string, string>): Record<string, string> {
+  return { ...SLATE_VARS, ...overrides };
+}
+
+const DEMO_THEMES: Record<
+  string,
+  { name: string; appearance: "dark" | "light"; vars: Record<string, string> }
+> = {
+  "lattice-slate": { name: "Lattice Slate", appearance: "dark", vars: SLATE_VARS },
+  "lattice-paper": { name: "Lattice Paper", appearance: "light", vars: PAPER_VARS },
+  "lattice-carbon": {
+    name: "Lattice Carbon",
+    appearance: "dark",
+    vars: variantVars({
+      "--lt-bg": "#090a0c",
+      "--lt-bg-raise": "#101215",
+      "--lt-panel": "#171a1e",
+      "--lt-slate": "#98a0aa",
+      "--lt-text": "#f0f2f4",
+      "--lt-text-soft": "#c5c9ce",
+      "--lt-muted": "#8e959e",
+      "--lt-faint": "#626973",
+      "--lt-accent": "#ff7a45",
+      "--lt-accent-bright": "#ffb08f",
+      "--lt-accent-deep": "#d95222",
+      "--lt-danger": "#ff806f",
+      "--lt-on-accent": "#240b03",
+      "--lt-radius": "7px",
+      "--lt-radius-sm": "5px",
+      "--lt-radius-lg": "12px",
+      "--lt-grid": "32px",
+    }),
+  },
+  "lattice-fjord": {
+    name: "Lattice Fjord",
+    appearance: "dark",
+    vars: variantVars({
+      "--lt-bg": "#071217",
+      "--lt-bg-raise": "#0b1a21",
+      "--lt-panel": "#10252d",
+      "--lt-slate": "#88a8b3",
+      "--lt-text": "#e8f3f4",
+      "--lt-text-soft": "#b8cdd1",
+      "--lt-muted": "#7f9ba3",
+      "--lt-faint": "#536f78",
+      "--lt-accent": "#42d6bd",
+      "--lt-accent-bright": "#9aefdf",
+      "--lt-accent-deep": "#159b89",
+      "--lt-danger": "#ff8e82",
+      "--lt-on-accent": "#04201c",
+      "--lt-radius": "10px",
+      "--lt-radius-sm": "7px",
+      "--lt-radius-lg": "15px",
+      "--lt-grid": "36px",
+    }),
+  },
+  "lattice-ultraviolet": {
+    name: "Lattice Ultraviolet",
+    appearance: "dark",
+    vars: variantVars({
+      "--lt-bg": "#0d0916",
+      "--lt-bg-raise": "#151023",
+      "--lt-panel": "#1d1730",
+      "--lt-slate": "#a199bd",
+      "--lt-text": "#f1edfa",
+      "--lt-text-soft": "#cbc3df",
+      "--lt-muted": "#958aa9",
+      "--lt-faint": "#695f7c",
+      "--lt-accent": "#b08cff",
+      "--lt-accent-bright": "#d8c5ff",
+      "--lt-accent-deep": "#7651d5",
+      "--lt-danger": "#ff8caa",
+      "--lt-on-accent": "#180c2b",
+      "--lt-radius": "11px",
+      "--lt-radius-sm": "7px",
+      "--lt-radius-lg": "17px",
+    }),
+  },
+  "lattice-blueprint": {
+    name: "Lattice Blueprint",
+    appearance: "dark",
+    vars: variantVars({
+      "--lt-bg": "#07182b",
+      "--lt-bg-raise": "#0b2139",
+      "--lt-panel": "#102b49",
+      "--lt-slate": "#84a7ca",
+      "--lt-text": "#edf5ff",
+      "--lt-text-soft": "#bfd3e8",
+      "--lt-muted": "#88a6c2",
+      "--lt-faint": "#587797",
+      "--lt-accent": "#ffc857",
+      "--lt-accent-bright": "#ffe3a0",
+      "--lt-accent-deep": "#d99a20",
+      "--lt-danger": "#ff9b8b",
+      "--lt-on-accent": "#251801",
+      "--lt-radius": "5px",
+      "--lt-radius-sm": "3px",
+      "--lt-radius-lg": "9px",
+      "--lt-grid": "28px",
+    }),
+  },
+  "lattice-vellum": {
+    name: "Lattice Vellum",
+    appearance: "light",
+    vars: variantVars({
+      "--lt-bg": "#f3ecdc",
+      "--lt-bg-raise": "#ebe1ce",
+      "--lt-panel": "#fbf7ed",
+      "--lt-slate": "#766f66",
+      "--lt-text": "#2b241d",
+      "--lt-text-soft": "#554b40",
+      "--lt-muted": "#786d61",
+      "--lt-faint": "#9a8d7d",
+      "--lt-accent": "#9f3f35",
+      "--lt-accent-bright": "#7d2d27",
+      "--lt-accent-deep": "#6b211d",
+      "--lt-danger": "#a62f2a",
+      "--lt-on-accent": "#fff8ee",
+      "--lt-radius": "8px",
+      "--lt-radius-sm": "5px",
+      "--lt-radius-lg": "12px",
+    }),
+  },
+};
+
 function readPrefs(): DemoPrefs {
   try {
     const raw = localStorage.getItem(DEMO_PREFS_KEY);
@@ -120,22 +245,13 @@ function writePrefs(prefs: DemoPrefs): void {
 }
 
 function builtins() {
-  return [
-    {
-      id: "lattice-slate",
-      name: "Lattice Slate",
-      appearance: "dark",
-      source: "builtin" as const,
-      path: "builtin:lattice-slate.theme.yaml",
-    },
-    {
-      id: "lattice-paper",
-      name: "Lattice Paper",
-      appearance: "light",
-      source: "builtin" as const,
-      path: "builtin:lattice-paper.theme.yaml",
-    },
-  ];
+  return Object.entries(DEMO_THEMES).map(([id, theme]) => ({
+    id,
+    name: theme.name,
+    appearance: theme.appearance,
+    source: "builtin" as const,
+    path: `builtin:${id}.theme.yaml`,
+  }));
 }
 
 function resolveId(prefs: DemoPrefs, system: "dark" | "light"): string {
@@ -149,12 +265,12 @@ function buildResolved(
   id: string,
   prefs: DemoPrefs,
 ): ResolvedThemePayload {
-  const isPaper = id === "lattice-paper";
-  const vars = isPaper ? { ...PAPER_VARS } : { ...SLATE_VARS };
+  const theme = DEMO_THEMES[id] ?? DEMO_THEMES["lattice-slate"];
+  const vars = { ...theme.vars };
   return {
     id,
-    name: isPaper ? "Lattice Paper" : "Lattice Slate",
-    appearance: isPaper ? "light" : "dark",
+    name: theme.name,
+    appearance: theme.appearance,
     sourcePath: `builtin:${id}.theme.yaml`,
     vars,
     background: vars["--lt-bg"] ?? "#0a0d13",

@@ -1,0 +1,49 @@
+# Lattice Ultraviolet — nocturnal violet structure with electric lilac signal.
+
+name: Lattice Ultraviolet
+id: lattice-ultraviolet
+appearance: dark
+
+palette:
+  ground: "#0d0916"
+  ground_raise: "#151023"
+  panel: "#1d1730"
+  slate: "#a199bd"
+  text: "#f1edfa"
+  text_soft: "#cbc3df"
+  muted: "#958aa9"
+  faint: "#695f7c"
+  accent: "#b08cff"
+  accent_bright: "#d8c5ff"
+  accent_deep: "#7651d5"
+  danger: "#ff8caa"
+  ink_shadow: "#050208"
+  on_accent: "#180c2b"
+
+roles:
+  bg: $ground
+  bg_raise: $ground_raise
+  panel: $panel
+  slate: $slate
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $accent
+  accent_bright: $accent_bright
+  accent_deep: $accent_deep
+  danger: $danger
+  shadow: $ink_shadow
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 11px
+  radius_sm: 7px
+  radius_lg: 17px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px
