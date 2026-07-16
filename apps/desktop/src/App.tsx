@@ -1,16 +1,18 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import type { Resource, WorkspaceSnapshot } from "./types";
 import { KindMark, KIND_LABELS } from "./KindMark";
 import { demoCanvas, demoPage, demoSnapshot, demoStartEmpty, inBrowser } from "./demo";
 import { CanvasViewer } from "./canvas/CanvasViewer";
+import { PageEditor, saveIndicatorText, isUnsaved, type SaveState } from "./editor/PageEditor";
+import { createDemoPageIO, createNativePageIO, type PageIO } from "./editor/pageIO";
 
 interface PageState {
   resource: Resource;
   content: string;
+  revision: string | null;
+  io: PageIO;
 }
 
 interface CanvasState {
@@ -51,6 +53,7 @@ export default function App() {
   const [canvas, setCanvas] = useState<CanvasState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
 
   async function handleOpenWorkspace() {
     setError(null);
@@ -63,6 +66,7 @@ export default function App() {
       setSnapshot(next);
       setSelected(null);
       setPage(null);
+      setSaveState({ status: "idle" });
     } catch (err) {
       setError(String(err));
     } finally {
@@ -101,18 +105,18 @@ export default function App() {
       return;
     }
 
+    setSaveState({ status: "idle" });
+
     if (inBrowser) {
-      setPage({ resource, content: demoPage });
+      setPage({ resource, content: demoPage, revision: "demo:0", io: createDemoPageIO(demoPage) });
       return;
     }
 
     setBusy(true);
     try {
-      const content = await invoke<string>("read_file", {
-        root: snapshot.root,
-        relPath: resource.path,
-      });
-      setPage({ resource, content });
+      const io = createNativePageIO(snapshot.root, resource.path);
+      const { raw, revision } = await io.load();
+      setPage({ resource, content: raw, revision, io });
     } catch (err) {
       setPage(null);
       setError(String(err));
@@ -189,6 +193,22 @@ export default function App() {
             <>
               <KindMark kind={selected.kind} size={13} />
               <span className="main-head-path">{selected.path}</span>
+              {selected.kind === "page" && page && (
+                <>
+                  {isUnsaved(saveState) && (
+                    <span
+                      className="dirty-dot"
+                      title="Unsaved changes"
+                      aria-label="Unsaved changes"
+                    />
+                  )}
+                  {saveIndicatorText(saveState) && (
+                    <span className={`save-state save-state-${saveState.status}`}>
+                      {saveIndicatorText(saveState)}
+                    </span>
+                  )}
+                </>
+              )}
             </>
           )}
         </header>
@@ -205,9 +225,13 @@ export default function App() {
               </div>
             )}
             {selected && selected.kind === "page" && page && (
-              <article className="markdown-body">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{page.content}</ReactMarkdown>
-              </article>
+              <PageEditor
+                key={page.resource.path}
+                raw={page.content}
+                revision={page.revision}
+                io={page.io}
+                onSaveStateChange={setSaveState}
+              />
             )}
             {selected && selected.kind !== "page" && selected.kind !== "canvas" && !error && (
               <div className="placeholder">
