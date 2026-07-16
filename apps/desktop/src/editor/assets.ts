@@ -1,5 +1,3 @@
-import { convertFileSrc } from "@tauri-apps/api/core";
-
 /** `scheme:` or `//host` prefixes — anything that isn't a page-relative path. */
 const ABSOLUTE_SRC_PATTERN = /^([a-z][a-z0-9+.-]*:|\/\/)/i;
 
@@ -29,19 +27,34 @@ export function joinRelativePath(baseDir: string, relative: string): string {
 }
 
 /**
- * Resolve a page-relative embed `src` (an image path from Markdown) to a
- * URL the webview can actually load: the Tauri asset protocol, scoped to
- * `root` and resolved relative to `pagePath`'s directory (not the
- * workspace root — Markdown image paths are relative to the file that
- * contains them).
- *
- * Returns `src` unchanged when it's already absolute, or when there is no
- * workspace `root` to resolve against (the in-browser demo shell has no
- * real files on disk, and no Tauri bridge to ask).
+ * Resolve a page-relative embed path against the page's own directory. The
+ * resulting path remains workspace-relative and is passed to the validated
+ * `read_binary_file` command; it is never concatenated into a filesystem URL.
  */
-export function resolveEmbedSrc(root: string | null, pagePath: string, src: string): string {
-  if (!root || isAbsoluteSrc(src)) return src;
+export function resolveWorkspaceAssetPath(pagePath: string, src: string): string | null {
+  if (isAbsoluteSrc(src)) return null;
   const pageDir = pagePath.includes("/") ? pagePath.slice(0, pagePath.lastIndexOf("/")) : "";
-  const relPath = joinRelativePath(pageDir, src);
-  return convertFileSrc(`${root}/${relPath}`);
+  return joinRelativePath(pageDir, src);
+}
+
+/** Infer a useful Blob MIME type from a workspace-relative filename. */
+export function assetMimeType(path: string): string {
+  const extension = path.split(".").pop()?.toLowerCase();
+  switch (extension) {
+    case "avif":
+      return "image/avif";
+    case "gif":
+      return "image/gif";
+    case "jpeg":
+    case "jpg":
+      return "image/jpeg";
+    case "png":
+      return "image/png";
+    case "svg":
+      return "image/svg+xml";
+    case "webp":
+      return "image/webp";
+    default:
+      return "application/octet-stream";
+  }
 }

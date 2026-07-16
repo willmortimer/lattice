@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { isAbsoluteSrc, joinRelativePath, resolveEmbedSrc } from "./assets";
+import {
+  assetMimeType,
+  isAbsoluteSrc,
+  joinRelativePath,
+  resolveWorkspaceAssetPath,
+} from "./assets";
 
 describe("isAbsoluteSrc", () => {
   it("recognizes http(s) URLs", () => {
@@ -42,14 +47,26 @@ describe("joinRelativePath", () => {
   });
 });
 
-describe("resolveEmbedSrc", () => {
-  it("returns an absolute src unchanged even with a root present", () => {
-    expect(resolveEmbedSrc("/workspace", "Notes/Idea.md", "https://example.com/a.png")).toBe(
-      "https://example.com/a.png",
-    );
+describe("resolveWorkspaceAssetPath", () => {
+  it("rejects absolute URLs", () => {
+    expect(resolveWorkspaceAssetPath("Notes/Idea.md", "https://example.com/a.png")).toBeNull();
   });
 
-  it("returns a relative src unchanged when there is no workspace root", () => {
-    expect(resolveEmbedSrc(null, "Notes/Idea.md", "./diagram.png")).toBe("./diagram.png");
+  it("resolves paths relative to the containing page", () => {
+    expect(resolveWorkspaceAssetPath("Notes/Idea.md", "./diagram.png")).toBe("Notes/diagram.png");
+    expect(resolveWorkspaceAssetPath("Notes/Sub/Idea.md", "../diagram.png")).toBe(
+      "Notes/diagram.png",
+    );
+  });
+});
+
+describe("assetMimeType", () => {
+  it("recognizes common image formats", () => {
+    expect(assetMimeType("assets/photo.JPG")).toBe("image/jpeg");
+    expect(assetMimeType("assets/diagram.svg")).toBe("image/svg+xml");
+  });
+
+  it("falls back for unknown binary resources", () => {
+    expect(assetMimeType("assets/archive.bin")).toBe("application/octet-stream");
   });
 });
