@@ -4,6 +4,7 @@ description = "Headless CLI for Lattice workspaces"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [[bin]]
 name = "lattice"

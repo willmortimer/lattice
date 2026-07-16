@@ -3,6 +3,7 @@
   "type": "module",
   "version": "0.1.0",
   "private": true,
+  "license": "AGPL-3.0-or-later",
   "description": "Marketing and documentation site for Lattice.",
   "scripts": {
     "compile-theme": "node ../scripts/compile-theme.mjs",

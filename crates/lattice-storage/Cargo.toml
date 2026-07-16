@@ -4,6 +4,7 @@ description = "Atomic file materialization and crash-recovery journal for Lattic
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [dependencies]
 thiserror.workspace = true

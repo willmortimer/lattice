@@ -19,7 +19,12 @@ The licensing structure should:
 
 ## Proposed licensing split
 
-The exact choice requires legal review, but the preferred shape is:
+**Decision (2026-07):** this repository is **AGPL-3.0-or-later** for now
+([ADR 0031](./decisions/0031-agpl-3-or-later.md)). The split below remains the
+longer-term shape if schemas/SDKs are extracted into separately licensed
+artifacts.
+
+The preferred shape is:
 
 ### Format specifications and schemas
 

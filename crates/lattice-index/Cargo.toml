@@ -4,6 +4,7 @@ description = "Derived workspace search index (SQLite FTS5) for Lattice"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [dependencies]
 lattice-core.workspace = true
