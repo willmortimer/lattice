@@ -36,3 +36,23 @@ export type WorkspaceChangeEvent =
   | { type: "modified"; path: string; revision: string }
   | { type: "deleted"; path: string }
   | { type: "renamed"; from: string; to: string; revision: string };
+
+/** Mirrors `lattice_index::SearchHit` (`crates/lattice-index/src/index.rs`). */
+export interface SearchHit {
+  path: string;
+  title: string;
+  snippet: string | null;
+  rank: number;
+}
+
+/** Mirrors `lattice_index::BacklinkKind`. */
+export type BacklinkKind = "wiki" | "md";
+
+/** Mirrors `lattice_index::Backlink`. Field names match the Rust struct
+ * verbatim (no camelCase rename) since it has no `#[serde(rename_all)]`. */
+export interface Backlink {
+  source_path: string;
+  kind: BacklinkKind;
+  target: string;
+  anchor: string | null;
+}
