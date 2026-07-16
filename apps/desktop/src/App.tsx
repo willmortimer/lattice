@@ -5,11 +5,17 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Resource, WorkspaceSnapshot } from "./types";
 import { KindMark, KIND_LABELS } from "./KindMark";
-import { demoPage, demoSnapshot, demoStartEmpty, inBrowser } from "./demo";
+import { demoCanvas, demoPage, demoSnapshot, demoStartEmpty, inBrowser } from "./demo";
+import { CanvasViewer } from "./canvas/CanvasViewer";
 
 interface PageState {
   resource: Resource;
   content: string;
+}
+
+interface CanvasState {
+  resource: Resource;
+  json: unknown;
 }
 
 /** The wordmark node-glyph: the app's own mark, drawn on the lattice grid. */
@@ -42,6 +48,7 @@ export default function App() {
   );
   const [selected, setSelected] = useState<Resource | null>(null);
   const [page, setPage] = useState<PageState | null>(null);
+  const [canvas, setCanvas] = useState<CanvasState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -66,9 +73,31 @@ export default function App() {
   async function handleSelect(resource: Resource) {
     setSelected(resource);
     setError(null);
+    setPage(null);
+    setCanvas(null);
+
+    if (resource.kind === "canvas" && snapshot) {
+      if (inBrowser) {
+        setCanvas({ resource, json: demoCanvas });
+        return;
+      }
+
+      setBusy(true);
+      try {
+        const content = await invoke<string>("read_file", {
+          root: snapshot.root,
+          relPath: resource.path,
+        });
+        setCanvas({ resource, json: JSON.parse(content) });
+      } catch (err) {
+        setError(String(err));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
 
     if (resource.kind !== "page" || !snapshot) {
-      setPage(null);
       return;
     }
 
@@ -90,6 +119,12 @@ export default function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+  /** A file node's double-click callback: selects it if it's in the workspace. */
+  function handleOpenFile(path: string) {
+    const resource = snapshot?.resources.find((r) => r.path === path);
+    if (resource) handleSelect(resource);
   }
 
   if (!snapshot) {
@@ -157,32 +192,38 @@ export default function App() {
             </>
           )}
         </header>
-        <div className="main-scroll">
-          {error && <p className="error-text">{error}</p>}
-          {!selected && !error && (
-            <div className="placeholder">
-              <p className="placeholder-copy">Select a resource to view it.</p>
-            </div>
-          )}
-          {selected && selected.kind === "page" && page && (
-            <article className="markdown-body">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{page.content}</ReactMarkdown>
-            </article>
-          )}
-          {selected && selected.kind !== "page" && !error && (
-            <div className="placeholder">
-              <span className="placeholder-mark">
-                <KindMark kind={selected.kind} size={36} />
-              </span>
-              <p className="placeholder-copy">
-                No {KIND_LABELS[selected.kind].toLowerCase()} viewer yet.
-              </p>
-              <p className="placeholder-sub">
-                The file stays yours — open <code>{selected.path}</code> in any tool.
-              </p>
-            </div>
-          )}
-        </div>
+        {selected && selected.kind === "canvas" && canvas ? (
+          <div className="canvas-pane">
+            <CanvasViewer key={selected.path} json={canvas.json} onOpenFile={handleOpenFile} />
+          </div>
+        ) : (
+          <div className="main-scroll">
+            {error && <p className="error-text">{error}</p>}
+            {!selected && !error && (
+              <div className="placeholder">
+                <p className="placeholder-copy">Select a resource to view it.</p>
+              </div>
+            )}
+            {selected && selected.kind === "page" && page && (
+              <article className="markdown-body">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{page.content}</ReactMarkdown>
+              </article>
+            )}
+            {selected && selected.kind !== "page" && selected.kind !== "canvas" && !error && (
+              <div className="placeholder">
+                <span className="placeholder-mark">
+                  <KindMark kind={selected.kind} size={36} />
+                </span>
+                <p className="placeholder-copy">
+                  No {KIND_LABELS[selected.kind].toLowerCase()} viewer yet.
+                </p>
+                <p className="placeholder-sub">
+                  The file stays yours — open <code>{selected.path}</code> in any tool.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </main>
     </div>
   );
