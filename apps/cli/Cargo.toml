@@ -13,6 +13,7 @@ path = "src/main.rs"
 lattice-core.workspace = true
 lattice-storage.workspace = true
 lattice-commands.workspace = true
+lattice-index.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 serde.workspace = true
