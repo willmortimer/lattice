@@ -94,6 +94,14 @@ const parserTokens: { [tokenType: string]: ParseSpec } = {
   },
   hr: { node: "horizontalRule" },
   hardbreak: { node: "hardBreak" },
+  image: {
+    node: "image",
+    getAttrs: (tok) => ({
+      src: tok.attrGet("src"),
+      alt: tok.attrGet("alt") || tok.content || null,
+      title: tok.attrGet("title") || null,
+    }),
+  },
   em: { mark: "italic" },
   strong: { mark: "bold" },
   s: { mark: "strike" },
@@ -260,6 +268,14 @@ const serializerNodes: MarkdownSerializer["nodes"] = {
         return;
       }
     }
+  },
+  image(state, node) {
+    const alt = state.esc(node.attrs.alt ?? "");
+    const src = (node.attrs.src as string).replace(/[()]/g, "\\$&");
+    const title = node.attrs.title
+      ? ` "${(node.attrs.title as string).replace(/"/g, '\\"')}"`
+      : "";
+    state.write(`![${alt}](${src}${title})`);
   },
   table: serializeTable,
   text(state, node) {

@@ -47,6 +47,10 @@ const CORPUS: Record<string, string> = {
 
   horizontalRule: "Above.\n\n---\n\nBelow.\n",
 
+  image: 'An inline ![alt text](./diagram.png "Diagram") within a paragraph.\n',
+
+  imageNoTitleOrAlt: "![](assets/photo.png)\n",
+
   mixedDocument:
     "# Project Notes\n\n" +
     "An overview paragraph with a [link](https://example.com) and `code`.\n\n" +
@@ -87,6 +91,16 @@ describe("markdown serializer output", () => {
   it("escapes pipes inside table cells", () => {
     const json = parseMarkdownToJSON("| A |\n| --- |\n| has \\| pipe |\n");
     expect(serializeJSONToMarkdown(json)).toContain("has \\| pipe");
+  });
+
+  it("serializes an image with alt text and a title", () => {
+    const json = parseMarkdownToJSON('![alt text](./diagram.png "Diagram")\n');
+    expect(serializeJSONToMarkdown(json)).toBe('![alt text](./diagram.png "Diagram")\n');
+  });
+
+  it("serializes an image with neither alt text nor a title", () => {
+    const json = parseMarkdownToJSON("![](assets/photo.png)\n");
+    expect(serializeJSONToMarkdown(json)).toBe("![](assets/photo.png)\n");
   });
 });
 

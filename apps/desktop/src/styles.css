@@ -900,3 +900,28 @@ button {
   color: var(--amber-bright);
   text-decoration: underline;
 }
+
+/* ============================================================================
+   Read-view embeds — inline images and Mermaid diagrams
+   ========================================================================== */
+
+.page-embed-image {
+  display: inline-block;
+}
+
+.mermaid-preview {
+  margin-top: 10px;
+  padding: 14px 16px;
+  background: var(--bg-raise);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow-x: auto;
+}
+
+.mermaid-preview svg {
+  max-width: 100%;
+}
+
+.mermaid-error {
+  margin-top: 8px;
+}
