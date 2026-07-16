@@ -13,6 +13,7 @@ thiserror.workspace = true
 uuid.workspace = true
 walkdir.workspace = true
 lattice-storage.workspace = true
+lattice-profile.workspace = true
 notify.workspace = true
 notify-debouncer-full.workspace = true
 dirs.workspace = true

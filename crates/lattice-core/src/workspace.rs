@@ -19,6 +19,13 @@ impl Workspace {
     /// Create a new workspace at `root`, which may or may not exist but
     /// must not already contain a manifest.
     pub fn init(root: &Path, title: impl Into<String>) -> Result<Workspace> {
+        Self::init_with_manifest(root, WorkspaceManifest::new(title))
+    }
+
+    pub(crate) fn init_with_manifest(
+        root: &Path,
+        manifest: WorkspaceManifest,
+    ) -> Result<Workspace> {
         let manifest_file = manifest_path(root);
         if manifest_file.exists() {
             return Err(Error::WorkspaceExists {
@@ -26,7 +33,6 @@ impl Workspace {
             });
         }
         std::fs::create_dir_all(root).map_err(|e| Error::io(root, e))?;
-        let manifest = WorkspaceManifest::new(title);
         manifest.save(&manifest_file)?;
         Ok(Workspace {
             root: root.to_path_buf(),

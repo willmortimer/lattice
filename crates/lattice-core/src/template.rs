@@ -1,686 +1,615 @@
-//! Workspace folder templates applied at `init` time.
-//!
-//! Templates are one-time scaffolds. Once instantiated, every created file
-//! belongs to the user; Lattice does not retain ownership of template content.
+//! Validated, declarative workspace templates and safe provisioning.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use crate::{Error, Result};
+use lattice_storage::atomic_write_file;
+use serde::{Deserialize, Serialize};
 
-/// Built-in scaffolding choices for a new workspace.
+use crate::{
+    parse_resource_links, Capabilities, Error, ResourceCatalog, ResourceKind,
+    ResourceLinkResolution, Result, Workspace, WorkspaceDefaults, WorkspaceManifest,
+    WORKSPACE_MANIFEST_FILENAME,
+};
+
+#[derive(Debug)]
+pub(crate) struct SeedFile {
+    pub path: &'static str,
+    pub bytes: &'static [u8],
+}
+
+#[derive(Debug)]
+pub(crate) struct GeneratedTemplate {
+    pub id: &'static str,
+    pub order: u32,
+    pub name: &'static str,
+    pub category: &'static str,
+    pub description: &'static str,
+    pub visibility: &'static str,
+    pub recommended: bool,
+    pub recommended_title: &'static str,
+    pub directories: &'static [&'static str],
+    pub preview: &'static [&'static str],
+    pub capabilities: &'static [&'static str],
+    pub quick_note_directory: &'static str,
+    pub files: &'static [SeedFile],
+}
+
+include!("template_catalog.generated.rs");
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TemplateVisibility {
+    Gallery,
+    Legacy,
+    Sample,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateDescriptor {
+    pub id: String,
+    pub order: u32,
+    pub name: String,
+    pub category: String,
+    pub description: String,
+    pub visibility: TemplateVisibility,
+    pub recommended: bool,
+    pub recommended_title: String,
+    pub directories: Vec<String>,
+    pub preview: Vec<String>,
+    pub capabilities: Vec<String>,
+    pub quick_note_directory: String,
+}
+
+impl TemplateDescriptor {
+    fn from_generated(template: &GeneratedTemplate) -> Self {
+        Self {
+            id: template.id.into(),
+            order: template.order,
+            name: template.name.into(),
+            category: template.category.into(),
+            description: template.description.into(),
+            visibility: match template.visibility {
+                "gallery" => TemplateVisibility::Gallery,
+                "sample" => TemplateVisibility::Sample,
+                _ => TemplateVisibility::Legacy,
+            },
+            recommended: template.recommended,
+            recommended_title: template.recommended_title.into(),
+            directories: strings(template.directories),
+            preview: strings(template.preview),
+            capabilities: strings(template.capabilities),
+            quick_note_directory: template.quick_note_directory.into(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkspaceTemplate {
-    /// Purpose-based daily workspace (default for `~/Lattice/Workspaces/Personal`).
     Personal,
-    /// One finite, compound project with mixed resource types.
     Project,
-    /// Sources, notes, data, experiments, and outputs.
     Research,
-    /// Analytical work organized around sources, queries, notebooks, and reports.
     DataLab,
-    /// Legacy lightweight team / product workspace.
     Team,
-    /// Sample content for demos and the browser-only shell.
     Demo,
-    /// Manifest only — no folders or landing page.
     Blank,
 }
 
 impl WorkspaceTemplate {
     pub fn id(self) -> &'static str {
         match self {
-            WorkspaceTemplate::Personal => "personal",
-            WorkspaceTemplate::Project => "project",
-            WorkspaceTemplate::Research => "research",
-            WorkspaceTemplate::DataLab => "data-lab",
-            WorkspaceTemplate::Team => "team",
-            WorkspaceTemplate::Demo => "demo",
-            WorkspaceTemplate::Blank => "blank",
-        }
-    }
-
-    pub fn display_name(self) -> &'static str {
-        match self {
-            WorkspaceTemplate::Personal => "Personal",
-            WorkspaceTemplate::Project => "Project",
-            WorkspaceTemplate::Research => "Research",
-            WorkspaceTemplate::DataLab => "Data Lab",
-            WorkspaceTemplate::Team => "Team",
-            WorkspaceTemplate::Demo => "First Look",
-            WorkspaceTemplate::Blank => "Blank",
-        }
-    }
-
-    pub fn category(self) -> &'static str {
-        match self {
-            WorkspaceTemplate::Personal => "Everyday",
-            WorkspaceTemplate::Project => "Focused work",
-            WorkspaceTemplate::Research => "Knowledge",
-            WorkspaceTemplate::DataLab => "Analysis",
-            WorkspaceTemplate::Team => "Collaboration",
-            WorkspaceTemplate::Demo => "Sample",
-            WorkspaceTemplate::Blank => "Advanced",
-        }
-    }
-
-    pub fn description(self) -> &'static str {
-        match self {
-            WorkspaceTemplate::Personal => {
-                "Capture ideas, run projects, manage ongoing areas, and keep a durable library."
-            }
-            WorkspaceTemplate::Project => {
-                "Plan and deliver one outcome with decisions, research, working files, data, and outputs together."
-            }
-            WorkspaceTemplate::Research => {
-                "Move from questions and sources through notes, experiments, analysis, and published outputs."
-            }
-            WorkspaceTemplate::DataLab => {
-                "Organize data sources, queries, notebooks, dashboards, reports, and reusable analysis."
-            }
-            WorkspaceTemplate::Team => {
-                "Projects, docs, meetings, research, and archive with a shared Home page."
-            }
-            WorkspaceTemplate::Demo => {
-                "A curated sample with linked pages and a canvas for a quick first look."
-            }
-            WorkspaceTemplate::Blank => {
-                "Start with only lattice.yaml and shape the workspace yourself."
-            }
-        }
-    }
-
-    pub fn recommended(self) -> bool {
-        self == WorkspaceTemplate::Personal
-    }
-
-    pub fn preview_paths(self) -> &'static [&'static str] {
-        match self {
-            WorkspaceTemplate::Personal => &[
-                "Home.md",
-                "Welcome.md",
-                "Inbox/",
-                "Projects/",
-                "Areas/",
-                "Library/",
-                "Journal/",
-            ],
-            WorkspaceTemplate::Project => &[
-                "Home.md",
-                "Brief.md",
-                "Plan.md",
-                "Decisions/",
-                "Working/",
-                "Data/",
-                "Outputs/",
-            ],
-            WorkspaceTemplate::Research => &[
-                "Home.md",
-                "Questions.md",
-                "Sources/",
-                "Notes/",
-                "Data/",
-                "Experiments/",
-                "Outputs/",
-            ],
-            WorkspaceTemplate::DataLab => &[
-                "Home.md",
-                "Sources/",
-                "Data/",
-                "Queries/",
-                "Notebooks/",
-                "Dashboards/",
-                "Reports/",
-            ],
-            WorkspaceTemplate::Team => &["Home.md", "Projects/", "Docs/", "Meetings/", "Research/"],
-            WorkspaceTemplate::Demo => &[
-                "Home.md",
-                "Product/Vision.md",
-                "Research/Competitor Analysis.md",
-                "Canvases/Product Strategy.canvas",
-            ],
-            WorkspaceTemplate::Blank => &["lattice.yaml"],
+            Self::Personal => "personal",
+            Self::Project => "project",
+            Self::Research => "research",
+            Self::DataLab => "data-lab",
+            Self::Team => "team",
+            Self::Demo => "demo",
+            Self::Blank => "blank",
         }
     }
 
     pub fn parse(id: &str) -> Option<Self> {
         match id.trim().to_ascii_lowercase().as_str() {
-            "personal" | "default" => Some(WorkspaceTemplate::Personal),
-            "project" => Some(WorkspaceTemplate::Project),
-            "research" => Some(WorkspaceTemplate::Research),
-            "data-lab" | "data_lab" | "datalab" | "data" => Some(WorkspaceTemplate::DataLab),
-            "team" | "work" => Some(WorkspaceTemplate::Team),
-            "demo" | "sample" | "first-look" => Some(WorkspaceTemplate::Demo),
-            "blank" | "empty" | "none" => Some(WorkspaceTemplate::Blank),
+            "personal" | "default" => Some(Self::Personal),
+            "project" => Some(Self::Project),
+            "research" => Some(Self::Research),
+            "data-lab" | "data_lab" | "datalab" | "data" => Some(Self::DataLab),
+            "team" | "work" => Some(Self::Team),
+            "demo" | "sample" | "first-look" => Some(Self::Demo),
+            "blank" | "empty" | "none" => Some(Self::Blank),
             _ => None,
         }
     }
 
-    /// Templates shown in the normal new-workspace gallery.
-    ///
-    /// Team remains available to existing callers while it is still a folder
-    /// preset, and Demo is a sample workspace rather than an organizational
-    /// choice, so neither appears here.
-    pub fn gallery() -> &'static [WorkspaceTemplate] {
-        &[
-            WorkspaceTemplate::Personal,
-            WorkspaceTemplate::Project,
-            WorkspaceTemplate::Research,
-            WorkspaceTemplate::DataLab,
-            WorkspaceTemplate::Blank,
-        ]
+    pub fn descriptor(self) -> TemplateDescriptor {
+        TemplateDescriptor::from_generated(generated(self.id()).expect("built-in template exists"))
     }
 
-    fn folders(self) -> &'static [&'static str] {
-        match self {
-            WorkspaceTemplate::Personal => &[
-                "Inbox",
-                "Projects",
-                "Areas",
-                "Library",
-                "Journal",
-                "Templates",
-                "Archive",
-            ],
-            WorkspaceTemplate::Project => &[
-                "Decisions",
-                "Research",
-                "Working",
-                "Data",
-                "Outputs",
-                "Archive",
-            ],
-            WorkspaceTemplate::Research => &[
-                "Inbox",
-                "Sources",
-                "Notes",
-                "Data",
-                "Experiments",
-                "Outputs",
-                "Bibliography",
-                "Archive",
-            ],
-            WorkspaceTemplate::DataLab => &[
-                "Sources",
-                "Data",
-                "Queries",
-                "Notebooks",
-                "Dashboards",
-                "Reports",
-                "Archive",
-            ],
-            WorkspaceTemplate::Team => &["Projects", "Docs", "Meetings", "Research", "Archive"],
-            WorkspaceTemplate::Demo => &[
-                "Inbox", "Projects", "Product", "Research", "Canvases", "Archive",
-            ],
-            WorkspaceTemplate::Blank => &[],
-        }
+    pub fn display_name(self) -> &'static str {
+        generated(self.id()).expect("built-in template exists").name
     }
 
-    fn home_markdown(self) -> Option<&'static str> {
-        match self {
-            WorkspaceTemplate::Personal => Some(
-                r#"---
-title: Home
----
-
-# Home
-
-## Capture
-
-- [[Inbox]]
-- Create a quick note with **⌘N** or **Ctrl+N**
-
-## Active work
-
-- [[Projects]]
-
-## Ongoing areas
-
-- [[Areas]]
-
-## Reference
-
-- [[Library]]
-
-## Start here
-
-- [[Welcome]]
-
-## Recent
-
-Recent resources appear here when opened in Lattice.
-"#,
-            ),
-            WorkspaceTemplate::Project => Some(
-                r#"---
-title: Home
----
-
-# Project home
-
-## Goal
-
-Describe the outcome this project should produce.
-
-## Current status
-
-- Define the next milestone in [[Plan]].
-- Capture constraints and context in [[Brief]].
-
-## Key resources
-
-- [[Brief]]
-- [[Plan]]
-- `Decisions/`
-- `Research/`
-- `Working/`
-- `Data/`
-- `Outputs/`
-
-## Next actions
-
-- [ ] Clarify the goal
-- [ ] Choose the first deliverable
-- [ ] Record the next decision
-"#,
-            ),
-            WorkspaceTemplate::Research => Some(
-                r#"---
-title: Home
----
-
-# Research home
-
-## Research question
-
-Start with [[Questions]].
-
-## Workflow
-
-1. Capture unprocessed material in [[Inbox]].
-2. Keep original references in `Sources/`.
-3. Develop your own thinking in `Notes/`.
-4. Put datasets and measurements in `Data/`.
-5. Keep reproducible work in `Experiments/`.
-6. Publish durable results from `Outputs/`.
-"#,
-            ),
-            WorkspaceTemplate::DataLab => Some(
-                r#"---
-title: Home
----
-
-# Data Lab
-
-## Start
-
-- Register source material in `Sources/`.
-- Keep canonical datasets in `Data/`.
-- Save reusable SQL and transformations in `Queries/`.
-- Put exploratory and reproducible computation in `Notebooks/`.
-
-## Share
-
-- Build interactive summaries in `Dashboards/`.
-- Publish narrative findings from `Reports/`.
-
-Keep raw inputs, computation, and conclusions connected without forcing them
-into one file format.
-"#,
-            ),
-            WorkspaceTemplate::Team => Some(
-                r#"---
-title: Home
----
-
-# Home
-
-Shared workspace for product and team notes — all plain files on disk.
-
-## Where things go
-
-| Folder | Use it for |
-| --- | --- |
-| `Projects/` | Active initiatives |
-| `Docs/` | Specs, ADRs, and lasting write-ups |
-| `Meetings/` | Agendas and notes |
-| `Research/` | Discovery and competitive notes |
-| `Archive/` | Completed work |
-
-Use **⌘K** to search and **⌘P** for the command palette.
-"#,
-            ),
-            WorkspaceTemplate::Demo => Some(
-                r#"---
-title: Home
----
-
-# First Look
-
-A sample Lattice workspace. Try search (**⌘K**), the canvas under `Canvases/`,
-and quick notes (**⌘N**).
-
-## Map
-
-| Path | Kind |
-| --- | --- |
-| [[Product/Vision]] | page |
-| [[Product/Roadmap]] | page |
-| [[Research/Competitor Analysis]] | page |
-| `Canvases/Product Strategy.canvas` | canvas |
-"#,
-            ),
-            WorkspaceTemplate::Blank => None,
-        }
+    pub fn description(self) -> &'static str {
+        generated(self.id())
+            .expect("built-in template exists")
+            .description
     }
 
-    fn seed_files(self) -> &'static [(&'static str, &'static str)] {
-        match self {
-            WorkspaceTemplate::Personal => &[(
-                "Welcome.md",
-                r#"---
-title: Welcome
----
-
-# Welcome to Lattice
-
-Your workspace is an ordinary folder. You can edit these files with Lattice,
-VS Code, a terminal, or any other compatible tool.
-
-## Try these three things
-
-1. Press **⌘N** or **Ctrl+N** to capture a note into [[Inbox]].
-2. Create a table from the command palette.
-3. Put a page, table, and canvas inside the same project folder.
-
-## How this workspace is organized
-
-- `Inbox/` collects unprocessed material.
-- `Projects/` contains finite work with an intended outcome.
-- `Areas/` contains ongoing responsibilities without a finish line.
-- `Library/` contains durable reference material.
-- `Journal/` contains optional dated and periodic notes.
-- `Templates/` contains page and project starters you own.
-- `Archive/` contains inactive work that should remain searchable.
-
-Delete this page whenever you no longer need it.
-"#,
-            )],
-            WorkspaceTemplate::Project => &[
-                (
-                    "Brief.md",
-                    r#"---
-title: Brief
----
-
-# Brief
-
-## Outcome
-
-What will exist when this project is complete?
-
-## Context
-
-Why does this matter now?
-
-## Constraints
-
-- Time
-- Scope
-- Dependencies
-"#,
-                ),
-                (
-                    "Plan.md",
-                    r#"---
-title: Plan
----
-
-# Plan
-
-## Milestones
-
-- [ ] Define
-- [ ] Build
-- [ ] Review
-- [ ] Deliver
-
-## Next actions
-
-- [ ] Add the first concrete action
-"#,
-                ),
-            ],
-            WorkspaceTemplate::Research => &[(
-                "Questions.md",
-                r#"---
-title: Questions
----
-
-# Questions
-
-## Primary question
-
-What are you trying to learn, explain, or decide?
-
-## Supporting questions
-
-- What evidence would change your view?
-- Which sources or datasets are missing?
-- What assumptions need testing?
-"#,
-            )],
-            WorkspaceTemplate::Demo => &[
-                (
-                    "Product/Vision.md",
-                    r#"---
-title: Vision
----
-
-# Vision
-
-A fast local workspace that treats documents, data, notebooks, and canvases as ordinary files.
-
-See also [[Product/Roadmap]] and [[Research/Competitor Analysis]].
-"#,
-                ),
-                (
-                    "Product/Roadmap.md",
-                    r#"---
-title: Roadmap
----
-
-# Roadmap
-
-1. Daily-driver editing and search
-2. First data-app surface
-3. Capture from anywhere
-
-Back to [[Home]].
-"#,
-                ),
-                (
-                    "Research/Competitor Analysis.md",
-                    r#"---
-title: Competitor Analysis
-tags: [research]
----
-
-# Competitor Analysis
-
-| Tool | Keeps | Traps |
-| --- | --- | --- |
-| Obsidian | plain files | rich data |
-| Notion | interaction | your files |
-| Airtable | typed records | API lock-in |
-
-#research
-"#,
-                ),
-                (
-                    "Canvases/Product Strategy.canvas",
-                    r#"{
-  "nodes": [
-    {
-      "id": "intro",
-      "type": "text",
-      "x": 60,
-      "y": 60,
-      "width": 260,
-      "height": 120,
-      "text": "Sample canvas — double-click a file node to open it."
-    },
-    {
-      "id": "vision",
-      "type": "file",
-      "file": "Product/Vision.md",
-      "x": 360,
-      "y": 60,
-      "width": 220,
-      "height": 120
-    },
-    {
-      "id": "roadmap",
-      "type": "file",
-      "file": "Product/Roadmap.md",
-      "x": 620,
-      "y": 60,
-      "width": 220,
-      "height": 120
+    pub fn gallery() -> Vec<TemplateDescriptor> {
+        GENERATED_TEMPLATES
+            .iter()
+            .filter(|template| template.visibility == "gallery")
+            .map(TemplateDescriptor::from_generated)
+            .collect()
     }
-  ],
-  "edges": [
-    { "id": "e1", "fromNode": "intro", "toNode": "vision" },
-    { "id": "e2", "fromNode": "vision", "toNode": "roadmap" }
-  ]
-}
-"#,
-                ),
-            ],
-            _ => &[],
-        }
+
+    pub fn samples() -> Vec<TemplateDescriptor> {
+        GENERATED_TEMPLATES
+            .iter()
+            .filter(|template| template.visibility == "sample")
+            .map(TemplateDescriptor::from_generated)
+            .collect()
     }
 }
 
-/// Create template folders, landing page, and seed files.
-pub fn apply_template(workspace_root: &Path, template: WorkspaceTemplate) -> Result<()> {
-    for folder in template.folders() {
-        let path = workspace_root.join(folder);
-        std::fs::create_dir_all(&path).map_err(|e| Error::io(&path, e))?;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WorkspaceCreationMode {
+    NewDirectory,
+    ExistingDirectory,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceCreationPlan {
+    pub target: PathBuf,
+    pub title: String,
+    pub template_id: String,
+    pub mode: WorkspaceCreationMode,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DefaultWorkspaceStatus {
+    NotRequested,
+    Updated,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProvisionDiagnostic {
+    pub code: String,
+    pub message: String,
+    pub retryable: bool,
+}
+
+#[derive(Debug)]
+pub struct WorkspaceProvisionOutcome {
+    pub workspace: Workspace,
+    pub default_workspace_status: DefaultWorkspaceStatus,
+    pub diagnostics: Vec<ProvisionDiagnostic>,
+}
+
+pub struct WorkspaceProvisioner;
+
+impl WorkspaceProvisioner {
+    pub fn provision(plan: &WorkspaceCreationPlan) -> Result<WorkspaceProvisionOutcome> {
+        let template = generated(&plan.template_id).ok_or_else(|| Error::TemplateValidation {
+            message: format!("unknown workspace template {:?}", plan.template_id),
+        })?;
+        validate_target(&plan.target, template, plan.mode)?;
+        let workspace = match plan.mode {
+            WorkspaceCreationMode::NewDirectory => provision_staged(plan, template)?,
+            WorkspaceCreationMode::ExistingDirectory => provision_existing(plan, template)?,
+        };
+        validate_instantiated_template(&workspace)?;
+        Ok(WorkspaceProvisionOutcome {
+            workspace,
+            default_workspace_status: DefaultWorkspaceStatus::NotRequested,
+            diagnostics: Vec::new(),
+        })
     }
-    if let Some(body) = template.home_markdown() {
-        let path = workspace_root.join("Home.md");
-        if !path.exists() {
-            std::fs::write(&path, body).map_err(|e| Error::io(&path, e))?;
+}
+
+fn provision_staged(
+    plan: &WorkspaceCreationPlan,
+    template: &GeneratedTemplate,
+) -> Result<Workspace> {
+    let parent = plan
+        .target
+        .parent()
+        .ok_or_else(|| Error::TemplateValidation {
+            message: format!("target {} has no parent directory", plan.target.display()),
+        })?;
+    std::fs::create_dir_all(parent).map_err(|error| Error::io(parent, error))?;
+    let name = plan
+        .target
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("workspace");
+    let stage = parent.join(format!(".{name}.lattice-stage-{}", uuid::Uuid::now_v7()));
+    let result = (|| {
+        let workspace = create_workspace_at(&stage, &plan.title, template, false)?;
+        validate_instantiated_template(&workspace)?;
+        std::fs::rename(&stage, &plan.target).map_err(|error| Error::io(&plan.target, error))?;
+        Workspace::open(&plan.target)
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_dir_all(&stage);
+    }
+    result
+}
+
+fn provision_existing(
+    plan: &WorkspaceCreationPlan,
+    template: &GeneratedTemplate,
+) -> Result<Workspace> {
+    let mut created_files = Vec::new();
+    let mut created_directories = Vec::new();
+    let result = create_workspace_at_existing(
+        &plan.target,
+        &plan.title,
+        template,
+        &mut created_files,
+        &mut created_directories,
+    )
+    .and_then(|workspace| {
+        validate_instantiated_template(&workspace)?;
+        Ok(workspace)
+    });
+    if result.is_err() {
+        for path in created_files.iter().rev() {
+            let _ = std::fs::remove_file(path);
+        }
+        for path in created_directories.iter().rev() {
+            let _ = std::fs::remove_dir(path);
         }
     }
-    for (rel, body) in template.seed_files() {
-        let path = workspace_root.join(rel);
+    result
+}
+
+fn create_workspace_at(
+    root: &Path,
+    title: &str,
+    template: &GeneratedTemplate,
+    manifest_last: bool,
+) -> Result<Workspace> {
+    std::fs::create_dir_all(root).map_err(|error| Error::io(root, error))?;
+    if manifest_last {
+        unreachable!("existing-folder provisioning uses its rollback-aware path");
+    }
+    let manifest = manifest_for(title, template);
+    let workspace = Workspace::init_with_manifest(root, manifest)?;
+    materialize_template(root, template, None, None)?;
+    Ok(workspace)
+}
+
+fn create_workspace_at_existing(
+    root: &Path,
+    title: &str,
+    template: &GeneratedTemplate,
+    created_files: &mut Vec<PathBuf>,
+    created_directories: &mut Vec<PathBuf>,
+) -> Result<Workspace> {
+    materialize_template(
+        root,
+        template,
+        Some(created_files),
+        Some(created_directories),
+    )?;
+    let manifest_path = root.join(WORKSPACE_MANIFEST_FILENAME);
+    manifest_for(title, template).save(&manifest_path)?;
+    created_files.push(manifest_path);
+    Workspace::open(root)
+}
+
+fn materialize_template(
+    root: &Path,
+    template: &GeneratedTemplate,
+    mut created_files: Option<&mut Vec<PathBuf>>,
+    mut created_directories: Option<&mut Vec<PathBuf>>,
+) -> Result<()> {
+    for directory in template.directories {
+        let path = root.join(directory);
+        create_directory_tree(&path, root, created_directories.as_deref_mut())?;
+    }
+    for file in template.files {
+        let path = root.join(file.path);
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
+            create_directory_tree(parent, root, created_directories.as_deref_mut())?;
         }
-        if !path.exists() {
-            std::fs::write(&path, body).map_err(|e| Error::io(&path, e))?;
+        atomic_write_file(&path, file.bytes)
+            .map_err(|error| Error::io(&path, std::io::Error::other(error.to_string())))?;
+        if let Some(files) = created_files.as_deref_mut() {
+            files.push(path);
         }
     }
     Ok(())
 }
 
-/// `Workspace::init` + [`apply_template`].
+fn create_directory_tree(
+    path: &Path,
+    root: &Path,
+    created: Option<&mut Vec<PathBuf>>,
+) -> Result<()> {
+    let mut missing = Vec::new();
+    let mut current = path;
+    while current.starts_with(root) && current != root && !current.exists() {
+        missing.push(current.to_path_buf());
+        let Some(parent) = current.parent() else {
+            break;
+        };
+        current = parent;
+    }
+    std::fs::create_dir_all(path).map_err(|error| Error::io(path, error))?;
+    if let Some(created) = created {
+        missing.reverse();
+        created.extend(missing);
+    }
+    Ok(())
+}
+
+fn manifest_for(title: &str, template: &GeneratedTemplate) -> WorkspaceManifest {
+    let mut manifest = WorkspaceManifest::new(title);
+    manifest.capabilities = Capabilities {
+        enabled: strings(template.capabilities),
+    };
+    manifest.defaults = WorkspaceDefaults {
+        quick_note_directory: template.quick_note_directory.into(),
+    };
+    manifest
+}
+
+fn validate_target(
+    target: &Path,
+    template: &GeneratedTemplate,
+    mode: WorkspaceCreationMode,
+) -> Result<()> {
+    match mode {
+        WorkspaceCreationMode::NewDirectory if target.exists() => {
+            return Err(Error::ProvisioningConflict {
+                path: target.to_path_buf(),
+            });
+        }
+        WorkspaceCreationMode::ExistingDirectory if !target.is_dir() => {
+            return Err(Error::ProvisioningConflict {
+                path: target.to_path_buf(),
+            });
+        }
+        _ => {}
+    }
+    if mode == WorkspaceCreationMode::ExistingDirectory {
+        for path in std::iter::once(WORKSPACE_MANIFEST_FILENAME)
+            .chain(template.directories.iter().copied())
+            .chain(template.files.iter().map(|file| file.path))
+        {
+            let candidate = target.join(path);
+            if candidate.exists() {
+                return Err(Error::ProvisioningConflict { path: candidate });
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_instantiated_template(workspace: &Workspace) -> Result<()> {
+    let resources = workspace.scan()?;
+    let catalog = ResourceCatalog::new(&resources);
+    for resource in resources
+        .iter()
+        .filter(|resource| resource.kind == ResourceKind::Page)
+    {
+        let path = workspace.root().join(&resource.path);
+        let content = std::fs::read_to_string(&path).map_err(|error| Error::io(&path, error))?;
+        for link in parse_resource_links(&content) {
+            match catalog.resolve(Some(&resource.path), &link.target) {
+                ResourceLinkResolution::Found { .. } => {}
+                ResourceLinkResolution::Ambiguous { candidates, .. } => {
+                    return Err(Error::TemplateValidation {
+                        message: format!(
+                            "{} contains ambiguous link [[{}]] ({})",
+                            resource.path.display(),
+                            link.target,
+                            candidates
+                                .iter()
+                                .map(|target| target.path.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ),
+                    });
+                }
+                ResourceLinkResolution::Missing { .. } => {
+                    return Err(Error::TemplateValidation {
+                        message: format!(
+                            "{} contains unresolved link [[{}]]",
+                            resource.path.display(),
+                            link.target
+                        ),
+                    });
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn generated(id: &str) -> Option<&'static GeneratedTemplate> {
+    GENERATED_TEMPLATES
+        .iter()
+        .find(|template| template.id == id)
+}
+
+fn strings(values: &[&str]) -> Vec<String> {
+    values.iter().map(|value| (*value).to_string()).collect()
+}
+
+/// Apply a built-in template to a newly initialized workspace without
+/// overwriting any user path.
+pub fn apply_template(root: &Path, template: WorkspaceTemplate) -> Result<()> {
+    let generated = generated(template.id()).expect("built-in template exists");
+    for path in generated
+        .directories
+        .iter()
+        .copied()
+        .chain(generated.files.iter().map(|file| file.path))
+    {
+        let candidate = root.join(path);
+        if candidate.exists() {
+            return Err(Error::ProvisioningConflict { path: candidate });
+        }
+    }
+    let mut created_files = Vec::new();
+    let mut created_directories = Vec::new();
+    materialize_template(
+        root,
+        generated,
+        Some(&mut created_files),
+        Some(&mut created_directories),
+    )?;
+    let mut manifest = Workspace::open(root)?.manifest().clone();
+    manifest.capabilities = Capabilities {
+        enabled: strings(generated.capabilities),
+    };
+    manifest.defaults.quick_note_directory = generated.quick_note_directory.into();
+    manifest.save(&root.join(WORKSPACE_MANIFEST_FILENAME))?;
+    validate_instantiated_template(&Workspace::open(root)?)
+}
+
 pub fn init_with_template(
     root: &Path,
     title: impl Into<String>,
     template: WorkspaceTemplate,
-) -> Result<crate::Workspace> {
-    let ws = crate::Workspace::init(root, title)?;
-    apply_template(ws.root(), template)?;
-    Ok(ws)
+) -> Result<Workspace> {
+    WorkspaceProvisioner::provision(&WorkspaceCreationPlan {
+        target: root.to_path_buf(),
+        title: title.into(),
+        template_id: template.id().into(),
+        mode: if root.exists() {
+            WorkspaceCreationMode::ExistingDirectory
+        } else {
+            WorkspaceCreationMode::NewDirectory
+        },
+    })
+    .map(|outcome| outcome.workspace)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Workspace;
 
     #[test]
-    fn personal_template_uses_purpose_based_folders_and_separate_welcome() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().join("ws");
-        init_with_template(&root, "Test", WorkspaceTemplate::Personal).unwrap();
+    fn gallery_is_declarative_and_separates_sample_and_legacy_templates() {
+        assert_eq!(
+            WorkspaceTemplate::gallery()
+                .into_iter()
+                .map(|template| template.id)
+                .collect::<Vec<_>>(),
+            ["personal", "project", "research", "data-lab", "blank"]
+        );
+        assert_eq!(WorkspaceTemplate::samples()[0].id, "demo");
+        assert_eq!(
+            WorkspaceTemplate::Team.descriptor().visibility,
+            TemplateVisibility::Legacy
+        );
+    }
 
-        for folder in [
-            "Inbox",
-            "Projects",
-            "Areas",
-            "Library",
-            "Journal",
-            "Templates",
-            "Archive",
-        ] {
-            assert!(root.join(folder).is_dir(), "missing {folder}");
+    #[test]
+    fn provisioned_templates_have_no_unresolved_links() {
+        let directory = tempfile::tempdir().unwrap();
+        for template in WorkspaceTemplate::gallery()
+            .into_iter()
+            .chain(WorkspaceTemplate::samples())
+        {
+            let root = directory.path().join(&template.id);
+            let outcome = WorkspaceProvisioner::provision(&WorkspaceCreationPlan {
+                target: root,
+                title: template.recommended_title,
+                template_id: template.id,
+                mode: WorkspaceCreationMode::NewDirectory,
+            })
+            .unwrap();
+            validate_instantiated_template(&outcome.workspace).unwrap();
         }
-        assert!(!root.join("Product").exists());
-        assert!(!root.join("Canvases").exists());
-        assert!(root.join("Home.md").is_file());
-        assert!(root.join("Welcome.md").is_file());
-
-        let home = std::fs::read_to_string(root.join("Home.md")).unwrap();
-        let welcome = std::fs::read_to_string(root.join("Welcome.md")).unwrap();
-        assert!(home.contains("## Capture"));
-        assert!(!home.contains("How this workspace is organized"));
-        assert!(welcome.contains("How this workspace is organized"));
-
-        let ws = Workspace::open(&root).unwrap();
-        assert_eq!(ws.manifest().title, "Test");
     }
 
     #[test]
-    fn project_research_and_data_lab_templates_create_distinct_workflows() {
-        let dir = tempfile::tempdir().unwrap();
-
-        let project = dir.path().join("project");
-        init_with_template(&project, "Project", WorkspaceTemplate::Project).unwrap();
-        assert!(project.join("Brief.md").is_file());
-        assert!(project.join("Decisions").is_dir());
-        assert!(project.join("Outputs").is_dir());
-
-        let research = dir.path().join("research");
-        init_with_template(&research, "Research", WorkspaceTemplate::Research).unwrap();
-        assert!(research.join("Questions.md").is_file());
-        assert!(research.join("Sources").is_dir());
-        assert!(research.join("Experiments").is_dir());
-
-        let data_lab = dir.path().join("data-lab");
-        init_with_template(&data_lab, "Data Lab", WorkspaceTemplate::DataLab).unwrap();
-        assert!(data_lab.join("Queries").is_dir());
-        assert!(data_lab.join("Notebooks").is_dir());
-        assert!(data_lab.join("Dashboards").is_dir());
+    fn existing_folder_collisions_are_blocked_without_overwrite() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(directory.path().join("Home.md"), "user content").unwrap();
+        assert!(matches!(
+            WorkspaceProvisioner::provision(&WorkspaceCreationPlan {
+                target: directory.path().to_path_buf(),
+                title: "Personal".into(),
+                template_id: "personal".into(),
+                mode: WorkspaceCreationMode::ExistingDirectory,
+            }),
+            Err(Error::ProvisioningConflict { .. })
+        ));
+        assert_eq!(
+            std::fs::read_to_string(directory.path().join("Home.md")).unwrap(),
+            "user content"
+        );
+        assert!(!directory.path().join(WORKSPACE_MANIFEST_FILENAME).exists());
     }
 
     #[test]
-    fn gallery_excludes_legacy_team_and_sample_workspace() {
-        assert!(WorkspaceTemplate::gallery().contains(&WorkspaceTemplate::Personal));
-        assert!(WorkspaceTemplate::gallery().contains(&WorkspaceTemplate::Project));
-        assert!(!WorkspaceTemplate::gallery().contains(&WorkspaceTemplate::Team));
-        assert!(!WorkspaceTemplate::gallery().contains(&WorkspaceTemplate::Demo));
+    fn concurrent_new_directory_creation_has_one_atomic_winner() {
+        let directory = tempfile::tempdir().unwrap();
+        let target = std::sync::Arc::new(directory.path().join("Personal"));
+        let threads = (0..2)
+            .map(|_| {
+                let target = std::sync::Arc::clone(&target);
+                std::thread::spawn(move || {
+                    WorkspaceProvisioner::provision(&WorkspaceCreationPlan {
+                        target: target.as_ref().clone(),
+                        title: "Personal".into(),
+                        template_id: "personal".into(),
+                        mode: WorkspaceCreationMode::NewDirectory,
+                    })
+                })
+            })
+            .collect::<Vec<_>>();
+        let results = threads
+            .into_iter()
+            .map(|thread| thread.join().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
+        assert_eq!(results.iter().filter(|result| result.is_err()).count(), 1);
+        validate_instantiated_template(&Workspace::open(target.as_ref()).unwrap()).unwrap();
     }
 
     #[test]
-    fn demo_template_seeds_sample_pages_and_canvas() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().join("ws");
-        init_with_template(&root, "Demo", WorkspaceTemplate::Demo).unwrap();
-        assert!(root.join("Product/Vision.md").is_file());
-        assert!(root.join("Canvases/Product Strategy.canvas").is_file());
-    }
-
-    #[test]
-    fn blank_template_is_manifest_only() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path().join("ws");
-        init_with_template(&root, "Blank", WorkspaceTemplate::Blank).unwrap();
-        assert!(root.join("lattice.yaml").is_file());
-        assert!(!root.join("Home.md").exists());
-        assert!(!root.join("Inbox").exists());
+    fn existing_folder_rolls_back_when_final_validation_fails() {
+        static FILES: &[SeedFile] = &[SeedFile {
+            path: "Home.md",
+            bytes: b"# Home\n\n[[Missing]]\n",
+        }];
+        let template = GeneratedTemplate {
+            id: "invalid",
+            order: 1,
+            name: "Invalid",
+            category: "Test",
+            description: "Invalid test template",
+            visibility: "gallery",
+            recommended: false,
+            recommended_title: "Invalid",
+            directories: &["Inbox"],
+            preview: &["Home.md"],
+            capabilities: &["pages"],
+            quick_note_directory: "Inbox",
+            files: FILES,
+        };
+        let directory = tempfile::tempdir().unwrap();
+        let plan = WorkspaceCreationPlan {
+            target: directory.path().to_path_buf(),
+            title: "Invalid".into(),
+            template_id: "invalid".into(),
+            mode: WorkspaceCreationMode::ExistingDirectory,
+        };
+        assert!(provision_existing(&plan, &template).is_err());
+        assert!(!directory.path().join("Home.md").exists());
+        assert!(!directory.path().join("Inbox").exists());
+        assert!(!directory.path().join(WORKSPACE_MANIFEST_FILENAME).exists());
     }
 }

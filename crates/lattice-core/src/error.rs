@@ -25,6 +25,12 @@ pub enum Error {
         source: serde_yaml::Error,
     },
 
+    #[error("workspace provisioning conflict at {path}")]
+    ProvisioningConflict { path: PathBuf },
+
+    #[error("workspace template validation failed: {message}")]
+    TemplateValidation { message: String },
+
     /// A [`crate::WorkspaceWatcher`] failed to start or attach a filesystem
     /// watch at `path`.
     #[error("failed to watch {path}: {source}")]
