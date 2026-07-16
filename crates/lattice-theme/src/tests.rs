@@ -71,6 +71,26 @@ fn corrupt_appearance_uses_defaults_and_reports_diagnostic() {
 }
 
 #[test]
+fn legacy_appearance_is_upgraded_once_without_a_persistent_warning() {
+    let _guard = HOME_LOCK.lock().unwrap();
+    let dir = tempdir().unwrap();
+    std::env::set_var("LATTICE_HOME", dir.path());
+    let home = ensure_lattice_home().unwrap();
+    let path = AppearanceSettings::path_in(&home);
+    std::fs::write(&path, "theme: lattice-paper\nmode: fixed\n").unwrap();
+
+    let (_home, settings, diagnostics) =
+        crate::appearance::load_appearance_with_diagnostics().unwrap();
+
+    assert_eq!(settings.theme, "lattice-paper");
+    assert!(diagnostics.is_empty());
+    let upgraded = std::fs::read_to_string(path).unwrap();
+    assert!(upgraded.contains("format: lattice-appearance-settings"));
+    assert!(upgraded.contains("version: 1"));
+    std::env::remove_var("LATTICE_HOME");
+}
+
+#[test]
 fn user_theme_overrides_builtin_id() {
     let _guard = HOME_LOCK.lock().unwrap();
     let dir = tempdir().unwrap();

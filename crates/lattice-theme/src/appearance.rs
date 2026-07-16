@@ -90,7 +90,7 @@ impl AppearanceSettings {
     pub fn load_from_with_diagnostics(path: &Path) -> Result<(Self, Vec<SettingsDiagnostic>)> {
         let root = path.parent().unwrap_or_else(|| Path::new("."));
         SettingsStore::new(root)
-            .load::<Self>(APPEARANCE_SPEC)
+            .load_and_upgrade::<Self>(APPEARANCE_SPEC)
             .map(|loaded| (loaded.value, loaded.diagnostics))
             .map_err(|error| Error::io(path, std::io::Error::other(error.to_string())))
     }

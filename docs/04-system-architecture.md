@@ -110,7 +110,10 @@ Versioned YAML stores human-editable preferences. SQLite stores frequently
 changing operational state such as recents, sessions, and shell geometry.
 `workspaces.yaml` may point to any valid workspace, including one outside
 `~/Lattice/Workspaces`; invalid configured values remain available for
-diagnosis while startup uses a valid effective fallback.
+diagnosis while startup uses a valid effective fallback. Profile discovery is
+non-provisioning: if no valid workspace remains, Lattice presents onboarding
+and repair actions without recreating deleted canonical content. A Personal
+workspace is provisioned only after an explicit initialization action.
 
 ### Canonical layer
 

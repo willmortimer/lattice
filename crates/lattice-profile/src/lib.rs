@@ -40,7 +40,8 @@ impl LatticeHome {
     }
 
     pub fn workspace_startup_settings(&self) -> Result<SettingsLoad<WorkspaceStartupSettings>> {
-        self.settings_store().load(WORKSPACE_SETTINGS_SPEC)
+        self.settings_store()
+            .load_and_upgrade(WORKSPACE_SETTINGS_SPEC)
     }
 
     pub fn configured_default_workspace(&self) -> Result<Option<PathBuf>> {

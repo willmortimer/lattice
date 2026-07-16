@@ -24,6 +24,13 @@ export interface SettingsDiagnostic {
   severity: "warning" | "error";
 }
 
+export interface ProfileNotice {
+  code: string;
+  title: string;
+  message: string;
+  path: string | null;
+}
+
 export interface DesktopSettings {
   format: string;
   version: number;
@@ -85,6 +92,9 @@ export interface ProfileSnapshot {
   sidebarWidth: number | null;
   effectiveDefaultWorkspace: string | null;
   hasValidConfiguredDefault: boolean;
+  homeRoot: string;
+  workspacesDirectory: string;
+  notices: ProfileNotice[];
 }
 
 const DEMO_PROFILE_KEY = "lattice.browser.profile.v1";
@@ -153,6 +163,9 @@ function demoProfile(): ProfileSnapshot {
     sidebarWidth: null,
     effectiveDefaultWorkspace: null,
     hasValidConfiguredDefault: false,
+    homeRoot: "~/Lattice",
+    workspacesDirectory: "~/Lattice/Workspaces",
+    notices: [],
   };
   try {
     const saved = JSON.parse(localStorage.getItem(DEMO_PROFILE_KEY) ?? "null");

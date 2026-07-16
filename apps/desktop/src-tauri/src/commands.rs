@@ -5,7 +5,7 @@ use lattice_commands::{
     Command as SemanticCommand, CommandEngine, Error as CommandError, Transaction,
 };
 use lattice_core::{
-    effective_default_workspace, ensure_lattice_home, DefaultWorkspaceStatus, ProvisionDiagnostic,
+    ensure_lattice_home, initialize_lattice_home, DefaultWorkspaceStatus, ProvisionDiagnostic,
     Resource, TemplateDescriptor, Workspace, WorkspaceCreationMode, WorkspaceCreationPlan,
     WorkspaceDefaults, WorkspaceProvisioner,
 };
@@ -396,6 +396,7 @@ pub struct LatticeHomeInfo {
     pub workspaces: String,
     pub settings: String,
     pub default_workspace: Option<WorkspaceSnapshot>,
+    pub diagnostics: Vec<ProvisionDiagnostic>,
 }
 
 fn snapshot_from_workspace(workspace: &Workspace) -> Result<WorkspaceSnapshot, String> {
@@ -425,24 +426,18 @@ fn snapshot_from_parts(
     })
 }
 
-/// Ensure `~/Lattice/{Workspaces,Settings}` exists and seed `Workspaces/Personal`
-/// when Workspaces is empty. Returns paths plus the default workspace
-/// snapshot when it exists.
+/// Explicitly initialize Lattice home, provisioning a Personal workspace only
+/// when no valid workspace exists. Ordinary startup never calls this command.
 #[tauri::command]
 pub fn ensure_home() -> Result<LatticeHomeInfo, String> {
-    let home = ensure_lattice_home().map_err(|err| err.to_string())?;
-    let default_path = effective_default_workspace(&home).map_err(|err| err.to_string())?;
-    let default_workspace = if default_path.join("lattice.yaml").exists() {
-        let ws = Workspace::open(&default_path).map_err(|err| err.to_string())?;
-        Some(snapshot_from_workspace(&ws)?)
-    } else {
-        None
-    };
+    let (home, outcome) = initialize_lattice_home().map_err(|err| err.to_string())?;
+    let default_workspace = Some(snapshot_from_workspace(&outcome.workspace)?);
     Ok(LatticeHomeInfo {
         root: home.root.to_string_lossy().into_owned(),
         workspaces: home.workspaces.to_string_lossy().into_owned(),
         settings: home.settings.to_string_lossy().into_owned(),
         default_workspace,
+        diagnostics: outcome.diagnostics,
     })
 }
 
