@@ -41,10 +41,37 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": {
+        "default-src": "'self'",
+        "base-uri": "'none'",
+        "connect-src": "ipc: http://ipc.localhost",
+        "font-src": "'self' data:",
+        "form-action": "'none'",
+        "frame-src": "'none'",
+        "img-src": "'self' blob: data:",
+        "media-src": "'self' blob: data:",
+        "object-src": "'none'",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "worker-src": "'self' blob:"
+      },
+      "devCsp": {
+        "default-src": "'self' http://localhost:5173",
+        "base-uri": "'none'",
+        "connect-src": "ipc: http://ipc.localhost http://localhost:5173 ws://localhost:5173",
+        "font-src": "'self' data:",
+        "form-action": "'none'",
+        "frame-src": "'none'",
+        "img-src": "'self' blob: data:",
+        "media-src": "'self' blob: data:",
+        "object-src": "'none'",
+        "script-src": "'self' 'unsafe-inline' 'unsafe-eval' http://localhost:5173",
+        "style-src": "'self' 'unsafe-inline' http://localhost:5173",
+        "worker-src": "'self' blob:"
+      },
       "assetProtocol": {
-        "enable": true,
-        "scope": ["/**"]
+        "enable": false,
+        "scope": []
       }
     }
   },

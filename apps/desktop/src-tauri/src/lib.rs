@@ -58,15 +58,15 @@ pub fn run() {
             }
             Ok(menu)
         })
-        .on_menu_event(|app, event| {
+        .on_menu_event(|_app, _event| {
             #[cfg(debug_assertions)]
             {
                 use tauri::Manager;
 
-                let Some(window) = app.get_webview_window("main") else {
+                let Some(window) = _app.get_webview_window("main") else {
                     return;
                 };
-                match event.id().as_ref() {
+                match _event.id().as_ref() {
                     OPEN_INSPECTOR_MENU_ID => window.open_devtools(),
                     RELOAD_WINDOW_MENU_ID => {
                         let _ = window.reload();
@@ -82,9 +82,11 @@ pub fn run() {
             commands::open_workspace,
             commands::list_resources,
             commands::read_file,
+            commands::read_binary_file,
             commands::read_page,
             commands::apply_page_update,
             commands::create_page,
+            commands::create_asset,
             commands::rename_resource,
             commands::list_history,
             commands::undo_last,
