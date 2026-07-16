@@ -128,6 +128,15 @@ The frontend shell should not import every capability eagerly. Use route and res
 
 ## Generated code
 
+Workspace template manifests and seed files under `templates/workspaces/` are
+the source of truth. Run `pnpm compile-templates` after changing them. It
+validates paths, collisions, bounds, sources, and seeded links, then writes:
+
+- `crates/lattice-core/src/template_catalog.generated.rs`
+- `apps/desktop/src/templateCatalog.generated.ts`
+
+Do not edit either generated catalog directly.
+
 Use generation for:
 
 - Rust/TypeScript format models from schemas.

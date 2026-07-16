@@ -12,6 +12,10 @@ A one-time scaffold used to initialize a new workspace. After creation, its
 files and folders belong entirely to the user; the template does not retain
 ownership or update instantiated content.
 
+Built-in templates are versioned declarative packages under
+`templates/workspaces/<id>/`. First Look is a separate sample action and Team
+is a hidden legacy identifier, not a gallery choice.
+
 ### Starter project
 
 A coherent project scaffold added to an existing workspace. Unlike a workspace
