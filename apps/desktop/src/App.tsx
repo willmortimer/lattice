@@ -1,11 +1,19 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { Resource, WorkspaceSnapshot } from "./types";
+import type { Resource, WorkspaceChangeEvent, WorkspaceSnapshot } from "./types";
 import { KindMark, KIND_LABELS } from "./KindMark";
 import { demoCanvas, demoPage, demoSnapshot, demoStartEmpty, inBrowser } from "./demo";
 import { CanvasViewer } from "./canvas/CanvasViewer";
-import { PageEditor, saveIndicatorText, isUnsaved, type SaveState } from "./editor/PageEditor";
+import { ConflictEnvelope } from "./editor/ConflictEnvelope";
+import {
+  PageEditor,
+  saveIndicatorText,
+  isUnsaved,
+  type PageEditorHandle,
+  type SaveState,
+} from "./editor/PageEditor";
 import { createDemoPageIO, createNativePageIO, type PageIO } from "./editor/pageIO";
 
 interface PageState {
@@ -13,6 +21,23 @@ interface PageState {
   content: string;
   revision: string | null;
   io: PageIO;
+}
+
+/** An external edit landed while this page had unsaved local edits (ADR 0028). */
+interface ExternalConflict {
+  path: string;
+}
+
+/** Build the "keep both" sibling path: `Notes/Idea.md` -> `Notes/Idea (conflict 2026-07-15).md`. */
+function conflictSiblingPath(path: string): string {
+  const slash = path.lastIndexOf("/");
+  const dir = slash >= 0 ? path.slice(0, slash + 1) : "";
+  const base = slash >= 0 ? path.slice(slash + 1) : path;
+  const dot = base.lastIndexOf(".");
+  const stem = dot > 0 ? base.slice(0, dot) : base;
+  const ext = dot > 0 ? base.slice(dot) : "";
+  const date = new Date().toISOString().slice(0, 10);
+  return `${dir}${stem} (conflict ${date})${ext}`;
 }
 
 interface CanvasState {
@@ -54,6 +79,154 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
+  const [externalConflict, setExternalConflict] = useState<ExternalConflict | null>(null);
+  /** Bumped to force a fresh `PageEditor` mount (auto-reload, or a conflict
+   * resolution) without tying remounts to `page.revision`, which would
+   * otherwise remount on every autosave. */
+  const [reloadToken, setReloadToken] = useState(0);
+
+  // Refs mirroring state read inside the workspace-changed listener, which
+  // subscribes once and must not see stale closures over fast-changing state.
+  const pageRef = useRef(page);
+  useEffect(() => {
+    pageRef.current = page;
+  }, [page]);
+  const saveStateRef = useRef(saveState);
+  useEffect(() => {
+    saveStateRef.current = saveState;
+  }, [saveState]);
+  const snapshotRef = useRef(snapshot);
+  useEffect(() => {
+    snapshotRef.current = snapshot;
+  }, [snapshot]);
+  /** The revision the open `PageEditor` currently considers its clean base
+   * — updated on load/save/reload, not on every keystroke (see
+   * `PageEditor`'s `onRevisionChange`). Used to recognize an incoming
+   * external-edit event as an echo of a save this window already made. */
+  const currentPageRevisionRef = useRef<string | null>(null);
+  const pageEditorRef = useRef<PageEditorHandle>(null);
+
+  const refreshSidebar = useCallback(async () => {
+    const root = snapshotRef.current?.root;
+    if (!root) return;
+    try {
+      const resources = await invoke<Resource[]>("list_resources", { root });
+      setSnapshot((prev) => (prev ? { ...prev, resources } : prev));
+    } catch {
+      // Transient (e.g. a scan mid-write, or the workspace just closed);
+      // the next event or a manual reopen catches the list up.
+    }
+  }, []);
+
+  const reloadPageFromDisk = useCallback(async () => {
+    const current = pageRef.current;
+    if (!current) return;
+    try {
+      const { raw, revision } = await current.io.load();
+      setPage((prev) => (prev ? { ...prev, content: raw, revision } : prev));
+      setReloadToken((t) => t + 1);
+      setSaveState({ status: "idle" });
+    } catch (err) {
+      setError(String(err));
+    }
+  }, []);
+
+  const handleWorkspaceChanged = useCallback(
+    async (event: WorkspaceChangeEvent) => {
+      await refreshSidebar();
+
+      const current = pageRef.current;
+      if (!current) return;
+
+      if (event.type === "renamed") {
+        if (event.from === current.resource.path) {
+          setError(`"${event.from}" was renamed to "${event.to}" outside Lattice.`);
+          setPage(null);
+          setSelected(null);
+          setExternalConflict(null);
+        }
+        return;
+      }
+
+      if (event.type === "deleted") {
+        if (event.path === current.resource.path) {
+          setError(`"${event.path}" was deleted outside Lattice.`);
+          setPage(null);
+          setSelected(null);
+          setExternalConflict(null);
+        }
+        return;
+      }
+
+      if (event.path !== current.resource.path) return;
+
+      if (event.revision === currentPageRevisionRef.current) {
+        // Echo of a save this window already knows about (our own
+        // autosave, or a conflict resolution) — nothing to reconcile.
+        return;
+      }
+
+      if (isUnsaved(saveStateRef.current)) {
+        setExternalConflict({ path: event.path });
+      } else {
+        await reloadPageFromDisk();
+      }
+    },
+    [refreshSidebar, reloadPageFromDisk],
+  );
+
+  useEffect(() => {
+    if (inBrowser) return;
+    let unlisten: (() => void) | undefined;
+    listen<WorkspaceChangeEvent>("workspace-changed", (event) => {
+      void handleWorkspaceChanged(event.payload);
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => unlisten?.();
+  }, [handleWorkspaceChanged]);
+
+  async function handleKeepIncoming() {
+    await reloadPageFromDisk();
+    setExternalConflict(null);
+  }
+
+  async function handleKeepLocal() {
+    const current = pageRef.current;
+    const editorHandle = pageEditorRef.current;
+    if (!current || !editorHandle) return;
+    const localRaw = editorHandle.getRaw();
+    try {
+      // The incoming disk state becomes the base we intentionally overwrite
+      // with local content — "keep local" is a deliberate clobber, not a
+      // merge, so this is expected to succeed rather than hit STALE_REVISION.
+      const disk = await current.io.load();
+      const newRevision = await current.io.save(localRaw, disk.revision);
+      setPage((prev) => (prev ? { ...prev, content: localRaw, revision: newRevision } : prev));
+      setReloadToken((t) => t + 1);
+      setSaveState({ status: "idle" });
+      setExternalConflict(null);
+    } catch (err) {
+      setError(String(err));
+    }
+  }
+
+  async function handleKeepBoth() {
+    const current = pageRef.current;
+    const editorHandle = pageEditorRef.current;
+    const root = snapshotRef.current?.root;
+    if (!current || !editorHandle || !root) return;
+    const localRaw = editorHandle.getRaw();
+    const siblingPath = conflictSiblingPath(current.resource.path);
+    try {
+      await invoke("create_page", { root, relPath: siblingPath, content: localRaw });
+      await reloadPageFromDisk();
+      setExternalConflict(null);
+      await refreshSidebar();
+    } catch (err) {
+      setError(String(err));
+    }
+  }
 
   async function handleOpenWorkspace() {
     setError(null);
@@ -67,6 +240,12 @@ export default function App() {
       setSelected(null);
       setPage(null);
       setSaveState({ status: "idle" });
+      setExternalConflict(null);
+      if (!inBrowser) {
+        invoke("start_watching", { root: next.root }).catch((err) => {
+          console.error("failed to start workspace watcher:", err);
+        });
+      }
     } catch (err) {
       setError(String(err));
     } finally {
@@ -79,6 +258,9 @@ export default function App() {
     setError(null);
     setPage(null);
     setCanvas(null);
+    setExternalConflict(null);
+    setReloadToken(0);
+    currentPageRevisionRef.current = null;
 
     if (resource.kind === "canvas" && snapshot) {
       if (inBrowser) {
@@ -225,13 +407,29 @@ export default function App() {
               </div>
             )}
             {selected && selected.kind === "page" && page && (
-              <PageEditor
-                key={page.resource.path}
-                raw={page.content}
-                revision={page.revision}
-                io={page.io}
-                onSaveStateChange={setSaveState}
-              />
+              <>
+                {externalConflict && (
+                  <ConflictEnvelope
+                    message={`"${externalConflict.path}" changed on disk while you had unsaved edits.`}
+                    actions={[
+                      { label: "Keep incoming", onClick: () => void handleKeepIncoming() },
+                      { label: "Keep local", onClick: () => void handleKeepLocal() },
+                      { label: "Keep both", onClick: () => void handleKeepBoth(), variant: "primary" },
+                    ]}
+                  />
+                )}
+                <PageEditor
+                  key={`${page.resource.path}#${reloadToken}`}
+                  ref={pageEditorRef}
+                  raw={page.content}
+                  revision={page.revision}
+                  io={page.io}
+                  onSaveStateChange={setSaveState}
+                  onRevisionChange={(revision) => {
+                    currentPageRevisionRef.current = revision;
+                  }}
+                />
+              </>
             )}
             {selected && selected.kind !== "page" && selected.kind !== "canvas" && !error && (
               <div className="placeholder">

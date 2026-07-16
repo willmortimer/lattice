@@ -25,3 +25,14 @@ export interface WorkspaceSnapshot {
   id: string;
   resources: Resource[];
 }
+
+/**
+ * Mirrors `WorkspaceChangePayload` (`apps/desktop/src-tauri/src/watcher.rs`):
+ * the `workspace-changed` Tauri event emitted for each reconciled external
+ * filesystem change (docs/05).
+ */
+export type WorkspaceChangeEvent =
+  | { type: "created"; path: string; revision: string }
+  | { type: "modified"; path: string; revision: string }
+  | { type: "deleted"; path: string }
+  | { type: "renamed"; from: string; to: string; revision: string };
