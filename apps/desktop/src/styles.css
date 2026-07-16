@@ -532,6 +532,129 @@ button {
 }
 
 /* ============================================================================
+   Page editor — Tiptap over the markdown-body type system
+   ========================================================================== */
+
+.page-editor {
+  max-width: 68ch;
+  margin: 0 auto;
+}
+
+.page-editor-content .ProseMirror {
+  outline: none;
+  min-height: 40vh;
+}
+
+.page-editor-content .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--faint);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.page-editor-content .ProseMirror table {
+  overflow: hidden;
+}
+
+.page-editor-content .ProseMirror td,
+.page-editor-content .ProseMirror th {
+  border: 1px solid var(--line);
+}
+
+/* Breadcrumb dirty/save indicators */
+
+.dirty-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--amber);
+  flex-shrink: 0;
+}
+
+.save-state {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--faint);
+}
+
+.save-state-saving {
+  color: var(--muted);
+}
+
+.save-state-saved {
+  color: var(--amber);
+}
+
+.save-state-conflict,
+.save-state-error {
+  color: var(--danger);
+}
+
+/* Conflict banner */
+
+.conflict-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 12px 16px;
+  border: 1px solid var(--amber-deep);
+  background: var(--amber-wash);
+  border-radius: var(--radius);
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.conflict-banner-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.conflict-banner-actions .secondary-button,
+.conflict-banner-actions .primary-button {
+  width: auto;
+  margin-top: 0;
+  padding: 6px 14px;
+}
+
+/* Collapsed frontmatter block */
+
+.frontmatter-block {
+  margin-bottom: 24px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raise);
+}
+
+.frontmatter-block summary {
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--faint);
+  cursor: pointer;
+  user-select: none;
+}
+
+.frontmatter-block[open] summary {
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+
+.frontmatter-content {
+  margin: 0;
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ============================================================================
    Canvas viewer — full-bleed spatial pane, no scroll chrome
    ========================================================================== */
 
