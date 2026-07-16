@@ -1,11 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { open } from "@tauri-apps/plugin-dialog";
-import { openPath } from "@tauri-apps/plugin-opener";
-import type { Resource, WorkspaceChangeEvent, WorkspaceSnapshot } from "./types";
-import { KindMark, KIND_LABELS } from "./KindMark";
-import { demoCanvas, demoPage, demoSearch, demoSnapshot, demoStartEmpty, inBrowser } from "./demo";
+import { demoCanvas, demoPages, demoSearch, demoSnapshot, demoStartEmpty, inBrowser } from "./demo";
+import { NewWorkspaceDialog } from "./NewWorkspaceDialog";
 import { CanvasViewer } from "./canvas/CanvasViewer";
 import { BacklinksFooter } from "./BacklinksFooter";
 import { CommandPalette, type PaletteItem } from "./CommandPalette";
@@ -19,9 +13,17 @@ import {
   type SaveState,
 } from "./editor/PageEditor";
 import { createDemoPageIO, createNativePageIO, type PageIO } from "./editor/pageIO";
+import { listRecentWorkspaces, rememberWorkspace, type RecentWorkspace } from "./lib/recents";
 import { fileTimestamp, quickNotePath } from "./lib/timestamp";
 import { ResourceTree } from "./ResourceTree";
 import { SearchPane } from "./SearchPane";
+import { KindMark, KIND_LABELS } from "./KindMark";
+import type { Resource, WorkspaceChangeEvent, WorkspaceSnapshot } from "./types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-dialog";
+import { openPath } from "@tauri-apps/plugin-opener";
 
 interface PageState {
   resource: Resource;
@@ -97,6 +99,10 @@ export default function App() {
    * resolution) without tying remounts to `page.revision`, which would
    * otherwise remount on every autosave. */
   const [reloadToken, setReloadToken] = useState(0);
+  const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
+  const [workspacesDir, setWorkspacesDir] = useState<string | null>(null);
+  const [recents, setRecents] = useState<RecentWorkspace[]>(() => listRecentWorkspaces());
+  const [statusToast, setStatusToast] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [searchPaneOpen, setSearchPaneOpen] = useState(false);
 
@@ -248,6 +254,26 @@ export default function App() {
     }
   }
 
+  async function adoptWorkspace(next: WorkspaceSnapshot) {
+    setSnapshot(next);
+    setSelected(null);
+    setPage(null);
+    setCanvas(null);
+    setSaveState({ status: "idle" });
+    setExternalConflict(null);
+    rememberWorkspace(next);
+    setRecents(listRecentWorkspaces());
+    if (!inBrowser) {
+      invoke("start_watching", { root: next.root }).catch((err) => {
+        console.error("failed to start workspace watcher:", err);
+      });
+      // Warm the search index in the background so ⌘K is useful immediately.
+      invoke("rebuild_index", { root: next.root }).catch(() => {
+        /* index rebuild is best-effort on open */
+      });
+    }
+  }
+
   async function handleOpenWorkspace() {
     setError(null);
     const dir = await open({ directory: true, multiple: false, title: "Open Workspace" });
@@ -256,15 +282,35 @@ export default function App() {
     setBusy(true);
     try {
       const next = await invoke<WorkspaceSnapshot>("open_workspace", { path: dir });
-      setSnapshot(next);
-      setSelected(null);
-      setPage(null);
-      setSaveState({ status: "idle" });
-      setExternalConflict(null);
-      if (!inBrowser) {
-        invoke("start_watching", { root: next.root }).catch((err) => {
-          console.error("failed to start workspace watcher:", err);
-        });
+      await adoptWorkspace(next);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Creates ~/Lattice (Workspaces + Settings) and opens Workspaces/Personal. */
+  async function handleGetStarted() {
+    setError(null);
+    if (inBrowser) {
+      setSnapshot(demoSnapshot);
+      rememberWorkspace(demoSnapshot);
+      setRecents(listRecentWorkspaces());
+      return;
+    }
+    setBusy(true);
+    try {
+      const home = await invoke<{
+        root: string;
+        workspaces: string;
+        default_workspace: WorkspaceSnapshot | null;
+      }>("ensure_home");
+      setWorkspacesDir(home.workspaces);
+      if (home.default_workspace) {
+        await adoptWorkspace(home.default_workspace);
+      } else {
+        setError("Lattice home is ready, but no default workspace was found.");
       }
     } catch (err) {
       setError(String(err));
@@ -273,11 +319,78 @@ export default function App() {
     }
   }
 
+  async function openRecent(root: string) {
+    setError(null);
+    if (inBrowser) {
+      setSnapshot(demoSnapshot);
+      return;
+    }
+    setBusy(true);
+    try {
+      const next = await invoke<WorkspaceSnapshot>("open_workspace", { path: root });
+      await adoptWorkspace(next);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleCreateWorkspace(args: {
+    path: string;
+    title: string;
+    template: string;
+  }) {
+    setError(null);
+    if (inBrowser) {
+      setSnapshot({
+        ...demoSnapshot,
+        root: args.path,
+        title: args.title,
+        resources: [
+          { path: "Home.md", kind: "page" },
+          { path: "Inbox", kind: "folder" },
+          { path: "Projects", kind: "folder" },
+        ],
+      });
+      setNewWorkspaceOpen(false);
+      return;
+    }
+    setBusy(true);
+    try {
+      const next = await invoke<WorkspaceSnapshot>("create_workspace", {
+        path: args.path,
+        title: args.title,
+        template: args.template,
+      });
+      await adoptWorkspace(next);
+      setNewWorkspaceOpen(false);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function openNewWorkspaceDialog() {
+    setError(null);
+    if (!inBrowser && !workspacesDir) {
+      try {
+        const home = await invoke<{ workspaces: string }>("ensure_home");
+        setWorkspacesDir(home.workspaces);
+      } catch (err) {
+        setError(String(err));
+        return;
+      }
+    }
+    setNewWorkspaceOpen(true);
+  }
+
   /**
    * Create a new blank page at `relPath` and open it — shared by the
    * command palette's "New page" and the Cmd/Ctrl+N quick-note shortcut.
    * Unlike `handleSelect`, the demo shell gets a genuinely blank page
-   * rather than the `demoPage` fixture, since this is meant to look like
+   * rather than a fixture page, since this is meant to look like
    * a freshly created note.
    */
   async function createAndOpenPage(relPath: string) {
@@ -312,7 +425,10 @@ export default function App() {
   /** Cmd/Ctrl+N: a new page in `Inbox/`, named by timestamp (docs/07's
    * "Quick-note mode"). */
   function handleQuickNote() {
-    void createAndOpenPage(quickNotePath());
+    const path = quickNotePath();
+    setStatusToast(`Capturing to ${path}`);
+    window.setTimeout(() => setStatusToast(null), 2200);
+    void createAndOpenPage(path);
   }
 
   /** Command palette "New page": in the folder of the currently selected
@@ -348,6 +464,9 @@ export default function App() {
   }
 
   async function handleSelect(resource: Resource) {
+    if (resource.kind === "folder") {
+      return;
+    }
     setSelected(resource);
     setError(null);
     setPage(null);
@@ -384,7 +503,13 @@ export default function App() {
     setSaveState({ status: "idle" });
 
     if (inBrowser) {
-      setPage({ resource, content: demoPage, revision: "demo:0", io: createDemoPageIO(demoPage) });
+      const content = demoPages[resource.path] ?? `# ${resource.path}\n`;
+      setPage({
+        resource,
+        content,
+        revision: "demo:0",
+        io: createDemoPageIO(content),
+      });
       return;
     }
 
@@ -401,21 +526,49 @@ export default function App() {
     }
   }
 
+  /** Resolve `[[wiki]]` targets against the open workspace's resources. */
+  function handleOpenWiki(target: string) {
+    const trimmed = target.trim().replace(/\\/g, "/");
+    const candidates = [
+      trimmed,
+      trimmed.endsWith(".md") ? trimmed : `${trimmed}.md`,
+      trimmed.replace(/^\[\[|\]\]$/g, ""),
+    ];
+    const resources = snapshot?.resources ?? [];
+    for (const candidate of candidates) {
+      const hit = resources.find(
+        (r) =>
+          r.kind === "page" &&
+          (r.path === candidate ||
+            r.path === `${candidate}.md` ||
+            r.path.endsWith(`/${candidate}`) ||
+            r.path.endsWith(`/${candidate}.md`) ||
+            r.path.replace(/\.md$/i, "") === candidate),
+      );
+      if (hit) {
+        void handleSelect(hit);
+        return;
+      }
+    }
+    setError(`No page found for [[${target}]].`);
+  }
+
   /** A file node's double-click callback: selects it if it's in the workspace. */
   function handleOpenFile(path: string) {
     const resource = snapshot?.resources.find((r) => r.path === path);
-    if (resource) handleSelect(resource);
+    if (resource) void handleSelect(resource);
   }
 
   const paletteItems = useMemo<PaletteItem[]>(() => {
     const actions: PaletteItem[] = [
       { id: "action:new-page", label: "New page", run: handleNewPage },
       { id: "action:quick-note", label: "Quick note", hint: "Cmd+N", run: handleQuickNote },
+      { id: "action:new-workspace", label: "New workspace…", run: () => void openNewWorkspaceDialog() },
       { id: "action:open-workspace", label: "Open workspace…", run: () => void handleOpenWorkspace() },
       {
         id: "action:search",
         label: "Search workspace…",
-        hint: "Cmd+Shift+F",
+        hint: "Cmd+K",
         run: () => setSearchPaneOpen(true),
       },
     ];
@@ -439,9 +592,8 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshot, selected]);
 
-  // Cmd/Ctrl+P (palette), Cmd/Ctrl+N (quick note), Cmd/Ctrl+Shift+F (search) —
-  // subscribed once via a ref to the latest quick-note handler, the same
-  // pattern `PageEditor` uses for its Cmd/Ctrl+S shortcut.
+  // Cmd/Ctrl+K (search), Cmd/Ctrl+P (palette), Cmd/Ctrl+N (quick note),
+  // Cmd/Ctrl+Shift+F (search, legacy).
   const handleQuickNoteRef = useRef(handleQuickNote);
   handleQuickNoteRef.current = handleQuickNote;
 
@@ -450,14 +602,14 @@ export default function App() {
       if (!(event.metaKey || event.ctrlKey)) return;
       const key = event.key.toLowerCase();
 
-      if (key === "p") {
-        event.preventDefault();
-        setSearchPaneOpen(false);
-        setPaletteOpen(true);
-      } else if (key === "f" && event.shiftKey) {
+      if (key === "k" || (key === "f" && event.shiftKey)) {
         event.preventDefault();
         setPaletteOpen(false);
         setSearchPaneOpen(true);
+      } else if (key === "p") {
+        event.preventDefault();
+        setSearchPaneOpen(false);
+        setPaletteOpen(true);
       } else if (key === "n" && !event.shiftKey) {
         event.preventDefault();
         setPaletteOpen(false);
@@ -468,21 +620,85 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  // Re-open the most recent workspace when launching the native app into
+  // the empty state (skip browser demo / ?empty).
+  useEffect(() => {
+    if (inBrowser || demoStartEmpty || snapshot) return;
+    const latest = listRecentWorkspaces()[0];
+    if (!latest) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const next = await invoke<WorkspaceSnapshot>("open_workspace", { path: latest.root });
+        if (!cancelled) await adoptWorkspace(next);
+      } catch {
+        // Stale path — leave the empty state; user can pick another recent.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Only on first mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   if (!snapshot) {
     return (
-      <div className="empty-state" data-tauri-drag-region>
-        <BrandMark />
-        <h1 className="empty-wordmark">Lattice</h1>
-        <p className="empty-copy">
-          Open a folder to work in it. Pages, data, notebooks, and canvases stay
-          ordinary files on your disk.
-        </p>
-        <button className="primary-button" onClick={handleOpenWorkspace} disabled={busy}>
-          {busy ? "Opening…" : "Open workspace"}
-        </button>
-        <code className="empty-hint">a workspace is a folder with lattice.yaml</code>
-        {error && <p className="error-text">{error}</p>}
-      </div>
+      <>
+        <div className="empty-state" data-tauri-drag-region>
+          <BrandMark />
+          <h1 className="empty-wordmark">Lattice</h1>
+          <p className="empty-copy">
+            <strong>Create Lattice home</strong> makes{" "}
+            <code>~/Lattice</code> (for Settings and Workspaces) and opens your
+            first workspace at <code>Workspaces/Personal</code>. Or create a
+            workspace in any folder, or open one that already has{" "}
+            <code>lattice.yaml</code>.
+          </p>
+          <div className="empty-actions">
+            <button className="primary-button" onClick={() => void handleGetStarted()} disabled={busy}>
+              {busy ? "Setting up…" : "Create Lattice home"}
+            </button>
+            <button
+              className="secondary-button"
+              onClick={() => void openNewWorkspaceDialog()}
+              disabled={busy}
+            >
+              New workspace in a folder…
+            </button>
+            <button className="secondary-button" onClick={() => void handleOpenWorkspace()} disabled={busy}>
+              Open existing workspace…
+            </button>
+          </div>
+          {recents.length > 0 && (
+            <div className="recent-workspaces">
+              <div className="recent-heading">Recent</div>
+              {recents.slice(0, 5).map((r) => (
+                <button
+                  key={r.root}
+                  type="button"
+                  className="recent-item"
+                  onClick={() => void openRecent(r.root)}
+                  disabled={busy}
+                  title={r.root}
+                >
+                  <span className="recent-title">{r.title}</span>
+                  <code className="recent-path">{r.root}</code>
+                </button>
+              ))}
+            </div>
+          )}
+          <code className="empty-hint">~/Lattice/Workspaces/Personal · lattice.yaml marks a workspace</code>
+          {error && <p className="error-text">{error}</p>}
+        </div>
+        <NewWorkspaceDialog
+          open={newWorkspaceOpen}
+          busy={busy}
+          workspacesDir={workspacesDir}
+          onCancel={() => setNewWorkspaceOpen(false)}
+          onCreate={(args) => void handleCreateWorkspace(args)}
+        />
+      </>
     );
   }
 
@@ -505,7 +721,14 @@ export default function App() {
           />
         </nav>
         <div className="sidebar-footer">
-          <button className="secondary-button" onClick={handleOpenWorkspace} disabled={busy}>
+          <button
+            className="secondary-button"
+            onClick={() => void openNewWorkspaceDialog()}
+            disabled={busy}
+          >
+            New workspace…
+          </button>
+          <button className="secondary-button" onClick={() => void handleOpenWorkspace()} disabled={busy}>
             Open workspace…
           </button>
         </div>
@@ -545,7 +768,8 @@ export default function App() {
             {error && <p className="error-text">{error}</p>}
             {!selected && !error && (
               <div className="placeholder">
-                <p className="placeholder-copy">Select a resource to view it.</p>
+                <p className="placeholder-copy">Select a file, or press ⌘K to search.</p>
+                <p className="placeholder-sub">⌘N captures a quick note into Inbox/</p>
               </div>
             )}
             {selected && selected.kind === "page" && page && (
@@ -568,6 +792,7 @@ export default function App() {
                     revision={page.revision}
                     io={page.io}
                     onSaveStateChange={setSaveState}
+                    onOpenWiki={handleOpenWiki}
                     onRevisionChange={(revision) => {
                       currentPageRevisionRef.current = revision;
                     }}
@@ -619,6 +844,14 @@ export default function App() {
           onClose={() => setSearchPaneOpen(false)}
         />
       )}
+      <NewWorkspaceDialog
+        open={newWorkspaceOpen}
+        busy={busy}
+        workspacesDir={workspacesDir}
+        onCancel={() => setNewWorkspaceOpen(false)}
+        onCreate={(args) => void handleCreateWorkspace(args)}
+      />
+      {statusToast && <div className="status-toast">{statusToast}</div>}
     </div>
   );
 }
