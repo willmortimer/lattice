@@ -74,7 +74,23 @@
         docs-sync = "node site/scripts/sync-docs.mjs";
 
         # Desktop shell
+        # Vite HMR + native window (frontend hot-reload).
         desktop-dev = "pnpm install && pnpm --filter @lattice/desktop tauri dev";
+        # Browser-only React UI (demo workspace; no Tauri / no filesystem).
+        desktop-web = "pnpm install && pnpm --filter @lattice/desktop dev";
+        # Native window without Vite: reuse apps/desktop/dist if present,
+        # otherwise build the frontend once. Tauri's built-in static server
+        # serves dist (beforeDevCommand cleared via config merge).
+        desktop = ''
+          pnpm install
+          if [ ! -f apps/desktop/dist/index.html ]; then
+            echo "lattice-desktop: building frontend into apps/desktop/dist…"
+            pnpm --filter @lattice/desktop build
+          else
+            echo "lattice-desktop: reusing apps/desktop/dist (rebuild with: pnpm --filter @lattice/desktop build)"
+          fi
+          pnpm --filter @lattice/desktop exec tauri dev --config '{"build":{"beforeDevCommand":""}}'
+        '';
         desktop-build = "pnpm install && pnpm --filter @lattice/desktop tauri build --no-bundle";
       };
     in
@@ -84,7 +100,8 @@
           packages = toolchain pkgs ++ builtins.attrValues (taskScripts pkgs);
           shellHook = ''
             echo "lattice dev shell — rust $(rustc --version | cut -d' ' -f2), node $(node --version), pnpm $(pnpm --version)"
-            echo "tasks: lattice-{test,lint,fmt,check,site-dev,site-build,desktop-dev,desktop-build,docs-sync}"
+            echo "tasks: lattice-{test,lint,fmt,check,site-dev,site-build,docs-sync,"
+            echo "              desktop-dev,desktop-web,desktop,desktop-build}"
             echo "       (equivalently: nix run .#<task> from anywhere)"
           '';
         };

@@ -55,11 +55,21 @@ nix run .#test           # cargo test --workspace
 nix run .#lint           # clippy -D warnings + rustfmt check
 nix run .#fmt            # rustfmt
 nix run .#check          # everything CI would run (rust + both frontends)
-nix run .#site-dev       # astro dev server for the site
+nix run .#site-dev       # Astro marketing/docs site (not the app)
 nix run .#site-build     # static site build
 nix run .#docs-sync      # regenerate site docs content from docs/
-nix run .#desktop-dev    # tauri dev (native window)
+nix run .#desktop-dev    # Tauri native window + Vite HMR on :5173
 nix run .#desktop-build  # tauri release build, unbundled
+```
+
+`desktop-dev` starts **both** the native app and Vite on :5173 (Tauri loads the UI from Vite in dev). Opening :5173 in a browser is a demo-only shell — see [docs/dev/nix-workflows.md](docs/dev/nix-workflows.md).
+
+First-run home: `lattice home ensure` creates `~/Lattice/{Workspaces,Settings}` and seeds `Workspaces/Personal`. New workspaces: `lattice init --template personal|team|demo|blank`.
+
+```sh
+nix run .#desktop-dev    # native + Vite HMR
+nix run .#desktop-web    # browser-only demo UI
+nix run .#desktop        # native without Vite (reuses dist)
 ```
 
 Or bring your own toolchain: stable Rust, Node.js ≥ 22, pnpm ≥ 9, and Xcode
