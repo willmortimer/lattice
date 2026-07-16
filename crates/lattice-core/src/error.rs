@@ -24,6 +24,15 @@ pub enum Error {
         #[source]
         source: serde_yaml::Error,
     },
+
+    /// A [`crate::WorkspaceWatcher`] failed to start or attach a filesystem
+    /// watch at `path`.
+    #[error("failed to watch {path}: {source}")]
+    Watch {
+        path: PathBuf,
+        #[source]
+        source: notify::Error,
+    },
 }
 
 impl Error {
