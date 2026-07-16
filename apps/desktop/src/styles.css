@@ -661,6 +661,17 @@ html[data-platform="macos"] .empty-state {
   border: 1px solid var(--lt-line);
 }
 
+.page-embed-image-placeholder {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px dashed var(--lt-line-strong);
+  border-radius: var(--lt-radius-sm);
+  color: var(--lt-faint);
+  font: 10.5px var(--lt-font-mono);
+}
+
 /* Breadcrumb dirty/save indicators */
 
 .dirty-dot {
@@ -1854,6 +1865,59 @@ html[data-motion="always"] *::after {
   margin: 0;
   color: var(--lt-faint);
   font-size: 10.5px;
+}
+
+.wiki-menu strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-floating-toolbar {
+  position: fixed;
+  z-index: 89;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 4px;
+  border: 1px solid var(--lt-line-strong);
+  border-radius: var(--lt-radius-sm);
+  background: var(--lt-bg-raise);
+  box-shadow: 0 12px 32px color-mix(in oklch, black 30%, transparent);
+}
+
+.editor-selection-toolbar {
+  transform: translate(-50%, -100%);
+}
+
+.editor-block-toolbar {
+  max-width: min(340px, 70vw);
+  transform: translate(-100%, 0);
+}
+
+.editor-floating-toolbar > button {
+  display: inline-grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: calc(var(--lt-radius-sm) - 2px);
+  color: var(--lt-muted);
+  background: transparent;
+}
+
+.editor-floating-toolbar > button:hover,
+.editor-floating-toolbar > button:focus-visible {
+  color: var(--lt-text);
+  background: var(--lt-hover);
+}
+
+.editor-toolbar-separator {
+  width: 1px;
+  height: 18px;
+  margin: 0 3px;
+  background: var(--lt-line);
 }
 
 .data-grid-frame {

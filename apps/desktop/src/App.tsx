@@ -215,6 +215,13 @@ export default function App() {
    * against — `null` in the in-browser demo shell, which has no real
    * workspace on disk even when `snapshot` holds fixture data. */
   const assetRoot = inBrowser ? null : snapshot?.root ?? null;
+  const wikiTargets = useMemo(
+    () =>
+      (snapshot?.resources ?? [])
+        .filter((resource) => resource.kind === "page")
+        .map((resource) => resource.path.replace(/\.md$/i, "")),
+    [snapshot?.resources],
+  );
 
   // Refs mirroring state read inside the workspace-changed listener, which
   // subscribes once and must not see stale closures over fast-changing state.
@@ -319,6 +326,28 @@ export default function App() {
 
       if (event.type === "deleted") {
         if (event.path === current.resource.path) {
+          // Defensive second check: macOS atomic replacement can surface a
+          // transient remove event. If the page is readable now, reconcile it
+          // as a modification instead of ejecting the editor.
+          try {
+            const disk = await current.io.load();
+            if (disk.revision === currentPageRevisionRef.current) return;
+            if (isUnsaved(saveStateRef.current)) {
+              setExternalConflict({ path: event.path });
+            } else {
+              setPage((previous) =>
+                previous
+                  ? { ...previous, content: disk.raw, revision: disk.revision }
+                  : previous,
+              );
+              setReloadToken((token) => token + 1);
+              setSaveState({ status: "idle" });
+            }
+            return;
+          } catch {
+            // A genuine deletion remains unreadable and falls through to the
+            // existing close-and-report behavior.
+          }
           setError(`"${event.path}" was deleted outside Lattice.`);
           setPage(null);
           setSelected(null);
@@ -705,6 +734,25 @@ export default function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function handleImportEditorAsset(file: File): Promise<string> {
+    const workspace = snapshotRef.current;
+    const currentPage = pageRef.current;
+    if (inBrowser || !workspace || !currentPage) {
+      throw new Error("File import requires the native desktop workspace.");
+    }
+
+    const content = new Uint8Array(await file.arrayBuffer());
+    const relativePath = await invoke<string>("create_asset", content, {
+      headers: {
+        "x-lattice-root": encodeURIComponent(workspace.root),
+        "x-lattice-page-path": encodeURIComponent(currentPage.resource.path),
+        "x-lattice-file-name": encodeURIComponent(file.name),
+      },
+    });
+    await refreshSidebar();
+    return relativePath;
   }
 
   /** Placeholder view's "Open externally" button, for resource kinds with
@@ -1615,6 +1663,9 @@ export default function App() {
                                   setInspectorOpen(true);
                                 }
                               }}
+                              onCreateTable={handleNewTable}
+                              wikiTargets={wikiTargets}
+                              onImportAsset={inBrowser ? undefined : handleImportEditorAsset}
                               autosaveDelayMs={settings.editor.autosaveDelayMs}
                               spellcheck={settings.editor.spellcheck}
                               slashCommands={settings.editor.slashCommands}
