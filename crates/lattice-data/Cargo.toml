@@ -4,6 +4,7 @@ description = "Lattice `.data` package open/create and SQLite row CRUD"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [dependencies]
 csv = "1"

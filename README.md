@@ -100,6 +100,7 @@ pnpm compile-theme
 
 ## License
 
-Not yet licensed for redistribution; a licensing split (permissive specs,
-copyleft client/server) is planned — see
+Lattice is licensed under the [GNU Affero General Public License v3.0 or
+later](LICENSE) (`AGPL-3.0-or-later`). See
+[ADR 0031](docs/decisions/0031-agpl-3-or-later.md) and
 [docs/35-licensing-governance-and-sustainability.md](docs/35-licensing-governance-and-sustainability.md).

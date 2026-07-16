@@ -32,3 +32,4 @@ These records capture architecture choices that should not be silently reversed.
 - [ADR 0028: Present all conflicts as incompatible resource revisions](0028-unified-conflict-revisions.md)
 - [ADR 0029: Define portable and collaborative SQLite profiles](0029-sqlite-portable-and-collaborative-profiles.md)
 - [ADR 0030: Use per-resource Inspect instead of a global Workbench mode](0030-inspect-not-workbench.md)
+- [ADR 0031: License the Lattice repository under AGPL-3.0-or-later](0031-agpl-3-or-later.md)
