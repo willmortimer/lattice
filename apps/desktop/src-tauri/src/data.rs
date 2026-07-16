@@ -76,7 +76,9 @@ fn canonical_workspace_root(root: &str) -> Result<PathBuf, String> {
 fn validate_rel_path(rel_path: &str) -> Result<(), String> {
     let path = Path::new(rel_path);
     if path.is_absolute() {
-        return Err(format!("{rel_path:?} must be relative to the workspace root"));
+        return Err(format!(
+            "{rel_path:?} must be relative to the workspace root"
+        ));
     }
     if path
         .components()
