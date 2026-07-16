@@ -5,6 +5,7 @@ members = [
     "crates/lattice-core",
     "crates/lattice-storage",
     "crates/lattice-commands",
+    "crates/lattice-index",
     "apps/desktop/src-tauri",
 ]
 
@@ -17,6 +18,7 @@ rust-version = "1.85"
 lattice-core = { path = "crates/lattice-core" }
 lattice-storage = { path = "crates/lattice-storage" }
 lattice-commands = { path = "crates/lattice-commands" }
+lattice-index = { path = "crates/lattice-index" }
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
