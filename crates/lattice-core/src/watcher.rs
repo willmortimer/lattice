@@ -145,7 +145,7 @@ fn translate(
         // plain delete/create of the half we do see.
         EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
             if let Some(path) = event.paths.first() {
-                emit_delete(root, path, tx);
+                emit_delete(root, store, path, tx);
             }
         }
         EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
@@ -164,7 +164,7 @@ fn translate(
         }
         EventKind::Remove(_) => {
             if let Some(path) = event.paths.first() {
-                emit_delete(root, path, tx);
+                emit_delete(root, store, path, tx);
             }
         }
         // `Access` and `Other` carry no content change; `Any` is a
@@ -219,7 +219,7 @@ fn handle_rename(
                 revision: meta.revision.hash,
             });
         }
-        (Some(_), None) => emit_delete(root, from_abs, tx),
+        (Some(_), None) => emit_delete(root, store, from_abs, tx),
         (None, Some(_)) => emit_write(root, store, to_abs, tx, |path, revision| {
             WorkspaceEvent::Created { path, revision }
         }),
@@ -253,13 +253,33 @@ fn emit_write(
     let _ = tx.send(make(rel, meta.revision.hash));
 }
 
-fn emit_delete(root: &Path, absolute: &Path, tx: &Sender<WorkspaceEvent>) {
+fn emit_delete(
+    root: &Path,
+    store: &NativeWorkspaceStore,
+    absolute: &Path,
+    tx: &Sender<WorkspaceEvent>,
+) {
     let Some(rel) = relativize(root, absolute) else {
         return;
     };
     if is_ignored(&rel) {
         return;
     }
+
+    // Atomic replacement on macOS commonly reports a Remove event for the
+    // destination even though the replacement file is already present by the
+    // time the debounce window closes. Re-check the canonical store before
+    // announcing deletion: a surviving file is a modification, not a delete.
+    if let Ok(meta) = store.metadata(&rel) {
+        if !meta.is_dir {
+            let _ = tx.send(WorkspaceEvent::Modified {
+                path: rel,
+                revision: meta.revision.hash,
+            });
+        }
+        return;
+    }
+
     let _ = tx.send(WorkspaceEvent::Deleted { path: rel });
 }
 
@@ -436,6 +456,36 @@ mod tests {
                 path: PathBuf::from("Note.md")
             }
         );
+        watcher.stop();
+    }
+
+    #[test]
+    fn atomic_replacement_does_not_emit_deleted_for_surviving_target() {
+        let dir = temp_root();
+        let target = dir.path().join("Note.md");
+        let replacement = dir.path().join(".Note.md.lattice-tmp-test");
+        std::fs::write(&target, "# Before\n").unwrap();
+        let (watcher, rx) = WorkspaceWatcher::start(dir.path().to_path_buf()).unwrap();
+
+        std::fs::write(&replacement, "# After\n").unwrap();
+        std::fs::rename(&replacement, &target).unwrap();
+
+        let event = recv_matching(&rx, Duration::from_secs(5), |event| {
+            matches!(
+                event,
+                WorkspaceEvent::Modified { path, .. }
+                    | WorkspaceEvent::Created { path, .. }
+                    | WorkspaceEvent::Deleted { path }
+                    if path == Path::new("Note.md")
+            )
+        })
+        .expect("expected an event for the replaced target");
+
+        assert!(
+            !matches!(event, WorkspaceEvent::Deleted { .. }),
+            "a surviving atomic-replacement target must not be reported deleted"
+        );
+        assert_eq!(std::fs::read_to_string(target).unwrap(), "# After\n");
         watcher.stop();
     }
 
