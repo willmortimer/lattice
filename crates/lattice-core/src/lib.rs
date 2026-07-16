@@ -12,12 +12,14 @@ mod error;
 mod manifest;
 mod resource;
 mod validate;
+mod watcher;
 mod workspace;
 
 pub use error::Error;
 pub use manifest::{Capabilities, WorkspaceManifest, WORKSPACE_MANIFEST_FILENAME};
 pub use resource::{Resource, ResourceKind};
 pub use validate::{Diagnostic, Severity};
+pub use watcher::{WorkspaceEvent, WorkspaceWatcher};
 pub use workspace::{Workspace, OPERATIONAL_DIR};
 
 pub type Result<T> = std::result::Result<T, Error>;
