@@ -37,6 +37,8 @@ const CORPUS: Record<string, string> = {
 
   links: "See [the docs](https://example.com/docs \"Docs\") for more, or just [plain](https://example.com).\n",
 
+  wikiLinks: "See [[Product/Vision]] and [[Home|back home]].\n",
+
   table:
     "| Name | Qty | Price |\n" +
     "| :-- | :-: | --: |\n" +

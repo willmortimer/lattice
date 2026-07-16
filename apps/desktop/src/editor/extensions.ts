@@ -2,6 +2,7 @@ import type { Extensions } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import { TableKit } from "@tiptap/extension-table";
 import Image from "@tiptap/extension-image";
+import Link from "@tiptap/extension-link";
 
 /**
  * The single source of truth for the editor's node/mark set. Both the live
@@ -17,9 +18,17 @@ import Image from "@tiptap/extension-image";
  * alongside text within a paragraph, exactly like `markdown-it`'s
  * `image` token appears as a child of the paragraph's inline stream
  * (see `markdown.ts`'s parser/serializer entries for it).
+ *
+ * Wiki links `[[Target]]` are stored as ordinary `link` marks whose href
+ * uses the `wiki:` scheme (see `markdown.ts` preprocess/serialize).
  */
 export const editorExtensions: Extensions = [
-  StarterKit.configure({ underline: false }),
+  StarterKit.configure({ underline: false, link: false }),
   TableKit.configure({ table: { resizable: false } }),
   Image.configure({ inline: true, allowBase64: false }),
+  Link.configure({
+    openOnClick: false,
+    autolink: true,
+    HTMLAttributes: { class: "editor-link" },
+  }),
 ];

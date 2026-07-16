@@ -90,6 +90,8 @@ interface PageEditorProps {
    * a remount on every autosave.
    */
   onRevisionChange?: (revision: string | null) => void;
+  /** Navigate when the user clicks a `wiki:…` link (`[[Target]]`). */
+  onOpenWiki?: (target: string) => void;
 }
 
 /** Imperative escape hatch for a parent that needs the live buffer outside
@@ -110,7 +112,7 @@ export interface PageEditorHandle {
  * shows it collapsed and never parses or edits it (docs/07).
  */
 export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function PageEditor(
-  { raw, revision, io, onSaveStateChange, onRevisionChange },
+  { raw, revision, io, onSaveStateChange, onRevisionChange, onOpenWiki },
   ref,
 ) {
   const [{ frontmatter }] = useState(() => splitFrontmatter(raw));
@@ -268,7 +270,20 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
 
       {saveState.status === "error" && <p className="error-text">{saveState.message}</p>}
 
-      <EditorContent editor={editor} className="markdown-body page-editor-content" />
+      <div
+        onClick={(event) => {
+          if (!onOpenWiki) return;
+          const anchor = (event.target as HTMLElement | null)?.closest?.("a");
+          if (!anchor) return;
+          const href = anchor.getAttribute("href");
+          if (!href?.startsWith("wiki:")) return;
+          event.preventDefault();
+          event.stopPropagation();
+          onOpenWiki(decodeURIComponent(href.slice("wiki:".length)));
+        }}
+      >
+        <EditorContent editor={editor} className="markdown-body page-editor-content" />
+      </div>
     </div>
   );
 });
