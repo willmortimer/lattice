@@ -6,6 +6,23 @@
 
 A portable root directory containing canonical resources and optional `.lattice/` operational state.
 
+### Workspace template
+
+A one-time scaffold used to initialize a new workspace. After creation, its
+files and folders belong entirely to the user; the template does not retain
+ownership or update instantiated content.
+
+### Starter project
+
+A coherent project scaffold added to an existing workspace. Unlike a workspace
+template, it does not define the whole workspace and must be previewed for
+collisions before merge.
+
+### Sample workspace
+
+A curated demonstration used for evaluation, onboarding, screenshots, and
+conformance testing. It is not presented as a normal organizational template.
+
 ### Resource
 
 Any addressable item Lattice can inspect or render: page, dataset, view, canvas, notebook, ink drawing, artifact, app, workflow, task, file, query, form, or external connector target.

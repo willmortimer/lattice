@@ -90,6 +90,21 @@ Each surface owns its hot loop. React receives coarse state and lifecycle events
 
 ## Workspace storage
 
+### Lattice home
+
+`~/Lattice` is user-level application state, not a workspace:
+
+```text
+~/Lattice/
+├── Workspaces/
+└── Settings/
+    └── default-workspace.yaml
+```
+
+The default-workspace setting points to any valid workspace, including one
+outside `~/Lattice/Workspaces`. It controls the Home/startup default without
+changing that workspace's canonical files.
+
 ### Canonical layer
 
 Normal files and directories.

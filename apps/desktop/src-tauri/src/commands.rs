@@ -403,7 +403,10 @@ pub struct LatticeHomeInfo {
 pub struct TemplateInfo {
     pub id: String,
     pub name: String,
+    pub category: String,
     pub description: String,
+    pub recommended: bool,
+    pub preview: Vec<String>,
 }
 
 fn snapshot_from_workspace(workspace: &Workspace) -> Result<WorkspaceSnapshot, String> {
@@ -423,7 +426,7 @@ fn snapshot_from_workspace(workspace: &Workspace) -> Result<WorkspaceSnapshot, S
 #[tauri::command]
 pub fn ensure_home() -> Result<LatticeHomeInfo, String> {
     let home = ensure_lattice_home().map_err(|err| err.to_string())?;
-    let default_path = home.default_workspace();
+    let default_path = home.default_workspace().map_err(|err| err.to_string())?;
     let default_workspace = if default_path.join("lattice.yaml").exists() {
         let ws = Workspace::open(&default_path).map_err(|err| err.to_string())?;
         Some(snapshot_from_workspace(&ws)?)
@@ -445,6 +448,7 @@ pub fn create_workspace(
     path: String,
     title: Option<String>,
     template: String,
+    set_default: bool,
 ) -> Result<WorkspaceSnapshot, String> {
     let root = PathBuf::from(&path);
     let title = title.unwrap_or_else(|| {
@@ -454,22 +458,36 @@ pub fn create_workspace(
             .to_string()
     });
     let template = WorkspaceTemplate::parse(&template).ok_or_else(|| {
-        format!("unknown template {template:?}; expected personal, team, demo, or blank")
+        format!(
+            "unknown template {template:?}; expected personal, project, research, data-lab, team, demo, or blank"
+        )
     })?;
     let ws = init_with_template(&root, title, template).map_err(|err| err.to_string())?;
+    if set_default {
+        let home = ensure_lattice_home().map_err(|err| err.to_string())?;
+        home.set_default_workspace(ws.root())
+            .map_err(|err| err.to_string())?;
+    }
     snapshot_from_workspace(&ws)
 }
 
-/// Built-in workspace templates for the New Workspace UI.
+/// Built-in workspace templates for the New Workspace gallery.
 #[tauri::command]
 pub fn list_templates() -> Vec<TemplateInfo> {
-    WorkspaceTemplate::all()
+    WorkspaceTemplate::gallery()
         .iter()
         .copied()
         .map(|t| TemplateInfo {
             id: t.id().to_string(),
             name: t.display_name().to_string(),
+            category: t.category().to_string(),
             description: t.description().to_string(),
+            recommended: t.recommended(),
+            preview: t
+                .preview_paths()
+                .iter()
+                .map(|path| path.to_string())
+                .collect(),
         })
         .collect()
 }

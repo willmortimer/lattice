@@ -37,7 +37,8 @@ enum Command {
         /// Workspace title. Defaults to the directory name.
         #[arg(long)]
         title: Option<String>,
-        /// Folder scaffolding: `personal` (default), `team`, `demo`, or `blank`.
+        /// Workspace scaffold: `personal` (default), `project`, `research`,
+        /// `data-lab`, `team`, `demo`, or `blank`.
         #[arg(long, default_value = "personal")]
         template: String,
     },
@@ -476,7 +477,9 @@ fn cmd_init(path: Option<PathBuf>, title: Option<String>, template: String) -> R
         None => default_title(&root)?,
     };
     let template = WorkspaceTemplate::parse(&template).with_context(|| {
-        format!("unknown template {template:?}; expected personal, team, demo, or blank")
+        format!(
+            "unknown template {template:?}; expected personal, project, research, data-lab, team, demo, or blank"
+        )
     })?;
     let ws = init_with_template(&root, title, template)?;
     println!("created workspace at {}", ws.root().display());
@@ -490,7 +493,7 @@ fn cmd_home_ensure() -> Result<ExitCode> {
     println!("home: {}", home.root.display());
     println!("workspaces: {}", home.workspaces.display());
     println!("settings: {}", home.settings.display());
-    let default = home.default_workspace();
+    let default = home.default_workspace()?;
     if default.join("lattice.yaml").exists() {
         println!("default workspace: {}", default.display());
     }

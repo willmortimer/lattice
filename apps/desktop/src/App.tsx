@@ -518,6 +518,7 @@ export default function App() {
     path: string;
     title: string;
     template: string;
+    setDefault: boolean;
   }) {
     setError(null);
     if (inBrowser) {
@@ -540,6 +541,7 @@ export default function App() {
         path: args.path,
         title: args.title,
         template: args.template,
+        setDefault: args.setDefault,
       });
       await adoptWorkspace(next);
       setNewWorkspaceOpen(false);
@@ -1251,8 +1253,8 @@ export default function App() {
           <p className="empty-copy">
             <strong>Create Lattice home</strong> makes{" "}
             <code>~/Lattice</code> (for Settings and Workspaces) and opens your
-            first workspace at <code>Workspaces/Personal</code>. Or create a
-            workspace in any folder, or open one that already has{" "}
+            default Personal workspace. Or choose a starting point from the
+            workspace gallery, create in any folder, or open one that already has{" "}
             <code>lattice.yaml</code>.
           </p>
           <div className="empty-actions">
@@ -1288,7 +1290,7 @@ export default function App() {
               ))}
             </div>
           )}
-          <code className="empty-hint">~/Lattice/Workspaces/Personal · lattice.yaml marks a workspace</code>
+          <code className="empty-hint">Your default workspace can be changed when creating another workspace.</code>
           {error && <p className="error-text">{error}</p>}
         </div>
         <NewWorkspaceDialog
