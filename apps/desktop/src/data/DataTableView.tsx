@@ -1,6 +1,6 @@
 import { ConflictEnvelope } from "../editor/ConflictEnvelope";
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   cellValueToDisplay,
   cloneSnapshot,
@@ -10,6 +10,7 @@ import {
   type DataColumn,
   type DataRow,
   type FieldType,
+  type ViewFilter,
 } from "./types";
 
 const STALE_REVISION_PREFIX = "STALE_REVISION:";
@@ -30,6 +31,20 @@ function editableColumns(columns: DataColumn[]): DataColumn[] {
   return columns.filter((column) => column.name !== "id");
 }
 
+function cycleSortDirection(
+  currentField: string | undefined,
+  currentDirection: "asc" | "desc" | undefined,
+  nextField: string,
+): { field: string; direction: "asc" | "desc" } {
+  if (currentField !== nextField) {
+    return { field: nextField, direction: "asc" };
+  }
+  return {
+    field: nextField,
+    direction: currentDirection === "asc" ? "desc" : "asc",
+  };
+}
+
 export function DataTableView({
   root,
   relPath,
@@ -37,6 +52,16 @@ export function DataTableView({
   demoMutate,
 }: DataTableViewProps) {
   const [snapshot, setSnapshot] = useState(() => cloneSnapshot(initialSnapshot));
+  const [activeView, setActiveView] = useState(initialSnapshot.active_view);
+  const [sortField, setSortField] = useState<string | undefined>(initialSnapshot.sort_field);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc" | undefined>(
+    initialSnapshot.sort_direction,
+  );
+  const [filters, setFilters] = useState<ViewFilter[]>(initialSnapshot.filters);
+  const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(() => new Set());
+  const [filterField, setFilterField] = useState("");
+  const [filterOperator, setFilterOperator] = useState<"equals" | "contains">("contains");
+  const [filterValue, setFilterValue] = useState("");
   const [stale, setStale] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -46,6 +71,11 @@ export function DataTableView({
   useEffect(() => {
     const next = cloneSnapshot(initialSnapshot);
     setSnapshot(next);
+    setActiveView(next.active_view);
+    setSortField(next.sort_field);
+    setSortDirection(next.sort_direction);
+    setFilters(next.filters);
+    setHiddenColumns(new Set());
     revisionRef.current = next.package_revision;
     snapshotRef.current = next;
     setStale(false);
@@ -60,27 +90,39 @@ export function DataTableView({
   const applySnapshot = useCallback((next: DataAppSnapshot) => {
     const cloned = cloneSnapshot(next);
     setSnapshot(cloned);
+    setActiveView(cloned.active_view);
+    setSortField(cloned.sort_field);
+    setSortDirection(cloned.sort_direction);
+    setFilters(cloned.filters);
+    setHiddenColumns(new Set());
     snapshotRef.current = cloned;
     revisionRef.current = cloned.package_revision;
     setStale(false);
     setError(null);
   }, []);
 
-  const reload = useCallback(async () => {
-    if (demoMutate) {
-      applySnapshot(initialSnapshot);
-      return;
-    }
-    setBusy(true);
-    try {
-      const fresh = await invoke<DataAppSnapshot>("open_data_app", { root, relPath });
-      applySnapshot(fresh);
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setBusy(false);
-    }
-  }, [applySnapshot, demoMutate, initialSnapshot, relPath, root]);
+  const reload = useCallback(
+    async (viewName?: string) => {
+      if (demoMutate) {
+        applySnapshot(initialSnapshot);
+        return;
+      }
+      setBusy(true);
+      try {
+        const fresh = await invoke<DataAppSnapshot>("open_data_app", {
+          root,
+          relPath,
+          viewName: viewName ?? activeView,
+        });
+        applySnapshot(fresh);
+      } catch (err) {
+        setError(String(err));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [activeView, applySnapshot, demoMutate, initialSnapshot, relPath, root],
+  );
 
   const handleMutationError = useCallback((err: unknown) => {
     const message = String(err);
@@ -188,7 +230,11 @@ export function DataTableView({
         table: snapshotRef.current.default_table,
         values: {},
       });
-      const fresh = await invoke<DataAppSnapshot>("open_data_app", { root, relPath });
+      const fresh = await invoke<DataAppSnapshot>("open_data_app", {
+        root,
+        relPath,
+        viewName: activeView,
+      });
       applySnapshot({
         ...fresh,
         package_revision: result.revision,
@@ -198,7 +244,7 @@ export function DataTableView({
     } finally {
       setBusy(false);
     }
-  }, [applySnapshot, demoMutate, handleMutationError, relPath, root]);
+  }, [activeView, applySnapshot, demoMutate, handleMutationError, relPath, root]);
 
   const deleteRow = useCallback(
     async (row: DataRow) => {
@@ -244,8 +290,113 @@ export function DataTableView({
     [applySnapshot, demoMutate, handleMutationError, relPath, root],
   );
 
-  const columns = snapshot.columns;
-  const editColumns = editableColumns(columns);
+  const visibleColumns = useMemo(
+    () => snapshot.columns.filter((column) => !hiddenColumns.has(column.name)),
+    [hiddenColumns, snapshot.columns],
+  );
+  const editColumns = editableColumns(visibleColumns);
+  const filterableColumns = useMemo(
+    () => visibleColumns.filter((column) => column.name !== "id"),
+    [visibleColumns],
+  );
+
+  const displayRows = useMemo(() => {
+    let rows = [...snapshot.rows];
+    for (const filter of filters) {
+      rows = rows.filter((row) => {
+        const value = cellValueToDisplay(row.values[filter.field]).toLowerCase();
+        const needle = filter.value.toLowerCase();
+        return filter.operator === "equals" ? value === needle : value.includes(needle);
+      });
+    }
+    if (sortField) {
+      rows.sort((left, right) => {
+        const leftValue = cellValueToDisplay(left.values[sortField]);
+        const rightValue = cellValueToDisplay(right.values[sortField]);
+        const cmp = leftValue.localeCompare(rightValue, undefined, { numeric: true });
+        return sortDirection === "desc" ? -cmp : cmp;
+      });
+    }
+    return rows;
+  }, [filters, snapshot.rows, sortDirection, sortField]);
+
+  const applyFilter = useCallback(() => {
+    if (!filterField || !filterValue.trim()) return;
+    setFilters((prev) => [
+      ...prev.filter((filter) => filter.field !== filterField),
+      {
+        field: filterField,
+        operator: filterOperator,
+        value: filterValue.trim(),
+      },
+    ]);
+    setFilterValue("");
+  }, [filterField, filterOperator, filterValue]);
+
+  const saveView = useCallback(async () => {
+    const viewName = window.prompt("Save view as", activeView)?.trim();
+    if (!viewName) return;
+
+    if (demoMutate) {
+      setError("Saving views is not available in the browser demo.");
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const saved = await invoke<DataAppSnapshot>("save_data_view", {
+        root,
+        relPath,
+        request: {
+          viewName,
+          table: snapshotRef.current.default_table,
+          columns: visibleColumns.map((column) => column.name),
+          sortField: sortField ?? null,
+          sortDirection: sortDirection ?? null,
+          filters,
+        },
+      });
+      applySnapshot(saved);
+      setActiveView(viewName);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  }, [
+    activeView,
+    applySnapshot,
+    demoMutate,
+    filters,
+    relPath,
+    root,
+    sortDirection,
+    sortField,
+    visibleColumns,
+  ]);
+
+  const handleViewChange = useCallback(
+    async (viewName: string) => {
+      setActiveView(viewName);
+      await reload(viewName);
+    },
+    [reload],
+  );
+
+  const handleSort = useCallback((field: string) => {
+    const next = cycleSortDirection(sortField, sortDirection, field);
+    setSortField(next.field);
+    setSortDirection(next.direction);
+  }, [sortDirection, sortField]);
+
+  useEffect(() => {
+    if (demoMutate || !filterField) {
+      if (filterableColumns.length > 0 && !filterField) {
+        setFilterField(filterableColumns[0]?.name ?? "");
+      }
+      return;
+    }
+  }, [demoMutate, filterField, filterableColumns]);
 
   return (
     <div className="data-table-pane">
@@ -255,15 +406,103 @@ export function DataTableView({
           {snapshot.default_table} · {snapshot.rows.length} row
           {snapshot.rows.length === 1 ? "" : "s"}
         </span>
+        <div className="data-table-toolbar">
+          <label className="data-table-view-select">
+            View
+            <select
+              value={activeView}
+              disabled={busy}
+              onChange={(event) => void handleViewChange(event.currentTarget.value)}
+            >
+              {(snapshot.available_views.length > 0
+                ? snapshot.available_views
+                : ["All"]
+              ).map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => void saveView()}
+            disabled={busy}
+          >
+            Save view
+          </button>
+          <button
+            type="button"
+            className="secondary-button data-table-add"
+            onClick={() => void addRow()}
+            disabled={busy}
+          >
+            Add row
+          </button>
+        </div>
+      </header>
+
+      <div className="data-table-filter-bar">
+        <select
+          value={filterField}
+          disabled={busy || filterableColumns.length === 0}
+          onChange={(event) => setFilterField(event.currentTarget.value)}
+        >
+          {filterableColumns.map((column) => (
+            <option key={column.name} value={column.name}>
+              {column.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={filterOperator}
+          disabled={busy}
+          onChange={(event) =>
+            setFilterOperator(event.currentTarget.value as "equals" | "contains")
+          }
+        >
+          <option value="contains">contains</option>
+          <option value="equals">equals</option>
+        </select>
+        <input
+          className="data-table-filter-input"
+          type="text"
+          value={filterValue}
+          disabled={busy}
+          placeholder="Filter value"
+          onChange={(event) => setFilterValue(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              applyFilter();
+            }
+          }}
+        />
         <button
           type="button"
-          className="secondary-button data-table-add"
-          onClick={() => void addRow()}
+          className="secondary-button"
           disabled={busy}
+          onClick={applyFilter}
         >
-          Add row
+          Apply filter
         </button>
-      </header>
+        {filters.length > 0 && (
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={busy}
+            onClick={() => setFilters([])}
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
+      {filters.length > 0 && (
+        <p className="data-table-filter-summary">
+          {filters.map((filter) => `${filter.field} ${filter.operator} ${filter.value}`).join(" · ")}
+        </p>
+      )}
 
       {stale && (
         <ConflictEnvelope
@@ -278,23 +517,48 @@ export function DataTableView({
         <table className="data-table">
           <thead>
             <tr>
-              {columns.map((column) => (
-                <th key={column.name}>{column.name}</th>
+              {visibleColumns.map((column) => (
+                <th key={column.name}>
+                  <div className="data-table-col-head">
+                    <button
+                      type="button"
+                      className="data-table-sort"
+                      disabled={busy}
+                      onClick={() => handleSort(column.name)}
+                    >
+                      {column.name}
+                      {sortField === column.name ? (sortDirection === "desc" ? " ↓" : " ↑") : ""}
+                    </button>
+                    {column.name !== "id" && (
+                      <button
+                        type="button"
+                        className="data-table-hide-col"
+                        title="Hide column"
+                        disabled={busy}
+                        onClick={() =>
+                          setHiddenColumns((prev) => new Set([...prev, column.name]))
+                        }
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                </th>
               ))}
               <th className="data-table-actions-col" aria-label="Row actions" />
             </tr>
           </thead>
           <tbody>
-            {snapshot.rows.length === 0 ? (
+            {displayRows.length === 0 ? (
               <tr>
-                <td className="data-table-empty" colSpan={columns.length + 1}>
-                  No rows yet — add one to get started.
+                <td className="data-table-empty" colSpan={visibleColumns.length + 1}>
+                  No rows match this view.
                 </td>
               </tr>
             ) : (
-              snapshot.rows.map((row) => (
+              displayRows.map((row) => (
                 <tr key={row.id}>
-                  {columns.map((column) => {
+                  {visibleColumns.map((column) => {
                     const readOnly = column.name === "id";
                     const display = cellValueToDisplay(row.values[column.name]);
                     return (
@@ -336,6 +600,28 @@ export function DataTableView({
           </tbody>
         </table>
       </div>
+
+      {hiddenColumns.size > 0 && (
+        <div className="data-table-hidden-cols">
+          Hidden:
+          {[...hiddenColumns].map((name) => (
+            <button
+              key={name}
+              type="button"
+              className="secondary-button"
+              onClick={() =>
+                setHiddenColumns((prev) => {
+                  const next = new Set(prev);
+                  next.delete(name);
+                  return next;
+                })
+              }
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {editColumns.length === 0 && (
         <p className="data-table-hint">

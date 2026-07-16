@@ -104,6 +104,9 @@ export const demoDataApp: DataAppSnapshot = {
       },
     },
   ],
+  available_views: ["All"],
+  active_view: "All",
+  filters: [],
 };
 
 /** Body used when opening demo pages in the browser shell. */

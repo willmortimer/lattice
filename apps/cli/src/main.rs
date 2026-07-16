@@ -10,7 +10,7 @@ use lattice_core::{
     ensure_lattice_home, init_with_template, Diagnostic, Resource, Severity, Workspace,
     WorkspaceTemplate,
 };
-use lattice_data::{CellValue, DataApp};
+use lattice_data::{parse_csv_file, CellValue, DataApp};
 use lattice_index::{Backlink, SearchHit, WorkspaceIndex};
 use lattice_storage::{NativeWorkspaceStore, RecoveryJournal, WorkspaceStore};
 
@@ -217,6 +217,49 @@ enum TableCommand {
         #[arg(long)]
         json: bool,
     },
+    /// Import a CSV file into a new `.data` package.
+    Import {
+        /// CSV file to import (may be outside the workspace).
+        #[arg(long)]
+        csv: PathBuf,
+        /// Package name (creates `{name}.data` at the workspace root).
+        #[arg(long)]
+        name: String,
+        /// Human-readable package title. Defaults to `name`.
+        #[arg(long)]
+        title: Option<String>,
+        /// Table name inside the package. Defaults to `records`.
+        #[arg(long, default_value = "records")]
+        table: String,
+    },
+    /// List and inspect saved grid views.
+    View {
+        #[command(subcommand)]
+        command: TableViewCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum TableViewCommand {
+    /// List saved views in a `.data` package.
+    List {
+        /// Workspace path of the package.
+        path: PathBuf,
+        /// Emit view names as a JSON array.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show one saved view definition.
+    Show {
+        /// Workspace path of the package.
+        path: PathBuf,
+        /// View name (without `.yaml`).
+        #[arg(long)]
+        name: String,
+        /// Emit the view as JSON.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -312,6 +355,18 @@ fn run(command: Command) -> Result<ExitCode> {
         Command::Table { command } => match command {
             TableCommand::Create { path, title, table } => cmd_table_create(path, title, table),
             TableCommand::Show { path, json } => cmd_table_show(path, json),
+            TableCommand::Import {
+                csv,
+                name,
+                title,
+                table,
+            } => cmd_table_import(csv, name, title, table),
+            TableCommand::View { command } => match command {
+                TableViewCommand::List { path, json } => cmd_table_view_list(path, json),
+                TableViewCommand::Show { path, name, json } => {
+                    cmd_table_view_show(path, name, json)
+                }
+            },
         },
         Command::Record { command } => match command {
             RecordCommand::Insert {
@@ -665,6 +720,101 @@ fn cmd_table_create(path: PathBuf, title: String, table: String) -> Result<ExitC
             .as_deref()
             .unwrap_or("?")
     );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn package_path_from_name(name: &str) -> PathBuf {
+    let trimmed = name.trim().trim_end_matches(".data");
+    PathBuf::from(format!("{trimmed}.data"))
+}
+
+fn cmd_table_import(
+    csv: PathBuf,
+    name: String,
+    title: Option<String>,
+    table: String,
+) -> Result<ExitCode> {
+    let parsed = parse_csv_file(&csv)?;
+    let (ws, mut engine) = open_engine()?;
+    let rel = workspace_relative(&ws, &package_path_from_name(&name))?;
+    let title = title.unwrap_or_else(|| name.trim().replace(".data", "").to_string());
+
+    engine.apply(Transaction::new(
+        format!("Create table package {} from CSV", rel.display()),
+        vec![Semantic::TableCreate {
+            path: rel.clone(),
+            title: title.clone(),
+            table_name: table.clone(),
+        }],
+    ))?;
+
+    let mut app = DataApp::open(&ws.root().join(&rel))?;
+    app.add_columns_from_csv(&table, &parsed)?;
+
+    for row in &parsed.rows {
+        let mut values = std::collections::BTreeMap::new();
+        for ((header, field_type), cell) in parsed
+            .headers
+            .iter()
+            .zip(&parsed.field_types)
+            .zip(row.iter())
+        {
+            values.insert(
+                header.clone(),
+                lattice_data::cell_from_csv(cell, *field_type)?,
+            );
+        }
+        engine.apply(Transaction::new(
+            format!("Import row into {}.{}", rel.display(), table),
+            vec![Semantic::RecordInsert {
+                path: rel.clone(),
+                table: table.clone(),
+                values,
+                id: None,
+            }],
+        ))?;
+    }
+
+    println!(
+        "imported {} row(s) into {} ({})",
+        parsed.rows.len(),
+        rel.display(),
+        table
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_table_view_list(path: PathBuf, json: bool) -> Result<ExitCode> {
+    let start = std::env::current_dir().context("failed to determine current directory")?;
+    let ws = Workspace::discover(&start)?;
+    let rel = workspace_relative(&ws, &path)?;
+    let app = DataApp::open(&ws.root().join(&rel))?;
+    let views = app.list_views()?;
+
+    if json {
+        print_json(&views)?;
+    } else if views.is_empty() {
+        println!("no views saved");
+    } else {
+        for name in views {
+            println!("{name}");
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_table_view_show(path: PathBuf, name: String, json: bool) -> Result<ExitCode> {
+    let start = std::env::current_dir().context("failed to determine current directory")?;
+    let ws = Workspace::discover(&start)?;
+    let rel = workspace_relative(&ws, &path)?;
+    let app = DataApp::open(&ws.root().join(&rel))?;
+    let view = app.load_view(&name)?;
+
+    if json {
+        print_json(&view)?;
+    } else {
+        println!("{}", app.render_view_yaml(&view)?);
+    }
     Ok(ExitCode::SUCCESS)
 }
 
