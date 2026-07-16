@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { Extensions } from "@tiptap/core";
+import type { Editor, Extensions } from "@tiptap/core";
 import { EditorContent, ReactNodeViewRenderer, useEditor } from "@tiptap/react";
 
 import { CodeBlockView } from "./CodeBlockView";
@@ -21,10 +21,32 @@ import {
   splitFrontmatter,
 } from "./markdown";
 import { StaleRevisionError, type PageIO } from "./pageIO";
+import { type SaveState } from "./saveState";
+export { isUnsaved, saveIndicatorText, type SaveState } from "./saveState";
 
-const AUTOSAVE_DELAY_MS = 800;
 /** How long the "Saved" indicator lingers before fading back to idle. */
 const SAVED_INDICATOR_MS = 1500;
+
+interface SlashMenuState {
+  from: number;
+  to: number;
+  query: string;
+  left: number;
+  top: number;
+}
+
+const SLASH_COMMANDS = [
+  { id: "text", label: "Text", description: "Plain paragraph" },
+  { id: "heading-1", label: "Heading 1", description: "Large section heading" },
+  { id: "heading-2", label: "Heading 2", description: "Medium section heading" },
+  { id: "heading-3", label: "Heading 3", description: "Small section heading" },
+  { id: "bullet-list", label: "Bulleted list", description: "Unordered list" },
+  { id: "ordered-list", label: "Numbered list", description: "Ordered list" },
+  { id: "quote", label: "Quote", description: "Quoted block" },
+  { id: "code", label: "Code block", description: "Fenced code" },
+  { id: "divider", label: "Divider", description: "Horizontal rule" },
+  { id: "table", label: "Table", description: "3 × 3 table" },
+] as const;
 
 /**
  * The live editor's extension list: `editorExtensions` (the schema
@@ -43,40 +65,6 @@ const liveExtensions: Extensions = editorExtensions.map((extension) => {
   return extension;
 });
 
-export type SaveState =
-  | { status: "idle" }
-  | { status: "dirty" }
-  | { status: "saving" }
-  | { status: "saved" }
-  | { status: "conflict"; message: string }
-  | { status: "error"; message: string };
-
-/** Whether `state` represents an edit not yet durably saved. */
-export function isUnsaved(state: SaveState): boolean {
-  return state.status !== "idle" && state.status !== "saved";
-}
-
-/** Short label for the save-state indicator in the breadcrumb. */
-export function saveIndicatorText(state: SaveState): string {
-  switch (state.status) {
-    case "idle":
-      return "";
-    case "dirty":
-      return "Edited";
-    case "saving":
-      return "Saving…";
-    case "saved":
-      return "Saved";
-    case "conflict":
-      return "Save conflict";
-    case "error":
-      return "Save failed";
-    default:
-      // Exhaustiveness guard: a new SaveState variant must be handled above.
-      return state satisfies never;
-  }
-}
-
 interface PageEditorProps {
   raw: string;
   revision: string | null;
@@ -92,6 +80,10 @@ interface PageEditorProps {
   onRevisionChange?: (revision: string | null) => void;
   /** Navigate when the user clicks a `wiki:…` link (`[[Target]]`). */
   onOpenWiki?: (target: string) => void;
+  autosaveDelayMs?: number;
+  spellcheck?: boolean;
+  slashCommands?: boolean;
+  showFrontmatter?: boolean;
 }
 
 /** Imperative escape hatch for a parent that needs the live buffer outside
@@ -112,13 +104,59 @@ export interface PageEditorHandle {
  * shows it collapsed and never parses or edits it (docs/07).
  */
 export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function PageEditor(
-  { raw, revision, io, onSaveStateChange, onRevisionChange, onOpenWiki },
+  {
+    raw,
+    revision,
+    io,
+    onSaveStateChange,
+    onRevisionChange,
+    onOpenWiki,
+    autosaveDelayMs = 800,
+    spellcheck = true,
+    slashCommands = true,
+    showFrontmatter = true,
+  },
   ref,
 ) {
   const [{ frontmatter }] = useState(() => splitFrontmatter(raw));
   const initialDoc = useMemo(() => parseMarkdownToJSON(splitFrontmatter(raw).body), [raw]);
 
   const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
+  const [slashMenu, setSlashMenu] = useState<SlashMenuState | null>(null);
+  const [slashIndex, setSlashIndex] = useState(0);
+  const editorContainerRef = useRef<HTMLDivElement>(null);
+
+  const updateSlashMenu = useCallback(
+    (currentEditor: Editor) => {
+      if (!slashCommands || !currentEditor.isEditable) {
+        setSlashMenu(null);
+        return;
+      }
+      const { $from } = currentEditor.state.selection;
+      if (!$from.parent.isTextblock) {
+        setSlashMenu(null);
+        return;
+      }
+      const before = $from.parent.textBetween(0, $from.parentOffset, undefined, "\ufffc");
+      const match = before.match(/(?:^|\s)\/([a-z0-9-]*)$/i);
+      if (!match) {
+        setSlashMenu(null);
+        return;
+      }
+      const query = match[1] ?? "";
+      const from = $from.pos - query.length - 1;
+      const coordinates = currentEditor.view.coordsAtPos($from.pos);
+      setSlashIndex(0);
+      setSlashMenu({
+        from,
+        to: $from.pos,
+        query,
+        left: coordinates.left,
+        top: coordinates.bottom + 6,
+      });
+    },
+    [slashCommands],
+  );
 
   // Notify the parent as an effect (not from inside the state updater above)
   // so this never fires while React is still rendering `PageEditor` itself.
@@ -154,11 +192,24 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
   const editor = useEditor({
     extensions: liveExtensions,
     content: initialDoc,
-    onUpdate: () => {
+    editorProps: {
+      attributes: {
+        spellcheck: spellcheck ? "true" : "false",
+      },
+    },
+    onUpdate: ({ editor: currentEditor }) => {
       setSaveState((prev) => (prev.status === "conflict" ? prev : { status: "dirty" }));
       scheduleAutosave();
+      updateSlashMenu(currentEditor);
     },
+    onSelectionUpdate: ({ editor: currentEditor }) => updateSlashMenu(currentEditor),
   });
+
+  useEffect(() => {
+    editorContainerRef.current
+      ?.querySelector<HTMLElement>("[contenteditable='true']")
+      ?.setAttribute("spellcheck", spellcheck ? "true" : "false");
+  }, [spellcheck]);
 
   useImperativeHandle(
     ref,
@@ -214,8 +265,83 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     clearAutosaveTimer();
     autosaveTimer.current = window.setTimeout(() => {
       void performSaveRef.current();
-    }, AUTOSAVE_DELAY_MS);
+    }, autosaveDelayMs);
   }
+
+  const filteredSlashCommands = useMemo(() => {
+    const query = slashMenu?.query.toLowerCase() ?? "";
+    return SLASH_COMMANDS.filter(
+      (command) =>
+        command.label.toLowerCase().includes(query) ||
+        command.description.toLowerCase().includes(query),
+    );
+  }, [slashMenu?.query]);
+
+  const runSlashCommand = useCallback(
+    (id: (typeof SLASH_COMMANDS)[number]["id"]) => {
+      if (!slashMenu) return;
+      const chain = editor.chain().focus().deleteRange({ from: slashMenu.from, to: slashMenu.to });
+      switch (id) {
+        case "heading-1":
+          chain.setHeading({ level: 1 }).run();
+          break;
+        case "heading-2":
+          chain.setHeading({ level: 2 }).run();
+          break;
+        case "heading-3":
+          chain.setHeading({ level: 3 }).run();
+          break;
+        case "bullet-list":
+          chain.toggleBulletList().run();
+          break;
+        case "ordered-list":
+          chain.toggleOrderedList().run();
+          break;
+        case "quote":
+          chain.toggleBlockquote().run();
+          break;
+        case "code":
+          chain.toggleCodeBlock().run();
+          break;
+        case "divider":
+          chain.setHorizontalRule().run();
+          break;
+        case "table":
+          chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+          break;
+        case "text":
+          chain.setParagraph().run();
+          break;
+      }
+      setSlashMenu(null);
+    },
+    [editor, slashMenu],
+  );
+
+  useEffect(() => {
+    if (!slashMenu) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setSlashMenu(null);
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setSlashIndex((index) => (index + 1) % Math.max(filteredSlashCommands.length, 1));
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setSlashIndex(
+          (index) =>
+            (index - 1 + Math.max(filteredSlashCommands.length, 1)) %
+            Math.max(filteredSlashCommands.length, 1),
+        );
+      } else if (event.key === "Enter" && filteredSlashCommands.length > 0) {
+        event.preventDefault();
+        runSlashCommand(filteredSlashCommands[slashIndex]?.id ?? filteredSlashCommands[0].id);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [filteredSlashCommands, runSlashCommand, slashIndex, slashMenu]);
 
   // Cmd/Ctrl+S: save immediately, bypassing the debounce.
   useEffect(() => {
@@ -261,7 +387,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
         />
       )}
 
-      {frontmatter && (
+      {frontmatter && showFrontmatter && (
         <details className="frontmatter-block">
           <summary>Frontmatter</summary>
           <pre className="frontmatter-content">{frontmatter.trim()}</pre>
@@ -271,6 +397,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
       {saveState.status === "error" && <p className="error-text">{saveState.message}</p>}
 
       <div
+        ref={editorContainerRef}
         onClick={(event) => {
           if (!onOpenWiki) return;
           const anchor = (event.target as HTMLElement | null)?.closest?.("a");
@@ -284,6 +411,34 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
       >
         <EditorContent editor={editor} className="markdown-body page-editor-content" />
       </div>
+      <p className="page-editor-hint">Type / for blocks and formatting · ⌘S saves immediately</p>
+      {slashMenu && (
+        <div
+          className="slash-menu"
+          role="listbox"
+          aria-label="Block commands"
+          style={{ left: slashMenu.left, top: slashMenu.top }}
+        >
+          {filteredSlashCommands.length === 0 ? (
+            <p>No matching commands</p>
+          ) : (
+            filteredSlashCommands.map((command, index) => (
+              <button
+                type="button"
+                role="option"
+                aria-selected={slashIndex === index}
+                key={command.id}
+                className={slashIndex === index ? "slash-command-active" : ""}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => runSlashCommand(command.id)}
+              >
+                <strong>{command.label}</strong>
+                <span>{command.description}</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 });

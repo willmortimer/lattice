@@ -7,7 +7,8 @@ export function fileTimestamp(now: Date = new Date()): string {
   return now.toISOString().replace(/[:.]/g, "-");
 }
 
-/** The quick-note path (docs/07's "Quick-note mode"): a new page in `Inbox/`. */
-export function quickNotePath(now: Date = new Date()): string {
-  return `Inbox/${fileTimestamp(now)}.md`;
+/** The quick-note path (docs/07's "Quick-note mode"): a new page in the configured folder. */
+export function quickNotePath(now: Date = new Date(), directory = "Inbox"): string {
+  const normalized = directory.trim().replace(/^\/+|\/+$/g, "") || "Inbox";
+  return `${normalized}/${fileTimestamp(now)}.md`;
 }

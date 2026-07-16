@@ -21,4 +21,9 @@ describe("quickNotePath", () => {
     const path = quickNotePath(new Date("2026-07-15T20:32:05.123Z"));
     expect(path).toBe("Inbox/2026-07-15T20-32-05-123Z.md");
   });
+
+  it("normalizes a configured capture directory", () => {
+    const path = quickNotePath(new Date("2026-07-15T20:32:05.123Z"), "/Capture/Quick/");
+    expect(path).toBe("Capture/Quick/2026-07-15T20-32-05-123Z.md");
+  });
 });
