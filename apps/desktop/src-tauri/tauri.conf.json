@@ -12,11 +12,29 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Lattice",
         "width": 1200,
         "height": 800,
         "minWidth": 720,
         "minHeight": 480,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "backgroundColor": "#0a0d13"
+      },
+      {
+        "label": "quick-note",
+        "title": "Quick Note",
+        "url": "quick-note.html",
+        "width": 680,
+        "height": 470,
+        "minWidth": 520,
+        "minHeight": 360,
+        "center": true,
+        "visible": false,
+        "alwaysOnTop": true,
+        "resizable": true,
+        "skipTaskbar": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "backgroundColor": "#0a0d13"
