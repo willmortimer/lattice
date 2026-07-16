@@ -7,7 +7,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use lattice_commands::{Command as Semantic, CommandEngine, Transaction};
 use lattice_core::{
-    effective_default_workspace, ensure_lattice_home, init_with_template, Diagnostic, Resource,
+    ensure_lattice_home, init_with_template, initialize_lattice_home, Diagnostic, Resource,
     Severity, Workspace, WorkspaceTemplate,
 };
 use lattice_data::{parse_csv_file, CellValue, DataApp};
@@ -489,13 +489,16 @@ fn cmd_init(path: Option<PathBuf>, title: Option<String>, template: String) -> R
 }
 
 fn cmd_home_ensure() -> Result<ExitCode> {
-    let home = ensure_lattice_home()?;
+    let (home, outcome) = initialize_lattice_home()?;
     println!("home: {}", home.root.display());
     println!("workspaces: {}", home.workspaces.display());
     println!("settings: {}", home.settings.display());
-    let default = effective_default_workspace(&home)?;
+    let default = outcome.workspace.root();
     if default.join("lattice.yaml").exists() {
         println!("default workspace: {}", default.display());
+    }
+    for diagnostic in outcome.diagnostics {
+        eprintln!("warning: {}", diagnostic.message);
     }
     Ok(ExitCode::SUCCESS)
 }

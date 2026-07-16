@@ -27,6 +27,9 @@ pub struct WatcherState(Mutex<Option<WorkspaceWatcher>>);
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 enum WorkspaceChangePayload {
+    WorkspaceUnavailable {
+        reason: String,
+    },
     Created {
         path: String,
         revision: String,
@@ -48,6 +51,9 @@ enum WorkspaceChangePayload {
 impl WorkspaceChangePayload {
     fn from_event(event: &WorkspaceEvent) -> Self {
         match event {
+            WorkspaceEvent::RootDeleted => WorkspaceChangePayload::WorkspaceUnavailable {
+                reason: "root-deleted".into(),
+            },
             WorkspaceEvent::Created { path, revision } => WorkspaceChangePayload::Created {
                 path: path_string(path),
                 revision: revision.clone(),
@@ -134,6 +140,7 @@ fn stop(state: &WatcherState) {
 
 fn apply_to_index(index: &WorkspaceIndex, event: &WorkspaceEvent, root: &Path) {
     match event {
+        WorkspaceEvent::RootDeleted => {}
         WorkspaceEvent::Created { path, .. } | WorkspaceEvent::Modified { path, .. } => {
             reindex_if_page(index, root, path);
         }
@@ -199,6 +206,14 @@ mod tests {
         assert_eq!(json["from"], "Notes/Old.md");
         assert_eq!(json["to"], "Notes/New.md");
         assert_eq!(json["revision"], "sha256:abc");
+    }
+
+    #[test]
+    fn root_deletion_becomes_workspace_unavailable() {
+        let payload = WorkspaceChangePayload::from_event(&WorkspaceEvent::RootDeleted);
+        let json = serde_json::to_value(&payload).unwrap();
+        assert_eq!(json["type"], "workspace-unavailable");
+        assert_eq!(json["reason"], "root-deleted");
     }
 
     #[test]

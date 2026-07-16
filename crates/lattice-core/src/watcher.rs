@@ -49,6 +49,8 @@ const DEBOUNCE_TIMEOUT: Duration = Duration::from_millis(400);
 /// constructed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WorkspaceEvent {
+    /// The watched workspace root itself was removed or moved away.
+    RootDeleted,
     /// A new file appeared.
     Created { path: PathBuf, revision: String },
     /// An existing file's content (or metadata) changed.
@@ -259,6 +261,10 @@ fn emit_delete(
     absolute: &Path,
     tx: &Sender<WorkspaceEvent>,
 ) {
+    if absolute == root {
+        let _ = tx.send(WorkspaceEvent::RootDeleted);
+        return;
+    }
     let Some(rel) = relativize(root, absolute) else {
         return;
     };
@@ -457,6 +463,18 @@ mod tests {
             }
         );
         watcher.stop();
+    }
+
+    #[test]
+    fn deleting_the_watched_root_has_a_distinct_lifecycle_event() {
+        let dir = temp_root();
+        let root = dir.path().to_path_buf();
+        let store = NativeWorkspaceStore::new(&root);
+        let (tx, rx) = mpsc::channel();
+
+        emit_delete(&root, &store, &root, &tx);
+
+        assert_eq!(rx.recv().unwrap(), WorkspaceEvent::RootDeleted);
     }
 
     #[test]

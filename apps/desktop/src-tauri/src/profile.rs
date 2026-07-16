@@ -3,10 +3,19 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use lattice_core::{effective_default_workspace, ensure_lattice_home, Workspace};
 use lattice_profile::{
-    DesktopSession, DesktopSettings, RecentWorkspace, SettingsSnapshot, WorkspaceStartupSettings,
-    DESKTOP_SETTINGS_SPEC, WORKSPACE_SETTINGS_SPEC,
+    DesktopSession, DesktopSettings, ProfileStateStore, RecentWorkspace, SettingsSnapshot,
+    WorkspaceStartupSettings, DESKTOP_SETTINGS_SPEC, WORKSPACE_SETTINGS_SPEC,
 };
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileNotice {
+    pub code: String,
+    pub title: String,
+    pub message: String,
+    pub path: Option<String>,
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -16,6 +25,9 @@ pub struct ProfileSnapshot {
     pub sidebar_width: Option<f64>,
     pub effective_default_workspace: Option<String>,
     pub has_valid_configured_default: bool,
+    pub home_root: String,
+    pub workspaces_directory: String,
+    pub notices: Vec<ProfileNotice>,
 }
 
 fn snapshot() -> Result<ProfileSnapshot, String> {
@@ -27,21 +39,96 @@ fn snapshot() -> Result<ProfileSnapshot, String> {
         .ui_value("sidebar-width")
         .map_err(err)?
         .and_then(|value| value.parse().ok());
-    let effective_default_workspace = effective_default_workspace(&home)
-        .ok()
+    let configured_default = settings.workspaces.default_workspace.as_deref();
+    let has_valid_configured_default =
+        configured_default.is_some_and(|path| Workspace::open(path).is_ok());
+    let effective_default = effective_default_workspace(&home).ok();
+    let mut notices = profile_notices(configured_default, effective_default.as_deref(), &recents);
+    notices.extend(settings_file_notices(&home, &state)?);
+    let effective_default_workspace = effective_default
+        .as_deref()
         .map(|path| path.to_string_lossy().into_owned());
-    let has_valid_configured_default = home
-        .configured_default_workspace()
-        .ok()
-        .flatten()
-        .is_some_and(|path| Workspace::open(&path).is_ok());
     Ok(ProfileSnapshot {
         settings,
         recents,
         sidebar_width,
         effective_default_workspace,
         has_valid_configured_default,
+        home_root: home.root.to_string_lossy().into_owned(),
+        workspaces_directory: home.workspaces.to_string_lossy().into_owned(),
+        notices,
     })
+}
+
+fn settings_file_notices(
+    home: &lattice_core::LatticeHome,
+    state: &ProfileStateStore,
+) -> Result<Vec<ProfileNotice>, String> {
+    let mut notices = Vec::new();
+    for (filename, label) in [
+        ("appearance.yaml", "Appearance settings"),
+        ("desktop.yaml", "Desktop settings"),
+        ("workspaces.yaml", "Workspace startup settings"),
+    ] {
+        let path = home.settings.join(filename);
+        let marker = format!("profile-file-seen:{filename}");
+        let was_seen = state.ui_value(&marker).map_err(err)?.as_deref() == Some("true");
+        if path.is_file() {
+            if !was_seen {
+                state.set_ui_value(&marker, "true").map_err(err)?;
+            }
+        } else if was_seen {
+            notices.push(ProfileNotice {
+                code: format!("settings-file-missing:{filename}"),
+                title: format!("{label} missing"),
+                message: format!(
+                    "{filename} was removed outside Lattice. Defaults are active; the file was not silently recreated."
+                ),
+                path: Some(path.to_string_lossy().into_owned()),
+            });
+        }
+    }
+    Ok(notices)
+}
+
+fn profile_notices(
+    configured_default: Option<&Path>,
+    effective_default: Option<&Path>,
+    recents: &[RecentWorkspace],
+) -> Vec<ProfileNotice> {
+    if effective_default.is_none() {
+        let previously_known = configured_default.is_some() || !recents.is_empty();
+        return vec![ProfileNotice {
+            code: "no-valid-workspaces".into(),
+            title: if previously_known {
+                "Workspaces unavailable".into()
+            } else {
+                "Create your first workspace".into()
+            },
+            message: if previously_known {
+                "No valid workspace remains at the configured or recent locations. They may have been moved or deleted outside Lattice; no replacement content was created."
+                    .into()
+            } else {
+                "No workspace exists yet. Choose a template or open a folder that already contains lattice.yaml."
+                    .into()
+            },
+            path: configured_default.map(|path| path.to_string_lossy().into_owned()),
+        }];
+    }
+
+    if let Some(configured) = configured_default.filter(|path| Workspace::open(path).is_err()) {
+        return vec![ProfileNotice {
+            code: "default-workspace-unavailable".into(),
+            title: "Default workspace unavailable".into(),
+            message: format!(
+                "The configured default was moved or deleted outside Lattice. This session is using {} instead; the configured value was preserved for repair.",
+                effective_default.unwrap().display()
+            ),
+            path: Some(configured.to_string_lossy().into_owned()),
+        }];
+    }
+
+    Vec::new()
 }
 
 #[tauri::command]
@@ -273,6 +360,62 @@ mod tests {
         })
         .unwrap();
         assert_eq!(second.sidebar_width, Some(320.0));
+        std::env::remove_var("LATTICE_HOME");
+    }
+
+    #[test]
+    fn deleted_workspaces_return_onboarding_notice_without_recreation() {
+        let _guard = env_lock();
+        let directory = tempfile::tempdir().unwrap();
+        std::env::set_var("LATTICE_HOME", directory.path());
+        let (home, outcome) = lattice_core::initialize_lattice_home().unwrap();
+        let deleted = outcome.workspace.root().to_path_buf();
+        std::fs::remove_dir_all(&deleted).unwrap();
+
+        let mut state = home.state_store().unwrap();
+        state
+            .remember_workspace(&RecentWorkspace {
+                root: deleted.to_string_lossy().into_owned(),
+                title: "Personal".into(),
+                opened_at: 10,
+            })
+            .unwrap();
+        let profile = snapshot().unwrap();
+        assert!(profile.effective_default_workspace.is_none());
+        assert_eq!(profile.notices[0].code, "no-valid-workspaces");
+        assert!(profile.notices[0]
+            .message
+            .contains("no replacement content"));
+        assert!(std::fs::read_dir(home.workspaces).unwrap().next().is_none());
+        std::env::remove_var("LATTICE_HOME");
+    }
+
+    #[test]
+    fn deleting_a_known_settings_file_activates_defaults_with_a_notice() {
+        let _guard = env_lock();
+        let directory = tempfile::tempdir().unwrap();
+        std::env::set_var("LATTICE_HOME", directory.path());
+        let home = ensure_lattice_home().unwrap();
+        let appearance = home.settings.join("appearance.yaml");
+        std::fs::write(
+            &appearance,
+            "format: lattice-appearance-settings\nversion: 1\nmode: fixed\ntheme: lattice-slate\n",
+        )
+        .unwrap();
+
+        assert!(snapshot()
+            .unwrap()
+            .notices
+            .iter()
+            .all(|notice| notice.code != "settings-file-missing:appearance.yaml"));
+        std::fs::remove_file(&appearance).unwrap();
+        let after_deletion = snapshot().unwrap();
+
+        assert!(after_deletion
+            .notices
+            .iter()
+            .any(|notice| notice.code == "settings-file-missing:appearance.yaml"));
+        assert!(!appearance.exists());
         std::env::remove_var("LATTICE_HOME");
     }
 }

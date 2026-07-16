@@ -62,9 +62,8 @@ fn catalog(
                 message: diagnostic.message,
             }),
     );
-    let mut resolved =
+    let resolved =
         resolve_active_theme(&home, &settings, system, workspace_root).map_err(err_string)?;
-    resolved.diagnostics.extend(diagnostics.iter().cloned());
     Ok(ThemeCatalog {
         themes,
         diagnostics,

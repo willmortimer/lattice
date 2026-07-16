@@ -38,6 +38,7 @@ export interface WorkspaceSnapshot {
  * filesystem change (docs/05).
  */
 export type WorkspaceChangeEvent =
+  | { type: "workspace-unavailable"; reason: "root-deleted" }
   | { type: "created"; path: string; revision: string }
   | { type: "modified"; path: string; revision: string }
   | { type: "deleted"; path: string }

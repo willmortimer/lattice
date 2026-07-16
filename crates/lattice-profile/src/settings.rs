@@ -200,6 +200,50 @@ impl SettingsStore {
         }
     }
 
+    /// Load settings and atomically materialize valid legacy/older documents
+    /// in the current versioned format.
+    ///
+    /// Invalid, empty, differently formatted, and newer-version documents are
+    /// never rewritten. If an upgrade cannot be persisted, the valid in-memory
+    /// value remains active and a non-fatal diagnostic explains the failure.
+    pub fn load_and_upgrade<T>(&self, spec: SettingsSpec) -> Result<SettingsLoad<T>>
+    where
+        T: Default + DeserializeOwned + Serialize,
+    {
+        let mut loaded = self.load::<T>(spec)?;
+        let should_upgrade = !loaded.diagnostics.is_empty()
+            && loaded.diagnostics.iter().all(|diagnostic| {
+                matches!(
+                    diagnostic.code.as_str(),
+                    "settings-legacy" | "settings-old-version"
+                )
+            });
+        if !should_upgrade {
+            return Ok(loaded);
+        }
+
+        match self.save(spec, &loaded.value, loaded.revision.as_deref()) {
+            Ok(revision) => {
+                loaded.revision = Some(revision);
+                loaded.diagnostics.clear();
+            }
+            // Another window may have completed the same migration first.
+            // Reload so the caller sees the winner rather than a false error.
+            Err(Error::RevisionConflict { .. }) => return self.load::<T>(spec),
+            Err(error) => {
+                loaded.diagnostics = vec![diagnostic(
+                    &self.path(spec),
+                    "settings-upgrade-failed",
+                    format!(
+                        "Legacy settings are active, but could not be upgraded on disk: {error}"
+                    ),
+                    SettingsDiagnosticSeverity::Warning,
+                )];
+            }
+        }
+        Ok(loaded)
+    }
+
     pub fn save<T>(
         &self,
         spec: SettingsSpec,
@@ -242,8 +286,9 @@ impl SettingsStore {
     }
 
     pub fn snapshot(&self) -> Result<SettingsSnapshot> {
-        let desktop = self.load::<DesktopSettings>(DESKTOP_SETTINGS_SPEC)?;
-        let workspaces = self.load::<WorkspaceStartupSettings>(WORKSPACE_SETTINGS_SPEC)?;
+        let desktop = self.load_and_upgrade::<DesktopSettings>(DESKTOP_SETTINGS_SPEC)?;
+        let workspaces =
+            self.load_and_upgrade::<WorkspaceStartupSettings>(WORKSPACE_SETTINGS_SPEC)?;
         let mut diagnostics = desktop.diagnostics;
         diagnostics.extend(workspaces.diagnostics);
         Ok(SettingsSnapshot {
@@ -659,6 +704,26 @@ mod tests {
             .unwrap();
         assert_eq!(legacy.value.editor.autosave_delay_ms, 1500);
         assert_eq!(legacy.diagnostics[0].code, "settings-legacy");
+    }
+
+    #[test]
+    fn valid_legacy_settings_are_upgraded_atomically_on_load() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = SettingsStore::new(directory.path());
+        std::fs::write(
+            store.path(DESKTOP_SETTINGS_SPEC),
+            "editor:\n  autosaveDelayMs: 1500\n",
+        )
+        .unwrap();
+
+        let loaded = store
+            .load_and_upgrade::<DesktopSettings>(DESKTOP_SETTINGS_SPEC)
+            .unwrap();
+        assert_eq!(loaded.value.editor.autosave_delay_ms, 1500);
+        assert!(loaded.diagnostics.is_empty());
+        let materialized = std::fs::read_to_string(store.path(DESKTOP_SETTINGS_SPEC)).unwrap();
+        assert!(materialized.contains("format: lattice-desktop-settings"));
+        assert!(materialized.contains("version: 1"));
     }
 
     #[test]

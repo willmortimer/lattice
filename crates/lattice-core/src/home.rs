@@ -1,4 +1,4 @@
-//! Compatibility facade for the user profile plus first-workspace bootstrap.
+//! Compatibility facade for the user profile and explicit first-workspace bootstrap.
 
 use std::path::{Path, PathBuf};
 
@@ -7,44 +7,61 @@ pub use lattice_profile::{
     STATE_DIR_NAME, WORKSPACES_DIR_NAME,
 };
 
-use crate::template::{self, WorkspaceTemplate};
+use crate::template::{
+    DefaultWorkspaceStatus, ProvisionDiagnostic, WorkspaceCreationMode, WorkspaceCreationPlan,
+    WorkspaceProvisionOutcome, WorkspaceProvisioner,
+};
 use crate::workspace::Workspace;
 use crate::{Error, Result};
 
-/// Ensure the profile layout and select a usable default workspace.
+/// Ensure the profile directories exist without creating or changing a workspace.
 ///
-/// Invalid or newer `workspaces.yaml` never blocks startup: its source remains
-/// untouched, diagnostics are returned through the profile API, and Lattice
-/// chooses a safe effective fallback for this process.
+/// This function is intentionally safe to call from read paths such as profile,
+/// settings, and theme loading. Canonical workspace content is provisioned only
+/// by [`initialize_lattice_home`], after an explicit user action.
 pub fn ensure_lattice_home() -> Result<LatticeHome> {
-    let home = lattice_profile::ensure_profile_layout().map_err(profile_error)?;
-    let startup = home.workspace_startup_settings().map_err(profile_error)?;
-    let configured = startup.value.default_workspace.clone();
-    if configured.as_deref().is_some_and(is_valid_workspace) {
-        return Ok(home);
+    lattice_profile::ensure_profile_layout().map_err(profile_error)
+}
+
+/// Explicitly create a Personal workspace when no valid workspace exists.
+///
+/// Provisioning is staged and never overwrites an existing path. A failed
+/// default-workspace preference write is reported as a partial success rather
+/// than turning a successfully created workspace into an apparent failure.
+pub fn initialize_lattice_home() -> Result<(LatticeHome, WorkspaceProvisionOutcome)> {
+    let home = ensure_lattice_home()?;
+    if let Ok(path) = effective_default_workspace(&home) {
+        return Ok((
+            home,
+            WorkspaceProvisionOutcome {
+                workspace: Workspace::open(&path)?,
+                default_workspace_status: DefaultWorkspaceStatus::NotRequested,
+                diagnostics: Vec::new(),
+            },
+        ));
     }
 
-    let personal = home.personal_workspace();
-    let selected = if is_valid_workspace(&personal) {
-        personal
-    } else if let Some(existing) = first_workspace(&home.workspaces)? {
-        existing
-    } else {
-        let workspace = Workspace::init(&personal, "Personal")?;
-        template::apply_template(workspace.root(), WorkspaceTemplate::Personal)?;
-        personal
-    };
-
-    // A malformed/newer settings file remains preserved. Failing to persist
-    // the fallback is non-fatal here: callers can still use `selected`, and
-    // profile diagnostics explain why the configured value was ignored.
-    let settings_are_writable = !startup.diagnostics.iter().any(|diagnostic| {
-        diagnostic.severity == lattice_profile::SettingsDiagnosticSeverity::Error
-    });
-    if configured.is_none() && settings_are_writable {
-        let _ = home.set_default_workspace(&selected);
+    let target = available_personal_target(&home);
+    let mut outcome = WorkspaceProvisioner::provision(&WorkspaceCreationPlan {
+        target,
+        title: "Personal".into(),
+        template_id: "personal".into(),
+        mode: WorkspaceCreationMode::NewDirectory,
+    })?;
+    match home.set_default_workspace(outcome.workspace.root()) {
+        Ok(_) => outcome.default_workspace_status = DefaultWorkspaceStatus::Updated,
+        Err(error) => {
+            outcome.default_workspace_status = DefaultWorkspaceStatus::Failed;
+            outcome.diagnostics.push(ProvisionDiagnostic {
+                code: "default-workspace-save-failed".into(),
+                message: format!(
+                    "The Personal workspace was created, but Lattice could not make it the default: {error}"
+                ),
+                retryable: true,
+            });
+        }
     }
-    Ok(home)
+    Ok((home, outcome))
 }
 
 pub fn effective_default_workspace(home: &LatticeHome) -> Result<PathBuf> {
@@ -86,6 +103,20 @@ fn first_workspace(workspaces: &Path) -> Result<Option<PathBuf>> {
     Ok(candidates.into_iter().next())
 }
 
+fn available_personal_target(home: &LatticeHome) -> PathBuf {
+    let personal = home.personal_workspace();
+    if !personal.exists() {
+        return personal;
+    }
+    for suffix in 2.. {
+        let candidate = home.workspaces.join(format!("Personal {suffix}"));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    unreachable!("an available Personal workspace name must exist")
+}
+
 fn profile_error(error: lattice_profile::Error) -> Error {
     match error {
         lattice_profile::Error::Io { path, source } => Error::Io { path, source },
@@ -110,12 +141,25 @@ mod tests {
     }
 
     #[test]
-    fn ensure_seeds_and_persists_default_home_workspace() {
+    fn ensure_only_creates_profile_directories() {
         let _guard = env_lock();
         let directory = tempfile::tempdir().unwrap();
         std::env::set_var("LATTICE_HOME", directory.path());
         let home = ensure_lattice_home().unwrap();
+        assert!(home.workspaces.is_dir());
+        assert!(!home.personal_workspace().exists());
+        assert!(effective_default_workspace(&home).is_err());
+        std::env::remove_var("LATTICE_HOME");
+    }
+
+    #[test]
+    fn explicit_initialization_seeds_and_persists_default_workspace() {
+        let _guard = env_lock();
+        let directory = tempfile::tempdir().unwrap();
+        std::env::set_var("LATTICE_HOME", directory.path());
+        let (home, outcome) = initialize_lattice_home().unwrap();
         let default = effective_default_workspace(&home).unwrap();
+        assert_eq!(default, outcome.workspace.root().canonicalize().unwrap());
         assert!(default.join("Home.md").is_file());
         assert!(default.join("Welcome.md").is_file());
         assert!(home.state.is_dir());
@@ -125,6 +169,24 @@ mod tests {
             .iter()
             .any(|resource| resource.kind == ResourceKind::Folder
                 && resource.path.ends_with("Inbox")));
+        std::env::remove_var("LATTICE_HOME");
+    }
+
+    #[test]
+    fn deleting_all_workspaces_does_not_silently_reprovision_personal() {
+        let _guard = env_lock();
+        let directory = tempfile::tempdir().unwrap();
+        std::env::set_var("LATTICE_HOME", directory.path());
+        let (home, outcome) = initialize_lattice_home().unwrap();
+        std::fs::remove_dir_all(outcome.workspace.root()).unwrap();
+
+        let rediscovered = ensure_lattice_home().unwrap();
+        assert_eq!(rediscovered, home);
+        assert!(std::fs::read_dir(&home.workspaces)
+            .unwrap()
+            .next()
+            .is_none());
+        assert!(effective_default_workspace(&home).is_err());
         std::env::remove_var("LATTICE_HOME");
     }
 
@@ -140,7 +202,7 @@ mod tests {
         )
         .unwrap();
         let home = ensure_lattice_home().unwrap();
-        assert!(effective_default_workspace(&home).unwrap().is_dir());
+        assert!(effective_default_workspace(&home).is_err());
         assert_eq!(
             std::fs::read_to_string(directory.path().join("Settings/workspaces.yaml")).unwrap(),
             "invalid: [yaml"

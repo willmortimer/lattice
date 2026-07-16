@@ -248,6 +248,56 @@ button {
   max-width: 480px;
 }
 
+.profile-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  border: 1px solid color-mix(in srgb, var(--lt-accent) 38%, var(--lt-line));
+  border-radius: var(--lt-radius-md);
+  color: var(--lt-text-soft);
+  background: color-mix(in srgb, var(--lt-accent-wash) 55%, var(--lt-panel));
+  text-align: left;
+}
+
+.profile-notice > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--lt-accent);
+}
+
+.profile-notice > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.profile-notice strong {
+  color: var(--lt-text);
+  font-size: 12px;
+}
+
+.profile-notice span,
+.profile-notice code {
+  color: var(--lt-muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.profile-notice-empty {
+  width: min(620px, 90vw);
+  padding: 11px 13px;
+}
+
+.profile-notice-shell {
+  flex: 0 0 auto;
+  margin: 8px 10px 0;
+  padding: 8px 10px;
+}
+
+.profile-notice-shell > button:last-child {
+  margin-left: auto;
+}
+
 /* ============================================================================
    App shell
    ========================================================================== */

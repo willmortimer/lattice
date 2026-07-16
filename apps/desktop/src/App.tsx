@@ -214,6 +214,13 @@ export default function App() {
   const [workspacesDir, setWorkspacesDir] = useState<string | null>(null);
   const [templates, setTemplates] = useState<TemplateDescriptor[]>([]);
   const [statusToast, setStatusToast] = useState<string | null>(null);
+  const [runtimeNotice, setRuntimeNotice] = useState<{
+    code: string;
+    title: string;
+    message: string;
+    path: string | null;
+  } | null>(null);
+  const [dismissedNoticeCodes, setDismissedNoticeCodes] = useState<string[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [searchPaneOpen, setSearchPaneOpen] = useState(false);
   const [themeCatalog, setThemeCatalog] = useState<ThemeCatalogPayload | null>(null);
@@ -230,6 +237,7 @@ export default function App() {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const sessionRestoredRootRef = useRef<string | null>(null);
+  const startupAttemptedRef = useRef(false);
   const workspaceSettingsTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
@@ -285,6 +293,9 @@ export default function App() {
       capability === "pages" || Boolean(snapshot?.capabilities.includes(capability)),
     [snapshot?.capabilities],
   );
+  const profileNotices = [runtimeNotice, ...profile.notices]
+    .filter((notice): notice is NonNullable<typeof notice> => notice !== null)
+    .filter((notice) => !dismissedNoticeCodes.includes(notice.code));
 
   // Refs mirroring state read inside the workspace-changed listener, which
   // subscribes once and must not see stale closures over fast-changing state.
@@ -300,11 +311,21 @@ export default function App() {
   useEffect(() => {
     snapshotRef.current = snapshot;
   }, [snapshot]);
+  const selectedRef = useRef(selected);
+  useEffect(() => {
+    selectedRef.current = selected;
+  }, [selected]);
 
   const applyThemeCatalog = useCallback((catalog: ThemeCatalogPayload) => {
     setThemeCatalog(catalog);
     applyResolvedTheme(catalog.resolved);
-    const diags = [...catalog.diagnostics, ...catalog.resolved.diagnostics];
+    const diags = [...catalog.diagnostics, ...catalog.resolved.diagnostics].filter(
+      (diagnostic, index, all) =>
+        all.findIndex(
+          (candidate) =>
+            candidate.path === diagnostic.path && candidate.message === diagnostic.message,
+        ) === index,
+    );
     if (diags.length > 0) {
       setError(diags.map((d) => `${d.path}: ${d.message}`).join("\n"));
     }
@@ -373,23 +394,67 @@ export default function App() {
 
   const handleWorkspaceChanged = useCallback(
     async (event: WorkspaceChangeEvent) => {
+      const root = snapshotRef.current?.root;
+      if (
+        event.type === "workspace-unavailable" ||
+        (event.type === "deleted" && event.path === "lattice.yaml")
+      ) {
+        if (!root) return;
+        // A genuine manifest/root deletion invalidates the workspace as a
+        // command boundary. Keep its path for repair, but do not recreate it.
+        if (event.type === "deleted") {
+          try {
+            const reopened = await invoke<WorkspaceSnapshot>("open_workspace", { path: root });
+            setSnapshot(reopened);
+            return;
+          } catch {
+            // It remains unavailable after watcher debounce: genuine loss.
+          }
+        }
+        invoke("stop_watching").catch(() => undefined);
+        snapshotRef.current = null;
+        setSnapshot(null);
+        setSelected(null);
+        setPage(null);
+        setCanvas(null);
+        setDataApp(null);
+        setOpenTabs([]);
+        setExternalConflict(null);
+        setRuntimeNotice({
+          code: "open-workspace-unavailable",
+          title: "Workspace unavailable",
+          message:
+            "The open workspace was moved or deleted outside Lattice. It was closed without recreating any content; create a workspace or open its new location.",
+          path: root,
+        });
+        void refreshProfile();
+        return;
+      }
+
       await refreshSidebar();
 
       const current = pageRef.current;
-      if (!current) return;
 
       if (event.type === "renamed") {
-        if (event.from === current.resource.path) {
+        if (current && event.from === current.resource.path) {
           setError(`"${event.from}" was renamed to "${event.to}" outside Lattice.`);
           setPage(null);
           setSelected(null);
           setExternalConflict(null);
         }
+        const currentSelection = selectedRef.current;
+        if (currentSelection?.path === event.from) {
+          setError(`"${event.from}" was renamed to "${event.to}" outside Lattice.`);
+          setSelected(null);
+          setCanvas(null);
+          setDataApp(null);
+          setOpenTabs((tabs) => tabs.filter((tab) => tab.path !== event.from));
+        }
         return;
       }
 
       if (event.type === "deleted") {
-        if (event.path === current.resource.path) {
+        if (current && event.path === current.resource.path) {
           // Defensive second check: macOS atomic replacement can surface a
           // transient remove event. If the page is readable now, reconcile it
           // as a modification instead of ejecting the editor.
@@ -417,9 +482,26 @@ export default function App() {
           setSelected(null);
           setExternalConflict(null);
         }
+        const currentSelection = selectedRef.current;
+        if (
+          currentSelection &&
+          (currentSelection.path === event.path ||
+            currentSelection.path.startsWith(`${event.path}/`))
+        ) {
+          setError(`"${event.path}" was deleted outside Lattice.`);
+          setSelected(null);
+          setCanvas(null);
+          setDataApp(null);
+          setOpenTabs((tabs) =>
+            tabs.filter(
+              (tab) => tab.path !== event.path && !tab.path.startsWith(`${event.path}/`),
+            ),
+          );
+        }
         return;
       }
 
+      if (!current) return;
       if (event.path !== current.resource.path) return;
 
       if (event.revision === currentPageRevisionRef.current) {
@@ -434,7 +516,7 @@ export default function App() {
         await reloadPageFromDisk();
       }
     },
-    [refreshSidebar, reloadPageFromDisk],
+    [refreshProfile, refreshSidebar, reloadPageFromDisk],
   );
 
   useEffect(() => {
@@ -499,6 +581,7 @@ export default function App() {
     setDataApp(null);
     setSaveState({ status: "idle" });
     setExternalConflict(null);
+    setRuntimeNotice(null);
     setOpenTabs([]);
     setNavigation({ paths: [], index: -1 });
     setActivityArea("home");
@@ -546,10 +629,14 @@ export default function App() {
         root: string;
         workspaces: string;
         default_workspace: WorkspaceSnapshot | null;
+        diagnostics: Array<{ message: string }>;
       }>("ensure_home");
       setWorkspacesDir(home.workspaces);
       if (home.default_workspace) {
         await adoptWorkspace(home.default_workspace);
+        if (home.diagnostics.length > 0) {
+          setStatusToast(home.diagnostics.map((item) => item.message).join(" "));
+        }
       } else {
         setError("Lattice home is ready, but no default workspace was found.");
       }
@@ -613,15 +700,7 @@ export default function App() {
 
   async function openNewWorkspaceDialog() {
     setError(null);
-    if (!inBrowser && !workspacesDir) {
-      try {
-        const home = await invoke<{ workspaces: string }>("ensure_home");
-        setWorkspacesDir(home.workspaces);
-      } catch (err) {
-        setError(String(err));
-        return;
-      }
-    }
+    if (!inBrowser && !profile.workspacesDirectory) return;
     setNewWorkspaceOpen(true);
   }
 
@@ -1363,7 +1442,15 @@ export default function App() {
   // Resume the last valid workspace, then fall back to the configured
   // effective default. Invalid paths remain visible in profile diagnostics.
   useEffect(() => {
-    if (inBrowser || demoStartEmpty || snapshot || !profileReady) return;
+    if (
+      inBrowser ||
+      demoStartEmpty ||
+      snapshot ||
+      !profileReady ||
+      startupAttemptedRef.current
+    )
+      return;
+    startupAttemptedRef.current = true;
     const candidates = [
       ...(startup.reopenLastWorkspace ? recents.map((recent) => recent.root) : []),
       profile.effectiveDefaultWorkspace,
@@ -1403,12 +1490,20 @@ export default function App() {
           <BrandMark />
           <h1 className="empty-wordmark">Lattice</h1>
           <p className="empty-copy">
-            <strong>Create Lattice home</strong> makes{" "}
-            <code>~/Lattice</code> (for Settings and Workspaces) and opens your
-            default Personal workspace. Or choose a starting point from the
-            workspace gallery, create in any folder, or open one that already has{" "}
-            <code>lattice.yaml</code>.
+            Create a Personal workspace, choose a template from the gallery, or
+            open a folder that already contains <code>lattice.yaml</code>. Lattice
+            never restores externally deleted workspace content automatically.
           </p>
+          {profileNotices.map((notice) => (
+            <div className="profile-notice profile-notice-empty" role="status" key={notice.code}>
+              <CircleAlert size={16} />
+              <div>
+                <strong>{notice.title}</strong>
+                <span>{notice.message}</span>
+                {notice.path && <code>{notice.path}</code>}
+              </div>
+            </div>
+          ))}
           <div className="empty-actions">
             <button className="primary-button" onClick={() => void handleGetStarted()} disabled={busy}>
               {busy ? "Setting up…" : "Create Lattice home"}
@@ -1416,7 +1511,7 @@ export default function App() {
             <button
               className="secondary-button"
               onClick={() => void openNewWorkspaceDialog()}
-              disabled={busy}
+              disabled={busy || !profileReady}
             >
               New workspace in a folder…
             </button>
@@ -1449,7 +1544,7 @@ export default function App() {
           open={newWorkspaceOpen}
           busy={busy}
           templates={templates}
-          workspacesDir={workspacesDir}
+          workspacesDir={workspacesDir ?? profile.workspacesDirectory}
           hasValidDefault={profile.hasValidConfiguredDefault}
           onCancel={() => setNewWorkspaceOpen(false)}
           onPickFolder={pickWorkspaceFolder}
@@ -1685,6 +1780,24 @@ export default function App() {
               </IconButton>
             </div>
           </header>
+
+          {profileNotices[0] && (
+            <div className="profile-notice profile-notice-shell" role="status">
+              <CircleAlert size={15} />
+              <div>
+                <strong>{profileNotices[0].title}</strong>
+                <span>{profileNotices[0].message}</span>
+              </div>
+              <IconButton
+                label="Dismiss notice"
+                onClick={() =>
+                  setDismissedNoticeCodes((codes) => [...codes, profileNotices[0].code])
+                }
+              >
+                <X size={13} />
+              </IconButton>
+            </div>
+          )}
 
           {openTabs.length > 0 && (
             <div className="tab-strip" role="tablist" aria-label="Open resources">
@@ -1971,7 +2084,7 @@ export default function App() {
         open={newWorkspaceOpen}
         busy={busy}
         templates={templates}
-        workspacesDir={workspacesDir}
+        workspacesDir={workspacesDir ?? profile.workspacesDirectory}
         hasValidDefault={profile.hasValidConfiguredDefault}
         onCancel={() => setNewWorkspaceOpen(false)}
         onPickFolder={pickWorkspaceFolder}

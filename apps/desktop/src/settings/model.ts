@@ -31,6 +31,9 @@ function emptyProfile(): ProfileSnapshot {
     sidebarWidth: null,
     effectiveDefaultWorkspace: null,
     hasValidConfiguredDefault: false,
+    homeRoot: "~/Lattice",
+    workspacesDirectory: "~/Lattice/Workspaces",
+    notices: [],
   };
 }
 
