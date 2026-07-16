@@ -1,5 +1,17 @@
 # Search, Links, Context, and AI Interoperability
 
+## Typed workspace links
+
+Desktop navigation, indexing, backlinks, and template validation share the
+`lattice-core` resource-link parser and resolver. Exact workspace-relative
+paths win; Markdown pages may omit `.md`; folders require a trailing slash;
+and other resource kinds retain their extension or package suffix. Relative
+Markdown paths resolve from the source page. A unique basename may resolve,
+but ambiguity always returns candidates instead of selecting arbitrarily.
+
+Autocomplete queries a bounded cached `ResourceCatalog` and returns canonical
+link text, display label, path, and resource kind.
+
 ## Organization model
 
 Lattice combines several complementary systems:

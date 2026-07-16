@@ -75,6 +75,10 @@ facts.
   - `apps/desktop/src/theme-tokens.css`
   - `apps/desktop/src/theme-tokens.ts`
   - `site/src/styles/theme-tokens.css`
+- Workspace template packages under `templates/workspaces/` are source files.
+  Regenerate the embedded catalogs with `pnpm compile-templates`; do not
+  hand-edit `crates/lattice-core/src/template_catalog.generated.rs` or
+  `apps/desktop/src/templateCatalog.generated.ts`.
 - The Lattice mark is generated from the axonometric unit-cell algorithm in
   `site/scripts/generate-mark.mjs`. Do not hand-edit generated mark geometry.
 - Visuals should follow `design/philosophy.md`: structure is quiet, signal is

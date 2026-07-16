@@ -97,13 +97,20 @@ Each surface owns its hot loop. React receives coarse state and lifecycle events
 ```text
 ~/Lattice/
 ├── Workspaces/
-└── Settings/
-    └── default-workspace.yaml
+├── Settings/
+│   ├── appearance.yaml
+│   ├── desktop.yaml
+│   ├── workspaces.yaml
+│   └── themes/
+└── State/
+    └── desktop.sqlite
 ```
 
-The default-workspace setting points to any valid workspace, including one
-outside `~/Lattice/Workspaces`. It controls the Home/startup default without
-changing that workspace's canonical files.
+Versioned YAML stores human-editable preferences. SQLite stores frequently
+changing operational state such as recents, sessions, and shell geometry.
+`workspaces.yaml` may point to any valid workspace, including one outside
+`~/Lattice/Workspaces`; invalid configured values remain available for
+diagnosis while startup uses a valid effective fallback.
 
 ### Canonical layer
 

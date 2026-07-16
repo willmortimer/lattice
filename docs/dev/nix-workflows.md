@@ -58,6 +58,7 @@ Run them from the repo root (they use relative paths).
 | `site-build` | static site build (syncs docs content first via `prebuild`) |
 | `docs-sync` | regenerate `site/src/content/docs/` from `docs/` |
 | `compile-theme` | compile `themes/*.theme.yaml` → desktop/site CSS (+ Pixi) tokens |
+| `compile-templates` | validate template packages → embedded Rust and browser catalogs |
 | `desktop-dev` | Native window **+ Vite HMR** on :5173 (frontend hot-reload) |
 | `desktop-web` | Browser-only React UI on :5173 (demo workspace; no Tauri) |
 | `desktop` | Native window **without Vite** — reuses `apps/desktop/dist` if present, else builds once |
@@ -97,10 +98,14 @@ First-run (**Create Lattice home**) creates:
 │       ├── Projects/
 │       ├── Product/
 │       └── …
-└── Settings/              # reserved for future prefs
+├── Settings/              # versioned human-editable preferences
+└── State/
+    └── desktop.sqlite     # recents, sessions, and shell state
 ```
 
-`Personal` is the workspace folder; `Home.md` is just a page inside it. Templates: `personal` (default), `team`, `demo` (sample pages + canvas), `blank`.
+`Personal` is the workspace folder; `Home.md` is just a page inside it. Gallery
+templates are `personal`, `project`, `research`, `data-lab`, and `blank`.
+`demo` is the First Look sample; `team` remains a hidden legacy identifier.
 
 ## Troubleshooting
 
