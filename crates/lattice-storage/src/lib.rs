@@ -28,7 +28,7 @@ mod writer;
 pub use atomic::atomic_write_file;
 pub use error::Error;
 pub use journal::{PendingWrite, RecoveryJournal};
-pub use revision::ResourceRevision;
+pub use revision::{sha256_reader, ResourceRevision};
 pub use store::{
     MemoryWorkspaceStore, NativeWorkspaceStore, ResourceEntry, ResourceMetadata, WorkspaceStore,
 };
