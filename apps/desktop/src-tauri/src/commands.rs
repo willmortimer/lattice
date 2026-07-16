@@ -32,6 +32,15 @@ pub fn open_workspace(path: String) -> Result<WorkspaceSnapshot, String> {
     })
 }
 
+/// Re-scan a workspace's resource listing without re-reading its manifest.
+/// Lighter than [`open_workspace`] for refreshing the sidebar after a
+/// `workspace-changed` event.
+#[tauri::command]
+pub fn list_resources(root: String) -> Result<Vec<Resource>, String> {
+    let workspace = Workspace::open(Path::new(&root)).map_err(|err| err.to_string())?;
+    workspace.scan().map_err(|err| err.to_string())
+}
+
 /// Canonicalize `root` and a `rel_path` candidate beneath it, rejecting `..`
 /// traversal and absolute-path escapes (including through symlinks) by
 /// requiring the resolved candidate to remain under the canonical root.
@@ -147,6 +156,30 @@ pub fn apply_page_update(
         .ok_or_else(|| "page update did not produce a resulting revision".to_string())
 }
 
+/// Create a new page at `rel_path` with `content`. Used by the external-edit
+/// conflict envelope's "keep both" action to write a sibling copy of local
+/// edits (ADR 0028) without touching the page that already exists on disk.
+#[tauri::command]
+pub fn create_page(root: String, rel_path: String, content: String) -> Result<String, String> {
+    let mut engine = CommandEngine::open(Path::new(&root)).map_err(command_error_to_string)?;
+
+    let receipt = engine
+        .apply(Transaction::new(
+            format!("Create page {rel_path}"),
+            vec![SemanticCommand::PageCreate {
+                path: PathBuf::from(&rel_path),
+                content,
+            }],
+        ))
+        .map_err(command_error_to_string)?;
+
+    receipt
+        .outcomes
+        .first()
+        .and_then(|outcome| outcome.resulting_revision.clone())
+        .ok_or_else(|| "page create did not produce a resulting revision".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -249,6 +282,42 @@ mod tests {
         let after = read_page(root, "Notes.md".to_string()).unwrap();
         assert_eq!(after.content, "# Hi, edited\n");
         assert_eq!(after.revision, after_revision);
+    }
+
+    #[test]
+    fn list_resources_matches_open_workspace_scan() {
+        let dir = init_workspace();
+        std::fs::write(dir.path().join("Notes.md"), "# Hi\n").unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        let resources = list_resources(root).unwrap();
+        assert!(resources.iter().any(|r| r.path.ends_with("Notes.md")));
+    }
+
+    #[test]
+    fn create_page_writes_new_file_and_rejects_existing() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        let revision = create_page(
+            root.clone(),
+            "Notes (conflict 2026-07-15).md".to_string(),
+            "# Local copy\n".to_string(),
+        )
+        .unwrap();
+        assert!(revision.starts_with("sha256:"));
+
+        let content =
+            read_file(root.clone(), "Notes (conflict 2026-07-15).md".to_string()).unwrap();
+        assert_eq!(content, "# Local copy\n");
+
+        let err = create_page(
+            root,
+            "Notes (conflict 2026-07-15).md".to_string(),
+            "# Again\n".to_string(),
+        )
+        .unwrap_err();
+        assert!(err.contains("already exists"));
     }
 
     #[test]
