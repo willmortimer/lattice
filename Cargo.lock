@@ -2130,6 +2130,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-data"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "rusqlite",
+ "serde",
+ "serde_yaml",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
 name = "lattice-desktop"
 version = "0.1.0"
 dependencies = [
