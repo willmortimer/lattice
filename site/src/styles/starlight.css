@@ -1,53 +1,55 @@
+@import "./theme-tokens.css";
+
 /* ============================================================================
    Lattice — Starlight theme override
-   Re-skins the docs so they share the marketing identity: blue-slate ground,
-   amber accent, Fraunces display + Space Grotesk body + JetBrains mono.
+   Maps Starlight's --sl-* tokens onto Lattice --lt-* roles so docs share
+   the same theme YAML as the marketing site and desktop shell.
    ========================================================================== */
 
 :root,
 :root[data-theme='dark'] {
-  /* Accent (amber) ------------------------------------------------------- */
-  --sl-color-accent-low: #3a2905;
-  --sl-color-accent: #d98615;
-  --sl-color-accent-high: #ffce8a;
+  /* Accent --------------------------------------------------------------- */
+  --sl-color-accent-low: color-mix(in oklch, var(--lt-accent) 22%, var(--lt-bg));
+  --sl-color-accent: var(--lt-accent-deep);
+  --sl-color-accent-high: var(--lt-accent-bright);
 
-  /* Neutral blue-slate scale -------------------------------------------- */
-  --sl-color-white: #f2f5fb;
-  --sl-color-gray-1: #e7ecf5;
-  --sl-color-gray-2: #b9c2d4;
-  --sl-color-gray-3: #8791a6;
-  --sl-color-gray-4: #5f6a80;
-  --sl-color-gray-5: #313a4d;
-  --sl-color-gray-6: #1a2233;
-  --sl-color-gray-7: #141b29;
+  /* Neutral scale -------------------------------------------------------- */
+  --sl-color-white: color-mix(in oklch, var(--lt-text) 92%, white);
+  --sl-color-gray-1: var(--lt-text);
+  --sl-color-gray-2: var(--lt-text-soft);
+  --sl-color-gray-3: var(--lt-muted);
+  --sl-color-gray-4: var(--lt-faint);
+  --sl-color-gray-5: color-mix(in oklch, var(--lt-slate) 28%, var(--lt-bg));
+  --sl-color-gray-6: color-mix(in oklch, var(--lt-slate) 14%, var(--lt-bg));
+  --sl-color-gray-7: color-mix(in oklch, var(--lt-slate) 10%, var(--lt-bg));
 
-  --sl-color-black: #0a0d13;
-  --sl-color-bg: #0a0d13;
-  --sl-color-bg-nav: color-mix(in srgb, #0a0d13 82%, transparent);
-  --sl-color-bg-sidebar: #0c1017;
-  --sl-color-bg-inline-code: rgba(245, 166, 35, 0.1);
-  --sl-color-hairline: rgba(140, 162, 196, 0.12);
-  --sl-color-hairline-light: rgba(140, 162, 196, 0.14);
-  --sl-color-hairline-shade: rgba(140, 162, 196, 0.1);
+  --sl-color-black: var(--lt-bg);
+  --sl-color-bg: var(--lt-bg);
+  --sl-color-bg-nav: color-mix(in oklch, var(--lt-bg) 82%, transparent);
+  --sl-color-bg-sidebar: color-mix(in oklch, var(--lt-bg) 92%, var(--lt-panel));
+  --sl-color-bg-inline-code: var(--lt-accent-wash);
+  --sl-color-hairline: var(--lt-line);
+  --sl-color-hairline-light: color-mix(in oklch, var(--lt-slate) 14%, transparent);
+  --sl-color-hairline-shade: color-mix(in oklch, var(--lt-slate) 10%, transparent);
 
-  --sl-color-text: #cdd5e3;
-  --sl-color-text-accent: #ffce8a;
+  --sl-color-text: color-mix(in oklch, var(--lt-text) 85%, var(--lt-muted));
+  --sl-color-text-accent: var(--lt-accent-bright);
 
   /* Typography ----------------------------------------------------------- */
-  --sl-font: 'Space Grotesk Variable', 'Space Grotesk', system-ui, sans-serif;
-  --sl-font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --sl-font: var(--lt-font-ui);
+  --sl-font-mono: var(--lt-font-mono);
 
-  --sl-shadow-md: 0 20px 50px -30px rgba(0, 0, 0, 0.85);
-  --sl-shadow-lg: 0 40px 80px -40px rgba(0, 0, 0, 0.85);
+  --sl-shadow-md: 0 20px 50px -30px color-mix(in oklch, var(--lt-shadow) 85%, transparent);
+  --sl-shadow-lg: 0 40px 80px -40px color-mix(in oklch, var(--lt-shadow) 85%, transparent);
 }
 
 /* Subtle lattice grid behind the docs, matching the marketing backdrop. */
 body {
   background-color: var(--sl-color-bg);
   background-image:
-    linear-gradient(rgba(140, 162, 196, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(140, 162, 196, 0.05) 1px, transparent 1px);
-  background-size: 34px 34px;
+    linear-gradient(color-mix(in oklch, var(--lt-slate) 5%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklch, var(--lt-slate) 5%, transparent) 1px, transparent 1px);
+  background-size: var(--lt-grid) var(--lt-grid);
   background-attachment: fixed;
 }
 
@@ -57,7 +59,7 @@ body {
 .sl-markdown-content h3,
 .content-panel h1,
 h1#_top {
-  font-family: 'Fraunces Variable', 'Fraunces', Georgia, serif;
+  font-family: var(--lt-font-display);
   font-weight: 560;
   letter-spacing: -0.015em;
 }
@@ -74,7 +76,7 @@ h1#_top {
   backdrop-filter: blur(12px);
 }
 .site-title {
-  font-family: 'Fraunces Variable', 'Fraunces', Georgia, serif;
+  font-family: var(--lt-font-display);
   font-weight: 600;
   letter-spacing: -0.02em;
   font-size: 20px;
@@ -87,7 +89,7 @@ h1#_top {
 }
 .sidebar-content a[aria-current='page'],
 .sidebar-content a[aria-current='page']:hover {
-  background: rgba(245, 166, 35, 0.13);
+  background: color-mix(in oklch, var(--lt-accent) 13%, transparent);
   color: var(--sl-color-text-accent);
   border-radius: 7px;
   font-weight: 600;
@@ -108,7 +110,7 @@ h1#_top {
 .sl-markdown-content a:not(:where(.not-content *)) {
   color: var(--sl-color-text-accent);
   text-underline-offset: 3px;
-  text-decoration-color: rgba(245, 166, 35, 0.4);
+  text-decoration-color: color-mix(in oklch, var(--lt-accent) 40%, transparent);
 }
 .sl-markdown-content a:hover:not(:where(.not-content *)) {
   text-decoration-color: var(--sl-color-accent);
@@ -117,7 +119,7 @@ h1#_top {
 /* Inline code + file paths feel product-native. */
 .sl-markdown-content code:not(:where(.not-content *)) {
   color: var(--sl-color-accent-high);
-  border: 1px solid rgba(245, 166, 35, 0.2);
+  border: 1px solid color-mix(in oklch, var(--lt-accent) 20%, transparent);
   border-radius: 5px;
   padding: 0.1em 0.4em;
   font-size: 0.86em;
@@ -135,10 +137,10 @@ h1#_top {
 /* Blockquotes as editorial callouts */
 .sl-markdown-content blockquote:not(:where(.not-content *)) {
   border-inline-start: 2px solid var(--sl-color-accent);
-  background: rgba(245, 166, 35, 0.05);
+  background: color-mix(in oklch, var(--lt-accent) 5%, transparent);
   border-radius: 0 8px 8px 0;
   padding: 2px 18px;
-  font-family: 'Fraunces Variable', 'Fraunces', Georgia, serif;
+  font-family: var(--lt-font-display);
   font-style: italic;
   color: var(--sl-color-gray-1);
 }

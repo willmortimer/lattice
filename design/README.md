@@ -8,6 +8,8 @@ diamond. See [philosophy.md](philosophy.md) for the aesthetic rationale.
 - `logo-lab.html` — interactive p5.js explorer for the mark (subdivisions,
   tilt, depth fade, seeded glow nodes, traveling pulses). Open directly in a
   browser; no build step. Download PNG renders from the sidebar.
+- `../themes/` — **Lattice Slate** theme YAML (single source of truth for
+  colors/fonts/shape). Compile with `node scripts/compile-theme.mjs`.
 - `../site/scripts/generate-mark.mjs` — deterministic SVG generator. Run
   `node site/scripts/generate-mark.mjs` to regenerate
   `site/src/assets/lattice-mark.svg` and print the inline variants used in

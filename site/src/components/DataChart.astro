@@ -80,8 +80,8 @@ const ticks = [1_000, 100_000, 10_000_000, 1_000_000_000];
       const cx = leftPad + slot * i + slot / 2;
       const x = cx - barW / 2;
       const y = baseY - h;
-      const fill = b.accent ? 'var(--l-amber)' : 'rgba(140,162,196,0.28)';
-      const stroke = b.accent ? 'var(--l-amber-bright)' : 'rgba(140,162,196,0.5)';
+      const fill = b.accent ? 'var(--l-amber)' : 'var(--lt-node-dot)';
+      const stroke = b.accent ? 'var(--l-amber-bright)' : 'color-mix(in oklch, var(--lt-slate) 50%, transparent)';
       return (
         <g>
           <rect
