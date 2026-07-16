@@ -1,4 +1,6 @@
-import { demoCanvas, demoPages, demoSearch, demoSnapshot, demoStartEmpty, inBrowser } from "./demo";
+import { demoCanvas, demoDataApp, demoPages, demoSearch, demoSnapshot, demoStartEmpty, inBrowser } from "./demo";
+import { DataTableView } from "./data/DataTableView";
+import type { DataAppSnapshot } from "./data/types";
 import { NewWorkspaceDialog } from "./NewWorkspaceDialog";
 import { CanvasViewer } from "./canvas/CanvasViewer";
 import { BacklinksFooter } from "./BacklinksFooter";
@@ -60,6 +62,31 @@ interface CanvasState {
   json: unknown;
 }
 
+interface DataAppState {
+  resource: Resource;
+  snapshot: DataAppSnapshot;
+}
+
+/** Derive a SQL table name from a human label (palette "New table…"). */
+function tableNameFromLabel(label: string): string {
+  let name = label
+    .trim()
+    .replace(/\.data$/i, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (!name || /^\d/.test(name)) {
+    name = `t_${name || "table"}`;
+  }
+  return name;
+}
+
+/** `Tasks` -> `Tasks.data` */
+function dataPackagePath(label: string): string {
+  const trimmed = label.trim().replace(/\.data$/i, "");
+  return `${trimmed}.data`;
+}
+
 /** The wordmark node-glyph: the app's own mark, drawn on the lattice grid. */
 function BrandMark({ size = 64 }: { size?: number }) {
   return (
@@ -91,6 +118,7 @@ export default function App() {
   const [selected, setSelected] = useState<Resource | null>(null);
   const [page, setPage] = useState<PageState | null>(null);
   const [canvas, setCanvas] = useState<CanvasState | null>(null);
+  const [dataApp, setDataApp] = useState<DataAppState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
@@ -259,6 +287,7 @@ export default function App() {
     setSelected(null);
     setPage(null);
     setCanvas(null);
+    setDataApp(null);
     setSaveState({ status: "idle" });
     setExternalConflict(null);
     rememberWorkspace(next);
@@ -401,6 +430,7 @@ export default function App() {
       setSelected(resource);
       setError(null);
       setCanvas(null);
+      setDataApp(null);
       setExternalConflict(null);
       setSaveState({ status: "idle" });
       setReloadToken((t) => t + 1);
@@ -452,6 +482,64 @@ export default function App() {
     }
   }
 
+  /** Command palette "New table…": create a `.data` package at the workspace root. */
+  async function handleNewTable() {
+    const name = window.prompt("New table name");
+    if (!name?.trim()) return;
+
+    const relPath = dataPackagePath(name);
+    const title = name.trim().replace(/\.data$/i, "");
+    const tableName = tableNameFromLabel(name);
+    const resource: Resource = { path: relPath, kind: "data-app" };
+
+    if (inBrowser) {
+      if (snapshot?.resources.some((entry) => entry.path === relPath)) {
+        setError(`${relPath} already exists`);
+        return;
+      }
+      setSnapshot((prev) =>
+        prev ? { ...prev, resources: [...prev.resources, resource] } : prev,
+      );
+      setSelected(resource);
+      setPage(null);
+      setCanvas(null);
+      setExternalConflict(null);
+      setError(null);
+      setDataApp({
+        resource,
+        snapshot: {
+          title,
+          default_table: tableName,
+          package_revision: "demo:0",
+          columns: [{ name: "id", field_type: "text", sqlite_type: "TEXT" }],
+          rows: [],
+        },
+      });
+      return;
+    }
+
+    if (!snapshot) return;
+    setBusy(true);
+    try {
+      const created = await invoke<DataAppSnapshot>("create_table_package", {
+        root: snapshot.root,
+        relPath,
+        title,
+        tableName,
+      });
+      await refreshSidebar();
+      setSelected(resource);
+      setPage(null);
+      setCanvas(null);
+      setDataApp({ resource, snapshot: created });
+      setError(null);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   /** Placeholder view's "Open externally" button, for resource kinds with
    * no built-in viewer (PDFs, images, and other binary embeds). */
   async function handleOpenExternally(resource: Resource) {
@@ -471,6 +559,7 @@ export default function App() {
     setError(null);
     setPage(null);
     setCanvas(null);
+    setDataApp(null);
     setExternalConflict(null);
     setReloadToken(0);
     currentPageRevisionRef.current = null;
@@ -488,6 +577,27 @@ export default function App() {
           relPath: resource.path,
         });
         setCanvas({ resource, json: JSON.parse(content) });
+      } catch (err) {
+        setError(String(err));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    if (resource.kind === "data-app" && snapshot) {
+      if (inBrowser) {
+        setDataApp({ resource, snapshot: demoDataApp });
+        return;
+      }
+
+      setBusy(true);
+      try {
+        const opened = await invoke<DataAppSnapshot>("open_data_app", {
+          root: snapshot.root,
+          relPath: resource.path,
+        });
+        setDataApp({ resource, snapshot: opened });
       } catch (err) {
         setError(String(err));
       } finally {
@@ -562,6 +672,7 @@ export default function App() {
   const paletteItems = useMemo<PaletteItem[]>(() => {
     const actions: PaletteItem[] = [
       { id: "action:new-page", label: "New page", run: handleNewPage },
+      { id: "action:new-table", label: "New table…", run: () => void handleNewTable() },
       { id: "action:quick-note", label: "Quick note", hint: "Cmd+N", run: handleQuickNote },
       { id: "action:new-workspace", label: "New workspace…", run: () => void openNewWorkspaceDialog() },
       { id: "action:open-workspace", label: "Open workspace…", run: () => void handleOpenWorkspace() },
@@ -805,7 +916,20 @@ export default function App() {
                 />
               </>
             )}
-            {selected && selected.kind !== "page" && selected.kind !== "canvas" && !error && (
+            {selected && selected.kind === "data-app" && dataApp && snapshot && (
+              <DataTableView
+                key={selected.path}
+                root={snapshot.root}
+                relPath={dataApp.resource.path}
+                initialSnapshot={dataApp.snapshot}
+                demoMutate={inBrowser ? (next) => next : undefined}
+              />
+            )}
+            {selected &&
+              selected.kind !== "page" &&
+              selected.kind !== "canvas" &&
+              selected.kind !== "data-app" &&
+              !error && (
               <div className="placeholder">
                 <span className="placeholder-mark">
                   <KindMark kind={selected.kind} size={36} />

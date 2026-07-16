@@ -47,7 +47,10 @@ pub fn list_resources(root: String) -> Result<Vec<Resource>, String> {
 /// traversal and absolute-path escapes (including through symlinks) by
 /// requiring the resolved candidate to remain under the canonical root.
 /// Returns `(canonical_root, canonical_candidate)`.
-fn resolve_within_root(root: &str, rel_path: &str) -> Result<(PathBuf, PathBuf), String> {
+pub(crate) fn resolve_within_root(
+    root: &str,
+    rel_path: &str,
+) -> Result<(PathBuf, PathBuf), String> {
     let canonical_root = PathBuf::from(root)
         .canonicalize()
         .map_err(|err| format!("invalid workspace root {root:?}: {err}"))?;
@@ -105,9 +108,9 @@ pub fn read_page(root: String, rel_path: String) -> Result<PageContent, String> 
 /// the frontend must react to (show the conflict banner) rather than a
 /// generic failure — so it's marked with a `STALE_REVISION:` prefix the
 /// frontend can detect without parsing prose.
-const STALE_REVISION_PREFIX: &str = "STALE_REVISION:";
+pub(crate) const STALE_REVISION_PREFIX: &str = "STALE_REVISION:";
 
-fn command_error_to_string(err: CommandError) -> String {
+pub(crate) fn command_error_to_string(err: CommandError) -> String {
     match err {
         CommandError::StaleBaseRevision {
             path,
