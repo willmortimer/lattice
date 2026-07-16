@@ -1,8 +1,8 @@
 # Nix workflows
 
 Everything automatable in this repo runs through the flake. This page is the
-complete inventory: setup, the dev shell, every task, and the failure modes
-we have actually hit.
+complete inventory: setup, the dev shell, every task, and how the desktop /
+site / browser surfaces relate.
 
 ## One-time setup
 
@@ -54,13 +54,52 @@ Run them from the repo root (they use relative paths).
 | `lint` | clippy with `-D warnings` + `rustfmt --check` |
 | `fmt` | format all Rust code |
 | `check` | everything CI runs: fmt check, clippy, tests, `pnpm install --frozen-lockfile`, desktop + site builds |
-| `site-dev` | Astro dev server for the marketing/docs site |
+| `site-dev` | Astro **marketing/docs** site (usually <http://localhost:4321>) |
 | `site-build` | static site build (syncs docs content first via `prebuild`) |
 | `docs-sync` | regenerate `site/src/content/docs/` from `docs/` |
-| `desktop-dev` | `tauri dev` — compiles the Rust shell and opens the native window |
+| `desktop-dev` | Native window **+ Vite HMR** on :5173 (frontend hot-reload) |
+| `desktop-web` | Browser-only React UI on :5173 (demo workspace; no Tauri) |
+| `desktop` | Native window **without Vite** — reuses `apps/desktop/dist` if present, else builds once |
 | `desktop-build` | release binary, unbundled (`tauri build --no-bundle`) |
 
 CI should run exactly one thing: `nix run .#check`.
+
+### Three different “web” surfaces
+
+| Surface | How to run | URL (typical) | What it is |
+| --- | --- | --- | --- |
+| **Desktop app (native, HMR)** | `nix run .#desktop-dev` | Tauri window ← Vite :5173 | Real Lattice shell with hot reload |
+| **Desktop app (native, no Vite)** | `nix run .#desktop` | Tauri window ← static `dist` | Real shell; rebuild UI with `pnpm --filter @lattice/desktop build` when needed |
+| **Desktop frontend only (browser)** | `nix run .#desktop-web` | <http://localhost:5173> | Same React UI, **demo fixture**, no filesystem |
+| **Marketing / docs site** | `nix run .#site-dev` | Astro (often :4321) | Public site + Starlight docs |
+
+### Why `desktop-dev` also starts :5173
+
+`tauri dev` is two processes by design:
+
+1. **Vite** — serves the React UI with HMR on port **5173**.
+2. **Rust / Tauri** — native WebView pointed at that Vite URL.
+
+Seeing Vite on 5173 alongside the native window is expected for `desktop-dev`. Prefer `nix run .#desktop` when you want the native app without a Vite process.
+
+### Lattice home directory
+
+First-run (**Create Lattice home**) creates:
+
+```text
+~/Lattice/                 # Lattice home (user-level, not a workspace)
+├── Workspaces/
+│   └── Personal/          # first workspace (personal template)
+│       ├── lattice.yaml
+│       ├── Home.md        # landing page inside the workspace
+│       ├── Inbox/
+│       ├── Projects/
+│       ├── Product/
+│       └── …
+└── Settings/              # reserved for future prefs
+```
+
+`Personal` is the workspace folder; `Home.md` is just a page inside it. Templates: `personal` (default), `team`, `demo` (sample pages + canvas), `blank`.
 
 ## Troubleshooting
 
@@ -72,6 +111,8 @@ CI should run exactly one thing: `nix run .#check`.
 | `Git tree ... is dirty` warning | Harmless; nix is telling you the working tree has uncommitted changes. |
 | Task can't find `site/scripts/...` or workspace packages | Run tasks from the repo root. |
 | `tauri build` (bundled) fails outside the shell | macOS bundling needs Xcode CLT; the nix shell doesn't provide it. |
+| Browser on :5173 shows “Engineering Workspace” | That is the **demo fixture** (`demo.ts`), not your disk. Use the Tauri window to open a real folder. |
+| Want Astro but ran `desktop-dev` | Use `nix run .#site-dev` instead. |
 
 ## How it fits together
 
@@ -79,3 +120,4 @@ CI should run exactly one thing: `nix run .#check`.
   exposed as both flake `apps` and dev-shell `lattice-*` commands.
 - [.envrc](../../.envrc) — `use flake`, for direnv users.
 - `flake.lock` — pinned nixpkgs; update deliberately with `nix flake update`.
+- [environment.md](./environment.md) — env vars (none required today).
