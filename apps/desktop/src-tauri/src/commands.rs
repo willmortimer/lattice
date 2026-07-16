@@ -9,6 +9,9 @@ use lattice_core::{
 };
 use lattice_storage::{NativeWorkspaceStore, WorkspaceStore};
 use serde::Serialize;
+use tauri::ipc::{InvokeBody, Request};
+
+const MAX_EDITOR_ASSET_BYTES: usize = 8 * 1024 * 1024;
 
 /// Everything the frontend needs to render a workspace: its identity plus
 /// the flat resource listing from [`Workspace::scan`].
@@ -77,6 +80,16 @@ pub(crate) fn resolve_within_root(
 pub fn read_file(root: String, rel_path: String) -> Result<String, String> {
     let (_, canonical_candidate) = resolve_within_root(&root, &rel_path)?;
     std::fs::read_to_string(&canonical_candidate).map_err(|err| err.to_string())
+}
+
+/// Read a binary resource through the same workspace containment check used
+/// by text reads. The desktop frontend turns the returned bytes into a
+/// short-lived Blob URL instead of exposing a globally scoped filesystem
+/// asset protocol to the webview.
+#[tauri::command]
+pub fn read_binary_file(root: String, rel_path: String) -> Result<Vec<u8>, String> {
+    let (_, canonical_candidate) = resolve_within_root(&root, &rel_path)?;
+    std::fs::read(&canonical_candidate).map_err(|err| err.to_string())
 }
 
 /// A page's content plus the content-hash revision it was read at, so the
@@ -184,6 +197,136 @@ pub fn create_page(root: String, rel_path: String, content: String) -> Result<St
         .first()
         .and_then(|outcome| outcome.resulting_revision.clone())
         .ok_or_else(|| "page create did not produce a resulting revision".to_string())
+}
+
+/// Import a pasted or dropped editor asset beside its containing page.
+///
+/// Assets are stored in an `assets/` directory relative to the page, receive
+/// a collision-free filename, and are created through the semantic command
+/// engine. The returned path is page-relative for direct insertion into
+/// Markdown.
+fn decode_header(value: &str) -> Result<String, String> {
+    let bytes = value.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            let hex = bytes
+                .get(index + 1..index + 3)
+                .ok_or_else(|| "invalid percent-encoded asset metadata".to_string())?;
+            let pair = std::str::from_utf8(hex)
+                .map_err(|_| "invalid percent-encoded asset metadata".to_string())?;
+            decoded.push(
+                u8::from_str_radix(pair, 16)
+                    .map_err(|_| "invalid percent-encoded asset metadata".to_string())?,
+            );
+            index += 3;
+        } else {
+            decoded.push(bytes[index]);
+            index += 1;
+        }
+    }
+    String::from_utf8(decoded).map_err(|_| "asset metadata is not valid UTF-8".to_string())
+}
+
+fn request_header(request: &Request<'_>, name: &str) -> Result<String, String> {
+    let value = request
+        .headers()
+        .get(name)
+        .ok_or_else(|| format!("missing {name} header"))?
+        .to_str()
+        .map_err(|_| format!("{name} header is invalid"))?;
+    decode_header(value)
+}
+
+#[tauri::command]
+pub fn create_asset(request: Request<'_>) -> Result<String, String> {
+    let content = match request.body() {
+        InvokeBody::Raw(bytes) => bytes.clone(),
+        InvokeBody::Json(_) => return Err("asset import requires a raw binary body".to_string()),
+    };
+    create_asset_inner(
+        request_header(&request, "x-lattice-root")?,
+        request_header(&request, "x-lattice-page-path")?,
+        request_header(&request, "x-lattice-file-name")?,
+        content,
+    )
+}
+
+fn create_asset_inner(
+    root: String,
+    page_path: String,
+    file_name: String,
+    content: Vec<u8>,
+) -> Result<String, String> {
+    if content.is_empty() {
+        return Err("cannot import an empty asset".to_string());
+    }
+    if content.len() > MAX_EDITOR_ASSET_BYTES {
+        return Err(format!(
+            "editor assets are limited to {} MiB",
+            MAX_EDITOR_ASSET_BYTES / (1024 * 1024)
+        ));
+    }
+
+    let (canonical_root, _) = resolve_within_root(&root, &page_path)?;
+    let safe_name = Path::new(&file_name)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty() && *name != "." && *name != "..")
+        .ok_or_else(|| "asset filename is invalid".to_string())?;
+    if safe_name != file_name {
+        return Err("asset filename must not contain path separators".to_string());
+    }
+
+    let page = Path::new(&page_path);
+    let page_dir = page.parent().unwrap_or_else(|| Path::new(""));
+    let asset_dir = page_dir.join("assets");
+    let file_path = Path::new(safe_name);
+    let stem = file_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("asset");
+    let extension = file_path.extension().and_then(|value| value.to_str());
+
+    let store = NativeWorkspaceStore::new(&canonical_root);
+    let mut candidate = asset_dir.join(safe_name);
+    let mut suffix = 2usize;
+    while store.metadata(&candidate).is_ok() {
+        let next_name = match extension {
+            Some(extension) => format!("{stem} {suffix}.{extension}"),
+            None => format!("{stem} {suffix}"),
+        };
+        candidate = asset_dir.join(next_name);
+        suffix += 1;
+    }
+
+    let mut engine = CommandEngine::open(&canonical_root).map_err(command_error_to_string)?;
+    let receipt = engine
+        .apply(Transaction::new(
+            format!("Import asset {}", candidate.display()),
+            vec![SemanticCommand::ResourceCreate {
+                path: candidate.clone(),
+                content,
+            }],
+        ))
+        .map_err(command_error_to_string)?;
+
+    if receipt
+        .outcomes
+        .first()
+        .and_then(|outcome| outcome.resulting_revision.as_ref())
+        .is_none()
+    {
+        return Err("asset import did not produce a resulting revision".to_string());
+    }
+
+    let relative_to_page = candidate
+        .strip_prefix(page_dir)
+        .unwrap_or(&candidate)
+        .to_string_lossy()
+        .replace('\\', "/");
+    Ok(relative_to_page)
 }
 
 /// Rename a resource through the semantic command core.
@@ -402,6 +545,28 @@ mod tests {
     }
 
     #[test]
+    fn read_binary_file_returns_exact_bytes_within_root() {
+        let dir = init_workspace();
+        let bytes = [0, 159, 146, 150, 255];
+        std::fs::write(dir.path().join("image.bin"), bytes).unwrap();
+
+        let content = read_binary_file(
+            dir.path().to_string_lossy().into_owned(),
+            "image.bin".to_string(),
+        )
+        .unwrap();
+        assert_eq!(content, bytes);
+    }
+
+    #[test]
+    fn decode_header_restores_percent_encoded_unicode_paths() {
+        assert_eq!(
+            decode_header("%2FUsers%2Fwill%2FLattice%2F%E6%97%A5%E8%A8%98.md").unwrap(),
+            "/Users/will/Lattice/日記.md"
+        );
+    }
+
+    #[test]
     fn read_page_returns_content_and_revision() {
         let dir = init_workspace();
         std::fs::write(dir.path().join("Notes.md"), "# Hi\n").unwrap();
@@ -469,6 +634,39 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.contains("already exists"));
+    }
+
+    #[test]
+    fn create_asset_is_page_relative_collision_safe_and_undoable() {
+        let dir = init_workspace();
+        std::fs::create_dir_all(dir.path().join("Notes")).unwrap();
+        std::fs::write(dir.path().join("Notes/Idea.md"), "# Idea\n").unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        let first = create_asset_inner(
+            root.clone(),
+            "Notes/Idea.md".to_string(),
+            "diagram.png".to_string(),
+            vec![1, 2, 3],
+        )
+        .unwrap();
+        let second = create_asset_inner(
+            root.clone(),
+            "Notes/Idea.md".to_string(),
+            "diagram.png".to_string(),
+            vec![4, 5, 6],
+        )
+        .unwrap();
+
+        assert_eq!(first, "assets/diagram.png");
+        assert_eq!(second, "assets/diagram 2.png");
+        assert_eq!(
+            std::fs::read(dir.path().join("Notes/assets/diagram.png")).unwrap(),
+            vec![1, 2, 3]
+        );
+
+        undo_last(root).unwrap();
+        assert!(!dir.path().join("Notes/assets/diagram 2.png").exists());
     }
 
     #[test]
