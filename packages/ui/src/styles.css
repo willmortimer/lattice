@@ -1,0 +1,123 @@
+.ltui-button {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid transparent;
+  border-radius: var(--lt-radius-sm);
+  font: inherit;
+  font-weight: 550;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    color 110ms ease,
+    background 110ms ease,
+    border-color 110ms ease,
+    opacity 110ms ease;
+}
+
+.ltui-button-md {
+  min-height: 32px;
+  padding: 0 11px;
+}
+
+.ltui-button-sm {
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.ltui-button-primary {
+  color: var(--lt-on-accent);
+  background: var(--lt-accent);
+}
+
+.ltui-button-primary:hover {
+  background: var(--lt-accent-bright);
+}
+
+.ltui-button-secondary {
+  color: var(--lt-text-soft);
+  background: var(--lt-bg-raise);
+  border-color: var(--lt-border);
+}
+
+.ltui-button-secondary:hover {
+  color: var(--lt-text);
+  border-color: var(--lt-line-strong);
+}
+
+.ltui-button-ghost {
+  color: var(--lt-muted);
+  background: transparent;
+}
+
+.ltui-button-ghost:hover,
+.ltui-button-ghost[data-popup-open] {
+  color: var(--lt-text);
+  background: var(--lt-hover);
+}
+
+.ltui-button-danger {
+  color: var(--lt-danger);
+  background: color-mix(in oklch, var(--lt-danger) 10%, transparent);
+  border-color: color-mix(in oklch, var(--lt-danger) 24%, transparent);
+}
+
+.ltui-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.ltui-icon-button {
+  width: 28px;
+  padding: 0;
+}
+
+.ltui-tooltip {
+  z-index: 120;
+  max-width: 220px;
+  padding: 5px 8px;
+  border: 1px solid var(--lt-line-strong);
+  border-radius: 5px;
+  color: var(--lt-text-soft);
+  background: var(--lt-panel);
+  box-shadow: 0 8px 24px var(--lt-shadow-md);
+  font-family: var(--lt-font-ui);
+  font-size: 11px;
+}
+
+.ltui-menu,
+.ltui-popover {
+  z-index: 110;
+  min-width: 190px;
+  padding: 5px;
+  border: 1px solid var(--lt-line-strong);
+  border-radius: var(--lt-radius);
+  color: var(--lt-text-soft);
+  background: var(--lt-panel);
+  box-shadow: 0 16px 44px var(--lt-shadow-lg);
+}
+
+.ltui-menu-item {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 9px;
+  border-radius: var(--lt-radius-sm);
+  outline: none;
+  font-size: 12.5px;
+}
+
+.ltui-menu-item[data-highlighted] {
+  color: var(--lt-text);
+  background: var(--lt-hover);
+}
+
+.ltui-menu-separator {
+  height: 1px;
+  margin: 5px;
+  background: var(--lt-line);
+}
