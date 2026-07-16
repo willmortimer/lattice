@@ -6,7 +6,10 @@ use std::time::SystemTime;
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use lattice_commands::{Command as Semantic, CommandEngine, Transaction};
-use lattice_core::{Diagnostic, Resource, Severity, Workspace};
+use lattice_core::{
+    ensure_lattice_home, init_with_template, Diagnostic, Resource, Severity, Workspace,
+    WorkspaceTemplate,
+};
 use lattice_index::{Backlink, SearchHit, WorkspaceIndex};
 use lattice_storage::{NativeWorkspaceStore, RecoveryJournal, WorkspaceStore};
 
@@ -30,6 +33,14 @@ enum Command {
         /// Workspace title. Defaults to the directory name.
         #[arg(long)]
         title: Option<String>,
+        /// Folder scaffolding: `personal` (default), `team`, `demo`, or `blank`.
+        #[arg(long, default_value = "personal")]
+        template: String,
+    },
+    /// Manage the Lattice home directory (`~/Lattice`).
+    Home {
+        #[command(subcommand)]
+        command: HomeCommand,
     },
     /// Show workspace details.
     Info {
@@ -116,6 +127,14 @@ enum Command {
 }
 
 #[derive(Subcommand)]
+enum HomeCommand {
+    /// Create `~/Lattice/{Workspaces,Settings}` and seed `Workspaces/Personal` if empty.
+    Ensure,
+    /// Print the Lattice home paths.
+    Path,
+}
+
+#[derive(Subcommand)]
 enum PageCommand {
     /// Create a new page.
     Create {
@@ -179,7 +198,15 @@ fn main() -> ExitCode {
 
 fn run(command: Command) -> Result<ExitCode> {
     match command {
-        Command::Init { path, title } => cmd_init(path, title),
+        Command::Init {
+            path,
+            title,
+            template,
+        } => cmd_init(path, title, template),
+        Command::Home { command } => match command {
+            HomeCommand::Ensure => cmd_home_ensure(),
+            HomeCommand::Path => cmd_home_path(),
+        },
         Command::Info { path } => cmd_info(path),
         Command::Ls { path, json } => cmd_ls(path, json),
         Command::Validate { path, json } => cmd_validate(path, json),
@@ -231,15 +258,37 @@ fn default_title(path: &Path) -> Result<String> {
     Ok(name)
 }
 
-fn cmd_init(path: Option<PathBuf>, title: Option<String>) -> Result<ExitCode> {
+fn cmd_init(path: Option<PathBuf>, title: Option<String>, template: String) -> Result<ExitCode> {
     let root = cwd_or(path)?;
     let title = match title {
         Some(t) => t,
         None => default_title(&root)?,
     };
-    let ws = Workspace::init(&root, title)?;
+    let template = WorkspaceTemplate::parse(&template).with_context(|| {
+        format!("unknown template {template:?}; expected personal, team, demo, or blank")
+    })?;
+    let ws = init_with_template(&root, title, template)?;
     println!("created workspace at {}", ws.root().display());
     println!("id: {}", ws.manifest().id);
+    println!("template: {}", template.id());
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_home_ensure() -> Result<ExitCode> {
+    let home = ensure_lattice_home()?;
+    println!("home: {}", home.root.display());
+    println!("workspaces: {}", home.workspaces.display());
+    println!("settings: {}", home.settings.display());
+    let default = home.default_workspace();
+    if default.join("lattice.yaml").exists() {
+        println!("default workspace: {}", default.display());
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_home_path() -> Result<ExitCode> {
+    let home = ensure_lattice_home()?;
+    println!("{}", home.root.display());
     Ok(ExitCode::SUCCESS)
 }
 
