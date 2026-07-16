@@ -1,0 +1,21 @@
+[package]
+name = "lattice-profile"
+description = "Versioned user settings and operational desktop state for Lattice"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+dirs.workspace = true
+hex.workspace = true
+lattice-storage.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

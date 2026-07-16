@@ -18,12 +18,14 @@
 //! Paths handed to a store are always workspace-relative; components that
 //! escape the root (`..`, absolute paths) are rejected rather than followed.
 
+mod atomic;
 mod error;
 mod journal;
 mod revision;
 mod store;
 mod writer;
 
+pub use atomic::atomic_write_file;
 pub use error::Error;
 pub use journal::{PendingWrite, RecoveryJournal};
 pub use revision::ResourceRevision;

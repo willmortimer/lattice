@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "apps/cli",
     "crates/lattice-core",
+    "crates/lattice-profile",
     "crates/lattice-storage",
     "crates/lattice-commands",
     "crates/lattice-index",
@@ -19,6 +20,7 @@ license = "AGPL-3.0-or-later"
 
 [workspace.dependencies]
 lattice-core = { path = "crates/lattice-core" }
+lattice-profile = { path = "crates/lattice-profile" }
 lattice-storage = { path = "crates/lattice-storage" }
 lattice-commands = { path = "crates/lattice-commands" }
 lattice-index = { path = "crates/lattice-index" }
