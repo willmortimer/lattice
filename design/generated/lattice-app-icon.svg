@@ -1,0 +1,30 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lattice">
+  <defs>
+    <linearGradient id="tile" x1="180" y1="90" x2="850" y2="930" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#13253A"/>
+      <stop offset="0.55" stop-color="#0B1828"/>
+      <stop offset="1" stop-color="#07111D"/>
+    </linearGradient>
+    <radialGradient id="signal" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(512 512) rotate(90) scale(280)">
+      <stop stop-color="#F5A623" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#F5A623" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="tile-clip">
+      <rect x="48" y="48" width="928" height="928" rx="214"/>
+    </clipPath>
+  </defs>
+  <rect x="48" y="48" width="928" height="928" rx="214" fill="url(#tile)"/>
+  <g clip-path="url(#tile-clip)">
+    <path d="M96 290H928M96 512H928M96 734H928M290 96V928M512 96V928M734 96V928" stroke="#88A4C2" stroke-width="5" opacity="0.1"/>
+    <circle cx="512" cy="512" r="280" fill="url(#signal)"/>
+  </g>
+  <g stroke="#F5A623" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M512 512L797.79 677M512 512L512 182M512 512L226.21 677" stroke-width="23.8" opacity="0.24"/>
+    <path d="M654.89 264.5L369.11 429.5M369.11 264.5L654.89 429.5M797.79 512L512 677M654.89 759.5L654.89 429.5M369.11 759.5L369.11 429.5M226.21 512L512 677" stroke-width="24.48" opacity="0.4"/>
+    <path d="M512 182L797.79 347M797.79 347L797.79 677M797.79 677L512 842M512 842L226.21 677M226.21 677L226.21 347M226.21 347L512 182" stroke-width="34" opacity="0.94"/>
+    <path d="M512 512L797.79 347M512 512L226.21 347M512 512L512 842" stroke-width="34" opacity="0.98"/>
+  </g>
+  <g fill="#FFCE8A"><circle cx="512" cy="182" r="38"/><circle cx="797.79" cy="347" r="38"/><circle cx="797.79" cy="677" r="38"/><circle cx="512" cy="842" r="38"/><circle cx="226.21" cy="677" r="38"/><circle cx="226.21" cy="347" r="38"/></g>
+  <circle cx="512" cy="512" r="62" fill="#F5A623"/>
+  <rect x="50.5" y="50.5" width="923" height="923" rx="211.5" stroke="#8FB3D8" stroke-width="5" opacity="0.22"/>
+</svg>
