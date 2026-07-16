@@ -5,13 +5,15 @@ use lattice_commands::{
     Command as SemanticCommand, CommandEngine, Error as CommandError, Transaction,
 };
 use lattice_core::{
-    ensure_lattice_home, initialize_lattice_home, DefaultWorkspaceStatus, ProvisionDiagnostic,
-    Resource, TemplateDescriptor, Workspace, WorkspaceCreationMode, WorkspaceCreationPlan,
-    WorkspaceDefaults, WorkspaceProvisioner,
+    ensure_lattice_home, initialize_lattice_home, inspect_resource as inspect_native_resource,
+    read_resource_range as read_native_resource_range, read_text_window as read_native_text_window,
+    DefaultWorkspaceStatus, ProvisionDiagnostic, Resource, ResourceRuntimeError,
+    TemplateDescriptor, Workspace, WorkspaceCreationMode, WorkspaceCreationPlan, WorkspaceDefaults,
+    WorkspaceProvisioner,
 };
 use lattice_storage::{NativeWorkspaceStore, WorkspaceStore};
 use serde::Serialize;
-use tauri::ipc::{InvokeBody, Request};
+use tauri::ipc::{InvokeBody, Request, Response};
 
 const MAX_EDITOR_ASSET_BYTES: usize = 8 * 1024 * 1024;
 
@@ -89,6 +91,42 @@ pub fn read_file(root: String, rel_path: String) -> Result<String, String> {
 pub fn read_binary_file(root: String, rel_path: String) -> Result<Vec<u8>, String> {
     let (_, canonical_candidate) = resolve_within_root(&root, &rel_path)?;
     std::fs::read(&canonical_candidate).map_err(|err| err.to_string())
+}
+
+/// Inspect a native resource without mutating it. Format recognition is
+/// extension- and bounded-probe-based; the returned diagnostics are safe to
+/// display even when a resource is malformed or only partially supported.
+#[tauri::command]
+pub fn inspect_resource(
+    root: String,
+    rel_path: String,
+) -> Result<lattice_core::ResourceInspection, ResourceRuntimeError> {
+    inspect_native_resource(Path::new(&root), Path::new(&rel_path))
+}
+
+/// Read a bounded raw byte range. Tauri's raw response avoids turning binary
+/// content into a JSON array; callers obtain format and size metadata from
+/// [`inspect_resource`].
+#[tauri::command]
+pub fn read_resource_range(
+    root: String,
+    rel_path: String,
+    offset: u64,
+    length: u64,
+) -> Result<Response, ResourceRuntimeError> {
+    let range = read_native_resource_range(Path::new(&root), Path::new(&rel_path), offset, length)?;
+    Ok(Response::new(range.bytes))
+}
+
+/// Read a bounded, encoding-aware text window with a structured serde result.
+#[tauri::command]
+pub fn read_text_window(
+    root: String,
+    rel_path: String,
+    offset: u64,
+    length: u64,
+) -> Result<lattice_core::TextWindow, ResourceRuntimeError> {
+    read_native_text_window(Path::new(&root), Path::new(&rel_path), offset, length)
 }
 
 /// A page's content plus the content-hash revision it was read at, so the

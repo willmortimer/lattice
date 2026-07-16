@@ -1,3 +1,4 @@
+use std::io::Read;
 use std::time::SystemTime;
 
 use sha2::{Digest, Sha256};
@@ -26,4 +27,18 @@ impl ResourceRevision {
             modified,
         }
     }
+}
+
+/// Stream a content hash without loading the resource into memory.
+pub fn sha256_reader(mut reader: impl Read) -> std::io::Result<String> {
+    let mut digest = Sha256::new();
+    let mut buffer = [0u8; 8192];
+    loop {
+        let read = reader.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        digest.update(&buffer[..read]);
+    }
+    Ok(format!("sha256:{}", hex::encode(digest.finalize())))
 }
