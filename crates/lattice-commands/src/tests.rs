@@ -61,6 +61,40 @@ fn create_undo_redo_roundtrip() {
     assert!(engine.redo().unwrap().is_none());
 }
 
+#[test]
+fn binary_resource_create_undo_redo_preserves_exact_bytes() {
+    let (dir, mut engine) = engine();
+    let content = vec![0, 159, 146, 150, 255, 10];
+    engine
+        .apply(Transaction::new(
+            "Import binary asset",
+            vec![Command::ResourceCreate {
+                path: PathBuf::from("assets/image.bin"),
+                content: content.clone(),
+            }],
+        ))
+        .unwrap();
+    assert_eq!(read(&dir, "assets/image.bin"), content);
+
+    engine.undo().unwrap().unwrap();
+    assert!(!exists(&dir, "assets/image.bin"));
+
+    engine.redo().unwrap().unwrap();
+    assert_eq!(read(&dir, "assets/image.bin"), content);
+}
+
+#[test]
+fn binary_resource_command_serializes_content_compactly_and_round_trips() {
+    let command = Command::ResourceCreate {
+        path: PathBuf::from("assets/image.bin"),
+        content: vec![0, 159, 146, 150, 255],
+    };
+    let json = serde_json::to_string(&command).unwrap();
+    assert!(json.contains("\"content\":\""));
+    assert!(!json.contains("\"content\":["));
+    assert_eq!(serde_json::from_str::<Command>(&json).unwrap(), command);
+}
+
 // 2. Stale base_revision -> precondition error, file unchanged, no history.
 #[test]
 fn stale_base_revision_is_refused_without_side_effects() {

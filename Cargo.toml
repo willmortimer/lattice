@@ -35,6 +35,7 @@ walkdir = "2"
 rusqlite = { version = "0.37", features = ["bundled"] }
 sha2 = "0.10"
 hex = "0.4"
+base64 = "0.22"
 trash = "5"
 dirs = "6"
 # `macos_kqueue` (not the default FSEvents backend) avoids multi-second
