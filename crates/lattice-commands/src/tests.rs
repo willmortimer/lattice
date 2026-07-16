@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use lattice_core::Workspace;
+use lattice_storage::{NativeWorkspaceStore, WorkspaceStore};
 use tempfile::TempDir;
 
 use crate::{Command, CommandEngine, Error, Transaction, TrashPolicy};
@@ -33,6 +34,51 @@ fn read(dir: &TempDir, path: &str) -> Vec<u8> {
 
 fn exists(dir: &TempDir, path: &str) -> bool {
     dir.path().join(path).exists()
+}
+
+#[test]
+fn workspace_manifest_update_is_revision_guarded_and_undoable() {
+    let (dir, mut engine) = engine();
+    let path = Path::new(lattice_core::WORKSPACE_MANIFEST_FILENAME);
+    let store = NativeWorkspaceStore::new(dir.path());
+    let original = std::fs::read_to_string(dir.path().join(path)).unwrap();
+    let base_revision = store.metadata(path).unwrap().revision.hash;
+    let mut manifest = lattice_core::WorkspaceManifest::parse(path, &original).unwrap();
+    manifest.capabilities.enabled = vec!["pages".into(), "canvas".into()];
+    manifest.defaults.quick_note_directory = "Capture".into();
+
+    engine
+        .apply(Transaction::new(
+            "Update workspace settings",
+            vec![Command::WorkspaceManifestUpdate {
+                content: serde_yaml::to_string(&manifest).unwrap(),
+                base_revision,
+            }],
+        ))
+        .unwrap();
+    assert_eq!(
+        Workspace::open(dir.path())
+            .unwrap()
+            .manifest()
+            .defaults
+            .quick_note_directory,
+        "Capture"
+    );
+
+    engine.undo().unwrap().unwrap();
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join(path)).unwrap(),
+        original
+    );
+    engine.redo().unwrap().unwrap();
+    assert_eq!(
+        Workspace::open(dir.path())
+            .unwrap()
+            .manifest()
+            .defaults
+            .quick_note_directory,
+        "Capture"
+    );
 }
 
 // 1. page create -> file exists with content; undo -> gone; redo -> back.

@@ -316,6 +316,24 @@ impl CommandEngine {
                 }
                 Ok(())
             }
+            Command::WorkspaceManifestUpdate {
+                content,
+                base_revision,
+            } => {
+                let path = PathBuf::from(lattice_core::WORKSPACE_MANIFEST_FILENAME);
+                lattice_core::WorkspaceManifest::parse(&path, content)?;
+                let meta = self
+                    .metadata_opt(&path)?
+                    .ok_or_else(|| Error::NotFound { path: path.clone() })?;
+                if meta.revision.hash != *base_revision {
+                    return Err(Error::StaleBaseRevision {
+                        path,
+                        expected: base_revision.clone(),
+                        found: meta.revision.hash,
+                    });
+                }
+                Ok(())
+            }
             Command::ResourceRename { from, to } => {
                 if self.metadata_opt(from)?.is_none() {
                     return Err(Error::NotFound { path: from.clone() });
@@ -459,6 +477,33 @@ impl CommandEngine {
                     forward: command.clone(),
                     inverse: Command::PageUpdate {
                         path: path.clone(),
+                        content: String::from_utf8_lossy(&prior).into_owned(),
+                        base_revision: revision.hash.clone(),
+                    },
+                    prior_content: Some(prior),
+                    resulting_revision: Some(revision.hash),
+                })
+            }
+            Command::WorkspaceManifestUpdate {
+                content,
+                base_revision,
+            } => {
+                let path = PathBuf::from(lattice_core::WORKSPACE_MANIFEST_FILENAME);
+                let meta = self.store.metadata(&path)?;
+                if meta.revision.hash != *base_revision {
+                    return Err(Error::StaleBaseRevision {
+                        path,
+                        expected: base_revision.clone(),
+                        found: meta.revision.hash,
+                    });
+                }
+                let prior = self.store.read(&path)?;
+                let revision =
+                    self.writer()
+                        .write(&path, content.as_bytes(), Some(&meta.revision))?;
+                Ok(AppliedOp {
+                    forward: command.clone(),
+                    inverse: Command::WorkspaceManifestUpdate {
                         content: String::from_utf8_lossy(&prior).into_owned(),
                         base_revision: revision.hash.clone(),
                     },
@@ -695,6 +740,15 @@ impl CommandEngine {
                 self.writer().write(path, &bytes, Some(&meta.revision))?;
                 Ok(())
             }
+            Command::WorkspaceManifestUpdate { content, .. } => {
+                let path = PathBuf::from(lattice_core::WORKSPACE_MANIFEST_FILENAME);
+                let bytes = prior_content
+                    .map(<[u8]>::to_vec)
+                    .unwrap_or_else(|| content.clone().into_bytes());
+                let meta = self.store.metadata(&path)?;
+                self.writer().write(&path, &bytes, Some(&meta.revision))?;
+                Ok(())
+            }
             // Inverse of ResourceDelete (file): re-materialize the bytes.
             Command::PageCreate { path, content } => {
                 let bytes = prior_content
@@ -848,7 +902,8 @@ impl CommandEngine {
             }
             Command::PageCreate { .. }
             | Command::ResourceCreate { .. }
-            | Command::PageUpdate { .. } => {
+            | Command::PageUpdate { .. }
+            | Command::WorkspaceManifestUpdate { .. } => {
                 self.guard_hash(&forward.guard_path(), resulting_revision.as_deref())
             }
             Command::TableCreate { path, .. } => {

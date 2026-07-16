@@ -5,10 +5,18 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use lattice_core::{ensure_lattice_home, LatticeHome};
+use lattice_profile::{SettingsDiagnostic, SettingsSpec, SettingsStore};
 
 use crate::{Error, Result};
 
 pub const APPEARANCE_FILENAME: &str = "appearance.yaml";
+const APPEARANCE_FORMAT: &str = "lattice-appearance-settings";
+const APPEARANCE_VERSION: u32 = 1;
+const APPEARANCE_SPEC: SettingsSpec = SettingsSpec {
+    filename: APPEARANCE_FILENAME,
+    format: APPEARANCE_FORMAT,
+    version: APPEARANCE_VERSION,
+};
 
 /// How the active theme is chosen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -41,6 +49,10 @@ impl Default for ThemePair {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppearanceSettings {
+    #[serde(default = "appearance_format")]
+    pub format: String,
+    #[serde(default = "appearance_version")]
+    pub version: u32,
     #[serde(default)]
     pub mode: AppearanceMode,
     /// Theme id when `mode` is `fixed`.
@@ -57,6 +69,8 @@ fn default_theme_id() -> String {
 impl Default for AppearanceSettings {
     fn default() -> Self {
         Self {
+            format: appearance_format(),
+            version: appearance_version(),
             mode: AppearanceMode::Fixed,
             theme: default_theme_id(),
             pair: ThemePair::default(),
@@ -70,26 +84,36 @@ impl AppearanceSettings {
     }
 
     pub fn load_from(path: &Path) -> Result<Self> {
-        if !path.is_file() {
-            return Ok(Self::default());
-        }
-        let text = std::fs::read_to_string(path).map_err(|e| Error::io(path, e))?;
-        if text.trim().is_empty() {
-            return Ok(Self::default());
-        }
-        serde_yaml::from_str(&text).map_err(|source| Error::Yaml {
-            path: path.to_path_buf(),
-            source,
-        })
+        Self::load_from_with_diagnostics(path).map(|(settings, _)| settings)
+    }
+
+    pub fn load_from_with_diagnostics(path: &Path) -> Result<(Self, Vec<SettingsDiagnostic>)> {
+        let root = path.parent().unwrap_or_else(|| Path::new("."));
+        SettingsStore::new(root)
+            .load::<Self>(APPEARANCE_SPEC)
+            .map(|loaded| (loaded.value, loaded.diagnostics))
+            .map_err(|error| Error::io(path, std::io::Error::other(error.to_string())))
     }
 
     pub fn save_to(&self, path: &Path) -> Result<()> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
-        }
-        let text = serde_yaml::to_string(self).expect("appearance serializes");
-        std::fs::write(path, text).map_err(|e| Error::io(path, e))
+        let root = path.parent().unwrap_or_else(|| Path::new("."));
+        let store = SettingsStore::new(root);
+        let loaded = store
+            .load::<Self>(APPEARANCE_SPEC)
+            .map_err(|error| Error::io(path, std::io::Error::other(error.to_string())))?;
+        store
+            .save(APPEARANCE_SPEC, self, loaded.revision.as_deref())
+            .map(|_| ())
+            .map_err(|error| Error::io(path, std::io::Error::other(error.to_string())))
     }
+}
+
+fn appearance_format() -> String {
+    APPEARANCE_FORMAT.into()
+}
+
+fn appearance_version() -> u32 {
+    APPEARANCE_VERSION
 }
 
 fn ensure_home() -> Result<LatticeHome> {
@@ -104,11 +128,18 @@ fn ensure_home() -> Result<LatticeHome> {
 
 /// Load appearance settings from the Lattice home (creating home if needed).
 pub fn load_appearance() -> Result<(LatticeHome, AppearanceSettings)> {
+    load_appearance_with_diagnostics().map(|(home, settings, _)| (home, settings))
+}
+
+/// Load appearance settings while preserving non-fatal settings diagnostics
+/// for visible presentation by desktop callers.
+pub fn load_appearance_with_diagnostics(
+) -> Result<(LatticeHome, AppearanceSettings, Vec<SettingsDiagnostic>)> {
     let home = ensure_home()?;
     ensure_user_themes_dir(&home)?;
     let path = AppearanceSettings::path_in(&home);
-    let settings = AppearanceSettings::load_from(&path)?;
-    Ok((home, settings))
+    let (settings, diagnostics) = AppearanceSettings::load_from_with_diagnostics(&path)?;
+    Ok((home, settings, diagnostics))
 }
 
 /// Save appearance settings under the Lattice home.
