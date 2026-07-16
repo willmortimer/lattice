@@ -91,6 +91,7 @@ pub fn run() {
             commands::read_text_window,
             commands::read_page,
             commands::apply_page_update,
+            commands::apply_resource_update,
             commands::create_page,
             commands::create_asset,
             commands::rename_resource,

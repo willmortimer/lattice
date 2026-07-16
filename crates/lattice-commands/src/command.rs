@@ -42,6 +42,19 @@ pub enum Command {
         base_revision: String,
     },
 
+    /// Replace an editable file resource with bytes. The command is the
+    /// native foundation for text-oriented viewers; callers must provide the
+    /// materialized revision they edited from. Binary profiles use dedicated
+    /// format commands or remain read-only.
+    ResourceUpdate {
+        path: PathBuf,
+        #[serde(with = "base64_bytes")]
+        content: Vec<u8>,
+        /// `"sha256:<hex>"` the update is based on.
+        #[serde(rename = "base-revision")]
+        base_revision: String,
+    },
+
     /// Replace `lattice.yaml` after validating a typed workspace-manifest
     /// update. The command stores serialized YAML for durable history while
     /// callers construct it from `lattice_core::WorkspaceManifest`.
@@ -148,6 +161,7 @@ impl Command {
             Command::PageCreate { path, .. } => path.clone(),
             Command::ResourceCreate { path, .. } => path.clone(),
             Command::PageUpdate { path, .. } => path.clone(),
+            Command::ResourceUpdate { path, .. } => path.clone(),
             Command::WorkspaceManifestUpdate { .. } => {
                 PathBuf::from(lattice_core::WORKSPACE_MANIFEST_FILENAME)
             }
@@ -171,6 +185,7 @@ impl Command {
             Command::PageCreate { path, .. } => vec![path.clone()],
             Command::ResourceCreate { path, .. } => vec![path.clone()],
             Command::PageUpdate { path, .. } => vec![path.clone()],
+            Command::ResourceUpdate { path, .. } => vec![path.clone()],
             Command::WorkspaceManifestUpdate { .. } => {
                 vec![PathBuf::from(lattice_core::WORKSPACE_MANIFEST_FILENAME)]
             }

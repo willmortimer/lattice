@@ -9,6 +9,7 @@
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Component, Path, PathBuf};
+use std::time::UNIX_EPOCH;
 
 use serde::{Deserialize, Serialize};
 
@@ -35,6 +36,7 @@ pub enum ResourceFormatProfile {
     Json,
     Yaml,
     UnknownBinary,
+    UnknownDirectory,
 }
 
 /// Capabilities exposed by a recognized format profile.
@@ -70,7 +72,7 @@ impl FormatCapabilities {
             can_inspect: true,
             can_read_range: true,
             can_read_text_window: false,
-            can_update: true,
+            can_update: false,
             is_text: false,
             is_binary: true,
             validates_structure: false,
@@ -90,6 +92,19 @@ impl FormatCapabilities {
             max_edit_bytes: DEFAULT_RESOURCE_EDIT_BYTES,
         }
     }
+
+    fn directory() -> Self {
+        Self {
+            can_inspect: true,
+            can_read_range: false,
+            can_read_text_window: false,
+            can_update: false,
+            is_text: false,
+            is_binary: false,
+            validates_structure: false,
+            max_edit_bytes: DEFAULT_RESOURCE_EDIT_BYTES,
+        }
+    }
 }
 
 impl ResourceFormatProfile {
@@ -97,8 +112,10 @@ impl ResourceFormatProfile {
         match self {
             Self::Markdown | Self::PlainText | Self::Code => FormatCapabilities::text(false),
             Self::JsonCanvas | Self::Json | Self::Yaml => FormatCapabilities::text(true),
-            Self::SqliteDataApp => FormatCapabilities::binary(),
-            Self::Image | Self::Pdf | Self::UnknownBinary => FormatCapabilities::binary(),
+            Self::Image | Self::Pdf | Self::SqliteDataApp | Self::UnknownBinary => {
+                FormatCapabilities::binary()
+            }
+            Self::UnknownDirectory => FormatCapabilities::directory(),
         }
     }
 }
@@ -132,6 +149,10 @@ pub struct ResourceInspection {
     pub kind: ResourceKind,
     pub profile: ResourceFormatProfile,
     pub capabilities: FormatCapabilities,
+    /// Content hash for editable text files at or below the edit budget;
+    /// otherwise a cheap `metadata:<mtime-nanos>:<size>` revision. Metadata
+    /// revisions are suitable for read-only inspection and are not a content
+    /// identity guarantee.
     pub revision: String,
     pub size: u64,
     pub is_directory: bool,
@@ -235,26 +256,48 @@ pub fn inspect_resource(
     let (normalized, absolute) = resolve_contained(root, relative_path)?;
     let metadata = std::fs::metadata(&absolute).map_err(|source| io_error(&normalized, source))?;
     let size = metadata.len();
-    let kind = ResourceKind::classify(&absolute, metadata.is_dir());
-    let revision = content_revision(&absolute, metadata.is_dir(), size)?;
+    let classified_kind = ResourceKind::classify(&absolute, metadata.is_dir());
+    let kind = if metadata.is_dir() && classified_kind != ResourceKind::DataApp {
+        ResourceKind::Folder
+    } else {
+        classified_kind
+    };
 
     if metadata.is_dir() {
+        let is_data_app = kind == ResourceKind::DataApp;
         return Ok(ResourceInspection {
             path: normalized,
             kind,
-            profile: ResourceFormatProfile::SqliteDataApp,
-            capabilities: FormatCapabilities::package(),
-            revision,
+            profile: if is_data_app {
+                ResourceFormatProfile::SqliteDataApp
+            } else {
+                ResourceFormatProfile::UnknownDirectory
+            },
+            capabilities: if is_data_app {
+                FormatCapabilities::package()
+            } else {
+                FormatCapabilities::directory()
+            },
+            revision: metadata_revision(&metadata, size),
             size,
             is_directory: true,
             encoding: None,
             probe_bytes: 0,
-            diagnostics: Vec::new(),
+            diagnostics: if is_data_app {
+                Vec::new()
+            } else {
+                vec![diagnostic(
+                    "unsupported-directory",
+                    Severity::Warning,
+                    "ordinary directories are containers, not editable file resources",
+                )]
+            },
         });
     }
 
     let probe = read_probe(&absolute, size)?;
     let (profile, diagnostics, encoding) = recognize(&normalized, kind, size, &probe);
+    let revision = revision_for_profile(&absolute, &metadata, size, profile);
     Ok(ResourceInspection {
         path: normalized,
         kind,
@@ -417,17 +460,30 @@ fn io_error(path: &Path, source: std::io::Error) -> ResourceRuntimeError {
     }
 }
 
-fn content_revision(
+fn revision_for_profile(
     path: &Path,
-    is_directory: bool,
+    metadata: &std::fs::Metadata,
     size: u64,
-) -> Result<String, ResourceRuntimeError> {
-    if !is_directory {
-        let file = File::open(path).map_err(|source| io_error(path, source))?;
-        return lattice_storage::sha256_reader(file).map_err(|source| io_error(path, source));
+    profile: ResourceFormatProfile,
+) -> String {
+    if profile.capabilities().can_update && size <= DEFAULT_RESOURCE_EDIT_BYTES {
+        if let Ok(file) = File::open(path) {
+            if let Ok(revision) = lattice_storage::sha256_reader(file) {
+                return revision;
+            }
+        }
     }
-    let _ = size;
-    lattice_storage::sha256_reader(std::io::empty()).map_err(|source| io_error(path, source))
+    metadata_revision(metadata, size)
+}
+
+fn metadata_revision(metadata: &std::fs::Metadata, size: u64) -> String {
+    let modified = metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    format!("metadata:{modified}:{size}")
 }
 
 fn read_probe(path: &Path, size: u64) -> Result<Vec<u8>, ResourceRuntimeError> {
@@ -637,8 +693,12 @@ fn decode_text(bytes: &[u8], encoding: ResourceEncoding) -> Result<String, ()> {
                 .map(str::to_owned)
                 .map_err(|_| ())
         }
-        ResourceEncoding::Utf16Le => decode_utf16(bytes, true),
-        ResourceEncoding::Utf16Be => decode_utf16(bytes, false),
+        ResourceEncoding::Utf16Le => {
+            decode_utf16(bytes.strip_prefix(&[0xff, 0xfe]).unwrap_or(bytes), true)
+        }
+        ResourceEncoding::Utf16Be => {
+            decode_utf16(bytes.strip_prefix(&[0xfe, 0xff]).unwrap_or(bytes), false)
+        }
     }
 }
 
@@ -915,6 +975,12 @@ mod tests {
                 .profile,
             ResourceFormatProfile::Pdf
         );
+        assert!(
+            !inspect_resource(directory.path(), Path::new("paper.pdf"))
+                .unwrap()
+                .capabilities
+                .can_update
+        );
     }
 
     #[test]
@@ -978,6 +1044,32 @@ mod tests {
             read_text_window(directory.path(), Path::new("blob.bin"), 0, 4),
             Err(ResourceRuntimeError::BinaryResource { .. })
         ));
+    }
+
+    #[test]
+    fn ordinary_directories_are_not_reported_as_sqlite() {
+        let directory = workspace();
+        std::fs::create_dir(directory.path().join("Folder")).unwrap();
+        let inspection = inspect_resource(directory.path(), Path::new("Folder")).unwrap();
+        assert_eq!(inspection.kind, ResourceKind::Folder);
+        assert_eq!(inspection.profile, ResourceFormatProfile::UnknownDirectory);
+        assert!(inspection
+            .diagnostics
+            .iter()
+            .any(|item| item.code == "unsupported-directory"));
+        assert!(!inspection.capabilities.can_update);
+    }
+
+    #[test]
+    fn read_only_large_files_use_metadata_revision_and_bounded_probe() {
+        let directory = workspace();
+        let mut pdf = b"%PDF-1.7\n".to_vec();
+        pdf.resize(MAX_FORMAT_PROBE_BYTES as usize + 1024, b'x');
+        std::fs::write(directory.path().join("large.pdf"), pdf).unwrap();
+        let inspection = inspect_resource(directory.path(), Path::new("large.pdf")).unwrap();
+        assert_eq!(inspection.probe_bytes, MAX_FORMAT_PROBE_BYTES);
+        assert!(inspection.revision.starts_with("metadata:"));
+        assert!(!inspection.capabilities.can_update);
     }
 
     #[cfg(unix)]

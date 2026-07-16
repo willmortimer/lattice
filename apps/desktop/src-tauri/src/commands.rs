@@ -212,6 +212,37 @@ pub fn apply_page_update(
         .ok_or_else(|| "page update did not produce a resulting revision".to_string())
 }
 
+/// Apply a bounded byte-oriented resource edit through the semantic command
+/// core. Binary payloads arrive as raw Tauri request bytes, so they never
+/// become JSON byte arrays on the command boundary.
+#[tauri::command]
+pub fn apply_resource_update(request: Request<'_>) -> Result<String, String> {
+    let content = match request.body() {
+        InvokeBody::Raw(bytes) => bytes.clone(),
+        InvokeBody::Json(_) => return Err("resource update requires a raw binary body".to_string()),
+    };
+    let root = request_header(&request, "x-lattice-root")?;
+    let rel_path = request_header(&request, "x-lattice-path")?;
+    let base_revision = request_header(&request, "x-lattice-base-revision")?;
+    let (canonical_root, _) = resolve_within_root(&root, &rel_path)?;
+    let mut engine = CommandEngine::open(&canonical_root).map_err(command_error_to_string)?;
+    let receipt = engine
+        .apply(Transaction::new(
+            format!("Update resource {rel_path}"),
+            vec![SemanticCommand::ResourceUpdate {
+                path: PathBuf::from(&rel_path),
+                content,
+                base_revision,
+            }],
+        ))
+        .map_err(command_error_to_string)?;
+    receipt
+        .outcomes
+        .first()
+        .and_then(|outcome| outcome.resulting_revision.clone())
+        .ok_or_else(|| "resource update did not produce a resulting revision".to_string())
+}
+
 /// Create a new page at `rel_path` with `content`. Used by the external-edit
 /// conflict envelope's "keep both" action to write a sibling copy of local
 /// edits (ADR 0028) without touching the page that already exists on disk.
@@ -686,6 +717,38 @@ mod tests {
         )
         .unwrap();
         assert_eq!(content, bytes);
+    }
+
+    #[test]
+    fn native_resource_commands_expose_inspection_and_text_windows() {
+        let dir = init_workspace();
+        std::fs::write(dir.path().join("Board.canvas"), br#"{"nodes":[]}"#).unwrap();
+        std::fs::write(dir.path().join("Note.txt"), "hello native\n").unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        let inspection = inspect_resource(root.clone(), "Board.canvas".into()).unwrap();
+        assert_eq!(
+            inspection.profile,
+            lattice_core::ResourceFormatProfile::JsonCanvas
+        );
+        let window = read_text_window(root, "Note.txt".into(), 0, 5).unwrap();
+        assert_eq!(window.content, "hello");
+    }
+
+    #[test]
+    fn native_resource_command_preserves_structured_read_errors() {
+        let dir = init_workspace();
+        std::fs::write(dir.path().join("blob.bin"), [0, 159, 146, 150]).unwrap();
+        let result = read_text_window(
+            dir.path().to_string_lossy().into_owned(),
+            "blob.bin".into(),
+            0,
+            4,
+        );
+        assert!(matches!(
+            result,
+            Err(lattice_core::ResourceRuntimeError::BinaryResource { .. })
+        ));
     }
 
     #[test]
