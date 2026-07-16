@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { KindMark, KIND_LABELS } from "./KindMark";
@@ -10,6 +10,7 @@ interface ResourceTreeProps {
   selectedPath: string | null;
   onSelect: (resource: Resource) => void;
   onContextMenu?: (resource: Resource) => void;
+  revealPath?: string | null;
 }
 
 const INDENT_BASE_PX = 9;
@@ -28,8 +29,20 @@ export function ResourceTree({
   selectedPath,
   onSelect,
   onContextMenu,
+  revealPath,
 }: ResourceTreeProps) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+
+  useEffect(() => {
+    if (!revealPath) return;
+    const parts = revealPath.replace(/\/$/, "").split("/");
+    const ancestors = parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join("/"));
+    setCollapsed((previous) => {
+      const next = new Set(previous);
+      ancestors.forEach((path) => next.delete(path));
+      return next;
+    });
+  }, [revealPath]);
 
   if (resources.length === 0) {
     return (

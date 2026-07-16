@@ -7,8 +7,8 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use lattice_commands::{Command as Semantic, CommandEngine, Transaction};
 use lattice_core::{
-    ensure_lattice_home, init_with_template, Diagnostic, Resource, Severity, Workspace,
-    WorkspaceTemplate,
+    effective_default_workspace, ensure_lattice_home, init_with_template, Diagnostic, Resource,
+    Severity, Workspace, WorkspaceTemplate,
 };
 use lattice_data::{parse_csv_file, CellValue, DataApp};
 use lattice_index::{Backlink, SearchHit, WorkspaceIndex};
@@ -493,7 +493,7 @@ fn cmd_home_ensure() -> Result<ExitCode> {
     println!("home: {}", home.root.display());
     println!("workspaces: {}", home.workspaces.display());
     println!("settings: {}", home.settings.display());
-    let default = home.default_workspace()?;
+    let default = effective_default_workspace(&home)?;
     if default.join("lattice.yaml").exists() {
         println!("default workspace: {}", default.display());
     }

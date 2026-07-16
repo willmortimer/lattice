@@ -6,9 +6,10 @@
   "type": "module",
   "scripts": {
     "compile-theme": "node ../../scripts/compile-theme.mjs",
-    "predev": "node ../../scripts/compile-theme.mjs",
+    "compile-templates": "node ../../scripts/compile-templates.mjs",
+    "predev": "pnpm compile-theme && pnpm compile-templates",
     "dev": "vite",
-    "prebuild": "node ../../scripts/compile-theme.mjs",
+    "prebuild": "pnpm compile-theme && pnpm compile-templates",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",

@@ -75,6 +75,24 @@
   padding: 0;
 }
 
+.ltui-checkbox {
+  display: grid;
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  place-items: center;
+  margin-top: 1px;
+  border: 1px solid var(--lt-border);
+  border-radius: 4px;
+  color: var(--lt-on-accent);
+  background: var(--lt-bg);
+}
+
+.ltui-checkbox[data-checked] {
+  border-color: var(--lt-accent);
+  background: var(--lt-accent);
+}
+
 .ltui-tooltip {
   z-index: 120;
   max-width: 220px;

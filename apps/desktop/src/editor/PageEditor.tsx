@@ -40,6 +40,8 @@ import {
 } from "./markdown";
 import { StaleRevisionError, type PageIO } from "./pageIO";
 import { type SaveState } from "./saveState";
+import { KindMark } from "../KindMark";
+import type { ResourceLinkTarget } from "../lib/resourceLinks";
 export { isUnsaved, saveIndicatorText, type SaveState } from "./saveState";
 
 /** How long the "Saved" indicator lingers before fading back to idle. */
@@ -108,8 +110,10 @@ interface PageEditorProps {
   onOpenWiki?: (target: string) => void;
   /** Create and open a canonical `.data` table package. */
   onCreateTable?: () => Promise<void> | void;
-  /** Workspace page targets offered after typing `[[`. */
-  wikiTargets?: string[];
+  /** Typed workspace resource targets offered after typing `[[`. */
+  wikiTargets?: ResourceLinkTarget[];
+  /** Native bounded catalog query used instead of hydrating all targets. */
+  onSearchWiki?: (query: string) => Promise<ResourceLinkTarget[]>;
   /** Import a pasted/dropped file through the semantic command boundary. */
   onImportAsset?: (file: File) => Promise<string>;
   autosaveDelayMs?: number;
@@ -145,6 +149,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     onOpenWiki,
     onCreateTable,
     wikiTargets = [],
+    onSearchWiki,
     onImportAsset,
     autosaveDelayMs = 800,
     spellcheck = true,
@@ -157,6 +162,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
   const initialDoc = useMemo(() => parseMarkdownToJSON(splitFrontmatter(raw).body), [raw]);
 
   const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
+  const [searchedWikiTargets, setSearchedWikiTargets] = useState<ResourceLinkTarget[]>([]);
   const [slashMenu, setSlashMenu] = useState<SlashMenuState | null>(null);
   const [slashIndex, setSlashIndex] = useState(0);
   const [wikiMenu, setWikiMenu] = useState<WikiMenuState | null>(null);
@@ -433,12 +439,31 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     );
   }, [slashMenu?.query]);
 
+  useEffect(() => {
+    if (!wikiMenu || !onSearchWiki) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void onSearchWiki(wikiMenu.query).then((targets) => {
+        if (!cancelled) setSearchedWikiTargets(targets);
+      });
+    }, 80);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [onSearchWiki, wikiMenu]);
+
   const filteredWikiTargets = useMemo(() => {
     const query = wikiMenu?.query.trim().toLowerCase() ?? "";
-    return wikiTargets
-      .filter((target) => !query || target.toLowerCase().includes(query))
+    return (onSearchWiki ? searchedWikiTargets : wikiTargets)
+      .filter(
+        (target) =>
+          !query ||
+          target.display.toLowerCase().includes(query) ||
+          target.canonical.toLowerCase().includes(query),
+      )
       .slice(0, 12);
-  }, [wikiMenu?.query, wikiTargets]);
+  }, [onSearchWiki, searchedWikiTargets, wikiMenu?.query, wikiTargets]);
 
   const runSlashCommand = useCallback(
     async (id: (typeof SLASH_COMMANDS)[number]["id"]) => {
@@ -488,7 +513,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
   );
 
   const insertWikiTarget = useCallback(
-    (target: string) => {
+    (target: ResourceLinkTarget) => {
       if (!wikiMenu) return;
       editor
         .chain()
@@ -496,8 +521,10 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
         .deleteRange({ from: wikiMenu.from, to: wikiMenu.to })
         .insertContent({
           type: "text",
-          text: target,
-          marks: [{ type: "link", attrs: { href: `wiki:${encodeURIComponent(target)}` } }],
+          text: target.canonical,
+          marks: [
+            { type: "link", attrs: { href: `wiki:${encodeURIComponent(target.canonical)}` } },
+          ],
         })
         .run();
       setWikiMenu(null);
@@ -785,13 +812,16 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
                 type="button"
                 role="option"
                 aria-selected={wikiIndex === index}
-                key={target}
+                key={target.path}
                 className={wikiIndex === index ? "slash-command-active" : ""}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => insertWikiTarget(target)}
               >
-                <strong>{target.split("/").pop()}</strong>
-                <span>{target}</span>
+                <strong>
+                  <KindMark kind={target.kind} size={13} />
+                  {target.display}
+                </strong>
+                <span>{target.canonical}</span>
               </button>
             ))
           )}

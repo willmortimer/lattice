@@ -7,9 +7,8 @@ import { ArrowUpRight, ExternalLink, FileText, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createNativePageIO } from "./editor/pageIO";
-import { listRecentWorkspaces } from "./lib/recents";
+import { loadProfile } from "./lib/profile";
 import { quickNotePath } from "./lib/timestamp";
-import { loadAppSettings } from "./settings/model";
 import {
   applyResolvedTheme,
   detectSystemAppearance,
@@ -36,12 +35,19 @@ export function QuickNoteApp() {
   const [loading, setLoading] = useState(false);
   const creatingRef = useRef(false);
   const revisionRef = useRef<string | null>(null);
+  const autosaveDelayRef = useRef(800);
   const saveTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
   const prepare = useCallback(async (requestedRoot?: string | null) => {
     if (creatingRef.current) return;
     if (page) return;
-    const root = requestedRoot ?? listRecentWorkspaces()[0]?.root ?? null;
+    const profile = await loadProfile();
+    autosaveDelayRef.current = profile.settings.desktop.editor.autosaveDelayMs;
+    const root =
+      requestedRoot ??
+      profile.recents[0]?.root ??
+      profile.effectiveDefaultWorkspace ??
+      null;
     if (!root) {
       setError("Open a workspace in Lattice before using Quick Note.");
       return;
@@ -51,9 +57,11 @@ export function QuickNoteApp() {
     setLoading(true);
     setError(null);
     try {
-      const workspace = await invoke<{ title: string }>("open_workspace", { path: root });
-      const settings = loadAppSettings();
-      const path = quickNotePath(new Date(), settings.files.quickNoteDirectory);
+      const workspace = await invoke<{
+        title: string;
+        defaults: { quickNoteDirectory: string };
+      }>("open_workspace", { path: root });
+      const path = quickNotePath(new Date(), workspace.defaults.quickNoteDirectory);
       await invoke("create_page", { root, relPath: path, content: "" });
       const io = createNativePageIO(root, path);
       const loaded = await io.load();
@@ -104,7 +112,7 @@ export function QuickNoteApp() {
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(
       () => void saveDraft(value),
-      loadAppSettings().editor.autosaveDelayMs,
+      autosaveDelayRef.current,
     );
   }
 

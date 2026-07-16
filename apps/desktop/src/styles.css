@@ -1097,6 +1097,11 @@ html[data-platform="macos"] .empty-state {
 }
 
 .modal-panel-gallery {
+  position: fixed;
+  z-index: 81;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   width: min(760px, 100%);
   max-height: min(92vh, 780px);
 }
@@ -1202,6 +1207,9 @@ html[data-platform="macos"] .empty-state {
   color: var(--lt-text-soft);
   background: var(--lt-bg-raise);
   cursor: pointer;
+  text-align: left;
+  font: inherit;
+  outline: none;
 }
 
 .template-card:hover {
@@ -1209,18 +1217,24 @@ html[data-platform="macos"] .empty-state {
   background: var(--lt-hover);
 }
 
-.template-card:focus-within,
-.template-card-selected {
+.template-card:focus-visible,
+.template-card[data-checked] {
   border-color: var(--lt-accent-deep);
   background: var(--lt-accent-wash);
   box-shadow: inset 3px 0 0 var(--lt-accent);
 }
 
-.template-card-radio {
+.template-radio-indicator {
   position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
+  top: 13px;
+  right: 13px;
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--lt-on-accent);
+  background: var(--lt-accent);
 }
 
 .template-card-heading {
@@ -1228,6 +1242,7 @@ html[data-platform="macos"] .empty-state {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  padding-right: 24px;
 }
 
 .template-card-heading > span:first-child {
@@ -1268,21 +1283,24 @@ html[data-platform="macos"] .empty-state {
   line-height: 1.45;
 }
 
-.template-card-preview {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
+.template-mini-tree {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 12px;
   margin-top: auto;
 }
 
-.template-card-preview code {
-  padding: 3px 5px;
-  border: 1px solid var(--lt-line);
-  border-radius: var(--lt-radius-sm);
+.template-mini-tree > span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
   color: var(--lt-faint);
-  background: var(--lt-panel);
   font-family: var(--lt-font-mono);
   font-size: 9.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .modal-gallery-note {
@@ -1299,6 +1317,38 @@ html[data-platform="macos"] .empty-state {
   font-size: 13px;
   color: var(--lt-text-soft);
   cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: var(--lt-radius-sm);
+  padding: 9px;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+}
+
+.modal-radio[data-checked] {
+  border-color: var(--lt-accent-deep);
+  background: var(--lt-accent-wash);
+}
+
+.modal-radio > span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.modal-radio small {
+  color: var(--lt-muted);
+  font-size: 11.5px;
+}
+
+.modal-radio-dot {
+  width: 9px;
+  height: 9px;
+  margin-top: 4px;
+  border: 3px solid var(--lt-panel);
+  border-radius: 50%;
+  background: var(--lt-accent);
+  box-shadow: 0 0 0 1px var(--lt-accent);
 }
 
 .modal-radio strong {
@@ -1328,6 +1378,50 @@ html[data-platform="macos"] .empty-state {
   flex-direction: column;
   gap: 8px;
   margin-left: 22px;
+}
+
+.sample-workspace-action,
+.workspace-destination-preview {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 11px 12px;
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius-sm);
+  color: var(--lt-text-soft);
+  background: var(--lt-bg-raise);
+  text-align: left;
+}
+
+.sample-workspace-action {
+  cursor: pointer;
+}
+
+.sample-workspace-action:hover {
+  border-color: var(--lt-line-strong);
+  background: var(--lt-hover);
+}
+
+.sample-workspace-action > span,
+.workspace-destination-preview > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sample-workspace-action small,
+.workspace-destination-preview small {
+  color: var(--lt-muted);
+}
+
+.workspace-destination-preview code {
+  overflow: hidden;
+  color: var(--lt-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .modal-default-option {
@@ -1365,6 +1459,50 @@ html[data-platform="macos"] .empty-state {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 8px;
+}
+
+.link-picker-panel h2 {
+  margin-top: 0;
+}
+
+.link-picker-panel {
+  position: fixed;
+  z-index: 81;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.link-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.link-picker-list button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px;
+  border: 0;
+  border-radius: var(--lt-radius-sm);
+  color: var(--lt-text-soft);
+  background: transparent;
+  text-align: left;
+}
+
+.link-picker-list button:hover,
+.link-picker-list button:focus-visible {
+  background: var(--lt-hover);
+}
+
+.link-picker-list span {
+  display: flex;
+  flex-direction: column;
+}
+
+.link-picker-list small {
+  color: var(--lt-muted);
 }
 
 @media (max-width: 680px) {

@@ -1,156 +1,188 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-const SETTINGS_KEY = "lattice.desktop.settings.v1";
-const SETTINGS_EVENT = "lattice-settings-changed";
+import {
+  defaultDesktopSettings,
+  defaultWorkspaceStartupSettings,
+  loadProfile,
+  clearRecents as clearProfileRecents,
+  rememberWorkspace as persistRecentWorkspace,
+  removeRecent as removeProfileRecent,
+  saveDesktopSettings,
+  saveWorkspaceStartupSettings,
+  type DesktopSettings,
+  type ProfileSnapshot,
+  type WorkspaceStartupSettings,
+} from "../lib/profile";
+import type { WorkspaceSnapshot } from "../types";
 
-export interface AppSettings {
-  editor: {
-    autosaveDelayMs: number;
-    spellcheck: boolean;
-    slashCommands: boolean;
-    showFrontmatter: boolean;
-    linkClickBehavior: "navigate" | "inspect";
-  };
-  files: {
-    restoreSession: boolean;
-    reopenLastWorkspace: boolean;
-    quickNoteDirectory: string;
-    confirmCloseWithUnsavedChanges: boolean;
-  };
-  keybindings: {
-    search: string;
-    commandPalette: string;
-    quickNote: string;
-    newPage: string;
-    settings: string;
-  };
-  data: {
-    rowHeight: "compact" | "comfortable" | "spacious";
-    pageSize: 100 | 250 | 500;
-    showRowNumbers: boolean;
-    zebraRows: boolean;
-    defaultSortDirection: "asc" | "desc";
-  };
-  capabilities: {
-    search: boolean;
-    quickCapture: boolean;
-    canvas: boolean;
-    dataApps: boolean;
-    externalOpen: boolean;
-  };
-  performance: {
-    maxOpenTabs: number;
-    suspendInactiveResources: boolean;
-    reducedMotion: "system" | "always" | "never";
-    rendererCache: "conservative" | "balanced" | "aggressive";
-  };
-  diagnostics: {
-    nativeContextMenus: boolean;
-    commandTimings: boolean;
-    verboseErrors: boolean;
-    showRendererStats: boolean;
-  };
-}
+export type AppSettings = DesktopSettings;
+export const DEFAULT_SETTINGS = defaultDesktopSettings();
 
-export const DEFAULT_SETTINGS: AppSettings = {
-  editor: {
-    autosaveDelayMs: 800,
-    spellcheck: true,
-    slashCommands: true,
-    showFrontmatter: true,
-    linkClickBehavior: "navigate",
-  },
-  files: {
-    restoreSession: true,
-    reopenLastWorkspace: true,
-    quickNoteDirectory: "Inbox",
-    confirmCloseWithUnsavedChanges: true,
-  },
-  keybindings: {
-    search: "Mod+K",
-    commandPalette: "Mod+P",
-    quickNote: "Mod+N",
-    newPage: "Mod+Shift+N",
-    settings: "Mod+,",
-  },
-  data: {
-    rowHeight: "comfortable",
-    pageSize: 500,
-    showRowNumbers: true,
-    zebraRows: false,
-    defaultSortDirection: "asc",
-  },
-  capabilities: {
-    search: true,
-    quickCapture: true,
-    canvas: true,
-    dataApps: true,
-    externalOpen: true,
-  },
-  performance: {
-    maxOpenTabs: 12,
-    suspendInactiveResources: true,
-    reducedMotion: "system",
-    rendererCache: "balanced",
-  },
-  diagnostics: {
-    nativeContextMenus: true,
-    commandTimings: false,
-    verboseErrors: false,
-    showRendererStats: false,
-  },
-};
-
-function mergeSettings(input: Partial<AppSettings> | null | undefined): AppSettings {
+function emptyProfile(): ProfileSnapshot {
   return {
-    editor: { ...DEFAULT_SETTINGS.editor, ...input?.editor },
-    files: { ...DEFAULT_SETTINGS.files, ...input?.files },
-    keybindings: { ...DEFAULT_SETTINGS.keybindings, ...input?.keybindings },
-    data: { ...DEFAULT_SETTINGS.data, ...input?.data },
-    capabilities: { ...DEFAULT_SETTINGS.capabilities, ...input?.capabilities },
-    performance: { ...DEFAULT_SETTINGS.performance, ...input?.performance },
-    diagnostics: { ...DEFAULT_SETTINGS.diagnostics, ...input?.diagnostics },
+    settings: {
+      desktop: defaultDesktopSettings(),
+      workspaces: defaultWorkspaceStartupSettings(),
+      desktopRevision: null,
+      workspacesRevision: null,
+      diagnostics: [],
+    },
+    recents: [],
+    sidebarWidth: null,
+    effectiveDefaultWorkspace: null,
+    hasValidConfiguredDefault: false,
   };
-}
-
-export function loadAppSettings(): AppSettings {
-  try {
-    return mergeSettings(JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "null"));
-  } catch {
-    return mergeSettings(null);
-  }
-}
-
-export function saveAppSettings(settings: AppSettings): void {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  window.dispatchEvent(new CustomEvent(SETTINGS_EVENT, { detail: settings }));
 }
 
 export function useAppSettings() {
-  const [settings, setSettingsState] = useState<AppSettings>(() => loadAppSettings());
+  const [profile, setProfile] = useState<ProfileSnapshot>(emptyProfile);
+  const [ready, setReady] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const profileRef = useRef(profile);
+  const desktopSaveTimer = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const startupSaveTimer = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  profileRef.current = profile;
 
   useEffect(() => {
-    const onChange = (event: Event) => {
-      setSettingsState(mergeSettings((event as CustomEvent<AppSettings>).detail));
+    let cancelled = false;
+    void loadProfile()
+      .then((next) => {
+        if (!cancelled) setProfile(next);
+      })
+      .catch((error) => {
+        if (!cancelled) setSaveError(String(error));
+      })
+      .finally(() => {
+        if (!cancelled) setReady(true);
+      });
+    return () => {
+      cancelled = true;
+      if (desktopSaveTimer.current) window.clearTimeout(desktopSaveTimer.current);
+      if (startupSaveTimer.current) window.clearTimeout(startupSaveTimer.current);
     };
-    window.addEventListener(SETTINGS_EVENT, onChange);
-    return () => window.removeEventListener(SETTINGS_EVENT, onChange);
   }, []);
 
   const setSettings = useCallback(
     (next: AppSettings | ((current: AppSettings) => AppSettings)) => {
-      setSettingsState((current) => {
-        const resolved = typeof next === "function" ? next(current) : next;
-        saveAppSettings(resolved);
-        return resolved;
+      setProfile((current) => {
+        const resolved =
+          typeof next === "function" ? next(current.settings.desktop) : next;
+        const optimistic = {
+          ...current,
+          settings: { ...current.settings, desktop: resolved },
+        };
+        if (desktopSaveTimer.current) window.clearTimeout(desktopSaveTimer.current);
+        desktopSaveTimer.current = window.setTimeout(() => {
+          const base = profileRef.current;
+          const value = base.settings.desktop;
+          void saveDesktopSettings(base, value)
+            .then((saved) => {
+              setProfile((latest) =>
+                latest.settings.desktop === value
+                  ? saved
+                  : {
+                      ...saved,
+                      settings: { ...saved.settings, desktop: latest.settings.desktop },
+                    },
+              );
+            })
+            .catch((error) => setSaveError(String(error)));
+        }, 180);
+        return optimistic;
       });
     },
     [],
   );
 
-  const resetSettings = useCallback(() => setSettings(mergeSettings(null)), [setSettings]);
+  const setStartup = useCallback(
+    (
+      next:
+        | WorkspaceStartupSettings
+        | ((current: WorkspaceStartupSettings) => WorkspaceStartupSettings),
+    ) => {
+      setProfile((current) => {
+        const resolved =
+          typeof next === "function" ? next(current.settings.workspaces) : next;
+        const optimistic = {
+          ...current,
+          settings: { ...current.settings, workspaces: resolved },
+        };
+        if (startupSaveTimer.current) window.clearTimeout(startupSaveTimer.current);
+        startupSaveTimer.current = window.setTimeout(() => {
+          const base = profileRef.current;
+          const value = base.settings.workspaces;
+          void saveWorkspaceStartupSettings(base, value)
+            .then((saved) => {
+              setProfile((latest) =>
+                latest.settings.workspaces === value
+                  ? saved
+                  : {
+                      ...saved,
+                      settings: { ...saved.settings, workspaces: latest.settings.workspaces },
+                    },
+              );
+            })
+            .catch((error) => setSaveError(String(error)));
+        }, 180);
+        return optimistic;
+      });
+    },
+    [],
+  );
 
-  return { settings, setSettings, resetSettings };
+  const rememberWorkspace = useCallback((workspace: WorkspaceSnapshot) => {
+    setProfile((current) => {
+      void persistRecentWorkspace(current, workspace)
+        .then(setProfile)
+        .catch((error) => setSaveError(String(error)));
+      return current;
+    });
+  }, []);
+
+  const clearRecents = useCallback(() => {
+    setProfile((current) => {
+      void clearProfileRecents(current)
+        .then(setProfile)
+        .catch((error) => setSaveError(String(error)));
+      return current;
+    });
+  }, []);
+
+  const removeRecent = useCallback((root: string) => {
+    setProfile((current) => {
+      void removeProfileRecent(current, root)
+        .then(setProfile)
+        .catch((error) => setSaveError(String(error)));
+      return current;
+    });
+  }, []);
+
+  const resetSettings = useCallback(() => {
+    setSettings(defaultDesktopSettings());
+    setStartup(defaultWorkspaceStartupSettings());
+  }, [setSettings, setStartup]);
+  const refreshProfile = useCallback(() => {
+    void loadProfile().then(setProfile).catch((error) => setSaveError(String(error)));
+  }, []);
+
+  return {
+    profile,
+    ready,
+    settings: profile.settings.desktop,
+    startup: profile.settings.workspaces,
+    recents: profile.recents,
+    sidebarWidth: profile.sidebarWidth,
+    diagnostics: profile.settings.diagnostics,
+    saveError,
+    clearSaveError: () => setSaveError(null),
+    setSettings,
+    setStartup,
+    rememberWorkspace,
+    clearRecents,
+    removeRecent,
+    resetSettings,
+    refreshProfile,
+  };
 }
 
 export function matchesKeybinding(event: KeyboardEvent, binding: string): boolean {
