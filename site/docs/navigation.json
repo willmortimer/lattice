@@ -1,0 +1,26 @@
+[
+  {
+    "label": "Start here",
+    "items": [
+      { "label": "Overview", "file": "overview.md" },
+      { "label": "Getting started", "file": "getting-started.md" },
+      { "label": "Current product", "file": "current-product.md" }
+    ]
+  },
+  {
+    "label": "Understand Lattice",
+    "items": [
+      { "label": "Core concepts", "file": "concepts.md" },
+      { "label": "Open formats", "file": "formats.md" },
+      { "label": "Architecture", "file": "architecture.md" },
+      { "label": "Roadmap", "file": "roadmap.md" }
+    ]
+  },
+  {
+    "label": "Project",
+    "collapsed": true,
+    "items": [
+      { "label": "Contributing", "file": "contributing.md" }
+    ]
+  }
+]

@@ -1,0 +1,81 @@
+<svg
+  class="open-stack"
+  viewBox="0 0 620 330"
+  fill="none"
+  role="img"
+  aria-label="Open file formats composed through one command core"
+>
+  <g class="stack-links" stroke="var(--l-line-strong)">
+    <path d="M115 82L310 165L505 82" />
+    <path d="M115 248L310 165L505 248" />
+    <path d="M310 40V165V290" />
+  </g>
+  <g class="stack-pulse" fill="var(--l-amber-bright)">
+    <circle r="3" style="offset-path:path('M115 82L310 165')" />
+    <circle r="3" style="offset-path:path('M505 248L310 165')" />
+    <circle r="3" style="offset-path:path('M310 40V165')" />
+  </g>
+
+  {
+    [
+      [115, 82, 'Page', '.md'],
+      [310, 40, 'Notebook', '.ipynb'],
+      [505, 82, 'Canvas', '.canvas'],
+      [115, 248, 'Table', 'SQLite'],
+      [310, 290, 'Dataset', 'Parquet'],
+      [505, 248, 'File', 'native'],
+    ].map(([x, y, title, format]) => (
+      <g class="stack-resource" transform={`translate(${Number(x) - 58} ${Number(y) - 29})`}>
+        <rect width="116" height="58" rx="8" />
+        <circle cx="17" cy="18" r="3" />
+        <text class="stack-title" x="29" y="22">{title}</text>
+        <text class="stack-format" x="17" y="42">{format}</text>
+      </g>
+    ))
+  }
+
+  <g class="stack-core" transform="translate(250 128)">
+    <path d="M60 0L120 37L60 74L0 37Z" />
+    <circle cx="60" cy="37" r="5" />
+    <text x="60" y="98">COMMAND CORE</text>
+  </g>
+</svg>
+
+<style>
+  .open-stack { width: 100%; height: auto; }
+  .stack-links path { stroke-width: 1.2; }
+  .stack-resource rect {
+    fill: var(--l-bg-2);
+    stroke: var(--l-line-strong);
+  }
+  .stack-resource circle,
+  .stack-core circle { fill: var(--l-amber); }
+  .stack-title {
+    fill: var(--l-text);
+    font: 600 12px var(--l-font-body);
+  }
+  .stack-format,
+  .stack-core text {
+    fill: var(--l-faint);
+    font: 10px var(--l-font-mono);
+    letter-spacing: .06em;
+  }
+  .stack-core path {
+    fill: var(--l-amber-wash);
+    stroke: var(--l-amber);
+    stroke-width: 1.4;
+  }
+  .stack-core text { text-anchor: middle; }
+  .stack-pulse circle {
+    opacity: 0;
+    animation: stack-travel 4s ease-in-out infinite;
+  }
+  .stack-pulse circle:nth-child(2) { animation-delay: 1.25s; }
+  .stack-pulse circle:nth-child(3) { animation-delay: 2.35s; }
+  @keyframes stack-travel {
+    0% { offset-distance: 0; opacity: 0; }
+    12% { opacity: 1; }
+    55% { offset-distance: 100%; opacity: 0; }
+    100% { offset-distance: 100%; opacity: 0; }
+  }
+</style>

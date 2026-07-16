@@ -449,39 +449,133 @@
 }
 
 /* ============================================================================
-   Comparison / thesis row
+   Current product status
    ========================================================================== */
 
-.thesis {
+.product-status {
+  background: color-mix(in oklch, var(--l-panel) 42%, transparent);
+}
+.status-layout {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1px;
-  background: var(--l-line);
+  grid-template-columns: .95fr 1.05fr;
+  gap: clamp(28px, 6vw, 72px);
+  align-items: start;
+}
+.status-layout h2 {
+  font-size: clamp(28px, 4vw, 43px);
+  margin-bottom: 16px;
+}
+.status-layout > div > p:last-child {
+  color: var(--l-text-soft);
+  margin: 0;
+}
+.status-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.status-list li {
+  position: relative;
+  padding: 14px 12px 14px 36px;
+  border-bottom: 1px solid var(--l-line);
+  color: var(--l-text-soft);
+  font-size: 14.5px;
+}
+.status-list li::before {
+  content: '';
+  position: absolute;
+  left: 9px;
+  top: 21px;
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--l-amber);
+  transform: rotate(45deg);
+  box-shadow: 0 0 10px var(--l-amber-glow);
+}
+@media (max-width: 780px) {
+  .status-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================================
+   Desktop theme gallery
+   ========================================================================== */
+
+.theme-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+.theme-preview {
+  padding: 12px;
   border: 1px solid var(--l-border);
-  border-radius: var(--l-radius);
+  border-radius: var(--l-radius-sm);
+  background: var(--l-panel);
+  transition: transform .18s ease, border-color .18s ease;
+}
+.theme-preview:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in oklch, var(--theme-accent) 55%, transparent);
+}
+.theme-mini-shell {
+  display: grid;
+  height: 136px;
+  grid-template-columns: 15px 55px 1fr;
   overflow: hidden;
+  margin-bottom: 11px;
+  border: 1px solid color-mix(in oklch, white 13%, transparent);
+  border-radius: 8px;
+  background: var(--theme-ground);
+  box-shadow: 0 18px 35px -24px #000;
 }
-.thesis .cell {
-  background: var(--l-bg-2);
-  padding: 26px 22px;
+.theme-mini-rail {
+  background:
+    radial-gradient(circle at 50% 18px, var(--theme-accent) 2px, transparent 3px),
+    linear-gradient(color-mix(in oklch, var(--theme-panel) 60%, var(--theme-ground)), color-mix(in oklch, var(--theme-panel) 60%, var(--theme-ground)));
+  border-right: 1px solid color-mix(in oklch, white 9%, transparent);
 }
-.thesis .cell .who {
-  font-family: var(--l-font-mono);
-  font-size: 12px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--l-faint);
-  margin: 0 0 8px;
+.theme-mini-sidebar {
+  background:
+    linear-gradient(var(--theme-accent), var(--theme-accent)) 8px 18px / 30px 2px no-repeat,
+    repeating-linear-gradient(to bottom, transparent 0 15px, color-mix(in oklch, white 11%, transparent) 15px 16px);
+  border-right: 1px solid color-mix(in oklch, white 9%, transparent);
 }
-.thesis .cell .what {
-  font-family: var(--l-font-display);
-  font-size: 20px;
+.theme-mini-page {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 30px 18px;
+  background:
+    radial-gradient(circle at 70% 5%, color-mix(in oklch, var(--theme-accent) 13%, transparent), transparent 45%),
+    var(--theme-ground);
+}
+.theme-mini-page i,
+.theme-mini-page b {
+  display: block;
+  height: 3px;
+  border-radius: 2px;
+  background: color-mix(in oklch, white 45%, var(--theme-ground));
+}
+.theme-preview-light .theme-mini-page i,
+.theme-preview-light .theme-mini-page b {
+  background: color-mix(in oklch, black 35%, var(--theme-ground));
+}
+.theme-mini-page i:nth-child(1) { width: 66%; height: 7px; background: var(--theme-accent); }
+.theme-mini-page i:nth-child(2) { width: 92%; }
+.theme-mini-page i:nth-child(3) { width: 78%; }
+.theme-mini-page b { width: 52%; }
+.theme-preview > strong {
+  display: block;
   color: var(--l-text);
-  letter-spacing: -0.01em;
+  font-size: 14px;
 }
-.thesis .cell .what b {
-  color: var(--l-amber);
-  font-weight: 600;
+.theme-preview > code {
+  color: var(--l-faint);
+  font-family: var(--l-font-mono);
+  font-size: 10.5px;
 }
 
 /* ============================================================================
@@ -529,6 +623,8 @@
 }
 .phase.done .dot {
   background: var(--l-amber);
+}
+.phase.current .dot {
   animation: phasepulse 3.2s ease-in-out infinite;
 }
 @keyframes phasepulse {

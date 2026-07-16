@@ -4,6 +4,7 @@ import HeroLattice from '../components/HeroLattice.astro';
 import DirectoryTree from '../components/DirectoryTree.astro';
 import CommandCore from '../components/CommandCore.astro';
 import DataChart from '../components/DataChart.astro';
+import OpenNativeStack from '../components/OpenNativeStack.astro';
 
 const promises = [
   {
@@ -38,18 +39,17 @@ const promises = [
   },
 ];
 
-const thesis = [
-  { who: 'Obsidian', what: "files" },
-  { who: 'OneNote', what: 'canvas' },
-  { who: 'Notion', what: 'polish' },
-  { who: 'Airtable', what: 'data model' },
-  { who: 'Jupyter', what: 'compute' },
-  { who: 'Power BI', what: 'dashboards' },
+const shipped = [
+  'Native Tauri workspace shell with open-directory workflows',
+  'Markdown page editor with links, backlinks, embeds, autosave, and conflict handling',
+  'Resource tree, search, command palette, tabs, inspector, and quick capture',
+  'Basic JSON Canvas viewing and SQLite-backed data applications',
+  'Semantic command history, undo, external-edit reconciliation, and a headless CLI',
 ];
 
 const phases = [
-  { n: 'Phase 0', title: 'Specifications & headless core', body: 'Manifests, command + transaction model, permissions, Rust storage, CLI.', current: true },
-  { n: 'Phase 1', title: 'Fast local notebook', body: 'Tauri shell, editor, links, backlinks, basic canvas, external-edit reconciliation.' },
+  { n: 'Phase 0', title: 'Specifications & headless core', body: 'Manifests, command + transaction model, permissions, Rust storage, CLI.', done: true },
+  { n: 'Phase 1', title: 'Fast local notebook', body: 'Tauri shell, editor, links, backlinks, basic canvas, external-edit reconciliation.', current: true },
   { n: 'Phase 2', title: 'Data applications', body: 'SQLite, typed fields and relations, grid, board/list/gallery/calendar/form views.' },
   { n: 'Phase 3', title: 'Analytical data', body: 'Native DuckDB, Parquet datasets, Arrow transport, charts and dashboards.' },
   { n: 'Phase 4', title: 'Programmable workspace', body: 'Local HTTP API, MCP server, proposed transactions, Python, Jupyter, artifacts.' },
@@ -60,6 +60,15 @@ const phases = [
   { n: 'Phase 9', title: 'Sync & collaboration', body: 'Operation outbox, Rust sync server, text/canvas collaboration, team permissions.' },
   { n: 'Phase 10', title: 'Mobile & native ink', body: 'iPad reader/editor, PencilKit overlay, Lattice Ink, handwriting search.' },
 ];
+
+const themes = [
+  { name: 'Slate', id: 'slate', ground: '#0a0d13', panel: '#131a29', accent: '#f5a623' },
+  { name: 'Carbon', id: 'carbon', ground: '#090a0c', panel: '#171a1e', accent: '#ff7a45' },
+  { name: 'Fjord', id: 'fjord', ground: '#071217', panel: '#10252d', accent: '#42d6bd' },
+  { name: 'Ultraviolet', id: 'ultraviolet', ground: '#0d0916', panel: '#1d1730', accent: '#b08cff' },
+  { name: 'Blueprint', id: 'blueprint', ground: '#07182b', panel: '#102b49', accent: '#ffc857' },
+  { name: 'Vellum', id: 'vellum', ground: '#f3ecdc', panel: '#fbf7ed', accent: '#9f3f35', light: true },
+];
 ---
 
 <Layout>
@@ -68,18 +77,18 @@ const phases = [
     <div class="wrap">
       <div class="hero-grid">
         <div class="hero-copy">
-          <p class="eyebrow">The open information studio</p>
+          <p class="eyebrow">Local-first desktop workspace · active development</p>
           <h1>
             One workspace for<br />everything, kept as<br /><span class="accent">plain files.</span>
           </h1>
           <p class="lede">
-            Lattice is a fast, local-first, open-native workspace for documents, relational data
-            apps, analytical datasets, notebooks, canvases, ink, dashboards, and inspectable
-            automations — all in a real directory, driven by one command core.
+            Lattice is a fast, local-first desktop workspace for pages, canvases, tables, and
+            ordinary files. Canonical content stays in a real directory while one Rust command
+            core keeps app edits consistent, inspectable, and reversible.
           </p>
           <div class="hero-actions">
-            <a class="btn btn-primary" href="/docs/">Read the docs</a>
-            <a class="btn btn-ghost" href="/#directory">See how it works</a>
+            <a class="btn btn-primary" href="/docs/">Get oriented</a>
+            <a class="btn btn-ghost" href="https://github.com/willmortimer/lattice">View the source</a>
           </div>
           <div class="hero-meta">
             <span class="path">lattice.yaml</span>
@@ -91,6 +100,26 @@ const phases = [
         <div class="hero-figure">
           <HeroLattice />
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== CURRENT PRODUCT ===================== -->
+  <section class="section product-status" id="status">
+    <div class="wrap">
+      <div class="status-layout reveal">
+        <div>
+          <p class="eyebrow">What exists today</p>
+          <h2>A working local notebook shell, not a finished everything-app.</h2>
+          <p>
+            Phase 0 is complete and Phase 1 is underway. The current build focuses on the native
+            filesystem, semantic mutation path, fast page workflows, honest external edits, and
+            the shell needed to grow into richer data and compute surfaces.
+          </p>
+        </div>
+        <ul class="status-list">
+          {shipped.map((item) => <li>{item}</li>)}
+        </ul>
       </div>
     </div>
   </section>
@@ -233,28 +262,61 @@ const phases = [
     </div>
   </section>
 
-  <!-- ===================== THESIS ===================== -->
+  <!-- ===================== COMPOSITION ===================== -->
   <section class="section" id="thesis">
     <div class="wrap">
+      <div class="feature reverse">
+        <div class="feature-body reveal">
+          <p class="eyebrow">Open-native composition</p>
+          <h3>One workspace vocabulary, without flattening every resource into a block.</h3>
+          <p>
+            Page, Canvas, Table, Notebook, and File are understandable entry points. Each keeps an
+            appropriate open format and specialized renderer, while shared commands, links,
+            inspection, history, and permissions make the workspace feel coherent.
+          </p>
+          <ul class="feature-list">
+            <li>React coordinates the shell; specialized renderers own performance-critical loops.</li>
+            <li>Rust owns canonical resource state, validation, storage, search, and commands.</li>
+            <li>Capabilities appear contextually instead of crowding the primary interface.</li>
+          </ul>
+        </div>
+        <div class="figure reveal">
+          <OpenNativeStack />
+          <p class="figure-caption">Different formats · shared command and inspection surfaces</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== THEMES ===================== -->
+  <section class="section" id="themes">
+    <div class="wrap">
       <div class="section-head reveal">
-        <p class="eyebrow">The missing intersection</p>
-        <h2>The product thesis, in one row.</h2>
+        <p class="eyebrow">Desktop themes</p>
+        <h2>Semantic color systems, not component-by-component skins.</h2>
         <p>
-          Not another block editor with more blocks. Lattice occupies the intersection that no
-          single tool covers today.
+          Built-in YAML themes resolve into the same compact set of surface, text, line, signal,
+          danger, type, and geometry roles. The gallery previews the Tauri app themes; the site
+          itself stays on Lattice Slate.
         </p>
       </div>
-      <div class="thesis reveal">
-        {
-          thesis.map((t) => (
-            <div class="cell">
-              <p class="who">{t.who}</p>
-              <p class="what">
-                <b>{t.what}</b>
-              </p>
+      <div class="theme-gallery reveal">
+        {themes.map((theme) => (
+          <article
+            class={`theme-preview ${theme.light ? 'theme-preview-light' : ''}`}
+            style={`--theme-ground:${theme.ground};--theme-panel:${theme.panel};--theme-accent:${theme.accent}`}
+          >
+            <div class="theme-mini-shell">
+              <span class="theme-mini-rail"></span>
+              <span class="theme-mini-sidebar"></span>
+              <span class="theme-mini-page">
+                <i></i><i></i><i></i><b></b>
+              </span>
             </div>
-          ))
-        }
+            <strong>Lattice {theme.name}</strong>
+            <code>lattice-{theme.id}</code>
+          </article>
+        ))}
       </div>
     </div>
   </section>
@@ -274,7 +336,7 @@ const phases = [
         <div class="roadmap">
           {
             phases.map((p) => (
-              <div class={`phase ${p.current ? 'done' : ''}`}>
+              <div class={`phase ${p.done ? 'done' : ''} ${p.current ? 'current' : ''}`}>
                 <span class="dot" />
                 <p class="pnum">{p.n}</p>
                 <h4>{p.title}</h4>
@@ -291,15 +353,15 @@ const phases = [
   <section class="section" id="cta">
     <div class="wrap">
       <div class="cta-band reveal">
-        <p class="eyebrow" style="justify-content:center;">Specification-stage · open by design</p>
-        <h2>Read the architecture behind Lattice.</h2>
+        <p class="eyebrow" style="justify-content:center;">Open source · early native build</p>
+        <h2>Use the public guide, or inspect the implementation.</h2>
         <p>
-          Thirty-eight architecture documents and a full set of decision records describe the
-          formats, command model, data engine, and roadmap in depth.
+          The public docs now stay concise and product-facing. The repository retains the full
+          architecture corpus, decision records, formats, performance contracts, and roadmap.
         </p>
         <div class="cta-actions">
-          <a class="btn btn-primary" href="/docs/">Open the documentation</a>
-          <a class="btn btn-ghost" href="/docs/decisions/">Browse decisions</a>
+          <a class="btn btn-primary" href="/docs/">Read the guide</a>
+          <a class="btn btn-ghost" href="https://github.com/willmortimer/lattice/tree/main/docs">Architecture on GitHub</a>
         </div>
       </div>
     </div>

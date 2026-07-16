@@ -11,7 +11,7 @@
     "predev": "node ../scripts/compile-theme.mjs && node scripts/sync-docs.mjs",
     "dev": "astro dev",
     "prebuild": "node ../scripts/compile-theme.mjs && node scripts/sync-docs.mjs",
-    "build": "node ../scripts/compile-theme.mjs && node scripts/sync-docs.mjs && astro build",
+    "build": "astro build",
     "preview": "astro preview",
     "astro": "astro"
   },

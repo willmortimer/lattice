@@ -38,7 +38,7 @@ export default defineConfig({
       // (light/dark toggle removed via disableThemeSelector below is not a real
       // option; we instead pin defaultColorScheme through CSS + head.)
       social: [
-        { icon: 'github', label: 'GitHub', href: 'https://github.com' },
+        { icon: 'github', label: 'GitHub', href: 'https://github.com/willmortimer/lattice' },
       ],
       sidebar,
       components: {

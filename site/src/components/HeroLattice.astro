@@ -1,210 +1,169 @@
 ---
 /**
- * Animated hero lattice: a fine grid whose node intersections light up and
- * connect. Pure CSS animation (no SMIL, no JS) so the global
- * prefers-reduced-motion rule in theme.css neutralises all motion.
+ * The hero is the brand algorithm expanded into a small 3D lattice.
+ * Geometry is derived from the same 30° axonometric projection used by
+ * generate-mark.mjs; only scale, subdivision, and signal routes differ.
  */
-const cols = 7;
-const rows = 5;
-const gap = 76;
-const ox = 44;
-const oy = 44;
+const tilt = Math.PI / 6;
+const ax = Math.cos(tilt);
+const ay = Math.sin(tilt);
+const count = 4;
+const scale = 68;
+const cx = 330;
+const cy = 230;
 
-const nodes = [];
-for (let r = 0; r < rows; r++) {
-  for (let c = 0; c < cols; c++) {
-    nodes.push({ x: ox + c * gap, y: oy + r * gap, r, c });
+const project = (x, y, z) => ({
+  x: cx + (x - z) * ax * scale,
+  y: cy + ((x + z) * ay - y) * scale,
+  depth: x + y + z,
+  key: `${x}:${y}:${z}`,
+});
+
+const points = [];
+for (let x = 0; x < count; x++) {
+  for (let y = 0; y < count; y++) {
+    for (let z = 0; z < count; z++) points.push(project(x, y, z));
   }
 }
-// A few "active" nodes that glow brighter, and connecting paths between them.
-// Each entry is [row, col] within rows (0..4) and cols (0..6).
-const active = [
-  [1, 1],
-  [0, 3],
-  [1, 5],
-  [2, 3],
-  [3, 1],
-  [4, 3],
-  [3, 5],
+
+const edges = [];
+for (let x = 0; x < count; x++) {
+  for (let y = 0; y < count; y++) {
+    for (let z = 0; z < count; z++) {
+      const from = project(x, y, z);
+      if (x + 1 < count) edges.push({ from, to: project(x + 1, y, z) });
+      if (y + 1 < count) edges.push({ from, to: project(x, y + 1, z) });
+      if (z + 1 < count) edges.push({ from, to: project(x, y, z + 1) });
+    }
+  }
+}
+
+const routeCoords = [
+  [0, 1, 0],
+  [1, 1, 0],
+  [1, 2, 0],
+  [1, 2, 1],
+  [2, 2, 1],
+  [2, 2, 2],
+  [3, 2, 2],
+  [3, 3, 2],
 ];
-const idx = (r, c) => nodes.find((n) => n.r === r && n.c === c);
-const links = [
-  [active[0], active[1]],
-  [active[1], active[2]],
-  [active[1], active[3]],
-  [active[3], active[4]],
-  [active[3], active[5]],
-  [active[4], active[6]],
-  [active[4], active[2]],
-];
-const W = ox * 2 + (cols - 1) * gap;
-const H = oy * 2 + (rows - 1) * gap;
+const route = routeCoords.map(([x, y, z]) => project(x, y, z));
+const routeSegments = route.slice(1).map((to, i) => ({ from: route[i], to }));
 ---
 
 <svg
   class="hero-lattice"
-  viewBox={`0 0 ${W} ${H}`}
+  viewBox="0 0 660 470"
   fill="none"
   role="img"
-  aria-label="A lattice of nodes lighting up and connecting"
-  xmlns="http://www.w3.org/2000/svg"
+  aria-label="An axonometric lattice carrying a signal through addressable nodes"
 >
   <defs>
-    <radialGradient id="nodeGlow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="var(--l-amber-bright)" stop-opacity="0.9" />
-      <stop offset="100%" stop-color="var(--l-amber)" stop-opacity="0" />
+    <radialGradient id="axonGlow">
+      <stop offset="0" stop-color="var(--l-amber-bright)" stop-opacity=".8" />
+      <stop offset="1" stop-color="var(--l-amber)" stop-opacity="0" />
     </radialGradient>
+    <linearGradient id="depthFade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="var(--l-line)" />
+      <stop offset=".55" stop-color="var(--l-line-strong)" />
+      <stop offset="1" stop-color="var(--l-muted)" stop-opacity=".65" />
+    </linearGradient>
   </defs>
 
-  <!-- faint grid -->
-  <g stroke="var(--l-line-strong)" stroke-width="1">
+  <g class="axon-structure" stroke="url(#depthFade)" stroke-linecap="round">
     {
-      Array.from({ length: rows }).map((_, r) => (
-        <line x1={ox} y1={oy + r * gap} x2={ox + (cols - 1) * gap} y2={oy + r * gap} />
+      edges.map(({ from, to }) => (
+        <line
+          x1={from.x}
+          y1={from.y}
+          x2={to.x}
+          y2={to.y}
+          opacity={0.2 + ((from.depth + to.depth) / 18) * 0.45}
+        />
       ))
     }
+  </g>
+
+  <g class="axon-route" stroke="var(--l-amber)" stroke-linecap="round">
     {
-      Array.from({ length: cols }).map((_, c) => (
-        <line x1={ox + c * gap} y1={oy} x2={ox + c * gap} y2={oy + (rows - 1) * gap} />
+      routeSegments.map(({ from, to }, index) => (
+        <line
+          x1={from.x}
+          y1={from.y}
+          x2={to.x}
+          y2={to.y}
+          style={`--delay:${index * 0.22}s`}
+        />
       ))
     }
   </g>
 
-  <!-- animated connecting paths -->
-  <g stroke="var(--l-amber)" stroke-width="1.6" stroke-linecap="round">
+  <g class="axon-nodes" fill="var(--l-faint)">
+    {points.map((point) => <circle cx={point.x} cy={point.y} r="1.65" />)}
+  </g>
+
+  <g class="axon-signal">
     {
-      links.map(([a, b], i) => {
-        const na = idx(a[0], a[1]);
-        const nb = idx(b[0], b[1]);
-        return (
-          <line
-            class="link"
-            x1={na.x}
-            y1={na.y}
-            x2={nb.x}
-            y2={nb.y}
-            style={`--d:${(i * 0.42).toFixed(2)}s`}
-          />
-        );
-      })
+      route.map((point, index) => (
+        <g style={`--delay:${index * 0.22 + 0.4}s`}>
+          <circle class="signal-halo" cx={point.x} cy={point.y} r="18" fill="url(#axonGlow)" />
+          <circle cx={point.x} cy={point.y} r={index === route.length - 1 ? 4.8 : 3.1} />
+        </g>
+      ))
     }
   </g>
 
-  <!-- signal pulses traveling the drawn links (skipped where offset-path
-       is unsupported; the reduced-motion rule in theme.css stops them) -->
-  <g>
-    {
-      links.map(([a, b], i) => {
-        const na = idx(a[0], a[1]);
-        const nb = idx(b[0], b[1]);
-        return (
-          <circle
-            class="pulse"
-            r="3"
-            fill="var(--l-amber-bright)"
-            style={`--d:${(i * 0.63 + 3).toFixed(2)}s; offset-path: path('M${na.x} ${na.y} L${nb.x} ${nb.y}')`}
-          />
-        );
-      })
-    }
-  </g>
-
-  <!-- base nodes -->
-  <g fill="var(--l-faint)">
-    {nodes.map((n) => <circle cx={n.x} cy={n.y} r="2.1" />)}
-  </g>
-
-  <!-- active glowing nodes -->
-  <g>
-    {
-      active.map(([r, c], i) => {
-        const n = idx(r, c);
-        return (
-          <g class="node" style={`--d:${(i * 0.34).toFixed(2)}s`}>
-            <circle cx={n.x} cy={n.y} r="16" fill="url(#nodeGlow)" class="node-glow" />
-            <circle cx={n.x} cy={n.y} r="3.4" fill="var(--l-amber-bright)" />
-          </g>
-        );
-      })
-    }
+  <g class="axon-labels">
+    <text x="30" y="424">real directory</text>
+    <text x="505" y="76">semantic command</text>
+    <text x="490" y="430">open resource</text>
   </g>
 </svg>
 
 <style>
   .hero-lattice {
+    display: block;
     width: 100%;
     height: auto;
   }
-  .link {
-    stroke-dasharray: 220;
-    stroke-dashoffset: 220;
+  .axon-structure line {
+    stroke-width: 1;
+  }
+  .axon-route line {
+    stroke-width: 2;
+    stroke-dasharray: 120;
+    stroke-dashoffset: 120;
+    animation: axon-draw 1.15s cubic-bezier(.22, 1, .36, 1) forwards;
+    animation-delay: var(--delay);
+  }
+  .axon-signal g {
+    color: var(--l-amber-bright);
+    fill: currentColor;
     opacity: 0;
-    animation: draw 2.6s ease forwards, linkpulse 4s ease-in-out infinite;
-    animation-delay: var(--d), calc(var(--d) + 2.6s);
+    animation: axon-node .7s cubic-bezier(.34, 1.56, .64, 1) forwards;
+    animation-delay: var(--delay);
   }
-  @keyframes draw {
-    0% {
-      stroke-dashoffset: 220;
-      opacity: 0;
-    }
-    30% {
-      opacity: 0.85;
-    }
-    100% {
-      stroke-dashoffset: 0;
-      opacity: 0.85;
-    }
-  }
-  @keyframes linkpulse {
-    0%,
-    100% {
-      opacity: 0.45;
-    }
-    50% {
-      opacity: 0.95;
-    }
-  }
-  .pulse {
-    opacity: 0;
-  }
-  @supports (offset-path: path('M0 0 L1 1')) {
-    .pulse {
-      animation: travel 4.2s ease-in-out infinite;
-      animation-delay: var(--d);
-    }
-    @keyframes travel {
-      0% {
-        offset-distance: 0%;
-        opacity: 0;
-      }
-      10% {
-        opacity: 0.95;
-      }
-      40% {
-        offset-distance: 100%;
-        opacity: 0;
-      }
-      100% {
-        offset-distance: 100%;
-        opacity: 0;
-      }
-    }
-  }
-  .node-glow {
+  .signal-halo {
     transform-box: fill-box;
     transform-origin: center;
-    animation: glowpulse 3.4s ease-in-out infinite;
-    animation-delay: var(--d);
+    animation: axon-breathe 3.2s ease-in-out infinite;
   }
-  @keyframes glowpulse {
-    0%,
-    100% {
-      opacity: 0.35;
-      transform: scale(0.7);
-    }
-    50% {
-      opacity: 1;
-      transform: scale(1.1);
-    }
+  .axon-labels {
+    fill: var(--l-faint);
+    font-family: var(--l-font-mono);
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+  @keyframes axon-draw {
+    to { stroke-dashoffset: 0; }
+  }
+  @keyframes axon-node {
+    from { opacity: 0; transform: scale(.55); transform-origin: center; }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes axon-breathe {
+    50% { opacity: .35; transform: scale(.72); }
   }
 </style>
