@@ -1,5 +1,7 @@
 mod commands;
 mod data;
+mod profile;
+mod resource_links;
 mod search;
 mod theme;
 mod watcher;
@@ -19,6 +21,7 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(watcher::WatcherState::default())
         .manage(theme::ThemeWatchState::default())
+        .manage(resource_links::ResourceCatalogState::default())
         .menu(|app| {
             use tauri::menu::Menu;
 
@@ -93,6 +96,20 @@ pub fn run() {
             commands::ensure_home,
             commands::create_workspace,
             commands::list_templates,
+            commands::update_workspace_manifest,
+            profile::get_profile_snapshot,
+            profile::save_desktop_settings,
+            profile::save_workspace_startup_settings,
+            profile::remember_workspace,
+            profile::clear_recent_workspaces,
+            profile::remove_recent_workspace,
+            profile::load_desktop_session,
+            profile::save_desktop_session,
+            profile::set_profile_ui_value,
+            profile::import_legacy_profile,
+            resource_links::refresh_resource_catalog,
+            resource_links::search_resource_links,
+            resource_links::resolve_resource_link,
             search::search_workspace,
             search::get_backlinks,
             search::rebuild_index,

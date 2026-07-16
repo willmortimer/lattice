@@ -5,8 +5,9 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use lattice_theme::{
-    discover_themes, load_appearance, resolve_active_theme, save_appearance, AppearanceMode,
-    ResolvedTheme, SystemAppearance, ThemeDiagnostic, ThemeSummary,
+    discover_themes, load_appearance, load_appearance_with_diagnostics, resolve_active_theme,
+    save_appearance, AppearanceMode, ResolvedTheme, SystemAppearance, ThemeDiagnostic,
+    ThemeSummary,
 };
 use notify::{RecommendedWatcher, RecursiveMode};
 use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, RecommendedCache};
@@ -50,8 +51,17 @@ fn catalog(
     system: SystemAppearance,
     workspace_root: Option<&Path>,
 ) -> Result<ThemeCatalog, String> {
-    let (home, settings) = load_appearance().map_err(err_string)?;
-    let (themes, diagnostics) = discover_themes(&home).map_err(err_string)?;
+    let (home, settings, appearance_diagnostics) =
+        load_appearance_with_diagnostics().map_err(err_string)?;
+    let (themes, mut diagnostics) = discover_themes(&home).map_err(err_string)?;
+    diagnostics.extend(
+        appearance_diagnostics
+            .into_iter()
+            .map(|diagnostic| ThemeDiagnostic {
+                path: diagnostic.path,
+                message: diagnostic.message,
+            }),
+    );
     let mut resolved =
         resolve_active_theme(&home, &settings, system, workspace_root).map_err(err_string)?;
     resolved.diagnostics.extend(diagnostics.iter().cloned());

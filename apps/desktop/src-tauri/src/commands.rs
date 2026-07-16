@@ -5,7 +5,9 @@ use lattice_commands::{
     Command as SemanticCommand, CommandEngine, Error as CommandError, Transaction,
 };
 use lattice_core::{
-    ensure_lattice_home, init_with_template, Resource, Workspace, WorkspaceTemplate,
+    effective_default_workspace, ensure_lattice_home, DefaultWorkspaceStatus, ProvisionDiagnostic,
+    Resource, TemplateDescriptor, Workspace, WorkspaceCreationMode, WorkspaceCreationPlan,
+    WorkspaceDefaults, WorkspaceProvisioner,
 };
 use lattice_storage::{NativeWorkspaceStore, WorkspaceStore};
 use serde::Serialize;
@@ -21,6 +23,9 @@ pub struct WorkspaceSnapshot {
     pub title: String,
     pub id: String,
     pub resources: Vec<Resource>,
+    pub capabilities: Vec<String>,
+    pub defaults: WorkspaceDefaults,
+    pub manifest_revision: String,
 }
 
 #[tauri::command]
@@ -28,14 +33,8 @@ pub fn open_workspace(path: String) -> Result<WorkspaceSnapshot, String> {
     let root = PathBuf::from(path);
     let workspace = Workspace::open(&root).map_err(|err| err.to_string())?;
     let resources = workspace.scan().map_err(|err| err.to_string())?;
-    let manifest = workspace.manifest();
 
-    Ok(WorkspaceSnapshot {
-        root: workspace.root().to_string_lossy().into_owned(),
-        title: manifest.title.clone(),
-        id: manifest.id.clone(),
-        resources,
-    })
+    snapshot_from_parts(&workspace, resources)
 }
 
 /// Re-scan a workspace's resource listing without re-reading its manifest.
@@ -399,24 +398,30 @@ pub struct LatticeHomeInfo {
     pub default_workspace: Option<WorkspaceSnapshot>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct TemplateInfo {
-    pub id: String,
-    pub name: String,
-    pub category: String,
-    pub description: String,
-    pub recommended: bool,
-    pub preview: Vec<String>,
-}
-
 fn snapshot_from_workspace(workspace: &Workspace) -> Result<WorkspaceSnapshot, String> {
     let resources = workspace.scan().map_err(|err| err.to_string())?;
+    snapshot_from_parts(workspace, resources)
+}
+
+fn snapshot_from_parts(
+    workspace: &Workspace,
+    resources: Vec<Resource>,
+) -> Result<WorkspaceSnapshot, String> {
     let manifest = workspace.manifest();
+    let store = NativeWorkspaceStore::new(workspace.root());
+    let manifest_revision = store
+        .metadata(Path::new(lattice_core::WORKSPACE_MANIFEST_FILENAME))
+        .map_err(|error| error.to_string())?
+        .revision
+        .hash;
     Ok(WorkspaceSnapshot {
         root: workspace.root().to_string_lossy().into_owned(),
         title: manifest.title.clone(),
         id: manifest.id.clone(),
         resources,
+        capabilities: manifest.capabilities.enabled.clone(),
+        defaults: manifest.defaults.clone(),
+        manifest_revision,
     })
 }
 
@@ -426,7 +431,7 @@ fn snapshot_from_workspace(workspace: &Workspace) -> Result<WorkspaceSnapshot, S
 #[tauri::command]
 pub fn ensure_home() -> Result<LatticeHomeInfo, String> {
     let home = ensure_lattice_home().map_err(|err| err.to_string())?;
-    let default_path = home.default_workspace().map_err(|err| err.to_string())?;
+    let default_path = effective_default_workspace(&home).map_err(|err| err.to_string())?;
     let default_workspace = if default_path.join("lattice.yaml").exists() {
         let ws = Workspace::open(&default_path).map_err(|err| err.to_string())?;
         Some(snapshot_from_workspace(&ws)?)
@@ -441,15 +446,22 @@ pub fn ensure_home() -> Result<LatticeHomeInfo, String> {
     })
 }
 
-/// Create a new workspace at `path` (folder may already exist, but must not
-/// already contain `lattice.yaml`), apply `template`, and return a snapshot.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceProvisionResult {
+    pub workspace: WorkspaceSnapshot,
+    pub default_workspace_status: DefaultWorkspaceStatus,
+    pub diagnostics: Vec<ProvisionDiagnostic>,
+}
+
 #[tauri::command]
 pub fn create_workspace(
     path: String,
     title: Option<String>,
     template: String,
     set_default: bool,
-) -> Result<WorkspaceSnapshot, String> {
+    initialize_existing: bool,
+) -> Result<WorkspaceProvisionResult, String> {
     let root = PathBuf::from(&path);
     let title = title.unwrap_or_else(|| {
         root.file_name()
@@ -457,39 +469,106 @@ pub fn create_workspace(
             .unwrap_or("Workspace")
             .to_string()
     });
-    let template = WorkspaceTemplate::parse(&template).ok_or_else(|| {
-        format!(
-            "unknown template {template:?}; expected personal, project, research, data-lab, team, demo, or blank"
-        )
-    })?;
-    let ws = init_with_template(&root, title, template).map_err(|err| err.to_string())?;
+    let mut outcome = WorkspaceProvisioner::provision(&WorkspaceCreationPlan {
+        target: root,
+        title,
+        template_id: template,
+        mode: if initialize_existing {
+            WorkspaceCreationMode::ExistingDirectory
+        } else {
+            WorkspaceCreationMode::NewDirectory
+        },
+    })
+    .map_err(|err| err.to_string())?;
     if set_default {
-        let home = ensure_lattice_home().map_err(|err| err.to_string())?;
-        home.set_default_workspace(ws.root())
-            .map_err(|err| err.to_string())?;
+        match ensure_lattice_home()
+            .map_err(|error| error.to_string())
+            .and_then(|home| {
+                home.set_default_workspace(outcome.workspace.root())
+                    .map_err(|error| error.to_string())
+            }) {
+            Ok(_) => outcome.default_workspace_status = DefaultWorkspaceStatus::Updated,
+            Err(error) => {
+                outcome.default_workspace_status = DefaultWorkspaceStatus::Failed;
+                outcome.diagnostics.push(ProvisionDiagnostic {
+                    code: "default-workspace-save-failed".into(),
+                    message: format!(
+                        "The workspace was created, but Lattice could not make it the default: {error}"
+                    ),
+                    retryable: true,
+                });
+            }
+        }
     }
-    snapshot_from_workspace(&ws)
+    Ok(WorkspaceProvisionResult {
+        workspace: snapshot_from_workspace(&outcome.workspace)?,
+        default_workspace_status: outcome.default_workspace_status,
+        diagnostics: outcome.diagnostics,
+    })
 }
 
 /// Built-in workspace templates for the New Workspace gallery.
 #[tauri::command]
-pub fn list_templates() -> Vec<TemplateInfo> {
-    WorkspaceTemplate::gallery()
-        .iter()
-        .copied()
-        .map(|t| TemplateInfo {
-            id: t.id().to_string(),
-            name: t.display_name().to_string(),
-            category: t.category().to_string(),
-            description: t.description().to_string(),
-            recommended: t.recommended(),
-            preview: t
-                .preview_paths()
-                .iter()
-                .map(|path| path.to_string())
-                .collect(),
+pub fn list_templates() -> Vec<TemplateDescriptor> {
+    lattice_core::WorkspaceTemplate::gallery()
+}
+
+#[tauri::command]
+pub fn update_workspace_manifest(
+    root: String,
+    enabled_capabilities: Vec<String>,
+    quick_note_directory: String,
+    base_revision: String,
+) -> Result<WorkspaceSnapshot, String> {
+    if quick_note_directory.trim().is_empty() || quick_note_directory.contains('\\') {
+        return Err("Quick Note directory must be a non-empty workspace-relative path.".into());
+    }
+    let quick_note_path = Path::new(&quick_note_directory);
+    if quick_note_path.is_absolute()
+        || quick_note_path.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::CurDir
+                    | std::path::Component::ParentDir
+                    | std::path::Component::RootDir
+                    | std::path::Component::Prefix(_)
+            )
         })
-        .collect()
+    {
+        return Err("Quick Note directory must be workspace-relative.".into());
+    }
+    let workspace = Workspace::open(Path::new(&root)).map_err(|error| error.to_string())?;
+    let mut manifest = workspace.manifest().clone();
+    const MUTABLE_CAPABILITIES: [&str; 2] = ["canvas", "sqlite"];
+    let mut capabilities = manifest
+        .capabilities
+        .enabled
+        .iter()
+        .filter(|capability| !MUTABLE_CAPABILITIES.contains(&capability.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    capabilities.extend(
+        enabled_capabilities
+            .into_iter()
+            .filter(|capability| MUTABLE_CAPABILITIES.contains(&capability.as_str())),
+    );
+    manifest.capabilities.enabled = capabilities;
+    manifest.capabilities.enabled.sort();
+    manifest.capabilities.enabled.dedup();
+    manifest.defaults.quick_note_directory = quick_note_directory;
+    let content = serde_yaml::to_string(&manifest).map_err(|error| error.to_string())?;
+
+    let mut engine = CommandEngine::open(Path::new(&root)).map_err(command_error_to_string)?;
+    engine
+        .apply(Transaction::new(
+            "Update workspace settings",
+            vec![SemanticCommand::WorkspaceManifestUpdate {
+                content,
+                base_revision,
+            }],
+        ))
+        .map_err(command_error_to_string)?;
+    snapshot_from_workspace(&Workspace::open(Path::new(&root)).map_err(|error| error.to_string())?)
 }
 
 #[cfg(test)]
