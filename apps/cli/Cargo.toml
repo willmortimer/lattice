@@ -15,6 +15,7 @@ lattice-storage.workspace = true
 lattice-commands.workspace = true
 lattice-data.workspace = true
 lattice-index.workspace = true
+lattice-theme.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 serde.workspace = true
