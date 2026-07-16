@@ -1,0 +1,17 @@
+{
+  "format": "lattice-workspace-template",
+  "version": 1,
+  "id": "demo",
+  "order": 60,
+  "name": "First Look",
+  "category": "Sample",
+  "description": "A curated sample with linked pages and a canvas for a quick first look.",
+  "visibility": "sample",
+  "recommended": false,
+  "recommendedTitle": "First Look",
+  "directories": ["Product", "Research", "Canvases", "Archive"],
+  "preview": ["Home.md", "Product/Vision.md", "Product/Roadmap.md", "Research/Competitor Analysis.md", "Canvases/Product Strategy.canvas"],
+  "files": ["Home.md", "Product/Vision.md", "Product/Roadmap.md", "Research/Competitor Analysis.md", "Canvases/Product Strategy.canvas"],
+  "capabilities": ["pages", "canvas", "sqlite"],
+  "workspaceDefaults": { "quickNoteDirectory": "Research" }
+}

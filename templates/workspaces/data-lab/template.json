@@ -1,0 +1,17 @@
+{
+  "format": "lattice-workspace-template",
+  "version": 1,
+  "id": "data-lab",
+  "order": 40,
+  "name": "Data Lab",
+  "category": "Analysis",
+  "description": "Organize data sources, queries, notebooks, dashboards, reports, and reusable analysis.",
+  "visibility": "gallery",
+  "recommended": false,
+  "recommendedTitle": "Data Lab",
+  "directories": ["Sources", "Data", "Queries", "Notebooks", "Dashboards", "Reports", "Archive"],
+  "preview": ["Home.md", "Sources/", "Data/", "Queries/", "Notebooks/", "Dashboards/", "Reports/"],
+  "files": ["Home.md"],
+  "capabilities": ["pages", "canvas", "sqlite", "jupyter"],
+  "workspaceDefaults": { "quickNoteDirectory": "Reports" }
+}

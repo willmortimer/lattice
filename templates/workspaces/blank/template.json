@@ -1,0 +1,17 @@
+{
+  "format": "lattice-workspace-template",
+  "version": 1,
+  "id": "blank",
+  "order": 50,
+  "name": "Blank",
+  "category": "Advanced",
+  "description": "Start with only lattice.yaml and shape the workspace yourself.",
+  "visibility": "gallery",
+  "recommended": false,
+  "recommendedTitle": "Workspace",
+  "directories": [],
+  "preview": ["lattice.yaml"],
+  "files": [],
+  "capabilities": ["pages"],
+  "workspaceDefaults": { "quickNoteDirectory": "Inbox" }
+}

@@ -1,0 +1,17 @@
+{
+  "format": "lattice-workspace-template",
+  "version": 1,
+  "id": "personal",
+  "order": 10,
+  "name": "Personal",
+  "category": "Everyday",
+  "description": "Capture ideas, run projects, manage ongoing areas, and keep a durable library.",
+  "visibility": "gallery",
+  "recommended": true,
+  "recommendedTitle": "Personal",
+  "directories": ["Inbox", "Projects", "Areas", "Library", "Journal", "Templates", "Archive"],
+  "preview": ["Home.md", "Welcome.md", "Inbox/", "Projects/", "Areas/", "Library/", "Journal/"],
+  "files": ["Home.md", "Welcome.md"],
+  "capabilities": ["pages", "canvas", "sqlite"],
+  "workspaceDefaults": { "quickNoteDirectory": "Inbox" }
+}

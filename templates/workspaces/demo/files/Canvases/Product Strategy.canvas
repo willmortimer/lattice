@@ -1,0 +1,23 @@
+{
+  "nodes": [
+    {
+      "id": "intro",
+      "type": "text",
+      "x": 60,
+      "y": 60,
+      "width": 260,
+      "height": 120,
+      "text": "Sample canvas — double-click a file node to open it."
+    },
+    {
+      "id": "vision",
+      "type": "file",
+      "file": "Product/Vision.md",
+      "x": 360,
+      "y": 60,
+      "width": 220,
+      "height": 120
+    }
+  ],
+  "edges": []
+}
