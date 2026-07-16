@@ -482,6 +482,46 @@ export default function App() {
     }
   }
 
+  /** Command palette "Import CSV…": create a `.data` package from a CSV file. */
+  async function handleImportCsv() {
+    if (inBrowser) {
+      setError("CSV import is not available in the browser demo.");
+      return;
+    }
+    if (!snapshot) return;
+
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: "CSV", extensions: ["csv"] }],
+    });
+    if (!selected || typeof selected !== "string") return;
+
+    const name = window.prompt("Package name", "Imported")?.trim();
+    if (!name) return;
+
+    setBusy(true);
+    try {
+      const [relPath, created] = await invoke<[string, DataAppSnapshot]>("import_csv_table", {
+        root: snapshot.root,
+        csvPath: selected,
+        packageName: name,
+        title: name.replace(/\.data$/i, ""),
+        tableName: tableNameFromLabel(name),
+      });
+      await refreshSidebar();
+      const resource: Resource = { path: relPath, kind: "data-app" };
+      setSelected(resource);
+      setPage(null);
+      setCanvas(null);
+      setDataApp({ resource, snapshot: created });
+      setError(null);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   /** Command palette "New table…": create a `.data` package at the workspace root. */
   async function handleNewTable() {
     const name = window.prompt("New table name");
@@ -513,6 +553,9 @@ export default function App() {
           package_revision: "demo:0",
           columns: [{ name: "id", field_type: "text", sqlite_type: "TEXT" }],
           rows: [],
+          available_views: ["All"],
+          active_view: "All",
+          filters: [],
         },
       });
       return;
@@ -596,6 +639,7 @@ export default function App() {
         const opened = await invoke<DataAppSnapshot>("open_data_app", {
           root: snapshot.root,
           relPath: resource.path,
+          viewName: null,
         });
         setDataApp({ resource, snapshot: opened });
       } catch (err) {
@@ -673,6 +717,7 @@ export default function App() {
     const actions: PaletteItem[] = [
       { id: "action:new-page", label: "New page", run: handleNewPage },
       { id: "action:new-table", label: "New table…", run: () => void handleNewTable() },
+      { id: "action:import-csv", label: "Import CSV…", run: () => void handleImportCsv() },
       { id: "action:quick-note", label: "Quick note", hint: "Cmd+N", run: handleQuickNote },
       { id: "action:new-workspace", label: "New workspace…", run: () => void openNewWorkspaceDialog() },
       { id: "action:open-workspace", label: "Open workspace…", run: () => void handleOpenWorkspace() },

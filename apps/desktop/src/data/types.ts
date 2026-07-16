@@ -27,12 +27,23 @@ export interface DataRow {
   values: Record<string, CellValue>;
 }
 
+export interface ViewFilter {
+  field: string;
+  operator: "equals" | "contains";
+  value: string;
+}
+
 export interface DataAppSnapshot {
   title: string;
   default_table: string;
   package_revision: string;
   columns: DataColumn[];
   rows: DataRow[];
+  available_views: string[];
+  active_view: string;
+  sort_field?: string;
+  sort_direction?: "asc" | "desc";
+  filters: ViewFilter[];
 }
 
 export function cellValueToDisplay(value: CellValue | undefined): string {
@@ -75,5 +86,7 @@ export function cloneSnapshot(snapshot: DataAppSnapshot): DataAppSnapshot {
       id: row.id,
       values: { ...row.values },
     })),
+    available_views: [...snapshot.available_views],
+    filters: snapshot.filters.map((filter) => ({ ...filter })),
   };
 }

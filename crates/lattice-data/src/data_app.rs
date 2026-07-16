@@ -5,8 +5,10 @@ use rusqlite::{params, Connection};
 use sha2::{Digest, Sha256};
 
 use crate::app::{app_manifest_path, database_path, schema_path, write_default_view, AppManifest};
+use crate::csv::{cell_from_csv, CsvTable};
 use crate::error::Error;
 use crate::types::{CellValue, ColumnMeta, FieldType, Row};
+use crate::view::{build_view_query, row_from_view_sql, view_path, visible_columns, ViewDef};
 use crate::Result;
 
 /// A opened or newly created `.data` package backed by SQLite.
@@ -304,6 +306,127 @@ impl DataApp {
             return Err(Error::table(table, format!("row not found for id {id:?}")));
         }
         Ok(())
+    }
+
+    /// List saved view names from `views/*.yaml`.
+    pub fn list_views(&self) -> Result<Vec<String>> {
+        let views_dir = self.path.join("views");
+        if !views_dir.is_dir() {
+            return Ok(Vec::new());
+        }
+
+        let mut names = Vec::new();
+        for entry in
+            std::fs::read_dir(&views_dir).map_err(|source| Error::io(&views_dir, source))?
+        {
+            let entry = entry.map_err(|source| Error::io(&views_dir, source))?;
+            let path = entry.path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("yaml") {
+                continue;
+            }
+            if let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) {
+                names.push(stem.to_string());
+            }
+        }
+        names.sort();
+        Ok(names)
+    }
+
+    /// Load `views/{name}.yaml`.
+    pub fn load_view(&self, name: &str) -> Result<ViewDef> {
+        ViewDef::load(&view_path(&self.path, name))
+    }
+
+    /// Serialize a view definition to YAML for [`ViewSave`].
+    pub fn render_view_yaml(&self, view: &ViewDef) -> Result<String> {
+        view.to_yaml()
+    }
+
+    /// List rows applying a view's column order, sort, and filters.
+    pub fn list_rows_with_view(
+        &self,
+        table: &str,
+        view: &ViewDef,
+        limit: usize,
+        offset: usize,
+    ) -> Result<(Vec<ColumnMeta>, Vec<Row>)> {
+        validate_identifier(table)?;
+        ensure_table_exists(&self.conn, table)?;
+        ensure_id_column(&self.conn, table)?;
+
+        let all_columns = self.columns(table)?;
+        let visible = visible_columns(&all_columns, view)?;
+        let visible_meta: Vec<ColumnMeta> =
+            visible.iter().map(|column| (*column).clone()).collect();
+        let visible_refs: Vec<&ColumnMeta> = visible_meta.iter().collect();
+
+        let query = build_view_query(table, &visible_refs, view, limit, offset)?;
+        let mut stmt = self.conn.prepare(&query.sql)?;
+        let rows = stmt.query_map(rusqlite::params_from_iter(query.params), |row| {
+            row_from_view_sql(row, &visible_refs)
+        })?;
+
+        let collected = rows
+            .collect::<rusqlite::Result<Vec<Row>>>()
+            .map_err(Error::from)?;
+        Ok((visible_meta, collected))
+    }
+
+    /// Add columns inferred from CSV import and update manifest/schema files.
+    pub fn add_columns_from_csv(&mut self, table: &str, csv: &CsvTable) -> Result<()> {
+        validate_identifier(table)?;
+        ensure_table_exists(&self.conn, table)?;
+
+        let schema_file = schema_path(&self.path);
+        let mut schema_sql = std::fs::read_to_string(&schema_file)
+            .map_err(|source| Error::io(&schema_file, source))?;
+
+        let existing = self.columns(table)?;
+        let table_meta = self.manifest.tables.entry(table.to_string()).or_default();
+        for (header, field_type) in csv.headers.iter().zip(&csv.field_types) {
+            validate_identifier(header)?;
+            if existing.iter().any(|column| column.name == *header) {
+                continue;
+            }
+
+            let sqlite_type = field_type.sqlite_type();
+            let alter = format!("ALTER TABLE {table} ADD COLUMN {header} {sqlite_type};\n");
+            self.conn
+                .execute_batch(&alter)
+                .map_err(|source| Error::table(table, source.to_string()))?;
+            schema_sql.push_str(&alter);
+
+            table_meta.columns.insert(
+                header.clone(),
+                crate::app::ColumnMetaYaml {
+                    field_type: *field_type,
+                },
+            );
+        }
+
+        std::fs::write(&schema_file, schema_sql)
+            .map_err(|source| Error::io(&schema_file, source))?;
+        self.manifest.save(&app_manifest_path(&self.path))?;
+        Ok(())
+    }
+
+    /// Insert parsed CSV rows into an existing table (caller handles transactions).
+    pub fn insert_csv_rows(&self, table: &str, csv: &CsvTable) -> Result<usize> {
+        validate_identifier(table)?;
+        ensure_table_exists(&self.conn, table)?;
+
+        let mut inserted = 0;
+        for row in &csv.rows {
+            let mut values = BTreeMap::new();
+            for ((header, field_type), cell) in
+                csv.headers.iter().zip(&csv.field_types).zip(row.iter())
+            {
+                values.insert(header.clone(), cell_from_csv(cell, *field_type)?);
+            }
+            self.insert_row(table, &values)?;
+            inserted += 1;
+        }
+        Ok(inserted)
     }
 
     /// Content hash of `database.sqlite` bytes for optimistic guards in D2.

@@ -4,16 +4,23 @@
 //! `schema.sql`, `database.sqlite`, and optional view definitions.
 
 mod app;
+mod csv;
 mod data_app;
 mod error;
 mod types;
+mod view;
 
 #[cfg(test)]
 mod tests;
 
 pub use app::{AppManifest, DATA_APP_FORMAT, DEFAULT_VIEW_NAME};
+pub use csv::{cell_from_csv, infer_field_type, parse_csv_file, sanitize_column_name, CsvTable};
 pub use data_app::DataApp;
 pub use error::Error;
 pub use types::{CellValue, ColumnMeta, FieldType, Row};
+pub use view::{
+    FilterOperator, SortDirection, ViewDef, ViewFilter, ViewLayout, ViewSort, ViewSource,
+    VIEW_FORMAT, VIEW_VERSION,
+};
 
 pub type Result<T> = std::result::Result<T, Error>;
