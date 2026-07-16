@@ -1,0 +1,49 @@
+# Lattice Fjord — deep marine structure with a restrained glacial signal.
+
+name: Lattice Fjord
+id: lattice-fjord
+appearance: dark
+
+palette:
+  ground: "#071217"
+  ground_raise: "#0b1a21"
+  panel: "#10252d"
+  slate: "#88a8b3"
+  text: "#e8f3f4"
+  text_soft: "#b8cdd1"
+  muted: "#7f9ba3"
+  faint: "#536f78"
+  accent: "#42d6bd"
+  accent_bright: "#9aefdf"
+  accent_deep: "#159b89"
+  danger: "#ff8e82"
+  ink_shadow: "#02090c"
+  on_accent: "#04201c"
+
+roles:
+  bg: $ground
+  bg_raise: $ground_raise
+  panel: $panel
+  slate: $slate
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $accent
+  accent_bright: $accent_bright
+  accent_deep: $accent_deep
+  danger: $danger
+  shadow: $ink_shadow
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 10px
+  radius_sm: 7px
+  radius_lg: 15px
+  grid: 36px
+  titlebar: 38px
+  max_width: 1140px

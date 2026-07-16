@@ -18,7 +18,7 @@ static HOME_LOCK: Mutex<()> = Mutex::new(());
 
 #[test]
 fn builtins_parse_and_flatten() {
-    for id in ["lattice-slate", "lattice-paper"] {
+    for id in crate::builtin::BUILTIN_IDS {
         let doc = load_builtin(id).unwrap();
         let vars = flatten_theme(&doc, &builtin_path(id)).unwrap();
         assert!(vars.contains_key("--lt-bg"));

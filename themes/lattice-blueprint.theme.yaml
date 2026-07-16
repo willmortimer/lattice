@@ -1,0 +1,49 @@
+# Lattice Blueprint — drafting-paper blue with a warm annotation signal.
+
+name: Lattice Blueprint
+id: lattice-blueprint
+appearance: dark
+
+palette:
+  ground: "#07182b"
+  ground_raise: "#0b2139"
+  panel: "#102b49"
+  slate: "#84a7ca"
+  text: "#edf5ff"
+  text_soft: "#bfd3e8"
+  muted: "#88a6c2"
+  faint: "#587797"
+  accent: "#ffc857"
+  accent_bright: "#ffe3a0"
+  accent_deep: "#d99a20"
+  danger: "#ff9b8b"
+  ink_shadow: "#020b14"
+  on_accent: "#251801"
+
+roles:
+  bg: $ground
+  bg_raise: $ground_raise
+  panel: $panel
+  slate: $slate
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $accent
+  accent_bright: $accent_bright
+  accent_deep: $accent_deep
+  danger: $danger
+  shadow: $ink_shadow
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 5px
+  radius_sm: 3px
+  radius_lg: 9px
+  grid: 28px
+  titlebar: 38px
+  max_width: 1140px

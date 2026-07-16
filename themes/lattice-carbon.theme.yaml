@@ -1,0 +1,49 @@
+# Lattice Carbon — dense graphite surfaces with a precise ember signal.
+
+name: Lattice Carbon
+id: lattice-carbon
+appearance: dark
+
+palette:
+  ground: "#090a0c"
+  ground_raise: "#101215"
+  panel: "#171a1e"
+  slate: "#98a0aa"
+  text: "#f0f2f4"
+  text_soft: "#c5c9ce"
+  muted: "#8e959e"
+  faint: "#626973"
+  accent: "#ff7a45"
+  accent_bright: "#ffb08f"
+  accent_deep: "#d95222"
+  danger: "#ff806f"
+  ink_shadow: "#000000"
+  on_accent: "#240b03"
+
+roles:
+  bg: $ground
+  bg_raise: $ground_raise
+  panel: $panel
+  slate: $slate
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $accent
+  accent_bright: $accent_bright
+  accent_deep: $accent_deep
+  danger: $danger
+  shadow: $ink_shadow
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 7px
+  radius_sm: 5px
+  radius_lg: 12px
+  grid: 32px
+  titlebar: 38px
+  max_width: 1140px
