@@ -1,6 +1,10 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
+use lattice_commands::{
+    Command as SemanticCommand, CommandEngine, Error as CommandError, Transaction,
+};
 use lattice_core::{Resource, Workspace};
+use lattice_storage::{NativeWorkspaceStore, WorkspaceStore};
 use serde::Serialize;
 
 /// Everything the frontend needs to render a workspace: its identity plus
@@ -28,18 +32,16 @@ pub fn open_workspace(path: String) -> Result<WorkspaceSnapshot, String> {
     })
 }
 
-/// Read a text resource by path relative to `root`.
-///
-/// `root` and the resolved candidate path are both canonicalized and the
-/// candidate is required to remain under the canonical root, which rejects
-/// `..` traversal and absolute-path escapes (including through symlinks).
-#[tauri::command]
-pub fn read_file(root: String, rel_path: String) -> Result<String, String> {
-    let canonical_root = PathBuf::from(&root)
+/// Canonicalize `root` and a `rel_path` candidate beneath it, rejecting `..`
+/// traversal and absolute-path escapes (including through symlinks) by
+/// requiring the resolved candidate to remain under the canonical root.
+/// Returns `(canonical_root, canonical_candidate)`.
+fn resolve_within_root(root: &str, rel_path: &str) -> Result<(PathBuf, PathBuf), String> {
+    let canonical_root = PathBuf::from(root)
         .canonicalize()
         .map_err(|err| format!("invalid workspace root {root:?}: {err}"))?;
 
-    let candidate = canonical_root.join(&rel_path);
+    let candidate = canonical_root.join(rel_path);
     let canonical_candidate = candidate
         .canonicalize()
         .map_err(|err| format!("cannot resolve {rel_path:?}: {err}"))?;
@@ -48,7 +50,101 @@ pub fn read_file(root: String, rel_path: String) -> Result<String, String> {
         return Err(format!("{rel_path:?} escapes the workspace root"));
     }
 
+    Ok((canonical_root, canonical_candidate))
+}
+
+/// Read a text resource by path relative to `root`.
+///
+/// `root` and the resolved candidate path are both canonicalized and the
+/// candidate is required to remain under the canonical root, which rejects
+/// `..` traversal and absolute-path escapes (including through symlinks).
+#[tauri::command]
+pub fn read_file(root: String, rel_path: String) -> Result<String, String> {
+    let (_, canonical_candidate) = resolve_within_root(&root, &rel_path)?;
     std::fs::read_to_string(&canonical_candidate).map_err(|err| err.to_string())
+}
+
+/// A page's content plus the content-hash revision it was read at, so the
+/// editor can round-trip that revision back as `apply_page_update`'s
+/// `base_revision` (optimistic concurrency, ADR 0007).
+#[derive(Debug, Serialize)]
+pub struct PageContent {
+    pub content: String,
+    pub revision: String,
+}
+
+/// Read a page and the revision it was read at, in one round trip.
+#[tauri::command]
+pub fn read_page(root: String, rel_path: String) -> Result<PageContent, String> {
+    let (canonical_root, canonical_candidate) = resolve_within_root(&root, &rel_path)?;
+    let content = std::fs::read_to_string(&canonical_candidate).map_err(|err| err.to_string())?;
+
+    let store = NativeWorkspaceStore::new(&canonical_root);
+    let revision = store
+        .metadata(Path::new(&rel_path))
+        .map_err(|err| err.to_string())?
+        .revision
+        .hash;
+
+    Ok(PageContent { content, revision })
+}
+
+/// Errors returned by [`apply_page_update`] are plain strings (Tauri's IPC
+/// error channel), but a stale base revision is a distinct, expected case
+/// the frontend must react to (show the conflict banner) rather than a
+/// generic failure — so it's marked with a `STALE_REVISION:` prefix the
+/// frontend can detect without parsing prose.
+const STALE_REVISION_PREFIX: &str = "STALE_REVISION:";
+
+fn command_error_to_string(err: CommandError) -> String {
+    match err {
+        CommandError::StaleBaseRevision {
+            path,
+            expected,
+            found,
+        } => {
+            format!(
+                "{STALE_REVISION_PREFIX}{}|expected={expected}|found={found}",
+                path.display()
+            )
+        }
+        other => other.to_string(),
+    }
+}
+
+/// Apply a `PageUpdate` command through the [`CommandEngine`]: replace the
+/// page at `rel_path` with `content` if the on-disk revision still matches
+/// `base_revision`. Returns the resulting revision on success.
+///
+/// On a stale base revision (the page changed on disk since the editor read
+/// it), the error string is prefixed with `STALE_REVISION:` so the frontend
+/// can show a conflict banner instead of a generic error.
+#[tauri::command]
+pub fn apply_page_update(
+    root: String,
+    rel_path: String,
+    content: String,
+    base_revision: String,
+) -> Result<String, String> {
+    let (canonical_root, _) = resolve_within_root(&root, &rel_path)?;
+    let mut engine = CommandEngine::open(&canonical_root).map_err(command_error_to_string)?;
+
+    let receipt = engine
+        .apply(Transaction::new(
+            format!("Update page {rel_path}"),
+            vec![SemanticCommand::PageUpdate {
+                path: PathBuf::from(&rel_path),
+                content,
+                base_revision,
+            }],
+        ))
+        .map_err(command_error_to_string)?;
+
+    receipt
+        .outcomes
+        .first()
+        .and_then(|outcome| outcome.resulting_revision.clone())
+        .ok_or_else(|| "page update did not produce a resulting revision".to_string())
 }
 
 #[cfg(test)]
@@ -119,5 +215,59 @@ mod tests {
             outside.path().to_string_lossy().into_owned(),
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn read_page_returns_content_and_revision() {
+        let dir = init_workspace();
+        std::fs::write(dir.path().join("Notes.md"), "# Hi\n").unwrap();
+
+        let page = read_page(
+            dir.path().to_string_lossy().into_owned(),
+            "Notes.md".to_string(),
+        )
+        .unwrap();
+        assert_eq!(page.content, "# Hi\n");
+        assert!(page.revision.starts_with("sha256:"));
+    }
+
+    #[test]
+    fn apply_page_update_writes_content_and_returns_new_revision() {
+        let dir = init_workspace();
+        std::fs::write(dir.path().join("Notes.md"), "# Hi\n").unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        let before = read_page(root.clone(), "Notes.md".to_string()).unwrap();
+        let after_revision = apply_page_update(
+            root.clone(),
+            "Notes.md".to_string(),
+            "# Hi, edited\n".to_string(),
+            before.revision,
+        )
+        .unwrap();
+
+        let after = read_page(root, "Notes.md".to_string()).unwrap();
+        assert_eq!(after.content, "# Hi, edited\n");
+        assert_eq!(after.revision, after_revision);
+    }
+
+    #[test]
+    fn apply_page_update_reports_stale_revision() {
+        let dir = init_workspace();
+        std::fs::write(dir.path().join("Notes.md"), "# Hi\n").unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        let result = apply_page_update(
+            root,
+            "Notes.md".to_string(),
+            "# Hi, edited\n".to_string(),
+            "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+        );
+
+        let err = result.unwrap_err();
+        assert!(
+            err.starts_with(STALE_REVISION_PREFIX),
+            "expected a STALE_REVISION-prefixed error, got: {err}"
+        );
     }
 }
