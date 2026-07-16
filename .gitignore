@@ -25,6 +25,20 @@ result
 # Editors
 .idea/
 *.swp
+.vscode/
+
+# AI / agent tooling (local session state — never commit)
+.claude/
+.cursor/
+.codex/
+.continue/
+.aider*
+.windsurf/
+.copilot/
+.agent/
+.agents/
+.mcp.json
+.mcp.jsonc
 
 # Local env & secrets
 .env
