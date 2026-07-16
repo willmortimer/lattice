@@ -1,5 +1,16 @@
 import { ConflictEnvelope } from "../editor/ConflictEnvelope";
+import type { AppSettings } from "../settings/model";
 import { invoke } from "@tauri-apps/api/core";
+import DataEditor, {
+  GridCellKind,
+  type EditableGridCell,
+  type GridCell,
+  type GridColumn,
+  type GridSelection,
+  type Item,
+  type Theme,
+} from "@glideapps/glide-data-grid";
+import "@glideapps/glide-data-grid/dist/index.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   cellValueToDisplay,
@@ -21,6 +32,35 @@ interface DataTableViewProps {
   initialSnapshot: DataAppSnapshot;
   /** When set, mutations update local state only (browser demo). */
   demoMutate?: (snapshot: DataAppSnapshot) => DataAppSnapshot;
+  preferences: AppSettings["data"];
+  showRendererStats?: boolean;
+}
+
+function token(name: string, fallback: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+}
+
+function gridTheme(): Partial<Theme> {
+  return {
+    accentColor: token("--lt-accent", "#d69b45"),
+    accentLight: token("--lt-accent-wash", "#372b1f"),
+    accentFg: token("--lt-bg", "#0a0d13"),
+    textDark: token("--lt-text", "#f2ede3"),
+    textMedium: token("--lt-text-soft", "#c9c2b7"),
+    textLight: token("--lt-faint", "#77736e"),
+    textHeader: token("--lt-muted", "#9d9891"),
+    bgCell: token("--lt-bg", "#0a0d13"),
+    bgCellMedium: token("--lt-bg-raise", "#11161f"),
+    bgHeader: token("--lt-panel", "#131923"),
+    bgHeaderHovered: token("--lt-hover", "#1b2330"),
+    bgHeaderHasFocus: token("--lt-accent-wash", "#372b1f"),
+    borderColor: token("--lt-line", "#252c36"),
+    linkColor: token("--lt-accent-bright", "#efb85f"),
+    fontFamily: token("--lt-font-mono", "ui-monospace"),
+    baseFontStyle: "12px",
+    headerFontStyle: "600 11px",
+    editorFontSize: "12px",
+  };
 }
 
 function isStaleRevisionError(message: string): boolean {
@@ -35,9 +75,10 @@ function cycleSortDirection(
   currentField: string | undefined,
   currentDirection: "asc" | "desc" | undefined,
   nextField: string,
+  defaultDirection: "asc" | "desc" = "asc",
 ): { field: string; direction: "asc" | "desc" } {
   if (currentField !== nextField) {
-    return { field: nextField, direction: "asc" };
+    return { field: nextField, direction: defaultDirection };
   }
   return {
     field: nextField,
@@ -50,6 +91,8 @@ export function DataTableView({
   relPath,
   initialSnapshot,
   demoMutate,
+  preferences,
+  showRendererStats = false,
 }: DataTableViewProps) {
   const [snapshot, setSnapshot] = useState(() => cloneSnapshot(initialSnapshot));
   const [activeView, setActiveView] = useState(initialSnapshot.active_view);
@@ -65,6 +108,9 @@ export function DataTableView({
   const [stale, setStale] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const [theme, setTheme] = useState<Partial<Theme>>(() => gridTheme());
+  const [visibleCellCount, setVisibleCellCount] = useState(0);
   const revisionRef = useRef(snapshot.package_revision);
   const snapshotRef = useRef(snapshot);
 
@@ -81,6 +127,15 @@ export function DataTableView({
     setStale(false);
     setError(null);
   }, [initialSnapshot, relPath]);
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => setTheme(gridTheme()));
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["style", "data-theme"],
+    });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     snapshotRef.current = snapshot;
@@ -317,8 +372,107 @@ export function DataTableView({
         return sortDirection === "desc" ? -cmp : cmp;
       });
     }
-    return rows;
-  }, [filters, snapshot.rows, sortDirection, sortField]);
+    return rows.slice(0, preferences.pageSize);
+  }, [filters, preferences.pageSize, snapshot.rows, sortDirection, sortField]);
+
+  const gridColumns = useMemo<GridColumn[]>(
+    () =>
+      visibleColumns.map((column) => ({
+        id: column.name,
+        title:
+          column.name +
+          (sortField === column.name ? (sortDirection === "desc" ? " ↓" : " ↑") : ""),
+        width: columnWidths[column.name] ?? (column.name === "id" ? 170 : 190),
+        grow: column.name === "id" ? 0 : 1,
+        hasMenu: column.name !== "id",
+      })),
+    [columnWidths, sortDirection, sortField, visibleColumns],
+  );
+
+  const getCellContent = useCallback(
+    ([columnIndex, rowIndex]: Item): GridCell => {
+      const column = visibleColumns[columnIndex];
+      const row = displayRows[rowIndex];
+      if (!column || !row) {
+        return {
+          kind: GridCellKind.Text,
+          data: "",
+          displayData: "",
+          allowOverlay: false,
+          readonly: true,
+        };
+      }
+      const display = cellValueToDisplay(row.values[column.name]);
+      const readOnly = column.name === "id" || busy || stale;
+      const zebraTheme =
+        preferences.zebraRows && rowIndex % 2 === 1
+          ? { bgCell: token("--lt-bg-raise", "#11161f") }
+          : undefined;
+      if (column.field_type === "boolean") {
+        return {
+          kind: GridCellKind.Boolean,
+          data: display === "true",
+          allowOverlay: false,
+          readonly: readOnly,
+          themeOverride: zebraTheme,
+        };
+      }
+      if (column.field_type === "integer" || column.field_type === "decimal") {
+        return {
+          kind: GridCellKind.Number,
+          data: display === "" ? undefined : Number(display),
+          displayData: display,
+          allowOverlay: !readOnly,
+          readonly: readOnly,
+          themeOverride: zebraTheme,
+        };
+      }
+      return {
+        kind: GridCellKind.Text,
+        data: display,
+        displayData: display,
+        allowOverlay: !readOnly,
+        readonly: readOnly,
+        themeOverride: zebraTheme,
+      };
+    },
+    [busy, displayRows, preferences.zebraRows, stale, visibleColumns],
+  );
+
+  const handleCellEdited = useCallback(
+    ([columnIndex, rowIndex]: Item, value: EditableGridCell) => {
+      const column = visibleColumns[columnIndex];
+      const row = displayRows[rowIndex];
+      if (!column || !row || column.name === "id") return;
+      const raw =
+        value.kind === GridCellKind.Boolean
+          ? value.data === true
+            ? "true"
+            : "false"
+          : value.kind === GridCellKind.Number
+            ? value.data === undefined
+              ? ""
+              : String(value.data)
+            : "data" in value
+              ? String(value.data)
+              : "";
+      void commitCell(row, column, raw);
+    },
+    [commitCell, displayRows, visibleColumns],
+  );
+
+  const deleteSelectedRows = useCallback(
+    async (selection: GridSelection) => {
+      const rows = selection.rows
+        .toArray()
+        .map((index) => displayRows[index])
+        .filter((row): row is DataRow => Boolean(row));
+      for (const row of rows.reverse()) {
+        await deleteRow(row);
+      }
+    },
+    [deleteRow, displayRows],
+  );
 
   const applyFilter = useCallback(() => {
     if (!filterField || !filterValue.trim()) return;
@@ -384,10 +538,15 @@ export function DataTableView({
   );
 
   const handleSort = useCallback((field: string) => {
-    const next = cycleSortDirection(sortField, sortDirection, field);
+    const next = cycleSortDirection(
+      sortField,
+      sortDirection,
+      field,
+      preferences.defaultSortDirection,
+    );
     setSortField(next.field);
     setSortDirection(next.direction);
-  }, [sortDirection, sortField]);
+  }, [preferences.defaultSortDirection, sortDirection, sortField]);
 
   useEffect(() => {
     if (demoMutate || !filterField) {
@@ -513,93 +672,69 @@ export function DataTableView({
 
       {error && <p className="error-text">{error}</p>}
 
-      <div className="data-table-scroll">
-        <table className="data-table">
-          <thead>
-            <tr>
-              {visibleColumns.map((column) => (
-                <th key={column.name}>
-                  <div className="data-table-col-head">
-                    <button
-                      type="button"
-                      className="data-table-sort"
-                      disabled={busy}
-                      onClick={() => handleSort(column.name)}
-                    >
-                      {column.name}
-                      {sortField === column.name ? (sortDirection === "desc" ? " ↓" : " ↑") : ""}
-                    </button>
-                    {column.name !== "id" && (
-                      <button
-                        type="button"
-                        className="data-table-hide-col"
-                        title="Hide column"
-                        disabled={busy}
-                        onClick={() =>
-                          setHiddenColumns((prev) => new Set([...prev, column.name]))
-                        }
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
-                </th>
-              ))}
-              <th className="data-table-actions-col" aria-label="Row actions" />
-            </tr>
-          </thead>
-          <tbody>
-            {displayRows.length === 0 ? (
-              <tr>
-                <td className="data-table-empty" colSpan={visibleColumns.length + 1}>
-                  No rows match this view.
-                </td>
-              </tr>
-            ) : (
-              displayRows.map((row) => (
-                <tr key={row.id}>
-                  {visibleColumns.map((column) => {
-                    const readOnly = column.name === "id";
-                    const display = cellValueToDisplay(row.values[column.name]);
-                    return (
-                      <td key={column.name}>
-                        {readOnly ? (
-                          <span className="data-table-id">{display}</span>
-                        ) : (
-                          <input
-                            className="data-table-cell"
-                            type="text"
-                            defaultValue={display}
-                            disabled={busy || stale}
-                            onBlur={(event) =>
-                              void commitCell(row, column, event.currentTarget.value)
-                            }
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter") {
-                                event.currentTarget.blur();
-                              }
-                            }}
-                          />
-                        )}
-                      </td>
-                    );
-                  })}
-                  <td className="data-table-actions-col">
-                    <button
-                      type="button"
-                      className="secondary-button data-table-delete"
-                      disabled={busy || stale}
-                      onClick={() => void deleteRow(row)}
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      <div className="data-grid-frame">
+        {displayRows.length === 0 ? (
+          <div className="data-table-empty">No rows match this view.</div>
+        ) : (
+          <DataEditor
+            width="100%"
+            height="100%"
+            columns={gridColumns}
+            rows={displayRows.length}
+            getCellContent={getCellContent}
+            onCellEdited={handleCellEdited}
+            onRowAppended={async () => {
+              await addRow();
+              return "bottom" as const;
+            }}
+            trailingRowOptions={{ hint: "Add row", sticky: true }}
+            rowMarkers={preferences.showRowNumbers ? "both" : "checkbox-visible"}
+            rowHeight={
+              preferences.rowHeight === "compact"
+                ? 26
+                : preferences.rowHeight === "spacious"
+                  ? 42
+                  : 34
+            }
+            headerHeight={34}
+            freezeColumns={visibleColumns[0]?.name === "id" ? 1 : 0}
+            smoothScrollX
+            smoothScrollY
+            rangeSelect="multi-rect"
+            rowSelect="multi"
+            getCellsForSelection
+            onDelete={(selection) => {
+              void deleteSelectedRows(selection);
+              return false;
+            }}
+            onHeaderClicked={(columnIndex) => {
+              const column = visibleColumns[columnIndex];
+              if (column) handleSort(column.name);
+            }}
+            onHeaderContextMenu={(columnIndex, event) => {
+              event.preventDefault();
+              const column = visibleColumns[columnIndex];
+              if (column?.name !== "id") {
+                setHiddenColumns((current) => new Set([...current, column.name]));
+              }
+            }}
+            onColumnResize={(column, newSize) => {
+              const id = column.id;
+              if (id) setColumnWidths((current) => ({ ...current, [id]: newSize }));
+            }}
+            onVisibleRegionChanged={(range) =>
+              setVisibleCellCount(range.width * range.height)
+            }
+            theme={theme}
+          />
+        )}
       </div>
+
+      {showRendererStats && (
+        <p className="data-renderer-stats">
+          Canvas renderer · {displayRows.length} loaded rows · {visibleCellCount} visible cells
+        </p>
+      )}
 
       {hiddenColumns.size > 0 && (
         <div className="data-table-hidden-cols">

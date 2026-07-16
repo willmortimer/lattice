@@ -9,6 +9,7 @@ interface ResourceTreeProps {
   resources: readonly Resource[];
   selectedPath: string | null;
   onSelect: (resource: Resource) => void;
+  onContextMenu?: (resource: Resource) => void;
 }
 
 const INDENT_BASE_PX = 9;
@@ -22,7 +23,12 @@ const INDENT_STEP_PX = 16;
  * persisted, and defaults to fully expanded so nothing already open in
  * the old flat list disappears on first render.
  */
-export function ResourceTree({ resources, selectedPath, onSelect }: ResourceTreeProps) {
+export function ResourceTree({
+  resources,
+  selectedPath,
+  onSelect,
+  onContextMenu,
+}: ResourceTreeProps) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
 
   if (resources.length === 0) {
@@ -55,6 +61,7 @@ export function ResourceTree({ resources, selectedPath, onSelect }: ResourceTree
           aria-label={`${KIND_LABELS[resource.kind]}: ${resource.path}`}
           title={resource.path}
           onClick={() => onSelect(resource)}
+          onContextMenu={() => onContextMenu?.(resource)}
         >
           <KindMark kind={resource.kind} />
           <span className="resource-path">{node.name}</span>
