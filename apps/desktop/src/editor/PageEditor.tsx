@@ -1,6 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 
+import { ConflictEnvelope } from "./ConflictEnvelope";
 import { editorExtensions } from "./extensions";
 import {
   joinFrontmatter,
@@ -53,6 +62,24 @@ interface PageEditorProps {
   revision: string | null;
   io: PageIO;
   onSaveStateChange?: (state: SaveState) => void;
+  /**
+   * Fires whenever the revision this editor considers its clean base
+   * changes (initial load, successful save, or an explicit reload) — not on
+   * every keystroke. Lets a parent detect "this incoming external-edit
+   * event is just an echo of a save I already know about" without forcing
+   * a remount on every autosave.
+   */
+  onRevisionChange?: (revision: string | null) => void;
+}
+
+/** Imperative escape hatch for a parent that needs the live buffer outside
+ * the normal load/save cycle — e.g. an external-edit conflict envelope's
+ * "keep local" and "keep both" actions, which must save (or copy aside)
+ * whatever is currently in the editor, not the `raw` it was mounted with. */
+export interface PageEditorHandle {
+  /** The editor's current content, serialized back to full page text
+   * (frontmatter included, verbatim). */
+  getRaw(): string;
 }
 
 /**
@@ -62,7 +89,10 @@ interface PageEditorProps {
  * Frontmatter is split off on load and reattached verbatim on save — v0
  * shows it collapsed and never parses or edits it (docs/07).
  */
-export function PageEditor({ raw, revision, io, onSaveStateChange }: PageEditorProps) {
+export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function PageEditor(
+  { raw, revision, io, onSaveStateChange, onRevisionChange },
+  ref,
+) {
   const [{ frontmatter }] = useState(() => splitFrontmatter(raw));
   const initialDoc = useMemo(() => parseMarkdownToJSON(splitFrontmatter(raw).body), [raw]);
 
@@ -79,6 +109,26 @@ export function PageEditor({ raw, revision, io, onSaveStateChange }: PageEditorP
   const autosaveTimer = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const savedIndicatorTimer = useRef<ReturnType<typeof window.setTimeout> | null>(null);
 
+  const onRevisionChangeRef = useRef(onRevisionChange);
+  onRevisionChangeRef.current = onRevisionChange;
+  /** Every place that updates `revisionRef` funnels through here so the
+   * parent's view of "this editor's clean base revision" never drifts from
+   * the editor's own. */
+  const setRevision = useCallback((next: string | null) => {
+    revisionRef.current = next;
+    onRevisionChangeRef.current?.(next);
+  }, []);
+
+  // The initial revision (on mount) is a "revision change" too — the parent
+  // must learn it even though nothing was saved or reloaded yet.
+  useEffect(() => {
+    setRevision(revision);
+    // Only on mount: `revision` here is this instance's initial prop value,
+    // and `PageEditor` is remounted (fresh `key`) rather than re-fed a new
+    // `revision` prop in place.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const editor = useEditor({
     extensions: editorExtensions,
     content: initialDoc,
@@ -87,6 +137,14 @@ export function PageEditor({ raw, revision, io, onSaveStateChange }: PageEditorP
       scheduleAutosave();
     },
   });
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      getRaw: () => joinFrontmatter(frontmatter, serializeJSONToMarkdown(editor.getJSON())),
+    }),
+    [editor, frontmatter],
+  );
 
   const clearAutosaveTimer = useCallback(() => {
     if (autosaveTimer.current !== null) {
@@ -110,7 +168,7 @@ export function PageEditor({ raw, revision, io, onSaveStateChange }: PageEditorP
 
     try {
       const nextRevision = await io.save(fullRaw, revisionRef.current);
-      revisionRef.current = nextRevision;
+      setRevision(nextRevision);
       setSaveState({ status: "saved" });
       if (savedIndicatorTimer.current !== null) window.clearTimeout(savedIndicatorTimer.current);
       savedIndicatorTimer.current = window.setTimeout(() => {
@@ -125,7 +183,7 @@ export function PageEditor({ raw, revision, io, onSaveStateChange }: PageEditorP
     } finally {
       savingRef.current = false;
     }
-  }, [editor, frontmatter, io, saveState.status, clearAutosaveTimer, setSaveState]);
+  }, [editor, frontmatter, io, saveState.status, clearAutosaveTimer, setRevision]);
 
   const performSaveRef = useRef(performSave);
   performSaveRef.current = performSave;
@@ -159,7 +217,7 @@ export function PageEditor({ raw, revision, io, onSaveStateChange }: PageEditorP
   async function handleReload() {
     clearAutosaveTimer();
     const snapshot = await io.load();
-    revisionRef.current = snapshot.revision;
+    setRevision(snapshot.revision);
     editor.commands.setContent(parseMarkdownToJSON(splitFrontmatter(snapshot.raw).body));
     setSaveState({ status: "idle" });
   }
@@ -172,20 +230,13 @@ export function PageEditor({ raw, revision, io, onSaveStateChange }: PageEditorP
   return (
     <div className="page-editor">
       {saveState.status === "conflict" && (
-        <div className="conflict-banner">
-          <span className="conflict-banner-copy">
-            This page changed on disk since it was opened — saving now would overwrite that
-            change.
-          </span>
-          <div className="conflict-banner-actions">
-            <button className="secondary-button" onClick={handleKeepEditing}>
-              Keep editing
-            </button>
-            <button className="primary-button" onClick={() => void handleReload()}>
-              Reload
-            </button>
-          </div>
-        </div>
+        <ConflictEnvelope
+          message="This page changed on disk since it was opened — saving now would overwrite that change."
+          actions={[
+            { label: "Keep editing", onClick: handleKeepEditing },
+            { label: "Reload", onClick: () => void handleReload(), variant: "primary" },
+          ]}
+        />
       )}
 
       {frontmatter && (
@@ -200,4 +251,4 @@ export function PageEditor({ raw, revision, io, onSaveStateChange }: PageEditorP
       <EditorContent editor={editor} className="markdown-body page-editor-content" />
     </div>
   );
-}
+});
