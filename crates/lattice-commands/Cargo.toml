@@ -1,0 +1,19 @@
+[package]
+name = "lattice-commands"
+description = "Semantic command and transaction core for Lattice: preconditions, atomic apply, durable history, and undo/redo"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+lattice-core.workspace = true
+lattice-storage.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rusqlite.workspace = true
+uuid.workspace = true
+trash.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

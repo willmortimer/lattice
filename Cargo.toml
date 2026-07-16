@@ -4,6 +4,7 @@ members = [
     "apps/cli",
     "crates/lattice-core",
     "crates/lattice-storage",
+    "crates/lattice-commands",
     "apps/desktop/src-tauri",
 ]
 
@@ -15,6 +16,7 @@ rust-version = "1.85"
 [workspace.dependencies]
 lattice-core = { path = "crates/lattice-core" }
 lattice-storage = { path = "crates/lattice-storage" }
+lattice-commands = { path = "crates/lattice-commands" }
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
@@ -26,3 +28,4 @@ walkdir = "2"
 rusqlite = { version = "0.37", features = ["bundled"] }
 sha2 = "0.10"
 hex = "0.4"
+trash = "5"
