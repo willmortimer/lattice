@@ -2114,6 +2114,7 @@ dependencies = [
  "lattice-data",
  "lattice-index",
  "lattice-storage",
+ "lattice-theme",
  "predicates",
  "serde",
  "serde_json",
@@ -2176,6 +2177,9 @@ dependencies = [
  "lattice-data",
  "lattice-index",
  "lattice-storage",
+ "lattice-theme",
+ "notify",
+ "notify-debouncer-full",
  "rusqlite",
  "serde",
  "serde_json",
@@ -2209,6 +2213,19 @@ dependencies = [
  "hex",
  "rusqlite",
  "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "lattice-theme"
+version = "0.1.0"
+dependencies = [
+ "dirs",
+ "lattice-core",
+ "serde",
+ "serde_json",
+ "serde_yaml",
  "tempfile",
  "thiserror 2.0.18",
 ]

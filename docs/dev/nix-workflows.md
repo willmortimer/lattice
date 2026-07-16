@@ -57,6 +57,7 @@ Run them from the repo root (they use relative paths).
 | `site-dev` | Astro **marketing/docs** site (usually <http://localhost:4321>) |
 | `site-build` | static site build (syncs docs content first via `prebuild`) |
 | `docs-sync` | regenerate `site/src/content/docs/` from `docs/` |
+| `compile-theme` | compile `themes/*.theme.yaml` → desktop/site CSS (+ Pixi) tokens |
 | `desktop-dev` | Native window **+ Vite HMR** on :5173 (frontend hot-reload) |
 | `desktop-web` | Browser-only React UI on :5173 (demo workspace; no Tauri) |
 | `desktop` | Native window **without Vite** — reuses `apps/desktop/dist` if present, else builds once |
