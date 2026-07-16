@@ -51,7 +51,7 @@ impl fmt::Display for FieldType {
 }
 
 /// One typed cell value for row CRUD.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum CellValue {
     Null,
     Text(String),
@@ -121,7 +121,7 @@ pub struct ColumnMeta {
 }
 
 /// One row from a data-app table.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Row {
     pub id: String,
     pub values: BTreeMap<String, CellValue>,

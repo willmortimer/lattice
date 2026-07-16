@@ -360,3 +360,177 @@ fn history_order_undone_flags_and_redo_stack_clearing() {
     assert_eq!(limited.len(), 1);
     assert_eq!(limited[0].summary, "Create page C.md");
 }
+
+// 10. Table package CRUD through the command engine with undo roundtrips.
+#[test]
+fn table_record_commands_undo_roundtrip() {
+    use std::collections::BTreeMap;
+
+    use lattice_data::CellValue;
+
+    let (dir, mut engine) = engine();
+
+    engine
+        .apply(Transaction::new(
+            "Create CRM.data",
+            vec![Command::TableCreate {
+                path: PathBuf::from("CRM.data"),
+                title: "CRM".into(),
+                table_name: "contacts".into(),
+            }],
+        ))
+        .unwrap();
+    assert!(dir.path().join("CRM.data/database.sqlite").is_file());
+
+    let db_path = dir.path().join("CRM.data/database.sqlite");
+    rusqlite::Connection::open(&db_path)
+        .unwrap()
+        .execute_batch("ALTER TABLE contacts ADD COLUMN name TEXT;")
+        .unwrap();
+
+    let insert = engine
+        .apply(Transaction::new(
+            "Insert contact",
+            vec![Command::RecordInsert {
+                path: PathBuf::from("CRM.data"),
+                table: "contacts".into(),
+                values: BTreeMap::from([("name".into(), CellValue::Text("Ada".into()))]),
+                id: None,
+            }],
+        ))
+        .unwrap();
+    let after_insert = insert.outcomes[0].resulting_revision.clone().unwrap();
+
+    let row_id = lattice_data::DataApp::open(&dir.path().join("CRM.data"))
+        .unwrap()
+        .list_rows("contacts", 10, 0)
+        .unwrap()[0]
+        .id
+        .clone();
+
+    let update_base = after_insert.clone();
+    engine
+        .apply(Transaction::new(
+            "Update contact",
+            vec![Command::RecordUpdate {
+                path: PathBuf::from("CRM.data"),
+                table: "contacts".into(),
+                id: row_id.clone(),
+                values: BTreeMap::from([("name".into(), CellValue::Text("Grace".into()))]),
+                base_revision: update_base,
+            }],
+        ))
+        .unwrap();
+
+    let delete_base = lattice_data::DataApp::open(&dir.path().join("CRM.data"))
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Delete contact",
+            vec![Command::RecordDelete {
+                path: PathBuf::from("CRM.data"),
+                table: "contacts".into(),
+                id: row_id.clone(),
+                base_revision: delete_base,
+            }],
+        ))
+        .unwrap();
+    assert!(lattice_data::DataApp::open(&dir.path().join("CRM.data"))
+        .unwrap()
+        .list_rows("contacts", 10, 0)
+        .unwrap()
+        .is_empty());
+
+    engine.undo().unwrap().unwrap();
+    let app = lattice_data::DataApp::open(&dir.path().join("CRM.data")).unwrap();
+    assert_eq!(app.list_rows("contacts", 10, 0).unwrap()[0].id, row_id);
+    assert_eq!(
+        app.list_rows("contacts", 10, 0).unwrap()[0]
+            .values
+            .get("name"),
+        Some(&CellValue::Text("Grace".into()))
+    );
+
+    engine.undo().unwrap().unwrap();
+    let app = lattice_data::DataApp::open(&dir.path().join("CRM.data")).unwrap();
+    assert_eq!(
+        app.list_rows("contacts", 10, 0).unwrap()[0]
+            .values
+            .get("name"),
+        Some(&CellValue::Text("Ada".into()))
+    );
+
+    engine.undo().unwrap().unwrap();
+    assert!(lattice_data::DataApp::open(&dir.path().join("CRM.data"))
+        .unwrap()
+        .list_rows("contacts", 10, 0)
+        .unwrap()
+        .is_empty());
+
+    engine.undo().unwrap().unwrap();
+    assert!(!dir.path().join("CRM.data").exists());
+
+    engine.redo().unwrap().unwrap();
+    assert!(dir.path().join("CRM.data").is_dir());
+}
+
+#[test]
+fn stale_package_revision_on_record_update_is_refused() {
+    use std::collections::BTreeMap;
+
+    use lattice_data::CellValue;
+
+    let (dir, mut engine) = engine();
+    engine
+        .apply(Transaction::new(
+            "Create CRM.data",
+            vec![Command::TableCreate {
+                path: PathBuf::from("CRM.data"),
+                title: "CRM".into(),
+                table_name: "contacts".into(),
+            }],
+        ))
+        .unwrap();
+    rusqlite::Connection::open(dir.path().join("CRM.data/database.sqlite"))
+        .unwrap()
+        .execute_batch("ALTER TABLE contacts ADD COLUMN name TEXT;")
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Insert contact",
+            vec![Command::RecordInsert {
+                path: PathBuf::from("CRM.data"),
+                table: "contacts".into(),
+                values: BTreeMap::from([("name".into(), CellValue::Text("Ada".into()))]),
+                id: None,
+            }],
+        ))
+        .unwrap();
+
+    let app = lattice_data::DataApp::open(&dir.path().join("CRM.data")).unwrap();
+    let row_id = app.list_rows("contacts", 10, 0).unwrap()[0].id.clone();
+    drop(app);
+
+    let result = engine.apply(Transaction::new(
+        "Stale update",
+        vec![Command::RecordUpdate {
+            path: PathBuf::from("CRM.data"),
+            table: "contacts".into(),
+            id: row_id,
+            values: BTreeMap::from([("name".into(), CellValue::Text("Stale".into()))]),
+            base_revision: "sha256:deadbeef".into(),
+        }],
+    ));
+    assert!(matches!(result, Err(Error::StaleBaseRevision { .. })));
+    assert_eq!(
+        lattice_data::DataApp::open(&dir.path().join("CRM.data"))
+            .unwrap()
+            .list_rows("contacts", 10, 0)
+            .unwrap()[0]
+            .values
+            .get("name"),
+        Some(&CellValue::Text("Ada".into()))
+    );
+}
