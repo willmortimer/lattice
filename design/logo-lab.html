@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crystalline Signal — Lattice Logo Lab</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&family=Lora:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* Anthropic Brand Colors */
+        :root {
+            --anthropic-dark: #141413;
+            --anthropic-light: #faf9f5;
+            --anthropic-mid-gray: #b0aea5;
+            --anthropic-light-gray: #e8e6dc;
+            --anthropic-orange: #d97757;
+            --anthropic-blue: #6a9bcc;
+            --anthropic-green: #788c5d;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, var(--anthropic-light) 0%, #f5f3ee 100%);
+            min-height: 100vh;
+            color: var(--anthropic-dark);
+        }
+
+        .container {
+            display: flex;
+            min-height: 100vh;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 320px;
+            flex-shrink: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(20, 20, 19, 0.1);
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .sidebar h1 {
+            font-family: 'Lora', serif;
+            font-size: 24px;
+            font-weight: 500;
+            color: var(--anthropic-dark);
+            margin-bottom: 8px;
+        }
+
+        .sidebar .subtitle {
+            color: var(--anthropic-mid-gray);
+            font-size: 14px;
+            margin-bottom: 32px;
+            line-height: 1.4;
+        }
+
+        /* Control Sections */
+        .control-section {
+            margin-bottom: 32px;
+        }
+
+        .control-section h3 {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--anthropic-dark);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .control-section h3::before {
+            content: '•';
+            color: var(--anthropic-orange);
+            font-weight: bold;
+        }
+
+        /* Seed Controls */
+        .seed-input {
+            width: 100%;
+            background: var(--anthropic-light);
+            padding: 12px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            margin-bottom: 12px;
+            border: 1px solid var(--anthropic-light-gray);
+            text-align: center;
+        }
+
+        .seed-input:focus {
+            outline: none;
+            border-color: var(--anthropic-orange);
+            box-shadow: 0 0 0 2px rgba(217, 119, 87, 0.1);
+            background: white;
+        }
+
+        .seed-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .regen-button {
+            margin-bottom: 0;
+        }
+
+        /* Parameter Controls */
+        .control-group {
+            margin-bottom: 20px;
+        }
+
+        .control-group label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--anthropic-dark);
+            margin-bottom: 8px;
+        }
+
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .slider-container input[type="range"] {
+            flex: 1;
+            height: 4px;
+            background: var(--anthropic-light-gray);
+            border-radius: 2px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .slider-container input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: var(--anthropic-orange);
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .slider-container input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+            background: #c86641;
+        }
+
+        .slider-container input[type="range"]::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background: var(--anthropic-orange);
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .value-display {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: var(--anthropic-mid-gray);
+            min-width: 60px;
+            text-align: right;
+        }
+
+        /* Color Pickers */
+        .color-group {
+            margin-bottom: 16px;
+        }
+
+        .color-group label {
+            display: block;
+            font-size: 12px;
+            color: var(--anthropic-mid-gray);
+            margin-bottom: 4px;
+        }
+
+        .color-picker-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .color-picker-container input[type="color"] {
+            width: 32px;
+            height: 32px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            background: none;
+            padding: 0;
+        }
+
+        .color-value {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: var(--anthropic-mid-gray);
+        }
+
+        /* Buttons */
+        .button {
+            background: var(--anthropic-orange);
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            width: 100%;
+        }
+
+        .button:hover {
+            background: #c86641;
+            transform: translateY(-1px);
+        }
+
+        .button:active {
+            transform: translateY(0);
+        }
+
+        .button.secondary {
+            background: var(--anthropic-blue);
+        }
+
+        .button.secondary:hover {
+            background: #5a8bb8;
+        }
+
+        .button.tertiary {
+            background: var(--anthropic-green);
+        }
+
+        .button.tertiary:hover {
+            background: #6b7b52;
+        }
+
+        .button-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .button-row .button {
+            flex: 1;
+        }
+
+        /* Canvas Area */
+        .canvas-area {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 0;
+        }
+
+        #canvas-container {
+            width: 100%;
+            max-width: 1000px;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 20px 40px rgba(20, 20, 19, 0.1);
+            background: white;
+        }
+
+        #canvas-container canvas {
+            display: block;
+            width: 100% !important;
+            height: auto !important;
+        }
+
+        /* Loading State */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: var(--anthropic-mid-gray);
+        }
+
+        /* Responsive - Stack on mobile */
+        @media (max-width: 600px) {
+            .container {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+            }
+
+            .canvas-area {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Control Sidebar -->
+        <div class="sidebar">
+            <h1>Crystalline Signal</h1>
+            <div class="subtitle">The Lattice mark as a living system: an axonometric 3D lattice with seeded glow nodes and pulses traveling its edges. See design/philosophy.md.</div>
+
+            <!-- Seed Section -->
+            <div class="control-section">
+                <h3>Seed</h3>
+                <input type="number" id="seed-input" class="seed-input" value="12345" onchange="updateSeed()">
+                <div class="seed-controls">
+                    <button class="button secondary" onclick="previousSeed()">← Prev</button>
+                    <button class="button secondary" onclick="nextSeed()">Next →</button>
+                </div>
+                <button class="button tertiary regen-button" onclick="randomSeedAndUpdate()">↻ Random</button>
+            </div>
+
+            <!-- Parameters Section -->
+            <div class="control-section">
+                <h3>Parameters</h3>
+
+                <div class="control-group">
+                    <label>Subdivisions</label>
+                    <div class="slider-container">
+                        <input type="range" id="divisions" min="1" max="4" step="1" value="2" oninput="updateParam('divisions', this.value)">
+                        <span class="value-display" id="divisions-value">2</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Tilt (degrees)</label>
+                    <div class="slider-container">
+                        <input type="range" id="tilt" min="18" max="42" step="0.5" value="30" oninput="updateParam('tilt', this.value)">
+                        <span class="value-display" id="tilt-value">30</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Depth Fade</label>
+                    <div class="slider-container">
+                        <input type="range" id="depthFade" min="0" max="1" step="0.05" value="0.75" oninput="updateParam('depthFade', this.value)">
+                        <span class="value-display" id="depthFade-value">0.75</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Node Size</label>
+                    <div class="slider-container">
+                        <input type="range" id="nodeSize" min="0.4" max="2" step="0.1" value="1" oninput="updateParam('nodeSize', this.value)">
+                        <span class="value-display" id="nodeSize-value">1</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Glow Nodes</label>
+                    <div class="slider-container">
+                        <input type="range" id="glowNodes" min="0" max="10" step="1" value="4" oninput="updateParam('glowNodes', this.value)">
+                        <span class="value-display" id="glowNodes-value">4</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Pulses</label>
+                    <div class="slider-container">
+                        <input type="range" id="pulseCount" min="0" max="8" step="1" value="3" oninput="updateParam('pulseCount', this.value)">
+                        <span class="value-display" id="pulseCount-value">3</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Pulse Speed</label>
+                    <div class="slider-container">
+                        <input type="range" id="pulseSpeed" min="0.2" max="2" step="0.1" value="0.8" oninput="updateParam('pulseSpeed', this.value)">
+                        <span class="value-display" id="pulseSpeed-value">0.8</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Colors Section -->
+            <div class="control-section">
+                <h3>Colors</h3>
+
+                <div class="color-group">
+                    <label>Lattice Amber</label>
+                    <div class="color-picker-container">
+                        <input type="color" id="color1" value="#f5a623" onchange="updateColor('color1', this.value)">
+                        <span class="color-value" id="color1-value">#f5a623</span>
+                    </div>
+                </div>
+
+                <div class="color-group">
+                    <label>Signal Bright</label>
+                    <div class="color-picker-container">
+                        <input type="color" id="color2" value="#ffce8a" onchange="updateColor('color2', this.value)">
+                        <span class="color-value" id="color2-value">#ffce8a</span>
+                    </div>
+                </div>
+
+                <div class="color-group">
+                    <label>Ground</label>
+                    <div class="color-picker-container">
+                        <input type="color" id="color3" value="#0a0d13" onchange="updateColor('color3', this.value)">
+                        <span class="color-value" id="color3-value">#0a0d13</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions Section -->
+            <div class="control-section">
+                <h3>Actions</h3>
+                <div class="button-row" style="margin-bottom: 8px;">
+                    <button class="button" onclick="initializeSystem()">Regenerate</button>
+                    <button class="button" onclick="resetParameters()">Reset</button>
+                </div>
+                <button class="button tertiary" onclick="downloadPNG()">Download PNG</button>
+            </div>
+        </div>
+
+        <!-- Main Canvas Area -->
+        <div class="canvas-area">
+            <div id="canvas-container">
+                <div class="loading">Initializing generative art...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ═══════════════════════════════════════════════════════════════════
+        // CRYSTALLINE SIGNAL — parameters
+        // ═══════════════════════════════════════════════════════════════════
+
+        let params = {
+            seed: 12345,
+            divisions: 2,     // lattice subdivisions per axis
+            tilt: 30,         // projection angle; 30° = isometric
+            depthFade: 0.75,  // how strongly the far scaffold dissolves
+            nodeSize: 1,      // node radius multiplier
+            glowNodes: 4,     // seeded waking vertices
+            pulseCount: 3,    // signals traveling the edges
+            pulseSpeed: 0.8,
+            colorPalette: ['#f5a623', '#ffce8a', '#0a0d13']
+        };
+
+        let defaultParams = JSON.parse(JSON.stringify(params));
+
+        // ═══════════════════════════════════════════════════════════════════
+        // The system: an axonometric 3D lattice.
+        //
+        // Every drawable is derived from integer coordinates (x,y,z) in
+        // [0..n]^3. Projection: px=(x−z)·cosT, py=(x+z)·sinT−y. Depth is
+        // (x+y+z)/3n, 0 = far corner, 1 = near corner; opacity and weight
+        // follow depth so the far scaffold dissolves into the ground.
+        // At T = 30° the near corner projects exactly onto the silhouette
+        // center — the brightest node is the point closest to the viewer.
+        // ═══════════════════════════════════════════════════════════════════
+
+        const SIZE = 1200;
+        let nodes = [];    // {x,y,z, px,py, depth}
+        let edges = [];    // {a,b (node indices), depth}
+        let glowing = [];  // {i (node index), phase, rate}
+        let pulses = [];   // {path:[node indices], t, speed, len}
+
+        function setup() {
+            let canvas = createCanvas(SIZE, SIZE);
+            canvas.parent('canvas-container');
+            initializeSystem();
+            document.querySelector('.loading').style.display = 'none';
+        }
+
+        function projectAll() {
+            const n = params.divisions;
+            const T = radians(params.tilt);
+            const ax = Math.cos(T), ay = Math.sin(T);
+            // Projected bounding box: x in [−n·ax, n·ax], y in [−n, 2n·ay].
+            const w = 2 * n * ax;
+            const h = 2 * n * ay + n;
+            const s = (SIZE * 0.62) / Math.max(w, h);
+            const cx = SIZE / 2;
+            const pyMin = -n, pyMax = 2 * n * ay;
+            const yOff = (pyMin + pyMax) / 2;
+
+            nodes = [];
+            const index = {};
+            for (let x = 0; x <= n; x++)
+                for (let y = 0; y <= n; y++)
+                    for (let z = 0; z <= n; z++) {
+                        const px = cx + (x - z) * ax * s;
+                        const py = SIZE / 2 + ((x + z) * ay - y - yOff) * s;
+                        index[[x, y, z]] = nodes.length;
+                        nodes.push({ x, y, z, px, py, depth: (x + y + z) / (3 * n) });
+                    }
+
+            edges = [];
+            const dirs = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+            for (const nd of nodes)
+                for (const [dx, dy, dz] of dirs) {
+                    const to = index[[nd.x + dx, nd.y + dy, nd.z + dz]];
+                    if (to !== undefined) {
+                        const a = index[[nd.x, nd.y, nd.z]];
+                        edges.push({ a, b: to, depth: (nd.depth + nodes[to].depth) / 2 });
+                    }
+                }
+            return index;
+        }
+
+        function initializeSystem() {
+            randomSeed(params.seed);
+            noiseSeed(params.seed);
+            const index = projectAll();
+            const n = params.divisions;
+
+            // Seeded waking vertices — never the near corner, which is
+            // already the mark's anchor.
+            glowing = [];
+            const candidates = shuffle([...Array(nodes.length).keys()]
+                .filter((i) => !(nodes[i].x === n && nodes[i].y === n && nodes[i].z === n)));
+            for (let k = 0; k < Math.min(params.glowNodes, candidates.length); k++) {
+                glowing.push({ i: candidates[k], phase: random(TWO_PI), rate: random(0.5, 1.1) });
+            }
+
+            // Seeded pulse routes: random walks along lattice edges.
+            pulses = [];
+            for (let k = 0; k < params.pulseCount; k++) {
+                let cur = [floor(random(n + 1)), floor(random(n + 1)), floor(random(n + 1))];
+                const path = [index[cur]];
+                let prevAxis = -1;
+                const steps = 4 + floor(random(4));
+                for (let s = 0; s < steps; s++) {
+                    const options = [];
+                    [[0, 1], [1, 1], [2, 1], [0, -1], [1, -1], [2, -1]].forEach(([axis, dir]) => {
+                        if (axis === prevAxis) return;
+                        const next = [...cur];
+                        next[axis] += dir;
+                        if (next[axis] >= 0 && next[axis] <= n) options.push({ axis, next });
+                    });
+                    if (!options.length) break;
+                    const pick = options[floor(random(options.length))];
+                    cur = pick.next;
+                    prevAxis = pick.axis;
+                    path.push(index[cur]);
+                }
+                if (path.length > 1)
+                    pulses.push({ path, t: random(path.length - 1), speed: random(0.6, 1.4) });
+            }
+        }
+
+        function edgeAlpha(depth) {
+            // Far scaffold dissolves; near cell stays sharp.
+            const lo = 1 - params.depthFade;
+            return lerp(lo, 1, pow(depth, 1.6));
+        }
+
+        function draw() {
+            const [amber, brightC, ground] = params.colorPalette;
+            const n = params.divisions;
+
+            // Ground with a slow radial vignette.
+            background(ground);
+            noStroke();
+            const g = color(amber);
+            g.setAlpha(10);
+            fill(g);
+            ellipse(SIZE / 2, SIZE / 2, SIZE * 0.9, SIZE * 0.9);
+
+            // Lattice edges, far to near.
+            const sorted = [...edges].sort((e1, e2) => e1.depth - e2.depth);
+            for (const e of sorted) {
+                const a = nodes[e.a], b = nodes[e.b];
+                const c = color(amber);
+                c.setAlpha(edgeAlpha(e.depth) * 210);
+                stroke(c);
+                strokeWeight(lerp(1.6, 4.2, e.depth) * (2 / max(n, 2)));
+                line(a.px, a.py, b.px, b.py);
+            }
+
+            // Lattice nodes.
+            noStroke();
+            for (const nd of nodes) {
+                const c = color(brightC);
+                c.setAlpha(edgeAlpha(nd.depth) * 235);
+                fill(c);
+                const corner = [0, n].includes(nd.x) && [0, n].includes(nd.y) && [0, n].includes(nd.z);
+                circle(nd.px, nd.py, (corner ? 16 : 9) * params.nodeSize * (2 / max(n, 2)) * lerp(0.7, 1.15, nd.depth));
+            }
+
+            // Waking vertices: breathing halos on slow sine phases.
+            const tNow = millis() / 1000;
+            for (const gl of glowing) {
+                const nd = nodes[gl.i];
+                const breathe = 0.5 + 0.5 * sin(tNow * gl.rate * TWO_PI * 0.25 + gl.phase);
+                const halo = color(amber);
+                for (let ring = 3; ring >= 1; ring--) {
+                    halo.setAlpha(breathe * 26 * ring);
+                    fill(halo);
+                    circle(nd.px, nd.py, (46 - ring * 10) * (2 / max(n, 2)) * (0.7 + 0.5 * breathe));
+                }
+                const core = color(brightC);
+                core.setAlpha(150 + 105 * breathe);
+                fill(core);
+                circle(nd.px, nd.py, 13 * params.nodeSize * (2 / max(n, 2)));
+            }
+
+            // The near corner: the mark's anchor, always awake.
+            const anchor = nodes.find((nd) => nd.x === n && nd.y === n && nd.z === n);
+            const pulseA = 0.5 + 0.5 * sin(tNow * 1.4);
+            const haloA = color(amber);
+            haloA.setAlpha(40 + 40 * pulseA);
+            fill(haloA);
+            circle(anchor.px, anchor.py, 64 * (2 / max(n, 2)) * (0.8 + 0.3 * pulseA));
+            fill(amber);
+            circle(anchor.px, anchor.py, 26 * params.nodeSize * (2 / max(n, 2)));
+
+            // Signals traveling the edges.
+            for (const p of pulses) {
+                p.t = (p.t + (deltaTime / 1000) * p.speed * params.pulseSpeed) % (p.path.length - 1);
+                const seg = floor(p.t);
+                const frac = p.t - seg;
+                const a = nodes[p.path[seg]], b = nodes[p.path[seg + 1]];
+                const px = lerp(a.px, b.px, frac), py = lerp(a.py, b.py, frac);
+                // Short bright trail back along the segment.
+                for (let k = 0; k < 6; k++) {
+                    const tf = max(0, frac - k * 0.06);
+                    const trail = color(brightC);
+                    trail.setAlpha(120 * (1 - k / 6));
+                    fill(trail);
+                    circle(lerp(a.px, b.px, tf), lerp(a.py, b.py, tf), (10 - k) * (2 / max(n, 2)));
+                }
+                const head = color(brightC);
+                head.setAlpha(235);
+                fill(head);
+                circle(px, py, 12 * (2 / max(n, 2)));
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // UI control handlers
+        // ═══════════════════════════════════════════════════════════════════
+
+        function updateParam(name, value) {
+            params[name] = parseFloat(value);
+            document.getElementById(name + '-value').textContent = value;
+            initializeSystem();
+        }
+
+        function updateColor(colorId, value) {
+            const idx = { color1: 0, color2: 1, color3: 2 }[colorId];
+            params.colorPalette[idx] = value;
+            document.getElementById(colorId + '-value').textContent = value;
+        }
+
+        function downloadPNG() {
+            saveCanvas('lattice-mark-' + params.seed, 'png');
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Seed controls
+        // ═══════════════════════════════════════════════════════════════════
+
+        function updateSeedDisplay() {
+            document.getElementById('seed-input').value = params.seed;
+        }
+
+        function updateSeed() {
+            let input = document.getElementById('seed-input');
+            let newSeed = parseInt(input.value);
+            if (newSeed && newSeed > 0) {
+                params.seed = newSeed;
+                initializeSystem();
+            } else {
+                updateSeedDisplay();
+            }
+        }
+
+        function previousSeed() {
+            params.seed = Math.max(1, params.seed - 1);
+            updateSeedDisplay();
+            initializeSystem();
+        }
+
+        function nextSeed() {
+            params.seed = params.seed + 1;
+            updateSeedDisplay();
+            initializeSystem();
+        }
+
+        function randomSeedAndUpdate() {
+            params.seed = Math.floor(Math.random() * 999999) + 1;
+            updateSeedDisplay();
+            initializeSystem();
+        }
+
+        function resetParameters() {
+            params = JSON.parse(JSON.stringify(defaultParams));
+            for (const key of ['divisions', 'tilt', 'depthFade', 'nodeSize', 'glowNodes', 'pulseCount', 'pulseSpeed']) {
+                document.getElementById(key).value = params[key];
+                document.getElementById(key + '-value').textContent = params[key];
+            }
+            ['color1', 'color2', 'color3'].forEach((id, i) => {
+                document.getElementById(id).value = params.colorPalette[i];
+                document.getElementById(id + '-value').textContent = params.colorPalette[i];
+            });
+            updateSeedDisplay();
+            initializeSystem();
+        }
+
+        window.addEventListener('load', updateSeedDisplay);
+    </script>
+</body>
+</html>
