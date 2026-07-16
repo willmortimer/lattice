@@ -9,12 +9,12 @@
  *
  *   node site/scripts/generate-mark.mjs
  *
- * Writes site/src/assets/lattice-mark.svg and prints the inline variants
- * (header/footer SVG with CSS variables, favicon data URI, desktop BrandMark
- * geometry) to stdout for pasting into components.
+ * Writes the site mark and canonical desktop app-icon source, then prints
+ * inline variants (header/footer SVG with CSS variables, favicon data URI,
+ * desktop BrandMark geometry) to stdout for pasting into components.
  */
 
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -118,6 +118,49 @@ function markSvg({ viewSize, scale, stroke, amber, bright, withAria }) {
 `;
 }
 
+function appIconSvg() {
+  const viewSize = 1024;
+  const scale = 330;
+  const stroke = 34;
+  const { pt, path } = layout(viewSize, scale);
+  const [cx, cy] = pt(CENTER);
+  const dots = VERTICES.map(pt)
+    .map(([x, y]) => `<circle cx="${x}" cy="${y}" r="38"/>`)
+    .join("");
+
+  return `<svg width="${viewSize}" height="${viewSize}" viewBox="0 0 ${viewSize} ${viewSize}" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lattice">
+  <defs>
+    <linearGradient id="tile" x1="180" y1="90" x2="850" y2="930" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#13253A"/>
+      <stop offset="0.55" stop-color="#0B1828"/>
+      <stop offset="1" stop-color="#07111D"/>
+    </linearGradient>
+    <radialGradient id="signal" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(${cx} ${cy}) rotate(90) scale(280)">
+      <stop stop-color="#F5A623" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#F5A623" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="tile-clip">
+      <rect x="48" y="48" width="928" height="928" rx="214"/>
+    </clipPath>
+  </defs>
+  <rect x="48" y="48" width="928" height="928" rx="214" fill="url(#tile)"/>
+  <g clip-path="url(#tile-clip)">
+    <path d="M96 290H928M96 512H928M96 734H928M290 96V928M512 96V928M734 96V928" stroke="#88A4C2" stroke-width="5" opacity="0.1"/>
+    <circle cx="${cx}" cy="${cy}" r="280" fill="url(#signal)"/>
+  </g>
+  <g stroke="#F5A623" stroke-linecap="round" stroke-linejoin="round">
+    <path d="${path(FAR)}" stroke-width="${r2(stroke * 0.7)}" opacity="0.24"/>
+    <path d="${path(GRID)}" stroke-width="${r2(stroke * 0.72)}" opacity="0.4"/>
+    <path d="${path(OUTLINE)}" stroke-width="${stroke}" opacity="0.94"/>
+    <path d="${path(NEAR)}" stroke-width="${stroke}" opacity="0.98"/>
+  </g>
+  <g fill="#FFCE8A">${dots}</g>
+  <circle cx="${cx}" cy="${cy}" r="62" fill="#F5A623"/>
+  <rect x="50.5" y="50.5" width="923" height="923" rx="211.5" stroke="#8FB3D8" stroke-width="5" opacity="0.22"/>
+</svg>
+`;
+}
+
 // --- Outputs -----------------------------------------------------------------
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -133,7 +176,14 @@ const asset = markSvg({
 writeFileSync(join(here, "../src/assets/lattice-mark.svg"), asset);
 console.log("wrote site/src/assets/lattice-mark.svg\n");
 
-// 2. Inline variant for Layout.astro (CSS variables instead of hex)
+// 2. Canonical desktop source. Platform sizes are generated from this SVG by
+// the Tauri CLI so the app icon cannot drift from the algorithmic kindmark.
+const generatedDir = join(here, "../../design/generated");
+mkdirSync(generatedDir, { recursive: true });
+writeFileSync(join(generatedDir, "lattice-app-icon.svg"), appIconSvg());
+console.log("wrote design/generated/lattice-app-icon.svg\n");
+
+// 3. Inline variant for Layout.astro (CSS variables instead of hex)
 console.log("--- inline (Layout.astro) ---\n");
 console.log(
   markSvg({
@@ -146,7 +196,7 @@ console.log(
   }),
 );
 
-// 3. Favicon data URI (dark rounded tile + simplified cell — no interior
+// 4. Favicon data URI (dark rounded tile + simplified cell — no interior
 // grid, which muddies at 16px)
 const { path: fpath, pt: fpt } = layout(32, 12.2);
 const [fcx, fcy] = fpt(CENTER);
@@ -162,7 +212,7 @@ const favicon =
 console.log("--- favicon href ---\n");
 console.log(`data:image/svg+xml,${favicon}\n`);
 
-// 4. Desktop BrandMark geometry (56 viewBox)
+// 5. Desktop BrandMark geometry (56 viewBox)
 console.log("--- BrandMark (App.tsx, 56 viewBox) ---\n");
 const b = layout(56, 22);
 const [bcx, bcy] = b.pt(CENTER);
