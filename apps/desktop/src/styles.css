@@ -334,6 +334,42 @@ button {
   color: var(--amber);
 }
 
+/* Kind marks draw themselves on when a resource becomes active: strokes
+   trace in (all marks are stroke-drawn on the same 20×20 grid), then the
+   node dots pop. Applies wherever the selection lands — sidebar row,
+   breadcrumb, and the no-viewer placeholder. */
+.resource-item-active .kind-mark path,
+.resource-item-active .kind-mark rect,
+.main-head .kind-mark path,
+.main-head .kind-mark rect,
+.placeholder-mark .kind-mark path,
+.placeholder-mark .kind-mark rect {
+  stroke-dasharray: 60;
+  stroke-dashoffset: 60;
+  animation: kind-draw 420ms cubic-bezier(0.33, 1, 0.68, 1) forwards;
+}
+
+@keyframes kind-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.resource-item-active .kind-mark circle,
+.main-head .kind-mark circle,
+.placeholder-mark .kind-mark circle {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: kind-pop 240ms 180ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+
+@keyframes kind-pop {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+}
+
 .resource-path {
   overflow: hidden;
   text-overflow: ellipsis;
