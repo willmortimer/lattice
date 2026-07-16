@@ -530,3 +530,27 @@ button {
 .markdown-body li::marker {
   color: var(--amber-deep);
 }
+
+/* ============================================================================
+   Canvas viewer — full-bleed spatial pane, no scroll chrome
+   ========================================================================== */
+
+.canvas-pane {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 34px 34px;
+}
+
+.canvas-viewer {
+  position: absolute;
+  inset: 0;
+}
+
+.canvas-viewer canvas {
+  display: block;
+}

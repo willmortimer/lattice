@@ -34,6 +34,130 @@ export const demoSnapshot: WorkspaceSnapshot = {
   ],
 };
 
+/**
+ * `Product/Product Strategy.canvas` fixture: text notes, file nodes back
+ * onto the resources above, one group, and enough edges to review panning,
+ * zooming, selection, and file-node double-click in a plain browser.
+ */
+export const demoCanvas = {
+  nodes: [
+    {
+      id: "strategy-group",
+      type: "group",
+      label: "Strategy",
+      x: 40,
+      y: 40,
+      width: 800,
+      height: 360,
+    },
+    {
+      id: "intro",
+      type: "text",
+      x: 60,
+      y: 60,
+      width: 260,
+      height: 140,
+      text: "Q3 push: grow from evaluation to daily use. Vision and roadmap anchor everything below — competitor data feeds the roadmap bets directly.",
+    },
+    {
+      id: "vision",
+      type: "file",
+      file: "Product/Vision.md",
+      x: 340,
+      y: 60,
+      width: 220,
+      height: 140,
+    },
+    {
+      id: "roadmap",
+      type: "file",
+      file: "Product/Roadmap.md",
+      x: 580,
+      y: 60,
+      width: 220,
+      height: 140,
+    },
+    {
+      id: "competitors-page",
+      type: "file",
+      file: "Research/Competitor Analysis.md",
+      x: 60,
+      y: 240,
+      width: 220,
+      height: 130,
+    },
+    {
+      id: "competitors-data",
+      type: "file",
+      file: "Research/Competitors.data",
+      x: 320,
+      y: 240,
+      width: 220,
+      height: 130,
+    },
+    {
+      id: "usage-dataset",
+      type: "file",
+      file: "Analytics/Usage.dataset",
+      x: 580,
+      y: 240,
+      width: 220,
+      height: 130,
+    },
+    {
+      id: "usage-notebook",
+      type: "file",
+      file: "Notebooks/Usage Analysis.ipynb",
+      x: 340,
+      y: 460,
+      width: 240,
+      height: 140,
+    },
+    {
+      id: "note-market",
+      type: "text",
+      x: 620,
+      y: 460,
+      width: 220,
+      height: 140,
+      text: "Market map still needs the enterprise segment split out before the all-hands.",
+    },
+    {
+      id: "market-map",
+      type: "file",
+      file: "Artifacts/Market Map.artifact",
+      x: 880,
+      y: 460,
+      width: 220,
+      height: 140,
+    },
+    {
+      id: "spec-link",
+      type: "link",
+      url: "https://jsoncanvas.org",
+      x: 60,
+      y: 460,
+      width: 220,
+      height: 110,
+    },
+  ],
+  edges: [
+    { id: "e1", fromNode: "intro", toNode: "vision", fromSide: "right", toSide: "left" },
+    { id: "e2", fromNode: "vision", toNode: "roadmap", fromSide: "right", toSide: "left" },
+    {
+      id: "e3",
+      fromNode: "roadmap",
+      toNode: "competitors-data",
+      label: "informs",
+    },
+    { id: "e4", fromNode: "competitors-page", toNode: "competitors-data" },
+    { id: "e5", fromNode: "competitors-data", toNode: "usage-dataset" },
+    { id: "e6", fromNode: "usage-dataset", toNode: "usage-notebook" },
+    { id: "e7", fromNode: "usage-notebook", toNode: "market-map", label: "feeds" },
+    { id: "e8", fromNode: "note-market", toNode: "market-map" },
+  ],
+};
+
 export const demoPage = `# Competitor Analysis
 
 A running comparison of the tools Lattice draws from — and where each one
