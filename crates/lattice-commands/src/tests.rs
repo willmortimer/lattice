@@ -4,7 +4,7 @@ use lattice_core::Workspace;
 use lattice_storage::{NativeWorkspaceStore, WorkspaceStore};
 use tempfile::TempDir;
 
-use crate::{Command, CommandEngine, Error, Transaction, TrashPolicy};
+use crate::{Command, CommandEngine, Error, Transaction, TrashPolicy, MAX_RESOURCE_EDIT_BYTES};
 
 /// A fresh workspace + engine. Tests use [`TrashPolicy::LocalFallbackOnly`]
 /// so deletes deterministically land in `.lattice/trash/` instead of the OS
@@ -134,6 +134,165 @@ fn binary_resource_command_serializes_content_compactly_and_round_trips() {
     let command = Command::ResourceCreate {
         path: PathBuf::from("assets/image.bin"),
         content: vec![0, 159, 146, 150, 255],
+    };
+    let json = serde_json::to_string(&command).unwrap();
+    assert!(json.contains("\"content\":\""));
+    assert!(!json.contains("\"content\":["));
+    assert_eq!(serde_json::from_str::<Command>(&json).unwrap(), command);
+}
+
+#[test]
+fn resource_update_preserves_exact_text_bytes_and_is_undoable() {
+    let (dir, mut engine) = engine();
+    let original = b"\0version one\n".to_vec();
+    engine
+        .apply(Transaction::new(
+            "Create binary resource",
+            vec![Command::ResourceCreate {
+                path: PathBuf::from("assets/blob.txt"),
+                content: original.clone(),
+            }],
+        ))
+        .unwrap();
+    let base = NativeWorkspaceStore::new(dir.path())
+        .metadata(Path::new("assets/blob.txt"))
+        .unwrap()
+        .revision
+        .hash;
+    let updated = b"\0version two\n".to_vec();
+
+    let receipt = engine
+        .apply(Transaction::new(
+            "Update binary resource",
+            vec![Command::ResourceUpdate {
+                path: PathBuf::from("assets/blob.txt"),
+                content: updated.clone(),
+                base_revision: base,
+            }],
+        ))
+        .unwrap();
+    assert_eq!(read(&dir, "assets/blob.txt"), updated);
+    assert!(receipt.outcomes[0]
+        .resulting_revision
+        .as_deref()
+        .is_some_and(|revision| revision.starts_with("sha256:")));
+
+    engine.undo().unwrap().unwrap();
+    assert_eq!(read(&dir, "assets/blob.txt"), original);
+    engine.redo().unwrap().unwrap();
+    assert_eq!(read(&dir, "assets/blob.txt"), updated);
+}
+
+#[test]
+fn resource_update_rejects_stale_and_oversized_edits_without_history() {
+    let (dir, mut engine) = engine();
+    engine
+        .apply(Transaction::new(
+            "Create resource",
+            vec![Command::ResourceCreate {
+                path: PathBuf::from("note.txt"),
+                content: vec![1, 2, 3],
+            }],
+        ))
+        .unwrap();
+    let before = read(&dir, "note.txt");
+    let stale = engine.apply(Transaction::new(
+        "Stale resource update",
+        vec![Command::ResourceUpdate {
+            path: PathBuf::from("note.txt"),
+            content: vec![9],
+            base_revision: "sha256:stale".into(),
+        }],
+    ));
+    assert!(matches!(stale, Err(Error::StaleBaseRevision { .. })));
+    assert_eq!(read(&dir, "note.txt"), before);
+
+    let oversized = engine.apply(Transaction::new(
+        "Oversized resource update",
+        vec![Command::ResourceUpdate {
+            path: PathBuf::from("note.txt"),
+            content: vec![0; MAX_RESOURCE_EDIT_BYTES + 1],
+            base_revision: "sha256:irrelevant".into(),
+        }],
+    ));
+    assert!(matches!(oversized, Err(Error::EditTooLarge { .. })));
+    assert_eq!(engine.history(10).unwrap().len(), 1);
+    assert_eq!(read(&dir, "note.txt"), before);
+}
+
+#[test]
+fn resource_update_rejects_read_only_and_internal_targets() {
+    let (dir, mut engine) = engine();
+    let image = vec![0x89, b'P', b'N', b'G', 0, 1, 2, 3];
+    engine
+        .apply(Transaction::new(
+            "Create image",
+            vec![Command::ResourceCreate {
+                path: PathBuf::from("image.png"),
+                content: image,
+            }],
+        ))
+        .unwrap();
+    let image_result = engine.apply(Transaction::new(
+        "Update image",
+        vec![Command::ResourceUpdate {
+            path: PathBuf::from("image.png"),
+            content: b"not an image".to_vec(),
+            base_revision: "sha256:any".into(),
+        }],
+    ));
+    assert!(matches!(
+        image_result,
+        Err(Error::ResourceNotEditable { .. })
+    ));
+
+    std::fs::create_dir(dir.path().join("Folder")).unwrap();
+    let directory_result = engine.apply(Transaction::new(
+        "Update folder",
+        vec![Command::ResourceUpdate {
+            path: PathBuf::from("Folder"),
+            content: b"no".to_vec(),
+            base_revision: "sha256:any".into(),
+        }],
+    ));
+    assert!(matches!(
+        directory_result,
+        Err(Error::InvalidResourceTarget { .. })
+    ));
+
+    let manifest_result = engine.apply(Transaction::new(
+        "Update manifest",
+        vec![Command::ResourceUpdate {
+            path: PathBuf::from(lattice_core::WORKSPACE_MANIFEST_FILENAME),
+            content: b"format: lattice-workspace\n".to_vec(),
+            base_revision: "sha256:any".into(),
+        }],
+    ));
+    assert!(matches!(
+        manifest_result,
+        Err(Error::ResourceNotEditable { .. })
+    ));
+
+    let operational_result = engine.apply(Transaction::new(
+        "Update operational state",
+        vec![Command::ResourceUpdate {
+            path: PathBuf::from(".lattice/cache.bin"),
+            content: b"no".to_vec(),
+            base_revision: "sha256:any".into(),
+        }],
+    ));
+    assert!(matches!(
+        operational_result,
+        Err(Error::ResourceNotEditable { .. })
+    ));
+}
+
+#[test]
+fn resource_update_serializes_bytes_as_base64() {
+    let command = Command::ResourceUpdate {
+        path: PathBuf::from("image.png"),
+        content: vec![0, 255, 1, 2],
+        base_revision: "sha256:base".into(),
     };
     let json = serde_json::to_string(&command).unwrap();
     assert!(json.contains("\"content\":\""));

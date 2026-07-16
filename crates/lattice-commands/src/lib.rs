@@ -37,6 +37,9 @@ pub use engine::CommandEngine;
 pub use error::Error;
 pub use trash::TrashPolicy;
 
+/// Maximum byte size of one semantic resource edit.
+pub const MAX_RESOURCE_EDIT_BYTES: usize = lattice_core::DEFAULT_RESOURCE_EDIT_BYTES as usize;
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[cfg(test)]
