@@ -1134,3 +1134,123 @@ button {
   text-decoration-style: dotted;
 }
 
+/* Data table viewer */
+
+.data-table-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+.data-table-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.data-table-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.data-table-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.data-table-add {
+  margin-left: auto;
+  width: auto;
+  margin-top: 0;
+  padding: 6px 14px;
+}
+
+.data-table-scroll {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raise);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.data-table th,
+.data-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.data-table th {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  background: var(--panel);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.data-table tbody tr:hover td {
+  background: var(--hover);
+}
+
+.data-table-cell {
+  width: 100%;
+  min-width: 80px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-soft);
+  font-family: var(--font-ui);
+  font-size: 13px;
+}
+
+.data-table-cell:focus {
+  outline: none;
+  border-color: var(--border);
+  background: var(--panel);
+}
+
+.data-table-id {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.data-table-actions-col {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.data-table-delete {
+  width: auto;
+  margin-top: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.data-table-empty {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.data-table-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--faint);
+}
+

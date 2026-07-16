@@ -1,4 +1,5 @@
 mod commands;
+mod data;
 mod search;
 mod watcher;
 
@@ -24,6 +25,11 @@ pub fn run() {
             search::rebuild_index,
             watcher::start_watching,
             watcher::stop_watching,
+            data::open_data_app,
+            data::create_table_package,
+            data::insert_record,
+            data::update_record,
+            data::delete_record,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
