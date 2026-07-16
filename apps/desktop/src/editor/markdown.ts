@@ -126,9 +126,18 @@ const parserTokens: { [tokenType: string]: ParseSpec } = {
 
 const parser = new MarkdownParser(schema, tokenizer, parserTokens);
 
+/** Turn `[[Target]]` / `[[Target|label]]` into markdown links with a `wiki:` href. */
+function encodeWikiLinks(markdown: string): string {
+  return markdown.replace(/\[\[([^\]|\n]+)(?:\|([^\]\n]+))?\]\]/g, (_full, target, label) => {
+    const t = String(target).trim();
+    const text = (label != null ? String(label) : t).trim();
+    return `[${text}](wiki:${encodeURIComponent(t)})`;
+  });
+}
+
 /** Parse a page body (frontmatter already stripped) into Tiptap JSON. */
 export function parseMarkdownToJSON(markdown: string): JSONContent {
-  return parser.parse(markdown).toJSON() as JSONContent;
+  return parser.parse(encodeWikiLinks(markdown)).toJSON() as JSONContent;
 }
 
 // ---------------------------------------------------------------------------
@@ -160,9 +169,21 @@ const serializerMarks: MarkdownSerializer["marks"] = {
     escape: false,
   },
   link: {
-    open: "[",
+    open: (_state, mark) => {
+      const href = mark.attrs.href as string;
+      if (href.startsWith("wiki:")) {
+        const target = decodeURIComponent(href.slice("wiki:".length));
+        // `[[target|` + label + `]]`; collapsed to `[[target]]` when label matches.
+        return `[[${target}|`;
+      }
+      return "[";
+    },
     close: (_state, mark) => {
-      const href = (mark.attrs.href as string).replace(/[()]/g, "\\$&");
+      const hrefRaw = mark.attrs.href as string;
+      if (hrefRaw.startsWith("wiki:")) {
+        return "]]";
+      }
+      const href = hrefRaw.replace(/[()]/g, "\\$&");
       const title = mark.attrs.title
         ? ` "${(mark.attrs.title as string).replace(/"/g, '\\"')}"`
         : "";
@@ -289,6 +310,8 @@ const serializer = new MarkdownSerializer(serializerNodes, serializerMarks);
 export function serializeJSONToMarkdown(json: JSONContent): string {
   const node = schema.nodeFromJSON(json);
   let markdown = serializer.serialize(node, { tightLists: true });
+  // Collapse `[[Target|Target]]` produced when the wiki label matches the target.
+  markdown = markdown.replace(/\[\[([^\]|]+)\|\1\]\]/g, "[[$1]]");
   if (!markdown.endsWith("\n")) markdown += "\n";
   return markdown;
 }
