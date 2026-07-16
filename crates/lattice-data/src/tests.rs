@@ -7,7 +7,9 @@ use tempfile::tempdir;
 use crate::app::{
     app_manifest_path, database_path, default_view_path, schema_path, DATABASE_FILENAME,
 };
-use crate::{CellValue, DataApp, FieldType};
+use crate::{
+    CellValue, DataApp, FieldType, FilterOperator, SortDirection, ViewDef, ViewFilter, ViewSort,
+};
 
 #[test]
 fn create_open_and_crud_round_trip() {
@@ -137,4 +139,102 @@ fn app_yaml_includes_default_table_metadata() {
 #[allow(dead_code)]
 fn package_layout_reference() -> &'static Path {
     Path::new("Name.data")
+}
+
+#[test]
+fn view_round_trip_and_list_rows_with_view() {
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Viewed.data");
+    let app = DataApp::create(&package_path, "Viewed", "records").unwrap();
+
+    rusqlite::Connection::open(database_path(&package_path))
+        .unwrap()
+        .execute_batch("ALTER TABLE records ADD COLUMN name TEXT;")
+        .unwrap();
+
+    app.insert_row(
+        "records",
+        &BTreeMap::from([("name".into(), CellValue::Text("Ada".into()))]),
+    )
+    .unwrap();
+    app.insert_row(
+        "records",
+        &BTreeMap::from([("name".into(), CellValue::Text("Grace".into()))]),
+    )
+    .unwrap();
+
+    let mut view = ViewDef::new_grid("records");
+    view.layout.columns = vec!["id".into(), "name".into()];
+    view.sort = Some(ViewSort {
+        field: "name".into(),
+        direction: SortDirection::Desc,
+    });
+    view.filter = vec![ViewFilter {
+        field: "name".into(),
+        operator: FilterOperator::Contains,
+        value: "a".into(),
+    }];
+
+    let yaml = app.render_view_yaml(&view).unwrap();
+    assert!(yaml.contains("format: lattice-view"));
+    assert!(yaml.contains("operator: contains"));
+
+    let views_dir = package_path.join("views");
+    std::fs::create_dir_all(&views_dir).unwrap();
+    let custom_path = views_dir.join("Filtered.yaml");
+    std::fs::write(&custom_path, &yaml).unwrap();
+
+    let views = app.list_views().unwrap();
+    assert!(views.iter().any(|name| name == "All"));
+    assert!(views.iter().any(|name| name == "Filtered"));
+
+    let loaded = app.load_view("Filtered").unwrap();
+    assert_eq!(loaded, view);
+
+    let (columns, rows) = app.list_rows_with_view("records", &loaded, 10, 0).unwrap();
+    assert_eq!(columns.len(), 2);
+    assert_eq!(rows.len(), 2);
+    assert_eq!(
+        rows[0].values.get("name"),
+        Some(&CellValue::Text("Grace".into()))
+    );
+}
+
+#[test]
+fn csv_parse_and_import_columns() {
+    use crate::csv::{infer_field_type, parse_csv_file, sanitize_column_name};
+
+    assert_eq!(sanitize_column_name("Full Name"), "full_name");
+    assert_eq!(
+        infer_field_type(&["10".into(), "20".into()]),
+        FieldType::Integer
+    );
+
+    let dir = tempdir().unwrap();
+    let csv_path = dir.path().join("people.csv");
+    std::fs::write(&csv_path, "name,active,count\nAda,true,1\nGrace,false,2\n").unwrap();
+
+    let parsed = parse_csv_file(&csv_path).unwrap();
+    assert_eq!(parsed.headers, vec!["name", "active", "count"]);
+    assert_eq!(parsed.field_types[0], FieldType::Text);
+    assert_eq!(parsed.field_types[1], FieldType::Boolean);
+    assert_eq!(parsed.field_types[2], FieldType::Integer);
+
+    let package_path = dir.path().join("People.data");
+    let mut app = DataApp::create(&package_path, "People", "records").unwrap();
+    app.add_columns_from_csv("records", &parsed).unwrap();
+    let inserted = app.insert_csv_rows("records", &parsed).unwrap();
+    assert_eq!(inserted, 2);
+
+    let rows = app.list_rows("records", 10, 0).unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(
+        rows[0].values.get("name"),
+        Some(&CellValue::Text("Ada".into()))
+    );
+    assert_eq!(
+        rows[0].values.get("active"),
+        Some(&CellValue::Boolean(true))
+    );
+    assert_eq!(rows[0].values.get("count"), Some(&CellValue::Integer(1)));
 }

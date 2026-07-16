@@ -30,6 +30,10 @@ pub fn run() {
             data::insert_record,
             data::update_record,
             data::delete_record,
+            data::list_data_views,
+            data::load_data_view,
+            data::save_data_view,
+            data::import_csv_table,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
