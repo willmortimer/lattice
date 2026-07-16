@@ -1,4 +1,5 @@
 import type { SearchHit, WorkspaceSnapshot } from "./types";
+import type { DataAppSnapshot } from "./data/types";
 
 /**
  * Dev-only stand-in used when the frontend runs in a plain browser
@@ -30,6 +31,7 @@ export const demoSnapshot: WorkspaceSnapshot = {
     { path: "Notebooks", kind: "folder" },
     { path: "Canvases", kind: "folder" },
     { path: "Canvases/Product Strategy.canvas", kind: "canvas" },
+    { path: "CRM.data", kind: "data-app" },
     { path: "Resources", kind: "folder" },
     { path: "Archive", kind: "folder" },
   ],
@@ -71,6 +73,36 @@ export const demoCanvas = {
   edges: [
     { id: "e1", fromNode: "intro", toNode: "vision" },
     { id: "e2", fromNode: "vision", toNode: "roadmap" },
+  ],
+};
+
+/** `CRM.data` — in-memory grid for browser review. */
+export const demoDataApp: DataAppSnapshot = {
+  title: "CRM",
+  default_table: "contacts",
+  package_revision: "demo:0",
+  columns: [
+    { name: "id", field_type: "text", sqlite_type: "TEXT" },
+    { name: "name", field_type: "text", sqlite_type: "TEXT" },
+    { name: "status", field_type: "text", sqlite_type: "TEXT" },
+  ],
+  rows: [
+    {
+      id: "0198-demo-ada",
+      values: {
+        id: { Text: "0198-demo-ada" },
+        name: { Text: "Ada Lovelace" },
+        status: { Text: "Active" },
+      },
+    },
+    {
+      id: "0198-demo-grace",
+      values: {
+        id: { Text: "0198-demo-grace" },
+        name: { Text: "Grace Hopper" },
+        status: { Text: "Active" },
+      },
+    },
   ],
 };
 
