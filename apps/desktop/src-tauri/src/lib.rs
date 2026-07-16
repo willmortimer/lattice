@@ -1,6 +1,7 @@
 mod commands;
 mod data;
 mod search;
+mod theme;
 mod watcher;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -9,6 +10,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(watcher::WatcherState::default())
+        .manage(theme::ThemeWatchState::default())
         .invoke_handler(tauri::generate_handler![
             commands::open_workspace,
             commands::list_resources,
@@ -25,6 +27,12 @@ pub fn run() {
             search::rebuild_index,
             watcher::start_watching,
             watcher::stop_watching,
+            theme::list_themes,
+            theme::get_resolved_theme,
+            theme::set_theme,
+            theme::set_appearance_mode,
+            theme::start_theme_watching,
+            theme::stop_theme_watching,
             data::open_data_app,
             data::create_table_package,
             data::insert_record,
