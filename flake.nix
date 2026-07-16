@@ -71,7 +71,8 @@
         # Marketing/docs site
         site-dev = "pnpm install && pnpm --filter @lattice/site dev";
         site-build = "pnpm install && pnpm --filter @lattice/site build";
-        docs-sync = "node site/scripts/sync-docs.mjs";
+        docs-sync = "pnpm --filter @lattice/site sync-docs";
+        compile-theme = "pnpm --filter @lattice/desktop compile-theme";
 
         # Desktop shell
         # Vite HMR + native window (frontend hot-reload).
@@ -100,7 +101,7 @@
           packages = toolchain pkgs ++ builtins.attrValues (taskScripts pkgs);
           shellHook = ''
             echo "lattice dev shell — rust $(rustc --version | cut -d' ' -f2), node $(node --version), pnpm $(pnpm --version)"
-            echo "tasks: lattice-{test,lint,fmt,check,site-dev,site-build,docs-sync,"
+            echo "tasks: lattice-{test,lint,fmt,check,site-dev,site-build,docs-sync,compile-theme,"
             echo "              desktop-dev,desktop-web,desktop,desktop-build}"
             echo "       (equivalently: nix run .#<task> from anywhere)"
           '';
