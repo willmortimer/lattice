@@ -3,6 +3,7 @@ import '@fontsource-variable/fraunces';
 import '@fontsource-variable/space-grotesk';
 import '@fontsource-variable/jetbrains-mono';
 import '../styles/theme.css';
+import GridGlints from '../components/GridGlints.astro';
 
 interface Props {
   title?: string;
@@ -32,6 +33,7 @@ const {
     />
   </head>
   <body class="marketing">
+    <GridGlints />
     <header class="site-header">
       <div class="wrap">
         <a class="brand" href="/">

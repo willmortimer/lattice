@@ -1,0 +1,118 @@
+---
+/**
+ * Rare amber glints traveling along the backdrop grid lines — the same
+ * "signal moving through structure" language as the hero lattice and the
+ * mark. Positions are exact multiples of --l-grid-size so every glint rides
+ * a real line. Long idle phases keep them an occasional event, not noise;
+ * the global reduced-motion rule stills them entirely.
+ */
+const horizontals = [
+  { row: 4, delay: 0, dur: 16 },
+  { row: 9, delay: 7.5, dur: 19 },
+  { row: 15, delay: 12, dur: 17 },
+];
+const verticals = [
+  { col: 7, delay: 4, dur: 18 },
+  { col: 24, delay: 10, dur: 21 },
+  { col: 35, delay: 15.5, dur: 19 },
+];
+---
+
+<div class="grid-glints" aria-hidden="true">
+  {
+    horizontals.map((g) => (
+      <span
+        class="glint glint-h"
+        style={`top: calc(var(--l-grid-size) * ${g.row}); animation-delay: ${g.delay}s; animation-duration: ${g.dur}s;`}
+      />
+    ))
+  }
+  {
+    verticals.map((g) => (
+      <span
+        class="glint glint-v"
+        style={`left: calc(var(--l-grid-size) * ${g.col}); animation-delay: ${g.delay}s; animation-duration: ${g.dur}s;`}
+      />
+    ))
+  }
+</div>
+
+<style>
+  .grid-glints {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+    /* Same fade as the grid itself, so glints never outlive their line. */
+    -webkit-mask-image: radial-gradient(ellipse 120% 90% at 50% -5%, #000 40%, transparent 92%);
+    mask-image: radial-gradient(ellipse 120% 90% at 50% -5%, #000 40%, transparent 92%);
+  }
+
+  .glint {
+    position: absolute;
+    opacity: 0;
+    will-change: transform, opacity;
+  }
+
+  .glint-h {
+    left: 0;
+    width: 140px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--l-amber), transparent);
+    box-shadow: 0 0 8px rgba(245, 166, 35, 0.35);
+    animation: glint-h linear infinite;
+  }
+
+  .glint-v {
+    top: 0;
+    width: 1px;
+    height: 140px;
+    background: linear-gradient(180deg, transparent, var(--l-amber), transparent);
+    box-shadow: 0 0 8px rgba(245, 166, 35, 0.35);
+    animation: glint-v linear infinite;
+  }
+
+  /* Travel occupies ~15% of the cycle; the rest is idle. */
+  @keyframes glint-h {
+    0% {
+      transform: translateX(-160px);
+      opacity: 0;
+    }
+    1.5% {
+      opacity: 0.75;
+    }
+    13.5% {
+      opacity: 0.75;
+    }
+    15% {
+      transform: translateX(calc(100vw + 40px));
+      opacity: 0;
+    }
+    100% {
+      transform: translateX(calc(100vw + 40px));
+      opacity: 0;
+    }
+  }
+
+  @keyframes glint-v {
+    0% {
+      transform: translateY(-160px);
+      opacity: 0;
+    }
+    1.5% {
+      opacity: 0.75;
+    }
+    13.5% {
+      opacity: 0.75;
+    }
+    15% {
+      transform: translateY(calc(100vh + 40px));
+      opacity: 0;
+    }
+    100% {
+      transform: translateY(calc(100vh + 40px));
+      opacity: 0;
+    }
+  }
+</style>
