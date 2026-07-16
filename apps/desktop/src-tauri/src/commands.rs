@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::time::UNIX_EPOCH;
 
 use lattice_commands::{
     Command as SemanticCommand, CommandEngine, Error as CommandError, Transaction,
@@ -183,6 +184,55 @@ pub fn create_page(root: String, rel_path: String, content: String) -> Result<St
         .first()
         .and_then(|outcome| outcome.resulting_revision.clone())
         .ok_or_else(|| "page create did not produce a resulting revision".to_string())
+}
+
+/// Rename a resource through the semantic command core.
+#[tauri::command]
+pub fn rename_resource(root: String, from: String, to: String) -> Result<(), String> {
+    let mut engine = CommandEngine::open(Path::new(&root)).map_err(command_error_to_string)?;
+    engine
+        .apply(Transaction::new(
+            format!("Rename {from} to {to}"),
+            vec![SemanticCommand::ResourceRename {
+                from: PathBuf::from(from),
+                to: PathBuf::from(to),
+            }],
+        ))
+        .map_err(command_error_to_string)?;
+    Ok(())
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryItem {
+    pub id: String,
+    pub summary: String,
+    pub created_at: u64,
+    pub undone: bool,
+    pub command_count: usize,
+}
+
+/// A bounded history listing for the resource inspector.
+#[tauri::command]
+pub fn list_history(root: String, limit: usize) -> Result<Vec<HistoryItem>, String> {
+    let engine = CommandEngine::open(Path::new(&root)).map_err(command_error_to_string)?;
+    let entries = engine
+        .history(limit.min(100))
+        .map_err(command_error_to_string)?;
+    Ok(entries
+        .into_iter()
+        .map(|entry| HistoryItem {
+            id: entry.id,
+            summary: entry.summary,
+            created_at: entry
+                .created_at
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            undone: entry.undone,
+            command_count: entry.command_count,
+        })
+        .collect())
 }
 
 /// Undo the most recent transaction recorded in this workspace's history,
@@ -445,6 +495,25 @@ mod tests {
         let root = dir.path().to_string_lossy().into_owned();
 
         assert_eq!(undo_last(root).unwrap(), None);
+    }
+
+    #[test]
+    fn rename_resource_uses_command_history() {
+        let dir = init_workspace();
+        std::fs::write(dir.path().join("Before.md"), "# Before\n").unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        rename_resource(
+            root.clone(),
+            "Before.md".to_string(),
+            "After.md".to_string(),
+        )
+        .unwrap();
+
+        assert!(!dir.path().join("Before.md").exists());
+        assert!(dir.path().join("After.md").exists());
+        let history = list_history(root, 10).unwrap();
+        assert_eq!(history[0].summary, "Rename Before.md to After.md");
     }
 
     #[test]
