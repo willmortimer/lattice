@@ -5,6 +5,16 @@ fn lattice() -> Command {
     Command::cargo_bin("lattice").unwrap()
 }
 
+/// Most CLI tests want a bare workspace; personal is the init default.
+fn init_blank(path: &std::path::Path) -> assert_cmd::assert::Assert {
+    lattice()
+        .arg("init")
+        .arg(path)
+        .arg("--template")
+        .arg("blank")
+        .assert()
+}
+
 #[test]
 fn init_creates_manifest() {
     let dir = tempfile::tempdir().unwrap();
@@ -14,6 +24,8 @@ fn init_creates_manifest() {
         .arg(dir.path())
         .arg("--title")
         .arg("Demo Workspace")
+        .arg("--template")
+        .arg("blank")
         .assert()
         .success()
         .stdout(predicates_contains(dir.path().to_string_lossy().as_ref()));
@@ -30,17 +42,34 @@ fn init_defaults_title_to_directory_name() {
     let root = dir.path().join("My Workspace");
     fs::create_dir_all(&root).unwrap();
 
-    lattice().arg("init").arg(&root).assert().success();
+    init_blank(&root).success();
 
     let text = fs::read_to_string(root.join("lattice.yaml")).unwrap();
     assert!(text.contains("My Workspace"));
 }
 
 #[test]
+fn init_personal_template_seeds_home_and_folders() {
+    let dir = tempfile::tempdir().unwrap();
+    lattice()
+        .arg("init")
+        .arg(dir.path())
+        .arg("--template")
+        .arg("personal")
+        .assert()
+        .success()
+        .stdout(predicates_contains("template: personal"));
+
+    assert!(dir.path().join("Home.md").is_file());
+    assert!(dir.path().join("Inbox").is_dir());
+    assert!(dir.path().join("Projects").is_dir());
+}
+
+#[test]
 fn init_twice_fails() {
     let dir = tempfile::tempdir().unwrap();
-    lattice().arg("init").arg(dir.path()).assert().success();
-    lattice().arg("init").arg(dir.path()).assert().failure();
+    init_blank(dir.path()).success();
+    init_blank(dir.path()).failure();
 }
 
 #[test]
@@ -51,6 +80,8 @@ fn info_reports_workspace_details() {
         .arg(dir.path())
         .arg("--title")
         .arg("Info Workspace")
+        .arg("--template")
+        .arg("blank")
         .assert()
         .success();
 
@@ -66,7 +97,7 @@ fn info_reports_workspace_details() {
 #[test]
 fn ls_lists_markdown_as_page() {
     let dir = tempfile::tempdir().unwrap();
-    lattice().arg("init").arg(dir.path()).assert().success();
+    init_blank(dir.path()).success();
     fs::write(dir.path().join("Notes.md"), "# Notes\n").unwrap();
 
     lattice()
@@ -81,7 +112,7 @@ fn ls_lists_markdown_as_page() {
 #[test]
 fn ls_json_emits_array() {
     let dir = tempfile::tempdir().unwrap();
-    lattice().arg("init").arg(dir.path()).assert().success();
+    init_blank(dir.path()).success();
     fs::write(dir.path().join("Notes.md"), "# Notes\n").unwrap();
 
     let output = lattice()
@@ -107,6 +138,8 @@ fn validate_exit_code_is_zero_for_clean_workspace() {
         .arg(dir.path())
         .arg("--title")
         .arg("Clean")
+        .arg("--template")
+        .arg("blank")
         .assert()
         .success();
 
@@ -121,7 +154,7 @@ fn validate_exit_code_is_zero_for_clean_workspace() {
 #[test]
 fn validate_exit_code_is_one_when_error_diagnostic_present() {
     let dir = tempfile::tempdir().unwrap();
-    lattice().arg("init").arg(dir.path()).assert().success();
+    init_blank(dir.path()).success();
     fs::create_dir_all(dir.path().join("CRM.data")).unwrap();
 
     lattice()
