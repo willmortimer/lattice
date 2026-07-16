@@ -73,6 +73,16 @@ impl WorkspaceIndex {
         &self.workspace_root
     }
 
+    /// Number of resources currently indexed. Callers (desktop search
+    /// commands) use this to detect an index that exists but was never
+    /// populated — e.g. a workspace opened before any watcher-driven write
+    /// — and rebuild lazily rather than returning empty results forever.
+    pub fn resource_count(&self) -> Result<usize> {
+        let conn = self.conn.lock().unwrap();
+        let count: i64 = conn.query_row("SELECT COUNT(*) FROM resources", [], |row| row.get(0))?;
+        Ok(count as usize)
+    }
+
     /// Scan all Markdown pages under `root` and rebuild the index from scratch.
     pub fn rebuild(&self, root: &Path) -> Result<RebuildStats> {
         let ws = Workspace::open(root)?;
@@ -500,6 +510,20 @@ mod tests {
         assert!(inc_backlinks
             .iter()
             .any(|b| b.source_path == Path::new("Notes/Links.md")));
+    }
+
+    #[test]
+    fn resource_count_reflects_rebuild_and_removal() {
+        let dir = TempDir::new().unwrap();
+        sample_workspace(dir.path());
+        let index = WorkspaceIndex::open(dir.path()).unwrap();
+        assert_eq!(index.resource_count().unwrap(), 0);
+
+        index.rebuild(dir.path()).unwrap();
+        assert_eq!(index.resource_count().unwrap(), 3);
+
+        index.remove_resource(Path::new("Notes/Home.md")).unwrap();
+        assert_eq!(index.resource_count().unwrap(), 2);
     }
 
     #[test]
