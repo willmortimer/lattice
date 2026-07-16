@@ -2,16 +2,42 @@
 //!
 //! Every mutation in the product — desktop GUI, CLI, future local API and
 //! MCP — is expressed as a [`Command`], grouped into an atomic
-//! [`Transaction`], and applied through the command engine.
+//! [`Transaction`], and applied through the [`CommandEngine`]. The engine
+//! validates all preconditions against the current workspace state before
+//! mutating anything, applies through `lattice-storage` (so content writes
+//! are journaled and materialized atomically), and records every transaction
+//! with its inverse operations in a durable history database at
+//! `.lattice/history.sqlite` — the substrate for undo, redo, idempotent
+//! replay, and audit.
+//!
+//! Undo and redo are guarded per ADR 0023: if a resource was modified
+//! outside Lattice after a transaction was recorded, undoing that
+//! transaction is refused rather than silently clobbering the external edit.
+//!
+//! Deletes go to the OS Trash (falling back to `.lattice/trash/` when the OS
+//! Trash is unavailable — see [`TrashPolicy`]), but single-file bytes are
+//! also captured in history first, so `undo` restores them without digging
+//! in the Trash. Directory (package) deletes are trashed without byte
+//! capture; undoing one is refused with a pointer at the Trash.
+//!
+//! v0 scope: whole-file commands only ([`Command`]), and the commands within
+//! one transaction must touch disjoint paths. Block-level commands and
+//! intra-transaction sequential dependencies come later (docs/17).
 
 mod command;
+mod engine;
 mod error;
+mod history;
 mod trash;
 
 pub use command::{
     Command, CommandOutcome, HistoryEntry, Transaction, TransactionReceipt, UndoReport,
 };
+pub use engine::CommandEngine;
 pub use error::Error;
 pub use trash::TrashPolicy;
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+#[cfg(test)]
+mod tests;
