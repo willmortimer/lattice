@@ -132,77 +132,17 @@ fn extract_headings(body: &str) -> Vec<Heading> {
 }
 
 fn extract_links(body: &str) -> Vec<ExtractedLink> {
-    let mut links = Vec::new();
-    let bytes = body.as_bytes();
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'[' && i + 1 < bytes.len() && bytes[i + 1] == b'[' {
-            if let Some(link) = parse_wiki_link(body, i + 2) {
-                links.push(link.0);
-                i = link.1;
-                continue;
-            }
-        }
-        if bytes[i] == b'[' {
-            if let Some(link) = parse_md_link(body, i) {
-                links.push(link.0);
-                i = link.1;
-                continue;
-            }
-        }
-        i += 1;
-    }
-    links
-}
-
-fn parse_wiki_link(body: &str, start: usize) -> Option<(ExtractedLink, usize)> {
-    let rest = body.get(start..)?;
-    let end = rest.find("]]")?;
-    let inner = &rest[..end];
-    let (target_part, _display) = match inner.split_once('|') {
-        Some((t, d)) => (t, d),
-        None => (inner, inner),
-    };
-    let (target, anchor) = match target_part.split_once('#') {
-        Some((t, a)) => (t.trim(), Some(a.trim().to_string())),
-        None => (target_part.trim(), None),
-    };
-    if target.is_empty() {
-        return None;
-    }
-    let link = ExtractedLink {
-        target: target.to_string(),
-        kind: LinkKind::Wiki,
-        anchor: anchor.filter(|a| !a.is_empty()),
-    };
-    Some((link, start + end + 2))
-}
-
-fn parse_md_link(body: &str, bracket_start: usize) -> Option<(ExtractedLink, usize)> {
-    let rest = body.get(bracket_start + 1..)?;
-    let close_text = rest.find(']')?;
-    let after_text = rest.get(close_text + 1..)?;
-    let after_text = after_text.strip_prefix('(')?;
-    let close_url = after_text.find(')')?;
-    let url = after_text[..close_url].trim();
-    if url.is_empty() || url.starts_with("http://") || url.starts_with("https://") {
-        return None;
-    }
-    let (path_part, anchor) = match url.split_once('#') {
-        Some((p, a)) => (p, Some(a.to_string())),
-        None => (url, None),
-    };
-    let path_part = path_part.trim();
-    if path_part.is_empty() {
-        return None;
-    }
-    let link = ExtractedLink {
-        target: path_part.to_string(),
-        kind: LinkKind::Md,
-        anchor: anchor.filter(|a| !a.is_empty()),
-    };
-    let consumed = bracket_start + 1 + close_text + 1 + 1 + close_url + 1;
-    Some((link, consumed))
+    lattice_core::parse_resource_links(body)
+        .into_iter()
+        .map(|link| ExtractedLink {
+            target: link.target,
+            kind: match link.kind {
+                lattice_core::MarkdownLinkKind::Wiki => LinkKind::Wiki,
+                lattice_core::MarkdownLinkKind::Markdown => LinkKind::Md,
+            },
+            anchor: link.anchor,
+        })
+        .collect()
 }
 
 fn extract_inline_tags(body: &str) -> Vec<String> {

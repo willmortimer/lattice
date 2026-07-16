@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use lattice_core::{ResourceKind, Workspace};
+use lattice_core::{ResourceCatalog, ResourceKind, ResourceLinkResolution, Workspace};
 use rusqlite::{params, Connection};
 use sha2::{Digest, Sha256};
 
@@ -215,6 +215,8 @@ impl WorkspaceIndex {
     /// List resources that link to `path` (wiki or Markdown targets).
     pub fn backlinks(&self, path: &Path) -> Result<Vec<Backlink>> {
         let rel = normalize_workspace_path(path)?;
+        let workspace = Workspace::open(&self.workspace_root)?;
+        let catalog = ResourceCatalog::new(&workspace.scan()?);
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
             "SELECT r.path, l.target, l.kind, l.anchor
@@ -235,7 +237,11 @@ impl WorkspaceIndex {
 
         let mut backlinks = Vec::new();
         for (source_path, target, kind, anchor) in rows {
-            if !link_matches_target(&rel, &target) {
+            if !matches!(
+                catalog.resolve(Some(&source_path), &target),
+                ResourceLinkResolution::Found { target, .. }
+                    if Path::new(&target.path) == rel
+            ) {
                 continue;
             }
             let kind = match kind.as_str() {
@@ -391,41 +397,6 @@ fn escape_fts_query(query: &str) -> String {
     format!("\"{escaped}\"")
 }
 
-fn link_matches_target(query_path: &Path, stored_target: &str) -> bool {
-    let query_key = path_key(query_path);
-    let target = stored_target.replace('\\', "/");
-
-    if target == query_key {
-        return true;
-    }
-
-    if Path::new(&target)
-        .file_name()
-        .is_some_and(|n| n == query_path.file_name().unwrap_or_default())
-    {
-        return true;
-    }
-
-    let query_stem = query_path
-        .file_stem()
-        .map(|s| s.to_string_lossy().into_owned());
-    let target_stem = Path::new(&target)
-        .file_stem()
-        .map(|s| s.to_string_lossy().into_owned());
-
-    if query_stem.is_some() && query_stem == target_stem {
-        return true;
-    }
-
-    if let Some(stem) = query_stem {
-        if target == stem {
-            return true;
-        }
-    }
-
-    false
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -535,18 +506,5 @@ mod tests {
         index.remove_resource(Path::new("Notes/Home.md")).unwrap();
         let hits = index.search("welcome", 10).unwrap();
         assert!(!hits.iter().any(|h| h.path == Path::new("Notes/Home.md")));
-    }
-
-    #[test]
-    fn link_target_matching() {
-        assert!(link_matches_target(Path::new("Notes/Other.md"), "Other"));
-        assert!(link_matches_target(
-            Path::new("Notes/Other.md"),
-            "./Other.md"
-        ));
-        assert!(!link_matches_target(
-            Path::new("Notes/Other.md"),
-            "Unrelated"
-        ));
     }
 }

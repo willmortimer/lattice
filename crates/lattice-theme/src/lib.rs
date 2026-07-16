@@ -15,8 +15,8 @@ mod override_file;
 mod resolve;
 
 pub use appearance::{
-    load_appearance, save_appearance, AppearanceMode, AppearanceSettings, ThemePair,
-    APPEARANCE_FILENAME,
+    load_appearance, load_appearance_with_diagnostics, save_appearance, AppearanceMode,
+    AppearanceSettings, ThemePair, APPEARANCE_FILENAME,
 };
 pub use discover::{
     check_theme_file, discover_themes, load_theme_by_id, theme_dirs, ThemeDiagnostic, ThemeSource,

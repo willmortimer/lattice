@@ -42,6 +42,15 @@ pub enum Command {
         base_revision: String,
     },
 
+    /// Replace `lattice.yaml` after validating a typed workspace-manifest
+    /// update. The command stores serialized YAML for durable history while
+    /// callers construct it from `lattice_core::WorkspaceManifest`.
+    WorkspaceManifestUpdate {
+        content: String,
+        #[serde(rename = "base-revision")]
+        base_revision: String,
+    },
+
     /// Rename a resource. Precondition: `from` present, `to` absent.
     ResourceRename { from: PathBuf, to: PathBuf },
 
@@ -139,6 +148,9 @@ impl Command {
             Command::PageCreate { path, .. } => path.clone(),
             Command::ResourceCreate { path, .. } => path.clone(),
             Command::PageUpdate { path, .. } => path.clone(),
+            Command::WorkspaceManifestUpdate { .. } => {
+                PathBuf::from(lattice_core::WORKSPACE_MANIFEST_FILENAME)
+            }
             Command::ResourceRename { to, .. } => to.clone(),
             Command::ResourceMove { from, to_dir } => to_dir.join(file_name(from)),
             Command::ResourceDelete { path } => path.clone(),
@@ -159,6 +171,9 @@ impl Command {
             Command::PageCreate { path, .. } => vec![path.clone()],
             Command::ResourceCreate { path, .. } => vec![path.clone()],
             Command::PageUpdate { path, .. } => vec![path.clone()],
+            Command::WorkspaceManifestUpdate { .. } => {
+                vec![PathBuf::from(lattice_core::WORKSPACE_MANIFEST_FILENAME)]
+            }
             Command::ResourceRename { from, to } => vec![from.clone(), to.clone()],
             Command::ResourceMove { from, to_dir } => {
                 vec![from.clone(), to_dir.join(file_name(from))]
