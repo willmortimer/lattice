@@ -31,3 +31,11 @@ rusqlite = { version = "0.37", features = ["bundled"] }
 sha2 = "0.10"
 hex = "0.4"
 trash = "5"
+# `macos_kqueue` (not the default FSEvents backend) avoids multi-second
+# event-delivery latency observed under this repo's sandboxed macOS dev
+# environment; kqueue talks to the kernel directly instead of through the
+# fseventsd daemon. Behavior is equivalent to the default on Linux/Windows.
+notify = { version = "8", default-features = false, features = ["macos_kqueue"] }
+notify-debouncer-full = { version = "0.7", default-features = false, features = [
+    "macos_kqueue",
+] }
