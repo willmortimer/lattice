@@ -13,6 +13,9 @@ use lattice_core::{
 use lattice_data::{parse_csv_file, CellValue, DataApp};
 use lattice_index::{Backlink, SearchHit, WorkspaceIndex};
 use lattice_storage::{NativeWorkspaceStore, RecoveryJournal, WorkspaceStore};
+use lattice_theme::{
+    check_theme_file, discover_themes, load_appearance, save_appearance, AppearanceMode,
+};
 
 #[derive(Parser)]
 #[command(
@@ -135,6 +138,11 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Themes and appearance settings.
+    Theme {
+        #[command(subcommand)]
+        command: ThemeCommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -143,6 +151,36 @@ enum HomeCommand {
     Ensure,
     /// Print the Lattice home paths.
     Path,
+}
+
+#[derive(Subcommand)]
+enum ThemeCommand {
+    /// List built-in and user themes.
+    List {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Validate a theme YAML file (defaults to checking all discovered themes).
+    Check {
+        /// Path to a `.theme.yaml` file. When omitted, checks every discovered theme.
+        path: Option<PathBuf>,
+    },
+    /// Set the fixed active theme id.
+    Set {
+        /// Theme id (e.g. `lattice-slate`).
+        id: String,
+    },
+    /// Choose fixed theme vs system-follow pair.
+    Mode {
+        /// `fixed` or `auto`.
+        mode: String,
+        /// Dark theme id when mode is `auto`.
+        #[arg(long)]
+        dark: Option<String>,
+        /// Light theme id when mode is `auto`.
+        #[arg(long)]
+        light: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -403,6 +441,12 @@ fn run(command: Command) -> Result<ExitCode> {
             json,
         } => cmd_search(query, path, limit, json),
         Command::Backlinks { target, path, json } => cmd_backlinks(target, path, json),
+        Command::Theme { command } => match command {
+            ThemeCommand::List { json } => cmd_theme_list(json),
+            ThemeCommand::Check { path } => cmd_theme_check(path),
+            ThemeCommand::Set { id } => cmd_theme_set(id),
+            ThemeCommand::Mode { mode, dark, light } => cmd_theme_mode(mode, dark, light),
+        },
     }
 }
 
@@ -1177,6 +1221,117 @@ fn cmd_backlinks(target: PathBuf, path: Option<PathBuf>, json: bool) -> Result<E
             print_backlink(link);
         }
     }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_theme_list(json: bool) -> Result<ExitCode> {
+    let (home, settings) = load_appearance()?;
+    let (themes, diagnostics) = discover_themes(&home)?;
+    if json {
+        print_json(&serde_json::json!({
+            "settings": settings,
+            "themes": themes,
+            "diagnostics": diagnostics,
+        }))?;
+    } else {
+        println!(
+            "mode={} theme={} pair=dark:{} light:{}",
+            match settings.mode {
+                AppearanceMode::Fixed => "fixed",
+                AppearanceMode::Auto => "auto",
+            },
+            settings.theme,
+            settings.pair.dark,
+            settings.pair.light
+        );
+        for theme in &themes {
+            println!(
+                "{}\t{}\t{}\t{}",
+                theme.id, theme.name, theme.appearance, theme.path
+            );
+        }
+        for diag in &diagnostics {
+            eprintln!("error: {}: {}", diag.path, diag.message);
+        }
+    }
+    Ok(if diagnostics.is_empty() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
+}
+
+fn cmd_theme_check(path: Option<PathBuf>) -> Result<ExitCode> {
+    if let Some(path) = path {
+        match check_theme_file(&path) {
+            Ok(doc) => {
+                println!("ok {} ({})", doc.id, doc.name);
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(err) => {
+                eprintln!("error: {err}");
+                Ok(ExitCode::FAILURE)
+            }
+        }
+    } else {
+        let (home, _) = load_appearance()?;
+        let (themes, diagnostics) = discover_themes(&home)?;
+        let mut failed = !diagnostics.is_empty();
+        for diag in &diagnostics {
+            eprintln!("error: {}: {}", diag.path, diag.message);
+        }
+        for theme in &themes {
+            if theme.path.starts_with("builtin:") {
+                println!("ok {}", theme.id);
+                continue;
+            }
+            match check_theme_file(Path::new(&theme.path)) {
+                Ok(_) => println!("ok {}", theme.id),
+                Err(err) => {
+                    eprintln!("error: {err}");
+                    failed = true;
+                }
+            }
+        }
+        Ok(if failed {
+            ExitCode::FAILURE
+        } else {
+            ExitCode::SUCCESS
+        })
+    }
+}
+
+fn cmd_theme_set(id: String) -> Result<ExitCode> {
+    let (home, mut settings) = load_appearance()?;
+    let (themes, _) = discover_themes(&home)?;
+    if !themes.iter().any(|t| t.id == id) {
+        bail!("theme not found: {id}");
+    }
+    settings.mode = AppearanceMode::Fixed;
+    settings.theme = id.clone();
+    save_appearance(&settings)?;
+    println!("theme set to {id}");
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_theme_mode(mode: String, dark: Option<String>, light: Option<String>) -> Result<ExitCode> {
+    let (_home, mut settings) = load_appearance()?;
+    settings.mode = match mode.to_ascii_lowercase().as_str() {
+        "auto" => AppearanceMode::Auto,
+        "fixed" => AppearanceMode::Fixed,
+        other => bail!("mode must be fixed|auto, got {other}"),
+    };
+    if let Some(dark) = dark {
+        settings.pair.dark = dark;
+    }
+    if let Some(light) = light {
+        settings.pair.light = light;
+    }
+    save_appearance(&settings)?;
+    println!(
+        "appearance mode={} (dark={} light={})",
+        mode, settings.pair.dark, settings.pair.light
+    );
     Ok(ExitCode::SUCCESS)
 }
 

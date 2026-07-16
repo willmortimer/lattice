@@ -4,7 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "compile-theme": "node ../../scripts/compile-theme.mjs",
+    "predev": "node ../../scripts/compile-theme.mjs",
     "dev": "vite",
+    "prebuild": "node ../../scripts/compile-theme.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",

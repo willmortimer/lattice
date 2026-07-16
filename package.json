@@ -4,5 +4,9 @@
   "engines": {
     "node": ">=22"
   },
-  "packageManager": "pnpm@11.11.0"
+  "packageManager": "pnpm@11.11.0",
+  "scripts": {
+    "compile-theme": "pnpm --filter @lattice/desktop compile-theme",
+    "test:theme": "node --test scripts/compile-theme.test.mjs"
+  }
 }

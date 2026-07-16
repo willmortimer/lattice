@@ -70,14 +70,14 @@ function icon(kind) {
           {isFolder ? (
             <path
               d={`M${x} ${cy - 6} h7 l2 3 h9 v10 h-18 z`}
-              fill={accent ? 'var(--l-amber-wash)' : 'rgba(140,162,196,0.12)'}
+              fill={accent ? 'var(--l-amber-wash)' : 'var(--lt-line)'}
               stroke={accent ? 'var(--l-amber)' : 'var(--l-muted)'}
               stroke-width="1.1"
             />
           ) : (
             <path
               d={`M${x} ${cy - 7} h11 l5 5 v11 h-16 z`}
-              fill="rgba(140,162,196,0.08)"
+              fill="color-mix(in oklch, var(--lt-slate) 8%, transparent)"
               stroke={accent ? 'var(--l-amber)' : 'var(--l-muted)'}
               stroke-width="1.1"
             />

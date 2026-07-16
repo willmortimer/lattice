@@ -20,6 +20,15 @@ import { fileTimestamp, quickNotePath } from "./lib/timestamp";
 import { ResourceTree } from "./ResourceTree";
 import { SearchPane } from "./SearchPane";
 import { KindMark, KIND_LABELS } from "./KindMark";
+import {
+  applyResolvedTheme,
+  loadThemeCatalog,
+  setAppearanceMode,
+  setFixedTheme,
+  startThemeWatch,
+  type ThemeCatalogPayload,
+  type ThemeSummaryPayload,
+} from "./theme";
 import type { Resource, WorkspaceChangeEvent, WorkspaceSnapshot } from "./types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -99,7 +108,7 @@ function BrandMark({ size = 64 }: { size?: number }) {
       fill="none"
       aria-hidden="true"
     >
-      <g stroke="var(--amber)" strokeLinecap="round">
+      <g stroke="var(--lt-accent)" strokeLinecap="round">
         <path d="M28 28L47.05 39M28 28L28 6M28 28L8.95 39" strokeWidth="1.7" opacity="0.28" />
         <path
           d="M37.53 11.5L18.47 22.5M18.47 11.5L37.53 22.5M47.05 28L28 39M37.53 44.5L37.53 22.5M18.47 44.5L18.47 22.5M8.95 28L28 39"
@@ -113,7 +122,7 @@ function BrandMark({ size = 64 }: { size?: number }) {
         />
         <path d="M28 28L47.05 17M28 28L8.95 17M28 28L28 50" strokeWidth="2.45" opacity="0.95" />
       </g>
-      <g fill="var(--amber-bright)">
+      <g fill="var(--lt-accent-bright)">
         <circle cx="28" cy="6" r="2.75" />
         <circle cx="47.05" cy="17" r="2.75" />
         <circle cx="47.05" cy="39" r="2.75" />
@@ -121,7 +130,7 @@ function BrandMark({ size = 64 }: { size?: number }) {
         <circle cx="8.95" cy="39" r="2.75" />
         <circle cx="8.95" cy="17" r="2.75" />
       </g>
-      <circle cx="28" cy="28" r="4.2" fill="var(--amber)" />
+      <circle cx="28" cy="28" r="4.2" fill="var(--lt-accent)" />
     </svg>
   );
 }
@@ -148,6 +157,7 @@ export default function App() {
   const [statusToast, setStatusToast] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [searchPaneOpen, setSearchPaneOpen] = useState(false);
+  const [themeCatalog, setThemeCatalog] = useState<ThemeCatalogPayload | null>(null);
 
   /** The root read-view embeds and search/backlinks commands resolve
    * against — `null` in the in-browser demo shell, which has no real
@@ -168,6 +178,44 @@ export default function App() {
   useEffect(() => {
     snapshotRef.current = snapshot;
   }, [snapshot]);
+
+  const applyThemeCatalog = useCallback((catalog: ThemeCatalogPayload) => {
+    setThemeCatalog(catalog);
+    applyResolvedTheme(catalog.resolved);
+    const diags = [...catalog.diagnostics, ...catalog.resolved.diagnostics];
+    if (diags.length > 0) {
+      setError(diags.map((d) => `${d.path}: ${d.message}`).join("\n"));
+    }
+  }, []);
+
+  const reloadTheme = useCallback(async () => {
+    try {
+      const catalog = await loadThemeCatalog(snapshotRef.current?.root);
+      applyThemeCatalog(catalog);
+    } catch (err) {
+      setError(String(err));
+    }
+  }, [applyThemeCatalog]);
+
+  // Initial theme resolve + re-apply when the open workspace changes.
+  useEffect(() => {
+    void reloadTheme();
+  }, [reloadTheme, snapshot?.root]);
+
+  useEffect(() => {
+    let stop: (() => void) | undefined;
+    let cancelled = false;
+    void (async () => {
+      stop = await startThemeWatch(snapshot?.root ?? null, () => {
+        if (!cancelled) void reloadTheme();
+      });
+    })();
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, [snapshot?.root, reloadTheme]);
+
   /** The revision the open `PageEditor` currently considers its clean base
    * — updated on load/save/reload, not on every keystroke (see
    * `PageEditor`'s `onRevisionChange`). Used to recognize an incoming
@@ -729,6 +777,7 @@ export default function App() {
   }
 
   const paletteItems = useMemo<PaletteItem[]>(() => {
+    const root = snapshot?.root ?? null;
     const actions: PaletteItem[] = [
       { id: "action:new-page", label: "New page", run: handleNewPage },
       { id: "action:new-table", label: "New table…", run: () => void handleNewTable() },
@@ -742,7 +791,50 @@ export default function App() {
         hint: "Cmd+K",
         run: () => setSearchPaneOpen(true),
       },
+      {
+        id: "action:theme-follow-system",
+        label: "Theme: Follow system",
+        hint:
+          themeCatalog?.resolved.settings.mode === "auto"
+            ? "active"
+            : "auto dark/light pair",
+        run: () => {
+          void (async () => {
+            try {
+              applyThemeCatalog(await setAppearanceMode("auto", root));
+              setStatusToast("Theme follows system");
+            } catch (err) {
+              setError(String(err));
+            }
+          })();
+        },
+      },
     ];
+
+    const themes: ThemeSummaryPayload[] = themeCatalog?.themes ?? [];
+    for (const theme of themes) {
+      const active = themeCatalog?.resolved.id === theme.id;
+      actions.push({
+        id: `action:theme-${theme.id}`,
+        label: `Theme: ${theme.name}`,
+        hint: active
+          ? "active"
+          : theme.source === "user"
+            ? "user"
+            : theme.appearance,
+        run: () => {
+          void (async () => {
+            try {
+              applyThemeCatalog(await setFixedTheme(theme.id, root));
+              setStatusToast(`Theme: ${theme.name}`);
+            } catch (err) {
+              setError(String(err));
+            }
+          })();
+        },
+      });
+    }
+
     if (!inBrowser) {
       actions.push({ id: "action:undo", label: "Undo last change", run: () => void handleUndo() });
     }
@@ -761,7 +853,7 @@ export default function App() {
     // depending on the underlying data (not the handlers themselves) keeps
     // this from recomputing on every keystroke without going stale.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snapshot, selected]);
+  }, [snapshot, selected, themeCatalog, applyThemeCatalog]);
 
   // Cmd/Ctrl+K (search), Cmd/Ctrl+P (palette), Cmd/Ctrl+N (quick note),
   // Cmd/Ctrl+Shift+F (search, legacy).
