@@ -2,12 +2,14 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use lattice_core::Workspace;
+use lattice_data::{DataApp, Row};
 use lattice_storage::{
     BufferedWriter, NativeWorkspaceStore, RecoveryJournal, ResourceMetadata, WorkspaceStore,
 };
 
 use crate::command::{
-    file_name, Command, CommandOutcome, HistoryEntry, Transaction, TransactionReceipt, UndoReport,
+    file_name, view_file_path, Command, CommandOutcome, HistoryEntry, Transaction,
+    TransactionReceipt, UndoReport,
 };
 use crate::history::{unix_now, unix_to_system, HistoryStore};
 use crate::trash::{dispose, TrashPolicy};
@@ -345,6 +347,61 @@ impl CommandEngine {
                 }
                 Ok(())
             }
+            Command::TableCreate { path, .. } => match self.metadata_opt(path)? {
+                None => Ok(()),
+                Some(_) => Err(Error::AlreadyExists { path: path.clone() }),
+            },
+            Command::RecordInsert { path, .. } => {
+                if self.metadata_opt(path)?.is_none() {
+                    return Err(Error::NotFound { path: path.clone() });
+                }
+                let app = self.open_data_app(path)?;
+                if let Command::RecordInsert {
+                    table,
+                    id: Some(row_id),
+                    ..
+                } = command
+                {
+                    if app.get_row(table, row_id)?.is_some() {
+                        return Err(Error::AlreadyExists { path: path.clone() });
+                    }
+                }
+                Ok(())
+            }
+            Command::RecordUpdate {
+                path,
+                base_revision,
+                table,
+                id,
+                ..
+            } => {
+                self.ensure_package_revision(path, base_revision)?;
+                let app = self.open_data_app(path)?;
+                if app.get_row(table, id)?.is_none() {
+                    return Err(Error::NotFound { path: path.clone() });
+                }
+                Ok(())
+            }
+            Command::RecordDelete {
+                path,
+                base_revision,
+                table,
+                id,
+                ..
+            } => {
+                self.ensure_package_revision(path, base_revision)?;
+                let app = self.open_data_app(path)?;
+                if app.get_row(table, id)?.is_none() {
+                    return Err(Error::NotFound { path: path.clone() });
+                }
+                Ok(())
+            }
+            Command::ViewSave { path, .. } => {
+                if self.metadata_opt(path)?.is_none() {
+                    return Err(Error::NotFound { path: path.clone() });
+                }
+                Ok(())
+            }
         }
     }
 
@@ -449,6 +506,147 @@ impl CommandEngine {
                     resulting_revision: None,
                 })
             }
+            Command::TableCreate {
+                path,
+                title,
+                table_name,
+            } => {
+                let abs = self.root.join(path);
+                let app = DataApp::create(&abs, title, table_name)?;
+                let revision = app.package_revision()?;
+                Ok(AppliedOp {
+                    forward: command.clone(),
+                    // Undo removes the package directly (not via Trash) so redo
+                    // can recreate a clean path without digging in Trash.
+                    inverse: Command::ResourceDelete { path: path.clone() },
+                    prior_content: None,
+                    resulting_revision: Some(revision),
+                })
+            }
+            Command::RecordInsert {
+                path,
+                table,
+                values,
+                id,
+            } => {
+                let app = self.open_data_app(path)?;
+                let row_id = if let Some(row_id) = id.clone() {
+                    let mut row_values = values.clone();
+                    row_values.insert(
+                        "id".to_string(),
+                        lattice_data::CellValue::Text(row_id.clone()),
+                    );
+                    let row = Row {
+                        id: row_id.clone(),
+                        values: row_values,
+                    };
+                    app.restore_row(table, &row)?;
+                    row_id
+                } else {
+                    app.insert_row(table, values)?
+                };
+                let revision = app.package_revision()?;
+                Ok(AppliedOp {
+                    forward: Command::RecordInsert {
+                        path: path.clone(),
+                        table: table.clone(),
+                        values: values.clone(),
+                        id: Some(row_id.clone()),
+                    },
+                    inverse: Command::RecordDelete {
+                        path: path.clone(),
+                        table: table.clone(),
+                        id: row_id,
+                        base_revision: revision.clone(),
+                    },
+                    prior_content: None,
+                    resulting_revision: Some(revision),
+                })
+            }
+            Command::RecordUpdate {
+                path,
+                table,
+                id,
+                values,
+                base_revision,
+            } => {
+                self.ensure_package_revision(path, base_revision)?;
+                let app = self.open_data_app(path)?;
+                let prior_row = app
+                    .get_row(table, id)?
+                    .ok_or_else(|| Error::NotFound { path: path.clone() })?;
+                let prior_values = row_values_without_id(&prior_row);
+                app.update_row(table, id, values)?;
+                let revision = app.package_revision()?;
+                Ok(AppliedOp {
+                    forward: command.clone(),
+                    inverse: Command::RecordUpdate {
+                        path: path.clone(),
+                        table: table.clone(),
+                        id: id.clone(),
+                        values: prior_values,
+                        base_revision: revision.clone(),
+                    },
+                    prior_content: Some(serde_json::to_vec(&prior_row)?),
+                    resulting_revision: Some(revision),
+                })
+            }
+            Command::RecordDelete {
+                path,
+                table,
+                id,
+                base_revision,
+            } => {
+                self.ensure_package_revision(path, base_revision)?;
+                let app = self.open_data_app(path)?;
+                let prior_row = app
+                    .get_row(table, id)?
+                    .ok_or_else(|| Error::NotFound { path: path.clone() })?;
+                app.delete_row(table, id)?;
+                let revision = app.package_revision()?;
+                Ok(AppliedOp {
+                    forward: command.clone(),
+                    inverse: Command::RecordInsert {
+                        path: path.clone(),
+                        table: table.clone(),
+                        values: row_values_without_id(&prior_row),
+                        id: Some(id.clone()),
+                    },
+                    prior_content: Some(serde_json::to_vec(&prior_row)?),
+                    resulting_revision: Some(revision),
+                })
+            }
+            Command::ViewSave {
+                path,
+                view_name,
+                content,
+            } => {
+                let view_path = view_file_path(path, view_name);
+                let prior = self.read_view_opt(&view_path)?;
+                if let Some(parent) = self.root.join(&view_path).parent() {
+                    std::fs::create_dir_all(parent).map_err(|source| Error::io(parent, source))?;
+                }
+                let revision = self
+                    .writer()
+                    .write(&view_path, content.as_bytes(), None)?
+                    .hash;
+                let inverse = match prior {
+                    Some(previous) => Command::ViewSave {
+                        path: path.clone(),
+                        view_name: view_name.clone(),
+                        content: previous,
+                    },
+                    None => Command::ResourceDelete {
+                        path: view_path.clone(),
+                    },
+                };
+                Ok(AppliedOp {
+                    forward: command.clone(),
+                    inverse,
+                    prior_content: None,
+                    resulting_revision: Some(revision),
+                })
+            }
         }
     }
 
@@ -504,6 +702,88 @@ impl CommandEngine {
                 self.store.rename(from, &to_dir.join(file_name(from)))?;
                 Ok(())
             }
+            Command::TableCreate {
+                path,
+                title,
+                table_name,
+            } => {
+                let abs = self.root.join(path);
+                DataApp::create(&abs, title, table_name)?;
+                Ok(())
+            }
+            Command::RecordInsert {
+                path,
+                table,
+                values,
+                id,
+            } => {
+                let app = self.open_data_app(path)?;
+                if let Some(bytes) = prior_content {
+                    let row: Row = serde_json::from_slice(bytes)?;
+                    app.restore_row(table, &row)?;
+                } else if let Some(row_id) = id {
+                    let mut row_values = values.clone();
+                    row_values.insert(
+                        "id".to_string(),
+                        lattice_data::CellValue::Text(row_id.clone()),
+                    );
+                    app.restore_row(
+                        table,
+                        &Row {
+                            id: row_id.clone(),
+                            values: row_values,
+                        },
+                    )?;
+                } else {
+                    app.insert_row(table, values)?;
+                }
+                Ok(())
+            }
+            Command::RecordUpdate {
+                path,
+                table,
+                id,
+                values,
+                base_revision: _,
+            } => {
+                if let Some(bytes) = prior_content {
+                    let row: Row = serde_json::from_slice(bytes)?;
+                    self.open_data_app(path)?.update_row(
+                        table,
+                        id,
+                        &row_values_without_id(&row),
+                    )?;
+                } else {
+                    self.open_data_app(path)?.update_row(table, id, values)?;
+                }
+                Ok(())
+            }
+            Command::RecordDelete {
+                path,
+                table,
+                id,
+                base_revision: _,
+            } => {
+                self.open_data_app(path)?.delete_row(table, id)?;
+                Ok(())
+            }
+            Command::ViewSave {
+                path,
+                view_name,
+                content,
+            } => {
+                let view_path = view_file_path(path, view_name);
+                if let Some(parent) = self.root.join(&view_path).parent() {
+                    std::fs::create_dir_all(parent).map_err(|source| Error::io(parent, source))?;
+                }
+                let meta = self.store.metadata(&view_path).ok();
+                self.writer().write(
+                    &view_path,
+                    content.as_bytes(),
+                    meta.as_ref().map(|m| &m.revision),
+                )?;
+                Ok(())
+            }
         }
     }
 
@@ -551,6 +831,48 @@ impl CommandEngine {
             Command::PageCreate { .. } | Command::PageUpdate { .. } => {
                 self.guard_hash(&forward.guard_path(), resulting_revision.as_deref())
             }
+            Command::TableCreate { path, .. } => {
+                if self.metadata_opt(path)?.is_some() {
+                    Ok(())
+                } else {
+                    Err(Error::RevisionGuard {
+                        op: "undo",
+                        path: path.clone(),
+                        expected: "(package present)".into(),
+                        found: "(absent)".into(),
+                    })
+                }
+            }
+            Command::RecordInsert {
+                path,
+                table,
+                id: Some(row_id),
+                ..
+            } => self.guard_row_present(path, table, row_id),
+            Command::RecordInsert { path, .. } => self.guard_package_revision(
+                path,
+                resulting_revision
+                    .as_deref()
+                    .ok_or_else(|| Error::RevisionGuard {
+                        op: "undo",
+                        path: path.clone(),
+                        expected: "(recorded)".into(),
+                        found: "(missing revision)".into(),
+                    })?,
+            ),
+            Command::RecordUpdate {
+                path,
+                table,
+                id,
+                values,
+                ..
+            } => self.guard_row_values(path, table, id, values),
+            Command::RecordDelete {
+                path, table, id, ..
+            } => self.guard_row_absent(path, table, id),
+            Command::ViewSave { .. } => {
+                self.guard_hash(&forward.guard_path(), resulting_revision.as_deref())
+            }
         }
     }
 
@@ -588,4 +910,119 @@ impl CommandEngine {
     fn current_hash(&self, path: &Path) -> Result<Option<String>> {
         Ok(self.metadata_opt(path)?.map(|m| m.revision.hash))
     }
+
+    fn open_data_app(&self, path: &Path) -> Result<DataApp> {
+        Ok(DataApp::open(&self.root.join(path))?)
+    }
+
+    fn package_revision(&self, path: &Path) -> Result<String> {
+        Ok(self.open_data_app(path)?.package_revision()?)
+    }
+
+    fn ensure_package_revision(&self, path: &Path, expected: &str) -> Result<()> {
+        let found = self.package_revision(path)?;
+        if found == expected {
+            Ok(())
+        } else {
+            Err(Error::StaleBaseRevision {
+                path: path.to_path_buf(),
+                expected: expected.to_string(),
+                found,
+            })
+        }
+    }
+
+    fn guard_package_revision(&self, path: &Path, expected: &str) -> Result<()> {
+        let found = self.package_revision(path)?;
+        if found == expected {
+            Ok(())
+        } else {
+            Err(Error::RevisionGuard {
+                op: "undo",
+                path: path.to_path_buf(),
+                expected: expected.to_string(),
+                found,
+            })
+        }
+    }
+
+    fn guard_row_present(&self, path: &Path, table: &str, row_id: &str) -> Result<()> {
+        let app = self.open_data_app(path)?;
+        if app.get_row(table, row_id)?.is_some() {
+            Ok(())
+        } else {
+            Err(Error::RevisionGuard {
+                op: "undo",
+                path: path.to_path_buf(),
+                expected: format!("row {row_id:?} present"),
+                found: "(absent)".into(),
+            })
+        }
+    }
+
+    fn guard_row_absent(&self, path: &Path, table: &str, row_id: &str) -> Result<()> {
+        let app = self.open_data_app(path)?;
+        if app.get_row(table, row_id)?.is_none() {
+            Ok(())
+        } else {
+            Err(Error::RevisionGuard {
+                op: "undo",
+                path: path.to_path_buf(),
+                expected: format!("row {row_id:?} absent"),
+                found: "(present)".into(),
+            })
+        }
+    }
+
+    fn guard_row_values(
+        &self,
+        path: &Path,
+        table: &str,
+        row_id: &str,
+        expected_values: &std::collections::BTreeMap<String, lattice_data::CellValue>,
+    ) -> Result<()> {
+        let app = self.open_data_app(path)?;
+        let row = app
+            .get_row(table, row_id)?
+            .ok_or_else(|| Error::RevisionGuard {
+                op: "undo",
+                path: path.to_path_buf(),
+                expected: format!("row {row_id:?} present"),
+                found: "(absent)".into(),
+            })?;
+        for (column, expected) in expected_values {
+            match row.values.get(column) {
+                Some(found) if found == expected => {}
+                other => {
+                    return Err(Error::RevisionGuard {
+                        op: "undo",
+                        path: path.to_path_buf(),
+                        expected: format!("{column}={expected:?}"),
+                        found: format!("{other:?}"),
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn read_view_opt(&self, view_path: &Path) -> Result<Option<String>> {
+        match self.store.read(view_path) {
+            Ok(bytes) => Ok(Some(String::from_utf8_lossy(&bytes).into_owned())),
+            Err(lattice_storage::Error::Io { ref source, .. })
+                if source.kind() == std::io::ErrorKind::NotFound =>
+            {
+                Ok(None)
+            }
+            Err(other) => Err(other.into()),
+        }
+    }
+}
+
+fn row_values_without_id(row: &Row) -> std::collections::BTreeMap<String, lattice_data::CellValue> {
+    row.values
+        .iter()
+        .filter(|(key, _)| key.as_str() != "id")
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect()
 }
