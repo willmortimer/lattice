@@ -1,0 +1,49 @@
+# Lattice Paper — built-in light theme (auto-pair companion to Lattice Slate).
+
+name: Lattice Paper
+id: lattice-paper
+appearance: light
+
+palette:
+  ground: "#f4f6fa"
+  ground_raise: "#eef1f7"
+  panel: "#ffffff"
+  slate: "#5a6b86"
+  text: "#121822"
+  text_soft: "#3a4558"
+  muted: "#6b778c"
+  faint: "#8b96a8"
+  accent: "#c47a0a"
+  accent_bright: "#a86408"
+  accent_deep: "#8a5206"
+  danger: "#b42318"
+  ink_shadow: "#0a0d13"
+  on_accent: "#fff8ef"
+
+roles:
+  bg: $ground
+  bg_raise: $ground_raise
+  panel: $panel
+  slate: $slate
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $accent
+  accent_bright: $accent_bright
+  accent_deep: $accent_deep
+  danger: $danger
+  shadow: $ink_shadow
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 9px
+  radius_sm: 6px
+  radius_lg: 14px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px
