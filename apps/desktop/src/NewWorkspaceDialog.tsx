@@ -1,337 +1,317 @@
+import {
+  Button,
+  CheckboxIndicator,
+  CheckboxRoot,
+  DialogBackdrop,
+  DialogDescription,
+  DialogPopup,
+  DialogPortal,
+  DialogRoot,
+  DialogTitle,
+  RadioGroupRoot,
+  RadioIndicator,
+  RadioItem,
+} from "@lattice/ui";
+import {
+  Beaker,
+  Check,
+  ChevronLeft,
+  Database,
+  File,
+  FileText,
+  Folder,
+  FolderOpen,
+  LayoutTemplate,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
 
-import { inBrowser } from "./demo";
-
-export interface TemplateInfo {
-  id: string;
-  name: string;
-  category: string;
-  description: string;
-  recommended: boolean;
-  preview: string[];
-}
-
-const DEMO_TEMPLATES: TemplateInfo[] = [
-  {
-    id: "personal",
-    name: "Personal",
-    category: "Everyday",
-    description: "Capture ideas, run projects, manage ongoing areas, and keep a durable library.",
-    recommended: true,
-    preview: ["Home.md", "Welcome.md", "Inbox/", "Projects/", "Areas/", "Library/", "Journal/"],
-  },
-  {
-    id: "project",
-    name: "Project",
-    category: "Focused work",
-    description: "Plan and deliver one outcome with decisions, research, working files, data, and outputs together.",
-    recommended: false,
-    preview: ["Home.md", "Brief.md", "Plan.md", "Decisions/", "Working/", "Data/", "Outputs/"],
-  },
-  {
-    id: "research",
-    name: "Research",
-    category: "Knowledge",
-    description: "Move from questions and sources through notes, experiments, analysis, and published outputs.",
-    recommended: false,
-    preview: ["Home.md", "Questions.md", "Sources/", "Notes/", "Data/", "Experiments/", "Outputs/"],
-  },
-  {
-    id: "data-lab",
-    name: "Data Lab",
-    category: "Analysis",
-    description: "Organize data sources, queries, notebooks, dashboards, reports, and reusable analysis.",
-    recommended: false,
-    preview: ["Home.md", "Sources/", "Data/", "Queries/", "Notebooks/", "Dashboards/", "Reports/"],
-  },
-  {
-    id: "blank",
-    name: "Blank",
-    category: "Advanced",
-    description: "Start with only lattice.yaml and shape the workspace yourself.",
-    recommended: false,
-    preview: ["lattice.yaml"],
-  },
-];
+import type { TemplateDescriptor } from "./lib/templates";
 
 interface NewWorkspaceDialogProps {
   open: boolean;
   busy: boolean;
+  templates: TemplateDescriptor[];
+  workspacesDir: string | null;
+  hasValidDefault: boolean;
   onCancel: () => void;
+  onPickFolder: () => Promise<string | null>;
   onCreate: (args: {
     path: string;
     title: string;
     template: string;
     setDefault: boolean;
+    initializeExisting: boolean;
   }) => void;
-  /** Suggested parent for "create under Lattice home" (from ensure_home). */
-  workspacesDir: string | null;
 }
 
-/**
- * Two-step workspace creation flow: choose a purpose-built scaffold, then
- * choose its title, location, and whether it should become the default.
- */
+function PreviewIcon({ path }: { path: string }) {
+  if (path.endsWith("/")) return <Folder size={13} />;
+  if (path.endsWith(".md")) return <FileText size={13} />;
+  if (path.endsWith(".data")) return <Database size={13} />;
+  return <File size={13} />;
+}
+
+function safeChildName(title: string) {
+  return title.trim().replace(/[/:\\]/g, "-").replace(/\s+/g, " ");
+}
+
 export function NewWorkspaceDialog({
-  open: isOpen,
+  open,
   busy,
-  onCancel,
-  onCreate,
+  templates,
   workspacesDir,
+  hasValidDefault,
+  onCancel,
+  onPickFolder,
+  onCreate,
 }: NewWorkspaceDialogProps) {
-  const [templates, setTemplates] = useState<TemplateInfo[]>(DEMO_TEMPLATES);
-  const [template, setTemplate] = useState("personal");
+  const gallery = useMemo(
+    () => templates.filter((template) => template.visibility === "gallery"),
+    [templates],
+  );
+  const sample = templates.find((template) => template.visibility === "sample") ?? null;
+  const [templateId, setTemplateId] = useState("personal");
   const [step, setStep] = useState<"gallery" | "details">("gallery");
   const [title, setTitle] = useState("Personal");
   const [titleTouched, setTitleTouched] = useState(false);
-  const [folderPath, setFolderPath] = useState<string | null>(null);
-  const [mode, setMode] = useState<"pick" | "under-home">("under-home");
-  const [makeDefault, setMakeDefault] = useState(true);
+  const [parentPath, setParentPath] = useState<string | null>(null);
+  const [mode, setMode] = useState<"new-child" | "existing">("new-child");
+  const [makeDefault, setMakeDefault] = useState(!hasValidDefault);
   const [error, setError] = useState<string | null>(null);
 
-  const selectedTemplate = useMemo(
-    () => templates.find((candidate) => candidate.id === template) ?? templates[0],
-    [template, templates],
-  );
+  const selected = templates.find((template) => template.id === templateId) ?? gallery[0];
+  const childName = safeChildName(title || selected?.recommendedTitle || "Workspace");
+  const selectedParent = parentPath ?? workspacesDir;
+  const destination =
+    mode === "new-child" && selectedParent
+      ? `${selectedParent.replace(/[/\\]$/, "")}/${childName}`
+      : parentPath;
 
   useEffect(() => {
-    if (!isOpen || inBrowser) return;
-    invoke<TemplateInfo[]>("list_templates")
-      .then((next) => {
-        setTemplates(next.length > 0 ? next : DEMO_TEMPLATES);
-      })
-      .catch(() => setTemplates(DEMO_TEMPLATES));
-  }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    setTemplate("personal");
+    if (!open) return;
+    setTemplateId("personal");
     setStep("gallery");
     setTitle("Personal");
     setTitleTouched(false);
-    setFolderPath(null);
-    setMode(workspacesDir ? "under-home" : "pick");
-    setMakeDefault(true);
+    setParentPath(null);
+    setMode("new-child");
+    setMakeDefault(!hasValidDefault);
     setError(null);
-  }, [isOpen, workspacesDir]);
+  }, [hasValidDefault, open]);
 
-  if (!isOpen) return null;
-
-  function chooseTemplate(next: TemplateInfo) {
-    setTemplate(next.id);
-    if (!titleTouched) setTitle(next.name);
+  function chooseTemplate(template: TemplateDescriptor) {
+    setTemplateId(template.id);
+    if (!titleTouched) setTitle(template.recommendedTitle);
   }
 
-  async function pickFolder() {
-    setError(null);
-    const dir = await open({
-      directory: true,
-      multiple: false,
-      title: "Choose folder for new workspace",
-    });
-    if (!dir || Array.isArray(dir)) return;
-    setFolderPath(dir);
-    setMode("pick");
-    const base = dir.split(/[/\\]/).filter(Boolean).pop();
-    if (base && !titleTouched) setTitle(base);
+  async function pickParent(nextMode: "new-child" | "existing") {
+    const path = await onPickFolder();
+    if (!path) return;
+    setMode(nextMode);
+    setParentPath(path);
+    if (nextMode === "existing" && !titleTouched) {
+      setTitle(path.split(/[/\\]/).filter(Boolean).pop() ?? selected?.recommendedTitle ?? "Workspace");
+    }
   }
 
   function submit() {
-    setError(null);
-    if (mode === "under-home") {
-      if (!workspacesDir) {
-        setError("Lattice home is not available yet.");
-        return;
-      }
-      const workspaceTitle = title.trim() || selectedTemplate?.name || "Workspace";
-      const path = `${workspacesDir.replace(/[/\\]$/, "")}/${workspaceTitle}`;
-      onCreate({ path, title: workspaceTitle, template, setDefault: makeDefault });
+    if (!selected) return;
+    if (!childName) {
+      setError("Enter a workspace title.");
       return;
     }
-    if (!folderPath) {
-      setError("Choose a folder first.");
+    if (!destination) {
+      setError(mode === "new-child" ? "Choose a parent folder." : "Choose an existing folder.");
       return;
     }
     onCreate({
-      path: folderPath,
-      title: title.trim() || selectedTemplate?.name || "Workspace",
-      template,
+      path: destination,
+      title: title.trim(),
+      template: selected.id,
       setDefault: makeDefault,
+      initializeExisting: mode === "existing",
     });
   }
 
   return (
-    <div className="modal-backdrop" role="presentation" onClick={onCancel}>
-      <div
-        className="modal-panel modal-panel-gallery"
-        role="dialog"
-        aria-labelledby="new-ws-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="modal-step-row" aria-label="Workspace creation progress">
-          <span className={step === "gallery" ? "modal-step-active" : ""}>1 · Starting point</span>
-          <span className={step === "details" ? "modal-step-active" : ""}>2 · Details</span>
-        </div>
+    <DialogRoot open={open} onOpenChange={(next) => !next && !busy && onCancel()}>
+      <DialogPortal>
+        <DialogBackdrop className="modal-backdrop" />
+        <DialogPopup className="modal-panel modal-panel-gallery">
+          <div className="modal-step-row" aria-label="Workspace creation progress">
+            <span className={step === "gallery" ? "modal-step-active" : ""}>1 · Starting point</span>
+            <span className={step === "details" ? "modal-step-active" : ""}>2 · Destination</span>
+          </div>
 
-        {step === "gallery" ? (
-          <>
-            <h2 id="new-ws-title" className="modal-title">
-              What are you creating?
-            </h2>
-            <p className="modal-copy">
-              Choose a workspace organized around the purpose of the work. You can change or
-              delete everything after creation.
-            </p>
-
-            <fieldset className="modal-template-fieldset" disabled={busy}>
-              <legend className="visually-hidden">Workspace template</legend>
-              <div className="template-gallery">
-                {templates.map((candidate) => (
-                  <label
-                    key={candidate.id}
-                    className={`template-card ${template === candidate.id ? "template-card-selected" : ""}`}
+          {step === "gallery" ? (
+            <>
+              <DialogTitle className="modal-title">What are you creating?</DialogTitle>
+              <DialogDescription className="modal-copy">
+                Templates provision ordinary files once. Lattice never retains ownership of them.
+              </DialogDescription>
+              <RadioGroupRoot
+                className="template-gallery"
+                value={templateId}
+                onValueChange={(value) => {
+                  const template = templates.find((candidate) => candidate.id === value);
+                  if (template) chooseTemplate(template);
+                }}
+                aria-label="Workspace template"
+              >
+                {gallery.map((template) => (
+                  <RadioItem
+                    key={template.id}
+                    value={template.id}
+                    className="template-card"
+                    disabled={busy}
                   >
-                    <input
-                      className="template-card-radio"
-                      type="radio"
-                      name="ws-template"
-                      checked={template === candidate.id}
-                      onChange={() => chooseTemplate(candidate)}
-                    />
+                    <RadioIndicator className="template-radio-indicator">
+                      <Check size={12} />
+                    </RadioIndicator>
                     <span className="template-card-heading">
                       <span>
-                        <span className="template-card-category">{candidate.category}</span>
-                        <strong>{candidate.name}</strong>
+                        <span className="template-card-category">{template.category}</span>
+                        <strong>{template.name}</strong>
                       </span>
-                      {candidate.recommended && (
+                      {template.recommended && (
                         <span className="template-recommended">Recommended</span>
                       )}
                     </span>
-                    <span className="template-card-description">{candidate.description}</span>
-                    <span className="template-card-preview" aria-label="Example structure">
-                      {candidate.preview.slice(0, 7).map((path) => (
-                        <code key={path}>{path}</code>
+                    <span className="template-card-description">{template.description}</span>
+                    <span className="template-mini-tree" aria-label="Example structure">
+                      {template.preview.slice(0, 7).map((path) => (
+                        <span key={path}>
+                          <PreviewIcon path={path} />
+                          {path}
+                        </span>
                       ))}
                     </span>
-                  </label>
+                  </RadioItem>
                 ))}
-              </div>
-            </fieldset>
+              </RadioGroupRoot>
 
-            <div className="modal-gallery-note">
-              Templates initialize ordinary files and folders once. They do not retain ownership
-              or overwrite your content later.
-            </div>
-
-            <div className="modal-actions">
-              <button type="button" className="secondary-button" onClick={onCancel} disabled={busy}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="primary-button"
-                onClick={() => setStep("details")}
-                disabled={busy || !selectedTemplate}
-              >
-                Continue with {selectedTemplate?.name ?? "template"}
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <h2 id="new-ws-title" className="modal-title">
-              Create {selectedTemplate?.name ?? "workspace"}
-            </h2>
-            <p className="modal-copy">
-              Name the workspace, choose where its ordinary files live, and optionally make it the
-              workspace Lattice opens by default.
-            </p>
-
-            <label className="modal-field">
-              <span className="modal-label">Title</span>
-              <input
-                className="modal-input"
-                value={title}
-                onChange={(event) => {
-                  setTitle(event.target.value);
-                  setTitleTouched(true);
-                }}
-                disabled={busy}
-                autoFocus
-              />
-            </label>
-
-            <fieldset className="modal-fieldset" disabled={busy}>
-              <legend className="modal-label">Location</legend>
-              {workspacesDir && (
-                <label className="modal-radio">
-                  <input
-                    type="radio"
-                    name="ws-loc"
-                    checked={mode === "under-home"}
-                    onChange={() => setMode("under-home")}
-                  />
+              {sample && (
+                <button
+                  type="button"
+                  className="sample-workspace-action"
+                  onClick={() => {
+                    chooseTemplate(sample);
+                    setStep("details");
+                  }}
+                >
+                  <Beaker size={16} />
                   <span>
-                    Under Lattice home <code className="modal-code">{workspacesDir}</code>
+                    <strong>Open a First Look sample</strong>
+                    <small>A curated linked workspace, separate from the reusable templates.</small>
                   </span>
-                </label>
+                </button>
               )}
-              <label className="modal-radio">
+
+              <div className="modal-actions">
+                <Button onClick={onCancel} disabled={busy}>Cancel</Button>
+                <Button
+                  variant="primary"
+                  onClick={() => setStep("details")}
+                  disabled={busy || !selected}
+                >
+                  Continue with {selected?.name ?? "template"}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <DialogTitle className="modal-title">Create {selected?.name}</DialogTitle>
+              <DialogDescription className="modal-copy">
+                New workspaces are staged and validated before they appear at the destination.
+              </DialogDescription>
+
+              <label className="modal-field">
+                <span className="modal-label">Title</span>
                 <input
-                  type="radio"
-                  name="ws-loc"
-                  checked={mode === "pick"}
-                  onChange={() => setMode("pick")}
+                  className="modal-input"
+                  value={title}
+                  onChange={(event) => {
+                    setTitle(event.currentTarget.value);
+                    setTitleTouched(true);
+                  }}
+                  autoFocus
+                  disabled={busy}
                 />
-                <span>Existing folder on disk</span>
               </label>
-              {mode === "pick" && (
-                <div className="modal-pick-row">
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={() => void pickFolder()}
-                  >
-                    Choose folder…
-                  </button>
-                  {folderPath && <code className="modal-code">{folderPath}</code>}
-                </div>
-              )}
-            </fieldset>
 
-            <label className="modal-default-option">
-              <input
-                type="checkbox"
-                checked={makeDefault}
-                onChange={(event) => setMakeDefault(event.target.checked)}
-                disabled={busy}
-              />
-              <span>
-                <strong>Make this my default workspace</strong>
-                <small>Lattice will open it from the Home action and remember the choice.</small>
-              </span>
-            </label>
-
-            {error && <p className="error-text">{error}</p>}
-
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => setStep("gallery")}
-                disabled={busy}
+              <RadioGroupRoot
+                className="modal-fieldset"
+                value={mode}
+                onValueChange={(value) => setMode(value as "new-child" | "existing")}
+                aria-label="Creation mode"
               >
-                Back
-              </button>
-              <button type="button" className="primary-button" onClick={submit} disabled={busy}>
-                {busy ? "Creating…" : "Create workspace"}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+                <RadioItem value="new-child" className="modal-radio">
+                  <RadioIndicator className="modal-radio-dot" />
+                  <span>
+                    <strong>Create a new named folder</strong>
+                    <small>Recommended. The complete workspace commits atomically.</small>
+                  </span>
+                </RadioItem>
+                <RadioItem value="existing" className="modal-radio">
+                  <RadioIndicator className="modal-radio-dot" />
+                  <span>
+                    <strong>Initialize this existing folder</strong>
+                    <small>Advanced. Collisions are blocked and existing files are never overwritten.</small>
+                  </span>
+                </RadioItem>
+              </RadioGroupRoot>
+
+              <div className="modal-pick-row">
+                <Button onClick={() => void pickParent(mode)}>
+                  <FolderOpen size={14} />
+                  {mode === "new-child" ? "Choose parent…" : "Choose folder…"}
+                </Button>
+                {mode === "new-child" && !parentPath && workspacesDir && (
+                  <span className="modal-code">Using {workspacesDir}</span>
+                )}
+              </div>
+
+              <div className="workspace-destination-preview">
+                <LayoutTemplate size={15} />
+                <span>
+                  <small>Final destination</small>
+                  <code>{destination ?? "Choose a destination"}</code>
+                </span>
+              </div>
+
+              <label className="modal-default-option">
+                <CheckboxRoot
+                  checked={makeDefault}
+                  onCheckedChange={(checked) => setMakeDefault(checked === true)}
+                  disabled={busy}
+                  className="ltui-checkbox"
+                >
+                  <CheckboxIndicator><Check size={12} /></CheckboxIndicator>
+                </CheckboxRoot>
+                <span>
+                  <strong>Make this my default workspace</strong>
+                  <small>
+                    {!hasValidDefault
+                      ? "Selected automatically because no valid default exists."
+                      : "Use this workspace when no restorable session is available."}
+                  </small>
+                </span>
+              </label>
+
+              {error && <p className="error-text">{error}</p>}
+              <div className="modal-actions">
+                <Button onClick={() => setStep("gallery")} disabled={busy}>
+                  <ChevronLeft size={14} />
+                  Back
+                </Button>
+                <Button variant="primary" onClick={submit} disabled={busy}>
+                  {busy ? "Creating…" : "Create workspace"}
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogPopup>
+      </DialogPortal>
+    </DialogRoot>
   );
 }

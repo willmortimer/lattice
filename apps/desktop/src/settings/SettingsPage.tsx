@@ -7,17 +7,21 @@ import {
   Keyboard,
   Palette,
   Puzzle,
+  Rocket,
   TextCursorInput,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { ThemeCatalogPayload } from "../theme";
+import type { WorkspaceStartupSettings } from "../lib/profile";
+import type { WorkspaceSnapshot } from "../types";
 import type { AppSettings } from "./model";
 
 type SettingsSection =
   | "appearance"
   | "editor"
   | "files"
+  | "workspaces"
   | "keybindings"
   | "data"
   | "capabilities"
@@ -26,8 +30,16 @@ type SettingsSection =
 
 interface SettingsPageProps {
   settings: AppSettings;
+  startup: WorkspaceStartupSettings;
+  workspace: WorkspaceSnapshot;
   themeCatalog: ThemeCatalogPayload | null;
   onChange: (next: AppSettings) => void;
+  onStartupChange: (next: WorkspaceStartupSettings) => void;
+  onWorkspaceChange: (next: {
+    capabilities: string[];
+    quickNoteDirectory: string;
+  }) => void;
+  onClearRecents: () => void;
   onReset: () => void;
   onThemeChange: (themeId: string) => void;
   onFollowSystem: () => void;
@@ -37,6 +49,7 @@ const SECTIONS = [
   { id: "appearance" as const, label: "Appearance", icon: Palette },
   { id: "editor" as const, label: "Editor behavior", icon: TextCursorInput },
   { id: "files" as const, label: "Files, links & autosave", icon: FileCog },
+  { id: "workspaces" as const, label: "Workspaces & startup", icon: Rocket },
   { id: "keybindings" as const, label: "Keybindings", icon: Keyboard },
   { id: "data" as const, label: "Data defaults", icon: Database },
   { id: "capabilities" as const, label: "Enabled capabilities", icon: Puzzle },
@@ -89,15 +102,32 @@ function Toggle({
 
 export function SettingsPage({
   settings,
+  startup,
+  workspace,
   themeCatalog,
   onChange,
+  onStartupChange,
+  onWorkspaceChange,
+  onClearRecents,
   onReset,
   onThemeChange,
   onFollowSystem,
 }: SettingsPageProps) {
   const [section, setSection] = useState<SettingsSection>("appearance");
+  const [quickNoteDraft, setQuickNoteDraft] = useState(workspace.defaults.quickNoteDirectory);
+  const [defaultWorkspaceDraft, setDefaultWorkspaceDraft] = useState(
+    startup.defaultWorkspace ?? "",
+  );
 
-  function update<K extends keyof AppSettings>(
+  useEffect(() => {
+    setQuickNoteDraft(workspace.defaults.quickNoteDirectory);
+  }, [workspace.defaults.quickNoteDirectory]);
+
+  useEffect(() => {
+    setDefaultWorkspaceDraft(startup.defaultWorkspace ?? "");
+  }, [startup.defaultWorkspace]);
+
+  function update<K extends Exclude<keyof AppSettings, "format" | "version">>(
     group: K,
     patch: Partial<AppSettings[K]>,
   ) {
@@ -211,25 +241,15 @@ export function SettingsPage({
                 <option value="3000">3 seconds</option>
               </select>
             </SettingRow>
-            <SettingRow title="Restore tabs" description="Reopen the workspace session and active resource at launch.">
-              <Toggle
-                label="Restore tabs"
-                checked={settings.files.restoreSession}
-                onChange={(restoreSession) => update("files", { restoreSession })}
-              />
-            </SettingRow>
-            <SettingRow title="Reopen workspace" description="Automatically reopen the most recently used native workspace.">
-              <Toggle
-                label="Reopen last workspace"
-                checked={settings.files.reopenLastWorkspace}
-                onChange={(reopenLastWorkspace) => update("files", { reopenLastWorkspace })}
-              />
-            </SettingRow>
             <SettingRow title="Quick Note folder" description="Workspace-relative directory for new captures.">
               <input
-                value={settings.files.quickNoteDirectory}
-                onChange={(event) =>
-                  update("files", { quickNoteDirectory: event.currentTarget.value })
+                value={quickNoteDraft}
+                onChange={(event) => setQuickNoteDraft(event.currentTarget.value)}
+                onBlur={() =>
+                  onWorkspaceChange({
+                    capabilities: workspace.capabilities,
+                    quickNoteDirectory: quickNoteDraft,
+                  })
                 }
               />
             </SettingRow>
@@ -241,6 +261,48 @@ export function SettingsPage({
                   update("files", { confirmCloseWithUnsavedChanges })
                 }
               />
+            </SettingRow>
+          </>
+        )}
+
+        {section === "workspaces" && (
+          <>
+            <h1>Workspaces and startup</h1>
+            <SettingRow title="Default workspace" description="Used when no valid session can be resumed.">
+              <input
+                value={defaultWorkspaceDraft}
+                placeholder="No configured default"
+                onChange={(event) => setDefaultWorkspaceDraft(event.currentTarget.value)}
+                onBlur={() =>
+                  onStartupChange({
+                    ...startup,
+                    defaultWorkspace: defaultWorkspaceDraft || null,
+                  })
+                }
+              />
+            </SettingRow>
+            <SettingRow title="Reopen last workspace" description="Try recent workspaces before the configured default.">
+              <Toggle
+                label="Reopen last workspace"
+                checked={startup.reopenLastWorkspace}
+                onChange={(reopenLastWorkspace) =>
+                  onStartupChange({ ...startup, reopenLastWorkspace })
+                }
+              />
+            </SettingRow>
+            <SettingRow title="Restore session" description="Restore tabs, active resource, activity area, and inspector state.">
+              <Toggle
+                label="Restore session"
+                checked={startup.restoreSession}
+                onChange={(restoreSession) =>
+                  onStartupChange({ ...startup, restoreSession })
+                }
+              />
+            </SettingRow>
+            <SettingRow title="Recent workspaces" description="Remove operational history without touching workspace files.">
+              <Button variant="secondary" onClick={onClearRecents}>
+                Clear recents
+              </Button>
             </SettingRow>
           </>
         )}
@@ -321,21 +383,30 @@ export function SettingsPage({
               These switches control bundled shell surfaces. Canonical formats remain readable
               even when an optional renderer is hidden.
             </p>
-            {(Object.entries(settings.capabilities) as Array<
-              [keyof AppSettings["capabilities"], boolean]
-            >).map(([key, value]) => (
+            {(["canvas", "sqlite"] as const).map((key) => (
               <SettingRow
                 key={key}
-                title={key.replace(/([A-Z])/g, " $1")}
-                description="Bundled and lazy-loaded for this desktop profile."
+                title={key === "sqlite" ? "Data apps" : "Canvas"}
+                description="Workspace-owned and materialized through the semantic manifest command."
               >
                 <Toggle
                   label={key}
-                  checked={value}
-                  onChange={(checked) => update("capabilities", { [key]: checked })}
+                  checked={workspace.capabilities.includes(key)}
+                  onChange={(checked) =>
+                    onWorkspaceChange({
+                      capabilities: checked
+                        ? [...workspace.capabilities, key]
+                        : workspace.capabilities.filter((capability) => capability !== key),
+                      quickNoteDirectory: workspace.defaults.quickNoteDirectory,
+                    })
+                  }
                 />
               </SettingRow>
             ))}
+            <div className="diagnostics-card">
+              <strong>Always available</strong>
+              <span>Pages, files, folders, search, Quick Capture, and external open.</span>
+            </div>
           </>
         )}
 

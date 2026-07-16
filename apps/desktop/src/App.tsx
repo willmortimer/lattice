@@ -8,7 +8,20 @@ import { ConflictEnvelope } from "./editor/ConflictEnvelope";
 import type { PageEditorHandle } from "./editor/PageEditor";
 import { saveIndicatorText, isUnsaved, type SaveState } from "./editor/saveState";
 import { createDemoPageIO, createNativePageIO, type PageIO } from "./editor/pageIO";
-import { listRecentWorkspaces, rememberWorkspace, type RecentWorkspace } from "./lib/recents";
+import { loadSession, saveSession, saveSidebarWidth } from "./lib/profile";
+import {
+  demoLinkTargets,
+  refreshResourceCatalog,
+  resolveResourceLink,
+  searchResourceLinks,
+  type ResourceLinkTarget,
+} from "./lib/resourceLinks";
+import {
+  listTemplates,
+  provisionWorkspace,
+  type TemplateDescriptor,
+} from "./lib/templates";
+import { updateWorkspaceManifest } from "./lib/workspace";
 import { installNativeContextMenus, showNativeResourceMenu } from "./lib/nativeMenus";
 import { fileTimestamp, quickNotePath } from "./lib/timestamp";
 import { ResourceTree } from "./ResourceTree";
@@ -33,6 +46,11 @@ import type { Resource, WorkspaceChangeEvent, WorkspaceSnapshot } from "./types"
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Button,
+  DialogBackdrop,
+  DialogPopup,
+  DialogPortal,
+  DialogRoot,
+  DialogTitle,
   IconButton,
   MenuItem,
   MenuPopup,
@@ -130,10 +148,6 @@ function renamedPath(path: string, title: string): string {
   return `${dir}${title.trim()}${extension}`;
 }
 
-function sessionKey(root: string): string {
-  return `lattice.desktop.session:${root}`;
-}
-
 const PageEditor = lazy(() =>
   import("./editor/PageEditor").then((module) => ({ default: module.PageEditor })),
 );
@@ -165,7 +179,22 @@ function dataPackagePath(label: string): string {
 }
 
 export default function App() {
-  const { settings, setSettings, resetSettings } = useAppSettings();
+  const {
+    profile,
+    ready: profileReady,
+    settings,
+    startup,
+    recents,
+    diagnostics: profileDiagnostics,
+    saveError: profileSaveError,
+    setSettings,
+    setStartup,
+    rememberWorkspace,
+    clearRecents,
+    removeRecent,
+    refreshProfile,
+    resetSettings,
+  } = useAppSettings();
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot | null>(
     inBrowser && !demoStartEmpty ? demoSnapshot : null,
   );
@@ -183,22 +212,25 @@ export default function App() {
   const [reloadToken, setReloadToken] = useState(0);
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
   const [workspacesDir, setWorkspacesDir] = useState<string | null>(null);
-  const [recents, setRecents] = useState<RecentWorkspace[]>(() => listRecentWorkspaces());
+  const [templates, setTemplates] = useState<TemplateDescriptor[]>([]);
   const [statusToast, setStatusToast] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [searchPaneOpen, setSearchPaneOpen] = useState(false);
   const [themeCatalog, setThemeCatalog] = useState<ThemeCatalogPayload | null>(null);
   const [activityArea, setActivityArea] = useState<ActivityArea>("files");
-  const [sidebarWidth, setSidebarWidth] = useState(() => {
-    const stored = Number(localStorage.getItem("lattice.sidebarWidth"));
-    return Number.isFinite(stored) && stored >= 210 && stored <= 480 ? stored : 272;
-  });
+  const [sidebarWidth, setSidebarWidth] = useState(272);
+  const [revealPath, setRevealPath] = useState<string | null>(null);
+  const [linkPicker, setLinkPicker] = useState<{
+    query: string;
+    candidates: ResourceLinkTarget[];
+  } | null>(null);
   const [openTabs, setOpenTabs] = useState<Resource[]>([]);
   const [navigation, setNavigation] = useState<NavigationState>({ paths: [], index: -1 });
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const sessionRestoredRootRef = useRef<string | null>(null);
+  const workspaceSettingsTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
 
@@ -211,16 +243,47 @@ export default function App() {
     document.documentElement.dataset.motion = settings.performance.reducedMotion;
   }, [settings.performance.reducedMotion]);
 
+  useEffect(
+    () => () => {
+      if (workspaceSettingsTimerRef.current) {
+        window.clearTimeout(workspaceSettingsTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (profile.sidebarWidth && profile.sidebarWidth >= 210 && profile.sidebarWidth <= 480) {
+      setSidebarWidth(profile.sidebarWidth);
+    }
+  }, [profile.sidebarWidth]);
+
+  useEffect(() => {
+    void listTemplates()
+      .then(setTemplates)
+      .catch((err) => setError(String(err)));
+  }, []);
+
+  useEffect(() => {
+    const messages = [
+      ...profileDiagnostics.map((diagnostic) => `${diagnostic.path}: ${diagnostic.message}`),
+      ...(profileSaveError ? [profileSaveError] : []),
+    ];
+    if (messages.length > 0) setError(messages.join("\n"));
+  }, [profileDiagnostics, profileSaveError]);
+
   /** The root read-view embeds and search/backlinks commands resolve
    * against — `null` in the in-browser demo shell, which has no real
    * workspace on disk even when `snapshot` holds fixture data. */
   const assetRoot = inBrowser ? null : snapshot?.root ?? null;
   const wikiTargets = useMemo(
-    () =>
-      (snapshot?.resources ?? [])
-        .filter((resource) => resource.kind === "page")
-        .map((resource) => resource.path.replace(/\.md$/i, "")),
+    () => demoLinkTargets(snapshot?.resources ?? []),
     [snapshot?.resources],
+  );
+  const hasCapability = useCallback(
+    (capability: string) =>
+      capability === "pages" || Boolean(snapshot?.capabilities.includes(capability)),
+    [snapshot?.capabilities],
   );
 
   // Refs mirroring state read inside the workspace-changed listener, which
@@ -288,6 +351,7 @@ export default function App() {
     try {
       const resources = await invoke<Resource[]>("list_resources", { root });
       setSnapshot((prev) => (prev ? { ...prev, resources } : prev));
+      await refreshResourceCatalog(root);
     } catch {
       // Transient (e.g. a scan mid-write, or the workspace just closed);
       // the next event or a manual reopen catches the list up.
@@ -440,7 +504,6 @@ export default function App() {
     setActivityArea("home");
     sessionRestoredRootRef.current = null;
     rememberWorkspace(next);
-    setRecents(listRecentWorkspaces());
     if (!inBrowser) {
       invoke("start_watching", { root: next.root }).catch((err) => {
         console.error("failed to start workspace watcher:", err);
@@ -449,6 +512,7 @@ export default function App() {
       invoke("rebuild_index", { root: next.root }).catch(() => {
         /* index rebuild is best-effort on open */
       });
+      void refreshResourceCatalog(next.root);
     }
   }
 
@@ -474,7 +538,6 @@ export default function App() {
     if (inBrowser) {
       setSnapshot(demoSnapshot);
       rememberWorkspace(demoSnapshot);
-      setRecents(listRecentWorkspaces());
       return;
     }
     setBusy(true);
@@ -508,6 +571,7 @@ export default function App() {
       const next = await invoke<WorkspaceSnapshot>("open_workspace", { path: root });
       await adoptWorkspace(next);
     } catch (err) {
+      removeRecent(root);
       setError(String(err));
     } finally {
       setBusy(false);
@@ -519,31 +583,26 @@ export default function App() {
     title: string;
     template: string;
     setDefault: boolean;
+    initializeExisting: boolean;
   }) {
     setError(null);
     if (inBrowser) {
-      setSnapshot({
-        ...demoSnapshot,
-        root: args.path,
-        title: args.title,
-        resources: [
-          { path: "Home.md", kind: "page" },
-          { path: "Inbox", kind: "folder" },
-          { path: "Projects", kind: "folder" },
-        ],
-      });
+      const outcome = await provisionWorkspace(args);
+      await adoptWorkspace(outcome.workspace);
+      refreshProfile();
       setNewWorkspaceOpen(false);
       return;
     }
     setBusy(true);
     try {
-      const next = await invoke<WorkspaceSnapshot>("create_workspace", {
-        path: args.path,
-        title: args.title,
-        template: args.template,
-        setDefault: args.setDefault,
-      });
-      await adoptWorkspace(next);
+      const outcome = await provisionWorkspace(args);
+      await adoptWorkspace(outcome.workspace);
+      refreshProfile();
+      if (outcome.diagnostics.length > 0) {
+        setStatusToast(outcome.diagnostics.map((item) => item.message).join(" "));
+      } else {
+        setStatusToast(`Created ${outcome.workspace.title}`);
+      }
       setNewWorkspaceOpen(false);
     } catch (err) {
       setError(String(err));
@@ -564,6 +623,15 @@ export default function App() {
       }
     }
     setNewWorkspaceOpen(true);
+  }
+
+  async function pickWorkspaceFolder() {
+    const path = await open({
+      directory: true,
+      multiple: false,
+      title: "Choose workspace destination",
+    });
+    return typeof path === "string" ? path : null;
   }
 
   /**
@@ -607,7 +675,7 @@ export default function App() {
    * through the same semantic commands as pages opened in the main shell. */
   function handleQuickNote() {
     if (inBrowser) {
-      const path = quickNotePath(new Date(), settings.files.quickNoteDirectory);
+      const path = quickNotePath(new Date(), snapshot?.defaults.quickNoteDirectory ?? "Inbox");
       setStatusToast(`Browser demo capture: ${path}`);
       window.setTimeout(() => setStatusToast(null), 2200);
       void createAndOpenPage(path);
@@ -800,8 +868,8 @@ export default function App() {
     currentPageRevisionRef.current = null;
 
     if (resource.kind === "canvas" && workspace) {
-      if (!settings.capabilities.canvas) {
-        setError("The Canvas capability is disabled in Settings.");
+      if (!hasCapability("canvas")) {
+        setError("Canvas is not enabled for this workspace.");
         return;
       }
       if (inBrowser) {
@@ -825,8 +893,8 @@ export default function App() {
     }
 
     if (resource.kind === "data-app" && workspace) {
-      if (!settings.capabilities.dataApps) {
-        setError("The Data Apps capability is disabled in Settings.");
+      if (!hasCapability("sqlite")) {
+        setError("Data apps are not enabled for this workspace.");
         return;
       }
       if (inBrowser) {
@@ -996,51 +1064,102 @@ export default function App() {
     }
   }
 
+  function updateWorkspaceSettings(next: {
+    capabilities: string[];
+    quickNoteDirectory: string;
+  }) {
+    const current = snapshotRef.current;
+    if (!current) return;
+    const optimistic = {
+      ...current,
+      capabilities: next.capabilities,
+      defaults: { quickNoteDirectory: next.quickNoteDirectory },
+    };
+    snapshotRef.current = optimistic;
+    setSnapshot(optimistic);
+    if (inBrowser) {
+      return;
+    }
+    if (workspaceSettingsTimerRef.current) {
+      window.clearTimeout(workspaceSettingsTimerRef.current);
+    }
+    workspaceSettingsTimerRef.current = window.setTimeout(() => {
+      const desired = snapshotRef.current;
+      if (!desired) return;
+      void updateWorkspaceManifest({
+        root: desired.root,
+        enabledCapabilities: desired.capabilities,
+        quickNoteDirectory: desired.defaults.quickNoteDirectory,
+        baseRevision: current.manifestRevision,
+      })
+        .then((updated) => {
+          snapshotRef.current = updated;
+          setSnapshot(updated);
+          setStatusToast("Workspace settings saved");
+        })
+        .catch(async (err) => {
+          try {
+            const reloaded = await invoke<WorkspaceSnapshot>("open_workspace", {
+              path: current.root,
+            });
+            snapshotRef.current = reloaded;
+            setSnapshot(reloaded);
+          } catch {
+            snapshotRef.current = current;
+            setSnapshot(current);
+          }
+          setError(String(err));
+        });
+    }, 180);
+  }
+
   useEffect(() => {
-    localStorage.setItem("lattice.sidebarWidth", String(sidebarWidth));
+    const timer = window.setTimeout(() => {
+      void saveSidebarWidth(sidebarWidth).catch(() => {});
+    }, 250);
+    return () => window.clearTimeout(timer);
   }, [sidebarWidth]);
 
   useEffect(() => {
     if (!snapshot || sessionRestoredRootRef.current === snapshot.root) return;
     sessionRestoredRootRef.current = snapshot.root;
-    if (!settings.files.restoreSession) {
+    if (!startup.restoreSession) {
       setActivityArea("home");
       return;
     }
-    try {
-      const stored = JSON.parse(localStorage.getItem(sessionKey(snapshot.root)) ?? "{}") as {
-        tabs?: string[];
-        active?: string;
-        activity?: ActivityArea;
-        inspector?: boolean;
-      };
+    void loadSession(snapshot.root).then((stored) => {
+      if (!stored) {
+        setActivityArea("home");
+        return;
+      }
       const tabs = (stored.tabs ?? [])
         .map((path) => snapshot.resources.find((resource) => resource.path === path))
         .filter((resource): resource is Resource => Boolean(resource));
       setOpenTabs(tabs);
       setInspectorOpen(Boolean(stored.inspector));
-      setActivityArea(stored.activity ?? (tabs.length > 0 ? "files" : "home"));
+      setActivityArea((stored.activity as ActivityArea | null) ?? (tabs.length > 0 ? "files" : "home"));
       const active =
         snapshot.resources.find((resource) => resource.path === stored.active) ?? tabs[0] ?? null;
       if (active) void handleSelect(active, { recordHistory: false });
-    } catch {
+    }).catch(() => {
       setActivityArea("home");
-    }
+    });
     // Restoration is intentionally keyed only by the workspace identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snapshot?.root, settings.files.restoreSession]);
+  }, [snapshot?.root, startup.restoreSession]);
 
   useEffect(() => {
     if (!snapshot || sessionRestoredRootRef.current !== snapshot.root) return;
-    localStorage.setItem(
-      sessionKey(snapshot.root),
-      JSON.stringify({
+    const timer = window.setTimeout(() => {
+      void saveSession({
+        root: snapshot.root,
         tabs: openTabs.map((tab) => tab.path),
         active: selected?.path ?? null,
         activity: activityArea,
         inspector: inspectorOpen,
-      }),
-    );
+      }).catch(() => {});
+    }, 250);
+    return () => window.clearTimeout(timer);
   }, [snapshot, openTabs, selected?.path, activityArea, inspectorOpen]);
 
   useEffect(() => {
@@ -1078,31 +1197,51 @@ export default function App() {
     };
   }, []);
 
-  /** Resolve `[[wiki]]` targets against the open workspace's resources. */
-  function handleOpenWiki(target: string) {
-    const trimmed = target.trim().replace(/\\/g, "/");
-    const candidates = [
-      trimmed,
-      trimmed.endsWith(".md") ? trimmed : `${trimmed}.md`,
-      trimmed.replace(/^\[\[|\]\]$/g, ""),
-    ];
-    const resources = snapshot?.resources ?? [];
-    for (const candidate of candidates) {
-      const hit = resources.find(
-        (r) =>
-          r.kind === "page" &&
-          (r.path === candidate ||
-            r.path === `${candidate}.md` ||
-            r.path.endsWith(`/${candidate}`) ||
-            r.path.endsWith(`/${candidate}.md`) ||
-            r.path.replace(/\.md$/i, "") === candidate),
-      );
-      if (hit) {
-        void handleSelect(hit);
-        return;
-      }
+  function openLinkTarget(target: ResourceLinkTarget) {
+    if (target.kind === "folder") {
+      setActivityArea("files");
+      setRevealPath(target.path);
+      setStatusToast(`Revealed ${target.path}`);
+      return;
     }
-    setError(`No page found for [[${target}]].`);
+    const resource = snapshot?.resources.find((item) => item.path === target.path);
+    if (resource) void handleSelect(resource);
+  }
+
+  /** Resolve every resource link through the shared Rust catalog. */
+  async function handleOpenWiki(target: string) {
+    if (!snapshot) return;
+    if (inBrowser) {
+      const match = wikiTargets.find(
+        (candidate) =>
+          candidate.canonical.toLowerCase() === target.trim().toLowerCase() ||
+          candidate.path.toLowerCase() === target.trim().toLowerCase(),
+      );
+      if (match) openLinkTarget(match);
+      else setError(`No resource found for [[${target}]].`);
+      return;
+    }
+    try {
+      const resolution = await resolveResourceLink(
+        snapshot.root,
+        page?.resource.path ?? null,
+        target,
+      );
+      if (resolution.status === "found") {
+        openLinkTarget(resolution.target);
+      } else if (resolution.status === "ambiguous") {
+        setLinkPicker({ query: resolution.query, candidates: resolution.candidates });
+      } else if (
+        resolution.suggested_page &&
+        window.confirm(`Create ${resolution.suggested_page}?`)
+      ) {
+        await createAndOpenPage(resolution.suggested_page);
+      } else {
+        setError(`No resource found for [[${resolution.query}]].`);
+      }
+    } catch (err) {
+      setError(String(err));
+    }
   }
 
   /** A file node's double-click callback: selects it if it's in the workspace. */
@@ -1221,19 +1360,25 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [settings.keybindings]);
 
-  // Re-open the most recent workspace when launching the native app into
-  // the empty state (skip browser demo / ?empty).
+  // Resume the last valid workspace, then fall back to the configured
+  // effective default. Invalid paths remain visible in profile diagnostics.
   useEffect(() => {
-    if (inBrowser || demoStartEmpty || snapshot || !settings.files.reopenLastWorkspace) return;
-    const latest = listRecentWorkspaces()[0];
-    if (!latest) return;
+    if (inBrowser || demoStartEmpty || snapshot || !profileReady) return;
+    const candidates = [
+      ...(startup.reopenLastWorkspace ? recents.map((recent) => recent.root) : []),
+      profile.effectiveDefaultWorkspace,
+    ].filter((path, index, all): path is string => Boolean(path) && all.indexOf(path) === index);
+    if (candidates.length === 0) return;
     let cancelled = false;
     (async () => {
-      try {
-        const next = await invoke<WorkspaceSnapshot>("open_workspace", { path: latest.root });
-        if (!cancelled) await adoptWorkspace(next);
-      } catch {
-        // Stale path — leave the empty state; user can pick another recent.
+      for (const path of candidates) {
+        try {
+          const next = await invoke<WorkspaceSnapshot>("open_workspace", { path });
+          if (!cancelled) await adoptWorkspace(next);
+          return;
+        } catch {
+          if (recents.some((recent) => recent.root === path)) removeRecent(path);
+        }
       }
     })();
     return () => {
@@ -1241,7 +1386,14 @@ export default function App() {
     };
     // Only on first mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings.files.reopenLastWorkspace]);
+  }, [
+    profileReady,
+    profile.effectiveDefaultWorkspace,
+    recents,
+    snapshot,
+    startup.reopenLastWorkspace,
+    removeRecent,
+  ]);
 
   if (!snapshot) {
     return (
@@ -1296,8 +1448,11 @@ export default function App() {
         <NewWorkspaceDialog
           open={newWorkspaceOpen}
           busy={busy}
+          templates={templates}
           workspacesDir={workspacesDir}
+          hasValidDefault={profile.hasValidConfiguredDefault}
           onCancel={() => setNewWorkspaceOpen(false)}
+          onPickFolder={pickWorkspaceFolder}
           onCreate={(args) => void handleCreateWorkspace(args)}
         />
       </>
@@ -1316,12 +1471,8 @@ export default function App() {
             {[
               { id: "home" as const, label: "Home", icon: Home },
               { id: "files" as const, label: "Files", icon: Files },
-              ...(settings.capabilities.search
-                ? [{ id: "search" as const, label: "Search", icon: Search }]
-                : []),
-              ...(settings.capabilities.quickCapture
-                ? [{ id: "quick-note" as const, label: "Quick Capture", icon: Sparkles }]
-                : []),
+              { id: "search" as const, label: "Search", icon: Search },
+              { id: "quick-note" as const, label: "Quick Capture", icon: Sparkles },
             ].map(({ id, label, icon: Icon }) => (
               <IconButton
                 key={id}
@@ -1366,18 +1517,16 @@ export default function App() {
             <div className="workspace-root">{`⁦${snapshot.root}⁩`}</div>
           </header>
           <div className="sidebar-toolbar">
-            {settings.capabilities.search && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="sidebar-search"
-                onClick={() => setSearchPaneOpen(true)}
-              >
-                <Search size={14} />
-                Search
-                <kbd>{settings.keybindings.search}</kbd>
-              </Button>
-            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="sidebar-search"
+              onClick={() => setSearchPaneOpen(true)}
+            >
+              <Search size={14} />
+              Search
+              <kbd>{settings.keybindings.search}</kbd>
+            </Button>
             <MenuRoot>
               <MenuTrigger
                 render={
@@ -1393,14 +1542,14 @@ export default function App() {
                       <FilePlus2 size={14} />
                       New page
                     </MenuItem>
-                    {settings.capabilities.dataApps && (
+                    {hasCapability("sqlite") && (
                       <MenuItem className="ltui-menu-item" onClick={() => void handleNewTable()}>
                         <Table2 size={14} />
                         New table
                       </MenuItem>
                     )}
                     <MenuSeparator className="ltui-menu-separator" />
-                    {settings.capabilities.dataApps && (
+                    {hasCapability("sqlite") && (
                       <MenuItem className="ltui-menu-item" onClick={() => void handleImportCsv()}>
                         <ArrowUpRight size={14} />
                         Import CSV
@@ -1423,12 +1572,12 @@ export default function App() {
                     void handleSelect(resource);
                     setInspectorOpen(true);
                   },
-                  openExternally:
-                    !inBrowser && settings.capabilities.externalOpen
-                      ? () => void handleOpenExternally(resource)
-                      : undefined,
+                  openExternally: !inBrowser
+                    ? () => void handleOpenExternally(resource)
+                    : undefined,
                 })
               }
+              revealPath={revealPath}
             />
           </nav>
           <div className="sidebar-footer">
@@ -1514,7 +1663,7 @@ export default function App() {
                   {externalConflict ? "Conflict" : saveIndicatorText(saveState) || "Saved"}
                 </span>
               )}
-              {selected && !inBrowser && settings.capabilities.externalOpen && (
+              {selected && !inBrowser && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1594,8 +1743,13 @@ export default function App() {
               {activityArea === "settings" && (
                 <SettingsPage
                   settings={settings}
+                  startup={startup}
+                  workspace={snapshot}
                   themeCatalog={themeCatalog}
                   onChange={setSettings}
+                  onStartupChange={setStartup}
+                  onWorkspaceChange={(next) => void updateWorkspaceSettings(next)}
+                  onClearRecents={clearRecents}
                   onReset={resetSettings}
                   onThemeChange={(themeId) =>
                     void setFixedTheme(themeId, snapshot.root)
@@ -1667,6 +1821,11 @@ export default function App() {
                               }}
                               onCreateTable={handleNewTable}
                               wikiTargets={wikiTargets}
+                              onSearchWiki={
+                                !inBrowser && snapshot
+                                  ? (query) => searchResourceLinks(snapshot.root, query, 20)
+                                  : undefined
+                              }
                               onImportAsset={inBrowser ? undefined : handleImportEditorAsset}
                               autosaveDelayMs={settings.editor.autosaveDelayMs}
                               spellcheck={settings.editor.spellcheck}
@@ -1712,7 +1871,7 @@ export default function App() {
                           <p className="placeholder-sub">
                             The file stays yours — open <code>{selected.path}</code> in any tool.
                           </p>
-                          {!inBrowser && settings.capabilities.externalOpen && (
+                          {!inBrowser && (
                             <Button
                               variant="secondary"
                               onClick={() => void handleOpenExternally(selected)}
@@ -1776,11 +1935,46 @@ export default function App() {
           onClose={() => setSearchPaneOpen(false)}
         />
       )}
+      {linkPicker && (
+        <DialogRoot open onOpenChange={(open) => !open && setLinkPicker(null)}>
+          <DialogPortal>
+            <DialogBackdrop className="modal-backdrop" />
+            <DialogPopup className="modal-panel link-picker-panel">
+            <DialogTitle id="link-picker-title">Choose “{linkPicker.query}”</DialogTitle>
+            <p className="modal-copy">More than one resource matches this link.</p>
+            <div className="link-picker-list">
+              {linkPicker.candidates.map((candidate) => (
+                <button
+                  type="button"
+                  key={candidate.path}
+                  onClick={() => {
+                    openLinkTarget(candidate);
+                    setLinkPicker(null);
+                  }}
+                >
+                  <KindMark kind={candidate.kind} size={14} />
+                  <span>
+                    <strong>{candidate.display}</strong>
+                    <small>{candidate.path}</small>
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="modal-actions">
+              <Button onClick={() => setLinkPicker(null)}>Cancel</Button>
+            </div>
+            </DialogPopup>
+          </DialogPortal>
+        </DialogRoot>
+      )}
       <NewWorkspaceDialog
         open={newWorkspaceOpen}
         busy={busy}
+        templates={templates}
         workspacesDir={workspacesDir}
+        hasValidDefault={profile.hasValidConfiguredDefault}
         onCancel={() => setNewWorkspaceOpen(false)}
+        onPickFolder={pickWorkspaceFolder}
         onCreate={(args) => void handleCreateWorkspace(args)}
       />
       {statusToast && <div className="status-toast">{statusToast}</div>}

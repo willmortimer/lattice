@@ -25,6 +25,11 @@ export interface WorkspaceSnapshot {
   title: string;
   id: string;
   resources: Resource[];
+  capabilities: string[];
+  defaults: {
+    quickNoteDirectory: string;
+  };
+  manifestRevision: string;
 }
 
 /**

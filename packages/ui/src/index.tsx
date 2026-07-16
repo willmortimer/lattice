@@ -1,6 +1,10 @@
 import { Button as BaseButton } from "@base-ui/react/button";
+import { Checkbox } from "@base-ui/react/checkbox";
+import { Dialog } from "@base-ui/react/dialog";
 import { Menu } from "@base-ui/react/menu";
 import { Popover } from "@base-ui/react/popover";
+import { Radio } from "@base-ui/react/radio";
+import { RadioGroup } from "@base-ui/react/radio-group";
 import { Tabs } from "@base-ui/react/tabs";
 import { Tooltip } from "@base-ui/react/tooltip";
 import type { ComponentProps, ReactNode } from "react";
@@ -87,3 +91,18 @@ export const TabsList = Tabs.List;
 export const TabsTab = Tabs.Tab;
 export const TabsPanel = Tabs.Panel;
 export const TabsIndicator = Tabs.Indicator;
+
+export const DialogRoot = Dialog.Root;
+export const DialogPortal = Dialog.Portal;
+export const DialogBackdrop = Dialog.Backdrop;
+export const DialogPopup = Dialog.Popup;
+export const DialogTitle = Dialog.Title;
+export const DialogDescription = Dialog.Description;
+export const DialogClose = Dialog.Close;
+
+export const RadioGroupRoot = RadioGroup;
+export const RadioItem = Radio.Root;
+export const RadioIndicator = Radio.Indicator;
+
+export const CheckboxRoot = Checkbox.Root;
+export const CheckboxIndicator = Checkbox.Indicator;

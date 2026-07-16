@@ -19,6 +19,9 @@ export const demoSnapshot: WorkspaceSnapshot = {
   root: "/Users/you/Lattice/Workspaces/Personal",
   title: "Personal",
   id: "0198-demo",
+  capabilities: ["pages", "canvas", "sqlite"],
+  defaults: { quickNoteDirectory: "Inbox" },
+  manifestRevision: "demo:0",
   resources: [
     { path: "Home.md", kind: "page" },
     { path: "Inbox", kind: "folder" },
