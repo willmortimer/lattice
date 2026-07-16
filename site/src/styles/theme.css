@@ -63,7 +63,9 @@
   box-sizing: border-box;
 }
 
-/* Fixed lattice-grid backdrop with node glow, painted behind everything. */
+/* Fixed lattice-grid backdrop with node glow, painted behind everything.
+   The corner-anchored radial layer tiles into faint dots at every line
+   intersection — the grid gets nodes, like the mark. */
 .marketing::before {
   content: '';
   position: fixed;
@@ -71,6 +73,7 @@
   z-index: 0;
   pointer-events: none;
   background-image:
+    radial-gradient(circle at 0 0, rgba(140, 162, 196, 0.28) 1px, transparent 1.6px),
     linear-gradient(var(--l-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--l-line) 1px, transparent 1px);
   background-size: var(--l-grid-size) var(--l-grid-size);
@@ -92,6 +95,23 @@
 .marketing > * {
   position: relative;
   z-index: 1;
+}
+
+.marketing ::selection {
+  background: var(--l-amber-wash);
+  color: var(--l-amber-bright);
+}
+
+.marketing :focus-visible {
+  outline: 2px solid var(--l-amber);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 .wrap {
@@ -181,6 +201,11 @@
   width: 27px;
   height: 27px;
   overflow: visible;
+  filter: drop-shadow(0 0 6px rgba(245, 166, 35, 0.2));
+  transition: filter 0.25s ease;
+}
+.brand:hover svg {
+  filter: drop-shadow(0 0 10px rgba(245, 166, 35, 0.45));
 }
 .nav {
   display: flex;
@@ -437,6 +462,11 @@
   height: 34px;
   margin-bottom: 14px;
   color: var(--l-amber);
+  transition: filter 0.18s ease, transform 0.18s ease;
+}
+.card:hover .card-icon {
+  filter: drop-shadow(0 0 8px var(--l-amber-glow));
+  transform: translateY(-1px);
 }
 .card h3 {
   font-family: var(--l-font-body);
@@ -533,6 +563,12 @@
 }
 .phase.done .dot {
   background: var(--l-amber);
+  animation: phasepulse 3.2s ease-in-out infinite;
+}
+@keyframes phasepulse {
+  50% {
+    box-shadow: 0 0 0 4px var(--l-bg), 0 0 26px var(--l-amber-glow);
+  }
 }
 .phase .pnum {
   font-family: var(--l-font-mono);

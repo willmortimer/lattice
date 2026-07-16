@@ -90,6 +90,25 @@ const H = oy * 2 + (rows - 1) * gap;
     }
   </g>
 
+  <!-- signal pulses traveling the drawn links (skipped where offset-path
+       is unsupported; the reduced-motion rule in theme.css stops them) -->
+  <g>
+    {
+      links.map(([a, b], i) => {
+        const na = idx(a[0], a[1]);
+        const nb = idx(b[0], b[1]);
+        return (
+          <circle
+            class="pulse"
+            r="3"
+            fill="var(--l-amber-bright)"
+            style={`--d:${(i * 0.63 + 3).toFixed(2)}s; offset-path: path('M${na.x} ${na.y} L${nb.x} ${nb.y}')`}
+          />
+        );
+      })
+    }
+  </g>
+
   <!-- base nodes -->
   <g fill="var(--l-faint)">
     {nodes.map((n) => <circle cx={n.x} cy={n.y} r="2.1" />)}
@@ -143,6 +162,32 @@ const H = oy * 2 + (rows - 1) * gap;
     }
     50% {
       opacity: 0.95;
+    }
+  }
+  .pulse {
+    opacity: 0;
+  }
+  @supports (offset-path: path('M0 0 L1 1')) {
+    .pulse {
+      animation: travel 4.2s ease-in-out infinite;
+      animation-delay: var(--d);
+    }
+    @keyframes travel {
+      0% {
+        offset-distance: 0%;
+        opacity: 0;
+      }
+      10% {
+        opacity: 0.95;
+      }
+      40% {
+        offset-distance: 100%;
+        opacity: 0;
+      }
+      100% {
+        offset-distance: 100%;
+        opacity: 0;
+      }
     }
   }
   .node-glow {
