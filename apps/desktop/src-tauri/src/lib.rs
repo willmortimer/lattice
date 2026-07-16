@@ -16,8 +16,12 @@ pub fn run() {
             commands::apply_page_update,
             commands::create_page,
             commands::undo_last,
+            commands::ensure_home,
+            commands::create_workspace,
+            commands::list_templates,
             search::search_workspace,
             search::get_backlinks,
+            search::rebuild_index,
             watcher::start_watching,
             watcher::stop_watching,
         ])

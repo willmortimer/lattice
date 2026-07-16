@@ -21,6 +21,16 @@ fn ensure_index(root: &Path) -> Result<WorkspaceIndex, String> {
     Ok(index)
 }
 
+/// Rebuild the search index for `root`. Called when a workspace opens so
+/// search is ready without waiting for the first query or external edit.
+#[tauri::command]
+pub fn rebuild_index(root: String) -> Result<u64, String> {
+    let root = PathBuf::from(root);
+    let index = WorkspaceIndex::open(&root).map_err(|err| err.to_string())?;
+    let stats = index.rebuild(&root).map_err(|err| err.to_string())?;
+    Ok(stats.pages_indexed as u64)
+}
+
 /// Full-text search over the workspace's indexed pages.
 #[tauri::command]
 pub fn search_workspace(
