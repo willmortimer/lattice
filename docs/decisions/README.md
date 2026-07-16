@@ -33,3 +33,6 @@ These records capture architecture choices that should not be silently reversed.
 - [ADR 0029: Define portable and collaborative SQLite profiles](0029-sqlite-portable-and-collaborative-profiles.md)
 - [ADR 0030: Use per-resource Inspect instead of a global Workbench mode](0030-inspect-not-workbench.md)
 - [ADR 0031: License the Lattice repository under AGPL-3.0-or-later](0031-agpl-3-or-later.md)
+- [ADR 0032: Separate versioned profile settings from operational state](0032-versioned-profile-settings-and-operational-state.md)
+- [ADR 0033: Use declarative templates and staged workspace provisioning](0033-declarative-templates-and-staged-provisioning.md)
+- [ADR 0034: Resolve cross-resource links through one typed catalog](0034-typed-resource-link-resolution.md)
