@@ -18,6 +18,8 @@ export type ResourceKind =
 export interface Resource {
   path: string;
   kind: ResourceKind;
+  /** Optional native-provided format ID; ordinary files derive one from path. */
+  formatId?: string;
 }
 
 export interface WorkspaceSnapshot {
