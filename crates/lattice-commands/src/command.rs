@@ -24,6 +24,14 @@ pub enum Command {
     /// Create a page at `path` with `content`. Precondition: `path` is absent.
     PageCreate { path: PathBuf, content: String },
 
+    /// Create an arbitrary file resource at `path`. Used for binary assets
+    /// imported by editor paste/drop. Precondition: `path` is absent.
+    ResourceCreate {
+        path: PathBuf,
+        #[serde(with = "base64_bytes")]
+        content: Vec<u8>,
+    },
+
     /// Replace the content of the page at `path`. Precondition: the on-disk
     /// revision equals `base_revision` (optimistic concurrency).
     PageUpdate {
@@ -98,6 +106,28 @@ pub enum Command {
     },
 }
 
+mod base64_bytes {
+    use base64::Engine;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&base64::engine::general_purpose::STANDARD.encode(bytes))
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let encoded = String::deserialize(deserializer)?;
+        base64::engine::general_purpose::STANDARD
+            .decode(encoded)
+            .map_err(serde::de::Error::custom)
+    }
+}
+
 impl Command {
     /// The path whose post-apply state the recorded `resulting_revision`
     /// describes — used as the target of the external-write undo guard.
@@ -107,6 +137,7 @@ impl Command {
     pub(crate) fn guard_path(&self) -> PathBuf {
         match self {
             Command::PageCreate { path, .. } => path.clone(),
+            Command::ResourceCreate { path, .. } => path.clone(),
             Command::PageUpdate { path, .. } => path.clone(),
             Command::ResourceRename { to, .. } => to.clone(),
             Command::ResourceMove { from, to_dir } => to_dir.join(file_name(from)),
@@ -126,6 +157,7 @@ impl Command {
     pub(crate) fn touched_paths(&self) -> Vec<PathBuf> {
         match self {
             Command::PageCreate { path, .. } => vec![path.clone()],
+            Command::ResourceCreate { path, .. } => vec![path.clone()],
             Command::PageUpdate { path, .. } => vec![path.clone()],
             Command::ResourceRename { from, to } => vec![from.clone(), to.clone()],
             Command::ResourceMove { from, to_dir } => {

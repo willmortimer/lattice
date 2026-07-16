@@ -293,10 +293,12 @@ impl CommandEngine {
 
     fn validate_one(&self, command: &Command) -> Result<()> {
         match command {
-            Command::PageCreate { path, .. } => match self.metadata_opt(path)? {
-                None => Ok(()),
-                Some(_) => Err(Error::AlreadyExists { path: path.clone() }),
-            },
+            Command::PageCreate { path, .. } | Command::ResourceCreate { path, .. } => {
+                match self.metadata_opt(path)? {
+                    None => Ok(()),
+                    Some(_) => Err(Error::AlreadyExists { path: path.clone() }),
+                }
+            }
             Command::PageUpdate {
                 path,
                 base_revision,
@@ -417,6 +419,15 @@ impl CommandEngine {
         match command {
             Command::PageCreate { path, content } => {
                 let revision = self.writer().write(path, content.as_bytes(), None)?;
+                Ok(AppliedOp {
+                    forward: command.clone(),
+                    inverse: Command::ResourceDelete { path: path.clone() },
+                    prior_content: None,
+                    resulting_revision: Some(revision.hash),
+                })
+            }
+            Command::ResourceCreate { path, content } => {
+                let revision = self.writer().write(path, content, None)?;
                 Ok(AppliedOp {
                     forward: command.clone(),
                     inverse: Command::ResourceDelete { path: path.clone() },
@@ -692,6 +703,13 @@ impl CommandEngine {
                 self.writer().write(path, &bytes, None)?;
                 Ok(())
             }
+            Command::ResourceCreate { path, content } => {
+                let bytes = prior_content
+                    .map(<[u8]>::to_vec)
+                    .unwrap_or_else(|| content.clone());
+                self.writer().write(path, &bytes, None)?;
+                Ok(())
+            }
             // Inverse of ResourceRename / ResourceMove.
             Command::ResourceRename { from, to } => {
                 self.store.rename(from, to)?;
@@ -828,7 +846,9 @@ impl CommandEngine {
                 }
                 Ok(())
             }
-            Command::PageCreate { .. } | Command::PageUpdate { .. } => {
+            Command::PageCreate { .. }
+            | Command::ResourceCreate { .. }
+            | Command::PageUpdate { .. } => {
                 self.guard_hash(&forward.guard_path(), resulting_revision.as_deref())
             }
             Command::TableCreate { path, .. } => {
