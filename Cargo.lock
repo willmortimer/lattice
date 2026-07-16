@@ -2151,8 +2151,10 @@ version = "0.1.0"
 dependencies = [
  "lattice-commands",
  "lattice-core",
+ "lattice-data",
  "lattice-index",
  "lattice-storage",
+ "rusqlite",
  "serde",
  "serde_json",
  "tauri",

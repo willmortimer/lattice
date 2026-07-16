@@ -23,6 +23,8 @@ lattice-core.workspace = true
 lattice-commands.workspace = true
 lattice-storage.workspace = true
 lattice-index.workspace = true
+lattice-data.workspace = true
 
 [dev-dependencies]
 tempfile = "3"
+rusqlite = { workspace = true }
