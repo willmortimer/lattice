@@ -9,6 +9,24 @@ import {
 } from "react";
 import type { Editor, Extensions } from "@tiptap/core";
 import { EditorContent, ReactNodeViewRenderer, useEditor } from "@tiptap/react";
+import { TextSelection } from "@tiptap/pm/state";
+import type { EditorView } from "@tiptap/pm/view";
+import {
+  ArrowDown,
+  ArrowUp,
+  Bold,
+  Code,
+  CopyPlus,
+  Heading1,
+  Heading2,
+  Italic,
+  Link as LinkIcon,
+  List,
+  Pilcrow,
+  Quote,
+  Strikethrough,
+  Unlink,
+} from "lucide-react";
 
 import { CodeBlockView } from "./CodeBlockView";
 import { ConflictEnvelope } from "./ConflictEnvelope";
@@ -35,6 +53,13 @@ interface SlashMenuState {
   top: number;
 }
 
+interface FloatingToolbarState {
+  left: number;
+  top: number;
+}
+
+interface WikiMenuState extends SlashMenuState {}
+
 const SLASH_COMMANDS = [
   { id: "text", label: "Text", description: "Plain paragraph" },
   { id: "heading-1", label: "Heading 1", description: "Large section heading" },
@@ -45,7 +70,8 @@ const SLASH_COMMANDS = [
   { id: "quote", label: "Quote", description: "Quoted block" },
   { id: "code", label: "Code block", description: "Fenced code" },
   { id: "divider", label: "Divider", description: "Horizontal rule" },
-  { id: "table", label: "Table", description: "3 × 3 table" },
+  { id: "table", label: "Table", description: "Create a typed SQLite-backed table" },
+  { id: "markdown-table", label: "Markdown table", description: "Static 3 × 3 page table" },
 ] as const;
 
 /**
@@ -80,6 +106,12 @@ interface PageEditorProps {
   onRevisionChange?: (revision: string | null) => void;
   /** Navigate when the user clicks a `wiki:…` link (`[[Target]]`). */
   onOpenWiki?: (target: string) => void;
+  /** Create and open a canonical `.data` table package. */
+  onCreateTable?: () => Promise<void> | void;
+  /** Workspace page targets offered after typing `[[`. */
+  wikiTargets?: string[];
+  /** Import a pasted/dropped file through the semantic command boundary. */
+  onImportAsset?: (file: File) => Promise<string>;
   autosaveDelayMs?: number;
   spellcheck?: boolean;
   slashCommands?: boolean;
@@ -111,6 +143,9 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     onSaveStateChange,
     onRevisionChange,
     onOpenWiki,
+    onCreateTable,
+    wikiTargets = [],
+    onImportAsset,
     autosaveDelayMs = 800,
     spellcheck = true,
     slashCommands = true,
@@ -124,20 +159,77 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
   const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
   const [slashMenu, setSlashMenu] = useState<SlashMenuState | null>(null);
   const [slashIndex, setSlashIndex] = useState(0);
+  const [wikiMenu, setWikiMenu] = useState<WikiMenuState | null>(null);
+  const [wikiIndex, setWikiIndex] = useState(0);
+  const [selectionToolbar, setSelectionToolbar] = useState<FloatingToolbarState | null>(null);
+  const [blockToolbar, setBlockToolbar] = useState<FloatingToolbarState | null>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
 
-  const updateSlashMenu = useCallback(
+  const onCreateTableRef = useRef(onCreateTable);
+  onCreateTableRef.current = onCreateTable;
+  const onImportAssetRef = useRef(onImportAsset);
+  onImportAssetRef.current = onImportAsset;
+
+  const updateEditorMenus = useCallback(
     (currentEditor: Editor) => {
-      if (!slashCommands || !currentEditor.isEditable) {
+      if (!currentEditor.isEditable) {
         setSlashMenu(null);
+        setWikiMenu(null);
+        setSelectionToolbar(null);
+        setBlockToolbar(null);
         return;
       }
-      const { $from } = currentEditor.state.selection;
+
+      const { from: selectionFrom, to: selectionTo, $from } = currentEditor.state.selection;
+      if (selectionFrom !== selectionTo) {
+        const start = currentEditor.view.coordsAtPos(selectionFrom);
+        const end = currentEditor.view.coordsAtPos(selectionTo);
+        setSelectionToolbar({
+          left: (start.left + end.right) / 2,
+          top: Math.min(start.top, end.top) - 8,
+        });
+        setBlockToolbar(null);
+        setSlashMenu(null);
+        setWikiMenu(null);
+        return;
+      }
+
+      setSelectionToolbar(null);
+      const blockCoordinates = currentEditor.view.coordsAtPos($from.start());
+      setBlockToolbar({
+        left: blockCoordinates.left - 8,
+        top: blockCoordinates.top,
+      });
+
       if (!$from.parent.isTextblock) {
         setSlashMenu(null);
+        setWikiMenu(null);
         return;
       }
       const before = $from.parent.textBetween(0, $from.parentOffset, undefined, "\ufffc");
+
+      const wikiMatch = before.match(/\[\[([^\]|\n]*)$/);
+      if (wikiMatch) {
+        const query = wikiMatch[1] ?? "";
+        const from = $from.pos - query.length - 2;
+        const coordinates = currentEditor.view.coordsAtPos($from.pos);
+        setWikiIndex(0);
+        setWikiMenu({
+          from,
+          to: $from.pos,
+          query,
+          left: coordinates.left,
+          top: coordinates.bottom + 6,
+        });
+        setSlashMenu(null);
+        return;
+      }
+      setWikiMenu(null);
+
+      if (!slashCommands) {
+        setSlashMenu(null);
+        return;
+      }
       const match = before.match(/(?:^|\s)\/([a-z0-9-]*)$/i);
       if (!match) {
         setSlashMenu(null);
@@ -156,6 +248,35 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
       });
     },
     [slashCommands],
+  );
+
+  const importFilesIntoView = useCallback(
+    async (view: EditorView, files: File[], position?: number) => {
+      const importAsset = onImportAssetRef.current;
+      if (!importAsset) return;
+
+      if (position != null) {
+        view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(position))));
+      }
+
+      for (const file of files) {
+        const src = await importAsset(file);
+        if (view.isDestroyed) return;
+        const { schema } = view.state;
+        const transaction = view.state.tr;
+        if (file.type.startsWith("image/") && schema.nodes.image) {
+          transaction.replaceSelectionWith(
+            schema.nodes.image.create({ src, alt: file.name, title: null }),
+          );
+        } else if (schema.marks.link) {
+          transaction.replaceSelectionWith(
+            schema.text(file.name, [schema.marks.link.create({ href: src })]),
+          );
+        }
+        view.dispatch(transaction.scrollIntoView());
+      }
+    },
+    [],
   );
 
   // Notify the parent as an effect (not from inside the state updater above)
@@ -196,13 +317,48 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
       attributes: {
         spellcheck: spellcheck ? "true" : "false",
       },
+      handlePaste: (view, event) => {
+        const files = Array.from(event.clipboardData?.files ?? []);
+        if (files.length > 0 && onImportAssetRef.current) {
+          event.preventDefault();
+          void importFilesIntoView(view, files);
+          return true;
+        }
+
+        const pastedText = event.clipboardData?.getData("text/plain").trim() ?? "";
+        const { from, to } = view.state.selection;
+        if (
+          from !== to &&
+          /^(https?:\/\/|mailto:)/i.test(pastedText) &&
+          view.state.schema.marks.link
+        ) {
+          event.preventDefault();
+          view.dispatch(
+            view.state.tr.addMark(
+              from,
+              to,
+              view.state.schema.marks.link.create({ href: pastedText }),
+            ),
+          );
+          return true;
+        }
+        return false;
+      },
+      handleDrop: (view, event) => {
+        const files = Array.from(event.dataTransfer?.files ?? []);
+        if (files.length === 0 || !onImportAssetRef.current) return false;
+        event.preventDefault();
+        const position = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos;
+        void importFilesIntoView(view, files, position);
+        return true;
+      },
     },
     onUpdate: ({ editor: currentEditor }) => {
       setSaveState((prev) => (prev.status === "conflict" ? prev : { status: "dirty" }));
       scheduleAutosave();
-      updateSlashMenu(currentEditor);
+      updateEditorMenus(currentEditor);
     },
-    onSelectionUpdate: ({ editor: currentEditor }) => updateSlashMenu(currentEditor),
+    onSelectionUpdate: ({ editor: currentEditor }) => updateEditorMenus(currentEditor),
   });
 
   useEffect(() => {
@@ -277,8 +433,15 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     );
   }, [slashMenu?.query]);
 
+  const filteredWikiTargets = useMemo(() => {
+    const query = wikiMenu?.query.trim().toLowerCase() ?? "";
+    return wikiTargets
+      .filter((target) => !query || target.toLowerCase().includes(query))
+      .slice(0, 12);
+  }, [wikiMenu?.query, wikiTargets]);
+
   const runSlashCommand = useCallback(
-    (id: (typeof SLASH_COMMANDS)[number]["id"]) => {
+    async (id: (typeof SLASH_COMMANDS)[number]["id"]) => {
       if (!slashMenu) return;
       const chain = editor.chain().focus().deleteRange({ from: slashMenu.from, to: slashMenu.to });
       switch (id) {
@@ -307,6 +470,12 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
           chain.setHorizontalRule().run();
           break;
         case "table":
+          chain.run();
+          setSlashMenu(null);
+          await performSaveRef.current();
+          await onCreateTableRef.current?.();
+          return;
+        case "markdown-table":
           chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
           break;
         case "text":
@@ -316,6 +485,24 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
       setSlashMenu(null);
     },
     [editor, slashMenu],
+  );
+
+  const insertWikiTarget = useCallback(
+    (target: string) => {
+      if (!wikiMenu) return;
+      editor
+        .chain()
+        .focus()
+        .deleteRange({ from: wikiMenu.from, to: wikiMenu.to })
+        .insertContent({
+          type: "text",
+          text: target,
+          marks: [{ type: "link", attrs: { href: `wiki:${encodeURIComponent(target)}` } }],
+        })
+        .run();
+      setWikiMenu(null);
+    },
+    [editor, wikiMenu],
   );
 
   useEffect(() => {
@@ -336,12 +523,112 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
         );
       } else if (event.key === "Enter" && filteredSlashCommands.length > 0) {
         event.preventDefault();
-        runSlashCommand(filteredSlashCommands[slashIndex]?.id ?? filteredSlashCommands[0].id);
+        void runSlashCommand(
+          filteredSlashCommands[slashIndex]?.id ?? filteredSlashCommands[0].id,
+        );
       }
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [filteredSlashCommands, runSlashCommand, slashIndex, slashMenu]);
+
+  useEffect(() => {
+    if (!wikiMenu) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setWikiMenu(null);
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setWikiIndex((index) => (index + 1) % Math.max(filteredWikiTargets.length, 1));
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setWikiIndex(
+          (index) =>
+            (index - 1 + Math.max(filteredWikiTargets.length, 1)) %
+            Math.max(filteredWikiTargets.length, 1),
+        );
+      } else if (event.key === "Enter" && filteredWikiTargets.length > 0) {
+        event.preventDefault();
+        insertWikiTarget(filteredWikiTargets[wikiIndex] ?? filteredWikiTargets[0]);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [filteredWikiTargets, insertWikiTarget, wikiIndex, wikiMenu]);
+
+  const setSelectionLink = useCallback(() => {
+    if (editor.isActive("link")) {
+      editor.chain().focus().unsetLink().run();
+      return;
+    }
+    const input = window.prompt("Link URL or [[page]]")?.trim();
+    if (!input) return;
+    const wiki = input.match(/^\[\[([^\]]+)\]\]$/);
+    const href = wiki ? `wiki:${encodeURIComponent(wiki[1].trim())}` : input;
+    editor.chain().focus().setLink({ href }).run();
+  }, [editor]);
+
+  const transformBlock = useCallback(
+    (kind: "paragraph" | "heading-1" | "heading-2" | "bullet-list" | "quote") => {
+      const chain = editor.chain().focus();
+      switch (kind) {
+        case "paragraph":
+          chain.setParagraph().run();
+          break;
+        case "heading-1":
+          chain.setHeading({ level: 1 }).run();
+          break;
+        case "heading-2":
+          chain.setHeading({ level: 2 }).run();
+          break;
+        case "bullet-list":
+          chain.toggleBulletList().run();
+          break;
+        case "quote":
+          chain.toggleBlockquote().run();
+          break;
+      }
+    },
+    [editor],
+  );
+
+  const moveOrDuplicateBlock = useCallback(
+    (action: "up" | "down" | "duplicate") => {
+      const { state, view } = editor;
+      const index = state.selection.$from.index(0);
+      const node = state.doc.child(index);
+      let start = 0;
+      for (let childIndex = 0; childIndex < index; childIndex += 1) {
+        start += state.doc.child(childIndex).nodeSize;
+      }
+      const end = start + node.nodeSize;
+      const transaction = state.tr;
+
+      if (action === "duplicate") {
+        const insertAt = end;
+        transaction.insert(insertAt, node.copy(node.content));
+        transaction.setSelection(TextSelection.near(transaction.doc.resolve(insertAt + 1)));
+      } else if (action === "up" && index > 0) {
+        const previous = state.doc.child(index - 1);
+        const insertAt = start - previous.nodeSize;
+        transaction.delete(start, end).insert(insertAt, node);
+        transaction.setSelection(TextSelection.near(transaction.doc.resolve(insertAt + 1)));
+      } else if (action === "down" && index < state.doc.childCount - 1) {
+        const next = state.doc.child(index + 1);
+        transaction.delete(start, end).insert(start + next.nodeSize, node);
+        transaction.setSelection(
+          TextSelection.near(transaction.doc.resolve(start + next.nodeSize + 1)),
+        );
+      } else {
+        return;
+      }
+
+      view.dispatch(transaction.scrollIntoView());
+      view.focus();
+    },
+    [editor],
+  );
 
   // Cmd/Ctrl+S: save immediately, bypassing the debounce.
   useEffect(() => {
@@ -411,7 +698,51 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
       >
         <EditorContent editor={editor} className="markdown-body page-editor-content" />
       </div>
-      <p className="page-editor-hint">Type / for blocks and formatting · ⌘S saves immediately</p>
+      <p className="page-editor-hint">
+        Type / for blocks · [[ to link a page · paste or drop files · ⌘S saves immediately
+      </p>
+      {selectionToolbar && (
+        <div
+          className="editor-floating-toolbar editor-selection-toolbar"
+          role="toolbar"
+          aria-label="Text formatting"
+          style={{ left: selectionToolbar.left, top: selectionToolbar.top }}
+        >
+          <button type="button" aria-label="Bold" title="Bold" onClick={() => editor.chain().focus().toggleBold().run()}>
+            <Bold size={14} />
+          </button>
+          <button type="button" aria-label="Italic" title="Italic" onClick={() => editor.chain().focus().toggleItalic().run()}>
+            <Italic size={14} />
+          </button>
+          <button type="button" aria-label="Strikethrough" title="Strikethrough" onClick={() => editor.chain().focus().toggleStrike().run()}>
+            <Strikethrough size={14} />
+          </button>
+          <button type="button" aria-label="Inline code" title="Inline code" onClick={() => editor.chain().focus().toggleCode().run()}>
+            <Code size={14} />
+          </button>
+          <button type="button" aria-label={editor.isActive("link") ? "Remove link" : "Add link"} title={editor.isActive("link") ? "Remove link" : "Add link"} onClick={setSelectionLink}>
+            {editor.isActive("link") ? <Unlink size={14} /> : <LinkIcon size={14} />}
+          </button>
+        </div>
+      )}
+      {blockToolbar && !slashMenu && !wikiMenu && (
+        <div
+          className="editor-floating-toolbar editor-block-toolbar"
+          role="toolbar"
+          aria-label="Block actions"
+          style={{ left: blockToolbar.left, top: blockToolbar.top }}
+        >
+          <button type="button" aria-label="Paragraph" title="Paragraph" onClick={() => transformBlock("paragraph")}><Pilcrow size={13} /></button>
+          <button type="button" aria-label="Heading 1" title="Heading 1" onClick={() => transformBlock("heading-1")}><Heading1 size={13} /></button>
+          <button type="button" aria-label="Heading 2" title="Heading 2" onClick={() => transformBlock("heading-2")}><Heading2 size={13} /></button>
+          <button type="button" aria-label="Bulleted list" title="Bulleted list" onClick={() => transformBlock("bullet-list")}><List size={13} /></button>
+          <button type="button" aria-label="Quote" title="Quote" onClick={() => transformBlock("quote")}><Quote size={13} /></button>
+          <span className="editor-toolbar-separator" />
+          <button type="button" aria-label="Move block up" title="Move block up" onClick={() => moveOrDuplicateBlock("up")}><ArrowUp size={13} /></button>
+          <button type="button" aria-label="Move block down" title="Move block down" onClick={() => moveOrDuplicateBlock("down")}><ArrowDown size={13} /></button>
+          <button type="button" aria-label="Duplicate block" title="Duplicate block" onClick={() => moveOrDuplicateBlock("duplicate")}><CopyPlus size={13} /></button>
+        </div>
+      )}
       {slashMenu && (
         <div
           className="slash-menu"
@@ -430,10 +761,37 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
                 key={command.id}
                 className={slashIndex === index ? "slash-command-active" : ""}
                 onMouseDown={(event) => event.preventDefault()}
-                onClick={() => runSlashCommand(command.id)}
+                onClick={() => void runSlashCommand(command.id)}
               >
                 <strong>{command.label}</strong>
                 <span>{command.description}</span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+      {wikiMenu && (
+        <div
+          className="slash-menu wiki-menu"
+          role="listbox"
+          aria-label="Link to page"
+          style={{ left: wikiMenu.left, top: wikiMenu.top }}
+        >
+          {filteredWikiTargets.length === 0 ? (
+            <p>No matching pages</p>
+          ) : (
+            filteredWikiTargets.map((target, index) => (
+              <button
+                type="button"
+                role="option"
+                aria-selected={wikiIndex === index}
+                key={target}
+                className={wikiIndex === index ? "slash-command-active" : ""}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => insertWikiTarget(target)}
+              >
+                <strong>{target.split("/").pop()}</strong>
+                <span>{target}</span>
               </button>
             ))
           )}
