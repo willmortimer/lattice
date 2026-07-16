@@ -2090,6 +2090,7 @@ dependencies = [
  "clap",
  "lattice-commands",
  "lattice-core",
+ "lattice-data",
  "lattice-index",
  "lattice-storage",
  "predicates",
@@ -2103,6 +2104,7 @@ name = "lattice-commands"
 version = "0.1.0"
 dependencies = [
  "lattice-core",
+ "lattice-data",
  "lattice-storage",
  "rusqlite",
  "serde",

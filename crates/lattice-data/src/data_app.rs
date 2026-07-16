@@ -161,6 +161,50 @@ impl DataApp {
         }
     }
 
+    /// Re-insert a row with its original id (undo of [`Self::delete_row`]).
+    pub fn restore_row(&self, table: &str, row: &Row) -> Result<()> {
+        validate_identifier(table)?;
+        ensure_table_exists(&self.conn, table)?;
+        ensure_id_column(&self.conn, table)?;
+
+        if self.get_row(table, &row.id)?.is_some() {
+            return Err(Error::table(
+                table,
+                format!("row already exists for id {:?}", row.id),
+            ));
+        }
+
+        let mut values = row.values.clone();
+        values.insert("id".to_string(), CellValue::Text(row.id.clone()));
+        let column_meta = self.columns(table)?;
+
+        let (columns, placeholders, sql_params): (Vec<_>, Vec<_>, Vec<_>) = column_meta
+            .iter()
+            .map(|meta| {
+                let value = values.get(&meta.name).cloned().unwrap_or(CellValue::Null);
+                (meta.name.as_str(), "?", value.as_sqlite_value())
+            })
+            .fold(
+                (Vec::new(), Vec::new(), Vec::new()),
+                |(mut cols, mut marks, mut params), (col, mark, param)| {
+                    cols.push(col);
+                    marks.push(mark);
+                    params.push(param);
+                    (cols, marks, params)
+                },
+            );
+
+        let sql = format!(
+            "INSERT INTO {table} ({}) VALUES ({})",
+            columns.join(", "),
+            placeholders.join(", ")
+        );
+
+        self.conn
+            .execute(&sql, rusqlite::params_from_iter(sql_params))?;
+        Ok(())
+    }
+
     pub fn insert_row(&self, table: &str, values: &BTreeMap<String, CellValue>) -> Result<String> {
         validate_identifier(table)?;
         ensure_table_exists(&self.conn, table)?;
@@ -264,6 +308,9 @@ impl DataApp {
 
     /// Content hash of `database.sqlite` bytes for optimistic guards in D2.
     pub fn package_revision(&self) -> Result<String> {
+        // Hash the on-disk main file after flushing WAL pages so concurrent
+        // readers and `fs::read` observers see the same bytes we recorded.
+        self.conn.execute_batch("PRAGMA wal_checkpoint(FULL);")?;
         let db_path = database_path(&self.path);
         let bytes = std::fs::read(&db_path).map_err(|source| Error::io(&db_path, source))?;
         let digest = Sha256::digest(bytes);
