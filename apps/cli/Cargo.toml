@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 lattice-core.workspace = true
 lattice-storage.workspace = true
+lattice-commands.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 serde.workspace = true

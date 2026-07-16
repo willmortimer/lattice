@@ -5,6 +5,7 @@ use std::time::SystemTime;
 
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
+use lattice_commands::{Command as Semantic, CommandEngine, Transaction};
 use lattice_core::{Diagnostic, Resource, Severity, Workspace};
 use lattice_storage::{NativeWorkspaceStore, RecoveryJournal, WorkspaceStore};
 
@@ -55,6 +56,62 @@ enum Command {
         #[command(subcommand)]
         command: RecoverCommand,
     },
+    /// Create and update pages through the command engine.
+    Page {
+        #[command(subcommand)]
+        command: PageCommand,
+    },
+    /// Rename a resource, or move it into an existing directory.
+    Mv {
+        /// Source path.
+        from: PathBuf,
+        /// Destination path; if it is an existing directory, the source is
+        /// moved into it under its own name.
+        to: PathBuf,
+    },
+    /// Delete a resource (sent to the OS Trash; undoable for files).
+    Rm {
+        /// Path to delete.
+        path: PathBuf,
+    },
+    /// List applied transactions, newest first.
+    History {
+        /// Maximum number of transactions to show.
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
+    /// Undo the most recent transaction.
+    Undo,
+    /// Redo the most recently undone transaction.
+    Redo,
+}
+
+#[derive(Subcommand)]
+enum PageCommand {
+    /// Create a new page.
+    Create {
+        /// Workspace path of the page (e.g. Notes/Ideas.md).
+        path: PathBuf,
+        /// Page content. Defaults to a heading derived from the filename.
+        #[arg(long, conflicts_with = "stdin")]
+        content: Option<String>,
+        /// Read the page content from standard input.
+        #[arg(long)]
+        stdin: bool,
+    },
+    /// Replace the content of an existing page (reads from standard input).
+    Update {
+        /// Workspace path of the page.
+        path: PathBuf,
+        /// Read the new content from standard input (required).
+        #[arg(long)]
+        stdin: bool,
+        /// Base revision ("sha256:...") the edit is based on. Defaults to
+        /// the current on-disk revision (convenient for scripting, but skips
+        /// the lost-update protection).
+        #[arg(long)]
+        base: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -102,6 +159,19 @@ fn run(command: Command) -> Result<ExitCode> {
             RecoverCommand::Apply { id, path } => cmd_recover_apply(id, path),
             RecoverCommand::Discard { id, path } => cmd_recover_discard(id, path),
         },
+        Command::Page { command } => match command {
+            PageCommand::Create {
+                path,
+                content,
+                stdin,
+            } => cmd_page_create(path, content, stdin),
+            PageCommand::Update { path, stdin, base } => cmd_page_update(path, stdin, base),
+        },
+        Command::Mv { from, to } => cmd_mv(from, to),
+        Command::Rm { path } => cmd_rm(path),
+        Command::History { limit } => cmd_history(limit),
+        Command::Undo => cmd_undo(),
+        Command::Redo => cmd_redo(),
     }
 }
 
@@ -270,6 +340,189 @@ fn cmd_recover_discard(id: i64, path: Option<PathBuf>) -> Result<ExitCode> {
     }
     journal.discard(id)?;
     println!("discarded entry {id}");
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Discover the enclosing workspace from the current directory and open the
+/// command engine over it. All semantic mutations flow through this.
+fn open_engine() -> Result<(Workspace, CommandEngine)> {
+    let start = std::env::current_dir().context("failed to determine current directory")?;
+    let ws = Workspace::discover(&start)?;
+    let engine = CommandEngine::open(ws.root())?;
+    Ok((ws, engine))
+}
+
+/// Resolve a user-supplied path (relative to the current directory, or
+/// absolute) to a workspace-relative path.
+fn workspace_relative(ws: &Workspace, path: &Path) -> Result<PathBuf> {
+    let absolute = std::path::absolute(path)
+        .with_context(|| format!("failed to resolve path {}", path.display()))?;
+    absolute
+        .strip_prefix(ws.root())
+        .map(Path::to_path_buf)
+        .map_err(|_| {
+            anyhow::anyhow!(
+                "path {} is outside the workspace at {}",
+                path.display(),
+                ws.root().display()
+            )
+        })
+}
+
+fn read_stdin() -> Result<String> {
+    use std::io::Read;
+    let mut buffer = String::new();
+    std::io::stdin()
+        .read_to_string(&mut buffer)
+        .context("failed to read content from stdin")?;
+    Ok(buffer)
+}
+
+/// Default content for a new page: a heading derived from the filename.
+fn default_page_content(path: &Path) -> String {
+    let title = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "Untitled".to_string());
+    format!("# {title}\n")
+}
+
+fn cmd_page_create(path: PathBuf, content: Option<String>, stdin: bool) -> Result<ExitCode> {
+    let (ws, mut engine) = open_engine()?;
+    let rel = workspace_relative(&ws, &path)?;
+    let content = if stdin {
+        read_stdin()?
+    } else {
+        content.unwrap_or_else(|| default_page_content(&rel))
+    };
+    let receipt = engine.apply(Transaction::new(
+        format!("Create page {}", rel.display()),
+        vec![Semantic::PageCreate {
+            path: rel.clone(),
+            content,
+        }],
+    ))?;
+    println!(
+        "created {} ({})",
+        rel.display(),
+        receipt.outcomes[0]
+            .resulting_revision
+            .as_deref()
+            .unwrap_or("?")
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_page_update(path: PathBuf, stdin: bool, base: Option<String>) -> Result<ExitCode> {
+    if !stdin {
+        bail!("page update reads the new content from stdin; pass --stdin");
+    }
+    let (ws, mut engine) = open_engine()?;
+    let rel = workspace_relative(&ws, &path)?;
+    let base_revision = match base {
+        Some(base) => base,
+        // Convenience: base on whatever is on disk right now. This skips the
+        // lost-update protection a caller-supplied --base provides.
+        None => {
+            let store = NativeWorkspaceStore::new(ws.root());
+            store.metadata(&rel)?.revision.hash
+        }
+    };
+    let content = read_stdin()?;
+    let receipt = engine.apply(Transaction::new(
+        format!("Update page {}", rel.display()),
+        vec![Semantic::PageUpdate {
+            path: rel.clone(),
+            content,
+            base_revision,
+        }],
+    ))?;
+    println!(
+        "updated {} ({})",
+        rel.display(),
+        receipt.outcomes[0]
+            .resulting_revision
+            .as_deref()
+            .unwrap_or("?")
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_mv(from: PathBuf, to: PathBuf) -> Result<ExitCode> {
+    let (ws, mut engine) = open_engine()?;
+    let from_rel = workspace_relative(&ws, &from)?;
+    let to_rel = workspace_relative(&ws, &to)?;
+
+    // If the destination is an existing directory, move into it; otherwise
+    // this is a rename.
+    let to_is_dir = ws.root().join(&to_rel).is_dir();
+    if to_is_dir {
+        engine.apply(Transaction::new(
+            format!("Move {} into {}", from_rel.display(), to_rel.display()),
+            vec![Semantic::ResourceMove {
+                from: from_rel.clone(),
+                to_dir: to_rel.clone(),
+            }],
+        ))?;
+        println!("moved {} into {}", from_rel.display(), to_rel.display());
+    } else {
+        engine.apply(Transaction::new(
+            format!("Rename {} to {}", from_rel.display(), to_rel.display()),
+            vec![Semantic::ResourceRename {
+                from: from_rel.clone(),
+                to: to_rel.clone(),
+            }],
+        ))?;
+        println!("renamed {} to {}", from_rel.display(), to_rel.display());
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_rm(path: PathBuf) -> Result<ExitCode> {
+    let (ws, mut engine) = open_engine()?;
+    let rel = workspace_relative(&ws, &path)?;
+    engine.apply(Transaction::new(
+        format!("Delete {}", rel.display()),
+        vec![Semantic::ResourceDelete { path: rel.clone() }],
+    ))?;
+    println!("deleted {} (sent to Trash)", rel.display());
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_history(limit: usize) -> Result<ExitCode> {
+    let (_ws, engine) = open_engine()?;
+    let entries = engine.history(limit)?;
+    if entries.is_empty() {
+        println!("no transactions recorded");
+        return Ok(ExitCode::SUCCESS);
+    }
+    for entry in &entries {
+        let short_id: String = entry.id.chars().take(8).collect();
+        println!(
+            "{short_id}  {:<10} {}{}",
+            format_age(entry.created_at),
+            entry.summary,
+            if entry.undone { "  (undone)" } else { "" },
+        );
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_undo() -> Result<ExitCode> {
+    let (_ws, mut engine) = open_engine()?;
+    match engine.undo()? {
+        Some(report) => println!("undid: {}", report.summary),
+        None => println!("nothing to undo"),
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_redo() -> Result<ExitCode> {
+    let (_ws, mut engine) = open_engine()?;
+    match engine.redo()? {
+        Some(report) => println!("redid: {}", report.summary),
+        None => println!("nothing to redo"),
+    }
     Ok(ExitCode::SUCCESS)
 }
 
