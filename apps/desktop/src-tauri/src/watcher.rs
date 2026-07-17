@@ -2,14 +2,14 @@
 //!
 //! Keeps `lattice-core` free of Tauri (docs/27): this module owns the one
 //! active [`WorkspaceWatcher`], forwards its events to the frontend as the
-//! `workspace-changed` event, and applies `.md` changes to the workspace
+//! `workspace-changed` event, and applies supported-file changes to the workspace
 //! search index — the index dependency lives here, not in core.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use lattice_core::{ResourceKind, WorkspaceEvent, WorkspaceWatcher};
-use lattice_index::{upsert_page, WorkspaceIndex};
+use lattice_core::{Resource, ResourceKind, WorkspaceEvent, WorkspaceWatcher};
+use lattice_index::WorkspaceIndex;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
@@ -142,22 +142,57 @@ fn apply_to_index(index: &WorkspaceIndex, event: &WorkspaceEvent, root: &Path) {
     match event {
         WorkspaceEvent::RootDeleted => {}
         WorkspaceEvent::Created { path, .. } | WorkspaceEvent::Modified { path, .. } => {
-            reindex_if_page(index, root, path);
+            reindex_if_resource(index, root, path);
         }
-        WorkspaceEvent::Deleted { path } => remove_if_page(index, path),
+        WorkspaceEvent::Deleted { path } => remove_if_resource(index, path),
         WorkspaceEvent::Renamed { from, to, .. } => {
-            remove_if_page(index, from);
-            reindex_if_page(index, root, to);
+            remove_if_resource(index, from);
+            reindex_if_resource(index, root, to);
         }
     }
 }
 
+#[cfg(test)]
 fn is_page(path: &Path) -> bool {
-    ResourceKind::classify(path, false) == ResourceKind::Page
+    resource_for_event(path).is_some_and(|resource| resource.kind == ResourceKind::Page)
 }
 
-fn remove_if_page(index: &WorkspaceIndex, path: &Path) {
-    if !is_page(path) {
+fn resource_for_event(path: &Path) -> Option<Resource> {
+    // Workspace::scan yields package directories as one resource and does not
+    // expose their children. Keep this check local; do not scan the workspace
+    // synchronously for every event.
+    if path.components().any(|component| {
+        component
+            .as_os_str()
+            .to_str()
+            .is_some_and(|name| name.starts_with('.'))
+    }) {
+        return None;
+    }
+    if path
+        .parent()
+        .into_iter()
+        .flat_map(Path::components)
+        .filter_map(|component| component.as_os_str().to_str())
+        .any(is_package_directory_name)
+    {
+        return None;
+    }
+    Some(Resource {
+        path: path.to_path_buf(),
+        kind: ResourceKind::classify(path, false),
+    })
+}
+
+fn is_package_directory_name(name: &str) -> bool {
+    matches!(
+        name.rsplit_once('.').map(|(_, extension)| extension),
+        Some("data" | "dataset" | "ink" | "artifact" | "app" | "task")
+    )
+}
+
+fn remove_if_resource(index: &WorkspaceIndex, path: &Path) {
+    if resource_for_event(path).is_none() {
         return;
     }
     if let Err(err) = index.remove_resource(path) {
@@ -168,24 +203,17 @@ fn remove_if_page(index: &WorkspaceIndex, path: &Path) {
     }
 }
 
-fn reindex_if_page(index: &WorkspaceIndex, root: &Path, path: &Path) {
-    if !is_page(path) {
+fn reindex_if_resource(index: &WorkspaceIndex, _root: &Path, path: &Path) {
+    let Some(resource) = resource_for_event(path) else {
         return;
-    }
-    match std::fs::read_to_string(root.join(path)) {
-        Ok(content) => {
-            if let Err(err) = upsert_page(index, path, &content) {
-                eprintln!("lattice: failed to index {}: {err}", path.display());
-            }
-        }
-        Err(err) => {
-            // Benign race: the file was replaced or removed again before we
-            // read it. The next settled event will re-index it.
-            eprintln!(
-                "lattice: skipped indexing {} after watch event: {err}",
-                path.display()
-            );
-        }
+    };
+    if let Err(err) = index.upsert_resource(&resource) {
+        // Benign race: the file was replaced or removed again before the
+        // bounded runtime probe completed. The next settled event retries it.
+        eprintln!(
+            "lattice: skipped indexing {} after watch event: {err}",
+            path.display()
+        );
     }
 }
 
@@ -224,12 +252,83 @@ mod tests {
     }
 
     #[test]
-    fn reindex_if_page_is_a_noop_for_non_pages() {
+    fn reindex_if_resource_is_a_noop_for_missing_non_page() {
         let dir = tempfile::tempdir().unwrap();
         lattice_core::Workspace::init(dir.path(), "Test").unwrap();
         let index = WorkspaceIndex::open(dir.path()).unwrap();
         // No file exists at this path; a page would error attempting to
         // read it, but a non-page path must return before ever trying.
-        reindex_if_page(&index, dir.path(), Path::new("missing.canvas"));
+        reindex_if_resource(&index, dir.path(), Path::new("missing.canvas"));
+    }
+
+    #[test]
+    fn watcher_dispatch_updates_generic_resources_and_removes_stale_rows() {
+        let dir = tempfile::tempdir().unwrap();
+        lattice_core::Workspace::init(dir.path(), "Test").unwrap();
+        std::fs::write(dir.path().join("notes.txt"), "first searchable value").unwrap();
+        let index = WorkspaceIndex::open(dir.path()).unwrap();
+
+        apply_to_index(
+            &index,
+            &WorkspaceEvent::Created {
+                path: PathBuf::from("notes.txt"),
+                revision: "external".to_string(),
+            },
+            dir.path(),
+        );
+        assert!(index
+            .search("first searchable", 10)
+            .unwrap()
+            .iter()
+            .any(|hit| { hit.path == Path::new("notes.txt") }));
+
+        std::fs::write(dir.path().join("notes.txt"), "second searchable value").unwrap();
+        apply_to_index(
+            &index,
+            &WorkspaceEvent::Modified {
+                path: PathBuf::from("notes.txt"),
+                revision: "external-2".to_string(),
+            },
+            dir.path(),
+        );
+        assert!(index
+            .search("second searchable", 10)
+            .unwrap()
+            .iter()
+            .any(|hit| { hit.path == Path::new("notes.txt") }));
+        assert!(index.search("first searchable", 10).unwrap().is_empty());
+
+        std::fs::rename(dir.path().join("notes.txt"), dir.path().join("renamed.txt")).unwrap();
+        apply_to_index(
+            &index,
+            &WorkspaceEvent::Renamed {
+                from: PathBuf::from("notes.txt"),
+                to: PathBuf::from("renamed.txt"),
+                revision: "external-3".to_string(),
+            },
+            dir.path(),
+        );
+        assert!(index.metadata(Path::new("notes.txt")).unwrap().is_none());
+        assert!(index
+            .search("second searchable", 10)
+            .unwrap()
+            .iter()
+            .any(|hit| { hit.path == Path::new("renamed.txt") }));
+
+        std::fs::remove_file(dir.path().join("renamed.txt")).unwrap();
+        apply_to_index(
+            &index,
+            &WorkspaceEvent::Deleted {
+                path: PathBuf::from("renamed.txt"),
+            },
+            dir.path(),
+        );
+        assert!(index.metadata(Path::new("renamed.txt")).unwrap().is_none());
+    }
+
+    #[test]
+    fn package_children_are_not_indexed_as_separate_resources() {
+        assert!(resource_for_event(Path::new("Notes/Idea.md")).is_some());
+        assert!(resource_for_event(Path::new("CRM.data/app.yaml")).is_none());
     }
 }
