@@ -6,9 +6,10 @@ adding one.
 
 **Current state: no environment variables are required.** The app is
 local-first by design — no API keys, no backend endpoints, no telemetry.
+Most runtime overrides are optional developer conveniences documented below.
 An audit of the source (Rust `env::var`, JS `process.env` /
-`import.meta.env`) confirms nothing is read today beyond Vite's built-in
-`DEV` flag.
+`import.meta.env`) confirms nothing beyond these is read today except Vite's
+built-in `DEV` flag.
 
 `.envrc` at the repo root is **direnv configuration** (it loads the nix dev
 shell), not an env-var file.
@@ -17,6 +18,8 @@ shell), not an env-var file.
 
 | Variable | Where to set | Where to get it | What it does | Secret? | Status |
 | --- | --- | --- | --- | --- | --- |
+| `LATTICE_DEV_HOME` | `nix run .#desktop-dev`, `pnpm tauri:dev`, or your shell | repo-relative `target/dev-home` (set automatically by dev scripts) | Isolated Lattice profile root for local Tauri dev. Takes precedence over `LATTICE_HOME` and `~/Lattice`. First-run seeds the **First Look** (`demo`) template instead of Personal. Delete the directory to reset. | No | Works today |
+| `LATTICE_HOME` | your shell | any writable directory | Override the Lattice profile root (`~/Lattice` by default). Ignored when `LATTICE_DEV_HOME` is set. | No | Works today |
 | `RUST_BACKTRACE` | your shell | n/a (`1` or `full`) | Backtraces on Rust panics in CLI/desktop dev | No | Works today (std behavior) |
 | `RUST_LOG` | your shell | n/a (e.g. `debug`) | Log-level filter | No | **Not yet wired** — takes effect once tracing/env-logger lands (observability workstream) |
 

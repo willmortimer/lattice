@@ -3,8 +3,9 @@
 use std::path::{Path, PathBuf};
 
 pub use lattice_profile::{
-    lattice_home_path, LatticeHome, DEFAULT_WORKSPACE_NAME, LATTICE_HOME_NAME, SETTINGS_DIR_NAME,
-    STATE_DIR_NAME, WORKSPACES_DIR_NAME,
+    lattice_dev_home_enabled, lattice_home_path, LatticeHome, DEFAULT_WORKSPACE_NAME,
+    LATTICE_DEV_HOME_ENV, LATTICE_HOME_ENV, LATTICE_HOME_NAME, SETTINGS_DIR_NAME, STATE_DIR_NAME,
+    WORKSPACES_DIR_NAME,
 };
 
 use crate::template::{
@@ -13,6 +14,9 @@ use crate::template::{
 };
 use crate::workspace::Workspace;
 use crate::{Error, Result};
+
+pub const DEV_WORKSPACE_NAME: &str = "First Look";
+pub const DEV_TEMPLATE_ID: &str = "demo";
 
 /// Ensure the profile directories exist without creating or changing a workspace.
 ///
@@ -64,6 +68,56 @@ pub fn initialize_lattice_home() -> Result<(LatticeHome, WorkspaceProvisionOutco
     Ok((home, outcome))
 }
 
+/// Explicitly create a First Look demo workspace when no valid workspace exists.
+///
+/// Intended for local development when [`LATTICE_DEV_HOME_ENV`] points at an
+/// isolated profile root. Production and release paths must keep using
+/// [`initialize_lattice_home`].
+pub fn initialize_dev_lattice_home() -> Result<(LatticeHome, WorkspaceProvisionOutcome)> {
+    let home = ensure_lattice_home()?;
+    if let Ok(path) = effective_default_workspace(&home) {
+        return Ok((
+            home,
+            WorkspaceProvisionOutcome {
+                workspace: Workspace::open(&path)?,
+                default_workspace_status: DefaultWorkspaceStatus::NotRequested,
+                diagnostics: Vec::new(),
+            },
+        ));
+    }
+
+    let target = available_named_target(&home, DEV_WORKSPACE_NAME);
+    let mut outcome = WorkspaceProvisioner::provision(&WorkspaceCreationPlan {
+        target,
+        title: DEV_WORKSPACE_NAME.into(),
+        template_id: DEV_TEMPLATE_ID.into(),
+        mode: WorkspaceCreationMode::NewDirectory,
+    })?;
+    match home.set_default_workspace(outcome.workspace.root()) {
+        Ok(_) => outcome.default_workspace_status = DefaultWorkspaceStatus::Updated,
+        Err(error) => {
+            outcome.default_workspace_status = DefaultWorkspaceStatus::Failed;
+            outcome.diagnostics.push(ProvisionDiagnostic {
+                code: "default-workspace-save-failed".into(),
+                message: format!(
+                    "The First Look workspace was created, but Lattice could not make it the default: {error}"
+                ),
+                retryable: true,
+            });
+        }
+    }
+    Ok((home, outcome))
+}
+
+/// Initialize the active Lattice home for the current process environment.
+pub fn initialize_active_lattice_home() -> Result<(LatticeHome, WorkspaceProvisionOutcome)> {
+    if lattice_dev_home_enabled() {
+        initialize_dev_lattice_home()
+    } else {
+        initialize_lattice_home()
+    }
+}
+
 pub fn effective_default_workspace(home: &LatticeHome) -> Result<PathBuf> {
     if let Some(configured) = home
         .configured_default_workspace()
@@ -104,17 +158,21 @@ fn first_workspace(workspaces: &Path) -> Result<Option<PathBuf>> {
 }
 
 fn available_personal_target(home: &LatticeHome) -> PathBuf {
-    let personal = home.personal_workspace();
-    if !personal.exists() {
-        return personal;
+    available_named_target(home, DEFAULT_WORKSPACE_NAME)
+}
+
+fn available_named_target(home: &LatticeHome, base_name: &str) -> PathBuf {
+    let preferred = home.workspaces.join(base_name);
+    if !preferred.exists() {
+        return preferred;
     }
     for suffix in 2.. {
-        let candidate = home.workspaces.join(format!("Personal {suffix}"));
+        let candidate = home.workspaces.join(format!("{base_name} {suffix}"));
         if !candidate.exists() {
             return candidate;
         }
     }
-    unreachable!("an available Personal workspace name must exist")
+    unreachable!("an available workspace name must exist")
 }
 
 fn profile_error(error: lattice_profile::Error) -> Error {
@@ -188,6 +246,31 @@ mod tests {
             .is_none());
         assert!(effective_default_workspace(&home).is_err());
         std::env::remove_var("LATTICE_HOME");
+    }
+
+    #[test]
+    fn dev_initialization_seeds_demo_template_when_env_is_set() {
+        let _guard = env_lock();
+        let directory = tempfile::tempdir().unwrap();
+        std::env::set_var(LATTICE_DEV_HOME_ENV, directory.path());
+        let (home, outcome) = initialize_dev_lattice_home().unwrap();
+        let default = effective_default_workspace(&home).unwrap();
+        assert_eq!(default, outcome.workspace.root().canonicalize().unwrap());
+        assert!(default.join("CRM.data").is_dir());
+        assert!(default.join("Product/Vision.md").is_file());
+        assert!(default.join("Canvases/Product Strategy.canvas").is_file());
+        std::env::remove_var(LATTICE_DEV_HOME_ENV);
+    }
+
+    #[test]
+    fn initialize_active_home_uses_demo_when_dev_home_is_set() {
+        let _guard = env_lock();
+        let directory = tempfile::tempdir().unwrap();
+        std::env::set_var(LATTICE_DEV_HOME_ENV, directory.path());
+        let (home, outcome) = initialize_active_lattice_home().unwrap();
+        assert_eq!(home.root, directory.path());
+        assert!(outcome.workspace.root().join("CRM.data").is_dir());
+        std::env::remove_var(LATTICE_DEV_HOME_ENV);
     }
 
     #[test]

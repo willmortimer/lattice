@@ -5,7 +5,7 @@ use lattice_commands::{
     Command as SemanticCommand, CommandEngine, Error as CommandError, Transaction,
 };
 use lattice_core::{
-    ensure_lattice_home, initialize_lattice_home, inspect_resource as inspect_native_resource,
+    ensure_lattice_home, initialize_active_lattice_home, inspect_resource as inspect_native_resource,
     read_resource_range as read_native_resource_range, read_text_window as read_native_text_window,
     DefaultWorkspaceStatus, ProvisionDiagnostic, Resource, ResourceRuntimeError,
     TemplateDescriptor, Workspace, WorkspaceCreationMode, WorkspaceCreationPlan, WorkspaceDefaults,
@@ -503,11 +503,12 @@ fn snapshot_from_parts(
     })
 }
 
-/// Explicitly initialize Lattice home, provisioning a Personal workspace only
-/// when no valid workspace exists. Ordinary startup never calls this command.
+/// Explicitly initialize Lattice home, provisioning a workspace only when no valid
+/// workspace exists. Uses the First Look demo template when `LATTICE_DEV_HOME` is
+/// set; otherwise provisions Personal. Ordinary startup never calls this command.
 #[tauri::command]
 pub fn ensure_home() -> Result<LatticeHomeInfo, String> {
-    let (home, outcome) = initialize_lattice_home().map_err(|err| err.to_string())?;
+    let (home, outcome) = initialize_active_lattice_home().map_err(|err| err.to_string())?;
     let default_workspace = Some(snapshot_from_workspace(&outcome.workspace)?);
     Ok(LatticeHomeInfo {
         root: home.root.to_string_lossy().into_owned(),

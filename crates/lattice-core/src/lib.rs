@@ -22,8 +22,10 @@ mod workspace;
 
 pub use error::Error;
 pub use home::{
-    effective_default_workspace, ensure_lattice_home, initialize_lattice_home, lattice_home_path,
-    LatticeHome, DEFAULT_WORKSPACE_NAME, LATTICE_HOME_NAME, SETTINGS_DIR_NAME, STATE_DIR_NAME,
+    effective_default_workspace, ensure_lattice_home, initialize_active_lattice_home,
+    initialize_dev_lattice_home, initialize_lattice_home, lattice_dev_home_enabled,
+    lattice_home_path, DEV_TEMPLATE_ID, DEV_WORKSPACE_NAME, LatticeHome, DEFAULT_WORKSPACE_NAME,
+    LATTICE_DEV_HOME_ENV, LATTICE_HOME_ENV, LATTICE_HOME_NAME, SETTINGS_DIR_NAME, STATE_DIR_NAME,
     WORKSPACES_DIR_NAME,
 };
 pub use link_repair::{
