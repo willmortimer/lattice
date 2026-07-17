@@ -1,4 +1,5 @@
 import { Application, Container, FederatedPointerEvent, Graphics, Rectangle, Text } from "pixi.js";
+import type { CanvasNodeMove } from "./adapter";
 import type { CanvasData, CanvasEdge, CanvasNode } from "./types";
 import { classifyPath } from "./classify";
 import { KIND_LABELS } from "../KindMark";
@@ -13,6 +14,8 @@ const CARD_PADDING = 12;
 interface CanvasSceneOptions {
   onOpenFile: (path: string) => void;
   onSelectNode?: (id: string | null) => void;
+  onMoveNodes?: (nodes: CanvasNodeMove[]) => void;
+  onRemoveNodes?: (nodeIds: string[]) => void;
 }
 
 type Side = "top" | "right" | "bottom" | "left";
@@ -76,6 +79,15 @@ export class CanvasScene {
   private nodeCards = new Map<string, { container: Container; bg: Graphics; node: CanvasNode }>();
   private selectedId: string | null = null;
   private lastTapAt = new Map<string, number>();
+  private suppressTapFor: string | null = null;
+  private dragging: {
+    id: string;
+    startX: number;
+    startY: number;
+    nodeX: number;
+    nodeY: number;
+    moved: boolean;
+  } | null = null;
 
   private resizeObserver: ResizeObserver | null = null;
   private host: HTMLElement;
@@ -122,6 +134,8 @@ export class CanvasScene {
     this.host.appendChild(this.app.canvas);
     this.app.canvas.style.display = "block";
     this.app.canvas.style.touchAction = "none";
+    this.app.canvas.tabIndex = 0;
+    this.app.canvas.setAttribute("aria-label", "Canvas scene");
 
     this.world.addChild(this.groupsLayer, this.edgesLayer, this.nodesLayer);
     this.app.stage.addChild(this.world);
@@ -210,7 +224,10 @@ export class CanvasScene {
     container.eventMode = "static";
     container.cursor = "default";
     container.hitArea = new Rectangle(0, 0, node.width, node.height);
-    container.on("pointerdown", (e: FederatedPointerEvent) => e.stopPropagation());
+    container.on("pointerdown", (e: FederatedPointerEvent) => {
+      e.stopPropagation();
+      this.beginNodeDrag(node.id, e);
+    });
     container.on("pointertap", () => this.selectNode(node.id));
 
     return container;
@@ -308,7 +325,10 @@ export class CanvasScene {
     container.eventMode = "static";
     container.cursor = "pointer";
     container.hitArea = new Rectangle(0, 0, node.width, node.height);
-    container.on("pointerdown", (e: FederatedPointerEvent) => e.stopPropagation());
+    container.on("pointerdown", (e: FederatedPointerEvent) => {
+      e.stopPropagation();
+      this.beginNodeDrag(node.id, e);
+    });
     container.on("pointertap", () => this.onNodeTap(node));
 
     return { container, bg, node };
@@ -377,6 +397,10 @@ export class CanvasScene {
   }
 
   private onNodeTap(node: CanvasNode) {
+    if (this.suppressTapFor === node.id) {
+      this.suppressTapFor = null;
+      return;
+    }
     this.selectNode(node.id);
     if (node.type !== "file") return;
 
@@ -389,7 +413,7 @@ export class CanvasScene {
     }
   }
 
-  private selectNode(id: string | null) {
+  selectNode(id: string | null) {
     if (this.selectedId === id) return;
     const prev = this.selectedId ? this.nodeCards.get(this.selectedId) : undefined;
     if (prev) this.paintCard(prev.bg, prev.node, false);
@@ -399,6 +423,39 @@ export class CanvasScene {
     if (next) this.paintCard(next.bg, next.node, true);
 
     this.options.onSelectNode?.(id);
+  }
+
+  moveSelectedBy(dx: number, dy: number): boolean {
+    if (!this.selectedId) return false;
+    const card = this.nodeCards.get(this.selectedId);
+    if (!card) return false;
+    const x = card.node.x + dx;
+    const y = card.node.y + dy;
+    card.node = { ...card.node, x, y };
+    card.container.position.set(x, y);
+    this.options.onMoveNodes?.([{ id: this.selectedId, x, y }]);
+    return true;
+  }
+
+  removeSelected(): boolean {
+    if (!this.selectedId) return false;
+    const id = this.selectedId;
+    this.options.onRemoveNodes?.([id]);
+    return true;
+  }
+
+  private beginNodeDrag(id: string, event: FederatedPointerEvent) {
+    const card = this.nodeCards.get(id);
+    if (!card) return;
+    this.selectNode(id);
+    this.dragging = {
+      id,
+      startX: event.global.x,
+      startY: event.global.y,
+      nodeX: card.node.x,
+      nodeY: card.node.y,
+      moved: false,
+    };
   }
 
   private fitToContent(nodes: CanvasNode[]) {
@@ -435,6 +492,16 @@ export class CanvasScene {
   };
 
   private onStagePointerMove = (e: FederatedPointerEvent) => {
+    if (this.dragging) {
+      const drag = this.dragging;
+      const card = this.nodeCards.get(drag.id);
+      if (!card) return;
+      const dx = (e.global.x - drag.startX) / this.world.scale.x;
+      const dy = (e.global.y - drag.startY) / this.world.scale.y;
+      if (Math.abs(dx) > 1 || Math.abs(dy) > 1) drag.moved = true;
+      card.container.position.set(drag.nodeX + dx, drag.nodeY + dy);
+      return;
+    }
     if (!this.panning) return;
     const dx = e.global.x - this.panStart.x;
     const dy = e.global.y - this.panStart.y;
@@ -442,6 +509,19 @@ export class CanvasScene {
   };
 
   private onStagePointerUp = () => {
+    if (this.dragging) {
+      const drag = this.dragging;
+      const card = this.nodeCards.get(drag.id);
+      this.dragging = null;
+      if (card && drag.moved) {
+        this.suppressTapFor = drag.id;
+        this.options.onMoveNodes?.([{
+          id: drag.id,
+          x: card.container.x,
+          y: card.container.y,
+        }]);
+      }
+    }
     this.panning = false;
   };
 

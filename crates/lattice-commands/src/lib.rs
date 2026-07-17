@@ -24,6 +24,7 @@
 //! one transaction must touch disjoint paths. Block-level commands and
 //! intra-transaction sequential dependencies come later (docs/17).
 
+mod canvas;
 mod command;
 mod engine;
 mod error;
@@ -32,7 +33,8 @@ mod revisions;
 mod trash;
 
 pub use command::{
-    Command, CommandOutcome, HistoryEntry, Transaction, TransactionReceipt, UndoReport,
+    CanvasMoveNodes, CanvasNodeMove, CanvasPlaceResource, CanvasRemoveNodes, Command,
+    CommandOutcome, HistoryEntry, Transaction, TransactionReceipt, UndoReport,
 };
 pub use engine::CommandEngine;
 pub use error::Error;
