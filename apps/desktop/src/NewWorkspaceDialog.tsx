@@ -25,7 +25,14 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import type { TemplateDescriptor } from "./lib/templates";
+import type { TemplateCategory, TemplateDescriptor } from "./lib/templates";
+
+const GALLERY_CATEGORIES: TemplateCategory[] = [
+  "Everyday",
+  "Work",
+  "Knowledge & Research",
+  "Data & Advanced",
+];
 
 interface NewWorkspaceDialogProps {
   open: boolean;
@@ -68,6 +75,14 @@ export function NewWorkspaceDialog({
   const gallery = useMemo(
     () => templates.filter((template) => template.visibility === "gallery"),
     [templates],
+  );
+  const galleryByCategory = useMemo(
+    () =>
+      GALLERY_CATEGORIES.map((category) => ({
+        category,
+        templates: gallery.filter((template) => template.category === category),
+      })).filter((group) => group.templates.length > 0),
+    [gallery],
   );
   const sample = templates.find((template) => template.visibility === "sample") ?? null;
   const [templateId, setTemplateId] = useState("personal");
@@ -150,7 +165,7 @@ export function NewWorkspaceDialog({
                 Templates provision ordinary files once. Lattice never retains ownership of them.
               </DialogDescription>
               <RadioGroupRoot
-                className="template-gallery"
+                className="template-gallery-groups"
                 value={templateId}
                 onValueChange={(value) => {
                   const template = templates.find((candidate) => candidate.id === value);
@@ -158,35 +173,41 @@ export function NewWorkspaceDialog({
                 }}
                 aria-label="Workspace template"
               >
-                {gallery.map((template) => (
-                  <RadioItem
-                    key={template.id}
-                    value={template.id}
-                    className="template-card"
-                    disabled={busy}
-                  >
-                    <RadioIndicator className="template-radio-indicator">
-                      <Check size={12} />
-                    </RadioIndicator>
-                    <span className="template-card-heading">
-                      <span>
-                        <span className="template-card-category">{template.category}</span>
-                        <strong>{template.name}</strong>
-                      </span>
-                      {template.recommended && (
-                        <span className="template-recommended">Recommended</span>
-                      )}
-                    </span>
-                    <span className="template-card-description">{template.description}</span>
-                    <span className="template-mini-tree" aria-label="Example structure">
-                      {template.preview.slice(0, 7).map((path) => (
-                        <span key={path}>
-                          <PreviewIcon path={path} />
-                          {path}
-                        </span>
+                {galleryByCategory.map(({ category, templates: categoryTemplates }) => (
+                  <section key={category} className="template-gallery-group" aria-label={category}>
+                    <h3 className="template-gallery-group-heading">{category}</h3>
+                    <div className="template-gallery">
+                      {categoryTemplates.map((template) => (
+                        <RadioItem
+                          key={template.id}
+                          value={template.id}
+                          className="template-card"
+                          disabled={busy}
+                        >
+                          <RadioIndicator className="template-radio-indicator">
+                            <Check size={12} />
+                          </RadioIndicator>
+                          <span className="template-card-heading">
+                            <span>
+                              <strong>{template.name}</strong>
+                            </span>
+                            {template.recommended && (
+                              <span className="template-recommended">Recommended</span>
+                            )}
+                          </span>
+                          <span className="template-card-description">{template.description}</span>
+                          <span className="template-mini-tree" aria-label="Example structure">
+                            {template.preview.slice(0, 7).map((path) => (
+                              <span key={path}>
+                                <PreviewIcon path={path} />
+                                {path}
+                              </span>
+                            ))}
+                          </span>
+                        </RadioItem>
                       ))}
-                    </span>
-                  </RadioItem>
+                    </div>
+                  </section>
                 ))}
               </RadioGroupRoot>
 

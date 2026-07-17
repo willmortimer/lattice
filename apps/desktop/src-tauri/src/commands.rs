@@ -571,10 +571,10 @@ pub fn create_workspace(
     })
 }
 
-/// Built-in workspace templates for the New Workspace gallery.
+/// Built-in workspace templates for the New Workspace gallery and First Look sample.
 #[tauri::command]
 pub fn list_templates() -> Vec<TemplateDescriptor> {
-    lattice_core::WorkspaceTemplate::gallery()
+    lattice_core::WorkspaceTemplate::catalog()
 }
 
 #[tauri::command]
