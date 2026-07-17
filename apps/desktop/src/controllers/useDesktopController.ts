@@ -1,7 +1,13 @@
 import { demoSnapshot, demoStartEmpty, inBrowser } from "../demo";
 import type { SaveState } from "../editor/saveState";
 import type { PageEditorHandle } from "../editor/PageEditor";
-import { saveSidebarWidth, type DesktopSession } from "../lib/profile";
+import { saveResourceTreeCollapsed, saveSidebarWidth, type DesktopSession } from "../lib/profile";
+import {
+  collapsedPathsForWorkspace,
+  serializeResourceTreeCollapseState,
+  updateCollapsedPathsForWorkspace,
+  type ResourceTreeCollapseState,
+} from "../lib/treeCollapse";
 import { demoLinkTargets, type ResourceLinkTarget } from "../lib/resourceLinks";
 import {
   applyLinkRepair,
@@ -55,6 +61,8 @@ export function useDesktopController() {
   const [searchPaneOpen, setSearchPaneOpen] = useState(false);
   const [themeCatalog, setThemeCatalog] = useState<ThemeCatalogPayload | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(272);
+  const [resourceTreeCollapsedByWorkspace, setResourceTreeCollapsedByWorkspace] =
+    useState<ResourceTreeCollapseState>({});
   const [revealPath, setRevealPath] = useState<string | null>(null);
   const [linkPicker, setLinkPicker] = useState<{
     query: string; candidates: ResourceLinkTarget[];
@@ -119,6 +127,9 @@ export function useDesktopController() {
       setSidebarWidth(profile.sidebarWidth);
     }
   }, [profile.sidebarWidth]);
+  useEffect(() => {
+    setResourceTreeCollapsedByWorkspace(profile.resourceTreeCollapsedByWorkspace ?? {});
+  }, [profile.resourceTreeCollapsedByWorkspace]);
   useEffect(() => {
     const messages = [
       ...profileDiagnostics.map((diagnostic) => `${diagnostic.path}: ${diagnostic.message}`),
@@ -406,6 +417,38 @@ export function useDesktopController() {
   }, [sidebarWidth]);
 
   useEffect(() => {
+    if (!profileReady) return;
+    if (
+      serializeResourceTreeCollapseState(resourceTreeCollapsedByWorkspace) ===
+      serializeResourceTreeCollapseState(profile.resourceTreeCollapsedByWorkspace ?? {})
+    ) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void saveResourceTreeCollapsed(profile, resourceTreeCollapsedByWorkspace).catch(() => {});
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [
+    profile,
+    profileReady,
+    profile.resourceTreeCollapsedByWorkspace,
+    resourceTreeCollapsedByWorkspace,
+  ]);
+
+  const handleTreeCollapsedPathsChange = useCallback((paths: ReadonlySet<string>) => {
+    const workspaceKey = snapshotRef.current?.id;
+    if (!workspaceKey) return;
+    setResourceTreeCollapsedByWorkspace((previous) =>
+      updateCollapsedPathsForWorkspace(previous, workspaceKey, paths),
+    );
+  }, []);
+
+  const treeCollapsedPaths = useMemo(
+    () => collapsedPathsForWorkspace(resourceTreeCollapsedByWorkspace, snapshot?.id ?? null),
+    [resourceTreeCollapsedByWorkspace, snapshot?.id],
+  );
+
+  useEffect(() => {
     if (inBrowser) return;
     let unlisten: (() => void) | undefined;
     void listen<{ root: string; path: string }>("open-resource", (event) => {
@@ -582,13 +625,14 @@ export function useDesktopController() {
   return {
     profile, profileReady, settings, startup, snapshot, snapshotRef, selected, session, error, busy, saveState,
     externalConflict, reloadToken, newWorkspaceOpen, workspacesDir, templates, statusToast, runtimeNotice,
-    profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth, revealPath, linkPicker,
+    profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth, treeCollapsedPaths, revealPath, linkPicker,
     linkRepairReview, handleLinkRepairAccept, handleLinkRepairDefer,
     openTabs, navigation, inspectorOpen, editingTitle, titleDraft, assetRoot, wikiTargets, pageEditorRef,
     recents, page, currentPageRevisionRef,
     paletteItems, hasCapability, setSettings, setStartup, setError,
     setSaveState, setNewWorkspaceOpen, setSearchPaneOpen, setPaletteOpen,
     setActivityArea, setInspectorOpen, setDismissedNoticeCodes, setEditingTitle, setTitleDraft, setSidebarWidth,
+    handleTreeCollapsedPathsChange,
     setLinkPicker,
     setStatusToast, applyThemeCatalog, rememberWorkspace, clearRecents, resetSettings, handleGetStarted,
     handleOpenWorkspace, openRecent, handleCreateWorkspace, openNewWorkspaceDialog, pickWorkspaceFolder,

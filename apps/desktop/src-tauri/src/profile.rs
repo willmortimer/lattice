@@ -23,6 +23,7 @@ pub struct ProfileSnapshot {
     pub settings: SettingsSnapshot,
     pub recents: Vec<RecentWorkspace>,
     pub sidebar_width: Option<f64>,
+    pub resource_tree_collapsed_by_workspace: serde_json::Map<String, serde_json::Value>,
     pub effective_default_workspace: Option<String>,
     pub has_valid_configured_default: bool,
     pub home_root: String,
@@ -39,6 +40,8 @@ fn snapshot() -> Result<ProfileSnapshot, String> {
         .ui_value("sidebar-width")
         .map_err(err)?
         .and_then(|value| value.parse().ok());
+    let resource_tree_collapsed_by_workspace =
+        parse_resource_tree_collapsed(state.ui_value("resource-tree-collapsed").map_err(err)?);
     let configured_default = settings.workspaces.default_workspace.as_deref();
     let has_valid_configured_default =
         configured_default.is_some_and(|path| Workspace::open(path).is_ok());
@@ -52,6 +55,7 @@ fn snapshot() -> Result<ProfileSnapshot, String> {
         settings,
         recents,
         sidebar_width,
+        resource_tree_collapsed_by_workspace,
         effective_default_workspace,
         has_valid_configured_default,
         home_root: home.root.to_string_lossy().into_owned(),
@@ -310,6 +314,34 @@ fn now() -> u64 {
 
 fn err(error: impl ToString) -> String {
     error.to_string()
+}
+
+fn parse_resource_tree_collapsed(
+    raw: Option<String>,
+) -> serde_json::Map<String, serde_json::Value> {
+    let Some(raw) = raw else {
+        return serde_json::Map::new();
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&raw) else {
+        return serde_json::Map::new();
+    };
+    let Some(map) = value.as_object() else {
+        return serde_json::Map::new();
+    };
+    map.iter()
+        .filter_map(|(workspace_key, paths)| {
+            let array = paths.as_array()?;
+            let strings: Vec<serde_json::Value> = array
+                .iter()
+                .filter(|entry| entry.is_string())
+                .cloned()
+                .collect();
+            if strings.is_empty() {
+                return None;
+            }
+            Some((workspace_key.clone(), serde_json::Value::Array(strings)))
+        })
+        .collect()
 }
 
 #[cfg(test)]

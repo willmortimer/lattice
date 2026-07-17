@@ -400,6 +400,21 @@ html[data-platform="macos"] .empty-state {
   transition: color 100ms ease;
 }
 
+.resource-item .resource-tree-icon {
+  flex-shrink: 0;
+  color: var(--lt-faint);
+  transition: color 100ms ease;
+}
+
+.resource-item:hover .resource-tree-icon {
+  color: var(--lt-muted);
+}
+
+.resource-item-active .resource-tree-icon,
+.resource-item-active:hover .resource-tree-icon {
+  color: var(--lt-accent);
+}
+
 .resource-item:hover {
   background: var(--lt-hover);
   color: var(--lt-text);
@@ -1129,6 +1144,15 @@ html[data-platform="macos"] .empty-state {
 
 .tree-chevron-open {
   transform: rotate(90deg);
+}
+
+.resource-tree-folder-icon {
+  flex-shrink: 0;
+  color: var(--lt-faint);
+}
+
+.tree-folder-row:hover .resource-tree-folder-icon {
+  color: var(--lt-muted);
 }
 
 .tree-folder-name {

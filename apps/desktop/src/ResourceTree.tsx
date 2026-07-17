@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { KindMark, KIND_LABELS } from "./KindMark";
 import { writeResourceDragPayload } from "./lib/resourceDrag";
+import { folderTreeIcon, resourceTreeIcon } from "./lib/resourceIcons";
 import { buildResourceTree, type TreeNode } from "./lib/resourceTree";
 import type { Resource } from "./types";
 
@@ -14,18 +15,32 @@ interface ResourceTreeProps {
   revealPath?: string | null;
   /** Optional path → purpose hints from the active template catalog. */
   directoryPurposes?: Readonly<Record<string, string>>;
+  /** Workspace id used to load/save collapsed folder paths in the profile. */
+  workspaceKey?: string | null;
+  collapsedPaths?: ReadonlySet<string>;
+  onCollapsedPathsChange?: (paths: ReadonlySet<string>) => void;
 }
 
 const INDENT_BASE_PX = 9;
 const INDENT_STEP_PX = 16;
+const TREE_ICON_SIZE = 15;
+const FOLDER_ICON_SIZE = 14;
+
+function ResourceTreeRowIcon({ resource }: { resource: Resource }) {
+  const decision = resourceTreeIcon(resource);
+  if (decision.type === "kind-mark") {
+    return <KindMark kind={decision.kind} size={TREE_ICON_SIZE} />;
+  }
+  const Icon = decision.Icon;
+  return <Icon size={TREE_ICON_SIZE} weight="regular" className="resource-tree-icon" aria-hidden />;
+}
 
 /**
  * Collapsible folder tree over a flat resource listing — replaces the
  * former flat `resource-list`. Folders group by path segment (sorted
  * before files, both alphabetically within a level; see
- * `lib/resourceTree`); collapsing one is purely local UI state, not
- * persisted, and defaults to fully expanded so nothing already open in
- * the old flat list disappears on first render.
+ * `lib/resourceTree`). Collapse state persists per workspace in the
+ * Lattice profile when `workspaceKey` and change handlers are provided.
  */
 export function ResourceTree({
   resources,
@@ -34,14 +49,25 @@ export function ResourceTree({
   onContextMenu,
   revealPath,
   directoryPurposes,
+  workspaceKey: _workspaceKey,
+  collapsedPaths,
+  onCollapsedPathsChange,
 }: ResourceTreeProps) {
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  const [localCollapsed, setLocalCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  const collapsed = collapsedPaths ?? localCollapsed;
+
+  function updateCollapsed(updater: (previous: ReadonlySet<string>) => ReadonlySet<string>) {
+    const previous = collapsedPaths ?? localCollapsed;
+    const next = updater(previous);
+    if (onCollapsedPathsChange) onCollapsedPathsChange(next);
+    else setLocalCollapsed(next);
+  }
 
   useEffect(() => {
     if (!revealPath) return;
     const parts = revealPath.replace(/\/$/, "").split("/");
     const ancestors = parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join("/"));
-    setCollapsed((previous) => {
+    updateCollapsed((previous) => {
       const next = new Set(previous);
       ancestors.forEach((path) => next.delete(path));
       return next;
@@ -55,7 +81,7 @@ export function ResourceTree({
   }
 
   function toggle(path: string) {
-    setCollapsed((prev) => {
+    updateCollapsed((prev) => {
       const next = new Set(prev);
       if (next.has(path)) next.delete(path);
       else next.add(path);
@@ -88,13 +114,14 @@ export function ResourceTree({
           onClick={() => onSelect(resource)}
           onContextMenu={() => onContextMenu?.(resource)}
         >
-          <KindMark kind={resource.kind} />
+          <ResourceTreeRowIcon resource={resource} />
           <span className="resource-path">{node.name}</span>
         </button>
       );
     }
 
     const isCollapsed = collapsed.has(node.path);
+    const FolderIcon = folderTreeIcon(isCollapsed);
     return (
       <div key={node.path} className="tree-folder">
         <button
@@ -106,6 +133,12 @@ export function ResourceTree({
           <span
             className={"tree-chevron" + (isCollapsed ? "" : " tree-chevron-open")}
             aria-hidden="true"
+          />
+          <FolderIcon
+            size={FOLDER_ICON_SIZE}
+            weight="regular"
+            className="resource-tree-folder-icon"
+            aria-hidden
           />
           <span className="tree-folder-name">{node.name}</span>
         </button>
