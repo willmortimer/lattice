@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { Editor, Extensions } from "@tiptap/core";
 import { EditorContent, ReactNodeViewRenderer, useEditor } from "@tiptap/react";
+import { DOMParser as ProseMirrorDOMParser, Slice } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import {
@@ -30,6 +31,7 @@ import {
 
 import { CodeBlockView } from "./CodeBlockView";
 import { ConflictEnvelope } from "./ConflictEnvelope";
+import { BlockDragHandle } from "./BlockDragHandle";
 import { editorExtensions } from "./extensions";
 import { ImageView } from "./ImageView";
 import { LatticeEmbedView } from "./LatticeEmbedView";
@@ -38,6 +40,7 @@ import {
   parseMarkdownToJSON,
   splitFrontmatter,
 } from "./markdown";
+import { classifyClipboard, sanitizePastedHtml } from "./pasteSanitize";
 import { PageModeChrome } from "./PageModeChrome";
 import { PagePreview } from "./PagePreview";
 import { PageSourceEditor } from "./PageSourceEditor";
@@ -87,18 +90,21 @@ const SLASH_COMMANDS = [
  * adds `addNodeView`, so the schema itself — what a document can contain —
  * stays identical between live editing and the standalone codec.
  */
-const liveExtensions: Extensions = editorExtensions.map((extension) => {
-  if (extension.name === "image") {
-    return extension.extend({ addNodeView: () => ReactNodeViewRenderer(ImageView) });
-  }
-  if (extension.name === "codeBlock") {
-    return extension.extend({ addNodeView: () => ReactNodeViewRenderer(CodeBlockView) });
-  }
-  if (extension.name === "latticeEmbed") {
-    return extension.extend({ addNodeView: () => ReactNodeViewRenderer(LatticeEmbedView) });
-  }
-  return extension;
-});
+const liveExtensions: Extensions = [
+  ...editorExtensions.map((extension) => {
+    if (extension.name === "image") {
+      return extension.extend({ addNodeView: () => ReactNodeViewRenderer(ImageView) });
+    }
+    if (extension.name === "codeBlock") {
+      return extension.extend({ addNodeView: () => ReactNodeViewRenderer(CodeBlockView) });
+    }
+    if (extension.name === "latticeEmbed") {
+      return extension.extend({ addNodeView: () => ReactNodeViewRenderer(LatticeEmbedView) });
+    }
+    return extension;
+  }),
+  BlockDragHandle,
+];
 
 interface PageEditorProps {
   raw: string;
@@ -341,11 +347,40 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
         spellcheck: spellcheck ? "true" : "false",
       },
       handlePaste: (view, event) => {
-        const files = Array.from(event.clipboardData?.files ?? []);
-        if (files.length > 0 && onImportAssetRef.current) {
+        const kind = classifyClipboard(event.clipboardData);
+        if (kind === "files" && onImportAssetRef.current) {
+          const files = Array.from(event.clipboardData?.files ?? []);
           event.preventDefault();
           void importFilesIntoView(view, files);
           return true;
+        }
+
+        if (kind === "markdown" && event.clipboardData) {
+          const markdown = event.clipboardData.getData("text/markdown");
+          try {
+            const docJson = parseMarkdownToJSON(markdown);
+            const node = view.state.schema.nodeFromJSON(docJson);
+            event.preventDefault();
+            const tr = view.state.tr.replaceSelection(new Slice(node.content, 0, 0));
+            view.dispatch(tr.scrollIntoView());
+            return true;
+          } catch {
+            // Fall through to HTML/plain handling when markdown is malformed.
+          }
+        }
+
+        if (kind === "html" && event.clipboardData) {
+          const clean = sanitizePastedHtml(event.clipboardData.getData("text/html"));
+          if (clean.trim()) {
+            event.preventDefault();
+            const element = document.createElement("div");
+            element.innerHTML = clean;
+            const slice = ProseMirrorDOMParser.fromSchema(view.state.schema).parseSlice(element, {
+              preserveWhitespace: true,
+            });
+            view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView());
+            return true;
+          }
         }
 
         const pastedText = event.clipboardData?.getData("text/plain").trim() ?? "";

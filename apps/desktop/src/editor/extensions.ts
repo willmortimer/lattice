@@ -6,6 +6,7 @@ import Link from "@tiptap/extension-link";
 
 import { LatticeEmbed } from "./LatticeEmbedExtension";
 import { OpaqueDirective } from "./OpaqueDirectiveExtension";
+import { BlockDragHandle } from "./BlockDragHandle";
 
 /**
  * The single source of truth for the editor's node/mark set. Both the live
@@ -37,3 +38,6 @@ export const editorExtensions: Extensions = [
   LatticeEmbed,
   OpaqueDirective,
 ];
+
+/** Live editor only — drag handles are presentation, not part of the codec schema. */
+export const liveEditorExtensions: Extensions = [...editorExtensions, BlockDragHandle];
