@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Build and run lattice-bridge for the cell browser demo backend.
+# Binds 0.0.0.0 inside Dev Container so Docker published ports work; loopback
+# elsewhere. Default --root is the seeded First Look workspace under LATTICE_DEV_HOME.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "${ROOT}"
+
+export LATTICE_DEV_HOME="${LATTICE_DEV_HOME:-${ROOT}/target/cell-home}"
+WORKSPACE="${LATTICE_DEV_HOME}/Workspaces/First Look"
+
+HOST="${LATTICE_BRIDGE_HOST:-}"
+if [[ -z "${HOST}" ]]; then
+  if [[ "${DEVCONTAINER:-}" == "1" || "${DEV_CELL:-}" == "true" ]]; then
+    HOST="0.0.0.0"
+  else
+    HOST="127.0.0.1"
+  fi
+fi
+
+PORT="${LATTICE_BRIDGE_PORT:-8787}"
+
+ROOT_ARGS=()
+if [[ -f "${WORKSPACE}/lattice.yaml" ]]; then
+  ROOT_ARGS=(--root "${WORKSPACE}")
+else
+  echo "warning: workspace not seeded (${WORKSPACE}); run ./scripts/devcontainer/seed" >&2
+  echo "         bridge will start without --root; use ensure_home or open_workspace" >&2
+fi
+
+echo "LATTICE_BRIDGE_HOST=${HOST}"
+echo "LATTICE_BRIDGE_PORT=${PORT}"
+if [[ ${#ROOT_ARGS[@]} -gt 0 ]]; then
+  echo "workspace: ${WORKSPACE}"
+fi
+echo "health: http://127.0.0.1:${PORT}/health"
+
+exec cargo run -p lattice-bridge -- --host "${HOST}" --port "${PORT}" "${ROOT_ARGS[@]}"

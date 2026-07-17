@@ -1,12 +1,27 @@
 #!/usr/bin/env bash
-# Browser-only desktop demo (Vite). Binds 0.0.0.0:5173 for published ports / Serve.
+# Browser desktop shell (Vite). Binds 0.0.0.0:5173 for published ports / Serve.
+# When VITE_LATTICE_BRIDGE_URL is set (default below), the UI uses lattice-bridge
+# instead of the in-memory demo fixture.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT}"
 
+export LATTICE_DEV_HOME="${LATTICE_DEV_HOME:-${ROOT}/target/cell-home}"
+WORKSPACE="${LATTICE_DEV_HOME}/Workspaces/First Look"
+
+export VITE_LATTICE_BRIDGE_URL="${VITE_LATTICE_BRIDGE_URL:-http://127.0.0.1:8787}"
+if [[ -f "${WORKSPACE}/lattice.yaml" ]]; then
+  export VITE_LATTICE_WORKSPACE="${VITE_LATTICE_WORKSPACE:-${WORKSPACE}}"
+fi
+
 if ! command -v pnpm >/dev/null 2>&1; then
   corepack prepare pnpm@11.11.0 --activate
+fi
+
+echo "VITE_LATTICE_BRIDGE_URL=${VITE_LATTICE_BRIDGE_URL}"
+if [[ -n "${VITE_LATTICE_WORKSPACE:-}" ]]; then
+  echo "VITE_LATTICE_WORKSPACE=${VITE_LATTICE_WORKSPACE}"
 fi
 
 pnpm install

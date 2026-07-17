@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Seed workspace, start lattice-bridge in the background, and print the web command.
+# Keeps running until the bridge exits (Ctrl+C stops bridge + this script).
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${ROOT}"
+
+export LATTICE_DEV_HOME="${LATTICE_DEV_HOME:-${ROOT}/target/cell-home}"
+PORT="${LATTICE_BRIDGE_PORT:-8787}"
+HEALTH_URL="http://127.0.0.1:${PORT}/health"
+
+"${SCRIPT_DIR}/seed"
+
+"${SCRIPT_DIR}/bridge" &
+BRIDGE_PID=$!
+
+cleanup() {
+  kill "${BRIDGE_PID}" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+echo "waiting for bridge at ${HEALTH_URL} ..."
+for _ in $(seq 1 60); do
+  if curl -sf "${HEALTH_URL}" >/dev/null 2>&1; then
+    break
+  fi
+  if ! kill -0 "${BRIDGE_PID}" 2>/dev/null; then
+    echo "error: bridge exited before becoming healthy" >&2
+    exit 1
+  fi
+  sleep 1
+done
+
+if ! curl -sf "${HEALTH_URL}" >/dev/null 2>&1; then
+  echo "error: bridge did not become healthy at ${HEALTH_URL}" >&2
+  exit 1
+fi
+
+cat <<EOF
+
+Bridge ready (PID ${BRIDGE_PID}).
+
+In another terminal:
+  ./scripts/devcontainer/web
+
+Browser UI uses bridge mode (VITE_LATTICE_BRIDGE_URL) against the real Rust core.
+Without bridge env vars, ./scripts/devcontainer/web runs the in-memory demo fixture.
+
+EOF
+
+wait "${BRIDGE_PID}"
