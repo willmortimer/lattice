@@ -1,0 +1,50 @@
+{
+  "format": "lattice-workspace-template",
+  "version": 2,
+  "id": "second-brain",
+  "order": 35,
+  "name": "Second Brain",
+  "category": "Knowledge & Research",
+  "description": "Capture fleeting ideas, grow atomic notes, and navigate your knowledge with maps of content and agent-ready context.",
+  "visibility": "gallery",
+  "recommended": false,
+  "recommendedTitle": "Second Brain",
+  "directories": [
+    { "path": "Inbox", "purpose": "Fleeting captures and unsorted inputs — triage into Notes or Sources." },
+    { "path": "Notes", "purpose": "Atomic, densely linked notes that accrue meaning over time." },
+    { "path": "MOCs", "purpose": "Maps of content that orient you across topics without rigid folders." },
+    { "path": "Sources", "purpose": "Books, papers, articles, and media you want to cite or distill." },
+    { "path": "Context", "purpose": "Workspace context for humans and agents — scope, tone, and conventions." },
+    { "path": "Prompts", "purpose": "Reusable prompt patterns for synthesis, review, and extraction." }
+  ],
+  "preview": [
+    "MOCs/Knowledge Base.md",
+    "Notes/Capture Workflow.md",
+    "Notes/Evergreen Notes.md",
+    "Notes/Linking Philosophy.md",
+    "Inbox/",
+    "Sources/",
+    "Context/AGENTS.md",
+    "Prompts/"
+  ],
+  "files": [
+    "Home.md",
+    "MOCs/Knowledge Base.md",
+    "Notes/Capture Workflow.md",
+    "Notes/Evergreen Notes.md",
+    "Notes/Linking Philosophy.md",
+    "Notes/Progressive Summarization.md",
+    "Notes/Spaced Repetition.md",
+    "Notes/Zettelkasten Primer.md",
+    "Context/AGENTS.md",
+    "Prompts/Synthesize Connections.md",
+    "Prompts/Weekly Review.md",
+    "Prompts/Extract Key Ideas.md"
+  ],
+  "capabilities": ["pages", "citations"],
+  "workspaceDefaults": {
+    "quickNoteDirectory": "Inbox",
+    "templateDirectory": "Prompts"
+  },
+  "openOnCreate": "MOCs/Knowledge Base.md"
+}
