@@ -9,12 +9,38 @@
   "visibility": "gallery",
   "recommended": false,
   "recommendedTitle": "Project",
-  "directories": ["Decisions", "Research", "Working", "Data", "Outputs", "Archive"],
-  "preview": ["Home.md", "Brief.md", "Plan.md", "Decisions/", "Working/", "Data/", "Outputs/"],
-  "files": ["Home.md", "Brief.md", "Plan.md"],
+  "directories": [
+    { "path": "Decisions", "purpose": "Lightweight ADRs and decision records." },
+    { "path": "Meetings", "purpose": "Agendas, notes, and follow-ups from syncs." },
+    { "path": "Research", "purpose": "Background reading and exploratory notes." },
+    { "path": "Working", "purpose": "Active drafts and in-progress material." },
+    { "path": "Data", "purpose": "Tables, datasets, and structured inputs." },
+    { "path": "Outputs", "purpose": "Deliverables ready to share." },
+    { "path": "Templates", "purpose": "Reusable patterns for decisions and meetings." },
+    { "path": "Archive", "purpose": "Superseded or completed material." }
+  ],
+  "preview": [
+    "Home.md",
+    "Brief.md",
+    "Plan.md",
+    "Milestones.canvas",
+    "Decisions/0001 Example decision.md",
+    "Decisions/",
+    "Meetings/",
+    "Working/"
+  ],
+  "files": [
+    "Home.md",
+    "Brief.md",
+    "Plan.md",
+    "Milestones.canvas",
+    "Decisions/0001 Example decision.md",
+    "Templates/Decision.md"
+  ],
   "capabilities": ["pages", "canvas", "sqlite"],
   "workspaceDefaults": {
     "quickNoteDirectory": "Working",
+    "templateDirectory": "Templates",
     "archiveDirectory": "Archive"
   },
   "openOnCreate": "Home.md"
