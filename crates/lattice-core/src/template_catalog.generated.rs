@@ -18,7 +18,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             SeedDirectory { path: "Templates", purpose: Some("Reusable note patterns with {{title}} and {{date}} placeholders."), default_kind: None, icon: None },
             SeedDirectory { path: "Archive", purpose: Some("Completed projects and inactive material."), default_kind: None, icon: None }
         ],
-        preview: &["Home.md", "Projects/Example Project.md", "Journal/2026-07-17.md", "Templates/Daily.md", "Inbox/", "Projects/", "Journal/"],
+        preview: &["Home.md", "Projects/Example Project.md", "Journal/{{date}}.md", "Templates/Daily.md", "Inbox/", "Projects/", "Journal/"],
         capabilities: &["pages", "canvas", "sqlite"],
         quick_note_directory: "Inbox",
         daily_note_directory: Some("Journal"),
@@ -30,7 +30,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             SeedFile { path: "Home.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/personal/files/Home.md")) },
             SeedFile { path: "Welcome.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/personal/files/Welcome.md")) },
             SeedFile { path: "Projects/Example Project.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/personal/files/Projects/Example Project.md")) },
-            SeedFile { path: "Journal/2026-07-17.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/personal/files/Journal/2026-07-17.md")) },
+            SeedFile { path: "Journal/{{date}}.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/personal/files/Journal/{{date}}.md")) },
             SeedFile { path: "Templates/Meeting Note.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/personal/files/Templates/Meeting Note.md")) },
             SeedFile { path: "Templates/Book Note.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/personal/files/Templates/Book Note.md")) },
             SeedFile { path: "Templates/Daily.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/personal/files/Templates/Daily.md")) }
@@ -156,14 +156,15 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             SeedDirectory { path: "MOCs", purpose: Some("Maps of content that orient you across topics without rigid folders."), default_kind: None, icon: None },
             SeedDirectory { path: "Sources", purpose: Some("Books, papers, articles, and media you want to cite or distill."), default_kind: None, icon: None },
             SeedDirectory { path: "Context", purpose: Some("Workspace context for humans and agents — scope, tone, and conventions."), default_kind: None, icon: None },
-            SeedDirectory { path: "Prompts", purpose: Some("Reusable prompt patterns for synthesis, review, and extraction."), default_kind: None, icon: None }
+            SeedDirectory { path: "Prompts", purpose: Some("Reusable prompt patterns for synthesis, review, and extraction."), default_kind: None, icon: None },
+            SeedDirectory { path: "Templates", purpose: Some("Page templates with {{title}} and {{date}} placeholders."), default_kind: None, icon: None }
         ],
-        preview: &["MOCs/Knowledge Base.md", "Notes/Capture Workflow.md", "Notes/Evergreen Notes.md", "Notes/Linking Philosophy.md", "Inbox/", "Sources/", "Context/AGENTS.md", "Prompts/"],
+        preview: &["MOCs/Knowledge Base.md", "Notes/Capture Workflow.md", "Notes/Evergreen Notes.md", "Notes/Linking Philosophy.md", "Inbox/", "Sources/", "Context/AGENTS.md", "Templates/Daily.md", "Prompts/"],
         capabilities: &["pages", "citations"],
         quick_note_directory: "Inbox",
         daily_note_directory: None,
         attachments_directory: None,
-        template_directory: Some("Prompts"),
+        template_directory: Some("Templates"),
         archive_directory: None,
         open_on_create: Some("MOCs/Knowledge Base.md"),
         files: &[
@@ -176,6 +177,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             SeedFile { path: "Notes/Spaced Repetition.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/second-brain/files/Notes/Spaced Repetition.md")) },
             SeedFile { path: "Notes/Zettelkasten Primer.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/second-brain/files/Notes/Zettelkasten Primer.md")) },
             SeedFile { path: "Context/AGENTS.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/second-brain/files/Context/AGENTS.md")) },
+            SeedFile { path: "Templates/Daily.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/second-brain/files/Templates/Daily.md")) },
             SeedFile { path: "Prompts/Synthesize Connections.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/second-brain/files/Prompts/Synthesize Connections.md")) },
             SeedFile { path: "Prompts/Weekly Review.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/second-brain/files/Prompts/Weekly Review.md")) },
             SeedFile { path: "Prompts/Extract Key Ideas.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/second-brain/files/Prompts/Extract Key Ideas.md")) }

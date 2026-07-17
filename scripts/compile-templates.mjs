@@ -13,7 +13,7 @@ const DEMO_TEMPLATE_ID = "demo";
 const DEMO_WORKSPACE_ID = "0198-demo";
 const MAX_FILES = 128;
 const MAX_BYTES = 2 * 1024 * 1024;
-const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "avif", "bmp", "tiff"]);
+const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "tiff"]);
 const CODE_EXTENSIONS = new Set([
   "js",
   "jsx",
@@ -41,6 +41,7 @@ const TEXT_BODY_EXTENSIONS = new Set([
   "yml",
   "csv",
   "tsv",
+  "svg",
   ...CODE_EXTENSIONS,
 ]);
 const SQLITE_TYPES = {
@@ -171,6 +172,7 @@ function loadTemplate(root, directoryName) {
   // Declarative dataPackages JSON counts toward the same 2MiB seed budget as flat files.
   totalBytes += Buffer.byteLength(JSON.stringify(dataPackages), "utf8");
   if (totalBytes > MAX_BYTES) throw new Error(`${directoryName}: template exceeds size bound`);
+  warnMissingDefaultDirectories(directoryName, directories, workspaceDefaults);
   validateLinks(
     directoryName,
     directories.map((entry) => entry.path),
@@ -324,6 +326,21 @@ function normalizeWorkspaceDefaults(defaults, template) {
     normalized[key] = normalizeOptionalPath(defaults[key], template, `workspaceDefaults.${key}`);
   }
   return normalized;
+}
+
+function warnMissingDefaultDirectories(template, directories, workspaceDefaults) {
+  // Blank (and similar) templates intentionally declare defaults without folders.
+  if (directories.length === 0) return;
+  const known = new Set(directories.map((entry) => entry.path));
+  for (const key of WORKSPACE_DEFAULT_KEYS) {
+    const value = workspaceDefaults[key];
+    if (typeof value !== "string" || value.length === 0) continue;
+    if (!known.has(value)) {
+      console.warn(
+        `${template}: workspaceDefaults.${key}=${JSON.stringify(value)} is not a seeded directory`,
+      );
+    }
+  }
 }
 
 function normalizeOptionalPath(value, template, label) {
@@ -502,6 +519,7 @@ function resourceKindForPath(path) {
 
 function formatIdForPath(path) {
   const extension = fileExtension(path);
+  if (extension === "svg") return "file:text";
   if (IMAGE_EXTENSIONS.has(extension)) return "file:image";
   if (extension === "pdf") return "file:pdf";
   if (["txt", "md", "markdown", "log", "csv", "tsv"].includes(extension)) return "file:text";
@@ -519,12 +537,12 @@ function demoRowId(row, index) {
   if (typeof row.name === "string") {
     const slug = row.name
       .trim()
-      .split(/\s+/)[0]
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "");
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
     if (slug) return `${DEMO_WORKSPACE_ID}-${slug}`;
   }
-  return `${DEMO_WORKSPACE_ID}-${index}`;
+  return `${DEMO_WORKSPACE_ID}-row-${index}`;
 }
 
 function cellValueForField(value, fieldType) {
@@ -622,6 +640,15 @@ function buildDemoDataApp(template) {
     }
     return { id, values };
   });
+  const rowIds = new Set();
+  for (const row of rows) {
+    if (rowIds.has(row.id)) {
+      throw new Error(
+        `${DEMO_TEMPLATE_ID}: duplicate demo data-app row id ${JSON.stringify(row.id)}`,
+      );
+    }
+    rowIds.add(row.id);
+  }
   return {
     title: packageDef.title,
     default_table: packageDef.table,
@@ -646,11 +673,12 @@ export function emitDemoWorkspace(templates) {
     }
   }
   const snapshot = {
-    root: "/Users/you/Lattice/Workspaces/Personal",
-    title: "Personal",
+    root: "/Users/you/Lattice/Workspaces/First Look",
+    title: "First Look",
     id: DEMO_WORKSPACE_ID,
     capabilities: template.capabilities,
     defaults,
+    sourceTemplate: DEMO_TEMPLATE_ID,
     manifestRevision: "demo:0",
     resources: buildDemoResources(template),
   };

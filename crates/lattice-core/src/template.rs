@@ -176,14 +176,15 @@ impl WorkspaceTemplate {
     }
 
     pub fn parse(id: &str) -> Option<Self> {
-        match id.trim().to_ascii_lowercase().as_str() {
-            "personal" | "default" => Some(Self::Personal),
+        let canonical = resolve_template_id(id)?;
+        match canonical {
+            "personal" => Some(Self::Personal),
             "project" => Some(Self::Project),
             "research" => Some(Self::Research),
-            "data-lab" | "data_lab" | "datalab" | "data" => Some(Self::DataLab),
-            "team" | "work" => Some(Self::Team),
-            "demo" | "sample" | "first-look" => Some(Self::Demo),
-            "blank" | "empty" | "none" => Some(Self::Blank),
+            "data-lab" => Some(Self::DataLab),
+            "team" => Some(Self::Team),
+            "demo" => Some(Self::Demo),
+            "blank" => Some(Self::Blank),
             _ => None,
         }
     }
@@ -308,7 +309,7 @@ fn provision_staged(
         .unwrap_or("workspace");
     let stage = parent.join(format!(".{name}.lattice-stage-{}", uuid::Uuid::now_v7()));
     let result = (|| {
-        let workspace = create_workspace_at(&stage, &plan.title, template, false)?;
+        let workspace = create_workspace_at(&stage, &plan.title, template)?;
         validate_instantiated_template(&workspace)?;
         std::fs::rename(&stage, &plan.target).map_err(|error| Error::io(&plan.target, error))?;
         Workspace::open(&plan.target)
@@ -352,12 +353,8 @@ fn create_workspace_at(
     root: &Path,
     title: &str,
     template: &GeneratedTemplate,
-    manifest_last: bool,
 ) -> Result<Workspace> {
     std::fs::create_dir_all(root).map_err(|error| Error::io(root, error))?;
-    if manifest_last {
-        unreachable!("existing-folder provisioning uses its rollback-aware path");
-    }
     let manifest = manifest_for(title, template);
     let workspace = Workspace::init_with_manifest(root, manifest)?;
     materialize_template(root, template, None, None)?;
@@ -389,16 +386,19 @@ fn materialize_template(
     mut created_files: Option<&mut Vec<PathBuf>>,
     mut created_directories: Option<&mut Vec<PathBuf>>,
 ) -> Result<()> {
+    let date = provision_iso_date();
     for directory in template.directories {
         let path = root.join(directory.path);
         create_directory_tree(&path, root, created_directories.as_deref_mut())?;
     }
     for file in template.files {
-        let path = root.join(file.path);
+        let relative = expand_seed_placeholders(file.path, &date);
+        let path = root.join(&relative);
         if let Some(parent) = path.parent() {
             create_directory_tree(parent, root, created_directories.as_deref_mut())?;
         }
-        atomic_write_file(&path, file.bytes)
+        let bytes = expand_seed_file_bytes(file.bytes, &relative, &date);
+        atomic_write_file(&path, &bytes)
             .map_err(|error| Error::io(&path, std::io::Error::other(error.to_string())))?;
         if let Some(files) = created_files.as_deref_mut() {
             files.push(path);
@@ -408,6 +408,52 @@ fn materialize_template(
         materialize_data_package(root, package, created_directories.as_deref_mut())?;
     }
     Ok(())
+}
+
+fn provision_iso_date() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let days = secs.div_euclid(86_400);
+    let (year, month, day) = civil_from_days(days);
+    format!("{year:04}-{month:02}-{day:02}")
+}
+
+/// Civil date from Unix day count (Howard Hinnant's `civil_from_days`).
+fn civil_from_days(days_since_epoch: i64) -> (i32, u32, u32) {
+    let z = days_since_epoch + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    (y as i32, m as u32, d as u32)
+}
+
+fn expand_seed_placeholders(value: &str, date: &str) -> String {
+    value.replace("{{date}}", date)
+}
+
+fn expand_seed_file_bytes(bytes: &[u8], relative_path: &str, date: &str) -> Vec<u8> {
+    let Ok(text) = std::str::from_utf8(bytes) else {
+        return bytes.to_vec();
+    };
+    if !text.contains("{{date}}") && !text.contains("{{title}}") {
+        return bytes.to_vec();
+    }
+    let title = Path::new(relative_path)
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .filter(|stem| !stem.is_empty())
+        .unwrap_or("Untitled");
+    expand_seed_placeholders(text, date)
+        .replace("{{title}}", title)
+        .into_bytes()
 }
 
 fn materialize_data_package(
@@ -607,6 +653,7 @@ fn create_directory_tree(
 
 fn manifest_for(title: &str, template: &GeneratedTemplate) -> WorkspaceManifest {
     let mut manifest = WorkspaceManifest::new(title);
+    manifest.source_template = Some(template.id.into());
     manifest.capabilities = Capabilities {
         enabled: strings(template.capabilities),
     };
@@ -704,6 +751,31 @@ fn generated(id: &str) -> Option<&'static GeneratedTemplate> {
         .find(|template| template.id == id)
 }
 
+/// Resolve a user-facing template id or alias to a catalog id.
+///
+/// Accepts any id present in [`GENERATED_TEMPLATES`], plus a few historical
+/// aliases (`default` → `personal`, `first-look` → `demo`, …).
+pub fn resolve_template_id(id: &str) -> Option<&'static str> {
+    let normalized = id.trim().to_ascii_lowercase();
+    let canonical = match normalized.as_str() {
+        "default" => "personal",
+        "data_lab" | "datalab" | "data" => "data-lab",
+        "work" => "team",
+        "sample" | "first-look" => "demo",
+        "empty" | "none" => "blank",
+        other => other,
+    };
+    generated(canonical).map(|template| template.id)
+}
+
+/// Catalog ids in declaration order (for CLI help / errors).
+pub fn template_catalog_ids() -> Vec<&'static str> {
+    GENERATED_TEMPLATES
+        .iter()
+        .map(|template| template.id)
+        .collect()
+}
+
 fn strings(values: &[&str]) -> Vec<String> {
     values.iter().map(|value| (*value).to_string()).collect()
 }
@@ -733,6 +805,7 @@ pub fn apply_template(root: &Path, template: WorkspaceTemplate) -> Result<()> {
         Some(&mut created_directories),
     )?;
     let mut manifest = Workspace::open(root)?.manifest().clone();
+    manifest.source_template = Some(generated.id.into());
     manifest.capabilities = Capabilities {
         enabled: strings(generated.capabilities),
     };
@@ -744,12 +817,15 @@ pub fn apply_template(root: &Path, template: WorkspaceTemplate) -> Result<()> {
 pub fn init_with_template(
     root: &Path,
     title: impl Into<String>,
-    template: WorkspaceTemplate,
+    template_id: &str,
 ) -> Result<Workspace> {
+    let template_id = resolve_template_id(template_id).ok_or_else(|| Error::TemplateValidation {
+        message: format!("unknown workspace template {template_id:?}"),
+    })?;
     WorkspaceProvisioner::provision(&WorkspaceCreationPlan {
         target: root.to_path_buf(),
         title: title.into(),
-        template_id: template.id().into(),
+        template_id: template_id.into(),
         mode: if root.exists() {
             WorkspaceCreationMode::ExistingDirectory
         } else {
@@ -890,13 +966,18 @@ mod tests {
         );
 
         let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("Personal");
         let outcome = WorkspaceProvisioner::provision(&WorkspaceCreationPlan {
-            target: directory.path().join("Personal"),
+            target: root.clone(),
             title: "Personal".into(),
             template_id: "personal".into(),
             mode: WorkspaceCreationMode::NewDirectory,
         })
         .unwrap();
+        assert_eq!(
+            outcome.workspace.manifest().source_template.as_deref(),
+            Some("personal")
+        );
         assert_eq!(
             outcome
                 .workspace
@@ -924,6 +1005,12 @@ mod tests {
                 .as_deref(),
             Some("Archive")
         );
+        let date = provision_iso_date();
+        let journal = root.join(format!("Journal/{date}.md"));
+        assert!(journal.is_file(), "missing {}", journal.display());
+        let body = std::fs::read_to_string(&journal).unwrap();
+        assert!(body.contains(&date));
+        assert!(!body.contains("{{date}}"));
         assert_eq!(
             WorkspaceTemplate::Blank.descriptor().category,
             "Data & Advanced"
@@ -939,6 +1026,17 @@ mod tests {
         );
         assert_eq!(WorkspaceTemplate::Demo.descriptor().category, "Sample");
         assert_eq!(WorkspaceTemplate::Team.descriptor().category, "Work");
+    }
+
+    #[test]
+    fn resolve_template_id_accepts_catalog_ids_and_aliases() {
+        assert_eq!(resolve_template_id("second-brain"), Some("second-brain"));
+        assert_eq!(resolve_template_id("dev-notebook"), Some("dev-notebook"));
+        assert_eq!(resolve_template_id("first-look"), Some("demo"));
+        assert_eq!(resolve_template_id("default"), Some("personal"));
+        assert_eq!(resolve_template_id("nope"), None);
+        assert!(template_catalog_ids().contains(&"second-brain"));
+        assert!(template_catalog_ids().contains(&"dev-notebook"));
     }
 
     #[test]
@@ -1038,7 +1136,7 @@ mod tests {
 
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path().join("ContactsWorkspace");
-        create_workspace_at(&root, "Contacts", &template, false).unwrap();
+        create_workspace_at(&root, "Contacts", &template).unwrap();
 
         let package_path = root.join("Data/Contacts.data");
         let app = DataApp::open(&package_path).unwrap();

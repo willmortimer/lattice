@@ -101,22 +101,46 @@ function generatedDescriptors(): TemplateDescriptor[] {
   });
 }
 
-/** Build a path → purpose map from the embedded template catalog. */
+/** Build a path → purpose map from the embedded template catalog.
+ *
+ * When `templateId` is set, purposes come from that template only. Otherwise
+ * only paths where every defining template agrees on the same purpose are
+ * included (avoids last-writer-wins collisions like Inbox across templates).
+ */
 export function directoryPurposesFromCatalog(
   templateId?: string | null,
 ): Readonly<Record<string, string>> {
-  const purposes: Record<string, string> = {};
-  const templates =
-    templateId == null
-      ? GENERATED_TEMPLATE_CATALOG
-      : GENERATED_TEMPLATE_CATALOG.filter((template) => template.id === templateId);
-  for (const template of templates) {
+  if (templateId != null && templateId !== "") {
+    const purposes: Record<string, string> = {};
+    const template = GENERATED_TEMPLATE_CATALOG.find((entry) => entry.id === templateId);
+    if (!template) return purposes;
     for (const directory of template.directories) {
       const normalized = normalizeDirectory(directory);
       if (normalized.purpose) purposes[normalized.path] = normalized.purpose;
     }
+    return purposes;
   }
-  return purposes;
+
+  const candidates = new Map<string, Set<string>>();
+  for (const template of GENERATED_TEMPLATE_CATALOG) {
+    for (const directory of template.directories) {
+      const normalized = normalizeDirectory(directory);
+      if (!normalized.purpose) continue;
+      let purposes = candidates.get(normalized.path);
+      if (!purposes) {
+        purposes = new Set();
+        candidates.set(normalized.path, purposes);
+      }
+      purposes.add(normalized.purpose);
+    }
+  }
+  const consensus: Record<string, string> = {};
+  for (const [path, purposes] of candidates) {
+    if (purposes.size === 1) {
+      consensus[path] = purposes.values().next().value!;
+    }
+  }
+  return consensus;
 }
 
 export async function listTemplates(): Promise<TemplateDescriptor[]> {
@@ -143,6 +167,7 @@ export async function provisionWorkspace(input: {
         ],
         capabilities: ["pages", "canvas", "sqlite"],
         defaults: { quickNoteDirectory: "Inbox" },
+        sourceTemplate: input.template,
         manifestRevision: "demo:0",
       },
       defaultWorkspaceStatus: input.setDefault ? "updated" : "not-requested",

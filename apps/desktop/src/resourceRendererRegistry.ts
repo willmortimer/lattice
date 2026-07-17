@@ -211,7 +211,7 @@ export class ResourceRendererRegistry<TContext, TSession> {
   }
 }
 
-const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "avif", "bmp", "tiff"]);
+const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "tiff"]);
 const CODE_EXTENSIONS = new Set(["js", "jsx", "ts", "tsx", "rs", "py", "go", "java", "c", "cpp", "h", "css", "html", "sql", "sh"]);
 
 /** Stable browser/native-independent format IDs for ordinary files. */
@@ -219,6 +219,7 @@ export function deriveResourceFormatId(resource: Resource): string {
   if (resource.formatId) return resource.formatId;
   if (resource.kind !== "file") return resource.kind;
   const extension = resource.path.split(".").pop()?.toLowerCase() ?? "";
+  if (extension === "svg") return "file:text";
   if (IMAGE_EXTENSIONS.has(extension)) return "file:image";
   if (extension === "pdf") return "file:pdf";
   if (["txt", "md", "markdown", "log"].includes(extension)) return "file:text";

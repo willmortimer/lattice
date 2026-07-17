@@ -4,7 +4,7 @@
 //! - `{{title}}` — page title
 //! - `{{date}}` — ISO calendar date `YYYY-MM-DD` (UTC)
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use lattice_storage::WorkspaceStore;
@@ -69,29 +69,6 @@ pub fn resolve_page_create_content(
         .unwrap_or_else(|| title_from_page_path(page_path));
     let date = utc_iso_date(now);
     Ok(instantiate_template(&body, &resolved_title, &date))
-}
-
-/// Quick Note default template lookup.
-///
-/// Convention: prefer `<template_directory>/Daily.md` when `template_directory`
-/// is configured; otherwise use the workspace-relative path `Templates/Daily.md`
-/// when that file exists. Returns `None` when neither candidate is present.
-pub fn resolve_quick_note_template_path(
-    store: &dyn WorkspaceStore,
-    template_directory: Option<&str>,
-) -> Option<PathBuf> {
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Some(dir) = template_directory {
-        let trimmed = dir.trim().trim_matches('/');
-        if !trimmed.is_empty() {
-            candidates.push(PathBuf::from(format!("{trimmed}/Daily.md")));
-        }
-    }
-    let convention = PathBuf::from("Templates/Daily.md");
-    if !candidates.iter().any(|path| path == &convention) {
-        candidates.push(convention);
-    }
-    candidates.into_iter().find(|path| store.metadata(path).is_ok())
 }
 
 /// Civil date from Unix day count (Howard Hinnant's `civil_from_days`).

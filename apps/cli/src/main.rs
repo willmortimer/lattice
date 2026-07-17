@@ -7,8 +7,8 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use lattice_commands::{Command as Semantic, CommandEngine, Transaction};
 use lattice_core::{
-    ensure_lattice_home, init_with_template, initialize_active_lattice_home, Diagnostic, Resource,
-    Severity, Workspace, WorkspaceTemplate,
+    ensure_lattice_home, init_with_template, initialize_active_lattice_home, resolve_template_id,
+    template_catalog_ids, Diagnostic, Resource, Severity, Workspace,
 };
 use lattice_data::{parse_csv_file, CellValue, DataApp};
 use lattice_index::{Backlink, SearchHit, WorkspaceIndex};
@@ -476,15 +476,16 @@ fn cmd_init(path: Option<PathBuf>, title: Option<String>, template: String) -> R
         Some(t) => t,
         None => default_title(&root)?,
     };
-    let template = WorkspaceTemplate::parse(&template).with_context(|| {
+    let template_id = resolve_template_id(&template).with_context(|| {
         format!(
-            "unknown template {template:?}; expected personal, project, research, second-brain, data-lab, dev-notebook, team, demo, or blank"
+            "unknown template {template:?}; expected {}",
+            template_catalog_ids().join(", ")
         )
     })?;
-    let ws = init_with_template(&root, title, template)?;
+    let ws = init_with_template(&root, title, template_id)?;
     println!("created workspace at {}", ws.root().display());
     println!("id: {}", ws.manifest().id);
-    println!("template: {}", template.id());
+    println!("template: {template_id}");
     Ok(ExitCode::SUCCESS)
 }
 

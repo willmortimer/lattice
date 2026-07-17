@@ -48,10 +48,10 @@ pub use resource_runtime::{
     DEFAULT_RESOURCE_EDIT_BYTES, MAX_FORMAT_PROBE_BYTES, MAX_RESOURCE_RANGE_BYTES,
 };
 pub use template::{
-    apply_template, init_with_template, DefaultWorkspaceStatus, ProvisionDiagnostic,
-    TemplateDescriptor, TemplateDirectory, TemplateVisibility, WorkspaceCreationMode,
-    WorkspaceCreationPlan,
-    WorkspaceProvisionOutcome, WorkspaceProvisioner, WorkspaceTemplate,
+    apply_template, init_with_template, resolve_template_id, template_catalog_ids,
+    DefaultWorkspaceStatus, ProvisionDiagnostic, TemplateDescriptor, TemplateDirectory,
+    TemplateVisibility, WorkspaceCreationMode, WorkspaceCreationPlan, WorkspaceProvisionOutcome,
+    WorkspaceProvisioner, WorkspaceTemplate,
 };
 pub use validate::{Diagnostic, Severity};
 pub use watcher::{WorkspaceEvent, WorkspaceWatcher};
