@@ -103,6 +103,9 @@ pub enum Error {
     #[error("revision payload for {path} is unavailable after retention cleanup")]
     RevisionPayloadUnavailable { path: PathBuf },
 
+    #[error("revision payload object {hash} is unavailable after retention cleanup")]
+    RevisionObjectUnavailable { hash: String },
+
     #[error("failed to (de)serialize command: {0}")]
     Json(#[from] serde_json::Error),
 
