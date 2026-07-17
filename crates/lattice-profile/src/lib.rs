@@ -11,6 +11,8 @@ pub use settings::{
 };
 pub use state::{DesktopSession, ProfileStateStore, RecentWorkspace};
 
+pub const LATTICE_DEV_HOME_ENV: &str = "LATTICE_DEV_HOME";
+pub const LATTICE_HOME_ENV: &str = "LATTICE_HOME";
 pub const LATTICE_HOME_NAME: &str = "Lattice";
 pub const WORKSPACES_DIR_NAME: &str = "Workspaces";
 pub const SETTINGS_DIR_NAME: &str = "Settings";
@@ -68,8 +70,19 @@ impl LatticeHome {
     }
 }
 
+pub fn lattice_dev_home_enabled() -> bool {
+    std::env::var(LATTICE_DEV_HOME_ENV)
+        .map(|value| !value.is_empty())
+        .unwrap_or(false)
+}
+
 pub fn lattice_home_path() -> Result<PathBuf> {
-    if let Ok(override_path) = std::env::var("LATTICE_HOME") {
+    if let Ok(override_path) = std::env::var(LATTICE_DEV_HOME_ENV) {
+        if !override_path.is_empty() {
+            return Ok(PathBuf::from(override_path));
+        }
+    }
+    if let Ok(override_path) = std::env::var(LATTICE_HOME_ENV) {
         return Ok(PathBuf::from(override_path));
     }
     let home = dirs::home_dir().ok_or_else(|| Error::HomeUnavailable)?;
@@ -143,11 +156,24 @@ mod tests {
     fn ensures_settings_state_and_workspace_directories() {
         let _guard = env_lock();
         let directory = tempfile::tempdir().unwrap();
-        std::env::set_var("LATTICE_HOME", directory.path());
+        std::env::set_var(LATTICE_HOME_ENV, directory.path());
         let home = ensure_profile_layout().unwrap();
         assert!(home.settings.is_dir());
         assert!(home.state.is_dir());
         assert!(home.workspaces.is_dir());
-        std::env::remove_var("LATTICE_HOME");
+        std::env::remove_var(LATTICE_HOME_ENV);
+    }
+
+    #[test]
+    fn lattice_dev_home_takes_precedence_over_lattice_home() {
+        let _guard = env_lock();
+        let dev = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        std::env::set_var(LATTICE_DEV_HOME_ENV, dev.path());
+        std::env::set_var(LATTICE_HOME_ENV, home.path());
+        assert!(lattice_dev_home_enabled());
+        assert_eq!(lattice_home_path().unwrap(), dev.path());
+        std::env::remove_var(LATTICE_DEV_HOME_ENV);
+        std::env::remove_var(LATTICE_HOME_ENV);
     }
 }

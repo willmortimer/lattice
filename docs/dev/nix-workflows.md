@@ -59,7 +59,7 @@ Run them from the repo root (they use relative paths).
 | `docs-sync` | regenerate `site/src/content/docs/` from `docs/` |
 | `compile-theme` | compile `themes/*.theme.yaml` → desktop/site CSS (+ Pixi) tokens |
 | `compile-templates` | validate template packages → embedded Rust and browser catalogs |
-| `desktop-dev` | Native window **+ Vite HMR** on :5173 (frontend hot-reload) |
+| `desktop-dev` | Native window **+ Vite HMR** on :5173 (frontend hot-reload); seeds **First Look** in `target/dev-home` |
 | `desktop-web` | Browser-only React UI on :5173 (demo workspace; no Tauri) |
 | `desktop` | Native window **without Vite** — reuses `apps/desktop/dist` if present, else builds once |
 | `desktop-build` | release binary, unbundled (`tauri build --no-bundle`) |
@@ -86,7 +86,7 @@ Seeing Vite on 5173 alongside the native window is expected for `desktop-dev`. P
 
 ### Lattice home directory
 
-First-run (**Create Lattice home**) creates:
+Production first-run (**Create Lattice home**) creates:
 
 ```text
 ~/Lattice/                 # Lattice home (user-level, not a workspace)
@@ -103,9 +103,33 @@ First-run (**Create Lattice home**) creates:
     └── desktop.sqlite     # recents, sessions, and shell state
 ```
 
-`Personal` is the workspace folder; `Home.md` is just a page inside it. Gallery
-templates are `personal`, `project`, `research`, `data-lab`, and `blank`.
-`demo` is the First Look sample; `team` remains a hidden legacy identifier.
+`nix run .#desktop-dev` (and `pnpm --filter @lattice/desktop tauri:dev`) set
+`LATTICE_DEV_HOME=target/dev-home` so local Tauri development uses an isolated
+profile under the repo instead of `~/Lattice`. First-run there seeds the
+**First Look** demo template:
+
+```text
+target/dev-home/
+├── Workspaces/
+│   └── First Look/        # demo / kitchen-sink template
+│       ├── lattice.yaml
+│       ├── Home.md
+│       ├── CRM.data
+│       ├── Product/
+│       └── …
+├── Settings/
+└── State/
+```
+
+Delete `target/dev-home` to regenerate the dev profile from scratch. Your real
+`~/Lattice` profile is untouched.
+
+`Personal` is the production workspace folder; `Home.md` is just a page inside
+it. Gallery templates are `personal`, `project`, `research`, `data-lab`, and
+`blank`. `demo` is the First Look sample; `team` remains a hidden legacy
+identifier.
+
+See [environment.md](./environment.md) for `LATTICE_DEV_HOME` and `LATTICE_HOME`.
 
 ## Troubleshooting
 
@@ -126,4 +150,4 @@ templates are `personal`, `project`, `research`, `data-lab`, and `blank`.
   exposed as both flake `apps` and dev-shell `lattice-*` commands.
 - [.envrc](../../.envrc) — `use flake`, for direnv users.
 - `flake.lock` — pinned nixpkgs; update deliberately with `nix flake update`.
-- [environment.md](./environment.md) — env vars (none required today).
+- [environment.md](./environment.md) — env vars (`LATTICE_DEV_HOME`, `LATTICE_HOME`, etc.).
