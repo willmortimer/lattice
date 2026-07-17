@@ -12,6 +12,7 @@ import DataEditor, {
 } from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { RecordDetailPanel } from "./RecordDetailPanel";
 import {
   cellValueToDisplay,
   cloneSnapshot,
@@ -111,6 +112,8 @@ export function DataTableView({
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [theme, setTheme] = useState<Partial<Theme>>(() => gridTheme());
   const [visibleCellCount, setVisibleCellCount] = useState(0);
+  const [detailRowId, setDetailRowId] = useState<string | null>(null);
+  const [gridSelection, setGridSelection] = useState<GridSelection | undefined>(undefined);
   const revisionRef = useRef(snapshot.package_revision);
   const snapshotRef = useRef(snapshot);
 
@@ -126,6 +129,8 @@ export function DataTableView({
     snapshotRef.current = next;
     setStale(false);
     setError(null);
+    setDetailRowId(null);
+    setGridSelection(undefined);
   }, [initialSnapshot, relPath]);
 
   useEffect(() => {
@@ -189,17 +194,11 @@ export function DataTableView({
     setError(message);
   }, []);
 
-  const commitCell = useCallback(
-    async (row: DataRow, column: DataColumn, raw: string) => {
-      const nextValue = displayToCellValue(raw, column.field_type as FieldType);
-      const current = row.values[column.name];
-      if (cellValueToDisplay(current) === cellValueToDisplay(nextValue)) {
+  const updateRecordValues = useCallback(
+    async (row: DataRow, values: Record<string, CellValue>) => {
+      if (Object.keys(values).length === 0) {
         return;
       }
-
-      const values: Record<string, CellValue> = {
-        [column.name]: nextValue,
-      };
 
       if (demoMutate) {
         const currentSnapshot = snapshotRef.current;
@@ -207,7 +206,7 @@ export function DataTableView({
           candidate.id === row.id
             ? {
                 ...candidate,
-                values: { ...candidate.values, [column.name]: nextValue },
+                values: { ...candidate.values, ...values },
               }
             : candidate,
         );
@@ -239,7 +238,7 @@ export function DataTableView({
               candidate.id === row.id
                 ? {
                     ...candidate,
-                    values: { ...candidate.values, [column.name]: nextValue },
+                    values: { ...candidate.values, ...values },
                   }
                 : candidate,
             ),
@@ -252,11 +251,24 @@ export function DataTableView({
         setError(null);
       } catch (err) {
         handleMutationError(err);
+        throw err;
       } finally {
         setBusy(false);
       }
     },
     [applySnapshot, demoMutate, handleMutationError, relPath, root],
+  );
+
+  const commitCell = useCallback(
+    async (row: DataRow, column: DataColumn, raw: string) => {
+      const nextValue = displayToCellValue(raw, column.field_type as FieldType);
+      const current = row.values[column.name];
+      if (cellValueToDisplay(current) === cellValueToDisplay(nextValue)) {
+        return;
+      }
+      await updateRecordValues(row, { [column.name]: nextValue });
+    },
+    [updateRecordValues],
   );
 
   const addRow = useCallback(async () => {
@@ -374,6 +386,50 @@ export function DataTableView({
     }
     return rows.slice(0, preferences.pageSize);
   }, [filters, preferences.pageSize, snapshot.rows, sortDirection, sortField]);
+
+  const selectedGridRow = useMemo(() => {
+    const currentRow = gridSelection?.current?.cell[1];
+    if (currentRow !== undefined) {
+      return displayRows[currentRow];
+    }
+    const selectedRows = gridSelection?.rows.toArray() ?? [];
+    if (selectedRows.length > 0) {
+      return displayRows[selectedRows[0]];
+    }
+    return undefined;
+  }, [displayRows, gridSelection]);
+
+  const detailRow = useMemo(() => {
+    if (!detailRowId) return undefined;
+    return (
+      displayRows.find((row) => row.id === detailRowId) ??
+      snapshot.rows.find((row) => row.id === detailRowId)
+    );
+  }, [detailRowId, displayRows, snapshot.rows]);
+
+  useEffect(() => {
+    if (detailRowId && !detailRow) {
+      setDetailRowId(null);
+    }
+  }, [detailRow, detailRowId]);
+
+  const openRecordDetail = useCallback((row: DataRow) => {
+    setDetailRowId(row.id);
+  }, []);
+
+  const handleGridSelectionChange = useCallback(
+    (selection: GridSelection) => {
+      setGridSelection(selection);
+      const rowIndex =
+        selection.current?.cell[1] ?? selection.rows.toArray()[0];
+      if (rowIndex === undefined) return;
+      const row = displayRows[rowIndex];
+      if (row) {
+        setDetailRowId(row.id);
+      }
+    },
+    [displayRows],
+  );
 
   const gridColumns = useMemo<GridColumn[]>(
     () =>
@@ -593,6 +649,14 @@ export function DataTableView({
           </button>
           <button
             type="button"
+            className="secondary-button"
+            onClick={() => selectedGridRow && openRecordDetail(selectedGridRow)}
+            disabled={busy || !selectedGridRow}
+          >
+            Open record
+          </button>
+          <button
+            type="button"
             className="secondary-button data-table-add"
             onClick={() => void addRow()}
             disabled={busy}
@@ -672,60 +736,81 @@ export function DataTableView({
 
       {error && <p className="error-text">{error}</p>}
 
-      <div className="data-grid-frame">
-        {displayRows.length === 0 ? (
-          <div className="data-table-empty">No rows match this view.</div>
-        ) : (
-          <DataEditor
-            width="100%"
-            height="100%"
-            columns={gridColumns}
-            rows={displayRows.length}
-            getCellContent={getCellContent}
-            onCellEdited={handleCellEdited}
-            onRowAppended={async () => {
-              await addRow();
-              return "bottom" as const;
-            }}
-            trailingRowOptions={{ hint: "Add row", sticky: true }}
-            rowMarkers={preferences.showRowNumbers ? "both" : "checkbox-visible"}
-            rowHeight={
-              preferences.rowHeight === "compact"
-                ? 26
-                : preferences.rowHeight === "spacious"
-                  ? 42
-                  : 34
-            }
-            headerHeight={34}
-            freezeColumns={visibleColumns[0]?.name === "id" ? 1 : 0}
-            smoothScrollX
-            smoothScrollY
-            rangeSelect="multi-rect"
-            rowSelect="multi"
-            getCellsForSelection
-            onDelete={(selection) => {
-              void deleteSelectedRows(selection);
-              return false;
-            }}
-            onHeaderClicked={(columnIndex) => {
-              const column = visibleColumns[columnIndex];
-              if (column) handleSort(column.name);
-            }}
-            onHeaderContextMenu={(columnIndex, event) => {
-              event.preventDefault();
-              const column = visibleColumns[columnIndex];
-              if (column?.name !== "id") {
-                setHiddenColumns((current) => new Set([...current, column.name]));
+      <div
+        className={`data-table-main${detailRow ? " data-table-main--detail-open" : ""}`}
+      >
+        <div className="data-grid-frame">
+          {displayRows.length === 0 ? (
+            <div className="data-table-empty">No rows match this view.</div>
+          ) : (
+            <DataEditor
+              width="100%"
+              height="100%"
+              columns={gridColumns}
+              rows={displayRows.length}
+              getCellContent={getCellContent}
+              onCellEdited={handleCellEdited}
+              gridSelection={gridSelection}
+              onGridSelectionChange={handleGridSelectionChange}
+              onCellActivated={([, rowIndex]) => {
+                const row = displayRows[rowIndex];
+                if (row) openRecordDetail(row);
+              }}
+              onRowAppended={async () => {
+                await addRow();
+                return "bottom" as const;
+              }}
+              trailingRowOptions={{ hint: "Add row", sticky: true }}
+              rowMarkers={preferences.showRowNumbers ? "both" : "checkbox-visible"}
+              rowHeight={
+                preferences.rowHeight === "compact"
+                  ? 26
+                  : preferences.rowHeight === "spacious"
+                    ? 42
+                    : 34
               }
-            }}
-            onColumnResize={(column, newSize) => {
-              const id = column.id;
-              if (id) setColumnWidths((current) => ({ ...current, [id]: newSize }));
-            }}
-            onVisibleRegionChanged={(range) =>
-              setVisibleCellCount(range.width * range.height)
-            }
-            theme={theme}
+              headerHeight={34}
+              freezeColumns={visibleColumns[0]?.name === "id" ? 1 : 0}
+              smoothScrollX
+              smoothScrollY
+              rangeSelect="multi-rect"
+              rowSelect="multi"
+              getCellsForSelection
+              onDelete={(selection) => {
+                void deleteSelectedRows(selection);
+                return false;
+              }}
+              onHeaderClicked={(columnIndex) => {
+                const column = visibleColumns[columnIndex];
+                if (column) handleSort(column.name);
+              }}
+              onHeaderContextMenu={(columnIndex, event) => {
+                event.preventDefault();
+                const column = visibleColumns[columnIndex];
+                if (column?.name !== "id") {
+                  setHiddenColumns((current) => new Set([...current, column.name]));
+                }
+              }}
+              onColumnResize={(column, newSize) => {
+                const id = column.id;
+                if (id) setColumnWidths((current) => ({ ...current, [id]: newSize }));
+              }}
+              onVisibleRegionChanged={(range) =>
+                setVisibleCellCount(range.width * range.height)
+              }
+              theme={theme}
+            />
+          )}
+        </div>
+
+        {detailRow && (
+          <RecordDetailPanel
+            row={detailRow}
+            columns={snapshot.columns}
+            readOnly={busy || stale}
+            saving={busy}
+            onClose={() => setDetailRowId(null)}
+            onSave={(values) => updateRecordValues(detailRow, values)}
           />
         )}
       </div>
