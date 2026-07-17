@@ -17,6 +17,85 @@ export interface TreeFile {
 
 export type TreeNode = TreeFolder | TreeFile;
 
+/** Fixed row height for the virtualized sidebar tree (must match CSS). */
+export const RESOURCE_TREE_ROW_HEIGHT = 30;
+
+export type FlatRow =
+  | {
+      type: "folder";
+      depth: number;
+      path: string;
+      name: string;
+      folder: TreeFolder;
+    }
+  | {
+      type: "file";
+      depth: number;
+      path: string;
+      name: string;
+      resource: Resource;
+    }
+  | {
+      type: "empty-folder";
+      depth: number;
+      path: string;
+      name: string;
+      folder: TreeFolder;
+    };
+
+/**
+ * Depth-first list of visible tree rows, honoring collapsed folder paths.
+ * Folder rows always precede their visible descendants; sibling order matches
+ * `buildResourceTree` (folders before files, alphabetical within each group).
+ */
+export function flattenVisibleTree(
+  nodes: readonly TreeNode[],
+  collapsed: ReadonlySet<string>,
+): FlatRow[] {
+  const rows: FlatRow[] = [];
+
+  function visit(nodeList: readonly TreeNode[], depth: number): void {
+    for (const node of nodeList) {
+      if (node.type === "file") {
+        rows.push({
+          type: "file",
+          depth,
+          path: node.resource.path,
+          name: node.name,
+          resource: node.resource,
+        });
+        continue;
+      }
+
+      rows.push({
+        type: "folder",
+        depth,
+        path: node.path,
+        name: node.name,
+        folder: node,
+      });
+
+      if (collapsed.has(node.path)) continue;
+
+      if (node.children.length === 0) {
+        rows.push({
+          type: "empty-folder",
+          depth: depth + 1,
+          path: node.path,
+          name: node.name,
+          folder: node,
+        });
+        continue;
+      }
+
+      visit(node.children, depth + 1);
+    }
+  }
+
+  visit(nodes, 0);
+  return rows;
+}
+
 /**
  * Build a collapsible folder tree from a flat resource listing (as
  * returned by `list_resources`), grouping by `/`-separated path segments.

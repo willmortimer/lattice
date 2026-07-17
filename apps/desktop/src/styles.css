@@ -374,6 +374,38 @@ html[data-platform="macos"] .empty-state {
   gap: 1px;
 }
 
+.resource-tree-virtual {
+  --resource-tree-row-height: 30px;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+}
+
+.resource-tree-virtual-spacer {
+  position: relative;
+  width: 100%;
+}
+
+.resource-tree-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  box-sizing: border-box;
+  height: var(--resource-tree-row-height);
+  min-height: var(--resource-tree-row-height);
+  max-height: var(--resource-tree-row-height);
+}
+
+.resource-tree-empty-row {
+  display: flex;
+  align-items: center;
+  padding-top: 0;
+  padding-bottom: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .resource-list-empty {
   color: var(--lt-muted);
   font-size: 12px;
@@ -387,7 +419,7 @@ html[data-platform="macos"] .empty-state {
   background: transparent;
   border: none;
   border-radius: var(--lt-radius-sm);
-  padding: 6px 9px;
+  padding: 0 9px;
   color: var(--lt-text-soft);
   text-align: left;
   width: 100%;
@@ -1116,7 +1148,7 @@ html[data-platform="macos"] .empty-state {
   background: transparent;
   border: none;
   border-radius: var(--lt-radius-sm);
-  padding: 6px 9px;
+  padding: 0 9px;
   width: 100%;
   text-align: left;
   color: var(--lt-muted);

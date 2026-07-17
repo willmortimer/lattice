@@ -1,10 +1,15 @@
-import { useEffect, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 
 import { fileTitle } from "./controllers/useResourceController";
 import { KindMark, KIND_LABELS } from "./KindMark";
 import { readResourceDragPayload, writeResourceDragPayload } from "./lib/resourceDrag";
 import { folderTreeIcon, resourceTreeIcon } from "./lib/resourceIcons";
-import { buildResourceTree, type TreeNode } from "./lib/resourceTree";
+import {
+  buildResourceTree,
+  flattenVisibleTree,
+  RESOURCE_TREE_ROW_HEIGHT,
+  type FlatRow,
+} from "./lib/resourceTree";
 import { validateMoveResource } from "./lib/treeOps";
 import type { Resource } from "./types";
 
@@ -30,6 +35,7 @@ const INDENT_BASE_PX = 9;
 const INDENT_STEP_PX = 16;
 const TREE_ICON_SIZE = 15;
 const FOLDER_ICON_SIZE = 14;
+const OVERSCAN = 8;
 
 function ResourceTreeRowIcon({ resource }: { resource: Resource }) {
   const decision = resourceTreeIcon(resource);
@@ -50,12 +56,50 @@ function acceptsResourceDrop(
   return validateMoveResource(from, toDir, resources).ok;
 }
 
+function useResourceListScroll() {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const scrollParentRef = useRef<HTMLElement | null>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+
+    const parent = root.closest(".resource-list");
+    if (!(parent instanceof HTMLElement)) return;
+
+    scrollParentRef.current = parent;
+
+    const sync = () => {
+      setScrollTop(parent.scrollTop);
+      setViewportHeight(parent.clientHeight);
+    };
+
+    sync();
+    parent.addEventListener("scroll", sync, { passive: true });
+    const observer = new ResizeObserver(sync);
+    observer.observe(parent);
+
+    return () => {
+      parent.removeEventListener("scroll", sync);
+      observer.disconnect();
+      if (scrollParentRef.current === parent) scrollParentRef.current = null;
+    };
+  }, []);
+
+  return { rootRef, scrollParentRef, scrollTop, viewportHeight };
+}
+
 /**
  * Collapsible folder tree over a flat resource listing — replaces the
  * former flat `resource-list`. Folders group by path segment (sorted
  * before files, both alphabetically within a level; see
  * `lib/resourceTree`). Collapse state persists per workspace in the
  * Lattice profile when `workspaceKey` and change handlers are provided.
+ *
+ * Visible rows are flattened and windowed so large workspaces only mount
+ * rows near the `.resource-list` scroll viewport.
  */
 export function ResourceTree({
   resources,
@@ -77,6 +121,17 @@ export function ResourceTree({
   const [renameDraft, setRenameDraft] = useState("");
   const [dropTargetPath, setDropTargetPath] = useState<string | null>(null);
   const collapsed = collapsedPaths ?? localCollapsed;
+  const { rootRef, scrollParentRef, scrollTop, viewportHeight } = useResourceListScroll();
+
+  const tree = useMemo(() => buildResourceTree(resources), [resources]);
+  const rows = useMemo(() => flattenVisibleTree(tree, collapsed), [collapsed, tree]);
+
+  const firstVisible = Math.max(0, Math.floor(scrollTop / RESOURCE_TREE_ROW_HEIGHT) - OVERSCAN);
+  const lastVisible = Math.min(
+    rows.length,
+    Math.ceil((scrollTop + viewportHeight) / RESOURCE_TREE_ROW_HEIGHT) + OVERSCAN,
+  );
+  const visibleRows = rows.slice(firstVisible, lastVisible);
 
   function updateCollapsed(updater: (previous: ReadonlySet<string>) => ReadonlySet<string>) {
     const previous = collapsedPaths ?? localCollapsed;
@@ -95,6 +150,23 @@ export function ResourceTree({
       return next;
     });
   }, [revealPath]);
+
+  useEffect(() => {
+    if (!revealPath) return;
+    const index = rows.findIndex((row) => row.type === "file" && row.resource.path === revealPath);
+    if (index < 0) return;
+
+    const parent = scrollParentRef.current;
+    if (!parent) return;
+
+    const rowTop = index * RESOURCE_TREE_ROW_HEIGHT;
+    const rowBottom = rowTop + RESOURCE_TREE_ROW_HEIGHT;
+    if (rowTop < parent.scrollTop) {
+      parent.scrollTop = rowTop;
+    } else if (rowBottom > parent.scrollTop + parent.clientHeight) {
+      parent.scrollTop = rowBottom - parent.clientHeight;
+    }
+  }, [revealPath, rows, scrollParentRef]);
 
   useEffect(() => {
     if (!renameRequest) return;
@@ -156,19 +228,24 @@ export function ResourceTree({
     onMoveToFolder?.(payload.path, folderPath);
   }
 
-  function renderNode(node: TreeNode, depth: number): ReactNode {
-    const indent = INDENT_BASE_PX + depth * INDENT_STEP_PX;
+  function renderRow(row: FlatRow, index: number) {
+    const indent = INDENT_BASE_PX + row.depth * INDENT_STEP_PX;
+    const style = {
+      top: index * RESOURCE_TREE_ROW_HEIGHT,
+      paddingLeft: indent,
+    };
 
-    if (node.type === "file") {
-      const { resource } = node;
+    if (row.type === "file") {
+      const { resource } = row;
       const isEditing = editingPath === resource.path;
       return (
         <button
-          key={resource.path}
+          key={`file:${resource.path}`}
           className={
-            "resource-item" + (selectedPath === resource.path ? " resource-item-active" : "")
+            "resource-item resource-tree-row"
+            + (selectedPath === resource.path ? " resource-item-active" : "")
           }
-          style={{ paddingLeft: indent }}
+          style={style}
           aria-label={`${KIND_LABELS[resource.kind]}: ${resource.path}`}
           title={resource.path}
           draggable={!isEditing}
@@ -204,64 +281,70 @@ export function ResourceTree({
                 beginRename(resource);
               }}
             >
-              {node.name}
+              {row.name}
             </span>
           )}
         </button>
       );
     }
 
-    const isCollapsed = collapsed.has(node.path);
+    if (row.type === "empty-folder") {
+      return (
+        <div
+          key={`empty:${row.path}`}
+          className="resource-list-empty resource-tree-empty-row resource-tree-row"
+          style={style}
+        >
+          {emptyFolderHint(row.path)}
+        </div>
+      );
+    }
+
+    const isCollapsed = collapsed.has(row.path);
     const FolderIcon = folderTreeIcon(isCollapsed);
     return (
-      <div key={node.path} className="tree-folder">
-        <button
-          className={
-            "tree-folder-row"
-            + (dropTargetPath === node.path ? " tree-folder-row-drop-target" : "")
-          }
-          style={{ paddingLeft: indent }}
-          onClick={() => toggle(node.path)}
-          aria-expanded={!isCollapsed}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            onFolderContextMenu?.(node.path);
-          }}
-          onDragOver={(event) => handleFolderDragOver(event, node.path)}
-          onDragLeave={() => {
-            if (dropTargetPath === node.path) setDropTargetPath(null);
-          }}
-          onDrop={(event) => handleFolderDrop(event, node.path)}
-        >
-          <span
-            className={"tree-chevron" + (isCollapsed ? "" : " tree-chevron-open")}
-            aria-hidden="true"
-          />
-          <FolderIcon
-            size={FOLDER_ICON_SIZE}
-            weight="regular"
-            className="resource-tree-folder-icon"
-            aria-hidden
-          />
-          <span className="tree-folder-name">{node.name}</span>
-        </button>
-        {!isCollapsed && (
-          <div className="tree-children">
-            {node.children.length === 0 ? (
-              <div
-                className="resource-list-empty"
-                style={{ paddingLeft: indent + INDENT_STEP_PX }}
-              >
-                {emptyFolderHint(node.path)}
-              </div>
-            ) : (
-              node.children.map((child) => renderNode(child, depth + 1))
-            )}
-          </div>
-        )}
-      </div>
+      <button
+        key={`folder:${row.path}`}
+        className={
+          "tree-folder-row resource-tree-row"
+          + (dropTargetPath === row.path ? " tree-folder-row-drop-target" : "")
+        }
+        style={style}
+        onClick={() => toggle(row.path)}
+        aria-expanded={!isCollapsed}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          onFolderContextMenu?.(row.path);
+        }}
+        onDragOver={(event) => handleFolderDragOver(event, row.path)}
+        onDragLeave={() => {
+          if (dropTargetPath === row.path) setDropTargetPath(null);
+        }}
+        onDrop={(event) => handleFolderDrop(event, row.path)}
+      >
+        <span
+          className={"tree-chevron" + (isCollapsed ? "" : " tree-chevron-open")}
+          aria-hidden="true"
+        />
+        <FolderIcon
+          size={FOLDER_ICON_SIZE}
+          weight="regular"
+          className="resource-tree-folder-icon"
+          aria-hidden
+        />
+        <span className="tree-folder-name">{row.name}</span>
+      </button>
     );
   }
 
-  return <>{buildResourceTree(resources).map((n) => renderNode(n, 0))}</>;
+  return (
+    <div ref={rootRef} className="resource-tree-virtual">
+      <div
+        className="resource-tree-virtual-spacer"
+        style={{ height: rows.length * RESOURCE_TREE_ROW_HEIGHT }}
+      >
+        {visibleRows.map((row, sliceIndex) => renderRow(row, firstVisible + sliceIndex))}
+      </div>
+    </div>
+  );
 }

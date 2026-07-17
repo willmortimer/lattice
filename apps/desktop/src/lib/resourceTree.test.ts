@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { Resource } from "../types";
-import { buildResourceTree, type TreeFolder } from "./resourceTree";
+import { buildResourceTree, flattenVisibleTree, type TreeFolder } from "./resourceTree";
 
 function page(path: string): Resource {
   return { path, kind: "page" };
@@ -70,5 +70,43 @@ describe("buildResourceTree", () => {
     const inbox = tree[0] as TreeFolder;
     expect(inbox.type).toBe("folder");
     expect(inbox.children).toEqual([]);
+  });
+});
+
+describe("flattenVisibleTree", () => {
+  it("flattens an expanded tree depth-first, preserving folder-before-file order", () => {
+    const tree = buildResourceTree([page("Z.md"), page("A/Inner.md"), page("A/Outer.md")]);
+    const rows = flattenVisibleTree(tree, new Set());
+
+    expect(rows.map((row) => row.type)).toEqual(["folder", "file", "file", "file"]);
+    expect(rows.map((row) => row.name)).toEqual(["A", "Inner.md", "Outer.md", "Z.md"]);
+    expect(rows.map((row) => row.depth)).toEqual([0, 1, 1, 0]);
+  });
+
+  it("hides descendants when a folder path is collapsed", () => {
+    const tree = buildResourceTree([page("Notes/A.md"), page("Notes/B.md"), page("Top.md")]);
+    const rows = flattenVisibleTree(tree, new Set(["Notes"]));
+
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.name)).toEqual(["Notes", "Top.md"]);
+    expect(rows.every((row) => row.type !== "file" || !row.path.startsWith("Notes/"))).toBe(true);
+  });
+
+  it("shows an empty-folder row for expanded folders with no children", () => {
+    const tree = buildResourceTree([{ path: "Inbox", kind: "folder" }]);
+    const rows = flattenVisibleTree(tree, new Set());
+
+    expect(rows.map((row) => row.type)).toEqual(["folder", "empty-folder"]);
+    expect(rows[1]?.depth).toBe(1);
+    expect(rows[1]?.path).toBe("Inbox");
+  });
+
+  it("omits empty-folder rows when the folder is collapsed", () => {
+    const tree = buildResourceTree([{ path: "Inbox", kind: "folder" }]);
+    const rows = flattenVisibleTree(tree, new Set(["Inbox"]));
+
+    expect(rows).toEqual([
+      expect.objectContaining({ type: "folder", name: "Inbox", path: "Inbox" }),
+    ]);
   });
 });
