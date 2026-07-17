@@ -7,7 +7,6 @@ import { ResourceTree } from "../ResourceTree";
 import { SearchPane } from "../SearchPane";
 import { KindMark } from "../KindMark";
 import { QUICK_NOTE_SHORTCUT } from "../quickNoteWindow";
-import { showNativeResourceMenu } from "../lib/nativeMenus";
 import { directoryPurposesFromCatalog } from "../lib/templates";
 import { SettingsPage } from "../settings/SettingsPage";
 import { BrandMark } from "../shell/BrandMark";
@@ -58,6 +57,8 @@ export function DesktopShell({ model }: DesktopShellProps) {
     handleCreateWorkspace, openNewWorkspaceDialog, pickWorkspaceFolder, handleNewPage, handleQuickNote,
     handleNewTable, handleImportCsv, handleSelect, handleOpenExternally, handleOpenFile,
     handleKeepIncoming, handleKeepLocal, handleKeepBoth, handleTreeCollapsedPathsChange,
+    handleTreeResourceContextMenu, handleTreeFolderContextMenu, handleTreeRename, handleMoveToFolder,
+    treeRenameRequest,
     navigateHistory, closeTab, reorderTab, beginSidebarResize, commitTitle, updateWorkspaceSettings,
     handleOpenWiki, openLinkTarget,
   } = model;
@@ -254,18 +255,11 @@ export function DesktopShell({ model }: DesktopShellProps) {
               workspaceKey={snapshot.id}
               collapsedPaths={treeCollapsedPaths}
               onCollapsedPathsChange={handleTreeCollapsedPathsChange}
-              onContextMenu={(resource) =>
-                void showNativeResourceMenu({
-                  open: () => void handleSelect(resource),
-                  inspect: () => {
-                    void handleSelect(resource);
-                    setInspectorOpen(true);
-                  },
-                  openExternally: !inBrowser
-                    ? () => void handleOpenExternally(resource)
-                    : undefined,
-                })
-              }
+              onResourceContextMenu={handleTreeResourceContextMenu}
+              onFolderContextMenu={handleTreeFolderContextMenu}
+              onRename={handleTreeRename}
+              onMoveToFolder={(from, toDir) => void handleMoveToFolder(from, toDir)}
+              renameRequest={treeRenameRequest}
               revealPath={revealPath}
             />
           </nav>

@@ -34,11 +34,38 @@ export async function showNativeEditMenu(): Promise<void> {
   await popup(menu);
 }
 
+export interface TreeResourceMenuActions {
+  open: () => void;
+  inspect: () => void;
+  openExternally?: () => void;
+  copyPath: () => void;
+  rename: () => void;
+  duplicate: () => void;
+  delete: () => void;
+}
+
+export interface TreeFolderMenuActions {
+  newPage: () => void;
+  newFolder: () => void;
+  copyPath: () => void;
+}
+
+/** @deprecated Use `showNativeTreeResourceMenu` for sidebar tree rows. */
 export async function showNativeResourceMenu(actions: {
   open: () => void;
   inspect: () => void;
   openExternally?: () => void;
 }): Promise<void> {
+  await showNativeTreeResourceMenu({
+    ...actions,
+    copyPath: () => undefined,
+    rename: () => undefined,
+    duplicate: () => undefined,
+    delete: () => undefined,
+  });
+}
+
+export async function showNativeTreeResourceMenu(actions: TreeResourceMenuActions): Promise<void> {
   if (inBrowser) return;
   const menu = await Menu.new({
     items: [
@@ -50,6 +77,26 @@ export async function showNativeResourceMenu(actions: {
             { text: "Open Externally", action: actions.openExternally },
           ]
         : []),
+      { item: "Separator" },
+      { text: "Copy Path", action: actions.copyPath },
+      { item: "Separator" },
+      { text: "Rename", action: actions.rename },
+      { text: "Duplicate", action: actions.duplicate },
+      { item: "Separator" },
+      { text: "Delete", action: actions.delete },
+    ],
+  });
+  await popup(menu);
+}
+
+export async function showNativeTreeFolderMenu(actions: TreeFolderMenuActions): Promise<void> {
+  if (inBrowser) return;
+  const menu = await Menu.new({
+    items: [
+      { text: "New Page", action: actions.newPage },
+      { text: "New Folder", action: actions.newFolder },
+      { item: "Separator" },
+      { text: "Copy Path", action: actions.copyPath },
     ],
   });
   await popup(menu);

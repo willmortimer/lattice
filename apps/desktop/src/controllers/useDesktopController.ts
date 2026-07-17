@@ -27,6 +27,7 @@ import { useResourceController } from "./useResourceController";
 import { useResourceReconciliation, type ResourceReconciliationController } from "./useResourceReconciliation";
 import { useWorkspaceController } from "./useWorkspaceController";
 import { useDesktopActionsController } from "./desktopActions";
+import { useTreeActionsController } from "./treeActions";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
@@ -80,6 +81,7 @@ export function useDesktopController() {
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
+  const [treeRenameRequest, setTreeRenameRequest] = useState<{ path: string; token: number } | null>(null);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const pageEditorRef = useRef<PageEditorHandle>(null);
@@ -386,8 +388,40 @@ export function useDesktopController() {
   const {
     handleQuickNote, handleNewPage, handleNewTable, handleImportCsv, handleUndo,
     handleOpenExternally, handleOpenFile, handleImportEditorAsset, handleOpenWiki,
-    openLinkTarget, updateWorkspaceSettings,
+    openLinkTarget, updateWorkspaceSettings, createAndOpenPage,
   } = actions;
+
+  const requestTreeRename = useCallback((resource: Resource) => {
+    setTreeRenameRequest((previous) => ({
+      path: resource.path,
+      token: (previous?.token ?? 0) + 1,
+    }));
+  }, []);
+
+  const treeActions = useTreeActionsController({
+    snapshot,
+    snapshotRef,
+    setSnapshot,
+    setError,
+    setBusy,
+    setStatusToast,
+    setRevealPath,
+    setInspectorOpen,
+    refreshResources,
+    handleSelect,
+    renameResource: resourceController.renameResource,
+    clearSelectionIf: resourceController.clearSelectionIf,
+    removeTabs: navigationController.removeTabs,
+    createAndOpenPage,
+    requestTreeRename,
+    handleOpenExternally,
+  });
+  const {
+    handleTreeResourceContextMenu,
+    handleTreeFolderContextMenu,
+    handleTreeRename,
+    handleMoveToFolder,
+  } = treeActions;
 
   function beginSidebarResize(event: React.PointerEvent<HTMLDivElement>) {
     event.preventDefault();
@@ -643,5 +677,7 @@ export function useDesktopController() {
     reorderTab: navigationController.reorderTab,
     beginSidebarResize, commitTitle, updateWorkspaceSettings, handleOpenWiki, openLinkTarget,
     handleKeepIncoming, handleKeepLocal, handleKeepBoth,
+    handleTreeResourceContextMenu, handleTreeFolderContextMenu, handleTreeRename, handleMoveToFolder,
+    treeRenameRequest,
   };
 }

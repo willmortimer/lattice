@@ -1155,6 +1155,32 @@ html[data-platform="macos"] .empty-state {
   color: var(--lt-muted);
 }
 
+.tree-folder-row-drop-target,
+.tree-folder-row-drop-target:hover {
+  background: color-mix(in srgb, var(--lt-accent) 16%, var(--lt-hover));
+  color: var(--lt-text);
+  outline: 1px dashed color-mix(in srgb, var(--lt-accent) 55%, transparent);
+  outline-offset: -1px;
+}
+
+.tree-folder-row-drop-target .resource-tree-folder-icon,
+.tree-folder-row-drop-target:hover .resource-tree-folder-icon {
+  color: var(--lt-accent);
+}
+
+.tree-rename-input {
+  flex: 1;
+  min-width: 0;
+  margin: -2px 0;
+  padding: 1px 4px;
+  border: 1px solid var(--lt-accent);
+  border-radius: var(--lt-radius-xs);
+  background: var(--lt-surface);
+  color: var(--lt-text);
+  font: inherit;
+  font-family: var(--lt-font-mono);
+}
+
 .tree-folder-name {
   overflow: hidden;
   text-overflow: ellipsis;
