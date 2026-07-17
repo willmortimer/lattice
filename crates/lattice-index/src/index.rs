@@ -6,8 +6,10 @@ use std::sync::{
 use std::time::Duration;
 
 use lattice_core::{
-    inspect_resource, read_resource_range, Resource, ResourceEncoding, ResourceFormatProfile,
-    ResourceKind, ResourceLinkResolution, Workspace, MAX_RESOURCE_RANGE_BYTES,
+    build_link_repair_plan, inspect_resource, read_resource_range, resolution_targets_path,
+    LinkOccurrence, LinkRepairPlan, LinkRepairSource, MarkdownLinkKind, Resource, ResourceCatalog,
+    ResourceEncoding, ResourceFormatProfile, ResourceKind, ResourceLinkResolution, Workspace,
+    MAX_RESOURCE_RANGE_BYTES,
 };
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::Serialize;
@@ -390,6 +392,58 @@ impl WorkspaceIndex {
         }
         backlinks.sort_by(|a, b| a.source_path.cmp(&b.source_path));
         Ok(backlinks)
+    }
+
+    /// List parseable links emitted by `path`, including source spans for repair.
+    pub fn outgoing_links(&self, path: &Path) -> Result<Vec<LinkOccurrence>> {
+        let rel = normalize_workspace_path(path)?;
+        let conn = self.conn.lock().unwrap();
+        query_link_occurrences(&conn, Some(&rel))
+    }
+
+    /// List indexed link occurrences that resolve to `from` before a rename to `to`.
+    pub fn affected_by_rename(&self, from: &Path, to: &Path) -> Result<Vec<LinkOccurrence>> {
+        let from = normalize_workspace_path(from)?;
+        let to = normalize_workspace_path(to)?;
+        let workspace = Workspace::open(&self.workspace_root)?;
+        let catalog = ResourceCatalog::new(&workspace.scan()?);
+        let conn = self.conn.lock().unwrap();
+        let occurrences = query_link_occurrences(&conn, None)?;
+        Ok(occurrences
+            .into_iter()
+            .filter(|occurrence| {
+                resolution_targets_path(
+                    &catalog.resolve(Some(&occurrence.source_path), &occurrence.raw_target),
+                    &from,
+                )
+            })
+            .filter(|occurrence| occurrence.source_path != to)
+            .collect())
+    }
+
+    /// Build a pure repair plan for a rename using indexed occurrences.
+    pub fn link_repair_plan(
+        &self,
+        from: &Path,
+        to: &Path,
+        source: LinkRepairSource,
+        plan_id: &str,
+        created_at: u64,
+    ) -> Result<LinkRepairPlan> {
+        let from = normalize_workspace_path(from)?;
+        let to = normalize_workspace_path(to)?;
+        let workspace = Workspace::open(&self.workspace_root)?;
+        let catalog = ResourceCatalog::new(&workspace.scan()?);
+        let occurrences = self.affected_by_rename(&from, &to)?;
+        Ok(build_link_repair_plan(
+            &catalog,
+            occurrences,
+            from,
+            to,
+            source,
+            plan_id,
+            created_at,
+        ))
     }
 
     fn persist(&self, record: IndexedRecord) -> Result<()> {
@@ -1054,9 +1108,68 @@ fn escape_fts_query(query: &str) -> String {
     format!("\"{}\"", trimmed.replace('"', "\"\""))
 }
 
+fn query_link_occurrences(
+    conn: &Connection,
+    source_path: Option<&Path>,
+) -> Result<Vec<LinkOccurrence>> {
+    let (sql, path_key) = match source_path {
+        Some(path) => (
+            "SELECT r.path, l.target, l.kind, l.anchor, l.label,
+                    l.source_start_byte, l.source_end_byte,
+                    l.source_start_line, l.source_start_column,
+                    l.source_end_line, l.source_end_column
+             FROM links l JOIN resources r ON r.id = l.source_id
+             WHERE r.path = ?1
+             ORDER BY r.path, l.id",
+            Some(path_key(path)),
+        ),
+        None => (
+            "SELECT r.path, l.target, l.kind, l.anchor, l.label,
+                    l.source_start_byte, l.source_end_byte,
+                    l.source_start_line, l.source_start_column,
+                    l.source_end_line, l.source_end_column
+             FROM links l JOIN resources r ON r.id = l.source_id
+             ORDER BY r.path, l.id",
+            None,
+        ),
+    };
+    let mut stmt = conn.prepare(sql)?;
+    let rows = if let Some(path) = path_key {
+        stmt.query_map(params![path], link_occurrence_from_row)?
+    } else {
+        stmt.query_map([], link_occurrence_from_row)?
+    };
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(Error::from)
+}
+
+fn link_occurrence_from_row(row: &Row<'_>) -> rusqlite::Result<LinkOccurrence> {
+    let kind = match row.get::<_, String>(2)?.as_str() {
+        "wiki" => MarkdownLinkKind::Wiki,
+        "md" => MarkdownLinkKind::Markdown,
+        other => {
+            return Err(rusqlite::Error::InvalidParameterName(other.to_string()));
+        }
+    };
+    Ok(LinkOccurrence {
+        source_path: PathBuf::from(row.get::<_, String>(0)?),
+        kind,
+        raw_target: row.get(1)?,
+        anchor: row.get(3)?,
+        label: row.get(4)?,
+        source_start_byte: row.get::<_, Option<i64>>(5)?.unwrap_or(0) as usize,
+        source_end_byte: row.get::<_, Option<i64>>(6)?.unwrap_or(0) as usize,
+        source_start_line: row.get::<_, Option<i64>>(7)?.unwrap_or(0) as usize,
+        source_start_column: row.get::<_, Option<i64>>(8)?.unwrap_or(0) as usize,
+        source_end_line: row.get::<_, Option<i64>>(9)?.unwrap_or(0) as usize,
+        source_end_column: row.get::<_, Option<i64>>(10)?.unwrap_or(0) as usize,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lattice_core::{LinkRepairSource, LinkRepairStatus, MarkdownLinkKind};
     use std::fs;
     use tempfile::TempDir;
 
@@ -1183,6 +1296,81 @@ mod tests {
             .unwrap();
         assert_eq!(markdown.anchor.as_deref(), Some("body"));
         assert_eq!(markdown.label.as_deref(), Some("other"));
+    }
+
+    #[test]
+    fn outgoing_links_returns_spans_for_source_page() {
+        let dir = TempDir::new().unwrap();
+        sample_workspace(dir.path());
+        let index = WorkspaceIndex::open(dir.path()).unwrap();
+        index.rebuild(dir.path()).unwrap();
+
+        let outgoing = index.outgoing_links(Path::new("Notes/Home.md")).unwrap();
+        assert_eq!(outgoing.len(), 1);
+        assert_eq!(outgoing[0].raw_target, "Other");
+        assert_eq!(outgoing[0].kind, MarkdownLinkKind::Wiki);
+        assert_eq!(outgoing[0].anchor.as_deref(), Some("start"));
+        assert_eq!(outgoing[0].label.as_deref(), Some("the other page"));
+        assert!(outgoing[0].source_end_byte > outgoing[0].source_start_byte);
+    }
+
+    #[test]
+    fn affected_by_rename_finds_wiki_and_markdown_links() {
+        let dir = TempDir::new().unwrap();
+        sample_workspace(dir.path());
+        let index = WorkspaceIndex::open(dir.path()).unwrap();
+        index.rebuild(dir.path()).unwrap();
+
+        let affected = index
+            .affected_by_rename(Path::new("Notes/Other.md"), Path::new("Notes/Renamed.md"))
+            .unwrap();
+        assert_eq!(affected.len(), 2);
+        assert!(affected
+            .iter()
+            .any(|occurrence| occurrence.raw_target == "Other"));
+        assert!(affected
+            .iter()
+            .any(|occurrence| occurrence.raw_target == "./Other.md"));
+    }
+
+    #[test]
+    fn link_repair_plan_preserves_syntax_and_flags_ambiguity() {
+        let dir = TempDir::new().unwrap();
+        sample_workspace(dir.path());
+        fs::create_dir_all(dir.path().join("Archive")).unwrap();
+        fs::write(dir.path().join("Archive/Other.md"), "Archive copy.\n").unwrap();
+        let index = WorkspaceIndex::open(dir.path()).unwrap();
+        index.rebuild(dir.path()).unwrap();
+
+        let plan = index
+            .link_repair_plan(
+                Path::new("Notes/Other.md"),
+                Path::new("Notes/Renamed.md"),
+                LinkRepairSource::LatticeRename,
+                "plan-1",
+                1,
+            )
+            .unwrap();
+        assert_eq!(plan.candidates.len(), 2);
+        assert!(plan
+            .candidates
+            .iter()
+            .any(|candidate| candidate.new_text.contains("Renamed")));
+        assert_eq!(plan.summary().unresolved_count, 0);
+
+        let ambiguous = index
+            .link_repair_plan(
+                Path::new("Notes/Other.md"),
+                Path::new("Archive/Other.md"),
+                LinkRepairSource::ExternalRename,
+                "plan-2",
+                2,
+            )
+            .unwrap();
+        assert!(ambiguous
+            .candidates
+            .iter()
+            .any(|candidate| candidate.status == LinkRepairStatus::Ambiguous));
     }
 
     #[test]
