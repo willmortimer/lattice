@@ -53,8 +53,7 @@ function lazyFileFallback(signal: AbortSignal): ReturnType<MediaResourceRenderer
   });
 }
 
-/** Exported for the shell composition layer; this module deliberately does
- * not call it, so media remains opt-in and does not alter the default registry. */
+/** Register image, PDF, and generic file fallback renderers on the shell registry. */
 export function registerMediaResourceRenderers(
   registry: ResourceRendererRegistry<ResourceRendererContext, OpenResourceSession>,
 ): ResourceRendererRegistry<ResourceRendererContext, OpenResourceSession> {

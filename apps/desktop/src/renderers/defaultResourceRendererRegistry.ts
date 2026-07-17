@@ -1,6 +1,7 @@
 import { createAbortError, ResourceRendererRegistry, type ResourceRendererDefinition } from "../resourceRendererRegistry";
 import type { OpenResourceSession } from "../resourceSession";
 import type { ResourceKind } from "../types";
+import { registerMediaResourceRenderers } from "./mediaResourceRendererRegistration";
 import type { ResourceRendererContext } from "./RendererContext";
 
 type Definition = ResourceRendererDefinition<ResourceRendererContext, OpenResourceSession>;
@@ -59,5 +60,6 @@ export function createDefaultResourceRendererRegistry(): ResourceRendererRegistr
         lazyImport(() => import("./DataResourceRenderer").then((module) => module.DataResourceRenderer), signal),
       ),
     );
+  registerMediaResourceRenderers(registry);
   return registry;
 }
