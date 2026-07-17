@@ -6,6 +6,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./_env.sh
+source "${SCRIPT_DIR}/_env.sh"
 cd "${ROOT}"
 
 export LATTICE_DEV_HOME="${LATTICE_DEV_HOME:-${ROOT}/target/cell-home}"
@@ -15,13 +17,15 @@ if [[ "${LATTICE_CLI_RELEASE:-}" == "1" ]]; then
   PROFILE="release"
 fi
 
-BIN="${ROOT}/target/${PROFILE}/lattice"
-if [[ ! -x "${BIN}" ]]; then
+BIN="$(lattice_cli_bin "${PROFILE}")"
+# Rebuild when missing, or when a host-mounted Darwin binary cannot exec on Linux.
+if [[ ! -x "${BIN}" ]] || ! "${BIN}" --help >/dev/null 2>&1; then
   if [[ "${LATTICE_CLI_RELEASE:-}" == "1" ]]; then
     "${SCRIPT_DIR}/cli" --release
   else
     "${SCRIPT_DIR}/cli"
   fi
+  BIN="$(lattice_cli_bin "${PROFILE}")"
 fi
 
 "${BIN}" home ensure

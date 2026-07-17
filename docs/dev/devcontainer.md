@@ -51,6 +51,14 @@ With VS Code / Cursor Dev Containers, or any host that understands
 Bind address is `0.0.0.0` for Vite, Astro, and bridge inside the container so
 Docker / DevCell published ports and `tailscale serve` can reach the processes.
 
+### Bind-mounting from macOS
+
+If you mount the Mac checkout into a Linux container, host `node_modules` and
+`target/` are the wrong ABI. Cell scripts set `CI=true` (non-TTY pnpm purge)
+and `CARGO_TARGET_DIR=target/devcontainer` when `DEVCONTAINER=1` or
+`DEV_CELL=true`, so Linux builds do not try to exec Mach-O binaries from the
+host `target/debug` tree.
+
 ## Real core in the browser (recommended cell flow)
 
 ```sh

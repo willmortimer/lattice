@@ -3,6 +3,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=./_env.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_env.sh"
 cd "${ROOT}"
 
 if ! command -v pnpm >/dev/null 2>&1; then
