@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./lib/ipc";
 
 import { KindMark } from "./KindMark";
 import type { SearchHit } from "./types";
