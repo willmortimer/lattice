@@ -1,0 +1,159 @@
+.lattice-text-viewer {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  color: var(--lt-text);
+  background: var(--lt-bg);
+}
+
+.lattice-text-toolbar,
+.lattice-text-window-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 42px;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--lt-line);
+  color: var(--lt-text-soft);
+  background: var(--lt-panel);
+  font-size: 11px;
+}
+
+.lattice-text-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.lattice-text-kind,
+.lattice-text-status,
+.lattice-text-badge,
+.lattice-text-size,
+.lattice-text-window-controls span {
+  font-family: var(--lt-font-mono);
+}
+
+.lattice-text-kind {
+  color: var(--lt-accent-bright);
+  font-weight: 650;
+  letter-spacing: .08em;
+}
+
+.lattice-text-badge {
+  padding: 2px 6px;
+  border: 1px solid var(--lt-line-strong);
+  border-radius: var(--lt-radius-sm);
+  color: var(--lt-muted);
+}
+
+.lattice-text-button {
+  border: 1px solid var(--lt-border);
+  border-radius: var(--lt-radius-sm);
+  padding: 4px 8px;
+  color: var(--lt-text-soft);
+  background: transparent;
+}
+
+.lattice-text-button:hover:not(:disabled) {
+  border-color: var(--lt-accent);
+  color: var(--lt-text);
+}
+
+.lattice-text-button:disabled {
+  cursor: default;
+  opacity: .45;
+}
+
+.lattice-text-button-primary {
+  border-color: var(--lt-accent);
+  color: var(--lt-on-accent);
+  background: var(--lt-accent);
+}
+
+.lattice-text-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+  flex: 1;
+}
+
+.lattice-text-layout-with-tree {
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 34%);
+}
+
+.lattice-text-editor {
+  min-height: 420px;
+  overflow: auto;
+  background: var(--lt-bg);
+}
+
+.lattice-text-editor .cm-editor {
+  min-height: 100%;
+  color: var(--lt-text);
+  background: var(--lt-bg);
+  font: 12px/1.6 var(--lt-font-mono);
+}
+
+.lattice-text-editor .cm-scroller {
+  padding: 16px 0 40px;
+}
+
+.lattice-text-editor .cm-gutters {
+  border-right: 1px solid var(--lt-line);
+  color: var(--lt-faint);
+  background: var(--lt-panel);
+}
+
+.lattice-text-editor .cm-activeLine,
+.lattice-text-editor .cm-activeLineGutter {
+  background: var(--lt-bg-raise);
+}
+
+.lattice-structured-tree {
+  position: relative;
+  height: 420px;
+  overflow: auto;
+  border-left: 1px solid var(--lt-line);
+  color: var(--lt-text-soft);
+  background: var(--lt-panel);
+  font: 11px/26px var(--lt-font-mono);
+}
+
+.lattice-structured-tree-row {
+  position: absolute;
+  right: 0;
+  left: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.lattice-structured-tree-row:hover,
+.lattice-structured-tree-row:focus-visible {
+  color: var(--lt-text);
+  background: var(--lt-bg-raise);
+}
+
+.lattice-structured-tree-chevron {
+  display: inline-block;
+  width: 16px;
+  color: var(--lt-accent);
+}
+
+.lattice-text-diagnostic {
+  margin: 0;
+  padding: 8px 14px;
+  border-top: 1px solid var(--lt-line);
+  color: var(--lt-warning, var(--lt-accent-bright));
+  background: var(--lt-panel);
+  font-size: 11px;
+}
+
+@media (max-width: 780px) {
+  .lattice-text-layout-with-tree { grid-template-columns: 1fr; }
+  .lattice-structured-tree { border-top: 1px solid var(--lt-line); border-left: 0; }
+  .lattice-text-toolbar { align-items: flex-start; flex-direction: column; }
+}
