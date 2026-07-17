@@ -28,6 +28,7 @@ mod command;
 mod engine;
 mod error;
 mod history;
+mod revisions;
 mod trash;
 
 pub use command::{
@@ -35,6 +36,11 @@ pub use command::{
 };
 pub use engine::CommandEngine;
 pub use error::Error;
+pub use revisions::{
+    ConflictEnvelope, HistoryCleanupCandidate, HistoryCleanupReport, HistoryRetentionPolicy,
+    ResourceRevisionDetail, ResourceRevisionSummary, RevisionDiff, RevisionPayload,
+    RevisionService, RevisionSource,
+};
 pub use trash::TrashPolicy;
 
 /// Maximum byte size of one semantic resource edit.
