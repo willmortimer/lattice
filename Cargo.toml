@@ -9,6 +9,7 @@ members = [
     "crates/lattice-index",
     "crates/lattice-data",
     "crates/lattice-theme",
+    "crates/lattice-handlers",
     "apps/desktop/src-tauri",
 ]
 
@@ -26,6 +27,7 @@ lattice-commands = { path = "crates/lattice-commands" }
 lattice-index = { path = "crates/lattice-index" }
 lattice-data = { path = "crates/lattice-data" }
 lattice-theme = { path = "crates/lattice-theme" }
+lattice-handlers = { path = "crates/lattice-handlers" }
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
