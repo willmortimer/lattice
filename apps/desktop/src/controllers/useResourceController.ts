@@ -1,22 +1,27 @@
-import { useCallback, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { demoCanvas, demoDataApp, demoPages, inBrowser } from "../demo";
 import type { DataAppSnapshot } from "../data/types";
 import { createDemoPageIO, createNativePageIO } from "../editor/pageIO";
 import type { OpenResourceSession } from "../resourceSession";
 import type { Resource, WorkspaceSnapshot } from "../types";
+import { createResourceLoadGate, type ResourceLoadGate, type ResourceLoadTicket } from "./resourceLoad";
 
 export interface ResourceControllerOptions {
   snapshot: WorkspaceSnapshot | null;
   snapshotRef: MutableRefObject<WorkspaceSnapshot | null>;
-  settings: { performance: { maxOpenTabs: number } };
+  setSnapshot: Dispatch<SetStateAction<WorkspaceSnapshot | null>>;
   hasCapability: (capability: string) => boolean;
   onError: (message: string | null) => void;
   onBusy: (busy: boolean) => void;
   onActivity: (area: "files") => void;
   onTitle: (title: string) => void;
-  onResetSelection: () => void;
+  onSelectionChanged: () => void;
   onRecordNavigation: (path: string) => void;
+  onOpenTab: (resource: Resource) => void;
+  onReplaceTab: (from: string, to: Resource) => void;
+  onReplaceHistoryPath: (from: string, to: string) => void;
+  refreshResources: () => Promise<void>;
   onPageReady: () => void;
 }
 
@@ -25,83 +30,162 @@ export interface ResourceController {
   setSelected: Dispatch<SetStateAction<Resource | null>>;
   session: OpenResourceSession | null;
   setSession: Dispatch<SetStateAction<OpenResourceSession | null>>;
-  openTabs: Resource[];
-  setOpenTabs: Dispatch<SetStateAction<Resource[]>>;
+  pageRef: MutableRefObject<Extract<OpenResourceSession, { kind: "page" }> | null>;
+  currentPageRevisionRef: MutableRefObject<string | null>;
+  reloadToken: number;
   handleSelect: (resource: Resource, options?: { recordHistory?: boolean }) => Promise<void>;
+  reloadPageFromDisk: () => Promise<void>;
+  applyPageContent: (raw: string, revision: string | null) => void;
+  saveLocalPage: (raw: string) => Promise<void>;
+  openCreatedResource: (resource: Resource, session: OpenResourceSession) => void;
+  clearSelection: () => void;
+  clearSelectionIf: (path: string) => void;
+  commitTitle: (title: string) => Promise<void>;
   resetResources: () => void;
 }
 
-/** Owns resource identity, tabs, and the bounded async load for each native
- * surface. Shell concerns enter only through typed callbacks. */
+export function fileTitle(path: string): string {
+  const base = path.split("/").pop() ?? path;
+  return base.replace(/\.(md|canvas|pdf|png|jpe?g)$/i, "").replace(/\.data$/i, "");
+}
+
+export function renamedPath(path: string, title: string): string {
+  const slash = path.lastIndexOf("/");
+  const dir = slash >= 0 ? path.slice(0, slash + 1) : "";
+  const base = slash >= 0 ? path.slice(slash + 1) : path;
+  const dataSuffix = base.endsWith(".data") ? ".data" : "";
+  const dot = dataSuffix ? -1 : base.lastIndexOf(".");
+  const extension = dataSuffix || (dot > 0 ? base.slice(dot) : "");
+  return `${dir}${title.trim()}${extension}`;
+}
+
+/** Owns selected resource identity, format-aware session loading, and page
+ * title coordination. The abort ticket is deliberately local to this hook so
+ * stale native reads cannot publish into a later renderer session. */
 export function useResourceController(options: ResourceControllerOptions): ResourceController {
   const {
-    snapshot, snapshotRef, settings, hasCapability, onError, onBusy, onActivity,
-    onTitle, onResetSelection, onRecordNavigation, onPageReady,
+    snapshot, snapshotRef, setSnapshot, hasCapability, onError, onBusy,
+    onActivity, onTitle, onSelectionChanged, onRecordNavigation, onOpenTab,
+    onReplaceTab, onReplaceHistoryPath, refreshResources, onPageReady,
   } = options;
   const [selected, setSelected] = useState<Resource | null>(null);
   const [session, setSession] = useState<OpenResourceSession | null>(null);
-  const [openTabs, setOpenTabs] = useState<Resource[]>([]);
+  const [reloadToken, setReloadToken] = useState(0);
+  const pageRef = useRef<Extract<OpenResourceSession, { kind: "page" }> | null>(null);
+  const selectedRef = useRef<Resource | null>(null);
+  const sessionRef = useRef<OpenResourceSession | null>(null);
+  const currentPageRevisionRef = useRef<string | null>(null);
+  const loadGateRef = useRef<ResourceLoadGate>(createResourceLoadGate());
+
+  useEffect(() => {
+    selectedRef.current = selected;
+    sessionRef.current = session;
+    pageRef.current = session?.kind === "page" ? session : null;
+  }, [selected, session]);
+
+  const beginLoad = useCallback(() => {
+    return loadGateRef.current.begin();
+  }, []);
+
+  const isCurrentLoad = useCallback((ticket: ResourceLoadTicket) => loadGateRef.current.isCurrent(ticket), []);
+
+  const resetLoad = useCallback(() => {
+    loadGateRef.current.cancel();
+  }, []);
 
   const resetResources = useCallback(() => {
+    resetLoad();
+    selectedRef.current = null;
+    sessionRef.current = null;
+    pageRef.current = null;
+    currentPageRevisionRef.current = null;
     setSelected(null);
     setSession(null);
-    setOpenTabs([]);
-  }, []);
+    setReloadToken(0);
+  }, [resetLoad]);
+
+  const clearSelection = useCallback(() => {
+    resetResources();
+  }, [resetResources]);
+
+  const clearSelectionIf = useCallback((path: string) => {
+    const current = selectedRef.current;
+    if (current && (current.path === path || current.path.startsWith(`${path}/`))) clearSelection();
+  }, [clearSelection]);
+
+  const openCreatedResource = useCallback((resource: Resource, nextSession: OpenResourceSession) => {
+    resetLoad();
+    selectedRef.current = resource;
+    sessionRef.current = nextSession;
+    pageRef.current = nextSession.kind === "page" ? nextSession : null;
+    currentPageRevisionRef.current = nextSession.kind === "page" ? nextSession.revision : null;
+    setSelected(resource);
+    setSession(nextSession);
+    setReloadToken((token) => token + 1);
+    onOpenTab(resource);
+    onActivity("files");
+    onTitle(fileTitle(resource.path));
+    onSelectionChanged();
+  }, [onActivity, onOpenTab, onSelectionChanged, onTitle, resetLoad]);
 
   const handleSelect = useCallback(async (resource: Resource, selectionOptions: { recordHistory?: boolean } = {}) => {
     const workspace = snapshotRef.current ?? snapshot;
     if (resource.kind === "folder") return;
+    const ticket = beginLoad();
     onActivity("files");
-    setOpenTabs((tabs) => tabs.some((tab) => tab.path === resource.path)
-      ? tabs
-      : [...tabs, resource].slice(-settings.performance.maxOpenTabs));
+    onOpenTab(resource);
     if (selectionOptions.recordHistory !== false) onRecordNavigation(resource.path);
+    selectedRef.current = resource;
+    sessionRef.current = null;
+    pageRef.current = null;
+    currentPageRevisionRef.current = null;
     setSelected(resource);
-    onTitle(resource.path.split("/").pop()?.replace(/\.(md|canvas|pdf|png|jpe?g)$/i, "").replace(/\.data$/i, "") ?? resource.path);
+    onTitle(fileTitle(resource.path));
     onError(null);
     setSession(null);
-    onResetSelection();
+    setReloadToken(0);
+    onSelectionChanged();
 
     if (resource.kind === "canvas" && workspace) {
       if (!hasCapability("canvas")) {
-        setSession({ kind: "unknown", resource });
+        if (isCurrentLoad(ticket)) setSession({ kind: "unknown", resource });
         onError("Canvas is not enabled for this workspace.");
         return;
       }
       if (inBrowser) {
-        setSession({ kind: "canvas", resource, json: demoCanvas });
+        if (isCurrentLoad(ticket)) setSession({ kind: "canvas", resource, json: demoCanvas });
         return;
       }
       onBusy(true);
       try {
         const content = await invoke<string>("read_file", { root: workspace.root, relPath: resource.path });
-        setSession({ kind: "canvas", resource, json: JSON.parse(content) });
+        if (isCurrentLoad(ticket)) setSession({ kind: "canvas", resource, json: JSON.parse(content) });
       } catch (error) {
-        onError(String(error));
+        if (isCurrentLoad(ticket)) onError(String(error));
       } finally {
-        onBusy(false);
+        if (isCurrentLoad(ticket)) onBusy(false);
       }
       return;
     }
 
     if (resource.kind === "data-app" && workspace) {
       if (!hasCapability("sqlite")) {
-        setSession({ kind: "unknown", resource });
+        if (isCurrentLoad(ticket)) setSession({ kind: "unknown", resource });
         onError("Data apps are not enabled for this workspace.");
         return;
       }
       if (inBrowser) {
-        setSession({ kind: "data-app", resource, snapshot: demoDataApp });
+        if (isCurrentLoad(ticket)) setSession({ kind: "data-app", resource, snapshot: demoDataApp });
         return;
       }
       onBusy(true);
       try {
         const opened = await invoke<DataAppSnapshot>("open_data_app", { root: workspace.root, relPath: resource.path, viewName: null });
-        setSession({ kind: "data-app", resource, snapshot: opened });
+        if (isCurrentLoad(ticket)) setSession({ kind: "data-app", resource, snapshot: opened });
       } catch (error) {
-        onError(String(error));
+        if (isCurrentLoad(ticket)) onError(String(error));
       } finally {
-        onBusy(false);
+        if (isCurrentLoad(ticket)) onBusy(false);
       }
       return;
     }
@@ -110,21 +194,121 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     onPageReady();
     if (inBrowser) {
       const content = demoPages[resource.path] ?? `# ${resource.path}\n`;
-      setSession({ kind: "page", resource, content, revision: "demo:0", io: createDemoPageIO(content) });
+      if (isCurrentLoad(ticket)) {
+        const next = { kind: "page" as const, resource, content, revision: "demo:0", io: createDemoPageIO(content) };
+        sessionRef.current = next;
+        pageRef.current = next;
+        currentPageRevisionRef.current = next.revision;
+        setSession(next);
+      }
       return;
     }
     onBusy(true);
     try {
       const io = createNativePageIO(workspace.root, resource.path);
       const { raw, revision } = await io.load();
-      setSession({ kind: "page", resource, content: raw, revision, io });
+      if (isCurrentLoad(ticket)) {
+        const next = { kind: "page" as const, resource, content: raw, revision, io };
+        sessionRef.current = next;
+        pageRef.current = next;
+        currentPageRevisionRef.current = revision;
+        setSession(next);
+      }
     } catch (error) {
-      setSession(null);
+      if (isCurrentLoad(ticket)) {
+        setSession(null);
+        onError(String(error));
+      }
+    } finally {
+      if (isCurrentLoad(ticket)) onBusy(false);
+    }
+  }, [beginLoad, hasCapability, isCurrentLoad, onActivity, onBusy, onError, onOpenTab, onPageReady, onRecordNavigation, onSelectionChanged, onTitle, resetLoad, snapshot, snapshotRef]);
+
+  const reloadPageFromDisk = useCallback(async () => {
+    const current = pageRef.current;
+    if (!current) return;
+    const ticket = beginLoad();
+    try {
+      const { raw, revision } = await current.io.load();
+      if (!isCurrentLoad(ticket) || pageRef.current?.resource.path !== current.resource.path) return;
+      const next = { ...current, content: raw, revision };
+      pageRef.current = next;
+      sessionRef.current = next;
+      currentPageRevisionRef.current = revision;
+      setSession((previous) => previous?.kind === "page" ? next : previous);
+      setReloadToken((token) => token + 1);
+      onPageReady();
+    } catch (error) {
+      if (isCurrentLoad(ticket)) onError(String(error));
+    }
+  }, [beginLoad, isCurrentLoad, onError, onPageReady]);
+
+  const applyPageContent = useCallback((raw: string, revision: string | null) => {
+    const current = pageRef.current;
+    if (!current) return;
+    const next = { ...current, content: raw, revision };
+    pageRef.current = next;
+    sessionRef.current = next;
+    currentPageRevisionRef.current = revision;
+    setSession((previous) => previous?.kind === "page" ? next : previous);
+    setReloadToken((token) => token + 1);
+  }, []);
+
+  const saveLocalPage = useCallback(async (raw: string) => {
+    const current = pageRef.current;
+    if (!current) return;
+    const disk = await current.io.load();
+    const revision = await current.io.save(raw, disk.revision);
+    applyPageContent(raw, revision);
+  }, [applyPageContent]);
+
+  const commitTitle = useCallback(async (title: string) => {
+    const current = snapshotRef.current ?? snapshot;
+    const resource = selectedRef.current;
+    if (!current || !resource) return;
+    const nextPath = renamedPath(resource.path, title);
+    if (!title.trim() || nextPath === resource.path) {
+      onTitle(fileTitle(resource.path));
+      return;
+    }
+    const nextResource = { ...resource, path: nextPath };
+    if (inBrowser) {
+      setSnapshot((workspace) => workspace ? {
+        ...workspace,
+        resources: workspace.resources.map((entry) => entry.path === resource.path ? nextResource : entry),
+      } : workspace);
+      setSelected(nextResource);
+      selectedRef.current = nextResource;
+      onReplaceTab(resource.path, nextResource);
+      onReplaceHistoryPath(resource.path, nextPath);
+      if (sessionRef.current) {
+        const nextSession = { ...sessionRef.current, resource: nextResource } as OpenResourceSession;
+        sessionRef.current = nextSession;
+        pageRef.current = nextSession.kind === "page" ? nextSession : null;
+        setSession(nextSession);
+      }
+      onTitle(fileTitle(nextPath));
+      return;
+    }
+    onBusy(true);
+    try {
+      await invoke("rename_resource", { root: current.root, from: resource.path, to: nextPath });
+      await refreshResources();
+      setSelected(nextResource);
+      selectedRef.current = nextResource;
+      onReplaceTab(resource.path, nextResource);
+      onReplaceHistoryPath(resource.path, nextPath);
+      await handleSelect(nextResource, { recordHistory: false });
+    } catch (error) {
       onError(String(error));
     } finally {
       onBusy(false);
     }
-  }, [hasCapability, onActivity, onBusy, onError, onPageReady, onRecordNavigation, onResetSelection, onTitle, settings.performance.maxOpenTabs, snapshot, snapshotRef]);
+  }, [handleSelect, onBusy, onError, onReplaceHistoryPath, onReplaceTab, onTitle, refreshResources, setSnapshot, snapshot, snapshotRef]);
 
-  return { selected, setSelected, session, setSession, openTabs, setOpenTabs, handleSelect, resetResources };
+  return {
+    selected, setSelected, session, setSession, pageRef, currentPageRevisionRef, reloadToken,
+    handleSelect, reloadPageFromDisk, applyPageContent, saveLocalPage, openCreatedResource, clearSelection, clearSelectionIf,
+    commitTitle, resetResources,
+  };
 }

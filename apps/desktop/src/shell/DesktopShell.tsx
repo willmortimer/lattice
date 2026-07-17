@@ -13,7 +13,7 @@ import { HomeDashboard } from "../shell/HomeDashboard";
 import { ResourceInspector } from "../shell/ResourceInspector";
 import { ResourceSurface } from "../shell/ResourceSurface";
 import { setAppearanceMode, setFixedTheme } from "../theme";
-import { fileTitle } from "../controllers/useDesktopController";
+import { fileTitle } from "../controllers/useResourceController";
 import { isUnsaved, saveIndicatorText } from "../editor/saveState";
 import { searchResourceLinks } from "../lib/resourceLinks";
 import { Button, DialogBackdrop, DialogPopup, DialogPortal, DialogRoot, DialogTitle, IconButton, MenuItem, MenuPopup, MenuPortal, MenuPositioner, MenuRoot, MenuSeparator, MenuTrigger, TooltipProvider } from "@lattice/ui";
