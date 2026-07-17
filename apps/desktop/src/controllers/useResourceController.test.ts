@@ -11,4 +11,12 @@ describe("resource load cancellation", () => {
     expect(gate.isCurrent(first)).toBe(false);
     expect(gate.isCurrent(second)).toBe(true);
   });
+
+  it("invalidates the active ticket when cancelled explicitly", () => {
+    const gate = createResourceLoadGate();
+    const ticket = gate.begin();
+    gate.cancel();
+    expect(ticket.controller.signal.aborted).toBe(true);
+    expect(gate.isCurrent(ticket)).toBe(false);
+  });
 });
