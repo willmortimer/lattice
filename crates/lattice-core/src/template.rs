@@ -217,6 +217,17 @@ impl WorkspaceTemplate {
             .map(TemplateDescriptor::from_generated)
             .collect()
     }
+
+    /// Gallery templates plus First Look samples, in catalog order (excludes legacy).
+    pub fn catalog() -> Vec<TemplateDescriptor> {
+        GENERATED_TEMPLATES
+            .iter()
+            .filter(|template| {
+                template.visibility == "gallery" || template.visibility == "sample"
+            })
+            .map(TemplateDescriptor::from_generated)
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -765,6 +776,17 @@ mod tests {
         assert_eq!(
             WorkspaceTemplate::Team.descriptor().visibility,
             TemplateVisibility::Legacy
+        );
+    }
+
+    #[test]
+    fn catalog_includes_gallery_and_sample_but_not_legacy() {
+        assert_eq!(
+            WorkspaceTemplate::catalog()
+                .into_iter()
+                .map(|template| template.id)
+                .collect::<Vec<_>>(),
+            ["personal", "project", "research", "data-lab", "blank", "demo"]
         );
     }
 
