@@ -7,7 +7,7 @@ import { fileFallbackResourceRendererDefinition, imageResourceRendererDefinition
 const fallback = { id: "fallback", kind: "*" as const, load: async () => (() => null) };
 
 describe("media renderer registration", () => {
-  it("targets image and PDF format IDs without changing the default registry", () => {
+  it("targets image and PDF format IDs on a dedicated registry", () => {
     const registry = new ResourceRendererRegistry<ResourceRendererContext, OpenResourceSession>({ capabilityFallback: fallback, unknownFallback: fallback });
     registerMediaResourceRenderers(registry);
     expect(registry.resolve({ kind: "file", path: "photo.png", formatId: "file:image" }).definition.id).toBe(imageResourceRendererDefinition.id);
