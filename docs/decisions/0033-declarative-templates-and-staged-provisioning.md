@@ -17,6 +17,11 @@ catalog (`template_catalog.generated.rs`), the TypeScript gallery catalog
 (`templateCatalog.generated.ts`), and the browser-demo workspace snapshot
 (`demoWorkspace.generated.ts`) from the `demo` sample package.
 
+Directory purposes are copied into the workspace manifest's editable
+`directories:` section at provision time; the shell prefers the manifest and
+falls back to catalog hints, so workspace owners can rewrite folder semantics
+in `lattice.yaml` like any other file.
+
 Creating a workspace defaults to a new named child directory. Lattice builds
 and validates it in a unique sibling staging directory, then atomically renames
 it into place. Initializing an existing directory is an explicit advanced

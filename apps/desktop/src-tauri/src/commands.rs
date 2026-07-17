@@ -30,6 +30,9 @@ pub struct WorkspaceSnapshot {
     pub defaults: WorkspaceDefaults,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_template: Option<String>,
+    /// Path -> purpose from the manifest's editable `directories:` section.
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub directory_purposes: std::collections::BTreeMap<String, String>,
     pub manifest_revision: String,
 }
 
@@ -503,6 +506,15 @@ fn snapshot_from_parts(
         capabilities: manifest.capabilities.enabled.clone(),
         defaults: manifest.defaults.clone(),
         source_template: manifest.source_template.clone(),
+        directory_purposes: manifest
+            .directories
+            .iter()
+            .filter_map(|(path, meta)| {
+                meta.purpose
+                    .as_ref()
+                    .map(|purpose| (path.clone(), purpose.clone()))
+            })
+            .collect(),
         manifest_revision,
     })
 }

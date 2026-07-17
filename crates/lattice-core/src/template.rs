@@ -8,7 +8,7 @@ use lattice_storage::atomic_write_file;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    parse_resource_links, Capabilities, Error, ResourceCatalog, ResourceKind,
+    parse_resource_links, Capabilities, DirectoryMeta, Error, ResourceCatalog, ResourceKind,
     ResourceLinkResolution, Result, Workspace, WorkspaceDefaults, WorkspaceManifest,
     WORKSPACE_MANIFEST_FILENAME,
 };
@@ -671,7 +671,27 @@ fn manifest_for(title: &str, template: &GeneratedTemplate) -> WorkspaceManifest 
         enabled: strings(template.capabilities),
     };
     manifest.defaults = defaults_for(template);
+    manifest.directories = directory_metadata_for(template);
     manifest
+}
+
+/// Directory purposes copied into `lattice.yaml` so workspace owners can edit
+/// them after provisioning.
+fn directory_metadata_for(template: &GeneratedTemplate) -> BTreeMap<String, DirectoryMeta> {
+    template
+        .directories
+        .iter()
+        .filter_map(|directory| {
+            directory.purpose.map(|purpose| {
+                (
+                    directory.path.to_string(),
+                    DirectoryMeta {
+                        purpose: Some(purpose.to_string()),
+                    },
+                )
+            })
+        })
+        .collect()
 }
 
 fn defaults_for(template: &GeneratedTemplate) -> WorkspaceDefaults {
@@ -823,6 +843,7 @@ pub fn apply_template(root: &Path, template: WorkspaceTemplate) -> Result<()> {
         enabled: strings(generated.capabilities),
     };
     manifest.defaults = defaults_for(generated);
+    manifest.directories = directory_metadata_for(generated);
     manifest.save(&root.join(WORKSPACE_MANIFEST_FILENAME))?;
     validate_instantiated_template(&Workspace::open(root)?)
 }
@@ -1039,6 +1060,31 @@ mod tests {
         );
         assert_eq!(WorkspaceTemplate::Demo.descriptor().category, "Sample");
         assert_eq!(WorkspaceTemplate::Team.descriptor().category, "Work");
+    }
+
+    #[test]
+    fn provisioned_manifest_carries_editable_directory_purposes() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("Personal");
+        let outcome = WorkspaceProvisioner::provision(&WorkspaceCreationPlan {
+            target: root.clone(),
+            title: "Personal".into(),
+            template_id: "personal".into(),
+            mode: WorkspaceCreationMode::NewDirectory,
+        })
+        .unwrap();
+        assert_eq!(
+            outcome
+                .workspace
+                .manifest()
+                .directories
+                .get("Inbox")
+                .and_then(|meta| meta.purpose.as_deref()),
+            Some("Drop raw captures here — triage them into Projects or Library.")
+        );
+        let yaml = std::fs::read_to_string(root.join(WORKSPACE_MANIFEST_FILENAME)).unwrap();
+        assert!(yaml.contains("directories:"));
+        assert!(yaml.contains("Inbox:"));
     }
 
     #[test]

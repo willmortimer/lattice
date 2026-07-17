@@ -672,6 +672,11 @@ export function emitDemoWorkspace(templates) {
       defaults[key] = template.workspaceDefaults[key];
     }
   }
+  // Mirrors the manifest's editable `directories:` section for browser review.
+  const directoryPurposes = {};
+  for (const directory of template.directories) {
+    if (directory.purpose) directoryPurposes[directory.path] = directory.purpose;
+  }
   const snapshot = {
     root: "/Users/you/Lattice/Workspaces/First Look",
     title: "First Look",
@@ -679,6 +684,7 @@ export function emitDemoWorkspace(templates) {
     capabilities: template.capabilities,
     defaults,
     sourceTemplate: DEMO_TEMPLATE_ID,
+    ...(Object.keys(directoryPurposes).length > 0 ? { directoryPurposes } : {}),
     manifestRevision: "demo:0",
     resources: buildDemoResources(template),
   };

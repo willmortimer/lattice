@@ -38,7 +38,7 @@ pub use links::{
     ResourceLinkResolution, ResourceLinkTarget,
 };
 pub use manifest::{
-    Capabilities, WorkspaceDefaults, WorkspaceManifest, WORKSPACE_MANIFEST_FILENAME,
+    Capabilities, DirectoryMeta, WorkspaceDefaults, WorkspaceManifest, WORKSPACE_MANIFEST_FILENAME,
 };
 pub use resource::{Resource, ResourceKind};
 pub use resource_runtime::{

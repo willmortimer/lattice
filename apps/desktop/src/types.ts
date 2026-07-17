@@ -37,6 +37,8 @@ export interface WorkspaceSnapshot {
   };
   /** Built-in template id used to provision this workspace, when known. */
   sourceTemplate?: string | null;
+  /** Path → purpose from the manifest's editable `directories:` section. */
+  directoryPurposes?: Record<string, string>;
   manifestRevision: string;
 }
 

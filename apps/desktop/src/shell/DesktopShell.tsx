@@ -44,9 +44,14 @@ export function DesktopShell({ model }: DesktopShellProps) {
     handleOpenWiki, openLinkTarget,
   } = model;
 
+  // Manifest-authored purposes (editable in lattice.yaml) win over the
+  // catalog hints derived from the provisioning template.
   const directoryPurposes = useMemo(
-    () => directoryPurposesFromCatalog(snapshot?.sourceTemplate),
-    [snapshot?.sourceTemplate],
+    () => ({
+      ...directoryPurposesFromCatalog(snapshot?.sourceTemplate),
+      ...(snapshot?.directoryPurposes ?? {}),
+    }),
+    [snapshot?.sourceTemplate, snapshot?.directoryPurposes],
   );
 
   if (!snapshot) {

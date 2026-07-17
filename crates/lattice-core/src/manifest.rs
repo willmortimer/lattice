@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -42,6 +43,19 @@ pub struct WorkspaceManifest {
     pub capabilities: Capabilities,
     #[serde(default, skip_serializing_if = "WorkspaceDefaults::is_default")]
     pub defaults: WorkspaceDefaults,
+    /// Per-directory metadata keyed by workspace-relative path. Seeded from
+    /// the provisioning template and freely editable in `lattice.yaml`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub directories: BTreeMap<String, DirectoryMeta>,
+}
+
+/// Editable metadata for one workspace directory.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DirectoryMeta {
+    /// Human-readable purpose shown for empty folders.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purpose: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -104,6 +118,7 @@ impl WorkspaceManifest {
             source_template: None,
             capabilities: Capabilities::default(),
             defaults: WorkspaceDefaults::default(),
+            directories: BTreeMap::new(),
         }
     }
 
@@ -175,6 +190,23 @@ mod tests {
         assert!(text.contains("archiveDirectory: Archive"));
         let parsed = WorkspaceManifest::parse(Path::new("lattice.yaml"), &text).unwrap();
         assert_eq!(parsed.defaults, manifest.defaults);
+    }
+
+    #[test]
+    fn directory_metadata_round_trips_and_is_omitted_when_empty() {
+        let mut manifest = WorkspaceManifest::new("Dirs");
+        assert!(!serde_yaml::to_string(&manifest).unwrap().contains("directories"));
+        manifest.directories.insert(
+            "Inbox".into(),
+            DirectoryMeta {
+                purpose: Some("Drop raw captures here.".into()),
+            },
+        );
+        let text = serde_yaml::to_string(&manifest).unwrap();
+        assert!(text.contains("directories:"));
+        assert!(text.contains("purpose: Drop raw captures here."));
+        let parsed = WorkspaceManifest::parse(Path::new("lattice.yaml"), &text).unwrap();
+        assert_eq!(parsed.directories, manifest.directories);
     }
 
     #[test]
