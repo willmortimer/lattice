@@ -168,19 +168,24 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
         order: 60,
         name: "First Look",
         category: "Sample",
-        description: "A curated sample with linked pages and a canvas for a quick first look.",
+        description: "A kitchen-sink sample with pages, canvas, files, CSV, Mermaid, an image, and a CRM data app.",
         visibility: "sample",
         recommended: false,
         recommended_title: "First Look",
         directories: &[
-            SeedDirectory { path: "Product", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Research", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Canvases", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Archive", purpose: None, default_kind: None, icon: None }
+            SeedDirectory { path: "Inbox", purpose: Some("Drop quick captures here — triage into Product or Research."), default_kind: None, icon: None },
+            SeedDirectory { path: "Projects", purpose: Some("Active workstreams with a clear outcome."), default_kind: None, icon: None },
+            SeedDirectory { path: "Product", purpose: Some("Product narrative, vision, and roadmap pages."), default_kind: None, icon: None },
+            SeedDirectory { path: "Research", purpose: Some("Notes, comparisons, and diagrams."), default_kind: None, icon: None },
+            SeedDirectory { path: "Notebooks", purpose: Some("Reserved for notebook resources."), default_kind: None, icon: None },
+            SeedDirectory { path: "Canvases", purpose: Some("Spatial boards that link into workspace files."), default_kind: None, icon: None },
+            SeedDirectory { path: "Data", purpose: Some("Tabular seeds and imported tables."), default_kind: None, icon: None },
+            SeedDirectory { path: "Resources", purpose: Some("Ordinary files — JSON, YAML, code, images."), default_kind: None, icon: None },
+            SeedDirectory { path: "Archive", purpose: Some("Finished or inactive material."), default_kind: None, icon: None }
         ],
-        preview: &["Home.md", "Product/Vision.md", "Product/Roadmap.md", "Research/Competitor Analysis.md", "Canvases/Product Strategy.canvas"],
+        preview: &["Home.md", "Product/Vision.md", "Product/Roadmap.md", "Research/Competitor Analysis.md", "Research/Architecture.md", "Canvases/Product Strategy.canvas", "CRM.data", "Data/sample.csv", "Resources/config.json"],
         capabilities: &["pages", "canvas", "sqlite"],
-        quick_note_directory: "Research",
+        quick_note_directory: "Inbox",
         daily_note_directory: None,
         attachments_directory: None,
         template_directory: None,
@@ -191,10 +196,29 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             SeedFile { path: "Product/Vision.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Product/Vision.md")) },
             SeedFile { path: "Product/Roadmap.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Product/Roadmap.md")) },
             SeedFile { path: "Research/Competitor Analysis.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Research/Competitor Analysis.md")) },
-            SeedFile { path: "Canvases/Product Strategy.canvas", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Canvases/Product Strategy.canvas")) }
+            SeedFile { path: "Research/Architecture.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Research/Architecture.md")) },
+            SeedFile { path: "Canvases/Product Strategy.canvas", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Canvases/Product Strategy.canvas")) },
+            SeedFile { path: "Data/sample.csv", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Data/sample.csv")) },
+            SeedFile { path: "Resources/config.json", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Resources/config.json")) },
+            SeedFile { path: "Resources/schema.yaml", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Resources/schema.yaml")) },
+            SeedFile { path: "Resources/notes.txt", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Resources/notes.txt")) },
+            SeedFile { path: "Resources/example.ts", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Resources/example.ts")) },
+            SeedFile { path: "Resources/mark.svg", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Resources/mark.svg")) }
         ],
         data_packages: &[
-            
+            SeedDataPackage {
+            path: "CRM.data",
+            title: "CRM",
+            table: "contacts",
+            columns: &[
+                SeedDataColumn { name: "name", field_type: "text" },
+                SeedDataColumn { name: "status", field_type: "text" }
+            ],
+            rows_json: &[
+                "{\"name\":\"Ada Lovelace\",\"status\":\"Active\"}",
+                "{\"name\":\"Grace Hopper\",\"status\":\"Active\"}"
+            ],
+        }
         ],
     },
     GeneratedTemplate {

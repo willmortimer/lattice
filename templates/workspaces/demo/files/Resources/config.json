@@ -1,0 +1,8 @@
+{
+  "name": "Personal",
+  "version": 1,
+  "features": {
+    "canvas": true,
+    "search": true
+  }
+}

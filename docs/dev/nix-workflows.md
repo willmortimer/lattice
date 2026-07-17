@@ -117,7 +117,7 @@ templates are `personal`, `project`, `research`, `data-lab`, and `blank`.
 | `Git tree ... is dirty` warning | Harmless; nix is telling you the working tree has uncommitted changes. |
 | Task can't find `site/scripts/...` or workspace packages | Run tasks from the repo root. |
 | `tauri build` (bundled) fails outside the shell | macOS bundling needs Xcode CLT; the nix shell doesn't provide it. |
-| Browser on :5173 shows “Engineering Workspace” | That is the **demo fixture** (`demo.ts`), not your disk. Use the Tauri window to open a real folder. |
+| Browser on :5173 shows “Engineering Workspace” | That is the **demo fixture** (`demoWorkspace.generated.ts` from the `demo` template), not your disk. Use the Tauri window to open a real folder. |
 | Want Astro but ran `desktop-dev` | Use `nix run .#site-dev` instead. |
 
 ## How it fits together

@@ -1,0 +1,7 @@
+title: Sample schema
+version: 1
+fields:
+  - name: id
+    type: text
+  - name: status
+    type: text

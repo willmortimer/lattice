@@ -243,22 +243,46 @@ export const GENERATED_TEMPLATE_CATALOG = [
     "order": 60,
     "name": "First Look",
     "category": "Sample",
-    "description": "A curated sample with linked pages and a canvas for a quick first look.",
+    "description": "A kitchen-sink sample with pages, canvas, files, CSV, Mermaid, an image, and a CRM data app.",
     "visibility": "sample",
     "recommended": false,
     "recommendedTitle": "First Look",
     "directories": [
       {
-        "path": "Product"
+        "path": "Inbox",
+        "purpose": "Drop quick captures here — triage into Product or Research."
       },
       {
-        "path": "Research"
+        "path": "Projects",
+        "purpose": "Active workstreams with a clear outcome."
       },
       {
-        "path": "Canvases"
+        "path": "Product",
+        "purpose": "Product narrative, vision, and roadmap pages."
       },
       {
-        "path": "Archive"
+        "path": "Research",
+        "purpose": "Notes, comparisons, and diagrams."
+      },
+      {
+        "path": "Notebooks",
+        "purpose": "Reserved for notebook resources."
+      },
+      {
+        "path": "Canvases",
+        "purpose": "Spatial boards that link into workspace files."
+      },
+      {
+        "path": "Data",
+        "purpose": "Tabular seeds and imported tables."
+      },
+      {
+        "path": "Resources",
+        "purpose": "Ordinary files — JSON, YAML, code, images."
+      },
+      {
+        "path": "Archive",
+        "purpose": "Finished or inactive material."
       }
     ],
     "preview": [
@@ -266,7 +290,11 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "Product/Vision.md",
       "Product/Roadmap.md",
       "Research/Competitor Analysis.md",
-      "Canvases/Product Strategy.canvas"
+      "Research/Architecture.md",
+      "Canvases/Product Strategy.canvas",
+      "CRM.data",
+      "Data/sample.csv",
+      "Resources/config.json"
     ],
     "capabilities": [
       "pages",
@@ -274,11 +302,37 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "sqlite"
     ],
     "workspaceDefaults": {
-      "quickNoteDirectory": "Research",
+      "quickNoteDirectory": "Inbox",
       "archiveDirectory": "Archive"
     },
     "openOnCreate": "Home.md",
-    "dataPackages": []
+    "dataPackages": [
+      {
+        "path": "CRM.data",
+        "title": "CRM",
+        "table": "contacts",
+        "columns": [
+          {
+            "name": "name",
+            "type": "text"
+          },
+          {
+            "name": "status",
+            "type": "text"
+          }
+        ],
+        "rows": [
+          {
+            "name": "Ada Lovelace",
+            "status": "Active"
+          },
+          {
+            "name": "Grace Hopper",
+            "status": "Active"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "team",

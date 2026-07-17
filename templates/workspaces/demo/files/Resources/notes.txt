@@ -1,0 +1,3 @@
+Sample plain text file.
+
+This fixture runs in the browser shell without native filesystem access.

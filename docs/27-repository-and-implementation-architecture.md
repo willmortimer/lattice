@@ -136,12 +136,14 @@ committed SQLite binaries), then writes:
 
 - `crates/lattice-core/src/template_catalog.generated.rs`
 - `apps/desktop/src/templateCatalog.generated.ts`
+- `apps/desktop/src/demoWorkspace.generated.ts` (browser demo snapshot from
+  the `demo` sample package)
 
 Flat `files[]` entries (including binaries) are embedded via `include_bytes!`.
 `dataPackages` JSON counts toward the same 2MiB seed budget and is materialized
 with `DataApp::create` plus row inserts at provision time.
 
-Do not edit either generated catalog directly.
+Do not edit the generated catalogs directly.
 
 Use generation for:
 
