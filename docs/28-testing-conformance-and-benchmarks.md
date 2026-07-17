@@ -24,6 +24,12 @@ Verify preservation of unknown fields and stable formatting policy.
 
 ### Golden fixtures
 
+Phase 1 resource-runtime conformance fixtures live under
+`test/fixtures/resource-runtime/` and are exercised by
+`lattice-core` integration tests (profiles, diagnostics, containment, and
+read budgets). Add cases there when introducing or tightening format
+profiles.
+
 Maintain real example workspaces covering:
 
 - Markdown edge cases.
