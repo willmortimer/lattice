@@ -23,6 +23,19 @@ pub enum Error {
         found: String,
     },
 
+    /// A semantic resource edit exceeded the bounded default edit size.
+    #[error("resource edit at {path} is {size} bytes; the limit is {max} bytes")]
+    EditTooLarge { path: PathBuf, size: u64, max: u64 },
+
+    /// The generic byte update command is restricted to editable text
+    /// profiles; images, PDFs, opaque binaries, SQLite packages, and
+    /// containers have format-specific command paths or remain read-only.
+    #[error("resource {path} is not editable through ResourceUpdate (profile: {profile})")]
+    ResourceNotEditable { path: PathBuf, profile: String },
+
+    #[error("cannot update resource {path}: {reason}")]
+    InvalidResourceTarget { path: PathBuf, reason: String },
+
     /// A `ResourceMove` destination is not a directory.
     #[error("cannot move into {path}: not a directory")]
     NotADirectory { path: PathBuf },

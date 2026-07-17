@@ -13,6 +13,7 @@ mod home;
 mod links;
 mod manifest;
 mod resource;
+mod resource_runtime;
 mod template;
 mod validate;
 mod watcher;
@@ -32,6 +33,12 @@ pub use manifest::{
     Capabilities, WorkspaceDefaults, WorkspaceManifest, WORKSPACE_MANIFEST_FILENAME,
 };
 pub use resource::{Resource, ResourceKind};
+pub use resource_runtime::{
+    inspect_resource, read_resource_range, read_text_window, BuiltinFormatRegistry,
+    FormatCapabilities, ResourceDiagnostic, ResourceEncoding, ResourceFormatProfile,
+    ResourceInspection, ResourceRange, ResourceRuntimeError, TextWindow,
+    DEFAULT_RESOURCE_EDIT_BYTES, MAX_FORMAT_PROBE_BYTES, MAX_RESOURCE_RANGE_BYTES,
+};
 pub use template::{
     apply_template, init_with_template, DefaultWorkspaceStatus, ProvisionDiagnostic,
     TemplateDescriptor, TemplateVisibility, WorkspaceCreationMode, WorkspaceCreationPlan,

@@ -5,13 +5,15 @@ use lattice_commands::{
     Command as SemanticCommand, CommandEngine, Error as CommandError, Transaction,
 };
 use lattice_core::{
-    ensure_lattice_home, initialize_lattice_home, DefaultWorkspaceStatus, ProvisionDiagnostic,
-    Resource, TemplateDescriptor, Workspace, WorkspaceCreationMode, WorkspaceCreationPlan,
-    WorkspaceDefaults, WorkspaceProvisioner,
+    ensure_lattice_home, initialize_lattice_home, inspect_resource as inspect_native_resource,
+    read_resource_range as read_native_resource_range, read_text_window as read_native_text_window,
+    DefaultWorkspaceStatus, ProvisionDiagnostic, Resource, ResourceRuntimeError,
+    TemplateDescriptor, Workspace, WorkspaceCreationMode, WorkspaceCreationPlan, WorkspaceDefaults,
+    WorkspaceProvisioner,
 };
 use lattice_storage::{NativeWorkspaceStore, WorkspaceStore};
 use serde::Serialize;
-use tauri::ipc::{InvokeBody, Request};
+use tauri::ipc::{InvokeBody, Request, Response};
 
 const MAX_EDITOR_ASSET_BYTES: usize = 8 * 1024 * 1024;
 
@@ -89,6 +91,42 @@ pub fn read_file(root: String, rel_path: String) -> Result<String, String> {
 pub fn read_binary_file(root: String, rel_path: String) -> Result<Vec<u8>, String> {
     let (_, canonical_candidate) = resolve_within_root(&root, &rel_path)?;
     std::fs::read(&canonical_candidate).map_err(|err| err.to_string())
+}
+
+/// Inspect a native resource without mutating it. Format recognition is
+/// extension- and bounded-probe-based; the returned diagnostics are safe to
+/// display even when a resource is malformed or only partially supported.
+#[tauri::command]
+pub fn inspect_resource(
+    root: String,
+    rel_path: String,
+) -> Result<lattice_core::ResourceInspection, ResourceRuntimeError> {
+    inspect_native_resource(Path::new(&root), Path::new(&rel_path))
+}
+
+/// Read a bounded raw byte range. Tauri's raw response avoids turning binary
+/// content into a JSON array; callers obtain format and size metadata from
+/// [`inspect_resource`].
+#[tauri::command]
+pub fn read_resource_range(
+    root: String,
+    rel_path: String,
+    offset: u64,
+    length: u64,
+) -> Result<Response, ResourceRuntimeError> {
+    let range = read_native_resource_range(Path::new(&root), Path::new(&rel_path), offset, length)?;
+    Ok(Response::new(range.bytes))
+}
+
+/// Read a bounded, encoding-aware text window with a structured serde result.
+#[tauri::command]
+pub fn read_text_window(
+    root: String,
+    rel_path: String,
+    offset: u64,
+    length: u64,
+) -> Result<lattice_core::TextWindow, ResourceRuntimeError> {
+    read_native_text_window(Path::new(&root), Path::new(&rel_path), offset, length)
 }
 
 /// A page's content plus the content-hash revision it was read at, so the
@@ -172,6 +210,37 @@ pub fn apply_page_update(
         .first()
         .and_then(|outcome| outcome.resulting_revision.clone())
         .ok_or_else(|| "page update did not produce a resulting revision".to_string())
+}
+
+/// Apply a bounded byte-oriented resource edit through the semantic command
+/// core. Binary payloads arrive as raw Tauri request bytes, so they never
+/// become JSON byte arrays on the command boundary.
+#[tauri::command]
+pub fn apply_resource_update(request: Request<'_>) -> Result<String, String> {
+    let content = match request.body() {
+        InvokeBody::Raw(bytes) => bytes.clone(),
+        InvokeBody::Json(_) => return Err("resource update requires a raw binary body".to_string()),
+    };
+    let root = request_header(&request, "x-lattice-root")?;
+    let rel_path = request_header(&request, "x-lattice-path")?;
+    let base_revision = request_header(&request, "x-lattice-base-revision")?;
+    let (canonical_root, _) = resolve_within_root(&root, &rel_path)?;
+    let mut engine = CommandEngine::open(&canonical_root).map_err(command_error_to_string)?;
+    let receipt = engine
+        .apply(Transaction::new(
+            format!("Update resource {rel_path}"),
+            vec![SemanticCommand::ResourceUpdate {
+                path: PathBuf::from(&rel_path),
+                content,
+                base_revision,
+            }],
+        ))
+        .map_err(command_error_to_string)?;
+    receipt
+        .outcomes
+        .first()
+        .and_then(|outcome| outcome.resulting_revision.clone())
+        .ok_or_else(|| "resource update did not produce a resulting revision".to_string())
 }
 
 /// Create a new page at `rel_path` with `content`. Used by the external-edit
@@ -648,6 +717,38 @@ mod tests {
         )
         .unwrap();
         assert_eq!(content, bytes);
+    }
+
+    #[test]
+    fn native_resource_commands_expose_inspection_and_text_windows() {
+        let dir = init_workspace();
+        std::fs::write(dir.path().join("Board.canvas"), br#"{"nodes":[]}"#).unwrap();
+        std::fs::write(dir.path().join("Note.txt"), "hello native\n").unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        let inspection = inspect_resource(root.clone(), "Board.canvas".into()).unwrap();
+        assert_eq!(
+            inspection.profile,
+            lattice_core::ResourceFormatProfile::JsonCanvas
+        );
+        let window = read_text_window(root, "Note.txt".into(), 0, 5).unwrap();
+        assert_eq!(window.content, "hello");
+    }
+
+    #[test]
+    fn native_resource_command_preserves_structured_read_errors() {
+        let dir = init_workspace();
+        std::fs::write(dir.path().join("blob.bin"), [0, 159, 146, 150]).unwrap();
+        let result = read_text_window(
+            dir.path().to_string_lossy().into_owned(),
+            "blob.bin".into(),
+            0,
+            4,
+        );
+        assert!(matches!(
+            result,
+            Err(lattice_core::ResourceRuntimeError::BinaryResource { .. })
+        ));
     }
 
     #[test]

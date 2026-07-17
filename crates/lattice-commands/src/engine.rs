@@ -13,7 +13,7 @@ use crate::command::{
 };
 use crate::history::{unix_now, unix_to_system, HistoryStore};
 use crate::trash::{dispose, TrashPolicy};
-use crate::{Error, Result};
+use crate::{Error, Result, MAX_RESOURCE_EDIT_BYTES};
 
 /// One applied command, carrying everything history needs to reverse it.
 struct AppliedOp {
@@ -302,11 +302,41 @@ impl CommandEngine {
             Command::PageUpdate {
                 path,
                 base_revision,
-                ..
+                content,
             } => {
+                self.validate_edit_size(path, content.len())?;
                 let meta = self
                     .metadata_opt(path)?
                     .ok_or_else(|| Error::NotFound { path: path.clone() })?;
+                if meta.revision.hash != *base_revision {
+                    return Err(Error::StaleBaseRevision {
+                        path: path.clone(),
+                        expected: base_revision.clone(),
+                        found: meta.revision.hash,
+                    });
+                }
+                Ok(())
+            }
+            Command::ResourceUpdate {
+                path,
+                content,
+                base_revision,
+            } => {
+                self.validate_edit_size(path, content.len())?;
+                self.validate_resource_update_target(path)?;
+                let meta = self
+                    .metadata_opt(path)?
+                    .ok_or_else(|| Error::NotFound { path: path.clone() })?;
+                if meta.is_dir {
+                    return Err(Error::NotFound { path: path.clone() });
+                }
+                if meta.revision.len > MAX_RESOURCE_EDIT_BYTES as u64 {
+                    return Err(Error::EditTooLarge {
+                        path: path.clone(),
+                        size: meta.revision.len,
+                        max: MAX_RESOURCE_EDIT_BYTES as u64,
+                    });
+                }
                 if meta.revision.hash != *base_revision {
                     return Err(Error::StaleBaseRevision {
                         path: path.clone(),
@@ -433,6 +463,54 @@ impl CommandEngine {
         BufferedWriter::new(&self.store, &self.journal, self.session_id.clone())
     }
 
+    fn validate_edit_size(&self, path: &Path, size: usize) -> Result<()> {
+        if size > MAX_RESOURCE_EDIT_BYTES {
+            return Err(Error::EditTooLarge {
+                path: path.to_path_buf(),
+                size: size as u64,
+                max: MAX_RESOURCE_EDIT_BYTES as u64,
+            });
+        }
+        Ok(())
+    }
+
+    fn validate_resource_update_target(&self, path: &Path) -> Result<()> {
+        let components = path.components().collect::<Vec<_>>();
+        let is_manifest = components.len() == 1
+            && components.first().is_some_and(|component| {
+                component.as_os_str() == lattice_core::WORKSPACE_MANIFEST_FILENAME
+            });
+        let is_operational = components.iter().any(|component| {
+            component.as_os_str() == std::ffi::OsStr::new(lattice_core::OPERATIONAL_DIR)
+        });
+        if is_manifest || is_operational {
+            return Err(Error::ResourceNotEditable {
+                path: path.to_path_buf(),
+                profile: "internal".into(),
+            });
+        }
+
+        let inspection = lattice_core::inspect_resource(&self.root, path).map_err(|error| {
+            Error::InvalidResourceTarget {
+                path: path.to_path_buf(),
+                reason: error.to_string(),
+            }
+        })?;
+        if inspection.is_directory {
+            return Err(Error::InvalidResourceTarget {
+                path: path.to_path_buf(),
+                reason: "directories are not file edit targets".into(),
+            });
+        }
+        if !inspection.capabilities.can_update || inspection.encoding.is_none() {
+            return Err(Error::ResourceNotEditable {
+                path: path.to_path_buf(),
+                profile: format!("{:?}", inspection.profile),
+            });
+        }
+        Ok(())
+    }
+
     fn apply_one(&self, command: &Command) -> Result<AppliedOp> {
         match command {
             Command::PageCreate { path, content } => {
@@ -478,6 +556,44 @@ impl CommandEngine {
                     inverse: Command::PageUpdate {
                         path: path.clone(),
                         content: String::from_utf8_lossy(&prior).into_owned(),
+                        base_revision: revision.hash.clone(),
+                    },
+                    prior_content: Some(prior),
+                    resulting_revision: Some(revision.hash),
+                })
+            }
+            Command::ResourceUpdate {
+                path,
+                content,
+                base_revision,
+            } => {
+                self.validate_edit_size(path, content.len())?;
+                self.validate_resource_update_target(path)?;
+                let meta = self.store.metadata(path)?;
+                if meta.is_dir {
+                    return Err(Error::NotFound { path: path.clone() });
+                }
+                if meta.revision.len > MAX_RESOURCE_EDIT_BYTES as u64 {
+                    return Err(Error::EditTooLarge {
+                        path: path.clone(),
+                        size: meta.revision.len,
+                        max: MAX_RESOURCE_EDIT_BYTES as u64,
+                    });
+                }
+                if meta.revision.hash != *base_revision {
+                    return Err(Error::StaleBaseRevision {
+                        path: path.clone(),
+                        expected: base_revision.clone(),
+                        found: meta.revision.hash,
+                    });
+                }
+                let prior = self.store.read(path)?;
+                let revision = self.writer().write(path, content, Some(&meta.revision))?;
+                Ok(AppliedOp {
+                    forward: command.clone(),
+                    inverse: Command::ResourceUpdate {
+                        path: path.clone(),
+                        content: prior.clone(),
                         base_revision: revision.hash.clone(),
                     },
                     prior_content: Some(prior),
@@ -740,6 +856,14 @@ impl CommandEngine {
                 self.writer().write(path, &bytes, Some(&meta.revision))?;
                 Ok(())
             }
+            Command::ResourceUpdate { path, content, .. } => {
+                let bytes = prior_content
+                    .map(<[u8]>::to_vec)
+                    .unwrap_or_else(|| content.clone());
+                let meta = self.store.metadata(path)?;
+                self.writer().write(path, &bytes, Some(&meta.revision))?;
+                Ok(())
+            }
             Command::WorkspaceManifestUpdate { content, .. } => {
                 let path = PathBuf::from(lattice_core::WORKSPACE_MANIFEST_FILENAME);
                 let bytes = prior_content
@@ -903,6 +1027,7 @@ impl CommandEngine {
             Command::PageCreate { .. }
             | Command::ResourceCreate { .. }
             | Command::PageUpdate { .. }
+            | Command::ResourceUpdate { .. }
             | Command::WorkspaceManifestUpdate { .. } => {
                 self.guard_hash(&forward.guard_path(), resulting_revision.as_deref())
             }
