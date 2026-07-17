@@ -3,8 +3,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { demoSnapshot, inBrowser } from "../demo";
 import { listTemplates, provisionWorkspace, type TemplateDescriptor } from "../lib/templates";
+import { loadSession, saveSession, type DesktopSession } from "../lib/profile";
 import { refreshResourceCatalog } from "../lib/resourceLinks";
-import type { WorkspaceSnapshot } from "../types";
+import type { Resource, WorkspaceChangeEvent, WorkspaceSnapshot } from "../types";
+import { workspaceUnavailableState } from "./workspacePolicy";
 
 type Profile = ReturnType<typeof import("../settings/model").useAppSettings>["profile"];
 type Startup = ReturnType<typeof import("../settings/model").useAppSettings>["startup"];
@@ -24,7 +26,10 @@ export interface WorkspaceControllerOptions {
   rememberWorkspace: (snapshot: WorkspaceSnapshot) => void;
   removeRecent: (root: string) => void;
   refreshProfile: () => void | Promise<void>;
+  getSession: () => Omit<DesktopSession, "root">;
+  restoreSession: (session: DesktopSession, snapshot: WorkspaceSnapshot) => void | Promise<void>;
   onAdopt: (snapshot: WorkspaceSnapshot) => void | Promise<void>;
+  onWorkspaceUnavailable: (root: string) => void | Promise<void>;
 }
 
 export interface WorkspaceController {
@@ -34,6 +39,8 @@ export interface WorkspaceController {
   workspacesDir: string | null;
   templates: TemplateDescriptor[];
   adoptWorkspace: (snapshot: WorkspaceSnapshot) => Promise<void>;
+  handleWorkspaceChanged: (event: WorkspaceChangeEvent) => Promise<void>;
+  refreshResources: () => Promise<void>;
   handleGetStarted: () => Promise<void>;
   handleOpenWorkspace: () => Promise<void>;
   openRecent: (root: string) => Promise<void>;
@@ -48,20 +55,24 @@ export interface WorkspaceController {
   pickWorkspaceFolder: () => Promise<string | null>;
 }
 
-/** Owns workspace identity, profile-backed startup, adoption, and native
- * watcher/index lifecycle. Resource/UI cleanup is injected through onAdopt so
- * this controller does not depend on the resource controller. */
+/** Owns workspace identity, profile-backed startup/session state, and the
+ * native watcher/index lifecycle. Other controllers receive lifecycle
+ * callbacks instead of reaching back into this hook. */
 export function useWorkspaceController(options: WorkspaceControllerOptions): WorkspaceController {
   const {
     initialSnapshot, profile, profileReady, startup, recents, demoStartEmpty,
     setError, setBusy, setStatusToast, setNewWorkspaceOpen, rememberWorkspace,
-    removeRecent, refreshProfile, onAdopt,
+    removeRecent, refreshProfile, getSession, restoreSession, onAdopt,
+    onWorkspaceUnavailable,
   } = options;
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot | null>(initialSnapshot);
   const [workspacesDir, setWorkspacesDir] = useState<string | null>(null);
   const [templates, setTemplates] = useState<TemplateDescriptor[]>([]);
   const snapshotRef = useRef(snapshot);
   const startupAttemptedRef = useRef(false);
+  const watchingRootRef = useRef<string | null>(null);
+  const sessionRestoredRootRef = useRef<string | null>(null);
+
   useEffect(() => {
     snapshotRef.current = snapshot;
   }, [snapshot]);
@@ -70,19 +81,69 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
     void listTemplates().then(setTemplates).catch((error: unknown) => setError(String(error)));
   }, [setError]);
 
+  const stopWatching = useCallback(async () => {
+    if (inBrowser || !watchingRootRef.current) return;
+    watchingRootRef.current = null;
+    await invoke("stop_watching").catch(() => undefined);
+  }, []);
+
+  useEffect(() => () => {
+    void stopWatching();
+  }, [stopWatching]);
+
   const adoptWorkspace = useCallback(async (next: WorkspaceSnapshot) => {
+    if (watchingRootRef.current && watchingRootRef.current !== next.root) await stopWatching();
     snapshotRef.current = next;
+    sessionRestoredRootRef.current = null;
     setSnapshot(next);
     await onAdopt(next);
     rememberWorkspace(next);
     if (!inBrowser) {
+      watchingRootRef.current = next.root;
       void invoke("start_watching", { root: next.root }).catch((error: unknown) => {
+        if (watchingRootRef.current === next.root) watchingRootRef.current = null;
         console.error("failed to start workspace watcher:", error);
       });
       void invoke("rebuild_index", { root: next.root }).catch(() => undefined);
       await refreshResourceCatalog(next.root);
     }
-  }, [onAdopt, rememberWorkspace]);
+  }, [onAdopt, rememberWorkspace, stopWatching]);
+
+  const refreshResources = useCallback(async () => {
+    const root = snapshotRef.current?.root;
+    if (!root) return;
+    try {
+      const resources = await invoke<Resource[]>("list_resources", { root });
+      setSnapshot((prev) => (prev ? { ...prev, resources } : prev));
+      await refreshResourceCatalog(root);
+    } catch {
+      // A scan can briefly observe a file mid-write or a workspace closing.
+    }
+  }, []);
+
+  const handleWorkspaceChanged = useCallback(async (event: WorkspaceChangeEvent) => {
+    const root = snapshotRef.current?.root;
+    if (!root) return;
+    if (event.type === "workspace-unavailable" || (event.type === "deleted" && event.path === "lattice.yaml")) {
+      // Atomic manifest replacement may briefly look like deletion. Reopen it
+      // first; only reset after the watcher confirms the workspace is gone.
+      if (event.type === "deleted") {
+        try {
+          await adoptWorkspace(await invoke<WorkspaceSnapshot>("open_workspace", { path: root }));
+          return;
+        } catch {
+          // Continue with the honest unavailable state below.
+        }
+      }
+      await stopWatching();
+      const reset = workspaceUnavailableState(root);
+      snapshotRef.current = reset.snapshot;
+      sessionRestoredRootRef.current = null;
+      setSnapshot(reset.snapshot);
+      await onWorkspaceUnavailable(root);
+      await refreshProfile();
+    }
+  }, [adoptWorkspace, onWorkspaceUnavailable, refreshProfile, stopWatching]);
 
   const handleOpenWorkspace = useCallback(async () => {
     setError(null);
@@ -101,9 +162,7 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
   const handleGetStarted = useCallback(async () => {
     setError(null);
     if (inBrowser) {
-      setSnapshot(demoSnapshot);
-      snapshotRef.current = demoSnapshot;
-      rememberWorkspace(demoSnapshot);
+      await adoptWorkspace(demoSnapshot);
       return;
     }
     setBusy(true);
@@ -121,13 +180,12 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
     } finally {
       setBusy(false);
     }
-  }, [adoptWorkspace, rememberWorkspace, setBusy, setError, setStatusToast]);
+  }, [adoptWorkspace, setBusy, setError, setStatusToast]);
 
   const openRecent = useCallback(async (root: string) => {
     setError(null);
     if (inBrowser) {
-      setSnapshot(demoSnapshot);
-      snapshotRef.current = demoSnapshot;
+      await adoptWorkspace(demoSnapshot);
       return;
     }
     setBusy(true);
@@ -149,7 +207,7 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
     try {
       const outcome = await provisionWorkspace(args);
       await adoptWorkspace(outcome.workspace);
-      refreshProfile();
+      await refreshProfile();
       if (outcome.diagnostics.length > 0) setStatusToast(outcome.diagnostics.map((item) => item.message).join(" "));
       else if (!inBrowser) setStatusToast(`Created ${outcome.workspace.title}`);
       setNewWorkspaceOpen(false);
@@ -194,9 +252,26 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
     return () => { cancelled = true; };
   }, [adoptWorkspace, demoStartEmpty, profile.effectiveDefaultWorkspace, profileReady, recents, removeRecent, snapshot, startup.reopenLastWorkspace]);
 
+  useEffect(() => {
+    if (!snapshot || sessionRestoredRootRef.current === snapshot.root) return;
+    sessionRestoredRootRef.current = snapshot.root;
+    if (!startup.restoreSession) return;
+    void loadSession(snapshot.root).then((stored) => {
+      if (stored) void restoreSession(stored, snapshot);
+    }).catch(() => undefined);
+  }, [restoreSession, snapshot, startup.restoreSession]);
+
+  useEffect(() => {
+    if (!snapshot || sessionRestoredRootRef.current !== snapshot.root) return;
+    const timer = window.setTimeout(() => {
+      void saveSession({ root: snapshot.root, ...getSession() }).catch(() => undefined);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [getSession, snapshot, snapshot?.root]);
+
   return {
     snapshot, snapshotRef, setSnapshot, workspacesDir, templates, adoptWorkspace,
-    handleGetStarted, handleOpenWorkspace, openRecent, handleCreateWorkspace,
-    openNewWorkspaceDialog, pickWorkspaceFolder,
+    handleWorkspaceChanged, refreshResources, handleGetStarted, handleOpenWorkspace,
+    openRecent, handleCreateWorkspace, openNewWorkspaceDialog, pickWorkspaceFolder,
   };
 }
