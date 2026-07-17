@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { Editor, Extensions } from "@tiptap/core";
 import { EditorContent, ReactNodeViewRenderer, useEditor } from "@tiptap/react";
+import { DOMParser as ProseMirrorDOMParser, Slice } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import {
@@ -30,14 +31,20 @@ import {
 
 import { CodeBlockView } from "./CodeBlockView";
 import { ConflictEnvelope } from "./ConflictEnvelope";
+import { BlockDragHandle } from "./BlockDragHandle";
 import { editorExtensions } from "./extensions";
 import { ImageView } from "./ImageView";
+import { LatticeEmbedView } from "./LatticeEmbedView";
 import {
   joinFrontmatter,
   parseMarkdownToJSON,
-  serializeJSONToMarkdown,
   splitFrontmatter,
 } from "./markdown";
+import { classifyClipboard, sanitizePastedHtml } from "./pasteSanitize";
+import { PageModeChrome } from "./PageModeChrome";
+import { PagePreview } from "./PagePreview";
+import { PageSourceEditor } from "./PageSourceEditor";
+import { applyModeSwitch, bodyForPersistence, type PageMode } from "./pageDraft";
 import { StaleRevisionError, type PageIO } from "./pageIO";
 import { type SaveState } from "./saveState";
 import { KindMark } from "../KindMark";
@@ -83,15 +90,21 @@ const SLASH_COMMANDS = [
  * adds `addNodeView`, so the schema itself — what a document can contain —
  * stays identical between live editing and the standalone codec.
  */
-const liveExtensions: Extensions = editorExtensions.map((extension) => {
-  if (extension.name === "image") {
-    return extension.extend({ addNodeView: () => ReactNodeViewRenderer(ImageView) });
-  }
-  if (extension.name === "codeBlock") {
-    return extension.extend({ addNodeView: () => ReactNodeViewRenderer(CodeBlockView) });
-  }
-  return extension;
-});
+const liveExtensions: Extensions = [
+  ...editorExtensions.map((extension) => {
+    if (extension.name === "image") {
+      return extension.extend({ addNodeView: () => ReactNodeViewRenderer(ImageView) });
+    }
+    if (extension.name === "codeBlock") {
+      return extension.extend({ addNodeView: () => ReactNodeViewRenderer(CodeBlockView) });
+    }
+    if (extension.name === "latticeEmbed") {
+      return extension.extend({ addNodeView: () => ReactNodeViewRenderer(LatticeEmbedView) });
+    }
+    return extension;
+  }),
+  BlockDragHandle,
+];
 
 interface PageEditorProps {
   raw: string;
@@ -158,8 +171,13 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
   },
   ref,
 ) {
-  const [{ frontmatter }] = useState(() => splitFrontmatter(raw));
-  const initialDoc = useMemo(() => parseMarkdownToJSON(splitFrontmatter(raw).body), [raw]);
+  const [{ frontmatter, body: initialBody }] = useState(() => splitFrontmatter(raw));
+  const initialDoc = useMemo(() => parseMarkdownToJSON(initialBody), [initialBody]);
+
+  const [mode, setMode] = useState<PageMode>("edit");
+  const [draftBody, setDraftBody] = useState(initialBody);
+  const [sourceParseError, setSourceParseError] = useState<string | null>(null);
+  const [sourceResetKey, setSourceResetKey] = useState(0);
 
   const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
   const [searchedWikiTargets, setSearchedWikiTargets] = useState<ResourceLinkTarget[]>([]);
@@ -178,7 +196,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
 
   const updateEditorMenus = useCallback(
     (currentEditor: Editor) => {
-      if (!currentEditor.isEditable) {
+      if (!currentEditor.isEditable || mode !== "edit") {
         setSlashMenu(null);
         setWikiMenu(null);
         setSelectionToolbar(null);
@@ -253,7 +271,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
         top: coordinates.bottom + 6,
       });
     },
-    [slashCommands],
+    [mode, slashCommands],
   );
 
   const importFilesIntoView = useCallback(
@@ -306,6 +324,11 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     onRevisionChangeRef.current?.(next);
   }, []);
 
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+  const draftBodyRef = useRef(draftBody);
+  draftBodyRef.current = draftBody;
+
   // The initial revision (on mount) is a "revision change" too — the parent
   // must learn it even though nothing was saved or reloaded yet.
   useEffect(() => {
@@ -324,11 +347,40 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
         spellcheck: spellcheck ? "true" : "false",
       },
       handlePaste: (view, event) => {
-        const files = Array.from(event.clipboardData?.files ?? []);
-        if (files.length > 0 && onImportAssetRef.current) {
+        const kind = classifyClipboard(event.clipboardData);
+        if (kind === "files" && onImportAssetRef.current) {
+          const files = Array.from(event.clipboardData?.files ?? []);
           event.preventDefault();
           void importFilesIntoView(view, files);
           return true;
+        }
+
+        if (kind === "markdown" && event.clipboardData) {
+          const markdown = event.clipboardData.getData("text/markdown");
+          try {
+            const docJson = parseMarkdownToJSON(markdown);
+            const node = view.state.schema.nodeFromJSON(docJson);
+            event.preventDefault();
+            const tr = view.state.tr.replaceSelection(new Slice(node.content, 0, 0));
+            view.dispatch(tr.scrollIntoView());
+            return true;
+          } catch {
+            // Fall through to HTML/plain handling when markdown is malformed.
+          }
+        }
+
+        if (kind === "html" && event.clipboardData) {
+          const clean = sanitizePastedHtml(event.clipboardData.getData("text/html"));
+          if (clean.trim()) {
+            event.preventDefault();
+            const element = document.createElement("div");
+            element.innerHTML = clean;
+            const slice = ProseMirrorDOMParser.fromSchema(view.state.schema).parseSlice(element, {
+              preserveWhitespace: true,
+            });
+            view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView());
+            return true;
+          }
         }
 
         const pastedText = event.clipboardData?.getData("text/plain").trim() ?? "";
@@ -376,7 +428,11 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
   useImperativeHandle(
     ref,
     () => ({
-      getRaw: () => joinFrontmatter(frontmatter, serializeJSONToMarkdown(editor.getJSON())),
+      getRaw: () =>
+        joinFrontmatter(
+          frontmatter,
+          bodyForPersistence(modeRef.current, draftBodyRef.current, editor?.getJSON() ?? null),
+        ),
     }),
     [editor, frontmatter],
   );
@@ -398,7 +454,11 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     savingRef.current = true;
     setSaveState({ status: "saving" });
 
-    const body = serializeJSONToMarkdown(editor.getJSON());
+    const body = bodyForPersistence(
+      modeRef.current,
+      draftBodyRef.current,
+      editor?.getJSON() ?? null,
+    );
     const fullRaw = joinFrontmatter(frontmatter, body);
 
     try {
@@ -429,6 +489,43 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
       void performSaveRef.current();
     }, autosaveDelayMs);
   }
+
+  const requestModeChange = useCallback(
+    (targetMode: PageMode) => {
+      const result = applyModeSwitch({
+        from: modeRef.current,
+        to: targetMode,
+        draftBody: draftBodyRef.current,
+        editJson: modeRef.current === "edit" ? editor?.getJSON() ?? null : null,
+      });
+      if (result.blocked) {
+        setSourceParseError(result.sourceParseError);
+        setMode("source");
+        setSourceResetKey((key) => key + 1);
+        return;
+      }
+      setSourceParseError(result.sourceParseError);
+      setDraftBody(result.draftBody);
+      draftBodyRef.current = result.draftBody;
+      if (result.editContent && editor) {
+        editor.commands.setContent(result.editContent);
+      }
+      if (result.mode === "source") {
+        setSourceResetKey((key) => key + 1);
+      }
+      setMode(result.mode);
+      modeRef.current = result.mode;
+    },
+    [editor],
+  );
+
+  const handleSourceChange = useCallback((nextBody: string) => {
+    draftBodyRef.current = nextBody;
+    setDraftBody(nextBody);
+    setSourceParseError(null);
+    setSaveState((prev) => (prev.status === "conflict" ? prev : { status: "dirty" }));
+    scheduleAutosave();
+  }, []);
 
   const filteredSlashCommands = useMemo(() => {
     const query = slashMenu?.query.toLowerCase() ?? "";
@@ -680,7 +777,14 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     clearAutosaveTimer();
     const snapshot = await io.load();
     setRevision(snapshot.revision);
-    editor.commands.setContent(parseMarkdownToJSON(splitFrontmatter(snapshot.raw).body));
+    const reloaded = splitFrontmatter(snapshot.raw);
+    const body = reloaded.body;
+    setDraftBody(body);
+    draftBodyRef.current = body;
+    setSourceParseError(null);
+    setMode("edit");
+    modeRef.current = "edit";
+    editor.commands.setContent(parseMarkdownToJSON(body));
     setSaveState({ status: "idle" });
   }
 
@@ -710,6 +814,25 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
 
       {saveState.status === "error" && <p className="error-text">{saveState.message}</p>}
 
+      <PageModeChrome
+        mode={mode}
+        sourceParseError={sourceParseError}
+        onModeChange={requestModeChange}
+      />
+
+      {mode === "source" && (
+        <PageSourceEditor
+          value={draftBody}
+          resetKey={`${sourceResetKey}`}
+          onChange={handleSourceChange}
+        />
+      )}
+
+      {mode === "preview" && (
+        <PagePreview draftBody={draftBody} parseError={sourceParseError} />
+      )}
+
+      {mode === "edit" && (
       <div
         ref={editorContainerRef}
         onClick={(event) => {
@@ -725,10 +848,13 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
       >
         <EditorContent editor={editor} className="markdown-body page-editor-content" />
       </div>
+      )}
+      {mode === "edit" && (
       <p className="page-editor-hint">
         Type / for blocks · [[ to link a page · paste or drop files · ⌘S saves immediately
       </p>
-      {selectionToolbar && (
+      )}
+      {mode === "edit" && selectionToolbar && (
         <div
           className="editor-floating-toolbar editor-selection-toolbar"
           role="toolbar"
@@ -752,7 +878,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
           </button>
         </div>
       )}
-      {blockToolbar && !slashMenu && !wikiMenu && (
+      {mode === "edit" && blockToolbar && !slashMenu && !wikiMenu && (
         <div
           className="editor-floating-toolbar editor-block-toolbar"
           role="toolbar"
@@ -770,7 +896,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
           <button type="button" aria-label="Duplicate block" title="Duplicate block" onClick={() => moveOrDuplicateBlock("duplicate")}><CopyPlus size={13} /></button>
         </div>
       )}
-      {slashMenu && (
+      {mode === "edit" && slashMenu && (
         <div
           className="slash-menu"
           role="listbox"
@@ -797,7 +923,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
           )}
         </div>
       )}
-      {wikiMenu && (
+      {mode === "edit" && wikiMenu && (
         <div
           className="slash-menu wiki-menu"
           role="listbox"

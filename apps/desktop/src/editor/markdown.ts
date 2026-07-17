@@ -32,6 +32,12 @@ import {
   type ParseSpec,
 } from "prosemirror-markdown";
 
+import {
+  latticeEmbedAttrsFromFields,
+  parseDirectiveBody,
+  serializeLatticeEmbed,
+  type LatticeEmbedAttrs,
+} from "./directives";
 import { editorExtensions } from "./extensions";
 
 const schema = getSchema(editorExtensions);
@@ -59,6 +65,62 @@ const tokenizer = new MarkdownIt("commonmark", { html: false }).enable([
  * synthetic paragraph so it satisfies the schema — this runs as a core rule
  * so it sees the real token stream before `MarkdownParser` walks it.
  */
+interface DirectiveTokenMeta {
+  name: string;
+  body: string;
+  raw: string;
+}
+
+/**
+ * Block-level `:::name` … `:::` directives (docs/07). `lattice-embed` becomes
+ * a structured node; every other name is preserved verbatim as opaque.
+ */
+tokenizer.block.ruler.before(
+  "fence",
+  "lattice_directive",
+  (state, startLine, endLine, silent) => {
+    const start = state.bMarks[startLine] + state.tShift[startLine];
+    const max = state.eMarks[startLine];
+    const opener = state.src.slice(start, max).trimEnd();
+    if (!opener.startsWith(":::")) return false;
+    const name = opener.slice(3).trim();
+    if (!name || /\s/.test(name)) return false;
+
+    let closeLine = startLine + 1;
+    let foundClose = false;
+    while (closeLine < endLine) {
+      const lineStart = state.bMarks[closeLine] + state.tShift[closeLine];
+      const lineEnd = state.eMarks[closeLine];
+      if (state.src.slice(lineStart, lineEnd).trim() === ":::") {
+        foundClose = true;
+        break;
+      }
+      closeLine += 1;
+    }
+    if (!foundClose) return false;
+
+    if (silent) return true;
+
+    const bodyStart = state.bMarks[startLine + 1] ?? state.eMarks[startLine];
+    const bodyEnd = state.bMarks[closeLine] ?? state.eMarks[closeLine - 1];
+    const body = state.src.slice(bodyStart, bodyEnd).replace(/\n$/, "");
+    const rawEnd = state.eMarks[closeLine];
+    const raw = `${state.src.slice(start, rawEnd)}\n`;
+
+    const token = state.push(
+      name === "lattice-embed" ? "lattice_embed" : "opaque_directive",
+      "",
+      0,
+    );
+    token.meta = { name, body, raw } satisfies DirectiveTokenMeta;
+    token.map = [startLine, closeLine + 1];
+    token.markup = ":::";
+    token.block = true;
+    state.line = closeLine + 1;
+    return true;
+  },
+);
+
 tokenizer.core.ruler.push("lattice-wrap-table-cells", (state) => {
   const input = state.tokens;
   const output: typeof input = [];
@@ -122,6 +184,19 @@ const parserTokens: { [tokenType: string]: ParseSpec } = {
   tr: { block: "tableRow" },
   th: { block: "tableHeader", getAttrs: tableAlign as ParseSpec["getAttrs"] },
   td: { block: "tableCell", getAttrs: tableAlign as ParseSpec["getAttrs"] },
+  lattice_embed: {
+    block: "latticeEmbed",
+    getAttrs: (tok) => {
+      const meta = tok.meta as DirectiveTokenMeta;
+      return latticeEmbedAttrsFromFields(parseDirectiveBody(meta.body));
+    },
+    noCloseToken: true,
+  },
+  opaque_directive: {
+    block: "opaqueDirective",
+    getAttrs: (tok) => ({ raw: (tok.meta as DirectiveTokenMeta).raw }),
+    noCloseToken: true,
+  },
 };
 
 const parser = new MarkdownParser(schema, tokenizer, parserTokens);
@@ -138,6 +213,21 @@ function encodeWikiLinks(markdown: string): string {
 /** Parse a page body (frontmatter already stripped) into Tiptap JSON. */
 export function parseMarkdownToJSON(markdown: string): JSONContent {
   return parser.parse(encodeWikiLinks(markdown)).toJSON() as JSONContent;
+}
+
+export type MarkdownParseResult =
+  | { ok: true; json: JSONContent }
+  | { ok: false; error: string };
+
+/** Parse markdown without throwing; validates the result against the page schema. */
+export function tryParseMarkdownToJSON(markdown: string): MarkdownParseResult {
+  try {
+    const json = parseMarkdownToJSON(markdown);
+    schema.nodeFromJSON(json).check();
+    return { ok: true, json };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -299,6 +389,25 @@ const serializerNodes: MarkdownSerializer["nodes"] = {
     state.write(`![${alt}](${src}${title})`);
   },
   table: serializeTable,
+  latticeEmbed(state, node) {
+    state.write(
+      serializeLatticeEmbed({
+        resource: node.attrs.resource as string,
+        view: (node.attrs.view as string | null) ?? null,
+        height: (node.attrs.height as string | null) ?? null,
+        lines: (node.attrs.lines as string | null) ?? null,
+        fallback: (node.attrs.fallback as string | null) ?? null,
+        extraFields: (node.attrs.extraFields as Record<string, string>) ?? {},
+        extraFieldKeys: (node.attrs.extraFieldKeys as string[]) ?? [],
+      } satisfies LatticeEmbedAttrs),
+    );
+    state.closeBlock(node);
+  },
+  opaqueDirective(state, node) {
+    const raw = node.attrs.raw as string;
+    state.write(raw.endsWith("\n") ? raw : `${raw}\n`);
+    state.closeBlock(node);
+  },
   text(state, node) {
     state.text(node.text ?? "");
   },
