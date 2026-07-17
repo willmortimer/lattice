@@ -51,6 +51,7 @@ export interface ResourceController {
   clearSelection: () => void;
   clearSelectionIf: (path: string) => void;
   commitTitle: (title: string) => Promise<void>;
+  renameResource: (resource: Resource, title: string) => Promise<void>;
   resetResources: () => void;
 }
 
@@ -347,13 +348,12 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     applyPageContent(raw, revision);
   }, [applyPageContent]);
 
-  const commitTitle = useCallback(async (title: string) => {
+  const renameResource = useCallback(async (resource: Resource, title: string) => {
     const current = snapshotRef.current ?? snapshot;
-    const resource = selectedRef.current;
-    if (!current || !resource) return;
+    if (!current) return;
     const nextPath = renamedPath(resource.path, title);
     if (!title.trim() || nextPath === resource.path) {
-      onTitle(fileTitle(resource.path));
+      if (selectedRef.current?.path === resource.path) onTitle(fileTitle(resource.path));
       return;
     }
     const nextResource = { ...resource, path: nextPath };
@@ -362,17 +362,19 @@ export function useResourceController(options: ResourceControllerOptions): Resou
         ...workspace,
         resources: workspace.resources.map((entry) => entry.path === resource.path ? nextResource : entry),
       } : workspace);
-      setSelected(nextResource);
-      selectedRef.current = nextResource;
-      onReplaceTab(resource.path, nextResource);
-      onReplaceHistoryPath(resource.path, nextPath);
-      if (sessionRef.current) {
-        const nextSession = { ...sessionRef.current, resource: nextResource } as OpenResourceSession;
-        sessionRef.current = nextSession;
-        pageRef.current = nextSession.kind === "page" ? nextSession : null;
-        setSession(nextSession);
+      if (selectedRef.current?.path === resource.path) {
+        setSelected(nextResource);
+        selectedRef.current = nextResource;
+        onReplaceTab(resource.path, nextResource);
+        onReplaceHistoryPath(resource.path, nextPath);
+        if (sessionRef.current) {
+          const nextSession = { ...sessionRef.current, resource: nextResource } as OpenResourceSession;
+          sessionRef.current = nextSession;
+          pageRef.current = nextSession.kind === "page" ? nextSession : null;
+          setSession(nextSession);
+        }
+        onTitle(fileTitle(nextPath));
       }
-      onTitle(fileTitle(nextPath));
       return;
     }
     onBusy(true);
@@ -386,28 +388,37 @@ export function useResourceController(options: ResourceControllerOptions): Resou
           mode: "lattice-rename",
         });
         if (decision === "cancelled") {
-          onTitle(fileTitle(resource.path));
+          if (selectedRef.current?.path === resource.path) onTitle(fileTitle(resource.path));
           return;
         }
       } else {
         await invoke("rename_resource", { root: current.root, from: resource.path, to: nextPath });
       }
       await refreshResources();
-      setSelected(nextResource);
-      selectedRef.current = nextResource;
-      onReplaceTab(resource.path, nextResource);
-      onReplaceHistoryPath(resource.path, nextPath);
-      await handleSelect(nextResource, { recordHistory: false });
+      if (selectedRef.current?.path === resource.path) {
+        setSelected(nextResource);
+        selectedRef.current = nextResource;
+        onReplaceTab(resource.path, nextResource);
+        onReplaceHistoryPath(resource.path, nextPath);
+        await handleSelect(nextResource, { recordHistory: false });
+      }
     } catch (error) {
       onError(String(error));
+      if (selectedRef.current?.path === resource.path) onTitle(fileTitle(resource.path));
     } finally {
       onBusy(false);
     }
   }, [handleSelect, onBusy, onError, onLinkRepairReview, onReplaceHistoryPath, onReplaceTab, onTitle, refreshResources, setSnapshot, snapshot, snapshotRef]);
 
+  const commitTitle = useCallback(async (title: string) => {
+    const resource = selectedRef.current;
+    if (!resource) return;
+    await renameResource(resource, title);
+  }, [renameResource]);
+
   return {
     selected, setSelected, session, setSession, pageRef, currentPageRevisionRef, reloadToken,
     handleSelect, reloadPageFromDisk, applyPageContent, saveLocalPage, openCreatedResource, clearSelection, clearSelectionIf,
-    commitTitle, resetResources,
+    commitTitle, renameResource, resetResources,
   };
 }

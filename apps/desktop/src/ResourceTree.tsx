@@ -1,17 +1,22 @@
-import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useState, type DragEvent, type ReactNode } from "react";
 
+import { fileTitle } from "./controllers/useResourceController";
 import { KindMark, KIND_LABELS } from "./KindMark";
-import { writeResourceDragPayload } from "./lib/resourceDrag";
+import { readResourceDragPayload, writeResourceDragPayload } from "./lib/resourceDrag";
 import { folderTreeIcon, resourceTreeIcon } from "./lib/resourceIcons";
 import { buildResourceTree, type TreeNode } from "./lib/resourceTree";
+import { validateMoveResource } from "./lib/treeOps";
 import type { Resource } from "./types";
 
 interface ResourceTreeProps {
   resources: readonly Resource[];
   selectedPath: string | null;
   onSelect: (resource: Resource) => void;
-  onContextMenu?: (resource: Resource) => void;
+  onResourceContextMenu?: (resource: Resource) => void;
+  onFolderContextMenu?: (folderPath: string) => void;
+  onRename?: (resource: Resource, title: string) => Promise<void>;
+  onMoveToFolder?: (from: string, toDir: string) => void;
+  renameRequest?: { path: string; token: number } | null;
   revealPath?: string | null;
   /** Optional path → purpose hints from the active template catalog. */
   directoryPurposes?: Readonly<Record<string, string>>;
@@ -35,6 +40,16 @@ function ResourceTreeRowIcon({ resource }: { resource: Resource }) {
   return <Icon size={TREE_ICON_SIZE} weight="regular" className="resource-tree-icon" aria-hidden />;
 }
 
+function acceptsResourceDrop(
+  event: DragEvent,
+  resources: readonly Resource[],
+  from: string,
+  toDir: string,
+): boolean {
+  if (!event.dataTransfer.types.includes("application/x-lattice-resource")) return false;
+  return validateMoveResource(from, toDir, resources).ok;
+}
+
 /**
  * Collapsible folder tree over a flat resource listing — replaces the
  * former flat `resource-list`. Folders group by path segment (sorted
@@ -46,7 +61,11 @@ export function ResourceTree({
   resources,
   selectedPath,
   onSelect,
-  onContextMenu,
+  onResourceContextMenu,
+  onFolderContextMenu,
+  onRename,
+  onMoveToFolder,
+  renameRequest,
   revealPath,
   directoryPurposes,
   workspaceKey: _workspaceKey,
@@ -54,6 +73,9 @@ export function ResourceTree({
   onCollapsedPathsChange,
 }: ResourceTreeProps) {
   const [localCollapsed, setLocalCollapsed] = useState<ReadonlySet<string>>(() => new Set());
+  const [editingPath, setEditingPath] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [dropTargetPath, setDropTargetPath] = useState<string | null>(null);
   const collapsed = collapsedPaths ?? localCollapsed;
 
   function updateCollapsed(updater: (previous: ReadonlySet<string>) => ReadonlySet<string>) {
@@ -74,6 +96,12 @@ export function ResourceTree({
     });
   }, [revealPath]);
 
+  useEffect(() => {
+    if (!renameRequest) return;
+    setEditingPath(renameRequest.path);
+    setRenameDraft(fileTitle(renameRequest.path));
+  }, [renameRequest]);
+
   if (resources.length === 0) {
     return (
       <div className="resource-list-empty">This folder is empty. Files you add appear here.</div>
@@ -93,11 +121,47 @@ export function ResourceTree({
     return directoryPurposes?.[path] ?? "This folder is empty. Files you add appear here.";
   }
 
+  function beginRename(resource: Resource) {
+    setEditingPath(resource.path);
+    setRenameDraft(fileTitle(resource.path));
+  }
+
+  async function commitRename(resource: Resource) {
+    const draft = renameDraft.trim();
+    setEditingPath(null);
+    if (!draft || draft === fileTitle(resource.path)) return;
+    await onRename?.(resource, draft);
+  }
+
+  function cancelRename(resource: Resource) {
+    setEditingPath(null);
+    setRenameDraft(fileTitle(resource.path));
+  }
+
+  function handleFolderDragOver(event: DragEvent, folderPath: string) {
+    const payload = readResourceDragPayload(event.dataTransfer);
+    if (!payload) return;
+    if (!acceptsResourceDrop(event, resources, payload.path, folderPath)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDropTargetPath(folderPath);
+  }
+
+  function handleFolderDrop(event: DragEvent, folderPath: string) {
+    event.preventDefault();
+    setDropTargetPath(null);
+    const payload = readResourceDragPayload(event.dataTransfer);
+    if (!payload) return;
+    if (!validateMoveResource(payload.path, folderPath, resources).ok) return;
+    onMoveToFolder?.(payload.path, folderPath);
+  }
+
   function renderNode(node: TreeNode, depth: number): ReactNode {
     const indent = INDENT_BASE_PX + depth * INDENT_STEP_PX;
 
     if (node.type === "file") {
       const { resource } = node;
+      const isEditing = editingPath === resource.path;
       return (
         <button
           key={resource.path}
@@ -107,15 +171,42 @@ export function ResourceTree({
           style={{ paddingLeft: indent }}
           aria-label={`${KIND_LABELS[resource.kind]}: ${resource.path}`}
           title={resource.path}
-          draggable
+          draggable={!isEditing}
           onDragStart={(event) => {
             writeResourceDragPayload(event.dataTransfer, resource);
           }}
           onClick={() => onSelect(resource)}
-          onContextMenu={() => onContextMenu?.(resource)}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            onResourceContextMenu?.(resource);
+          }}
         >
           <ResourceTreeRowIcon resource={resource} />
-          <span className="resource-path">{node.name}</span>
+          {isEditing ? (
+            <input
+              className="tree-rename-input"
+              value={renameDraft}
+              autoFocus
+              aria-label={`Rename ${resource.path}`}
+              onClick={(event) => event.stopPropagation()}
+              onChange={(event) => setRenameDraft(event.target.value)}
+              onBlur={() => void commitRename(resource)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void commitRename(resource);
+                if (event.key === "Escape") cancelRename(resource);
+              }}
+            />
+          ) : (
+            <span
+              className="resource-path"
+              onDoubleClick={(event) => {
+                event.stopPropagation();
+                beginRename(resource);
+              }}
+            >
+              {node.name}
+            </span>
+          )}
         </button>
       );
     }
@@ -125,10 +216,22 @@ export function ResourceTree({
     return (
       <div key={node.path} className="tree-folder">
         <button
-          className="tree-folder-row"
+          className={
+            "tree-folder-row"
+            + (dropTargetPath === node.path ? " tree-folder-row-drop-target" : "")
+          }
           style={{ paddingLeft: indent }}
           onClick={() => toggle(node.path)}
           aria-expanded={!isCollapsed}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            onFolderContextMenu?.(node.path);
+          }}
+          onDragOver={(event) => handleFolderDragOver(event, node.path)}
+          onDragLeave={() => {
+            if (dropTargetPath === node.path) setDropTargetPath(null);
+          }}
+          onDrop={(event) => handleFolderDrop(event, node.path)}
         >
           <span
             className={"tree-chevron" + (isCollapsed ? "" : " tree-chevron-open")}
