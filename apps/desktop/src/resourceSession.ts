@@ -1,5 +1,6 @@
 import type { DataAppSnapshot } from "./data/types";
 import type { PageIO } from "./editor/pageIO";
+import type { ResourceEncoding, ResourceInspection } from "./lib/resourceRuntime";
 import type { Resource } from "./types";
 
 /** The resource currently open in the main surface.
@@ -25,6 +26,18 @@ export type OpenResourceSession =
       kind: "data-app";
       resource: Resource;
       snapshot: DataAppSnapshot;
+    }
+  | {
+      kind: "text";
+      resource: Resource;
+      inspection: ResourceInspection;
+      content: string;
+      revision: string;
+      offset: number;
+      totalSize: number;
+      truncated: boolean;
+      encoding: ResourceEncoding;
+      editable: boolean;
     }
   | {
       kind: "unknown";

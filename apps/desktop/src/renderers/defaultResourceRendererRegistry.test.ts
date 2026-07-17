@@ -5,6 +5,7 @@ import {
   imageResourceRendererDefinition,
   pdfResourceRendererDefinition,
 } from "./mediaResourceRendererRegistration";
+import { textResourceRendererDefinition } from "./textResourceRendererRegistration";
 
 describe("createDefaultResourceRendererRegistry", () => {
   it("includes media renderers resolved by format ID", () => {
@@ -18,6 +19,7 @@ describe("createDefaultResourceRendererRegistry", () => {
     expect(registry.resolve({ kind: "file", path: "archive.zip" }).definition.id).toBe(
       fileFallbackResourceRendererDefinition.id,
     );
+    expect(registry.resolve({ kind: "file", path: "config.json" }).definition.id).toBe(textResourceRendererDefinition.id);
     expect(registry.resolve({ kind: "page", path: "Notes.page.md" }, ["pages"]).definition.id).toBe("page-editor");
   });
 
@@ -26,7 +28,7 @@ describe("createDefaultResourceRendererRegistry", () => {
     const mediaIds = registry
       .entries()
       .filter((entry) =>
-        [imageResourceRendererDefinition.id, pdfResourceRendererDefinition.id, fileFallbackResourceRendererDefinition.id].includes(
+        [imageResourceRendererDefinition.id, pdfResourceRendererDefinition.id, fileFallbackResourceRendererDefinition.id, textResourceRendererDefinition.id].includes(
           entry.id,
         ),
       )
@@ -35,6 +37,7 @@ describe("createDefaultResourceRendererRegistry", () => {
       imageResourceRendererDefinition.id,
       pdfResourceRendererDefinition.id,
       fileFallbackResourceRendererDefinition.id,
+      textResourceRendererDefinition.id,
     ]);
   });
 });

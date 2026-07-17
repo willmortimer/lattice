@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { demoCanvas, demoDataApp, demoPages, inBrowser } from "../demo";
+import { demoCanvas, demoDataApp, demoPages, demoTextFiles, inBrowser } from "../demo";
 import type { DataAppSnapshot } from "../data/types";
 import { createDemoPageIO, createNativePageIO } from "../editor/pageIO";
 import { readNativeCanvas } from "../canvas/adapter";
 import type { OpenResourceSession } from "../resourceSession";
+import { deriveResourceFormatId } from "../resourceRendererRegistry";
 import type { Resource, WorkspaceSnapshot } from "../types";
-import { createResourceLoadGate, type ResourceLoadGate, type ResourceLoadTicket } from "./resourceLoad";
+import { createResourceLoadGate, isTextFormatId, loadTextResource, type ResourceLoadGate, type ResourceLoadTicket } from "./resourceLoad";
 
 export interface ResourceControllerOptions {
   snapshot: WorkspaceSnapshot | null;
@@ -190,6 +191,79 @@ export function useResourceController(options: ResourceControllerOptions): Resou
       } finally {
         if (isCurrentLoad(ticket)) onBusy(false);
       }
+      return;
+    }
+
+    if (resource.kind === "file" && workspace) {
+      const formatId = deriveResourceFormatId(resource);
+      if (isTextFormatId(formatId)) {
+        if (inBrowser) {
+          const content = demoTextFiles[resource.path] ?? `# ${resource.path}\n\nBrowser demo text — no native filesystem access.\n`;
+          const encoded = new TextEncoder().encode(content);
+          if (isCurrentLoad(ticket)) {
+            setSession({
+              kind: "text",
+              resource,
+              inspection: {
+                path: resource.path,
+                kind: "file",
+                profile: formatId === "file:json" || formatId === "json" ? "json" : formatId === "file:yaml" || formatId === "yaml" ? "yaml" : formatId === "file:code" || formatId === "code" ? "code" : "plain-text",
+                capabilities: {
+                  canInspect: true,
+                  canReadRange: true,
+                  canReadTextWindow: true,
+                  canUpdate: false,
+                  isText: true,
+                  isBinary: false,
+                  validatesStructure: false,
+                  maxEditBytes: 0,
+                },
+                revision: "demo:0",
+                size: encoded.length,
+                isDirectory: false,
+                encoding: "utf8",
+                probeBytes: encoded.length,
+                diagnostics: [],
+              },
+              content,
+              revision: "demo:0",
+              offset: 0,
+              totalSize: encoded.length,
+              truncated: false,
+              encoding: "utf8",
+              editable: false,
+            });
+          }
+          return;
+        }
+        onBusy(true);
+        try {
+          const loaded = await loadTextResource(workspace.root, resource.path, ticket.controller.signal);
+          if (isCurrentLoad(ticket)) {
+            setSession({
+              kind: "text",
+              resource,
+              inspection: loaded.inspection,
+              content: loaded.window.content,
+              revision: loaded.inspection.revision,
+              offset: loaded.window.offset,
+              totalSize: loaded.window.totalSize,
+              truncated: loaded.window.truncated,
+              encoding: loaded.window.encoding,
+              editable: loaded.editable,
+            });
+          }
+        } catch (error) {
+          if (isCurrentLoad(ticket)) {
+            setSession(null);
+            onError(String(error));
+          }
+        } finally {
+          if (isCurrentLoad(ticket)) onBusy(false);
+        }
+        return;
+      }
+      if (isCurrentLoad(ticket)) setSession({ kind: "unknown", resource });
       return;
     }
 

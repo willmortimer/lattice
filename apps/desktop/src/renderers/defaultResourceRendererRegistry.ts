@@ -2,6 +2,7 @@ import { createAbortError, ResourceRendererRegistry, type ResourceRendererDefini
 import type { OpenResourceSession } from "../resourceSession";
 import type { ResourceKind } from "../types";
 import { registerMediaResourceRenderers } from "./mediaResourceRendererRegistration";
+import { registerTextResourceRenderers } from "./textResourceRendererRegistration";
 import type { ResourceRendererContext } from "./RendererContext";
 
 type Definition = ResourceRendererDefinition<ResourceRendererContext, OpenResourceSession>;
@@ -61,5 +62,6 @@ export function createDefaultResourceRendererRegistry(): ResourceRendererRegistr
       ),
     );
   registerMediaResourceRenderers(registry);
+  registerTextResourceRenderers(registry);
   return registry;
 }
