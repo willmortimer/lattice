@@ -3,6 +3,13 @@ import type { SaveState } from "../editor/saveState";
 import type { PageEditorHandle } from "../editor/PageEditor";
 import { saveSidebarWidth, type DesktopSession } from "../lib/profile";
 import { demoLinkTargets, type ResourceLinkTarget } from "../lib/resourceLinks";
+import {
+  applyLinkRepair,
+  applyLinkRepairProposal,
+  deferLinkRepairProposal,
+  getLinkRepairProposal,
+  type LinkRepairPlan,
+} from "../lib/linkRepair";
 import { installNativeContextMenus } from "../lib/nativeMenus";
 import { QUICK_NOTE_SHORTCUT, showQuickNote } from "../quickNoteWindow";
 import { applyResolvedTheme, loadThemeCatalog, setAppearanceMode, setFixedTheme, startThemeWatch, type ThemeCatalogPayload, type ThemeSummaryPayload } from "../theme";
@@ -52,6 +59,16 @@ export function useDesktopController() {
   const [linkPicker, setLinkPicker] = useState<{
     query: string; candidates: ResourceLinkTarget[];
   } | null>(null);
+  const [linkRepairReview, setLinkRepairReview] = useState<{
+    plan: LinkRepairPlan;
+    from: string;
+    to: string;
+    mode: "lattice-rename" | "external";
+    proposalId?: string;
+  } | null>(null);
+  const linkRepairResolverRef = useRef<
+    ((result: "accepted" | "deferred" | "cancelled") => void) | null
+  >(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
@@ -188,6 +205,73 @@ export function useDesktopController() {
     [snapshot?.capabilities],
   );
 
+  const onLinkRepairReview = useCallback((review: {
+    plan: LinkRepairPlan;
+    from: string;
+    to: string;
+    mode: "lattice-rename" | "external";
+    proposalId?: string;
+  }) => new Promise<"accepted" | "deferred" | "cancelled">((resolve) => {
+    linkRepairResolverRef.current = resolve;
+    setLinkRepairReview(review);
+  }), []);
+
+  const finishLinkRepairReview = useCallback((result: "accepted" | "deferred" | "cancelled") => {
+    linkRepairResolverRef.current?.(result);
+    linkRepairResolverRef.current = null;
+    setLinkRepairReview(null);
+  }, []);
+
+  const handleLinkRepairAccept = useCallback(async (acceptedCandidateIds: string[]) => {
+    const review = linkRepairReview;
+    const root = snapshotRef.current?.root;
+    if (!review || !root) return;
+    setBusy(true);
+    try {
+      if (review.mode === "lattice-rename") {
+        await applyLinkRepair(root, review.from, review.to, acceptedCandidateIds, review.plan);
+      } else if (review.proposalId) {
+        await applyLinkRepairProposal(root, review.proposalId, acceptedCandidateIds);
+      }
+      finishLinkRepairReview("accepted");
+    } catch (err) {
+      setError(String(err));
+      finishLinkRepairReview("cancelled");
+    } finally {
+      setBusy(false);
+    }
+  }, [finishLinkRepairReview, linkRepairReview]);
+
+  const handleLinkRepairDefer = useCallback(async () => {
+    const review = linkRepairReview;
+    const root = snapshotRef.current?.root;
+    if (!review || !root) return;
+    setBusy(true);
+    try {
+      if (review.mode === "lattice-rename") {
+        await deferLinkRepairProposal(root, review.plan);
+        await invoke("rename_resource", { root, from: review.from, to: review.to });
+      }
+      finishLinkRepairReview("deferred");
+    } catch (err) {
+      setError(String(err));
+      finishLinkRepairReview("cancelled");
+    } finally {
+      setBusy(false);
+    }
+  }, [finishLinkRepairReview, linkRepairReview]);
+
+  const openExternalLinkRepairProposal = useCallback(async (proposalId: string, from: string, to: string) => {
+    const root = snapshotRef.current?.root;
+    if (!root) return;
+    try {
+      const plan = await getLinkRepairProposal(root, proposalId);
+      await onLinkRepairReview({ plan, from, to, mode: "external", proposalId });
+    } catch (err) {
+      setError(String(err));
+    }
+  }, [onLinkRepairReview]);
+
   const resourceController = useResourceController({
     snapshot,
     snapshotRef,
@@ -204,6 +288,7 @@ export function useDesktopController() {
     onReplaceHistoryPath: navigationController.replacePath,
     refreshResources,
     onPageReady: () => setSaveState({ status: "idle" }),
+    onLinkRepairReview,
   });
   resourceResetRef.current = resourceController.resetResources;
   resourceSelectRef.current = resourceController.handleSelect;
@@ -273,6 +358,9 @@ export function useDesktopController() {
     removeTabs: navigationController.removeTabs,
     onError: setError,
     setSaveStateIdle: () => setSaveState({ status: "idle" }),
+    onExternalLinkRepairProposal: (proposalId, from, to) => {
+      void openExternalLinkRepairProposal(proposalId, from, to);
+    },
   });
   reconciliationRef.current = reconciliationController;
   const { externalConflict, handleKeepIncoming, handleKeepLocal, handleKeepBoth } = reconciliationController;
@@ -464,6 +552,7 @@ export function useDesktopController() {
     profile, profileReady, settings, startup, snapshot, snapshotRef, selected, session, error, busy, saveState,
     externalConflict, reloadToken, newWorkspaceOpen, workspacesDir, templates, statusToast, runtimeNotice,
     profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth, revealPath, linkPicker,
+    linkRepairReview, handleLinkRepairAccept, handleLinkRepairDefer,
     openTabs, navigation, inspectorOpen, editingTitle, titleDraft, assetRoot, wikiTargets, pageEditorRef,
     recents, page, currentPageRevisionRef,
     paletteItems, hasCapability, setSettings, setStartup, setError,

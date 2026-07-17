@@ -7,6 +7,7 @@ import type { PageEditorHandle } from "../editor/PageEditor";
 import type { OpenResourceSession } from "../resourceSession";
 import type { Resource, WorkspaceChangeEvent } from "../types";
 import { conflictSiblingPath, dispositionForModifiedResource, pathIsRemoved, shouldClearRenamedPath } from "./reconciliationPolicy";
+import { listLinkRepairProposals } from "../lib/linkRepair";
 
 export interface ExternalConflict {
   path: string;
@@ -31,6 +32,7 @@ export interface ResourceReconciliationOptions {
   removeTabs: (predicate: (resource: Resource) => boolean) => void;
   onError: (message: string | null) => void;
   setSaveStateIdle: () => void;
+  onExternalLinkRepairProposal?: (proposalId: string, from: string, to: string) => void;
 }
 
 export interface ResourceReconciliationController {
@@ -68,6 +70,23 @@ export function useResourceReconciliation(options: ResourceReconciliationOptions
         current.clearSelectionIf(event.from);
       }
       current.removeTabs((resource) => resource.path === event.from);
+      const root = current.snapshotRef.current?.root;
+      if (root && current.onExternalLinkRepairProposal) {
+        try {
+          const proposals = await listLinkRepairProposals(root);
+          const match = proposals.find(
+            (proposal) =>
+              proposal.renameFrom === event.from
+              && proposal.renameTo === event.to
+              && proposal.source === "external-rename",
+          );
+          if (match) {
+            current.onExternalLinkRepairProposal(match.id, event.from, event.to);
+          }
+        } catch (error) {
+          current.onError(String(error));
+        }
+      }
       return;
     }
 

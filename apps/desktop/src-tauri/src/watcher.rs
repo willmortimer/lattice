@@ -148,6 +148,9 @@ fn apply_to_index(index: &WorkspaceIndex, event: &WorkspaceEvent, root: &Path) {
         WorkspaceEvent::Renamed { from, to, .. } => {
             remove_if_resource(index, from);
             reindex_if_resource(index, root, to);
+            if let Err(err) = link_repair::save_external_link_repair_proposal(root, from, to) {
+                eprintln!("lattice: failed to save external link-repair proposal: {err}");
+            }
         }
     }
 }
