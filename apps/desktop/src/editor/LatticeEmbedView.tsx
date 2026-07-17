@@ -1,6 +1,6 @@
 import { NodeViewWrapper } from "@tiptap/react";
 import type { NodeViewProps } from "@tiptap/react";
-import { Box } from "lucide-react";
+import { Cube } from "@phosphor-icons/react";
 
 /**
  * Read-view card for `:::lattice-embed` blocks. Shows the referenced resource
@@ -20,7 +20,7 @@ export function LatticeEmbedView({ node }: NodeViewProps) {
         aria-label={missing ? "Embed missing resource" : `Embed: ${resource}`}
       >
         <div className="page-embed-lattice-header">
-          <Box size={14} aria-hidden="true" />
+          <Cube size={14} aria-hidden="true" />
           <span className="page-embed-lattice-label">Embed</span>
         </div>
         {missing ? (

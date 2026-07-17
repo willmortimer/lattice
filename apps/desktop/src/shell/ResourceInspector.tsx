@@ -1,6 +1,6 @@
 import { IconButton } from "@lattice/ui";
 import { invoke } from "@tauri-apps/api/core";
-import { X } from "lucide-react";
+import { X } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 
 import type { DataAppSnapshot } from "../data/types";

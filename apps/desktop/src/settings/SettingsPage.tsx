@@ -1,15 +1,15 @@
 import { Button } from "@lattice/ui";
 import {
-  Activity,
+  CursorText,
   Database,
-  FileCog,
+  Files,
   Gauge,
   Keyboard,
   Palette,
-  Puzzle,
+  Pulse,
+  PuzzlePiece,
   Rocket,
-  TextCursorInput,
-} from "lucide-react";
+} from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 
 import { inBrowser } from "../demo";
@@ -49,14 +49,14 @@ interface SettingsPageProps {
 
 const SECTIONS = [
   { id: "appearance" as const, label: "Appearance", icon: Palette },
-  { id: "editor" as const, label: "Editor behavior", icon: TextCursorInput },
-  { id: "files" as const, label: "Files, links & autosave", icon: FileCog },
+  { id: "editor" as const, label: "Editor behavior", icon: CursorText },
+  { id: "files" as const, label: "Files, links & autosave", icon: Files },
   { id: "workspaces" as const, label: "Workspaces & startup", icon: Rocket },
   { id: "keybindings" as const, label: "Keybindings", icon: Keyboard },
   { id: "data" as const, label: "Data defaults", icon: Database },
-  { id: "capabilities" as const, label: "Enabled capabilities", icon: Puzzle },
+  { id: "capabilities" as const, label: "Enabled capabilities", icon: PuzzlePiece },
   { id: "performance" as const, label: "Performance & lifecycle", icon: Gauge },
-  { id: "diagnostics" as const, label: "Advanced diagnostics", icon: Activity },
+  { id: "diagnostics" as const, label: "Advanced diagnostics", icon: Pulse },
 ];
 
 function SettingRow({

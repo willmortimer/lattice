@@ -13,16 +13,16 @@ import {
   RadioItem,
 } from "@lattice/ui";
 import {
-  Beaker,
+  CaretLeft,
   Check,
-  ChevronLeft,
   Database,
   File,
   FileText,
+  Flask,
   Folder,
   FolderOpen,
-  LayoutTemplate,
-} from "lucide-react";
+  Layout,
+} from "@phosphor-icons/react";
 import { useEffect, useMemo, useState } from "react";
 
 import type { TemplateCategory, TemplateDescriptor } from "./lib/templates";
@@ -220,7 +220,7 @@ export function NewWorkspaceDialog({
                     setStep("details");
                   }}
                 >
-                  <Beaker size={16} />
+                  <Flask size={16} />
                   <span>
                     <strong>Open a First Look sample</strong>
                     <small>A curated linked workspace, separate from the reusable templates.</small>
@@ -293,7 +293,7 @@ export function NewWorkspaceDialog({
               </div>
 
               <div className="workspace-destination-preview">
-                <LayoutTemplate size={15} />
+                <Layout size={15} />
                 <span>
                   <small>Final destination</small>
                   <code>{destination ?? "Choose a destination"}</code>
@@ -322,7 +322,7 @@ export function NewWorkspaceDialog({
               {error && <p className="error-text">{error}</p>}
               <div className="modal-actions">
                 <Button onClick={() => setStep("gallery")} disabled={busy}>
-                  <ChevronLeft size={14} />
+                  <CaretLeft size={14} />
                   Back
                 </Button>
                 <Button variant="primary" onClick={submit} disabled={busy}>
