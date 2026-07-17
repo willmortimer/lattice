@@ -8,7 +8,8 @@ use clap::{Parser, Subcommand};
 use lattice_commands::{Command as Semantic, CommandEngine, Transaction};
 use lattice_core::{
     ensure_lattice_home, init_with_template, initialize_active_lattice_home, resolve_template_id,
-    template_catalog_ids, Diagnostic, Resource, Severity, Workspace,
+    template_catalog, template_descriptor, Diagnostic, Resource, Severity, TemplateDescriptor,
+    TemplateVisibility, Workspace,
 };
 use lattice_data::{parse_csv_file, CellValue, DataApp};
 use lattice_index::{Backlink, SearchHit, WorkspaceIndex};
@@ -37,9 +38,9 @@ enum Command {
         /// Workspace title. Defaults to the directory name.
         #[arg(long)]
         title: Option<String>,
-        /// Workspace scaffold: `personal` (default), `project`, `writing`,
-        /// `ops`, `research`, `second-brain`, `data-lab`, `dev-notebook`,
-        /// `team`, `demo`, or `blank`.
+        /// Workspace scaffold id or alias (default: `personal`). Run
+        /// `lattice templates list` for the current catalog (e.g. `personal`,
+        /// `project`, `blank`, `demo`).
         #[arg(long, default_value = "personal")]
         template: String,
     },
@@ -145,6 +146,11 @@ enum Command {
         #[command(subcommand)]
         command: ThemeCommand,
     },
+    /// List built-in workspace templates.
+    Templates {
+        #[command(subcommand)]
+        command: TemplatesCommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -153,6 +159,24 @@ enum HomeCommand {
     Ensure,
     /// Print the Lattice home paths.
     Path,
+}
+
+#[derive(Subcommand)]
+enum TemplatesCommand {
+    /// List workspace templates from the embedded catalog.
+    List {
+        /// Emit templates as a JSON array.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show one template (accepts ids and aliases such as `default` or `first-look`).
+    Show {
+        /// Template id or alias.
+        id: String,
+        /// Emit the template as JSON.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -449,6 +473,10 @@ fn run(command: Command) -> Result<ExitCode> {
             ThemeCommand::Set { id } => cmd_theme_set(id),
             ThemeCommand::Mode { mode, dark, light } => cmd_theme_mode(mode, dark, light),
         },
+        Command::Templates { command } => match command {
+            TemplatesCommand::List { json } => cmd_templates_list(json),
+            TemplatesCommand::Show { id, json } => cmd_templates_show(id, json),
+        },
     }
 }
 
@@ -478,10 +506,7 @@ fn cmd_init(path: Option<PathBuf>, title: Option<String>, template: String) -> R
         None => default_title(&root)?,
     };
     let template_id = resolve_template_id(&template).with_context(|| {
-        format!(
-            "unknown template {template:?}; expected {}",
-            template_catalog_ids().join(", ")
-        )
+        format!("unknown template {template:?}; run `lattice templates list` for ids")
     })?;
     let ws = init_with_template(&root, title, template_id)?;
     println!("created workspace at {}", ws.root().display());
@@ -1267,6 +1292,114 @@ fn cmd_theme_list(json: bool) -> Result<ExitCode> {
     } else {
         ExitCode::FAILURE
     })
+}
+
+fn cmd_templates_list(json: bool) -> Result<ExitCode> {
+    let templates = template_catalog();
+    if json {
+        let items: Vec<TemplateListItem<'_>> = templates.iter().map(TemplateListItem::from).collect();
+        print_json(&items)?;
+    } else {
+        for template in &templates {
+            println!(
+                "{}\t{}\t{}\t{}",
+                template.id,
+                template.name,
+                template.category,
+                visibility_label(template.visibility),
+            );
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_templates_show(id: String, json: bool) -> Result<ExitCode> {
+    let template = template_descriptor(&id)
+        .with_context(|| format!("unknown template {id:?}; run `lattice templates list` for ids"))?;
+    if json {
+        print_json(&template)?;
+    } else {
+        print_template_descriptor(&template);
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+#[derive(serde::Serialize)]
+struct TemplateListItem<'a> {
+    id: &'a str,
+    name: &'a str,
+    category: &'a str,
+    visibility: &'static str,
+}
+
+impl<'a> From<&'a TemplateDescriptor> for TemplateListItem<'a> {
+    fn from(template: &'a TemplateDescriptor) -> Self {
+        Self {
+            id: &template.id,
+            name: &template.name,
+            category: &template.category,
+            visibility: visibility_label(template.visibility),
+        }
+    }
+}
+
+fn visibility_label(visibility: TemplateVisibility) -> &'static str {
+    match visibility {
+        TemplateVisibility::Gallery => "gallery",
+        TemplateVisibility::Legacy => "legacy",
+        TemplateVisibility::Sample => "sample",
+    }
+}
+
+fn print_template_descriptor(template: &TemplateDescriptor) {
+    println!("id: {}", template.id);
+    println!("name: {}", template.name);
+    println!("category: {}", template.category);
+    println!("visibility: {}", visibility_label(template.visibility));
+    println!("description: {}", template.description);
+    println!("recommended: {}", template.recommended);
+    println!("recommended title: {}", template.recommended_title);
+    if template.capabilities.is_empty() {
+        println!("capabilities: (none)");
+    } else {
+        println!("capabilities: {}", template.capabilities.join(", "));
+    }
+    if let Some(path) = template.open_on_create.as_deref() {
+        println!("open on create: {path}");
+    }
+    println!("quick note directory: {}", template.quick_note_directory);
+    if let Some(path) = template.daily_note_directory.as_deref() {
+        println!("daily note directory: {path}");
+    }
+    if let Some(path) = template.attachments_directory.as_deref() {
+        println!("attachments directory: {path}");
+    }
+    if let Some(path) = template.template_directory.as_deref() {
+        println!("template directory: {path}");
+    }
+    if let Some(path) = template.archive_directory.as_deref() {
+        println!("archive directory: {path}");
+    }
+    if template.directories.is_empty() {
+        println!("directories: (none)");
+    } else {
+        println!("directories:");
+        for directory in &template.directories {
+            let mut details = directory.path.clone();
+            if let Some(purpose) = directory.purpose.as_deref() {
+                details.push_str(&format!(" — {purpose}"));
+            }
+            if let Some(kind) = directory.default_kind.as_deref() {
+                details.push_str(&format!(" (default kind: {kind})"));
+            }
+            println!("  {details}");
+        }
+    }
+    if template.preview.is_empty() {
+        println!("preview: (none)");
+    } else {
+        println!("preview: {}", template.preview.join(", "));
+    }
 }
 
 fn cmd_theme_check(path: Option<PathBuf>) -> Result<ExitCode> {

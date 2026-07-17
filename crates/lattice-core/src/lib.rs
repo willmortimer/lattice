@@ -48,7 +48,8 @@ pub use resource_runtime::{
     DEFAULT_RESOURCE_EDIT_BYTES, MAX_FORMAT_PROBE_BYTES, MAX_RESOURCE_RANGE_BYTES,
 };
 pub use template::{
-    apply_template, init_with_template, resolve_template_id, template_catalog_ids,
+    apply_template, init_with_template, resolve_template_id, template_catalog,
+    template_catalog_ids, template_descriptor,
     DefaultWorkspaceStatus, ProvisionDiagnostic, TemplateDescriptor, TemplateDirectory,
     TemplateVisibility, WorkspaceCreationMode, WorkspaceCreationPlan, WorkspaceProvisionOutcome,
     WorkspaceProvisioner, WorkspaceTemplate,
