@@ -407,6 +407,10 @@ export const GENERATED_TEMPLATE_CATALOG = [
       {
         "path": "Archive",
         "purpose": "Completed or superseded research."
+      },
+      {
+        "path": "Templates",
+        "purpose": "Page templates with {{title}} and {{date}} placeholders."
       }
     ],
     "preview": [
@@ -416,7 +420,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "Sources/",
       "Notes/",
       "Experiments/",
-      "Outputs/"
+      "Outputs/",
+      "Templates/Literature Note.md"
     ],
     "capabilities": [
       "pages",
@@ -426,6 +431,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
     ],
     "workspaceDefaults": {
       "quickNoteDirectory": "Inbox",
+      "templateDirectory": "Templates",
       "archiveDirectory": "Archive"
     },
     "openOnCreate": "Home.md",
@@ -656,6 +662,10 @@ export const GENERATED_TEMPLATE_CATALOG = [
         "purpose": "Timestamped investigation notes, repro steps, and hypotheses."
       },
       {
+        "path": "Templates",
+        "purpose": "Page templates with {{title}} and {{date}} placeholders."
+      },
+      {
         "path": "Archive",
         "purpose": "Retired notes, resolved issues, and superseded decisions."
       }
@@ -667,8 +677,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "Decisions/0001-record-architecture-decisions.md",
       "Snippets/",
       "Runbooks/",
-      "Debug Journal/",
-      "Issues.data"
+      "Issues.data",
+      "Templates/Debug Session.md"
     ],
     "capabilities": [
       "pages",
@@ -677,6 +687,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
     ],
     "workspaceDefaults": {
       "quickNoteDirectory": "Debug Journal",
+      "templateDirectory": "Templates",
       "archiveDirectory": "Archive"
     },
     "openOnCreate": "Home.md",

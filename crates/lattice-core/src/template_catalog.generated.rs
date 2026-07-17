@@ -213,20 +213,23 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             SeedDirectory { path: "Experiments", purpose: Some("Reproducible runs and protocols."), default_kind: None, icon: None },
             SeedDirectory { path: "Outputs", purpose: Some("Published findings and write-ups."), default_kind: None, icon: None },
             SeedDirectory { path: "Bibliography", purpose: Some("Formal reference list and exports."), default_kind: None, icon: None },
-            SeedDirectory { path: "Archive", purpose: Some("Completed or superseded research."), default_kind: None, icon: None }
+            SeedDirectory { path: "Archive", purpose: Some("Completed or superseded research."), default_kind: None, icon: None },
+            SeedDirectory { path: "Templates", purpose: Some("Page templates with {{title}} and {{date}} placeholders."), default_kind: None, icon: None }
         ],
-        preview: &["Home.md", "Questions.md", "Sources/Example Paper.md", "Sources/", "Notes/", "Experiments/", "Outputs/"],
+        preview: &["Home.md", "Questions.md", "Sources/Example Paper.md", "Sources/", "Notes/", "Experiments/", "Outputs/", "Templates/Literature Note.md"],
         capabilities: &["pages", "canvas", "sqlite", "citations"],
         quick_note_directory: "Inbox",
         daily_note_directory: None,
         attachments_directory: None,
-        template_directory: None,
+        template_directory: Some("Templates"),
         archive_directory: Some("Archive"),
         open_on_create: Some("Home.md"),
         files: &[
             SeedFile { path: "Home.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/research/files/Home.md")) },
             SeedFile { path: "Questions.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/research/files/Questions.md")) },
-            SeedFile { path: "Sources/Example Paper.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/research/files/Sources/Example Paper.md")) }
+            SeedFile { path: "Sources/Example Paper.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/research/files/Sources/Example Paper.md")) },
+            SeedFile { path: "Templates/Literature Note.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/research/files/Templates/Literature Note.md")) },
+            SeedFile { path: "Templates/Experiment.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/research/files/Templates/Experiment.md")) }
         ],
         data_packages: &[
             SeedDataPackage {
@@ -355,14 +358,15 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             SeedDirectory { path: "Snippets", purpose: Some("Reusable TypeScript, Rust, SQL, and shell fragments."), default_kind: Some("file"), icon: None },
             SeedDirectory { path: "Runbooks", purpose: Some("Operational procedures, deploy steps, and incident playbooks."), default_kind: None, icon: None },
             SeedDirectory { path: "Debug Journal", purpose: Some("Timestamped investigation notes, repro steps, and hypotheses."), default_kind: None, icon: None },
+            SeedDirectory { path: "Templates", purpose: Some("Page templates with {{title}} and {{date}} placeholders."), default_kind: None, icon: None },
             SeedDirectory { path: "Archive", purpose: Some("Retired notes, resolved issues, and superseded decisions."), default_kind: None, icon: None }
         ],
-        preview: &["Home.md", "Architecture/System Overview.canvas", "Architecture/Component Map.md", "Decisions/0001-record-architecture-decisions.md", "Snippets/", "Runbooks/", "Debug Journal/", "Issues.data"],
+        preview: &["Home.md", "Architecture/System Overview.canvas", "Architecture/Component Map.md", "Decisions/0001-record-architecture-decisions.md", "Snippets/", "Runbooks/", "Issues.data", "Templates/Debug Session.md"],
         capabilities: &["pages", "canvas", "sqlite"],
         quick_note_directory: "Debug Journal",
         daily_note_directory: None,
         attachments_directory: None,
-        template_directory: None,
+        template_directory: Some("Templates"),
         archive_directory: Some("Archive"),
         open_on_create: Some("Home.md"),
         files: &[
@@ -374,7 +378,9 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             SeedFile { path: "Snippets/query.sql", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/dev-notebook/files/Snippets/query.sql")) },
             SeedFile { path: "Snippets/lib-helper.rs", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/dev-notebook/files/Snippets/lib-helper.rs")) },
             SeedFile { path: "Runbooks/Incident Response.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/dev-notebook/files/Runbooks/Incident Response.md")) },
-            SeedFile { path: "Debug Journal/Template.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/dev-notebook/files/Debug Journal/Template.md")) }
+            SeedFile { path: "Templates/Debug Session.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/dev-notebook/files/Templates/Debug Session.md")) },
+            SeedFile { path: "Templates/Decision.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/dev-notebook/files/Templates/Decision.md")) },
+            SeedFile { path: "Templates/Daily.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/dev-notebook/files/Templates/Daily.md")) }
         ],
         data_packages: &[
             SeedDataPackage {

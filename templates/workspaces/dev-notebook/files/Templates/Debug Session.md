@@ -1,8 +1,10 @@
 ---
-title: Debug session template
+title: "{{title}}"
+date: {{date}}
+status: investigating
 ---
 
-# Debug session
+# {{title}}
 
 ## Symptom
 
