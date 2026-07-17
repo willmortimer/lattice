@@ -36,6 +36,10 @@ export const demoSnapshot: WorkspaceSnapshot = {
     { path: "Canvases/Product Strategy.canvas", kind: "canvas" },
     { path: "CRM.data", kind: "data-app" },
     { path: "Resources", kind: "folder" },
+    { path: "Resources/config.json", kind: "file", formatId: "json" },
+    { path: "Resources/schema.yaml", kind: "file", formatId: "yaml" },
+    { path: "Resources/notes.txt", kind: "file", formatId: "plain-text" },
+    { path: "Resources/example.ts", kind: "file", formatId: "code" },
     { path: "Archive", kind: "folder" },
   ],
 };
@@ -167,6 +171,34 @@ tags: [research]
 | Airtable | typed records | API lock-in |
 
 #research
+`,
+};
+
+/** In-memory text files for browser review of the text viewer. */
+export const demoTextFiles: Record<string, string> = {
+  "Resources/config.json": `{
+  "name": "Personal",
+  "version": 1,
+  "features": {
+    "canvas": true,
+    "search": true
+  }
+}
+`,
+  "Resources/schema.yaml": `title: Sample schema
+version: 1
+fields:
+  - name: id
+    type: text
+  - name: status
+    type: text
+`,
+  "Resources/notes.txt": `Sample plain text file.
+
+This fixture runs in the browser shell without native filesystem access.`,
+  "Resources/example.ts": `export function greet(name: string): string {
+  return \`Hello, \${name}\`;
+}
 `,
 };
 

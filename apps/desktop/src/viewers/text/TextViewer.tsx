@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { applyResourceUpdate } from "../../lib/resourceRuntime";
 import { loadTextResource } from "../../controllers/resourceLoad";
 import type { OpenResourceSession } from "../../resourceSession";
+import type { Resource } from "../../types";
 import type { SaveState } from "../../editor/saveState";
 import { StructuredTree } from "./StructuredTree";
 import { parseStructuredInWorker, type StructuredParseResult } from "./structuredParser";
@@ -17,6 +18,7 @@ export interface TextViewerProps {
   root: string | null;
   onSaveStateChange?: (state: SaveState) => void;
   onRevisionChange?: (revision: string | null) => void;
+  onOpenExternally?: (resource: Resource) => void;
 }
 
 function encodeText(value: string, encoding: TextSession["encoding"]): Uint8Array {
@@ -52,7 +54,7 @@ function report(state: ((state: SaveState) => void) | undefined, next: SaveState
   state?.(next);
 }
 
-export function TextViewer({ session, root, onSaveStateChange, onRevisionChange }: TextViewerProps) {
+export function TextViewer({ session, root, onSaveStateChange, onRevisionChange, onOpenExternally }: TextViewerProps) {
   const [activeSession, setActiveSession] = useState(session);
   const [content, setContent] = useState(session.content);
   const [revision, setRevision] = useState(session.revision);
@@ -62,7 +64,8 @@ export function TextViewer({ session, root, onSaveStateChange, onRevisionChange 
   const [showTree, setShowTree] = useState(true);
   const saveController = useRef<AbortController | null>(null);
   const syntaxInfo = useMemo(() => syntaxForPath(session.resource.path, session.resource.formatId), [session.resource.formatId, session.resource.path]);
-  const isStructured = (syntaxInfo.syntax === "json" || syntaxInfo.syntax === "yaml") && !activeSession.truncated;
+  const structuredSyntax = syntaxInfo.syntax === "json" || syntaxInfo.syntax === "yaml" ? syntaxInfo.syntax : null;
+  const isStructured = structuredSyntax !== null && !activeSession.truncated;
 
   useEffect(() => {
     setActiveSession(session);
@@ -79,11 +82,11 @@ export function TextViewer({ session, root, onSaveStateChange, onRevisionChange 
     }
     const controller = new AbortController();
     setParseResult(null);
-    void parseStructuredInWorker(content, syntaxInfo.syntax, controller.signal).then(setParseResult).catch(() => {
+    void parseStructuredInWorker(content, structuredSyntax, controller.signal).then(setParseResult).catch(() => {
       if (!controller.signal.aborted) setParseResult(null);
     });
     return () => controller.abort();
-  }, [content, isStructured, syntaxInfo.syntax]);
+  }, [content, isStructured, structuredSyntax]);
 
   useEffect(() => () => saveController.current?.abort(), []);
 
@@ -147,6 +150,9 @@ export function TextViewer({ session, root, onSaveStateChange, onRevisionChange 
         <div className="lattice-text-toolbar-group">
           {treeAvailable && <button type="button" className="lattice-text-button" aria-pressed={showTree} onClick={() => setShowTree((value) => !value)}>{showTree ? "Hide tree" : "Show tree"}</button>}
           {activeSession.editable && <button type="button" className="lattice-text-button lattice-text-button-primary" disabled={!dirty} onClick={() => void save()}>Save</button>}
+          {!activeSession.editable && onOpenExternally && (
+            <button type="button" className="lattice-text-button" onClick={() => onOpenExternally(activeSession.resource)}>Open externally</button>
+          )}
           <span className="lattice-text-status" role="status" aria-live="polite">{saveError ?? (dirty ? "Edited" : activeSession.editable ? "Saved" : "Viewing window")}</span>
         </div>
       </header>
