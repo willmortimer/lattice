@@ -18,7 +18,7 @@ test("workspace template packages validate", () => {
   const templates = compileTemplates();
   assert.deepEqual(
     templates.filter((template) => template.visibility === "gallery").map((template) => template.id),
-    ["personal", "project", "research", "data-lab", "blank"],
+    ["personal", "project", "research", "second-brain", "data-lab", "dev-notebook", "blank"],
   );
   assert.equal(templates.filter((template) => template.recommended).length, 1);
   assert.ok(templates.every((template) => template.version === 2));
@@ -30,8 +30,16 @@ test("workspace template packages validate", () => {
     "Knowledge & Research",
   );
   assert.equal(
+    templates.find((template) => template.id === "second-brain")?.category,
+    "Knowledge & Research",
+  );
+  assert.equal(
     templates.find((template) => template.id === "data-lab")?.category,
     "Data & Advanced",
+  );
+  assert.equal(
+    templates.find((template) => template.id === "dev-notebook")?.category,
+    "Work",
   );
   assert.equal(templates.find((template) => template.id === "blank")?.category, "Data & Advanced");
   assert.equal(templates.find((template) => template.id === "demo")?.category, "Sample");

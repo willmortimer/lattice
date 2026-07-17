@@ -11,14 +11,14 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
         recommended_title: "Personal",
         directories: &[
             SeedDirectory { path: "Inbox", purpose: Some("Drop raw captures here — triage them into Projects or Library."), default_kind: None, icon: None },
-            SeedDirectory { path: "Projects", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Areas", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Library", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Journal", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Templates", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Archive", purpose: None, default_kind: None, icon: None }
+            SeedDirectory { path: "Projects", purpose: Some("Time-bound outcomes with a clear finish line."), default_kind: None, icon: None },
+            SeedDirectory { path: "Areas", purpose: Some("Ongoing responsibilities to maintain over time."), default_kind: None, icon: None },
+            SeedDirectory { path: "Library", purpose: Some("Reference material, book notes, and durable knowledge."), default_kind: None, icon: None },
+            SeedDirectory { path: "Journal", purpose: Some("Daily notes and periodic reflections."), default_kind: None, icon: None },
+            SeedDirectory { path: "Templates", purpose: Some("Reusable note patterns with {{title}} and {{date}} placeholders."), default_kind: None, icon: None },
+            SeedDirectory { path: "Archive", purpose: Some("Completed projects and inactive material."), default_kind: None, icon: None }
         ],
-        preview: &["Home.md", "Welcome.md", "Inbox/", "Projects/", "Areas/", "Library/", "Journal/"],
+        preview: &["Home.md", "Projects/Example Project.md", "Journal/2026-07-17.md", "Templates/Daily.md", "Inbox/", "Projects/", "Journal/"],
         capabilities: &["pages", "canvas", "sqlite"],
         quick_note_directory: "Inbox",
         daily_note_directory: Some("Journal"),
@@ -28,10 +28,28 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
         open_on_create: Some("Home.md"),
         files: &[
             SeedFile { path: "Home.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/personal/files/Home.md")) },
-            SeedFile { path: "Welcome.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/personal/files/Welcome.md")) }
+            SeedFile { path: "Welcome.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/personal/files/Welcome.md")) },
+            SeedFile { path: "Projects/Example Project.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/personal/files/Projects/Example Project.md")) },
+            SeedFile { path: "Journal/2026-07-17.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/personal/files/Journal/2026-07-17.md")) },
+            SeedFile { path: "Templates/Meeting Note.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/personal/files/Templates/Meeting Note.md")) },
+            SeedFile { path: "Templates/Book Note.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/personal/files/Templates/Book Note.md")) },
+            SeedFile { path: "Templates/Daily.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/personal/files/Templates/Daily.md")) }
         ],
         data_packages: &[
-            
+            SeedDataPackage {
+            path: "Tasks.data",
+            title: "Tasks",
+            table: "tasks",
+            columns: &[
+                SeedDataColumn { name: "task", field_type: "text" },
+                SeedDataColumn { name: "status", field_type: "text" },
+                SeedDataColumn { name: "due", field_type: "date" }
+            ],
+            rows_json: &[
+                "{\"task\":\"Review inbox\",\"status\":\"todo\",\"due\":null}",
+                "{\"task\":\"Plan the week\",\"status\":\"todo\",\"due\":\"2026-07-21\"}"
+            ],
+        }
         ],
     },
     GeneratedTemplate {
@@ -44,25 +62,30 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
         recommended: false,
         recommended_title: "Project",
         directories: &[
-            SeedDirectory { path: "Decisions", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Research", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Working", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Data", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Outputs", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Archive", purpose: None, default_kind: None, icon: None }
+            SeedDirectory { path: "Decisions", purpose: Some("Lightweight ADRs and decision records."), default_kind: None, icon: None },
+            SeedDirectory { path: "Meetings", purpose: Some("Agendas, notes, and follow-ups from syncs."), default_kind: None, icon: None },
+            SeedDirectory { path: "Research", purpose: Some("Background reading and exploratory notes."), default_kind: None, icon: None },
+            SeedDirectory { path: "Working", purpose: Some("Active drafts and in-progress material."), default_kind: None, icon: None },
+            SeedDirectory { path: "Data", purpose: Some("Tables, datasets, and structured inputs."), default_kind: None, icon: None },
+            SeedDirectory { path: "Outputs", purpose: Some("Deliverables ready to share."), default_kind: None, icon: None },
+            SeedDirectory { path: "Templates", purpose: Some("Reusable patterns for decisions and meetings."), default_kind: None, icon: None },
+            SeedDirectory { path: "Archive", purpose: Some("Superseded or completed material."), default_kind: None, icon: None }
         ],
-        preview: &["Home.md", "Brief.md", "Plan.md", "Decisions/", "Working/", "Data/", "Outputs/"],
+        preview: &["Home.md", "Brief.md", "Plan.md", "Milestones.canvas", "Decisions/0001 Example decision.md", "Decisions/", "Meetings/", "Working/"],
         capabilities: &["pages", "canvas", "sqlite"],
         quick_note_directory: "Working",
         daily_note_directory: None,
         attachments_directory: None,
-        template_directory: None,
+        template_directory: Some("Templates"),
         archive_directory: Some("Archive"),
         open_on_create: Some("Home.md"),
         files: &[
             SeedFile { path: "Home.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/project/files/Home.md")) },
             SeedFile { path: "Brief.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/project/files/Brief.md")) },
-            SeedFile { path: "Plan.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/project/files/Plan.md")) }
+            SeedFile { path: "Plan.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/project/files/Plan.md")) },
+            SeedFile { path: "Milestones.canvas", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/project/files/Milestones.canvas")) },
+            SeedFile { path: "Decisions/0001 Example decision.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/project/files/Decisions/0001 Example decision.md")) },
+            SeedFile { path: "Templates/Decision.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/project/files/Templates/Decision.md")) }
         ],
         data_packages: &[
             
@@ -78,16 +101,16 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
         recommended: false,
         recommended_title: "Research",
         directories: &[
-            SeedDirectory { path: "Inbox", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Sources", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Notes", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Data", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Experiments", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Outputs", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Bibliography", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Archive", purpose: None, default_kind: None, icon: None }
+            SeedDirectory { path: "Inbox", purpose: Some("Unprocessed captures awaiting triage."), default_kind: None, icon: None },
+            SeedDirectory { path: "Sources", purpose: Some("Literature notes with citation metadata."), default_kind: None, icon: None },
+            SeedDirectory { path: "Notes", purpose: Some("Developing ideas and synthesis."), default_kind: None, icon: None },
+            SeedDirectory { path: "Data", purpose: Some("Datasets supporting analysis."), default_kind: None, icon: None },
+            SeedDirectory { path: "Experiments", purpose: Some("Reproducible runs and protocols."), default_kind: None, icon: None },
+            SeedDirectory { path: "Outputs", purpose: Some("Published findings and write-ups."), default_kind: None, icon: None },
+            SeedDirectory { path: "Bibliography", purpose: Some("Formal reference list and exports."), default_kind: None, icon: None },
+            SeedDirectory { path: "Archive", purpose: Some("Completed or superseded research."), default_kind: None, icon: None }
         ],
-        preview: &["Home.md", "Questions.md", "Sources/", "Notes/", "Data/", "Experiments/", "Outputs/"],
+        preview: &["Home.md", "Questions.md", "Sources/Example Paper.md", "Sources/", "Notes/", "Experiments/", "Outputs/"],
         capabilities: &["pages", "canvas", "sqlite", "citations"],
         quick_note_directory: "Inbox",
         daily_note_directory: None,
@@ -97,7 +120,65 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
         open_on_create: Some("Home.md"),
         files: &[
             SeedFile { path: "Home.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/research/files/Home.md")) },
-            SeedFile { path: "Questions.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/research/files/Questions.md")) }
+            SeedFile { path: "Questions.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/research/files/Questions.md")) },
+            SeedFile { path: "Sources/Example Paper.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/research/files/Sources/Example Paper.md")) }
+        ],
+        data_packages: &[
+            SeedDataPackage {
+            path: "Experiments/experiments-log.data",
+            title: "Experiments log",
+            table: "experiments",
+            columns: &[
+                SeedDataColumn { name: "name", field_type: "text" },
+                SeedDataColumn { name: "status", field_type: "text" },
+                SeedDataColumn { name: "run_date", field_type: "date" },
+                SeedDataColumn { name: "notes", field_type: "long_text" }
+            ],
+            rows_json: &[
+                "{\"name\":\"Baseline replication\",\"status\":\"planned\",\"run_date\":null,\"notes\":\"Replicate methods from Example Paper.\"}",
+                "{\"name\":\"Pilot run\",\"status\":\"complete\",\"run_date\":\"2026-07-10\",\"notes\":\"Smoke test of data pipeline.\"}"
+            ],
+        }
+        ],
+    },
+    GeneratedTemplate {
+        id: "second-brain",
+        order: 35,
+        name: "Second Brain",
+        category: "Knowledge & Research",
+        description: "Capture fleeting ideas, grow atomic notes, and navigate your knowledge with maps of content and agent-ready context.",
+        visibility: "gallery",
+        recommended: false,
+        recommended_title: "Second Brain",
+        directories: &[
+            SeedDirectory { path: "Inbox", purpose: Some("Fleeting captures and unsorted inputs — triage into Notes or Sources."), default_kind: None, icon: None },
+            SeedDirectory { path: "Notes", purpose: Some("Atomic, densely linked notes that accrue meaning over time."), default_kind: None, icon: None },
+            SeedDirectory { path: "MOCs", purpose: Some("Maps of content that orient you across topics without rigid folders."), default_kind: None, icon: None },
+            SeedDirectory { path: "Sources", purpose: Some("Books, papers, articles, and media you want to cite or distill."), default_kind: None, icon: None },
+            SeedDirectory { path: "Context", purpose: Some("Workspace context for humans and agents — scope, tone, and conventions."), default_kind: None, icon: None },
+            SeedDirectory { path: "Prompts", purpose: Some("Reusable prompt patterns for synthesis, review, and extraction."), default_kind: None, icon: None }
+        ],
+        preview: &["MOCs/Knowledge Base.md", "Notes/Capture Workflow.md", "Notes/Evergreen Notes.md", "Notes/Linking Philosophy.md", "Inbox/", "Sources/", "Context/AGENTS.md", "Prompts/"],
+        capabilities: &["pages", "citations"],
+        quick_note_directory: "Inbox",
+        daily_note_directory: None,
+        attachments_directory: None,
+        template_directory: Some("Prompts"),
+        archive_directory: None,
+        open_on_create: Some("MOCs/Knowledge Base.md"),
+        files: &[
+            SeedFile { path: "Home.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/second-brain/files/Home.md")) },
+            SeedFile { path: "MOCs/Knowledge Base.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/second-brain/files/MOCs/Knowledge Base.md")) },
+            SeedFile { path: "Notes/Capture Workflow.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/second-brain/files/Notes/Capture Workflow.md")) },
+            SeedFile { path: "Notes/Evergreen Notes.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/second-brain/files/Notes/Evergreen Notes.md")) },
+            SeedFile { path: "Notes/Linking Philosophy.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/second-brain/files/Notes/Linking Philosophy.md")) },
+            SeedFile { path: "Notes/Progressive Summarization.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/second-brain/files/Notes/Progressive Summarization.md")) },
+            SeedFile { path: "Notes/Spaced Repetition.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/second-brain/files/Notes/Spaced Repetition.md")) },
+            SeedFile { path: "Notes/Zettelkasten Primer.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/second-brain/files/Notes/Zettelkasten Primer.md")) },
+            SeedFile { path: "Context/AGENTS.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/second-brain/files/Context/AGENTS.md")) },
+            SeedFile { path: "Prompts/Synthesize Connections.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/second-brain/files/Prompts/Synthesize Connections.md")) },
+            SeedFile { path: "Prompts/Weekly Review.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/second-brain/files/Prompts/Weekly Review.md")) },
+            SeedFile { path: "Prompts/Extract Key Ideas.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/second-brain/files/Prompts/Extract Key Ideas.md")) }
         ],
         data_packages: &[
             
@@ -113,15 +194,15 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
         recommended: false,
         recommended_title: "Data Lab",
         directories: &[
-            SeedDirectory { path: "Sources", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Data", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Queries", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Notebooks", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Dashboards", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Reports", purpose: None, default_kind: None, icon: None },
-            SeedDirectory { path: "Archive", purpose: None, default_kind: None, icon: None }
+            SeedDirectory { path: "Connections", purpose: Some("Database, API, and file connection definitions."), default_kind: None, icon: None },
+            SeedDirectory { path: "Data", purpose: Some("Canonical datasets and curated tables."), default_kind: None, icon: None },
+            SeedDirectory { path: "Queries", purpose: Some("Reusable SQL and saved query definitions."), default_kind: None, icon: None },
+            SeedDirectory { path: "Notebooks", purpose: Some("Reproducible analysis notebooks."), default_kind: None, icon: None },
+            SeedDirectory { path: "Dashboards", purpose: Some("Interactive summaries and charts."), default_kind: None, icon: None },
+            SeedDirectory { path: "Reports", purpose: Some("Narrative findings and published analysis."), default_kind: None, icon: None },
+            SeedDirectory { path: "Archive", purpose: Some("Deprecated datasets and old reports."), default_kind: None, icon: None }
         ],
-        preview: &["Home.md", "Sources/", "Data/", "Queries/", "Notebooks/", "Dashboards/", "Reports/"],
+        preview: &["Home.md", "Data/contacts.csv", "Queries/example.sql", "Notebooks/example.ipynb", "Connections/", "Data/", "Queries/", "Notebooks/"],
         capabilities: &["pages", "canvas", "sqlite", "jupyter"],
         quick_note_directory: "Reports",
         daily_note_directory: None,
@@ -130,10 +211,82 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
         archive_directory: Some("Archive"),
         open_on_create: Some("Home.md"),
         files: &[
-            SeedFile { path: "Home.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/data-lab/files/Home.md")) }
+            SeedFile { path: "Home.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/data-lab/files/Home.md")) },
+            SeedFile { path: "Data/contacts.csv", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/data-lab/files/Data/contacts.csv")) },
+            SeedFile { path: "Queries/example.sql", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/data-lab/files/Queries/example.sql")) },
+            SeedFile { path: "Notebooks/example.ipynb", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/data-lab/files/Notebooks/example.ipynb")) }
         ],
         data_packages: &[
-            
+            SeedDataPackage {
+            path: "Data/metrics.data",
+            title: "Metrics",
+            table: "metrics",
+            columns: &[
+                SeedDataColumn { name: "metric", field_type: "text" },
+                SeedDataColumn { name: "value", field_type: "decimal" },
+                SeedDataColumn { name: "recorded_on", field_type: "date" }
+            ],
+            rows_json: &[
+                "{\"metric\":\"active_users\",\"value\":128,\"recorded_on\":\"2026-07-01\"}",
+                "{\"metric\":\"query_latency_ms\",\"value\":42.5,\"recorded_on\":\"2026-07-01\"}"
+            ],
+        }
+        ],
+    },
+    GeneratedTemplate {
+        id: "dev-notebook",
+        order: 45,
+        name: "Dev Notebook",
+        category: "Work",
+        description: "Track architecture, decisions, snippets, runbooks, debug notes, and issues in one engineering workspace.",
+        visibility: "gallery",
+        recommended: false,
+        recommended_title: "Dev Notebook",
+        directories: &[
+            SeedDirectory { path: "Architecture", purpose: Some("System diagrams, canvases, and structural notes."), default_kind: None, icon: None },
+            SeedDirectory { path: "Decisions", purpose: Some("Architecture decision records and technical rationale."), default_kind: None, icon: None },
+            SeedDirectory { path: "Snippets", purpose: Some("Reusable TypeScript, Rust, SQL, and shell fragments."), default_kind: Some("file"), icon: None },
+            SeedDirectory { path: "Runbooks", purpose: Some("Operational procedures, deploy steps, and incident playbooks."), default_kind: None, icon: None },
+            SeedDirectory { path: "Debug Journal", purpose: Some("Timestamped investigation notes, repro steps, and hypotheses."), default_kind: None, icon: None },
+            SeedDirectory { path: "Archive", purpose: Some("Retired notes, resolved issues, and superseded decisions."), default_kind: None, icon: None }
+        ],
+        preview: &["Home.md", "Architecture/System Overview.canvas", "Architecture/Component Map.md", "Decisions/0001-record-architecture-decisions.md", "Snippets/", "Runbooks/", "Debug Journal/", "Issues.data"],
+        capabilities: &["pages", "canvas", "sqlite"],
+        quick_note_directory: "Debug Journal",
+        daily_note_directory: None,
+        attachments_directory: None,
+        template_directory: None,
+        archive_directory: Some("Archive"),
+        open_on_create: Some("Home.md"),
+        files: &[
+            SeedFile { path: "Home.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/dev-notebook/files/Home.md")) },
+            SeedFile { path: "Architecture/System Overview.canvas", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/dev-notebook/files/Architecture/System Overview.canvas")) },
+            SeedFile { path: "Architecture/Component Map.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/dev-notebook/files/Architecture/Component Map.md")) },
+            SeedFile { path: "Decisions/0001-record-architecture-decisions.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/dev-notebook/files/Decisions/0001-record-architecture-decisions.md")) },
+            SeedFile { path: "Snippets/api-handler.ts", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/dev-notebook/files/Snippets/api-handler.ts")) },
+            SeedFile { path: "Snippets/query.sql", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/dev-notebook/files/Snippets/query.sql")) },
+            SeedFile { path: "Snippets/lib-helper.rs", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/dev-notebook/files/Snippets/lib-helper.rs")) },
+            SeedFile { path: "Runbooks/Incident Response.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/dev-notebook/files/Runbooks/Incident Response.md")) },
+            SeedFile { path: "Debug Journal/Template.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/dev-notebook/files/Debug Journal/Template.md")) }
+        ],
+        data_packages: &[
+            SeedDataPackage {
+            path: "Issues.data",
+            title: "Issues",
+            table: "issues",
+            columns: &[
+                SeedDataColumn { name: "title", field_type: "text" },
+                SeedDataColumn { name: "status", field_type: "text" },
+                SeedDataColumn { name: "priority", field_type: "text" },
+                SeedDataColumn { name: "component", field_type: "text" },
+                SeedDataColumn { name: "notes", field_type: "long_text" }
+            ],
+            rows_json: &[
+                "{\"title\":\"Provision workspace from template\",\"status\":\"done\",\"priority\":\"medium\",\"component\":\"tooling\",\"notes\":\"Seed Issues.data and verify wiki links on Home.md.\"}",
+                "{\"title\":\"Add health check endpoint\",\"status\":\"open\",\"priority\":\"high\",\"component\":\"api\",\"notes\":\"See Snippets/api-handler.ts for the handler stub.\"}",
+                "{\"title\":\"Document deploy rollback\",\"status\":\"open\",\"priority\":\"low\",\"component\":\"ops\",\"notes\":\"Capture steps in Runbooks/ before the next release.\"}"
+            ],
+        }
         ],
     },
     GeneratedTemplate {
