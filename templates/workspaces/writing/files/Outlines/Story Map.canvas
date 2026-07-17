@@ -1,0 +1,55 @@
+{
+  "nodes": [
+    {
+      "id": "hook",
+      "type": "text",
+      "x": 60,
+      "y": 80,
+      "width": 190,
+      "height": 90,
+      "text": "Hook\n— why keep reading?"
+    },
+    {
+      "id": "turn",
+      "type": "text",
+      "x": 290,
+      "y": 80,
+      "width": 190,
+      "height": 90,
+      "text": "First turn\n— the situation changes"
+    },
+    {
+      "id": "crisis",
+      "type": "text",
+      "x": 520,
+      "y": 80,
+      "width": 190,
+      "height": 90,
+      "text": "Crisis\n— the hardest choice"
+    },
+    {
+      "id": "resolution",
+      "type": "text",
+      "x": 750,
+      "y": 80,
+      "width": 190,
+      "height": 90,
+      "text": "Resolution\n— the new normal"
+    },
+    {
+      "id": "chapter1",
+      "type": "file",
+      "file": "Manuscript/Chapter 01.md",
+      "x": 60,
+      "y": 230,
+      "width": 220,
+      "height": 110
+    }
+  ],
+  "edges": [
+    { "id": "e1", "fromNode": "hook", "toNode": "turn" },
+    { "id": "e2", "fromNode": "turn", "toNode": "crisis" },
+    { "id": "e3", "fromNode": "crisis", "toNode": "resolution" },
+    { "id": "e4", "fromNode": "hook", "toNode": "chapter1" }
+  ]
+}

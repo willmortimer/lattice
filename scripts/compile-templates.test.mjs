@@ -18,7 +18,7 @@ test("workspace template packages validate", () => {
   const templates = compileTemplates();
   assert.deepEqual(
     templates.filter((template) => template.visibility === "gallery").map((template) => template.id),
-    ["personal", "project", "research", "second-brain", "data-lab", "dev-notebook", "blank"],
+    ["personal", "project", "writing", "ops", "research", "second-brain", "data-lab", "dev-notebook", "blank"],
   );
   assert.equal(templates.filter((template) => template.recommended).length, 1);
   assert.ok(templates.every((template) => template.version === 2));

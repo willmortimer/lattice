@@ -883,6 +883,8 @@ mod tests {
             [
                 "personal",
                 "project",
+                "writing",
+                "ops",
                 "research",
                 "second-brain",
                 "data-lab",
@@ -907,6 +909,8 @@ mod tests {
             [
                 "personal",
                 "project",
+                "writing",
+                "ops",
                 "research",
                 "second-brain",
                 "data-lab",
