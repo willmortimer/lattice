@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { demoCanvas, demoDataApp, demoPages, inBrowser } from "../demo";
 import type { DataAppSnapshot } from "../data/types";
 import { createDemoPageIO, createNativePageIO } from "../editor/pageIO";
+import { readNativeCanvas } from "../canvas/adapter";
 import type { OpenResourceSession } from "../resourceSession";
 import type { Resource, WorkspaceSnapshot } from "../types";
 import { createResourceLoadGate, type ResourceLoadGate, type ResourceLoadTicket } from "./resourceLoad";
@@ -153,13 +154,15 @@ export function useResourceController(options: ResourceControllerOptions): Resou
         return;
       }
       if (inBrowser) {
-        if (isCurrentLoad(ticket)) setSession({ kind: "canvas", resource, json: demoCanvas });
+        if (isCurrentLoad(ticket)) setSession({ kind: "canvas", resource, json: demoCanvas, revision: "demo:0" });
         return;
       }
       onBusy(true);
       try {
-        const content = await invoke<string>("read_file", { root: workspace.root, relPath: resource.path });
-        if (isCurrentLoad(ticket)) setSession({ kind: "canvas", resource, json: JSON.parse(content) });
+        const canvas = await readNativeCanvas(workspace.root, resource.path);
+        if (isCurrentLoad(ticket)) {
+          setSession({ kind: "canvas", resource, json: JSON.parse(canvas.content), revision: canvas.revision });
+        }
       } catch (error) {
         if (isCurrentLoad(ticket)) onError(String(error));
       } finally {

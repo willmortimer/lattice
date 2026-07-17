@@ -51,6 +51,12 @@ export interface CanvasData {
   edges: CanvasEdge[];
 }
 
+export interface CanvasNodePosition {
+  id: string;
+  x: number;
+  y: number;
+}
+
 /** Thrown by parseCanvas with a human-readable, specific message. */
 export class CanvasParseError extends Error {}
 

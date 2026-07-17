@@ -7,6 +7,7 @@ use lattice_storage::{
     BufferedWriter, NativeWorkspaceStore, RecoveryJournal, ResourceMetadata, WorkspaceStore,
 };
 
+use crate::canvas::{self, CanvasEdit};
 use crate::command::{
     file_name, view_file_path, Command, CommandOutcome, HistoryEntry, Transaction,
     TransactionReceipt, UndoReport,
@@ -92,6 +93,26 @@ impl AppliedOp {
                 }),
                 before: self.prior_content.clone(),
                 after: None,
+            }),
+            Command::CanvasPlaceResource {
+                path,
+                base_revision,
+                ..
+            }
+            | Command::CanvasMoveNodes {
+                path,
+                base_revision,
+                ..
+            }
+            | Command::CanvasRemoveNodes {
+                path,
+                base_revision,
+                ..
+            } => Some(RevisionCapture {
+                path: path.clone(),
+                parent_revision: Some(base_revision.clone()),
+                before: self.prior_content.clone(),
+                after: self.after_content.clone(),
             }),
             _ => None,
         }
@@ -651,6 +672,59 @@ impl CommandEngine {
                 }
                 Ok(())
             }
+            Command::CanvasPlaceResource {
+                path,
+                base_revision,
+                resource_path,
+                node_id,
+                x,
+                y,
+                width,
+                height,
+            } => {
+                self.ensure_canvas_revision(path, base_revision)?;
+                self.ensure_canvas_resource(resource_path)?;
+                canvas::validate_edit(
+                    path,
+                    &self.store.read(path)?,
+                    &CanvasEdit::Place {
+                        resource_path: resource_path.clone(),
+                        node_id: node_id.clone(),
+                        x: *x,
+                        y: *y,
+                        width: *width,
+                        height: *height,
+                    },
+                )
+            }
+            Command::CanvasMoveNodes {
+                path,
+                base_revision,
+                nodes,
+            } => {
+                self.ensure_canvas_revision(path, base_revision)?;
+                canvas::validate_edit(
+                    path,
+                    &self.store.read(path)?,
+                    &CanvasEdit::Move {
+                        nodes: nodes.clone(),
+                    },
+                )
+            }
+            Command::CanvasRemoveNodes {
+                path,
+                base_revision,
+                node_ids,
+            } => {
+                self.ensure_canvas_revision(path, base_revision)?;
+                canvas::validate_edit(
+                    path,
+                    &self.store.read(path)?,
+                    &CanvasEdit::Remove {
+                        node_ids: node_ids.clone(),
+                    },
+                )
+            }
         }
     }
 
@@ -1031,7 +1105,79 @@ impl CommandEngine {
                     resulting_revision: Some(revision),
                 })
             }
+            Command::CanvasPlaceResource {
+                path,
+                base_revision,
+                resource_path,
+                node_id,
+                x,
+                y,
+                width,
+                height,
+            } => self.apply_canvas_edit(
+                command,
+                path,
+                base_revision,
+                CanvasEdit::Place {
+                    resource_path: resource_path.clone(),
+                    node_id: node_id.clone(),
+                    x: *x,
+                    y: *y,
+                    width: *width,
+                    height: *height,
+                },
+            ),
+            Command::CanvasMoveNodes {
+                path,
+                base_revision,
+                nodes,
+            } => self.apply_canvas_edit(
+                command,
+                path,
+                base_revision,
+                CanvasEdit::Move {
+                    nodes: nodes.clone(),
+                },
+            ),
+            Command::CanvasRemoveNodes {
+                path,
+                base_revision,
+                node_ids,
+            } => self.apply_canvas_edit(
+                command,
+                path,
+                base_revision,
+                CanvasEdit::Remove {
+                    node_ids: node_ids.clone(),
+                },
+            ),
         }
+    }
+
+    fn apply_canvas_edit(
+        &self,
+        command: &Command,
+        path: &Path,
+        base_revision: &str,
+        edit: CanvasEdit,
+    ) -> Result<AppliedOp> {
+        self.ensure_canvas_revision(path, base_revision)?;
+        let meta = self.store.metadata(path)?;
+        let prior = self.store.read(path)?;
+        let after = canvas::patch(path, &prior, &edit)?;
+        self.validate_edit_size(path, after.len())?;
+        let revision = self.writer().write(path, &after, Some(&meta.revision))?;
+        Ok(AppliedOp {
+            forward: command.clone(),
+            inverse: Command::ResourceUpdate {
+                path: path.to_path_buf(),
+                content: prior.clone(),
+                base_revision: revision.hash.clone(),
+            },
+            prior_content: Some(prior),
+            after_content: Some(after),
+            resulting_revision: Some(revision.hash),
+        })
     }
 
     // ---------------------------------------------------------------------
@@ -1192,6 +1338,11 @@ impl CommandEngine {
                 )?;
                 Ok(())
             }
+            Command::CanvasPlaceResource { .. }
+            | Command::CanvasMoveNodes { .. }
+            | Command::CanvasRemoveNodes { .. } => {
+                unreachable!("canvas commands are never stored as inverse operations")
+            }
         }
     }
 
@@ -1285,6 +1436,11 @@ impl CommandEngine {
             Command::ViewSave { .. } => {
                 self.guard_hash(&forward.guard_path(), resulting_revision.as_deref())
             }
+            Command::CanvasPlaceResource { .. }
+            | Command::CanvasMoveNodes { .. }
+            | Command::CanvasRemoveNodes { .. } => {
+                self.guard_hash(&forward.guard_path(), resulting_revision.as_deref())
+            }
         }
     }
 
@@ -1342,6 +1498,71 @@ impl CommandEngine {
                 found,
             })
         }
+    }
+
+    fn ensure_canvas_revision(&self, path: &Path, expected: &str) -> Result<()> {
+        canvas::validate_canvas_path(path)?;
+        let canonical_root = self
+            .root
+            .canonicalize()
+            .map_err(|source| Error::io(&self.root, source))?;
+        let canonical_canvas = self
+            .root
+            .join(path)
+            .canonicalize()
+            .map_err(|source| Error::io(path, source))?;
+        if !canonical_canvas.starts_with(&canonical_root) {
+            return Err(Error::InvalidCanvas {
+                path: path.to_path_buf(),
+                reason: "canvas path escapes the workspace".into(),
+            });
+        }
+        let meta = self.metadata_opt(path)?.ok_or_else(|| Error::NotFound {
+            path: path.to_path_buf(),
+        })?;
+        if meta.is_dir {
+            return Err(Error::NotFound {
+                path: path.to_path_buf(),
+            });
+        }
+        if meta.revision.hash == expected {
+            Ok(())
+        } else {
+            Err(Error::StaleBaseRevision {
+                path: path.to_path_buf(),
+                expected: expected.to_string(),
+                found: meta.revision.hash,
+            })
+        }
+    }
+
+    fn ensure_canvas_resource(&self, path: &Path) -> Result<()> {
+        canvas::validate_path(path, "resource path")?;
+        let canonical_root = self
+            .root
+            .canonicalize()
+            .map_err(|source| Error::io(&self.root, source))?;
+        let canonical_resource = self
+            .root
+            .join(path)
+            .canonicalize()
+            .map_err(|source| Error::io(path, source))?;
+        if !canonical_resource.starts_with(&canonical_root) {
+            return Err(Error::InvalidCanvas {
+                path: path.to_path_buf(),
+                reason: "resource path escapes the workspace".into(),
+            });
+        }
+        let metadata = self.metadata_opt(path)?.ok_or_else(|| Error::NotFound {
+            path: path.to_path_buf(),
+        })?;
+        if metadata.is_dir {
+            return Err(Error::InvalidCanvas {
+                path: path.to_path_buf(),
+                reason: "resource path must identify a file".into(),
+            });
+        }
+        Ok(())
     }
 
     fn guard_package_revision(&self, path: &Path, expected: &str) -> Result<()> {
