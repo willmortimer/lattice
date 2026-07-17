@@ -19,6 +19,7 @@ export type OpenResourceSession =
       kind: "canvas";
       resource: Resource;
       json: unknown;
+      revision: string;
     }
   | {
       kind: "data-app";

@@ -855,6 +855,132 @@ html[data-platform="macos"] .empty-state {
   display: block;
 }
 
+.canvas-surface {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  min-height: 0;
+  height: 100%;
+}
+
+.canvas-toolbar {
+  display: flex;
+  grid-column: 1;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--lt-line);
+}
+
+.canvas-toolbar button {
+  padding: 5px 8px;
+  border: 1px solid var(--lt-line);
+  border-radius: 5px;
+  color: var(--lt-text-soft);
+  background: var(--lt-bg-raise);
+  cursor: pointer;
+}
+
+.canvas-toolbar button:hover,
+.canvas-toolbar button:focus-visible {
+  border-color: var(--lt-amber);
+  color: var(--lt-text);
+}
+
+.canvas-conflict {
+  grid-column: 1;
+  margin: 0;
+  padding: 6px 10px;
+  color: var(--lt-amber-deep);
+  background: var(--lt-bg-raise);
+  font: 11px var(--lt-font-mono);
+}
+
+.canvas-surface > .canvas-viewer {
+  grid-column: 1;
+  grid-row: 2;
+  min-height: 0;
+}
+
+.canvas-outline {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  min-width: 0;
+  overflow: auto;
+  padding: 14px 10px;
+  border-left: 1px solid var(--lt-line);
+  background: var(--lt-panel);
+}
+
+.canvas-outline-title {
+  margin: 0 0 8px;
+  color: var(--lt-text-soft);
+  font: 600 11px var(--lt-font-mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.canvas-outline ol {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.canvas-outline li {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.canvas-outline li > button:first-child {
+  display: flex;
+  flex: 1;
+  gap: 7px;
+  min-width: 0;
+  align-items: center;
+  padding: 7px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--lt-text-soft);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.canvas-outline li > button:first-child:hover,
+.canvas-outline li > button:first-child.is-selected {
+  border-color: var(--lt-line-strong);
+  background: var(--lt-bg-raise);
+  color: var(--lt-text);
+}
+
+.canvas-outline li > button:first-child > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-outline-preview {
+  display: grid;
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 4px;
+  color: var(--lt-amber-deep);
+  background: var(--lt-bg-raise);
+  font: 10px var(--lt-font-mono);
+}
+
+.canvas-outline-remove {
+  padding: 4px 5px;
+  border: 0;
+  color: var(--lt-text-faint);
+  background: transparent;
+  font: 10px var(--lt-font-mono);
+  cursor: pointer;
+}
+
 /* ============================================================================
    Resource tree — collapsible folders over the sidebar's flat file list
    ========================================================================== */

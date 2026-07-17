@@ -36,6 +36,10 @@ pub enum Error {
     #[error("cannot update resource {path}: {reason}")]
     InvalidResourceTarget { path: PathBuf, reason: String },
 
+    /// A canvas command had an invalid path, value, ID, or JSON Canvas shape.
+    #[error("invalid canvas command at {path}: {reason}")]
+    InvalidCanvas { path: PathBuf, reason: String },
+
     /// A `ResourceMove` destination is not a directory.
     #[error("cannot move into {path}: not a directory")]
     NotADirectory { path: PathBuf },
