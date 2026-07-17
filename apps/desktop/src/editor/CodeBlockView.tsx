@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { NodeViewContent, NodeViewWrapper } from "@tiptap/react";
 import type { NodeViewProps } from "@tiptap/react";
 
+import { useDeferredUntilVisible } from "./visibilityDeferred";
+
 let mermaidInitialized = false;
 
 /** `mermaid.initialize` is process-wide and idempotent-unsafe to call
@@ -21,16 +23,20 @@ async function ensureMermaidInitialized(): Promise<typeof import("mermaid").defa
  * `NodeViewContent` (ProseMirror owns that DOM directly); a block whose
  * language is `mermaid` additionally renders its diagram underneath,
  * loaded lazily so pages without one never pay for the dependency.
+ *
+ * Diagram layout is further deferred until the block is near the viewport
+ * (ADR 0036).
  */
 export function CodeBlockView({ node }: NodeViewProps) {
   const language = node.attrs.language as string | null;
   const isMermaid = language === "mermaid";
   const text = node.textContent;
+  const { ref, isVisible } = useDeferredUntilVisible();
   const [svg, setSvg] = useState<string | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isMermaid || text.trim().length === 0) {
+    if (!isVisible || !isMermaid || text.trim().length === 0) {
       setSvg(null);
       setRenderError(null);
       return;
@@ -57,18 +63,27 @@ export function CodeBlockView({ node }: NodeViewProps) {
     return () => {
       cancelled = true;
     };
-  }, [isMermaid, text]);
+  }, [isVisible, isMermaid, text]);
 
   return (
     <NodeViewWrapper className="code-block-view">
-      <pre>
-        <NodeViewContent<"code"> as="code" />
-      </pre>
-      {isMermaid && svg && (
-        // eslint-disable-next-line react/no-danger -- mermaid.render output, not user HTML
-        <div className="mermaid-preview" dangerouslySetInnerHTML={{ __html: svg }} />
-      )}
-      {isMermaid && renderError && <p className="error-text mermaid-error">{renderError}</p>}
+      <div ref={ref}>
+        <pre>
+          <NodeViewContent<"code"> as="code" />
+        </pre>
+        {isMermaid && !isVisible && (
+          <p className="page-embed-deferred-hint" role="status">
+            Diagram preview loads when visible.
+          </p>
+        )}
+        {isMermaid && isVisible && svg && (
+          // eslint-disable-next-line react/no-danger -- mermaid.render output, not user HTML
+          <div className="mermaid-preview" dangerouslySetInnerHTML={{ __html: svg }} />
+        )}
+        {isMermaid && isVisible && renderError && (
+          <p className="error-text mermaid-error">{renderError}</p>
+        )}
+      </div>
     </NodeViewWrapper>
   );
 }

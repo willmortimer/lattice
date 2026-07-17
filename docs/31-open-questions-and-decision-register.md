@@ -29,6 +29,8 @@ The ADR directory records accepted decisions. Major accepted choices include:
 - Unified conflict-revision presentation.
 - Per-resource Inspect instead of a global Workbench mode.
 - Generated-resource ownership and build semantics.
+- Incremental long-page performance before full block virtualization
+  ([ADR 0036](decisions/0036-incremental-long-page-performance.md)).
 
 ## Open implementation questions
 
@@ -42,7 +44,6 @@ The ADR directory records accepted decisions. Major accepted choices include:
 - Exact Tiptap extension set.
 - Block-ID insertion policy.
 - Round-trip handling for imported Markdown dialects.
-- Long-page virtualization strategy.
 
 ### Canvas
 

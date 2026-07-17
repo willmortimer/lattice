@@ -1362,6 +1362,16 @@ html[data-platform="macos"] .empty-state {
   display: inline-block;
 }
 
+.page-embed-image-mount {
+  display: inline-block;
+}
+
+.page-embed-deferred-hint {
+  margin: 6px 0 0;
+  color: var(--lt-faint);
+  font: 10.5px var(--lt-font-mono);
+}
+
 .page-embed-lattice {
   display: block;
   margin: 12px 0;
