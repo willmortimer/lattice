@@ -100,6 +100,9 @@ pub enum Error {
     #[error("revision {revision} was not found for {path}")]
     RevisionNotFound { path: PathBuf, revision: String },
 
+    #[error("revision payload for {path} is unavailable after retention cleanup")]
+    RevisionPayloadUnavailable { path: PathBuf },
+
     #[error("failed to (de)serialize command: {0}")]
     Json(#[from] serde_json::Error),
 

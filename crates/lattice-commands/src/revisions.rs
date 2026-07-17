@@ -227,10 +227,6 @@ impl RevisionService {
         Ok(service)
     }
 
-    pub(crate) fn objects_root(&self) -> &Path {
-        &self.objects
-    }
-
     fn migrate_legacy_prior_content(&self) -> Result<()> {
         let legacy = {
             let conn = self.conn.lock().unwrap();
@@ -286,7 +282,7 @@ impl RevisionService {
         Ok(hash)
     }
 
-    fn read_object(&self, hash: &str) -> Result<Vec<u8>> {
+    pub(crate) fn read_object(&self, hash: &str) -> Result<Vec<u8>> {
         let filename = hash
             .strip_prefix("sha256:")
             .filter(|name| !name.is_empty() && name.chars().all(|c| c.is_ascii_hexdigit()))
@@ -718,7 +714,10 @@ fn protected_objects(conn: &Connection) -> Result<BTreeSet<String>> {
     let mut stmt = conn.prepare(
         "SELECT before_object_hash, after_object_hash, incoming_object_hash
          FROM resource_revisions
-         WHERE pinned = 1 OR current_baseline = 1 OR unresolved_conflict = 1",
+         WHERE pinned = 1 OR unresolved_conflict = 1
+         UNION ALL
+         SELECT NULL, after_object_hash, incoming_object_hash
+         FROM resource_revisions WHERE current_baseline = 1",
     )?;
     let rows = stmt.query_map([], |row| {
         Ok([
@@ -853,10 +852,7 @@ mod tests {
             .store_operation_payload(Some(b"same bytes"))
             .unwrap();
         assert_eq!(first, second);
-        assert_eq!(
-            std::fs::read_dir(service.objects_root()).unwrap().count(),
-            1
-        );
+        assert_eq!(std::fs::read_dir(&service.objects).unwrap().count(), 1);
         assert_eq!(
             service.read_object(first.as_deref().unwrap()).unwrap(),
             b"same bytes"
@@ -925,5 +921,64 @@ mod tests {
         let policy = HistoryRetentionPolicy::default();
         assert_eq!(policy.max_age, Duration::from_secs(180 * 24 * 60 * 60));
         assert_eq!(policy.max_bytes, 1024 * 1024 * 1024);
+    }
+
+    #[test]
+    fn retention_dry_run_notices_before_deletion_and_keeps_baseline() {
+        let directory = tempfile::tempdir().unwrap();
+        let service = RevisionService::open(directory.path()).unwrap();
+        let first = service
+            .record_external_revision(Path::new("A.md"), None, b"one", None, None)
+            .unwrap();
+        let second = service
+            .record_external_revision(Path::new("A.md"), Some(b"one"), b"two", None, None)
+            .unwrap();
+        let first_hash = first.after_hash.clone().unwrap();
+        let second_hash = second.after_hash.clone().unwrap();
+        let policy = HistoryRetentionPolicy {
+            max_age: Duration::from_secs(0),
+            max_bytes: 0,
+        };
+
+        let notice = service.cleanup(policy, false).unwrap();
+        assert!(notice.dry_run);
+        assert!(notice.requires_confirmation);
+        assert!(notice.reclaimable_bytes > 0);
+
+        let deleted = service.cleanup(policy, false).unwrap();
+        assert_eq!(deleted.deleted_objects, 1);
+        assert!(service.read_object(&first_hash).is_err());
+        assert_eq!(service.read_object(&second_hash).unwrap(), b"two");
+    }
+
+    #[test]
+    fn pinned_payload_is_exempt_from_retention() {
+        let directory = tempfile::tempdir().unwrap();
+        let service = RevisionService::open(directory.path()).unwrap();
+        let first = service
+            .record_external_revision(Path::new("A.md"), None, b"one", None, None)
+            .unwrap();
+        let second = service
+            .record_external_revision(Path::new("A.md"), Some(b"one"), b"two", None, None)
+            .unwrap();
+        service.mark_pinned(&first.revision_id, true).unwrap();
+        let report = service
+            .cleanup(
+                HistoryRetentionPolicy {
+                    max_age: Duration::from_secs(0),
+                    max_bytes: 0,
+                },
+                true,
+            )
+            .unwrap();
+        assert!(report.candidates.is_empty());
+        assert_eq!(
+            service.read_object(&first.after_hash.unwrap()).unwrap(),
+            b"one"
+        );
+        assert_eq!(
+            service.read_object(&second.after_hash.unwrap()).unwrap(),
+            b"two"
+        );
     }
 }
