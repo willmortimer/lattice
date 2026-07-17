@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Ensure a demo Lattice home + First Look workspace for cell scripts/tests.
+# Uses LATTICE_DEV_HOME (default: <repo>/target/cell-home) so `lattice home ensure`
+# seeds the demo template instead of Personal.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "${ROOT}"
+
+export LATTICE_DEV_HOME="${LATTICE_DEV_HOME:-${ROOT}/target/cell-home}"
+
+PROFILE="debug"
+if [[ "${LATTICE_CLI_RELEASE:-}" == "1" ]]; then
+  PROFILE="release"
+fi
+
+BIN="${ROOT}/target/${PROFILE}/lattice"
+if [[ ! -x "${BIN}" ]]; then
+  if [[ "${LATTICE_CLI_RELEASE:-}" == "1" ]]; then
+    "${SCRIPT_DIR}/cli" --release
+  else
+    "${SCRIPT_DIR}/cli"
+  fi
+fi
+
+"${BIN}" home ensure
+
+WORKSPACE="${LATTICE_DEV_HOME}/Workspaces/First Look"
+MANIFEST="${WORKSPACE}/lattice.yaml"
+if [[ ! -f "${MANIFEST}" ]]; then
+  echo "error: expected workspace manifest missing: ${MANIFEST}" >&2
+  exit 1
+fi
+
+echo "LATTICE_DEV_HOME=${LATTICE_DEV_HOME}"
+echo "workspace: ${WORKSPACE}"
+echo "manifest: ${MANIFEST}"
