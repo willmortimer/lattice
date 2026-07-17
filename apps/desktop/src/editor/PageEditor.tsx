@@ -32,6 +32,7 @@ import { CodeBlockView } from "./CodeBlockView";
 import { ConflictEnvelope } from "./ConflictEnvelope";
 import { editorExtensions } from "./extensions";
 import { ImageView } from "./ImageView";
+import { LatticeEmbedView } from "./LatticeEmbedView";
 import {
   joinFrontmatter,
   parseMarkdownToJSON,
@@ -92,6 +93,9 @@ const liveExtensions: Extensions = editorExtensions.map((extension) => {
   }
   if (extension.name === "codeBlock") {
     return extension.extend({ addNodeView: () => ReactNodeViewRenderer(CodeBlockView) });
+  }
+  if (extension.name === "latticeEmbed") {
+    return extension.extend({ addNodeView: () => ReactNodeViewRenderer(LatticeEmbedView) });
   }
   return extension;
 });

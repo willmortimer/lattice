@@ -4,6 +4,9 @@ import { TableKit } from "@tiptap/extension-table";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
 
+import { LatticeEmbed } from "./LatticeEmbedExtension";
+import { OpaqueDirective } from "./OpaqueDirectiveExtension";
+
 /**
  * The single source of truth for the editor's node/mark set. Both the live
  * Tiptap editor (`PageEditor`) and the standalone markdown codec
@@ -31,4 +34,6 @@ export const editorExtensions: Extensions = [
     autolink: true,
     HTMLAttributes: { class: "editor-link" },
   }),
+  LatticeEmbed,
+  OpaqueDirective,
 ];
