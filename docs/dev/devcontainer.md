@@ -9,6 +9,8 @@ Nix + Tauri on your Mac remain the source of truth for the native desktop shell.
 | --- | --- |
 | Open the browser demo UI remotely | `./scripts/devcontainer/web` → port **5173** |
 | Open marketing / Starlight docs | `./scripts/devcontainer/site` → port **4321** |
+| Build the headless `lattice` CLI | `./scripts/devcontainer/cli` |
+| Seed a real demo workspace on disk | `./scripts/devcontainer/seed` |
 | Run headless checks in the cell | `./scripts/devcontainer/test` |
 | Native window + real filesystem | **Not here** — `nix run .#desktop-dev` on macOS |
 
@@ -27,11 +29,54 @@ With VS Code / Cursor Dev Containers, or any host that understands
 ```sh
 ./scripts/devcontainer/web
 ./scripts/devcontainer/site
+./scripts/devcontainer/cli
+./scripts/devcontainer/seed
 ./scripts/devcontainer/test
 ```
 
 Bind address is `0.0.0.0` so Docker / DevCell published ports and
 `tailscale serve` can reach the processes.
+
+## CLI (headless workspace)
+
+The cell image includes Rust but not Nix or Tauri. Use the `lattice` CLI for
+real filesystem workspaces, scripts, and headless automation inside the cell.
+
+```sh
+# Build debug binary (default) → target/debug/lattice
+./scripts/devcontainer/cli
+
+# Release build
+./scripts/devcontainer/cli --release
+# or: LATTICE_CLI_RELEASE=1 ./scripts/devcontainer/cli
+
+# Ensure demo home + First Look workspace (sets LATTICE_DEV_HOME when unset)
+./scripts/devcontainer/seed
+```
+
+`seed` defaults `LATTICE_DEV_HOME` to `<repo>/target/cell-home` (in the
+container: `/workspaces/lattice/target/cell-home`). That mirrors local Tauri
+dev isolation: `lattice home ensure` seeds the **First Look** (`demo`) template
+instead of Personal. Override with `LATTICE_DEV_HOME` before running `seed` or
+the CLI.
+
+After seeding, smoke the workspace:
+
+```sh
+export LATTICE_DEV_HOME=/workspaces/lattice/target/cell-home
+LATTICE=target/debug/lattice   # or target/release/lattice
+
+$LATTICE --help
+$LATTICE home path
+$LATTICE ls "${LATTICE_DEV_HOME}/Workspaces/First Look"
+$LATTICE index "${LATTICE_DEV_HOME}/Workspaces/First Look"
+$LATTICE search workspace "${LATTICE_DEV_HOME}/Workspaces/First Look" --limit 5
+```
+
+`./scripts/devcontainer/test` runs a short CLI smoke (build + seed + `ls` /
+`search`) after the existing cargo and pnpm checks.
+
+See [environment.md](./environment.md) for `LATTICE_DEV_HOME` and `LATTICE_HOME`.
 
 ## Ports
 
