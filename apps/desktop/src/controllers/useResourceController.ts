@@ -7,6 +7,7 @@ import { readNativeCanvas } from "../canvas/adapter";
 import type { OpenResourceSession } from "../resourceSession";
 import { deriveResourceFormatId } from "../resourceRendererRegistry";
 import type { Resource, WorkspaceSnapshot } from "../types";
+import { previewLinkRepair, type LinkRepairPlan } from "../lib/linkRepair";
 import { createResourceLoadGate, isTextFormatId, loadTextResource, type ResourceLoadGate, type ResourceLoadTicket } from "./resourceLoad";
 
 export interface ResourceControllerOptions {
@@ -25,6 +26,13 @@ export interface ResourceControllerOptions {
   onReplaceHistoryPath: (from: string, to: string) => void;
   refreshResources: () => Promise<void>;
   onPageReady: () => void;
+  onLinkRepairReview: (review: {
+    plan: LinkRepairPlan;
+    from: string;
+    to: string;
+    mode: "lattice-rename" | "external";
+    proposalId?: string;
+  }) => Promise<"accepted" | "deferred" | "cancelled">;
 }
 
 export interface ResourceController {
@@ -68,7 +76,7 @@ export function useResourceController(options: ResourceControllerOptions): Resou
   const {
     snapshot, snapshotRef, setSnapshot, hasCapability, onError, onBusy,
     onActivity, onTitle, onSelectionChanged, onRecordNavigation, onOpenTab,
-    onReplaceTab, onReplaceHistoryPath, refreshResources, onPageReady,
+    onReplaceTab, onReplaceHistoryPath, refreshResources, onPageReady, onLinkRepairReview,
   } = options;
   const [selected, setSelected] = useState<Resource | null>(null);
   const [session, setSession] = useState<OpenResourceSession | null>(null);
@@ -369,7 +377,21 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     }
     onBusy(true);
     try {
-      await invoke("rename_resource", { root: current.root, from: resource.path, to: nextPath });
+      const plan = await previewLinkRepair(current.root, resource.path, nextPath, "lattice-rename");
+      if (plan.candidates.length > 0) {
+        const decision = await onLinkRepairReview({
+          plan,
+          from: resource.path,
+          to: nextPath,
+          mode: "lattice-rename",
+        });
+        if (decision === "cancelled") {
+          onTitle(fileTitle(resource.path));
+          return;
+        }
+      } else {
+        await invoke("rename_resource", { root: current.root, from: resource.path, to: nextPath });
+      }
       await refreshResources();
       setSelected(nextResource);
       selectedRef.current = nextResource;
@@ -381,7 +403,7 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     } finally {
       onBusy(false);
     }
-  }, [handleSelect, onBusy, onError, onReplaceHistoryPath, onReplaceTab, onTitle, refreshResources, setSnapshot, snapshot, snapshotRef]);
+  }, [handleSelect, onBusy, onError, onLinkRepairReview, onReplaceHistoryPath, onReplaceTab, onTitle, refreshResources, setSnapshot, snapshot, snapshotRef]);
 
   return {
     selected, setSelected, session, setSession, pageRef, currentPageRevisionRef, reloadToken,

@@ -1,6 +1,7 @@
 mod canvas;
 mod commands;
 mod data;
+mod link_repair;
 mod profile;
 mod resource_links;
 mod revisions;
@@ -97,6 +98,13 @@ pub fn run() {
             commands::create_page,
             commands::create_asset,
             commands::rename_resource,
+            link_repair::preview_link_repair,
+            link_repair::get_link_repair_proposal,
+            link_repair::list_link_repair_proposals_cmd,
+            link_repair::dismiss_link_repair_proposal_cmd,
+            link_repair::defer_link_repair_proposal,
+            link_repair::apply_link_repair,
+            link_repair::apply_link_repair_proposal,
             commands::list_history,
             commands::undo_last,
             revisions::list_resource_revisions,
