@@ -1,3 +1,4 @@
+mod canvas;
 mod commands;
 mod data;
 mod profile;
@@ -139,6 +140,10 @@ pub fn run() {
             data::load_data_view,
             data::save_data_view,
             data::import_csv_table,
+            canvas::read_canvas,
+            canvas::canvas_place_resource,
+            canvas::canvas_move_nodes,
+            canvas::canvas_remove_nodes,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

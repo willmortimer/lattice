@@ -5,6 +5,50 @@ use std::time::SystemTime;
 use lattice_data::CellValue;
 use serde::{Deserialize, Serialize};
 
+/// A file node placement on a JSON Canvas. The canvas path and resource path
+/// are workspace-relative; the command engine validates both before writing.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CanvasPlaceResource {
+    pub path: PathBuf,
+    #[serde(rename = "base-revision")]
+    pub base_revision: String,
+    #[serde(rename = "resource-path")]
+    pub resource_path: PathBuf,
+    #[serde(rename = "node-id")]
+    pub node_id: String,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+/// One node's new position in a batched canvas move.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CanvasNodeMove {
+    pub id: String,
+    pub x: f64,
+    pub y: f64,
+}
+
+/// A batched move of existing JSON Canvas nodes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CanvasMoveNodes {
+    pub path: PathBuf,
+    #[serde(rename = "base-revision")]
+    pub base_revision: String,
+    pub nodes: Vec<CanvasNodeMove>,
+}
+
+/// Removal of existing JSON Canvas nodes and their incident edges.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CanvasRemoveNodes {
+    pub path: PathBuf,
+    #[serde(rename = "base-revision")]
+    pub base_revision: String,
+    #[serde(rename = "node-ids")]
+    pub node_ids: Vec<String>,
+}
+
 /// The v0 semantic command set.
 ///
 /// These are whole-file (whole-resource) operations; block-level and
@@ -126,6 +170,39 @@ pub enum Command {
         view_name: String,
         content: String,
     },
+
+    /// Place a file node into a JSON Canvas while preserving the rest of the
+    /// original JSON value, including fields unknown to Lattice.
+    CanvasPlaceResource {
+        path: PathBuf,
+        #[serde(rename = "base-revision")]
+        base_revision: String,
+        #[serde(rename = "resource-path")]
+        resource_path: PathBuf,
+        #[serde(rename = "node-id")]
+        node_id: String,
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+    },
+
+    /// Move one or more JSON Canvas nodes in one semantic transaction.
+    CanvasMoveNodes {
+        path: PathBuf,
+        #[serde(rename = "base-revision")]
+        base_revision: String,
+        nodes: Vec<CanvasNodeMove>,
+    },
+
+    /// Remove nodes and their incident edges from a JSON Canvas.
+    CanvasRemoveNodes {
+        path: PathBuf,
+        #[serde(rename = "base-revision")]
+        base_revision: String,
+        #[serde(rename = "node-ids")]
+        node_ids: Vec<String>,
+    },
 }
 
 mod base64_bytes {
@@ -175,6 +252,9 @@ impl Command {
             Command::ViewSave {
                 path, view_name, ..
             } => view_file_path(path, view_name),
+            Command::CanvasPlaceResource { path, .. }
+            | Command::CanvasMoveNodes { path, .. }
+            | Command::CanvasRemoveNodes { path, .. } => path.clone(),
         }
     }
 
@@ -201,6 +281,9 @@ impl Command {
             Command::ViewSave {
                 path, view_name, ..
             } => vec![view_file_path(path, view_name)],
+            Command::CanvasPlaceResource { path, .. }
+            | Command::CanvasMoveNodes { path, .. }
+            | Command::CanvasRemoveNodes { path, .. } => vec![path.clone()],
         }
     }
 }

@@ -2,9 +2,13 @@ use std::path::{Path, PathBuf};
 
 use lattice_core::Workspace;
 use lattice_storage::{NativeWorkspaceStore, WorkspaceStore};
+use serde_json::Value;
 use tempfile::TempDir;
 
-use crate::{Command, CommandEngine, Error, Transaction, TrashPolicy, MAX_RESOURCE_EDIT_BYTES};
+use crate::{
+    CanvasNodeMove, Command, CommandEngine, Error, Transaction, TrashPolicy,
+    MAX_RESOURCE_EDIT_BYTES,
+};
 
 /// A fresh workspace + engine. Tests use [`TrashPolicy::LocalFallbackOnly`]
 /// so deletes deterministically land in `.lattice/trash/` instead of the OS
@@ -34,6 +38,232 @@ fn read(dir: &TempDir, path: &str) -> Vec<u8> {
 
 fn exists(dir: &TempDir, path: &str) -> bool {
     dir.path().join(path).exists()
+}
+
+fn canvas_base(dir: &TempDir) -> String {
+    NativeWorkspaceStore::new(dir.path())
+        .metadata(Path::new("Boards/Main.canvas"))
+        .unwrap()
+        .revision
+        .hash
+}
+
+fn create_canvas(engine: &mut CommandEngine, dir: &TempDir) -> String {
+    engine
+        .apply(Transaction::new(
+            "Create canvas resource",
+            vec![Command::ResourceCreate {
+                path: PathBuf::from("Notes/Source.md"),
+                content: b"source\n".to_vec(),
+            }],
+        ))
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Create canvas",
+            vec![Command::ResourceCreate {
+                path: PathBuf::from("Boards/Main.canvas"),
+                content: br#"{
+  "metadata": {"owner": "test"},
+  "nodes": [
+    {"id":"a","type":"text","text":"A","x":1,"y":2,"width":100,"height":80,"plugin":{"keep":true}},
+    {"id":"b","type":"file","file":"../../outside","x":240,"y":2,"width":100,"height":80}
+  ],
+  "edges": [{"id":"ab","fromNode":"a","toNode":"b","label":"kept","pluginEdge":{"keep":true}}]
+}
+"#
+                .to_vec(),
+            }],
+        ))
+        .unwrap();
+    let _ = dir;
+    canvas_base(dir)
+}
+
+#[test]
+fn canvas_patches_preserve_unknown_values_and_use_canvas_relative_paths() {
+    let (dir, mut engine) = engine();
+    let base = create_canvas(&mut engine, &dir);
+    let receipt = engine
+        .apply(Transaction::new(
+            "Place source on canvas",
+            vec![Command::CanvasPlaceResource {
+                path: PathBuf::from("Boards/Main.canvas"),
+                base_revision: base,
+                resource_path: PathBuf::from("Notes/Source.md"),
+                node_id: "source".into(),
+                x: 400.0,
+                y: 120.0,
+                width: 320.0,
+                height: 200.0,
+            }],
+        ))
+        .unwrap();
+    let value: Value = serde_json::from_slice(&read(&dir, "Boards/Main.canvas")).unwrap();
+    assert_eq!(value["metadata"]["owner"], "test");
+    assert_eq!(value["nodes"][0]["plugin"]["keep"], true);
+    assert_eq!(value["edges"][0]["pluginEdge"]["keep"], true);
+    assert_eq!(value["nodes"][2]["file"], "../Notes/Source.md");
+
+    let moved_base = receipt.outcomes[0].resulting_revision.clone().unwrap();
+    engine
+        .apply(Transaction::new(
+            "Move canvas nodes",
+            vec![Command::CanvasMoveNodes {
+                path: PathBuf::from("Boards/Main.canvas"),
+                base_revision: moved_base,
+                nodes: vec![CanvasNodeMove {
+                    id: "a".into(),
+                    x: 40.0,
+                    y: 50.0,
+                }],
+            }],
+        ))
+        .unwrap();
+    let value: Value = serde_json::from_slice(&read(&dir, "Boards/Main.canvas")).unwrap();
+    assert_eq!(value["nodes"][0]["x"], 40.0);
+    assert_eq!(value["nodes"][0]["plugin"]["keep"], true);
+    assert_eq!(value["edges"][0]["pluginEdge"]["keep"], true);
+}
+
+#[test]
+fn canvas_remove_removes_incident_edges_but_preserves_other_edges_and_unknown_fields() {
+    let (dir, mut engine) = engine();
+    let base = create_canvas(&mut engine, &dir);
+    let mut document: Value = serde_json::from_slice(&read(&dir, "Boards/Main.canvas")).unwrap();
+    document["nodes"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({"id":"c","type":"text","text":"C","x":400,"y":2,"width":100,"height":80,"custom":42}));
+    document["edges"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "id":"bc","fromNode":"b","toNode":"c","customEdge":"keep"
+        }));
+    std::fs::write(
+        dir.path().join("Boards/Main.canvas"),
+        serde_json::to_vec_pretty(&document).unwrap(),
+    )
+    .unwrap();
+    let current = canvas_base(&dir);
+    assert_ne!(current, base);
+
+    engine
+        .apply(Transaction::new(
+            "Remove node",
+            vec![Command::CanvasRemoveNodes {
+                path: PathBuf::from("Boards/Main.canvas"),
+                base_revision: current,
+                node_ids: vec!["a".into()],
+            }],
+        ))
+        .unwrap();
+    let value: Value = serde_json::from_slice(&read(&dir, "Boards/Main.canvas")).unwrap();
+    assert!(value["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|node| node["id"] != "a"));
+    assert!(value["edges"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|edge| edge["id"] != "ab"));
+    assert_eq!(value["edges"][0]["customEdge"], "keep");
+    assert_eq!(value["nodes"][1]["custom"], 42);
+}
+
+#[test]
+fn canvas_stale_invalid_and_undo_are_guarded() {
+    let (dir, mut engine) = engine();
+    let base = create_canvas(&mut engine, &dir);
+    let original = read(&dir, "Boards/Main.canvas");
+    let stale = engine.apply(Transaction::new(
+        "Stale canvas move",
+        vec![Command::CanvasMoveNodes {
+            path: PathBuf::from("Boards/Main.canvas"),
+            base_revision: "sha256:stale".into(),
+            nodes: vec![CanvasNodeMove {
+                id: "a".into(),
+                x: 1.0,
+                y: 2.0,
+            }],
+        }],
+    ));
+    assert!(matches!(stale, Err(Error::StaleBaseRevision { .. })));
+    assert_eq!(read(&dir, "Boards/Main.canvas"), original);
+
+    let invalid = engine.apply(Transaction::new(
+        "Invalid canvas placement",
+        vec![Command::CanvasPlaceResource {
+            path: PathBuf::from("Boards/Main.canvas"),
+            base_revision: base.clone(),
+            resource_path: PathBuf::from("Notes/Source.md"),
+            node_id: "new".into(),
+            x: f64::NAN,
+            y: 0.0,
+            width: 100.0,
+            height: 100.0,
+        }],
+    ));
+    assert!(matches!(invalid, Err(Error::InvalidCanvas { .. })));
+    assert_eq!(read(&dir, "Boards/Main.canvas"), original);
+
+    let receipt = engine
+        .apply(Transaction::new(
+            "Move canvas node",
+            vec![Command::CanvasMoveNodes {
+                path: PathBuf::from("Boards/Main.canvas"),
+                base_revision: base,
+                nodes: vec![CanvasNodeMove {
+                    id: "a".into(),
+                    x: 90.0,
+                    y: 100.0,
+                }],
+            }],
+        ))
+        .unwrap();
+    assert_ne!(read(&dir, "Boards/Main.canvas"), original);
+    engine.undo().unwrap().unwrap();
+    assert_eq!(read(&dir, "Boards/Main.canvas"), original);
+    engine.redo().unwrap().unwrap();
+    assert_ne!(read(&dir, "Boards/Main.canvas"), original);
+    assert!(receipt.outcomes[0].resulting_revision.is_some());
+}
+
+#[test]
+fn canvas_rejects_escape_paths_and_unknown_node_ids() {
+    let (dir, mut engine) = engine();
+    let base = create_canvas(&mut engine, &dir);
+    let result = engine.apply(Transaction::new(
+        "Escape canvas resource",
+        vec![Command::CanvasPlaceResource {
+            path: PathBuf::from("Boards/../Main.canvas"),
+            base_revision: base,
+            resource_path: PathBuf::from("Notes/Source.md"),
+            node_id: "new".into(),
+            x: 0.0,
+            y: 0.0,
+            width: 100.0,
+            height: 100.0,
+        }],
+    ));
+    assert!(matches!(result, Err(Error::InvalidCanvas { .. })));
+
+    let result = engine.apply(Transaction::new(
+        "Move missing canvas node",
+        vec![Command::CanvasMoveNodes {
+            path: PathBuf::from("Boards/Main.canvas"),
+            base_revision: canvas_base(&dir),
+            nodes: vec![CanvasNodeMove {
+                id: "missing".into(),
+                x: 0.0,
+                y: 0.0,
+            }],
+        }],
+    ));
+    assert!(matches!(result, Err(Error::InvalidCanvas { .. })));
 }
 
 #[test]
