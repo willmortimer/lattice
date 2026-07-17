@@ -2202,6 +2202,7 @@ dependencies = [
  "lattice-commands",
  "lattice-core",
  "lattice-data",
+ "lattice-handlers",
  "lattice-index",
  "lattice-profile",
  "lattice-storage",
@@ -2217,6 +2218,19 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-global-shortcut",
  "tauri-plugin-opener",
+ "tempfile",
+]
+
+[[package]]
+name = "lattice-handlers"
+version = "0.1.0"
+dependencies = [
+ "lattice-commands",
+ "lattice-core",
+ "lattice-index",
+ "lattice-storage",
+ "serde",
+ "serde_yaml",
  "tempfile",
 ]
 
