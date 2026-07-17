@@ -31,6 +31,7 @@ mod error;
 mod history;
 mod link_repair;
 mod revisions;
+mod template;
 mod trash;
 
 pub use command::{
@@ -49,6 +50,10 @@ pub use revisions::{
     ConflictEnvelope, HistoryCleanupCandidate, HistoryCleanupReport, HistoryRetentionPolicy,
     ResourceRevisionDetail, ResourceRevisionSummary, RevisionDiff, RevisionPayload,
     RevisionService, RevisionSource,
+};
+pub use template::{
+    instantiate_template, resolve_page_create_content, resolve_quick_note_template_path,
+    title_from_page_path, utc_iso_date,
 };
 pub use trash::TrashPolicy;
 

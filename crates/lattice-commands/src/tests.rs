@@ -1090,3 +1090,42 @@ fn stale_package_revision_on_record_update_is_refused() {
         Some(&CellValue::Text("Ada".into()))
     );
 }
+
+#[test]
+fn page_create_from_template_substitutes_title_and_date() {
+    let (dir, mut engine) = engine();
+    std::fs::create_dir_all(dir.path().join("Templates")).unwrap();
+    std::fs::write(
+        dir.path().join("Templates/Daily.md"),
+        "# {{title}}\n\nCaptured {{date}}\n",
+    )
+    .unwrap();
+
+    engine
+        .create_page(
+            PathBuf::from("Notes/Sync.md"),
+            String::new(),
+            Some(PathBuf::from("Templates/Daily.md")),
+            Some("Sync".into()),
+        )
+        .unwrap();
+
+    let body = String::from_utf8(read(&dir, "Notes/Sync.md")).unwrap();
+    assert!(body.starts_with("# Sync\n\nCaptured "));
+    let date = body.trim_start_matches("# Sync\n\nCaptured ").trim_end();
+    assert!(
+        date.len() == 10 && date.chars().nth(4) == Some('-') && date.chars().nth(7) == Some('-'),
+        "expected ISO date, got {date:?}"
+    );
+
+    // Blank create (no template) still writes the provided content as-is.
+    engine
+        .create_page(
+            PathBuf::from("Notes/Blank.md"),
+            String::new(),
+            None,
+            None,
+        )
+        .unwrap();
+    assert_eq!(read(&dir, "Notes/Blank.md"), b"");
+}

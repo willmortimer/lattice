@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject, type RefObject } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { inBrowser } from "../demo";
 import { isUnsaved, type SaveState } from "../editor/saveState";
 import type { PageEditorHandle } from "../editor/PageEditor";
+import { createPage } from "../lib/pages";
 import type { OpenResourceSession } from "../resourceSession";
 import type { Resource, WorkspaceChangeEvent } from "../types";
 import { conflictSiblingPath, dispositionForModifiedResource, pathIsRemoved, shouldClearRenamedPath } from "./reconciliationPolicy";
@@ -164,7 +164,7 @@ export function useResourceReconciliation(options: ResourceReconciliationOptions
     const root = current.snapshotRef.current?.root;
     if (!page || !editor || !root) return;
     try {
-      await invoke("create_page", {
+      await createPage({
         root,
         relPath: conflictSiblingPath(page.resource.path),
         content: editor.getRaw(),

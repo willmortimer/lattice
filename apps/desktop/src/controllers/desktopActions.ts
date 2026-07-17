@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { resolveResourceLink, type ResourceLinkTarget } from "../lib/resourceLinks";
+import { createPage } from "../lib/pages";
 import { updateWorkspaceManifest } from "../lib/workspace";
 import { fileTimestamp, quickNotePath } from "../lib/timestamp";
 import { showQuickNote } from "../quickNoteWindow";
@@ -60,19 +61,34 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
     if (workspaceSettingsTimerRef.current) window.clearTimeout(workspaceSettingsTimerRef.current);
   }, []);
 
-  const createAndOpenPage = useCallback(async (relPath: string) => {
+  const createAndOpenPage = useCallback(async (
+    relPath: string,
+    options?: { templatePath?: string | null; title?: string | null; content?: string },
+  ) => {
     const resource: Resource = { path: relPath, kind: "page" };
     if (inBrowser) {
       setSnapshot((prev) => prev ? { ...prev, resources: [...prev.resources, resource] } : prev);
       setError(null);
       setSaveStateIdle();
-      openCreatedResource(resource, { kind: "page", resource, content: "", revision: "demo:0", io: createDemoPageIO("") });
+      openCreatedResource(resource, {
+        kind: "page",
+        resource,
+        content: options?.content ?? "",
+        revision: "demo:0",
+        io: createDemoPageIO(options?.content ?? ""),
+      });
       return;
     }
     if (!snapshot) return;
     setBusy(true);
     try {
-      await invoke("create_page", { root: snapshot.root, relPath, content: "" });
+      await createPage({
+        root: snapshot.root,
+        relPath,
+        content: options?.content ?? "",
+        templatePath: options?.templatePath,
+        title: options?.title,
+      });
       await refreshResources();
       await handleSelect(resource);
     } catch (error) {

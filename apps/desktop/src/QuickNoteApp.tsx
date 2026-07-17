@@ -7,6 +7,7 @@ import { ArrowUpRight, ExternalLink, FileText, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createNativePageIO } from "./editor/pageIO";
+import { createPage, resolveQuickNoteTemplatePath } from "./lib/pages";
 import { loadProfile } from "./lib/profile";
 import { quickNotePath } from "./lib/timestamp";
 import {
@@ -14,6 +15,7 @@ import {
   detectSystemAppearance,
   type ThemeCatalogPayload,
 } from "./theme/apply";
+import type { Resource } from "./types";
 
 interface QuickNotePage {
   root: string;
@@ -59,10 +61,24 @@ export function QuickNoteApp() {
     try {
       const workspace = await invoke<{
         title: string;
-        defaults: { quickNoteDirectory: string };
+        defaults: { quickNoteDirectory: string; templateDirectory?: string | null };
+        resources: Resource[];
       }>("open_workspace", { path: root });
       const path = quickNotePath(new Date(), workspace.defaults.quickNoteDirectory);
-      await invoke("create_page", { root, relPath: path, content: "" });
+      // Quick Note default: `<templateDirectory>/Daily.md` when configured,
+      // else `Templates/Daily.md` when that resource exists.
+      const templatePath = resolveQuickNoteTemplatePath(
+        workspace.defaults.templateDirectory,
+        workspace.resources.map((resource) => resource.path),
+      );
+      const title = new Date().toISOString().slice(0, 10);
+      await createPage({
+        root,
+        relPath: path,
+        content: "",
+        templatePath,
+        title,
+      });
       const io = createNativePageIO(root, path);
       const loaded = await io.load();
       const catalog = await invoke<ThemeCatalogPayload>("list_themes", {
