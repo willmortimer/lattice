@@ -9,6 +9,11 @@ use crate::Result;
 
 pub const VIEW_FORMAT: &str = "lattice-view";
 pub const VIEW_VERSION: u32 = 1;
+pub const LAYOUT_GRID: &str = "grid";
+pub const LAYOUT_LIST: &str = "list";
+pub const LAYOUT_BOARD: &str = "board";
+
+const SUPPORTED_LAYOUT_TYPES: &[&str] = &[LAYOUT_GRID, LAYOUT_LIST, LAYOUT_BOARD];
 
 /// Parsed `views/{name}.yaml` grid view definition.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -35,6 +40,9 @@ pub struct ViewLayout {
     pub layout_type: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub columns: Vec<String>,
+    /// Board layout only: column used to group cards into lanes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group_by: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -79,8 +87,9 @@ impl ViewDef {
                 table: table.into(),
             },
             layout: ViewLayout {
-                layout_type: "grid".to_string(),
+                layout_type: LAYOUT_GRID.to_string(),
                 columns: Vec::new(),
+                group_by: None,
             },
             sort: None,
             filter: Vec::new(),
@@ -121,11 +130,19 @@ impl ViewDef {
                 self.version
             )));
         }
-        if self.layout.layout_type != "grid" {
+        if !SUPPORTED_LAYOUT_TYPES.contains(&self.layout.layout_type.as_str()) {
             return Err(invalid(format!(
-                "unsupported view layout type {:?}",
-                self.layout.layout_type
+                "unsupported view layout type {:?}; expected one of {:?}",
+                self.layout.layout_type, SUPPORTED_LAYOUT_TYPES
             )));
+        }
+        if let Some(group_by) = &self.layout.group_by {
+            validate_identifier(group_by)?;
+            if self.layout.layout_type != LAYOUT_BOARD {
+                return Err(invalid(
+                    "layout.group_by is only supported for board views".to_string(),
+                ));
+            }
         }
         Ok(())
     }

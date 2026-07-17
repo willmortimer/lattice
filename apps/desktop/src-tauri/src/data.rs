@@ -27,6 +27,9 @@ pub struct DataAppSnapshot {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sort_direction: Option<String>,
     pub filters: Vec<FilterDto>,
+    pub layout_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_by: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,6 +49,9 @@ pub struct ViewSummary {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sort_direction: Option<String>,
     pub filters: Vec<FilterDto>,
+    pub layout_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group_by: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -107,6 +113,8 @@ fn snapshot_from_app(app: &DataApp, view_name: Option<&str>) -> Result<DataAppSn
             SortDirection::Desc => "desc".to_string(),
         }),
         filters: view.filter.iter().map(filter_dto).collect(),
+        layout_type: view.layout.layout_type.clone(),
+        group_by: view.layout.group_by.clone(),
     })
 }
 
@@ -174,6 +182,8 @@ pub fn load_data_view(root: String, rel_path: String, name: String) -> Result<Vi
             SortDirection::Desc => "desc".to_string(),
         }),
         filters: view.filter.iter().map(filter_dto).collect(),
+        layout_type: view.layout.layout_type.clone(),
+        group_by: view.layout.group_by.clone(),
     })
 }
 

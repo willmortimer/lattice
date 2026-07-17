@@ -139,6 +139,12 @@ Views are saved queries plus presentation:
 
 A view never duplicates records.
 
+Phase 2 desktop rendering supports `grid` (default), `list`, and `board` layout types. Gallery, calendar, and form layouts are reserved for later phases.
+
+- **Grid** — editable spreadsheet surface (default for saved views and the built-in `All` view).
+- **List** — scrollable rows using the first non-`id` column as the title and the next as a subtitle; row click opens record detail.
+- **Board** — kanban lanes grouped by `layout.group_by` when set, otherwise a column named `status`, otherwise the first text/boolean column. Row cards reuse the list title/subtitle fields and open record detail on click.
+
 ```yaml
 format: lattice-view
 version: 1
@@ -152,6 +158,13 @@ filter:
   - field: archived
     operator: equals
     value: false
+```
+
+List views omit `group_by`:
+
+```yaml
+layout:
+  type: list
 ```
 
 ## Forms

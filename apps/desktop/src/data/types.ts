@@ -33,6 +33,8 @@ export interface ViewFilter {
   value: string;
 }
 
+export type ViewLayoutType = "grid" | "list" | "board";
+
 export interface DataAppSnapshot {
   title: string;
   default_table: string;
@@ -44,6 +46,10 @@ export interface DataAppSnapshot {
   sort_field?: string;
   sort_direction?: "asc" | "desc";
   filters: ViewFilter[];
+  /** Active view layout: `grid`, `list`, or `board`. */
+  layout_type: ViewLayoutType;
+  /** Board layout: explicit group-by column from the view YAML. */
+  group_by?: string;
 }
 
 export function cellValueToDisplay(value: CellValue | undefined): string {
@@ -88,5 +94,7 @@ export function cloneSnapshot(snapshot: DataAppSnapshot): DataAppSnapshot {
     })),
     available_views: [...snapshot.available_views],
     filters: snapshot.filters.map((filter) => ({ ...filter })),
+    layout_type: snapshot.layout_type,
+    group_by: snapshot.group_by,
   };
 }
