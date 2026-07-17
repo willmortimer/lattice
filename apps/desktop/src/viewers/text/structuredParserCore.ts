@@ -1,4 +1,4 @@
-import { parseDocument } from "yaml";
+import { isAlias, isMap, isScalar, isSeq, parseDocument } from "yaml";
 
 export type StructuredSyntax = "json" | "yaml";
 
@@ -67,44 +67,41 @@ function normalizeJson(value: unknown, depth: number, state: { nodes: number }, 
   };
 }
 
-/** Converts YAML's AST without resolving aliases. This keeps the tree bounded
+function scalarKey(value: unknown): string {
+  if (isScalar(value)) {
+    const scalar = value.value;
+    if (typeof scalar === "string") return scalar;
+    if (scalar === null) return "null";
+    if (typeof scalar === "number" || typeof scalar === "boolean") return String(scalar);
+  }
+  return objectKey(value);
+}
+
+/** Converts YAML CST nodes without resolving aliases. This keeps the tree bounded
  * and prevents a recursive alias graph from becoming an expanded JS object. */
 function normalizeYaml(node: unknown, depth: number, state: { nodes: number; aliases: number }, limits: StructuredParseLimits): StructuredNode {
   state.nodes += 1;
   if (state.nodes > limits.maxNodes) throw new ParseLimitError(`Structured value exceeds the ${limits.maxNodes.toLocaleString()} node limit.`);
   if (depth > limits.maxDepth) throw new ParseLimitError(`Structured value exceeds the depth limit of ${limits.maxDepth}.`);
-  if (!node || typeof node !== "object") return { kind: "value", value: null };
-
-  const candidate = node as {
-    type?: string;
-    value?: unknown;
-    source?: unknown;
-    items?: unknown[];
-  };
-  if (candidate.type === "ALIAS") {
+  if (isAlias(node)) {
     state.aliases += 1;
     if (state.aliases > limits.maxAliases) throw new ParseLimitError(`YAML exceeds the ${limits.maxAliases} alias limit.`);
-    return { kind: "alias", name: String(candidate.source ?? "alias") };
+    return { kind: "alias", name: String(node.source ?? "alias") };
   }
-  if (candidate.type === "MAP") {
+  if (isMap(node)) {
     return {
       kind: "object",
-      entries: (candidate.items ?? []).map((item) => {
-        const pair = item as { key?: unknown; value?: unknown };
-        return {
-          key: objectKey(pair.key && typeof pair.key === "object" && "value" in pair.key
-            ? (pair.key as { value: unknown }).value
-            : pair.key),
-          value: normalizeYaml(pair.value, depth + 1, state, limits),
-        };
-      }),
+      entries: node.items.map((item) => ({
+        key: scalarKey(item.key),
+        value: normalizeYaml(item.value, depth + 1, state, limits),
+      })),
     };
   }
-  if (candidate.type === "SEQ") {
-    return { kind: "array", items: (candidate.items ?? []).map((item) => normalizeYaml(item, depth + 1, state, limits)) };
+  if (isSeq(node)) {
+    return { kind: "array", items: node.items.map((item) => normalizeYaml(item, depth + 1, state, limits)) };
   }
-  if (candidate.type === "SCALAR" || "value" in candidate) {
-    const value = candidate.value;
+  if (isScalar(node)) {
+    const value = node.value;
     if (value === null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
       return { kind: "value", value };
     }
@@ -131,8 +128,8 @@ export function parseStructuredSource(
     if (syntax === "json") return { ok: true, root: normalizeJson(JSON.parse(source), 0, { nodes: 0 }, limits), diagnostics: [] };
 
     const document = parseDocument(source, {
-      maxAliasCount: limits.maxAliases,
       prettyErrors: false,
+      customTags: [],
     });
     if (document.errors.length > 0) {
       return { ok: false, root: null, diagnostics: document.errors.map(diagnosticFromError) };

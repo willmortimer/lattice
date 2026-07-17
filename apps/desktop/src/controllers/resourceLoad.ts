@@ -22,6 +22,21 @@ export interface ResourceLoadGate {
 export const MAX_EDITABLE_TEXT_BYTES = 10 * 1024 * 1024;
 export const DEFAULT_TEXT_WINDOW_BYTES = 256 * 1024;
 
+const TEXT_FORMAT_IDS = new Set([
+  "plain-text",
+  "code",
+  "json",
+  "yaml",
+  "file:text",
+  "file:code",
+  "file:json",
+  "file:yaml",
+]);
+
+export function isTextFormatId(formatId: string): boolean {
+  return TEXT_FORMAT_IDS.has(formatId);
+}
+
 export interface TextResourceLoadResult {
   inspection: ResourceInspection;
   window: TextWindow;
