@@ -3,6 +3,7 @@ import { CanvasOutline } from "./CanvasOutline";
 import { CanvasStaleRevisionError, keyboardMoveDelta, previewPlaceResource, type CanvasAdapter } from "./adapter";
 import { CanvasParseError, parseCanvas, type CanvasData } from "./types";
 import { CanvasScene } from "./scene";
+import { LATTICE_RESOURCE_MIME, readResourceDragPayload } from "../lib/resourceDrag";
 
 interface CanvasViewerProps {
   json: unknown;
@@ -129,41 +130,79 @@ export function CanvasViewer({ json, onOpenFile, adapter, baseRevision, onRevisi
     }).catch((error: unknown) => reportError(String(error)));
   };
 
-  const placeResource = () => {
-    const resourcePath = window.prompt("Workspace resource path", "Notes/")?.trim();
-    if (!resourcePath) return;
+  const placeResourceAt = (resourcePath: string, x = 120, y = 120) => {
     const node = {
-      id: `resource-${data.nodes.length + 1}`,
-      x: 80 + (data.nodes.length % 5) * 40,
-      y: 80 + Math.floor(data.nodes.length / 5) * 40,
+      id: `resource-${crypto.randomUUID()}`,
+      x,
+      y,
       width: 320,
       height: 200,
     };
     const currentAdapter = adapterRef.current;
     if (!currentAdapter) {
-      setData((current) => current ? previewPlaceResource(current, resourcePath, node) : current);
+      setData((current) => (current ? previewPlaceResource(current, resourcePath, node) : current));
       return;
     }
-    void currentAdapter.placeResource({
-      resourcePath,
-      nodeId: node.id,
-      x: node.x,
-      y: node.y,
-      width: node.width,
-      height: node.height,
-      baseRevision: revisionRef.current,
-    }).then((revision) => {
-      revisionRef.current = revision;
-      setErrorMessage(null);
-      onRevisionChange?.(revision);
-      setData((current) => current ? previewPlaceResource(current, resourcePath, node) : current);
-    }).catch((error: unknown) => reportError(error instanceof CanvasStaleRevisionError ? `Canvas changed externally: ${error.message}` : String(error)));
+    void currentAdapter
+      .placeResource({
+        resourcePath,
+        nodeId: node.id,
+        x: node.x,
+        y: node.y,
+        width: node.width,
+        height: node.height,
+        baseRevision: revisionRef.current,
+      })
+      .then((revision) => {
+        revisionRef.current = revision;
+        setErrorMessage(null);
+        onRevisionChange?.(revision);
+        setData((current) => (current ? previewPlaceResource(current, resourcePath, node) : current));
+      })
+      .catch((error: unknown) =>
+        reportError(
+          error instanceof CanvasStaleRevisionError
+            ? `Canvas changed externally: ${error.message}`
+            : String(error),
+        ),
+      );
+  };
+
+  const placeResource = () => {
+    const resourcePath = window.prompt("Workspace resource path", "Notes/")?.trim();
+    if (!resourcePath) return;
+    placeResourceAt(resourcePath);
   };
 
   return (
     <div
       className="canvas-surface"
       tabIndex={0}
+      onDragOver={(event) => {
+        if (
+          event.dataTransfer?.types.includes(LATTICE_RESOURCE_MIME) ||
+          (event.dataTransfer?.files?.length ?? 0) > 0
+        ) {
+          event.preventDefault();
+          if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+        }
+      }}
+      onDrop={(event) => {
+        const payload = readResourceDragPayload(event.dataTransfer);
+        if (payload) {
+          event.preventDefault();
+          const host = hostRef.current?.getBoundingClientRect();
+          const x = host ? Math.max(40, event.clientX - host.left - 40) : 120;
+          const y = host ? Math.max(40, event.clientY - host.top - 40) : 120;
+          placeResourceAt(payload.path, x, y);
+          return;
+        }
+        const files = Array.from(event.dataTransfer?.files ?? []);
+        if (files.length > 0) {
+          event.preventDefault();
+          reportError("Import OS files onto the canvas from a page first, then drag the imported resource.");
+        }
+      }}
       onKeyDown={(event) => {
         const delta = keyboardMoveDelta(event.key, event.shiftKey);
         if (delta && sceneRef.current?.moveSelectedBy(delta.x, delta.y)) event.preventDefault();
@@ -174,7 +213,7 @@ export function CanvasViewer({ json, onOpenFile, adapter, baseRevision, onRevisi
     >
       <div className="canvas-toolbar" aria-label="Canvas editing actions">
         <button type="button" onClick={placeResource}>Insert Resource</button>
-        <button type="button" onClick={placeResource}>Place</button>
+        <button type="button" onClick={placeResource}>Place on Canvas</button>
         <button type="button" onClick={() => sceneRef.current?.moveSelectedBy(10, 0)}>Move</button>
         <button type="button" onClick={() => sceneRef.current?.removeSelected()}>Remove</button>
       </div>

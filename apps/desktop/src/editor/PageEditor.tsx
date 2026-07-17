@@ -41,6 +41,12 @@ import {
   splitFrontmatter,
 } from "./markdown";
 import { classifyClipboard, sanitizePastedHtml } from "./pasteSanitize";
+import {
+  latticeEmbedMarkdown,
+  pageDropIntent,
+  readResourceDragPayload,
+  wikiLinkMarkdown,
+} from "../lib/resourceDrag";
 import { PageModeChrome } from "./PageModeChrome";
 import { PagePreview } from "./PagePreview";
 import { PageSourceEditor } from "./PageSourceEditor";
@@ -403,6 +409,29 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
         return false;
       },
       handleDrop: (view, event) => {
+        const resourcePayload = readResourceDragPayload(event.dataTransfer);
+        if (resourcePayload) {
+          event.preventDefault();
+          const markdown =
+            pageDropIntent(event) === "embed"
+              ? latticeEmbedMarkdown(resourcePayload)
+              : wikiLinkMarkdown(resourcePayload);
+          try {
+            const docJson = parseMarkdownToJSON(markdown);
+            const node = view.state.schema.nodeFromJSON(docJson);
+            const position = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos;
+            let tr = view.state.tr;
+            if (typeof position === "number") {
+              tr = tr.setSelection(TextSelection.near(tr.doc.resolve(position)));
+            }
+            tr = tr.replaceSelection(new Slice(node.content, 0, 0));
+            view.dispatch(tr.scrollIntoView());
+          } catch (error) {
+            console.warn("Failed to drop resource into page:", error);
+          }
+          return true;
+        }
+
         const files = Array.from(event.dataTransfer?.files ?? []);
         if (files.length === 0 || !onImportAssetRef.current) return false;
         event.preventDefault();
