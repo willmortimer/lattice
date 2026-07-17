@@ -5,23 +5,31 @@ import { useEffect, useState } from "react";
 
 import { useAssetContext } from "./AssetContext";
 import { assetMimeType, isAbsoluteSrc, resolveWorkspaceAssetPath } from "./assets";
+import { heavyEmbedPlaceholderStyle, useDeferredUntilVisible } from "./visibilityDeferred";
 
 /**
  * Read-view image embed. Workspace-relative images are read through a
  * containment-checked Tauri command and rendered from a short-lived Blob URL.
  * This keeps arbitrary filesystem paths outside the webview's authority.
+ *
+ * Binary reads and decode are deferred until the embed is near the viewport
+ * (ADR 0036); the ProseMirror node view stays mounted for editing correctness.
  */
 export function ImageView({ node }: NodeViewProps) {
   const { root, pagePath } = useAssetContext();
   const src = node.attrs.src as string;
   const alt = (node.attrs.alt as string | null) ?? "";
   const title = (node.attrs.title as string | null) ?? undefined;
+  const { ref, isVisible } = useDeferredUntilVisible();
   const [resolvedSrc, setResolvedSrc] = useState<string | null>(() =>
     !root || isAbsoluteSrc(src) ? src : null,
   );
   const [loadError, setLoadError] = useState<string | null>(null);
+  const placeholderStyle = heavyEmbedPlaceholderStyle(node.attrs.width, node.attrs.height);
 
   useEffect(() => {
+    if (!isVisible) return;
+
     if (!root || isAbsoluteSrc(src)) {
       setResolvedSrc(src);
       setLoadError(null);
@@ -53,17 +61,29 @@ export function ImageView({ node }: NodeViewProps) {
       disposed = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [pagePath, root, src]);
+  }, [isVisible, pagePath, root, src]);
+
+  const showImage = isVisible && resolvedSrc;
 
   return (
     <NodeViewWrapper as="span" className="page-embed-image">
-      {resolvedSrc ? (
-        <img src={resolvedSrc} alt={alt} title={title} />
-      ) : (
-        <span className="page-embed-image-placeholder" role={loadError ? "alert" : "status"}>
-          {loadError ? `Could not load ${alt || src}` : `Loading ${alt || src}…`}
-        </span>
-      )}
+      <span ref={ref} className="page-embed-image-mount">
+        {showImage ? (
+          <img src={resolvedSrc} alt={alt} title={title} />
+        ) : (
+          <span
+            className="page-embed-image-placeholder"
+            style={placeholderStyle}
+            role={loadError ? "alert" : "status"}
+          >
+            {loadError
+              ? `Could not load ${alt || src}`
+              : isVisible
+                ? `Loading ${alt || src}…`
+                : alt || src}
+          </span>
+        )}
+      </span>
     </NodeViewWrapper>
   );
 }
