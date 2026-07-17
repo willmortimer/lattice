@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { invoke as coreInvoke } from "../lib/ipc";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
@@ -267,7 +268,7 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
         .then((updated) => { snapshotRef.current = updated; setSnapshot(updated); setStatusToast("Workspace settings saved"); })
         .catch(async (error) => {
           try {
-            const reloaded = await invoke<WorkspaceSnapshot>("open_workspace", { path: current.root });
+            const reloaded = await coreInvoke<WorkspaceSnapshot>("open_workspace", { path: current.root });
             snapshotRef.current = reloaded;
             setSnapshot(reloaded);
           } catch {

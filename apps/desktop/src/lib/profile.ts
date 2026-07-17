@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import { inBrowser } from "../demo";
+import { hasTauri } from "./ipc";
 import type { WorkspaceSnapshot } from "../types";
 import {
   resourceTreeCollapseStorageKey,
@@ -197,7 +197,7 @@ function parseLegacy(value: string | null, fallback: unknown) {
 }
 
 export async function loadProfile(): Promise<ProfileSnapshot> {
-  if (inBrowser) return demoProfile();
+  if (!hasTauri) return demoProfile();
 
   const legacySettings = localStorage.getItem("lattice.desktop.settings.v1");
   const legacyRecents = localStorage.getItem("lattice.recentWorkspaces");
@@ -238,7 +238,7 @@ export async function saveDesktopSettings(
   profile: ProfileSnapshot,
   settings: DesktopSettings,
 ): Promise<ProfileSnapshot> {
-  if (inBrowser) {
+  if (!hasTauri) {
     const next = {
       ...profile,
       settings: { ...profile.settings, desktop: settings },
@@ -256,7 +256,7 @@ export async function saveWorkspaceStartupSettings(
   profile: ProfileSnapshot,
   settings: WorkspaceStartupSettings,
 ): Promise<ProfileSnapshot> {
-  if (inBrowser) {
+  if (!hasTauri) {
     const next = {
       ...profile,
       settings: { ...profile.settings, workspaces: settings },
@@ -274,7 +274,7 @@ export async function rememberWorkspace(
   profile: ProfileSnapshot,
   workspace: WorkspaceSnapshot,
 ): Promise<ProfileSnapshot> {
-  if (inBrowser) {
+  if (!hasTauri) {
     const recent = { root: workspace.root, title: workspace.title, openedAt: Date.now() };
     const next = {
       ...profile,
@@ -291,17 +291,17 @@ export async function rememberWorkspace(
 }
 
 export async function loadSession(root: string): Promise<DesktopSession | null> {
-  if (inBrowser) return null;
+  if (!hasTauri) return null;
   return invoke("load_desktop_session", { root });
 }
 
 export async function saveSession(session: DesktopSession): Promise<void> {
-  if (inBrowser) return;
+  if (!hasTauri) return;
   await invoke("save_desktop_session", { session });
 }
 
 export async function saveSidebarWidth(width: number): Promise<void> {
-  if (inBrowser) return;
+  if (!hasTauri) return;
   await invoke("set_profile_ui_value", { key: "sidebar-width", value: String(width) });
 }
 
@@ -310,7 +310,7 @@ export async function saveResourceTreeCollapsed(
   state: ResourceTreeCollapseState,
 ): Promise<ProfileSnapshot> {
   const resourceTreeCollapsedByWorkspace = { ...state };
-  if (inBrowser) {
+  if (!hasTauri) {
     const next = { ...profile, resourceTreeCollapsedByWorkspace };
     saveDemoProfile(next);
     return next;
@@ -323,7 +323,7 @@ export async function saveResourceTreeCollapsed(
 }
 
 export async function clearRecents(profile: ProfileSnapshot): Promise<ProfileSnapshot> {
-  if (inBrowser) {
+  if (!hasTauri) {
     const next = { ...profile, recents: [] };
     saveDemoProfile(next);
     return next;
@@ -336,7 +336,7 @@ export async function removeRecent(
   profile: ProfileSnapshot,
   root: string,
 ): Promise<ProfileSnapshot> {
-  if (inBrowser) {
+  if (!hasTauri) {
     const next = { ...profile, recents: profile.recents.filter((item) => item.root !== root) };
     saveDemoProfile(next);
     return next;
