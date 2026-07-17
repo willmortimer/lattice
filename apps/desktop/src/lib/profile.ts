@@ -2,6 +2,11 @@ import { invoke } from "@tauri-apps/api/core";
 
 import { inBrowser } from "../demo";
 import type { WorkspaceSnapshot } from "../types";
+import {
+  resourceTreeCollapseStorageKey,
+  serializeResourceTreeCollapseState,
+  type ResourceTreeCollapseState,
+} from "./treeCollapse";
 
 export interface RecentWorkspace {
   root: string;
@@ -90,6 +95,8 @@ export interface ProfileSnapshot {
   };
   recents: RecentWorkspace[];
   sidebarWidth: number | null;
+  /** Collapsed resource-tree folder paths keyed by workspace id. */
+  resourceTreeCollapsedByWorkspace: ResourceTreeCollapseState;
   effectiveDefaultWorkspace: string | null;
   hasValidConfiguredDefault: boolean;
   homeRoot: string;
@@ -161,6 +168,7 @@ function demoProfile(): ProfileSnapshot {
     },
     recents: [],
     sidebarWidth: null,
+    resourceTreeCollapsedByWorkspace: {},
     effectiveDefaultWorkspace: null,
     hasValidConfiguredDefault: false,
     homeRoot: "~/Lattice",
@@ -169,7 +177,7 @@ function demoProfile(): ProfileSnapshot {
   };
   try {
     const saved = JSON.parse(localStorage.getItem(DEMO_PROFILE_KEY) ?? "null");
-    return saved ? { ...defaults, ...saved } : defaults;
+    return saved ? normalizeProfile({ ...defaults, ...saved }) : defaults;
   } catch {
     return defaults;
   }
@@ -216,7 +224,14 @@ export async function loadProfile(): Promise<ProfileSnapshot> {
   Object.keys(localStorage)
     .filter((key) => key.startsWith("lattice.desktop.session:"))
     .forEach((key) => localStorage.removeItem(key));
-  return imported;
+  return normalizeProfile(imported);
+}
+
+function normalizeProfile(profile: ProfileSnapshot): ProfileSnapshot {
+  return {
+    ...profile,
+    resourceTreeCollapsedByWorkspace: profile.resourceTreeCollapsedByWorkspace ?? {},
+  };
 }
 
 export async function saveDesktopSettings(
@@ -288,6 +303,23 @@ export async function saveSession(session: DesktopSession): Promise<void> {
 export async function saveSidebarWidth(width: number): Promise<void> {
   if (inBrowser) return;
   await invoke("set_profile_ui_value", { key: "sidebar-width", value: String(width) });
+}
+
+export async function saveResourceTreeCollapsed(
+  profile: ProfileSnapshot,
+  state: ResourceTreeCollapseState,
+): Promise<ProfileSnapshot> {
+  const resourceTreeCollapsedByWorkspace = { ...state };
+  if (inBrowser) {
+    const next = { ...profile, resourceTreeCollapsedByWorkspace };
+    saveDemoProfile(next);
+    return next;
+  }
+  await invoke("set_profile_ui_value", {
+    key: resourceTreeCollapseStorageKey(),
+    value: serializeResourceTreeCollapseState(resourceTreeCollapsedByWorkspace),
+  });
+  return { ...profile, resourceTreeCollapsedByWorkspace };
 }
 
 export async function clearRecents(profile: ProfileSnapshot): Promise<ProfileSnapshot> {

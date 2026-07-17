@@ -48,7 +48,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
     profile, profileReady, settings, startup, snapshot, selected, session, error, busy, saveState,
     externalConflict, reloadToken, newWorkspaceOpen, workspacesDir, templates, statusToast,
     profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth,
-    revealPath, linkPicker, linkRepairReview, handleLinkRepairAccept, handleLinkRepairDefer,
+    treeCollapsedPaths, revealPath, linkPicker, linkRepairReview, handleLinkRepairAccept, handleLinkRepairDefer,
     openTabs, navigation, inspectorOpen, editingTitle, titleDraft, assetRoot,
     wikiTargets, pageEditorRef, paletteItems, hasCapability, setSettings, setStartup, setError,
     recents, page, currentPageRevisionRef, setSaveState, setLinkPicker, handleImportEditorAsset,
@@ -57,7 +57,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
     clearRecents, resetSettings, handleGetStarted, handleOpenWorkspace, openRecent,
     handleCreateWorkspace, openNewWorkspaceDialog, pickWorkspaceFolder, handleNewPage, handleQuickNote,
     handleNewTable, handleImportCsv, handleSelect, handleOpenExternally, handleOpenFile,
-    handleKeepIncoming, handleKeepLocal, handleKeepBoth,
+    handleKeepIncoming, handleKeepLocal, handleKeepBoth, handleTreeCollapsedPathsChange,
     navigateHistory, closeTab, reorderTab, beginSidebarResize, commitTitle, updateWorkspaceSettings,
     handleOpenWiki, openLinkTarget,
   } = model;
@@ -251,6 +251,9 @@ export function DesktopShell({ model }: DesktopShellProps) {
               selectedPath={selected?.path ?? null}
               onSelect={handleSelect}
               directoryPurposes={directoryPurposes}
+              workspaceKey={snapshot.id}
+              collapsedPaths={treeCollapsedPaths}
+              onCollapsedPathsChange={handleTreeCollapsedPathsChange}
               onContextMenu={(resource) =>
                 void showNativeResourceMenu({
                   open: () => void handleSelect(resource),

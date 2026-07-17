@@ -29,6 +29,7 @@ function emptyProfile(): ProfileSnapshot {
     },
     recents: [],
     sidebarWidth: null,
+    resourceTreeCollapsedByWorkspace: {},
     effectiveDefaultWorkspace: null,
     hasValidConfiguredDefault: false,
     homeRoot: "~/Lattice",
