@@ -2,6 +2,7 @@ mod commands;
 mod data;
 mod profile;
 mod resource_links;
+mod revisions;
 mod search;
 mod theme;
 mod watcher;
@@ -97,6 +98,10 @@ pub fn run() {
             commands::rename_resource,
             commands::list_history,
             commands::undo_last,
+            revisions::list_resource_revisions,
+            revisions::get_resource_revision,
+            revisions::revert_resource_revision,
+            revisions::cleanup_history,
             commands::ensure_home,
             commands::create_workspace,
             commands::list_templates,
