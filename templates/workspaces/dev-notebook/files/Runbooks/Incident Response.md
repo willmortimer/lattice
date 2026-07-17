@@ -6,7 +6,7 @@ title: Incident Response
 
 ## Triage
 
-1. Create a debug journal entry from [[Debug Journal/Template]].
+1. Create a debug journal entry from [[Templates/Debug Session]].
 2. Link the active issue in `Issues.data`.
 3. Capture hypotheses and repro steps before changing production.
 

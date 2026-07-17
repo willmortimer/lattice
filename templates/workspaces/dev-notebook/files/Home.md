@@ -14,7 +14,7 @@ Engineering dashboard for architecture, decisions, code fragments, operations, a
 ## Decisions
 
 - Start with [[Decisions/0001-record-architecture-decisions]]
-- Browse all records in [[Decisions/]]
+- Browse all records in [[Decisions/]] — new ones from [[Templates/Decision]]
 
 ## Snippets
 
@@ -29,8 +29,8 @@ Engineering dashboard for architecture, decisions, code fragments, operations, a
 
 ## Debug journal
 
-- Copy [[Debug Journal/Template]] for a new session
-- Ongoing notes live in [[Debug Journal/]]
+- Quick notes (**⌘N**) land in [[Debug Journal/]] using [[Templates/Daily]]
+- Start an investigation from [[Templates/Debug Session]]
 
 ## Issues
 

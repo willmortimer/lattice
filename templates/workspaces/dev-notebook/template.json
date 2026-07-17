@@ -32,6 +32,10 @@
       "purpose": "Timestamped investigation notes, repro steps, and hypotheses."
     },
     {
+      "path": "Templates",
+      "purpose": "Page templates with {{title}} and {{date}} placeholders."
+    },
+    {
       "path": "Archive",
       "purpose": "Retired notes, resolved issues, and superseded decisions."
     }
@@ -43,8 +47,8 @@
     "Decisions/0001-record-architecture-decisions.md",
     "Snippets/",
     "Runbooks/",
-    "Debug Journal/",
-    "Issues.data"
+    "Issues.data",
+    "Templates/Debug Session.md"
   ],
   "files": [
     "Home.md",
@@ -55,12 +59,19 @@
     "Snippets/query.sql",
     "Snippets/lib-helper.rs",
     "Runbooks/Incident Response.md",
-    "Debug Journal/Template.md"
+    "Templates/Debug Session.md",
+    "Templates/Decision.md",
+    "Templates/Daily.md"
   ],
-  "capabilities": ["pages", "canvas", "sqlite"],
+  "capabilities": [
+    "pages",
+    "canvas",
+    "sqlite"
+  ],
   "workspaceDefaults": {
     "quickNoteDirectory": "Debug Journal",
-    "archiveDirectory": "Archive"
+    "archiveDirectory": "Archive",
+    "templateDirectory": "Templates"
   },
   "openOnCreate": "Home.md",
   "dataPackages": [
@@ -69,11 +80,26 @@
       "title": "Issues",
       "table": "issues",
       "columns": [
-        { "name": "title", "type": "text" },
-        { "name": "status", "type": "text" },
-        { "name": "priority", "type": "text" },
-        { "name": "component", "type": "text" },
-        { "name": "notes", "type": "long_text" }
+        {
+          "name": "title",
+          "type": "text"
+        },
+        {
+          "name": "status",
+          "type": "text"
+        },
+        {
+          "name": "priority",
+          "type": "text"
+        },
+        {
+          "name": "component",
+          "type": "text"
+        },
+        {
+          "name": "notes",
+          "type": "long_text"
+        }
       ],
       "rows": [
         {
