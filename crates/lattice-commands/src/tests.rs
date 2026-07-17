@@ -37,6 +37,90 @@ fn exists(dir: &TempDir, path: &str) -> bool {
 }
 
 #[test]
+fn resource_revisions_capture_text_diff_and_revert_as_a_new_revision() {
+    let (dir, mut engine) = engine();
+    let created = engine.apply(create("Notes/A.md", "one\ntwo\n")).unwrap();
+    let base = created.outcomes[0].resulting_revision.clone().unwrap();
+    let updated = engine
+        .apply(Transaction::new(
+            "Update Notes/A.md",
+            vec![Command::PageUpdate {
+                path: PathBuf::from("Notes/A.md"),
+                content: "one\nthree\n".into(),
+                base_revision: base,
+            }],
+        ))
+        .unwrap();
+    let current = updated.outcomes[0].resulting_revision.clone().unwrap();
+
+    let revisions = engine
+        .list_resource_revisions(Path::new("Notes/A.md"), 10)
+        .unwrap();
+    assert_eq!(revisions.len(), 2);
+    let update_revision = revisions
+        .iter()
+        .find(|revision| revision.summary.as_deref() == Some("Update Notes/A.md"))
+        .unwrap();
+    let detail = engine
+        .resource_revision_detail(Path::new("Notes/A.md"), &update_revision.revision_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(detail.base.unwrap().bytes.unwrap(), b"one\ntwo\n");
+    assert_eq!(detail.local.unwrap().bytes.unwrap(), b"one\nthree\n");
+    let diff = detail.diff.unified.unwrap();
+    assert!(diff.contains("-two"));
+    assert!(diff.contains("+three"));
+
+    let reverted = engine
+        .revert_resource_revision(Path::new("Notes/A.md"), &revisions[1].revision_id, &current)
+        .unwrap();
+    assert_eq!(read(&dir, "Notes/A.md"), b"one\ntwo\n");
+    assert_ne!(
+        reverted.transaction_id,
+        revisions[1].transaction_id.clone().unwrap()
+    );
+    assert_eq!(
+        engine
+            .list_resource_revisions(Path::new("Notes/A.md"), 10)
+            .unwrap()
+            .len(),
+        3
+    );
+}
+
+#[test]
+fn stale_revert_is_guarded_without_mutation() {
+    let (dir, mut engine) = engine();
+    let created = engine.apply(create("A.md", "one\n")).unwrap();
+    let base = created.outcomes[0].resulting_revision.clone().unwrap();
+    engine
+        .apply(Transaction::new(
+            "Update A.md",
+            vec![Command::PageUpdate {
+                path: PathBuf::from("A.md"),
+                content: "two\n".into(),
+                base_revision: base,
+            }],
+        ))
+        .unwrap();
+    let revision = engine
+        .list_resource_revisions(Path::new("A.md"), 10)
+        .unwrap()[1]
+        .revision_id
+        .clone();
+    let result = engine.revert_resource_revision(Path::new("A.md"), &revision, "sha256:stale");
+    assert!(matches!(result, Err(Error::StaleBaseRevision { .. })));
+    assert_eq!(read(&dir, "A.md"), b"two\n");
+    assert_eq!(
+        engine
+            .list_resource_revisions(Path::new("A.md"), 10)
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[test]
 fn workspace_manifest_update_is_revision_guarded_and_undoable() {
     let (dir, mut engine) = engine();
     let path = Path::new(lattice_core::WORKSPACE_MANIFEST_FILENAME);
@@ -586,12 +670,15 @@ fn history_order_undone_flags_and_redo_stack_clearing() {
     assert!(!history[1].undone);
     assert!(history.iter().all(|e| e.command_count == 1));
 
-    // A new apply deletes the undone rows: B is gone from history and there
-    // is nothing left to redo.
+    // A new apply discards B from the redo stack but retains its transaction
+    // metadata indefinitely for history/audit views.
     engine.apply(create("C.md", "c\n")).unwrap();
     let history = engine.history(10).unwrap();
     let summaries: Vec<_> = history.iter().map(|e| e.summary.as_str()).collect();
-    assert_eq!(summaries, ["Create page C.md", "Create page A.md"]);
+    assert_eq!(
+        summaries,
+        ["Create page C.md", "Create page B.md", "Create page A.md"]
+    );
     assert!(engine.redo().unwrap().is_none());
 
     // Limit is honored (newest first).

@@ -12,6 +12,10 @@ use crate::command::{
     TransactionReceipt, UndoReport,
 };
 use crate::history::{unix_now, unix_to_system, HistoryStore};
+use crate::revisions::{
+    ConflictEnvelope, HistoryCleanupReport, HistoryRetentionPolicy, ResourceRevisionDetail,
+    ResourceRevisionSummary,
+};
 use crate::trash::{dispose, TrashPolicy};
 use crate::{Error, Result, MAX_RESOURCE_EDIT_BYTES};
 
@@ -22,9 +26,76 @@ struct AppliedOp {
     /// Bytes displaced by the command (previous page content, deleted file
     /// content). These, not the JSON, are authoritative for restoration.
     prior_content: Option<Vec<u8>>,
+    /// Bytes materialized by the command, when this operation has a durable
+    /// resource revision payload (create/update operations).
+    after_content: Option<Vec<u8>>,
     /// Content hash of the command's target after it applied; `None` for
     /// deletes. Checked by the undo guard.
     resulting_revision: Option<String>,
+}
+
+struct RevisionCapture {
+    path: PathBuf,
+    parent_revision: Option<String>,
+    before: Option<Vec<u8>>,
+    after: Option<Vec<u8>>,
+}
+
+impl AppliedOp {
+    fn revision_capture(&self) -> Option<RevisionCapture> {
+        match &self.forward {
+            Command::PageCreate { path, content } => Some(RevisionCapture {
+                path: path.clone(),
+                parent_revision: None,
+                before: self.prior_content.clone(),
+                after: Some(content.as_bytes().to_vec()),
+            }),
+            Command::ResourceCreate { path, content } => Some(RevisionCapture {
+                path: path.clone(),
+                parent_revision: None,
+                before: self.prior_content.clone(),
+                after: Some(content.clone()),
+            }),
+            Command::PageUpdate {
+                path,
+                content,
+                base_revision,
+            } => Some(RevisionCapture {
+                path: path.clone(),
+                parent_revision: Some(base_revision.clone()),
+                before: self.prior_content.clone(),
+                after: Some(content.as_bytes().to_vec()),
+            }),
+            Command::ResourceUpdate {
+                path,
+                content,
+                base_revision,
+            } => Some(RevisionCapture {
+                path: path.clone(),
+                parent_revision: Some(base_revision.clone()),
+                before: self.prior_content.clone(),
+                after: Some(content.clone()),
+            }),
+            Command::WorkspaceManifestUpdate {
+                content,
+                base_revision,
+            } => Some(RevisionCapture {
+                path: PathBuf::from(lattice_core::WORKSPACE_MANIFEST_FILENAME),
+                parent_revision: Some(base_revision.clone()),
+                before: self.prior_content.clone(),
+                after: Some(content.as_bytes().to_vec()),
+            }),
+            Command::ResourceDelete { path } => Some(RevisionCapture {
+                path: path.clone(),
+                parent_revision: self.prior_content.as_deref().and_then(|bytes| {
+                    lattice_storage::sha256_reader(std::io::Cursor::new(bytes)).ok()
+                }),
+                before: self.prior_content.clone(),
+                after: None,
+            }),
+            _ => None,
+        }
+    }
 }
 
 /// The semantic command and transaction core (ADR 0007).
@@ -127,10 +198,11 @@ impl CommandEngine {
         }
 
         self.history.clear_redo_stack()?;
+        let created_at = unix_now();
         let rowid = self.history.insert_transaction(
             &tx.id,
             &tx.summary,
-            unix_now(),
+            created_at,
             tx.idempotency_key.as_deref(),
         )?;
         for (seq, op) in applied.iter().enumerate() {
@@ -140,8 +212,21 @@ impl CommandEngine {
                 &serde_json::to_string(&op.forward)?,
                 &serde_json::to_string(&op.inverse)?,
                 op.prior_content.as_deref(),
+                op.after_content.as_deref(),
                 op.resulting_revision.as_deref(),
             )?;
+            if let Some(capture) = op.revision_capture() {
+                self.history.revisions().record_local_revision(
+                    &format!("{}:{seq}", tx.id),
+                    &tx.id,
+                    &tx.summary,
+                    seq,
+                    &capture.path,
+                    capture.parent_revision.as_deref(),
+                    capture.before.as_deref(),
+                    capture.after.as_deref(),
+                )?;
+            }
         }
 
         Ok(TransactionReceipt {
@@ -242,6 +327,7 @@ impl CommandEngine {
                 stored.rowid,
                 seq as i64,
                 op.prior_content.as_deref(),
+                op.after_content.as_deref(),
                 op.resulting_revision.as_deref(),
             )?;
         }
@@ -267,6 +353,119 @@ impl CommandEngine {
                 command_count,
             })
             .collect())
+    }
+
+    /// List durable revisions for one workspace-relative resource.
+    pub fn list_resource_revisions(
+        &self,
+        path: &Path,
+        limit: usize,
+    ) -> Result<Vec<ResourceRevisionSummary>> {
+        self.history
+            .revisions()
+            .list_resource_revisions(path, limit)
+    }
+
+    /// Load the base/local/incoming payload metadata and diff for one revision.
+    pub fn resource_revision_detail(
+        &self,
+        path: &Path,
+        revision_id: &str,
+    ) -> Result<Option<ResourceRevisionDetail>> {
+        self.history.revisions().get_detail(path, revision_id)
+    }
+
+    /// Record a file-system revision observed outside the command engine.
+    /// Missing prior bytes remain missing in the resulting envelope.
+    pub fn record_external_revision(
+        &self,
+        path: &Path,
+        prior: Option<&[u8]>,
+        after: &[u8],
+        conflict: Option<&ConflictEnvelope>,
+        incoming: Option<&[u8]>,
+    ) -> Result<ResourceRevisionSummary> {
+        self.history
+            .revisions()
+            .record_external_revision(path, prior, after, conflict, incoming)
+    }
+
+    /// Run explicit/idle-callable history payload cleanup. Transaction and
+    /// revision metadata are retained even when payloads are reclaimed.
+    pub fn cleanup_history(
+        &self,
+        policy: HistoryRetentionPolicy,
+        dry_run: bool,
+    ) -> Result<HistoryCleanupReport> {
+        self.history.revisions().cleanup(policy, dry_run)
+    }
+
+    /// Revert a resource to a recorded local state by applying a fresh,
+    /// guarded semantic transaction. The caller must provide the revision it
+    /// currently sees; a mismatch refuses the revert without mutation.
+    pub fn revert_resource_revision(
+        &mut self,
+        path: &Path,
+        revision_id: &str,
+        expected_current_revision: &str,
+    ) -> Result<TransactionReceipt> {
+        let detail = self
+            .resource_revision_detail(path, revision_id)?
+            .ok_or_else(|| Error::RevisionNotFound {
+                path: path.to_path_buf(),
+                revision: revision_id.to_string(),
+            })?;
+        let current = self.metadata_opt(path)?.map(|meta| meta.revision.hash);
+        let found = current.clone().unwrap_or_else(|| "(absent)".into());
+        if found != expected_current_revision {
+            return Err(Error::StaleBaseRevision {
+                path: path.to_path_buf(),
+                expected: expected_current_revision.to_string(),
+                found,
+            });
+        }
+
+        let command = match detail.local {
+            Some(payload) => {
+                let bytes = payload
+                    .bytes
+                    .ok_or_else(|| Error::RevisionPayloadUnavailable {
+                        path: path.to_path_buf(),
+                    })?;
+                match String::from_utf8(bytes.clone()) {
+                    Ok(content) if current.is_some() => Command::PageUpdate {
+                        path: path.to_path_buf(),
+                        content,
+                        base_revision: expected_current_revision.to_string(),
+                    },
+                    Ok(content) => Command::PageCreate {
+                        path: path.to_path_buf(),
+                        content,
+                    },
+                    Err(_) if current.is_some() => Command::ResourceUpdate {
+                        path: path.to_path_buf(),
+                        content: bytes,
+                        base_revision: expected_current_revision.to_string(),
+                    },
+                    Err(_) => Command::ResourceCreate {
+                        path: path.to_path_buf(),
+                        content: bytes,
+                    },
+                }
+            }
+            None if current.is_some() => Command::ResourceDelete {
+                path: path.to_path_buf(),
+            },
+            None => {
+                return Err(Error::NotFound {
+                    path: path.to_path_buf(),
+                })
+            }
+        };
+        self.apply(Transaction::new(
+            format!("Revert {} to {revision_id}", path.display()),
+            vec![command],
+        ))
     }
 
     // ---------------------------------------------------------------------
@@ -519,6 +718,7 @@ impl CommandEngine {
                     forward: command.clone(),
                     inverse: Command::ResourceDelete { path: path.clone() },
                     prior_content: None,
+                    after_content: Some(content.as_bytes().to_vec()),
                     resulting_revision: Some(revision.hash),
                 })
             }
@@ -528,6 +728,7 @@ impl CommandEngine {
                     forward: command.clone(),
                     inverse: Command::ResourceDelete { path: path.clone() },
                     prior_content: None,
+                    after_content: Some(content.clone()),
                     resulting_revision: Some(revision.hash),
                 })
             }
@@ -559,6 +760,7 @@ impl CommandEngine {
                         base_revision: revision.hash.clone(),
                     },
                     prior_content: Some(prior),
+                    after_content: Some(content.as_bytes().to_vec()),
                     resulting_revision: Some(revision.hash),
                 })
             }
@@ -597,6 +799,7 @@ impl CommandEngine {
                         base_revision: revision.hash.clone(),
                     },
                     prior_content: Some(prior),
+                    after_content: Some(content.clone()),
                     resulting_revision: Some(revision.hash),
                 })
             }
@@ -624,6 +827,7 @@ impl CommandEngine {
                         base_revision: revision.hash.clone(),
                     },
                     prior_content: Some(prior),
+                    after_content: Some(content.as_bytes().to_vec()),
                     resulting_revision: Some(revision.hash),
                 })
             }
@@ -637,6 +841,7 @@ impl CommandEngine {
                         to: from.clone(),
                     },
                     prior_content: None,
+                    after_content: None,
                     resulting_revision: Some(hash),
                 })
             }
@@ -651,6 +856,7 @@ impl CommandEngine {
                         to: from.clone(),
                     },
                     prior_content: None,
+                    after_content: None,
                     resulting_revision: Some(hash),
                 })
             }
@@ -675,6 +881,7 @@ impl CommandEngine {
                         content,
                     },
                     prior_content: prior,
+                    after_content: None,
                     resulting_revision: None,
                 })
             }
@@ -692,6 +899,7 @@ impl CommandEngine {
                     // can recreate a clean path without digging in Trash.
                     inverse: Command::ResourceDelete { path: path.clone() },
                     prior_content: None,
+                    after_content: None,
                     resulting_revision: Some(revision),
                 })
             }
@@ -732,6 +940,7 @@ impl CommandEngine {
                         base_revision: revision.clone(),
                     },
                     prior_content: None,
+                    after_content: None,
                     resulting_revision: Some(revision),
                 })
             }
@@ -760,6 +969,7 @@ impl CommandEngine {
                         base_revision: revision.clone(),
                     },
                     prior_content: Some(serde_json::to_vec(&prior_row)?),
+                    after_content: None,
                     resulting_revision: Some(revision),
                 })
             }
@@ -785,6 +995,7 @@ impl CommandEngine {
                         id: Some(id.clone()),
                     },
                     prior_content: Some(serde_json::to_vec(&prior_row)?),
+                    after_content: None,
                     resulting_revision: Some(revision),
                 })
             }
@@ -816,6 +1027,7 @@ impl CommandEngine {
                     forward: command.clone(),
                     inverse,
                     prior_content: None,
+                    after_content: Some(content.as_bytes().to_vec()),
                     resulting_revision: Some(revision),
                 })
             }
