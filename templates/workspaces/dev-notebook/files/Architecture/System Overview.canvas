@@ -1,0 +1,47 @@
+{
+  "nodes": [
+    {
+      "id": "intro",
+      "type": "text",
+      "x": 60,
+      "y": 60,
+      "width": 280,
+      "height": 100,
+      "text": "System overview — open linked pages from file nodes."
+    },
+    {
+      "id": "component-map",
+      "type": "file",
+      "file": "Architecture/Component Map.md",
+      "x": 400,
+      "y": 40,
+      "width": 240,
+      "height": 120
+    },
+    {
+      "id": "adr",
+      "type": "file",
+      "file": "Decisions/0001-record-architecture-decisions.md",
+      "x": 400,
+      "y": 200,
+      "width": 280,
+      "height": 120
+    },
+    {
+      "id": "issues",
+      "type": "file",
+      "file": "Issues.data",
+      "x": 60,
+      "y": 220,
+      "width": 220,
+      "height": 100
+    }
+  ],
+  "edges": [
+    {
+      "id": "map-to-adr",
+      "from": "component-map",
+      "to": "adr"
+    }
+  ]
+}
