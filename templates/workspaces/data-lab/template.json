@@ -9,9 +9,47 @@
   "visibility": "gallery",
   "recommended": false,
   "recommendedTitle": "Data Lab",
-  "directories": ["Sources", "Data", "Queries", "Notebooks", "Dashboards", "Reports", "Archive"],
-  "preview": ["Home.md", "Sources/", "Data/", "Queries/", "Notebooks/", "Dashboards/", "Reports/"],
-  "files": ["Home.md"],
+  "directories": [
+    { "path": "Connections", "purpose": "Database, API, and file connection definitions." },
+    { "path": "Data", "purpose": "Canonical datasets and curated tables." },
+    { "path": "Queries", "purpose": "Reusable SQL and saved query definitions." },
+    { "path": "Notebooks", "purpose": "Reproducible analysis notebooks." },
+    { "path": "Dashboards", "purpose": "Interactive summaries and charts." },
+    { "path": "Reports", "purpose": "Narrative findings and published analysis." },
+    { "path": "Archive", "purpose": "Deprecated datasets and old reports." }
+  ],
+  "preview": [
+    "Home.md",
+    "Data/contacts.csv",
+    "Queries/example.sql",
+    "Notebooks/example.ipynb",
+    "Connections/",
+    "Data/",
+    "Queries/",
+    "Notebooks/"
+  ],
+  "files": [
+    "Home.md",
+    "Data/contacts.csv",
+    "Queries/example.sql",
+    "Notebooks/example.ipynb"
+  ],
+  "dataPackages": [
+    {
+      "path": "Data/metrics.data",
+      "title": "Metrics",
+      "table": "metrics",
+      "columns": [
+        { "name": "metric", "type": "text" },
+        { "name": "value", "type": "decimal" },
+        { "name": "recorded_on", "type": "date" }
+      ],
+      "rows": [
+        { "metric": "active_users", "value": 128, "recorded_on": "2026-07-01" },
+        { "metric": "query_latency_ms", "value": 42.5, "recorded_on": "2026-07-01" }
+      ]
+    }
+  ],
   "capabilities": ["pages", "canvas", "sqlite", "jupyter"],
   "workspaceDefaults": {
     "quickNoteDirectory": "Reports",

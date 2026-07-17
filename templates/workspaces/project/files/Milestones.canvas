@@ -1,0 +1,54 @@
+{
+  "nodes": [
+    {
+      "id": "define",
+      "type": "text",
+      "x": 60,
+      "y": 80,
+      "width": 180,
+      "height": 90,
+      "text": "Define\n— align on Brief"
+    },
+    {
+      "id": "build",
+      "type": "text",
+      "x": 280,
+      "y": 80,
+      "width": 180,
+      "height": 90,
+      "text": "Build\n— Working files"
+    },
+    {
+      "id": "review",
+      "type": "text",
+      "x": 500,
+      "y": 80,
+      "width": 180,
+      "height": 90,
+      "text": "Review\n— Decisions"
+    },
+    {
+      "id": "deliver",
+      "type": "text",
+      "x": 720,
+      "y": 80,
+      "width": 180,
+      "height": 90,
+      "text": "Deliver\n— Outputs"
+    },
+    {
+      "id": "plan",
+      "type": "file",
+      "file": "Plan.md",
+      "x": 360,
+      "y": 220,
+      "width": 200,
+      "height": 100
+    }
+  ],
+  "edges": [
+    { "id": "e1", "fromNode": "define", "toNode": "build" },
+    { "id": "e2", "fromNode": "build", "toNode": "review" },
+    { "id": "e3", "fromNode": "review", "toNode": "deliver" }
+  ]
+}
