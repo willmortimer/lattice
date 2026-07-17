@@ -7,6 +7,7 @@ import type { DataAppSnapshot } from "../data/types";
 import { inBrowser } from "../demo";
 import { KIND_LABELS } from "../KindMark";
 import type { Backlink, Resource } from "../types";
+import { InspectorHistoryPanel } from "./InspectorHistoryPanel";
 
 const SECTIONS = [
   "properties",
@@ -54,18 +55,23 @@ export function ResourceInspector({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!root || !resource || inBrowser) return;
+    if (!root || inBrowser) return;
+    // Per-resource history is owned by InspectorHistoryPanel.
+    if (section === "history" && resource) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     const tasks: Promise<void>[] = [];
-    if (section === "history") {
+    if (section === "history" && !resource) {
       tasks.push(
         invoke<HistoryItem[]>("list_history", { root, limit: 30 }).then((items) => {
           if (!cancelled) setHistory(items);
         }),
       );
     }
-    if (section === "links" && resource.kind === "page") {
+    if (section === "links" && resource?.kind === "page") {
       tasks.push(
         invoke<Backlink[]>("get_backlinks", { root, relPath: resource.path }).then((items) => {
           if (!cancelled) setBacklinks(items);
@@ -130,7 +136,10 @@ export function ResourceInspector({
             ))}
           </>
         )}
-        {!loading && section === "history" && (
+        {section === "history" && root && resource && !inBrowser && (
+          <InspectorHistoryPanel root={root} path={resource.path} />
+        )}
+        {!loading && section === "history" && !(root && resource && !inBrowser) && (
           <div className="history-list">
             {history.length === 0 && <p className="inspector-empty">No command history yet.</p>}
             {history.map((item) => (
