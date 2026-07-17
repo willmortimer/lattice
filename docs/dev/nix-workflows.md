@@ -74,6 +74,7 @@ CI should run exactly one thing: `nix run .#check`.
 | **Desktop app (native, no Vite)** | `nix run .#desktop` | Tauri window ← static `dist` | Real shell; rebuild UI with `pnpm --filter @lattice/desktop build` when needed |
 | **Desktop frontend only (browser)** | `nix run .#desktop-web` | <http://localhost:5173> | Same React UI, **demo fixture**, no filesystem |
 | **Marketing / docs site** | `nix run .#site-dev` | Astro (often :4321) | Public site + Starlight docs |
+| **Cell / Dev Container demo** | `./scripts/devcontainer/web` (+ `site`) | :5173 / :4321 on `0.0.0.0` | Same browser + site surfaces without Nix; see [devcontainer.md](./devcontainer.md) |
 
 ### Why `desktop-dev` also starts :5173
 

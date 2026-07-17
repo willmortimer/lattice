@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Headless checks usable inside the cell (no Tauri / no display).
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "${ROOT}"
+
+if ! command -v pnpm >/dev/null 2>&1; then
+  corepack prepare pnpm@11.11.0 --activate
+fi
+
+pnpm install
+cargo test --workspace
+pnpm --filter @lattice/desktop test
+pnpm test:theme
+pnpm test:templates
+
+echo "==> devcontainer CLI smoke"
+CLI_SCRIPT="${ROOT}/scripts/devcontainer/cli"
+SEED_SCRIPT="${ROOT}/scripts/devcontainer/seed"
+"${CLI_SCRIPT}"
+"${SEED_SCRIPT}"
+
+export LATTICE_DEV_HOME="${LATTICE_DEV_HOME:-${ROOT}/target/cell-home}"
+LATTICE="${ROOT}/target/debug/lattice"
+WORKSPACE="${LATTICE_DEV_HOME}/Workspaces/First Look"
+
+"${LATTICE}" --help >/dev/null
+"${LATTICE}" ls "${WORKSPACE}"
+"${LATTICE}" index "${WORKSPACE}"
+"${LATTICE}" search workspace "${WORKSPACE}" --limit 3

@@ -2,116 +2,35 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 use lattice_commands::{
-    Command as SemanticCommand, CommandEngine, Error as CommandError, Transaction,
+    Command as SemanticCommand, CommandEngine, Transaction,
 };
 use lattice_core::{
-    ensure_lattice_home, initialize_active_lattice_home, inspect_resource as inspect_native_resource,
+    inspect_resource as inspect_native_resource,
     read_resource_range as read_native_resource_range, read_text_window as read_native_text_window,
-    DefaultWorkspaceStatus, ProvisionDiagnostic, Resource, ResourceKind, ResourceRuntimeError,
-    TemplateDescriptor, Workspace, WorkspaceCreationMode, WorkspaceCreationPlan, WorkspaceDefaults,
-    WorkspaceProvisioner,
+    ResourceKind, ResourceRuntimeError, Workspace,
 };
+use lattice_handlers::{self, join_within_root, snapshot_from_workspace};
 use lattice_storage::{NativeWorkspaceStore, WorkspaceStore};
 use serde::Serialize;
 use tauri::ipc::{InvokeBody, Request, Response};
 
-const MAX_EDITOR_ASSET_BYTES: usize = 8 * 1024 * 1024;
+pub use lattice_handlers::{
+    command_error_to_string, resolve_within_root, LatticeHomeInfo, PageContent,
+    WorkspaceProvisionResult, WorkspaceSnapshot,
+};
+#[allow(unused_imports)]
+pub use lattice_handlers::STALE_REVISION_PREFIX;
 
-/// Everything the frontend needs to render a workspace: its identity plus
-/// the flat resource listing from [`Workspace::scan`].
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WorkspaceSnapshot {
-    pub root: String,
-    pub title: String,
-    pub id: String,
-    pub resources: Vec<Resource>,
-    pub capabilities: Vec<String>,
-    pub defaults: WorkspaceDefaults,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub source_template: Option<String>,
-    /// Path -> purpose from the manifest's editable `directories:` section.
-    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
-    pub directory_purposes: std::collections::BTreeMap<String, String>,
-    pub manifest_revision: String,
-}
+const MAX_EDITOR_ASSET_BYTES: usize = 8 * 1024 * 1024;
 
 #[tauri::command]
 pub fn open_workspace(path: String) -> Result<WorkspaceSnapshot, String> {
-    let root = PathBuf::from(path);
-    let workspace = Workspace::open(&root).map_err(|err| err.to_string())?;
-    let resources = workspace.scan().map_err(|err| err.to_string())?;
-
-    snapshot_from_parts(&workspace, resources)
+    lattice_handlers::open_workspace(path)
 }
 
-/// Re-scan a workspace's resource listing without re-reading its manifest.
-/// Lighter than [`open_workspace`] for refreshing the sidebar after a
-/// `workspace-changed` event.
 #[tauri::command]
-pub fn list_resources(root: String) -> Result<Vec<Resource>, String> {
-    let workspace = Workspace::open(Path::new(&root)).map_err(|err| err.to_string())?;
-    workspace.scan().map_err(|err| err.to_string())
-}
-
-/// Canonicalize `root` and a `rel_path` candidate beneath it, rejecting `..`
-/// traversal and absolute-path escapes (including through symlinks) by
-/// requiring the resolved candidate to remain under the canonical root.
-/// Returns `(canonical_root, canonical_candidate)`.
-pub(crate) fn resolve_within_root(
-    root: &str,
-    rel_path: &str,
-) -> Result<(PathBuf, PathBuf), String> {
-    let canonical_root = PathBuf::from(root)
-        .canonicalize()
-        .map_err(|err| format!("invalid workspace root {root:?}: {err}"))?;
-
-    let candidate = canonical_root.join(rel_path);
-    let canonical_candidate = candidate
-        .canonicalize()
-        .map_err(|err| format!("cannot resolve {rel_path:?}: {err}"))?;
-
-    if !canonical_candidate.starts_with(&canonical_root) {
-        return Err(format!("{rel_path:?} escapes the workspace root"));
-    }
-
-    Ok((canonical_root, canonical_candidate))
-}
-
-/// Reject workspace-relative paths that escape the root via `..` or absolute
-/// prefixes. Used when the target path may not exist yet (folder create).
-fn validate_workspace_relative(rel_path: &str) -> Result<PathBuf, String> {
-    let path = Path::new(rel_path);
-    if rel_path.trim().is_empty() {
-        return Err("path must be non-empty".to_string());
-    }
-    if path.is_absolute() {
-        return Err(format!("{rel_path:?} must be workspace-relative"));
-    }
-    if path.components().any(|component| {
-        matches!(
-            component,
-            std::path::Component::ParentDir
-                | std::path::Component::RootDir
-                | std::path::Component::Prefix(_)
-        )
-    }) {
-        return Err(format!("{rel_path:?} escapes the workspace root"));
-    }
-    Ok(path.to_path_buf())
-}
-
-/// Join a validated workspace-relative path under a canonical root.
-fn join_within_root(root: &str, rel_path: &str) -> Result<(PathBuf, PathBuf), String> {
-    let canonical_root = PathBuf::from(root)
-        .canonicalize()
-        .map_err(|err| format!("invalid workspace root {root:?}: {err}"))?;
-    let relative = validate_workspace_relative(rel_path)?;
-    let candidate = canonical_root.join(&relative);
-    if !candidate.starts_with(&canonical_root) {
-        return Err(format!("{rel_path:?} escapes the workspace root"));
-    }
-    Ok((canonical_root, relative))
+pub fn list_resources(root: String) -> Result<Vec<lattice_core::Resource>, String> {
+    lattice_handlers::list_resources(root)
 }
 
 /// Read a text resource by path relative to `root`.
@@ -171,52 +90,10 @@ pub fn read_text_window(
     read_native_text_window(Path::new(&root), Path::new(&rel_path), offset, length)
 }
 
-/// A page's content plus the content-hash revision it was read at, so the
-/// editor can round-trip that revision back as `apply_page_update`'s
-/// `base_revision` (optimistic concurrency, ADR 0007).
-#[derive(Debug, Serialize)]
-pub struct PageContent {
-    pub content: String,
-    pub revision: String,
-}
-
 /// Read a page and the revision it was read at, in one round trip.
 #[tauri::command]
 pub fn read_page(root: String, rel_path: String) -> Result<PageContent, String> {
-    let (canonical_root, canonical_candidate) = resolve_within_root(&root, &rel_path)?;
-    let content = std::fs::read_to_string(&canonical_candidate).map_err(|err| err.to_string())?;
-
-    let store = NativeWorkspaceStore::new(&canonical_root);
-    let revision = store
-        .metadata(Path::new(&rel_path))
-        .map_err(|err| err.to_string())?
-        .revision
-        .hash;
-
-    Ok(PageContent { content, revision })
-}
-
-/// Errors returned by [`apply_page_update`] are plain strings (Tauri's IPC
-/// error channel), but a stale base revision is a distinct, expected case
-/// the frontend must react to (show the conflict banner) rather than a
-/// generic failure — so it's marked with a `STALE_REVISION:` prefix the
-/// frontend can detect without parsing prose.
-pub(crate) const STALE_REVISION_PREFIX: &str = "STALE_REVISION:";
-
-pub(crate) fn command_error_to_string(err: CommandError) -> String {
-    match err {
-        CommandError::StaleBaseRevision {
-            path,
-            expected,
-            found,
-        } => {
-            format!(
-                "{STALE_REVISION_PREFIX}{}|expected={expected}|found={found}",
-                path.display()
-            )
-        }
-        other => other.to_string(),
-    }
+    lattice_handlers::read_page(root, rel_path)
 }
 
 /// Apply a `PageUpdate` command through the [`CommandEngine`]: replace the
@@ -233,25 +110,7 @@ pub fn apply_page_update(
     content: String,
     base_revision: String,
 ) -> Result<String, String> {
-    let (canonical_root, _) = resolve_within_root(&root, &rel_path)?;
-    let mut engine = CommandEngine::open(&canonical_root).map_err(command_error_to_string)?;
-
-    let receipt = engine
-        .apply(Transaction::new(
-            format!("Update page {rel_path}"),
-            vec![SemanticCommand::PageUpdate {
-                path: PathBuf::from(&rel_path),
-                content,
-                base_revision,
-            }],
-        ))
-        .map_err(command_error_to_string)?;
-
-    receipt
-        .outcomes
-        .first()
-        .and_then(|outcome| outcome.resulting_revision.clone())
-        .ok_or_else(|| "page update did not produce a resulting revision".to_string())
+    lattice_handlers::apply_page_update(root, rel_path, content, base_revision)
 }
 
 /// Apply a bounded byte-oriented resource edit through the semantic command
@@ -299,22 +158,7 @@ pub fn create_page(
     template_path: Option<String>,
     title: Option<String>,
 ) -> Result<String, String> {
-    let mut engine = CommandEngine::open(Path::new(&root)).map_err(command_error_to_string)?;
-
-    let receipt = engine
-        .create_page(
-            PathBuf::from(&rel_path),
-            content,
-            template_path.map(PathBuf::from),
-            title,
-        )
-        .map_err(command_error_to_string)?;
-
-    receipt
-        .outcomes
-        .first()
-        .and_then(|outcome| outcome.resulting_revision.clone())
-        .ok_or_else(|| "page create did not produce a resulting revision".to_string())
+    lattice_handlers::create_page(root, rel_path, content, template_path, title)
 }
 
 /// Import a pasted or dropped editor asset beside its containing page.
@@ -640,75 +484,12 @@ pub fn undo_last(root: String) -> Result<Option<String>, String> {
     Ok(report.map(|r| r.summary))
 }
 
-/// Snapshot of `~/Lattice` after ensuring the layout exists.
-#[derive(Debug, Serialize)]
-pub struct LatticeHomeInfo {
-    pub root: String,
-    pub workspaces: String,
-    pub settings: String,
-    pub default_workspace: Option<WorkspaceSnapshot>,
-    pub diagnostics: Vec<ProvisionDiagnostic>,
-}
-
-fn snapshot_from_workspace(workspace: &Workspace) -> Result<WorkspaceSnapshot, String> {
-    let resources = workspace.scan().map_err(|err| err.to_string())?;
-    snapshot_from_parts(workspace, resources)
-}
-
-fn snapshot_from_parts(
-    workspace: &Workspace,
-    resources: Vec<Resource>,
-) -> Result<WorkspaceSnapshot, String> {
-    let manifest = workspace.manifest();
-    let store = NativeWorkspaceStore::new(workspace.root());
-    let manifest_revision = store
-        .metadata(Path::new(lattice_core::WORKSPACE_MANIFEST_FILENAME))
-        .map_err(|error| error.to_string())?
-        .revision
-        .hash;
-    Ok(WorkspaceSnapshot {
-        root: workspace.root().to_string_lossy().into_owned(),
-        title: manifest.title.clone(),
-        id: manifest.id.clone(),
-        resources,
-        capabilities: manifest.capabilities.enabled.clone(),
-        defaults: manifest.defaults.clone(),
-        source_template: manifest.source_template.clone(),
-        directory_purposes: manifest
-            .directories
-            .iter()
-            .filter_map(|(path, meta)| {
-                meta.purpose
-                    .as_ref()
-                    .map(|purpose| (path.clone(), purpose.clone()))
-            })
-            .collect(),
-        manifest_revision,
-    })
-}
-
 /// Explicitly initialize Lattice home, provisioning a workspace only when no valid
 /// workspace exists. Uses the First Look demo template when `LATTICE_DEV_HOME` is
 /// set; otherwise provisions Personal. Ordinary startup never calls this command.
 #[tauri::command]
 pub fn ensure_home() -> Result<LatticeHomeInfo, String> {
-    let (home, outcome) = initialize_active_lattice_home().map_err(|err| err.to_string())?;
-    let default_workspace = Some(snapshot_from_workspace(&outcome.workspace)?);
-    Ok(LatticeHomeInfo {
-        root: home.root.to_string_lossy().into_owned(),
-        workspaces: home.workspaces.to_string_lossy().into_owned(),
-        settings: home.settings.to_string_lossy().into_owned(),
-        default_workspace,
-        diagnostics: outcome.diagnostics,
-    })
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WorkspaceProvisionResult {
-    pub workspace: WorkspaceSnapshot,
-    pub default_workspace_status: DefaultWorkspaceStatus,
-    pub diagnostics: Vec<ProvisionDiagnostic>,
+    lattice_handlers::ensure_home()
 }
 
 #[tauri::command]
@@ -719,55 +500,13 @@ pub fn create_workspace(
     set_default: bool,
     initialize_existing: bool,
 ) -> Result<WorkspaceProvisionResult, String> {
-    let root = PathBuf::from(&path);
-    let title = title.unwrap_or_else(|| {
-        root.file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("Workspace")
-            .to_string()
-    });
-    let mut outcome = WorkspaceProvisioner::provision(&WorkspaceCreationPlan {
-        target: root,
-        title,
-        template_id: template,
-        mode: if initialize_existing {
-            WorkspaceCreationMode::ExistingDirectory
-        } else {
-            WorkspaceCreationMode::NewDirectory
-        },
-    })
-    .map_err(|err| err.to_string())?;
-    if set_default {
-        match ensure_lattice_home()
-            .map_err(|error| error.to_string())
-            .and_then(|home| {
-                home.set_default_workspace(outcome.workspace.root())
-                    .map_err(|error| error.to_string())
-            }) {
-            Ok(_) => outcome.default_workspace_status = DefaultWorkspaceStatus::Updated,
-            Err(error) => {
-                outcome.default_workspace_status = DefaultWorkspaceStatus::Failed;
-                outcome.diagnostics.push(ProvisionDiagnostic {
-                    code: "default-workspace-save-failed".into(),
-                    message: format!(
-                        "The workspace was created, but Lattice could not make it the default: {error}"
-                    ),
-                    retryable: true,
-                });
-            }
-        }
-    }
-    Ok(WorkspaceProvisionResult {
-        workspace: snapshot_from_workspace(&outcome.workspace)?,
-        default_workspace_status: outcome.default_workspace_status,
-        diagnostics: outcome.diagnostics,
-    })
+    lattice_handlers::create_workspace(path, title, template, set_default, initialize_existing)
 }
 
 /// Built-in workspace templates for the New Workspace gallery and First Look sample.
 #[tauri::command]
-pub fn list_templates() -> Vec<TemplateDescriptor> {
-    lattice_core::WorkspaceTemplate::catalog()
+pub fn list_templates() -> Vec<lattice_core::TemplateDescriptor> {
+    lattice_handlers::list_templates()
 }
 
 #[tauri::command]
@@ -836,25 +575,6 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         lattice_core::Workspace::init(dir.path(), "Test Workspace").unwrap();
         dir
-    }
-
-    #[test]
-    fn open_workspace_returns_snapshot_with_resources() {
-        let dir = init_workspace();
-        std::fs::write(dir.path().join("Notes.md"), "# Hi\n").unwrap();
-
-        let snapshot = open_workspace(dir.path().to_string_lossy().into_owned()).unwrap();
-        assert_eq!(snapshot.title, "Test Workspace");
-        assert!(snapshot
-            .resources
-            .iter()
-            .any(|r| r.path.ends_with("Notes.md")));
-    }
-
-    #[test]
-    fn open_workspace_rejects_missing_manifest() {
-        let dir = tempfile::tempdir().unwrap();
-        assert!(open_workspace(dir.path().to_string_lossy().into_owned()).is_err());
     }
 
     #[test]
@@ -950,105 +670,6 @@ mod tests {
             decode_header("%2FUsers%2Fwill%2FLattice%2F%E6%97%A5%E8%A8%98.md").unwrap(),
             "/Users/will/Lattice/日記.md"
         );
-    }
-
-    #[test]
-    fn read_page_returns_content_and_revision() {
-        let dir = init_workspace();
-        std::fs::write(dir.path().join("Notes.md"), "# Hi\n").unwrap();
-
-        let page = read_page(
-            dir.path().to_string_lossy().into_owned(),
-            "Notes.md".to_string(),
-        )
-        .unwrap();
-        assert_eq!(page.content, "# Hi\n");
-        assert!(page.revision.starts_with("sha256:"));
-    }
-
-    #[test]
-    fn apply_page_update_writes_content_and_returns_new_revision() {
-        let dir = init_workspace();
-        std::fs::write(dir.path().join("Notes.md"), "# Hi\n").unwrap();
-        let root = dir.path().to_string_lossy().into_owned();
-
-        let before = read_page(root.clone(), "Notes.md".to_string()).unwrap();
-        let after_revision = apply_page_update(
-            root.clone(),
-            "Notes.md".to_string(),
-            "# Hi, edited\n".to_string(),
-            before.revision,
-        )
-        .unwrap();
-
-        let after = read_page(root, "Notes.md".to_string()).unwrap();
-        assert_eq!(after.content, "# Hi, edited\n");
-        assert_eq!(after.revision, after_revision);
-    }
-
-    #[test]
-    fn list_resources_matches_open_workspace_scan() {
-        let dir = init_workspace();
-        std::fs::write(dir.path().join("Notes.md"), "# Hi\n").unwrap();
-        let root = dir.path().to_string_lossy().into_owned();
-
-        let resources = list_resources(root).unwrap();
-        assert!(resources.iter().any(|r| r.path.ends_with("Notes.md")));
-    }
-
-    #[test]
-    fn create_page_writes_new_file_and_rejects_existing() {
-        let dir = init_workspace();
-        let root = dir.path().to_string_lossy().into_owned();
-
-        let revision = create_page(
-            root.clone(),
-            "Notes (conflict 2026-07-15).md".to_string(),
-            "# Local copy\n".to_string(),
-            None,
-            None,
-        )
-        .unwrap();
-        assert!(revision.starts_with("sha256:"));
-
-        let content =
-            read_file(root.clone(), "Notes (conflict 2026-07-15).md".to_string()).unwrap();
-        assert_eq!(content, "# Local copy\n");
-
-        let err = create_page(
-            root,
-            "Notes (conflict 2026-07-15).md".to_string(),
-            "# Again\n".to_string(),
-            None,
-            None,
-        )
-        .unwrap_err();
-        assert!(err.contains("already exists"));
-    }
-
-    #[test]
-    fn create_page_from_template_substitutes_placeholders() {
-        let dir = init_workspace();
-        std::fs::create_dir_all(dir.path().join("Templates")).unwrap();
-        std::fs::write(
-            dir.path().join("Templates/Daily.md"),
-            "# {{title}}\n\n{{date}}\n",
-        )
-        .unwrap();
-        let root = dir.path().to_string_lossy().into_owned();
-
-        create_page(
-            root.clone(),
-            "Notes/Sync.md".to_string(),
-            String::new(),
-            Some("Templates/Daily.md".to_string()),
-            Some("Sync".to_string()),
-        )
-        .unwrap();
-
-        let content = read_file(root, "Notes/Sync.md".to_string()).unwrap();
-        assert!(content.starts_with("# Sync\n\n"));
-        assert!(content.contains('-'));
     }
 
     #[test]
@@ -1194,25 +815,5 @@ mod tests {
         assert!(resources
             .iter()
             .any(|resource| resource.path == PathBuf::from("Projects/New")));
-    }
-
-    #[test]
-    fn apply_page_update_reports_stale_revision() {
-        let dir = init_workspace();
-        std::fs::write(dir.path().join("Notes.md"), "# Hi\n").unwrap();
-        let root = dir.path().to_string_lossy().into_owned();
-
-        let result = apply_page_update(
-            root,
-            "Notes.md".to_string(),
-            "# Hi, edited\n".to_string(),
-            "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_string(),
-        );
-
-        let err = result.unwrap_err();
-        assert!(
-            err.starts_with(STALE_REVISION_PREFIX),
-            "expected a STALE_REVISION-prefixed error, got: {err}"
-        );
     }
 }

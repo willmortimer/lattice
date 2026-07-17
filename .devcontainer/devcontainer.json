@@ -1,0 +1,49 @@
+{
+  "name": "Lattice",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "workspaceFolder": "/workspaces/lattice",
+  "remoteUser": "node",
+  "forwardPorts": [5173, 4321, 8787],
+  "portsAttributes": {
+    "5173": {
+      "label": "desktop-web (browser demo)",
+      "onAutoForward": "notify"
+    },
+    "4321": {
+      "label": "marketing / docs site",
+      "onAutoForward": "notify"
+    },
+    "8787": {
+      "label": "lattice-bridge (HTTP handlers)",
+      "onAutoForward": "notify"
+    }
+  },
+  "containerEnv": {
+    "DEVCONTAINER": "1"
+  },
+  "remoteEnv": {
+    "DEV_CELL": "true",
+    "LATTICE_DEV_HOME": "/workspaces/lattice/target/cell-home"
+  },
+  "mounts": [
+    "source=lattice-pnpm-store,target=/home/node/.local/share/pnpm/store,type=volume",
+    "source=lattice-cargo-registry,target=/home/node/.cargo/registry,type=volume",
+    "source=lattice-cargo-git,target=/home/node/.cargo/git,type=volume"
+  ],
+  "postCreateCommand": "bash .devcontainer/scripts/post-create.sh",
+  "postStartCommand": "bash .devcontainer/scripts/post-start.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  }
+}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { demoSnapshot, inBrowser } from "../demo";
+import { bridgeWorkspacePath, hasTauri, inBridgeMode, invoke } from "../lib/ipc";
 import { listTemplates, provisionWorkspace, type TemplateDescriptor } from "../lib/templates";
 import { loadSession, saveSession, type DesktopSession } from "../lib/profile";
 import { refreshResourceCatalog } from "../lib/resourceLinks";
@@ -84,7 +84,7 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
   }, [setError]);
 
   const stopWatching = useCallback(async () => {
-    if (inBrowser || !watchingRootRef.current) return;
+    if (!hasTauri || !watchingRootRef.current) return;
     watchingRootRef.current = null;
     await invoke("stop_watching").catch(() => undefined);
   }, []);
@@ -100,14 +100,16 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
     setSnapshot(next);
     await onAdopt(next);
     rememberWorkspace(next);
-    if (!inBrowser) {
+    if (hasTauri) {
       watchingRootRef.current = next.root;
       void invoke("start_watching", { root: next.root }).catch((error: unknown) => {
         if (watchingRootRef.current === next.root) watchingRootRef.current = null;
         console.error("failed to start workspace watcher:", error);
       });
-      void invoke("rebuild_index", { root: next.root }).catch(() => undefined);
       await refreshResourceCatalog(next.root);
+    }
+    if (hasTauri || inBridgeMode) {
+      void invoke("rebuild_index", { root: next.root }).catch(() => undefined);
     }
   }, [onAdopt, rememberWorkspace, stopWatching]);
 
@@ -117,7 +119,7 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
     try {
       const resources = await invoke<Resource[]>("list_resources", { root });
       setSnapshot((prev) => (prev ? { ...prev, resources } : prev));
-      await refreshResourceCatalog(root);
+      if (hasTauri) await refreshResourceCatalog(root);
     } catch {
       // A scan can briefly observe a file mid-write or a workspace closing.
     }
@@ -149,6 +151,24 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
 
   const handleOpenWorkspace = useCallback(async () => {
     setError(null);
+    if (inBridgeMode) {
+      const path = bridgeWorkspacePath;
+      if (!path) {
+        setError(
+          "Bridge mode has no native folder dialog. Set VITE_LATTICE_WORKSPACE or use Get started (ensure_home).",
+        );
+        return;
+      }
+      setBusy(true);
+      try {
+        await adoptWorkspace(await invoke<WorkspaceSnapshot>("open_workspace", { path }));
+      } catch (error) {
+        setError(String(error));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     const directory = await open({ directory: true, multiple: false, title: "Open Workspace" });
     if (!directory || Array.isArray(directory)) return;
     setBusy(true);
@@ -227,17 +247,39 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
 
   const openNewWorkspaceDialog = useCallback(async () => {
     setError(null);
-    if (!inBrowser && !profile.workspacesDirectory) return;
+    if (hasTauri && !profile.workspacesDirectory) return;
     setNewWorkspaceOpen(true);
   }, [profile.workspacesDirectory, setError, setNewWorkspaceOpen]);
 
   const pickWorkspaceFolder = useCallback(async () => {
+    if (inBridgeMode) return null;
     const path = await open({ directory: true, multiple: false, title: "Choose workspace destination" });
     return typeof path === "string" ? path : null;
   }, []);
 
   useEffect(() => {
-    if (inBrowser || demoStartEmpty || snapshot || !profileReady || startupAttemptedRef.current) return;
+    if (demoStartEmpty || snapshot || !profileReady || startupAttemptedRef.current) return;
+
+    if (inBridgeMode) {
+      if (!bridgeWorkspacePath) return;
+      startupAttemptedRef.current = true;
+      let cancelled = false;
+      void (async () => {
+        try {
+          const next = await invoke<WorkspaceSnapshot>("open_workspace", {
+            path: bridgeWorkspacePath,
+          });
+          if (!cancelled) await adoptWorkspace(next);
+        } catch (error) {
+          if (!cancelled) setError(String(error));
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (inBrowser || !hasTauri) return;
     startupAttemptedRef.current = true;
     const candidates = [
       ...(startup.reopenLastWorkspace ? recents.map((recent) => recent.root) : []),
@@ -257,7 +299,7 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
       }
     })();
     return () => { cancelled = true; };
-  }, [adoptWorkspace, demoStartEmpty, profile.effectiveDefaultWorkspace, profileReady, recents, removeRecent, snapshot, startup.reopenLastWorkspace]);
+  }, [adoptWorkspace, demoStartEmpty, profile.effectiveDefaultWorkspace, profileReady, recents, removeRecent, setError, snapshot, startup.reopenLastWorkspace]);
 
   useEffect(() => {
     if (!snapshot || sessionRestoredRootRef.current === snapshot.root) return;

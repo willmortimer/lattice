@@ -9,6 +9,9 @@ export default defineConfig(async () => ({
 
   clearScreen: false,
   server: {
+    // 0.0.0.0 so DevCell / Docker published ports and Tailscale Serve work.
+    // Local Tauri still reaches the server via http://localhost:5173.
+    host: true,
     port: 5173,
     strictPort: true,
   },

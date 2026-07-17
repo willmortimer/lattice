@@ -1,5 +1,5 @@
 import { IconButton } from "@lattice/ui";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../lib/ipc";
 import { X } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 
