@@ -289,8 +289,15 @@ impl RevisionService {
             .ok_or_else(|| Error::InvalidRevision {
                 revision: hash.to_string(),
             })?;
-        std::fs::read(self.objects.join(filename))
-            .map_err(|source| Error::io("history object", source))
+        match std::fs::read(self.objects.join(filename)) {
+            Ok(bytes) => Ok(bytes),
+            Err(source) if source.kind() == std::io::ErrorKind::NotFound => {
+                Err(Error::RevisionObjectUnavailable {
+                    hash: hash.to_string(),
+                })
+            }
+            Err(source) => Err(Error::io("history object", source)),
+        }
     }
 
     pub(crate) fn store_operation_payload(&self, bytes: Option<&[u8]>) -> Result<Option<String>> {
@@ -947,7 +954,10 @@ mod tests {
 
         let deleted = service.cleanup(policy, false).unwrap();
         assert_eq!(deleted.deleted_objects, 1);
-        assert!(service.read_object(&first_hash).is_err());
+        assert!(matches!(
+            service.read_object(&first_hash),
+            Err(Error::RevisionObjectUnavailable { hash }) if hash == first_hash
+        ));
         assert_eq!(service.read_object(&second_hash).unwrap(), b"two");
     }
 
