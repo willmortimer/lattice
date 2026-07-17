@@ -122,6 +122,7 @@ export function ResourceInspector({
           <dl className="property-list">
             <div><dt>Kind</dt><dd>{resource ? KIND_LABELS[resource.kind] : "Workspace"}</dd></div>
             <div><dt>Path</dt><dd>{resource?.path ?? "—"}</dd></div>
+            <div><dt>Format</dt><dd>{resource?.formatId ?? "—"}</dd></div>
             <div><dt>Canonical state</dt><dd>{resource ? "Workspace file" : "Directory"}</dd></div>
           </dl>
         )}
