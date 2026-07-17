@@ -11,11 +11,23 @@ Nix + Tauri on your Mac remain the source of truth for the native desktop shell.
 | Open marketing / Starlight docs | `./scripts/devcontainer/site` → port **4321** |
 | Build the headless `lattice` CLI | `./scripts/devcontainer/cli` |
 | Seed a real demo workspace on disk | `./scripts/devcontainer/seed` |
+| Run `lattice-bridge` (HTTP handler backend) | `./scripts/devcontainer/bridge` → port **8787** |
+| Seed + bridge + web instructions | `./scripts/devcontainer/up` |
 | Run headless checks in the cell | `./scripts/devcontainer/test` |
 | Native window + real filesystem | **Not here** — `nix run .#desktop-dev` on macOS |
 
-The browser UI on :5173 is the **demo fixture** (no native filesystem authority).
-That is intentional for the cell / Tailscale Serve path.
+### Demo fixture vs bridge mode
+
+| Mode | How | Data |
+| --- | --- | --- |
+| **Demo fixture** | `./scripts/devcontainer/web` with `VITE_LATTICE_BRIDGE_URL` unset | In-memory sample workspace; no Rust core |
+| **Bridge mode** | `./scripts/devcontainer/bridge` + `./scripts/devcontainer/web` (default) | Real Rust handlers via `lattice-bridge` |
+
+`./scripts/devcontainer/web` exports `VITE_LATTICE_BRIDGE_URL` (default
+`http://127.0.0.1:8787`) and, when seeded, `VITE_LATTICE_WORKSPACE` pointing
+at the First Look workspace path **as seen by the bridge process** (same
+container → local path). Unset `VITE_LATTICE_BRIDGE_URL` to fall back to the
+demo fixture.
 
 ## Start
 
@@ -31,11 +43,41 @@ With VS Code / Cursor Dev Containers, or any host that understands
 ./scripts/devcontainer/site
 ./scripts/devcontainer/cli
 ./scripts/devcontainer/seed
+./scripts/devcontainer/bridge
+./scripts/devcontainer/up
 ./scripts/devcontainer/test
 ```
 
-Bind address is `0.0.0.0` so Docker / DevCell published ports and
-`tailscale serve` can reach the processes.
+Bind address is `0.0.0.0` for Vite, Astro, and bridge inside the container so
+Docker / DevCell published ports and `tailscale serve` can reach the processes.
+
+## Real core in the browser (recommended cell flow)
+
+```sh
+# Terminal 1 — seed workspace + start bridge
+./scripts/devcontainer/seed
+./scripts/devcontainer/bridge
+
+# Terminal 2 — Vite with bridge env vars
+./scripts/devcontainer/web
+```
+
+Or use the helper (seeds, starts bridge in background, prints web command):
+
+```sh
+./scripts/devcontainer/up
+# then in another terminal:
+./scripts/devcontainer/web
+```
+
+Open the forwarded UI on port **5173**. The shell talks to `lattice-bridge` on
+**8787**, which runs the same handlers as the Tauri desktop shell.
+
+Smoke the bridge:
+
+```sh
+curl -s http://127.0.0.1:8787/health
+```
 
 ## CLI (headless workspace)
 
@@ -76,21 +118,30 @@ $LATTICE search workspace "${LATTICE_DEV_HOME}/Workspaces/First Look" --limit 5
 `./scripts/devcontainer/test` runs a short CLI smoke (build + seed + `ls` /
 `search`) after the existing cargo and pnpm checks.
 
-## HTTP bridge (browser demo backend)
+## HTTP bridge (`lattice-bridge`)
 
-The cell has no Tauri IPC. Run [`lattice-bridge`](../../apps/bridge/README.md)
-beside Vite so the browser demo can call the same handlers as the desktop shell:
+The cell has no Tauri IPC. [`lattice-bridge`](../../apps/bridge/README.md) exposes
+the handler surface over HTTP so the browser shell can call the real Rust core.
+
+`./scripts/devcontainer/bridge`:
+
+- Binds **`0.0.0.0:8787`** inside the Dev Container (`DEVCONTAINER=1` /
+  `DEV_CELL=true`) so published ports work; **`127.0.0.1:8787`** elsewhere.
+- Defaults `--root` to the seeded First Look workspace under `LATTICE_DEV_HOME`.
+- Override with `LATTICE_BRIDGE_HOST`, `LATTICE_BRIDGE_PORT`, or `LATTICE_DEV_HOME`.
+
+Manual equivalent:
 
 ```sh
-cargo run -p lattice-bridge -- --host 127.0.0.1 --port 8787
-# optional default workspace after seed:
-# cargo run -p lattice-bridge -- --root "${LATTICE_DEV_HOME}/Workspaces/First Look"
-
-curl -s http://127.0.0.1:8787/health
+cargo run -p lattice-bridge -- \
+  --host 0.0.0.0 --port 8787 \
+  --root "${LATTICE_DEV_HOME}/Workspaces/First Look"
 ```
 
-CORS allows `http://localhost:5173` and `http://127.0.0.1:5173` only. React
-transport wiring is separate; this task only ships the Rust daemon.
+CORS allows `http://localhost:5173` and `http://127.0.0.1:5173` only. Port
+forwarding and local dev use those origins. If you expose Vite via Tailscale
+Serve on a non-localhost hostname, CORS will block bridge requests — use port
+forward to `localhost:5173` or run bridge + web on the same host origin.
 
 See [environment.md](./environment.md) for `LATTICE_DEV_HOME` and `LATTICE_HOME`.
 
@@ -98,11 +149,14 @@ See [environment.md](./environment.md) for `LATTICE_DEV_HOME` and `LATTICE_HOME`
 
 | Port | Process | Start command | Notes |
 | --- | --- | --- | --- |
-| **5173** | Vite (`@lattice/desktop`) | `./scripts/devcontainer/web` | Browser demo shell |
+| **5173** | Vite (`@lattice/desktop`) | `./scripts/devcontainer/web` | Browser shell (demo or bridge mode) |
 | **4321** | Astro (`@lattice/site`) | `./scripts/devcontainer/site` | Marketing + docs |
+| **8787** | `lattice-bridge` | `./scripts/devcontainer/bridge` | HTTP handler backend for bridge mode |
 
 Expose them from the cell (DevCell published ports or Tailscale Serve). Do not
-assume Mac `localhost` is the cell.
+assume Mac `localhost` is the cell. The browser reaches bridge and Vite via
+forwarded ports on the host (`127.0.0.1`), even though processes bind `0.0.0.0`
+inside the container.
 
 ## Toolchain (no Nix)
 
@@ -121,6 +175,7 @@ repo `.devcontainer`.
 - `tauri` / `nix run .#desktop-dev` (needs a display / WebView stack)
 - Full Nix flake inside the container
 - Secrets or Cloudflare Pages tokens in the image
+- Docker Compose multi-process orchestration (use the scripts above instead)
 
 ## Architecture notes
 
