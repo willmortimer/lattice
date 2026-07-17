@@ -7,7 +7,7 @@ use lattice_commands::{
 use lattice_core::{
     ensure_lattice_home, initialize_active_lattice_home, inspect_resource as inspect_native_resource,
     read_resource_range as read_native_resource_range, read_text_window as read_native_text_window,
-    DefaultWorkspaceStatus, ProvisionDiagnostic, Resource, ResourceRuntimeError,
+    DefaultWorkspaceStatus, ProvisionDiagnostic, Resource, ResourceKind, ResourceRuntimeError,
     TemplateDescriptor, Workspace, WorkspaceCreationMode, WorkspaceCreationPlan, WorkspaceDefaults,
     WorkspaceProvisioner,
 };
@@ -76,6 +76,42 @@ pub(crate) fn resolve_within_root(
     }
 
     Ok((canonical_root, canonical_candidate))
+}
+
+/// Reject workspace-relative paths that escape the root via `..` or absolute
+/// prefixes. Used when the target path may not exist yet (folder create).
+fn validate_workspace_relative(rel_path: &str) -> Result<PathBuf, String> {
+    let path = Path::new(rel_path);
+    if rel_path.trim().is_empty() {
+        return Err("path must be non-empty".to_string());
+    }
+    if path.is_absolute() {
+        return Err(format!("{rel_path:?} must be workspace-relative"));
+    }
+    if path.components().any(|component| {
+        matches!(
+            component,
+            std::path::Component::ParentDir
+                | std::path::Component::RootDir
+                | std::path::Component::Prefix(_)
+        )
+    }) {
+        return Err(format!("{rel_path:?} escapes the workspace root"));
+    }
+    Ok(path.to_path_buf())
+}
+
+/// Join a validated workspace-relative path under a canonical root.
+fn join_within_root(root: &str, rel_path: &str) -> Result<(PathBuf, PathBuf), String> {
+    let canonical_root = PathBuf::from(root)
+        .canonicalize()
+        .map_err(|err| format!("invalid workspace root {root:?}: {err}"))?;
+    let relative = validate_workspace_relative(rel_path)?;
+    let candidate = canonical_root.join(&relative);
+    if !candidate.starts_with(&canonical_root) {
+        return Err(format!("{rel_path:?} escapes the workspace root"));
+    }
+    Ok((canonical_root, relative))
 }
 
 /// Read a text resource by path relative to `root`.
@@ -425,6 +461,138 @@ pub fn rename_resource(root: String, from: String, to: String) -> Result<(), Str
         ))
         .map_err(command_error_to_string)?;
     Ok(())
+}
+
+/// Delete a resource through the semantic command core (files go to Trash).
+#[tauri::command]
+pub fn delete_resource(root: String, path: String) -> Result<(), String> {
+    let mut engine = CommandEngine::open(Path::new(&root)).map_err(command_error_to_string)?;
+    engine
+        .apply(Transaction::new(
+            format!("Delete {path}"),
+            vec![SemanticCommand::ResourceDelete {
+                path: PathBuf::from(path),
+            }],
+        ))
+        .map_err(command_error_to_string)?;
+    Ok(())
+}
+
+/// Move a resource into an existing directory through the semantic command core.
+#[tauri::command]
+pub fn move_resource(root: String, from: String, to_dir: String) -> Result<(), String> {
+    let mut engine = CommandEngine::open(Path::new(&root)).map_err(command_error_to_string)?;
+    engine
+        .apply(Transaction::new(
+            format!("Move {from} into {to_dir}"),
+            vec![SemanticCommand::ResourceMove {
+                from: PathBuf::from(from),
+                to_dir: PathBuf::from(to_dir),
+            }],
+        ))
+        .map_err(command_error_to_string)?;
+    Ok(())
+}
+
+fn duplicate_destination_path(
+    store: &NativeWorkspaceStore,
+    source: &Path,
+) -> Result<PathBuf, String> {
+    let parent = source.parent().unwrap_or_else(|| Path::new(""));
+    let stem = source
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "cannot duplicate a resource without a name".to_string())?;
+    let extension = source.extension().and_then(|value| value.to_str());
+
+    let mut candidate = parent.join(match extension {
+        Some(extension) => format!("{stem} copy.{extension}"),
+        None => format!("{stem} copy"),
+    });
+    let mut suffix = 2usize;
+    while store.metadata(&candidate).is_ok() {
+        let next_name = match extension {
+            Some(extension) => format!("{stem} copy {suffix}.{extension}"),
+            None => format!("{stem} copy {suffix}"),
+        };
+        candidate = parent.join(next_name);
+        suffix += 1;
+    }
+    Ok(candidate)
+}
+
+/// Duplicate a file resource at a unique sibling path (`Foo copy.md`, `Foo copy 2.md`, …).
+#[tauri::command]
+pub fn duplicate_resource(root: String, path: String) -> Result<String, String> {
+    let (canonical_root, _) = resolve_within_root(&root, &path)?;
+    let source = PathBuf::from(&path);
+    let store = NativeWorkspaceStore::new(&canonical_root);
+    let metadata = store
+        .metadata(&source)
+        .map_err(|err| err.to_string())?;
+    if metadata.is_dir {
+        return Err(format!("cannot duplicate directory {path:?}"));
+    }
+
+    let bytes = store.read(&source).map_err(|err| err.to_string())?;
+    let destination = duplicate_destination_path(&store, &source)?;
+    let kind = ResourceKind::classify(&source, false);
+    let command = if kind == ResourceKind::Page {
+        SemanticCommand::PageCreate {
+            path: destination.clone(),
+            content: String::from_utf8(bytes).map_err(|_| {
+                format!("page {path:?} is not valid UTF-8 and cannot be duplicated as a page")
+            })?,
+        }
+    } else {
+        SemanticCommand::ResourceCreate {
+            path: destination.clone(),
+            content: bytes,
+        }
+    };
+
+    let mut engine = CommandEngine::open(&canonical_root).map_err(command_error_to_string)?;
+    engine
+        .apply(Transaction::new(
+            format!("Duplicate {} to {}", source.display(), destination.display()),
+            vec![command],
+        ))
+        .map_err(command_error_to_string)?;
+
+    Ok(destination
+        .to_string_lossy()
+        .replace('\\', "/"))
+}
+
+/// Create an empty folder beneath the workspace root.
+///
+/// Folders are ordinary directories discovered by workspace scan. There is
+/// no `FolderCreate` semantic command yet, so this mirrors template
+/// provisioning (`create_dir`) rather than inventing an undeclared command.
+/// The operation is not recorded in command history and is not undoable.
+#[tauri::command]
+pub fn create_folder(root: String, path: String) -> Result<(), String> {
+    let (canonical_root, relative) = join_within_root(&root, &path)?;
+    let target = canonical_root.join(&relative);
+    if target.exists() {
+        return Err(format!("{path:?} already exists"));
+    }
+    let parent = target
+        .parent()
+        .filter(|parent| parent.starts_with(&canonical_root))
+        .ok_or_else(|| format!("invalid folder path {path:?}"))?;
+    if parent == canonical_root {
+        // Creating a top-level folder is allowed.
+    } else if !parent.is_dir() {
+        return Err(format!(
+            "parent directory {} does not exist",
+            parent.strip_prefix(&canonical_root)
+                .unwrap_or(parent)
+                .to_string_lossy()
+        ));
+    }
+    std::fs::create_dir(&target).map_err(|err| err.to_string())
 }
 
 #[derive(Debug, Serialize)]
@@ -961,6 +1129,71 @@ mod tests {
         assert!(dir.path().join("After.md").exists());
         let history = list_history(root, 10).unwrap();
         assert_eq!(history[0].summary, "Rename Before.md to After.md");
+    }
+
+    #[test]
+    fn delete_resource_uses_command_history() {
+        let dir = init_workspace();
+        std::fs::write(dir.path().join("Doomed.md"), "# Doomed\n").unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        delete_resource(root.clone(), "Doomed.md".to_string()).unwrap();
+
+        assert!(!dir.path().join("Doomed.md").exists());
+        let history = list_history(root, 10).unwrap();
+        assert_eq!(history[0].summary, "Delete Doomed.md");
+    }
+
+    #[test]
+    fn move_resource_uses_command_history() {
+        let dir = init_workspace();
+        std::fs::create_dir(dir.path().join("Inbox")).unwrap();
+        std::fs::write(dir.path().join("Note.md"), "# Note\n").unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        move_resource(
+            root.clone(),
+            "Note.md".to_string(),
+            "Inbox".to_string(),
+        )
+        .unwrap();
+
+        assert!(!dir.path().join("Note.md").exists());
+        assert!(dir.path().join("Inbox/Note.md").exists());
+        let history = list_history(root, 10).unwrap();
+        assert_eq!(history[0].summary, "Move Note.md into Inbox");
+    }
+
+    #[test]
+    fn duplicate_resource_creates_collision_safe_copy() {
+        let dir = init_workspace();
+        std::fs::write(dir.path().join("Note.md"), "# Note\n").unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        let first = duplicate_resource(root.clone(), "Note.md".to_string()).unwrap();
+        assert_eq!(first, "Note copy.md");
+        assert_eq!(
+            read_file(root.clone(), "Note copy.md".to_string()).unwrap(),
+            "# Note\n"
+        );
+
+        let second = duplicate_resource(root, "Note.md".to_string()).unwrap();
+        assert_eq!(second, "Note copy 2.md");
+    }
+
+    #[test]
+    fn create_folder_adds_empty_directory() {
+        let dir = init_workspace();
+        std::fs::create_dir(dir.path().join("Projects")).unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        create_folder(root.clone(), "Projects/New".to_string()).unwrap();
+
+        assert!(dir.path().join("Projects/New").is_dir());
+        let resources = list_resources(root).unwrap();
+        assert!(resources
+            .iter()
+            .any(|resource| resource.path == PathBuf::from("Projects/New")));
     }
 
     #[test]
