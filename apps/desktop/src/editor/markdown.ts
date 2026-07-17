@@ -140,6 +140,21 @@ export function parseMarkdownToJSON(markdown: string): JSONContent {
   return parser.parse(encodeWikiLinks(markdown)).toJSON() as JSONContent;
 }
 
+export type MarkdownParseResult =
+  | { ok: true; json: JSONContent }
+  | { ok: false; error: string };
+
+/** Parse markdown without throwing; validates the result against the page schema. */
+export function tryParseMarkdownToJSON(markdown: string): MarkdownParseResult {
+  try {
+    const json = parseMarkdownToJSON(markdown);
+    schema.nodeFromJSON(json).check();
+    return { ok: true, json };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Serializing: JSONContent -> markdown
 // ---------------------------------------------------------------------------
