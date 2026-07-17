@@ -76,6 +76,22 @@ $LATTICE search workspace "${LATTICE_DEV_HOME}/Workspaces/First Look" --limit 5
 `./scripts/devcontainer/test` runs a short CLI smoke (build + seed + `ls` /
 `search`) after the existing cargo and pnpm checks.
 
+## HTTP bridge (browser demo backend)
+
+The cell has no Tauri IPC. Run [`lattice-bridge`](../../apps/bridge/README.md)
+beside Vite so the browser demo can call the same handlers as the desktop shell:
+
+```sh
+cargo run -p lattice-bridge -- --host 127.0.0.1 --port 8787
+# optional default workspace after seed:
+# cargo run -p lattice-bridge -- --root "${LATTICE_DEV_HOME}/Workspaces/First Look"
+
+curl -s http://127.0.0.1:8787/health
+```
+
+CORS allows `http://localhost:5173` and `http://127.0.0.1:5173` only. React
+transport wiring is separate; this task only ships the Rust daemon.
+
 See [environment.md](./environment.md) for `LATTICE_DEV_HOME` and `LATTICE_HOME`.
 
 ## Ports
