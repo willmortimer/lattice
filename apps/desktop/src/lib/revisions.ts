@@ -83,3 +83,34 @@ export function revertResourceRevision(
     expectedCurrentRevision,
   });
 }
+
+export interface HistoryCleanupCandidate {
+  objectHash: string;
+  size: number;
+  createdAt: number;
+}
+
+export interface HistoryCleanupReport {
+  dryRun: boolean;
+  requiresConfirmation: boolean;
+  notice: string | null;
+  totalBytes: number;
+  reclaimableBytes: number;
+  candidates: HistoryCleanupCandidate[];
+  deletedObjects: number;
+  deletedBytes: number;
+}
+
+export function cleanupHistory(args: {
+  root: string;
+  dryRun: boolean;
+  maxAgeDays?: number;
+  maxBytes?: number;
+}): Promise<HistoryCleanupReport> {
+  return invoke("cleanup_history", {
+    root: args.root,
+    dryRun: args.dryRun,
+    maxAgeDays: args.maxAgeDays ?? null,
+    maxBytes: args.maxBytes ?? null,
+  });
+}

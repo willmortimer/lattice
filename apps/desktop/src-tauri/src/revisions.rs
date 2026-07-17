@@ -1,8 +1,10 @@
 use std::path::Path;
+use std::time::Duration;
 
 use lattice_commands::{
-    CommandEngine, ConflictEnvelope, HistoryCleanupReport, HistoryRetentionPolicy,
-    ResourceRevisionDetail, ResourceRevisionSummary, RevisionDiff, RevisionPayload, RevisionSource,
+    CommandEngine, ConflictEnvelope, HistoryCleanupCandidate, HistoryCleanupReport,
+    HistoryRetentionPolicy, ResourceRevisionDetail, ResourceRevisionSummary, RevisionDiff,
+    RevisionPayload, RevisionSource,
 };
 use serde::Serialize;
 
@@ -200,14 +202,78 @@ pub fn revert_resource_revision(
         .ok_or_else(|| "revision revert did not produce a resulting revision".into())
 }
 
-/// Run the default retention policy. Destructive cleanup always reports the
-/// first notice/dry-run boundary before deleting any object.
+/// Run retention cleanup. Optional age/size override the 180d / 1 GiB defaults.
+/// Destructive cleanup always reports the first notice/dry-run boundary before
+/// deleting any object when `requires_confirmation` is returned.
 #[tauri::command]
-pub fn cleanup_history(root: String, dry_run: bool) -> Result<HistoryCleanupReport, String> {
+pub fn cleanup_history(
+    root: String,
+    dry_run: bool,
+    max_age_days: Option<u64>,
+    max_bytes: Option<u64>,
+) -> Result<HistoryCleanupReportWire, String> {
+    let defaults = HistoryRetentionPolicy::default();
+    let policy = HistoryRetentionPolicy {
+        max_age: max_age_days
+            .map(|days| Duration::from_secs(days.saturating_mul(24 * 60 * 60)))
+            .unwrap_or(defaults.max_age),
+        max_bytes: max_bytes.unwrap_or(defaults.max_bytes),
+    };
     let engine = CommandEngine::open(Path::new(&root)).map_err(command_error_to_string)?;
     engine
-        .cleanup_history(HistoryRetentionPolicy::default(), dry_run)
+        .cleanup_history(policy, dry_run)
+        .map(HistoryCleanupReportWire::from)
         .map_err(command_error_to_string)
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryCleanupCandidateWire {
+    object_hash: String,
+    size: u64,
+    created_at: i64,
+}
+
+impl From<HistoryCleanupCandidate> for HistoryCleanupCandidateWire {
+    fn from(value: HistoryCleanupCandidate) -> Self {
+        Self {
+            object_hash: value.object_hash,
+            size: value.size,
+            created_at: value.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryCleanupReportWire {
+    dry_run: bool,
+    requires_confirmation: bool,
+    notice: Option<String>,
+    total_bytes: u64,
+    reclaimable_bytes: u64,
+    candidates: Vec<HistoryCleanupCandidateWire>,
+    deleted_objects: u64,
+    deleted_bytes: u64,
+}
+
+impl From<HistoryCleanupReport> for HistoryCleanupReportWire {
+    fn from(value: HistoryCleanupReport) -> Self {
+        Self {
+            dry_run: value.dry_run,
+            requires_confirmation: value.requires_confirmation,
+            notice: value.notice,
+            total_bytes: value.total_bytes,
+            reclaimable_bytes: value.reclaimable_bytes,
+            candidates: value
+                .candidates
+                .into_iter()
+                .map(HistoryCleanupCandidateWire::from)
+                .collect(),
+            deleted_objects: value.deleted_objects,
+            deleted_bytes: value.deleted_bytes,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -238,5 +304,28 @@ mod tests {
         let value = serde_json::to_value(wire).unwrap();
         assert!(value["text"].is_null());
         assert_eq!(value["len"], 3);
+    }
+
+    #[test]
+    fn cleanup_report_wire_uses_camel_case() {
+        let wire = HistoryCleanupReportWire::from(HistoryCleanupReport {
+            dry_run: true,
+            requires_confirmation: true,
+            notice: Some("preview".into()),
+            total_bytes: 10,
+            reclaimable_bytes: 4,
+            candidates: vec![HistoryCleanupCandidate {
+                object_hash: "abc".into(),
+                size: 4,
+                created_at: 1,
+            }],
+            deleted_objects: 0,
+            deleted_bytes: 0,
+        });
+        let value = serde_json::to_value(wire).unwrap();
+        assert_eq!(value["dryRun"], true);
+        assert_eq!(value["requiresConfirmation"], true);
+        assert_eq!(value["reclaimableBytes"], 4);
+        assert_eq!(value["candidates"][0]["objectHash"], "abc");
     }
 }
