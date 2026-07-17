@@ -6,7 +6,7 @@
   },
   "workspaceFolder": "/workspaces/lattice",
   "remoteUser": "node",
-  "forwardPorts": [5173, 4321],
+  "forwardPorts": [5173, 4321, 8787],
   "portsAttributes": {
     "5173": {
       "label": "desktop-web (browser demo)",
@@ -14,6 +14,10 @@
     },
     "4321": {
       "label": "marketing / docs site",
+      "onAutoForward": "notify"
+    },
+    "8787": {
+      "label": "lattice-bridge (HTTP handlers)",
       "onAutoForward": "notify"
     }
   },
