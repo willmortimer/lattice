@@ -35,6 +35,8 @@ export interface WorkspaceSnapshot {
     templateDirectory?: string | null;
     archiveDirectory?: string | null;
   };
+  /** Built-in template id used to provision this workspace, when known. */
+  sourceTemplate?: string | null;
   manifestRevision: string;
 }
 

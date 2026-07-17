@@ -44,7 +44,10 @@ export function DesktopShell({ model }: DesktopShellProps) {
     handleOpenWiki, openLinkTarget,
   } = model;
 
-  const directoryPurposes = useMemo(() => directoryPurposesFromCatalog(), []);
+  const directoryPurposes = useMemo(
+    () => directoryPurposesFromCatalog(snapshot?.sourceTemplate),
+    [snapshot?.sourceTemplate],
+  );
 
   if (!snapshot) {
     return (

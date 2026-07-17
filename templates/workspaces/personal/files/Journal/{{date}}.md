@@ -1,9 +1,9 @@
 ---
-title: "2026-07-17"
-date: 2026-07-17
+title: "{{date}}"
+date: {{date}}
 ---
 
-# 2026-07-17
+# {{date}}
 
 ## Focus
 

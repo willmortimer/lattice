@@ -21,7 +21,7 @@
   "preview": [
     "Home.md",
     "Projects/Example Project.md",
-    "Journal/2026-07-17.md",
+    "Journal/{{date}}.md",
     "Templates/Daily.md",
     "Inbox/",
     "Projects/",
@@ -31,7 +31,7 @@
     "Home.md",
     "Welcome.md",
     "Projects/Example Project.md",
-    "Journal/2026-07-17.md",
+    "Journal/{{date}}.md",
     "Templates/Meeting Note.md",
     "Templates/Book Note.md",
     "Templates/Daily.md"

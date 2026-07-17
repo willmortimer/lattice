@@ -15,7 +15,8 @@
     { "path": "MOCs", "purpose": "Maps of content that orient you across topics without rigid folders." },
     { "path": "Sources", "purpose": "Books, papers, articles, and media you want to cite or distill." },
     { "path": "Context", "purpose": "Workspace context for humans and agents — scope, tone, and conventions." },
-    { "path": "Prompts", "purpose": "Reusable prompt patterns for synthesis, review, and extraction." }
+    { "path": "Prompts", "purpose": "Reusable prompt patterns for synthesis, review, and extraction." },
+    { "path": "Templates", "purpose": "Page templates with {{title}} and {{date}} placeholders." }
   ],
   "preview": [
     "MOCs/Knowledge Base.md",
@@ -25,6 +26,7 @@
     "Inbox/",
     "Sources/",
     "Context/AGENTS.md",
+    "Templates/Daily.md",
     "Prompts/"
   ],
   "files": [
@@ -37,6 +39,7 @@
     "Notes/Spaced Repetition.md",
     "Notes/Zettelkasten Primer.md",
     "Context/AGENTS.md",
+    "Templates/Daily.md",
     "Prompts/Synthesize Connections.md",
     "Prompts/Weekly Review.md",
     "Prompts/Extract Key Ideas.md"
@@ -44,7 +47,7 @@
   "capabilities": ["pages", "citations"],
   "workspaceDefaults": {
     "quickNoteDirectory": "Inbox",
-    "templateDirectory": "Prompts"
+    "templateDirectory": "Templates"
   },
   "openOnCreate": "MOCs/Knowledge Base.md"
 }

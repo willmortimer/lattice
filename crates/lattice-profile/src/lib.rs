@@ -79,14 +79,27 @@ pub fn lattice_dev_home_enabled() -> bool {
 pub fn lattice_home_path() -> Result<PathBuf> {
     if let Ok(override_path) = std::env::var(LATTICE_DEV_HOME_ENV) {
         if !override_path.is_empty() {
-            return Ok(PathBuf::from(override_path));
+            return absolutize_override_path(PathBuf::from(override_path));
         }
     }
     if let Ok(override_path) = std::env::var(LATTICE_HOME_ENV) {
-        return Ok(PathBuf::from(override_path));
+        if !override_path.is_empty() {
+            return absolutize_override_path(PathBuf::from(override_path));
+        }
     }
     let home = dirs::home_dir().ok_or_else(|| Error::HomeUnavailable)?;
     Ok(home.join(LATTICE_HOME_NAME))
+}
+
+fn absolutize_override_path(path: PathBuf) -> Result<PathBuf> {
+    if path.is_absolute() {
+        return Ok(path);
+    }
+    let cwd = std::env::current_dir().map_err(|source| Error::Io {
+        path: PathBuf::from("."),
+        source,
+    })?;
+    Ok(cwd.join(path))
 }
 
 pub fn ensure_profile_layout() -> Result<LatticeHome> {
@@ -175,5 +188,21 @@ mod tests {
         assert_eq!(lattice_home_path().unwrap(), dev.path());
         std::env::remove_var(LATTICE_DEV_HOME_ENV);
         std::env::remove_var(LATTICE_HOME_ENV);
+    }
+
+    #[test]
+    fn relative_lattice_dev_home_is_resolved_against_cwd() {
+        let _guard = env_lock();
+        let cwd = tempfile::tempdir().unwrap();
+        let previous = std::env::current_dir().unwrap();
+        std::env::set_current_dir(cwd.path()).unwrap();
+        std::env::set_var(LATTICE_DEV_HOME_ENV, "target/dev-home");
+        let resolved = lattice_home_path().unwrap();
+        assert!(resolved.is_absolute());
+        assert!(resolved.ends_with("target/dev-home"));
+        let expected = std::env::current_dir().unwrap().join("target/dev-home");
+        assert_eq!(resolved, expected);
+        std::env::remove_var(LATTICE_DEV_HOME_ENV);
+        std::env::set_current_dir(previous).unwrap();
     }
 }

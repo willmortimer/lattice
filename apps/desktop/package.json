@@ -13,7 +13,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "tauri:dev": "LATTICE_DEV_HOME=../../target/dev-home tauri dev",
+    "tauri:dev": "LATTICE_DEV_HOME=\"$(cd ../.. && pwd)/target/dev-home\" tauri dev",
     "test": "vitest run"
   },
   "dependencies": {

@@ -27,7 +27,7 @@ Your map of content — start here and branch out.
 ## Journal
 
 - [[Journal/]] — daily notes and reflections
-- [[Journal/2026-07-17]] — example daily entry
+- [[Journal/{{date}}]] — example daily entry (date filled in at provision)
 
 ## Templates
 

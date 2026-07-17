@@ -76,7 +76,7 @@
 
         # Desktop shell
         # Vite HMR + native window (frontend hot-reload).
-        desktop-dev = "pnpm install && LATTICE_DEV_HOME=target/dev-home pnpm --filter @lattice/desktop tauri:dev";
+        desktop-dev = "pnpm install && pnpm --filter @lattice/desktop tauri:dev";
         # Browser-only React UI (demo workspace; no Tauri / no filesystem).
         desktop-web = "pnpm install && pnpm --filter @lattice/desktop dev";
         # Native window without Vite: reuse apps/desktop/dist if present,

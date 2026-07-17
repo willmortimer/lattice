@@ -31,6 +31,13 @@ pub struct WorkspaceManifest {
     pub version: u32,
     pub id: String,
     pub title: String,
+    /// Built-in template id used to provision this workspace, when known.
+    #[serde(
+        default,
+        rename = "sourceTemplate",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub source_template: Option<String>,
     #[serde(default, skip_serializing_if = "Capabilities::is_empty")]
     pub capabilities: Capabilities,
     #[serde(default, skip_serializing_if = "WorkspaceDefaults::is_default")]
@@ -94,6 +101,7 @@ impl WorkspaceManifest {
             version: SUPPORTED_VERSION,
             id: uuid::Uuid::now_v7().to_string(),
             title: title.into(),
+            source_template: None,
             capabilities: Capabilities::default(),
             defaults: WorkspaceDefaults::default(),
         }

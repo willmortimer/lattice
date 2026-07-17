@@ -163,11 +163,15 @@ test("demo template emits kitchen-sink browser fixture", () => {
 
   const source = emitDemoWorkspace(templates);
   assert.match(source, /export const demoSnapshot/);
+  assert.match(source, /"title": "First Look"/);
+  assert.match(source, /"sourceTemplate": "demo"/);
   assert.match(source, /"id": "0198-demo"/);
-  assert.match(source, /"id": "0198-demo-ada"/);
-  assert.match(source, /"id": "0198-demo-grace"/);
+  assert.match(source, /"id": "0198-demo-ada-lovelace"/);
+  assert.match(source, /"id": "0198-demo-grace-hopper"/);
   assert.match(source, /Research\/Architecture\.md/);
   assert.match(source, /Resources\/config\.json/);
+  assert.match(source, /Resources\/mark\.svg/);
+  assert.match(source, /"formatId": "file:text"/);
   assert.match(source, /CRM\.data/);
   assert.match(source, /mermaid/);
 });

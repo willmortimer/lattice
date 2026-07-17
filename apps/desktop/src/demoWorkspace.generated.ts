@@ -3,8 +3,8 @@ import type { WorkspaceSnapshot } from "./types";
 import type { DataAppSnapshot } from "./data/types";
 
 export const demoSnapshot: WorkspaceSnapshot = {
-  "root": "/Users/you/Lattice/Workspaces/Personal",
-  "title": "Personal",
+  "root": "/Users/you/Lattice/Workspaces/First Look",
+  "title": "First Look",
   "id": "0198-demo",
   "capabilities": [
     "pages",
@@ -15,6 +15,7 @@ export const demoSnapshot: WorkspaceSnapshot = {
     "quickNoteDirectory": "Inbox",
     "archiveDirectory": "Archive"
   },
+  "sourceTemplate": "demo",
   "manifestRevision": "demo:0",
   "resources": [
     {
@@ -99,7 +100,7 @@ export const demoSnapshot: WorkspaceSnapshot = {
     {
       "path": "Resources/mark.svg",
       "kind": "file",
-      "formatId": "file:image"
+      "formatId": "file:text"
     },
     {
       "path": "Resources/notes.txt",
@@ -181,10 +182,10 @@ export const demoDataApp: DataAppSnapshot = {
   ],
   "rows": [
     {
-      "id": "0198-demo-ada",
+      "id": "0198-demo-ada-lovelace",
       "values": {
         "id": {
-          "Text": "0198-demo-ada"
+          "Text": "0198-demo-ada-lovelace"
         },
         "name": {
           "Text": "Ada Lovelace"
@@ -195,10 +196,10 @@ export const demoDataApp: DataAppSnapshot = {
       }
     },
     {
-      "id": "0198-demo-grace",
+      "id": "0198-demo-grace-hopper",
       "values": {
         "id": {
-          "Text": "0198-demo-grace"
+          "Text": "0198-demo-grace-hopper"
         },
         "name": {
           "Text": "Grace Hopper"
@@ -229,5 +230,6 @@ export const demoTextFiles: Record<string, string> = {
   "Resources/config.json": "{\n  \"name\": \"Personal\",\n  \"version\": 1,\n  \"features\": {\n    \"canvas\": true,\n    \"search\": true\n  }\n}\n",
   "Resources/schema.yaml": "title: Sample schema\nversion: 1\nfields:\n  - name: id\n    type: text\n  - name: status\n    type: text\n",
   "Resources/notes.txt": "Sample plain text file.\n\nThis fixture runs in the browser shell without native filesystem access.\n",
-  "Resources/example.ts": "export function greet(name: string): string {\n  return `Hello, ${name}`;\n}\n"
+  "Resources/example.ts": "export function greet(name: string): string {\n  return `Hello, ${name}`;\n}\n",
+  "Resources/mark.svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"32\" height=\"32\" viewBox=\"0 0 32 32\" role=\"img\" aria-label=\"Lattice mark\">\n  <rect width=\"32\" height=\"32\" fill=\"#1a1a1a\"/>\n  <path fill=\"#e8a87c\" d=\"M8 22 L16 8 L24 22 Z\"/>\n</svg>\n"
 };

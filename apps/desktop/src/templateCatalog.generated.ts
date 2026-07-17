@@ -42,7 +42,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
     "preview": [
       "Home.md",
       "Projects/Example Project.md",
-      "Journal/2026-07-17.md",
+      "Journal/{{date}}.md",
       "Templates/Daily.md",
       "Inbox/",
       "Projects/",
@@ -296,6 +296,10 @@ export const GENERATED_TEMPLATE_CATALOG = [
       {
         "path": "Prompts",
         "purpose": "Reusable prompt patterns for synthesis, review, and extraction."
+      },
+      {
+        "path": "Templates",
+        "purpose": "Page templates with {{title}} and {{date}} placeholders."
       }
     ],
     "preview": [
@@ -306,6 +310,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "Inbox/",
       "Sources/",
       "Context/AGENTS.md",
+      "Templates/Daily.md",
       "Prompts/"
     ],
     "capabilities": [
@@ -314,7 +319,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
     ],
     "workspaceDefaults": {
       "quickNoteDirectory": "Inbox",
-      "templateDirectory": "Prompts"
+      "templateDirectory": "Templates"
     },
     "openOnCreate": "MOCs/Knowledge Base.md",
     "dataPackages": []

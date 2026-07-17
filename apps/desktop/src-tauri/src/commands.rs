@@ -20,6 +20,7 @@ const MAX_EDITOR_ASSET_BYTES: usize = 8 * 1024 * 1024;
 /// Everything the frontend needs to render a workspace: its identity plus
 /// the flat resource listing from [`Workspace::scan`].
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkspaceSnapshot {
     pub root: String,
     pub title: String,
@@ -27,6 +28,8 @@ pub struct WorkspaceSnapshot {
     pub resources: Vec<Resource>,
     pub capabilities: Vec<String>,
     pub defaults: WorkspaceDefaults,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_template: Option<String>,
     pub manifest_revision: String,
 }
 
@@ -499,6 +502,7 @@ fn snapshot_from_parts(
         resources,
         capabilities: manifest.capabilities.enabled.clone(),
         defaults: manifest.defaults.clone(),
+        source_template: manifest.source_template.clone(),
         manifest_revision,
     })
 }
