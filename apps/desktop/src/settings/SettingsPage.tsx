@@ -12,9 +12,11 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { inBrowser } from "../demo";
 import type { ThemeCatalogPayload } from "../theme";
 import type { WorkspaceStartupSettings } from "../lib/profile";
 import type { WorkspaceSnapshot } from "../types";
+import { HistoryRetentionSettings } from "./HistoryRetentionSettings";
 import type { AppSettings } from "./model";
 
 type SettingsSection =
@@ -463,6 +465,11 @@ export function SettingsPage({
                 <option value="aggressive">Aggressive</option>
               </select>
             </SettingRow>
+            <h2 className="settings-subsection">Revision history retention</h2>
+            <HistoryRetentionSettings
+              workspaceRoot={workspace.root || null}
+              nativeAvailable={!inBrowser}
+            />
           </>
         )}
 
