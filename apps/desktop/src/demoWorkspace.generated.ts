@@ -16,6 +16,17 @@ export const demoSnapshot: WorkspaceSnapshot = {
     "archiveDirectory": "Archive"
   },
   "sourceTemplate": "demo",
+  "directoryPurposes": {
+    "Inbox": "Drop quick captures here — triage into Product or Research.",
+    "Projects": "Active workstreams with a clear outcome.",
+    "Product": "Product narrative, vision, and roadmap pages.",
+    "Research": "Notes, comparisons, and diagrams.",
+    "Notebooks": "Reserved for notebook resources.",
+    "Canvases": "Spatial boards that link into workspace files.",
+    "Data": "Tabular seeds and imported tables.",
+    "Resources": "Ordinary files — JSON, YAML, code, images.",
+    "Archive": "Finished or inactive material."
+  },
   "manifestRevision": "demo:0",
   "resources": [
     {
