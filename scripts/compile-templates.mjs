@@ -24,6 +24,9 @@ const WORKSPACE_DEFAULT_KEYS = [
   "templateDirectory",
   "archiveDirectory",
 ];
+const FIELD_TYPES = new Set(["text", "long_text", "integer", "decimal", "boolean", "date"]);
+// Flat seed files (including binaries) are embedded via include_bytes!; declarative
+// dataPackages are JSON-only and materialized to SQLite at provision time.
 
 export function compileTemplates(root = TEMPLATE_ROOT) {
   const templates = readdirSync(root, { withFileTypes: true })
@@ -83,10 +86,11 @@ function loadTemplate(root, directoryName) {
   if (manifest.visibility === "sample" && manifest.category !== "Sample") {
     throw new Error(`${directoryName}: visibility sample requires category Sample`);
   }
+  const dataPackages = normalizeDataPackages(manifest.dataPackages, directoryName);
   if (
     !Array.isArray(manifest.files) ||
     !Array.isArray(manifest.directories) ||
-    manifest.files.length + manifest.directories.length > MAX_FILES
+    manifest.files.length + manifest.directories.length + dataPackages.length > MAX_FILES
   ) {
     throw new Error(`${directoryName}: too many files`);
   }
@@ -99,7 +103,11 @@ function loadTemplate(root, directoryName) {
       : normalizeOptionalPath(manifest.openOnCreate, directoryName, "openOnCreate");
 
   const destinations = new Set(["lattice.yaml"]);
-  for (const path of [...directories.map((entry) => entry.path), ...manifest.files]) {
+  for (const path of [
+    ...directories.map((entry) => entry.path),
+    ...manifest.files,
+    ...dataPackages.map((entry) => entry.path),
+  ]) {
     assertSafePath(path, directoryName);
     const normalized = posix.normalize(path);
     if (destinations.has(normalized)) {
@@ -119,6 +127,8 @@ function loadTemplate(root, directoryName) {
     totalBytes += stat.size;
     return { path, source };
   });
+  // Declarative dataPackages JSON counts toward the same 2MiB seed budget as flat files.
+  totalBytes += Buffer.byteLength(JSON.stringify(dataPackages), "utf8");
   if (totalBytes > MAX_BYTES) throw new Error(`${directoryName}: template exceeds size bound`);
   validateLinks(
     directoryName,
@@ -133,7 +143,102 @@ function loadTemplate(root, directoryName) {
     openOnCreate,
     recommended: Boolean(manifest.recommended),
     files,
+    dataPackages,
   };
+}
+
+function normalizeDataPackages(raw, template) {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) {
+    throw new Error(`${template}: dataPackages must be an array`);
+  }
+  return raw.map((entry, index) => normalizeDataPackage(entry, template, index));
+}
+
+function normalizeDataPackage(entry, template, index) {
+  const label = `dataPackages[${index}]`;
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    throw new Error(`${template}: ${label} must be an object`);
+  }
+  for (const key of ["path", "title", "table", "columns", "rows"]) {
+    if (entry[key] === undefined) {
+      throw new Error(`${template}: ${label} missing ${key}`);
+    }
+  }
+  if (typeof entry.path !== "string" || !entry.path.endsWith(".data")) {
+    throw new Error(`${template}: ${label}.path must end with .data`);
+  }
+  assertSafePath(entry.path, template);
+  if (typeof entry.title !== "string" || entry.title.trim().length === 0) {
+    throw new Error(`${template}: ${label}.title must be a non-empty string`);
+  }
+  if (typeof entry.table !== "string" || !isSqlIdentifier(entry.table)) {
+    throw new Error(`${template}: ${label}.table must be a valid SQL identifier`);
+  }
+  if (!Array.isArray(entry.columns) || entry.columns.length === 0) {
+    throw new Error(`${template}: ${label}.columns must be a non-empty array`);
+  }
+  if (!Array.isArray(entry.rows)) {
+    throw new Error(`${template}: ${label}.rows must be an array`);
+  }
+
+  const columns = [];
+  const columnNames = new Set();
+  for (const [columnIndex, column] of entry.columns.entries()) {
+    const columnLabel = `${label}.columns[${columnIndex}]`;
+    if (!column || typeof column !== "object" || Array.isArray(column)) {
+      throw new Error(`${template}: ${columnLabel} must be an object`);
+    }
+    if (typeof column.name !== "string" || !isSqlIdentifier(column.name)) {
+      throw new Error(`${template}: ${columnLabel}.name must be a valid SQL identifier`);
+    }
+    if (column.name === "id") {
+      throw new Error(`${template}: ${columnLabel}.name cannot be id (reserved)`);
+    }
+    if (columnNames.has(column.name)) {
+      throw new Error(`${template}: ${columnLabel} duplicate column ${column.name}`);
+    }
+    if (typeof column.type !== "string" || !FIELD_TYPES.has(column.type)) {
+      throw new Error(
+        `${template}: ${columnLabel}.type must be one of ${[...FIELD_TYPES].join(", ")}`,
+      );
+    }
+    columnNames.add(column.name);
+    columns.push({ name: column.name, type: column.type });
+  }
+
+  const rows = entry.rows.map((row, rowIndex) => {
+    const rowLabel = `${label}.rows[${rowIndex}]`;
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      throw new Error(`${template}: ${rowLabel} must be an object`);
+    }
+    for (const key of Object.keys(row)) {
+      if (!columnNames.has(key)) {
+        throw new Error(`${template}: ${rowLabel} unknown column ${key}`);
+      }
+      assertJsonCell(row[key], template, `${rowLabel}.${key}`);
+    }
+    return row;
+  });
+
+  return {
+    path: entry.path,
+    title: entry.title,
+    table: entry.table,
+    columns,
+    rows,
+  };
+}
+
+function assertJsonCell(value, template, label) {
+  const kind = value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
+  if (kind === "object" || kind === "array" || kind === "undefined" || kind === "function") {
+    throw new Error(`${template}: ${label} must be a JSON primitive or null`);
+  }
+}
+
+function isSqlIdentifier(name) {
+  return typeof name === "string" && /^[A-Za-z_][A-Za-z0-9_]*$/.test(name);
 }
 
 function normalizeDirectory(entry, template) {
@@ -253,6 +358,26 @@ function rustDirectory(directory) {
   return `SeedDirectory { path: ${rustString(directory.path)}, purpose: ${rustOptionString(directory.purpose)}, default_kind: ${rustOptionString(directory.defaultKind)}, icon: ${rustOptionString(directory.icon)} }`;
 }
 
+function rustDataColumn(column) {
+  return `SeedDataColumn { name: ${rustString(column.name)}, field_type: ${rustString(column.type)} }`;
+}
+
+function rustDataPackage(packageDef) {
+  const columns = packageDef.columns.map(rustDataColumn).join(",\n                ");
+  const rows = packageDef.rows.map((row) => rustString(JSON.stringify(row))).join(",\n                ");
+  return `SeedDataPackage {
+            path: ${rustString(packageDef.path)},
+            title: ${rustString(packageDef.title)},
+            table: ${rustString(packageDef.table)},
+            columns: &[
+                ${columns}
+            ],
+            rows_json: &[
+                ${rows}
+            ],
+        }`;
+}
+
 function emitRust(templates) {
   const entries = templates.map((template) => {
     const files = template.files
@@ -262,6 +387,7 @@ function emitRust(templates) {
       )
       .join(",\n            ");
     const directories = template.directories.map(rustDirectory).join(",\n            ");
+    const dataPackages = template.dataPackages.map(rustDataPackage).join(",\n            ");
     const defaults = template.workspaceDefaults;
     return `GeneratedTemplate {
         id: ${rustString(template.id)},
@@ -285,6 +411,9 @@ function emitRust(templates) {
         open_on_create: ${rustOptionString(template.openOnCreate)},
         files: &[
             ${files}
+        ],
+        data_packages: &[
+            ${dataPackages}
         ],
     }`;
   });
@@ -310,6 +439,7 @@ function emitTypeScript(templates) {
     capabilities: template.capabilities,
     workspaceDefaults: template.workspaceDefaults,
     ...(template.openOnCreate !== undefined ? { openOnCreate: template.openOnCreate } : {}),
+    dataPackages: template.dataPackages,
   }));
   return `// GENERATED by scripts/compile-templates.mjs — do not edit.
 export const GENERATED_TEMPLATE_CATALOG = ${JSON.stringify(catalog, null, 2)} as const;

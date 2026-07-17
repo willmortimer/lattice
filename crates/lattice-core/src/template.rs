@@ -1,7 +1,9 @@
 //! Validated, declarative workspace templates and safe provisioning.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use lattice_data::{CellValue, DataApp, FieldType};
 use lattice_storage::atomic_write_file;
 use serde::{Deserialize, Serialize};
 
@@ -26,6 +28,21 @@ pub(crate) struct SeedDirectory {
 }
 
 #[derive(Debug)]
+pub(crate) struct SeedDataColumn {
+    pub name: &'static str,
+    pub field_type: &'static str,
+}
+
+#[derive(Debug)]
+pub(crate) struct SeedDataPackage {
+    pub path: &'static str,
+    pub title: &'static str,
+    pub table: &'static str,
+    pub columns: &'static [SeedDataColumn],
+    pub rows_json: &'static [&'static str],
+}
+
+#[derive(Debug)]
 pub(crate) struct GeneratedTemplate {
     pub id: &'static str,
     pub order: u32,
@@ -45,6 +62,7 @@ pub(crate) struct GeneratedTemplate {
     pub archive_directory: Option<&'static str>,
     pub open_on_create: Option<&'static str>,
     pub files: &'static [SeedFile],
+    pub data_packages: &'static [SeedDataPackage],
 }
 
 include!("template_catalog.generated.rs");
@@ -311,8 +329,9 @@ fn provision_existing(
         for path in created_files.iter().rev() {
             let _ = std::fs::remove_file(path);
         }
+        // Data packages are non-empty directories; remove_dir_all clears nested SQLite files.
         for path in created_directories.iter().rev() {
-            let _ = std::fs::remove_dir(path);
+            let _ = std::fs::remove_dir_all(path);
         }
     }
     result
@@ -374,7 +393,183 @@ fn materialize_template(
             files.push(path);
         }
     }
+    for package in template.data_packages {
+        materialize_data_package(root, package, created_directories.as_deref_mut())?;
+    }
     Ok(())
+}
+
+fn materialize_data_package(
+    root: &Path,
+    package: &SeedDataPackage,
+    mut created_directories: Option<&mut Vec<PathBuf>>,
+) -> Result<()> {
+    let package_path = root.join(package.path);
+    if let Some(parent) = package_path.parent() {
+        create_directory_tree(parent, root, created_directories.as_deref_mut())?;
+    }
+
+    let package_existed = package_path.exists();
+    let mut app = match DataApp::create(&package_path, package.title, package.table) {
+        Ok(app) => app,
+        Err(error) => {
+            if !package_existed {
+                let _ = std::fs::remove_dir_all(&package_path);
+            }
+            return Err(map_data_error(error));
+        }
+    };
+    if let Some(directories) = created_directories.as_deref_mut() {
+        directories.push(package_path.clone());
+    }
+
+    let columns: Vec<(&str, FieldType)> = package
+        .columns
+        .iter()
+        .map(|column| {
+            Ok((
+                column.name,
+                parse_field_type(column.field_type).ok_or_else(|| Error::TemplateValidation {
+                    message: format!(
+                        "data package {} has unknown column type {:?}",
+                        package.path, column.field_type
+                    ),
+                })?,
+            ))
+        })
+        .collect::<Result<_>>()?;
+    app.add_columns(package.table, &columns)
+        .map_err(map_data_error)?;
+
+    let column_types: BTreeMap<&str, FieldType> = columns.into_iter().collect();
+    for row_json in package.rows_json {
+        let values = row_values_from_json(row_json, &column_types, package.path)?;
+        app.insert_row(package.table, &values)
+            .map_err(map_data_error)?;
+    }
+    Ok(())
+}
+
+fn row_values_from_json(
+    row_json: &str,
+    column_types: &BTreeMap<&str, FieldType>,
+    package_path: &str,
+) -> Result<BTreeMap<String, CellValue>> {
+    let parsed: serde_json::Map<String, serde_json::Value> = serde_json::from_str(row_json)
+        .map_err(|error| Error::TemplateValidation {
+            message: format!("data package {package_path} has invalid row JSON: {error}"),
+        })?;
+    let mut values = BTreeMap::new();
+    for (key, value) in parsed {
+        let field_type =
+            column_types
+                .get(key.as_str())
+                .copied()
+                .ok_or_else(|| Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path} row references unknown column {key:?}"
+                    ),
+                })?;
+        values.insert(key, cell_from_json(&value, field_type, package_path)?);
+    }
+    Ok(values)
+}
+
+fn cell_from_json(
+    value: &serde_json::Value,
+    field_type: FieldType,
+    package_path: &str,
+) -> Result<CellValue> {
+    match value {
+        serde_json::Value::Null => Ok(CellValue::Null),
+        serde_json::Value::Bool(flag) => match field_type {
+            FieldType::Boolean => Ok(CellValue::Boolean(*flag)),
+            FieldType::Text | FieldType::LongText => Ok(CellValue::Text(flag.to_string())),
+            _ => Err(Error::TemplateValidation {
+                message: format!(
+                    "data package {package_path}: boolean value incompatible with {field_type}"
+                ),
+            }),
+        },
+        serde_json::Value::Number(number) => {
+            match field_type {
+                FieldType::Integer => number.as_i64().map(CellValue::Integer).ok_or_else(|| {
+                    Error::TemplateValidation {
+                        message: format!(
+                            "data package {package_path}: number {number} is not a valid integer"
+                        ),
+                    }
+                }),
+                FieldType::Decimal => number.as_f64().map(CellValue::Decimal).ok_or_else(|| {
+                    Error::TemplateValidation {
+                        message: format!(
+                            "data package {package_path}: number {number} is not a valid decimal"
+                        ),
+                    }
+                }),
+                FieldType::Boolean => number
+                    .as_i64()
+                    .map(|n| CellValue::Boolean(n != 0))
+                    .ok_or_else(|| Error::TemplateValidation {
+                        message: format!(
+                            "data package {package_path}: number {number} is not a valid boolean"
+                        ),
+                    }),
+                FieldType::Text | FieldType::LongText | FieldType::Date => {
+                    Ok(CellValue::Text(number.to_string()))
+                }
+            }
+        }
+        serde_json::Value::String(text) => {
+            match field_type {
+                FieldType::Text | FieldType::LongText => Ok(CellValue::Text(text.clone())),
+                FieldType::Date => Ok(CellValue::Date(text.clone())),
+                FieldType::Boolean => Ok(CellValue::Boolean(matches!(
+                    text.to_ascii_lowercase().as_str(),
+                    "1" | "true" | "yes"
+                ))),
+                FieldType::Integer => text.parse::<i64>().map(CellValue::Integer).map_err(|_| {
+                    Error::TemplateValidation {
+                        message: format!(
+                            "data package {package_path}: {text:?} is not a valid integer"
+                        ),
+                    }
+                }),
+                FieldType::Decimal => text.parse::<f64>().map(CellValue::Decimal).map_err(|_| {
+                    Error::TemplateValidation {
+                        message: format!(
+                            "data package {package_path}: {text:?} is not a valid decimal"
+                        ),
+                    }
+                }),
+            }
+        }
+        serde_json::Value::Array(_) | serde_json::Value::Object(_) => {
+            Err(Error::TemplateValidation {
+                message: format!(
+                    "data package {package_path}: row cells must be JSON primitives or null"
+                ),
+            })
+        }
+    }
+}
+
+fn parse_field_type(value: &str) -> Option<FieldType> {
+    match value {
+        "text" => Some(FieldType::Text),
+        "long_text" => Some(FieldType::LongText),
+        "integer" => Some(FieldType::Integer),
+        "decimal" => Some(FieldType::Decimal),
+        "boolean" => Some(FieldType::Boolean),
+        "date" => Some(FieldType::Date),
+        _ => None,
+    }
+}
+
+fn map_data_error(error: lattice_data::Error) -> Error {
+    Error::TemplateValidation {
+        message: error.to_string(),
+    }
 }
 
 fn create_directory_tree(
@@ -440,6 +635,7 @@ fn validate_target(
         for path in std::iter::once(WORKSPACE_MANIFEST_FILENAME)
             .chain(template.directories.iter().map(|directory| directory.path))
             .chain(template.files.iter().map(|file| file.path))
+            .chain(template.data_packages.iter().map(|package| package.path))
         {
             let candidate = target.join(path);
             if candidate.exists() {
@@ -510,6 +706,7 @@ pub fn apply_template(root: &Path, template: WorkspaceTemplate) -> Result<()> {
         .iter()
         .map(|directory| directory.path)
         .chain(generated.files.iter().map(|file| file.path))
+        .chain(generated.data_packages.iter().map(|package| package.path))
     {
         let candidate = root.join(path);
         if candidate.exists() {
@@ -662,18 +859,36 @@ mod tests {
         })
         .unwrap();
         assert_eq!(
-            outcome.workspace.manifest().defaults.daily_note_directory.as_deref(),
+            outcome
+                .workspace
+                .manifest()
+                .defaults
+                .daily_note_directory
+                .as_deref(),
             Some("Journal")
         );
         assert_eq!(
-            outcome.workspace.manifest().defaults.template_directory.as_deref(),
+            outcome
+                .workspace
+                .manifest()
+                .defaults
+                .template_directory
+                .as_deref(),
             Some("Templates")
         );
         assert_eq!(
-            outcome.workspace.manifest().defaults.archive_directory.as_deref(),
+            outcome
+                .workspace
+                .manifest()
+                .defaults
+                .archive_directory
+                .as_deref(),
             Some("Archive")
         );
-        assert_eq!(WorkspaceTemplate::Blank.descriptor().category, "Data & Advanced");
+        assert_eq!(
+            WorkspaceTemplate::Blank.descriptor().category,
+            "Data & Advanced"
+        );
         assert_eq!(WorkspaceTemplate::Project.descriptor().category, "Work");
         assert_eq!(
             WorkspaceTemplate::Research.descriptor().category,
@@ -718,6 +933,7 @@ mod tests {
             archive_directory: None,
             open_on_create: None,
             files: FILES,
+            data_packages: &[],
         };
         let directory = tempfile::tempdir().unwrap();
         let plan = WorkspaceCreationPlan {
@@ -729,6 +945,127 @@ mod tests {
         assert!(provision_existing(&plan, &template).is_err());
         assert!(!directory.path().join("Home.md").exists());
         assert!(!directory.path().join("Inbox").exists());
+        assert!(!directory.path().join(WORKSPACE_MANIFEST_FILENAME).exists());
+    }
+
+    #[test]
+    fn provisioned_data_packages_are_readable_with_seeded_rows() {
+        static COLUMNS: &[SeedDataColumn] = &[
+            SeedDataColumn {
+                name: "name",
+                field_type: "text",
+            },
+            SeedDataColumn {
+                name: "email",
+                field_type: "text",
+            },
+        ];
+        static ROWS: &[&str] = &[
+            r#"{"name":"Ada Lovelace","email":"ada@example.com"}"#,
+            r#"{"name":"Grace Hopper","email":"grace@example.com"}"#,
+        ];
+        static PACKAGES: &[SeedDataPackage] = &[SeedDataPackage {
+            path: "Data/Contacts.data",
+            title: "Contacts",
+            table: "contacts",
+            columns: COLUMNS,
+            rows_json: ROWS,
+        }];
+        static FILES: &[SeedFile] = &[SeedFile {
+            path: "Home.md",
+            bytes: b"# Home\n",
+        }];
+        let template = GeneratedTemplate {
+            id: "contacts-fixture",
+            order: 1,
+            name: "Contacts Fixture",
+            category: "Test",
+            description: "Synthetic data package fixture",
+            visibility: "gallery",
+            recommended: false,
+            recommended_title: "Contacts",
+            directories: &[],
+            preview: &["Home.md", "Data/Contacts.data"],
+            capabilities: &["pages", "sqlite"],
+            quick_note_directory: "Inbox",
+            daily_note_directory: None,
+            attachments_directory: None,
+            template_directory: None,
+            archive_directory: None,
+            open_on_create: None,
+            files: FILES,
+            data_packages: PACKAGES,
+        };
+
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("ContactsWorkspace");
+        create_workspace_at(&root, "Contacts", &template, false).unwrap();
+
+        let package_path = root.join("Data/Contacts.data");
+        let app = DataApp::open(&package_path).unwrap();
+        assert_eq!(app.title(), "Contacts");
+        assert_eq!(app.default_table(), "contacts");
+        let rows = app.list_rows("contacts", 10, 0).unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(
+            rows[0].values.get("name"),
+            Some(&CellValue::Text("Ada Lovelace".into()))
+        );
+        assert_eq!(
+            rows[1].values.get("email"),
+            Some(&CellValue::Text("grace@example.com".into()))
+        );
+    }
+
+    #[test]
+    fn existing_folder_rolls_back_failed_data_package_materialization() {
+        static COLUMNS: &[SeedDataColumn] = &[SeedDataColumn {
+            name: "name",
+            field_type: "not_a_real_type",
+        }];
+        static PACKAGES: &[SeedDataPackage] = &[SeedDataPackage {
+            path: "Data/Broken.data",
+            title: "Broken",
+            table: "broken",
+            columns: COLUMNS,
+            rows_json: &[],
+        }];
+        static FILES: &[SeedFile] = &[SeedFile {
+            path: "Home.md",
+            bytes: b"# Home\n",
+        }];
+        let template = GeneratedTemplate {
+            id: "broken-data",
+            order: 1,
+            name: "Broken Data",
+            category: "Test",
+            description: "Fails while seeding a data package",
+            visibility: "gallery",
+            recommended: false,
+            recommended_title: "Broken",
+            directories: &[],
+            preview: &["Home.md"],
+            capabilities: &["pages", "sqlite"],
+            quick_note_directory: "Inbox",
+            daily_note_directory: None,
+            attachments_directory: None,
+            template_directory: None,
+            archive_directory: None,
+            open_on_create: None,
+            files: FILES,
+            data_packages: PACKAGES,
+        };
+        let directory = tempfile::tempdir().unwrap();
+        let plan = WorkspaceCreationPlan {
+            target: directory.path().to_path_buf(),
+            title: "Broken".into(),
+            template_id: "broken-data".into(),
+            mode: WorkspaceCreationMode::ExistingDirectory,
+        };
+        assert!(provision_existing(&plan, &template).is_err());
+        assert!(!directory.path().join("Home.md").exists());
+        assert!(!directory.path().join("Data").exists());
+        assert!(!directory.path().join("Data/Broken.data").exists());
         assert!(!directory.path().join(WORKSPACE_MANIFEST_FILENAME).exists());
     }
 }

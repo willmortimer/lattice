@@ -118,3 +118,98 @@ test("template compiler accepts version 1 fixtures during migration", () => {
   const templates = compileTemplates(fixture({ version: 1 }));
   assert.equal(templates[0].version, 1);
 });
+
+test("template compiler accepts declarative dataPackages", () => {
+  const templates = compileTemplates(
+    fixture({
+      directories: ["Data"],
+      dataPackages: [
+        {
+          path: "Data/Contacts.data",
+          title: "Contacts",
+          table: "contacts",
+          columns: [
+            { name: "name", type: "text" },
+            { name: "email", type: "text" },
+          ],
+          rows: [{ name: "Ada", email: "ada@example.com" }],
+        },
+      ],
+    }),
+  );
+  assert.equal(templates[0].dataPackages.length, 1);
+  assert.equal(templates[0].dataPackages[0].path, "Data/Contacts.data");
+  assert.equal(templates[0].dataPackages[0].rows.length, 1);
+});
+
+test("template compiler rejects invalid dataPackages", () => {
+  assert.throws(
+    () =>
+      compileTemplates(
+        fixture({
+          dataPackages: [
+            {
+              path: "Contacts.sqlite",
+              title: "Contacts",
+              table: "contacts",
+              columns: [{ name: "name", type: "text" }],
+              rows: [],
+            },
+          ],
+        }),
+      ),
+    /must end with \.data/,
+  );
+  assert.throws(
+    () =>
+      compileTemplates(
+        fixture({
+          dataPackages: [
+            {
+              path: "Contacts.data",
+              title: "Contacts",
+              table: "contacts",
+              columns: [{ name: "name", type: "text" }],
+              rows: [{ name: "Ada", unknown: true }],
+            },
+          ],
+        }),
+      ),
+    /unknown column/,
+  );
+  assert.throws(
+    () =>
+      compileTemplates(
+        fixture({
+          dataPackages: [
+            {
+              path: "Contacts.data",
+              title: "Contacts",
+              table: "contacts",
+              columns: [{ name: "id", type: "text" }],
+              rows: [],
+            },
+          ],
+        }),
+      ),
+    /cannot be id/,
+  );
+  assert.throws(
+    () =>
+      compileTemplates(
+        fixture({
+          files: ["Home.md", "Contacts.data"],
+          dataPackages: [
+            {
+              path: "Contacts.data",
+              title: "Contacts",
+              table: "contacts",
+              columns: [{ name: "name", type: "text" }],
+              rows: [],
+            },
+          ],
+        }),
+      ),
+    /duplicate destination/,
+  );
+});

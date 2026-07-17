@@ -8,7 +8,8 @@ Accepted.
 
 Built-in workspace templates are packages under
 `templates/workspaces/<id>/`. A versioned manifest declares presentation,
-ordinary seed files, directories, capabilities, defaults, and visibility.
+ordinary seed files, directories, optional declarative `dataPackages`,
+capabilities, defaults, and visibility.
 `pnpm compile-templates` validates packages and generates the embedded Rust
 catalog plus the browser-demo TypeScript catalog.
 
