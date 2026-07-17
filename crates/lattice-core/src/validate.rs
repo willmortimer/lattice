@@ -61,6 +61,28 @@ impl Workspace {
             self.validate_package(&resource, &mut diagnostics);
         }
 
+        for (path, meta) in &self.manifest().directories {
+            if path.trim().is_empty() {
+                diagnostics.push(Diagnostic {
+                    severity: Severity::Warning,
+                    path: PathBuf::from(crate::WORKSPACE_MANIFEST_FILENAME),
+                    message: "directories entry has an empty path key".to_string(),
+                });
+                continue;
+            }
+            if meta
+                .purpose
+                .as_ref()
+                .is_some_and(|purpose| purpose.trim().is_empty())
+            {
+                diagnostics.push(Diagnostic {
+                    severity: Severity::Warning,
+                    path: PathBuf::from(path),
+                    message: "directory purpose is empty in lattice.yaml".to_string(),
+                });
+            }
+        }
+
         Ok(diagnostics)
     }
 
@@ -101,5 +123,26 @@ mod tests {
         assert_eq!(findings.len(), 1);
         assert_eq!(findings[0].severity, Severity::Error);
         assert!(findings[0].message.contains("app.yaml"));
+    }
+
+    #[test]
+    fn empty_directory_purpose_is_a_warning() {
+        let dir = tempfile::tempdir().unwrap();
+        Workspace::init(dir.path(), "Purpose").unwrap();
+        let manifest_path = dir.path().join(crate::WORKSPACE_MANIFEST_FILENAME);
+        let mut text = std::fs::read_to_string(&manifest_path).unwrap();
+        text.push_str("\ndirectories:\n  Inbox:\n    purpose: \"   \"\n");
+        std::fs::write(&manifest_path, text).unwrap();
+        let ws = Workspace::open(dir.path()).unwrap();
+
+        let findings = ws.validate().unwrap();
+        assert!(
+            findings
+                .iter()
+                .any(|finding| finding.severity == Severity::Warning
+                    && finding.path == PathBuf::from("Inbox")
+                    && finding.message.contains("purpose is empty")),
+            "expected empty-purpose warning, got {findings:?}"
+        );
     }
 }

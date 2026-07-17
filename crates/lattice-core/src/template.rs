@@ -809,6 +809,22 @@ pub fn template_catalog_ids() -> Vec<&'static str> {
         .collect()
 }
 
+/// All built-in templates in catalog declaration order.
+pub fn template_catalog() -> Vec<TemplateDescriptor> {
+    GENERATED_TEMPLATES
+        .iter()
+        .map(TemplateDescriptor::from_generated)
+        .collect()
+}
+
+/// Look up one template by id or alias ([`resolve_template_id`]).
+pub fn template_descriptor(id: &str) -> Option<TemplateDescriptor> {
+    let canonical = resolve_template_id(id)?;
+    Some(TemplateDescriptor::from_generated(
+        generated(canonical)?,
+    ))
+}
+
 fn strings(values: &[&str]) -> Vec<String> {
     values.iter().map(|value| (*value).to_string()).collect()
 }
@@ -1121,6 +1137,22 @@ mod tests {
         assert_eq!(resolve_template_id("nope"), None);
         assert!(template_catalog_ids().contains(&"second-brain"));
         assert!(template_catalog_ids().contains(&"dev-notebook"));
+    }
+
+    #[test]
+    fn template_catalog_and_descriptor_match_generated_order() {
+        let catalog = template_catalog();
+        assert_eq!(
+            catalog.iter().map(|template| template.id.as_str()).collect::<Vec<_>>(),
+            template_catalog_ids()
+                .into_iter()
+                .map(|id| id)
+                .collect::<Vec<_>>()
+        );
+        let personal = template_descriptor("default").expect("alias resolves");
+        assert_eq!(personal.id, "personal");
+        assert_eq!(personal.name, "Personal");
+        assert!(template_descriptor("nope").is_none());
     }
 
     #[test]

@@ -169,3 +169,61 @@ fn validate_exit_code_is_one_when_error_diagnostic_present() {
 fn predicates_contains(s: &str) -> predicates::str::ContainsPredicate {
     predicates::prelude::predicate::str::contains(s.to_string())
 }
+
+#[test]
+fn templates_list_includes_personal_and_demo() {
+    lattice()
+        .arg("templates")
+        .arg("list")
+        .assert()
+        .success()
+        .stdout(predicates_contains("personal"))
+        .stdout(predicates_contains("Personal"))
+        .stdout(predicates_contains("demo"))
+        .stdout(predicates_contains("gallery"))
+        .stdout(predicates_contains("sample"));
+}
+
+#[test]
+fn templates_list_json_emits_array() {
+    let output = lattice()
+        .arg("templates")
+        .arg("list")
+        .arg("--json")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let value: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let arr = value.as_array().unwrap();
+    assert!(arr.iter().any(|item| item["id"] == "personal"));
+    assert!(arr.iter().any(|item| item["id"] == "demo"));
+}
+
+#[test]
+fn templates_show_resolves_aliases_and_unknown_fails() {
+    lattice()
+        .arg("templates")
+        .arg("show")
+        .arg("default")
+        .assert()
+        .success()
+        .stdout(predicates_contains("id: personal"))
+        .stdout(predicates_contains("name: Personal"));
+
+    lattice()
+        .arg("templates")
+        .arg("show")
+        .arg("first-look")
+        .assert()
+        .success()
+        .stdout(predicates_contains("id: demo"));
+
+    lattice()
+        .arg("templates")
+        .arg("show")
+        .arg("not-a-template")
+        .assert()
+        .failure()
+        .code(1);
+}
