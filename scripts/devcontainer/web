@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Browser-only desktop demo (Vite). Binds 0.0.0.0:5173 for published ports / Serve.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "${ROOT}"
+
+if ! command -v pnpm >/dev/null 2>&1; then
+  corepack prepare pnpm@11.11.0 --activate
+fi
+
+pnpm install
+exec pnpm --filter @lattice/desktop dev -- --host 0.0.0.0 --port 5173

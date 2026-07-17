@@ -88,6 +88,10 @@ facts.
 
 ## Development and verification
 
+Linux Dev Container / DevCell cell demos (browser UI + site, no Tauri) use
+`.devcontainer/` and `scripts/devcontainer/` — see `docs/dev/devcontainer.md`.
+Nix remains the source of truth for the native desktop shell.
+
 Prefer the documented Nix entry points:
 
 ```sh
