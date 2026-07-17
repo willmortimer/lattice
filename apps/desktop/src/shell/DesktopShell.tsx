@@ -8,6 +8,7 @@ import { SearchPane } from "../SearchPane";
 import { KindMark } from "../KindMark";
 import { QUICK_NOTE_SHORTCUT } from "../quickNoteWindow";
 import { showNativeResourceMenu } from "../lib/nativeMenus";
+import { directoryPurposesFromCatalog } from "../lib/templates";
 import { SettingsPage } from "../settings/SettingsPage";
 import { BrandMark } from "../shell/BrandMark";
 import { HomeDashboard } from "../shell/HomeDashboard";
@@ -19,6 +20,7 @@ import { isUnsaved, saveIndicatorText } from "../editor/saveState";
 import { searchResourceLinks } from "../lib/resourceLinks";
 import { Button, DialogBackdrop, DialogPopup, DialogPortal, DialogRoot, DialogTitle, IconButton, MenuItem, MenuPopup, MenuPortal, MenuPositioner, MenuRoot, MenuSeparator, MenuTrigger, TooltipProvider } from "@lattice/ui";
 import { ArrowLeft, ArrowRight, ArrowUpRight, ChevronDown, CircleAlert, FilePlus2, Files, Home, Menu as MenuIcon, MoreHorizontal, PanelRight, Plus, Search, Settings, Sparkles, Table2, X } from "lucide-react";
+import { useMemo } from "react";
 import type { useDesktopController } from "../controllers/useDesktopController";
 
 export interface DesktopShellProps { model: ReturnType<typeof useDesktopController>; }
@@ -41,6 +43,8 @@ export function DesktopShell({ model }: DesktopShellProps) {
     navigateHistory, closeTab, reorderTab, beginSidebarResize, commitTitle, updateWorkspaceSettings,
     handleOpenWiki, openLinkTarget,
   } = model;
+
+  const directoryPurposes = useMemo(() => directoryPurposesFromCatalog(), []);
 
   if (!snapshot) {
     return (
@@ -220,6 +224,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
               resources={snapshot.resources}
               selectedPath={selected?.path ?? null}
               onSelect={handleSelect}
+              directoryPurposes={directoryPurposes}
               onContextMenu={(resource) =>
                 void showNativeResourceMenu({
                   open: () => void handleSelect(resource),

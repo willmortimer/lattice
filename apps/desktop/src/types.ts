@@ -30,6 +30,10 @@ export interface WorkspaceSnapshot {
   capabilities: string[];
   defaults: {
     quickNoteDirectory: string;
+    dailyNoteDirectory?: string | null;
+    attachmentsDirectory?: string | null;
+    templateDirectory?: string | null;
+    archiveDirectory?: string | null;
   };
   manifestRevision: string;
 }

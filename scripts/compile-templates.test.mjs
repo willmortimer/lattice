@@ -6,6 +6,14 @@ import { tmpdir } from "node:os";
 
 import { compileTemplates } from "./compile-templates.mjs";
 
+const CATEGORIES = [
+  "Everyday",
+  "Work",
+  "Knowledge & Research",
+  "Data & Advanced",
+  "Sample",
+];
+
 test("workspace template packages validate", () => {
   const templates = compileTemplates();
   assert.deepEqual(
@@ -13,6 +21,21 @@ test("workspace template packages validate", () => {
     ["personal", "project", "research", "data-lab", "blank"],
   );
   assert.equal(templates.filter((template) => template.recommended).length, 1);
+  assert.ok(templates.every((template) => template.version === 2));
+  assert.ok(templates.every((template) => CATEGORIES.includes(template.category)));
+  assert.equal(templates.find((template) => template.id === "personal")?.category, "Everyday");
+  assert.equal(templates.find((template) => template.id === "project")?.category, "Work");
+  assert.equal(
+    templates.find((template) => template.id === "research")?.category,
+    "Knowledge & Research",
+  );
+  assert.equal(
+    templates.find((template) => template.id === "data-lab")?.category,
+    "Data & Advanced",
+  );
+  assert.equal(templates.find((template) => template.id === "blank")?.category, "Data & Advanced");
+  assert.equal(templates.find((template) => template.id === "demo")?.category, "Sample");
+  assert.equal(templates.find((template) => template.id === "team")?.category, "Work");
 });
 
 function fixture(overrides = {}, content = "# Home\n") {
@@ -21,11 +44,11 @@ function fixture(overrides = {}, content = "# Home\n") {
   mkdirSync(join(template, "files"), { recursive: true });
   const manifest = {
     format: "lattice-workspace-template",
-    version: 1,
+    version: 2,
     id: "fixture",
     order: 1,
     name: "Fixture",
-    category: "Test",
+    category: "Everyday",
     description: "Fixture",
     visibility: "gallery",
     recommendedTitle: "Fixture",
@@ -53,4 +76,45 @@ test("template compiler rejects unresolved seeded links", () => {
     () => compileTemplates(fixture({}, "# Home\n\n[[Missing]]\n")),
     /unresolved link/,
   );
+});
+
+test("template compiler accepts directory objects and openOnCreate", () => {
+  const templates = compileTemplates(
+    fixture({
+      directories: [
+        { path: "Inbox", purpose: "Raw captures", defaultKind: "page", icon: "inbox" },
+        "Archive",
+      ],
+      workspaceDefaults: {
+        quickNoteDirectory: "Inbox",
+        dailyNoteDirectory: "Journal",
+        archiveDirectory: "Archive",
+      },
+      openOnCreate: "Home.md",
+    }),
+  );
+  assert.equal(templates.length, 1);
+  assert.deepEqual(templates[0].directories, [
+    { path: "Inbox", purpose: "Raw captures", defaultKind: "page", icon: "inbox" },
+    { path: "Archive" },
+  ]);
+  assert.equal(templates[0].openOnCreate, "Home.md");
+  assert.equal(templates[0].workspaceDefaults.dailyNoteDirectory, "Journal");
+});
+
+test("template compiler rejects invalid categories and sample mismatches", () => {
+  assert.throws(() => compileTemplates(fixture({ category: "Focused work" })), /invalid category/);
+  assert.throws(
+    () => compileTemplates(fixture({ category: "Sample", visibility: "gallery" })),
+    /reserved for visibility: sample/,
+  );
+  assert.throws(
+    () => compileTemplates(fixture({ category: "Everyday", visibility: "sample" })),
+    /requires category Sample/,
+  );
+});
+
+test("template compiler accepts version 1 fixtures during migration", () => {
+  const templates = compileTemplates(fixture({ version: 1 }));
+  assert.equal(templates[0].version, 1);
 });

@@ -47,7 +47,8 @@ pub use resource_runtime::{
 };
 pub use template::{
     apply_template, init_with_template, DefaultWorkspaceStatus, ProvisionDiagnostic,
-    TemplateDescriptor, TemplateVisibility, WorkspaceCreationMode, WorkspaceCreationPlan,
+    TemplateDescriptor, TemplateDirectory, TemplateVisibility, WorkspaceCreationMode,
+    WorkspaceCreationPlan,
     WorkspaceProvisionOutcome, WorkspaceProvisioner, WorkspaceTemplate,
 };
 pub use validate::{Diagnostic, Severity};
