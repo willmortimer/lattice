@@ -18,6 +18,14 @@ pub(crate) struct SeedFile {
 }
 
 #[derive(Debug)]
+pub(crate) struct SeedDirectory {
+    pub path: &'static str,
+    pub purpose: Option<&'static str>,
+    pub default_kind: Option<&'static str>,
+    pub icon: Option<&'static str>,
+}
+
+#[derive(Debug)]
 pub(crate) struct GeneratedTemplate {
     pub id: &'static str,
     pub order: u32,
@@ -27,10 +35,15 @@ pub(crate) struct GeneratedTemplate {
     pub visibility: &'static str,
     pub recommended: bool,
     pub recommended_title: &'static str,
-    pub directories: &'static [&'static str],
+    pub directories: &'static [SeedDirectory],
     pub preview: &'static [&'static str],
     pub capabilities: &'static [&'static str],
     pub quick_note_directory: &'static str,
+    pub daily_note_directory: Option<&'static str>,
+    pub attachments_directory: Option<&'static str>,
+    pub template_directory: Option<&'static str>,
+    pub archive_directory: Option<&'static str>,
+    pub open_on_create: Option<&'static str>,
     pub files: &'static [SeedFile],
 }
 
@@ -46,6 +59,18 @@ pub enum TemplateVisibility {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TemplateDirectory {
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purpose: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TemplateDescriptor {
     pub id: String,
     pub order: u32,
@@ -55,10 +80,20 @@ pub struct TemplateDescriptor {
     pub visibility: TemplateVisibility,
     pub recommended: bool,
     pub recommended_title: String,
-    pub directories: Vec<String>,
+    pub directories: Vec<TemplateDirectory>,
     pub preview: Vec<String>,
     pub capabilities: Vec<String>,
     pub quick_note_directory: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub daily_note_directory: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attachments_directory: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template_directory: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub archive_directory: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub open_on_create: Option<String>,
 }
 
 impl TemplateDescriptor {
@@ -76,10 +111,24 @@ impl TemplateDescriptor {
             },
             recommended: template.recommended,
             recommended_title: template.recommended_title.into(),
-            directories: strings(template.directories),
+            directories: template
+                .directories
+                .iter()
+                .map(|directory| TemplateDirectory {
+                    path: directory.path.into(),
+                    purpose: directory.purpose.map(str::to_string),
+                    default_kind: directory.default_kind.map(str::to_string),
+                    icon: directory.icon.map(str::to_string),
+                })
+                .collect(),
             preview: strings(template.preview),
             capabilities: strings(template.capabilities),
             quick_note_directory: template.quick_note_directory.into(),
+            daily_note_directory: template.daily_note_directory.map(str::to_string),
+            attachments_directory: template.attachments_directory.map(str::to_string),
+            template_directory: template.template_directory.map(str::to_string),
+            archive_directory: template.archive_directory.map(str::to_string),
+            open_on_create: template.open_on_create.map(str::to_string),
         }
     }
 }
@@ -311,7 +360,7 @@ fn materialize_template(
     mut created_directories: Option<&mut Vec<PathBuf>>,
 ) -> Result<()> {
     for directory in template.directories {
-        let path = root.join(directory);
+        let path = root.join(directory.path);
         create_directory_tree(&path, root, created_directories.as_deref_mut())?;
     }
     for file in template.files {
@@ -355,10 +404,18 @@ fn manifest_for(title: &str, template: &GeneratedTemplate) -> WorkspaceManifest 
     manifest.capabilities = Capabilities {
         enabled: strings(template.capabilities),
     };
-    manifest.defaults = WorkspaceDefaults {
-        quick_note_directory: template.quick_note_directory.into(),
-    };
+    manifest.defaults = defaults_for(template);
     manifest
+}
+
+fn defaults_for(template: &GeneratedTemplate) -> WorkspaceDefaults {
+    WorkspaceDefaults {
+        quick_note_directory: template.quick_note_directory.into(),
+        daily_note_directory: template.daily_note_directory.map(str::to_string),
+        attachments_directory: template.attachments_directory.map(str::to_string),
+        template_directory: template.template_directory.map(str::to_string),
+        archive_directory: template.archive_directory.map(str::to_string),
+    }
 }
 
 fn validate_target(
@@ -381,7 +438,7 @@ fn validate_target(
     }
     if mode == WorkspaceCreationMode::ExistingDirectory {
         for path in std::iter::once(WORKSPACE_MANIFEST_FILENAME)
-            .chain(template.directories.iter().copied())
+            .chain(template.directories.iter().map(|directory| directory.path))
             .chain(template.files.iter().map(|file| file.path))
         {
             let candidate = target.join(path);
@@ -451,7 +508,7 @@ pub fn apply_template(root: &Path, template: WorkspaceTemplate) -> Result<()> {
     for path in generated
         .directories
         .iter()
-        .copied()
+        .map(|directory| directory.path)
         .chain(generated.files.iter().map(|file| file.path))
     {
         let candidate = root.join(path);
@@ -471,7 +528,7 @@ pub fn apply_template(root: &Path, template: WorkspaceTemplate) -> Result<()> {
     manifest.capabilities = Capabilities {
         enabled: strings(generated.capabilities),
     };
-    manifest.defaults.quick_note_directory = generated.quick_note_directory.into();
+    manifest.defaults = defaults_for(generated);
     manifest.save(&root.join(WORKSPACE_MANIFEST_FILENAME))?;
     validate_instantiated_template(&Workspace::open(root)?)
 }
@@ -580,10 +637,67 @@ mod tests {
     }
 
     #[test]
+    fn provisioned_templates_persist_rich_defaults_and_categories() {
+        let personal = WorkspaceTemplate::Personal.descriptor();
+        assert_eq!(personal.category, "Everyday");
+        assert_eq!(personal.open_on_create.as_deref(), Some("Home.md"));
+        assert_eq!(personal.daily_note_directory.as_deref(), Some("Journal"));
+        assert_eq!(personal.template_directory.as_deref(), Some("Templates"));
+        assert_eq!(personal.archive_directory.as_deref(), Some("Archive"));
+        assert_eq!(
+            personal
+                .directories
+                .iter()
+                .find(|directory| directory.path == "Inbox")
+                .and_then(|directory| directory.purpose.as_deref()),
+            Some("Drop raw captures here — triage them into Projects or Library.")
+        );
+
+        let directory = tempfile::tempdir().unwrap();
+        let outcome = WorkspaceProvisioner::provision(&WorkspaceCreationPlan {
+            target: directory.path().join("Personal"),
+            title: "Personal".into(),
+            template_id: "personal".into(),
+            mode: WorkspaceCreationMode::NewDirectory,
+        })
+        .unwrap();
+        assert_eq!(
+            outcome.workspace.manifest().defaults.daily_note_directory.as_deref(),
+            Some("Journal")
+        );
+        assert_eq!(
+            outcome.workspace.manifest().defaults.template_directory.as_deref(),
+            Some("Templates")
+        );
+        assert_eq!(
+            outcome.workspace.manifest().defaults.archive_directory.as_deref(),
+            Some("Archive")
+        );
+        assert_eq!(WorkspaceTemplate::Blank.descriptor().category, "Data & Advanced");
+        assert_eq!(WorkspaceTemplate::Project.descriptor().category, "Work");
+        assert_eq!(
+            WorkspaceTemplate::Research.descriptor().category,
+            "Knowledge & Research"
+        );
+        assert_eq!(
+            WorkspaceTemplate::DataLab.descriptor().category,
+            "Data & Advanced"
+        );
+        assert_eq!(WorkspaceTemplate::Demo.descriptor().category, "Sample");
+        assert_eq!(WorkspaceTemplate::Team.descriptor().category, "Work");
+    }
+
+    #[test]
     fn existing_folder_rolls_back_when_final_validation_fails() {
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",
             bytes: b"# Home\n\n[[Missing]]\n",
+        }];
+        static DIRECTORIES: &[SeedDirectory] = &[SeedDirectory {
+            path: "Inbox",
+            purpose: None,
+            default_kind: None,
+            icon: None,
         }];
         let template = GeneratedTemplate {
             id: "invalid",
@@ -594,10 +708,15 @@ mod tests {
             visibility: "gallery",
             recommended: false,
             recommended_title: "Invalid",
-            directories: &["Inbox"],
+            directories: DIRECTORIES,
             preview: &["Home.md"],
             capabilities: &["pages"],
             quick_note_directory: "Inbox",
+            daily_note_directory: None,
+            attachments_directory: None,
+            template_directory: None,
+            archive_directory: None,
+            open_on_create: None,
             files: FILES,
         };
         let directory = tempfile::tempdir().unwrap();

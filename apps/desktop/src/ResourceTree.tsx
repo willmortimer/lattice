@@ -12,6 +12,8 @@ interface ResourceTreeProps {
   onSelect: (resource: Resource) => void;
   onContextMenu?: (resource: Resource) => void;
   revealPath?: string | null;
+  /** Optional path → purpose hints from the active template catalog. */
+  directoryPurposes?: Readonly<Record<string, string>>;
 }
 
 const INDENT_BASE_PX = 9;
@@ -31,6 +33,7 @@ export function ResourceTree({
   onSelect,
   onContextMenu,
   revealPath,
+  directoryPurposes,
 }: ResourceTreeProps) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
 
@@ -58,6 +61,10 @@ export function ResourceTree({
       else next.add(path);
       return next;
     });
+  }
+
+  function emptyFolderHint(path: string): string {
+    return directoryPurposes?.[path] ?? "This folder is empty. Files you add appear here.";
   }
 
   function renderNode(node: TreeNode, depth: number): ReactNode {
@@ -104,7 +111,16 @@ export function ResourceTree({
         </button>
         {!isCollapsed && (
           <div className="tree-children">
-            {node.children.map((child) => renderNode(child, depth + 1))}
+            {node.children.length === 0 ? (
+              <div
+                className="resource-list-empty"
+                style={{ paddingLeft: indent + INDENT_STEP_PX }}
+              >
+                {emptyFolderHint(node.path)}
+              </div>
+            ) : (
+              node.children.map((child) => renderNode(child, depth + 1))
+            )}
           </div>
         )}
       </div>

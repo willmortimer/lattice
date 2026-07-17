@@ -1,10 +1,10 @@
 {
   "format": "lattice-workspace-template",
-  "version": 1,
+  "version": 2,
   "id": "blank",
   "order": 50,
   "name": "Blank",
-  "category": "Advanced",
+  "category": "Data & Advanced",
   "description": "Start with only lattice.yaml and shape the workspace yourself.",
   "visibility": "gallery",
   "recommended": false,

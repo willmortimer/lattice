@@ -190,6 +190,7 @@ export function useDesktopController() {
     restoreSession,
     onAdopt,
     onWorkspaceUnavailable,
+    openResource: (resource) => resourceSelectRef.current(resource),
   });
   const { snapshot, snapshotRef, setSnapshot, workspacesDir, templates, adoptWorkspace,
     handleGetStarted, handleOpenWorkspace, openRecent, handleCreateWorkspace,

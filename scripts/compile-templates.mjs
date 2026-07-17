@@ -10,6 +10,20 @@ const RUST_OUT = join(ROOT, "crates", "lattice-core", "src", "template_catalog.g
 const TS_OUT = join(ROOT, "apps", "desktop", "src", "templateCatalog.generated.ts");
 const MAX_FILES = 128;
 const MAX_BYTES = 2 * 1024 * 1024;
+const TEMPLATE_CATEGORIES = [
+  "Everyday",
+  "Work",
+  "Knowledge & Research",
+  "Data & Advanced",
+  "Sample",
+];
+const WORKSPACE_DEFAULT_KEYS = [
+  "quickNoteDirectory",
+  "dailyNoteDirectory",
+  "attachmentsDirectory",
+  "templateDirectory",
+  "archiveDirectory",
+];
 
 export function compileTemplates(root = TEMPLATE_ROOT) {
   const templates = readdirSync(root, { withFileTypes: true })
@@ -46,7 +60,7 @@ function loadTemplate(root, directoryName) {
   ]) {
     if (manifest[key] === undefined) throw new Error(`${directoryName}: missing ${key}`);
   }
-  if (manifest.format !== "lattice-workspace-template" || manifest.version !== 1) {
+  if (manifest.format !== "lattice-workspace-template" || ![1, 2].includes(manifest.version)) {
     throw new Error(`${directoryName}: unsupported template format/version`);
   }
   if (manifest.id !== directoryName) {
@@ -58,6 +72,17 @@ function loadTemplate(root, directoryName) {
   if (!["gallery", "legacy", "sample"].includes(manifest.visibility)) {
     throw new Error(`${directoryName}: invalid visibility`);
   }
+  if (!TEMPLATE_CATEGORIES.includes(manifest.category)) {
+    throw new Error(
+      `${directoryName}: invalid category ${JSON.stringify(manifest.category)}; expected one of ${TEMPLATE_CATEGORIES.join(", ")}`,
+    );
+  }
+  if (manifest.category === "Sample" && manifest.visibility !== "sample") {
+    throw new Error(`${directoryName}: category Sample is reserved for visibility: sample`);
+  }
+  if (manifest.visibility === "sample" && manifest.category !== "Sample") {
+    throw new Error(`${directoryName}: visibility sample requires category Sample`);
+  }
   if (
     !Array.isArray(manifest.files) ||
     !Array.isArray(manifest.directories) ||
@@ -66,14 +91,24 @@ function loadTemplate(root, directoryName) {
     throw new Error(`${directoryName}: too many files`);
   }
 
+  const directories = manifest.directories.map((entry) => normalizeDirectory(entry, directoryName));
+  const workspaceDefaults = normalizeWorkspaceDefaults(manifest.workspaceDefaults, directoryName);
+  const openOnCreate =
+    manifest.openOnCreate === undefined
+      ? undefined
+      : normalizeOptionalPath(manifest.openOnCreate, directoryName, "openOnCreate");
+
   const destinations = new Set(["lattice.yaml"]);
-  for (const path of [...manifest.directories, ...manifest.files]) {
+  for (const path of [...directories.map((entry) => entry.path), ...manifest.files]) {
     assertSafePath(path, directoryName);
     const normalized = posix.normalize(path);
     if (destinations.has(normalized)) {
       throw new Error(`${directoryName}: duplicate destination ${normalized}`);
     }
     destinations.add(normalized);
+  }
+  if (openOnCreate !== undefined && !destinations.has(posix.normalize(openOnCreate))) {
+    throw new Error(`${directoryName}: openOnCreate ${JSON.stringify(openOnCreate)} is not a seeded path`);
   }
 
   let totalBytes = 0;
@@ -85,13 +120,72 @@ function loadTemplate(root, directoryName) {
     return { path, source };
   });
   if (totalBytes > MAX_BYTES) throw new Error(`${directoryName}: template exceeds size bound`);
-  validateLinks(directoryName, manifest.directories, files);
+  validateLinks(
+    directoryName,
+    directories.map((entry) => entry.path),
+    files,
+  );
 
   return {
     ...manifest,
+    directories,
+    workspaceDefaults,
+    openOnCreate,
     recommended: Boolean(manifest.recommended),
     files,
   };
+}
+
+function normalizeDirectory(entry, template) {
+  if (typeof entry === "string") {
+    assertSafePath(entry, template);
+    return { path: entry };
+  }
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    throw new Error(`${template}: directory entry must be a string or object`);
+  }
+  if (typeof entry.path !== "string") {
+    throw new Error(`${template}: directory object requires path`);
+  }
+  assertSafePath(entry.path, template);
+  const directory = { path: entry.path };
+  for (const key of ["purpose", "defaultKind", "icon"]) {
+    if (entry[key] === undefined) continue;
+    if (typeof entry[key] !== "string" || entry[key].trim().length === 0) {
+      throw new Error(`${template}: directory ${key} must be a non-empty string`);
+    }
+    directory[key] = entry[key];
+  }
+  return directory;
+}
+
+function normalizeWorkspaceDefaults(defaults, template) {
+  if (!defaults || typeof defaults !== "object" || Array.isArray(defaults)) {
+    throw new Error(`${template}: workspaceDefaults must be an object`);
+  }
+  for (const key of Object.keys(defaults)) {
+    if (!WORKSPACE_DEFAULT_KEYS.includes(key)) {
+      throw new Error(`${template}: unknown workspaceDefaults key ${key}`);
+    }
+  }
+  if (typeof defaults.quickNoteDirectory !== "string") {
+    throw new Error(`${template}: workspaceDefaults.quickNoteDirectory is required`);
+  }
+  assertSafePath(defaults.quickNoteDirectory, template);
+  const normalized = { quickNoteDirectory: defaults.quickNoteDirectory };
+  for (const key of WORKSPACE_DEFAULT_KEYS.slice(1)) {
+    if (defaults[key] === undefined) continue;
+    normalized[key] = normalizeOptionalPath(defaults[key], template, `workspaceDefaults.${key}`);
+  }
+  return normalized;
+}
+
+function normalizeOptionalPath(value, template, label) {
+  if (typeof value !== "string") {
+    throw new Error(`${template}: ${label} must be a string`);
+  }
+  assertSafePath(value, template);
+  return value;
 }
 
 function assertSafePath(path, template) {
@@ -151,8 +245,12 @@ function rustString(value) {
   return JSON.stringify(value);
 }
 
-function rustArray(values) {
-  return `&[${values.map(rustString).join(", ")}]`;
+function rustOptionString(value) {
+  return value === undefined || value === null ? "None" : `Some(${rustString(value)})`;
+}
+
+function rustDirectory(directory) {
+  return `SeedDirectory { path: ${rustString(directory.path)}, purpose: ${rustOptionString(directory.purpose)}, default_kind: ${rustOptionString(directory.defaultKind)}, icon: ${rustOptionString(directory.icon)} }`;
 }
 
 function emitRust(templates) {
@@ -163,6 +261,8 @@ function emitRust(templates) {
           `SeedFile { path: ${rustString(file.path)}, bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/${template.id}/files/${file.path}")) }`,
       )
       .join(",\n            ");
+    const directories = template.directories.map(rustDirectory).join(",\n            ");
+    const defaults = template.workspaceDefaults;
     return `GeneratedTemplate {
         id: ${rustString(template.id)},
         order: ${template.order},
@@ -172,10 +272,17 @@ function emitRust(templates) {
         visibility: ${rustString(template.visibility)},
         recommended: ${template.recommended},
         recommended_title: ${rustString(template.recommendedTitle)},
-        directories: ${rustArray(template.directories)},
-        preview: ${rustArray(template.preview)},
-        capabilities: ${rustArray(template.capabilities)},
-        quick_note_directory: ${rustString(template.workspaceDefaults.quickNoteDirectory ?? "Inbox")},
+        directories: &[
+            ${directories}
+        ],
+        preview: &[${template.preview.map(rustString).join(", ")}],
+        capabilities: &[${template.capabilities.map(rustString).join(", ")}],
+        quick_note_directory: ${rustString(defaults.quickNoteDirectory ?? "Inbox")},
+        daily_note_directory: ${rustOptionString(defaults.dailyNoteDirectory)},
+        attachments_directory: ${rustOptionString(defaults.attachmentsDirectory)},
+        template_directory: ${rustOptionString(defaults.templateDirectory)},
+        archive_directory: ${rustOptionString(defaults.archiveDirectory)},
+        open_on_create: ${rustOptionString(template.openOnCreate)},
         files: &[
             ${files}
         ],
@@ -202,6 +309,7 @@ function emitTypeScript(templates) {
     preview: template.preview,
     capabilities: template.capabilities,
     workspaceDefaults: template.workspaceDefaults,
+    ...(template.openOnCreate !== undefined ? { openOnCreate: template.openOnCreate } : {}),
   }));
   return `// GENERATED by scripts/compile-templates.mjs — do not edit.
 export const GENERATED_TEMPLATE_CATALOG = ${JSON.stringify(catalog, null, 2)} as const;

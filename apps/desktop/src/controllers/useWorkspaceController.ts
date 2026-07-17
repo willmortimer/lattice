@@ -30,6 +30,8 @@ export interface WorkspaceControllerOptions {
   restoreSession: (session: DesktopSession, snapshot: WorkspaceSnapshot) => void | Promise<void>;
   onAdopt: (snapshot: WorkspaceSnapshot) => void | Promise<void>;
   onWorkspaceUnavailable: (root: string) => void | Promise<void>;
+  /** Opens a seeded resource after create_workspace when the template sets openOnCreate. */
+  openResource: (resource: Resource) => void | Promise<void>;
 }
 
 export interface WorkspaceController {
@@ -63,7 +65,7 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
     initialSnapshot, profile, profileReady, startup, recents, demoStartEmpty,
     setError, setBusy, setStatusToast, setNewWorkspaceOpen, rememberWorkspace,
     removeRecent, refreshProfile, getSession, restoreSession, onAdopt,
-    onWorkspaceUnavailable,
+    onWorkspaceUnavailable, openResource,
   } = options;
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot | null>(initialSnapshot);
   const [workspacesDir, setWorkspacesDir] = useState<string | null>(null);
@@ -211,12 +213,17 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
       if (outcome.diagnostics.length > 0) setStatusToast(outcome.diagnostics.map((item) => item.message).join(" "));
       else if (!inBrowser) setStatusToast(`Created ${outcome.workspace.title}`);
       setNewWorkspaceOpen(false);
+      const pathToOpen = templates.find((template) => template.id === args.template)?.openOnCreate;
+      if (pathToOpen) {
+        const resource = outcome.workspace.resources.find((entry) => entry.path === pathToOpen);
+        if (resource) await openResource(resource);
+      }
     } catch (error) {
       setError(String(error));
     } finally {
       if (!inBrowser) setBusy(false);
     }
-  }, [adoptWorkspace, refreshProfile, setBusy, setError, setNewWorkspaceOpen, setStatusToast]);
+  }, [adoptWorkspace, openResource, refreshProfile, setBusy, setError, setNewWorkspaceOpen, setStatusToast, templates]);
 
   const openNewWorkspaceDialog = useCallback(async () => {
     setError(null);

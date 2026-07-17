@@ -10,13 +10,28 @@ export const GENERATED_TEMPLATE_CATALOG = [
     "recommended": true,
     "recommendedTitle": "Personal",
     "directories": [
-      "Inbox",
-      "Projects",
-      "Areas",
-      "Library",
-      "Journal",
-      "Templates",
-      "Archive"
+      {
+        "path": "Inbox",
+        "purpose": "Drop raw captures here — triage them into Projects or Library."
+      },
+      {
+        "path": "Projects"
+      },
+      {
+        "path": "Areas"
+      },
+      {
+        "path": "Library"
+      },
+      {
+        "path": "Journal"
+      },
+      {
+        "path": "Templates"
+      },
+      {
+        "path": "Archive"
+      }
     ],
     "preview": [
       "Home.md",
@@ -33,25 +48,41 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "sqlite"
     ],
     "workspaceDefaults": {
-      "quickNoteDirectory": "Inbox"
-    }
+      "quickNoteDirectory": "Inbox",
+      "dailyNoteDirectory": "Journal",
+      "templateDirectory": "Templates",
+      "archiveDirectory": "Archive"
+    },
+    "openOnCreate": "Home.md"
   },
   {
     "id": "project",
     "order": 20,
     "name": "Project",
-    "category": "Focused work",
+    "category": "Work",
     "description": "Plan and deliver one outcome with decisions, research, working files, data, and outputs together.",
     "visibility": "gallery",
     "recommended": false,
     "recommendedTitle": "Project",
     "directories": [
-      "Decisions",
-      "Research",
-      "Working",
-      "Data",
-      "Outputs",
-      "Archive"
+      {
+        "path": "Decisions"
+      },
+      {
+        "path": "Research"
+      },
+      {
+        "path": "Working"
+      },
+      {
+        "path": "Data"
+      },
+      {
+        "path": "Outputs"
+      },
+      {
+        "path": "Archive"
+      }
     ],
     "preview": [
       "Home.md",
@@ -68,27 +99,45 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "sqlite"
     ],
     "workspaceDefaults": {
-      "quickNoteDirectory": "Working"
-    }
+      "quickNoteDirectory": "Working",
+      "archiveDirectory": "Archive"
+    },
+    "openOnCreate": "Home.md"
   },
   {
     "id": "research",
     "order": 30,
     "name": "Research",
-    "category": "Knowledge",
+    "category": "Knowledge & Research",
     "description": "Move from questions and sources through notes, experiments, analysis, and published outputs.",
     "visibility": "gallery",
     "recommended": false,
     "recommendedTitle": "Research",
     "directories": [
-      "Inbox",
-      "Sources",
-      "Notes",
-      "Data",
-      "Experiments",
-      "Outputs",
-      "Bibliography",
-      "Archive"
+      {
+        "path": "Inbox"
+      },
+      {
+        "path": "Sources"
+      },
+      {
+        "path": "Notes"
+      },
+      {
+        "path": "Data"
+      },
+      {
+        "path": "Experiments"
+      },
+      {
+        "path": "Outputs"
+      },
+      {
+        "path": "Bibliography"
+      },
+      {
+        "path": "Archive"
+      }
     ],
     "preview": [
       "Home.md",
@@ -106,26 +155,42 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "citations"
     ],
     "workspaceDefaults": {
-      "quickNoteDirectory": "Inbox"
-    }
+      "quickNoteDirectory": "Inbox",
+      "archiveDirectory": "Archive"
+    },
+    "openOnCreate": "Home.md"
   },
   {
     "id": "data-lab",
     "order": 40,
     "name": "Data Lab",
-    "category": "Analysis",
+    "category": "Data & Advanced",
     "description": "Organize data sources, queries, notebooks, dashboards, reports, and reusable analysis.",
     "visibility": "gallery",
     "recommended": false,
     "recommendedTitle": "Data Lab",
     "directories": [
-      "Sources",
-      "Data",
-      "Queries",
-      "Notebooks",
-      "Dashboards",
-      "Reports",
-      "Archive"
+      {
+        "path": "Sources"
+      },
+      {
+        "path": "Data"
+      },
+      {
+        "path": "Queries"
+      },
+      {
+        "path": "Notebooks"
+      },
+      {
+        "path": "Dashboards"
+      },
+      {
+        "path": "Reports"
+      },
+      {
+        "path": "Archive"
+      }
     ],
     "preview": [
       "Home.md",
@@ -143,14 +208,16 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "jupyter"
     ],
     "workspaceDefaults": {
-      "quickNoteDirectory": "Reports"
-    }
+      "quickNoteDirectory": "Reports",
+      "archiveDirectory": "Archive"
+    },
+    "openOnCreate": "Home.md"
   },
   {
     "id": "blank",
     "order": 50,
     "name": "Blank",
-    "category": "Advanced",
+    "category": "Data & Advanced",
     "description": "Start with only lattice.yaml and shape the workspace yourself.",
     "visibility": "gallery",
     "recommended": false,
@@ -176,10 +243,18 @@ export const GENERATED_TEMPLATE_CATALOG = [
     "recommended": false,
     "recommendedTitle": "First Look",
     "directories": [
-      "Product",
-      "Research",
-      "Canvases",
-      "Archive"
+      {
+        "path": "Product"
+      },
+      {
+        "path": "Research"
+      },
+      {
+        "path": "Canvases"
+      },
+      {
+        "path": "Archive"
+      }
     ],
     "preview": [
       "Home.md",
@@ -194,24 +269,36 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "sqlite"
     ],
     "workspaceDefaults": {
-      "quickNoteDirectory": "Research"
-    }
+      "quickNoteDirectory": "Research",
+      "archiveDirectory": "Archive"
+    },
+    "openOnCreate": "Home.md"
   },
   {
     "id": "team",
     "order": 90,
     "name": "Team",
-    "category": "Collaboration",
+    "category": "Work",
     "description": "Legacy shared-workspace scaffold retained for CLI compatibility.",
     "visibility": "legacy",
     "recommended": false,
     "recommendedTitle": "Team",
     "directories": [
-      "Projects",
-      "Docs",
-      "Meetings",
-      "Research",
-      "Archive"
+      {
+        "path": "Projects"
+      },
+      {
+        "path": "Docs"
+      },
+      {
+        "path": "Meetings"
+      },
+      {
+        "path": "Research"
+      },
+      {
+        "path": "Archive"
+      }
     ],
     "preview": [
       "Home.md",
@@ -226,7 +313,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "sqlite"
     ],
     "workspaceDefaults": {
-      "quickNoteDirectory": "Meetings"
-    }
+      "quickNoteDirectory": "Meetings",
+      "archiveDirectory": "Archive"
+    },
+    "openOnCreate": "Home.md"
   }
 ] as const;

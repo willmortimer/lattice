@@ -1,10 +1,10 @@
 {
   "format": "lattice-workspace-template",
-  "version": 1,
+  "version": 2,
   "id": "research",
   "order": 30,
   "name": "Research",
-  "category": "Knowledge",
+  "category": "Knowledge & Research",
   "description": "Move from questions and sources through notes, experiments, analysis, and published outputs.",
   "visibility": "gallery",
   "recommended": false,
@@ -13,5 +13,9 @@
   "preview": ["Home.md", "Questions.md", "Sources/", "Notes/", "Data/", "Experiments/", "Outputs/"],
   "files": ["Home.md", "Questions.md"],
   "capabilities": ["pages", "canvas", "sqlite", "citations"],
-  "workspaceDefaults": { "quickNoteDirectory": "Inbox" }
+  "workspaceDefaults": {
+    "quickNoteDirectory": "Inbox",
+    "archiveDirectory": "Archive"
+  },
+  "openOnCreate": "Home.md"
 }

@@ -54,12 +54,24 @@ impl Capabilities {
 pub struct WorkspaceDefaults {
     #[serde(default = "default_quick_note_directory")]
     pub quick_note_directory: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub daily_note_directory: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attachments_directory: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template_directory: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub archive_directory: Option<String>,
 }
 
 impl Default for WorkspaceDefaults {
     fn default() -> Self {
         Self {
             quick_note_directory: default_quick_note_directory(),
+            daily_note_directory: None,
+            attachments_directory: None,
+            template_directory: None,
+            archive_directory: None,
         }
     }
 }
@@ -132,4 +144,37 @@ impl WorkspaceManifest {
 /// Path of the manifest inside `root`.
 pub(crate) fn manifest_path(root: &Path) -> PathBuf {
     root.join(WORKSPACE_MANIFEST_FILENAME)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn workspace_defaults_round_trip_optional_directories() {
+        let mut manifest = WorkspaceManifest::new("Defaults");
+        manifest.defaults = WorkspaceDefaults {
+            quick_note_directory: "Inbox".into(),
+            daily_note_directory: Some("Journal".into()),
+            attachments_directory: Some("Attachments".into()),
+            template_directory: Some("Templates".into()),
+            archive_directory: Some("Archive".into()),
+        };
+        let text = serde_yaml::to_string(&manifest).unwrap();
+        assert!(text.contains("dailyNoteDirectory: Journal"));
+        assert!(text.contains("attachmentsDirectory: Attachments"));
+        assert!(text.contains("templateDirectory: Templates"));
+        assert!(text.contains("archiveDirectory: Archive"));
+        let parsed = WorkspaceManifest::parse(Path::new("lattice.yaml"), &text).unwrap();
+        assert_eq!(parsed.defaults, manifest.defaults);
+    }
+
+    #[test]
+    fn workspace_defaults_omit_unset_optional_fields() {
+        let text = serde_yaml::to_string(&WorkspaceManifest::new("Defaults")).unwrap();
+        assert!(!text.contains("dailyNoteDirectory"));
+        assert!(!text.contains("attachmentsDirectory"));
+        assert!(!text.contains("templateDirectory"));
+        assert!(!text.contains("archiveDirectory"));
+    }
 }

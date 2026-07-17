@@ -1,10 +1,10 @@
 {
   "format": "lattice-workspace-template",
-  "version": 1,
+  "version": 2,
   "id": "project",
   "order": 20,
   "name": "Project",
-  "category": "Focused work",
+  "category": "Work",
   "description": "Plan and deliver one outcome with decisions, research, working files, data, and outputs together.",
   "visibility": "gallery",
   "recommended": false,
@@ -13,5 +13,9 @@
   "preview": ["Home.md", "Brief.md", "Plan.md", "Decisions/", "Working/", "Data/", "Outputs/"],
   "files": ["Home.md", "Brief.md", "Plan.md"],
   "capabilities": ["pages", "canvas", "sqlite"],
-  "workspaceDefaults": { "quickNoteDirectory": "Working" }
+  "workspaceDefaults": {
+    "quickNoteDirectory": "Working",
+    "archiveDirectory": "Archive"
+  },
+  "openOnCreate": "Home.md"
 }

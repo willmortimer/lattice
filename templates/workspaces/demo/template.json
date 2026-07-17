@@ -1,6 +1,6 @@
 {
   "format": "lattice-workspace-template",
-  "version": 1,
+  "version": 2,
   "id": "demo",
   "order": 60,
   "name": "First Look",
@@ -13,5 +13,9 @@
   "preview": ["Home.md", "Product/Vision.md", "Product/Roadmap.md", "Research/Competitor Analysis.md", "Canvases/Product Strategy.canvas"],
   "files": ["Home.md", "Product/Vision.md", "Product/Roadmap.md", "Research/Competitor Analysis.md", "Canvases/Product Strategy.canvas"],
   "capabilities": ["pages", "canvas", "sqlite"],
-  "workspaceDefaults": { "quickNoteDirectory": "Research" }
+  "workspaceDefaults": {
+    "quickNoteDirectory": "Research",
+    "archiveDirectory": "Archive"
+  },
+  "openOnCreate": "Home.md"
 }

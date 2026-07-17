@@ -1,10 +1,10 @@
 {
   "format": "lattice-workspace-template",
-  "version": 1,
+  "version": 2,
   "id": "team",
   "order": 90,
   "name": "Team",
-  "category": "Collaboration",
+  "category": "Work",
   "description": "Legacy shared-workspace scaffold retained for CLI compatibility.",
   "visibility": "legacy",
   "recommended": false,
@@ -13,5 +13,9 @@
   "preview": ["Home.md", "Projects/", "Docs/", "Meetings/", "Research/"],
   "files": ["Home.md"],
   "capabilities": ["pages", "canvas", "sqlite"],
-  "workspaceDefaults": { "quickNoteDirectory": "Meetings" }
+  "workspaceDefaults": {
+    "quickNoteDirectory": "Meetings",
+    "archiveDirectory": "Archive"
+  },
+  "openOnCreate": "Home.md"
 }
