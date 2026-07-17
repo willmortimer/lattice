@@ -1,0 +1,81 @@
+{
+  "format": "lattice-workspace-template",
+  "version": 2,
+  "id": "ops",
+  "order": 27,
+  "name": "Meetings & Ops",
+  "category": "Work",
+  "description": "Run meetings, one-on-ones, weekly reviews, and OKRs from one operational hub.",
+  "visibility": "gallery",
+  "recommended": false,
+  "recommendedTitle": "Ops",
+  "directories": [
+    { "path": "Meetings", "purpose": "Dated meeting notes — agendas, decisions, and follow-ups." },
+    { "path": "1-1s", "purpose": "One page per person, appended over time." },
+    { "path": "Reviews", "purpose": "Weekly and quarterly reviews of what actually happened." },
+    { "path": "Templates", "purpose": "Page templates with {{title}} and {{date}} placeholders." },
+    { "path": "Archive", "purpose": "Closed-out meetings and past cycles." }
+  ],
+  "preview": [
+    "Home.md",
+    "Meetings/{{date}} Kickoff.md",
+    "OKRs.data",
+    "Templates/Meeting Note.md",
+    "Templates/Weekly Review.md",
+    "Meetings/",
+    "1-1s/",
+    "Reviews/"
+  ],
+  "files": [
+    "Home.md",
+    "Meetings/{{date}} Kickoff.md",
+    "Templates/Meeting Note.md",
+    "Templates/One-on-One.md",
+    "Templates/Weekly Review.md",
+    "Templates/Daily.md"
+  ],
+  "dataPackages": [
+    {
+      "path": "OKRs.data",
+      "title": "OKRs",
+      "table": "okrs",
+      "columns": [
+        { "name": "objective", "type": "text" },
+        { "name": "key_result", "type": "text" },
+        { "name": "owner", "type": "text" },
+        { "name": "status", "type": "text" },
+        { "name": "confidence", "type": "decimal" }
+      ],
+      "rows": [
+        {
+          "objective": "Ship the spring release",
+          "key_result": "All launch blockers closed by the freeze date",
+          "owner": "you",
+          "status": "on-track",
+          "confidence": 0.8
+        },
+        {
+          "objective": "Ship the spring release",
+          "key_result": "Two dogfood rounds with written findings",
+          "owner": "you",
+          "status": "at-risk",
+          "confidence": 0.5
+        },
+        {
+          "objective": "Grow the team sustainably",
+          "key_result": "Every report has a current growth plan",
+          "owner": "you",
+          "status": "on-track",
+          "confidence": 0.7
+        }
+      ]
+    }
+  ],
+  "capabilities": ["pages", "sqlite"],
+  "workspaceDefaults": {
+    "quickNoteDirectory": "Meetings",
+    "templateDirectory": "Templates",
+    "archiveDirectory": "Archive"
+  },
+  "openOnCreate": "Home.md"
+}

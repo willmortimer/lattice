@@ -125,7 +125,7 @@ Delete `target/dev-home` to regenerate the dev profile from scratch. Your real
 `~/Lattice` profile is untouched.
 
 `Personal` is the production workspace folder; `Home.md` is just a page inside
-it. Gallery templates are `personal`, `project`, `research`, `second-brain`,
+it. Gallery templates are `personal`, `project`, `writing`, `ops`, `research`, `second-brain`,
 `data-lab`, `dev-notebook`, and `blank`. `demo` is the First Look sample;
 `team` remains a hidden legacy identifier.
 

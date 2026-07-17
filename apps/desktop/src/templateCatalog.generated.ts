@@ -161,6 +161,212 @@ export const GENERATED_TEMPLATE_CATALOG = [
     "dataPackages": []
   },
   {
+    "id": "writing",
+    "order": 25,
+    "name": "Writing",
+    "category": "Work",
+    "description": "Draft a manuscript with research, outlines, a style guide, and a submissions tracker beside the prose.",
+    "visibility": "gallery",
+    "recommended": false,
+    "recommendedTitle": "Writing",
+    "directories": [
+      {
+        "path": "Manuscript",
+        "purpose": "Chapters and long-form drafts, in reading order."
+      },
+      {
+        "path": "Outlines",
+        "purpose": "Story maps, beat sheets, and structural planning."
+      },
+      {
+        "path": "Research",
+        "purpose": "Background material, references, and fact-checking."
+      },
+      {
+        "path": "Notes",
+        "purpose": "Fragments, ideas, and scenes that have no home yet."
+      },
+      {
+        "path": "Templates",
+        "purpose": "Page templates with {{title}} and {{date}} placeholders."
+      },
+      {
+        "path": "Archive",
+        "purpose": "Cut scenes, abandoned drafts, and past versions."
+      }
+    ],
+    "preview": [
+      "Home.md",
+      "Manuscript/Chapter 01.md",
+      "Outlines/Story Map.canvas",
+      "Style Guide.md",
+      "Submissions.data",
+      "Templates/Chapter.md",
+      "Notes/",
+      "Research/"
+    ],
+    "capabilities": [
+      "pages",
+      "canvas",
+      "sqlite"
+    ],
+    "workspaceDefaults": {
+      "quickNoteDirectory": "Notes",
+      "templateDirectory": "Templates",
+      "archiveDirectory": "Archive"
+    },
+    "openOnCreate": "Home.md",
+    "dataPackages": [
+      {
+        "path": "Submissions.data",
+        "title": "Submissions",
+        "table": "submissions",
+        "columns": [
+          {
+            "name": "piece",
+            "type": "text"
+          },
+          {
+            "name": "venue",
+            "type": "text"
+          },
+          {
+            "name": "status",
+            "type": "text"
+          },
+          {
+            "name": "submitted_on",
+            "type": "date"
+          },
+          {
+            "name": "response",
+            "type": "long_text"
+          }
+        ],
+        "rows": [
+          {
+            "piece": "Chapter 01 excerpt",
+            "venue": "Example Quarterly",
+            "status": "submitted",
+            "submitted_on": "2026-07-01",
+            "response": null
+          },
+          {
+            "piece": "Flash piece",
+            "venue": "Example Review",
+            "status": "draft",
+            "submitted_on": null,
+            "response": "Polish the opening before sending."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "ops",
+    "order": 27,
+    "name": "Meetings & Ops",
+    "category": "Work",
+    "description": "Run meetings, one-on-ones, weekly reviews, and OKRs from one operational hub.",
+    "visibility": "gallery",
+    "recommended": false,
+    "recommendedTitle": "Ops",
+    "directories": [
+      {
+        "path": "Meetings",
+        "purpose": "Dated meeting notes — agendas, decisions, and follow-ups."
+      },
+      {
+        "path": "1-1s",
+        "purpose": "One page per person, appended over time."
+      },
+      {
+        "path": "Reviews",
+        "purpose": "Weekly and quarterly reviews of what actually happened."
+      },
+      {
+        "path": "Templates",
+        "purpose": "Page templates with {{title}} and {{date}} placeholders."
+      },
+      {
+        "path": "Archive",
+        "purpose": "Closed-out meetings and past cycles."
+      }
+    ],
+    "preview": [
+      "Home.md",
+      "Meetings/{{date}} Kickoff.md",
+      "OKRs.data",
+      "Templates/Meeting Note.md",
+      "Templates/Weekly Review.md",
+      "Meetings/",
+      "1-1s/",
+      "Reviews/"
+    ],
+    "capabilities": [
+      "pages",
+      "sqlite"
+    ],
+    "workspaceDefaults": {
+      "quickNoteDirectory": "Meetings",
+      "templateDirectory": "Templates",
+      "archiveDirectory": "Archive"
+    },
+    "openOnCreate": "Home.md",
+    "dataPackages": [
+      {
+        "path": "OKRs.data",
+        "title": "OKRs",
+        "table": "okrs",
+        "columns": [
+          {
+            "name": "objective",
+            "type": "text"
+          },
+          {
+            "name": "key_result",
+            "type": "text"
+          },
+          {
+            "name": "owner",
+            "type": "text"
+          },
+          {
+            "name": "status",
+            "type": "text"
+          },
+          {
+            "name": "confidence",
+            "type": "decimal"
+          }
+        ],
+        "rows": [
+          {
+            "objective": "Ship the spring release",
+            "key_result": "All launch blockers closed by the freeze date",
+            "owner": "you",
+            "status": "on-track",
+            "confidence": 0.8
+          },
+          {
+            "objective": "Ship the spring release",
+            "key_result": "Two dogfood rounds with written findings",
+            "owner": "you",
+            "status": "at-risk",
+            "confidence": 0.5
+          },
+          {
+            "objective": "Grow the team sustainably",
+            "key_result": "Every report has a current growth plan",
+            "owner": "you",
+            "status": "on-track",
+            "confidence": 0.7
+          }
+        ]
+      }
+    ]
+  },
+  {
     "id": "research",
     "order": 30,
     "name": "Research",

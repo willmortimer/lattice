@@ -1,0 +1,76 @@
+{
+  "format": "lattice-workspace-template",
+  "version": 2,
+  "id": "writing",
+  "order": 25,
+  "name": "Writing",
+  "category": "Work",
+  "description": "Draft a manuscript with research, outlines, a style guide, and a submissions tracker beside the prose.",
+  "visibility": "gallery",
+  "recommended": false,
+  "recommendedTitle": "Writing",
+  "directories": [
+    { "path": "Manuscript", "purpose": "Chapters and long-form drafts, in reading order." },
+    { "path": "Outlines", "purpose": "Story maps, beat sheets, and structural planning." },
+    { "path": "Research", "purpose": "Background material, references, and fact-checking." },
+    { "path": "Notes", "purpose": "Fragments, ideas, and scenes that have no home yet." },
+    { "path": "Templates", "purpose": "Page templates with {{title}} and {{date}} placeholders." },
+    { "path": "Archive", "purpose": "Cut scenes, abandoned drafts, and past versions." }
+  ],
+  "preview": [
+    "Home.md",
+    "Manuscript/Chapter 01.md",
+    "Outlines/Story Map.canvas",
+    "Style Guide.md",
+    "Submissions.data",
+    "Templates/Chapter.md",
+    "Notes/",
+    "Research/"
+  ],
+  "files": [
+    "Home.md",
+    "Style Guide.md",
+    "Manuscript/Chapter 01.md",
+    "Outlines/Story Map.canvas",
+    "Templates/Chapter.md",
+    "Templates/Character Note.md",
+    "Templates/Daily.md"
+  ],
+  "dataPackages": [
+    {
+      "path": "Submissions.data",
+      "title": "Submissions",
+      "table": "submissions",
+      "columns": [
+        { "name": "piece", "type": "text" },
+        { "name": "venue", "type": "text" },
+        { "name": "status", "type": "text" },
+        { "name": "submitted_on", "type": "date" },
+        { "name": "response", "type": "long_text" }
+      ],
+      "rows": [
+        {
+          "piece": "Chapter 01 excerpt",
+          "venue": "Example Quarterly",
+          "status": "submitted",
+          "submitted_on": "2026-07-01",
+          "response": null
+        },
+        {
+          "piece": "Flash piece",
+          "venue": "Example Review",
+          "status": "draft",
+          "submitted_on": null,
+          "response": "Polish the opening before sending."
+        }
+      ]
+    }
+  ],
+  "capabilities": ["pages", "canvas", "sqlite"],
+  "workspaceDefaults": {
+    "quickNoteDirectory": "Notes",
+    "templateDirectory": "Templates",
+    "archiveDirectory": "Archive"
+  },
+  "openOnCreate": "Home.md"
+}

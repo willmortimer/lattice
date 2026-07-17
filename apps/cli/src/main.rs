@@ -37,8 +37,9 @@ enum Command {
         /// Workspace title. Defaults to the directory name.
         #[arg(long)]
         title: Option<String>,
-        /// Workspace scaffold: `personal` (default), `project`, `research`,
-        /// `second-brain`, `data-lab`, `dev-notebook`, `team`, `demo`, or `blank`.
+        /// Workspace scaffold: `personal` (default), `project`, `writing`,
+        /// `ops`, `research`, `second-brain`, `data-lab`, `dev-notebook`,
+        /// `team`, `demo`, or `blank`.
         #[arg(long, default_value = "personal")]
         template: String,
     },

@@ -92,6 +92,111 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
         ],
     },
     GeneratedTemplate {
+        id: "writing",
+        order: 25,
+        name: "Writing",
+        category: "Work",
+        description: "Draft a manuscript with research, outlines, a style guide, and a submissions tracker beside the prose.",
+        visibility: "gallery",
+        recommended: false,
+        recommended_title: "Writing",
+        directories: &[
+            SeedDirectory { path: "Manuscript", purpose: Some("Chapters and long-form drafts, in reading order."), default_kind: None, icon: None },
+            SeedDirectory { path: "Outlines", purpose: Some("Story maps, beat sheets, and structural planning."), default_kind: None, icon: None },
+            SeedDirectory { path: "Research", purpose: Some("Background material, references, and fact-checking."), default_kind: None, icon: None },
+            SeedDirectory { path: "Notes", purpose: Some("Fragments, ideas, and scenes that have no home yet."), default_kind: None, icon: None },
+            SeedDirectory { path: "Templates", purpose: Some("Page templates with {{title}} and {{date}} placeholders."), default_kind: None, icon: None },
+            SeedDirectory { path: "Archive", purpose: Some("Cut scenes, abandoned drafts, and past versions."), default_kind: None, icon: None }
+        ],
+        preview: &["Home.md", "Manuscript/Chapter 01.md", "Outlines/Story Map.canvas", "Style Guide.md", "Submissions.data", "Templates/Chapter.md", "Notes/", "Research/"],
+        capabilities: &["pages", "canvas", "sqlite"],
+        quick_note_directory: "Notes",
+        daily_note_directory: None,
+        attachments_directory: None,
+        template_directory: Some("Templates"),
+        archive_directory: Some("Archive"),
+        open_on_create: Some("Home.md"),
+        files: &[
+            SeedFile { path: "Home.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/writing/files/Home.md")) },
+            SeedFile { path: "Style Guide.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/writing/files/Style Guide.md")) },
+            SeedFile { path: "Manuscript/Chapter 01.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/writing/files/Manuscript/Chapter 01.md")) },
+            SeedFile { path: "Outlines/Story Map.canvas", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/writing/files/Outlines/Story Map.canvas")) },
+            SeedFile { path: "Templates/Chapter.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/writing/files/Templates/Chapter.md")) },
+            SeedFile { path: "Templates/Character Note.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/writing/files/Templates/Character Note.md")) },
+            SeedFile { path: "Templates/Daily.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/writing/files/Templates/Daily.md")) }
+        ],
+        data_packages: &[
+            SeedDataPackage {
+            path: "Submissions.data",
+            title: "Submissions",
+            table: "submissions",
+            columns: &[
+                SeedDataColumn { name: "piece", field_type: "text" },
+                SeedDataColumn { name: "venue", field_type: "text" },
+                SeedDataColumn { name: "status", field_type: "text" },
+                SeedDataColumn { name: "submitted_on", field_type: "date" },
+                SeedDataColumn { name: "response", field_type: "long_text" }
+            ],
+            rows_json: &[
+                "{\"piece\":\"Chapter 01 excerpt\",\"venue\":\"Example Quarterly\",\"status\":\"submitted\",\"submitted_on\":\"2026-07-01\",\"response\":null}",
+                "{\"piece\":\"Flash piece\",\"venue\":\"Example Review\",\"status\":\"draft\",\"submitted_on\":null,\"response\":\"Polish the opening before sending.\"}"
+            ],
+        }
+        ],
+    },
+    GeneratedTemplate {
+        id: "ops",
+        order: 27,
+        name: "Meetings & Ops",
+        category: "Work",
+        description: "Run meetings, one-on-ones, weekly reviews, and OKRs from one operational hub.",
+        visibility: "gallery",
+        recommended: false,
+        recommended_title: "Ops",
+        directories: &[
+            SeedDirectory { path: "Meetings", purpose: Some("Dated meeting notes — agendas, decisions, and follow-ups."), default_kind: None, icon: None },
+            SeedDirectory { path: "1-1s", purpose: Some("One page per person, appended over time."), default_kind: None, icon: None },
+            SeedDirectory { path: "Reviews", purpose: Some("Weekly and quarterly reviews of what actually happened."), default_kind: None, icon: None },
+            SeedDirectory { path: "Templates", purpose: Some("Page templates with {{title}} and {{date}} placeholders."), default_kind: None, icon: None },
+            SeedDirectory { path: "Archive", purpose: Some("Closed-out meetings and past cycles."), default_kind: None, icon: None }
+        ],
+        preview: &["Home.md", "Meetings/{{date}} Kickoff.md", "OKRs.data", "Templates/Meeting Note.md", "Templates/Weekly Review.md", "Meetings/", "1-1s/", "Reviews/"],
+        capabilities: &["pages", "sqlite"],
+        quick_note_directory: "Meetings",
+        daily_note_directory: None,
+        attachments_directory: None,
+        template_directory: Some("Templates"),
+        archive_directory: Some("Archive"),
+        open_on_create: Some("Home.md"),
+        files: &[
+            SeedFile { path: "Home.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/ops/files/Home.md")) },
+            SeedFile { path: "Meetings/{{date}} Kickoff.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/ops/files/Meetings/{{date}} Kickoff.md")) },
+            SeedFile { path: "Templates/Meeting Note.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/ops/files/Templates/Meeting Note.md")) },
+            SeedFile { path: "Templates/One-on-One.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/ops/files/Templates/One-on-One.md")) },
+            SeedFile { path: "Templates/Weekly Review.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/ops/files/Templates/Weekly Review.md")) },
+            SeedFile { path: "Templates/Daily.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/ops/files/Templates/Daily.md")) }
+        ],
+        data_packages: &[
+            SeedDataPackage {
+            path: "OKRs.data",
+            title: "OKRs",
+            table: "okrs",
+            columns: &[
+                SeedDataColumn { name: "objective", field_type: "text" },
+                SeedDataColumn { name: "key_result", field_type: "text" },
+                SeedDataColumn { name: "owner", field_type: "text" },
+                SeedDataColumn { name: "status", field_type: "text" },
+                SeedDataColumn { name: "confidence", field_type: "decimal" }
+            ],
+            rows_json: &[
+                "{\"objective\":\"Ship the spring release\",\"key_result\":\"All launch blockers closed by the freeze date\",\"owner\":\"you\",\"status\":\"on-track\",\"confidence\":0.8}",
+                "{\"objective\":\"Ship the spring release\",\"key_result\":\"Two dogfood rounds with written findings\",\"owner\":\"you\",\"status\":\"at-risk\",\"confidence\":0.5}",
+                "{\"objective\":\"Grow the team sustainably\",\"key_result\":\"Every report has a current growth plan\",\"owner\":\"you\",\"status\":\"on-track\",\"confidence\":0.7}"
+            ],
+        }
+        ],
+    },
+    GeneratedTemplate {
         id: "research",
         order: 30,
         name: "Research",
