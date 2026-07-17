@@ -19,7 +19,25 @@ import { fileTitle } from "../controllers/useResourceController";
 import { isUnsaved, saveIndicatorText } from "../editor/saveState";
 import { searchResourceLinks } from "../lib/resourceLinks";
 import { Button, DialogBackdrop, DialogPopup, DialogPortal, DialogRoot, DialogTitle, IconButton, MenuItem, MenuPopup, MenuPortal, MenuPositioner, MenuRoot, MenuSeparator, MenuTrigger, TooltipProvider } from "@lattice/ui";
-import { ArrowLeft, ArrowRight, ArrowUpRight, ChevronDown, CircleAlert, FilePlus2, Files, Home, Menu as MenuIcon, MoreHorizontal, PanelRight, Plus, Search, Settings, Sparkles, Table2, X } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  ArrowUpRight,
+  CaretDown,
+  DotsThree,
+  FilePlus,
+  Files,
+  Gear,
+  House,
+  List as MenuIcon,
+  MagnifyingGlass,
+  Plus,
+  Sidebar,
+  Sparkle,
+  Table,
+  WarningCircle,
+  X,
+} from "@phosphor-icons/react";
 import { useMemo } from "react";
 import type { useDesktopController } from "../controllers/useDesktopController";
 
@@ -68,7 +86,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
           </p>
           {profileNotices.map((notice) => (
             <div className="profile-notice profile-notice-empty" role="status" key={notice.code}>
-              <CircleAlert size={16} />
+              <WarningCircle size={16} />
               <div>
                 <strong>{notice.title}</strong>
                 <span>{notice.message}</span>
@@ -136,10 +154,10 @@ export function DesktopShell({ model }: DesktopShellProps) {
           </div>
           <nav>
             {[
-              { id: "home" as const, label: "Home", icon: Home },
+              { id: "home" as const, label: "Home", icon: House },
               { id: "files" as const, label: "Files", icon: Files },
-              { id: "search" as const, label: "Search", icon: Search },
-              { id: "quick-note" as const, label: "Quick Capture", icon: Sparkles },
+              { id: "search" as const, label: "Search", icon: MagnifyingGlass },
+              { id: "quick-note" as const, label: "Quick Capture", icon: Sparkle },
             ].map(({ id, label, icon: Icon }) => (
               <IconButton
                 key={id}
@@ -167,7 +185,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
             className={activityArea === "settings" ? "activity-button-active" : ""}
             onClick={() => setActivityArea("settings")}
           >
-            <Settings size={17} />
+            <Gear size={17} />
           </IconButton>
         </aside>
 
@@ -178,7 +196,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
                 {snapshot.title}
               </div>
               <IconButton label="Workspace menu" onClick={() => setPaletteOpen(true)}>
-                <MoreHorizontal size={15} />
+                <DotsThree size={15} />
               </IconButton>
             </div>
             <div className="workspace-root">{`⁦${snapshot.root}⁩`}</div>
@@ -190,7 +208,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
               className="sidebar-search"
               onClick={() => setSearchPaneOpen(true)}
             >
-              <Search size={14} />
+              <MagnifyingGlass size={14} />
               Search
               <kbd>{settings.keybindings.search}</kbd>
             </Button>
@@ -206,12 +224,12 @@ export function DesktopShell({ model }: DesktopShellProps) {
                 <MenuPositioner sideOffset={6} align="end">
                   <MenuPopup className="ltui-menu">
                     <MenuItem className="ltui-menu-item" onClick={handleNewPage}>
-                      <FilePlus2 size={14} />
+                      <FilePlus size={14} />
                       New page
                     </MenuItem>
                     {hasCapability("sqlite") && (
                       <MenuItem className="ltui-menu-item" onClick={() => void handleNewTable()}>
-                        <Table2 size={14} />
+                        <Table size={14} />
                         New table
                       </MenuItem>
                     )}
@@ -289,13 +307,13 @@ export function DesktopShell({ model }: DesktopShellProps) {
               </button>
               {selected?.path.split("/").slice(0, -1).map((part, index) => (
                 <span key={`${part}:${index}`}>
-                  <ChevronDown size={11} />
+                  <CaretDown size={11} />
                   {part}
                 </span>
               ))}
               {selected && (
                 <>
-                  <ChevronDown size={11} />
+                  <CaretDown size={11} />
                   <KindMark kind={selected.kind} size={13} />
                   {editingTitle ? (
                     <input
@@ -346,7 +364,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
                 className={inspectorOpen ? "header-button-active" : ""}
                 onClick={() => setInspectorOpen((open) => !open)}
               >
-                <PanelRight size={16} />
+                <Sidebar size={16} />
               </IconButton>
               <IconButton label="Command palette" onClick={() => setPaletteOpen(true)}>
                 <MenuIcon size={16} />
@@ -356,7 +374,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
 
           {profileNotices[0] && (
             <div className="profile-notice profile-notice-shell" role="status">
-              <CircleAlert size={15} />
+              <WarningCircle size={15} />
               <div>
                 <strong>{profileNotices[0].title}</strong>
                 <span>{profileNotices[0].message}</span>
@@ -536,7 +554,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
 
               {error && (
                 <div className="bottom-panel" role="alert">
-                  <CircleAlert size={15} />
+                  <WarningCircle size={15} />
                   <div>
                     <strong>Problem</strong>
                     <span>{error}</span>

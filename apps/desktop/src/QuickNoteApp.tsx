@@ -3,7 +3,7 @@ import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
-import { ArrowUpRight, ExternalLink, FileText, X } from "lucide-react";
+import { ArrowSquareOut, ArrowUpRight, FileText, X } from "@phosphor-icons/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createNativePageIO } from "./editor/pageIO";
@@ -209,7 +209,7 @@ export function QuickNoteApp() {
             {page && (
               <>
                 <Button variant="ghost" size="sm" onClick={() => void openInCode()}>
-                  <ExternalLink size={13} />
+                  <ArrowSquareOut size={13} />
                   VS Code
                 </Button>
                 <Button variant="ghost" size="sm" onClick={() => void openExternally()}>

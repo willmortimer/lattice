@@ -15,19 +15,19 @@ import type { EditorView } from "@tiptap/pm/view";
 import {
   ArrowDown,
   ArrowUp,
-  Bold,
   Code,
-  CopyPlus,
-  Heading1,
-  Heading2,
-  Italic,
+  CopySimple,
   Link as LinkIcon,
-  List,
-  Pilcrow,
-  Quote,
-  Strikethrough,
-  Unlink,
-} from "lucide-react";
+  LinkBreak,
+  ListBullets,
+  Paragraph,
+  Quotes,
+  TextB,
+  TextHOne,
+  TextHTwo,
+  TextItalic,
+  TextStrikethrough,
+} from "@phosphor-icons/react";
 
 import { CodeBlockView } from "./CodeBlockView";
 import { ConflictEnvelope } from "./ConflictEnvelope";
@@ -891,19 +891,19 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
           style={{ left: selectionToolbar.left, top: selectionToolbar.top }}
         >
           <button type="button" aria-label="Bold" title="Bold" onClick={() => editor.chain().focus().toggleBold().run()}>
-            <Bold size={14} />
+            <TextB size={14} />
           </button>
           <button type="button" aria-label="Italic" title="Italic" onClick={() => editor.chain().focus().toggleItalic().run()}>
-            <Italic size={14} />
+            <TextItalic size={14} />
           </button>
           <button type="button" aria-label="Strikethrough" title="Strikethrough" onClick={() => editor.chain().focus().toggleStrike().run()}>
-            <Strikethrough size={14} />
+            <TextStrikethrough size={14} />
           </button>
           <button type="button" aria-label="Inline code" title="Inline code" onClick={() => editor.chain().focus().toggleCode().run()}>
             <Code size={14} />
           </button>
           <button type="button" aria-label={editor.isActive("link") ? "Remove link" : "Add link"} title={editor.isActive("link") ? "Remove link" : "Add link"} onClick={setSelectionLink}>
-            {editor.isActive("link") ? <Unlink size={14} /> : <LinkIcon size={14} />}
+            {editor.isActive("link") ? <LinkBreak size={14} /> : <LinkIcon size={14} />}
           </button>
         </div>
       )}
@@ -914,15 +914,15 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
           aria-label="Block actions"
           style={{ left: blockToolbar.left, top: blockToolbar.top }}
         >
-          <button type="button" aria-label="Paragraph" title="Paragraph" onClick={() => transformBlock("paragraph")}><Pilcrow size={13} /></button>
-          <button type="button" aria-label="Heading 1" title="Heading 1" onClick={() => transformBlock("heading-1")}><Heading1 size={13} /></button>
-          <button type="button" aria-label="Heading 2" title="Heading 2" onClick={() => transformBlock("heading-2")}><Heading2 size={13} /></button>
-          <button type="button" aria-label="Bulleted list" title="Bulleted list" onClick={() => transformBlock("bullet-list")}><List size={13} /></button>
-          <button type="button" aria-label="Quote" title="Quote" onClick={() => transformBlock("quote")}><Quote size={13} /></button>
+          <button type="button" aria-label="Paragraph" title="Paragraph" onClick={() => transformBlock("paragraph")}><Paragraph size={13} /></button>
+          <button type="button" aria-label="Heading 1" title="Heading 1" onClick={() => transformBlock("heading-1")}><TextHOne size={13} /></button>
+          <button type="button" aria-label="Heading 2" title="Heading 2" onClick={() => transformBlock("heading-2")}><TextHTwo size={13} /></button>
+          <button type="button" aria-label="Bulleted list" title="Bulleted list" onClick={() => transformBlock("bullet-list")}><ListBullets size={13} /></button>
+          <button type="button" aria-label="Quote" title="Quote" onClick={() => transformBlock("quote")}><Quotes size={13} /></button>
           <span className="editor-toolbar-separator" />
           <button type="button" aria-label="Move block up" title="Move block up" onClick={() => moveOrDuplicateBlock("up")}><ArrowUp size={13} /></button>
           <button type="button" aria-label="Move block down" title="Move block down" onClick={() => moveOrDuplicateBlock("down")}><ArrowDown size={13} /></button>
-          <button type="button" aria-label="Duplicate block" title="Duplicate block" onClick={() => moveOrDuplicateBlock("duplicate")}><CopyPlus size={13} /></button>
+          <button type="button" aria-label="Duplicate block" title="Duplicate block" onClick={() => moveOrDuplicateBlock("duplicate")}><CopySimple size={13} /></button>
         </div>
       )}
       {mode === "edit" && slashMenu && (

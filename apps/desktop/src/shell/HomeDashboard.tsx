@@ -1,5 +1,5 @@
 import { Button } from "@lattice/ui";
-import { FilePlus2, Files, Info, Search, Sparkles } from "lucide-react";
+import { FilePlus, Files, Info, MagnifyingGlass, Sparkle } from "@phosphor-icons/react";
 
 export function HomeDashboard({
   title,
@@ -26,11 +26,11 @@ export function HomeDashboard({
         <p>{resourceCount} resources in a real directory.</p>
         <div>
           <Button variant="primary" onClick={onNewPage}>
-            <FilePlus2 size={14} />
+            <FilePlus size={14} />
             New page
           </Button>
           <Button variant="secondary" onClick={onQuickCapture}>
-            <Sparkles size={14} />
+            <Sparkle size={14} />
             Quick capture
           </Button>
         </div>
@@ -42,7 +42,7 @@ export function HomeDashboard({
           <span>Navigate pages, canvases, tables, and native files.</span>
         </button>
         <button type="button" onClick={onSearch}>
-          <Search size={20} />
+          <MagnifyingGlass size={20} />
           <strong>Search workspace</strong>
           <span>Find indexed page content without loading the workspace into React.</span>
         </button>
