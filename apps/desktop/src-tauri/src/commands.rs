@@ -243,21 +243,29 @@ pub fn apply_resource_update(request: Request<'_>) -> Result<String, String> {
         .ok_or_else(|| "resource update did not produce a resulting revision".to_string())
 }
 
-/// Create a new page at `rel_path` with `content`. Used by the external-edit
-/// conflict envelope's "keep both" action to write a sibling copy of local
-/// edits (ADR 0028) without touching the page that already exists on disk.
+/// Create a new page at `rel_path`.
+///
+/// When `template_path` is set, Rust reads that workspace-relative Markdown
+/// file, substitutes `{{title}}` / `{{date}}`, and writes the result through
+/// the semantic command core — the frontend never supplies the template body.
+/// `content` is used only for blank creates (`template_path` absent).
 #[tauri::command]
-pub fn create_page(root: String, rel_path: String, content: String) -> Result<String, String> {
+pub fn create_page(
+    root: String,
+    rel_path: String,
+    content: String,
+    template_path: Option<String>,
+    title: Option<String>,
+) -> Result<String, String> {
     let mut engine = CommandEngine::open(Path::new(&root)).map_err(command_error_to_string)?;
 
     let receipt = engine
-        .apply(Transaction::new(
-            format!("Create page {rel_path}"),
-            vec![SemanticCommand::PageCreate {
-                path: PathBuf::from(&rel_path),
-                content,
-            }],
-        ))
+        .create_page(
+            PathBuf::from(&rel_path),
+            content,
+            template_path.map(PathBuf::from),
+            title,
+        )
         .map_err(command_error_to_string)?;
 
     receipt
@@ -812,6 +820,8 @@ mod tests {
             root.clone(),
             "Notes (conflict 2026-07-15).md".to_string(),
             "# Local copy\n".to_string(),
+            None,
+            None,
         )
         .unwrap();
         assert!(revision.starts_with("sha256:"));
@@ -824,9 +834,36 @@ mod tests {
             root,
             "Notes (conflict 2026-07-15).md".to_string(),
             "# Again\n".to_string(),
+            None,
+            None,
         )
         .unwrap_err();
         assert!(err.contains("already exists"));
+    }
+
+    #[test]
+    fn create_page_from_template_substitutes_placeholders() {
+        let dir = init_workspace();
+        std::fs::create_dir_all(dir.path().join("Templates")).unwrap();
+        std::fs::write(
+            dir.path().join("Templates/Daily.md"),
+            "# {{title}}\n\n{{date}}\n",
+        )
+        .unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        create_page(
+            root.clone(),
+            "Notes/Sync.md".to_string(),
+            String::new(),
+            Some("Templates/Daily.md".to_string()),
+            Some("Sync".to_string()),
+        )
+        .unwrap();
+
+        let content = read_file(root, "Notes/Sync.md".to_string()).unwrap();
+        assert!(content.starts_with("# Sync\n\n"));
+        assert!(content.contains('-'));
     }
 
     #[test]
@@ -871,6 +908,8 @@ mod tests {
             root.clone(),
             "Inbox/Note.md".to_string(),
             "# Note\n".to_string(),
+            None,
+            None,
         )
         .unwrap();
         assert!(dir.path().join("Inbox/Note.md").exists());
