@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-import { inBrowser } from "../demo";
+import { hasTauri } from "../lib/ipc";
 import {
   applyResolvedTheme,
   detectSystemAppearance,
@@ -26,7 +26,7 @@ export async function loadThemeCatalog(
   workspaceRoot?: string | null,
 ): Promise<ThemeCatalogPayload> {
   const system = detectSystemAppearance();
-  if (inBrowser) {
+  if (!hasTauri) {
     return demoCatalog(system, workspaceRoot);
   }
   return invoke<ThemeCatalogPayload>("list_themes", {
@@ -40,7 +40,7 @@ export async function setFixedTheme(
   workspaceRoot?: string | null,
 ): Promise<ThemeCatalogPayload> {
   const system = detectSystemAppearance();
-  if (inBrowser) {
+  if (!hasTauri) {
     return demoSetTheme(themeId, system);
   }
   return invoke<ThemeCatalogPayload>("set_theme", {
@@ -55,7 +55,7 @@ export async function setAppearanceMode(
   workspaceRoot?: string | null,
 ): Promise<ThemeCatalogPayload> {
   const system = detectSystemAppearance();
-  if (inBrowser) {
+  if (!hasTauri) {
     return demoSetAppearanceMode(mode, system);
   }
   return invoke<ThemeCatalogPayload>("set_appearance_mode", {
@@ -80,7 +80,7 @@ export async function startThemeWatch(
   workspaceRoot: string | null | undefined,
   onChange: () => void,
 ): Promise<() => void> {
-  if (inBrowser) {
+  if (!hasTauri) {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const handler = () => onChange();
     mq.addEventListener("change", handler);

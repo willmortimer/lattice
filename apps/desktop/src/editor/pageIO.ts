@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../lib/ipc";
 
 /**
  * A page's full on-disk content (frontmatter and body, byte for byte) plus

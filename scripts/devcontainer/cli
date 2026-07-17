@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Build the headless `lattice` CLI. Debug by default; pass --release or set
+# LATTICE_CLI_RELEASE=1 for a release build.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "${ROOT}"
+
+BUILD_ARGS=(build -p lattice-cli)
+PROFILE="debug"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --release)
+      BUILD_ARGS+=(--release)
+      PROFILE="release"
+      shift
+      ;;
+    *)
+      BUILD_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ "${LATTICE_CLI_RELEASE:-}" == "1" && " ${BUILD_ARGS[*]} " != *" --release "* ]]; then
+  BUILD_ARGS+=(--release)
+  PROFILE="release"
+fi
+
+cargo "${BUILD_ARGS[@]}"
+
+BIN="${ROOT}/target/${PROFILE}/lattice"
+if [[ ! -x "${BIN}" ]]; then
+  echo "error: expected binary missing: ${BIN}" >&2
+  exit 1
+fi
+
+echo "lattice: ${BIN}"

@@ -1,0 +1,10 @@
+# Sent as Docker build context for `.devcontainer/Dockerfile` (no COPY today,
+# but keeps context small when the daemon is used).
+.git
+**/node_modules
+**/target
+**/dist
+**/.turbo
+**/coverage
+.env
+.env.*

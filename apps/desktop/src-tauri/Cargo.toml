@@ -29,6 +29,7 @@ lattice-commands.workspace = true
 lattice-storage.workspace = true
 lattice-index.workspace = true
 lattice-data.workspace = true
+lattice-handlers.workspace = true
 notify.workspace = true
 notify-debouncer-full.workspace = true
 
