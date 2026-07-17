@@ -387,6 +387,12 @@ fn materialize_template(
     mut created_directories: Option<&mut Vec<PathBuf>>,
 ) -> Result<()> {
     let date = provision_iso_date();
+    // Seeds under the template directory must keep `{{title}}` / `{{date}}`
+    // verbatim: they are instantiated per page at create time, not at
+    // provision time.
+    let preserved_prefix = template
+        .template_directory
+        .map(|directory| format!("{}/", directory.trim_end_matches('/')));
     for directory in template.directories {
         let path = root.join(directory.path);
         create_directory_tree(&path, root, created_directories.as_deref_mut())?;
@@ -397,7 +403,14 @@ fn materialize_template(
         if let Some(parent) = path.parent() {
             create_directory_tree(parent, root, created_directories.as_deref_mut())?;
         }
-        let bytes = expand_seed_file_bytes(file.bytes, &relative, &date);
+        let preserved = preserved_prefix
+            .as_deref()
+            .is_some_and(|prefix| relative.starts_with(prefix));
+        let bytes = if preserved {
+            file.bytes.to_vec()
+        } else {
+            expand_seed_file_bytes(file.bytes, &relative, &date)
+        };
         atomic_write_file(&path, &bytes)
             .map_err(|error| Error::io(&path, std::io::Error::other(error.to_string())))?;
         if let Some(files) = created_files.as_deref_mut() {
@@ -1026,6 +1039,27 @@ mod tests {
         );
         assert_eq!(WorkspaceTemplate::Demo.descriptor().category, "Sample");
         assert_eq!(WorkspaceTemplate::Team.descriptor().category, "Work");
+    }
+
+    #[test]
+    fn template_directory_seeds_keep_placeholders_for_create_time() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("Personal");
+        WorkspaceProvisioner::provision(&WorkspaceCreationPlan {
+            target: root.clone(),
+            title: "Personal".into(),
+            template_id: "personal".into(),
+            mode: WorkspaceCreationMode::NewDirectory,
+        })
+        .unwrap();
+        let daily = std::fs::read_to_string(root.join("Templates/Daily.md")).unwrap();
+        assert!(daily.contains("{{date}}"), "Daily.md lost {{{{date}}}}");
+        assert!(daily.contains("{{title}}"), "Daily.md lost {{{{title}}}}");
+        let meeting = std::fs::read_to_string(root.join("Templates/Meeting Note.md")).unwrap();
+        assert!(meeting.contains("{{title}}"));
+        // Seeds outside the template directory are still expanded.
+        let home = std::fs::read_to_string(root.join("Home.md")).unwrap();
+        assert!(!home.contains("{{date}}"));
     }
 
     #[test]
