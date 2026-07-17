@@ -13,6 +13,8 @@ import DataEditor, {
 import "@glideapps/glide-data-grid/dist/index.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RecordDetailPanel } from "./RecordDetailPanel";
+import { DataBoardView } from "./DataBoardView";
+import { DataListView } from "./DataListView";
 import {
   cellValueToDisplay,
   cloneSnapshot,
@@ -23,6 +25,7 @@ import {
   type DataRow,
   type FieldType,
   type ViewFilter,
+  type ViewLayoutType,
 } from "./types";
 
 const STALE_REVISION_PREFIX = "STALE_REVISION:";
@@ -102,6 +105,10 @@ export function DataTableView({
     initialSnapshot.sort_direction,
   );
   const [filters, setFilters] = useState<ViewFilter[]>(initialSnapshot.filters);
+  const [layoutType, setLayoutType] = useState<ViewLayoutType>(
+    initialSnapshot.layout_type ?? "grid",
+  );
+  const [groupBy, setGroupBy] = useState<string | undefined>(initialSnapshot.group_by);
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(() => new Set());
   const [filterField, setFilterField] = useState("");
   const [filterOperator, setFilterOperator] = useState<"equals" | "contains">("contains");
@@ -124,6 +131,8 @@ export function DataTableView({
     setSortField(next.sort_field);
     setSortDirection(next.sort_direction);
     setFilters(next.filters);
+    setLayoutType(next.layout_type ?? "grid");
+    setGroupBy(next.group_by);
     setHiddenColumns(new Set());
     revisionRef.current = next.package_revision;
     snapshotRef.current = next;
@@ -154,6 +163,8 @@ export function DataTableView({
     setSortField(cloned.sort_field);
     setSortDirection(cloned.sort_direction);
     setFilters(cloned.filters);
+    setLayoutType(cloned.layout_type ?? "grid");
+    setGroupBy(cloned.group_by);
     setHiddenColumns(new Set());
     snapshotRef.current = cloned;
     revisionRef.current = cloned.package_revision;
@@ -620,6 +631,7 @@ export function DataTableView({
         <span className="data-table-meta">
           {snapshot.default_table} · {snapshot.rows.length} row
           {snapshot.rows.length === 1 ? "" : "s"}
+          {layoutType !== "grid" ? ` · ${layoutType} view` : ""}
         </span>
         <div className="data-table-toolbar">
           <label className="data-table-view-select">
@@ -650,8 +662,11 @@ export function DataTableView({
           <button
             type="button"
             className="secondary-button"
-            onClick={() => selectedGridRow && openRecordDetail(selectedGridRow)}
-            disabled={busy || !selectedGridRow}
+            onClick={() => {
+              const row = layoutType === "grid" ? selectedGridRow : detailRow;
+              if (row) openRecordDetail(row);
+            }}
+            disabled={busy || (layoutType === "grid" ? !selectedGridRow : !detailRow)}
           >
             Open record
           </button>
@@ -742,6 +757,22 @@ export function DataTableView({
         <div className="data-grid-frame">
           {displayRows.length === 0 ? (
             <div className="data-table-empty">No rows match this view.</div>
+          ) : layoutType === "list" ? (
+            <DataListView
+              rows={displayRows}
+              columns={visibleColumns}
+              selectedRowId={detailRowId}
+              zebraRows={preferences.zebraRows}
+              onRowOpen={openRecordDetail}
+            />
+          ) : layoutType === "board" ? (
+            <DataBoardView
+              rows={displayRows}
+              columns={visibleColumns}
+              groupBy={groupBy}
+              selectedRowId={detailRowId}
+              onRowOpen={openRecordDetail}
+            />
           ) : (
             <DataEditor
               width="100%"
@@ -817,7 +848,9 @@ export function DataTableView({
 
       {showRendererStats && (
         <p className="data-renderer-stats">
-          Canvas renderer · {displayRows.length} loaded rows · {visibleCellCount} visible cells
+          {layoutType === "grid" ? "Canvas renderer" : `${layoutType} view`} · {displayRows.length}{" "}
+          loaded rows
+          {layoutType === "grid" ? ` · ${visibleCellCount} visible cells` : ""}
         </p>
       )}
 

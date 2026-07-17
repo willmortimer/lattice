@@ -201,6 +201,54 @@ fn view_round_trip_and_list_rows_with_view() {
 }
 
 #[test]
+fn list_and_board_views_load_with_layout_metadata() {
+    use crate::view::{LAYOUT_BOARD, LAYOUT_LIST};
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Boarded.data");
+    let app = DataApp::create(&package_path, "Boarded", "records").unwrap();
+
+    rusqlite::Connection::open(database_path(&package_path))
+        .unwrap()
+        .execute_batch(
+            "ALTER TABLE records ADD COLUMN name TEXT;
+             ALTER TABLE records ADD COLUMN status TEXT;",
+        )
+        .unwrap();
+
+    let views_dir = package_path.join("views");
+    std::fs::create_dir_all(&views_dir).unwrap();
+
+    let mut list_view = ViewDef::new_grid("records");
+    list_view.layout.layout_type = LAYOUT_LIST.to_string();
+    std::fs::write(views_dir.join("List.yaml"), app.render_view_yaml(&list_view).unwrap()).unwrap();
+
+    let mut board_view = ViewDef::new_grid("records");
+    board_view.layout.layout_type = LAYOUT_BOARD.to_string();
+    board_view.layout.group_by = Some("status".into());
+    std::fs::write(
+        views_dir.join("Board.yaml"),
+        app.render_view_yaml(&board_view).unwrap(),
+    )
+    .unwrap();
+
+    let loaded_list = app.load_view("List").unwrap();
+    assert_eq!(loaded_list.layout.layout_type, LAYOUT_LIST);
+    assert!(loaded_list.layout.group_by.is_none());
+
+    let loaded_board = app.load_view("Board").unwrap();
+    assert_eq!(loaded_board.layout.layout_type, LAYOUT_BOARD);
+    assert_eq!(loaded_board.layout.group_by.as_deref(), Some("status"));
+
+    let invalid_group_by = format!(
+        "format: lattice-view\nversion: 1\nsource:\n  database: ../database.sqlite\n  table: records\nlayout:\n  type: grid\n  group_by: status\n"
+    );
+    std::fs::write(views_dir.join("Invalid.yaml"), invalid_group_by).unwrap();
+    let err = app.load_view("Invalid").unwrap_err().to_string();
+    assert!(err.contains("group_by"));
+}
+
+#[test]
 fn csv_parse_and_import_columns() {
     use crate::csv::{infer_field_type, parse_csv_file, sanitize_column_name};
 
