@@ -38,7 +38,7 @@ enum Command {
         #[arg(long)]
         title: Option<String>,
         /// Workspace scaffold: `personal` (default), `project`, `research`,
-        /// `data-lab`, `team`, `demo`, or `blank`.
+        /// `second-brain`, `data-lab`, `dev-notebook`, `team`, `demo`, or `blank`.
         #[arg(long, default_value = "personal")]
         template: String,
     },
@@ -478,7 +478,7 @@ fn cmd_init(path: Option<PathBuf>, title: Option<String>, template: String) -> R
     };
     let template = WorkspaceTemplate::parse(&template).with_context(|| {
         format!(
-            "unknown template {template:?}; expected personal, project, research, data-lab, team, demo, or blank"
+            "unknown template {template:?}; expected personal, project, research, second-brain, data-lab, dev-notebook, team, demo, or blank"
         )
     })?;
     let ws = init_with_template(&root, title, template)?;

@@ -15,31 +15,37 @@ export const GENERATED_TEMPLATE_CATALOG = [
         "purpose": "Drop raw captures here — triage them into Projects or Library."
       },
       {
-        "path": "Projects"
+        "path": "Projects",
+        "purpose": "Time-bound outcomes with a clear finish line."
       },
       {
-        "path": "Areas"
+        "path": "Areas",
+        "purpose": "Ongoing responsibilities to maintain over time."
       },
       {
-        "path": "Library"
+        "path": "Library",
+        "purpose": "Reference material, book notes, and durable knowledge."
       },
       {
-        "path": "Journal"
+        "path": "Journal",
+        "purpose": "Daily notes and periodic reflections."
       },
       {
-        "path": "Templates"
+        "path": "Templates",
+        "purpose": "Reusable note patterns with {{title}} and {{date}} placeholders."
       },
       {
-        "path": "Archive"
+        "path": "Archive",
+        "purpose": "Completed projects and inactive material."
       }
     ],
     "preview": [
       "Home.md",
-      "Welcome.md",
+      "Projects/Example Project.md",
+      "Journal/2026-07-17.md",
+      "Templates/Daily.md",
       "Inbox/",
       "Projects/",
-      "Areas/",
-      "Library/",
       "Journal/"
     ],
     "capabilities": [
@@ -54,7 +60,39 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "archiveDirectory": "Archive"
     },
     "openOnCreate": "Home.md",
-    "dataPackages": []
+    "dataPackages": [
+      {
+        "path": "Tasks.data",
+        "title": "Tasks",
+        "table": "tasks",
+        "columns": [
+          {
+            "name": "task",
+            "type": "text"
+          },
+          {
+            "name": "status",
+            "type": "text"
+          },
+          {
+            "name": "due",
+            "type": "date"
+          }
+        ],
+        "rows": [
+          {
+            "task": "Review inbox",
+            "status": "todo",
+            "due": null
+          },
+          {
+            "task": "Plan the week",
+            "status": "todo",
+            "due": "2026-07-21"
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "project",
@@ -67,32 +105,47 @@ export const GENERATED_TEMPLATE_CATALOG = [
     "recommendedTitle": "Project",
     "directories": [
       {
-        "path": "Decisions"
+        "path": "Decisions",
+        "purpose": "Lightweight ADRs and decision records."
       },
       {
-        "path": "Research"
+        "path": "Meetings",
+        "purpose": "Agendas, notes, and follow-ups from syncs."
       },
       {
-        "path": "Working"
+        "path": "Research",
+        "purpose": "Background reading and exploratory notes."
       },
       {
-        "path": "Data"
+        "path": "Working",
+        "purpose": "Active drafts and in-progress material."
       },
       {
-        "path": "Outputs"
+        "path": "Data",
+        "purpose": "Tables, datasets, and structured inputs."
       },
       {
-        "path": "Archive"
+        "path": "Outputs",
+        "purpose": "Deliverables ready to share."
+      },
+      {
+        "path": "Templates",
+        "purpose": "Reusable patterns for decisions and meetings."
+      },
+      {
+        "path": "Archive",
+        "purpose": "Superseded or completed material."
       }
     ],
     "preview": [
       "Home.md",
       "Brief.md",
       "Plan.md",
+      "Milestones.canvas",
+      "Decisions/0001 Example decision.md",
       "Decisions/",
-      "Working/",
-      "Data/",
-      "Outputs/"
+      "Meetings/",
+      "Working/"
     ],
     "capabilities": [
       "pages",
@@ -101,6 +154,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
     ],
     "workspaceDefaults": {
       "quickNoteDirectory": "Working",
+      "templateDirectory": "Templates",
       "archiveDirectory": "Archive"
     },
     "openOnCreate": "Home.md",
@@ -117,36 +171,44 @@ export const GENERATED_TEMPLATE_CATALOG = [
     "recommendedTitle": "Research",
     "directories": [
       {
-        "path": "Inbox"
+        "path": "Inbox",
+        "purpose": "Unprocessed captures awaiting triage."
       },
       {
-        "path": "Sources"
+        "path": "Sources",
+        "purpose": "Literature notes with citation metadata."
       },
       {
-        "path": "Notes"
+        "path": "Notes",
+        "purpose": "Developing ideas and synthesis."
       },
       {
-        "path": "Data"
+        "path": "Data",
+        "purpose": "Datasets supporting analysis."
       },
       {
-        "path": "Experiments"
+        "path": "Experiments",
+        "purpose": "Reproducible runs and protocols."
       },
       {
-        "path": "Outputs"
+        "path": "Outputs",
+        "purpose": "Published findings and write-ups."
       },
       {
-        "path": "Bibliography"
+        "path": "Bibliography",
+        "purpose": "Formal reference list and exports."
       },
       {
-        "path": "Archive"
+        "path": "Archive",
+        "purpose": "Completed or superseded research."
       }
     ],
     "preview": [
       "Home.md",
       "Questions.md",
+      "Sources/Example Paper.md",
       "Sources/",
       "Notes/",
-      "Data/",
       "Experiments/",
       "Outputs/"
     ],
@@ -161,6 +223,100 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "archiveDirectory": "Archive"
     },
     "openOnCreate": "Home.md",
+    "dataPackages": [
+      {
+        "path": "Experiments/experiments-log.data",
+        "title": "Experiments log",
+        "table": "experiments",
+        "columns": [
+          {
+            "name": "name",
+            "type": "text"
+          },
+          {
+            "name": "status",
+            "type": "text"
+          },
+          {
+            "name": "run_date",
+            "type": "date"
+          },
+          {
+            "name": "notes",
+            "type": "long_text"
+          }
+        ],
+        "rows": [
+          {
+            "name": "Baseline replication",
+            "status": "planned",
+            "run_date": null,
+            "notes": "Replicate methods from Example Paper."
+          },
+          {
+            "name": "Pilot run",
+            "status": "complete",
+            "run_date": "2026-07-10",
+            "notes": "Smoke test of data pipeline."
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "second-brain",
+    "order": 35,
+    "name": "Second Brain",
+    "category": "Knowledge & Research",
+    "description": "Capture fleeting ideas, grow atomic notes, and navigate your knowledge with maps of content and agent-ready context.",
+    "visibility": "gallery",
+    "recommended": false,
+    "recommendedTitle": "Second Brain",
+    "directories": [
+      {
+        "path": "Inbox",
+        "purpose": "Fleeting captures and unsorted inputs — triage into Notes or Sources."
+      },
+      {
+        "path": "Notes",
+        "purpose": "Atomic, densely linked notes that accrue meaning over time."
+      },
+      {
+        "path": "MOCs",
+        "purpose": "Maps of content that orient you across topics without rigid folders."
+      },
+      {
+        "path": "Sources",
+        "purpose": "Books, papers, articles, and media you want to cite or distill."
+      },
+      {
+        "path": "Context",
+        "purpose": "Workspace context for humans and agents — scope, tone, and conventions."
+      },
+      {
+        "path": "Prompts",
+        "purpose": "Reusable prompt patterns for synthesis, review, and extraction."
+      }
+    ],
+    "preview": [
+      "MOCs/Knowledge Base.md",
+      "Notes/Capture Workflow.md",
+      "Notes/Evergreen Notes.md",
+      "Notes/Linking Philosophy.md",
+      "Inbox/",
+      "Sources/",
+      "Context/AGENTS.md",
+      "Prompts/"
+    ],
+    "capabilities": [
+      "pages",
+      "citations"
+    ],
+    "workspaceDefaults": {
+      "quickNoteDirectory": "Inbox",
+      "templateDirectory": "Prompts"
+    },
+    "openOnCreate": "MOCs/Knowledge Base.md",
     "dataPackages": []
   },
   {
@@ -174,35 +330,43 @@ export const GENERATED_TEMPLATE_CATALOG = [
     "recommendedTitle": "Data Lab",
     "directories": [
       {
-        "path": "Sources"
+        "path": "Connections",
+        "purpose": "Database, API, and file connection definitions."
       },
       {
-        "path": "Data"
+        "path": "Data",
+        "purpose": "Canonical datasets and curated tables."
       },
       {
-        "path": "Queries"
+        "path": "Queries",
+        "purpose": "Reusable SQL and saved query definitions."
       },
       {
-        "path": "Notebooks"
+        "path": "Notebooks",
+        "purpose": "Reproducible analysis notebooks."
       },
       {
-        "path": "Dashboards"
+        "path": "Dashboards",
+        "purpose": "Interactive summaries and charts."
       },
       {
-        "path": "Reports"
+        "path": "Reports",
+        "purpose": "Narrative findings and published analysis."
       },
       {
-        "path": "Archive"
+        "path": "Archive",
+        "purpose": "Deprecated datasets and old reports."
       }
     ],
     "preview": [
       "Home.md",
-      "Sources/",
+      "Data/contacts.csv",
+      "Queries/example.sql",
+      "Notebooks/example.ipynb",
+      "Connections/",
       "Data/",
       "Queries/",
-      "Notebooks/",
-      "Dashboards/",
-      "Reports/"
+      "Notebooks/"
     ],
     "capabilities": [
       "pages",
@@ -215,7 +379,148 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "archiveDirectory": "Archive"
     },
     "openOnCreate": "Home.md",
-    "dataPackages": []
+    "dataPackages": [
+      {
+        "path": "Data/metrics.data",
+        "title": "Metrics",
+        "table": "metrics",
+        "columns": [
+          {
+            "name": "metric",
+            "type": "text"
+          },
+          {
+            "name": "value",
+            "type": "decimal"
+          },
+          {
+            "name": "recorded_on",
+            "type": "date"
+          }
+        ],
+        "rows": [
+          {
+            "metric": "active_users",
+            "value": 128,
+            "recorded_on": "2026-07-01"
+          },
+          {
+            "metric": "query_latency_ms",
+            "value": 42.5,
+            "recorded_on": "2026-07-01"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "dev-notebook",
+    "order": 45,
+    "name": "Dev Notebook",
+    "category": "Work",
+    "description": "Track architecture, decisions, snippets, runbooks, debug notes, and issues in one engineering workspace.",
+    "visibility": "gallery",
+    "recommended": false,
+    "recommendedTitle": "Dev Notebook",
+    "directories": [
+      {
+        "path": "Architecture",
+        "purpose": "System diagrams, canvases, and structural notes."
+      },
+      {
+        "path": "Decisions",
+        "purpose": "Architecture decision records and technical rationale."
+      },
+      {
+        "path": "Snippets",
+        "purpose": "Reusable TypeScript, Rust, SQL, and shell fragments.",
+        "defaultKind": "file"
+      },
+      {
+        "path": "Runbooks",
+        "purpose": "Operational procedures, deploy steps, and incident playbooks."
+      },
+      {
+        "path": "Debug Journal",
+        "purpose": "Timestamped investigation notes, repro steps, and hypotheses."
+      },
+      {
+        "path": "Archive",
+        "purpose": "Retired notes, resolved issues, and superseded decisions."
+      }
+    ],
+    "preview": [
+      "Home.md",
+      "Architecture/System Overview.canvas",
+      "Architecture/Component Map.md",
+      "Decisions/0001-record-architecture-decisions.md",
+      "Snippets/",
+      "Runbooks/",
+      "Debug Journal/",
+      "Issues.data"
+    ],
+    "capabilities": [
+      "pages",
+      "canvas",
+      "sqlite"
+    ],
+    "workspaceDefaults": {
+      "quickNoteDirectory": "Debug Journal",
+      "archiveDirectory": "Archive"
+    },
+    "openOnCreate": "Home.md",
+    "dataPackages": [
+      {
+        "path": "Issues.data",
+        "title": "Issues",
+        "table": "issues",
+        "columns": [
+          {
+            "name": "title",
+            "type": "text"
+          },
+          {
+            "name": "status",
+            "type": "text"
+          },
+          {
+            "name": "priority",
+            "type": "text"
+          },
+          {
+            "name": "component",
+            "type": "text"
+          },
+          {
+            "name": "notes",
+            "type": "long_text"
+          }
+        ],
+        "rows": [
+          {
+            "title": "Provision workspace from template",
+            "status": "done",
+            "priority": "medium",
+            "component": "tooling",
+            "notes": "Seed Issues.data and verify wiki links on Home.md."
+          },
+          {
+            "title": "Add health check endpoint",
+            "status": "open",
+            "priority": "high",
+            "component": "api",
+            "notes": "See Snippets/api-handler.ts for the handler stub."
+          },
+          {
+            "title": "Document deploy rollback",
+            "status": "open",
+            "priority": "low",
+            "component": "ops",
+            "notes": "Capture steps in Runbooks/ before the next release."
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "blank",

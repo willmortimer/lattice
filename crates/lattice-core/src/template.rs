@@ -770,7 +770,15 @@ mod tests {
                 .into_iter()
                 .map(|template| template.id)
                 .collect::<Vec<_>>(),
-            ["personal", "project", "research", "data-lab", "blank"]
+            [
+                "personal",
+                "project",
+                "research",
+                "second-brain",
+                "data-lab",
+                "dev-notebook",
+                "blank",
+            ]
         );
         assert_eq!(WorkspaceTemplate::samples()[0].id, "demo");
         assert_eq!(
@@ -786,7 +794,16 @@ mod tests {
                 .into_iter()
                 .map(|template| template.id)
                 .collect::<Vec<_>>(),
-            ["personal", "project", "research", "data-lab", "blank", "demo"]
+            [
+                "personal",
+                "project",
+                "research",
+                "second-brain",
+                "data-lab",
+                "dev-notebook",
+                "blank",
+                "demo",
+            ]
         );
     }
 
