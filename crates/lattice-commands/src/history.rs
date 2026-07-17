@@ -4,6 +4,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use rusqlite::{Connection, OptionalExtension};
 
+use crate::revisions::RevisionService;
 use crate::{Error, Result};
 
 /// One stored transaction row (without its operations).
@@ -33,6 +34,7 @@ pub(crate) struct StoredOperation {
 /// revision each write produced (for the external-edit guard).
 pub(crate) struct HistoryStore {
     conn: Mutex<Connection>,
+    revisions: RevisionService,
 }
 
 impl HistoryStore {
@@ -63,8 +65,10 @@ impl HistoryStore {
                 PRIMARY KEY (tx_rowid, seq)
             );",
         )?;
+        let revisions = RevisionService::open(workspace_root)?;
         Ok(HistoryStore {
             conn: Mutex::new(conn),
+            revisions,
         })
     }
 
@@ -91,20 +95,25 @@ impl HistoryStore {
         forward_json: &str,
         inverse_json: &str,
         prior_content: Option<&[u8]>,
+        after_content: Option<&[u8]>,
         resulting_revision: Option<&str>,
     ) -> Result<()> {
+        let prior_object_hash = self.revisions.store_operation_payload(prior_content)?;
+        let after_object_hash = self.revisions.store_operation_payload(after_content)?;
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "INSERT INTO operations
-                (tx_rowid, seq, forward_json, inverse_json, prior_content, resulting_revision)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                (tx_rowid, seq, forward_json, inverse_json, prior_content,
+                 resulting_revision, prior_object_hash, after_object_hash)
+             VALUES (?1, ?2, ?3, ?4, NULL, ?5, ?6, ?7)",
             rusqlite::params![
                 tx_rowid,
                 seq,
                 forward_json,
                 inverse_json,
-                prior_content,
-                resulting_revision
+                resulting_revision,
+                prior_object_hash,
+                after_object_hash,
             ],
         )?;
         Ok(())
@@ -118,13 +127,23 @@ impl HistoryStore {
         tx_rowid: i64,
         seq: i64,
         prior_content: Option<&[u8]>,
+        after_content: Option<&[u8]>,
         resulting_revision: Option<&str>,
     ) -> Result<()> {
+        let prior_object_hash = self.revisions.store_operation_payload(prior_content)?;
+        let after_object_hash = self.revisions.store_operation_payload(after_content)?;
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "UPDATE operations SET prior_content = ?3, resulting_revision = ?4
+            "UPDATE operations SET prior_content = NULL, prior_object_hash = ?3,
+                    after_object_hash = ?4, resulting_revision = ?5
              WHERE tx_rowid = ?1 AND seq = ?2",
-            rusqlite::params![tx_rowid, seq, prior_content, resulting_revision],
+            rusqlite::params![
+                tx_rowid,
+                seq,
+                prior_object_hash,
+                after_object_hash,
+                resulting_revision
+            ],
         )?;
         Ok(())
     }
@@ -138,13 +157,15 @@ impl HistoryStore {
         Ok(())
     }
 
-    /// Delete the redo stack (all undone transactions and their operations).
-    /// Called at the start of every fresh apply so a new change discards any
-    /// forward history the user chose not to redo.
+    /// Discard the redo stack while retaining its transaction and operation
+    /// metadata indefinitely for audit/history views.
     pub(crate) fn clear_redo_stack(&self) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        // ON DELETE CASCADE removes the operations.
-        conn.execute("DELETE FROM transactions WHERE undone = 1", [])?;
+        conn.execute(
+            "UPDATE transactions SET redo_discarded = 1
+             WHERE undone = 1 AND redo_discarded = 0",
+            [],
+        )?;
         Ok(())
     }
 
@@ -179,7 +200,9 @@ impl HistoryStore {
         let conn = self.conn.lock().unwrap();
         conn.query_row(
             "SELECT rowid, tx_id, summary, created_at, idempotency_key, undone
-             FROM transactions WHERE undone = 1 ORDER BY rowid ASC LIMIT 1",
+             FROM transactions
+             WHERE undone = 1 AND redo_discarded = 0
+             ORDER BY rowid ASC LIMIT 1",
             [],
             row_to_transaction,
         )
@@ -188,21 +211,39 @@ impl HistoryStore {
     }
 
     pub(crate) fn operations(&self, tx_rowid: i64) -> Result<Vec<StoredOperation>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT forward_json, inverse_json, prior_content, resulting_revision
-             FROM operations WHERE tx_rowid = ?1 ORDER BY seq ASC",
-        )?;
-        let rows = stmt.query_map([tx_rowid], |row| {
-            Ok(StoredOperation {
-                forward_json: row.get(0)?,
-                inverse_json: row.get(1)?,
-                prior_content: row.get(2)?,
-                resulting_revision: row.get(3)?,
-            })
-        })?;
-        rows.collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(Error::from)
+        let rows = {
+            let conn = self.conn.lock().unwrap();
+            let mut stmt = conn.prepare(
+                "SELECT forward_json, inverse_json, prior_content,
+                        prior_object_hash, resulting_revision
+                 FROM operations WHERE tx_rowid = ?1 ORDER BY seq ASC",
+            )?;
+            let rows = stmt.query_map([tx_rowid], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<Vec<u8>>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                ))
+            })?;
+            rows.collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        rows.into_iter()
+            .map(
+                |(forward_json, inverse_json, legacy_prior, prior_hash, resulting_revision)| {
+                    Ok(StoredOperation {
+                        forward_json,
+                        inverse_json,
+                        prior_content: match prior_hash {
+                            Some(hash) => Some(self.revisions.read_object(&hash)?),
+                            None => legacy_prior,
+                        },
+                        resulting_revision,
+                    })
+                },
+            )
+            .collect()
     }
 
     /// The most recent `limit` transactions, newest first, each with its
@@ -219,6 +260,10 @@ impl HistoryStore {
         })?;
         rows.collect::<rusqlite::Result<Vec<_>>>()
             .map_err(Error::from)
+    }
+
+    pub(crate) fn revisions(&self) -> &RevisionService {
+        &self.revisions
     }
 }
 
