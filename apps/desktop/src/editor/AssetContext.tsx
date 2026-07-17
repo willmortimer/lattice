@@ -10,6 +10,8 @@ export interface AssetContextValue {
   /** The open page's path, relative to `root` — embeds resolve relative
    * to this file's own directory, not the workspace root. */
   pagePath: string;
+  /** Open an embedded resource when the user activates a lattice-embed card. */
+  onOpenEmbed?: (path: string) => void;
 }
 
 const DEFAULT_VALUE: AssetContextValue = { root: null, pagePath: "" };

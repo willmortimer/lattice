@@ -24,7 +24,13 @@ export function PageResourceRenderer({
           ]}
         />
       )}
-      <AssetContextProvider value={{ root: context.assetRoot, pagePath: session.resource.path }}>
+      <AssetContextProvider
+        value={{
+          root: context.assetRoot,
+          pagePath: session.resource.path,
+          onOpenEmbed: callbacks.onOpenFile,
+        }}
+      >
         <PageEditor
           key={`${session.resource.path}#${context.reloadToken}`}
           ref={context.pageEditorRef}
