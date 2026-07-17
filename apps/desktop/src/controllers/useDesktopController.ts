@@ -28,7 +28,7 @@ import { useResourceReconciliation, type ResourceReconciliationController } from
 import { useWorkspaceController } from "./useWorkspaceController";
 import { useDesktopActionsController } from "./desktopActions";
 import { useTreeActionsController } from "./treeActions";
-import { invoke } from "@tauri-apps/api/core";
+import { hasTauri, invoke } from "../lib/ipc";
 import { listen } from "@tauri-apps/api/event";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import type { PaletteItem } from "../CommandPalette";
@@ -483,7 +483,7 @@ export function useDesktopController() {
   );
 
   useEffect(() => {
-    if (inBrowser) return;
+    if (!hasTauri) return;
     let unlisten: (() => void) | undefined;
     void listen<{ root: string; path: string }>("open-resource", (event) => {
       const open = async () => {
@@ -505,7 +505,7 @@ export function useDesktopController() {
   }, []);
 
   useEffect(() => {
-    if (inBrowser) return;
+    if (!hasTauri) return;
     void register(QUICK_NOTE_SHORTCUT, () => {
       void showQuickNote(snapshotRef.current?.root).catch((err) => setError(String(err)));
     }).catch((err) => {
@@ -575,7 +575,7 @@ export function useDesktopController() {
       });
     }
 
-    if (!inBrowser) {
+    if (hasTauri) {
       actions.push({ id: "action:undo", label: "Undo last change", run: () => void handleUndo() });
     }
 

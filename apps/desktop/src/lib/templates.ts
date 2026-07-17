@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./ipc";
 
 import { inBrowser } from "../demo";
 import { GENERATED_TEMPLATE_CATALOG } from "../templateCatalog.generated";
