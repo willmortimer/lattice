@@ -30,6 +30,9 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             SeedFile { path: "Home.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/personal/files/Home.md")) },
             SeedFile { path: "Welcome.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/personal/files/Welcome.md")) }
         ],
+        data_packages: &[
+            
+        ],
     },
     GeneratedTemplate {
         id: "project",
@@ -60,6 +63,9 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             SeedFile { path: "Home.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/project/files/Home.md")) },
             SeedFile { path: "Brief.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/project/files/Brief.md")) },
             SeedFile { path: "Plan.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/project/files/Plan.md")) }
+        ],
+        data_packages: &[
+            
         ],
     },
     GeneratedTemplate {
@@ -93,6 +99,9 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             SeedFile { path: "Home.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/research/files/Home.md")) },
             SeedFile { path: "Questions.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/research/files/Questions.md")) }
         ],
+        data_packages: &[
+            
+        ],
     },
     GeneratedTemplate {
         id: "data-lab",
@@ -123,6 +132,9 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
         files: &[
             SeedFile { path: "Home.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/data-lab/files/Home.md")) }
         ],
+        data_packages: &[
+            
+        ],
     },
     GeneratedTemplate {
         id: "blank",
@@ -145,6 +157,9 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
         archive_directory: None,
         open_on_create: None,
         files: &[
+            
+        ],
+        data_packages: &[
             
         ],
     },
@@ -178,6 +193,9 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             SeedFile { path: "Research/Competitor Analysis.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Research/Competitor Analysis.md")) },
             SeedFile { path: "Canvases/Product Strategy.canvas", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Canvases/Product Strategy.canvas")) }
         ],
+        data_packages: &[
+            
+        ],
     },
     GeneratedTemplate {
         id: "team",
@@ -205,6 +223,9 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
         open_on_create: Some("Home.md"),
         files: &[
             SeedFile { path: "Home.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/team/files/Home.md")) }
+        ],
+        data_packages: &[
+            
         ],
     }
 ];

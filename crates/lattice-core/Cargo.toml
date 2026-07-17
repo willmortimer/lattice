@@ -8,12 +8,14 @@ license.workspace = true
 
 [dependencies]
 serde.workspace = true
+serde_json.workspace = true
 serde_yaml.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
 walkdir.workspace = true
 lattice-storage.workspace = true
 lattice-profile.workspace = true
+lattice-data.workspace = true
 notify.workspace = true
 notify-debouncer-full.workspace = true
 dirs.workspace = true

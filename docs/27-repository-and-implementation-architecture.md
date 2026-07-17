@@ -130,10 +130,16 @@ The frontend shell should not import every capability eagerly. Use route and res
 
 Workspace template manifests and seed files under `templates/workspaces/` are
 the source of truth. Run `pnpm compile-templates` after changing them. It
-validates paths, collisions, bounds, sources, and seeded links, then writes:
+validates paths, collisions, bounds, sources, seeded links, and optional
+declarative `dataPackages` (JSON column/row seeds for `.data` packages; no
+committed SQLite binaries), then writes:
 
 - `crates/lattice-core/src/template_catalog.generated.rs`
 - `apps/desktop/src/templateCatalog.generated.ts`
+
+Flat `files[]` entries (including binaries) are embedded via `include_bytes!`.
+`dataPackages` JSON counts toward the same 2MiB seed budget and is materialized
+with `DataApp::create` plus row inserts at provision time.
 
 Do not edit either generated catalog directly.
 

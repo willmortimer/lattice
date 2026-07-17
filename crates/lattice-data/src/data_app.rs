@@ -372,8 +372,8 @@ impl DataApp {
         Ok((visible_meta, collected))
     }
 
-    /// Add columns inferred from CSV import and update manifest/schema files.
-    pub fn add_columns_from_csv(&mut self, table: &str, csv: &CsvTable) -> Result<()> {
+    /// Add columns and update manifest/schema files. Existing column names are skipped.
+    pub fn add_columns(&mut self, table: &str, columns: &[(&str, FieldType)]) -> Result<()> {
         validate_identifier(table)?;
         ensure_table_exists(&self.conn, table)?;
 
@@ -383,21 +383,21 @@ impl DataApp {
 
         let existing = self.columns(table)?;
         let table_meta = self.manifest.tables.entry(table.to_string()).or_default();
-        for (header, field_type) in csv.headers.iter().zip(&csv.field_types) {
-            validate_identifier(header)?;
-            if existing.iter().any(|column| column.name == *header) {
+        for (name, field_type) in columns {
+            validate_identifier(name)?;
+            if existing.iter().any(|column| column.name == *name) {
                 continue;
             }
 
             let sqlite_type = field_type.sqlite_type();
-            let alter = format!("ALTER TABLE {table} ADD COLUMN {header} {sqlite_type};\n");
+            let alter = format!("ALTER TABLE {table} ADD COLUMN {name} {sqlite_type};\n");
             self.conn
                 .execute_batch(&alter)
                 .map_err(|source| Error::table(table, source.to_string()))?;
             schema_sql.push_str(&alter);
 
             table_meta.columns.insert(
-                header.clone(),
+                (*name).to_string(),
                 crate::app::ColumnMetaYaml {
                     field_type: *field_type,
                 },
@@ -408,6 +408,17 @@ impl DataApp {
             .map_err(|source| Error::io(&schema_file, source))?;
         self.manifest.save(&app_manifest_path(&self.path))?;
         Ok(())
+    }
+
+    /// Add columns inferred from CSV import and update manifest/schema files.
+    pub fn add_columns_from_csv(&mut self, table: &str, csv: &CsvTable) -> Result<()> {
+        let columns: Vec<(&str, FieldType)> = csv
+            .headers
+            .iter()
+            .zip(&csv.field_types)
+            .map(|(header, field_type)| (header.as_str(), *field_type))
+            .collect();
+        self.add_columns(table, &columns)
     }
 
     /// Insert parsed CSV rows into an existing table (caller handles transactions).

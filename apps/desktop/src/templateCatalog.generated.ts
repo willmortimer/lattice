@@ -53,7 +53,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "templateDirectory": "Templates",
       "archiveDirectory": "Archive"
     },
-    "openOnCreate": "Home.md"
+    "openOnCreate": "Home.md",
+    "dataPackages": []
   },
   {
     "id": "project",
@@ -102,7 +103,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "quickNoteDirectory": "Working",
       "archiveDirectory": "Archive"
     },
-    "openOnCreate": "Home.md"
+    "openOnCreate": "Home.md",
+    "dataPackages": []
   },
   {
     "id": "research",
@@ -158,7 +160,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "quickNoteDirectory": "Inbox",
       "archiveDirectory": "Archive"
     },
-    "openOnCreate": "Home.md"
+    "openOnCreate": "Home.md",
+    "dataPackages": []
   },
   {
     "id": "data-lab",
@@ -211,7 +214,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "quickNoteDirectory": "Reports",
       "archiveDirectory": "Archive"
     },
-    "openOnCreate": "Home.md"
+    "openOnCreate": "Home.md",
+    "dataPackages": []
   },
   {
     "id": "blank",
@@ -231,7 +235,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
     ],
     "workspaceDefaults": {
       "quickNoteDirectory": "Inbox"
-    }
+    },
+    "dataPackages": []
   },
   {
     "id": "demo",
@@ -272,7 +277,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "quickNoteDirectory": "Research",
       "archiveDirectory": "Archive"
     },
-    "openOnCreate": "Home.md"
+    "openOnCreate": "Home.md",
+    "dataPackages": []
   },
   {
     "id": "team",
@@ -316,6 +322,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "quickNoteDirectory": "Meetings",
       "archiveDirectory": "Archive"
     },
-    "openOnCreate": "Home.md"
+    "openOnCreate": "Home.md",
+    "dataPackages": []
   }
 ] as const;
