@@ -94,6 +94,12 @@ pub enum Error {
     #[error("history database error: {0}")]
     Sqlite(#[from] rusqlite::Error),
 
+    #[error("invalid revision payload reference: {revision}")]
+    InvalidRevision { revision: String },
+
+    #[error("revision {revision} was not found for {path}")]
+    RevisionNotFound { path: PathBuf, revision: String },
+
     #[error("failed to (de)serialize command: {0}")]
     Json(#[from] serde_json::Error),
 
