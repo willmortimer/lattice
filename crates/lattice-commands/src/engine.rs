@@ -172,6 +172,34 @@ impl CommandEngine {
         self.trash_policy = policy;
     }
 
+    /// Create a page, optionally instantiating body content from a workspace
+    /// template (`{{title}}` / `{{date}}`) before writing through
+    /// [`Command::PageCreate`]. History records the substituted body — not
+    /// the template path — so undo/redo stays stable if the template changes.
+    pub fn create_page(
+        &mut self,
+        path: PathBuf,
+        content: String,
+        template_path: Option<PathBuf>,
+        title: Option<String>,
+    ) -> Result<TransactionReceipt> {
+        let body = crate::template::resolve_page_create_content(
+            &self.store,
+            &path,
+            &content,
+            template_path.as_deref(),
+            title.as_deref(),
+            std::time::SystemTime::now(),
+        )?;
+        self.apply(Transaction::new(
+            format!("Create page {}", path.display()),
+            vec![Command::PageCreate {
+                path,
+                content: body,
+            }],
+        ))
+    }
+
     /// Validate and apply a transaction atomically.
     ///
     /// If the transaction's idempotency key was already applied, returns the
