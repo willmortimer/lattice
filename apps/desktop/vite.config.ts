@@ -13,6 +13,9 @@ export default defineConfig(async () => ({
     strictPort: true,
   },
   envPrefix: ["VITE_", "TAURI_"],
+  worker: {
+    format: "es",
+  },
   build: {
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
     rollupOptions: {

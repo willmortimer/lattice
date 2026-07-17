@@ -15,8 +15,8 @@ export function ResourceSurface({ session, capabilities, context, registry }: Re
   const defaultRegistry = useMemo(createDefaultResourceRendererRegistry, []);
   const activeRegistry = registry ?? defaultRegistry;
   const resolution = useMemo(
-    () => activeRegistry.resolve(session.resource.kind, capabilities),
-    [activeRegistry, capabilities, session.resource.kind],
+    () => activeRegistry.resolve(session.resource, capabilities),
+    [activeRegistry, capabilities, session.resource],
   );
   const [component, setComponent] = useState<ResourceRendererComponent<ResourceRendererContext, OpenResourceSession> | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
