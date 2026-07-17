@@ -225,7 +225,6 @@ export const demoDataApp: DataAppSnapshot = {
     "All"
   ],
   "active_view": "All",
-  "layout_type": "grid",
   "filters": []
 };
 
