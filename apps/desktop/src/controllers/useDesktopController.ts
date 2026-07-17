@@ -501,6 +501,36 @@ export function useDesktopController() {
       actions.push({ id: "action:undo", label: "Undo last change", run: () => void handleUndo() });
     }
 
+    if (selected && session?.kind === "page") {
+      actions.push({
+        id: "action:insert-resource-link",
+        label: `Insert link to ${selected.path}`,
+        hint: "page",
+        run: () => {
+          setStatusToast(`Drag ${selected.path} onto the page, or paste [[${selected.path.split("/").pop()}]]`);
+        },
+      });
+      actions.push({
+        id: "action:insert-resource-embed",
+        label: `Insert embed of ${selected.path}`,
+        hint: "Alt-drop",
+        run: () => {
+          setStatusToast(`Alt-drop ${selected.path} onto the page to embed`);
+        },
+      });
+    }
+
+    if (selected && session?.kind === "canvas") {
+      actions.push({
+        id: "action:place-on-canvas",
+        label: `Place ${selected.path} on canvas`,
+        hint: "drop or toolbar",
+        run: () => {
+          setStatusToast(`Drop ${selected.path} onto the canvas, or use Place on Canvas`);
+        },
+      });
+    }
+
     const files: PaletteItem[] = (snapshot?.resources ?? []).map((resource) => ({
       id: `file:${resource.path}`,
       label: resource.path.split("/").pop() ?? resource.path,
@@ -515,7 +545,7 @@ export function useDesktopController() {
     // depending on the underlying data (not the handlers themselves) keeps
     // this from recomputing on every keystroke without going stale.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snapshot, selected, themeCatalog, applyThemeCatalog]);
+  }, [snapshot, selected, session, themeCatalog, applyThemeCatalog]);
 
   const handleQuickNoteRef = useRef(handleQuickNote);
   handleQuickNoteRef.current = handleQuickNote;

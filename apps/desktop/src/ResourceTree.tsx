@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { KindMark, KIND_LABELS } from "./KindMark";
+import { writeResourceDragPayload } from "./lib/resourceDrag";
 import { buildResourceTree, type TreeNode } from "./lib/resourceTree";
 import type { Resource } from "./types";
 
@@ -73,6 +74,10 @@ export function ResourceTree({
           style={{ paddingLeft: indent }}
           aria-label={`${KIND_LABELS[resource.kind]}: ${resource.path}`}
           title={resource.path}
+          draggable
+          onDragStart={(event) => {
+            writeResourceDragPayload(event.dataTransfer, resource);
+          }}
           onClick={() => onSelect(resource)}
           onContextMenu={() => onContextMenu?.(resource)}
         >
