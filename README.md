@@ -56,6 +56,9 @@ Common tasks are flake apps (and `lattice-<task>` inside the dev shell).
 Full guide: [docs/dev/nix-workflows.md](docs/dev/nix-workflows.md).
 Environment variables: [docs/dev/environment.md](docs/dev/environment.md).
 
+For a Linux Dev Container / DevCell cell (browser demo + docs site, no Tauri):
+[docs/dev/devcontainer.md](docs/dev/devcontainer.md).
+
 ```sh
 nix run .#test            # cargo test --workspace
 nix run .#lint            # clippy -D warnings + rustfmt check
