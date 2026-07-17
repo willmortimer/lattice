@@ -169,7 +169,7 @@ pub fn new_link_repair_plan_id() -> String {
 
 /// Current unix timestamp for plan metadata.
 pub fn link_repair_now() -> u64 {
-    unix_now()
+    unix_now().max(0) as u64
 }
 
 #[cfg(test)]

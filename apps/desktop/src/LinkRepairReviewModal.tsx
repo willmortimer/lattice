@@ -10,8 +10,8 @@ import {
 } from "@lattice/ui";
 import { useMemo, useState } from "react";
 
-import type { LinkRepairCandidate, LinkRepairPlan } from "./linkRepair";
-import { defaultAcceptedCandidateIds } from "./linkRepair";
+import type { LinkRepairCandidate, LinkRepairPlan } from "./lib/linkRepair";
+import { defaultAcceptedCandidateIds } from "./lib/linkRepair";
 
 export interface LinkRepairReviewModalProps {
   plan: LinkRepairPlan;
