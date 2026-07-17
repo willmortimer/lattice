@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import { compileTemplates } from "./compile-templates.mjs";
+import { compileTemplates, emitDemoWorkspace } from "./compile-templates.mjs";
 
 const CATEGORIES = [
   "Everyday",
@@ -140,6 +140,28 @@ test("template compiler accepts declarative dataPackages", () => {
   assert.equal(templates[0].dataPackages.length, 1);
   assert.equal(templates[0].dataPackages[0].path, "Data/Contacts.data");
   assert.equal(templates[0].dataPackages[0].rows.length, 1);
+});
+
+test("demo template emits kitchen-sink browser fixture", () => {
+  const templates = compileTemplates();
+  const demo = templates.find((template) => template.id === "demo");
+  assert.ok(demo);
+  assert.equal(demo.openOnCreate, "Home.md");
+  assert.ok(demo.dataPackages.some((entry) => entry.path === "CRM.data"));
+  assert.ok(demo.files.some((file) => file.path === "Research/Architecture.md"));
+  assert.ok(demo.files.some((file) => file.path === "Data/sample.csv"));
+  assert.ok(demo.files.some((file) => file.path === "Resources/mark.svg"));
+  assert.ok(demo.directories.some((entry) => entry.path === "Inbox" && entry.purpose));
+
+  const source = emitDemoWorkspace(templates);
+  assert.match(source, /export const demoSnapshot/);
+  assert.match(source, /"id": "0198-demo"/);
+  assert.match(source, /"id": "0198-demo-ada"/);
+  assert.match(source, /"id": "0198-demo-grace"/);
+  assert.match(source, /Research\/Architecture\.md/);
+  assert.match(source, /Resources\/config\.json/);
+  assert.match(source, /CRM\.data/);
+  assert.match(source, /mermaid/);
 });
 
 test("template compiler rejects invalid dataPackages", () => {

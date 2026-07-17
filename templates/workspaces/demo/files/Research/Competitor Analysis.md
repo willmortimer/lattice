@@ -10,3 +10,5 @@ tags: [research]
 | Obsidian | plain files | rich data |
 | Notion | interaction | your files |
 | Airtable | typed records | API lock-in |
+
+#research

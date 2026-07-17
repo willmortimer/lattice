@@ -11,7 +11,8 @@ Built-in workspace templates are packages under
 ordinary seed files, directories, optional declarative `dataPackages`,
 capabilities, defaults, and visibility.
 `pnpm compile-templates` validates packages and generates the embedded Rust
-catalog plus the browser-demo TypeScript catalog.
+catalog, the TypeScript gallery catalog, and the browser-demo workspace
+snapshot (`demoWorkspace.generated.ts`) from the `demo` sample package.
 
 Creating a workspace defaults to a new named child directory. Lattice builds
 and validates it in a unique sibling staging directory, then atomically renames

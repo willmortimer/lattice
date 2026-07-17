@@ -17,7 +17,19 @@
       "y": 60,
       "width": 220,
       "height": 120
+    },
+    {
+      "id": "roadmap",
+      "type": "file",
+      "file": "Product/Roadmap.md",
+      "x": 620,
+      "y": 60,
+      "width": 220,
+      "height": 120
     }
   ],
-  "edges": []
+  "edges": [
+    { "id": "e1", "fromNode": "intro", "toNode": "vision" },
+    { "id": "e2", "fromNode": "vision", "toNode": "roadmap" }
+  ]
 }

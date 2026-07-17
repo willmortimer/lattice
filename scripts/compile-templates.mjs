@@ -8,8 +8,49 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const TEMPLATE_ROOT = join(ROOT, "templates", "workspaces");
 const RUST_OUT = join(ROOT, "crates", "lattice-core", "src", "template_catalog.generated.rs");
 const TS_OUT = join(ROOT, "apps", "desktop", "src", "templateCatalog.generated.ts");
+const DEMO_OUT = join(ROOT, "apps", "desktop", "src", "demoWorkspace.generated.ts");
+const DEMO_TEMPLATE_ID = "demo";
+const DEMO_WORKSPACE_ID = "0198-demo";
 const MAX_FILES = 128;
 const MAX_BYTES = 2 * 1024 * 1024;
+const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "avif", "bmp", "tiff"]);
+const CODE_EXTENSIONS = new Set([
+  "js",
+  "jsx",
+  "ts",
+  "tsx",
+  "rs",
+  "py",
+  "go",
+  "java",
+  "c",
+  "cpp",
+  "h",
+  "css",
+  "html",
+  "sql",
+  "sh",
+]);
+const TEXT_BODY_EXTENSIONS = new Set([
+  "txt",
+  "md",
+  "markdown",
+  "log",
+  "json",
+  "yaml",
+  "yml",
+  "csv",
+  "tsv",
+  ...CODE_EXTENSIONS,
+]);
+const SQLITE_TYPES = {
+  text: "TEXT",
+  long_text: "TEXT",
+  integer: "INTEGER",
+  decimal: "REAL",
+  boolean: "INTEGER",
+  date: "TEXT",
+};
 const TEMPLATE_CATEGORIES = [
   "Everyday",
   "Work",
@@ -446,12 +487,203 @@ export const GENERATED_TEMPLATE_CATALOG = ${JSON.stringify(catalog, null, 2)} as
 `;
 }
 
+function fileExtension(path) {
+  const base = path.split("/").pop() ?? path;
+  const dot = base.lastIndexOf(".");
+  return dot >= 0 ? base.slice(dot + 1).toLowerCase() : "";
+}
+
+function resourceKindForPath(path) {
+  const extension = fileExtension(path);
+  if (extension === "md" || extension === "markdown") return "page";
+  if (extension === "canvas") return "canvas";
+  return "file";
+}
+
+function formatIdForPath(path) {
+  const extension = fileExtension(path);
+  if (IMAGE_EXTENSIONS.has(extension)) return "file:image";
+  if (extension === "pdf") return "file:pdf";
+  if (["txt", "md", "markdown", "log", "csv", "tsv"].includes(extension)) return "file:text";
+  if (CODE_EXTENSIONS.has(extension)) return "file:code";
+  if (extension === "json") return "file:json";
+  if (["yaml", "yml"].includes(extension)) return "file:yaml";
+  return "file:unknown";
+}
+
+function isUtf8TextSeed(path) {
+  return TEXT_BODY_EXTENSIONS.has(fileExtension(path));
+}
+
+function demoRowId(row, index) {
+  if (typeof row.name === "string") {
+    const slug = row.name
+      .trim()
+      .split(/\s+/)[0]
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "");
+    if (slug) return `${DEMO_WORKSPACE_ID}-${slug}`;
+  }
+  return `${DEMO_WORKSPACE_ID}-${index}`;
+}
+
+function cellValueForField(value, fieldType) {
+  if (value === null) return { Null: null };
+  switch (fieldType) {
+    case "integer":
+      return { Integer: Number(value) };
+    case "decimal":
+      return { Decimal: Number(value) };
+    case "boolean":
+      return { Boolean: Boolean(value) };
+    case "date":
+      return { Date: String(value) };
+    case "text":
+    case "long_text":
+      return { Text: String(value) };
+    default: {
+      const _exhaustive = fieldType;
+      throw new Error(`unsupported demo field type ${String(_exhaustive)}`);
+    }
+  }
+}
+
+function buildDemoResources(template) {
+  const resources = [];
+  for (const directory of template.directories) {
+    resources.push({ path: directory.path, kind: "folder" });
+  }
+  for (const file of template.files) {
+    const kind = resourceKindForPath(file.path);
+    if (kind === "file") {
+      resources.push({ path: file.path, kind, formatId: formatIdForPath(file.path) });
+    } else {
+      resources.push({ path: file.path, kind });
+    }
+  }
+  for (const packageDef of template.dataPackages) {
+    resources.push({ path: packageDef.path, kind: "data-app" });
+  }
+  resources.sort((left, right) => {
+    if (left.path === "Home.md") return -1;
+    if (right.path === "Home.md") return 1;
+    return left.path.localeCompare(right.path);
+  });
+  return resources;
+}
+
+function buildDemoPages(template) {
+  const pages = {};
+  for (const file of template.files) {
+    if (resourceKindForPath(file.path) !== "page") continue;
+    pages[file.path] = readFileSync(file.source, "utf8");
+  }
+  return pages;
+}
+
+function buildDemoTextFiles(template) {
+  const textFiles = {};
+  for (const file of template.files) {
+    if (resourceKindForPath(file.path) !== "file") continue;
+    if (!isUtf8TextSeed(file.path)) continue;
+    textFiles[file.path] = readFileSync(file.source, "utf8");
+  }
+  return textFiles;
+}
+
+function buildDemoCanvas(template) {
+  const canvas = template.files.find((file) => resourceKindForPath(file.path) === "canvas");
+  if (!canvas) {
+    throw new Error(`${DEMO_TEMPLATE_ID}: expected at least one .canvas seed for browser demo`);
+  }
+  return JSON.parse(readFileSync(canvas.source, "utf8"));
+}
+
+function buildDemoDataApp(template) {
+  const packageDef =
+    template.dataPackages.find((entry) => entry.path === "CRM.data") ?? template.dataPackages[0];
+  if (!packageDef) {
+    throw new Error(`${DEMO_TEMPLATE_ID}: expected a dataPackages entry for browser demo CRM`);
+  }
+  const columns = [
+    { name: "id", field_type: "text", sqlite_type: "TEXT" },
+    ...packageDef.columns.map((column) => ({
+      name: column.name,
+      field_type: column.type,
+      sqlite_type: SQLITE_TYPES[column.type],
+    })),
+  ];
+  const rows = packageDef.rows.map((row, index) => {
+    const id = demoRowId(row, index);
+    const values = { id: { Text: id } };
+    for (const column of packageDef.columns) {
+      const raw = Object.prototype.hasOwnProperty.call(row, column.name) ? row[column.name] : null;
+      values[column.name] = cellValueForField(raw, column.type);
+    }
+    return { id, values };
+  });
+  return {
+    title: packageDef.title,
+    default_table: packageDef.table,
+    package_revision: "demo:0",
+    columns,
+    rows,
+    available_views: ["All"],
+    active_view: "All",
+    filters: [],
+  };
+}
+
+export function emitDemoWorkspace(templates) {
+  const template = templates.find((entry) => entry.id === DEMO_TEMPLATE_ID);
+  if (!template) {
+    throw new Error(`missing ${DEMO_TEMPLATE_ID} workspace template`);
+  }
+  const defaults = { quickNoteDirectory: template.workspaceDefaults.quickNoteDirectory };
+  for (const key of ["dailyNoteDirectory", "attachmentsDirectory", "templateDirectory", "archiveDirectory"]) {
+    if (template.workspaceDefaults[key] !== undefined) {
+      defaults[key] = template.workspaceDefaults[key];
+    }
+  }
+  const snapshot = {
+    root: "/Users/you/Lattice/Workspaces/Personal",
+    title: "Personal",
+    id: DEMO_WORKSPACE_ID,
+    capabilities: template.capabilities,
+    defaults,
+    manifestRevision: "demo:0",
+    resources: buildDemoResources(template),
+  };
+  const module = {
+    demoSnapshot: snapshot,
+    demoCanvas: buildDemoCanvas(template),
+    demoDataApp: buildDemoDataApp(template),
+    demoPages: buildDemoPages(template),
+    demoTextFiles: buildDemoTextFiles(template),
+  };
+  return `// GENERATED by scripts/compile-templates.mjs — do not edit.
+import type { WorkspaceSnapshot } from "./types";
+import type { DataAppSnapshot } from "./data/types";
+
+export const demoSnapshot: WorkspaceSnapshot = ${JSON.stringify(module.demoSnapshot, null, 2)};
+
+export const demoCanvas = ${JSON.stringify(module.demoCanvas, null, 2)};
+
+export const demoDataApp: DataAppSnapshot = ${JSON.stringify(module.demoDataApp, null, 2)};
+
+export const demoPages: Record<string, string> = ${JSON.stringify(module.demoPages, null, 2)};
+
+export const demoTextFiles: Record<string, string> = ${JSON.stringify(module.demoTextFiles, null, 2)};
+`;
+}
+
 function main() {
   const templates = compileTemplates();
   writeFileSync(RUST_OUT, emitRust(templates));
   writeFileSync(TS_OUT, emitTypeScript(templates));
+  writeFileSync(DEMO_OUT, emitDemoWorkspace(templates));
   console.log(
-    `compiled ${templates.length} workspace templates to ${relative(ROOT, RUST_OUT).split(sep).join("/")} and ${relative(ROOT, TS_OUT).split(sep).join("/")}`,
+    `compiled ${templates.length} workspace templates to ${relative(ROOT, RUST_OUT).split(sep).join("/")}, ${relative(ROOT, TS_OUT).split(sep).join("/")}, and ${relative(ROOT, DEMO_OUT).split(sep).join("/")}`,
   );
 }
 
