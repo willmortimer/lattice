@@ -1,0 +1,103 @@
+{
+  "format": "lattice-workspace-template",
+  "version": 2,
+  "id": "dev-notebook",
+  "order": 45,
+  "name": "Dev Notebook",
+  "category": "Work",
+  "description": "Track architecture, decisions, snippets, runbooks, debug notes, and issues in one engineering workspace.",
+  "visibility": "gallery",
+  "recommended": false,
+  "recommendedTitle": "Dev Notebook",
+  "directories": [
+    {
+      "path": "Architecture",
+      "purpose": "System diagrams, canvases, and structural notes."
+    },
+    {
+      "path": "Decisions",
+      "purpose": "Architecture decision records and technical rationale."
+    },
+    {
+      "path": "Snippets",
+      "purpose": "Reusable TypeScript, Rust, SQL, and shell fragments.",
+      "defaultKind": "file"
+    },
+    {
+      "path": "Runbooks",
+      "purpose": "Operational procedures, deploy steps, and incident playbooks."
+    },
+    {
+      "path": "Debug Journal",
+      "purpose": "Timestamped investigation notes, repro steps, and hypotheses."
+    },
+    {
+      "path": "Archive",
+      "purpose": "Retired notes, resolved issues, and superseded decisions."
+    }
+  ],
+  "preview": [
+    "Home.md",
+    "Architecture/System Overview.canvas",
+    "Architecture/Component Map.md",
+    "Decisions/0001-record-architecture-decisions.md",
+    "Snippets/",
+    "Runbooks/",
+    "Debug Journal/",
+    "Issues.data"
+  ],
+  "files": [
+    "Home.md",
+    "Architecture/System Overview.canvas",
+    "Architecture/Component Map.md",
+    "Decisions/0001-record-architecture-decisions.md",
+    "Snippets/api-handler.ts",
+    "Snippets/query.sql",
+    "Snippets/lib-helper.rs",
+    "Runbooks/Incident Response.md",
+    "Debug Journal/Template.md"
+  ],
+  "capabilities": ["pages", "canvas", "sqlite"],
+  "workspaceDefaults": {
+    "quickNoteDirectory": "Debug Journal",
+    "archiveDirectory": "Archive"
+  },
+  "openOnCreate": "Home.md",
+  "dataPackages": [
+    {
+      "path": "Issues.data",
+      "title": "Issues",
+      "table": "issues",
+      "columns": [
+        { "name": "title", "type": "text" },
+        { "name": "status", "type": "text" },
+        { "name": "priority", "type": "text" },
+        { "name": "component", "type": "text" },
+        { "name": "notes", "type": "long_text" }
+      ],
+      "rows": [
+        {
+          "title": "Provision workspace from template",
+          "status": "done",
+          "priority": "medium",
+          "component": "tooling",
+          "notes": "Seed Issues.data and verify wiki links on Home.md."
+        },
+        {
+          "title": "Add health check endpoint",
+          "status": "open",
+          "priority": "high",
+          "component": "api",
+          "notes": "See Snippets/api-handler.ts for the handler stub."
+        },
+        {
+          "title": "Document deploy rollback",
+          "status": "open",
+          "priority": "low",
+          "component": "ops",
+          "notes": "Capture steps in Runbooks/ before the next release."
+        }
+      ]
+    }
+  ]
+}
