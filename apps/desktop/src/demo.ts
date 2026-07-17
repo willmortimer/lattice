@@ -1,3 +1,4 @@
+import { ipcMode } from "./lib/ipc";
 import type { SearchHit } from "./types";
 import {
   demoPages,
@@ -13,13 +14,13 @@ export {
 } from "./demoWorkspace.generated";
 
 /**
- * Dev-only stand-in used when the frontend runs in a plain browser
- * (`pnpm dev` / `nix run .#desktop-web`) where the Tauri IPC bridge
- * doesn't exist. Snapshot bodies come from `templates/workspaces/demo/`
- * via `pnpm compile-templates` → `demoWorkspace.generated.ts`. Never
- * bundled into release builds.
+ * Dev-only fixture mode: plain browser without Tauri or `lattice-bridge`.
+ * Bridge mode (`VITE_LATTICE_BRIDGE_URL`) talks to real Rust handlers and is
+ * not the demo fixture. Snapshot bodies come from `templates/workspaces/demo/`
+ * via `pnpm compile-templates` → `demoWorkspace.generated.ts`. Never bundled
+ * into release builds.
  */
-export const inBrowser = import.meta.env.DEV && !("__TAURI_INTERNALS__" in window);
+export const inBrowser = import.meta.env.DEV && ipcMode === "demo";
 
 /** `?empty` reviews the empty state instead of the demo workspace. */
 export const demoStartEmpty =
