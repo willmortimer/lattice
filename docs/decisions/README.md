@@ -36,3 +36,4 @@ These records capture architecture choices that should not be silently reversed.
 - [ADR 0032: Separate versioned profile settings from operational state](0032-versioned-profile-settings-and-operational-state.md)
 - [ADR 0033: Use declarative templates and staged workspace provisioning](0033-declarative-templates-and-staged-provisioning.md)
 - [ADR 0034: Resolve cross-resource links through one typed catalog](0034-typed-resource-link-resolution.md)
+- [ADR 0035: Keep File kinds coarse and derive ResourceFormatProfile](0035-format-first-file-resources-and-resource-format-profile.md)

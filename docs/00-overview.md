@@ -92,6 +92,7 @@ Lattice is not a proprietary AI brain, a bundled agent, or a universal database 
 - [Open questions and decision register](./31-open-questions-and-decision-register.md)
 - [Reference manifests and examples](./32-reference-manifests-and-examples.md)
 - [Capability and format registry](./37-capability-and-format-registry.md)
+- [Resource runtime contracts](./39-resource-runtime-contracts.md)
 - [Licensing, governance, and sustainability](./35-licensing-governance-and-sustainability.md)
 - [Architecture decision records](./decisions/README.md)
 - [Accepted design-review addendum](./38-design-review-addendum.md)
