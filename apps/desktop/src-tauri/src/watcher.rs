@@ -146,11 +146,14 @@ fn apply_to_index(index: &WorkspaceIndex, event: &WorkspaceEvent, root: &Path) {
         }
         WorkspaceEvent::Deleted { path } => remove_if_resource(index, path),
         WorkspaceEvent::Renamed { from, to, .. } => {
-            remove_if_resource(index, from);
-            reindex_if_resource(index, root, to);
-            if let Err(err) = link_repair::save_external_link_repair_proposal(root, from, to) {
+            // Capture repair candidates before removing the old index rows;
+            // inbound link spans still name `from` until pages are rewritten.
+            if let Err(err) = crate::link_repair::save_external_link_repair_proposal(root, from, to)
+            {
                 eprintln!("lattice: failed to save external link-repair proposal: {err}");
             }
+            remove_if_resource(index, from);
+            reindex_if_resource(index, root, to);
         }
     }
 }

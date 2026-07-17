@@ -183,6 +183,17 @@ mod tests {
     #[test]
     fn external_proposal_persists_when_links_exist() {
         let dir = init_workspace();
+        // Simulate watcher order: plan while inbound spans still target `from`,
+        // then update index paths for the renamed file.
+        let summary = save_external_link_repair_proposal(
+            dir.path(),
+            Path::new("Notes/Other.md"),
+            Path::new("Notes/Renamed.md"),
+        )
+        .unwrap()
+        .expect("expected proposal");
+        assert_eq!(summary.candidate_count, 1);
+
         std::fs::rename(
             dir.path().join("Notes/Other.md"),
             dir.path().join("Notes/Renamed.md"),
@@ -198,14 +209,7 @@ mod tests {
                 kind: ResourceKind::Page,
             })
             .unwrap();
-        let summary = save_external_link_repair_proposal(
-            dir.path(),
-            Path::new("Notes/Other.md"),
-            Path::new("Notes/Renamed.md"),
-        )
-        .unwrap()
-        .expect("expected proposal");
-        assert_eq!(summary.candidate_count, 1);
+
         let listed = list_link_repair_proposals(dir.path()).unwrap();
         assert_eq!(listed.len(), 1);
     }

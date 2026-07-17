@@ -8,7 +8,7 @@ use lattice_core::{ResourceCatalog, ResourceLinkResolution, ResourceLinkTarget, 
 pub struct ResourceCatalogState(Mutex<HashMap<String, ResourceCatalog>>);
 
 impl ResourceCatalogState {
-    fn refresh(&self, root: &str) -> Result<(), String> {
+    pub(crate) fn refresh(&self, root: &str) -> Result<(), String> {
         let workspace = Workspace::open(Path::new(root)).map_err(|error| error.to_string())?;
         let resources = workspace.scan().map_err(|error| error.to_string())?;
         self.0
