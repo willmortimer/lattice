@@ -151,3 +151,87 @@ describe("frontmatter split/join", () => {
     expect(parseMarkdownToJSON(splitFrontmatter(saved).body)).toEqual(parseMarkdownToJSON(body));
   });
 });
+
+describe(":::lattice-embed directives", () => {
+  const EMBED_SAMPLE =
+    ":::lattice-embed\n" +
+    "resource: ../Data/Services.data/views/Active.view.yaml\n" +
+    "view: table\n" +
+    "height: 640\n" +
+    "lines: 10-20\n" +
+    'fallback: "[Open active services](../Data/Services.data/views/Active.view.yaml)"\n' +
+    "custom-flag: enabled\n" +
+    ":::\n";
+
+  it("round-trips a lattice-embed with known and unknown fields", () => {
+    const firstParse = parseMarkdownToJSON(EMBED_SAMPLE);
+    const serialized = serializeJSONToMarkdown(firstParse);
+    const secondParse = parseMarkdownToJSON(serialized);
+
+    expect(secondParse).toEqual(firstParse);
+    expect(firstParse.content?.[0]).toMatchObject({
+      type: "latticeEmbed",
+      attrs: {
+        resource: "../Data/Services.data/views/Active.view.yaml",
+        view: "table",
+        height: "640",
+        lines: "10-20",
+        fallback: "[Open active services](../Data/Services.data/views/Active.view.yaml)",
+        extraFields: { "custom-flag": "enabled" },
+        extraFieldKeys: ["custom-flag"],
+      },
+    });
+  });
+
+  it("serializes lattice-embed fields in documented order", () => {
+    const json = parseMarkdownToJSON(EMBED_SAMPLE);
+    const markdown = serializeJSONToMarkdown(json);
+
+    expect(markdown).toContain(":::lattice-embed\n");
+    expect(markdown).toContain("resource: ../Data/Services.data/views/Active.view.yaml\n");
+    expect(markdown).toContain("view: table\n");
+    expect(markdown).toContain("height: 640\n");
+    expect(markdown).toContain("lines: 10-20\n");
+    expect(markdown).toContain(
+      'fallback: "[Open active services](../Data/Services.data/views/Active.view.yaml)"\n',
+    );
+    expect(markdown).toContain("custom-flag: enabled\n");
+    expect(markdown.trimEnd().endsWith(":::")).toBe(true);
+  });
+
+  it("preserves unsupported directives as opaque raw blocks", () => {
+    const raw =
+      ":::lattice-code\n" +
+      "source: ../src/parser.rs\n" +
+      "symbol: Parser::parse_document\n" +
+      "language: rust\n" +
+      ":::\n";
+
+    const firstParse = parseMarkdownToJSON(raw);
+    const serialized = serializeJSONToMarkdown(firstParse);
+    const secondParse = parseMarkdownToJSON(serialized);
+
+    expect(secondParse).toEqual(firstParse);
+    expect(serialized).toBe(raw);
+    expect(firstParse.content?.[0]).toMatchObject({
+      type: "opaqueDirective",
+      attrs: { raw },
+    });
+  });
+
+  it("round-trips a page with prose and an embed", () => {
+    const markdown =
+      "# Deployment\n\n" +
+      "See the active services view.\n\n" +
+      ":::lattice-embed\n" +
+      "resource: ../Data/Services.data/views/Active.view.yaml\n" +
+      "height: 640\n" +
+      ":::\n";
+
+    const firstParse = parseMarkdownToJSON(markdown);
+    const serialized = serializeJSONToMarkdown(firstParse);
+    const secondParse = parseMarkdownToJSON(serialized);
+
+    expect(secondParse).toEqual(firstParse);
+  });
+});
