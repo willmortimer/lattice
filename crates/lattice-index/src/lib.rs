@@ -17,3 +17,7 @@ pub use index::{
     upsert_page, Backlink, BacklinkKind, ParserStatus, RebuildStats, ResourceMetadata, SearchHit,
     WorkspaceIndex, MAX_INDEX_TEXT_BYTES,
 };
+pub use lattice_core::{
+    build_link_repair_plan, LinkOccurrence, LinkRepairCandidate, LinkRepairPlan,
+    LinkRepairSource, LinkRepairStatus,
+};

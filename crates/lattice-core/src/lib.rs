@@ -10,6 +10,7 @@
 
 mod error;
 mod home;
+mod link_repair;
 mod links;
 mod manifest;
 mod resource;
@@ -24,6 +25,11 @@ pub use home::{
     effective_default_workspace, ensure_lattice_home, initialize_lattice_home, lattice_home_path,
     LatticeHome, DEFAULT_WORKSPACE_NAME, LATTICE_HOME_NAME, SETTINGS_DIR_NAME, STATE_DIR_NAME,
     WORKSPACES_DIR_NAME,
+};
+pub use link_repair::{
+    apply_span_replacements, build_link_repair_plan, build_repair_candidate, format_link_text,
+    resolution_targets_path, rewrite_link_target, LinkOccurrence, LinkRepairCandidate,
+    LinkRepairPlan, LinkRepairProposalSummary, LinkRepairSource, LinkRepairStatus,
 };
 pub use links::{
     parse_resource_links, MarkdownLinkKind, ParsedResourceLink, ResourceCatalog,

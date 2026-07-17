@@ -1,5 +1,6 @@
 import { inBrowser } from "../demo";
 import { demoSearch } from "../demo";
+import { LinkRepairReviewModal } from "../LinkRepairReviewModal";
 import { NewWorkspaceDialog } from "../NewWorkspaceDialog";
 import { CommandPalette } from "../CommandPalette";
 import { ResourceTree } from "../ResourceTree";
@@ -27,7 +28,8 @@ export function DesktopShell({ model }: DesktopShellProps) {
     profile, profileReady, settings, startup, snapshot, selected, session, error, busy, saveState,
     externalConflict, reloadToken, newWorkspaceOpen, workspacesDir, templates, statusToast,
     profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth,
-    revealPath, linkPicker, openTabs, navigation, inspectorOpen, editingTitle, titleDraft, assetRoot,
+    revealPath, linkPicker, linkRepairReview, handleLinkRepairAccept, handleLinkRepairDefer,
+    openTabs, navigation, inspectorOpen, editingTitle, titleDraft, assetRoot,
     wikiTargets, pageEditorRef, paletteItems, hasCapability, setSettings, setStartup, setError,
     recents, page, currentPageRevisionRef, setSaveState, setLinkPicker, handleImportEditorAsset,
     setNewWorkspaceOpen, setSearchPaneOpen, setPaletteOpen, setActivityArea, setInspectorOpen,
@@ -568,6 +570,15 @@ export function DesktopShell({ model }: DesktopShellProps) {
             handleOpenFile(path);
           }}
           onClose={() => setSearchPaneOpen(false)}
+        />
+      )}
+      {linkRepairReview && (
+        <LinkRepairReviewModal
+          plan={linkRepairReview.plan}
+          mode={linkRepairReview.mode}
+          busy={busy}
+          onAccept={(acceptedCandidateIds) => void handleLinkRepairAccept(acceptedCandidateIds)}
+          onDefer={() => void handleLinkRepairDefer()}
         />
       )}
       {linkPicker && (
