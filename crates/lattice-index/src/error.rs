@@ -12,11 +12,17 @@ pub enum Error {
     #[error("workspace error: {0}")]
     Workspace(#[from] lattice_core::Error),
 
+    #[error("resource runtime error: {0}")]
+    Runtime(#[from] lattice_core::ResourceRuntimeError),
+
     #[error("index database error: {0}")]
     Sqlite(#[from] rusqlite::Error),
 
     #[error("path {path} is not valid UTF-8")]
     NonUtf8Path { path: PathBuf },
+
+    #[error("index operation cancelled")]
+    Cancelled,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

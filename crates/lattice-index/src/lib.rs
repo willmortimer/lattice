@@ -1,14 +1,19 @@
 //! Derived workspace search index for Lattice.
 //!
 //! The index lives at `<workspace>/.lattice/index.sqlite` and is fully
-//! rebuildable from Markdown pages on disk. WS5 will call [`upsert_page`]
-//! after command-engine writes; WS6 will consume [`WorkspaceIndex::search`]
-//! and [`WorkspaceIndex::backlinks`] from the desktop shell.
+//! rebuildable from generic resources on disk. Text extraction is deliberately
+//! bounded; binary resources retain searchable names and runtime metadata.
 
 mod error;
 mod extract;
 mod index;
 
 pub use error::{Error, Result};
-pub use extract::{parse_page, ExtractedLink, Heading, LinkKind, PageIndexData};
-pub use index::{upsert_page, Backlink, BacklinkKind, RebuildStats, SearchHit, WorkspaceIndex};
+pub use extract::{
+    extract_structured_paths, parse_page, ExtractedLink, Heading, LinkKind, PageIndexData,
+    StructuredExtraction, StructuredFormat, StructuredPath,
+};
+pub use index::{
+    upsert_page, Backlink, BacklinkKind, ParserStatus, RebuildStats, ResourceMetadata, SearchHit,
+    WorkspaceIndex, MAX_INDEX_TEXT_BYTES,
+};
