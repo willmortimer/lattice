@@ -5,6 +5,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./_env.sh
+source "${SCRIPT_DIR}/_env.sh"
 cd "${ROOT}"
 
 export LATTICE_DEV_HOME="${LATTICE_DEV_HOME:-${ROOT}/target/cell-home}"
@@ -22,7 +24,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "waiting for bridge at ${HEALTH_URL} ..."
-for _ in $(seq 1 60); do
+for _ in $(seq 1 180); do
   if curl -sf "${HEALTH_URL}" >/dev/null 2>&1; then
     break
   fi

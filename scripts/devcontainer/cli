@@ -4,6 +4,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=./_env.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_env.sh"
 cd "${ROOT}"
 
 BUILD_ARGS=(build -p lattice-cli)
@@ -30,9 +32,13 @@ fi
 
 cargo "${BUILD_ARGS[@]}"
 
-BIN="${ROOT}/target/${PROFILE}/lattice"
+BIN="$(lattice_cli_bin "${PROFILE}")"
 if [[ ! -x "${BIN}" ]]; then
   echo "error: expected binary missing: ${BIN}" >&2
+  exit 1
+fi
+if ! "${BIN}" --help >/dev/null 2>&1; then
+  echo "error: lattice binary is not runnable on this host (wrong arch?): ${BIN}" >&2
   exit 1
 fi
 

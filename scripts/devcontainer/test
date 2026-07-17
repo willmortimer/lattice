@@ -3,6 +3,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# shellcheck source=./_env.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_env.sh"
 cd "${ROOT}"
 
 if ! command -v pnpm >/dev/null 2>&1; then
@@ -22,7 +24,7 @@ SEED_SCRIPT="${ROOT}/scripts/devcontainer/seed"
 "${SEED_SCRIPT}"
 
 export LATTICE_DEV_HOME="${LATTICE_DEV_HOME:-${ROOT}/target/cell-home}"
-LATTICE="${ROOT}/target/debug/lattice"
+LATTICE="$(lattice_cli_bin debug)"
 WORKSPACE="${LATTICE_DEV_HOME}/Workspaces/First Look"
 
 "${LATTICE}" --help >/dev/null
