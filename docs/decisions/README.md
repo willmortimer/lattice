@@ -38,3 +38,4 @@ These records capture architecture choices that should not be silently reversed.
 - [ADR 0034: Resolve cross-resource links through one typed catalog](0034-typed-resource-link-resolution.md)
 - [ADR 0035: Keep File kinds coarse and derive ResourceFormatProfile](0035-format-first-file-resources-and-resource-format-profile.md)
 - [ADR 0036: Incremental long-page performance before ProseMirror block virtualization](0036-incremental-long-page-performance.md)
+- [ADR 0037: Localhost headless bridge shares handlers with Tauri](0037-localhost-bridge-shares-handlers-with-tauri.md)

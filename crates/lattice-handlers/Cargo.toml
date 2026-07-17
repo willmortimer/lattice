@@ -1,0 +1,18 @@
+[package]
+name = "lattice-handlers"
+description = "Tauri-free workspace, page, search, and home handlers shared by the desktop shell and localhost bridge"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+lattice-core.workspace = true
+lattice-commands.workspace = true
+lattice-storage.workspace = true
+lattice-index.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
