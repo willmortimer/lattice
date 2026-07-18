@@ -3,9 +3,10 @@
 use std::path::{Path, PathBuf};
 
 pub use lattice_profile::{
-    lattice_dev_home_enabled, lattice_home_path, LatticeHome, DEFAULT_WORKSPACE_NAME,
-    LATTICE_DEV_HOME_ENV, LATTICE_HOME_ENV, LATTICE_HOME_NAME, SETTINGS_DIR_NAME, STATE_DIR_NAME,
-    WORKSPACES_DIR_NAME,
+    default_debug_home_path, lattice_dev_home_enabled, lattice_force_prod_home_enabled,
+    lattice_home_path, LatticeHome, DEFAULT_DEBUG_HOME_RELATIVE, DEFAULT_WORKSPACE_NAME,
+    LATTICE_DEV_HOME_ENV, LATTICE_FORCE_PROD_HOME_ENV, LATTICE_HOME_ENV, LATTICE_HOME_NAME,
+    SETTINGS_DIR_NAME, STATE_DIR_NAME, WORKSPACES_DIR_NAME,
 };
 
 use crate::template::{
@@ -70,8 +71,9 @@ pub fn initialize_lattice_home() -> Result<(LatticeHome, WorkspaceProvisionOutco
 
 /// Explicitly create a First Look demo workspace when no valid workspace exists.
 ///
-/// Intended for local development when [`LATTICE_DEV_HOME_ENV`] points at an
-/// isolated profile root. Production and release paths must keep using
+/// Used for local development when [`lattice_dev_home_enabled`] is true: an
+/// explicit `LATTICE_DEV_HOME`, or debug builds without `LATTICE_HOME` /
+/// `LATTICE_FORCE_PROD_HOME`. Production and release paths must keep using
 /// [`initialize_lattice_home`].
 pub fn initialize_dev_lattice_home() -> Result<(LatticeHome, WorkspaceProvisionOutcome)> {
     let home = ensure_lattice_home()?;
@@ -271,6 +273,38 @@ mod tests {
         assert_eq!(home.root, directory.path());
         assert!(outcome.workspace.root().join("CRM.data").is_dir());
         std::env::remove_var(LATTICE_DEV_HOME_ENV);
+    }
+
+    #[test]
+    fn initialize_active_home_seeds_demo_in_debug_without_env() {
+        let _guard = env_lock();
+        std::env::remove_var(LATTICE_DEV_HOME_ENV);
+        std::env::remove_var(LATTICE_HOME_ENV);
+        std::env::remove_var(LATTICE_FORCE_PROD_HOME_ENV);
+        let cwd = tempfile::tempdir().unwrap();
+        let previous = std::env::current_dir().unwrap();
+        std::env::set_current_dir(cwd.path()).unwrap();
+        let (home, outcome) = initialize_active_lattice_home().unwrap();
+        assert_eq!(
+            home.root.canonicalize().unwrap(),
+            cwd.path().join(DEFAULT_DEBUG_HOME_RELATIVE).canonicalize().unwrap()
+        );
+        assert!(outcome.workspace.root().join("CRM.data").is_dir());
+        std::env::set_current_dir(previous).unwrap();
+    }
+
+    #[test]
+    fn initialize_active_home_seeds_personal_when_lattice_home_is_set() {
+        let _guard = env_lock();
+        let directory = tempfile::tempdir().unwrap();
+        std::env::remove_var(LATTICE_DEV_HOME_ENV);
+        std::env::remove_var(LATTICE_FORCE_PROD_HOME_ENV);
+        std::env::set_var(LATTICE_HOME_ENV, directory.path());
+        let (home, outcome) = initialize_active_lattice_home().unwrap();
+        assert_eq!(home.root, directory.path());
+        assert!(outcome.workspace.root().join("Welcome.md").is_file());
+        assert!(!outcome.workspace.root().join("CRM.data").exists());
+        std::env::remove_var(LATTICE_HOME_ENV);
     }
 
     #[test]

@@ -19,7 +19,8 @@ shell), not an env-var file.
 | Variable | Where to set | Where to get it | What it does | Secret? | Status |
 | --- | --- | --- | --- | --- | --- |
 | `LATTICE_DEV_HOME` | `nix run .#desktop-dev`, `pnpm tauri:dev`, Dev Container (`devcontainer.json`), `./scripts/devcontainer/seed`, or your shell | absolute `…/target/dev-home` (Tauri) or `…/target/cell-home` (cell; default for `seed`) | Isolated Lattice profile root for local Tauri dev and Linux cell scripts. Takes precedence over `LATTICE_HOME` and `~/Lattice`. Relative values are resolved against the process current directory. First-run seeds the **First Look** (`demo`) template instead of Personal. Delete the directory to reset. | No | Works today |
-| `LATTICE_HOME` | your shell | any writable directory | Override the Lattice profile root (`~/Lattice` by default). Relative values are resolved against the process current directory. Ignored when `LATTICE_DEV_HOME` is set. | No | Works today |
+| `LATTICE_HOME` | your shell | any writable directory | Override the Lattice profile root (`~/Lattice` in release; in **debug** builds without `LATTICE_DEV_HOME`, the default is `target/dev-home` under the process cwd). Relative values are resolved against the process current directory. Ignored when `LATTICE_DEV_HOME` is set. Selects Personal seeding instead of First Look. | No | Works today |
+| `LATTICE_FORCE_PROD_HOME` | your shell | `1`, `true`, or `yes` | In **debug** builds, use the real `~/Lattice` profile and Personal seeding instead of the automatic `target/dev-home` dev profile. Ignored in release builds. | No | Works today |
 | `RUST_BACKTRACE` | your shell | n/a (`1` or `full`) | Backtraces on Rust panics in CLI/desktop dev | No | Works today (std behavior) |
 | `RUST_LOG` | your shell | n/a (e.g. `debug`) | Log-level filter | No | **Not yet wired** — takes effect once tracing/env-logger lands (observability workstream) |
 

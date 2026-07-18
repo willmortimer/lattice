@@ -181,6 +181,26 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
     }
   }, [adoptWorkspace, setBusy, setError]);
 
+  type EnsureHomeResult = {
+    workspaces: string;
+    default_workspace: WorkspaceSnapshot | null;
+    diagnostics: Array<{ message: string }>;
+  };
+
+  const provisionDefaultHome = useCallback(async () => {
+    const home = await invoke<EnsureHomeResult>("ensure_home");
+    setWorkspacesDir(home.workspaces);
+    if (home.default_workspace) {
+      await adoptWorkspace(home.default_workspace);
+      if (home.diagnostics.length > 0) {
+        setStatusToast(home.diagnostics.map((item) => item.message).join(" "));
+      }
+    } else {
+      setError("Lattice home is ready, but no default workspace was found.");
+    }
+    return home;
+  }, [adoptWorkspace, setError, setStatusToast]);
+
   const handleGetStarted = useCallback(async () => {
     setError(null);
     if (inBrowser) {
@@ -189,20 +209,13 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
     }
     setBusy(true);
     try {
-      const home = await invoke<{ workspaces: string; default_workspace: WorkspaceSnapshot | null; diagnostics: Array<{ message: string }> }>("ensure_home");
-      setWorkspacesDir(home.workspaces);
-      if (home.default_workspace) {
-        await adoptWorkspace(home.default_workspace);
-        if (home.diagnostics.length > 0) setStatusToast(home.diagnostics.map((item) => item.message).join(" "));
-      } else {
-        setError("Lattice home is ready, but no default workspace was found.");
-      }
+      await provisionDefaultHome();
     } catch (error) {
       setError(String(error));
     } finally {
       setBusy(false);
     }
-  }, [adoptWorkspace, setBusy, setError, setStatusToast]);
+  }, [adoptWorkspace, provisionDefaultHome, setBusy, setError]);
 
   const openRecent = useCallback(async (root: string) => {
     setError(null);
@@ -285,7 +298,19 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
       ...(startup.reopenLastWorkspace ? recents.map((recent) => recent.root) : []),
       profile.effectiveDefaultWorkspace,
     ].filter((path, index, all): path is string => Boolean(path) && all.indexOf(path) === index);
-    if (candidates.length === 0) return;
+    if (candidates.length === 0) {
+      let cancelled = false;
+      void (async () => {
+        try {
+          await provisionDefaultHome();
+        } catch (error) {
+          if (!cancelled) setError(String(error));
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
     let cancelled = false;
     void (async () => {
       for (const path of candidates) {
@@ -299,7 +324,7 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
       }
     })();
     return () => { cancelled = true; };
-  }, [adoptWorkspace, demoStartEmpty, profile.effectiveDefaultWorkspace, profileReady, recents, removeRecent, setError, snapshot, startup.reopenLastWorkspace]);
+  }, [adoptWorkspace, demoStartEmpty, profile.effectiveDefaultWorkspace, profileReady, provisionDefaultHome, recents, removeRecent, setError, snapshot, startup.reopenLastWorkspace]);
 
   useEffect(() => {
     if (!snapshot || sessionRestoredRootRef.current === snapshot.root) return;

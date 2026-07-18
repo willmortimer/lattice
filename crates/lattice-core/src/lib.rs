@@ -22,11 +22,12 @@ mod workspace;
 
 pub use error::Error;
 pub use home::{
-    effective_default_workspace, ensure_lattice_home, initialize_active_lattice_home,
-    initialize_dev_lattice_home, initialize_lattice_home, lattice_dev_home_enabled,
-    lattice_home_path, DEV_TEMPLATE_ID, DEV_WORKSPACE_NAME, LatticeHome, DEFAULT_WORKSPACE_NAME,
-    LATTICE_DEV_HOME_ENV, LATTICE_HOME_ENV, LATTICE_HOME_NAME, SETTINGS_DIR_NAME, STATE_DIR_NAME,
-    WORKSPACES_DIR_NAME,
+    default_debug_home_path, effective_default_workspace, ensure_lattice_home,
+    initialize_active_lattice_home, initialize_dev_lattice_home, initialize_lattice_home,
+    lattice_dev_home_enabled, lattice_force_prod_home_enabled, lattice_home_path, DEV_TEMPLATE_ID,
+    DEV_WORKSPACE_NAME, LatticeHome, DEFAULT_DEBUG_HOME_RELATIVE, DEFAULT_WORKSPACE_NAME,
+    LATTICE_DEV_HOME_ENV, LATTICE_FORCE_PROD_HOME_ENV, LATTICE_HOME_ENV, LATTICE_HOME_NAME,
+    SETTINGS_DIR_NAME, STATE_DIR_NAME, WORKSPACES_DIR_NAME,
 };
 pub use link_repair::{
     apply_span_replacements, build_link_repair_plan, build_repair_candidate, format_link_text,
