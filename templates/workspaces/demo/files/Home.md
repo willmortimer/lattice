@@ -15,7 +15,8 @@ ordinary file under a real directory — open it in any editor, or stay inside L
 4. Capture with **⌘N** into `Inbox/` (see [[Inbox/Sample capture]]).
 5. Open `CRM.data` — ~20 contacts with multiple column types, a **company** relation to a `companies` table, and a **reports_to** self-relation.
 6. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.
-7. Create pages from `Templates/` — daily and meeting note scaffolds.
+7. Open `Notebooks/CRM exploration.ipynb` — CRM tour notebook (markdown + commented code stubs).
+8. Create pages from `Templates/` — daily and meeting note scaffolds.
 
 ## First Look tour — new surfaces
 
@@ -79,6 +80,7 @@ Workspace defaults point quick capture at `Inbox/` and templates at `Templates/`
 | `Canvases/Product Strategy.canvas` | Spatial board linking Product pages |
 | `CRM.data` | SQLite data app (`companies` + `contacts` tables) |
 | `Data/sample.csv` | Flat CSV import sample |
+| `Notebooks/CRM exploration.ipynb` | CRM tour notebook (nbformat v4) |
 
 ### CRM views
 
@@ -141,4 +143,5 @@ fallback: "Open CRM board view"
 | `Canvases/Product Strategy.canvas` | canvas |
 | `CRM.data` | data app |
 | `Data/sample.csv` | CSV file |
+| `Notebooks/CRM exploration.ipynb` | notebook |
 | `Resources/` | code & config files |

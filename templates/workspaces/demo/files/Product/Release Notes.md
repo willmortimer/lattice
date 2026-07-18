@@ -14,6 +14,7 @@ Sample changelog page for the First Look workspace — not a live feed.
 - New [[Templates/Daily Note]] and [[Templates/Meeting Note]] page templates
 - Extra files under `Resources/` for code and config samples
 - [[Home]] tour checklist for layouts, Save view, folder undo, link repair, multi-select, and relations
+- `Notebooks/CRM exploration.ipynb` — CRM tour notebook seed referencing `Data/sample.csv`
 
 ## 2026.06 — Kitchen sink baseline
 
@@ -25,8 +26,7 @@ Sample changelog page for the First Look workspace — not a live feed.
 
 Tracked on [[Product/Roadmap]]:
 
-1. Notebook seeds under `Notebooks/`
-2. Richer canvas profiles linking data views
-3. Cross-package relations (CRM contacts ↔ project pages)
+1. Richer canvas profiles linking data views
+2. Cross-package relations (CRM contacts ↔ project pages)
 
 #product

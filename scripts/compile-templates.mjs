@@ -777,6 +777,7 @@ function resourceKindForPath(path) {
   const extension = fileExtension(path);
   if (extension === "md" || extension === "markdown") return "page";
   if (extension === "canvas") return "canvas";
+  if (extension === "ipynb") return "notebook";
   return "file";
 }
 

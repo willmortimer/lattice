@@ -857,7 +857,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
       },
       {
         "path": "Notebooks",
-        "purpose": "Reserved for notebook resources."
+        "purpose": "Reproducible analysis notebooks beside CRM and CSV seeds."
       },
       {
         "path": "Canvases",
@@ -889,6 +889,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "Canvases/Product Strategy.canvas",
       "Inbox/Sample capture.md",
       "Templates/Daily Note.md",
+      "Notebooks/CRM exploration.ipynb",
       "Resources/"
     ],
     "capabilities": [
