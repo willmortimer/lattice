@@ -31,9 +31,12 @@ import {
   type ViewLayoutType,
 } from "./types";
 import {
+  layoutFieldPickerSpecs,
+  layoutFieldPickerValue,
   layoutFieldsForSave,
   seedLayoutFieldsForType,
   VIEW_LAYOUT_TYPES,
+  type LayoutFieldPickerKind,
 } from "./viewLayout";
 
 const STALE_REVISION_PREFIX = "STALE_REVISION:";
@@ -96,6 +99,32 @@ function cycleSortDirection(
     field: nextField,
     direction: currentDirection === "asc" ? "desc" : "asc",
   };
+}
+
+function setLayoutFieldValue(
+  kind: LayoutFieldPickerKind,
+  value: string,
+  setters: {
+    setGroupBy: (value: string) => void;
+    setCoverField: (value: string) => void;
+    setDateField: (value: string) => void;
+  },
+): void {
+  switch (kind) {
+    case "groupBy":
+      setters.setGroupBy(value);
+      break;
+    case "coverField":
+      setters.setCoverField(value);
+      break;
+    case "dateField":
+      setters.setDateField(value);
+      break;
+    default: {
+      const _exhaustive: never = kind;
+      return _exhaustive;
+    }
+  }
 }
 
 export function DataTableView({
@@ -440,6 +469,24 @@ export function DataTableView({
     () => visibleColumns.filter((column) => column.name !== "id"),
     [visibleColumns],
   );
+  const layoutFieldPickers = useMemo(
+    () =>
+      layoutFieldPickerSpecs(layoutType, snapshot.columns, {
+        groupBy,
+        coverField,
+        dateField,
+      }),
+    [coverField, dateField, groupBy, layoutType, snapshot.columns],
+  );
+  const effectiveLayoutFields = useMemo(
+    () =>
+      seedLayoutFieldsForType(layoutType, snapshot.columns, {
+        groupBy,
+        coverField,
+        dateField,
+      }),
+    [coverField, dateField, groupBy, layoutType, snapshot.columns],
+  );
 
   const displayRows = useMemo(() => {
     let rows = [...snapshot.rows];
@@ -628,11 +675,12 @@ export function DataTableView({
 
     setBusy(true);
     try {
-      const layoutFields = layoutFieldsForSave(layoutType, {
+      const seeded = seedLayoutFieldsForType(layoutType, snapshotRef.current.columns, {
         groupBy,
         coverField,
         dateField,
       });
+      const layoutFields = layoutFieldsForSave(layoutType, seeded);
       const saved = await invoke<DataAppSnapshot>("save_data_view", {
         root,
         relPath,
@@ -756,6 +804,29 @@ export function DataTableView({
               ))}
             </select>
           </label>
+          {layoutFieldPickers.map((picker) => (
+            <label key={picker.kind} className="data-table-view-select">
+              {picker.label}
+              <select
+                value={layoutFieldPickerValue(picker.kind, effectiveLayoutFields) ?? ""}
+                disabled={busy || picker.options.length === 0}
+                aria-label={picker.ariaLabel}
+                onChange={(event) =>
+                  setLayoutFieldValue(picker.kind, event.currentTarget.value, {
+                    setGroupBy,
+                    setCoverField,
+                    setDateField,
+                  })
+                }
+              >
+                {picker.options.map((column) => (
+                  <option key={column.name} value={column.name}>
+                    {column.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
           <button
             type="button"
             className="secondary-button"
