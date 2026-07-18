@@ -294,13 +294,123 @@ function normalizeDataPackage(entry, template, index) {
 
   const views = normalizeDataPackageViews(entry.views, template, label, columnNames);
 
+  const extraTables = normalizeExtraTables(
+    entry.extraTables,
+    template,
+    label,
+    entry.table,
+    new Set([entry.table]),
+  );
+
   return {
     path: entry.path,
     title: entry.title,
     table: entry.table,
     columns,
     rows,
+    extraTables,
     views,
+  };
+}
+
+function normalizeExtraTables(raw, template, label, mainTable, reservedTables) {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) {
+    throw new Error(`${template}: ${label}.extraTables must be an array`);
+  }
+  const tables = new Set(reservedTables);
+  return raw.map((entry, index) =>
+    normalizeExtraTable(entry, template, `${label}.extraTables[${index}]`, mainTable, tables),
+  );
+}
+
+function normalizeExtraTable(entry, template, label, mainTable, reservedTables) {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    throw new Error(`${template}: ${label} must be an object`);
+  }
+  for (const key of ["table", "columns", "rows"]) {
+    if (entry[key] === undefined) {
+      throw new Error(`${template}: ${label} missing ${key}`);
+    }
+  }
+  if (typeof entry.table !== "string" || !isSqlIdentifier(entry.table)) {
+    throw new Error(`${template}: ${label}.table must be a valid SQL identifier`);
+  }
+  if (entry.table === mainTable) {
+    throw new Error(`${template}: ${label}.table cannot match the package default table`);
+  }
+  if (reservedTables.has(entry.table)) {
+    throw new Error(`${template}: ${label} duplicate table ${entry.table}`);
+  }
+  reservedTables.add(entry.table);
+  if (!Array.isArray(entry.columns) || entry.columns.length === 0) {
+    throw new Error(`${template}: ${label}.columns must be a non-empty array`);
+  }
+  if (!Array.isArray(entry.rows)) {
+    throw new Error(`${template}: ${label}.rows must be an array`);
+  }
+
+  const columns = [];
+  const columnNames = new Set();
+  for (const [columnIndex, column] of entry.columns.entries()) {
+    const columnLabel = `${label}.columns[${columnIndex}]`;
+    if (!column || typeof column !== "object" || Array.isArray(column)) {
+      throw new Error(`${template}: ${columnLabel} must be an object`);
+    }
+    if (typeof column.name !== "string" || !isSqlIdentifier(column.name)) {
+      throw new Error(`${template}: ${columnLabel}.name must be a valid SQL identifier`);
+    }
+    if (column.name === "id") {
+      throw new Error(`${template}: ${columnLabel}.name cannot be id (reserved)`);
+    }
+    if (columnNames.has(column.name)) {
+      throw new Error(`${template}: ${columnLabel} duplicate column ${column.name}`);
+    }
+    if (typeof column.type !== "string" || !FIELD_TYPES.has(column.type)) {
+      throw new Error(
+        `${template}: ${columnLabel}.type must be one of ${[...FIELD_TYPES].join(", ")}`,
+      );
+    }
+    let relationTable;
+    if (column.type === "relation") {
+      if (typeof column.relation_table !== "string" || !isSqlIdentifier(column.relation_table)) {
+        throw new Error(
+          `${template}: ${columnLabel}.relation_table must be a valid SQL identifier for relation columns`,
+        );
+      }
+      relationTable = column.relation_table;
+    } else if (column.relation_table !== undefined) {
+      throw new Error(
+        `${template}: ${columnLabel}.relation_table is only supported for relation columns`,
+      );
+    }
+    columnNames.add(column.name);
+    columns.push({
+      name: column.name,
+      type: column.type,
+      ...(relationTable === undefined ? {} : { relation_table: relationTable }),
+    });
+  }
+
+  const columnTypes = new Map(columns.map((column) => [column.name, column.type]));
+  const rows = entry.rows.map((row, rowIndex) => {
+    const rowLabel = `${label}.rows[${rowIndex}]`;
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      throw new Error(`${template}: ${rowLabel} must be an object`);
+    }
+    for (const key of Object.keys(row)) {
+      if (!columnNames.has(key)) {
+        throw new Error(`${template}: ${rowLabel} unknown column ${key}`);
+      }
+      assertJsonCell(row[key], template, `${rowLabel}.${key}`, columnTypes.get(key));
+    }
+    return row;
+  });
+
+  return {
+    table: entry.table,
+    columns,
+    rows,
   };
 }
 
@@ -555,10 +665,25 @@ function rustDataView(view) {
             }`;
 }
 
+function rustExtraTable(tableDef) {
+  const columns = tableDef.columns.map(rustDataColumn).join(",\n                ");
+  const rows = tableDef.rows.map((row) => rustString(JSON.stringify(row))).join(",\n                ");
+  return `SeedDataExtraTable {
+                table: ${rustString(tableDef.table)},
+                columns: &[
+                    ${columns}
+                ],
+                rows_json: &[
+                    ${rows}
+                ],
+            }`;
+}
+
 function rustDataPackage(packageDef) {
   const columns = packageDef.columns.map(rustDataColumn).join(",\n                ");
   const rows = packageDef.rows.map((row) => rustString(JSON.stringify(row))).join(",\n                ");
   const views = packageDef.views.map(rustDataView).join(",\n                ");
+  const extraTables = packageDef.extraTables.map(rustExtraTable).join(",\n                ");
   return `SeedDataPackage {
             path: ${rustString(packageDef.path)},
             title: ${rustString(packageDef.title)},
@@ -569,6 +694,7 @@ function rustDataPackage(packageDef) {
             rows_json: &[
                 ${rows}
             ],
+            extra_tables: &[${extraTables ? `\n                ${extraTables}\n            ` : ""}],
             views: &[${views ? `\n                ${views}\n            ` : ""}],
         }`;
 }
@@ -670,16 +796,78 @@ function isUtf8TextSeed(path) {
   return TEXT_BODY_EXTENSIONS.has(fileExtension(path));
 }
 
-function demoRowId(row, index) {
+function demoRowId(row, index, table) {
   if (typeof row.name === "string") {
     const slug = row.name
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "");
-    if (slug) return `${DEMO_WORKSPACE_ID}-${slug}`;
+    if (slug) {
+      return table === undefined ? `${DEMO_WORKSPACE_ID}-${slug}` : `${DEMO_WORKSPACE_ID}-${table}-${slug}`;
+    }
   }
-  return `${DEMO_WORKSPACE_ID}-row-${index}`;
+  const suffix = table === undefined ? `row-${index}` : `${table}-row-${index}`;
+  return `${DEMO_WORKSPACE_ID}-${suffix}`;
+}
+
+function buildDemoTableSnapshot(tableName, columns, rows, rowIdsByTable, legacyIds = false) {
+  const demoRows = rows.map((row, index) => {
+    const id = demoRowId(row, index, legacyIds ? undefined : tableName);
+    const values = { id: { Text: id } };
+    for (const column of columns) {
+      if (column.type === "relation") continue;
+      const raw = Object.prototype.hasOwnProperty.call(row, column.name) ? row[column.name] : null;
+      values[column.name] = cellValueForField(raw, column.type);
+    }
+    return { id, values, row };
+  });
+  const rowIdsByName = new Map(
+    demoRows.map((entry) => {
+      if (typeof entry.row.name !== "string") {
+        throw new Error(
+          `${DEMO_TEMPLATE_ID}: demo CRM rows require a name column for relation seeds`,
+        );
+      }
+      return [entry.row.name, entry.id];
+    }),
+  );
+  rowIdsByTable.set(tableName, rowIdsByName);
+  for (const entry of demoRows) {
+    for (const column of columns) {
+      if (column.type !== "relation") continue;
+      const raw = Object.prototype.hasOwnProperty.call(entry.row, column.name)
+        ? entry.row[column.name]
+        : null;
+      if (raw === null) {
+        entry.values[column.name] = { Null: null };
+        continue;
+      }
+      if (!Array.isArray(raw)) {
+        throw new Error(
+          `${DEMO_TEMPLATE_ID}: relation column ${column.name} must be a JSON array of record ids`,
+        );
+      }
+      const recordIds = resolveDemoRelationRefs(raw, column.relation_table, rowIdsByTable);
+      entry.values[column.name] = { Relation: { record_ids: recordIds } };
+    }
+  }
+  return demoRows.map(({ id, values }) => ({ id, values }));
+}
+
+function resolveDemoRelationRefs(references, targetTable, rowIdsByTable) {
+  const rowIdsByName = rowIdsByTable.get(targetTable) ?? new Map();
+  const targetIds = new Set(rowIdsByName.values());
+  return references.map((reference) => {
+    if (targetIds.has(reference)) return reference;
+    const resolved = rowIdsByName.get(reference);
+    if (!resolved) {
+      throw new Error(
+        `${DEMO_TEMPLATE_ID}: relation reference ${JSON.stringify(reference)} not found in table ${targetTable}`,
+      );
+    }
+    return resolved;
+  });
 }
 
 function cellValueForField(value, fieldType) {
@@ -788,19 +976,6 @@ function demoSnapshotLayoutFields(view) {
   return fields;
 }
 
-function resolveDemoRelationRefs(references, targetTable, rowIdsByName, knownIds) {
-  return references.map((reference) => {
-    if (knownIds.has(reference)) return reference;
-    const resolved = rowIdsByName.get(reference);
-    if (!resolved) {
-      throw new Error(
-        `${DEMO_TEMPLATE_ID}: relation reference ${JSON.stringify(reference)} not found in table ${targetTable}`,
-      );
-    }
-    return resolved;
-  });
-}
-
 function buildDemoDataApp(template) {
   const packageDef =
     template.dataPackages.find((entry) => entry.path === "CRM.data") ?? template.dataPackages[0];
@@ -818,65 +993,36 @@ function buildDemoDataApp(template) {
         : { relation_table: column.relation_table }),
     })),
   ];
-  const rows = packageDef.rows.map((row, index) => {
-    const id = demoRowId(row, index);
-    const values = { id: { Text: id } };
-    for (const column of packageDef.columns) {
-      if (column.type === "relation") continue;
-      const raw = Object.prototype.hasOwnProperty.call(row, column.name) ? row[column.name] : null;
-      values[column.name] = cellValueForField(raw, column.type);
-    }
-    return { id, values, row };
-  });
-  const rowIdsByName = new Map(
-    rows.map((entry) => {
-      if (typeof entry.row.name !== "string") {
-        throw new Error(`${DEMO_TEMPLATE_ID}: demo CRM rows require a name column for relation seeds`);
-      }
-      return [entry.row.name, entry.id];
-    }),
+  const rowIdsByTable = new Map();
+  const tableSnapshots = new Map();
+  for (const extraTable of packageDef.extraTables ?? []) {
+    tableSnapshots.set(
+      extraTable.table,
+      buildDemoTableSnapshot(extraTable.table, extraTable.columns, extraTable.rows, rowIdsByTable),
+    );
+  }
+  const demoRows = buildDemoTableSnapshot(
+    packageDef.table,
+    packageDef.columns,
+    packageDef.rows,
+    rowIdsByTable,
+    true,
   );
-  const knownIds = new Set(rows.map((entry) => entry.id));
-  for (const entry of rows) {
-    for (const column of packageDef.columns) {
-      if (column.type !== "relation") continue;
-      const raw = Object.prototype.hasOwnProperty.call(entry.row, column.name)
-        ? entry.row[column.name]
-        : null;
-      if (raw === null) {
-        entry.values[column.name] = { Null: null };
-        continue;
-      }
-      if (!Array.isArray(raw)) {
+  tableSnapshots.set(packageDef.table, demoRows);
+  const rowIds = new Set();
+  for (const rows of tableSnapshots.values()) {
+    for (const row of rows) {
+      if (rowIds.has(row.id)) {
         throw new Error(
-          `${DEMO_TEMPLATE_ID}: relation column ${column.name} must be a JSON array of record ids`,
+          `${DEMO_TEMPLATE_ID}: duplicate demo data-app row id ${JSON.stringify(row.id)}`,
         );
       }
-      const recordIds = resolveDemoRelationRefs(
-        raw,
-        column.relation_table,
-        rowIdsByName,
-        knownIds,
-      );
-      entry.values[column.name] = { Relation: { record_ids: recordIds } };
+      rowIds.add(row.id);
     }
-  }
-  const demoRows = rows.map(({ id, values }) => ({ id, values }));
-  const rowIds = new Set();
-  for (const row of demoRows) {
-    if (rowIds.has(row.id)) {
-      throw new Error(
-        `${DEMO_TEMPLATE_ID}: duplicate demo data-app row id ${JSON.stringify(row.id)}`,
-      );
-    }
-    rowIds.add(row.id);
   }
   const relation_targets = {};
-  for (const column of packageDef.columns) {
-    if (column.type !== "relation" || !column.relation_table) continue;
-    if (column.relation_table === packageDef.table) {
-      relation_targets[column.relation_table] = demoRows;
-    }
+  for (const [tableName, rows] of tableSnapshots) {
+    relation_targets[tableName] = rows;
   }
   const saved_views = buildDemoViewCatalog(packageDef);
   const available_views = saved_views.map((view) => view.name);

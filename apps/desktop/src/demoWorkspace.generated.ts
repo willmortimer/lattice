@@ -301,8 +301,9 @@ export const demoDataApp: DataAppSnapshot = {
     },
     {
       "name": "company",
-      "field_type": "text",
-      "sqlite_type": "TEXT"
+      "field_type": "relation",
+      "sqlite_type": "TEXT",
+      "relation_table": "companies"
     },
     {
       "name": "due_date",
@@ -339,9 +340,6 @@ export const demoDataApp: DataAppSnapshot = {
         "email": {
           "Text": "ada@analytical.io"
         },
-        "company": {
-          "Text": "Analytical Engines"
-        },
         "due_date": {
           "Date": "2026-08-15"
         },
@@ -350,6 +348,13 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "notes": {
           "Text": "Champion for typed tables beside narrative docs."
+        },
+        "company": {
+          "Relation": {
+            "record_ids": [
+              "0198-demo-companies-analytical-engines"
+            ]
+          }
         },
         "reports_to": {
           "Null": null
@@ -368,9 +373,6 @@ export const demoDataApp: DataAppSnapshot = {
         "email": {
           "Text": "grace@navy.mil"
         },
-        "company": {
-          "Text": "US Navy"
-        },
         "due_date": {
           "Date": "2026-07-25"
         },
@@ -379,6 +381,13 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "notes": {
           "Text": "Asked for honest SQL export from CRM views."
+        },
+        "company": {
+          "Relation": {
+            "record_ids": [
+              "0198-demo-companies-us-navy"
+            ]
+          }
         },
         "reports_to": {
           "Relation": {
@@ -401,9 +410,6 @@ export const demoDataApp: DataAppSnapshot = {
         "email": {
           "Text": "alan@bletchley.uk"
         },
-        "company": {
-          "Text": "Bletchley Park"
-        },
         "due_date": {
           "Date": "2026-09-01"
         },
@@ -412,6 +418,13 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "notes": {
           "Text": "Interested after notebook preview ships."
+        },
+        "company": {
+          "Relation": {
+            "record_ids": [
+              "0198-demo-companies-bletchley-park"
+            ]
+          }
         },
         "reports_to": {
           "Null": null
@@ -430,9 +443,6 @@ export const demoDataApp: DataAppSnapshot = {
         "email": {
           "Text": "katherine@nasa.gov"
         },
-        "company": {
-          "Text": "NASA"
-        },
         "due_date": {
           "Date": "2026-08-02"
         },
@@ -441,6 +451,13 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "notes": {
           "Text": "Needs calendar layout on due dates for standup."
+        },
+        "company": {
+          "Relation": {
+            "record_ids": [
+              "0198-demo-companies-nasa"
+            ]
+          }
         },
         "reports_to": {
           "Relation": {
@@ -463,9 +480,6 @@ export const demoDataApp: DataAppSnapshot = {
         "email": {
           "Text": "dorothy@nasa.gov"
         },
-        "company": {
-          "Text": "NASA"
-        },
         "due_date": {
           "Null": null
         },
@@ -474,6 +488,13 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "notes": {
           "Text": "Coordinating team rollout; gallery view by company."
+        },
+        "company": {
+          "Relation": {
+            "record_ids": [
+              "0198-demo-companies-nasa"
+            ]
+          }
         },
         "reports_to": {
           "Null": null
@@ -492,9 +513,6 @@ export const demoDataApp: DataAppSnapshot = {
         "email": {
           "Text": "mary@nasa.gov"
         },
-        "company": {
-          "Text": "NASA"
-        },
         "due_date": {
           "Date": "2026-07-30"
         },
@@ -503,6 +521,13 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "notes": {
           "Text": "Wants board grouped by status for sprint review."
+        },
+        "company": {
+          "Relation": {
+            "record_ids": [
+              "0198-demo-companies-nasa"
+            ]
+          }
         },
         "reports_to": {
           "Relation": {
@@ -525,9 +550,6 @@ export const demoDataApp: DataAppSnapshot = {
         "email": {
           "Text": "tim@w3.org"
         },
-        "company": {
-          "Text": "W3C"
-        },
         "due_date": {
           "Date": "2026-10-12"
         },
@@ -536,6 +558,13 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "notes": {
           "Text": "Linked data angle — follow up on wiki link semantics."
+        },
+        "company": {
+          "Relation": {
+            "record_ids": [
+              "0198-demo-companies-w3c"
+            ]
+          }
         },
         "reports_to": {
           "Null": null
@@ -554,9 +583,6 @@ export const demoDataApp: DataAppSnapshot = {
         "email": {
           "Text": "brendan@mozilla.org"
         },
-        "company": {
-          "Text": "Mozilla"
-        },
         "due_date": {
           "Date": "2026-08-20"
         },
@@ -565,6 +591,13 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "notes": {
           "Text": "Curious about Tauri shell performance budgets."
+        },
+        "company": {
+          "Relation": {
+            "record_ids": [
+              "0198-demo-companies-mozilla"
+            ]
+          }
         },
         "reports_to": {
           "Null": null
@@ -583,9 +616,6 @@ export const demoDataApp: DataAppSnapshot = {
         "email": {
           "Text": "margaret@mit.edu"
         },
-        "company": {
-          "Text": "MIT Instrumentation Lab"
-        },
         "due_date": {
           "Date": "2026-07-22"
         },
@@ -594,6 +624,13 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "notes": {
           "Text": "Long-page scroll tests map to her reliability bar."
+        },
+        "company": {
+          "Relation": {
+            "record_ids": [
+              "0198-demo-companies-mit-instrumentation-lab"
+            ]
+          }
         },
         "reports_to": {
           "Null": null
@@ -612,9 +649,6 @@ export const demoDataApp: DataAppSnapshot = {
         "email": {
           "Text": "knuth@stanford.edu"
         },
-        "company": {
-          "Text": "Stanford"
-        },
         "due_date": {
           "Null": null
         },
@@ -623,6 +657,13 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "notes": {
           "Text": "Literate programming — pages + code in Resources/."
+        },
+        "company": {
+          "Relation": {
+            "record_ids": [
+              "0198-demo-companies-stanford"
+            ]
+          }
         },
         "reports_to": {
           "Null": null
@@ -641,9 +682,6 @@ export const demoDataApp: DataAppSnapshot = {
         "email": {
           "Text": "linus@linux.foundation"
         },
-        "company": {
-          "Text": "Linux Foundation"
-        },
         "due_date": {
           "Date": "2026-11-05"
         },
@@ -652,6 +690,13 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "notes": {
           "Text": "Git-friendly workspace layout is the hook."
+        },
+        "company": {
+          "Relation": {
+            "record_ids": [
+              "0198-demo-companies-linux-foundation"
+            ]
+          }
         },
         "reports_to": {
           "Null": null
@@ -670,9 +715,6 @@ export const demoDataApp: DataAppSnapshot = {
         "email": {
           "Text": "guido@python.org"
         },
-        "company": {
-          "Text": "Python Software Foundation"
-        },
         "due_date": {
           "Date": "2026-08-08"
         },
@@ -681,6 +723,13 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "notes": {
           "Text": "Notebook story — track under Notebooks/ when ready."
+        },
+        "company": {
+          "Relation": {
+            "record_ids": [
+              "0198-demo-companies-python-software-foundation"
+            ]
+          }
         },
         "reports_to": {
           "Null": null
@@ -699,9 +748,6 @@ export const demoDataApp: DataAppSnapshot = {
         "email": {
           "Text": "radia@ieee.org"
         },
-        "company": {
-          "Text": "IEEE"
-        },
         "due_date": {
           "Date": "2026-09-18"
         },
@@ -710,6 +756,13 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "notes": {
           "Text": "Spanning-tree metaphor for canvas + outline sync."
+        },
+        "company": {
+          "Relation": {
+            "record_ids": [
+              "0198-demo-companies-ieee"
+            ]
+          }
         },
         "reports_to": {
           "Null": null
@@ -728,9 +781,6 @@ export const demoDataApp: DataAppSnapshot = {
         "email": {
           "Text": "shafi@mit.edu"
         },
-        "company": {
-          "Text": "MIT"
-        },
         "due_date": {
           "Date": "2026-07-28"
         },
@@ -739,6 +789,13 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "notes": {
           "Text": "Security review of command preconditions."
+        },
+        "company": {
+          "Relation": {
+            "record_ids": [
+              "0198-demo-companies-mit"
+            ]
+          }
         },
         "reports_to": {
           "Relation": {
@@ -761,9 +818,6 @@ export const demoDataApp: DataAppSnapshot = {
         "email": {
           "Text": "liskov@mit.edu"
         },
-        "company": {
-          "Text": "MIT"
-        },
         "due_date": {
           "Null": null
         },
@@ -772,6 +826,13 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "notes": {
           "Text": "Substitution principle maps to resource adapters."
+        },
+        "company": {
+          "Relation": {
+            "record_ids": [
+              "0198-demo-companies-mit"
+            ]
+          }
         },
         "reports_to": {
           "Null": null
@@ -790,9 +851,6 @@ export const demoDataApp: DataAppSnapshot = {
         "email": {
           "Text": "frances@ibm.com"
         },
-        "company": {
-          "Text": "IBM Research"
-        },
         "due_date": {
           "Date": "2026-08-30"
         },
@@ -801,6 +859,13 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "notes": {
           "Text": "Paused — re-engage after perf benchmarks published."
+        },
+        "company": {
+          "Relation": {
+            "record_ids": [
+              "0198-demo-companies-ibm-research"
+            ]
+          }
         },
         "reports_to": {
           "Null": null
@@ -819,9 +884,6 @@ export const demoDataApp: DataAppSnapshot = {
         "email": {
           "Text": "edsger@utexas.edu"
         },
-        "company": {
-          "Text": "UT Austin"
-        },
         "due_date": {
           "Date": "2026-12-01"
         },
@@ -830,6 +892,13 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "notes": {
           "Text": "Structured note templates under Templates/."
+        },
+        "company": {
+          "Relation": {
+            "record_ids": [
+              "0198-demo-companies-ut-austin"
+            ]
+          }
         },
         "reports_to": {
           "Null": null
@@ -848,9 +917,6 @@ export const demoDataApp: DataAppSnapshot = {
         "email": {
           "Text": "grace.b@example.com"
         },
-        "company": {
-          "Text": "Example Corp"
-        },
         "due_date": {
           "Date": "2026-07-19"
         },
@@ -859,6 +925,13 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "notes": {
           "Text": "Inbound from conference booth — assign owner."
+        },
+        "company": {
+          "Relation": {
+            "record_ids": [
+              "0198-demo-companies-example-corp"
+            ]
+          }
         },
         "reports_to": {
           "Null": null
@@ -877,9 +950,6 @@ export const demoDataApp: DataAppSnapshot = {
         "email": {
           "Text": "lamport@microsoft.com"
         },
-        "company": {
-          "Text": "Microsoft Research"
-        },
         "due_date": {
           "Date": "2026-09-25"
         },
@@ -888,6 +958,13 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "notes": {
           "Text": "Formal methods audience — link Research/Architecture."
+        },
+        "company": {
+          "Relation": {
+            "record_ids": [
+              "0198-demo-companies-microsoft-research"
+            ]
+          }
         },
         "reports_to": {
           "Null": null
@@ -906,9 +983,6 @@ export const demoDataApp: DataAppSnapshot = {
         "email": {
           "Text": "vint@google.com"
         },
-        "company": {
-          "Text": "Google"
-        },
         "due_date": {
           "Date": "2026-10-01"
         },
@@ -917,6 +991,13 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "notes": {
           "Text": "Offline-first narrative resonates; wants demo workspace zip."
+        },
+        "company": {
+          "Relation": {
+            "record_ids": [
+              "0198-demo-companies-google"
+            ]
+          }
         },
         "reports_to": {
           "Null": null
@@ -959,6 +1040,195 @@ export const demoDataApp: DataAppSnapshot = {
     }
   ],
   "relation_targets": {
+    "companies": [
+      {
+        "id": "0198-demo-companies-analytical-engines",
+        "values": {
+          "id": {
+            "Text": "0198-demo-companies-analytical-engines"
+          },
+          "name": {
+            "Text": "Analytical Engines"
+          }
+        }
+      },
+      {
+        "id": "0198-demo-companies-us-navy",
+        "values": {
+          "id": {
+            "Text": "0198-demo-companies-us-navy"
+          },
+          "name": {
+            "Text": "US Navy"
+          }
+        }
+      },
+      {
+        "id": "0198-demo-companies-bletchley-park",
+        "values": {
+          "id": {
+            "Text": "0198-demo-companies-bletchley-park"
+          },
+          "name": {
+            "Text": "Bletchley Park"
+          }
+        }
+      },
+      {
+        "id": "0198-demo-companies-nasa",
+        "values": {
+          "id": {
+            "Text": "0198-demo-companies-nasa"
+          },
+          "name": {
+            "Text": "NASA"
+          }
+        }
+      },
+      {
+        "id": "0198-demo-companies-w3c",
+        "values": {
+          "id": {
+            "Text": "0198-demo-companies-w3c"
+          },
+          "name": {
+            "Text": "W3C"
+          }
+        }
+      },
+      {
+        "id": "0198-demo-companies-mozilla",
+        "values": {
+          "id": {
+            "Text": "0198-demo-companies-mozilla"
+          },
+          "name": {
+            "Text": "Mozilla"
+          }
+        }
+      },
+      {
+        "id": "0198-demo-companies-mit-instrumentation-lab",
+        "values": {
+          "id": {
+            "Text": "0198-demo-companies-mit-instrumentation-lab"
+          },
+          "name": {
+            "Text": "MIT Instrumentation Lab"
+          }
+        }
+      },
+      {
+        "id": "0198-demo-companies-stanford",
+        "values": {
+          "id": {
+            "Text": "0198-demo-companies-stanford"
+          },
+          "name": {
+            "Text": "Stanford"
+          }
+        }
+      },
+      {
+        "id": "0198-demo-companies-linux-foundation",
+        "values": {
+          "id": {
+            "Text": "0198-demo-companies-linux-foundation"
+          },
+          "name": {
+            "Text": "Linux Foundation"
+          }
+        }
+      },
+      {
+        "id": "0198-demo-companies-python-software-foundation",
+        "values": {
+          "id": {
+            "Text": "0198-demo-companies-python-software-foundation"
+          },
+          "name": {
+            "Text": "Python Software Foundation"
+          }
+        }
+      },
+      {
+        "id": "0198-demo-companies-ieee",
+        "values": {
+          "id": {
+            "Text": "0198-demo-companies-ieee"
+          },
+          "name": {
+            "Text": "IEEE"
+          }
+        }
+      },
+      {
+        "id": "0198-demo-companies-mit",
+        "values": {
+          "id": {
+            "Text": "0198-demo-companies-mit"
+          },
+          "name": {
+            "Text": "MIT"
+          }
+        }
+      },
+      {
+        "id": "0198-demo-companies-ibm-research",
+        "values": {
+          "id": {
+            "Text": "0198-demo-companies-ibm-research"
+          },
+          "name": {
+            "Text": "IBM Research"
+          }
+        }
+      },
+      {
+        "id": "0198-demo-companies-ut-austin",
+        "values": {
+          "id": {
+            "Text": "0198-demo-companies-ut-austin"
+          },
+          "name": {
+            "Text": "UT Austin"
+          }
+        }
+      },
+      {
+        "id": "0198-demo-companies-example-corp",
+        "values": {
+          "id": {
+            "Text": "0198-demo-companies-example-corp"
+          },
+          "name": {
+            "Text": "Example Corp"
+          }
+        }
+      },
+      {
+        "id": "0198-demo-companies-microsoft-research",
+        "values": {
+          "id": {
+            "Text": "0198-demo-companies-microsoft-research"
+          },
+          "name": {
+            "Text": "Microsoft Research"
+          }
+        }
+      },
+      {
+        "id": "0198-demo-companies-google",
+        "values": {
+          "id": {
+            "Text": "0198-demo-companies-google"
+          },
+          "name": {
+            "Text": "Google"
+          }
+        }
+      }
+    ],
     "contacts": [
       {
         "id": "0198-demo-ada-lovelace",
@@ -972,9 +1242,6 @@ export const demoDataApp: DataAppSnapshot = {
           "email": {
             "Text": "ada@analytical.io"
           },
-          "company": {
-            "Text": "Analytical Engines"
-          },
           "due_date": {
             "Date": "2026-08-15"
           },
@@ -983,6 +1250,13 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "notes": {
             "Text": "Champion for typed tables beside narrative docs."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-analytical-engines"
+              ]
+            }
           },
           "reports_to": {
             "Null": null
@@ -1001,9 +1275,6 @@ export const demoDataApp: DataAppSnapshot = {
           "email": {
             "Text": "grace@navy.mil"
           },
-          "company": {
-            "Text": "US Navy"
-          },
           "due_date": {
             "Date": "2026-07-25"
           },
@@ -1012,6 +1283,13 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "notes": {
             "Text": "Asked for honest SQL export from CRM views."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-us-navy"
+              ]
+            }
           },
           "reports_to": {
             "Relation": {
@@ -1034,9 +1312,6 @@ export const demoDataApp: DataAppSnapshot = {
           "email": {
             "Text": "alan@bletchley.uk"
           },
-          "company": {
-            "Text": "Bletchley Park"
-          },
           "due_date": {
             "Date": "2026-09-01"
           },
@@ -1045,6 +1320,13 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "notes": {
             "Text": "Interested after notebook preview ships."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-bletchley-park"
+              ]
+            }
           },
           "reports_to": {
             "Null": null
@@ -1063,9 +1345,6 @@ export const demoDataApp: DataAppSnapshot = {
           "email": {
             "Text": "katherine@nasa.gov"
           },
-          "company": {
-            "Text": "NASA"
-          },
           "due_date": {
             "Date": "2026-08-02"
           },
@@ -1074,6 +1353,13 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "notes": {
             "Text": "Needs calendar layout on due dates for standup."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-nasa"
+              ]
+            }
           },
           "reports_to": {
             "Relation": {
@@ -1096,9 +1382,6 @@ export const demoDataApp: DataAppSnapshot = {
           "email": {
             "Text": "dorothy@nasa.gov"
           },
-          "company": {
-            "Text": "NASA"
-          },
           "due_date": {
             "Null": null
           },
@@ -1107,6 +1390,13 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "notes": {
             "Text": "Coordinating team rollout; gallery view by company."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-nasa"
+              ]
+            }
           },
           "reports_to": {
             "Null": null
@@ -1125,9 +1415,6 @@ export const demoDataApp: DataAppSnapshot = {
           "email": {
             "Text": "mary@nasa.gov"
           },
-          "company": {
-            "Text": "NASA"
-          },
           "due_date": {
             "Date": "2026-07-30"
           },
@@ -1136,6 +1423,13 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "notes": {
             "Text": "Wants board grouped by status for sprint review."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-nasa"
+              ]
+            }
           },
           "reports_to": {
             "Relation": {
@@ -1158,9 +1452,6 @@ export const demoDataApp: DataAppSnapshot = {
           "email": {
             "Text": "tim@w3.org"
           },
-          "company": {
-            "Text": "W3C"
-          },
           "due_date": {
             "Date": "2026-10-12"
           },
@@ -1169,6 +1460,13 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "notes": {
             "Text": "Linked data angle — follow up on wiki link semantics."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-w3c"
+              ]
+            }
           },
           "reports_to": {
             "Null": null
@@ -1187,9 +1485,6 @@ export const demoDataApp: DataAppSnapshot = {
           "email": {
             "Text": "brendan@mozilla.org"
           },
-          "company": {
-            "Text": "Mozilla"
-          },
           "due_date": {
             "Date": "2026-08-20"
           },
@@ -1198,6 +1493,13 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "notes": {
             "Text": "Curious about Tauri shell performance budgets."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-mozilla"
+              ]
+            }
           },
           "reports_to": {
             "Null": null
@@ -1216,9 +1518,6 @@ export const demoDataApp: DataAppSnapshot = {
           "email": {
             "Text": "margaret@mit.edu"
           },
-          "company": {
-            "Text": "MIT Instrumentation Lab"
-          },
           "due_date": {
             "Date": "2026-07-22"
           },
@@ -1227,6 +1526,13 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "notes": {
             "Text": "Long-page scroll tests map to her reliability bar."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-mit-instrumentation-lab"
+              ]
+            }
           },
           "reports_to": {
             "Null": null
@@ -1245,9 +1551,6 @@ export const demoDataApp: DataAppSnapshot = {
           "email": {
             "Text": "knuth@stanford.edu"
           },
-          "company": {
-            "Text": "Stanford"
-          },
           "due_date": {
             "Null": null
           },
@@ -1256,6 +1559,13 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "notes": {
             "Text": "Literate programming — pages + code in Resources/."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-stanford"
+              ]
+            }
           },
           "reports_to": {
             "Null": null
@@ -1274,9 +1584,6 @@ export const demoDataApp: DataAppSnapshot = {
           "email": {
             "Text": "linus@linux.foundation"
           },
-          "company": {
-            "Text": "Linux Foundation"
-          },
           "due_date": {
             "Date": "2026-11-05"
           },
@@ -1285,6 +1592,13 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "notes": {
             "Text": "Git-friendly workspace layout is the hook."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-linux-foundation"
+              ]
+            }
           },
           "reports_to": {
             "Null": null
@@ -1303,9 +1617,6 @@ export const demoDataApp: DataAppSnapshot = {
           "email": {
             "Text": "guido@python.org"
           },
-          "company": {
-            "Text": "Python Software Foundation"
-          },
           "due_date": {
             "Date": "2026-08-08"
           },
@@ -1314,6 +1625,13 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "notes": {
             "Text": "Notebook story — track under Notebooks/ when ready."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-python-software-foundation"
+              ]
+            }
           },
           "reports_to": {
             "Null": null
@@ -1332,9 +1650,6 @@ export const demoDataApp: DataAppSnapshot = {
           "email": {
             "Text": "radia@ieee.org"
           },
-          "company": {
-            "Text": "IEEE"
-          },
           "due_date": {
             "Date": "2026-09-18"
           },
@@ -1343,6 +1658,13 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "notes": {
             "Text": "Spanning-tree metaphor for canvas + outline sync."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-ieee"
+              ]
+            }
           },
           "reports_to": {
             "Null": null
@@ -1361,9 +1683,6 @@ export const demoDataApp: DataAppSnapshot = {
           "email": {
             "Text": "shafi@mit.edu"
           },
-          "company": {
-            "Text": "MIT"
-          },
           "due_date": {
             "Date": "2026-07-28"
           },
@@ -1372,6 +1691,13 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "notes": {
             "Text": "Security review of command preconditions."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-mit"
+              ]
+            }
           },
           "reports_to": {
             "Relation": {
@@ -1394,9 +1720,6 @@ export const demoDataApp: DataAppSnapshot = {
           "email": {
             "Text": "liskov@mit.edu"
           },
-          "company": {
-            "Text": "MIT"
-          },
           "due_date": {
             "Null": null
           },
@@ -1405,6 +1728,13 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "notes": {
             "Text": "Substitution principle maps to resource adapters."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-mit"
+              ]
+            }
           },
           "reports_to": {
             "Null": null
@@ -1423,9 +1753,6 @@ export const demoDataApp: DataAppSnapshot = {
           "email": {
             "Text": "frances@ibm.com"
           },
-          "company": {
-            "Text": "IBM Research"
-          },
           "due_date": {
             "Date": "2026-08-30"
           },
@@ -1434,6 +1761,13 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "notes": {
             "Text": "Paused — re-engage after perf benchmarks published."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-ibm-research"
+              ]
+            }
           },
           "reports_to": {
             "Null": null
@@ -1452,9 +1786,6 @@ export const demoDataApp: DataAppSnapshot = {
           "email": {
             "Text": "edsger@utexas.edu"
           },
-          "company": {
-            "Text": "UT Austin"
-          },
           "due_date": {
             "Date": "2026-12-01"
           },
@@ -1463,6 +1794,13 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "notes": {
             "Text": "Structured note templates under Templates/."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-ut-austin"
+              ]
+            }
           },
           "reports_to": {
             "Null": null
@@ -1481,9 +1819,6 @@ export const demoDataApp: DataAppSnapshot = {
           "email": {
             "Text": "grace.b@example.com"
           },
-          "company": {
-            "Text": "Example Corp"
-          },
           "due_date": {
             "Date": "2026-07-19"
           },
@@ -1492,6 +1827,13 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "notes": {
             "Text": "Inbound from conference booth — assign owner."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-example-corp"
+              ]
+            }
           },
           "reports_to": {
             "Null": null
@@ -1510,9 +1852,6 @@ export const demoDataApp: DataAppSnapshot = {
           "email": {
             "Text": "lamport@microsoft.com"
           },
-          "company": {
-            "Text": "Microsoft Research"
-          },
           "due_date": {
             "Date": "2026-09-25"
           },
@@ -1521,6 +1860,13 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "notes": {
             "Text": "Formal methods audience — link Research/Architecture."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-microsoft-research"
+              ]
+            }
           },
           "reports_to": {
             "Null": null
@@ -1539,9 +1885,6 @@ export const demoDataApp: DataAppSnapshot = {
           "email": {
             "Text": "vint@google.com"
           },
-          "company": {
-            "Text": "Google"
-          },
           "due_date": {
             "Date": "2026-10-01"
           },
@@ -1550,6 +1893,13 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "notes": {
             "Text": "Offline-first narrative resonates; wants demo workspace zip."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-google"
+              ]
+            }
           },
           "reports_to": {
             "Null": null
@@ -1562,7 +1912,7 @@ export const demoDataApp: DataAppSnapshot = {
 };
 
 export const demoPages: Record<string, string> = {
-  "Home.md": "---\ntitle: Home\n---\n\n# Home\n\nKitchen-sink tour of the **First Look** sample workspace. Everything here is an\nordinary file under a real directory — open it in any editor, or stay inside Lattice.\n\n## Quick start\n\n1. Search with **⌘K** — pages are indexed by path, title, tags, and body.\n2. Scroll [[Research/Long Read]] — long-form perf and virtualization fixture.\n3. Open `Canvases/Product Strategy.canvas` — double-click file nodes to jump.\n4. Capture with **⌘N** into `Inbox/` (see [[Inbox/Sample capture]]).\n5. Open `CRM.data` — ~20 contacts with multiple column types and a relation field.\n6. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.\n7. Create pages from `Templates/` — daily and meeting note scaffolds.\n\n## First Look tour — new surfaces\n\nWork through this checklist to exercise the latest desktop shell and data features.\nEach step is safe in the sample workspace; undo where noted.\n\n### CRM layouts and saved views\n\n1. Open `CRM.data` and switch **Board**, **Gallery**, **Calendar**, and **Form** from the view picker.\n2. In each layout, change the layout field pickers (group-by, cover field, date field, visible columns).\n3. Click **Save view** to persist the layout under `CRM.data/views/`.\n4. Open a contact row and inspect the **reports_to** relation column — a few contacts are pre-linked; add or change links in the record detail panel.\n\n### Resource tree\n\n5. Create a folder under `Projects/` (context menu or **New folder**).\n6. Press **⌘Z** to undo the folder creation.\n7. Move [[Product/Vision]] into another folder; accept link repair when prompted so wiki links update.\n8. **⌘-click** two pages in the tree, then drag the selection to a folder (multi-select move).\n9. Select multiple items and delete — confirm the batch operation.\n\n### Where to look next\n\n| Surface | Try |\n| --- | --- |\n| [[Research/Long Read]] | Scroll perf, embeds, extended checklist |\n| [[Product/Release Notes]] | What shipped in this sample |\n| `Canvases/Product Strategy.canvas` | Spatial links between Product pages |\n\n## Product\n\n| Page | What to try |\n| --- | --- |\n| [[Product/Vision]] | Short north-star narrative |\n| [[Product/Principles]] | Invariants and constraints |\n| [[Product/Roadmap]] | Phased delivery themes |\n| [[Product/Release Notes]] | Changelog-style sample |\n\n## Research\n\n| Page | What to try |\n| --- | --- |\n| [[Research/Long Read]] | Scroll perf, Mermaid, wiki links, `:::lattice-embed` |\n| [[Research/Architecture]] | System diagram (Mermaid) |\n| [[Research/Competitor Analysis]] | Comparison table |\n| [[Research/Market Notes]] | Segments and hypotheses |\n| [[Research/Interview Synthesis]] | Quotes mapped to CRM fields |\n\n## Inbox & templates\n\n- [[Inbox/Sample capture]] — triage-ready quick note\n- [[Templates/Daily Note]] — `{{date}}` / `{{title}}` placeholders preserved at provision\n- [[Templates/Meeting Note]] — agenda, decisions, action items\n\nWorkspace defaults point quick capture at `Inbox/` and templates at `Templates/`.\n\n## Canvas & data\n\n| Resource | Kind |\n| --- | --- |\n| `Canvases/Product Strategy.canvas` | Spatial board linking Product pages |\n| `CRM.data` | SQLite data app (contacts table) |\n| `Data/sample.csv` | Flat CSV import sample |\n\n### CRM views\n\nOpen `CRM.data` and switch layouts from the view picker. The template seeds saved\nviews under `CRM.data/views/` (one YAML file per view):\n\n| View | Layout | Key field |\n| ---- | ------ | --------- |\n| Board | `board` | `status` |\n| Calendar | `calendar` | `due_date` |\n| Gallery | `gallery` | `company` (cover) |\n| Form | `form` | — |\n\nSupported layout types also include `grid` and `list`. Board groups contacts by\n`status`; calendar plots `due_date`; gallery uses `company` as a cover field.\n\nThe **reports_to** column is a self-relation on `contacts` — open a row to link peers\nor managers. Template seeds resolve contact **names** to record ids at provision time.\n\nEmbed a view from a page (see [[Research/Long Read]]):\n\n```markdown\n:::lattice-embed\nresource: CRM.data/views/Board.yaml\nfallback: \"Open CRM board view\"\n:::\n```\n\n## Resources\n\n| File | Notes |\n| --- | --- |\n| `Resources/config.json` | Feature flags sample |\n| `Resources/schema.yaml` | Small YAML schema |\n| `Resources/hooks.json` | Workspace hook sketch |\n| `Resources/example.ts` | Tiny TypeScript export |\n| `Resources/types.ts` | CRM-related types |\n| `Resources/queries.sql` | Example SELECT statements |\n| `Resources/notes.txt` | Plain text |\n| `Resources/mark.svg` | Generated Lattice mark |\n\n## Map\n\n| Path | Kind |\n| --- | --- |\n| [[Product/Vision]] | page |\n| [[Product/Principles]] | page |\n| [[Product/Roadmap]] | page |\n| [[Product/Release Notes]] | page |\n| [[Research/Long Read]] | page (long / embed) |\n| [[Research/Architecture]] | page |\n| [[Research/Competitor Analysis]] | page |\n| [[Research/Market Notes]] | page |\n| [[Research/Interview Synthesis]] | page |\n| [[Inbox/Sample capture]] | page |\n| `Templates/` | page templates |\n| `Canvases/Product Strategy.canvas` | canvas |\n| `CRM.data` | data app |\n| `Data/sample.csv` | CSV file |\n| `Resources/` | code & config files |\n",
+  "Home.md": "---\ntitle: Home\n---\n\n# Home\n\nKitchen-sink tour of the **First Look** sample workspace. Everything here is an\nordinary file under a real directory — open it in any editor, or stay inside Lattice.\n\n## Quick start\n\n1. Search with **⌘K** — pages are indexed by path, title, tags, and body.\n2. Scroll [[Research/Long Read]] — long-form perf and virtualization fixture.\n3. Open `Canvases/Product Strategy.canvas` — double-click file nodes to jump.\n4. Capture with **⌘N** into `Inbox/` (see [[Inbox/Sample capture]]).\n5. Open `CRM.data` — ~20 contacts with multiple column types, a **company** relation to a `companies` table, and a **reports_to** self-relation.\n6. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.\n7. Create pages from `Templates/` — daily and meeting note scaffolds.\n\n## First Look tour — new surfaces\n\nWork through this checklist to exercise the latest desktop shell and data features.\nEach step is safe in the sample workspace; undo where noted.\n\n### CRM layouts and saved views\n\n1. Open `CRM.data` and switch **Board**, **Gallery**, **Calendar**, and **Form** from the view picker.\n2. In each layout, change the layout field pickers (group-by, cover field, date field, visible columns).\n3. Click **Save view** to persist the layout under `CRM.data/views/`.\n4. Open a contact row and inspect the **company** and **reports_to** relation columns — a few contacts are pre-linked; add or change links in the record detail panel.\n\n### Resource tree\n\n5. Create a folder under `Projects/` (context menu or **New folder**).\n6. Press **⌘Z** to undo the folder creation.\n7. Move [[Product/Vision]] into another folder; accept link repair when prompted so wiki links update.\n8. **⌘-click** two pages in the tree, then drag the selection to a folder (multi-select move).\n9. Select multiple items and delete — confirm the batch operation.\n\n### Where to look next\n\n| Surface | Try |\n| --- | --- |\n| [[Research/Long Read]] | Scroll perf, embeds, extended checklist |\n| [[Product/Release Notes]] | What shipped in this sample |\n| `Canvases/Product Strategy.canvas` | Spatial links between Product pages |\n\n## Product\n\n| Page | What to try |\n| --- | --- |\n| [[Product/Vision]] | Short north-star narrative |\n| [[Product/Principles]] | Invariants and constraints |\n| [[Product/Roadmap]] | Phased delivery themes |\n| [[Product/Release Notes]] | Changelog-style sample |\n\n## Research\n\n| Page | What to try |\n| --- | --- |\n| [[Research/Long Read]] | Scroll perf, Mermaid, wiki links, `:::lattice-embed` |\n| [[Research/Architecture]] | System diagram (Mermaid) |\n| [[Research/Competitor Analysis]] | Comparison table |\n| [[Research/Market Notes]] | Segments and hypotheses |\n| [[Research/Interview Synthesis]] | Quotes mapped to CRM fields |\n\n## Inbox & templates\n\n- [[Inbox/Sample capture]] — triage-ready quick note\n- [[Templates/Daily Note]] — `{{date}}` / `{{title}}` placeholders preserved at provision\n- [[Templates/Meeting Note]] — agenda, decisions, action items\n\nWorkspace defaults point quick capture at `Inbox/` and templates at `Templates/`.\n\n## Canvas & data\n\n| Resource | Kind |\n| --- | --- |\n| `Canvases/Product Strategy.canvas` | Spatial board linking Product pages |\n| `CRM.data` | SQLite data app (`companies` + `contacts` tables) |\n| `Data/sample.csv` | Flat CSV import sample |\n\n### CRM views\n\nOpen `CRM.data` and switch layouts from the view picker. The template seeds saved\nviews under `CRM.data/views/` (one YAML file per view):\n\n| View | Layout | Key field |\n| ---- | ------ | --------- |\n| Board | `board` | `status` |\n| Calendar | `calendar` | `due_date` |\n| Gallery | `gallery` | `company` (cover) |\n| Form | `form` | — |\n\nSupported layout types also include `grid` and `list`. Board groups contacts by\n`status`; calendar plots `due_date`; gallery uses `company` as a cover field.\n\nThe **company** column links each contact to a row in the seeded `companies` table.\nThe **reports_to** column is a self-relation on `contacts` — open a row to link peers\nor managers. Template relation seeds accept **record ids** or display **names** (matched\nvia each target table's `name` column at provision time); prefer ids when you need\nstable references across renames.\n\nEmbed a view from a page (see [[Research/Long Read]]):\n\n```markdown\n:::lattice-embed\nresource: CRM.data/views/Board.yaml\nfallback: \"Open CRM board view\"\n:::\n```\n\n## Resources\n\n| File | Notes |\n| --- | --- |\n| `Resources/config.json` | Feature flags sample |\n| `Resources/schema.yaml` | Small YAML schema |\n| `Resources/hooks.json` | Workspace hook sketch |\n| `Resources/example.ts` | Tiny TypeScript export |\n| `Resources/types.ts` | CRM-related types |\n| `Resources/queries.sql` | Example SELECT statements |\n| `Resources/notes.txt` | Plain text |\n| `Resources/mark.svg` | Generated Lattice mark |\n\n## Map\n\n| Path | Kind |\n| --- | --- |\n| [[Product/Vision]] | page |\n| [[Product/Principles]] | page |\n| [[Product/Roadmap]] | page |\n| [[Product/Release Notes]] | page |\n| [[Research/Long Read]] | page (long / embed) |\n| [[Research/Architecture]] | page |\n| [[Research/Competitor Analysis]] | page |\n| [[Research/Market Notes]] | page |\n| [[Research/Interview Synthesis]] | page |\n| [[Inbox/Sample capture]] | page |\n| `Templates/` | page templates |\n| `Canvases/Product Strategy.canvas` | canvas |\n| `CRM.data` | data app |\n| `Data/sample.csv` | CSV file |\n| `Resources/` | code & config files |\n",
   "Inbox/Sample capture.md": "---\ntitle: Sample capture\ntags: [inbox]\n---\n\n# Sample capture\n\nQuick note seeded in `Inbox/` — triage into [[Product/]] or [[Research/]] when ready.\n\n## Raw thought\n\nDogfood the First Look template daily: open [[Research/Long Read]], add a CRM row,\ncapture here with **⌘N**, promote to a full page from [[Templates/Daily Note]].\n\n- [ ] Review [[Product/Release Notes]]\n- [ ] Check `CRM.data` calendar layout for August due dates\n- [ ] Pin [[Canvases/Product Strategy.canvas]] in sidebar\n\n#inbox\n",
   "Product/Vision.md": "---\ntitle: Vision\n---\n\n# Vision\n\nA fast local workspace that treats documents, data, notebooks, and canvases as ordinary files.\n\nSee also [[Product/Principles]], [[Product/Roadmap]], [[Product/Release Notes]], and\n[[Research/Competitor Analysis]]. For volume testing, open [[Research/Long Read]].\n",
   "Product/Principles.md": "---\ntitle: Principles\ntags: [product]\n---\n\n# Principles\n\nGuiding constraints for Lattice — referenced from [[Product/Vision]] and [[Product/Roadmap]].\n\n## Local-first\n\nThe workspace is a directory on disk. Canonical content stays inspectable outside\nLattice. Offline is the normal state.\n\n## Commands, not side doors\n\nEvery mutation flows through the semantic command core. The React shell coordinates;\nit does not become a privileged writer.\n\n## Progressive disclosure\n\nPrimary creation vocabulary: **Page**, **Canvas**, **Table**, **Notebook**, **File**.\nAdvanced source, history, and conflicts belong under per-resource Inspect surfaces.\n\n## Honest reconciliation\n\nExternal edits are legitimate. Lattice watches the tree and reconciles without\nsilent data loss.\n\n## Performance as product\n\nLarge pages like [[Research/Long Read]], wide tables in `CRM.data`, and canvas\npanning should meet documented budgets before new abstractions land.\n\nSee [[Home]] for a tour of this sample workspace.\n",

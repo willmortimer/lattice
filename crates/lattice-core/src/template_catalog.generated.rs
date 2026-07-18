@@ -49,6 +49,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 "{\"task\":\"Review inbox\",\"status\":\"todo\",\"due\":null}",
                 "{\"task\":\"Plan the week\",\"status\":\"todo\",\"due\":\"2026-07-21\"}"
             ],
+            extra_tables: &[],
             views: &[],
         }
         ],
@@ -142,6 +143,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 "{\"piece\":\"Chapter 01 excerpt\",\"venue\":\"Example Quarterly\",\"status\":\"submitted\",\"submitted_on\":\"2026-07-01\",\"response\":null}",
                 "{\"piece\":\"Flash piece\",\"venue\":\"Example Review\",\"status\":\"draft\",\"submitted_on\":null,\"response\":\"Polish the opening before sending.\"}"
             ],
+            extra_tables: &[],
             views: &[],
         }
         ],
@@ -195,6 +197,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 "{\"objective\":\"Ship the spring release\",\"key_result\":\"Two dogfood rounds with written findings\",\"owner\":\"you\",\"status\":\"at-risk\",\"confidence\":0.5}",
                 "{\"objective\":\"Grow the team sustainably\",\"key_result\":\"Every report has a current growth plan\",\"owner\":\"you\",\"status\":\"on-track\",\"confidence\":0.7}"
             ],
+            extra_tables: &[],
             views: &[],
         }
         ],
@@ -249,6 +252,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 "{\"name\":\"Baseline replication\",\"status\":\"planned\",\"run_date\":null,\"notes\":\"Replicate methods from Example Paper.\"}",
                 "{\"name\":\"Pilot run\",\"status\":\"complete\",\"run_date\":\"2026-07-10\",\"notes\":\"Smoke test of data pipeline.\"}"
             ],
+            extra_tables: &[],
             views: &[],
         }
         ],
@@ -348,6 +352,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 "{\"metric\":\"query_latency_ms\",\"value\":38.2,\"recorded_on\":\"2026-07-08\",\"category\":\"Performance\"}",
                 "{\"metric\":\"error_rate_pct\",\"value\":0.3,\"recorded_on\":\"2026-07-08\",\"category\":\"Reliability\"}"
             ],
+            extra_tables: &[],
             views: &[
                 SeedDataView {
                 name: "Board",
@@ -445,6 +450,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 "{\"title\":\"Add health check endpoint\",\"status\":\"open\",\"priority\":\"high\",\"component\":\"api\",\"notes\":\"See Snippets/api-handler.ts for the handler stub.\"}",
                 "{\"title\":\"Document deploy rollback\",\"status\":\"open\",\"priority\":\"low\",\"component\":\"ops\",\"notes\":\"Capture steps in Runbooks/ before the next release.\"}"
             ],
+            extra_tables: &[],
             views: &[],
         }
         ],
@@ -538,33 +544,60 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             columns: &[
                 SeedDataColumn { name: "name", field_type: "text", relation_table: None },
                 SeedDataColumn { name: "email", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "company", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "company", field_type: "relation", relation_table: Some("companies") },
                 SeedDataColumn { name: "due_date", field_type: "date", relation_table: None },
                 SeedDataColumn { name: "status", field_type: "text", relation_table: None },
                 SeedDataColumn { name: "notes", field_type: "long_text", relation_table: None },
                 SeedDataColumn { name: "reports_to", field_type: "relation", relation_table: Some("contacts") }
             ],
             rows_json: &[
-                "{\"name\":\"Ada Lovelace\",\"email\":\"ada@analytical.io\",\"company\":\"Analytical Engines\",\"due_date\":\"2026-08-15\",\"status\":\"Active\",\"notes\":\"Champion for typed tables beside narrative docs.\"}",
-                "{\"name\":\"Grace Hopper\",\"email\":\"grace@navy.mil\",\"company\":\"US Navy\",\"due_date\":\"2026-07-25\",\"status\":\"Active\",\"notes\":\"Asked for honest SQL export from CRM views.\",\"reports_to\":[\"Ada Lovelace\"]}",
-                "{\"name\":\"Alan Turing\",\"email\":\"alan@bletchley.uk\",\"company\":\"Bletchley Park\",\"due_date\":\"2026-09-01\",\"status\":\"Nurture\",\"notes\":\"Interested after notebook preview ships.\"}",
-                "{\"name\":\"Katherine Johnson\",\"email\":\"katherine@nasa.gov\",\"company\":\"NASA\",\"due_date\":\"2026-08-02\",\"status\":\"Active\",\"notes\":\"Needs calendar layout on due dates for standup.\",\"reports_to\":[\"Dorothy Vaughan\"]}",
-                "{\"name\":\"Dorothy Vaughan\",\"email\":\"dorothy@nasa.gov\",\"company\":\"NASA\",\"due_date\":null,\"status\":\"Partner\",\"notes\":\"Coordinating team rollout; gallery view by company.\"}",
-                "{\"name\":\"Mary Jackson\",\"email\":\"mary@nasa.gov\",\"company\":\"NASA\",\"due_date\":\"2026-07-30\",\"status\":\"Active\",\"notes\":\"Wants board grouped by status for sprint review.\",\"reports_to\":[\"Katherine Johnson\"]}",
-                "{\"name\":\"Tim Berners-Lee\",\"email\":\"tim@w3.org\",\"company\":\"W3C\",\"due_date\":\"2026-10-12\",\"status\":\"Lead\",\"notes\":\"Linked data angle — follow up on wiki link semantics.\"}",
-                "{\"name\":\"Brendan Eich\",\"email\":\"brendan@mozilla.org\",\"company\":\"Mozilla\",\"due_date\":\"2026-08-20\",\"status\":\"Nurture\",\"notes\":\"Curious about Tauri shell performance budgets.\"}",
-                "{\"name\":\"Margaret Hamilton\",\"email\":\"margaret@mit.edu\",\"company\":\"MIT Instrumentation Lab\",\"due_date\":\"2026-07-22\",\"status\":\"Active\",\"notes\":\"Long-page scroll tests map to her reliability bar.\"}",
-                "{\"name\":\"Donald Knuth\",\"email\":\"knuth@stanford.edu\",\"company\":\"Stanford\",\"due_date\":null,\"status\":\"Lead\",\"notes\":\"Literate programming — pages + code in Resources/.\"}",
-                "{\"name\":\"Linus Torvalds\",\"email\":\"linus@linux.foundation\",\"company\":\"Linux Foundation\",\"due_date\":\"2026-11-05\",\"status\":\"Nurture\",\"notes\":\"Git-friendly workspace layout is the hook.\"}",
-                "{\"name\":\"Guido van Rossum\",\"email\":\"guido@python.org\",\"company\":\"Python Software Foundation\",\"due_date\":\"2026-08-08\",\"status\":\"Active\",\"notes\":\"Notebook story — track under Notebooks/ when ready.\"}",
-                "{\"name\":\"Radia Perlman\",\"email\":\"radia@ieee.org\",\"company\":\"IEEE\",\"due_date\":\"2026-09-18\",\"status\":\"Lead\",\"notes\":\"Spanning-tree metaphor for canvas + outline sync.\"}",
-                "{\"name\":\"Shafi Goldwasser\",\"email\":\"shafi@mit.edu\",\"company\":\"MIT\",\"due_date\":\"2026-07-28\",\"status\":\"Active\",\"notes\":\"Security review of command preconditions.\",\"reports_to\":[\"Barbara Liskov\"]}",
-                "{\"name\":\"Barbara Liskov\",\"email\":\"liskov@mit.edu\",\"company\":\"MIT\",\"due_date\":null,\"status\":\"Partner\",\"notes\":\"Substitution principle maps to resource adapters.\"}",
-                "{\"name\":\"Frances Allen\",\"email\":\"frances@ibm.com\",\"company\":\"IBM Research\",\"due_date\":\"2026-08-30\",\"status\":\"Churned\",\"notes\":\"Paused — re-engage after perf benchmarks published.\"}",
-                "{\"name\":\"Edsger Dijkstra\",\"email\":\"edsger@utexas.edu\",\"company\":\"UT Austin\",\"due_date\":\"2026-12-01\",\"status\":\"Lead\",\"notes\":\"Structured note templates under Templates/.\"}",
-                "{\"name\":\"Grace Brewster\",\"email\":\"grace.b@example.com\",\"company\":\"Example Corp\",\"due_date\":\"2026-07-19\",\"status\":\"Lead\",\"notes\":\"Inbound from conference booth — assign owner.\"}",
-                "{\"name\":\"Leslie Lamport\",\"email\":\"lamport@microsoft.com\",\"company\":\"Microsoft Research\",\"due_date\":\"2026-09-25\",\"status\":\"Nurture\",\"notes\":\"Formal methods audience — link Research/Architecture.\"}",
-                "{\"name\":\"Vint Cerf\",\"email\":\"vint@google.com\",\"company\":\"Google\",\"due_date\":\"2026-10-01\",\"status\":\"Active\",\"notes\":\"Offline-first narrative resonates; wants demo workspace zip.\"}"
+                "{\"name\":\"Ada Lovelace\",\"email\":\"ada@analytical.io\",\"company\":[\"Analytical Engines\"],\"due_date\":\"2026-08-15\",\"status\":\"Active\",\"notes\":\"Champion for typed tables beside narrative docs.\"}",
+                "{\"name\":\"Grace Hopper\",\"email\":\"grace@navy.mil\",\"company\":[\"US Navy\"],\"due_date\":\"2026-07-25\",\"status\":\"Active\",\"notes\":\"Asked for honest SQL export from CRM views.\",\"reports_to\":[\"Ada Lovelace\"]}",
+                "{\"name\":\"Alan Turing\",\"email\":\"alan@bletchley.uk\",\"company\":[\"Bletchley Park\"],\"due_date\":\"2026-09-01\",\"status\":\"Nurture\",\"notes\":\"Interested after notebook preview ships.\"}",
+                "{\"name\":\"Katherine Johnson\",\"email\":\"katherine@nasa.gov\",\"company\":[\"NASA\"],\"due_date\":\"2026-08-02\",\"status\":\"Active\",\"notes\":\"Needs calendar layout on due dates for standup.\",\"reports_to\":[\"Dorothy Vaughan\"]}",
+                "{\"name\":\"Dorothy Vaughan\",\"email\":\"dorothy@nasa.gov\",\"company\":[\"NASA\"],\"due_date\":null,\"status\":\"Partner\",\"notes\":\"Coordinating team rollout; gallery view by company.\"}",
+                "{\"name\":\"Mary Jackson\",\"email\":\"mary@nasa.gov\",\"company\":[\"NASA\"],\"due_date\":\"2026-07-30\",\"status\":\"Active\",\"notes\":\"Wants board grouped by status for sprint review.\",\"reports_to\":[\"Katherine Johnson\"]}",
+                "{\"name\":\"Tim Berners-Lee\",\"email\":\"tim@w3.org\",\"company\":[\"W3C\"],\"due_date\":\"2026-10-12\",\"status\":\"Lead\",\"notes\":\"Linked data angle — follow up on wiki link semantics.\"}",
+                "{\"name\":\"Brendan Eich\",\"email\":\"brendan@mozilla.org\",\"company\":[\"Mozilla\"],\"due_date\":\"2026-08-20\",\"status\":\"Nurture\",\"notes\":\"Curious about Tauri shell performance budgets.\"}",
+                "{\"name\":\"Margaret Hamilton\",\"email\":\"margaret@mit.edu\",\"company\":[\"MIT Instrumentation Lab\"],\"due_date\":\"2026-07-22\",\"status\":\"Active\",\"notes\":\"Long-page scroll tests map to her reliability bar.\"}",
+                "{\"name\":\"Donald Knuth\",\"email\":\"knuth@stanford.edu\",\"company\":[\"Stanford\"],\"due_date\":null,\"status\":\"Lead\",\"notes\":\"Literate programming — pages + code in Resources/.\"}",
+                "{\"name\":\"Linus Torvalds\",\"email\":\"linus@linux.foundation\",\"company\":[\"Linux Foundation\"],\"due_date\":\"2026-11-05\",\"status\":\"Nurture\",\"notes\":\"Git-friendly workspace layout is the hook.\"}",
+                "{\"name\":\"Guido van Rossum\",\"email\":\"guido@python.org\",\"company\":[\"Python Software Foundation\"],\"due_date\":\"2026-08-08\",\"status\":\"Active\",\"notes\":\"Notebook story — track under Notebooks/ when ready.\"}",
+                "{\"name\":\"Radia Perlman\",\"email\":\"radia@ieee.org\",\"company\":[\"IEEE\"],\"due_date\":\"2026-09-18\",\"status\":\"Lead\",\"notes\":\"Spanning-tree metaphor for canvas + outline sync.\"}",
+                "{\"name\":\"Shafi Goldwasser\",\"email\":\"shafi@mit.edu\",\"company\":[\"MIT\"],\"due_date\":\"2026-07-28\",\"status\":\"Active\",\"notes\":\"Security review of command preconditions.\",\"reports_to\":[\"Barbara Liskov\"]}",
+                "{\"name\":\"Barbara Liskov\",\"email\":\"liskov@mit.edu\",\"company\":[\"MIT\"],\"due_date\":null,\"status\":\"Partner\",\"notes\":\"Substitution principle maps to resource adapters.\"}",
+                "{\"name\":\"Frances Allen\",\"email\":\"frances@ibm.com\",\"company\":[\"IBM Research\"],\"due_date\":\"2026-08-30\",\"status\":\"Churned\",\"notes\":\"Paused — re-engage after perf benchmarks published.\"}",
+                "{\"name\":\"Edsger Dijkstra\",\"email\":\"edsger@utexas.edu\",\"company\":[\"UT Austin\"],\"due_date\":\"2026-12-01\",\"status\":\"Lead\",\"notes\":\"Structured note templates under Templates/.\"}",
+                "{\"name\":\"Grace Brewster\",\"email\":\"grace.b@example.com\",\"company\":[\"Example Corp\"],\"due_date\":\"2026-07-19\",\"status\":\"Lead\",\"notes\":\"Inbound from conference booth — assign owner.\"}",
+                "{\"name\":\"Leslie Lamport\",\"email\":\"lamport@microsoft.com\",\"company\":[\"Microsoft Research\"],\"due_date\":\"2026-09-25\",\"status\":\"Nurture\",\"notes\":\"Formal methods audience — link Research/Architecture.\"}",
+                "{\"name\":\"Vint Cerf\",\"email\":\"vint@google.com\",\"company\":[\"Google\"],\"due_date\":\"2026-10-01\",\"status\":\"Active\",\"notes\":\"Offline-first narrative resonates; wants demo workspace zip.\"}"
+            ],
+            extra_tables: &[
+                SeedDataExtraTable {
+                table: "companies",
+                columns: &[
+                    SeedDataColumn { name: "name", field_type: "text", relation_table: None }
+                ],
+                rows_json: &[
+                    "{\"name\":\"Analytical Engines\"}",
+                "{\"name\":\"US Navy\"}",
+                "{\"name\":\"Bletchley Park\"}",
+                "{\"name\":\"NASA\"}",
+                "{\"name\":\"W3C\"}",
+                "{\"name\":\"Mozilla\"}",
+                "{\"name\":\"MIT Instrumentation Lab\"}",
+                "{\"name\":\"Stanford\"}",
+                "{\"name\":\"Linux Foundation\"}",
+                "{\"name\":\"Python Software Foundation\"}",
+                "{\"name\":\"IEEE\"}",
+                "{\"name\":\"MIT\"}",
+                "{\"name\":\"IBM Research\"}",
+                "{\"name\":\"UT Austin\"}",
+                "{\"name\":\"Example Corp\"}",
+                "{\"name\":\"Microsoft Research\"}",
+                "{\"name\":\"Google\"}"
+                ],
+            }
             ],
             views: &[
                 SeedDataView {

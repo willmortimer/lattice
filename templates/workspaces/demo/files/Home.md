@@ -13,7 +13,7 @@ ordinary file under a real directory — open it in any editor, or stay inside L
 2. Scroll [[Research/Long Read]] — long-form perf and virtualization fixture.
 3. Open `Canvases/Product Strategy.canvas` — double-click file nodes to jump.
 4. Capture with **⌘N** into `Inbox/` (see [[Inbox/Sample capture]]).
-5. Open `CRM.data` — ~20 contacts with multiple column types and a relation field.
+5. Open `CRM.data` — ~20 contacts with multiple column types, a **company** relation to a `companies` table, and a **reports_to** self-relation.
 6. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.
 7. Create pages from `Templates/` — daily and meeting note scaffolds.
 
@@ -27,7 +27,7 @@ Each step is safe in the sample workspace; undo where noted.
 1. Open `CRM.data` and switch **Board**, **Gallery**, **Calendar**, and **Form** from the view picker.
 2. In each layout, change the layout field pickers (group-by, cover field, date field, visible columns).
 3. Click **Save view** to persist the layout under `CRM.data/views/`.
-4. Open a contact row and inspect the **reports_to** relation column — a few contacts are pre-linked; add or change links in the record detail panel.
+4. Open a contact row and inspect the **company** and **reports_to** relation columns — a few contacts are pre-linked; add or change links in the record detail panel.
 
 ### Resource tree
 
@@ -77,7 +77,7 @@ Workspace defaults point quick capture at `Inbox/` and templates at `Templates/`
 | Resource | Kind |
 | --- | --- |
 | `Canvases/Product Strategy.canvas` | Spatial board linking Product pages |
-| `CRM.data` | SQLite data app (contacts table) |
+| `CRM.data` | SQLite data app (`companies` + `contacts` tables) |
 | `Data/sample.csv` | Flat CSV import sample |
 
 ### CRM views
@@ -95,8 +95,11 @@ views under `CRM.data/views/` (one YAML file per view):
 Supported layout types also include `grid` and `list`. Board groups contacts by
 `status`; calendar plots `due_date`; gallery uses `company` as a cover field.
 
+The **company** column links each contact to a row in the seeded `companies` table.
 The **reports_to** column is a self-relation on `contacts` — open a row to link peers
-or managers. Template seeds resolve contact **names** to record ids at provision time.
+or managers. Template relation seeds accept **record ids** or display **names** (matched
+via each target table's `name` column at provision time); prefer ids when you need
+stable references across renames.
 
 Embed a view from a page (see [[Research/Long Read]]):
 
