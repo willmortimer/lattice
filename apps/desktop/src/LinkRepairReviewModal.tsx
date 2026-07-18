@@ -10,13 +10,17 @@ import {
 } from "@lattice/ui";
 import { useMemo, useState } from "react";
 
-import type { LinkRepairCandidate, LinkRepairPlan } from "./lib/linkRepair";
+import type { LinkRepairCandidate, LinkRepairPathChange, LinkRepairPlan } from "./lib/linkRepair";
 import { defaultAcceptedCandidateIds } from "./lib/linkRepair";
 
 export interface LinkRepairReviewModalProps {
   plan: LinkRepairPlan;
   mode: "lattice-rename" | "external";
+  moves?: readonly LinkRepairPathChange[];
   busy?: boolean;
+  truncated?: boolean;
+  omittedCoMovedCount?: number;
+  warnLargeRepairSet?: boolean;
   onAccept: (acceptedCandidateIds: string[]) => void | Promise<void>;
   onDefer: () => void | Promise<void>;
 }
@@ -29,12 +33,17 @@ function candidateLabel(candidate: LinkRepairCandidate): string {
 export function LinkRepairReviewModal({
   plan,
   mode,
+  moves,
   busy = false,
+  truncated = false,
+  omittedCoMovedCount = 0,
+  warnLargeRepairSet = false,
   onAccept,
   onDefer,
 }: LinkRepairReviewModalProps) {
   const resolvedDefaults = useMemo(() => defaultAcceptedCandidateIds(plan), [plan]);
   const [selected, setSelected] = useState<Set<string>>(() => new Set(resolvedDefaults));
+  const isBatch = (moves?.length ?? 0) > 1;
 
   const toggle = (id: string) => {
     setSelected((current) => {
@@ -46,6 +55,9 @@ export function LinkRepairReviewModal({
   };
 
   const ambiguousCount = plan.candidates.filter((candidate) => candidate.status === "ambiguous").length;
+  const pathSummary = isBatch
+    ? `Moving ${moves!.length} resources. Select which link references to rewrite.`
+    : `${plan.renameFrom} → ${plan.renameTo}. Select which link references to rewrite.`;
 
   return (
     <DialogRoot open onOpenChange={(open) => !open && !busy && void onDefer()}>
@@ -53,11 +65,24 @@ export function LinkRepairReviewModal({
         <DialogBackdrop className="modal-backdrop" />
         <DialogPopup className="modal-panel link-repair-panel">
           <DialogTitle id="link-repair-title">
-            {mode === "lattice-rename" ? "Update links for path change?" : "Repair links after external rename"}
+            {mode === "lattice-rename"
+              ? isBatch
+                ? "Update links for batch move?"
+                : "Update links for path change?"
+              : "Repair links after external rename"}
           </DialogTitle>
           <p className="modal-copy">
-            {plan.renameFrom} → {plan.renameTo}. Select which link references to rewrite.
+            {pathSummary}
             {ambiguousCount > 0 ? ` ${ambiguousCount} ambiguous link(s) need manual review.` : ""}
+            {omittedCoMovedCount > 0
+              ? ` ${omittedCoMovedCount} link(s) inside co-moved pages were skipped (same-transaction path conflict).`
+              : ""}
+            {truncated
+              ? " Candidate list was truncated to the batch hard cap (500); remaining links stay as-is."
+              : ""}
+            {warnLargeRepairSet && !truncated
+              ? " This repair set is large (200+ candidates); review carefully before accepting."
+              : ""}
           </p>
           <div className="link-repair-list">
             {plan.candidates.map((candidate) => {
@@ -92,7 +117,11 @@ export function LinkRepairReviewModal({
               disabled={busy || selected.size === 0}
               onClick={() => void onAccept([...selected])}
             >
-              {mode === "lattice-rename" ? "Rename and repair" : "Apply repairs"}
+              {mode === "lattice-rename"
+                ? isBatch
+                  ? "Move and repair"
+                  : "Rename and repair"
+                : "Apply repairs"}
             </Button>
           </div>
         </DialogPopup>

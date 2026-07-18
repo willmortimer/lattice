@@ -1,6 +1,7 @@
 import { inBrowser } from "../demo";
 import { demoSearch } from "../demo";
 import { LinkRepairReviewModal } from "../LinkRepairReviewModal";
+import { batchWarnThresholdExceeded } from "../lib/linkRepair";
 import { NewWorkspaceDialog } from "../NewWorkspaceDialog";
 import { CommandPalette } from "../CommandPalette";
 import { ResourceTree } from "../ResourceTree";
@@ -604,7 +605,15 @@ export function DesktopShell({ model }: DesktopShellProps) {
         <LinkRepairReviewModal
           plan={linkRepairReview.plan}
           mode={linkRepairReview.mode}
+          moves={linkRepairReview.moves}
           busy={busy}
+          truncated={linkRepairReview.batchPlan?.truncated ?? false}
+          omittedCoMovedCount={linkRepairReview.batchPlan?.omittedCoMovedCount ?? 0}
+          warnLargeRepairSet={
+            linkRepairReview.batchPlan
+              ? batchWarnThresholdExceeded(linkRepairReview.batchPlan)
+              : false
+          }
           onAccept={(acceptedCandidateIds) => void handleLinkRepairAccept(acceptedCandidateIds)}
           onDefer={() => void handleLinkRepairDefer()}
         />

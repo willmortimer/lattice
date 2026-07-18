@@ -31,8 +31,10 @@ pub use home::{
 };
 pub use link_repair::{
     apply_span_replacements, build_link_repair_plan, build_repair_candidate, format_link_text,
-    resolution_targets_path, rewrite_link_target, LinkOccurrence, LinkRepairCandidate,
-    LinkRepairPlan, LinkRepairProposalSummary, LinkRepairSource, LinkRepairStatus,
+    merge_batch_link_repair_plans, path_is_co_moved, resolution_targets_path, rewrite_link_target,
+    BatchLinkRepairPlan, LinkOccurrence, LinkRepairCandidate, LinkRepairPathChange, LinkRepairPlan,
+    LinkRepairProposalSummary, LinkRepairSource, LinkRepairStatus,
+    LINK_REPAIR_BATCH_CANDIDATE_HARD_CAP, LINK_REPAIR_BATCH_CANDIDATE_WARN_THRESHOLD,
 };
 pub use links::{
     parse_resource_links, MarkdownLinkKind, ParsedResourceLink, ResourceCatalog,

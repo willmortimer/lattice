@@ -63,6 +63,122 @@ pub struct LinkRepairPlan {
     pub created_at: u64,
 }
 
+/// One from→to path change in a batch move/rename repair preview.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkRepairPathChange {
+    pub from: PathBuf,
+    pub to: PathBuf,
+}
+
+/// Soft warning threshold for batch repair candidate count (UI may warn).
+pub const LINK_REPAIR_BATCH_CANDIDATE_WARN_THRESHOLD: usize = 200;
+
+/// Hard cap: batch preview truncates candidates beyond this count.
+pub const LINK_REPAIR_BATCH_CANDIDATE_HARD_CAP: usize = 500;
+
+/// Combined repair plan for moving/renaming multiple resources in one review.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchLinkRepairPlan {
+    pub id: String,
+    pub moves: Vec<LinkRepairPathChange>,
+    pub source: LinkRepairSource,
+    pub candidates: Vec<LinkRepairCandidate>,
+    pub created_at: u64,
+    /// Candidates dropped because their source page is also being moved in this
+    /// batch (PageUpdate + ResourceRename on the same path is rejected).
+    pub omitted_co_moved_count: usize,
+    /// True when [`candidates`] was truncated to
+    /// [`LINK_REPAIR_BATCH_CANDIDATE_HARD_CAP`].
+    pub truncated: bool,
+    /// Candidate count after co-moved filtering, before the hard cap.
+    pub candidate_total_before_cap: usize,
+}
+
+impl BatchLinkRepairPlan {
+    /// Whether the UI should warn that the repair set is large.
+    pub fn warn_threshold_exceeded(&self) -> bool {
+        self.candidate_total_before_cap >= LINK_REPAIR_BATCH_CANDIDATE_WARN_THRESHOLD
+            || self.truncated
+    }
+
+    /// Projection used by single-plan review UIs (combined candidate list).
+    pub fn as_link_repair_plan(&self) -> LinkRepairPlan {
+        let (rename_from, rename_to) = self
+            .moves
+            .first()
+            .map(|change| (change.from.clone(), change.to.clone()))
+            .unwrap_or_else(|| (PathBuf::new(), PathBuf::new()));
+        LinkRepairPlan {
+            id: self.id.clone(),
+            rename_from,
+            rename_to,
+            source: self.source,
+            candidates: self.candidates.clone(),
+            created_at: self.created_at,
+        }
+    }
+}
+
+/// True when `source` is one of the moved paths or nested under a moved folder.
+pub fn path_is_co_moved(source: &Path, moved_froms: &[PathBuf]) -> bool {
+    moved_froms
+        .iter()
+        .any(|from| source == from || source.starts_with(from))
+}
+
+/// Merge per-path repair plans into one batch plan: filter co-moved sources,
+/// re-id candidates, and apply the hard candidate cap.
+pub fn merge_batch_link_repair_plans(
+    plan_id: impl Into<String>,
+    created_at: u64,
+    source: LinkRepairSource,
+    plans: Vec<LinkRepairPlan>,
+) -> BatchLinkRepairPlan {
+    let plan_id = plan_id.into();
+    let moves: Vec<LinkRepairPathChange> = plans
+        .iter()
+        .map(|plan| LinkRepairPathChange {
+            from: plan.rename_from.clone(),
+            to: plan.rename_to.clone(),
+        })
+        .collect();
+    let moved_froms: Vec<PathBuf> = moves.iter().map(|change| change.from.clone()).collect();
+
+    let mut omitted_co_moved_count = 0usize;
+    let mut candidates = Vec::new();
+    for plan in plans {
+        for candidate in plan.candidates {
+            if path_is_co_moved(&candidate.occurrence.source_path, &moved_froms) {
+                omitted_co_moved_count += 1;
+                continue;
+            }
+            candidates.push(candidate);
+        }
+    }
+
+    let candidate_total_before_cap = candidates.len();
+    let truncated = candidate_total_before_cap > LINK_REPAIR_BATCH_CANDIDATE_HARD_CAP;
+    if truncated {
+        candidates.truncate(LINK_REPAIR_BATCH_CANDIDATE_HARD_CAP);
+    }
+    for (index, candidate) in candidates.iter_mut().enumerate() {
+        candidate.id = format!("{plan_id}-{index}");
+    }
+
+    BatchLinkRepairPlan {
+        id: plan_id,
+        moves,
+        source,
+        candidates,
+        created_at,
+        omitted_co_moved_count,
+        truncated,
+        candidate_total_before_cap,
+    }
+}
+
 /// Summary of a persisted deferred repair proposal.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -465,5 +581,101 @@ mod tests {
         )
         .unwrap();
         assert_eq!(updated, "[[D]] then [[C]]");
+    }
+
+    fn candidate(id: &str, source: &str, start: usize, end: usize) -> LinkRepairCandidate {
+        LinkRepairCandidate {
+            id: id.into(),
+            occurrence: LinkOccurrence {
+                source_path: source.into(),
+                kind: MarkdownLinkKind::Wiki,
+                raw_target: "X".into(),
+                anchor: None,
+                label: None,
+                source_start_byte: start,
+                source_end_byte: end,
+                source_start_line: 1,
+                source_start_column: 1,
+                source_end_line: 1,
+                source_end_column: 2,
+            },
+            old_target: "X".into(),
+            new_target: "Y".into(),
+            new_text: "[[Y]]".into(),
+            status: LinkRepairStatus::Resolved,
+            ambiguity: None,
+        }
+    }
+
+    #[test]
+    fn merge_batch_plans_omits_co_moved_sources_and_reids() {
+        let plans = vec![
+            LinkRepairPlan {
+                id: "a".into(),
+                rename_from: "Notes/A.md".into(),
+                rename_to: "Archive/A.md".into(),
+                source: LinkRepairSource::LatticeRename,
+                created_at: 1,
+                candidates: vec![
+                    candidate("a-0", "Notes/Home.md", 0, 5),
+                    candidate("a-1", "Notes/B.md", 0, 5),
+                ],
+            },
+            LinkRepairPlan {
+                id: "b".into(),
+                rename_from: "Notes/B.md".into(),
+                rename_to: "Archive/B.md".into(),
+                source: LinkRepairSource::LatticeRename,
+                created_at: 1,
+                candidates: vec![candidate("b-0", "Notes/Home.md", 10, 15)],
+            },
+        ];
+        let batch = merge_batch_link_repair_plans(
+            "batch",
+            2,
+            LinkRepairSource::LatticeRename,
+            plans,
+        );
+        assert_eq!(batch.moves.len(), 2);
+        assert_eq!(batch.omitted_co_moved_count, 1);
+        assert_eq!(batch.candidates.len(), 2);
+        assert_eq!(batch.candidates[0].id, "batch-0");
+        assert_eq!(batch.candidates[1].id, "batch-1");
+        assert!(!batch.truncated);
+        assert_eq!(batch.candidate_total_before_cap, 2);
+    }
+
+    #[test]
+    fn merge_batch_plans_applies_hard_cap() {
+        let mut candidates = Vec::new();
+        for index in 0..(LINK_REPAIR_BATCH_CANDIDATE_HARD_CAP + 3) {
+            candidates.push(candidate(
+                &format!("c-{index}"),
+                "Notes/Home.md",
+                index * 10,
+                index * 10 + 5,
+            ));
+        }
+        let plans = vec![LinkRepairPlan {
+            id: "a".into(),
+            rename_from: "Notes/A.md".into(),
+            rename_to: "Archive/A.md".into(),
+            source: LinkRepairSource::LatticeRename,
+            created_at: 1,
+            candidates,
+        }];
+        let batch = merge_batch_link_repair_plans(
+            "batch",
+            1,
+            LinkRepairSource::LatticeRename,
+            plans,
+        );
+        assert!(batch.truncated);
+        assert_eq!(batch.candidates.len(), LINK_REPAIR_BATCH_CANDIDATE_HARD_CAP);
+        assert_eq!(
+            batch.candidate_total_before_cap,
+            LINK_REPAIR_BATCH_CANDIDATE_HARD_CAP + 3
+        );
+        assert!(batch.warn_threshold_exceeded());
     }
 }

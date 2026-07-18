@@ -4,7 +4,7 @@ import { demoCanvas, demoDataApp, demoPages, demoTextFiles, inBrowser } from "..
 import type { DataAppSnapshot } from "../data/types";
 import { createDemoPageIO, createNativePageIO } from "../editor/pageIO";
 import { readNativeCanvas } from "../canvas/adapter";
-import { previewLinkRepair, type LinkRepairPlan } from "../lib/linkRepair";
+import { previewBatchLinkRepair, previewLinkRepair, type BatchLinkRepairPlan, type LinkRepairPlan, type LinkRepairPathChange } from "../lib/linkRepair";
 import { applyPathRemaps, type PathRemap } from "../lib/pathRemap";
 import { moveResource, moveResources } from "../lib/resourceMutations";
 import { destinationPath } from "../lib/treeOps";
@@ -12,6 +12,18 @@ import type { OpenResourceSession } from "../resourceSession";
 import { deriveResourceFormatId } from "../resourceRendererRegistry";
 import type { Resource, WorkspaceSnapshot } from "../types";
 import { createResourceLoadGate, isTextFormatId, loadTextResource, type ResourceLoadGate, type ResourceLoadTicket } from "./resourceLoad";
+
+export type LinkRepairReviewRequest = {
+  plan: LinkRepairPlan;
+  from: string;
+  to: string;
+  mode: "lattice-rename" | "external";
+  proposalId?: string;
+  /** Present for multi-select moves (2+); destinations share `toDir`. */
+  moves?: readonly LinkRepairPathChange[];
+  toDir?: string;
+  batchPlan?: BatchLinkRepairPlan;
+};
 
 export interface ResourceControllerOptions {
   snapshot: WorkspaceSnapshot | null;
@@ -29,13 +41,7 @@ export interface ResourceControllerOptions {
   onReplaceHistoryPath: (from: string, to: string) => void;
   refreshResources: () => Promise<void>;
   onPageReady: () => void;
-  onLinkRepairReview: (review: {
-    plan: LinkRepairPlan;
-    from: string;
-    to: string;
-    mode: "lattice-rename" | "external";
-    proposalId?: string;
-  }) => Promise<"accepted" | "deferred" | "cancelled">;
+  onLinkRepairReview: (review: LinkRepairReviewRequest) => Promise<"accepted" | "deferred" | "cancelled">;
 }
 
 export interface ResourceController {
@@ -540,15 +546,16 @@ export function useResourceController(options: ResourceControllerOptions): Resou
   ]);
 
   /**
-   * Move a resource into a folder. Link repair reuses rename-shaped from/to
-   * full paths: when inbound links would break, the existing review modal runs
-   * and `apply_link_repair` prepends ResourceRename(from, destination) — same
-   * filesystem rename as ResourceMove, without double-applying a prior move.
-   * Pure moves (no candidates) still use ResourceMove for honest history.
+   * Move resources into a folder. Link repair reuses rename-shaped from/to
+   * full paths: when inbound links would break, the review modal runs and
+   * apply prepends ResourceRename(from, destination) — same filesystem rename
+   * as ResourceMove, without double-applying a prior move. Pure moves (no
+   * candidates) still use ResourceMove for honest history.
    *
-   * Batch moves (2+) skip link-repair orchestration and record one transaction
-   * of N ResourceMove commands. Full batch rename repair is out of scope;
-   * single-path repair remains the supported path.
+   * Batch moves (2+) preview per-path repair, present one combined review when
+   * any candidates exist, and apply N renames + unioned PageUpdates in one
+   * transaction (one undo). Co-moved source pages are omitted from repair to
+   * satisfy disjoint-path transaction rules.
    */
   const moveResourcesToFolder = useCallback(async (fromPaths: readonly string[], toDir: string) => {
     const current = snapshotRef.current ?? snapshot;
@@ -619,6 +626,10 @@ export function useResourceController(options: ResourceControllerOptions): Resou
       from,
       to: destinationPath(from, toDir),
     }));
+    const moves: LinkRepairPathChange[] = remaps.map((remap) => ({
+      from: remap.from,
+      to: remap.to,
+    }));
 
     if (inBrowser) {
       setSnapshot((workspace) => {
@@ -642,8 +653,28 @@ export function useResourceController(options: ResourceControllerOptions): Resou
 
     onBusy(true);
     try {
-      // Batch link-repair is out of scope; best-effort is single-path only above.
-      await moveResources(current.root, unique, toDir);
+      const batchPlan = await previewBatchLinkRepair(current.root, moves, "lattice-rename");
+      if (batchPlan.candidates.length > 0) {
+        const decision = await onLinkRepairReview({
+          plan: {
+            id: batchPlan.id,
+            renameFrom: moves[0]?.from ?? "",
+            renameTo: moves[0]?.to ?? "",
+            source: batchPlan.source,
+            candidates: batchPlan.candidates,
+            createdAt: batchPlan.createdAt,
+          },
+          from: moves[0]?.from ?? "",
+          to: moves[0]?.to ?? "",
+          mode: "lattice-rename",
+          moves,
+          toDir,
+          batchPlan,
+        });
+        if (decision === "cancelled") return;
+      } else {
+        await moveResources(current.root, unique, toDir);
+      }
       await refreshResources();
       await reconcilePathRemaps(remaps);
     } catch (error) {

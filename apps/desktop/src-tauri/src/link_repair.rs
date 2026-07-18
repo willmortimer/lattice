@@ -3,19 +3,28 @@
 use std::path::{Path, PathBuf};
 
 use lattice_commands::{
-    build_link_repair_transaction, dismiss_link_repair_proposal, link_repair_now,
-    list_link_repair_proposals, load_link_repair_proposal, new_link_repair_plan_id,
-    save_link_repair_proposal, Command as SemanticCommand, CommandEngine, Transaction,
+    build_batch_link_repair_plan, build_batch_link_repair_transaction, build_link_repair_transaction,
+    dismiss_link_repair_proposal, link_repair_now, list_link_repair_proposals,
+    load_link_repair_proposal, new_link_repair_plan_id, save_link_repair_proposal,
+    Command as SemanticCommand, CommandEngine, Transaction,
 };
 use lattice_core::{
-    LinkRepairPlan, LinkRepairProposalSummary, LinkRepairSource,
+    BatchLinkRepairPlan, LinkRepairPlan, LinkRepairProposalSummary, LinkRepairSource,
 };
 use lattice_index::WorkspaceIndex;
 use lattice_storage::NativeWorkspaceStore;
+use serde::Deserialize;
 use tauri::State;
 
 use crate::commands::command_error_to_string;
 use crate::resource_links::ResourceCatalogState;
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkRepairMoveInput {
+    pub from: String,
+    pub to: String,
+}
 
 #[tauri::command]
 pub fn preview_link_repair(
@@ -36,6 +45,41 @@ pub fn preview_link_repair(
             link_repair_now(),
         )
         .map_err(|error| error.to_string())
+}
+
+/// Preview link repair for multiple from→to path changes as one combined plan.
+#[tauri::command]
+pub fn preview_batch_link_repair(
+    root: String,
+    moves: Vec<LinkRepairMoveInput>,
+    source: LinkRepairSource,
+    catalog_state: State<ResourceCatalogState>,
+) -> Result<BatchLinkRepairPlan, String> {
+    catalog_state.refresh(&root)?;
+    if moves.len() < 2 {
+        return Err("Batch link repair requires at least two path changes.".into());
+    }
+    let index = WorkspaceIndex::open(Path::new(&root)).map_err(|error| error.to_string())?;
+    let created_at = link_repair_now();
+    let mut plans = Vec::with_capacity(moves.len());
+    for change in &moves {
+        let plan = index
+            .link_repair_plan(
+                Path::new(&change.from),
+                Path::new(&change.to),
+                source,
+                &new_link_repair_plan_id(),
+                created_at,
+            )
+            .map_err(|error| error.to_string())?;
+        plans.push(plan);
+    }
+    Ok(build_batch_link_repair_plan(
+        new_link_repair_plan_id(),
+        created_at,
+        source,
+        plans,
+    ))
 }
 
 #[tauri::command]
@@ -82,6 +126,41 @@ pub fn apply_link_repair(
             to: PathBuf::from(to),
         }),
         &plan,
+        &accepted_candidate_ids,
+        summary,
+    )
+    .map_err(command_error_to_string)?;
+    apply_transaction(&root, tx)?;
+    dismiss_link_repair_proposal(Path::new(&root), &plan.id).ok();
+    Ok(())
+}
+
+/// Apply N path changes plus accepted link repairs in one transaction.
+#[tauri::command]
+pub fn apply_batch_link_repair(
+    root: String,
+    moves: Vec<LinkRepairMoveInput>,
+    accepted_candidate_ids: Vec<String>,
+    plan: BatchLinkRepairPlan,
+    catalog_state: State<ResourceCatalogState>,
+) -> Result<(), String> {
+    catalog_state.refresh(&root)?;
+    if moves.len() < 2 {
+        return Err("Batch link repair requires at least two path changes.".into());
+    }
+    let store = NativeWorkspaceStore::new(Path::new(&root));
+    let path_moves: Vec<(PathBuf, PathBuf)> = moves
+        .iter()
+        .map(|change| (PathBuf::from(&change.from), PathBuf::from(&change.to)))
+        .collect();
+    let summary = batch_link_repair_transaction_summary(
+        path_moves.len(),
+        accepted_candidate_ids.len(),
+    );
+    let tx = build_batch_link_repair_transaction(
+        &store,
+        &path_moves,
+        &plan.candidates,
         &accepted_candidate_ids,
         summary,
     )
@@ -156,6 +235,10 @@ fn link_repair_transaction_summary(from: &Path, to: &Path, repair_count: usize) 
     )
 }
 
+fn batch_link_repair_transaction_summary(move_count: usize, repair_count: usize) -> String {
+    format!("Move {move_count} resources with {repair_count} link repair(s)")
+}
+
 fn apply_transaction(root: &str, tx: Transaction) -> Result<(), String> {
     let mut engine = CommandEngine::open(Path::new(root)).map_err(command_error_to_string)?;
     engine.apply(tx).map_err(command_error_to_string)?;
@@ -190,6 +273,30 @@ mod tests {
                 kind: ResourceKind::Page,
             })
             .unwrap();
+        dir
+    }
+
+    fn init_batch_workspace() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        Workspace::init(dir.path(), "Batch Repair").unwrap();
+        std::fs::create_dir_all(dir.path().join("Notes")).unwrap();
+        std::fs::create_dir_all(dir.path().join("Archive")).unwrap();
+        std::fs::write(
+            dir.path().join("Notes/Home.md"),
+            "See [[Alpha]] and [[Beta]].\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("Notes/Alpha.md"), "# Alpha\n").unwrap();
+        std::fs::write(dir.path().join("Notes/Beta.md"), "# Beta\n").unwrap();
+        let index = WorkspaceIndex::open(dir.path()).unwrap();
+        for path in ["Notes/Home.md", "Notes/Alpha.md", "Notes/Beta.md"] {
+            index
+                .upsert_resource(&lattice_core::Resource {
+                    path: path.into(),
+                    kind: ResourceKind::Page,
+                })
+                .unwrap();
+        }
         dir
     }
 
@@ -281,5 +388,122 @@ mod tests {
         apply_transaction(&dir.path().to_string_lossy(), tx).unwrap();
         let home = std::fs::read_to_string(dir.path().join("Notes/Home.md")).unwrap();
         assert!(home.contains("[[Renamed]]"));
+    }
+
+    #[test]
+    fn batch_preview_and_apply_repairs_two_moves() {
+        let dir = init_batch_workspace();
+        let index = WorkspaceIndex::open(dir.path()).unwrap();
+        let created_at = link_repair_now();
+        let plans = vec![
+            index
+                .link_repair_plan(
+                    Path::new("Notes/Alpha.md"),
+                    Path::new("Archive/Alpha.md"),
+                    LinkRepairSource::LatticeRename,
+                    &new_link_repair_plan_id(),
+                    created_at,
+                )
+                .unwrap(),
+            index
+                .link_repair_plan(
+                    Path::new("Notes/Beta.md"),
+                    Path::new("Archive/Beta.md"),
+                    LinkRepairSource::LatticeRename,
+                    &new_link_repair_plan_id(),
+                    created_at,
+                )
+                .unwrap(),
+        ];
+        let mut batch = build_batch_link_repair_plan(
+            new_link_repair_plan_id(),
+            created_at,
+            LinkRepairSource::LatticeRename,
+            plans,
+        );
+        // Index may keep wiki titles stable across folder moves; inject observable rewrites.
+        batch.candidates = vec![
+            lattice_core::LinkRepairCandidate {
+                id: format!("{}-0", batch.id),
+                occurrence: lattice_core::LinkOccurrence {
+                    source_path: "Notes/Home.md".into(),
+                    kind: lattice_core::MarkdownLinkKind::Wiki,
+                    raw_target: "Alpha".into(),
+                    anchor: None,
+                    label: None,
+                    source_start_byte: 4,
+                    source_end_byte: 13,
+                    source_start_line: 1,
+                    source_start_column: 5,
+                    source_end_line: 1,
+                    source_end_column: 14,
+                },
+                old_target: "Alpha".into(),
+                new_target: "Archive/Alpha".into(),
+                new_text: "[[Archive/Alpha]]".into(),
+                status: LinkRepairStatus::Resolved,
+                ambiguity: None,
+            },
+            lattice_core::LinkRepairCandidate {
+                id: format!("{}-1", batch.id),
+                occurrence: lattice_core::LinkOccurrence {
+                    source_path: "Notes/Home.md".into(),
+                    kind: lattice_core::MarkdownLinkKind::Wiki,
+                    raw_target: "Beta".into(),
+                    anchor: None,
+                    label: None,
+                    source_start_byte: 18,
+                    source_end_byte: 26,
+                    source_start_line: 1,
+                    source_start_column: 19,
+                    source_end_line: 1,
+                    source_end_column: 27,
+                },
+                old_target: "Beta".into(),
+                new_target: "Archive/Beta".into(),
+                new_text: "[[Archive/Beta]]".into(),
+                status: LinkRepairStatus::Resolved,
+                ambiguity: None,
+            },
+        ];
+        let accepted: Vec<String> = batch.candidates.iter().map(|c| c.id.clone()).collect();
+        let moves: Vec<(PathBuf, PathBuf)> = batch
+            .moves
+            .iter()
+            .map(|change| (change.from.clone(), change.to.clone()))
+            .collect();
+        let store = NativeWorkspaceStore::new(dir.path());
+        let tx = build_batch_link_repair_transaction(
+            &store,
+            &moves,
+            &batch.candidates,
+            &accepted,
+            batch_link_repair_transaction_summary(moves.len(), accepted.len()),
+        )
+        .unwrap();
+        apply_transaction(&dir.path().to_string_lossy(), tx).unwrap();
+        assert!(dir.path().join("Archive/Alpha.md").exists());
+        assert!(dir.path().join("Archive/Beta.md").exists());
+        let home = std::fs::read_to_string(dir.path().join("Notes/Home.md")).unwrap();
+        assert_eq!(home, "See [[Archive/Alpha]] and [[Archive/Beta]].\n");
+    }
+
+    #[test]
+    fn batch_summary_names_move_count() {
+        assert_eq!(
+            batch_link_repair_transaction_summary(3, 5),
+            "Move 3 resources with 5 link repair(s)"
+        );
+    }
+
+    #[test]
+    fn path_change_serde_round_trip_shape() {
+        let change = lattice_core::LinkRepairPathChange {
+            from: PathBuf::from("Notes/A.md"),
+            to: PathBuf::from("Archive/A.md"),
+        };
+        let json = serde_json::to_value(&change).unwrap();
+        assert_eq!(json["from"], "Notes/A.md");
+        assert_eq!(json["to"], "Archive/A.md");
     }
 }

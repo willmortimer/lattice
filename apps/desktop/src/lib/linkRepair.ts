@@ -4,6 +4,11 @@ export type LinkRepairStatus = "resolved" | "ambiguous" | "skipped";
 export type LinkRepairSource = "lattice-rename" | "external-rename";
 export type MarkdownLinkKind = "wiki" | "md";
 
+/** Soft warning threshold — mirrors lattice-core LINK_REPAIR_BATCH_CANDIDATE_WARN_THRESHOLD. */
+export const LINK_REPAIR_BATCH_CANDIDATE_WARN_THRESHOLD = 200;
+/** Hard cap — mirrors lattice-core LINK_REPAIR_BATCH_CANDIDATE_HARD_CAP. */
+export const LINK_REPAIR_BATCH_CANDIDATE_HARD_CAP = 500;
+
 export interface LinkOccurrence {
   sourcePath: string;
   kind: MarkdownLinkKind;
@@ -44,6 +49,22 @@ export interface LinkRepairPlan {
   createdAt: number;
 }
 
+export interface LinkRepairPathChange {
+  from: string;
+  to: string;
+}
+
+export interface BatchLinkRepairPlan {
+  id: string;
+  moves: LinkRepairPathChange[];
+  source: LinkRepairSource;
+  candidates: LinkRepairCandidate[];
+  createdAt: number;
+  omittedCoMovedCount: number;
+  truncated: boolean;
+  candidateTotalBeforeCap: number;
+}
+
 export interface LinkRepairProposalSummary {
   id: string;
   renameFrom: string;
@@ -54,6 +75,22 @@ export interface LinkRepairProposalSummary {
   createdAt: number;
 }
 
+export function batchWarnThresholdExceeded(plan: BatchLinkRepairPlan): boolean {
+  return plan.candidateTotalBeforeCap >= LINK_REPAIR_BATCH_CANDIDATE_WARN_THRESHOLD || plan.truncated;
+}
+
+export function batchPlanAsLinkRepairPlan(plan: BatchLinkRepairPlan): LinkRepairPlan {
+  const first = plan.moves[0];
+  return {
+    id: plan.id,
+    renameFrom: first?.from ?? "",
+    renameTo: first?.to ?? "",
+    source: plan.source,
+    candidates: plan.candidates,
+    createdAt: plan.createdAt,
+  };
+}
+
 export async function previewLinkRepair(
   root: string,
   from: string,
@@ -61,6 +98,14 @@ export async function previewLinkRepair(
   source: LinkRepairSource = "lattice-rename",
 ): Promise<LinkRepairPlan> {
   return invoke("preview_link_repair", { root, from, to, source });
+}
+
+export async function previewBatchLinkRepair(
+  root: string,
+  moves: readonly LinkRepairPathChange[],
+  source: LinkRepairSource = "lattice-rename",
+): Promise<BatchLinkRepairPlan> {
+  return invoke("preview_batch_link_repair", { root, moves: [...moves], source });
 }
 
 export async function getLinkRepairProposal(
@@ -106,6 +151,20 @@ export async function applyLinkRepair(
   });
 }
 
+export async function applyBatchLinkRepair(
+  root: string,
+  moves: readonly LinkRepairPathChange[],
+  acceptedCandidateIds: string[],
+  plan: BatchLinkRepairPlan,
+): Promise<void> {
+  await invoke("apply_batch_link_repair", {
+    root,
+    moves: [...moves],
+    acceptedCandidateIds,
+    plan,
+  });
+}
+
 export async function applyLinkRepairProposal(
   root: string,
   proposalId: string,
@@ -118,7 +177,7 @@ export async function applyLinkRepairProposal(
   });
 }
 
-export function defaultAcceptedCandidateIds(plan: LinkRepairPlan): string[] {
+export function defaultAcceptedCandidateIds(plan: LinkRepairPlan | BatchLinkRepairPlan): string[] {
   return plan.candidates
     .filter((candidate) => candidate.status === "resolved")
     .map((candidate) => candidate.id);
