@@ -218,7 +218,21 @@ export function DataTableView({
   const reload = useCallback(
     async (viewName?: string) => {
       if (demoMutate) {
-        applySnapshot(initialSnapshot);
+        const targetView = viewName ?? activeView;
+        const base = cloneSnapshot(initialSnapshot);
+        const viewDef = base.saved_views?.find((view) => view.name === targetView);
+        if (viewDef) {
+          applySnapshot({
+            ...base,
+            active_view: targetView,
+            layout_type: viewDef.layout_type,
+            group_by: viewDef.group_by,
+            cover_field: viewDef.cover_field,
+            date_field: viewDef.date_field,
+          });
+          return;
+        }
+        applySnapshot(base);
         return;
       }
       setBusy(true);

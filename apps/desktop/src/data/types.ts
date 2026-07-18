@@ -35,6 +35,15 @@ export interface ViewFilter {
 
 export type ViewLayoutType = "grid" | "list" | "board" | "gallery" | "calendar" | "form";
 
+/** Saved view layout metadata for browser demo fixtures (from template seeds). */
+export interface DataViewSnapshot {
+  name: string;
+  layout_type: ViewLayoutType;
+  group_by?: string;
+  cover_field?: string;
+  date_field?: string;
+}
+
 export interface DataAppSnapshot {
   title: string;
   default_table: string;
@@ -54,6 +63,8 @@ export interface DataAppSnapshot {
   cover_field?: string;
   /** Calendar layout: column used to place records on the calendar. */
   date_field?: string;
+  /** Browser demo: per-view layout metadata from template `dataPackages[].views`. */
+  saved_views?: DataViewSnapshot[];
 }
 
 export function cellValueToDisplay(value: CellValue | undefined): string {
@@ -102,5 +113,6 @@ export function cloneSnapshot(snapshot: DataAppSnapshot): DataAppSnapshot {
     group_by: snapshot.group_by,
     cover_field: snapshot.cover_field,
     date_field: snapshot.date_field,
+    saved_views: snapshot.saved_views?.map((view) => ({ ...view })),
   };
 }

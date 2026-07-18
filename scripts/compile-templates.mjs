@@ -714,6 +714,34 @@ function buildDemoCanvas(template) {
   return JSON.parse(readFileSync(canvas.source, "utf8"));
 }
 
+function demoViewLayoutFromSeed(view) {
+  const layout = {
+    name: view.name,
+    layout_type: view.layout,
+  };
+  if (view.group_by !== undefined) layout.group_by = view.group_by;
+  if (view.cover_field !== undefined) layout.cover_field = view.cover_field;
+  if (view.date_field !== undefined) layout.date_field = view.date_field;
+  return layout;
+}
+
+function buildDemoViewCatalog(packageDef) {
+  const views = [
+    { name: "All", layout_type: "grid" },
+    ...packageDef.views.map(demoViewLayoutFromSeed),
+  ];
+  views.sort((left, right) => left.name.localeCompare(right.name));
+  return views;
+}
+
+function demoSnapshotLayoutFields(view) {
+  const fields = { layout_type: view.layout_type };
+  if (view.group_by !== undefined) fields.group_by = view.group_by;
+  if (view.cover_field !== undefined) fields.cover_field = view.cover_field;
+  if (view.date_field !== undefined) fields.date_field = view.date_field;
+  return fields;
+}
+
 function buildDemoDataApp(template) {
   const packageDef =
     template.dataPackages.find((entry) => entry.path === "CRM.data") ?? template.dataPackages[0];
@@ -746,16 +774,24 @@ function buildDemoDataApp(template) {
     }
     rowIds.add(row.id);
   }
+  const saved_views = buildDemoViewCatalog(packageDef);
+  const available_views = saved_views.map((view) => view.name);
+  const active_view = "All";
+  const activeView = saved_views.find((view) => view.name === active_view);
+  if (!activeView) {
+    throw new Error(`${DEMO_TEMPLATE_ID}: missing default All view in browser demo CRM`);
+  }
   return {
     title: packageDef.title,
     default_table: packageDef.table,
     package_revision: "demo:0",
     columns,
     rows,
-    available_views: ["All"],
-    active_view: "All",
+    available_views,
+    active_view,
     filters: [],
-    layout_type: "grid",
+    saved_views,
+    ...demoSnapshotLayoutFields(activeView),
   };
 }
 
