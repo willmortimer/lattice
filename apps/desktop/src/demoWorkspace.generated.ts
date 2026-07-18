@@ -13,18 +13,20 @@ export const demoSnapshot: WorkspaceSnapshot = {
   ],
   "defaults": {
     "quickNoteDirectory": "Inbox",
+    "templateDirectory": "Templates",
     "archiveDirectory": "Archive"
   },
   "sourceTemplate": "demo",
   "directoryPurposes": {
     "Inbox": "Drop quick captures here — triage into Product or Research.",
     "Projects": "Active workstreams with a clear outcome.",
-    "Product": "Product narrative, vision, and roadmap pages.",
-    "Research": "Notes, comparisons, and diagrams.",
+    "Product": "Product narrative, vision, principles, and roadmap pages.",
+    "Research": "Notes, comparisons, long reads, and diagrams.",
     "Notebooks": "Reserved for notebook resources.",
     "Canvases": "Spatial boards that link into workspace files.",
+    "Templates": "Page templates with {{title}} and {{date}} placeholders.",
     "Data": "Tabular seeds and imported tables.",
-    "Resources": "Ordinary files — JSON, YAML, code, images.",
+    "Resources": "Ordinary files — JSON, YAML, code, SQL, images.",
     "Archive": "Finished or inactive material."
   },
   "manifestRevision": "demo:0",
@@ -63,12 +65,24 @@ export const demoSnapshot: WorkspaceSnapshot = {
       "kind": "folder"
     },
     {
+      "path": "Inbox/Sample capture.md",
+      "kind": "page"
+    },
+    {
       "path": "Notebooks",
       "kind": "folder"
     },
     {
       "path": "Product",
       "kind": "folder"
+    },
+    {
+      "path": "Product/Principles.md",
+      "kind": "page"
+    },
+    {
+      "path": "Product/Release Notes.md",
+      "kind": "page"
     },
     {
       "path": "Product/Roadmap.md",
@@ -95,6 +109,18 @@ export const demoSnapshot: WorkspaceSnapshot = {
       "kind": "page"
     },
     {
+      "path": "Research/Interview Synthesis.md",
+      "kind": "page"
+    },
+    {
+      "path": "Research/Long Read.md",
+      "kind": "page"
+    },
+    {
+      "path": "Research/Market Notes.md",
+      "kind": "page"
+    },
+    {
       "path": "Resources",
       "kind": "folder"
     },
@@ -109,6 +135,11 @@ export const demoSnapshot: WorkspaceSnapshot = {
       "formatId": "file:code"
     },
     {
+      "path": "Resources/hooks.json",
+      "kind": "file",
+      "formatId": "file:json"
+    },
+    {
       "path": "Resources/mark.svg",
       "kind": "file",
       "formatId": "file:text"
@@ -119,9 +150,31 @@ export const demoSnapshot: WorkspaceSnapshot = {
       "formatId": "file:text"
     },
     {
+      "path": "Resources/queries.sql",
+      "kind": "file",
+      "formatId": "file:code"
+    },
+    {
       "path": "Resources/schema.yaml",
       "kind": "file",
       "formatId": "file:yaml"
+    },
+    {
+      "path": "Resources/types.ts",
+      "kind": "file",
+      "formatId": "file:code"
+    },
+    {
+      "path": "Templates",
+      "kind": "folder"
+    },
+    {
+      "path": "Templates/Daily Note.md",
+      "kind": "page"
+    },
+    {
+      "path": "Templates/Meeting Note.md",
+      "kind": "page"
     }
   ]
 };
@@ -133,16 +186,25 @@ export const demoCanvas = {
       "type": "text",
       "x": 60,
       "y": 60,
-      "width": 260,
-      "height": 120,
-      "text": "Sample canvas — double-click a file node to open it."
+      "width": 280,
+      "height": 140,
+      "text": "First Look canvas — double-click file nodes. Links mirror Home.md tour."
     },
     {
       "id": "vision",
       "type": "file",
       "file": "Product/Vision.md",
-      "x": 360,
-      "y": 60,
+      "x": 400,
+      "y": 40,
+      "width": 220,
+      "height": 120
+    },
+    {
+      "id": "principles",
+      "type": "file",
+      "file": "Product/Principles.md",
+      "x": 400,
+      "y": 200,
       "width": 220,
       "height": 120
     },
@@ -150,10 +212,37 @@ export const demoCanvas = {
       "id": "roadmap",
       "type": "file",
       "file": "Product/Roadmap.md",
-      "x": 620,
-      "y": 60,
+      "x": 660,
+      "y": 40,
       "width": 220,
       "height": 120
+    },
+    {
+      "id": "long-read",
+      "type": "file",
+      "file": "Research/Long Read.md",
+      "x": 660,
+      "y": 200,
+      "width": 240,
+      "height": 120
+    },
+    {
+      "id": "architecture",
+      "type": "file",
+      "file": "Research/Architecture.md",
+      "x": 400,
+      "y": 360,
+      "width": 220,
+      "height": 120
+    },
+    {
+      "id": "crm",
+      "type": "file",
+      "file": "CRM.data",
+      "x": 920,
+      "y": 120,
+      "width": 200,
+      "height": 100
     }
   ],
   "edges": [
@@ -166,6 +255,26 @@ export const demoCanvas = {
       "id": "e2",
       "fromNode": "vision",
       "toNode": "roadmap"
+    },
+    {
+      "id": "e3",
+      "fromNode": "vision",
+      "toNode": "principles"
+    },
+    {
+      "id": "e4",
+      "fromNode": "principles",
+      "toNode": "architecture"
+    },
+    {
+      "id": "e5",
+      "fromNode": "roadmap",
+      "toNode": "long-read"
+    },
+    {
+      "id": "e6",
+      "fromNode": "long-read",
+      "toNode": "crm"
     }
   ]
 };
@@ -186,8 +295,28 @@ export const demoDataApp: DataAppSnapshot = {
       "sqlite_type": "TEXT"
     },
     {
+      "name": "email",
+      "field_type": "text",
+      "sqlite_type": "TEXT"
+    },
+    {
+      "name": "company",
+      "field_type": "text",
+      "sqlite_type": "TEXT"
+    },
+    {
+      "name": "due_date",
+      "field_type": "date",
+      "sqlite_type": "TEXT"
+    },
+    {
       "name": "status",
       "field_type": "text",
+      "sqlite_type": "TEXT"
+    },
+    {
+      "name": "notes",
+      "field_type": "long_text",
       "sqlite_type": "TEXT"
     }
   ],
@@ -201,8 +330,20 @@ export const demoDataApp: DataAppSnapshot = {
         "name": {
           "Text": "Ada Lovelace"
         },
+        "email": {
+          "Text": "ada@analytical.io"
+        },
+        "company": {
+          "Text": "Analytical Engines"
+        },
+        "due_date": {
+          "Date": "2026-08-15"
+        },
         "status": {
           "Text": "Active"
+        },
+        "notes": {
+          "Text": "Champion for typed tables beside narrative docs."
         }
       }
     },
@@ -215,8 +356,488 @@ export const demoDataApp: DataAppSnapshot = {
         "name": {
           "Text": "Grace Hopper"
         },
+        "email": {
+          "Text": "grace@navy.mil"
+        },
+        "company": {
+          "Text": "US Navy"
+        },
+        "due_date": {
+          "Date": "2026-07-25"
+        },
         "status": {
           "Text": "Active"
+        },
+        "notes": {
+          "Text": "Asked for honest SQL export from CRM views."
+        }
+      }
+    },
+    {
+      "id": "0198-demo-alan-turing",
+      "values": {
+        "id": {
+          "Text": "0198-demo-alan-turing"
+        },
+        "name": {
+          "Text": "Alan Turing"
+        },
+        "email": {
+          "Text": "alan@bletchley.uk"
+        },
+        "company": {
+          "Text": "Bletchley Park"
+        },
+        "due_date": {
+          "Date": "2026-09-01"
+        },
+        "status": {
+          "Text": "Nurture"
+        },
+        "notes": {
+          "Text": "Interested after notebook preview ships."
+        }
+      }
+    },
+    {
+      "id": "0198-demo-katherine-johnson",
+      "values": {
+        "id": {
+          "Text": "0198-demo-katherine-johnson"
+        },
+        "name": {
+          "Text": "Katherine Johnson"
+        },
+        "email": {
+          "Text": "katherine@nasa.gov"
+        },
+        "company": {
+          "Text": "NASA"
+        },
+        "due_date": {
+          "Date": "2026-08-02"
+        },
+        "status": {
+          "Text": "Active"
+        },
+        "notes": {
+          "Text": "Needs calendar layout on due dates for standup."
+        }
+      }
+    },
+    {
+      "id": "0198-demo-dorothy-vaughan",
+      "values": {
+        "id": {
+          "Text": "0198-demo-dorothy-vaughan"
+        },
+        "name": {
+          "Text": "Dorothy Vaughan"
+        },
+        "email": {
+          "Text": "dorothy@nasa.gov"
+        },
+        "company": {
+          "Text": "NASA"
+        },
+        "due_date": {
+          "Null": null
+        },
+        "status": {
+          "Text": "Partner"
+        },
+        "notes": {
+          "Text": "Coordinating team rollout; gallery view by company."
+        }
+      }
+    },
+    {
+      "id": "0198-demo-mary-jackson",
+      "values": {
+        "id": {
+          "Text": "0198-demo-mary-jackson"
+        },
+        "name": {
+          "Text": "Mary Jackson"
+        },
+        "email": {
+          "Text": "mary@nasa.gov"
+        },
+        "company": {
+          "Text": "NASA"
+        },
+        "due_date": {
+          "Date": "2026-07-30"
+        },
+        "status": {
+          "Text": "Active"
+        },
+        "notes": {
+          "Text": "Wants board grouped by status for sprint review."
+        }
+      }
+    },
+    {
+      "id": "0198-demo-tim-berners-lee",
+      "values": {
+        "id": {
+          "Text": "0198-demo-tim-berners-lee"
+        },
+        "name": {
+          "Text": "Tim Berners-Lee"
+        },
+        "email": {
+          "Text": "tim@w3.org"
+        },
+        "company": {
+          "Text": "W3C"
+        },
+        "due_date": {
+          "Date": "2026-10-12"
+        },
+        "status": {
+          "Text": "Lead"
+        },
+        "notes": {
+          "Text": "Linked data angle — follow up on wiki link semantics."
+        }
+      }
+    },
+    {
+      "id": "0198-demo-brendan-eich",
+      "values": {
+        "id": {
+          "Text": "0198-demo-brendan-eich"
+        },
+        "name": {
+          "Text": "Brendan Eich"
+        },
+        "email": {
+          "Text": "brendan@mozilla.org"
+        },
+        "company": {
+          "Text": "Mozilla"
+        },
+        "due_date": {
+          "Date": "2026-08-20"
+        },
+        "status": {
+          "Text": "Nurture"
+        },
+        "notes": {
+          "Text": "Curious about Tauri shell performance budgets."
+        }
+      }
+    },
+    {
+      "id": "0198-demo-margaret-hamilton",
+      "values": {
+        "id": {
+          "Text": "0198-demo-margaret-hamilton"
+        },
+        "name": {
+          "Text": "Margaret Hamilton"
+        },
+        "email": {
+          "Text": "margaret@mit.edu"
+        },
+        "company": {
+          "Text": "MIT Instrumentation Lab"
+        },
+        "due_date": {
+          "Date": "2026-07-22"
+        },
+        "status": {
+          "Text": "Active"
+        },
+        "notes": {
+          "Text": "Long-page scroll tests map to her reliability bar."
+        }
+      }
+    },
+    {
+      "id": "0198-demo-donald-knuth",
+      "values": {
+        "id": {
+          "Text": "0198-demo-donald-knuth"
+        },
+        "name": {
+          "Text": "Donald Knuth"
+        },
+        "email": {
+          "Text": "knuth@stanford.edu"
+        },
+        "company": {
+          "Text": "Stanford"
+        },
+        "due_date": {
+          "Null": null
+        },
+        "status": {
+          "Text": "Lead"
+        },
+        "notes": {
+          "Text": "Literate programming — pages + code in Resources/."
+        }
+      }
+    },
+    {
+      "id": "0198-demo-linus-torvalds",
+      "values": {
+        "id": {
+          "Text": "0198-demo-linus-torvalds"
+        },
+        "name": {
+          "Text": "Linus Torvalds"
+        },
+        "email": {
+          "Text": "linus@linux.foundation"
+        },
+        "company": {
+          "Text": "Linux Foundation"
+        },
+        "due_date": {
+          "Date": "2026-11-05"
+        },
+        "status": {
+          "Text": "Nurture"
+        },
+        "notes": {
+          "Text": "Git-friendly workspace layout is the hook."
+        }
+      }
+    },
+    {
+      "id": "0198-demo-guido-van-rossum",
+      "values": {
+        "id": {
+          "Text": "0198-demo-guido-van-rossum"
+        },
+        "name": {
+          "Text": "Guido van Rossum"
+        },
+        "email": {
+          "Text": "guido@python.org"
+        },
+        "company": {
+          "Text": "Python Software Foundation"
+        },
+        "due_date": {
+          "Date": "2026-08-08"
+        },
+        "status": {
+          "Text": "Active"
+        },
+        "notes": {
+          "Text": "Notebook story — track under Notebooks/ when ready."
+        }
+      }
+    },
+    {
+      "id": "0198-demo-radia-perlman",
+      "values": {
+        "id": {
+          "Text": "0198-demo-radia-perlman"
+        },
+        "name": {
+          "Text": "Radia Perlman"
+        },
+        "email": {
+          "Text": "radia@ieee.org"
+        },
+        "company": {
+          "Text": "IEEE"
+        },
+        "due_date": {
+          "Date": "2026-09-18"
+        },
+        "status": {
+          "Text": "Lead"
+        },
+        "notes": {
+          "Text": "Spanning-tree metaphor for canvas + outline sync."
+        }
+      }
+    },
+    {
+      "id": "0198-demo-shafi-goldwasser",
+      "values": {
+        "id": {
+          "Text": "0198-demo-shafi-goldwasser"
+        },
+        "name": {
+          "Text": "Shafi Goldwasser"
+        },
+        "email": {
+          "Text": "shafi@mit.edu"
+        },
+        "company": {
+          "Text": "MIT"
+        },
+        "due_date": {
+          "Date": "2026-07-28"
+        },
+        "status": {
+          "Text": "Active"
+        },
+        "notes": {
+          "Text": "Security review of command preconditions."
+        }
+      }
+    },
+    {
+      "id": "0198-demo-barbara-liskov",
+      "values": {
+        "id": {
+          "Text": "0198-demo-barbara-liskov"
+        },
+        "name": {
+          "Text": "Barbara Liskov"
+        },
+        "email": {
+          "Text": "liskov@mit.edu"
+        },
+        "company": {
+          "Text": "MIT"
+        },
+        "due_date": {
+          "Null": null
+        },
+        "status": {
+          "Text": "Partner"
+        },
+        "notes": {
+          "Text": "Substitution principle maps to resource adapters."
+        }
+      }
+    },
+    {
+      "id": "0198-demo-frances-allen",
+      "values": {
+        "id": {
+          "Text": "0198-demo-frances-allen"
+        },
+        "name": {
+          "Text": "Frances Allen"
+        },
+        "email": {
+          "Text": "frances@ibm.com"
+        },
+        "company": {
+          "Text": "IBM Research"
+        },
+        "due_date": {
+          "Date": "2026-08-30"
+        },
+        "status": {
+          "Text": "Churned"
+        },
+        "notes": {
+          "Text": "Paused — re-engage after perf benchmarks published."
+        }
+      }
+    },
+    {
+      "id": "0198-demo-edsger-dijkstra",
+      "values": {
+        "id": {
+          "Text": "0198-demo-edsger-dijkstra"
+        },
+        "name": {
+          "Text": "Edsger Dijkstra"
+        },
+        "email": {
+          "Text": "edsger@utexas.edu"
+        },
+        "company": {
+          "Text": "UT Austin"
+        },
+        "due_date": {
+          "Date": "2026-12-01"
+        },
+        "status": {
+          "Text": "Lead"
+        },
+        "notes": {
+          "Text": "Structured note templates under Templates/."
+        }
+      }
+    },
+    {
+      "id": "0198-demo-grace-brewster",
+      "values": {
+        "id": {
+          "Text": "0198-demo-grace-brewster"
+        },
+        "name": {
+          "Text": "Grace Brewster"
+        },
+        "email": {
+          "Text": "grace.b@example.com"
+        },
+        "company": {
+          "Text": "Example Corp"
+        },
+        "due_date": {
+          "Date": "2026-07-19"
+        },
+        "status": {
+          "Text": "Lead"
+        },
+        "notes": {
+          "Text": "Inbound from conference booth — assign owner."
+        }
+      }
+    },
+    {
+      "id": "0198-demo-leslie-lamport",
+      "values": {
+        "id": {
+          "Text": "0198-demo-leslie-lamport"
+        },
+        "name": {
+          "Text": "Leslie Lamport"
+        },
+        "email": {
+          "Text": "lamport@microsoft.com"
+        },
+        "company": {
+          "Text": "Microsoft Research"
+        },
+        "due_date": {
+          "Date": "2026-09-25"
+        },
+        "status": {
+          "Text": "Nurture"
+        },
+        "notes": {
+          "Text": "Formal methods audience — link Research/Architecture."
+        }
+      }
+    },
+    {
+      "id": "0198-demo-vint-cerf",
+      "values": {
+        "id": {
+          "Text": "0198-demo-vint-cerf"
+        },
+        "name": {
+          "Text": "Vint Cerf"
+        },
+        "email": {
+          "Text": "vint@google.com"
+        },
+        "company": {
+          "Text": "Google"
+        },
+        "due_date": {
+          "Date": "2026-10-01"
+        },
+        "status": {
+          "Text": "Active"
+        },
+        "notes": {
+          "Text": "Offline-first narrative resonates; wants demo workspace zip."
         }
       }
     }
@@ -230,18 +851,29 @@ export const demoDataApp: DataAppSnapshot = {
 };
 
 export const demoPages: Record<string, string> = {
-  "Home.md": "---\ntitle: Home\n---\n\n# Home\n\nA sample Lattice workspace. Everything here is an ordinary file under a real\ndirectory — open it in any editor, or stay inside Lattice.\n\n## Try this\n\n1. Search with **⌘K** — pages are indexed by path and body.\n2. Open `Canvases/Product Strategy.canvas` — double-click a file node to jump.\n3. Capture a quick note with **⌘N** into `Inbox/`.\n4. Open `CRM.data` for a small typed table (contacts).\n5. Browse `Resources/` for JSON, YAML, TypeScript, and an SVG mark.\n6. Open [[Research/Architecture]] for a Mermaid diagram in a page.\n\n## Map\n\n| Path | Kind |\n| --- | --- |\n| [[Product/Vision]] | page |\n| [[Product/Roadmap]] | page |\n| [[Research/Competitor Analysis]] | page |\n| [[Research/Architecture]] | page (Mermaid) |\n| `Canvases/Product Strategy.canvas` | canvas |\n| `CRM.data` | data app |\n| `Data/sample.csv` | CSV file |\n| `Resources/` | code & config files |\n",
-  "Product/Vision.md": "---\ntitle: Vision\n---\n\n# Vision\n\nA fast local workspace that treats documents, data, notebooks, and canvases as ordinary files.\n\nSee also [[Product/Roadmap]] and [[Research/Competitor Analysis]].\n",
-  "Product/Roadmap.md": "---\ntitle: Roadmap\n---\n\n# Roadmap\n\n1. Daily-driver editing and search\n2. First data-app surface\n3. Capture from anywhere\n\nBack to [[Home]].\n",
-  "Research/Competitor Analysis.md": "---\ntitle: Competitor Analysis\ntags: [research]\n---\n\n# Competitor Analysis\n\n| Tool | Keeps | Traps |\n| --- | --- | --- |\n| Obsidian | plain files | rich data |\n| Notion | interaction | your files |\n| Airtable | typed records | API lock-in |\n\n#research\n",
-  "Research/Architecture.md": "---\ntitle: Architecture\ntags: [diagram]\n---\n\n# Architecture\n\nA tiny Mermaid sketch of how Lattice keeps the workspace honest:\n\n```mermaid\nflowchart LR\n  Files[Workspace files] --> Core[Rust command core]\n  Core --> UI[Desktop shell]\n  Core --> Index[Search index]\n  UI -->|semantic commands| Core\n```\n\nRelated: [[Product/Vision]] and [[Home]].\n"
+  "Home.md": "---\ntitle: Home\n---\n\n# Home\n\nKitchen-sink tour of the **First Look** sample workspace. Everything here is an\nordinary file under a real directory — open it in any editor, or stay inside Lattice.\n\n## Quick start\n\n1. Search with **⌘K** — pages are indexed by path, title, tags, and body.\n2. Scroll [[Research/Long Read]] — long-form perf and virtualization fixture.\n3. Open `Canvases/Product Strategy.canvas` — double-click file nodes to jump.\n4. Capture with **⌘N** into `Inbox/` (see [[Inbox/Sample capture]]).\n5. Open `CRM.data` — ~20 contacts with multiple column types.\n6. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.\n7. Create pages from `Templates/` — daily and meeting note scaffolds.\n\n## Product\n\n| Page | What to try |\n| --- | --- |\n| [[Product/Vision]] | Short north-star narrative |\n| [[Product/Principles]] | Invariants and constraints |\n| [[Product/Roadmap]] | Phased delivery themes |\n| [[Product/Release Notes]] | Changelog-style sample |\n\n## Research\n\n| Page | What to try |\n| --- | --- |\n| [[Research/Long Read]] | Scroll perf, Mermaid, wiki links, `:::lattice-embed` |\n| [[Research/Architecture]] | System diagram (Mermaid) |\n| [[Research/Competitor Analysis]] | Comparison table |\n| [[Research/Market Notes]] | Segments and hypotheses |\n| [[Research/Interview Synthesis]] | Quotes mapped to CRM fields |\n\n## Inbox & templates\n\n- [[Inbox/Sample capture]] — triage-ready quick note\n- [[Templates/Daily Note]] — `{{date}}` / `{{title}}` placeholders preserved at provision\n- [[Templates/Meeting Note]] — agenda, decisions, action items\n\nWorkspace defaults point quick capture at `Inbox/` and templates at `Templates/`.\n\n## Canvas & data\n\n| Resource | Kind |\n| --- | --- |\n| `Canvases/Product Strategy.canvas` | Spatial board linking Product pages |\n| `CRM.data` | SQLite data app (contacts table) |\n| `Data/sample.csv` | Flat CSV import sample |\n\n### CRM views\n\nThe template compiler seeds **rows and columns** only — not saved view YAML. After\nprovisioning, add layouts under `CRM.data/views/` (one file per view). In the CRM\nheader, pick a layout or switch among saved views.\n\nExample `CRM.data/views/Board.yaml`:\n\n```yaml\nformat: lattice-view\nversion: 1\nsource:\n  database: ../database.sqlite\n  table: contacts\nlayout:\n  type: board\n  group_by: status\nsort:\n  field: due_date\n  direction: ascending\n```\n\nSupported layout types: `grid`, `list`, `board`, `gallery`, `calendar`, `form`.\nCalendar views use `due_date`; gallery views can use `company` as a cover field.\n\nEmbed a view from a page (see [[Research/Long Read]]):\n\n```markdown\n:::lattice-embed\nresource: CRM.data/views/Board.yaml\nfallback: \"Open CRM board view\"\n:::\n```\n\n## Resources\n\n| File | Notes |\n| --- | --- |\n| `Resources/config.json` | Feature flags sample |\n| `Resources/schema.yaml` | Small YAML schema |\n| `Resources/hooks.json` | Workspace hook sketch |\n| `Resources/example.ts` | Tiny TypeScript export |\n| `Resources/types.ts` | CRM-related types |\n| `Resources/queries.sql` | Example SELECT statements |\n| `Resources/notes.txt` | Plain text |\n| `Resources/mark.svg` | Generated Lattice mark |\n\n## Map\n\n| Path | Kind |\n| --- | --- |\n| [[Product/Vision]] | page |\n| [[Product/Principles]] | page |\n| [[Product/Roadmap]] | page |\n| [[Product/Release Notes]] | page |\n| [[Research/Long Read]] | page (long / embed) |\n| [[Research/Architecture]] | page (Mermaid) |\n| [[Research/Competitor Analysis]] | page |\n| [[Research/Market Notes]] | page |\n| [[Research/Interview Synthesis]] | page |\n| [[Inbox/Sample capture]] | page |\n| `Templates/` | page templates |\n| `Canvases/Product Strategy.canvas` | canvas |\n| `CRM.data` | data app |\n| `Data/sample.csv` | CSV file |\n| `Resources/` | code & config files |\n",
+  "Inbox/Sample capture.md": "---\ntitle: Sample capture\ntags: [inbox]\n---\n\n# Sample capture\n\nQuick note seeded in `Inbox/` — triage into [[Product/]] or [[Research/]] when ready.\n\n## Raw thought\n\nDogfood the First Look template daily: open [[Research/Long Read]], add a CRM row,\ncapture here with **⌘N**, promote to a full page from [[Templates/Daily Note]].\n\n- [ ] Review [[Product/Release Notes]]\n- [ ] Check `CRM.data` calendar layout for August due dates\n- [ ] Pin [[Canvases/Product Strategy.canvas]] in sidebar\n\n#inbox\n",
+  "Product/Vision.md": "---\ntitle: Vision\n---\n\n# Vision\n\nA fast local workspace that treats documents, data, notebooks, and canvases as ordinary files.\n\nSee also [[Product/Principles]], [[Product/Roadmap]], [[Product/Release Notes]], and\n[[Research/Competitor Analysis]]. For volume testing, open [[Research/Long Read]].\n",
+  "Product/Principles.md": "---\ntitle: Principles\ntags: [product]\n---\n\n# Principles\n\nGuiding constraints for Lattice — referenced from [[Product/Vision]] and [[Product/Roadmap]].\n\n## Local-first\n\nThe workspace is a directory on disk. Canonical content stays inspectable outside\nLattice. Offline is the normal state.\n\n## Commands, not side doors\n\nEvery mutation flows through the semantic command core. The React shell coordinates;\nit does not become a privileged writer.\n\n## Progressive disclosure\n\nPrimary creation vocabulary: **Page**, **Canvas**, **Table**, **Notebook**, **File**.\nAdvanced source, history, and conflicts belong under per-resource Inspect surfaces.\n\n## Honest reconciliation\n\nExternal edits are legitimate. Lattice watches the tree and reconciles without\nsilent data loss.\n\n## Performance as product\n\nLarge pages like [[Research/Long Read]], wide tables in `CRM.data`, and canvas\npanning should meet documented budgets before new abstractions land.\n\nSee [[Home]] for a tour of this sample workspace.\n",
+  "Product/Roadmap.md": "---\ntitle: Roadmap\n---\n\n# Roadmap\n\n1. Daily-driver editing and search — exercise [[Research/Long Read]]\n2. Rich data-app surface — expand `CRM.data` views and layouts\n3. Capture from anywhere — `Inbox/` + [[Templates/Daily Note]]\n\nAligned with [[Product/Principles]]. Shipped items noted in [[Product/Release Notes]].\n\nBack to [[Home]].\n",
+  "Product/Release Notes.md": "---\ntitle: Release Notes\ntags: [product]\n---\n\n# Release Notes\n\nSample changelog page for the First Look workspace — not a live feed.\n\n## 2026.07 — First Look enrichment\n\n- Expanded `CRM.data` with email, company, due dates, and notes\n- Added [[Research/Long Read]] for scroll and search perf fixtures\n- New [[Templates/Daily Note]] and [[Templates/Meeting Note]] page templates\n- Extra files under `Resources/` for code and config samples\n\n## 2026.06 — Kitchen sink baseline\n\n- Home tour, Product and Research pages, sample canvas\n- Mermaid in [[Research/Architecture]]\n- CSV under `Data/sample.csv`\n\n## Next\n\nTracked on [[Product/Roadmap]]:\n\n1. Saved CRM views checked into `CRM.data/views/`\n2. Notebook seeds under `Notebooks/`\n3. Richer canvas profiles linking data views\n\n#product\n",
+  "Research/Long Read.md": "---\ntitle: Long Read\ntags: [research, perf, scroll]\n---\n\n# Long Read\n\nA deliberately long page for scroll, virtualization, and search-index stress tests.\nSkim the table of contents, follow wiki links, and open embedded resources without\nleaving the narrative.\n\n## Table of contents\n\n1. [[#Why this page exists]]\n2. [[#System map]]\n3. [[#Data flow]]\n4. [[#Collaboration model]]\n5. [[#Search and indexing]]\n6. [[#Canvas composition]]\n7. [[#CRM in context]]\n8. [[#Release rhythm]]\n9. [[#Interview themes]]\n10. [[#Competitive landscape]]\n11. [[#Principles in practice]]\n12. [[#Embedded resource]]\n13. [[#Appendix A — glossary]]\n14. [[#Appendix B — checklist]]\n\n## Why this page exists\n\nDaily dogfooding needs realistic volume: headings, lists, tables, code fences,\nMermaid diagrams, and cross-links that mirror how teams actually write. This page\nties together [[Product/Vision]], [[Product/Principles]], [[Product/Roadmap]], and\n[[Research/Architecture]] so perf work catches regressions in real reading paths.\n\nRelated notes: [[Research/Market Notes]], [[Research/Interview Synthesis]],\n[[Research/Competitor Analysis]], and the quick capture in [[Inbox/Sample capture]].\n\n## System map\n\nLattice keeps the workspace directory authoritative. The desktop shell coordinates;\nRust owns commands, validation, and storage.\n\n```mermaid\nflowchart TB\n  subgraph workspace [Workspace on disk]\n    Pages[Pages .md]\n    Canvas[Canvases .canvas]\n    Data[Data apps .data]\n    Files[Ordinary files]\n  end\n  subgraph core [Rust core]\n    Cmd[Command core]\n    Idx[Search index]\n    Store[Resource store]\n  end\n  subgraph ui [Desktop shell]\n    Shell[Shell UI]\n    Editor[Page editor]\n    Grid[Data views]\n  end\n  Pages --> Store\n  Canvas --> Store\n  Data --> Store\n  Files --> Store\n  Shell --> Cmd\n  Editor --> Cmd\n  Grid --> Cmd\n  Cmd --> Store\n  Cmd --> Idx\n```\n\n## Data flow\n\nExternal edits and Lattice mutations must reconcile honestly. Nothing in the UI\nbecomes a privileged writer.\n\n```mermaid\nsequenceDiagram\n  participant User\n  participant UI as Desktop shell\n  participant Core as Command core\n  participant Disk as Workspace files\n  User->>UI: Edit page / table row\n  UI->>Core: Semantic command\n  Core->>Core: Validate + transaction\n  Core->>Disk: Atomic write\n  Core-->>UI: Coarse state update\n  Disk-->>Core: External change (watcher)\n  Core-->>UI: Reconcile + notify\n```\n\nSee `Resources/queries.sql` for example read patterns against tabular data.\n\n## Collaboration model\n\nPages accumulate block-level identity over time. Wiki links like [[Home]] and\n[[Product/Release Notes]] stay readable in any Markdown tool. Canvas nodes can\nanchor back to blocks once IDs are assigned.\n\n| Concern | Lattice stance |\n| --- | --- |\n| Canonical storage | Real files and folders |\n| Offline | Default, not exceptional |\n| Rich tables | `.data` packages beside pages |\n| Deep tooling | Inspect surfaces per resource |\n\n## Search and indexing\n\n⌘K should find this page by title, tags, and body text. Repeated keywords below\nexercise index tokenization without nonsense padding.\n\n- workspace workspace workspace\n- canvas canvas canvas\n- sqlite sqlite sqlite\n- mermaid mermaid mermaid\n- embed embed embed\n\nLong paragraphs also matter: teams paste meeting notes, specs, and interview\ntranscripts that run thousands of words. Scroll performance should stay stable\nwhen the caret moves from the first heading through nested lists, tables, and\nfenced code blocks.\n\n## Canvas composition\n\nOpen [[Canvases/Product Strategy.canvas]] and double-click file nodes. The board\nlinks [[Product/Vision]] to [[Product/Roadmap]] spatially — a different reading\norder than this linear page.\n\n```mermaid\nflowchart LR\n  Intro[Canvas intro] --> Vision[[Product/Vision]]\n  Vision --> Roadmap[[Product/Roadmap]]\n  Roadmap --> CRM[CRM.data]\n  CRM --> Long[Long Read]\n```\n\n## CRM in context\n\n`CRM.data` ships ~20 sample contacts with email, company, due dates, status, and\nnotes. Open the data app from [[Home]] or search for a name like **Grace Hopper**.\n\nIn the data app header, switch layouts (grid, list, board, gallery, calendar, form)\nfrom the view picker. Saved views live under `CRM.data/views/` as YAML files — the\nFirst Look template seeds rows only; add views manually or duplicate from\n[[Home#CRM views]].\n\n## Release rhythm\n\nCross-link to [[Product/Release Notes]] for a changelog-style page. Roadmap themes\nfrom [[Product/Roadmap]] should stay aligned with principles in [[Product/Principles]].\n\n1. Instrument perf budgets before adding shell weight.\n2. Keep browser demo honest about filesystem authority.\n3. Prefer bounded queries over hydrating entire workspaces.\n\n## Interview themes\n\n[[Research/Interview Synthesis]] summarizes recurring quotes. [[Research/Market Notes]]\ntracks segments and pricing assumptions. Together they inform [[Research/Competitor Analysis]].\n\n> \"I want Notion-like tables without giving up my git repo.\"\n>\n> \"Canvas is for spatial thinking, not replacing the outline.\"\n\n## Competitive landscape\n\n| Product | Strength | Tradeoff |\n| --- | --- | --- |\n| Obsidian | Local Markdown | Weak relational data |\n| Notion | Polished blocks | Export friction |\n| Airtable | Typed columns | Cloud-centric |\n| Lattice | Files + commands | Young surface area |\n\n#research #product #strategy\n\n## Principles in practice\n\nFrom [[Product/Principles]]:\n\n- **Local-first** — edits work on a plane without Wi‑Fi.\n- **Inspectable** — `Resources/` holds JSON, YAML, TypeScript, and SVG you can diff.\n- **Progressive disclosure** — Page, Canvas, Table, Notebook, File as primary vocabulary.\n\n```typescript\n// Resources/example.ts — tiny module referenced from docs\nexport function greet(name: string): string {\n  return `Hello, ${name}`;\n}\n```\n\n## Embedded resource\n\nThe block below embeds [[Product/Vision]] inline. In read mode it renders a preview\ncard; activate it to open the full page.\n\n:::lattice-embed\nresource: ../Product/Vision.md\nfallback: \"[[Product/Vision]]\"\n:::\n\n## Appendix A — glossary\n\n| Term | Meaning |\n| --- | --- |\n| Data app | `.data` directory with SQLite + manifest |\n| Command | Validated mutation through Rust core |\n| Canvas | Spatial `.canvas` JSON graph |\n| View | YAML layout over a table (`views/*.yaml`) |\n\n## Appendix B — checklist\n\nUse this list when benchmarking scroll and typing on this page:\n\n- [ ] Scroll from top to bottom without layout thrash\n- [ ] Collapse and expand a long section mentally — caret stable\n- [ ] Follow five wiki links and return via history\n- [ ] Render all Mermaid blocks\n- [ ] Open the lattice-embed card\n- [ ] Search for \"Grace Hopper\" and jump to CRM\n\n---\n\nBack to [[Home]]. Architecture diagram: [[Research/Architecture]].\n",
+  "Research/Competitor Analysis.md": "---\ntitle: Competitor Analysis\ntags: [research]\n---\n\n# Competitor Analysis\n\n| Tool | Keeps | Traps |\n| --- | --- | --- |\n| Obsidian | plain files | rich data |\n| Notion | interaction | your files |\n| Airtable | typed records | API lock-in |\n\nDeeper context: [[Research/Market Notes]] and [[Research/Interview Synthesis]].\n\n#research\n",
+  "Research/Architecture.md": "---\ntitle: Architecture\ntags: [diagram]\n---\n\n# Architecture\n\nA tiny Mermaid sketch of how Lattice keeps the workspace honest:\n\n```mermaid\nflowchart LR\n  Files[Workspace files] --> Core[Rust command core]\n  Core --> UI[Desktop shell]\n  Core --> Index[Search index]\n  UI -->|semantic commands| Core\n```\n\nRelated: [[Product/Vision]] and [[Home]].\n",
+  "Research/Market Notes.md": "---\ntitle: Market Notes\ntags: [research]\n---\n\n# Market Notes\n\nWorking assumptions for positioning — link to [[Research/Competitor Analysis]] and\n[[Research/Interview Synthesis]].\n\n## Segments\n\n| Segment | Pain | Lattice fit |\n| --- | --- | --- |\n| Individual knowledge workers | Tool sprawl | Unified files + search |\n| Small product teams | Roadmap + research scattered | Pages + canvas + tables |\n| Data-curious builders | SQL without ops burden | `.data` apps beside Markdown |\n\n## Pricing hypotheses\n\n- Free local core; paid sync/collab later (out of scope for this template)\n- Teams value export and auditability over infinite block types\n\n## Open questions\n\n- How much calendar view usage appears in CRM-style tables?\n- Do users expect `Templates/` to mirror daily-note plugins from other tools?\n\nRelated: [[Product/Principles]] and [[Research/Long Read]].\n\n#research\n",
+  "Research/Interview Synthesis.md": "---\ntitle: Interview Synthesis\ntags: [research]\n---\n\n# Interview Synthesis\n\nThemes from five fictional discovery calls — seeds for [[Product/Vision]] and CRM\nstatus values in `CRM.data`.\n\n## Recurring requests\n\n1. **Keep my files** — git-friendly Markdown and JSON, not opaque databases.\n2. **Typed tables inline** — contacts and tasks beside narrative docs.\n3. **Spatial overview** — canvas for strategy, not just pretty wallpapers.\n4. **Fast search** — path + body, tolerating long pages like [[Research/Long Read]].\n\n## Representative quotes\n\n| Speaker | Quote | Implied column |\n| --- | --- | --- |\n| PM | \"Board view by status is how I run standup.\" | `status` |\n| Engineer | \"Due dates on leads, not on archived contacts.\" | `due_date` |\n| Designer | \"Gallery cover from company name is enough for now.\" | `company` |\n\n## Follow-ups\n\n- [ ] Add saved board view under `CRM.data/views/Board.yaml` (see [[Home#CRM views]])\n- [ ] Link interview pages from canvas nodes\n- [ ] Export subset to `Data/sample.csv` for comparison\n\n#research\n",
+  "Templates/Daily Note.md": "---\ntitle: \"{{title}}\"\ndate: {{date}}\n---\n\n# {{date}}\n\n## Focus\n\n-\n\n## Log\n\n-\n\n## Open loops\n\n- [ ]\n\n## Links\n\n-\n",
+  "Templates/Meeting Note.md": "---\ntitle: \"{{title}}\"\ndate: {{date}}\nattendees: []\n---\n\n# {{title}}\n\n## Agenda\n\n1.\n\n## Notes\n\n## Decisions\n\n## Action items\n\n- [ ] Owner — task (due: )\n\n## Related\n\n-\n"
 };
 
 export const demoTextFiles: Record<string, string> = {
   "Data/sample.csv": "name,role,status\nAda Lovelace,Analyst,Active\nGrace Hopper,Engineer,Active\n",
   "Resources/config.json": "{\n  \"name\": \"Personal\",\n  \"version\": 1,\n  \"features\": {\n    \"canvas\": true,\n    \"search\": true\n  }\n}\n",
   "Resources/schema.yaml": "title: Sample schema\nversion: 1\nfields:\n  - name: id\n    type: text\n  - name: status\n    type: text\n",
+  "Resources/hooks.json": "{\n  \"workspace\": \"first-look-demo\",\n  \"hooks\": {\n    \"onQuickCapture\": {\n      \"targetDirectory\": \"Inbox\",\n      \"template\": \"Templates/Daily Note.md\"\n    },\n    \"onArchive\": {\n      \"targetDirectory\": \"Archive\"\n    }\n  },\n  \"search\": {\n    \"indexBody\": true,\n    \"boostPaths\": [\"Product/\", \"Research/\"]\n  }\n}\n",
   "Resources/notes.txt": "Sample plain text file.\n\nThis fixture runs in the browser shell without native filesystem access.\n",
   "Resources/example.ts": "export function greet(name: string): string {\n  return `Hello, ${name}`;\n}\n",
+  "Resources/types.ts": "/** Shared types for demo Resources — not imported by the app. */\nexport type ContactStatus = \"Lead\" | \"Active\" | \"Nurture\" | \"Churned\" | \"Partner\";\n\nexport interface CrmContactSeed {\n  name: string;\n  email: string;\n  company: string;\n  due_date: string | null;\n  status: ContactStatus;\n  notes: string;\n}\n\nexport function formatDueLabel(isoDate: string | null): string {\n  if (!isoDate) return \"No date\";\n  return new Date(isoDate).toLocaleDateString(undefined, {\n    month: \"short\",\n    day: \"numeric\",\n    year: \"numeric\",\n  });\n}\n",
+  "Resources/queries.sql": "-- Example read-only queries for CRM contacts (illustrative; run outside Lattice).\nSELECT name, email, company, status, due_date\nFROM contacts\nWHERE status = 'Active'\nORDER BY due_date ASC\nLIMIT 25;\n\nSELECT status, COUNT(*) AS count\nFROM contacts\nGROUP BY status\nORDER BY count DESC;\n\nSELECT company, COUNT(*) AS contacts\nFROM contacts\nWHERE company IS NOT NULL\nGROUP BY company\nHAVING contacts > 1;\n",
   "Resources/mark.svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"32\" height=\"32\" viewBox=\"0 0 32 32\" role=\"img\" aria-label=\"Lattice mark\">\n  <rect width=\"32\" height=\"32\" fill=\"#1a1a1a\"/>\n  <path fill=\"#e8a87c\" d=\"M8 22 L16 8 L24 22 Z\"/>\n</svg>\n"
 };
