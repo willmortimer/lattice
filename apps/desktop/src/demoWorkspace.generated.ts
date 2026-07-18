@@ -843,10 +843,39 @@ export const demoDataApp: DataAppSnapshot = {
     }
   ],
   "available_views": [
-    "All"
+    "All",
+    "Board",
+    "Calendar",
+    "Form",
+    "Gallery"
   ],
   "active_view": "All",
   "filters": [],
+  "saved_views": [
+    {
+      "name": "All",
+      "layout_type": "grid"
+    },
+    {
+      "name": "Board",
+      "layout_type": "board",
+      "group_by": "status"
+    },
+    {
+      "name": "Calendar",
+      "layout_type": "calendar",
+      "date_field": "due_date"
+    },
+    {
+      "name": "Form",
+      "layout_type": "form"
+    },
+    {
+      "name": "Gallery",
+      "layout_type": "gallery",
+      "cover_field": "company"
+    }
+  ],
   "layout_type": "grid"
 };
 
