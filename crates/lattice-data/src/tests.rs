@@ -249,6 +249,103 @@ fn list_and_board_views_load_with_layout_metadata() {
 }
 
 #[test]
+fn gallery_calendar_and_form_views_load_with_layout_metadata() {
+    use crate::view::{LAYOUT_CALENDAR, LAYOUT_FORM, LAYOUT_GALLERY};
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Reserved.data");
+    let app = DataApp::create(&package_path, "Reserved", "records").unwrap();
+
+    rusqlite::Connection::open(database_path(&package_path))
+        .unwrap()
+        .execute_batch(
+            "ALTER TABLE records ADD COLUMN name TEXT;
+             ALTER TABLE records ADD COLUMN photo TEXT;
+             ALTER TABLE records ADD COLUMN due_date TEXT;",
+        )
+        .unwrap();
+
+    let views_dir = package_path.join("views");
+    std::fs::create_dir_all(&views_dir).unwrap();
+
+    let mut gallery_view = ViewDef::new_grid("records");
+    gallery_view.layout.layout_type = LAYOUT_GALLERY.to_string();
+    gallery_view.layout.cover_field = Some("photo".into());
+    std::fs::write(
+        views_dir.join("Gallery.yaml"),
+        app.render_view_yaml(&gallery_view).unwrap(),
+    )
+    .unwrap();
+
+    let mut calendar_view = ViewDef::new_grid("records");
+    calendar_view.layout.layout_type = LAYOUT_CALENDAR.to_string();
+    calendar_view.layout.date_field = Some("due_date".into());
+    std::fs::write(
+        views_dir.join("Calendar.yaml"),
+        app.render_view_yaml(&calendar_view).unwrap(),
+    )
+    .unwrap();
+
+    let mut form_view = ViewDef::new_grid("records");
+    form_view.layout.layout_type = LAYOUT_FORM.to_string();
+    form_view.layout.columns = vec!["name".into(), "due_date".into()];
+    std::fs::write(
+        views_dir.join("Form.yaml"),
+        app.render_view_yaml(&form_view).unwrap(),
+    )
+    .unwrap();
+
+    let loaded_gallery = app.load_view("Gallery").unwrap();
+    assert_eq!(loaded_gallery.layout.layout_type, LAYOUT_GALLERY);
+    assert_eq!(loaded_gallery.layout.cover_field.as_deref(), Some("photo"));
+
+    let loaded_calendar = app.load_view("Calendar").unwrap();
+    assert_eq!(loaded_calendar.layout.layout_type, LAYOUT_CALENDAR);
+    assert_eq!(
+        loaded_calendar.layout.date_field.as_deref(),
+        Some("due_date")
+    );
+
+    let loaded_form = app.load_view("Form").unwrap();
+    assert_eq!(loaded_form.layout.layout_type, LAYOUT_FORM);
+    assert_eq!(loaded_form.layout.columns, vec!["name", "due_date"]);
+}
+
+#[test]
+fn layout_field_misuse_is_rejected() {
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Misused.data");
+    let app = DataApp::create(&package_path, "Misused", "records").unwrap();
+
+    let views_dir = package_path.join("views");
+    std::fs::create_dir_all(&views_dir).unwrap();
+
+    let cover_on_grid = "format: lattice-view\nversion: 1\nsource:\n  database: ../database.sqlite\n  table: records\nlayout:\n  type: grid\n  cover_field: photo\n";
+    std::fs::write(views_dir.join("CoverOnGrid.yaml"), cover_on_grid).unwrap();
+    let err = app.load_view("CoverOnGrid").unwrap_err().to_string();
+    assert!(err.contains("cover_field"));
+
+    let date_on_gallery = "format: lattice-view\nversion: 1\nsource:\n  database: ../database.sqlite\n  table: records\nlayout:\n  type: gallery\n  date_field: due_date\n";
+    std::fs::write(views_dir.join("DateOnGallery.yaml"), date_on_gallery).unwrap();
+    let err = app.load_view("DateOnGallery").unwrap_err().to_string();
+    assert!(err.contains("date_field"));
+
+    let group_by_on_gallery = "format: lattice-view\nversion: 1\nsource:\n  database: ../database.sqlite\n  table: records\nlayout:\n  type: gallery\n  group_by: status\n";
+    std::fs::write(
+        views_dir.join("GroupByOnGallery.yaml"),
+        group_by_on_gallery,
+    )
+    .unwrap();
+    let err = app.load_view("GroupByOnGallery").unwrap_err().to_string();
+    assert!(err.contains("group_by"));
+
+    let unsupported = "format: lattice-view\nversion: 1\nsource:\n  database: ../database.sqlite\n  table: records\nlayout:\n  type: dashboard\n";
+    std::fs::write(views_dir.join("Unsupported.yaml"), unsupported).unwrap();
+    let err = app.load_view("Unsupported").unwrap_err().to_string();
+    assert!(err.contains("unsupported view layout type"));
+}
+
+#[test]
 fn csv_parse_and_import_columns() {
     use crate::csv::{infer_field_type, parse_csv_file, sanitize_column_name};
 

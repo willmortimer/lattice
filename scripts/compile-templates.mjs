@@ -658,6 +658,7 @@ function buildDemoDataApp(template) {
     available_views: ["All"],
     active_view: "All",
     filters: [],
+    layout_type: "grid",
   };
 }
 
