@@ -14,7 +14,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "LATTICE_DEV_HOME=\"$(cd ../.. && pwd)/target/dev-home\" tauri dev",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:perf": "playwright test"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.4",
@@ -62,6 +63,7 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.55.0",
     "@tauri-apps/cli": "^2.11.4",
     "@types/markdown-it": "^14.1.2",
     "@types/react": "^19.2.17",
