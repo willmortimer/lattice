@@ -485,8 +485,9 @@ pub fn undo_last(root: String) -> Result<Option<String>, String> {
 }
 
 /// Explicitly initialize Lattice home, provisioning a workspace only when no valid
-/// workspace exists. Uses the First Look demo template when `LATTICE_DEV_HOME` is
-/// set; otherwise provisions Personal. Ordinary startup never calls this command.
+/// workspace exists. Uses the First Look demo template when dev-home mode is
+/// active (`LATTICE_DEV_HOME`, or debug builds without `LATTICE_HOME` /
+/// `LATTICE_FORCE_PROD_HOME`); otherwise provisions Personal.
 #[tauri::command]
 pub fn ensure_home() -> Result<LatticeHomeInfo, String> {
     lattice_handlers::ensure_home()

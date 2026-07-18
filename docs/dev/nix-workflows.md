@@ -106,8 +106,12 @@ Production first-run (**Create Lattice home**) creates:
 
 `nix run .#desktop-dev` (and `pnpm --filter @lattice/desktop tauri:dev`) set
 `LATTICE_DEV_HOME` to an absolute `target/dev-home` under the repo root so local
-Tauri development uses an isolated profile instead of `~/Lattice`. First-run
-there seeds the **First Look** demo template:
+Tauri development uses an isolated profile instead of `~/Lattice`. **Debug**
+builds launched without any profile env vars also default to `target/dev-home`
+(relative to the process cwd) and seed First Look on first run; set
+`LATTICE_HOME` or `LATTICE_FORCE_PROD_HOME=1` to opt into real `~/Lattice`
+Personal seeding instead. Release builds always use `~/Lattice` unless overridden.
+First-run in dev-home mode seeds the **First Look** demo template:
 
 ```text
 target/dev-home/

@@ -42,7 +42,7 @@ export const bridgeUrl =
 /**
  * Optional workspace root for bridge mode (`VITE_LATTICE_WORKSPACE`). Bridge has
  * no native folder dialog — set this env var for auto-open on load, or use Get
- * started (`ensure_home` seeds First Look under `LATTICE_DEV_HOME` on the
+ * started (`ensure_home` seeds First Look when dev-home mode is active on the
  * bridge host). The bridge may also be started with `--root` so `root` can be
  * omitted on workspace-scoped routes.
  */

@@ -13,7 +13,9 @@ pub use state::{DesktopSession, ProfileStateStore, RecentWorkspace};
 
 pub const LATTICE_DEV_HOME_ENV: &str = "LATTICE_DEV_HOME";
 pub const LATTICE_HOME_ENV: &str = "LATTICE_HOME";
+pub const LATTICE_FORCE_PROD_HOME_ENV: &str = "LATTICE_FORCE_PROD_HOME";
 pub const LATTICE_HOME_NAME: &str = "Lattice";
+pub const DEFAULT_DEBUG_HOME_RELATIVE: &str = "target/dev-home";
 pub const WORKSPACES_DIR_NAME: &str = "Workspaces";
 pub const SETTINGS_DIR_NAME: &str = "Settings";
 pub const STATE_DIR_NAME: &str = "State";
@@ -70,10 +72,42 @@ impl LatticeHome {
     }
 }
 
+pub fn lattice_force_prod_home_enabled() -> bool {
+    std::env::var(LATTICE_FORCE_PROD_HOME_ENV)
+        .map(|value| matches!(value.as_str(), "1" | "true" | "yes"))
+        .unwrap_or(false)
+}
+
+/// Whether first-run provisioning should seed the First Look demo template.
+///
+/// True when `LATTICE_DEV_HOME` is set, or in debug builds when neither
+/// `LATTICE_HOME` nor [`lattice_force_prod_home_enabled`] opts into production
+/// profile behavior.
 pub fn lattice_dev_home_enabled() -> bool {
-    std::env::var(LATTICE_DEV_HOME_ENV)
+    if std::env::var(LATTICE_DEV_HOME_ENV)
         .map(|value| !value.is_empty())
         .unwrap_or(false)
+    {
+        return true;
+    }
+    if lattice_force_prod_home_enabled() {
+        return false;
+    }
+    if std::env::var(LATTICE_HOME_ENV)
+        .map(|value| !value.is_empty())
+        .unwrap_or(false)
+    {
+        return false;
+    }
+    cfg!(debug_assertions)
+}
+
+pub fn default_debug_home_path() -> Result<PathBuf> {
+    let cwd = std::env::current_dir().map_err(|source| Error::Io {
+        path: PathBuf::from("."),
+        source,
+    })?;
+    Ok(cwd.join(DEFAULT_DEBUG_HOME_RELATIVE))
 }
 
 pub fn lattice_home_path() -> Result<PathBuf> {
@@ -86,6 +120,9 @@ pub fn lattice_home_path() -> Result<PathBuf> {
         if !override_path.is_empty() {
             return absolutize_override_path(PathBuf::from(override_path));
         }
+    }
+    if cfg!(debug_assertions) && !lattice_force_prod_home_enabled() {
+        return default_debug_home_path();
     }
     let home = dirs::home_dir().ok_or_else(|| Error::HomeUnavailable)?;
     Ok(home.join(LATTICE_HOME_NAME))
@@ -162,7 +199,16 @@ mod tests {
 
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+        LOCK.get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn assert_same_path(left: &Path, right: &Path) {
+        assert_eq!(
+            left.canonicalize().unwrap_or_else(|_| left.to_path_buf()),
+            right.canonicalize().unwrap_or_else(|_| right.to_path_buf()),
+        );
     }
 
     #[test]
@@ -201,8 +247,54 @@ mod tests {
         assert!(resolved.is_absolute());
         assert!(resolved.ends_with("target/dev-home"));
         let expected = std::env::current_dir().unwrap().join("target/dev-home");
-        assert_eq!(resolved, expected);
+        std::fs::create_dir_all(&expected).unwrap();
+        assert_same_path(&resolved, &expected);
         std::env::remove_var(LATTICE_DEV_HOME_ENV);
         std::env::set_current_dir(previous).unwrap();
+    }
+
+    fn clear_home_env() {
+        std::env::remove_var(LATTICE_DEV_HOME_ENV);
+        std::env::remove_var(LATTICE_HOME_ENV);
+        std::env::remove_var(LATTICE_FORCE_PROD_HOME_ENV);
+    }
+
+    #[test]
+    fn debug_build_defaults_to_isolated_dev_home_when_unconfigured() {
+        let _guard = env_lock();
+        clear_home_env();
+        let cwd = tempfile::tempdir().unwrap();
+        let previous = std::env::current_dir().unwrap();
+        std::env::set_current_dir(cwd.path()).unwrap();
+        assert!(lattice_dev_home_enabled());
+        let resolved = lattice_home_path().unwrap();
+        assert!(resolved.is_absolute());
+        let expected = cwd.path().join(DEFAULT_DEBUG_HOME_RELATIVE);
+        std::fs::create_dir_all(&expected).unwrap();
+        assert_same_path(&resolved, &expected);
+        std::env::set_current_dir(previous).unwrap();
+    }
+
+    #[test]
+    fn lattice_home_opts_out_of_dev_home_in_debug() {
+        let _guard = env_lock();
+        clear_home_env();
+        let directory = tempfile::tempdir().unwrap();
+        std::env::set_var(LATTICE_HOME_ENV, directory.path());
+        assert!(!lattice_dev_home_enabled());
+        assert_eq!(lattice_home_path().unwrap(), directory.path());
+        std::env::remove_var(LATTICE_HOME_ENV);
+    }
+
+    #[test]
+    fn lattice_force_prod_home_opts_into_real_home_in_debug() {
+        let _guard = env_lock();
+        clear_home_env();
+        std::env::set_var(LATTICE_FORCE_PROD_HOME_ENV, "1");
+        assert!(!lattice_dev_home_enabled());
+        let resolved = lattice_home_path().unwrap();
+        let expected = dirs::home_dir().unwrap().join(LATTICE_HOME_NAME);
+        assert_eq!(resolved, expected);
+        std::env::remove_var(LATTICE_FORCE_PROD_HOME_ENV);
     }
 }
