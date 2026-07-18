@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use lattice_data::{CellValue, DataApp, FieldType};
+use lattice_data::{write_package_view, CellValue, DataApp, FieldType, ViewDef};
 use lattice_storage::atomic_write_file;
 use serde::{Deserialize, Serialize};
 
@@ -34,12 +34,23 @@ pub(crate) struct SeedDataColumn {
 }
 
 #[derive(Debug)]
+pub(crate) struct SeedDataView {
+    pub name: &'static str,
+    pub layout: &'static str,
+    pub group_by: Option<&'static str>,
+    pub cover_field: Option<&'static str>,
+    pub date_field: Option<&'static str>,
+    pub columns: &'static [&'static str],
+}
+
+#[derive(Debug)]
 pub(crate) struct SeedDataPackage {
     pub path: &'static str,
     pub title: &'static str,
     pub table: &'static str,
     pub columns: &'static [SeedDataColumn],
     pub rows_json: &'static [&'static str],
+    pub views: &'static [SeedDataView],
 }
 
 #[derive(Debug)]
@@ -517,7 +528,54 @@ fn materialize_data_package(
         app.insert_row(package.table, &values)
             .map_err(map_data_error)?;
     }
+
+    let known_columns: std::collections::HashSet<&str> = package
+        .columns
+        .iter()
+        .map(|column| column.name)
+        .chain(std::iter::once("id"))
+        .collect();
+    for seed_view in package.views {
+        materialize_seed_view(
+            &package_path,
+            package.table,
+            package.path,
+            seed_view,
+            &known_columns,
+        )?;
+    }
     Ok(())
+}
+
+fn materialize_seed_view(
+    package_path: &Path,
+    table: &str,
+    package_path_label: &str,
+    seed: &SeedDataView,
+    known_columns: &std::collections::HashSet<&str>,
+) -> Result<()> {
+    let mut view = ViewDef::new_grid(table);
+    view.layout.layout_type = seed.layout.to_string();
+    view.layout.columns = seed
+        .columns
+        .iter()
+        .map(|column| {
+            if !known_columns.contains(column) {
+                return Err(Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path_label} view {:?} references unknown column {column:?}",
+                        seed.name
+                    ),
+                });
+            }
+            Ok((*column).to_string())
+        })
+        .collect::<Result<Vec<_>>>()?;
+    view.layout.group_by = seed.group_by.map(str::to_string);
+    view.layout.cover_field = seed.cover_field.map(str::to_string);
+    view.layout.date_field = seed.date_field.map(str::to_string);
+
+    write_package_view(package_path, seed.name, &view).map_err(map_data_error)
 }
 
 fn row_values_from_json(
@@ -1223,6 +1281,7 @@ mod tests {
             table: "contacts",
             columns: COLUMNS,
             rows_json: ROWS,
+            views: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",
@@ -1282,6 +1341,7 @@ mod tests {
             table: "broken",
             columns: COLUMNS,
             rows_json: &[],
+            views: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",
@@ -1320,5 +1380,101 @@ mod tests {
         assert!(!directory.path().join("Data").exists());
         assert!(!directory.path().join("Data/Broken.data").exists());
         assert!(!directory.path().join(WORKSPACE_MANIFEST_FILENAME).exists());
+    }
+
+    #[test]
+    fn provisioned_data_packages_materialize_declarative_views() {
+        use lattice_data::{LAYOUT_BOARD, LAYOUT_GALLERY};
+
+        static COLUMNS: &[SeedDataColumn] = &[
+            SeedDataColumn {
+                name: "name",
+                field_type: "text",
+            },
+            SeedDataColumn {
+                name: "status",
+                field_type: "text",
+            },
+            SeedDataColumn {
+                name: "company",
+                field_type: "text",
+            },
+        ];
+        static ROWS: &[&str] = &[r#"{"name":"Ada","status":"Active","company":"Analytical"}"#];
+        static VIEWS: &[SeedDataView] = &[
+            SeedDataView {
+                name: "Board",
+                layout: LAYOUT_BOARD,
+                group_by: Some("status"),
+                cover_field: None,
+                date_field: None,
+                columns: &["name", "status"],
+            },
+            SeedDataView {
+                name: "Gallery",
+                layout: LAYOUT_GALLERY,
+                group_by: None,
+                cover_field: Some("company"),
+                date_field: None,
+                columns: &[],
+            },
+        ];
+        static PACKAGES: &[SeedDataPackage] = &[SeedDataPackage {
+            path: "Data/Tasks.data",
+            title: "Tasks",
+            table: "tasks",
+            columns: COLUMNS,
+            rows_json: ROWS,
+            views: VIEWS,
+        }];
+        static FILES: &[SeedFile] = &[SeedFile {
+            path: "Home.md",
+            bytes: b"# Home\n",
+        }];
+        let template = GeneratedTemplate {
+            id: "views-fixture",
+            order: 1,
+            name: "Views Fixture",
+            category: "Test",
+            description: "Synthetic data package views fixture",
+            visibility: "gallery",
+            recommended: false,
+            recommended_title: "Views",
+            directories: &[],
+            preview: &["Home.md", "Data/Tasks.data"],
+            capabilities: &["pages", "sqlite"],
+            quick_note_directory: "Inbox",
+            daily_note_directory: None,
+            attachments_directory: None,
+            template_directory: None,
+            archive_directory: None,
+            open_on_create: None,
+            files: FILES,
+            data_packages: PACKAGES,
+        };
+
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("ViewsWorkspace");
+        create_workspace_at(&root, "Views", &template).unwrap();
+
+        let package_path = root.join("Data/Tasks.data");
+        let app = DataApp::open(&package_path).unwrap();
+        let board = app.load_view("Board").unwrap();
+        assert_eq!(board.layout.layout_type, LAYOUT_BOARD);
+        assert_eq!(board.layout.group_by.as_deref(), Some("status"));
+        assert_eq!(board.layout.columns, vec!["name", "status"]);
+
+        let gallery = app.load_view("Gallery").unwrap();
+        assert_eq!(gallery.layout.layout_type, LAYOUT_GALLERY);
+        assert_eq!(gallery.layout.cover_field.as_deref(), Some("company"));
+        assert!(gallery.layout.columns.is_empty());
+
+        let board_yaml = std::fs::read_to_string(package_path.join("views/Board.yaml")).unwrap();
+        assert!(board_yaml.contains("type: board"));
+        assert!(board_yaml.contains("group_by: status"));
+        let gallery_yaml =
+            std::fs::read_to_string(package_path.join("views/Gallery.yaml")).unwrap();
+        assert!(gallery_yaml.contains("type: gallery"));
+        assert!(gallery_yaml.contains("cover_field: company"));
     }
 }

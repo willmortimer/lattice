@@ -186,6 +186,18 @@ pub(crate) fn view_path(package_path: &Path, name: &str) -> PathBuf {
     package_path.join("views").join(format!("{name}.yaml"))
 }
 
+/// Write `views/{name}.yaml` inside a `.data` package.
+pub fn write_package_view(package_path: &Path, name: &str, view: &ViewDef) -> Result<()> {
+    validate_identifier(name)?;
+    let path = view_path(package_path, name);
+    view.check(&path)?;
+    let views_dir = package_path.join("views");
+    std::fs::create_dir_all(&views_dir).map_err(|source| Error::io(&views_dir, source))?;
+    let contents = view.to_yaml()?;
+    std::fs::write(&path, contents).map_err(|source| Error::io(&path, source))?;
+    Ok(())
+}
+
 pub(crate) fn validate_identifier(name: &str) -> Result<()> {
     let valid = !name.is_empty()
         && name

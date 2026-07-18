@@ -67,6 +67,7 @@ const WORKSPACE_DEFAULT_KEYS = [
   "archiveDirectory",
 ];
 const FIELD_TYPES = new Set(["text", "long_text", "integer", "decimal", "boolean", "date"]);
+const VIEW_LAYOUTS = new Set(["grid", "list", "board", "gallery", "calendar", "form"]);
 // Flat seed files (including binaries) are embedded via include_bytes!; declarative
 // dataPackages are JSON-only and materialized to SQLite at provision time.
 
@@ -264,12 +265,94 @@ function normalizeDataPackage(entry, template, index) {
     return row;
   });
 
+  const views = normalizeDataPackageViews(entry.views, template, label, columnNames);
+
   return {
     path: entry.path,
     title: entry.title,
     table: entry.table,
     columns,
     rows,
+    views,
+  };
+}
+
+function normalizeDataPackageViews(raw, template, label, columnNames) {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) {
+    throw new Error(`${template}: ${label}.views must be an array`);
+  }
+  const allowedColumns = new Set([...columnNames, "id"]);
+  const viewNames = new Set();
+  return raw.map((entry, index) =>
+    normalizeDataPackageView(entry, template, `${label}.views[${index}]`, allowedColumns, viewNames),
+  );
+}
+
+function normalizeDataPackageView(entry, template, label, allowedColumns, viewNames) {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    throw new Error(`${template}: ${label} must be an object`);
+  }
+  if (typeof entry.name !== "string" || !isSqlIdentifier(entry.name)) {
+    throw new Error(`${template}: ${label}.name must be a valid SQL identifier`);
+  }
+  if (viewNames.has(entry.name)) {
+    throw new Error(`${template}: ${label} duplicate view name ${entry.name}`);
+  }
+  viewNames.add(entry.name);
+  if (typeof entry.layout !== "string" || !VIEW_LAYOUTS.has(entry.layout)) {
+    throw new Error(
+      `${template}: ${label}.layout must be one of ${[...VIEW_LAYOUTS].join(", ")}`,
+    );
+  }
+
+  const layoutFields = {
+    group_by: "board",
+    cover_field: "gallery",
+    date_field: "calendar",
+  };
+  for (const [field, layout] of Object.entries(layoutFields)) {
+    if (entry[field] === undefined) continue;
+    if (typeof entry[field] !== "string" || !isSqlIdentifier(entry[field])) {
+      throw new Error(`${template}: ${label}.${field} must be a valid SQL identifier`);
+    }
+    if (!allowedColumns.has(entry[field])) {
+      throw new Error(`${template}: ${label}.${field} references unknown column ${entry[field]}`);
+    }
+    if (entry.layout !== layout) {
+      throw new Error(`${template}: ${label}.${field} is only supported for ${layout} views`);
+    }
+  }
+
+  let columns = [];
+  if (entry.columns !== undefined) {
+    if (!Array.isArray(entry.columns)) {
+      throw new Error(`${template}: ${label}.columns must be an array`);
+    }
+    const seen = new Set();
+    columns = entry.columns.map((column, columnIndex) => {
+      const columnLabel = `${label}.columns[${columnIndex}]`;
+      if (typeof column !== "string" || !isSqlIdentifier(column)) {
+        throw new Error(`${template}: ${columnLabel} must be a valid SQL identifier`);
+      }
+      if (!allowedColumns.has(column)) {
+        throw new Error(`${template}: ${columnLabel} references unknown column ${column}`);
+      }
+      if (seen.has(column)) {
+        throw new Error(`${template}: ${columnLabel} duplicate column ${column}`);
+      }
+      seen.add(column);
+      return column;
+    });
+  }
+
+  return {
+    name: entry.name,
+    layout: entry.layout,
+    group_by: entry.group_by,
+    cover_field: entry.cover_field,
+    date_field: entry.date_field,
+    columns,
   };
 }
 
@@ -420,9 +503,22 @@ function rustDataColumn(column) {
   return `SeedDataColumn { name: ${rustString(column.name)}, field_type: ${rustString(column.type)} }`;
 }
 
+function rustDataView(view) {
+  const columns = view.columns.map((column) => rustString(column)).join(",\n                    ");
+  return `SeedDataView {
+                name: ${rustString(view.name)},
+                layout: ${rustString(view.layout)},
+                group_by: ${rustOptionString(view.group_by)},
+                cover_field: ${rustOptionString(view.cover_field)},
+                date_field: ${rustOptionString(view.date_field)},
+                columns: &[${columns ? `\n                    ${columns}\n                ` : ""}],
+            }`;
+}
+
 function rustDataPackage(packageDef) {
   const columns = packageDef.columns.map(rustDataColumn).join(",\n                ");
   const rows = packageDef.rows.map((row) => rustString(JSON.stringify(row))).join(",\n                ");
+  const views = packageDef.views.map(rustDataView).join(",\n                ");
   return `SeedDataPackage {
             path: ${rustString(packageDef.path)},
             title: ${rustString(packageDef.title)},
@@ -433,6 +529,7 @@ function rustDataPackage(packageDef) {
             rows_json: &[
                 ${rows}
             ],
+            views: &[${views ? `\n                ${views}\n            ` : ""}],
         }`;
 }
 

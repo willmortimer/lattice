@@ -90,7 +90,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "status": "todo",
             "due": "2026-07-21"
           }
-        ]
+        ],
+        "views": []
       }
     ]
   },
@@ -258,7 +259,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "submitted_on": null,
             "response": "Polish the opening before sending."
           }
-        ]
+        ],
+        "views": []
       }
     ]
   },
@@ -362,7 +364,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "status": "on-track",
             "confidence": 0.7
           }
-        ]
+        ],
+        "views": []
       }
     ]
   },
@@ -471,7 +474,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "run_date": "2026-07-10",
             "notes": "Smoke test of data pipeline."
           }
-        ]
+        ],
+        "views": []
       }
     ]
   },
@@ -626,7 +630,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "value": 42.5,
             "recorded_on": "2026-07-01"
           }
-        ]
+        ],
+        "views": []
       }
     ]
   },
@@ -740,7 +745,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "component": "ops",
             "notes": "Capture steps in Runbooks/ before the next release."
           }
-        ]
+        ],
+        "views": []
       }
     ]
   },
@@ -1030,7 +1036,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "status": "Active",
             "notes": "Offline-first narrative resonates; wants demo workspace zip."
           }
-        ]
+        ],
+        "views": []
       }
     ]
   },

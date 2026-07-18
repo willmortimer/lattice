@@ -49,6 +49,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 "{\"task\":\"Review inbox\",\"status\":\"todo\",\"due\":null}",
                 "{\"task\":\"Plan the week\",\"status\":\"todo\",\"due\":\"2026-07-21\"}"
             ],
+            views: &[],
         }
         ],
     },
@@ -141,6 +142,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 "{\"piece\":\"Chapter 01 excerpt\",\"venue\":\"Example Quarterly\",\"status\":\"submitted\",\"submitted_on\":\"2026-07-01\",\"response\":null}",
                 "{\"piece\":\"Flash piece\",\"venue\":\"Example Review\",\"status\":\"draft\",\"submitted_on\":null,\"response\":\"Polish the opening before sending.\"}"
             ],
+            views: &[],
         }
         ],
     },
@@ -193,6 +195,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 "{\"objective\":\"Ship the spring release\",\"key_result\":\"Two dogfood rounds with written findings\",\"owner\":\"you\",\"status\":\"at-risk\",\"confidence\":0.5}",
                 "{\"objective\":\"Grow the team sustainably\",\"key_result\":\"Every report has a current growth plan\",\"owner\":\"you\",\"status\":\"on-track\",\"confidence\":0.7}"
             ],
+            views: &[],
         }
         ],
     },
@@ -246,6 +249,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 "{\"name\":\"Baseline replication\",\"status\":\"planned\",\"run_date\":null,\"notes\":\"Replicate methods from Example Paper.\"}",
                 "{\"name\":\"Pilot run\",\"status\":\"complete\",\"run_date\":\"2026-07-10\",\"notes\":\"Smoke test of data pipeline.\"}"
             ],
+            views: &[],
         }
         ],
     },
@@ -340,6 +344,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 "{\"metric\":\"active_users\",\"value\":128,\"recorded_on\":\"2026-07-01\"}",
                 "{\"metric\":\"query_latency_ms\",\"value\":42.5,\"recorded_on\":\"2026-07-01\"}"
             ],
+            views: &[],
         }
         ],
     },
@@ -399,6 +404,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 "{\"title\":\"Add health check endpoint\",\"status\":\"open\",\"priority\":\"high\",\"component\":\"api\",\"notes\":\"See Snippets/api-handler.ts for the handler stub.\"}",
                 "{\"title\":\"Document deploy rollback\",\"status\":\"open\",\"priority\":\"low\",\"component\":\"ops\",\"notes\":\"Capture steps in Runbooks/ before the next release.\"}"
             ],
+            views: &[],
         }
         ],
     },
@@ -518,6 +524,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 "{\"name\":\"Leslie Lamport\",\"email\":\"lamport@microsoft.com\",\"company\":\"Microsoft Research\",\"due_date\":\"2026-09-25\",\"status\":\"Nurture\",\"notes\":\"Formal methods audience — link Research/Architecture.\"}",
                 "{\"name\":\"Vint Cerf\",\"email\":\"vint@google.com\",\"company\":\"Google\",\"due_date\":\"2026-10-01\",\"status\":\"Active\",\"notes\":\"Offline-first narrative resonates; wants demo workspace zip.\"}"
             ],
+            views: &[],
         }
         ],
     },
