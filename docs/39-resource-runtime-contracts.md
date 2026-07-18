@@ -42,13 +42,15 @@ Path renames and moves that affect parseable links produce a `LinkRepairPlan` in
 `lattice-core` ([ADR 0027](decisions/0027-progressive-resource-identity-and-path-repair.md),
 [ADR 0034](decisions/0034-typed-resource-link-resolution.md)).
 
-Contract:
+Contract (single-path and batch share the same repair semantics; batch differs
+only in how many paths are previewed, merged, and recorded per transaction):
 
 - Lattice-initiated renames and moves may offer an apply path after review.
   Moves reuse rename-shaped `from`/`to` full paths; accepting repair applies
-  `ResourceRename(from, destination)` plus page updates in one transaction
-  (equivalent filesystem rename to `ResourceMove`, without double-applying a
-  prior move). Pure moves with no link candidates still record `ResourceMove`.
+  `ResourceRename(from, destination)` plus page updates in **one**
+  transaction (equivalent filesystem rename to `ResourceMove`, without
+  double-applying a prior move). Pure moves with no link candidates still
+  record `ResourceMove` (single path) or N `ResourceMove` commands (batch).
 - External renames create a repair proposal; source files are not silently
   rewritten.
 - The desktop presents a review modal listing candidates with
@@ -63,12 +65,18 @@ Contract:
 - **Batch moves/deletes** record one transaction with N `ResourceMove` /
   `ResourceDelete` commands so a single undo restores the whole set. Path remaps
   from undo cover every relocated path in that transaction.
-- **Batch link repair** (multi-select move of 2+ paths): the shell previews
-  repair per path, merges candidates into one `BatchLinkRepairPlan`, and presents
-  a single review modal when any candidates remain. Accept applies **one**
-  transaction of N `ResourceRename(from, destination)` commands plus the union of
-  accepted `PageUpdate`s — one history step; undo restores every path and every
-  repaired link together.
+- **Single-path link repair** — `preview_link_repair` / apply after review:
+  one `ResourceRename` plus accepted `PageUpdate`s in one transaction; undo
+  restores the path remap and repaired links together. No candidates →
+  `ResourceMove` only (honest move history).
+- **Batch link repair** (multi-select move of 2+ paths) —
+  `preview_batch_link_repair` / `apply_batch_link_repair`: the shell previews
+  repair per path, merges candidates into one `BatchLinkRepairPlan`, and
+  presents a single review modal when any candidates remain. Accept applies
+  **one** transaction of N `ResourceRename(from, destination)` commands plus
+  the union of accepted `PageUpdate`s — one history step; undo restores every
+  path and every repaired link together. No candidates → N `ResourceMove`
+  commands in one transaction (same undo shape as before repair existed).
 - Candidates whose source page is itself being moved in the same batch are
   **omitted** (`omittedCoMovedCount`): v0 transactions require disjoint paths, so
   `PageUpdate` + `ResourceRename` on the same path are rejected. Cross-links among
@@ -78,8 +86,6 @@ Contract:
   candidates (`LINK_REPAIR_BATCH_CANDIDATE_WARN_THRESHOLD`); hard truncate at
   **500** (`LINK_REPAIR_BATCH_CANDIDATE_HARD_CAP`). Truncation sets `truncated` and
   leaves uncapped links unrepaired until a follow-up.
-- Pure batch moves with no repair candidates still record N `ResourceMove`
-  commands in one transaction (unchanged).
 
 ### Revision history presentation
 

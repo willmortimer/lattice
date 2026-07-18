@@ -126,10 +126,60 @@ tables:
 ["0195f0a2-…","0195f0a3-…"]
 ```
 
-- `relation_table` names a target table in the same `.data` package.
-- Cells hold zero or more linked record ids; insert/update validates each id exists in the target table.
-- On `RecordDelete` / `delete_row`, Lattice strips the deleted id from every relation column that targets that table (same package), in the same SQLite transaction as the DELETE. Command undo restores the deleted row **and** the prior inbound relation cells captured in history (`DeletedRowSnapshot`).
-- Lookup, Rollup, reverse-link UX, and junction tables remain later work.
+- `relation_table` names a target table in the same `.data` package. Cross-table
+  relations within one package are supported (for example `contacts.company` →
+  `companies` in First Look `CRM.data`). Cross-package links, junction tables,
+  Lookup, and Rollup remain later work.
+- Cells hold zero or more linked record ids; insert/update validates each id
+  exists in the target table.
+- On `RecordDelete` / `delete_row`, Lattice strips the deleted id from every
+  relation column in the package whose `relation_table` points at the deleted
+  row's table (self-relations and cross-table inbound links), in the same SQLite
+  transaction as the DELETE. Command undo restores the deleted row **and** the
+  prior inbound relation cells captured in history (`DeletedRowSnapshot` /
+  `RelationStrip`).
+
+### Relation labels and `relation_targets`
+
+`open_data_app` includes a `relation_targets` map: for each distinct
+`relation_table` referenced by the active table's columns, the snapshot carries
+target rows (id + values) used to resolve display labels. The shell builds a
+label index from name-like fields (`name`, `title`, `label`) and falls back to
+the first text value or raw id.
+
+- **Grid** — relation cells use the label index when present.
+- **List, board, gallery, calendar** — title, subtitle, cover, and date fields
+  resolve relation columns through the same index (not raw id strings).
+- **After mutate** — when the active table is itself a relation target for
+  other tables, insert/update/delete on that table patch `relation_targets` in
+  the shell snapshot so pickers and labels stay current without a full reopen.
+  Rows deleted through `RecordDelete` are removed from the index when the backend
+  strips inbound links.
+
+### Record detail
+
+Record detail is the editable surface for a single row:
+
+- **Outbound relations** — relation-typed columns use a searchable picker backed
+  by `relation_targets` for the column's `relation_table`.
+- **Inbound / reverse links (read-only)** — a **Linked from** section lists rows
+  whose relation cells point at the open record. Self-relations are discovered
+  from the active table's rows; cross-table inbound links (for example contacts
+  pointing at a company) use `relation_targets`. Each entry shows the source
+  row label and the linking column (and source table when different). Sources on
+  the active table are navigable; cross-table sources are display-only in v1.
+
+### Template seed resolution
+
+When a workspace template provisions `.data` package rows, relation cell values
+in template JSON may list **record ids** or the target row's **`name`** text.
+The provisioner resolves each reference against the target table before insert;
+unresolved references fail template validation. This keeps hand-authored seeds
+readable (for example `"company": ["Analytical Engines"]`) while storing canonical
+ids in SQLite.
+
+Lookup, Rollup, junction tables, and cross-package relation UX remain later
+work.
 
 Linked-record UX should make relational modeling approachable:
 
