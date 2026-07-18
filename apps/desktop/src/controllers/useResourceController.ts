@@ -53,7 +53,7 @@ export interface ResourceController {
   pageRef: MutableRefObject<Extract<OpenResourceSession, { kind: "page" }> | null>;
   currentPageRevisionRef: MutableRefObject<string | null>;
   reloadToken: number;
-  handleSelect: (resource: Resource, options?: { recordHistory?: boolean; syncTreeSelection?: boolean }) => Promise<void>;
+  handleSelect: (resource: Resource, options?: { recordHistory?: boolean; syncTreeSelection?: boolean; viewName?: string }) => Promise<void>;
   applyTreeSelection: (detail: {
     paths: ReadonlySet<string>;
     primary: Resource | null;
@@ -180,7 +180,7 @@ export function useResourceController(options: ResourceControllerOptions): Resou
 
   const handleSelect = useCallback(async (
     resource: Resource,
-    selectionOptions: { recordHistory?: boolean; syncTreeSelection?: boolean } = {},
+    selectionOptions: { recordHistory?: boolean; syncTreeSelection?: boolean; viewName?: string } = {},
   ) => {
     const workspace = snapshotRef.current ?? snapshot;
     if (resource.kind === "folder") return;
@@ -232,13 +232,23 @@ export function useResourceController(options: ResourceControllerOptions): Resou
         onError("Data apps are not enabled for this workspace.");
         return;
       }
+      const viewName = selectionOptions.viewName ?? null;
       if (inBrowser) {
-        if (isCurrentLoad(ticket)) setSession({ kind: "data-app", resource, snapshot: demoDataApp });
+        if (isCurrentLoad(ticket)) {
+          const snapshot = viewName && demoDataApp.available_views.includes(viewName)
+            ? { ...demoDataApp, active_view: viewName }
+            : demoDataApp;
+          setSession({ kind: "data-app", resource, snapshot });
+        }
         return;
       }
       onBusy(true);
       try {
-        const opened = await invoke<DataAppSnapshot>("open_data_app", { root: workspace.root, relPath: resource.path, viewName: null });
+        const opened = await invoke<DataAppSnapshot>("open_data_app", {
+          root: workspace.root,
+          relPath: resource.path,
+          viewName,
+        });
         if (isCurrentLoad(ticket)) setSession({ kind: "data-app", resource, snapshot: opened });
       } catch (error) {
         if (isCurrentLoad(ticket)) onError(String(error));

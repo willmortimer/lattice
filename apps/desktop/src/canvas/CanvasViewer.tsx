@@ -7,7 +7,7 @@ import { LATTICE_RESOURCE_MIME, readResourceDragPayload } from "../lib/resourceD
 
 interface CanvasViewerProps {
   json: unknown;
-  onOpenFile: (path: string) => void;
+  onOpenFile: (path: string, subpath?: string) => void;
   adapter?: CanvasAdapter;
   baseRevision: string;
   onRevisionChange?: (revision: string) => void;
@@ -59,7 +59,7 @@ export function CanvasViewer({ json, onOpenFile, adapter, baseRevision, onRevisi
 
     let cancelled = false;
     const scene = new CanvasScene(host, {
-      onOpenFile: (path) => onOpenFileRef.current(path),
+      onOpenFile: (path, subpath) => onOpenFileRef.current(path, subpath),
       onSelectNode: setSelectedId,
       onMoveNodes: (nodes) => {
         const currentAdapter = adapterRef.current;
