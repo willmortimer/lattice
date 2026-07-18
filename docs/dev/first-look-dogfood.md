@@ -11,6 +11,20 @@ on BASE commit `f90fb9535cbbd993a6d097c798ce8c710f6025c4`
 | Surface | Vite browser demo (`pnpm --filter @lattice/desktop dev`, fixture `inBrowser`) plus code review / existing unit tests for Tauri-only steps |
 | Method | Fixture + shell code paths under `apps/desktop/src/`; contracts in `docs/39-resource-runtime-contracts.md`; link-repair / batch-move coverage in desktop + `lattice-commands` / `lattice-index` tests. A Playwright dogfood harness was started against `:5173` but did not finish within timeout (shell chrome wait); results below do not depend on that run. |
 
+## Wave 1 landed (relation integrity + batch link-repair)
+
+Subsequent nodes (D0/R1/R2/B1/R3/T1, merged on `main`) closed the gaps called
+out in **Known expected fails** and the punch-list below. Contracts:
+
+- [Data applications — linked records](../10-data-applications-and-airtable-model.md#linked-records) — orphan strip on `RecordDelete`, `relation_targets` + label resolution on all desktop layouts, read-only **Linked from** inbound links in record detail, cross-table relations within a package (`CRM.data` `companies` ↔ `contacts`), template seed id-or-name resolution.
+- [Resource runtime — link repair](../39-resource-runtime-contracts.md#link-repair-review) — single-path and batch move repair in one transaction each; batch multi-select uses `preview_batch_link_repair` / `apply_batch_link_repair`.
+
+The checklist table is unchanged: it records what **failed or was skipped on BASE** at `f90fb95`. Re-run the tour on a current build to refresh pass/fail; do not treat historical **fail** rows as current regressions.
+
+Still deferred after Wave 1: Lookup/Rollup/junction relations, cross-package
+relation links, browser-demo **Save view** / native tree affordances, and a full
+native Tauri dogfood pass for folder undo and trash.
+
 ## Checklist
 
 Home.md items 1–9. Status: **pass** / **fail** / **skip**.
@@ -27,27 +41,29 @@ Home.md items 1–9. Status: **pass** / **fail** / **skip**.
 | 8 | ⌘-click multi-select + drag move | **pass** (selection/move UI) / native batch repair | Tree is `aria-multiselectable`; batch move (2+) previews combined link repair and applies one transaction when accepted. Browser remaps locally; native `preview_batch_link_repair` / `apply_batch_link_repair`. | `ResourceTree.tsx:396`; `useResourceController.ts` batch branch; `docs/39-resource-runtime-contracts.md` |
 | 9 | Multi-select delete + confirm | **pass** (browser local) / **skip** (native trash) | Confirm dialog + batch delete; browser filters snapshot; native `deleteResources` → Trash. Native trash/undo not verified in browser. | `treeActions.ts:83–135` |
 
-## Known expected fails (until later nodes)
+## Known expected fails on BASE (Wave 1 addressed)
 
-These are **not** regressions of BASE; document so Wave 1 does not re-litigate them as tour blockers.
+These were **not** regressions of BASE; they document why the checklist above
+shows **fail** / partial on `f90fb95`. Wave 1 landed the fixes; pointers
+remain for archaeology.
 
-| Issue | Why expected | Pointers |
+| Issue (BASE) | Wave 1 outcome | Pointers |
 | --- | --- | --- |
-| **Batch move skips repair** | Product contract: multi-select moves record N `ResourceMove`s without repair orchestration; single-path repair remains the supported path. | `docs/39-resource-runtime-contracts.md:66–68`; `useResourceController.ts:549–551`, `645` |
-| **List / board show raw relation ids** | List and board subtitle/primary use `cellValueToDisplay`, which joins relation record ids — no label index. Grid can resolve labels when `relation_targets` is present. | `DataListView.tsx:33–38`; `DataBoardView.tsx:59–64`; `types.ts:84` |
-| **`relation_targets` stale / missing** | Snapshot field is optional. Demo fixture omits it entirely. After native `update_record` / `delete_record`, the shell patches `rows` / revision but does **not** refresh `relation_targets`, so pickers and labels can drift until a full `open_data_app` reload. | `demoWorkspace.generated.ts:282–962`; `DataTableView.tsx:275–291`, `438–468`; `data.rs:116–151` (populated only on open snapshot) |
-| **Delete orphans** | `RecordDelete` removes the row; inbound relation cells on other rows are not cascade-cleared. Detail UI can show “missing target row”. | `data.rs:527–554`; `RecordDetailPanel.tsx:271–281` |
+| **Batch move skips repair** | **Landed** — batch preview/apply merges repair into one transaction. | `docs/39-resource-runtime-contracts.md`; `useResourceController.ts` batch branch |
+| **List / board show raw relation ids** | **Landed** — list, board, gallery, and calendar use `formatCellForColumnName` + label index. | `relationDisplay.ts`; `DataListView.tsx`, `DataBoardView.tsx`, etc. |
+| **`relation_targets` stale / missing** | **Landed** — demo seeds include targets; shell syncs after row mutate. | `demoWorkspace.generated.ts`; `DataTableView.tsx`; `data.rs` |
+| **Delete orphans** | **Landed** — `delete_row` strips inbound relation ids; undo restores strips. | `data_app.rs`; `DeletedRowSnapshot` in `lattice-data` |
 
-## Punch-list (Wave 1 priority)
+## Punch-list (Wave 1 — completed vs remaining)
 
-Ordered for First Look dogfood impact (CRM tour + tree honesty).
+Wave 1 (items 1–4, 6) shipped on `main`. Remaining items are post–Wave 1.
 
-1. **P0 — Seed / supply `relation_targets` for CRM demo** so grid + record detail resolve `reports_to` to names on first open (browser + any fixture path). Without this, checklist item 4 fails the “inspect relation” story.
-2. **P0 — Refresh `relation_targets` after row mutations** (`add` / `update` / `delete`) or reload snapshot after mutating relations so labels and pickers stay honest.
-3. **P1 — Relation-aware list / board (and gallery subtitle) display** — reuse `formatRelationCellValue` / label index instead of raw `cellValueToDisplay` for relation columns.
-4. **P1 — Cascade or scrub orphan relation ids on `RecordDelete`** (or surface Inspect dangling refs) so deleting Ada does not leave Grace → ghost id.
+1. ~~**P0 — Seed / supply `relation_targets` for CRM demo**~~ — done (T1).
+2. ~~**P0 — Refresh `relation_targets` after row mutations**~~ — done (R3).
+3. ~~**P1 — Relation-aware list / board (and gallery subtitle) display**~~ — done (R1).
+4. ~~**P1 — Cascade or scrub orphan relation ids on `RecordDelete`**~~ — done (R2).
 5. **P1 — Browser-demo tree affordances** for New Folder / delete when native menus no-op — otherwise checklist 5–6 cannot be dogfooded without Tauri.
-6. **P2 — Batch move link-repair** (or deferred proposals per path) — currently out of scope; keep documented until a dedicated node.
+6. ~~**P2 — Batch move link-repair**~~ — done (B1).
 7. **P2 — Persist Save view in demo or clear CTA** — today the button exists then errors; either hide in `demoMutate` or document “native only” on the control.
 8. **P2 — Native dogfood pass** for folder undo, single-path move+repair, multi-select trash+undo on `nix run .#desktop-dev` / Tauri e2e — still marked skip above.
 
