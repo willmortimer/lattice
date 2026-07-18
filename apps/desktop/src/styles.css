@@ -3315,6 +3315,139 @@ html[data-motion="always"] *::after {
   text-align: center;
 }
 
+.data-form-view {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  gap: 16px;
+  height: 100%;
+  padding: 16px;
+  overflow: auto;
+}
+
+.data-form-create {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius-md);
+  background: var(--lt-bg-raise);
+}
+
+.data-form-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.data-form-title {
+  margin: 0;
+  color: var(--lt-text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.data-form-success {
+  margin: 0;
+  color: var(--lt-text-soft);
+  font-size: 12px;
+}
+
+.data-form-success-link {
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  color: var(--lt-accent-bright);
+  background: transparent;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.data-form-success-link:hover {
+  color: var(--lt-accent);
+}
+
+.data-form-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.data-form-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--lt-line);
+}
+
+.data-form-empty {
+  margin: 0;
+  padding: 24px;
+  color: var(--lt-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.data-form-recent {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius-md);
+  background: var(--lt-panel);
+}
+
+.data-form-recent-title {
+  margin: 0;
+  color: var(--lt-faint);
+  font-family: var(--lt-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.data-form-recent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.data-form-recent-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--lt-radius-sm);
+  background: transparent;
+  color: var(--lt-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.data-form-recent-row:hover {
+  border-color: var(--lt-line);
+  background: var(--lt-hover);
+}
+
+.data-form-recent-label {
+  font-size: 13px;
+}
+
+.data-form-recent-id {
+  color: var(--lt-faint);
+  font-family: var(--lt-font-mono);
+  font-size: 10px;
+}
+
 .record-detail-panel {
   width: min(360px, 38vw);
   flex: 0 0 auto;

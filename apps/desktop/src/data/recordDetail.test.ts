@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import type { DataColumn, DataRow } from "./types";
 import {
   collectDirtyValues,
+  collectFormValues,
   draftFieldErrors,
   draftValuesFromRow,
+  emptyDraftValues,
   fieldEditorKind,
   fieldTypeLabel,
   hasDraftChanges,
@@ -79,6 +81,28 @@ describe("recordDetail helpers", () => {
     expect(draftFieldErrors(draft, columns)).toEqual({
       count: "Enter a whole number",
       due: "Use YYYY-MM-DD",
+    });
+  });
+
+  it("builds create-form drafts and insert payloads", () => {
+    const editable = columns.filter((column) => column.name !== "id");
+    expect(emptyDraftValues(editable)).toEqual({
+      name: "",
+      count: "",
+      active: "false",
+      notes: "",
+      due: "",
+    });
+    expect(
+      collectFormValues(
+        { name: "Grace", count: "2", active: "true", notes: "", due: "2026-07-18" },
+        editable,
+      ),
+    ).toEqual({
+      name: { Text: "Grace" },
+      count: { Integer: 2 },
+      active: { Boolean: true },
+      due: { Date: "2026-07-18" },
     });
   });
 });
