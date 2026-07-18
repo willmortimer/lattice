@@ -102,6 +102,34 @@ Storage remains ordinary SQLite types and tables. Presentation and semantic meta
 
 ## Linked records
 
+### MVP cell shape (Phase 1)
+
+Relation fields are typed in `app.yaml` and stored as JSON TEXT in SQLite—no junction tables in this MVP:
+
+```yaml
+# app.yaml (excerpt)
+tables:
+  contacts:
+    columns:
+      company:
+        type: relation
+        relation_table: companies
+```
+
+```json
+// CellValue over IPC / command payloads (externally tagged)
+{ "Relation": { "record_ids": ["0195f0a2-…", "0195f0a3-…"] } }
+```
+
+```text
+// SQLite TEXT encoding for the same cell
+["0195f0a2-…","0195f0a3-…"]
+```
+
+- `relation_table` names a target table in the same `.data` package.
+- Cells hold zero or more linked record ids; insert/update validates each id exists in the target table.
+- Lookup, Rollup, reverse links, and junction tables remain later work.
+
 Linked-record UX should make relational modeling approachable:
 
 - Search and select related records.
@@ -113,7 +141,7 @@ Linked-record UX should make relational modeling approachable:
 - Traverse relationships in interfaces.
 - Generate relationship diagrams.
 
-Underneath, use foreign keys and junction tables.
+Underneath, use foreign keys and junction tables for richer models over time; the MVP stores multi-record links as JSON TEXT as above.
 
 ## Views
 

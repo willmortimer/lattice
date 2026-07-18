@@ -40,6 +40,9 @@ pub struct TableMeta {
 pub struct ColumnMetaYaml {
     #[serde(rename = "type")]
     pub field_type: FieldType,
+    /// Target table for [`FieldType::Relation`] (same `.data` package).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relation_table: Option<String>,
 }
 
 impl AppManifest {
@@ -100,14 +103,18 @@ impl AppManifest {
             .entry("id".to_string())
             .or_insert(ColumnMetaYaml {
                 field_type: FieldType::Text,
+                relation_table: None,
             });
     }
 
     pub fn field_type_for_column(&self, table: &str, column: &str) -> Option<FieldType> {
+        self.column_yaml(table, column).map(|column_meta| column_meta.field_type)
+    }
+
+    pub fn column_yaml(&self, table: &str, column: &str) -> Option<&ColumnMetaYaml> {
         self.tables
             .get(table)
             .and_then(|table_meta| table_meta.columns.get(column))
-            .map(|column_meta| column_meta.field_type)
     }
 }
 

@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 use crate::app::{app_manifest_path, database_path, schema_path, write_default_view, AppManifest};
 use crate::csv::{cell_from_csv, CsvTable};
 use crate::error::Error;
-use crate::types::{CellValue, ColumnMeta, FieldType, Row};
+use crate::types::{CellValue, ColumnMeta, FieldType, NewColumn, Row};
 use crate::view::{build_view_query, row_from_view_sql, view_path, visible_columns, ViewDef};
 use crate::Result;
 
@@ -112,14 +112,16 @@ impl DataApp {
         let mut columns = Vec::new();
         for row in rows {
             let (name, declared_type) = row?;
-            let field_type = self
-                .manifest
-                .field_type_for_column(table, &name)
+            let yaml = self.manifest.column_yaml(table, &name);
+            let field_type = yaml
+                .map(|column| column.field_type)
                 .unwrap_or_else(|| FieldType::infer_from_sqlite(&declared_type));
+            let relation_table = yaml.and_then(|column| column.relation_table.clone());
             columns.push(ColumnMeta {
                 name,
                 field_type,
                 sqlite_type: declared_type,
+                relation_table,
             });
         }
         Ok(columns)
@@ -179,6 +181,7 @@ impl DataApp {
         let mut values = row.values.clone();
         values.insert("id".to_string(), CellValue::Text(row.id.clone()));
         let column_meta = self.columns(table)?;
+        validate_row_values(&self.conn, table, &column_meta, &values)?;
 
         let (columns, placeholders, sql_params): (Vec<_>, Vec<_>, Vec<_>) = column_meta
             .iter()
@@ -217,6 +220,7 @@ impl DataApp {
 
         let mut insert_values = values.clone();
         insert_values.insert("id".to_string(), CellValue::Text(id.clone()));
+        validate_row_values(&self.conn, table, &column_meta, &insert_values)?;
 
         let (columns, placeholders, sql_params): (Vec<_>, Vec<_>, Vec<_>) = column_meta
             .iter()
@@ -269,7 +273,7 @@ impl DataApp {
         let column_meta = self.columns(table)?;
         let known_columns: BTreeMap<_, _> = column_meta
             .iter()
-            .map(|meta| (meta.name.as_str(), meta.field_type))
+            .map(|meta| (meta.name.as_str(), meta))
             .collect();
 
         for key in values.keys() {
@@ -277,6 +281,8 @@ impl DataApp {
                 return Err(Error::table(table, format!("unknown column {key:?}")));
             }
         }
+
+        validate_row_values(&self.conn, table, &column_meta, values)?;
 
         let assignments: Vec<String> = values.keys().map(|name| format!("{name} = ?")).collect();
         let sql = format!("UPDATE {table} SET {} WHERE id = ?", assignments.join(", "));
@@ -373,7 +379,7 @@ impl DataApp {
     }
 
     /// Add columns and update manifest/schema files. Existing column names are skipped.
-    pub fn add_columns(&mut self, table: &str, columns: &[(&str, FieldType)]) -> Result<()> {
+    pub fn add_columns(&mut self, table: &str, columns: &[NewColumn<'_>]) -> Result<()> {
         validate_identifier(table)?;
         ensure_table_exists(&self.conn, table)?;
 
@@ -383,23 +389,51 @@ impl DataApp {
 
         let existing = self.columns(table)?;
         let table_meta = self.manifest.tables.entry(table.to_string()).or_default();
-        for (name, field_type) in columns {
-            validate_identifier(name)?;
-            if existing.iter().any(|column| column.name == *name) {
+        for column in columns {
+            validate_identifier(column.name)?;
+            if existing.iter().any(|existing| existing.name == column.name) {
                 continue;
             }
 
-            let sqlite_type = field_type.sqlite_type();
-            let alter = format!("ALTER TABLE {table} ADD COLUMN {name} {sqlite_type};\n");
+            let relation_table = match column.field_type {
+                FieldType::Relation => {
+                    let target = column.relation_table.ok_or_else(|| {
+                        Error::table(
+                            table,
+                            format!(
+                                "relation column {:?} requires relation_table",
+                                column.name
+                            ),
+                        )
+                    })?;
+                    validate_identifier(target)?;
+                    ensure_table_exists(&self.conn, target)?;
+                    Some(target.to_string())
+                }
+                _ if column.relation_table.is_some() => {
+                    return Err(Error::table(
+                        table,
+                        format!(
+                            "column {:?} only relation fields may set relation_table",
+                            column.name
+                        ),
+                    ));
+                }
+                _ => None,
+            };
+
+            let sqlite_type = column.field_type.sqlite_type();
+            let alter = format!("ALTER TABLE {table} ADD COLUMN {} {sqlite_type};\n", column.name);
             self.conn
                 .execute_batch(&alter)
                 .map_err(|source| Error::table(table, source.to_string()))?;
             schema_sql.push_str(&alter);
 
             table_meta.columns.insert(
-                (*name).to_string(),
+                column.name.to_string(),
                 crate::app::ColumnMetaYaml {
-                    field_type: *field_type,
+                    field_type: column.field_type,
+                    relation_table,
                 },
             );
         }
@@ -410,13 +444,35 @@ impl DataApp {
         Ok(())
     }
 
+    /// Create an additional table with only an `id` primary key and register it in the manifest.
+    pub fn add_table(&mut self, table_name: &str) -> Result<()> {
+        validate_identifier(table_name)?;
+        if ensure_table_exists(&self.conn, table_name).is_ok() {
+            return Err(Error::table(table_name, "table already exists"));
+        }
+
+        let create_sql = default_table_schema(table_name);
+        self.conn.execute_batch(&create_sql)?;
+
+        let schema_file = schema_path(&self.path);
+        let mut schema_sql = std::fs::read_to_string(&schema_file)
+            .map_err(|source| Error::io(&schema_file, source))?;
+        schema_sql.push_str(&create_sql);
+        std::fs::write(&schema_file, schema_sql)
+            .map_err(|source| Error::io(&schema_file, source))?;
+
+        self.manifest.ensure_default_table(table_name);
+        self.manifest.save(&app_manifest_path(&self.path))?;
+        Ok(())
+    }
+
     /// Add columns inferred from CSV import and update manifest/schema files.
     pub fn add_columns_from_csv(&mut self, table: &str, csv: &CsvTable) -> Result<()> {
-        let columns: Vec<(&str, FieldType)> = csv
+        let columns: Vec<NewColumn<'_>> = csv
             .headers
             .iter()
             .zip(&csv.field_types)
-            .map(|(header, field_type)| (header.as_str(), *field_type))
+            .map(|(header, field_type)| NewColumn::new(header.as_str(), *field_type))
             .collect();
         self.add_columns(table, &columns)
     }
@@ -509,6 +565,85 @@ fn ensure_id_column(conn: &Connection, table: &str) -> Result<()> {
         }
     }
     Err(Error::table(table, "table is missing required id column"))
+}
+
+/// Validate relation cells (and type shape) for the values being written.
+fn validate_row_values(
+    conn: &Connection,
+    table: &str,
+    column_meta: &[ColumnMeta],
+    values: &BTreeMap<String, CellValue>,
+) -> Result<()> {
+    let meta_by_name: BTreeMap<&str, &ColumnMeta> = column_meta
+        .iter()
+        .map(|meta| (meta.name.as_str(), meta))
+        .collect();
+
+    for (name, value) in values {
+        let Some(meta) = meta_by_name.get(name.as_str()) else {
+            continue;
+        };
+        if meta.field_type != FieldType::Relation {
+            continue;
+        }
+        validate_relation_cell(conn, table, meta, value)?;
+    }
+    Ok(())
+}
+
+fn validate_relation_cell(
+    conn: &Connection,
+    table: &str,
+    meta: &ColumnMeta,
+    value: &CellValue,
+) -> Result<()> {
+    let target = meta.relation_table.as_deref().ok_or_else(|| {
+        Error::table(
+            table,
+            format!("relation column {:?} is missing relation_table metadata", meta.name),
+        )
+    })?;
+    validate_identifier(target)?;
+    ensure_table_exists(conn, target)?;
+
+    match value {
+        CellValue::Null => Ok(()),
+        CellValue::Relation { record_ids } => {
+            for record_id in record_ids {
+                if record_id.is_empty() {
+                    return Err(Error::table(
+                        table,
+                        format!(
+                            "relation column {:?} rejects empty record id",
+                            meta.name
+                        ),
+                    ));
+                }
+                let exists: i64 = conn.query_row(
+                    &format!("SELECT COUNT(*) FROM {target} WHERE id = ?1"),
+                    params![record_id],
+                    |row| row.get(0),
+                )?;
+                if exists == 0 {
+                    return Err(Error::table(
+                        table,
+                        format!(
+                            "relation column {:?}: record id {record_id:?} not found in table {target}",
+                            meta.name
+                        ),
+                    ));
+                }
+            }
+            Ok(())
+        }
+        _ => Err(Error::table(
+            table,
+            format!(
+                "column {:?} expects a relation value (JSON record id list)",
+                meta.name
+            ),
+        )),
+    }
 }
 
 fn row_from_sql(row: &rusqlite::Row<'_>, column_meta: &[ColumnMeta]) -> rusqlite::Result<Row> {

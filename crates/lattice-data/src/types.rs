@@ -14,12 +14,17 @@ pub enum FieldType {
     Decimal,
     Boolean,
     Date,
+    /// Multi-record link to another table in the same `.data` package.
+    Relation,
 }
 
 impl FieldType {
     pub fn sqlite_type(self) -> &'static str {
         match self {
-            FieldType::Text | FieldType::LongText | FieldType::Date => "TEXT",
+            FieldType::Text
+            | FieldType::LongText
+            | FieldType::Date
+            | FieldType::Relation => "TEXT",
             FieldType::Integer | FieldType::Boolean => "INTEGER",
             FieldType::Decimal => "REAL",
         }
@@ -46,6 +51,7 @@ impl fmt::Display for FieldType {
             FieldType::Decimal => write!(f, "decimal"),
             FieldType::Boolean => write!(f, "boolean"),
             FieldType::Date => write!(f, "date"),
+            FieldType::Relation => write!(f, "relation"),
         }
     }
 }
@@ -59,6 +65,8 @@ pub enum CellValue {
     Decimal(f64),
     Boolean(bool),
     Date(String),
+    /// Linked record ids; SQLite stores a JSON array of strings as TEXT.
+    Relation { record_ids: Vec<String> },
 }
 
 impl CellValue {
@@ -71,6 +79,11 @@ impl CellValue {
             CellValue::Integer(value) => rusqlite::types::Value::Integer(*value),
             CellValue::Decimal(value) => rusqlite::types::Value::Real(*value),
             CellValue::Boolean(value) => rusqlite::types::Value::Integer(i64::from(*value)),
+            CellValue::Relation { record_ids } => {
+                let encoded = serde_json::to_string(record_ids)
+                    .expect("relation record_ids serialize to JSON");
+                rusqlite::types::Value::Text(encoded)
+            }
         }
     }
 
@@ -80,9 +93,21 @@ impl CellValue {
             ValueRef::Integer(value) => match field_type {
                 FieldType::Boolean => Ok(CellValue::Boolean(value != 0)),
                 FieldType::Date => Ok(CellValue::Date(value.to_string())),
+                FieldType::Relation => Err(rusqlite::Error::InvalidColumnType(
+                    0,
+                    "relation".into(),
+                    value_ref.data_type(),
+                )),
                 _ => Ok(CellValue::Integer(value)),
             },
-            ValueRef::Real(value) => Ok(CellValue::Decimal(value)),
+            ValueRef::Real(value) => match field_type {
+                FieldType::Relation => Err(rusqlite::Error::InvalidColumnType(
+                    0,
+                    "relation".into(),
+                    value_ref.data_type(),
+                )),
+                _ => Ok(CellValue::Decimal(value)),
+            },
             ValueRef::Text(bytes) => {
                 let text = std::str::from_utf8(bytes)
                     .map_err(|_| {
@@ -99,6 +124,17 @@ impl CellValue {
                         text.parse::<f64>().map(CellValue::Decimal).map_err(|_| {
                             rusqlite::Error::InvalidColumnType(0, text, rusqlite::types::Type::Real)
                         })
+                    }
+                    FieldType::Relation => {
+                        let record_ids: Vec<String> =
+                            serde_json::from_str(&text).map_err(|_| {
+                                rusqlite::Error::InvalidColumnType(
+                                    0,
+                                    text,
+                                    rusqlite::types::Type::Text,
+                                )
+                            })?;
+                        Ok(CellValue::Relation { record_ids })
                     }
                     _ => Ok(CellValue::Text(text)),
                 }
@@ -118,6 +154,34 @@ pub struct ColumnMeta {
     pub name: String,
     pub field_type: FieldType,
     pub sqlite_type: String,
+    /// Target table name for [`FieldType::Relation`] within the same package.
+    pub relation_table: Option<String>,
+}
+
+/// Spec for adding a column via [`crate::DataApp::add_columns`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NewColumn<'a> {
+    pub name: &'a str,
+    pub field_type: FieldType,
+    pub relation_table: Option<&'a str>,
+}
+
+impl<'a> NewColumn<'a> {
+    pub fn new(name: &'a str, field_type: FieldType) -> Self {
+        Self {
+            name,
+            field_type,
+            relation_table: None,
+        }
+    }
+
+    pub fn relation(name: &'a str, relation_table: &'a str) -> Self {
+        Self {
+            name,
+            field_type: FieldType::Relation,
+            relation_table: Some(relation_table),
+        }
+    }
 }
 
 /// One row from a data-app table.

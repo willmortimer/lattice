@@ -383,3 +383,143 @@ fn csv_parse_and_import_columns() {
     );
     assert_eq!(rows[0].values.get("count"), Some(&CellValue::Integer(1)));
 }
+
+#[test]
+fn relation_column_validates_target_record_ids() {
+    use crate::NewColumn;
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("CRM.data");
+    let mut app = DataApp::create(&package_path, "CRM", "companies").unwrap();
+    app.add_table("contacts").unwrap();
+    app.add_columns(
+        "contacts",
+        &[
+            NewColumn::new("name", FieldType::Text),
+            NewColumn::relation("company", "companies"),
+        ],
+    )
+    .unwrap();
+
+    let columns = app.columns("contacts").unwrap();
+    let company_col = columns
+        .iter()
+        .find(|column| column.name == "company")
+        .expect("company column");
+    assert_eq!(company_col.field_type, FieldType::Relation);
+    assert_eq!(company_col.relation_table.as_deref(), Some("companies"));
+    assert_eq!(company_col.sqlite_type.to_ascii_uppercase(), "TEXT");
+
+    let manifest_text = std::fs::read_to_string(app_manifest_path(&package_path)).unwrap();
+    assert!(manifest_text.contains("type: relation"));
+    assert!(manifest_text.contains("relation_table: companies"));
+
+    let company_id = app.insert_row("companies", &BTreeMap::new()).unwrap();
+    let other_company_id = app.insert_row("companies", &BTreeMap::new()).unwrap();
+
+    let contact_id = app
+        .insert_row(
+            "contacts",
+            &BTreeMap::from([(
+                "company".into(),
+                CellValue::Relation {
+                    record_ids: vec![company_id.clone(), other_company_id.clone()],
+                },
+            )]),
+        )
+        .unwrap();
+
+    let row = app.get_row("contacts", &contact_id).unwrap().unwrap();
+    assert_eq!(
+        row.values.get("company"),
+        Some(&CellValue::Relation {
+            record_ids: vec![company_id.clone(), other_company_id.clone()],
+        })
+    );
+
+    // SQLite TEXT encoding is a JSON array of ids.
+    let raw: String = rusqlite::Connection::open(database_path(&package_path))
+        .unwrap()
+        .query_row(
+            "SELECT company FROM contacts WHERE id = ?1",
+            rusqlite::params![contact_id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let decoded: Vec<String> = serde_json::from_str(&raw).unwrap();
+    assert_eq!(decoded, vec![company_id.clone(), other_company_id.clone()]);
+
+    let invalid = app.insert_row(
+        "contacts",
+        &BTreeMap::from([(
+            "company".into(),
+            CellValue::Relation {
+                record_ids: vec!["missing-id".into()],
+            },
+        )]),
+    );
+    assert!(invalid
+        .unwrap_err()
+        .to_string()
+        .contains("not found in table companies"));
+
+    let update_ok = app.update_row(
+        "contacts",
+        &contact_id,
+        &BTreeMap::from([(
+            "company".into(),
+            CellValue::Relation {
+                record_ids: vec![other_company_id.clone()],
+            },
+        )]),
+    );
+    assert!(update_ok.is_ok());
+
+    let update_bad = app.update_row(
+        "contacts",
+        &contact_id,
+        &BTreeMap::from([(
+            "company".into(),
+            CellValue::Relation {
+                record_ids: vec!["still-missing".into()],
+            },
+        )]),
+    );
+    assert!(update_bad
+        .unwrap_err()
+        .to_string()
+        .contains("not found in table companies"));
+
+    // Wrong cell shape for a relation column is rejected.
+    let wrong_shape = app.update_row(
+        "contacts",
+        &contact_id,
+        &BTreeMap::from([("company".into(), CellValue::Text("nope".into()))]),
+    );
+    assert!(wrong_shape
+        .unwrap_err()
+        .to_string()
+        .contains("expects a relation value"));
+}
+
+#[test]
+fn relation_column_requires_relation_table_metadata() {
+    use crate::NewColumn;
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("BrokenRel.data");
+    let mut app = DataApp::create(&package_path, "BrokenRel", "items").unwrap();
+    let err = app
+        .add_columns(
+            "items",
+            &[NewColumn {
+                name: "parent",
+                field_type: FieldType::Relation,
+                relation_table: None,
+            }],
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("requires relation_table"));
+}
+
