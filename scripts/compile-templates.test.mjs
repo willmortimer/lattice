@@ -150,6 +150,46 @@ test("template compiler accepts declarative dataPackages", () => {
   assert.equal(templates[0].dataPackages[0].rows.length, 1);
 });
 
+test("template compiler accepts declarative dataPackage views", () => {
+  const templates = compileTemplates(
+    fixture({
+      directories: ["Data"],
+      dataPackages: [
+        {
+          path: "Data/Tasks.data",
+          title: "Tasks",
+          table: "tasks",
+          columns: [
+            { name: "name", type: "text" },
+            { name: "status", type: "text" },
+            { name: "due_date", type: "date" },
+          ],
+          rows: [{ name: "Ship views", status: "Active", due_date: "2026-08-01" }],
+          views: [
+            {
+              name: "Board",
+              layout: "board",
+              group_by: "status",
+              columns: ["name", "status"],
+            },
+            {
+              name: "Calendar",
+              layout: "calendar",
+              date_field: "due_date",
+            },
+          ],
+        },
+      ],
+    }),
+  );
+  const views = templates[0].dataPackages[0].views;
+  assert.equal(views.length, 2);
+  assert.equal(views[0].layout, "board");
+  assert.equal(views[0].group_by, "status");
+  assert.equal(views[1].layout, "calendar");
+  assert.equal(views[1].date_field, "due_date");
+});
+
 test("demo template emits kitchen-sink browser fixture", () => {
   const templates = compileTemplates();
   const demo = templates.find((template) => template.id === "demo");
@@ -245,5 +285,41 @@ test("template compiler rejects invalid dataPackages", () => {
         }),
       ),
     /duplicate destination/,
+  );
+  assert.throws(
+    () =>
+      compileTemplates(
+        fixture({
+          dataPackages: [
+            {
+              path: "Contacts.data",
+              title: "Contacts",
+              table: "contacts",
+              columns: [{ name: "name", type: "text" }],
+              rows: [],
+              views: [{ name: "Board", layout: "board", group_by: "missing" }],
+            },
+          ],
+        }),
+      ),
+    /unknown column/,
+  );
+  assert.throws(
+    () =>
+      compileTemplates(
+        fixture({
+          dataPackages: [
+            {
+              path: "Contacts.data",
+              title: "Contacts",
+              table: "contacts",
+              columns: [{ name: "name", type: "text" }],
+              rows: [],
+              views: [{ name: "Board", layout: "grid", group_by: "name" }],
+            },
+          ],
+        }),
+      ),
+    /only supported for board views/,
   );
 });
