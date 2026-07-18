@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import type { DataColumn, DataRow } from "./types";
 import {
+  coverColumnsForPicker,
+  dateColumnsForPicker,
   groupRowsByCalendarDate,
   groupRowsByColumn,
+  groupableColumnsForPicker,
   isImageCoverValue,
   isImageLikeColumn,
+  layoutFieldPickerSpecs,
+  layoutFieldPickerValue,
   layoutFieldsForSave,
   parseCalendarDate,
   resolveCalendarDateColumn,
@@ -236,5 +241,49 @@ describe("viewLayout helpers", () => {
     expect(
       seedLayoutFieldsForType("board", withPhoto, { groupBy: "active" }),
     ).toEqual({ groupBy: "active" });
+  });
+
+  it("lists picker columns and specs per layout type", () => {
+    const withPhoto: DataColumn[] = [
+      ...columns,
+      { name: "photo", field_type: "text", sqlite_type: "TEXT" },
+      { name: "due_date", field_type: "date", sqlite_type: "TEXT" },
+    ];
+
+    expect(groupableColumnsForPicker(withPhoto).map((column) => column.name)).toEqual([
+      "name",
+      "status",
+      "active",
+      "photo",
+    ]);
+    expect(coverColumnsForPicker(withPhoto).map((column) => column.name)).toEqual([
+      "name",
+      "status",
+      "active",
+      "count",
+      "photo",
+      "due_date",
+    ]);
+    expect(dateColumnsForPicker(withPhoto).map((column) => column.name)).toEqual([
+      "due_date",
+    ]);
+    expect(groupableColumnsForPicker(withPhoto, "count").map((column) => column.name)).toEqual([
+      "count",
+      "name",
+      "status",
+      "active",
+      "photo",
+    ]);
+
+    expect(layoutFieldPickerSpecs("grid", withPhoto, {})).toEqual([]);
+    expect(layoutFieldPickerSpecs("board", withPhoto, {}).map((picker) => picker.kind)).toEqual([
+      "groupBy",
+    ]);
+    expect(layoutFieldPickerSpecs("gallery", withPhoto, {})[0]?.options).toHaveLength(6);
+    expect(layoutFieldPickerSpecs("calendar", withPhoto, {})[0]?.label).toBe("Date");
+
+    const seeded = seedLayoutFieldsForType("board", withPhoto, {});
+    expect(layoutFieldPickerValue("groupBy", seeded)).toBe("status");
+    expect(layoutFieldPickerValue("coverField", { coverField: "photo" })).toBe("photo");
   });
 });

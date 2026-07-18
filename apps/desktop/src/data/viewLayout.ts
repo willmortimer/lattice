@@ -99,6 +99,134 @@ export function seedLayoutFieldsForType(
 
 const GROUPABLE_FIELD_TYPES = new Set(["text", "boolean"]);
 
+export type LayoutFieldPickerKind = "groupBy" | "coverField" | "dateField";
+
+export interface LayoutFieldPickerSpec {
+  kind: LayoutFieldPickerKind;
+  label: string;
+  ariaLabel: string;
+  options: DataColumn[];
+}
+
+function columnsMatchingPicker(
+  columns: DataColumn[],
+  predicate: (column: DataColumn) => boolean,
+  explicit?: string | null,
+): DataColumn[] {
+  const matches = columns.filter((column) => column.name !== "id" && predicate(column));
+  if (explicit && !matches.some((column) => column.name === explicit)) {
+    const extra = columns.find((column) => column.name === explicit);
+    if (extra) {
+      return [extra, ...matches];
+    }
+  }
+  return matches;
+}
+
+/** Columns eligible for board `group_by` picker. */
+export function groupableColumnsForPicker(
+  columns: DataColumn[],
+  explicit?: string | null,
+): DataColumn[] {
+  return columnsMatchingPicker(
+    columns,
+    (column) => GROUPABLE_FIELD_TYPES.has(column.field_type),
+    explicit,
+  );
+}
+
+/** Columns eligible for gallery `cover_field` picker. */
+export function coverColumnsForPicker(
+  columns: DataColumn[],
+  explicit?: string | null,
+): DataColumn[] {
+  return columnsMatchingPicker(columns, () => true, explicit);
+}
+
+/** Columns eligible for calendar `date_field` picker. */
+export function dateColumnsForPicker(
+  columns: DataColumn[],
+  explicit?: string | null,
+): DataColumn[] {
+  return columnsMatchingPicker(
+    columns,
+    (column) =>
+      column.field_type === "date" || DATE_LIKE_COLUMN_PATTERN.test(column.name),
+    explicit,
+  );
+}
+
+/** Active layout field pickers for the toolbar (empty when layout has no layout field). */
+export function layoutFieldPickerSpecs(
+  layoutType: ViewLayoutType,
+  columns: DataColumn[],
+  current: {
+    groupBy?: string;
+    coverField?: string;
+    dateField?: string;
+  },
+): LayoutFieldPickerSpec[] {
+  switch (layoutType) {
+    case "grid":
+    case "list":
+    case "form":
+      return [];
+    case "board":
+      return [
+        {
+          kind: "groupBy",
+          label: "Group by",
+          ariaLabel: "Board group by column",
+          options: groupableColumnsForPicker(columns, current.groupBy),
+        },
+      ];
+    case "gallery":
+      return [
+        {
+          kind: "coverField",
+          label: "Cover",
+          ariaLabel: "Gallery cover column",
+          options: coverColumnsForPicker(columns, current.coverField),
+        },
+      ];
+    case "calendar":
+      return [
+        {
+          kind: "dateField",
+          label: "Date",
+          ariaLabel: "Calendar date column",
+          options: dateColumnsForPicker(columns, current.dateField),
+        },
+      ];
+    default: {
+      const _exhaustive: never = layoutType;
+      return _exhaustive;
+    }
+  }
+}
+
+export function layoutFieldPickerValue(
+  kind: LayoutFieldPickerKind,
+  fields: {
+    groupBy?: string;
+    coverField?: string;
+    dateField?: string;
+  },
+): string | undefined {
+  switch (kind) {
+    case "groupBy":
+      return fields.groupBy;
+    case "coverField":
+      return fields.coverField;
+    case "dateField":
+      return fields.dateField;
+    default: {
+      const _exhaustive: never = kind;
+      return _exhaustive;
+    }
+  }
+}
+
 const ISO_DATE_PREFIX = /^(\d{4}-\d{2}-\d{2})/;
 
 const DATE_LIKE_COLUMN_PATTERN =
