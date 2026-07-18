@@ -23,7 +23,7 @@ export interface ResourceRendererContext {
     onKeepIncoming: () => void;
     onKeepLocal: () => void;
     onKeepBoth: () => void;
-    onOpenFile: (path: string) => void;
+    onOpenFile: (path: string, subpath?: string) => void;
     onOpenExternally?: (resource: Resource) => void;
   };
   missingCapabilities?: readonly string[];

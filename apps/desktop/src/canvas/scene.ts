@@ -12,7 +12,7 @@ const CARD_RADIUS = 8;
 const CARD_PADDING = 12;
 
 interface CanvasSceneOptions {
-  onOpenFile: (path: string) => void;
+  onOpenFile: (path: string, subpath?: string) => void;
   onSelectNode?: (id: string | null) => void;
   onMoveNodes?: (nodes: CanvasNodeMove[]) => void;
   onRemoveNodes?: (nodeIds: string[]) => void;
@@ -409,7 +409,7 @@ export class CanvasScene {
     this.lastTapAt.set(node.id, now);
     if (now - last < DOUBLE_CLICK_MS) {
       this.lastTapAt.delete(node.id);
-      this.options.onOpenFile(node.file);
+      this.options.onOpenFile(node.file, node.subpath);
     }
   }
 

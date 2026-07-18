@@ -13,6 +13,7 @@ import type { DataAppSnapshot } from "../data/types";
 import type { OpenResourceSession } from "../resourceSession";
 import type { Resource, WorkspaceSnapshot } from "../types";
 import { inBrowser } from "../demo";
+import { viewNameFromCanvasSubpath } from "../canvas/dataViewSubpath";
 
 function dirnameOf(path: string): string {
   const slash = path.lastIndexOf("/");
@@ -47,7 +48,7 @@ export interface DesktopActionsOptions {
   setRevealPath: (path: string | null) => void;
   setLinkPicker: (picker: { query: string; candidates: ResourceLinkTarget[] } | null) => void;
   refreshResources: () => Promise<void>;
-  handleSelect: (resource: Resource, options?: { recordHistory?: boolean }) => Promise<void>;
+  handleSelect: (resource: Resource, options?: { recordHistory?: boolean; viewName?: string }) => Promise<void>;
   openCreatedResource: (resource: Resource, session: OpenResourceSession) => void;
   reconcilePathRemaps?: (remaps: { from: string; to: string }[]) => Promise<void>;
 }
@@ -254,9 +255,11 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
     }
   }, [createAndOpenPage, openLinkTarget, pageRef, setError, setLinkPicker, snapshot, wikiTargets]);
 
-  const handleOpenFile = useCallback((path: string) => {
+  const handleOpenFile = useCallback((path: string, subpath?: string) => {
     const resource = snapshot?.resources.find((entry) => entry.path === path);
-    if (resource) void handleSelect(resource);
+    if (!resource) return;
+    const viewName = viewNameFromCanvasSubpath(subpath) ?? undefined;
+    void handleSelect(resource, viewName ? { viewName } : undefined);
   }, [handleSelect, snapshot]);
 
   const updateWorkspaceSettings = useCallback((next: { capabilities: string[]; quickNoteDirectory: string }) => {

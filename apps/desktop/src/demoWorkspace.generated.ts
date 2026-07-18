@@ -190,9 +190,9 @@ export const demoCanvas = {
       "type": "text",
       "x": 60,
       "y": 60,
-      "width": 280,
-      "height": 140,
-      "text": "First Look canvas — double-click file nodes. Links mirror Home.md tour."
+      "width": 300,
+      "height": 160,
+      "text": "First Look canvas — double-click file nodes. CRM nodes open saved Board/Gallery views via subpath."
     },
     {
       "id": "vision",
@@ -240,13 +240,60 @@ export const demoCanvas = {
       "height": 120
     },
     {
-      "id": "crm",
+      "id": "crm-board-label",
+      "type": "text",
+      "x": 900,
+      "y": 60,
+      "width": 120,
+      "height": 40,
+      "text": "CRM Board view"
+    },
+    {
+      "id": "crm-board",
       "type": "file",
       "file": "CRM.data",
-      "x": 920,
-      "y": 120,
+      "subpath": "views/Board",
+      "x": 900,
+      "y": 100,
       "width": 200,
       "height": 100
+    },
+    {
+      "id": "crm-gallery-label",
+      "type": "text",
+      "x": 1120,
+      "y": 60,
+      "width": 130,
+      "height": 40,
+      "text": "CRM Gallery view"
+    },
+    {
+      "id": "crm-gallery",
+      "type": "file",
+      "file": "CRM.data",
+      "subpath": "views/Gallery.yaml",
+      "x": 1120,
+      "y": 100,
+      "width": 200,
+      "height": 100
+    },
+    {
+      "id": "crm-notebook-label",
+      "type": "text",
+      "x": 900,
+      "y": 240,
+      "width": 200,
+      "height": 40,
+      "text": "CRM exploration notebook"
+    },
+    {
+      "id": "crm-notebook",
+      "type": "file",
+      "file": "Notebooks/CRM exploration.ipynb",
+      "x": 900,
+      "y": 280,
+      "width": 240,
+      "height": 120
     }
   ],
   "edges": [
@@ -278,7 +325,17 @@ export const demoCanvas = {
     {
       "id": "e6",
       "fromNode": "long-read",
-      "toNode": "crm"
+      "toNode": "crm-board"
+    },
+    {
+      "id": "e7",
+      "fromNode": "crm-board",
+      "toNode": "crm-gallery"
+    },
+    {
+      "id": "e8",
+      "fromNode": "crm-board",
+      "toNode": "crm-notebook"
     }
   ]
 };
