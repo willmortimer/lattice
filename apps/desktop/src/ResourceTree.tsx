@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from "react";
 
 import { fileTitle } from "./controllers/useResourceController";
 import { KindMark, KIND_LABELS } from "./KindMark";
@@ -10,17 +10,22 @@ import {
   RESOURCE_TREE_ROW_HEIGHT,
   type FlatRow,
 } from "./lib/resourceTree";
-import { validateMoveResource } from "./lib/treeOps";
+import { nextTreeSelection, pathsForTreeDrag, type TreeSelectMode } from "./lib/treeSelection";
+import { validateMoveResources } from "./lib/treeOps";
 import type { Resource } from "./types";
 
 interface ResourceTreeProps {
   resources: readonly Resource[];
-  selectedPath: string | null;
-  onSelect: (resource: Resource) => void;
+  selectedPaths: ReadonlySet<string>;
+  onTreeSelect: (detail: {
+    paths: ReadonlySet<string>;
+    primary: Resource | null;
+    open: boolean;
+  }) => void;
   onResourceContextMenu?: (resource: Resource) => void;
   onFolderContextMenu?: (folderPath: string) => void;
   onRename?: (resource: Resource, title: string) => Promise<void>;
-  onMoveToFolder?: (from: string, toDir: string) => void;
+  onMoveToFolder?: (fromPaths: readonly string[], toDir: string) => void;
   renameRequest?: { path: string; token: number } | null;
   revealPath?: string | null;
   /** Optional path → purpose hints from the active template catalog. */
@@ -46,14 +51,20 @@ function ResourceTreeRowIcon({ resource }: { resource: Resource }) {
   return <Icon size={TREE_ICON_SIZE} weight="regular" className="resource-tree-icon" aria-hidden />;
 }
 
+function selectModeFromEvent(event: MouseEvent): TreeSelectMode {
+  if (event.shiftKey) return "range";
+  if (event.metaKey || event.ctrlKey) return "toggle";
+  return "replace";
+}
+
 function acceptsResourceDrop(
   event: DragEvent,
   resources: readonly Resource[],
-  from: string,
+  fromPaths: readonly string[],
   toDir: string,
 ): boolean {
   if (!event.dataTransfer.types.includes("application/x-lattice-resource")) return false;
-  return validateMoveResource(from, toDir, resources).ok;
+  return validateMoveResources(fromPaths, toDir, resources).ok;
 }
 
 function useResourceListScroll() {
@@ -100,11 +111,14 @@ function useResourceListScroll() {
  *
  * Visible rows are flattened and windowed so large workspaces only mount
  * rows near the `.resource-list` scroll viewport.
+ *
+ * Multi-select: plain click replaces; ⌘/Ctrl-click toggles; Shift-click
+ * selects a contiguous range of visible file rows.
  */
 export function ResourceTree({
   resources,
-  selectedPath,
-  onSelect,
+  selectedPaths,
+  onTreeSelect,
   onResourceContextMenu,
   onFolderContextMenu,
   onRename,
@@ -120,11 +134,18 @@ export function ResourceTree({
   const [editingPath, setEditingPath] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [dropTargetPath, setDropTargetPath] = useState<string | null>(null);
+  const selectionAnchorRef = useRef<string | null>(null);
+  const selectedPathsRef = useRef(selectedPaths);
+  selectedPathsRef.current = selectedPaths;
   const collapsed = collapsedPaths ?? localCollapsed;
   const { rootRef, scrollParentRef, scrollTop, viewportHeight } = useResourceListScroll();
 
   const tree = useMemo(() => buildResourceTree(resources), [resources]);
   const rows = useMemo(() => flattenVisibleTree(tree, collapsed), [collapsed, tree]);
+  const visibleFilePaths = useMemo(
+    () => rows.filter((row) => row.type === "file").map((row) => row.path),
+    [rows],
+  );
 
   const firstVisible = Math.max(0, Math.floor(scrollTop / RESOURCE_TREE_ROW_HEIGHT) - OVERSCAN);
   const lastVisible = Math.min(
@@ -210,10 +231,33 @@ export function ResourceTree({
     setRenameDraft(fileTitle(resource.path));
   }
 
+  function handleFileClick(event: MouseEvent, resource: Resource) {
+    const mode = selectModeFromEvent(event);
+    const result = nextTreeSelection({
+      previous: selectedPaths,
+      anchor: selectionAnchorRef.current,
+      clicked: resource.path,
+      visibleFilePaths,
+      mode,
+    });
+    selectionAnchorRef.current = result.anchor;
+    const open = mode !== "toggle" || result.selected.has(resource.path);
+    onTreeSelect({
+      paths: result.selected,
+      primary: result.selected.has(resource.path) ? resource : null,
+      open,
+    });
+  }
+
+  function dragPathsFor(from: string): string[] {
+    return pathsForTreeDrag(from, selectedPathsRef.current);
+  }
+
   function handleFolderDragOver(event: DragEvent, folderPath: string) {
     const payload = readResourceDragPayload(event.dataTransfer);
     if (!payload) return;
-    if (!acceptsResourceDrop(event, resources, payload.path, folderPath)) return;
+    const fromPaths = dragPathsFor(payload.path);
+    if (!acceptsResourceDrop(event, resources, fromPaths, folderPath)) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     setDropTargetPath(folderPath);
@@ -224,8 +268,9 @@ export function ResourceTree({
     setDropTargetPath(null);
     const payload = readResourceDragPayload(event.dataTransfer);
     if (!payload) return;
-    if (!validateMoveResource(payload.path, folderPath, resources).ok) return;
-    onMoveToFolder?.(payload.path, folderPath);
+    const fromPaths = dragPathsFor(payload.path);
+    if (!validateMoveResources(fromPaths, folderPath, resources).ok) return;
+    onMoveToFolder?.(fromPaths, folderPath);
   }
 
   function renderRow(row: FlatRow, index: number) {
@@ -238,23 +283,33 @@ export function ResourceTree({
     if (row.type === "file") {
       const { resource } = row;
       const isEditing = editingPath === resource.path;
+      const isSelected = selectedPaths.has(resource.path);
       return (
         <button
           key={`file:${resource.path}`}
           className={
             "resource-item resource-tree-row"
-            + (selectedPath === resource.path ? " resource-item-active" : "")
+            + (isSelected ? " resource-item-active" : "")
           }
           style={style}
           aria-label={`${KIND_LABELS[resource.kind]}: ${resource.path}`}
+          aria-selected={isSelected}
           title={resource.path}
           draggable={!isEditing}
           onDragStart={(event) => {
             writeResourceDragPayload(event.dataTransfer, resource);
           }}
-          onClick={() => onSelect(resource)}
+          onClick={(event) => handleFileClick(event, resource)}
           onContextMenu={(event) => {
             event.preventDefault();
+            if (!selectedPaths.has(resource.path)) {
+              selectionAnchorRef.current = resource.path;
+              onTreeSelect({
+                paths: new Set([resource.path]),
+                primary: resource,
+                open: true,
+              });
+            }
             onResourceContextMenu?.(resource);
           }}
         >
@@ -338,7 +393,7 @@ export function ResourceTree({
   }
 
   return (
-    <div ref={rootRef} className="resource-tree-virtual">
+    <div ref={rootRef} className="resource-tree-virtual" role="tree" aria-multiselectable="true">
       <div
         className="resource-tree-virtual-spacer"
         style={{ height: rows.length * RESOURCE_TREE_ROW_HEIGHT }}

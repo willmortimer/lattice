@@ -307,7 +307,7 @@ export function useDesktopController() {
   resourceResetRef.current = resourceController.resetResources;
   resourceSelectRef.current = resourceController.handleSelect;
   resourceClearRef.current = resourceController.clearSelection;
-  const { selected, session, pageRef, currentPageRevisionRef, reloadToken, handleSelect } = resourceController;
+  const { selected, selectedPaths, session, pageRef, currentPageRevisionRef, reloadToken, handleSelect } = resourceController;
   const page = session?.kind === "page" ? session : null;
   useEffect(() => { selectedRef.current = selected; }, [selected]);
   const profileNotices = [runtimeNotice, ...profile.notices]
@@ -411,8 +411,9 @@ export function useDesktopController() {
     refreshResources,
     handleSelect,
     renameResource: resourceController.renameResource,
-    moveResourceToFolder: resourceController.moveResourceToFolder,
-    clearSelectionIf: resourceController.clearSelectionIf,
+    moveResourcesToFolder: resourceController.moveResourcesToFolder,
+    selectedPaths,
+    clearSelectionPaths: resourceController.clearSelectionPaths,
     removeTabs: navigationController.removeTabs,
     createAndOpenPage,
     requestTreeRename,
@@ -659,7 +660,7 @@ export function useDesktopController() {
   }, [settings.keybindings]);
 
   return {
-    profile, profileReady, settings, startup, snapshot, snapshotRef, selected, session, error, busy, saveState,
+    profile, profileReady, settings, startup, snapshot, snapshotRef, selected, selectedPaths, session, error, busy, saveState,
     externalConflict, reloadToken, newWorkspaceOpen, workspacesDir, templates, statusToast, runtimeNotice,
     profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth, treeCollapsedPaths, revealPath, linkPicker,
     linkRepairReview, handleLinkRepairAccept, handleLinkRepairDefer,
@@ -673,6 +674,7 @@ export function useDesktopController() {
     setStatusToast, applyThemeCatalog, rememberWorkspace, clearRecents, resetSettings, handleGetStarted,
     handleOpenWorkspace, openRecent, handleCreateWorkspace, openNewWorkspaceDialog, pickWorkspaceFolder,
     handleNewPage, handleQuickNote, handleNewTable, handleImportCsv, handleUndo, handleSelect,
+    applyTreeSelection: resourceController.applyTreeSelection,
     handleOpenExternally, handleOpenFile, handleImportEditorAsset,
     navigateHistory: navigationController.navigateHistory,
     closeTab: navigationController.closeTab,

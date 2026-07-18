@@ -65,3 +65,38 @@ export function validateMoveResource(
   }
   return { ok: true, destination };
 }
+
+export type MoveResourcesValidation =
+  | { ok: true; destinations: string[] }
+  | { ok: false; reason: string };
+
+/**
+ * Validate a batch move into one folder. Destinations are checked against the
+ * workspace plus other batch destinations so two files with the same basename
+ * cannot collide mid-batch.
+ */
+export function validateMoveResources(
+  fromPaths: readonly string[],
+  toDir: string,
+  resources: readonly Resource[],
+): MoveResourcesValidation {
+  const unique = [...new Set(fromPaths.map((path) => path.trim()).filter(Boolean))];
+  if (unique.length === 0) {
+    return { ok: false, reason: "Nothing to move." };
+  }
+
+  const reserved = new Set(resources.map((resource) => resource.path));
+  const destinations: string[] = [];
+
+  for (const from of unique) {
+    const validation = validateMoveResource(from, toDir, resources);
+    if (!validation.ok) return validation;
+    if (reserved.has(validation.destination)) {
+      return { ok: false, reason: `${validation.destination} already exists.` };
+    }
+    reserved.add(validation.destination);
+    destinations.push(validation.destination);
+  }
+
+  return { ok: true, destinations };
+}

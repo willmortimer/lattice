@@ -6,7 +6,7 @@ import { createDemoPageIO, createNativePageIO } from "../editor/pageIO";
 import { readNativeCanvas } from "../canvas/adapter";
 import { previewLinkRepair, type LinkRepairPlan } from "../lib/linkRepair";
 import { applyPathRemaps, type PathRemap } from "../lib/pathRemap";
-import { moveResource } from "../lib/resourceMutations";
+import { moveResource, moveResources } from "../lib/resourceMutations";
 import { destinationPath } from "../lib/treeOps";
 import type { OpenResourceSession } from "../resourceSession";
 import { deriveResourceFormatId } from "../resourceRendererRegistry";
@@ -40,22 +40,30 @@ export interface ResourceControllerOptions {
 
 export interface ResourceController {
   selected: Resource | null;
+  selectedPaths: ReadonlySet<string>;
   setSelected: Dispatch<SetStateAction<Resource | null>>;
   session: OpenResourceSession | null;
   setSession: Dispatch<SetStateAction<OpenResourceSession | null>>;
   pageRef: MutableRefObject<Extract<OpenResourceSession, { kind: "page" }> | null>;
   currentPageRevisionRef: MutableRefObject<string | null>;
   reloadToken: number;
-  handleSelect: (resource: Resource, options?: { recordHistory?: boolean }) => Promise<void>;
+  handleSelect: (resource: Resource, options?: { recordHistory?: boolean; syncTreeSelection?: boolean }) => Promise<void>;
+  applyTreeSelection: (detail: {
+    paths: ReadonlySet<string>;
+    primary: Resource | null;
+    open: boolean;
+  }) => void;
   reloadPageFromDisk: () => Promise<void>;
   applyPageContent: (raw: string, revision: string | null) => void;
   saveLocalPage: (raw: string) => Promise<void>;
   openCreatedResource: (resource: Resource, session: OpenResourceSession) => void;
   clearSelection: () => void;
   clearSelectionIf: (path: string) => void;
+  clearSelectionPaths: (paths: readonly string[]) => void;
   commitTitle: (title: string) => Promise<void>;
   renameResource: (resource: Resource, title: string) => Promise<void>;
   moveResourceToFolder: (from: string, toDir: string) => Promise<void>;
+  moveResourcesToFolder: (fromPaths: readonly string[], toDir: string) => Promise<void>;
   reconcilePathRemaps: (remaps: PathRemap[]) => Promise<void>;
   resetResources: () => void;
 }
@@ -85,6 +93,7 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     onReplaceTab, onReplaceHistoryPath, refreshResources, onPageReady, onLinkRepairReview,
   } = options;
   const [selected, setSelected] = useState<Resource | null>(null);
+  const [selectedPaths, setSelectedPaths] = useState<ReadonlySet<string>>(() => new Set());
   const [session, setSession] = useState<OpenResourceSession | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const pageRef = useRef<Extract<OpenResourceSession, { kind: "page" }> | null>(null);
@@ -116,6 +125,7 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     pageRef.current = null;
     currentPageRevisionRef.current = null;
     setSelected(null);
+    setSelectedPaths(new Set());
     setSession(null);
     setReloadToken(0);
   }, [resetLoad]);
@@ -125,8 +135,25 @@ export function useResourceController(options: ResourceControllerOptions): Resou
   }, [resetResources]);
 
   const clearSelectionIf = useCallback((path: string) => {
+    setSelectedPaths((previous) => {
+      const next = new Set(
+        [...previous].filter((entry) => entry !== path && !entry.startsWith(`${path}/`)),
+      );
+      return next.size === previous.size ? previous : next;
+    });
     const current = selectedRef.current;
     if (current && (current.path === path || current.path.startsWith(`${path}/`))) clearSelection();
+  }, [clearSelection]);
+
+  const clearSelectionPaths = useCallback((paths: readonly string[]) => {
+    if (paths.length === 0) return;
+    const doomed = new Set(paths);
+    setSelectedPaths((previous) => {
+      const next = new Set([...previous].filter((entry) => !doomed.has(entry)));
+      return next.size === previous.size ? previous : next;
+    });
+    const current = selectedRef.current;
+    if (current && doomed.has(current.path)) clearSelection();
   }, [clearSelection]);
 
   const openCreatedResource = useCallback((resource: Resource, nextSession: OpenResourceSession) => {
@@ -136,6 +163,7 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     pageRef.current = nextSession.kind === "page" ? nextSession : null;
     currentPageRevisionRef.current = nextSession.kind === "page" ? nextSession.revision : null;
     setSelected(resource);
+    setSelectedPaths(new Set([resource.path]));
     setSession(nextSession);
     setReloadToken((token) => token + 1);
     onOpenTab(resource);
@@ -144,7 +172,10 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     onSelectionChanged();
   }, [onActivity, onOpenTab, onSelectionChanged, onTitle, resetLoad]);
 
-  const handleSelect = useCallback(async (resource: Resource, selectionOptions: { recordHistory?: boolean } = {}) => {
+  const handleSelect = useCallback(async (
+    resource: Resource,
+    selectionOptions: { recordHistory?: boolean; syncTreeSelection?: boolean } = {},
+  ) => {
     const workspace = snapshotRef.current ?? snapshot;
     if (resource.kind === "folder") return;
     const ticket = beginLoad();
@@ -156,6 +187,9 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     pageRef.current = null;
     currentPageRevisionRef.current = null;
     setSelected(resource);
+    if (selectionOptions.syncTreeSelection !== false) {
+      setSelectedPaths(new Set([resource.path]));
+    }
     onTitle(fileTitle(resource.path));
     onError(null);
     setSession(null);
@@ -315,6 +349,17 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     }
   }, [beginLoad, hasCapability, isCurrentLoad, onActivity, onBusy, onError, onOpenTab, onPageReady, onRecordNavigation, onSelectionChanged, onTitle, resetLoad, snapshot, snapshotRef]);
 
+  const applyTreeSelection = useCallback((detail: {
+    paths: ReadonlySet<string>;
+    primary: Resource | null;
+    open: boolean;
+  }) => {
+    setSelectedPaths(detail.paths);
+    if (detail.open && detail.primary) {
+      void handleSelect(detail.primary, { syncTreeSelection: false });
+    }
+  }, [handleSelect]);
+
   const reloadPageFromDisk = useCallback(async () => {
     const current = pageRef.current;
     if (!current) return;
@@ -375,6 +420,12 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     }
     onReplaceHistoryPath(from, to);
 
+    setSelectedPaths((previous) => {
+      if (previous.size === 0) return previous;
+      const next = new Set([...previous].map((path) => applyPathRemaps(path, [{ from, to }])));
+      return next;
+    });
+
     const selected = selectedRef.current;
     if (!selected || !remappedSelectedPath || remappedSelectedPath === selected.path) return;
 
@@ -385,7 +436,7 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     setSelected(resolved);
     selectedRef.current = resolved;
     onTitle(fileTitle(resolved.path));
-    await handleSelect(resolved, { recordHistory: false });
+    await handleSelect(resolved, { recordHistory: false, syncTreeSelection: false });
   }, [handleSelect, onReplaceHistoryPath, onReplaceTab, onTitle, snapshotRef]);
 
   const reconcilePathRemaps = useCallback(async (remaps: PathRemap[]) => {
@@ -401,6 +452,12 @@ export function useResourceController(options: ResourceControllerOptions): Resou
       onReplaceHistoryPath(remap.from, remap.to);
     }
 
+    setSelectedPaths((previous) => {
+      if (previous.size === 0) return previous;
+      const next = new Set([...previous].map((path) => applyPathRemaps(path, remaps)));
+      return next;
+    });
+
     const selected = selectedRef.current;
     if (!selected) return;
     const remapped = applyPathRemaps(selected.path, remaps);
@@ -411,7 +468,7 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     setSelected(resolved);
     selectedRef.current = resolved;
     onTitle(fileTitle(resolved.path));
-    await handleSelect(resolved, { recordHistory: false });
+    await handleSelect(resolved, { recordHistory: false, syncTreeSelection: false });
   }, [handleSelect, onReplaceHistoryPath, onReplaceTab, onTitle, snapshotRef]);
 
   const renameResource = useCallback(async (resource: Resource, title: string) => {
@@ -488,14 +545,80 @@ export function useResourceController(options: ResourceControllerOptions): Resou
    * and `apply_link_repair` prepends ResourceRename(from, destination) — same
    * filesystem rename as ResourceMove, without double-applying a prior move.
    * Pure moves (no candidates) still use ResourceMove for honest history.
+   *
+   * Batch moves (2+) skip link-repair orchestration and record one transaction
+   * of N ResourceMove commands. Full batch rename repair is out of scope;
+   * single-path repair remains the supported path.
    */
-  const moveResourceToFolder = useCallback(async (from: string, toDir: string) => {
+  const moveResourcesToFolder = useCallback(async (fromPaths: readonly string[], toDir: string) => {
     const current = snapshotRef.current ?? snapshot;
     if (!current) return;
-    const destination = destinationPath(from, toDir);
-    const resource = current.resources.find((entry) => entry.path === from);
-    if (!resource || destination === from) return;
-    const nextResource = { ...resource, path: destination };
+    const unique = [...new Set(fromPaths.map((path) => path.trim()).filter(Boolean))];
+    if (unique.length === 0) return;
+
+    if (unique.length === 1) {
+      const from = unique[0];
+      const destination = destinationPath(from, toDir);
+      const resource = current.resources.find((entry) => entry.path === from);
+      if (!resource || destination === from) return;
+      const nextResource = { ...resource, path: destination };
+
+      if (inBrowser) {
+        setSnapshot((workspace) => {
+          if (!workspace) return workspace;
+          return {
+            ...workspace,
+            resources: workspace.resources.map((entry) => {
+              if (entry.path === from) return { ...entry, path: destination };
+              if (entry.path.startsWith(`${from}/`)) {
+                return { ...entry, path: destination + entry.path.slice(from.length) };
+              }
+              return entry;
+            }),
+          };
+        });
+        setSelectedPaths((previous) => {
+          const next = new Set([...previous].map((path) => applyPathRemaps(path, [{ from, to: destination }])));
+          return next;
+        });
+        await reconcileAfterPathChange(from, destination, nextResource);
+        return;
+      }
+
+      onBusy(true);
+      try {
+        const plan = await previewLinkRepair(current.root, from, destination, "lattice-rename");
+        if (plan.candidates.length > 0) {
+          const decision = await onLinkRepairReview({
+            plan,
+            from,
+            to: destination,
+            mode: "lattice-rename",
+          });
+          if (decision === "cancelled") return;
+        } else {
+          await moveResource(current.root, from, toDir);
+        }
+        await refreshResources();
+        const refreshed = snapshotRef.current;
+        const moved = refreshed?.resources.find((entry) => entry.path === destination) ?? nextResource;
+        setSelectedPaths((previous) => {
+          const next = new Set([...previous].map((path) => applyPathRemaps(path, [{ from, to: destination }])));
+          return next;
+        });
+        await reconcileAfterPathChange(from, destination, moved);
+      } catch (error) {
+        onError(String(error));
+      } finally {
+        onBusy(false);
+      }
+      return;
+    }
+
+    const remaps: PathRemap[] = unique.map((from) => ({
+      from,
+      to: destinationPath(from, toDir),
+    }));
 
     if (inBrowser) {
       setSnapshot((workspace) => {
@@ -503,36 +626,26 @@ export function useResourceController(options: ResourceControllerOptions): Resou
         return {
           ...workspace,
           resources: workspace.resources.map((entry) => {
-            if (entry.path === from) return { ...entry, path: destination };
-            if (entry.path.startsWith(`${from}/`)) {
-              return { ...entry, path: destination + entry.path.slice(from.length) };
+            for (const remap of remaps) {
+              if (entry.path === remap.from) return { ...entry, path: remap.to };
+              if (entry.path.startsWith(`${remap.from}/`)) {
+                return { ...entry, path: remap.to + entry.path.slice(remap.from.length) };
+              }
             }
             return entry;
           }),
         };
       });
-      await reconcileAfterPathChange(from, destination, nextResource);
+      await reconcilePathRemaps(remaps);
       return;
     }
 
     onBusy(true);
     try {
-      const plan = await previewLinkRepair(current.root, from, destination, "lattice-rename");
-      if (plan.candidates.length > 0) {
-        const decision = await onLinkRepairReview({
-          plan,
-          from,
-          to: destination,
-          mode: "lattice-rename",
-        });
-        if (decision === "cancelled") return;
-      } else {
-        await moveResource(current.root, from, toDir);
-      }
+      // Batch link-repair is out of scope; best-effort is single-path only above.
+      await moveResources(current.root, unique, toDir);
       await refreshResources();
-      const refreshed = snapshotRef.current;
-      const moved = refreshed?.resources.find((entry) => entry.path === destination) ?? nextResource;
-      await reconcileAfterPathChange(from, destination, moved);
+      await reconcilePathRemaps(remaps);
     } catch (error) {
       onError(String(error));
     } finally {
@@ -543,11 +656,16 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     onError,
     onLinkRepairReview,
     reconcileAfterPathChange,
+    reconcilePathRemaps,
     refreshResources,
     setSnapshot,
     snapshot,
     snapshotRef,
   ]);
+
+  const moveResourceToFolder = useCallback(async (from: string, toDir: string) => {
+    await moveResourcesToFolder([from], toDir);
+  }, [moveResourcesToFolder]);
 
   const commitTitle = useCallback(async (title: string) => {
     const resource = selectedRef.current;
@@ -556,8 +674,9 @@ export function useResourceController(options: ResourceControllerOptions): Resou
   }, [renameResource]);
 
   return {
-    selected, setSelected, session, setSession, pageRef, currentPageRevisionRef, reloadToken,
-    handleSelect, reloadPageFromDisk, applyPageContent, saveLocalPage, openCreatedResource, clearSelection, clearSelectionIf,
-    commitTitle, renameResource, moveResourceToFolder, reconcilePathRemaps, resetResources,
+    selected, selectedPaths, setSelected, session, setSession, pageRef, currentPageRevisionRef, reloadToken,
+    handleSelect, applyTreeSelection, reloadPageFromDisk, applyPageContent, saveLocalPage, openCreatedResource,
+    clearSelection, clearSelectionIf, clearSelectionPaths,
+    commitTitle, renameResource, moveResourceToFolder, moveResourcesToFolder, reconcilePathRemaps, resetResources,
   };
 }

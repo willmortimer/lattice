@@ -310,14 +310,41 @@ pub fn rename_resource(root: String, from: String, to: String) -> Result<(), Str
 /// Delete a resource through the semantic command core (files go to Trash).
 #[tauri::command]
 pub fn delete_resource(root: String, path: String) -> Result<(), String> {
+    delete_resources(root, vec![path])
+}
+
+/// Delete one or more resources in a single transaction (one undo restores all).
+#[tauri::command]
+pub fn delete_resources(root: String, paths: Vec<String>) -> Result<(), String> {
+    let mut unique = Vec::new();
+    for path in paths {
+        let trimmed = path.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if !unique.iter().any(|existing: &String| existing == trimmed) {
+            unique.push(trimmed.to_string());
+        }
+    }
+    if unique.is_empty() {
+        return Err("Nothing to delete.".into());
+    }
+
+    let summary = if unique.len() == 1 {
+        format!("Delete {}", unique[0])
+    } else {
+        format!("Delete {} resources", unique.len())
+    };
+    let commands = unique
+        .into_iter()
+        .map(|path| SemanticCommand::ResourceDelete {
+            path: PathBuf::from(path),
+        })
+        .collect();
+
     let mut engine = CommandEngine::open(Path::new(&root)).map_err(command_error_to_string)?;
     engine
-        .apply(Transaction::new(
-            format!("Delete {path}"),
-            vec![SemanticCommand::ResourceDelete {
-                path: PathBuf::from(path),
-            }],
-        ))
+        .apply(Transaction::new(summary, commands))
         .map_err(command_error_to_string)?;
     Ok(())
 }
@@ -325,15 +352,47 @@ pub fn delete_resource(root: String, path: String) -> Result<(), String> {
 /// Move a resource into an existing directory through the semantic command core.
 #[tauri::command]
 pub fn move_resource(root: String, from: String, to_dir: String) -> Result<(), String> {
+    move_resources(root, vec![from], to_dir)
+}
+
+/// Move one or more resources into a directory in a single transaction (one undo).
+#[tauri::command]
+pub fn move_resources(
+    root: String,
+    from_paths: Vec<String>,
+    to_dir: String,
+) -> Result<(), String> {
+    let mut unique = Vec::new();
+    for path in from_paths {
+        let trimmed = path.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if !unique.iter().any(|existing: &String| existing == trimmed) {
+            unique.push(trimmed.to_string());
+        }
+    }
+    if unique.is_empty() {
+        return Err("Nothing to move.".into());
+    }
+
+    let summary = if unique.len() == 1 {
+        format!("Move {} into {to_dir}", unique[0])
+    } else {
+        format!("Move {} resources into {to_dir}", unique.len())
+    };
+    let to_dir_path = PathBuf::from(&to_dir);
+    let commands = unique
+        .into_iter()
+        .map(|from| SemanticCommand::ResourceMove {
+            from: PathBuf::from(from),
+            to_dir: to_dir_path.clone(),
+        })
+        .collect();
+
     let mut engine = CommandEngine::open(Path::new(&root)).map_err(command_error_to_string)?;
     engine
-        .apply(Transaction::new(
-            format!("Move {from} into {to_dir}"),
-            vec![SemanticCommand::ResourceMove {
-                from: PathBuf::from(from),
-                to_dir: PathBuf::from(to_dir),
-            }],
-        ))
+        .apply(Transaction::new(summary, commands))
         .map_err(command_error_to_string)?;
     Ok(())
 }
@@ -866,5 +925,58 @@ mod tests {
         assert_eq!(result.path_remaps[0].to, "Note.md");
         assert!(dir.path().join("Note.md").exists());
         assert!(!dir.path().join("Archive/Note.md").exists());
+    }
+
+    #[test]
+    fn batch_move_is_one_transaction_and_undo_restores_all() {
+        let dir = init_workspace();
+        std::fs::create_dir(dir.path().join("Archive")).unwrap();
+        std::fs::write(dir.path().join("A.md"), "a\n").unwrap();
+        std::fs::write(dir.path().join("B.md"), "b\n").unwrap();
+        std::fs::write(dir.path().join("C.md"), "c\n").unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        move_resources(
+            root.clone(),
+            vec!["A.md".into(), "B.md".into(), "C.md".into()],
+            "Archive".into(),
+        )
+        .unwrap();
+        assert!(dir.path().join("Archive/A.md").exists());
+        assert!(dir.path().join("Archive/B.md").exists());
+        assert!(dir.path().join("Archive/C.md").exists());
+
+        let history = list_history(root.clone(), 10).unwrap();
+        assert_eq!(history[0].summary, "Move 3 resources into Archive");
+        assert_eq!(history[0].command_count, 3);
+
+        let result = undo_last(root).unwrap().expect("undo result");
+        assert_eq!(result.summary, "Move 3 resources into Archive");
+        assert_eq!(result.path_remaps.len(), 3);
+        assert!(dir.path().join("A.md").exists());
+        assert!(dir.path().join("B.md").exists());
+        assert!(dir.path().join("C.md").exists());
+        assert!(!dir.path().join("Archive/A.md").exists());
+    }
+
+    #[test]
+    fn batch_delete_is_one_transaction_and_undo_restores_all() {
+        let dir = init_workspace();
+        std::fs::write(dir.path().join("A.md"), "a\n").unwrap();
+        std::fs::write(dir.path().join("B.md"), "b\n").unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        delete_resources(root.clone(), vec!["A.md".into(), "B.md".into()]).unwrap();
+        assert!(!dir.path().join("A.md").exists());
+        assert!(!dir.path().join("B.md").exists());
+
+        let history = list_history(root.clone(), 10).unwrap();
+        assert_eq!(history[0].summary, "Delete 2 resources");
+        assert_eq!(history[0].command_count, 2);
+
+        let result = undo_last(root).unwrap().expect("undo result");
+        assert_eq!(result.summary, "Delete 2 resources");
+        assert_eq!(std::fs::read(dir.path().join("A.md")).unwrap(), b"a\n");
+        assert_eq!(std::fs::read(dir.path().join("B.md")).unwrap(), b"b\n");
     }
 }

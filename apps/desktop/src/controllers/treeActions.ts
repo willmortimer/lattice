@@ -3,7 +3,7 @@ import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction 
 import { inBrowser } from "../demo";
 import {
   createFolder,
-  deleteResource,
+  deleteResources,
   duplicateResource,
 } from "../lib/resourceMutations";
 import {
@@ -11,7 +11,7 @@ import {
   showNativeTreeResourceMenu,
 } from "../lib/nativeMenus";
 import { fileTimestamp } from "../lib/timestamp";
-import { joinWorkspacePath, resourcePathExists, validateMoveResource } from "../lib/treeOps";
+import { joinWorkspacePath, resourcePathExists, validateMoveResources } from "../lib/treeOps";
 import type { Resource, WorkspaceSnapshot } from "../types";
 
 function pageFileName(raw: string): string {
@@ -36,8 +36,9 @@ export interface TreeActionsOptions {
   refreshResources: () => Promise<void>;
   handleSelect: (resource: Resource, options?: { recordHistory?: boolean }) => Promise<void>;
   renameResource: (resource: Resource, title: string) => Promise<void>;
-  moveResourceToFolder: (from: string, toDir: string) => Promise<void>;
-  clearSelectionIf: (path: string) => void;
+  moveResourcesToFolder: (fromPaths: readonly string[], toDir: string) => Promise<void>;
+  selectedPaths: ReadonlySet<string>;
+  clearSelectionPaths: (paths: readonly string[]) => void;
   removeTabs: (predicate: (resource: Resource) => boolean) => void;
   createAndOpenPage: (
     relPath: string,
@@ -60,8 +61,9 @@ export function useTreeActionsController(options: TreeActionsOptions) {
     refreshResources,
     handleSelect,
     renameResource,
-    moveResourceToFolder,
-    clearSelectionIf,
+    moveResourcesToFolder,
+    selectedPaths,
+    clearSelectionPaths,
     removeTabs,
     createAndOpenPage,
     requestTreeRename,
@@ -78,30 +80,51 @@ export function useTreeActionsController(options: TreeActionsOptions) {
     }
   }, [setError, setStatusToast]);
 
-  const handleDeleteResource = useCallback(async (resource: Resource) => {
+  const handleDeleteResources = useCallback(async (paths: readonly string[]) => {
     const workspace = snapshotRef.current ?? snapshot;
     if (!workspace) return;
-    const label = resource.path.split("/").pop() ?? resource.path;
-    if (!window.confirm(`Delete “${label}”? This moves the resource to Trash.`)) return;
+    const unique = [...new Set(paths.map((path) => path.trim()).filter(Boolean))];
+    if (unique.length === 0) return;
+
+    const label = unique.length === 1
+      ? (unique[0].split("/").pop() ?? unique[0])
+      : `${unique.length} resources`;
+    if (!window.confirm(`Delete “${label}”? This moves ${unique.length === 1 ? "the resource" : "them"} to Trash.`)) {
+      return;
+    }
 
     if (inBrowser) {
+      const doomed = new Set(unique);
       setSnapshot((current) => current ? {
         ...current,
-        resources: current.resources.filter(
-          (entry) => entry.path !== resource.path && !entry.path.startsWith(`${resource.path}/`),
-        ),
+        resources: current.resources.filter((entry) => {
+          for (const path of doomed) {
+            if (entry.path === path || entry.path.startsWith(`${path}/`)) return false;
+          }
+          return true;
+        }),
       } : current);
-      removeTabs((entry) => entry.path === resource.path || entry.path.startsWith(`${resource.path}/`));
-      clearSelectionIf(resource.path);
+      removeTabs((entry) => {
+        for (const path of doomed) {
+          if (entry.path === path || entry.path.startsWith(`${path}/`)) return true;
+        }
+        return false;
+      });
+      clearSelectionPaths(unique);
       setError(null);
       return;
     }
 
     setBusy(true);
     try {
-      await deleteResource(workspace.root, resource.path);
-      removeTabs((entry) => entry.path === resource.path || entry.path.startsWith(`${resource.path}/`));
-      clearSelectionIf(resource.path);
+      await deleteResources(workspace.root, unique);
+      removeTabs((entry) => {
+        for (const path of unique) {
+          if (entry.path === path || entry.path.startsWith(`${path}/`)) return true;
+        }
+        return false;
+      });
+      clearSelectionPaths(unique);
       await refreshResources();
       setError(null);
     } catch (error) {
@@ -109,7 +132,14 @@ export function useTreeActionsController(options: TreeActionsOptions) {
     } finally {
       setBusy(false);
     }
-  }, [clearSelectionIf, refreshResources, removeTabs, setBusy, setError, setSnapshot, snapshot, snapshotRef]);
+  }, [clearSelectionPaths, refreshResources, removeTabs, setBusy, setError, setSnapshot, snapshot, snapshotRef]);
+
+  const handleDeleteResource = useCallback(async (resource: Resource) => {
+    const batch = selectedPaths.has(resource.path) && selectedPaths.size > 1
+      ? [...selectedPaths]
+      : [resource.path];
+    await handleDeleteResources(batch);
+  }, [handleDeleteResources, selectedPaths]);
 
   const handleDuplicateResource = useCallback(async (resource: Resource) => {
     const workspace = snapshotRef.current ?? snapshot;
@@ -139,10 +169,10 @@ export function useTreeActionsController(options: TreeActionsOptions) {
     }
   }, [handleSelect, refreshResources, setBusy, setError, setSnapshot, snapshot, snapshotRef]);
 
-  const handleMoveToFolder = useCallback(async (from: string, toDir: string) => {
+  const handleMoveToFolder = useCallback(async (fromPaths: readonly string[], toDir: string) => {
     const workspace = snapshotRef.current ?? snapshot;
     if (!workspace) return;
-    const validation = validateMoveResource(from, toDir, workspace.resources);
+    const validation = validateMoveResources(fromPaths, toDir, workspace.resources);
     if (!validation.ok) {
       setStatusToast(validation.reason);
       window.setTimeout(() => setStatusToast(null), 2600);
@@ -150,13 +180,13 @@ export function useTreeActionsController(options: TreeActionsOptions) {
     }
 
     try {
-      await moveResourceToFolder(from, toDir);
+      await moveResourcesToFolder(fromPaths, toDir);
       setError(null);
     } catch (error) {
       setStatusToast(String(error));
       window.setTimeout(() => setStatusToast(null), 3200);
     }
-  }, [moveResourceToFolder, setError, setStatusToast, snapshot, snapshotRef]);
+  }, [moveResourcesToFolder, setError, setStatusToast, snapshot, snapshotRef]);
 
   const handleNewPageInFolder = useCallback(async (folderPath: string) => {
     const name = window.prompt("New page name", `Untitled ${fileTimestamp()}.md`);
@@ -247,6 +277,7 @@ export function useTreeActionsController(options: TreeActionsOptions) {
     handleTreeRename,
     handleMoveToFolder,
     handleDeleteResource,
+    handleDeleteResources,
     handleDuplicateResource,
     handleNewPageInFolder,
     handleNewFolderInFolder,
