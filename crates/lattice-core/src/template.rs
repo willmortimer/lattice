@@ -31,6 +31,7 @@ pub(crate) struct SeedDirectory {
 pub(crate) struct SeedDataColumn {
     pub name: &'static str,
     pub field_type: &'static str,
+    pub relation_table: Option<&'static str>,
 }
 
 #[derive(Debug)]
@@ -516,12 +517,13 @@ fn materialize_data_package(
                     ),
                 })?;
             if field_type == FieldType::Relation {
-                return Err(Error::TemplateValidation {
+                let target = column.relation_table.ok_or_else(|| Error::TemplateValidation {
                     message: format!(
-                        "data package {}: relation columns are not supported in template seeds yet",
-                        package.path
+                        "data package {}: relation column {:?} requires relation_table",
+                        package.path, column.name
                     ),
-                });
+                })?;
+                return Ok(NewColumn::relation(column.name, target));
             }
             Ok(NewColumn::new(column.name, field_type))
         })
@@ -533,9 +535,39 @@ fn materialize_data_package(
         .iter()
         .map(|column| (column.name, column.field_type))
         .collect();
+    let mut relation_columns = Vec::new();
+    for column in package.columns {
+        if column.field_type != "relation" {
+            continue;
+        }
+        let target = column.relation_table.ok_or_else(|| Error::TemplateValidation {
+            message: format!(
+                "data package {}: relation column {:?} requires relation_table",
+                package.path, column.name
+            ),
+        })?;
+        relation_columns.push((column.name, target));
+    }
+    let mut pending_relations: Vec<(String, BTreeMap<String, CellValue>)> = Vec::new();
     for row_json in package.rows_json {
-        let values = row_values_from_json(row_json, &column_types, package.path)?;
-        app.insert_row(package.table, &values)
+        let mut values = row_values_from_json(row_json, &column_types, package.path)?;
+        let mut relation_values = BTreeMap::new();
+        for (column_name, _) in &relation_columns {
+            if let Some(cell) = values.remove(*column_name) {
+                relation_values.insert((*column_name).to_string(), cell);
+            }
+        }
+        let row_id = app
+            .insert_row(package.table, &values)
+            .map_err(map_data_error)?;
+        if !relation_values.is_empty() {
+            pending_relations.push((row_id, relation_values));
+        }
+    }
+    for (row_id, relation_values) in pending_relations {
+        let resolved =
+            resolve_seed_relation_values(&app, package.path, &relation_columns, relation_values)?;
+        app.update_row(package.table, &row_id, &resolved)
             .map_err(map_data_error)?;
     }
 
@@ -555,6 +587,81 @@ fn materialize_data_package(
         )?;
     }
     Ok(())
+}
+
+fn resolve_seed_relation_values(
+    app: &DataApp,
+    package_path: &str,
+    relation_columns: &[(&str, &str)],
+    relation_values: BTreeMap<String, CellValue>,
+) -> Result<BTreeMap<String, CellValue>> {
+    let mut resolved = BTreeMap::new();
+    for (column_name, target_table) in relation_columns {
+        let Some(cell) = relation_values.get(*column_name) else {
+            continue;
+        };
+        match cell {
+            CellValue::Null => {
+                resolved.insert((*column_name).to_string(), CellValue::Null);
+            }
+            CellValue::Relation { record_ids } => {
+                let record_ids = resolve_seed_relation_refs(
+                    app,
+                    package_path,
+                    target_table,
+                    record_ids,
+                )?;
+                resolved.insert(
+                    (*column_name).to_string(),
+                    CellValue::Relation { record_ids },
+                );
+            }
+            _ => {
+                return Err(Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path}: relation column {column_name:?} expects a relation value"
+                    ),
+                });
+            }
+        }
+    }
+    Ok(resolved)
+}
+
+fn resolve_seed_relation_refs(
+    app: &DataApp,
+    package_path: &str,
+    target_table: &str,
+    references: &[String],
+) -> Result<Vec<String>> {
+    let rows = app
+        .list_rows(target_table, 10_000, 0)
+        .map_err(map_data_error)?;
+    let known_ids: std::collections::HashSet<&str> =
+        rows.iter().map(|row| row.id.as_str()).collect();
+    let name_to_id: BTreeMap<String, String> = rows
+        .iter()
+        .filter_map(|row| match row.values.get("name") {
+            Some(CellValue::Text(name)) => Some((name.clone(), row.id.clone())),
+            _ => None,
+        })
+        .collect();
+    let mut record_ids = Vec::with_capacity(references.len());
+    for reference in references {
+        if known_ids.contains(reference.as_str()) {
+            record_ids.push(reference.clone());
+            continue;
+        }
+        let Some(id) = name_to_id.get(reference) else {
+            return Err(Error::TemplateValidation {
+                message: format!(
+                    "data package {package_path}: relation reference {reference:?} not found in table {target_table}"
+                ),
+            });
+        };
+        record_ids.push(id.clone());
+    }
+    Ok(record_ids)
 }
 
 fn materialize_seed_view(
@@ -1305,10 +1412,12 @@ mod tests {
             SeedDataColumn {
                 name: "name",
                 field_type: "text",
+                relation_table: None,
             },
             SeedDataColumn {
                 name: "email",
                 field_type: "text",
+                relation_table: None,
             },
         ];
         static ROWS: &[&str] = &[
@@ -1374,6 +1483,7 @@ mod tests {
         static COLUMNS: &[SeedDataColumn] = &[SeedDataColumn {
             name: "name",
             field_type: "not_a_real_type",
+            relation_table: None,
         }];
         static PACKAGES: &[SeedDataPackage] = &[SeedDataPackage {
             path: "Data/Broken.data",
@@ -1430,14 +1540,17 @@ mod tests {
             SeedDataColumn {
                 name: "name",
                 field_type: "text",
+                relation_table: None,
             },
             SeedDataColumn {
                 name: "status",
                 field_type: "text",
+                relation_table: None,
             },
             SeedDataColumn {
                 name: "company",
                 field_type: "text",
+                relation_table: None,
             },
         ];
         static ROWS: &[&str] = &[r#"{"name":"Ada","status":"Active","company":"Analytical"}"#];
@@ -1516,5 +1629,81 @@ mod tests {
             std::fs::read_to_string(package_path.join("views/Gallery.yaml")).unwrap();
         assert!(gallery_yaml.contains("type: gallery"));
         assert!(gallery_yaml.contains("cover_field: company"));
+    }
+
+    #[test]
+    fn provisioned_data_packages_resolve_relation_seeds_by_name() {
+        static COLUMNS: &[SeedDataColumn] = &[
+            SeedDataColumn {
+                name: "name",
+                field_type: "text",
+                relation_table: None,
+            },
+            SeedDataColumn {
+                name: "reports_to",
+                field_type: "relation",
+                relation_table: Some("contacts"),
+            },
+        ];
+        static ROWS: &[&str] = &[
+            r#"{"name":"Ada Lovelace"}"#,
+            r#"{"name":"Grace Hopper","reports_to":["Ada Lovelace"]}"#,
+        ];
+        static PACKAGES: &[SeedDataPackage] = &[SeedDataPackage {
+            path: "Data/Contacts.data",
+            title: "Contacts",
+            table: "contacts",
+            columns: COLUMNS,
+            rows_json: ROWS,
+            views: &[],
+        }];
+        static FILES: &[SeedFile] = &[SeedFile {
+            path: "Home.md",
+            bytes: b"# Home\n",
+        }];
+        let template = GeneratedTemplate {
+            id: "relation-fixture",
+            order: 1,
+            name: "Relation Fixture",
+            category: "Test",
+            description: "Synthetic relation seed fixture",
+            visibility: "gallery",
+            recommended: false,
+            recommended_title: "Relation",
+            directories: &[],
+            preview: &["Home.md", "Data/Contacts.data"],
+            capabilities: &["pages", "sqlite"],
+            quick_note_directory: "Inbox",
+            daily_note_directory: None,
+            attachments_directory: None,
+            template_directory: None,
+            archive_directory: None,
+            open_on_create: None,
+            files: FILES,
+            data_packages: PACKAGES,
+        };
+
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("RelationWorkspace");
+        create_workspace_at(&root, "Relation", &template).unwrap();
+
+        let app = DataApp::open(&root.join("Data/Contacts.data")).unwrap();
+        let rows = app.list_rows("contacts", 10, 0).unwrap();
+        assert_eq!(rows.len(), 2);
+        let ada_id = rows
+            .iter()
+            .find(|row| row.values.get("name") == Some(&CellValue::Text("Ada Lovelace".into())))
+            .map(|row| row.id.clone())
+            .expect("Ada row");
+        let grace = rows
+            .iter()
+            .find(|row| row.values.get("name") == Some(&CellValue::Text("Grace Hopper".into())))
+            .expect("Grace row");
+        assert_eq!(
+            grace.values.get("reports_to"),
+            Some(&CellValue::Relation {
+                record_ids: vec![ada_id],
+            })
+        );
     }
 }

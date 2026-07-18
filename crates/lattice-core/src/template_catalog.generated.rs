@@ -41,9 +41,9 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             title: "Tasks",
             table: "tasks",
             columns: &[
-                SeedDataColumn { name: "task", field_type: "text" },
-                SeedDataColumn { name: "status", field_type: "text" },
-                SeedDataColumn { name: "due", field_type: "date" }
+                SeedDataColumn { name: "task", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "status", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "due", field_type: "date", relation_table: None }
             ],
             rows_json: &[
                 "{\"task\":\"Review inbox\",\"status\":\"todo\",\"due\":null}",
@@ -132,11 +132,11 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             title: "Submissions",
             table: "submissions",
             columns: &[
-                SeedDataColumn { name: "piece", field_type: "text" },
-                SeedDataColumn { name: "venue", field_type: "text" },
-                SeedDataColumn { name: "status", field_type: "text" },
-                SeedDataColumn { name: "submitted_on", field_type: "date" },
-                SeedDataColumn { name: "response", field_type: "long_text" }
+                SeedDataColumn { name: "piece", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "venue", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "status", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "submitted_on", field_type: "date", relation_table: None },
+                SeedDataColumn { name: "response", field_type: "long_text", relation_table: None }
             ],
             rows_json: &[
                 "{\"piece\":\"Chapter 01 excerpt\",\"venue\":\"Example Quarterly\",\"status\":\"submitted\",\"submitted_on\":\"2026-07-01\",\"response\":null}",
@@ -184,11 +184,11 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             title: "OKRs",
             table: "okrs",
             columns: &[
-                SeedDataColumn { name: "objective", field_type: "text" },
-                SeedDataColumn { name: "key_result", field_type: "text" },
-                SeedDataColumn { name: "owner", field_type: "text" },
-                SeedDataColumn { name: "status", field_type: "text" },
-                SeedDataColumn { name: "confidence", field_type: "decimal" }
+                SeedDataColumn { name: "objective", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "key_result", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "owner", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "status", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "confidence", field_type: "decimal", relation_table: None }
             ],
             rows_json: &[
                 "{\"objective\":\"Ship the spring release\",\"key_result\":\"All launch blockers closed by the freeze date\",\"owner\":\"you\",\"status\":\"on-track\",\"confidence\":0.8}",
@@ -240,10 +240,10 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             title: "Experiments log",
             table: "experiments",
             columns: &[
-                SeedDataColumn { name: "name", field_type: "text" },
-                SeedDataColumn { name: "status", field_type: "text" },
-                SeedDataColumn { name: "run_date", field_type: "date" },
-                SeedDataColumn { name: "notes", field_type: "long_text" }
+                SeedDataColumn { name: "name", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "status", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "run_date", field_type: "date", relation_table: None },
+                SeedDataColumn { name: "notes", field_type: "long_text", relation_table: None }
             ],
             rows_json: &[
                 "{\"name\":\"Baseline replication\",\"status\":\"planned\",\"run_date\":null,\"notes\":\"Replicate methods from Example Paper.\"}",
@@ -336,10 +336,10 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             title: "Metrics",
             table: "metrics",
             columns: &[
-                SeedDataColumn { name: "metric", field_type: "text" },
-                SeedDataColumn { name: "value", field_type: "decimal" },
-                SeedDataColumn { name: "recorded_on", field_type: "date" },
-                SeedDataColumn { name: "category", field_type: "text" }
+                SeedDataColumn { name: "metric", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "value", field_type: "decimal", relation_table: None },
+                SeedDataColumn { name: "recorded_on", field_type: "date", relation_table: None },
+                SeedDataColumn { name: "category", field_type: "text", relation_table: None }
             ],
             rows_json: &[
                 "{\"metric\":\"active_users\",\"value\":128,\"recorded_on\":\"2026-07-01\",\"category\":\"Engagement\"}",
@@ -434,11 +434,11 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             title: "Issues",
             table: "issues",
             columns: &[
-                SeedDataColumn { name: "title", field_type: "text" },
-                SeedDataColumn { name: "status", field_type: "text" },
-                SeedDataColumn { name: "priority", field_type: "text" },
-                SeedDataColumn { name: "component", field_type: "text" },
-                SeedDataColumn { name: "notes", field_type: "long_text" }
+                SeedDataColumn { name: "title", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "status", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "priority", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "component", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "notes", field_type: "long_text", relation_table: None }
             ],
             rows_json: &[
                 "{\"title\":\"Provision workspace from template\",\"status\":\"done\",\"priority\":\"medium\",\"component\":\"tooling\",\"notes\":\"Seed Issues.data and verify wiki links on Home.md.\"}",
@@ -536,20 +536,21 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             title: "CRM",
             table: "contacts",
             columns: &[
-                SeedDataColumn { name: "name", field_type: "text" },
-                SeedDataColumn { name: "email", field_type: "text" },
-                SeedDataColumn { name: "company", field_type: "text" },
-                SeedDataColumn { name: "due_date", field_type: "date" },
-                SeedDataColumn { name: "status", field_type: "text" },
-                SeedDataColumn { name: "notes", field_type: "long_text" }
+                SeedDataColumn { name: "name", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "email", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "company", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "due_date", field_type: "date", relation_table: None },
+                SeedDataColumn { name: "status", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "notes", field_type: "long_text", relation_table: None },
+                SeedDataColumn { name: "reports_to", field_type: "relation", relation_table: Some("contacts") }
             ],
             rows_json: &[
                 "{\"name\":\"Ada Lovelace\",\"email\":\"ada@analytical.io\",\"company\":\"Analytical Engines\",\"due_date\":\"2026-08-15\",\"status\":\"Active\",\"notes\":\"Champion for typed tables beside narrative docs.\"}",
-                "{\"name\":\"Grace Hopper\",\"email\":\"grace@navy.mil\",\"company\":\"US Navy\",\"due_date\":\"2026-07-25\",\"status\":\"Active\",\"notes\":\"Asked for honest SQL export from CRM views.\"}",
+                "{\"name\":\"Grace Hopper\",\"email\":\"grace@navy.mil\",\"company\":\"US Navy\",\"due_date\":\"2026-07-25\",\"status\":\"Active\",\"notes\":\"Asked for honest SQL export from CRM views.\",\"reports_to\":[\"Ada Lovelace\"]}",
                 "{\"name\":\"Alan Turing\",\"email\":\"alan@bletchley.uk\",\"company\":\"Bletchley Park\",\"due_date\":\"2026-09-01\",\"status\":\"Nurture\",\"notes\":\"Interested after notebook preview ships.\"}",
-                "{\"name\":\"Katherine Johnson\",\"email\":\"katherine@nasa.gov\",\"company\":\"NASA\",\"due_date\":\"2026-08-02\",\"status\":\"Active\",\"notes\":\"Needs calendar layout on due dates for standup.\"}",
+                "{\"name\":\"Katherine Johnson\",\"email\":\"katherine@nasa.gov\",\"company\":\"NASA\",\"due_date\":\"2026-08-02\",\"status\":\"Active\",\"notes\":\"Needs calendar layout on due dates for standup.\",\"reports_to\":[\"Dorothy Vaughan\"]}",
                 "{\"name\":\"Dorothy Vaughan\",\"email\":\"dorothy@nasa.gov\",\"company\":\"NASA\",\"due_date\":null,\"status\":\"Partner\",\"notes\":\"Coordinating team rollout; gallery view by company.\"}",
-                "{\"name\":\"Mary Jackson\",\"email\":\"mary@nasa.gov\",\"company\":\"NASA\",\"due_date\":\"2026-07-30\",\"status\":\"Active\",\"notes\":\"Wants board grouped by status for sprint review.\"}",
+                "{\"name\":\"Mary Jackson\",\"email\":\"mary@nasa.gov\",\"company\":\"NASA\",\"due_date\":\"2026-07-30\",\"status\":\"Active\",\"notes\":\"Wants board grouped by status for sprint review.\",\"reports_to\":[\"Katherine Johnson\"]}",
                 "{\"name\":\"Tim Berners-Lee\",\"email\":\"tim@w3.org\",\"company\":\"W3C\",\"due_date\":\"2026-10-12\",\"status\":\"Lead\",\"notes\":\"Linked data angle — follow up on wiki link semantics.\"}",
                 "{\"name\":\"Brendan Eich\",\"email\":\"brendan@mozilla.org\",\"company\":\"Mozilla\",\"due_date\":\"2026-08-20\",\"status\":\"Nurture\",\"notes\":\"Curious about Tauri shell performance budgets.\"}",
                 "{\"name\":\"Margaret Hamilton\",\"email\":\"margaret@mit.edu\",\"company\":\"MIT Instrumentation Lab\",\"due_date\":\"2026-07-22\",\"status\":\"Active\",\"notes\":\"Long-page scroll tests map to her reliability bar.\"}",
@@ -557,7 +558,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 "{\"name\":\"Linus Torvalds\",\"email\":\"linus@linux.foundation\",\"company\":\"Linux Foundation\",\"due_date\":\"2026-11-05\",\"status\":\"Nurture\",\"notes\":\"Git-friendly workspace layout is the hook.\"}",
                 "{\"name\":\"Guido van Rossum\",\"email\":\"guido@python.org\",\"company\":\"Python Software Foundation\",\"due_date\":\"2026-08-08\",\"status\":\"Active\",\"notes\":\"Notebook story — track under Notebooks/ when ready.\"}",
                 "{\"name\":\"Radia Perlman\",\"email\":\"radia@ieee.org\",\"company\":\"IEEE\",\"due_date\":\"2026-09-18\",\"status\":\"Lead\",\"notes\":\"Spanning-tree metaphor for canvas + outline sync.\"}",
-                "{\"name\":\"Shafi Goldwasser\",\"email\":\"shafi@mit.edu\",\"company\":\"MIT\",\"due_date\":\"2026-07-28\",\"status\":\"Active\",\"notes\":\"Security review of command preconditions.\"}",
+                "{\"name\":\"Shafi Goldwasser\",\"email\":\"shafi@mit.edu\",\"company\":\"MIT\",\"due_date\":\"2026-07-28\",\"status\":\"Active\",\"notes\":\"Security review of command preconditions.\",\"reports_to\":[\"Barbara Liskov\"]}",
                 "{\"name\":\"Barbara Liskov\",\"email\":\"liskov@mit.edu\",\"company\":\"MIT\",\"due_date\":null,\"status\":\"Partner\",\"notes\":\"Substitution principle maps to resource adapters.\"}",
                 "{\"name\":\"Frances Allen\",\"email\":\"frances@ibm.com\",\"company\":\"IBM Research\",\"due_date\":\"2026-08-30\",\"status\":\"Churned\",\"notes\":\"Paused — re-engage after perf benchmarks published.\"}",
                 "{\"name\":\"Edsger Dijkstra\",\"email\":\"edsger@utexas.edu\",\"company\":\"UT Austin\",\"due_date\":\"2026-12-01\",\"status\":\"Lead\",\"notes\":\"Structured note templates under Templates/.\"}",

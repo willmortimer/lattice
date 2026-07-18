@@ -137,13 +137,14 @@ flowchart LR
 
 ## CRM in context
 
-`CRM.data` ships ~20 sample contacts with email, company, due dates, status, and
-notes. Open the data app from [[Home]] or search for a name like **Grace Hopper**.
+`CRM.data` ships ~20 sample contacts with email, company, due dates, status,
+notes, and a **reports_to** self-relation. Open the data app from [[Home]] or
+search for a name like **Grace Hopper**.
 
 In the data app header, switch layouts (grid, list, board, gallery, calendar, form)
-from the view picker. Saved views ship under `CRM.data/views/` as YAML — Board,
-Calendar, Gallery, and Form are seeded from the template manifest (see
-[[Home#CRM views]]).
+from the view picker. Adjust layout field pickers and **Save view** to persist YAML
+under `CRM.data/views/`. Board, Calendar, Gallery, and Form are seeded from the
+template manifest (see [[Home#CRM views]] and [[Home#First Look tour — new surfaces]]).
 
 ## Release rhythm
 
@@ -218,6 +219,7 @@ Use this list when benchmarking scroll and typing on this page:
 - [ ] Render all Mermaid blocks
 - [ ] Open the lattice-embed card
 - [ ] Search for "Grace Hopper" and jump to CRM
+- [ ] Complete the [[Home#First Look tour — new surfaces]] checklist (layouts, relations, tree)
 
 ---
 
