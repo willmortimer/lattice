@@ -142,6 +142,9 @@ export function ResourceInspector({
         )}
         {!loading && section === "history" && !(root && resource && !inBrowser) && (
           <div className="history-list">
+            <p className="inspector-empty">
+              Path changes that include link repair may appear as rename-shaped history entries.
+            </p>
             {history.length === 0 && <p className="inspector-empty">No command history yet.</p>}
             {history.map((item) => (
               <article key={item.id}>
