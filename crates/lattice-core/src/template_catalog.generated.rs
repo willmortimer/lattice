@@ -338,13 +338,54 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             columns: &[
                 SeedDataColumn { name: "metric", field_type: "text" },
                 SeedDataColumn { name: "value", field_type: "decimal" },
-                SeedDataColumn { name: "recorded_on", field_type: "date" }
+                SeedDataColumn { name: "recorded_on", field_type: "date" },
+                SeedDataColumn { name: "category", field_type: "text" }
             ],
             rows_json: &[
-                "{\"metric\":\"active_users\",\"value\":128,\"recorded_on\":\"2026-07-01\"}",
-                "{\"metric\":\"query_latency_ms\",\"value\":42.5,\"recorded_on\":\"2026-07-01\"}"
+                "{\"metric\":\"active_users\",\"value\":128,\"recorded_on\":\"2026-07-01\",\"category\":\"Engagement\"}",
+                "{\"metric\":\"query_latency_ms\",\"value\":42.5,\"recorded_on\":\"2026-07-01\",\"category\":\"Performance\"}",
+                "{\"metric\":\"active_users\",\"value\":142,\"recorded_on\":\"2026-07-08\",\"category\":\"Engagement\"}",
+                "{\"metric\":\"query_latency_ms\",\"value\":38.2,\"recorded_on\":\"2026-07-08\",\"category\":\"Performance\"}",
+                "{\"metric\":\"error_rate_pct\",\"value\":0.3,\"recorded_on\":\"2026-07-08\",\"category\":\"Reliability\"}"
             ],
-            views: &[],
+            views: &[
+                SeedDataView {
+                name: "Board",
+                layout: "board",
+                group_by: Some("category"),
+                cover_field: None,
+                date_field: None,
+                columns: &[
+                    "metric",
+                    "value",
+                    "category"
+                ],
+            },
+                SeedDataView {
+                name: "Calendar",
+                layout: "calendar",
+                group_by: None,
+                cover_field: None,
+                date_field: Some("recorded_on"),
+                columns: &[],
+            },
+                SeedDataView {
+                name: "Gallery",
+                layout: "gallery",
+                group_by: None,
+                cover_field: Some("metric"),
+                date_field: None,
+                columns: &[],
+            },
+                SeedDataView {
+                name: "Form",
+                layout: "form",
+                group_by: None,
+                cover_field: None,
+                date_field: None,
+                columns: &[],
+            }
+            ],
         }
         ],
     },
@@ -524,7 +565,43 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 "{\"name\":\"Leslie Lamport\",\"email\":\"lamport@microsoft.com\",\"company\":\"Microsoft Research\",\"due_date\":\"2026-09-25\",\"status\":\"Nurture\",\"notes\":\"Formal methods audience — link Research/Architecture.\"}",
                 "{\"name\":\"Vint Cerf\",\"email\":\"vint@google.com\",\"company\":\"Google\",\"due_date\":\"2026-10-01\",\"status\":\"Active\",\"notes\":\"Offline-first narrative resonates; wants demo workspace zip.\"}"
             ],
-            views: &[],
+            views: &[
+                SeedDataView {
+                name: "Board",
+                layout: "board",
+                group_by: Some("status"),
+                cover_field: None,
+                date_field: None,
+                columns: &[
+                    "name",
+                    "status"
+                ],
+            },
+                SeedDataView {
+                name: "Calendar",
+                layout: "calendar",
+                group_by: None,
+                cover_field: None,
+                date_field: Some("due_date"),
+                columns: &[],
+            },
+                SeedDataView {
+                name: "Gallery",
+                layout: "gallery",
+                group_by: None,
+                cover_field: Some("company"),
+                date_field: None,
+                columns: &[],
+            },
+                SeedDataView {
+                name: "Form",
+                layout: "form",
+                group_by: None,
+                cover_field: None,
+                date_field: None,
+                columns: &[],
+            }
+            ],
         }
         ],
     },

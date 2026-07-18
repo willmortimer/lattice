@@ -231,6 +231,28 @@
           "status": "Active",
           "notes": "Offline-first narrative resonates; wants demo workspace zip."
         }
+      ],
+      "views": [
+        {
+          "name": "Board",
+          "layout": "board",
+          "group_by": "status",
+          "columns": ["name", "status"]
+        },
+        {
+          "name": "Calendar",
+          "layout": "calendar",
+          "date_field": "due_date"
+        },
+        {
+          "name": "Gallery",
+          "layout": "gallery",
+          "cover_field": "company"
+        },
+        {
+          "name": "Form",
+          "layout": "form"
+        }
       ]
     }
   ],

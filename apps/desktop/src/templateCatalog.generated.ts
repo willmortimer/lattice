@@ -617,21 +617,73 @@ export const GENERATED_TEMPLATE_CATALOG = [
           {
             "name": "recorded_on",
             "type": "date"
+          },
+          {
+            "name": "category",
+            "type": "text"
           }
         ],
         "rows": [
           {
             "metric": "active_users",
             "value": 128,
-            "recorded_on": "2026-07-01"
+            "recorded_on": "2026-07-01",
+            "category": "Engagement"
           },
           {
             "metric": "query_latency_ms",
             "value": 42.5,
-            "recorded_on": "2026-07-01"
+            "recorded_on": "2026-07-01",
+            "category": "Performance"
+          },
+          {
+            "metric": "active_users",
+            "value": 142,
+            "recorded_on": "2026-07-08",
+            "category": "Engagement"
+          },
+          {
+            "metric": "query_latency_ms",
+            "value": 38.2,
+            "recorded_on": "2026-07-08",
+            "category": "Performance"
+          },
+          {
+            "metric": "error_rate_pct",
+            "value": 0.3,
+            "recorded_on": "2026-07-08",
+            "category": "Reliability"
           }
         ],
-        "views": []
+        "views": [
+          {
+            "name": "Board",
+            "layout": "board",
+            "group_by": "category",
+            "columns": [
+              "metric",
+              "value",
+              "category"
+            ]
+          },
+          {
+            "name": "Calendar",
+            "layout": "calendar",
+            "date_field": "recorded_on",
+            "columns": []
+          },
+          {
+            "name": "Gallery",
+            "layout": "gallery",
+            "cover_field": "metric",
+            "columns": []
+          },
+          {
+            "name": "Form",
+            "layout": "form",
+            "columns": []
+          }
+        ]
       }
     ]
   },
@@ -1037,7 +1089,34 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "notes": "Offline-first narrative resonates; wants demo workspace zip."
           }
         ],
-        "views": []
+        "views": [
+          {
+            "name": "Board",
+            "layout": "board",
+            "group_by": "status",
+            "columns": [
+              "name",
+              "status"
+            ]
+          },
+          {
+            "name": "Calendar",
+            "layout": "calendar",
+            "date_field": "due_date",
+            "columns": []
+          },
+          {
+            "name": "Gallery",
+            "layout": "gallery",
+            "cover_field": "company",
+            "columns": []
+          },
+          {
+            "name": "Form",
+            "layout": "form",
+            "columns": []
+          }
+        ]
       }
     ]
   },
