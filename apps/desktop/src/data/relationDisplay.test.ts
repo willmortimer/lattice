@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import type { DataRow } from "./types";
+import type { DataColumn, DataRow } from "./types";
 import {
   buildRelationLabelIndex,
   extractRelationIds,
+  findInboundRelationLinks,
   formatCellForColumnName,
   formatColumnCellDisplay,
   formatRelationDisplay,
@@ -30,6 +31,44 @@ const companyRows: DataRow[] = [
     values: {
       id: { Text: "co_2" },
       name: { Text: "US Navy" },
+    },
+  },
+];
+
+const contactColumns: DataColumn[] = [
+  { name: "id", field_type: "text", sqlite_type: "TEXT" },
+  { name: "name", field_type: "text", sqlite_type: "TEXT" },
+  {
+    name: "reports_to",
+    field_type: "relation",
+    sqlite_type: "TEXT",
+    relation_table: "contacts",
+  },
+];
+
+const contactRows: DataRow[] = [
+  {
+    id: "c_ada",
+    values: {
+      id: { Text: "c_ada" },
+      name: { Text: "Ada Lovelace" },
+      reports_to: { Null: null },
+    },
+  },
+  {
+    id: "c_grace",
+    values: {
+      id: { Text: "c_grace" },
+      name: { Text: "Grace Hopper" },
+      reports_to: { Relation: { record_ids: ["c_ada"] } },
+    },
+  },
+  {
+    id: "c_alan",
+    values: {
+      id: { Text: "c_alan" },
+      name: { Text: "Alan Turing" },
+      reports_to: { Relation: { record_ids: ["c_ada"] } },
     },
   },
 ];
@@ -111,6 +150,89 @@ describe("relationDisplay helpers", () => {
         index,
       ),
     ).toBe("Analytical Engines");
+  });
+
+  it("finds inbound relation links on the active table and in relation_targets", () => {
+    const inbound = findInboundRelationLinks(
+      "c_ada",
+      "contacts",
+      contactColumns,
+      contactRows,
+      {
+        contacts: contactRows,
+        projects: [
+          {
+            id: "p_1",
+            values: {
+              id: { Text: "p_1" },
+              title: { Text: "Compiler audit" },
+              owner: { Relation: { record_ids: ["c_ada"] } },
+            },
+          },
+        ],
+      },
+    );
+
+    expect(inbound).toEqual([
+      {
+        table: "contacts",
+        column: "reports_to",
+        sourceRow: contactRows[1],
+        label: "Grace Hopper",
+      },
+      {
+        table: "contacts",
+        column: "reports_to",
+        sourceRow: contactRows[2],
+        label: "Alan Turing",
+      },
+      {
+        table: "projects",
+        column: "owner",
+        sourceRow: {
+          id: "p_1",
+          values: {
+            id: { Text: "p_1" },
+            title: { Text: "Compiler audit" },
+            owner: { Relation: { record_ids: ["c_ada"] } },
+          },
+        },
+        label: "Compiler audit",
+      },
+    ]);
+  });
+
+  it("prefers active-table rows over relation_targets for self-relations", () => {
+    const staleTargets = {
+      contacts: [
+        {
+          id: "c_grace",
+          values: {
+            id: { Text: "c_grace" },
+            name: { Text: "Stale Grace" },
+            reports_to: { Relation: { record_ids: ["c_ada"] } },
+          },
+        },
+      ],
+    };
+
+    const inbound = findInboundRelationLinks(
+      "c_ada",
+      "contacts",
+      contactColumns,
+      contactRows,
+      staleTargets,
+    );
+
+    expect(inbound).toHaveLength(2);
+    expect(inbound.every((link) => link.label !== "Stale Grace")).toBe(true);
+    expect(inbound.map((link) => link.sourceRow.id).sort()).toEqual(["c_alan", "c_grace"]);
+  });
+
+  it("returns no inbound links when nothing points at the row", () => {
+    expect(
+      findInboundRelationLinks("c_alan", "contacts", contactColumns, contactRows),
+    ).toEqual([]);
   });
 
   it("keeps relation_targets in sync after row upsert and delete", () => {

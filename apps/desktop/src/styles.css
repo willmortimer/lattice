@@ -3657,6 +3657,64 @@ html[data-motion="always"] *::after {
   padding: 6px 14px;
 }
 
+.record-detail-inbound {
+  padding: 12px;
+  border-top: 1px solid var(--lt-line);
+}
+
+.record-detail-inbound-title {
+  margin: 0 0 8px;
+  font-family: var(--lt-font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--lt-faint);
+}
+
+.record-detail-inbound-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.record-detail-inbound-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.record-detail-inbound-item-static {
+  cursor: default;
+}
+
+.record-detail-inbound-item-label {
+  color: var(--lt-accent);
+  font-size: 13px;
+}
+
+.record-detail-inbound-item:hover .record-detail-inbound-item-label,
+.record-detail-inbound-item:focus-visible .record-detail-inbound-item-label {
+  color: var(--lt-accent-bright);
+  text-decoration: underline;
+}
+
+.record-detail-inbound-item-via {
+  color: var(--lt-faint);
+  font-family: var(--lt-font-mono);
+  font-size: 10px;
+}
+
 .data-grid-frame .dvn-scroller {
   scrollbar-color: var(--lt-line-strong) transparent;
 }

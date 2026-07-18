@@ -221,6 +221,78 @@ function removeRelationTargetRow(
   return { ...targets, [table]: nextRows };
 }
 
+export interface InboundRelationLink {
+  /** Source table when the link comes from `relation_targets` (cross-table). */
+  table?: string;
+  column: string;
+  sourceRow: DataRow;
+  label: string;
+}
+
+/**
+ * Rows whose relation cells point at `rowId` within the current package snapshot.
+ * Self-relations scan `rows` on the active table; other tables use `relation_targets`.
+ */
+export function findInboundRelationLinks(
+  rowId: string,
+  targetTable: string,
+  columns: readonly DataColumn[],
+  rows: readonly DataRow[],
+  relationTargets?: Record<string, DataRow[]>,
+): InboundRelationLink[] {
+  const links: InboundRelationLink[] = [];
+
+  const inboundColumns = columns.filter(
+    (column) => column.field_type === "relation" && column.relation_table === targetTable,
+  );
+
+  for (const column of inboundColumns) {
+    for (const sourceRow of rows) {
+      if (sourceRow.id === rowId) {
+        continue;
+      }
+      if (!extractRelationIds(sourceRow.values[column.name]).includes(rowId)) {
+        continue;
+      }
+      links.push({
+        table: targetTable,
+        column: column.name,
+        sourceRow,
+        label: relationRecordLabel(sourceRow),
+      });
+    }
+  }
+
+  if (relationTargets) {
+    for (const [tableName, tableRows] of Object.entries(relationTargets)) {
+      if (tableName === targetTable) {
+        continue;
+      }
+      for (const sourceRow of tableRows) {
+        if (sourceRow.id === rowId) {
+          continue;
+        }
+        for (const [fieldName, value] of Object.entries(sourceRow.values)) {
+          if (fieldName === "id") {
+            continue;
+          }
+          if (!extractRelationIds(value).includes(rowId)) {
+            continue;
+          }
+          links.push({
+            table: tableName,
+            column: fieldName,
+            sourceRow,
+            label: relationRecordLabel(sourceRow),
+          });
+        }
+      }
+    }
+  }
+
+  return links;
+}
+
 /** Keep `relation_targets` honest after insert/update on the active table. */
 export function syncRelationTargetsAfterUpsert(
   snapshot: DataAppSnapshot,
