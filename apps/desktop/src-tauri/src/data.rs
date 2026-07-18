@@ -934,4 +934,67 @@ mod tests {
             "expected unsupported layout error, got: {err}"
         );
     }
+
+    #[test]
+    fn list_load_form_and_insert_via_form_fields() {
+        use lattice_data::{write_package_form, FormDef};
+
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let rel_path = "CRM.data".to_string();
+
+        create_table_package(
+            root.clone(),
+            rel_path.clone(),
+            "CRM".to_string(),
+            "contacts".to_string(),
+        )
+        .unwrap();
+
+        rusqlite::Connection::open(dir.path().join("CRM.data/database.sqlite"))
+            .unwrap()
+            .execute_batch(
+                "ALTER TABLE contacts ADD COLUMN name TEXT;
+                 ALTER TABLE contacts ADD COLUMN email TEXT;",
+            )
+            .unwrap();
+
+        let mut form = FormDef::new("intake", "contacts");
+        form.fields = vec!["name".into(), "email".into()];
+        form.title = Some("Contact intake".into());
+        write_package_form(&dir.path().join("CRM.data"), &form).unwrap();
+
+        assert_eq!(
+            list_data_forms(root.clone(), rel_path.clone()).unwrap(),
+            vec!["intake".to_string()]
+        );
+        let loaded = load_data_form(root.clone(), rel_path.clone(), "intake".into()).unwrap();
+        assert_eq!(loaded.name, "intake");
+        assert_eq!(loaded.table, "contacts");
+        assert_eq!(loaded.fields, vec!["name".to_string(), "email".to_string()]);
+        assert_eq!(loaded.title.as_deref(), Some("Contact intake"));
+
+        let inserted = insert_record(
+            root.clone(),
+            rel_path.clone(),
+            loaded.table,
+            BTreeMap::from([
+                ("name".into(), CellValue::Text("Ada".into())),
+                ("email".into(), CellValue::Text("ada@example.com".into())),
+            ]),
+        )
+        .unwrap();
+        assert!(!inserted.id.is_empty());
+
+        let snapshot = open_data_app(root, rel_path, None).unwrap();
+        assert_eq!(snapshot.rows.len(), 1);
+        assert_eq!(
+            snapshot.rows[0].values.get("name"),
+            Some(&CellValue::Text("Ada".into()))
+        );
+        assert_eq!(
+            snapshot.rows[0].values.get("email"),
+            Some(&CellValue::Text("ada@example.com".into()))
+        );
+    }
 }
