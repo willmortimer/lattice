@@ -61,6 +61,15 @@ Contract:
 - Undo of a rename/move returns path remaps so open tabs and selection follow
   the restored paths.
 
+### Revision history presentation
+
+Lattice-initiated moves that accept link repair record
+`ResourceRename(from, destination)` plus page updates in one transaction (see
+above). Inspect revision history may therefore show rename-shaped entries even
+when the resource moved between folders. Transaction summaries use “Move” when
+the parent directory changed and link repair was applied; undo semantics remain
+rename-shaped so the path change is not applied twice.
+
 ## Performance budgets (Phase 1)
 
 These limits are product requirements, not implementation details.

@@ -115,6 +115,9 @@ export function InspectorHistoryPanel({
 
   return (
     <div className="inspector-history-panel">
+      <p className="inspector-empty">
+        Path changes that include link repair may appear as rename-shaped revision entries.
+      </p>
       {error && <p className="inspector-empty" role="alert">{error}</p>}
       {deferNote && <p className="inspector-empty">{deferNote}</p>}
       {detail?.conflict && (

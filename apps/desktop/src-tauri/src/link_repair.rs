@@ -70,6 +70,11 @@ pub fn apply_link_repair(
 ) -> Result<(), String> {
     catalog_state.refresh(&root)?;
     let store = NativeWorkspaceStore::new(Path::new(&root));
+    let summary = link_repair_transaction_summary(
+        Path::new(&from),
+        Path::new(&to),
+        accepted_candidate_ids.len(),
+    );
     let tx = build_link_repair_transaction(
         &store,
         Some(SemanticCommand::ResourceRename {
@@ -78,12 +83,7 @@ pub fn apply_link_repair(
         }),
         &plan,
         &accepted_candidate_ids,
-        format!(
-            "Rename {} to {} with {} link repair(s)",
-            plan.rename_from.display(),
-            plan.rename_to.display(),
-            accepted_candidate_ids.len()
-        ),
+        summary,
     )
     .map_err(command_error_to_string)?;
     apply_transaction(&root, tx)?;
@@ -141,6 +141,19 @@ pub fn save_external_link_repair_proposal(
     }
     save_link_repair_proposal(workspace_root, &plan).map_err(command_error_to_string)?;
     Ok(Some(plan.summary()))
+}
+
+fn link_repair_transaction_summary(from: &Path, to: &Path, repair_count: usize) -> String {
+    let action = if from.parent() == to.parent() {
+        "Rename"
+    } else {
+        "Move"
+    };
+    format!(
+        "{action} {} to {} with {repair_count} link repair(s)",
+        from.display(),
+        to.display()
+    )
 }
 
 fn apply_transaction(root: &str, tx: Transaction) -> Result<(), String> {
@@ -212,6 +225,26 @@ mod tests {
 
         let listed = list_link_repair_proposals(dir.path()).unwrap();
         assert_eq!(listed.len(), 1);
+    }
+
+    #[test]
+    fn link_repair_transaction_summary_distinguishes_rename_and_move() {
+        assert_eq!(
+            link_repair_transaction_summary(
+                Path::new("Notes/A.md"),
+                Path::new("Notes/B.md"),
+                2,
+            ),
+            "Rename Notes/A.md to Notes/B.md with 2 link repair(s)"
+        );
+        assert_eq!(
+            link_repair_transaction_summary(
+                Path::new("Notes/A.md"),
+                Path::new("Archive/A.md"),
+                1,
+            ),
+            "Move Notes/A.md to Archive/A.md with 1 link repair(s)"
+        );
     }
 
     #[test]
