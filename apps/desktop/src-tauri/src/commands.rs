@@ -667,8 +667,8 @@ mod tests {
     #[test]
     fn decode_header_restores_percent_encoded_unicode_paths() {
         assert_eq!(
-            decode_header("%2FUsers%2Fwill%2FLattice%2F%E6%97%A5%E8%A8%98.md").unwrap(),
-            "/Users/will/Lattice/日記.md"
+            decode_header("%2FUsers%2Fexample%2FLattice%2F%E6%97%A5%E8%A8%98.md").unwrap(),
+            "/Users/example/Lattice/日記.md"
         );
     }
 
