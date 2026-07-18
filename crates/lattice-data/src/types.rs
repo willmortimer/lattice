@@ -21,10 +21,7 @@ pub enum FieldType {
 impl FieldType {
     pub fn sqlite_type(self) -> &'static str {
         match self {
-            FieldType::Text
-            | FieldType::LongText
-            | FieldType::Date
-            | FieldType::Relation => "TEXT",
+            FieldType::Text | FieldType::LongText | FieldType::Date | FieldType::Relation => "TEXT",
             FieldType::Integer | FieldType::Boolean => "INTEGER",
             FieldType::Decimal => "REAL",
         }
@@ -66,7 +63,9 @@ pub enum CellValue {
     Boolean(bool),
     Date(String),
     /// Linked record ids; SQLite stores a JSON array of strings as TEXT.
-    Relation { record_ids: Vec<String> },
+    Relation {
+        record_ids: Vec<String>,
+    },
 }
 
 impl CellValue {
@@ -156,6 +155,27 @@ pub struct ColumnMeta {
     pub sqlite_type: String,
     /// Target table name for [`FieldType::Relation`] within the same package.
     pub relation_table: Option<String>,
+}
+
+/// Prior relation cell state stripped when a target row is deleted.
+///
+/// Captured so command undo can restore inbound links after
+/// [`crate::DataApp::restore_row`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RelationStrip {
+    pub table: String,
+    pub row_id: String,
+    pub column: String,
+    pub prior_record_ids: Vec<String>,
+}
+
+/// Bytes stored as `prior_content` for [`RecordDelete`] undo: the deleted row
+/// plus any inbound relation cells that dropped its id.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DeletedRowSnapshot {
+    pub row: Row,
+    #[serde(default)]
+    pub relation_strips: Vec<RelationStrip>,
 }
 
 /// Spec for adding a column via [`crate::DataApp::add_columns`].

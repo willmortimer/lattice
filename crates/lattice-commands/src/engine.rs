@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use lattice_core::Workspace;
-use lattice_data::{DataApp, Row};
+use lattice_data::{DataApp, DeletedRowSnapshot, Row};
 use lattice_storage::{
     BufferedWriter, NativeWorkspaceStore, RecoveryJournal, ResourceMetadata, WorkspaceStore,
 };
@@ -1107,17 +1107,21 @@ impl CommandEngine {
                 let prior_row = app
                     .get_row(table, id)?
                     .ok_or_else(|| Error::NotFound { path: path.clone() })?;
-                app.delete_row(table, id)?;
+                let relation_strips = app.delete_row(table, id)?;
                 let revision = app.package_revision()?;
+                let snapshot = DeletedRowSnapshot {
+                    row: prior_row,
+                    relation_strips,
+                };
                 Ok(AppliedOp {
                     forward: command.clone(),
                     inverse: Command::RecordInsert {
                         path: path.clone(),
                         table: table.clone(),
-                        values: row_values_without_id(&prior_row),
+                        values: row_values_without_id(&snapshot.row),
                         id: Some(id.clone()),
                     },
-                    prior_content: Some(serde_json::to_vec(&prior_row)?),
+                    prior_content: Some(serde_json::to_vec(&snapshot)?),
                     after_content: None,
                     resulting_revision: Some(revision),
                 })
@@ -1322,8 +1326,15 @@ impl CommandEngine {
             } => {
                 let app = self.open_data_app(path)?;
                 if let Some(bytes) = prior_content {
-                    let row: Row = serde_json::from_slice(bytes)?;
-                    app.restore_row(table, &row)?;
+                    // Prefer DeletedRowSnapshot (row + inbound relation strips).
+                    // Legacy history stored a bare Row for RecordDelete undo.
+                    if let Ok(snapshot) = serde_json::from_slice::<DeletedRowSnapshot>(bytes) {
+                        app.restore_row(table, &snapshot.row)?;
+                        app.restore_relation_strips(&snapshot.relation_strips)?;
+                    } else {
+                        let row: Row = serde_json::from_slice(bytes)?;
+                        app.restore_row(table, &row)?;
+                    }
                 } else if let Some(row_id) = id {
                     let mut row_values = values.clone();
                     row_values.insert(
@@ -1545,11 +1556,9 @@ impl CommandEngine {
         if parent.as_os_str().is_empty() {
             return Ok(());
         }
-        let meta = self
-            .metadata_opt(parent)?
-            .ok_or_else(|| Error::NotFound {
-                path: parent.to_path_buf(),
-            })?;
+        let meta = self.metadata_opt(parent)?.ok_or_else(|| Error::NotFound {
+            path: parent.to_path_buf(),
+        })?;
         if meta.is_dir {
             Ok(())
         } else {
