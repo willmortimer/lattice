@@ -3,7 +3,99 @@ import {
   type CellValue,
   type DataColumn,
   type DataRow,
+  type ViewLayoutType,
 } from "./types";
+
+export const VIEW_LAYOUT_TYPES: readonly ViewLayoutType[] = [
+  "grid",
+  "list",
+  "board",
+  "gallery",
+  "calendar",
+  "form",
+] as const;
+
+/** Layout fields included in `save_data_view` (layout-specific keys only when applicable). */
+export interface ViewLayoutSaveFields {
+  layoutType: ViewLayoutType;
+  groupBy?: string | null;
+  coverField?: string | null;
+  dateField?: string | null;
+}
+
+/**
+ * Build the layout portion of a save-view request.
+ * Only the active layout's field is included so YAML stays valid.
+ */
+export function layoutFieldsForSave(
+  layoutType: ViewLayoutType,
+  fields: {
+    groupBy?: string;
+    coverField?: string;
+    dateField?: string;
+  },
+): ViewLayoutSaveFields {
+  switch (layoutType) {
+    case "grid":
+    case "list":
+    case "form":
+      return { layoutType };
+    case "board":
+      return { layoutType, groupBy: fields.groupBy ?? null };
+    case "gallery":
+      return { layoutType, coverField: fields.coverField ?? null };
+    case "calendar":
+      return { layoutType, dateField: fields.dateField ?? null };
+    default: {
+      const _exhaustive: never = layoutType;
+      return _exhaustive;
+    }
+  }
+}
+
+/**
+ * When the user picks a layout in the toolbar, seed layout-specific columns
+ * from resolvers so Save persists an explicit field.
+ */
+export function seedLayoutFieldsForType(
+  layoutType: ViewLayoutType,
+  columns: DataColumn[],
+  current: {
+    groupBy?: string;
+    coverField?: string;
+    dateField?: string;
+  },
+): {
+  groupBy?: string;
+  coverField?: string;
+  dateField?: string;
+} {
+  switch (layoutType) {
+    case "grid":
+    case "list":
+    case "form":
+      return current;
+    case "board":
+      return {
+        ...current,
+        groupBy: resolveGroupByColumn(columns, current.groupBy),
+      };
+    case "gallery":
+      return {
+        ...current,
+        coverField: resolveGalleryCoverColumn(columns, current.coverField),
+      };
+    case "calendar":
+      return {
+        ...current,
+        dateField: resolveCalendarDateColumn(columns, current.dateField),
+      };
+    default: {
+      const _exhaustive: never = layoutType;
+      return _exhaustive;
+    }
+  }
+}
 
 const GROUPABLE_FIELD_TYPES = new Set(["text", "boolean"]);
 

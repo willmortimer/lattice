@@ -21,7 +21,7 @@ pub use types::{CellValue, ColumnMeta, FieldType, Row};
 pub use view::{
     write_package_view, FilterOperator, SortDirection, ViewDef, ViewFilter, ViewLayout, ViewSort,
     ViewSource, LAYOUT_BOARD, LAYOUT_CALENDAR, LAYOUT_FORM, LAYOUT_GALLERY, LAYOUT_GRID,
-    LAYOUT_LIST, VIEW_FORMAT, VIEW_VERSION,
+    LAYOUT_LIST, SUPPORTED_LAYOUT_TYPES, VIEW_FORMAT, VIEW_VERSION,
 };
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -3,8 +3,9 @@ use std::path::{Path, PathBuf};
 
 use lattice_commands::{Command as SemanticCommand, CommandEngine, Transaction};
 use lattice_data::{
-    parse_csv_file, CellValue, ColumnMeta, DataApp, FilterOperator, Row, SortDirection, ViewDef,
-    ViewFilter, ViewSort,
+    parse_csv_file, CellValue, ColumnMeta, DataApp, FilterOperator, Row, SortDirection,
+    ViewDef, ViewFilter, ViewSort, LAYOUT_BOARD, LAYOUT_CALENDAR, LAYOUT_GALLERY,
+    SUPPORTED_LAYOUT_TYPES,
 };
 use serde::{Deserialize, Serialize};
 
@@ -200,6 +201,7 @@ pub fn load_data_view(root: String, rel_path: String, name: String) -> Result<Vi
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SaveViewRequest {
     pub view_name: String,
     pub table: String,
@@ -207,9 +209,25 @@ pub struct SaveViewRequest {
     pub sort_field: Option<String>,
     pub sort_direction: Option<String>,
     pub filters: Vec<FilterDto>,
+    /// One of [`SUPPORTED_LAYOUT_TYPES`]: grid, list, board, gallery, calendar, form.
+    #[serde(default = "default_layout_type")]
+    pub layout_type: String,
+    /// Board layout only: column used to group cards into lanes.
+    #[serde(default)]
+    pub group_by: Option<String>,
+    /// Gallery layout only: column rendered as each card's cover.
+    #[serde(default)]
+    pub cover_field: Option<String>,
+    /// Calendar layout only: column used to place records on the calendar.
+    #[serde(default)]
+    pub date_field: Option<String>,
 }
 
-/// Persist a grid view via the command engine (`ViewSave`).
+fn default_layout_type() -> String {
+    lattice_data::LAYOUT_GRID.to_string()
+}
+
+/// Persist a view (any supported layout) via the command engine (`ViewSave`).
 #[tauri::command]
 pub fn save_data_view(
     root: String,
@@ -223,10 +241,36 @@ pub fn save_data_view(
         sort_field,
         sort_direction,
         filters,
+        layout_type,
+        group_by,
+        cover_field,
+        date_field,
     } = request;
+    if !SUPPORTED_LAYOUT_TYPES.contains(&layout_type.as_str()) {
+        return Err(format!(
+            "unsupported view layout type {layout_type:?}; expected one of {SUPPORTED_LAYOUT_TYPES:?}"
+        ));
+    }
     let (canonical_root, _) = resolve_within_root(&root, &rel_path)?;
     let mut view = ViewDef::new_grid(table);
+    view.layout.layout_type = layout_type;
     view.layout.columns = columns;
+    // Layout-specific fields are exclusive; clear anything that does not belong.
+    view.layout.group_by = if view.layout.layout_type == LAYOUT_BOARD {
+        group_by.filter(|value| !value.is_empty())
+    } else {
+        None
+    };
+    view.layout.cover_field = if view.layout.layout_type == LAYOUT_GALLERY {
+        cover_field.filter(|value| !value.is_empty())
+    } else {
+        None
+    };
+    view.layout.date_field = if view.layout.layout_type == LAYOUT_CALENDAR {
+        date_field.filter(|value| !value.is_empty())
+    } else {
+        None
+    };
     if let Some(field) = sort_field {
         let direction = match sort_direction.as_deref() {
             Some("desc") => SortDirection::Desc,
@@ -623,6 +667,161 @@ mod tests {
         assert!(
             err.starts_with(crate::commands::STALE_REVISION_PREFIX),
             "expected STALE_REVISION-prefixed error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn save_data_view_persists_non_grid_layouts() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let rel_path = "CRM.data".to_string();
+
+        create_table_package(
+            root.clone(),
+            rel_path.clone(),
+            "CRM".to_string(),
+            "contacts".to_string(),
+        )
+        .unwrap();
+
+        rusqlite::Connection::open(dir.path().join("CRM.data/database.sqlite"))
+            .unwrap()
+            .execute_batch(
+                "ALTER TABLE contacts ADD COLUMN name TEXT;
+                 ALTER TABLE contacts ADD COLUMN status TEXT;
+                 ALTER TABLE contacts ADD COLUMN photo TEXT;
+                 ALTER TABLE contacts ADD COLUMN due_date TEXT;",
+            )
+            .unwrap();
+
+        let board = save_data_view(
+            root.clone(),
+            rel_path.clone(),
+            SaveViewRequest {
+                view_name: "ByStatus".into(),
+                table: "contacts".into(),
+                columns: vec!["id".into(), "name".into(), "status".into()],
+                sort_field: None,
+                sort_direction: None,
+                filters: Vec::new(),
+                layout_type: LAYOUT_BOARD.to_string(),
+                group_by: Some("status".into()),
+                cover_field: Some("photo".into()),
+                date_field: Some("due_date".into()),
+            },
+        )
+        .unwrap();
+        assert_eq!(board.layout_type, LAYOUT_BOARD);
+        assert_eq!(board.group_by.as_deref(), Some("status"));
+        assert!(board.cover_field.is_none());
+        assert!(board.date_field.is_none());
+
+        let gallery = save_data_view(
+            root.clone(),
+            rel_path.clone(),
+            SaveViewRequest {
+                view_name: "Covers".into(),
+                table: "contacts".into(),
+                columns: vec!["id".into(), "name".into(), "photo".into()],
+                sort_field: None,
+                sort_direction: None,
+                filters: Vec::new(),
+                layout_type: LAYOUT_GALLERY.to_string(),
+                group_by: Some("status".into()),
+                cover_field: Some("photo".into()),
+                date_field: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(gallery.layout_type, LAYOUT_GALLERY);
+        assert_eq!(gallery.cover_field.as_deref(), Some("photo"));
+        assert!(gallery.group_by.is_none());
+
+        let calendar = save_data_view(
+            root.clone(),
+            rel_path.clone(),
+            SaveViewRequest {
+                view_name: "Schedule".into(),
+                table: "contacts".into(),
+                columns: vec!["id".into(), "name".into(), "due_date".into()],
+                sort_field: None,
+                sort_direction: None,
+                filters: Vec::new(),
+                layout_type: LAYOUT_CALENDAR.to_string(),
+                group_by: None,
+                cover_field: None,
+                date_field: Some("due_date".into()),
+            },
+        )
+        .unwrap();
+        assert_eq!(calendar.layout_type, LAYOUT_CALENDAR);
+        assert_eq!(calendar.date_field.as_deref(), Some("due_date"));
+
+        let form = save_data_view(
+            root.clone(),
+            rel_path.clone(),
+            SaveViewRequest {
+                view_name: "Intake".into(),
+                table: "contacts".into(),
+                columns: vec!["name".into(), "status".into()],
+                sort_field: None,
+                sort_direction: None,
+                filters: Vec::new(),
+                layout_type: lattice_data::LAYOUT_FORM.to_string(),
+                group_by: None,
+                cover_field: None,
+                date_field: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(form.layout_type, lattice_data::LAYOUT_FORM);
+
+        let reloaded_board = open_data_app(root.clone(), rel_path.clone(), Some("ByStatus".into()))
+            .unwrap();
+        assert_eq!(reloaded_board.layout_type, LAYOUT_BOARD);
+        assert_eq!(reloaded_board.group_by.as_deref(), Some("status"));
+
+        let yaml = std::fs::read_to_string(dir.path().join("CRM.data/views/ByStatus.yaml")).unwrap();
+        assert!(yaml.contains("type: board"));
+        assert!(yaml.contains("group_by: status"));
+        assert!(!yaml.contains("cover_field"));
+        assert!(!yaml.contains("date_field"));
+    }
+
+    #[test]
+    fn save_data_view_rejects_unknown_layout_type() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let rel_path = "CRM.data".to_string();
+
+        create_table_package(
+            root.clone(),
+            rel_path.clone(),
+            "CRM".to_string(),
+            "contacts".to_string(),
+        )
+        .unwrap();
+
+        let err = save_data_view(
+            root,
+            rel_path,
+            SaveViewRequest {
+                view_name: "Bad".into(),
+                table: "contacts".into(),
+                columns: Vec::new(),
+                sort_field: None,
+                sort_direction: None,
+                filters: Vec::new(),
+                layout_type: "map".into(),
+                group_by: None,
+                cover_field: None,
+                date_field: None,
+            },
+        )
+        .unwrap_err();
+        assert!(
+            err.contains("unsupported view layout type"),
+            "expected unsupported layout error, got: {err}"
         );
     }
 }
