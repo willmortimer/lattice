@@ -54,28 +54,18 @@ Workspace defaults point quick capture at `Inbox/` and templates at `Templates/`
 
 ### CRM views
 
-The template compiler seeds **rows and columns** only — not saved view YAML. After
-provisioning, add layouts under `CRM.data/views/` (one file per view). In the CRM
-header, pick a layout or switch among saved views.
+Open `CRM.data` and switch layouts from the view picker. The template seeds saved
+views under `CRM.data/views/` (one YAML file per view):
 
-Example `CRM.data/views/Board.yaml`:
+| View | Layout | Key field |
+| ---- | ------ | --------- |
+| Board | `board` | `status` |
+| Calendar | `calendar` | `due_date` |
+| Gallery | `gallery` | `company` (cover) |
+| Form | `form` | — |
 
-```yaml
-format: lattice-view
-version: 1
-source:
-  database: ../database.sqlite
-  table: contacts
-layout:
-  type: board
-  group_by: status
-sort:
-  field: due_date
-  direction: ascending
-```
-
-Supported layout types: `grid`, `list`, `board`, `gallery`, `calendar`, `form`.
-Calendar views use `due_date`; gallery views can use `company` as a cover field.
+Supported layout types also include `grid` and `list`. Board groups contacts by
+`status`; calendar plots `due_date`; gallery uses `company` as a cover field.
 
 Embed a view from a page (see [[Research/Long Read]]):
 

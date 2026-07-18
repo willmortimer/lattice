@@ -141,9 +141,9 @@ flowchart LR
 notes. Open the data app from [[Home]] or search for a name like **Grace Hopper**.
 
 In the data app header, switch layouts (grid, list, board, gallery, calendar, form)
-from the view picker. Saved views live under `CRM.data/views/` as YAML files — the
-First Look template seeds rows only; add views manually or duplicate from
-[[Home#CRM views]].
+from the view picker. Saved views ship under `CRM.data/views/` as YAML — Board,
+Calendar, Gallery, and Form are seeded from the template manifest (see
+[[Home#CRM views]]).
 
 ## Release rhythm
 

@@ -17,5 +17,20 @@ title: Data Lab
 | -------- | -------- |
 | Contact list | [[Data/contacts.csv]] |
 | Sample query | [[Queries/example.sql]] |
-| Metrics table | `metrics.data` (seeded table) |
+| Metrics table | `Data/metrics.data` (seeded SQLite package) |
 | Starter notebook | [[Notebooks/example.ipynb]] |
+
+## Metrics views
+
+Open `Data/metrics.data` and switch layouts from the view picker. The template
+compiler seeds saved views under `Data/metrics.data/views/`:
+
+| View | Layout | Key field |
+| ---- | ------ | --------- |
+| Board | `board` | `category` |
+| Calendar | `calendar` | `recorded_on` |
+| Gallery | `gallery` | `metric` (cover) |
+| Form | `form` | — |
+
+Board groups metrics by category; calendar plots readings on `recorded_on`.
+Gallery uses the metric name as a cover label until you add image columns.

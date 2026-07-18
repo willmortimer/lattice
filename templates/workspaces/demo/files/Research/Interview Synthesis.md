@@ -25,7 +25,7 @@ status values in `CRM.data`.
 
 ## Follow-ups
 
-- [ ] Add saved board view under `CRM.data/views/Board.yaml` (see [[Home#CRM views]])
+- [x] Saved board view under `CRM.data/views/Board.yaml` (see [[Home#CRM views]])
 - [ ] Link interview pages from canvas nodes
 - [ ] Export subset to `Data/sample.csv` for comparison
 
