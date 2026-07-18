@@ -30,13 +30,19 @@ Each step is safe in the sample workspace; undo where noted.
 3. Click **Save view** to persist the layout under `CRM.data/views/`.
 4. Open a contact row and inspect the **company** and **reports_to** relation columns — a few contacts are pre-linked; add or change links in the record detail panel.
 
+### CRM package forms
+
+5. Open `CRM.data` and click **Forms** in the data-app chrome.
+6. Choose **Contact intake** — the seeded `forms/ContactIntake.form.yaml` maps `name`, `email`, `status`, and **company**.
+7. Submit a new contact; the row appears in the grid and relation pickers stay in sync with the `companies` table.
+
 ### Resource tree
 
-5. Create a folder under `Projects/` (context menu or **New folder**).
-6. Press **⌘Z** to undo the folder creation.
-7. Move [[Product/Vision]] into another folder; accept link repair when prompted so wiki links update.
-8. **⌘-click** two pages in the tree, then drag the selection to a folder (multi-select move).
-9. Select multiple items and delete — confirm the batch operation.
+8. Create a folder under `Projects/` (context menu or **New folder**).
+9. Press **⌘Z** to undo the folder creation.
+10. Move [[Product/Vision]] into another folder; accept link repair when prompted so wiki links update.
+11. **⌘-click** two pages in the tree, then drag the selection to a folder (multi-select move).
+12. Select multiple items and delete — confirm the batch operation.
 
 ### Where to look next
 
@@ -102,6 +108,16 @@ The **reports_to** column is a self-relation on `contacts` — open a row to lin
 or managers. Template relation seeds accept **record ids** or display **names** (matched
 via each target table's `name` column at provision time); prefer ids when you need
 stable references across renames.
+
+### CRM package forms
+
+Package forms live beside views under `CRM.data/forms/` (one YAML file per form):
+
+| Form | Table | Fields |
+| ---- | ----- | ------ |
+| ContactIntake | `contacts` | `name`, `email`, `status`, `company` |
+
+Open **Forms** in the data-app chrome to submit a new contact through the seeded intake form.
 
 Embed a view from a page (see [[Research/Long Read]]):
 

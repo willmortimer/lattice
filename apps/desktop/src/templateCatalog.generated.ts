@@ -92,7 +92,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
           }
         ],
         "extraTables": [],
-        "views": []
+        "views": [],
+        "forms": []
       }
     ]
   },
@@ -262,7 +263,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
           }
         ],
         "extraTables": [],
-        "views": []
+        "views": [],
+        "forms": []
       }
     ]
   },
@@ -368,7 +370,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
           }
         ],
         "extraTables": [],
-        "views": []
+        "views": [],
+        "forms": []
       }
     ]
   },
@@ -479,7 +482,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
           }
         ],
         "extraTables": [],
-        "views": []
+        "views": [],
+        "forms": []
       }
     ]
   },
@@ -688,7 +692,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "layout": "form",
             "columns": []
           }
-        ]
+        ],
+        "forms": []
       }
     ]
   },
@@ -804,7 +809,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
           }
         ],
         "extraTables": [],
-        "views": []
+        "views": [],
+        "forms": []
       }
     ]
   },
@@ -1244,6 +1250,20 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "name": "Form",
             "layout": "form",
             "columns": []
+          }
+        ],
+        "forms": [
+          {
+            "name": "ContactIntake",
+            "table": "contacts",
+            "fields": [
+              "name",
+              "email",
+              "status",
+              "company"
+            ],
+            "title": "Contact intake",
+            "description": "Create a contact from the package form."
           }
         ]
       }

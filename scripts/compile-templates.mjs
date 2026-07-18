@@ -293,6 +293,13 @@ function normalizeDataPackage(entry, template, index) {
   });
 
   const views = normalizeDataPackageViews(entry.views, template, label, columnNames);
+  const forms = normalizeDataPackageForms(
+    entry.forms,
+    template,
+    label,
+    entry.table,
+    columnNames,
+  );
 
   const extraTables = normalizeExtraTables(
     entry.extraTables,
@@ -310,6 +317,7 @@ function normalizeDataPackage(entry, template, index) {
     rows,
     extraTables,
     views,
+    forms,
   };
 }
 
@@ -493,6 +501,86 @@ function normalizeDataPackageView(entry, template, label, allowedColumns, viewNa
   };
 }
 
+function normalizeDataPackageForms(raw, template, label, defaultTable, columnNames) {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) {
+    throw new Error(`${template}: ${label}.forms must be an array`);
+  }
+  const allowedColumns = new Set([...columnNames, "id"]);
+  const formNames = new Set();
+  return raw.map((entry, index) =>
+    normalizeDataPackageForm(
+      entry,
+      template,
+      `${label}.forms[${index}]`,
+      defaultTable,
+      allowedColumns,
+      formNames,
+    ),
+  );
+}
+
+function normalizeDataPackageForm(entry, template, label, defaultTable, allowedColumns, formNames) {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    throw new Error(`${template}: ${label} must be an object`);
+  }
+  if (typeof entry.name !== "string" || !isSqlIdentifier(entry.name)) {
+    throw new Error(`${template}: ${label}.name must be a valid SQL identifier`);
+  }
+  if (formNames.has(entry.name)) {
+    throw new Error(`${template}: ${label} duplicate form name ${entry.name}`);
+  }
+  formNames.add(entry.name);
+  const table =
+    entry.table === undefined
+      ? defaultTable
+      : typeof entry.table === "string" && isSqlIdentifier(entry.table)
+        ? entry.table
+        : null;
+  if (!table) {
+    throw new Error(`${template}: ${label}.table must be a valid SQL identifier`);
+  }
+  if (table !== defaultTable) {
+    throw new Error(
+      `${template}: ${label}.table must match the package default table (${defaultTable})`,
+    );
+  }
+  if (!Array.isArray(entry.fields) || entry.fields.length === 0) {
+    throw new Error(`${template}: ${label}.fields must be a non-empty array`);
+  }
+  const seen = new Set();
+  const fields = entry.fields.map((field, fieldIndex) => {
+    const fieldLabel = `${label}.fields[${fieldIndex}]`;
+    if (typeof field !== "string" || !isSqlIdentifier(field)) {
+      throw new Error(`${template}: ${fieldLabel} must be a valid SQL identifier`);
+    }
+    if (!allowedColumns.has(field)) {
+      throw new Error(`${template}: ${fieldLabel} references unknown column ${field}`);
+    }
+    if (seen.has(field)) {
+      throw new Error(`${template}: ${fieldLabel} duplicate column ${field}`);
+    }
+    seen.add(field);
+    return field;
+  });
+  if (entry.title !== undefined && (typeof entry.title !== "string" || entry.title.trim() === "")) {
+    throw new Error(`${template}: ${label}.title must be a non-empty string`);
+  }
+  if (
+    entry.description !== undefined &&
+    (typeof entry.description !== "string" || entry.description.trim() === "")
+  ) {
+    throw new Error(`${template}: ${label}.description must be a non-empty string`);
+  }
+  return {
+    name: entry.name,
+    table,
+    fields,
+    title: entry.title,
+    description: entry.description,
+  };
+}
+
 function assertJsonCell(value, template, label, fieldType) {
   const kind = value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
   if (fieldType === "relation") {
@@ -653,6 +741,17 @@ function rustDataColumn(column) {
   return `SeedDataColumn { name: ${rustString(column.name)}, field_type: ${rustString(column.type)}, relation_table: ${rustOptionString(column.relation_table)} }`;
 }
 
+function rustDataForm(form) {
+  const fields = form.fields.map((field) => rustString(field)).join(",\n                    ");
+  return `SeedDataForm {
+                name: ${rustString(form.name)},
+                table: ${rustString(form.table)},
+                fields: &[${fields ? `\n                    ${fields}\n                ` : ""}],
+                title: ${rustOptionString(form.title)},
+                description: ${rustOptionString(form.description)},
+            }`;
+}
+
 function rustDataView(view) {
   const columns = view.columns.map((column) => rustString(column)).join(",\n                    ");
   return `SeedDataView {
@@ -683,6 +782,7 @@ function rustDataPackage(packageDef) {
   const columns = packageDef.columns.map(rustDataColumn).join(",\n                ");
   const rows = packageDef.rows.map((row) => rustString(JSON.stringify(row))).join(",\n                ");
   const views = packageDef.views.map(rustDataView).join(",\n                ");
+  const forms = packageDef.forms.map(rustDataForm).join(",\n                ");
   const extraTables = packageDef.extraTables.map(rustExtraTable).join(",\n                ");
   return `SeedDataPackage {
             path: ${rustString(packageDef.path)},
@@ -696,6 +796,7 @@ function rustDataPackage(packageDef) {
             ],
             extra_tables: &[${extraTables ? `\n                ${extraTables}\n            ` : ""}],
             views: &[${views ? `\n                ${views}\n            ` : ""}],
+            forms: &[${forms ? `\n                ${forms}\n            ` : ""}],
         }`;
 }
 
@@ -969,6 +1070,16 @@ function demoViewLayoutFromSeed(view) {
   return layout;
 }
 
+function buildDemoFormCatalog(packageDef) {
+  return packageDef.forms.map((form) => ({
+    name: form.name,
+    table: form.table,
+    fields: form.fields,
+    ...(form.title === undefined ? {} : { title: form.title }),
+    ...(form.description === undefined ? {} : { description: form.description }),
+  }));
+}
+
 function buildDemoViewCatalog(packageDef) {
   const views = [
     { name: "All", layout_type: "grid" },
@@ -1083,10 +1194,16 @@ export function emitDemoWorkspace(templates) {
     manifestRevision: "demo:0",
     resources: buildDemoResources(template),
   };
+  const crmPackage =
+    template.dataPackages.find((entry) => entry.path === "CRM.data") ?? template.dataPackages[0];
+  if (!crmPackage) {
+    throw new Error(`${DEMO_TEMPLATE_ID}: expected a dataPackages entry for browser demo CRM`);
+  }
   const module = {
     demoSnapshot: snapshot,
     demoCanvas: buildDemoCanvas(template),
     demoDataApp: buildDemoDataApp(template),
+    demoPackageForms: buildDemoFormCatalog(crmPackage),
     demoPages: buildDemoPages(template),
     demoTextFiles: buildDemoTextFiles(template),
     demoNotebooks: buildDemoNotebooks(template),
@@ -1094,12 +1211,15 @@ export function emitDemoWorkspace(templates) {
   return `// GENERATED by scripts/compile-templates.mjs — do not edit.
 import type { WorkspaceSnapshot } from "./types";
 import type { DataAppSnapshot } from "./data/types";
+import type { FormSummary } from "./data/forms";
 
 export const demoSnapshot: WorkspaceSnapshot = ${JSON.stringify(module.demoSnapshot, null, 2)};
 
 export const demoCanvas = ${JSON.stringify(module.demoCanvas, null, 2)};
 
 export const demoDataApp: DataAppSnapshot = ${JSON.stringify(module.demoDataApp, null, 2)};
+
+export const demoPackageForms: FormSummary[] = ${JSON.stringify(module.demoPackageForms, null, 2)};
 
 export const demoPages: Record<string, string> = ${JSON.stringify(module.demoPages, null, 2)};
 

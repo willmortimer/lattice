@@ -190,6 +190,41 @@ test("template compiler accepts declarative dataPackage views", () => {
   assert.equal(views[1].date_field, "due_date");
 });
 
+test("template compiler accepts declarative dataPackage forms", () => {
+  const templates = compileTemplates(
+    fixture({
+      directories: ["Data"],
+      dataPackages: [
+        {
+          path: "Data/Contacts.data",
+          title: "Contacts",
+          table: "contacts",
+          columns: [
+            { name: "name", type: "text" },
+            { name: "email", type: "text" },
+            { name: "status", type: "text" },
+          ],
+          rows: [{ name: "Ada", email: "ada@example.com", status: "Active" }],
+          forms: [
+            {
+              name: "ContactIntake",
+              fields: ["name", "email", "status"],
+              title: "Contact intake",
+              description: "Create a contact.",
+            },
+          ],
+        },
+      ],
+    }),
+  );
+  const forms = templates[0].dataPackages[0].forms;
+  assert.equal(forms.length, 1);
+  assert.equal(forms[0].name, "ContactIntake");
+  assert.equal(forms[0].table, "contacts");
+  assert.deepEqual(forms[0].fields, ["name", "email", "status"]);
+  assert.equal(forms[0].title, "Contact intake");
+});
+
 test("demo template emits kitchen-sink browser fixture", () => {
   const templates = compileTemplates();
   const demo = templates.find((template) => template.id === "demo");
@@ -218,6 +253,8 @@ test("demo template emits kitchen-sink browser fixture", () => {
   assert.match(source, /export const demoNotebooks/);
   assert.match(source, /Notebooks\/CRM exploration\.ipynb/);
   assert.match(source, /# CRM exploration/);
+  assert.match(source, /export const demoPackageForms/);
+  assert.match(source, /"name": "ContactIntake"/);
 });
 
 test("template compiler rejects invalid dataPackages", () => {
