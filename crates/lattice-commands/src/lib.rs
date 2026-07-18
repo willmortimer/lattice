@@ -42,10 +42,11 @@ pub use command::{
 pub use engine::CommandEngine;
 pub use error::Error;
 pub use link_repair::{
-    build_link_repair_page_updates, build_link_repair_transaction, dismiss_link_repair_proposal,
-    link_repair_now, list_link_repair_proposals, load_link_repair_proposal,
-    maybe_save_external_link_repair_proposal, new_link_repair_plan_id, save_link_repair_proposal,
-    LINK_REPAIR_DIR,
+    build_batch_link_repair_plan, build_batch_link_repair_transaction,
+    build_link_repair_page_updates, build_link_repair_page_updates_from_candidates,
+    build_link_repair_transaction, dismiss_link_repair_proposal, link_repair_now,
+    list_link_repair_proposals, load_link_repair_proposal, maybe_save_external_link_repair_proposal,
+    new_link_repair_plan_id, save_link_repair_proposal, LINK_REPAIR_DIR,
 };
 pub use revisions::{
     ConflictEnvelope, HistoryCleanupCandidate, HistoryCleanupReport, HistoryRetentionPolicy,

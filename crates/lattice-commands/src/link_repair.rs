@@ -6,8 +6,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use lattice_core::{
-    apply_span_replacements, LinkRepairCandidate, LinkRepairPlan, LinkRepairProposalSummary,
-    OPERATIONAL_DIR,
+    apply_span_replacements, merge_batch_link_repair_plans, BatchLinkRepairPlan, LinkRepairCandidate,
+    LinkRepairPlan, LinkRepairProposalSummary, LinkRepairSource, OPERATIONAL_DIR,
 };
 use lattice_storage::{NativeWorkspaceStore, WorkspaceStore};
 
@@ -78,12 +78,21 @@ pub fn build_link_repair_page_updates(
     plan: &LinkRepairPlan,
     accepted_candidate_ids: &[String],
 ) -> Result<Vec<Command>> {
+    build_link_repair_page_updates_from_candidates(store, &plan.candidates, accepted_candidate_ids)
+}
+
+/// Build `PageUpdate` commands from a flat candidate list (single or batch plans).
+pub fn build_link_repair_page_updates_from_candidates(
+    store: &NativeWorkspaceStore,
+    candidates: &[LinkRepairCandidate],
+    accepted_candidate_ids: &[String],
+) -> Result<Vec<Command>> {
     let accepted: BTreeSet<&str> = accepted_candidate_ids
         .iter()
         .map(String::as_str)
         .collect();
     let mut by_source: BTreeMap<PathBuf, Vec<&LinkRepairCandidate>> = BTreeMap::new();
-    for candidate in &plan.candidates {
+    for candidate in candidates {
         if !accepted.contains(candidate.id.as_str()) {
             continue;
         }
@@ -94,13 +103,13 @@ pub fn build_link_repair_page_updates(
     }
 
     let mut commands = Vec::new();
-    for (source_path, candidates) in by_source {
+    for (source_path, page_candidates) in by_source {
         let bytes = store.read(&source_path)?;
         let content = String::from_utf8(bytes).map_err(|_| Error::InvalidResourceTarget {
             path: source_path.clone(),
             reason: "link repair requires UTF-8 page content".into(),
         })?;
-        let replacements: Vec<(usize, usize, &str)> = candidates
+        let replacements: Vec<(usize, usize, &str)> = page_candidates
             .iter()
             .map(|candidate| {
                 (
@@ -149,6 +158,39 @@ pub fn build_link_repair_transaction(
     Ok(Transaction::new(summary, commands))
 }
 
+/// Compose N renames/moves with the union of accepted page updates (one undo).
+pub fn build_batch_link_repair_transaction(
+    store: &NativeWorkspaceStore,
+    moves: &[(PathBuf, PathBuf)],
+    candidates: &[LinkRepairCandidate],
+    accepted_candidate_ids: &[String],
+    summary: impl Into<String>,
+) -> Result<Transaction> {
+    let mut commands: Vec<Command> = moves
+        .iter()
+        .map(|(from, to)| Command::ResourceRename {
+            from: from.clone(),
+            to: to.clone(),
+        })
+        .collect();
+    commands.extend(build_link_repair_page_updates_from_candidates(
+        store,
+        candidates,
+        accepted_candidate_ids,
+    )?);
+    Ok(Transaction::new(summary, commands))
+}
+
+/// Merge per-path plans into a capped batch plan.
+pub fn build_batch_link_repair_plan(
+    plan_id: impl Into<String>,
+    created_at: u64,
+    source: LinkRepairSource,
+    plans: Vec<LinkRepairPlan>,
+) -> BatchLinkRepairPlan {
+    merge_batch_link_repair_plans(plan_id, created_at, source, plans)
+}
+
 /// Convenience for external renames: build and persist a proposal when links
 /// would be affected.
 pub fn maybe_save_external_link_repair_proposal(
@@ -176,8 +218,9 @@ pub fn link_repair_now() -> u64 {
 mod tests {
     use super::*;
     use lattice_core::{
-        build_link_repair_plan, LinkOccurrence, LinkRepairSource, LinkRepairStatus,
-        MarkdownLinkKind, Resource, ResourceCatalog, ResourceKind, Workspace,
+        build_link_repair_plan, BatchLinkRepairPlan, LinkOccurrence, LinkRepairCandidate,
+        LinkRepairPathChange, LinkRepairSource, LinkRepairStatus, MarkdownLinkKind, Resource,
+        ResourceCatalog, ResourceKind, Workspace,
     };
     use tempfile::TempDir;
 
@@ -328,6 +371,110 @@ mod tests {
         assert!(home.contains("[[Renamed]]"));
         assert!(!dir.path().join("Notes/Other.md").exists());
         assert!(dir.path().join("Notes/Renamed.md").exists());
+    }
+
+    #[test]
+    fn batch_transaction_moves_and_repairs_in_one_undo() {
+        let (dir, store) = workspace();
+        write_page(&dir, "Notes/Home.md", "See [[Alpha]] and [[Beta]].\n");
+        write_page(&dir, "Notes/Alpha.md", "# Alpha\n");
+        write_page(&dir, "Notes/Beta.md", "# Beta\n");
+        std::fs::create_dir_all(dir.path().join("Archive")).unwrap();
+
+        // Span-precise candidates (wiki titles may stay identical after a folder
+        // move; force distinct new_text so PageUpdate is observable).
+        let batch = BatchLinkRepairPlan {
+            id: "batch".into(),
+            moves: vec![
+                LinkRepairPathChange {
+                    from: "Notes/Alpha.md".into(),
+                    to: "Archive/Alpha.md".into(),
+                },
+                LinkRepairPathChange {
+                    from: "Notes/Beta.md".into(),
+                    to: "Archive/Beta.md".into(),
+                },
+            ],
+            source: LinkRepairSource::LatticeRename,
+            created_at: 1,
+            omitted_co_moved_count: 0,
+            truncated: false,
+            candidate_total_before_cap: 2,
+            candidates: vec![
+                LinkRepairCandidate {
+                    id: "batch-0".into(),
+                    occurrence: LinkOccurrence {
+                        source_path: "Notes/Home.md".into(),
+                        kind: MarkdownLinkKind::Wiki,
+                        raw_target: "Alpha".into(),
+                        anchor: None,
+                        label: None,
+                        source_start_byte: 4,
+                        source_end_byte: 13,
+                        source_start_line: 1,
+                        source_start_column: 5,
+                        source_end_line: 1,
+                        source_end_column: 14,
+                    },
+                    old_target: "Alpha".into(),
+                    new_target: "Archive/Alpha".into(),
+                    new_text: "[[Archive/Alpha]]".into(),
+                    status: LinkRepairStatus::Resolved,
+                    ambiguity: None,
+                },
+                LinkRepairCandidate {
+                    id: "batch-1".into(),
+                    occurrence: LinkOccurrence {
+                        source_path: "Notes/Home.md".into(),
+                        kind: MarkdownLinkKind::Wiki,
+                        raw_target: "Beta".into(),
+                        anchor: None,
+                        label: None,
+                        source_start_byte: 18,
+                        source_end_byte: 26,
+                        source_start_line: 1,
+                        source_start_column: 19,
+                        source_end_line: 1,
+                        source_end_column: 27,
+                    },
+                    old_target: "Beta".into(),
+                    new_target: "Archive/Beta".into(),
+                    new_text: "[[Archive/Beta]]".into(),
+                    status: LinkRepairStatus::Resolved,
+                    ambiguity: None,
+                },
+            ],
+        };
+        let accepted: Vec<String> = batch.candidates.iter().map(|c| c.id.clone()).collect();
+        let moves = batch
+            .moves
+            .iter()
+            .map(|change| (change.from.clone(), change.to.clone()))
+            .collect::<Vec<_>>();
+        let tx = build_batch_link_repair_transaction(
+            &store,
+            &moves,
+            &batch.candidates,
+            &accepted,
+            "Move 2 resources with link repair",
+        )
+        .unwrap();
+        assert_eq!(tx.commands.len(), 3); // 2 renames + 1 page update
+        let mut engine = crate::CommandEngine::open(dir.path()).unwrap();
+        engine.apply(tx).unwrap();
+        assert!(dir.path().join("Archive/Alpha.md").exists());
+        assert!(dir.path().join("Archive/Beta.md").exists());
+        assert!(!dir.path().join("Notes/Alpha.md").exists());
+        assert!(!dir.path().join("Notes/Beta.md").exists());
+        let home = std::fs::read_to_string(dir.path().join("Notes/Home.md")).unwrap();
+        assert_eq!(home, "See [[Archive/Alpha]] and [[Archive/Beta]].\n");
+
+        let undo = engine.undo().unwrap().expect("undo");
+        assert_eq!(undo.path_remaps.len(), 2);
+        assert!(dir.path().join("Notes/Alpha.md").exists());
+        assert!(dir.path().join("Notes/Beta.md").exists());
+        let home_restored = std::fs::read_to_string(dir.path().join("Notes/Home.md")).unwrap();
+        assert_eq!(home_restored, "See [[Alpha]] and [[Beta]].\n");
     }
 
     #[test]

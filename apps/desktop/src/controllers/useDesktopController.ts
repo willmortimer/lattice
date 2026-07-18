@@ -10,11 +10,11 @@ import {
 } from "../lib/treeCollapse";
 import { demoLinkTargets, type ResourceLinkTarget } from "../lib/resourceLinks";
 import {
+  applyBatchLinkRepair,
   applyLinkRepair,
   applyLinkRepairProposal,
   deferLinkRepairProposal,
   getLinkRepairProposal,
-  type LinkRepairPlan,
 } from "../lib/linkRepair";
 import { installNativeContextMenus } from "../lib/nativeMenus";
 import { QUICK_NOTE_SHORTCUT, showQuickNote } from "../quickNoteWindow";
@@ -23,7 +23,7 @@ import type { Resource, WorkspaceSnapshot } from "../types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { matchesKeybinding, useAppSettings } from "../settings/model";
 import { useNavigationController } from "./useNavigationController";
-import { useResourceController } from "./useResourceController";
+import { useResourceController, type LinkRepairReviewRequest } from "./useResourceController";
 import { useResourceReconciliation, type ResourceReconciliationController } from "./useResourceReconciliation";
 import { useWorkspaceController } from "./useWorkspaceController";
 import { useDesktopActionsController } from "./desktopActions";
@@ -68,13 +68,7 @@ export function useDesktopController() {
   const [linkPicker, setLinkPicker] = useState<{
     query: string; candidates: ResourceLinkTarget[];
   } | null>(null);
-  const [linkRepairReview, setLinkRepairReview] = useState<{
-    plan: LinkRepairPlan;
-    from: string;
-    to: string;
-    mode: "lattice-rename" | "external";
-    proposalId?: string;
-  } | null>(null);
+  const [linkRepairReview, setLinkRepairReview] = useState<LinkRepairReviewRequest | null>(null);
   const linkRepairResolverRef = useRef<
     ((result: "accepted" | "deferred" | "cancelled") => void) | null
   >(null);
@@ -219,13 +213,7 @@ export function useDesktopController() {
     [snapshot?.capabilities],
   );
 
-  const onLinkRepairReview = useCallback((review: {
-    plan: LinkRepairPlan;
-    from: string;
-    to: string;
-    mode: "lattice-rename" | "external";
-    proposalId?: string;
-  }) => new Promise<"accepted" | "deferred" | "cancelled">((resolve) => {
+  const onLinkRepairReview = useCallback((review: LinkRepairReviewRequest) => new Promise<"accepted" | "deferred" | "cancelled">((resolve) => {
     linkRepairResolverRef.current = resolve;
     setLinkRepairReview(review);
   }), []);
@@ -242,7 +230,9 @@ export function useDesktopController() {
     if (!review || !root) return;
     setBusy(true);
     try {
-      if (review.mode === "lattice-rename") {
+      if (review.mode === "lattice-rename" && review.batchPlan && review.moves && review.moves.length > 1) {
+        await applyBatchLinkRepair(root, review.moves, acceptedCandidateIds, review.batchPlan);
+      } else if (review.mode === "lattice-rename") {
         await applyLinkRepair(root, review.from, review.to, acceptedCandidateIds, review.plan);
       } else if (review.proposalId) {
         await applyLinkRepairProposal(root, review.proposalId, acceptedCandidateIds);
@@ -262,7 +252,16 @@ export function useDesktopController() {
     if (!review || !root) return;
     setBusy(true);
     try {
-      if (review.mode === "lattice-rename") {
+      if (review.mode === "lattice-rename" && review.moves && review.moves.length > 1) {
+        // Batch defer: move without repairs in one transaction; persist combined
+        // proposal so the user can repair links later without a second move.
+        await deferLinkRepairProposal(root, review.plan);
+        await invoke("move_resources", {
+          root,
+          fromPaths: review.moves.map((change) => change.from),
+          toDir: review.toDir ?? "",
+        });
+      } else if (review.mode === "lattice-rename") {
         await deferLinkRepairProposal(root, review.plan);
         await invoke("rename_resource", { root, from: review.from, to: review.to });
       }

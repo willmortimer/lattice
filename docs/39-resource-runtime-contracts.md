@@ -63,9 +63,23 @@ Contract:
 - **Batch moves/deletes** record one transaction with N `ResourceMove` /
   `ResourceDelete` commands so a single undo restores the whole set. Path remaps
   from undo cover every relocated path in that transaction.
-- **Batch link repair** is out of scope. Single-path Lattice moves still offer
-  the review modal; multi-select batch moves skip repair orchestration
-  (best-effort / first-path-only is not a full substitute for per-path repair).
+- **Batch link repair** (multi-select move of 2+ paths): the shell previews
+  repair per path, merges candidates into one `BatchLinkRepairPlan`, and presents
+  a single review modal when any candidates remain. Accept applies **one**
+  transaction of N `ResourceRename(from, destination)` commands plus the union of
+  accepted `PageUpdate`s — one history step; undo restores every path and every
+  repaired link together.
+- Candidates whose source page is itself being moved in the same batch are
+  **omitted** (`omittedCoMovedCount`): v0 transactions require disjoint paths, so
+  `PageUpdate` + `ResourceRename` on the same path are rejected. Cross-links among
+  co-moved pages are left unchanged in that transaction (wiki title links often
+  still resolve).
+- Batch candidate budgets (documented thresholds): soft warn at **200**
+  candidates (`LINK_REPAIR_BATCH_CANDIDATE_WARN_THRESHOLD`); hard truncate at
+  **500** (`LINK_REPAIR_BATCH_CANDIDATE_HARD_CAP`). Truncation sets `truncated` and
+  leaves uncapped links unrepaired until a follow-up.
+- Pure batch moves with no repair candidates still record N `ResourceMove`
+  commands in one transaction (unchanged).
 
 ### Revision history presentation
 
@@ -74,7 +88,9 @@ Lattice-initiated moves that accept link repair record
 above). Inspect revision history may therefore show rename-shaped entries even
 when the resource moved between folders. Transaction summaries use “Move” when
 the parent directory changed and link repair was applied; undo semantics remain
-rename-shaped so the path change is not applied twice.
+rename-shaped so the path change is not applied twice. Batch accept summaries
+look like `Move N resources with K link repair(s)` and undo as a single history
+step with N path remaps.
 
 ## Performance budgets (Phase 1)
 
@@ -85,6 +101,8 @@ These limits are product requirements, not implementation details.
 | Format probe | 64 KiB | Bounded recognition and structure validation |
 | Native range read | 1 MiB per request | Keeps Tauri IPC payloads predictable |
 | Semantic text edit | 10 MiB default | Matches editable text ceiling in the shell |
+| Batch link-repair candidates (warn) | 200 | Soft UI warning before accept |
+| Batch link-repair candidates (hard cap) | 500 | Truncate merged preview; remainder unrepaired |
 | Text read window (non-editable) | 256 KiB default | Large logs open as windows, not whole-file strings |
 | Image encoded preview | 64 MiB | Refuse decode before allocating WebView memory |
 | Image decoded pixels | 100 Mpx | Guard against decompression bombs |
