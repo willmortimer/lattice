@@ -51,6 +51,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             ],
             extra_tables: &[],
             views: &[],
+            forms: &[],
         }
         ],
     },
@@ -145,6 +146,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             ],
             extra_tables: &[],
             views: &[],
+            forms: &[],
         }
         ],
     },
@@ -199,6 +201,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             ],
             extra_tables: &[],
             views: &[],
+            forms: &[],
         }
         ],
     },
@@ -254,6 +257,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             ],
             extra_tables: &[],
             views: &[],
+            forms: &[],
         }
         ],
     },
@@ -391,6 +395,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 columns: &[],
             }
             ],
+            forms: &[],
         }
         ],
     },
@@ -452,6 +457,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             ],
             extra_tables: &[],
             views: &[],
+            forms: &[],
         }
         ],
     },
@@ -635,6 +641,20 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 cover_field: None,
                 date_field: None,
                 columns: &[],
+            }
+            ],
+            forms: &[
+                SeedDataForm {
+                name: "ContactIntake",
+                table: "contacts",
+                fields: &[
+                    "name",
+                    "email",
+                    "status",
+                    "company"
+                ],
+                title: Some("Contact intake"),
+                description: Some("Create a contact from the package form."),
             }
             ],
         }

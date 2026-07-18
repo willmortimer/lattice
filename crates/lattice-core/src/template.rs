@@ -3,7 +3,10 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use lattice_data::{write_package_view, CellValue, DataApp, FieldType, NewColumn, ViewDef};
+use lattice_data::{
+    write_package_form, write_package_view, CellValue, DataApp, FieldType, FormDef, NewColumn,
+    ViewDef,
+};
 use lattice_storage::atomic_write_file;
 use serde::{Deserialize, Serialize};
 
@@ -45,6 +48,15 @@ pub(crate) struct SeedDataView {
 }
 
 #[derive(Debug)]
+pub(crate) struct SeedDataForm {
+    pub name: &'static str,
+    pub table: &'static str,
+    pub fields: &'static [&'static str],
+    pub title: Option<&'static str>,
+    pub description: Option<&'static str>,
+}
+
+#[derive(Debug)]
 pub(crate) struct SeedDataExtraTable {
     pub table: &'static str,
     pub columns: &'static [SeedDataColumn],
@@ -60,6 +72,7 @@ pub(crate) struct SeedDataPackage {
     pub rows_json: &'static [&'static str],
     pub extra_tables: &'static [SeedDataExtraTable],
     pub views: &'static [SeedDataView],
+    pub forms: &'static [SeedDataForm],
 }
 
 #[derive(Debug)]
@@ -547,6 +560,15 @@ fn materialize_data_package(
             &known_columns,
         )?;
     }
+    for seed_form in package.forms {
+        materialize_seed_form(
+            &package_path,
+            package.path,
+            package.table,
+            seed_form,
+            &known_columns,
+        )?;
+    }
     Ok(())
 }
 
@@ -744,6 +766,38 @@ fn materialize_seed_view(
     view.layout.date_field = seed.date_field.map(str::to_string);
 
     write_package_view(package_path, seed.name, &view).map_err(map_data_error)
+}
+
+fn materialize_seed_form(
+    package_path: &Path,
+    package_path_label: &str,
+    package_table: &str,
+    seed: &SeedDataForm,
+    known_columns: &std::collections::HashSet<&str>,
+) -> Result<()> {
+    if seed.table != package_table {
+        return Err(Error::TemplateValidation {
+            message: format!(
+                "data package {package_path_label} form {:?} targets table {:?}, expected {package_table:?}",
+                seed.name, seed.table
+            ),
+        });
+    }
+    for field in seed.fields {
+        if !known_columns.contains(field) {
+            return Err(Error::TemplateValidation {
+                message: format!(
+                    "data package {package_path_label} form {:?} references unknown column {field:?}",
+                    seed.name
+                ),
+            });
+        }
+    }
+    let mut form = FormDef::new(seed.name, seed.table);
+    form.fields = seed.fields.iter().map(|field| (*field).to_string()).collect();
+    form.title = seed.title.map(str::to_string);
+    form.description = seed.description.map(str::to_string);
+    write_package_form(package_path, &form).map_err(map_data_error)
 }
 
 fn row_values_from_json(
@@ -1483,6 +1537,7 @@ mod tests {
             rows_json: ROWS,
             extra_tables: &[],
             views: &[],
+            forms: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",
@@ -1545,6 +1600,7 @@ mod tests {
             rows_json: &[],
             extra_tables: &[],
             views: &[],
+            forms: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",
@@ -1633,6 +1689,7 @@ mod tests {
             rows_json: ROWS,
             extra_tables: &[],
             views: VIEWS,
+            forms: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",
@@ -1686,6 +1743,96 @@ mod tests {
     }
 
     #[test]
+    fn provisioned_data_packages_materialize_declarative_forms() {
+        static COLUMNS: &[SeedDataColumn] = &[
+            SeedDataColumn {
+                name: "name",
+                field_type: "text",
+                relation_table: None,
+            },
+            SeedDataColumn {
+                name: "email",
+                field_type: "text",
+                relation_table: None,
+            },
+            SeedDataColumn {
+                name: "status",
+                field_type: "text",
+                relation_table: None,
+            },
+            SeedDataColumn {
+                name: "company",
+                field_type: "text",
+                relation_table: None,
+            },
+        ];
+        static ROWS: &[&str] = &[r#"{"name":"Ada","email":"ada@example.com","status":"Active","company":"Analytical"}"#];
+        static FORMS: &[SeedDataForm] = &[SeedDataForm {
+            name: "ContactIntake",
+            table: "contacts",
+            fields: &["name", "email", "status", "company"],
+            title: Some("Contact intake"),
+            description: Some("Create a contact from the package form."),
+        }];
+        static PACKAGES: &[SeedDataPackage] = &[SeedDataPackage {
+            path: "Data/Contacts.data",
+            title: "Contacts",
+            table: "contacts",
+            columns: COLUMNS,
+            rows_json: ROWS,
+            extra_tables: &[],
+            views: &[],
+            forms: FORMS,
+        }];
+        static FILES: &[SeedFile] = &[SeedFile {
+            path: "Home.md",
+            bytes: b"# Home\n",
+        }];
+        let template = GeneratedTemplate {
+            id: "forms-fixture",
+            order: 1,
+            name: "Forms Fixture",
+            category: "Test",
+            description: "Synthetic data package forms fixture",
+            visibility: "gallery",
+            recommended: false,
+            recommended_title: "Forms",
+            directories: &[],
+            preview: &["Home.md", "Data/Contacts.data"],
+            capabilities: &["pages", "sqlite"],
+            quick_note_directory: "Inbox",
+            daily_note_directory: None,
+            attachments_directory: None,
+            template_directory: None,
+            archive_directory: None,
+            open_on_create: None,
+            files: FILES,
+            data_packages: PACKAGES,
+        };
+
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("FormsWorkspace");
+        create_workspace_at(&root, "Forms", &template).unwrap();
+
+        let package_path = root.join("Data/Contacts.data");
+        let app = DataApp::open(&package_path).unwrap();
+        let forms = app.list_forms().unwrap();
+        assert_eq!(forms, vec!["ContactIntake".to_string()]);
+
+        let loaded = app.load_form("ContactIntake").unwrap();
+        assert_eq!(loaded.name, "ContactIntake");
+        assert_eq!(loaded.table, "contacts");
+        assert_eq!(loaded.fields, vec!["name", "email", "status", "company"]);
+        assert_eq!(loaded.title.as_deref(), Some("Contact intake"));
+
+        let form_yaml =
+            std::fs::read_to_string(package_path.join("forms/ContactIntake.form.yaml")).unwrap();
+        assert!(form_yaml.contains("format: lattice-form"));
+        assert!(form_yaml.contains("name: ContactIntake"));
+        assert!(form_yaml.contains("company"));
+    }
+
+    #[test]
     fn provisioned_data_packages_resolve_relation_seeds_by_name() {
         static COLUMNS: &[SeedDataColumn] = &[
             SeedDataColumn {
@@ -1711,6 +1858,7 @@ mod tests {
             rows_json: ROWS,
             extra_tables: &[],
             views: &[],
+            forms: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",
@@ -1797,6 +1945,7 @@ mod tests {
             rows_json: CONTACT_ROWS,
             extra_tables: EXTRA_TABLES,
             views: &[],
+            forms: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",

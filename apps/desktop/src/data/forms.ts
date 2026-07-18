@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
+import { demoPackageForms } from "../demoWorkspace.generated";
 import type { CellValue, DataColumn } from "./types";
 import { collectFormValues, emptyDraftValues } from "./recordDetail";
 
@@ -13,18 +14,10 @@ export interface FormSummary {
 }
 
 /**
- * Browser-demo fixture forms (no package seed until F3). Used when
- * `demoMutate` is active so the Forms chrome can be exercised locally.
+ * Browser-demo package forms compiled from the First Look template seed.
+ * Used when `demoMutate` is active so the Forms chrome matches native seeds.
  */
-export const DEMO_PACKAGE_FORMS: FormSummary[] = [
-  {
-    name: "ContactIntake",
-    table: "contacts",
-    fields: ["name", "email", "status", "company"],
-    title: "Contact intake",
-    description: "Create a contact from the package form (demo fixture).",
-  },
-];
+export const DEMO_PACKAGE_FORMS: FormSummary[] = demoPackageForms;
 
 export function formDisplayTitle(form: FormSummary): string {
   return form.title?.trim() || form.name;

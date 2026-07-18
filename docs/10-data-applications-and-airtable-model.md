@@ -333,8 +333,9 @@ the open `.data` package, opens one in a side panel (separate from
 `DataFormView` layout), and **Submit** inserts a row through `insert_record`
 (`RecordInsert`) using the form's `table` and field values. Undo uses the
 existing command history (`undo_last`). Browser demo mode mutates the local
-snapshot and ships a fixture form until F3 seeds `ContactIntake.form.yaml`.
-A form designer and public publish remain future work.
+snapshot and lists forms from the compiled First Look template seed
+(`forms/ContactIntake.form.yaml` in `CRM.data`). A form designer and public
+publish remain future work.
 
 ## Interfaces
 
