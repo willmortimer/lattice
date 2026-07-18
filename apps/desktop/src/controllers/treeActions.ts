@@ -220,7 +220,6 @@ export function useTreeActionsController(options: TreeActionsOptions) {
       return;
     }
 
-    // `create_folder` writes directly to disk and is not undoable yet.
     setBusy(true);
     try {
       await createFolder(workspace.root, relPath);

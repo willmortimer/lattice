@@ -708,6 +708,47 @@ fn move_into_directory_and_undo() {
     assert!(!exists(&dir, "Sub/A.md"));
 }
 
+// 4c. folder create + undo.
+#[test]
+fn folder_create_and_undo() {
+    let (dir, mut engine) = engine();
+    std::fs::create_dir(dir.path().join("Projects")).unwrap();
+
+    engine
+        .apply(Transaction::new(
+            "Create folder Projects/New",
+            vec![Command::FolderCreate {
+                path: PathBuf::from("Projects/New"),
+            }],
+        ))
+        .unwrap();
+    assert!(exists(&dir, "Projects/New"));
+    assert!(dir.path().join("Projects/New").is_dir());
+
+    engine.undo().unwrap().unwrap();
+    assert!(!exists(&dir, "Projects/New"));
+}
+
+#[test]
+fn folder_create_undo_refuses_non_empty_directory() {
+    let (dir, mut engine) = engine();
+    std::fs::create_dir(dir.path().join("Projects")).unwrap();
+
+    engine
+        .apply(Transaction::new(
+            "Create folder Projects/New",
+            vec![Command::FolderCreate {
+                path: PathBuf::from("Projects/New"),
+            }],
+        ))
+        .unwrap();
+    std::fs::write(dir.path().join("Projects/New/Note.md"), "content\n").unwrap();
+
+    let err = engine.undo().unwrap_err();
+    assert!(matches!(err, Error::DirectoryNotEmpty { .. }));
+    assert!(exists(&dir, "Projects/New"));
+}
+
 // 5. delete (file) -> lands in .lattice/trash (fallback path), bytes in
 //    history; undo restores them without touching the trash.
 #[test]
