@@ -30,6 +30,11 @@ import {
   type ViewFilter,
   type ViewLayoutType,
 } from "./types";
+import {
+  layoutFieldsForSave,
+  seedLayoutFieldsForType,
+  VIEW_LAYOUT_TYPES,
+} from "./viewLayout";
 
 const STALE_REVISION_PREFIX = "STALE_REVISION:";
 
@@ -623,6 +628,11 @@ export function DataTableView({
 
     setBusy(true);
     try {
+      const layoutFields = layoutFieldsForSave(layoutType, {
+        groupBy,
+        coverField,
+        dateField,
+      });
       const saved = await invoke<DataAppSnapshot>("save_data_view", {
         root,
         relPath,
@@ -633,6 +643,7 @@ export function DataTableView({
           sortField: sortField ?? null,
           sortDirection: sortDirection ?? null,
           filters,
+          ...layoutFields,
         },
       });
       applySnapshot(saved);
@@ -645,14 +656,33 @@ export function DataTableView({
   }, [
     activeView,
     applySnapshot,
+    coverField,
+    dateField,
     demoMutate,
     filters,
+    groupBy,
+    layoutType,
     relPath,
     root,
     sortDirection,
     sortField,
     visibleColumns,
   ]);
+
+  const handleLayoutChange = useCallback(
+    (nextLayout: ViewLayoutType) => {
+      const seeded = seedLayoutFieldsForType(nextLayout, snapshot.columns, {
+        groupBy,
+        coverField,
+        dateField,
+      });
+      setLayoutType(nextLayout);
+      setGroupBy(seeded.groupBy);
+      setCoverField(seeded.coverField);
+      setDateField(seeded.dateField);
+    },
+    [coverField, dateField, groupBy, snapshot.columns],
+  );
 
   const handleViewChange = useCallback(
     async (viewName: string) => {
@@ -705,6 +735,23 @@ export function DataTableView({
               ).map((name) => (
                 <option key={name} value={name}>
                   {name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="data-table-view-select">
+            Layout
+            <select
+              value={layoutType}
+              disabled={busy}
+              aria-label="View layout"
+              onChange={(event) =>
+                handleLayoutChange(event.currentTarget.value as ViewLayoutType)
+              }
+            >
+              {VIEW_LAYOUT_TYPES.map((layout) => (
+                <option key={layout} value={layout}>
+                  {layout}
                 </option>
               ))}
             </select>

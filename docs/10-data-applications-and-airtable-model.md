@@ -151,6 +151,10 @@ desktop rendering implements `grid` (default), `list`, `board`, `gallery`,
 - **Calendar** — month (and optional week) calendar using `layout.date_field` when set, otherwise the first `date` column, otherwise a date-like column name (for example `due_date`). Records parse `YYYY-MM-DD` and ISO datetimes to a day; unparseable values appear in an **Undated** bucket. Prev/next navigation, today shortcut, and event click open record detail.
 - **Form** — create-focused field form using `layout.columns` for field order when set, otherwise all non-`id` columns. Submit inserts a row through the same `insert_record` command path as the grid. After create, the form clears and offers **Open record** for edit in record detail; a compact recent-records list links to existing rows. Public publish and workflow triggers are out of scope.
 
+Desktop **Save view** persists the selected layout type and layout-specific fields
+(`group_by`, `cover_field`, `date_field`) through `save_data_view`; reloading the
+view restores the same layout. Hand-authored YAML remains supported.
+
 Layout fields are exclusive to their layout type and are rejected otherwise:
 
 - `layout.group_by` — board only.

@@ -6,6 +6,7 @@ import {
   groupRowsByColumn,
   isImageCoverValue,
   isImageLikeColumn,
+  layoutFieldsForSave,
   parseCalendarDate,
   resolveCalendarDateColumn,
   resolveFormColumns,
@@ -14,6 +15,7 @@ import {
   resolveImageLikeColumn,
   resolveListPrimaryColumn,
   resolveListSubtitleColumn,
+  seedLayoutFieldsForType,
 } from "./viewLayout";
 
 const columns: DataColumn[] = [
@@ -181,5 +183,58 @@ describe("viewLayout helpers", () => {
     expect(buckets.map((bucket) => bucket.key)).toEqual(["2026-07-04", "undated"]);
     expect(buckets[0]?.rows.map((row) => row.id)).toEqual(["a", "b"]);
     expect(buckets[1]?.rows.map((row) => row.id)).toEqual(["c"]);
+  });
+
+  it("includes only layout-specific fields when saving", () => {
+    expect(
+      layoutFieldsForSave("grid", {
+        groupBy: "status",
+        coverField: "photo",
+        dateField: "due_date",
+      }),
+    ).toEqual({ layoutType: "grid" });
+    expect(
+      layoutFieldsForSave("board", {
+        groupBy: "status",
+        coverField: "photo",
+        dateField: "due_date",
+      }),
+    ).toEqual({ layoutType: "board", groupBy: "status" });
+    expect(
+      layoutFieldsForSave("gallery", {
+        groupBy: "status",
+        coverField: "photo",
+        dateField: "due_date",
+      }),
+    ).toEqual({ layoutType: "gallery", coverField: "photo" });
+    expect(
+      layoutFieldsForSave("calendar", {
+        groupBy: "status",
+        coverField: "photo",
+        dateField: "due_date",
+      }),
+    ).toEqual({ layoutType: "calendar", dateField: "due_date" });
+    expect(layoutFieldsForSave("list", {})).toEqual({ layoutType: "list" });
+    expect(layoutFieldsForSave("form", {})).toEqual({ layoutType: "form" });
+  });
+
+  it("seeds layout fields when switching layout type", () => {
+    const withPhoto: DataColumn[] = [
+      ...columns,
+      { name: "photo", field_type: "text", sqlite_type: "TEXT" },
+      { name: "due_date", field_type: "date", sqlite_type: "TEXT" },
+    ];
+    expect(seedLayoutFieldsForType("board", withPhoto, {})).toEqual({
+      groupBy: "status",
+    });
+    expect(seedLayoutFieldsForType("gallery", withPhoto, {})).toEqual({
+      coverField: "photo",
+    });
+    expect(seedLayoutFieldsForType("calendar", withPhoto, {})).toEqual({
+      dateField: "due_date",
+    });
+    expect(
+      seedLayoutFieldsForType("board", withPhoto, { groupBy: "active" }),
+    ).toEqual({ groupBy: "active" });
   });
 });
