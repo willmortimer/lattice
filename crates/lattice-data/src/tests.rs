@@ -8,7 +8,8 @@ use crate::app::{
     app_manifest_path, database_path, default_view_path, schema_path, DATABASE_FILENAME,
 };
 use crate::{
-    CellValue, DataApp, FieldType, FilterOperator, SortDirection, ViewDef, ViewFilter, ViewSort,
+    write_package_form, CellValue, DataApp, FieldType, FilterOperator, FormDef, SortDirection,
+    ViewDef, ViewFilter, ViewSort,
 };
 
 #[test]
@@ -631,5 +632,87 @@ fn delete_row_strips_cross_table_relation_ids() {
         Some(&CellValue::Relation {
             record_ids: vec![other_id],
         })
+    );
+}
+
+#[test]
+fn form_def_round_trip_list_and_load() {
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Hiring.data");
+    let app = DataApp::create(&package_path, "Hiring", "candidates").unwrap();
+
+    rusqlite::Connection::open(database_path(&package_path))
+        .unwrap()
+        .execute_batch(
+            "ALTER TABLE candidates ADD COLUMN name TEXT;
+             ALTER TABLE candidates ADD COLUMN email TEXT;
+             ALTER TABLE candidates ADD COLUMN status TEXT;",
+        )
+        .unwrap();
+
+    assert!(app.list_forms().unwrap().is_empty());
+
+    let mut form = FormDef::new("intake", "candidates");
+    form.fields = vec!["name".into(), "email".into(), "status".into()];
+    form.title = Some("Candidate intake".into());
+    form.description = Some("Collect a new candidate row".into());
+
+    let yaml = app.render_form_yaml(&form).unwrap();
+    assert!(yaml.contains("format: lattice-form"));
+    assert!(yaml.contains("name: intake"));
+    assert!(yaml.contains("fields:"));
+
+    write_package_form(&package_path, &form).unwrap();
+    assert!(package_path.join("forms").join("intake.form.yaml").is_file());
+
+    let forms = app.list_forms().unwrap();
+    assert_eq!(forms, vec!["intake".to_string()]);
+
+    let loaded = app.load_form("intake").unwrap();
+    assert_eq!(loaded, form);
+    assert_eq!(loaded.fields, vec!["name", "email", "status"]);
+    assert_eq!(loaded.title.as_deref(), Some("Candidate intake"));
+}
+
+#[test]
+fn load_form_rejects_unknown_fields() {
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Hiring.data");
+    let app = DataApp::create(&package_path, "Hiring", "candidates").unwrap();
+
+    rusqlite::Connection::open(database_path(&package_path))
+        .unwrap()
+        .execute_batch("ALTER TABLE candidates ADD COLUMN name TEXT;")
+        .unwrap();
+
+    let mut form = FormDef::new("bad", "candidates");
+    form.fields = vec!["name".into(), "missing_col".into()];
+    write_package_form(&package_path, &form).unwrap();
+
+    let err = app.load_form("bad").unwrap_err().to_string();
+    assert!(
+        err.contains("unknown column") && err.contains("missing_col"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn load_form_rejects_name_file_mismatch() {
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Hiring.data");
+    let app = DataApp::create(&package_path, "Hiring", "candidates").unwrap();
+
+    let forms_dir = package_path.join("forms");
+    std::fs::create_dir_all(&forms_dir).unwrap();
+    std::fs::write(
+        forms_dir.join("intake.form.yaml"),
+        "format: lattice-form\nversion: 1\nname: other\ntable: candidates\nfields: []\n",
+    )
+    .unwrap();
+
+    let err = app.load_form("intake").unwrap_err().to_string();
+    assert!(
+        err.contains("does not match file stem"),
+        "unexpected error: {err}"
     );
 }
