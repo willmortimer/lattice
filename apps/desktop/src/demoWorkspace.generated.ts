@@ -958,6 +958,606 @@ export const demoDataApp: DataAppSnapshot = {
       "cover_field": "company"
     }
   ],
+  "relation_targets": {
+    "contacts": [
+      {
+        "id": "0198-demo-ada-lovelace",
+        "values": {
+          "id": {
+            "Text": "0198-demo-ada-lovelace"
+          },
+          "name": {
+            "Text": "Ada Lovelace"
+          },
+          "email": {
+            "Text": "ada@analytical.io"
+          },
+          "company": {
+            "Text": "Analytical Engines"
+          },
+          "due_date": {
+            "Date": "2026-08-15"
+          },
+          "status": {
+            "Text": "Active"
+          },
+          "notes": {
+            "Text": "Champion for typed tables beside narrative docs."
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-grace-hopper",
+        "values": {
+          "id": {
+            "Text": "0198-demo-grace-hopper"
+          },
+          "name": {
+            "Text": "Grace Hopper"
+          },
+          "email": {
+            "Text": "grace@navy.mil"
+          },
+          "company": {
+            "Text": "US Navy"
+          },
+          "due_date": {
+            "Date": "2026-07-25"
+          },
+          "status": {
+            "Text": "Active"
+          },
+          "notes": {
+            "Text": "Asked for honest SQL export from CRM views."
+          },
+          "reports_to": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-ada-lovelace"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "0198-demo-alan-turing",
+        "values": {
+          "id": {
+            "Text": "0198-demo-alan-turing"
+          },
+          "name": {
+            "Text": "Alan Turing"
+          },
+          "email": {
+            "Text": "alan@bletchley.uk"
+          },
+          "company": {
+            "Text": "Bletchley Park"
+          },
+          "due_date": {
+            "Date": "2026-09-01"
+          },
+          "status": {
+            "Text": "Nurture"
+          },
+          "notes": {
+            "Text": "Interested after notebook preview ships."
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-katherine-johnson",
+        "values": {
+          "id": {
+            "Text": "0198-demo-katherine-johnson"
+          },
+          "name": {
+            "Text": "Katherine Johnson"
+          },
+          "email": {
+            "Text": "katherine@nasa.gov"
+          },
+          "company": {
+            "Text": "NASA"
+          },
+          "due_date": {
+            "Date": "2026-08-02"
+          },
+          "status": {
+            "Text": "Active"
+          },
+          "notes": {
+            "Text": "Needs calendar layout on due dates for standup."
+          },
+          "reports_to": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-dorothy-vaughan"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "0198-demo-dorothy-vaughan",
+        "values": {
+          "id": {
+            "Text": "0198-demo-dorothy-vaughan"
+          },
+          "name": {
+            "Text": "Dorothy Vaughan"
+          },
+          "email": {
+            "Text": "dorothy@nasa.gov"
+          },
+          "company": {
+            "Text": "NASA"
+          },
+          "due_date": {
+            "Null": null
+          },
+          "status": {
+            "Text": "Partner"
+          },
+          "notes": {
+            "Text": "Coordinating team rollout; gallery view by company."
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-mary-jackson",
+        "values": {
+          "id": {
+            "Text": "0198-demo-mary-jackson"
+          },
+          "name": {
+            "Text": "Mary Jackson"
+          },
+          "email": {
+            "Text": "mary@nasa.gov"
+          },
+          "company": {
+            "Text": "NASA"
+          },
+          "due_date": {
+            "Date": "2026-07-30"
+          },
+          "status": {
+            "Text": "Active"
+          },
+          "notes": {
+            "Text": "Wants board grouped by status for sprint review."
+          },
+          "reports_to": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-katherine-johnson"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "0198-demo-tim-berners-lee",
+        "values": {
+          "id": {
+            "Text": "0198-demo-tim-berners-lee"
+          },
+          "name": {
+            "Text": "Tim Berners-Lee"
+          },
+          "email": {
+            "Text": "tim@w3.org"
+          },
+          "company": {
+            "Text": "W3C"
+          },
+          "due_date": {
+            "Date": "2026-10-12"
+          },
+          "status": {
+            "Text": "Lead"
+          },
+          "notes": {
+            "Text": "Linked data angle — follow up on wiki link semantics."
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-brendan-eich",
+        "values": {
+          "id": {
+            "Text": "0198-demo-brendan-eich"
+          },
+          "name": {
+            "Text": "Brendan Eich"
+          },
+          "email": {
+            "Text": "brendan@mozilla.org"
+          },
+          "company": {
+            "Text": "Mozilla"
+          },
+          "due_date": {
+            "Date": "2026-08-20"
+          },
+          "status": {
+            "Text": "Nurture"
+          },
+          "notes": {
+            "Text": "Curious about Tauri shell performance budgets."
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-margaret-hamilton",
+        "values": {
+          "id": {
+            "Text": "0198-demo-margaret-hamilton"
+          },
+          "name": {
+            "Text": "Margaret Hamilton"
+          },
+          "email": {
+            "Text": "margaret@mit.edu"
+          },
+          "company": {
+            "Text": "MIT Instrumentation Lab"
+          },
+          "due_date": {
+            "Date": "2026-07-22"
+          },
+          "status": {
+            "Text": "Active"
+          },
+          "notes": {
+            "Text": "Long-page scroll tests map to her reliability bar."
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-donald-knuth",
+        "values": {
+          "id": {
+            "Text": "0198-demo-donald-knuth"
+          },
+          "name": {
+            "Text": "Donald Knuth"
+          },
+          "email": {
+            "Text": "knuth@stanford.edu"
+          },
+          "company": {
+            "Text": "Stanford"
+          },
+          "due_date": {
+            "Null": null
+          },
+          "status": {
+            "Text": "Lead"
+          },
+          "notes": {
+            "Text": "Literate programming — pages + code in Resources/."
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-linus-torvalds",
+        "values": {
+          "id": {
+            "Text": "0198-demo-linus-torvalds"
+          },
+          "name": {
+            "Text": "Linus Torvalds"
+          },
+          "email": {
+            "Text": "linus@linux.foundation"
+          },
+          "company": {
+            "Text": "Linux Foundation"
+          },
+          "due_date": {
+            "Date": "2026-11-05"
+          },
+          "status": {
+            "Text": "Nurture"
+          },
+          "notes": {
+            "Text": "Git-friendly workspace layout is the hook."
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-guido-van-rossum",
+        "values": {
+          "id": {
+            "Text": "0198-demo-guido-van-rossum"
+          },
+          "name": {
+            "Text": "Guido van Rossum"
+          },
+          "email": {
+            "Text": "guido@python.org"
+          },
+          "company": {
+            "Text": "Python Software Foundation"
+          },
+          "due_date": {
+            "Date": "2026-08-08"
+          },
+          "status": {
+            "Text": "Active"
+          },
+          "notes": {
+            "Text": "Notebook story — track under Notebooks/ when ready."
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-radia-perlman",
+        "values": {
+          "id": {
+            "Text": "0198-demo-radia-perlman"
+          },
+          "name": {
+            "Text": "Radia Perlman"
+          },
+          "email": {
+            "Text": "radia@ieee.org"
+          },
+          "company": {
+            "Text": "IEEE"
+          },
+          "due_date": {
+            "Date": "2026-09-18"
+          },
+          "status": {
+            "Text": "Lead"
+          },
+          "notes": {
+            "Text": "Spanning-tree metaphor for canvas + outline sync."
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-shafi-goldwasser",
+        "values": {
+          "id": {
+            "Text": "0198-demo-shafi-goldwasser"
+          },
+          "name": {
+            "Text": "Shafi Goldwasser"
+          },
+          "email": {
+            "Text": "shafi@mit.edu"
+          },
+          "company": {
+            "Text": "MIT"
+          },
+          "due_date": {
+            "Date": "2026-07-28"
+          },
+          "status": {
+            "Text": "Active"
+          },
+          "notes": {
+            "Text": "Security review of command preconditions."
+          },
+          "reports_to": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-barbara-liskov"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "0198-demo-barbara-liskov",
+        "values": {
+          "id": {
+            "Text": "0198-demo-barbara-liskov"
+          },
+          "name": {
+            "Text": "Barbara Liskov"
+          },
+          "email": {
+            "Text": "liskov@mit.edu"
+          },
+          "company": {
+            "Text": "MIT"
+          },
+          "due_date": {
+            "Null": null
+          },
+          "status": {
+            "Text": "Partner"
+          },
+          "notes": {
+            "Text": "Substitution principle maps to resource adapters."
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-frances-allen",
+        "values": {
+          "id": {
+            "Text": "0198-demo-frances-allen"
+          },
+          "name": {
+            "Text": "Frances Allen"
+          },
+          "email": {
+            "Text": "frances@ibm.com"
+          },
+          "company": {
+            "Text": "IBM Research"
+          },
+          "due_date": {
+            "Date": "2026-08-30"
+          },
+          "status": {
+            "Text": "Churned"
+          },
+          "notes": {
+            "Text": "Paused — re-engage after perf benchmarks published."
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-edsger-dijkstra",
+        "values": {
+          "id": {
+            "Text": "0198-demo-edsger-dijkstra"
+          },
+          "name": {
+            "Text": "Edsger Dijkstra"
+          },
+          "email": {
+            "Text": "edsger@utexas.edu"
+          },
+          "company": {
+            "Text": "UT Austin"
+          },
+          "due_date": {
+            "Date": "2026-12-01"
+          },
+          "status": {
+            "Text": "Lead"
+          },
+          "notes": {
+            "Text": "Structured note templates under Templates/."
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-grace-brewster",
+        "values": {
+          "id": {
+            "Text": "0198-demo-grace-brewster"
+          },
+          "name": {
+            "Text": "Grace Brewster"
+          },
+          "email": {
+            "Text": "grace.b@example.com"
+          },
+          "company": {
+            "Text": "Example Corp"
+          },
+          "due_date": {
+            "Date": "2026-07-19"
+          },
+          "status": {
+            "Text": "Lead"
+          },
+          "notes": {
+            "Text": "Inbound from conference booth — assign owner."
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-leslie-lamport",
+        "values": {
+          "id": {
+            "Text": "0198-demo-leslie-lamport"
+          },
+          "name": {
+            "Text": "Leslie Lamport"
+          },
+          "email": {
+            "Text": "lamport@microsoft.com"
+          },
+          "company": {
+            "Text": "Microsoft Research"
+          },
+          "due_date": {
+            "Date": "2026-09-25"
+          },
+          "status": {
+            "Text": "Nurture"
+          },
+          "notes": {
+            "Text": "Formal methods audience — link Research/Architecture."
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-vint-cerf",
+        "values": {
+          "id": {
+            "Text": "0198-demo-vint-cerf"
+          },
+          "name": {
+            "Text": "Vint Cerf"
+          },
+          "email": {
+            "Text": "vint@google.com"
+          },
+          "company": {
+            "Text": "Google"
+          },
+          "due_date": {
+            "Date": "2026-10-01"
+          },
+          "status": {
+            "Text": "Active"
+          },
+          "notes": {
+            "Text": "Offline-first narrative resonates; wants demo workspace zip."
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      }
+    ]
+  },
   "layout_type": "grid"
 };
 

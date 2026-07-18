@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 
-import { cellValueToDisplay, type DataColumn, type DataRow } from "./types";
+import type { RelationLabelIndex } from "./relationDisplay";
+import { formatCellForColumnName } from "./relationDisplay";
+import { type DataColumn, type DataRow } from "./types";
 import {
   resolveListPrimaryColumn,
   resolveListSubtitleColumn,
@@ -9,6 +11,7 @@ import {
 interface DataListViewProps {
   rows: DataRow[];
   columns: DataColumn[];
+  relationLabelIndex: RelationLabelIndex;
   selectedRowId?: string | null;
   zebraRows: boolean;
   onRowOpen: (row: DataRow) => void;
@@ -17,6 +20,7 @@ interface DataListViewProps {
 export function DataListView({
   rows,
   columns,
+  relationLabelIndex,
   selectedRowId,
   zebraRows,
   onRowOpen,
@@ -31,10 +35,10 @@ export function DataListView({
     <div className="data-list-view" role="list">
       {rows.map((row, index) => {
         const primary = primaryColumn
-          ? cellValueToDisplay(row.values[primaryColumn])
+          ? formatCellForColumnName(row, primaryColumn, columns, relationLabelIndex)
           : row.id;
         const subtitle = subtitleColumn
-          ? cellValueToDisplay(row.values[subtitleColumn])
+          ? formatCellForColumnName(row, subtitleColumn, columns, relationLabelIndex)
           : "";
         const selected = selectedRowId === row.id;
 

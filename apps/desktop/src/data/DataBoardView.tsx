@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 
-import { cellValueToDisplay, type DataColumn, type DataRow } from "./types";
+import type { RelationLabelIndex } from "./relationDisplay";
+import { formatCellForColumnName } from "./relationDisplay";
+import { type DataColumn, type DataRow } from "./types";
 import {
   groupRowsByColumn,
   resolveGroupByColumn,
@@ -11,6 +13,7 @@ import {
 interface DataBoardViewProps {
   rows: DataRow[];
   columns: DataColumn[];
+  relationLabelIndex: RelationLabelIndex;
   groupBy?: string | null;
   selectedRowId?: string | null;
   onRowOpen: (row: DataRow) => void;
@@ -19,6 +22,7 @@ interface DataBoardViewProps {
 export function DataBoardView({
   rows,
   columns,
+  relationLabelIndex,
   groupBy,
   selectedRowId,
   onRowOpen,
@@ -57,10 +61,10 @@ export function DataBoardView({
           <div className="data-board-cards">
             {lane.rows.map((row) => {
               const primary = primaryColumn
-                ? cellValueToDisplay(row.values[primaryColumn])
+                ? formatCellForColumnName(row, primaryColumn, columns, relationLabelIndex)
                 : row.id;
               const subtitle = subtitleColumn
-                ? cellValueToDisplay(row.values[subtitleColumn])
+                ? formatCellForColumnName(row, subtitleColumn, columns, relationLabelIndex)
                 : "";
               const selected = selectedRowId === row.id;
 

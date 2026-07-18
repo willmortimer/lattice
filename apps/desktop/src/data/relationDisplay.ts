@@ -1,4 +1,4 @@
-import type { CellValue, DataRow } from "./types";
+import type { CellValue, DataAppSnapshot, DataColumn, DataRow } from "./types";
 import { cellValueToDisplay } from "./types";
 
 /** Map of target table name → record id → display label. */
@@ -127,4 +127,125 @@ export function formatRelationCellValue(
   index: RelationLabelIndex,
 ): string {
   return formatRelationDisplay(extractRelationIds(value), targetTable, index);
+}
+
+/** Display text for a column cell, resolving relation labels when targets are available. */
+export function formatColumnCellDisplay(
+  value: CellValue | undefined,
+  column: Pick<DataColumn, "field_type" | "relation_table">,
+  index: RelationLabelIndex,
+): string {
+  if (column.field_type === "relation") {
+    return formatRelationCellValue(value, column.relation_table, index);
+  }
+  return cellValueToDisplay(value);
+}
+
+/** Display text for a named column on a row (layout views). */
+export function formatCellForColumnName(
+  row: DataRow,
+  columnName: string | undefined,
+  columns: DataColumn[],
+  index: RelationLabelIndex,
+): string {
+  if (!columnName) {
+    return "";
+  }
+  const column = columns.find((candidate) => candidate.name === columnName);
+  if (!column) {
+    return cellValueToDisplay(row.values[columnName]);
+  }
+  return formatColumnCellDisplay(row.values[columnName], column, index);
+}
+
+function relationTargetTables(columns: readonly DataColumn[]): Set<string> {
+  const tables = new Set<string>();
+  for (const column of columns) {
+    if (column.field_type === "relation" && column.relation_table) {
+      tables.add(column.relation_table);
+    }
+  }
+  return tables;
+}
+
+function cloneRelationTargets(
+  targets: Record<string, DataRow[]> | undefined,
+): Record<string, DataRow[]> | undefined {
+  if (!targets) {
+    return undefined;
+  }
+  return Object.fromEntries(
+    Object.entries(targets).map(([table, rows]) => [
+      table,
+      rows.map((row) => ({ id: row.id, values: { ...row.values } })),
+    ]),
+  );
+}
+
+function upsertRelationTargetRow(
+  targets: Record<string, DataRow[]>,
+  table: string,
+  row: DataRow,
+): Record<string, DataRow[]> {
+  const existing = targets[table] ?? [];
+  const nextRow = { id: row.id, values: { ...row.values } };
+  const index = existing.findIndex((candidate) => candidate.id === row.id);
+  if (index < 0) {
+    return { ...targets, [table]: [...existing, nextRow] };
+  }
+  return {
+    ...targets,
+    [table]: existing.map((candidate, candidateIndex) =>
+      candidateIndex === index ? nextRow : candidate,
+    ),
+  };
+}
+
+function removeRelationTargetRow(
+  targets: Record<string, DataRow[]>,
+  table: string,
+  rowId: string,
+): Record<string, DataRow[]> {
+  const existing = targets[table];
+  if (!existing) {
+    return targets;
+  }
+  const nextRows = existing.filter((candidate) => candidate.id !== rowId);
+  if (nextRows.length === existing.length) {
+    return targets;
+  }
+  if (nextRows.length === 0) {
+    const { [table]: _removed, ...rest } = targets;
+    return rest;
+  }
+  return { ...targets, [table]: nextRows };
+}
+
+/** Keep `relation_targets` honest after insert/update on the active table. */
+export function syncRelationTargetsAfterUpsert(
+  snapshot: DataAppSnapshot,
+  row: DataRow,
+): Record<string, DataRow[]> | undefined {
+  const targetTables = relationTargetTables(snapshot.columns);
+  if (!targetTables.has(snapshot.default_table)) {
+    return snapshot.relation_targets;
+  }
+  const targets = cloneRelationTargets(snapshot.relation_targets) ?? {};
+  return upsertRelationTargetRow(targets, snapshot.default_table, row);
+}
+
+/** Keep `relation_targets` honest after delete on the active table. */
+export function syncRelationTargetsAfterDelete(
+  snapshot: DataAppSnapshot,
+  rowId: string,
+): Record<string, DataRow[]> | undefined {
+  const targetTables = relationTargetTables(snapshot.columns);
+  if (!targetTables.has(snapshot.default_table)) {
+    return snapshot.relation_targets;
+  }
+  const targets = cloneRelationTargets(snapshot.relation_targets);
+  if (!targets) {
+    return undefined;
+  }
+  return removeRelationTargetRow(targets, snapshot.default_table, rowId);
 }

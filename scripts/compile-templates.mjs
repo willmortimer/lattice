@@ -871,6 +871,13 @@ function buildDemoDataApp(template) {
     }
     rowIds.add(row.id);
   }
+  const relation_targets = {};
+  for (const column of packageDef.columns) {
+    if (column.type !== "relation" || !column.relation_table) continue;
+    if (column.relation_table === packageDef.table) {
+      relation_targets[column.relation_table] = demoRows;
+    }
+  }
   const saved_views = buildDemoViewCatalog(packageDef);
   const available_views = saved_views.map((view) => view.name);
   const active_view = "All";
@@ -888,6 +895,7 @@ function buildDemoDataApp(template) {
     active_view,
     filters: [],
     saved_views,
+    ...(Object.keys(relation_targets).length > 0 ? { relation_targets } : {}),
     ...demoSnapshotLayoutFields(activeView),
   };
 }
