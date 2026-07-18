@@ -61,6 +61,7 @@ Run them from the repo root (they use relative paths).
 | `compile-templates` | validate template packages → embedded Rust and browser catalogs |
 | `desktop-dev` | Native window **+ Vite HMR** on :5173 (frontend hot-reload); seeds **First Look** in `target/dev-home` |
 | `desktop-web` | Browser-only React UI on :5173 (demo workspace; no Tauri) |
+| `desktop-perf` | Playwright perf harness against the browser demo (see [perf-harness.md](./perf-harness.md)) |
 | `desktop` | Native window **without Vite** — reuses `apps/desktop/dist` if present, else builds once |
 | `desktop-build` | release binary, unbundled (`tauri build --no-bundle`) |
 
