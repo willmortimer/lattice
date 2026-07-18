@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { demoCanvas, demoDataApp, demoPages, demoTextFiles, inBrowser } from "../demo";
+import { demoCanvas, demoDataApp, demoNotebooks, demoPages, demoTextFiles, inBrowser } from "../demo";
 import type { DataAppSnapshot } from "../data/types";
 import { createDemoPageIO, createNativePageIO } from "../editor/pageIO";
 import { readNativeCanvas } from "../canvas/adapter";
@@ -76,7 +76,7 @@ export interface ResourceController {
 
 export function fileTitle(path: string): string {
   const base = path.split("/").pop() ?? path;
-  return base.replace(/\.(md|canvas|pdf|png|jpe?g)$/i, "").replace(/\.data$/i, "");
+  return base.replace(/\.(md|canvas|pdf|png|jpe?g|ipynb)$/i, "").replace(/\.data$/i, "");
 }
 
 export function renamedPath(path: string, title: string): string {
@@ -252,6 +252,42 @@ export function useResourceController(options: ResourceControllerOptions): Resou
         if (isCurrentLoad(ticket)) setSession({ kind: "data-app", resource, snapshot: opened });
       } catch (error) {
         if (isCurrentLoad(ticket)) onError(String(error));
+      } finally {
+        if (isCurrentLoad(ticket)) onBusy(false);
+      }
+      return;
+    }
+
+    if (resource.kind === "notebook" && workspace) {
+      if (inBrowser) {
+        const content = demoNotebooks[resource.path]
+          ?? `{\n  "nbformat": 4,\n  "nbformat_minor": 5,\n  "metadata": {},\n  "cells": []\n}`;
+        if (isCurrentLoad(ticket)) {
+          setSession({ kind: "notebook", resource, content, revision: "demo:0" });
+        }
+        return;
+      }
+      onBusy(true);
+      try {
+        const loaded = await loadTextResource(
+          workspace.root,
+          resource.path,
+          ticket.controller.signal,
+          { length: 10 * 1024 * 1024 },
+        );
+        if (isCurrentLoad(ticket)) {
+          setSession({
+            kind: "notebook",
+            resource,
+            content: loaded.window.content,
+            revision: loaded.inspection.revision,
+          });
+        }
+      } catch (error) {
+        if (isCurrentLoad(ticket)) {
+          setSession(null);
+          onError(String(error));
+        }
       } finally {
         if (isCurrentLoad(ticket)) onBusy(false);
       }
