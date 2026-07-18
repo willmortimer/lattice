@@ -9,7 +9,7 @@ test.describe("shell chrome", () => {
     await waitForShellChrome(page);
     const elapsedMs = Date.now() - startedAt;
 
-    const nav = await readNavigationMetrics((fn) => page.evaluate(fn));
+    const nav = await readNavigationMetrics(page);
     const heap = await readJsHeap(page);
 
     test.info().annotations.push({

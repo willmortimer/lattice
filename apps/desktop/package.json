@@ -14,8 +14,10 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "LATTICE_DEV_HOME=\"$(cd ../.. && pwd)/target/dev-home\" tauri dev",
+    "tauri:dev:e2e": "LATTICE_DEV_HOME=\"$(cd ../.. && pwd)/target/dev-home\" tauri dev --features e2e-testing",
     "test": "vitest run",
-    "test:perf": "playwright test"
+    "test:perf": "playwright test --project=browser",
+    "test:perf:tauri": "node ./e2e/run-tauri-perf.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.4",
@@ -64,6 +66,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
+    "@srsholmes/tauri-playwright": "0.4.1",
     "@tauri-apps/cli": "^2.11.4",
     "@types/markdown-it": "^14.1.2",
     "@types/react": "^19.2.17",

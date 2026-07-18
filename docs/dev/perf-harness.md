@@ -1,27 +1,22 @@
-# Browser performance harness
+# Performance harness
 
-Lattice ships a **browser-mode** Playwright harness that measures frontend
-performance budgets against the Vite desktop demo (`inBrowser` fixture). It
-runs in Chromium against `pnpm --filter @lattice/desktop dev` on
-<http://localhost:5173> — the same surface as `nix run .#desktop-web`.
+Lattice ships two Playwright surfaces for desktop performance budgets from
+[Frontend, rendering, and performance](../23-frontend-rendering-and-performance.md):
 
-Plain Playwright cannot drive WKWebView on macOS, so this harness does **not**
-block on native Tauri E2E. A future path is documented below.
+| Mode | How | What it measures |
+| --- | --- | --- |
+| **Browser** (default) | Chromium + Vite demo (`inBrowser`) | React shell, tree, page editor without native IPC |
+| **Tauri** | Real app WebView via [`tauri-plugin-playwright`](https://crates.io/crates/tauri-plugin-playwright) | Same UI flows on WKWebView / WebView2 / WebKitGTK with real Rust IPC |
 
-## Why browser-first
+Plain Playwright cannot drive WKWebView (no CDP on macOS/Linux). The Tauri path
+embeds a socket bridge (`e2e-testing` feature) that `@srsholmes/tauri-playwright`
+speaks.
 
-| Approach | Status |
-| --- | --- |
-| **Vite demo in Chromium** (this harness) | Implemented — repeatable, CI-friendly |
-| **Tauri + `tauri-plugin-playwright` / WebDriver** | Follow-up — needed for WKWebView parity on macOS |
+Browser mode intentionally does **not** use `createTauriTest({ mode: "browser" })`:
+that helper injects a mock `__TAURI_INTERNALS__`, which would exit Lattice’s
+demo fixture and break the Vite harness.
 
-The demo fixture exercises the real React shell, resource tree, and page editor
-without filesystem or Tauri IPC. Budget regressions in shell render and page
-open are meaningful even before native WebView automation exists.
-
-## Run
-
-From the repo root (Nix dev shell or plain Node 22 + pnpm):
+## Run — browser
 
 ```sh
 pnpm install
@@ -29,41 +24,40 @@ pnpm --filter @lattice/desktop exec playwright install chromium
 pnpm --filter @lattice/desktop test:perf
 ```
 
-Equivalent Nix task:
+Nix: `nix run .#desktop-perf`
+
+## Run — Tauri (native WebView)
 
 ```sh
-nix run .#desktop-perf
+pnpm install
+pnpm --filter @lattice/desktop test:perf:tauri
 ```
 
-The Playwright config starts the Vite dev server automatically unless one is
-already listening on port 5173 (local iteration). Set `CI=1` to always spawn a
-fresh server.
+The runner starts `tauri dev --features e2e-testing` (with `LATTICE_DEV_HOME`),
+waits for `/tmp/tauri-playwright.sock`, runs `--project=tauri`, then stops the
+app. Reuses an existing socket if you already have:
 
-HTML report (on failure or retry): `apps/desktop/playwright-report/index.html`.
+```sh
+pnpm --filter @lattice/desktop tauri:dev:e2e   # terminal 1
+pnpm --filter @lattice/desktop exec playwright test --project=tauri   # terminal 2
+```
+
+Override the socket with `TAURI_PLAYWRIGHT_SOCKET`. On macOS, native screenshots
+on failure need Screen Recording permission for the terminal/app host.
+
+Nix: `nix run .#desktop-perf-tauri`
 
 ## What is measured
 
-Specs live under `apps/desktop/e2e/perf/`:
-
 | Spec | Scenario |
 | --- | --- |
-| `shell.perf.spec.ts` | **Cold** first navigation to workspace chrome (title, resource tree, activity rail) |
-| `shell.perf.spec.ts` | **Warm** reload to the same chrome |
-| `page.perf.spec.ts` | Open `Home.md` from the resource tree until the ProseMirror editor is visible |
-| `page.perf.spec.ts` | Scroll smoke on an open page (demo pages are short) |
+| `shell.perf.spec.ts` / `shell.tauri.perf.spec.ts` | Cold/ready shell chrome + warm reload |
+| `page.perf.spec.ts` / `page.tauri.perf.spec.ts` | Open `Home.md` until ProseMirror; scroll smoke |
 
-Each run records wall-clock time plus Navigation Timing (`domContentLoaded`,
-`load`) and, on Chromium, JS heap via CDP (`Runtime.getHeapUsage`).
+Annotations record wall time, Navigation Timing, and (browser only) Chromium JS
+heap via CDP.
 
 ## Budgets
-
-Product targets are in
-[Frontend, rendering, and performance](../23-frontend-rendering-and-performance.md):
-
-- **Warm shell visible:** 300–500 ms on representative hardware.
-
-The harness asserts **soft** ceilings so CI stays stable on shared runners.
-Tighten locally when profiling on your machine.
 
 | Variable | Default (CI-friendly) | Local profiling suggestion |
 | --- | --- | --- |
@@ -72,40 +66,32 @@ Tighten locally when profiling on your machine.
 | `LATTICE_PERF_PAGE_OPEN_MS` | `4000` | `1000` |
 | `LATTICE_PERF_PAGE_SCROLL_MS` | `2000` | `500` |
 
-Example — assert doc-level warm shell on a fast laptop:
-
 ```sh
 LATTICE_PERF_SHELL_WARM_MS=500 pnpm --filter @lattice/desktop test:perf
 ```
 
-Failures print the measured value and the active budget. Annotations in the
-Playwright report include navigation and heap snapshots for triage.
-
 ## Vitest boundary
 
-Unit tests remain `pnpm --filter @lattice/desktop test` (Vitest, `src/**/*.test.ts`).
-Perf specs are excluded from Vitest; only `test:perf` runs Playwright.
+Unit tests remain `pnpm --filter @lattice/desktop test` (Vitest). Perf specs are
+Playwright-only via `test:perf` / `test:perf:tauri`.
 
 ## CI
 
-The harness is **optional** for repo CI (`nix run .#check` does not run it yet).
-Add a dedicated job when runner time allows:
+Browser harness is optional for `nix run .#check`. Suggested jobs:
 
 ```sh
+# Fast / Linux CI
 pnpm --filter @lattice/desktop exec playwright install --with-deps chromium
 pnpm --filter @lattice/desktop test:perf
+
+# Native WebView (macOS runner recommended)
+pnpm --filter @lattice/desktop test:perf:tauri
 ```
 
-## Future: native Tauri perf
+## Dependencies
 
-When WKWebView automation is available:
-
-1. **`tauri-plugin-playwright`** or platform WebDriver against the embedded
-   webview.
-2. Reuse the same budget env vars and spec structure; swap `webServer` for a
-   `tauri dev` (or packaged app) lifecycle.
-3. Add IPC-heavy scenarios (large tables, canvas) that the browser demo cannot
-   represent.
-
-Until then, treat this harness as the canonical frontend perf gate for shell
-and page surfaces.
+| Package | License | Role | Removal |
+| --- | --- | --- | --- |
+| `tauri-plugin-playwright` `0.4.1` | MIT | Rust socket bridge (initialized only with `e2e-testing`) | Drop feature + capability + dep |
+| `@srsholmes/tauri-playwright` `0.4.1` | MIT | Node fixture / `TauriPage` API | Drop fixtures + tauri project |
+| `@playwright/test` | Apache-2.0 | Test runner | Keep for browser harness |

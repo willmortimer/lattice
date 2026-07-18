@@ -46,19 +46,21 @@ export interface NavigationMetrics {
   performanceNowMs: number;
 }
 
-export async function readNavigationMetrics(
-  evaluate: <T>(pageFunction: () => T) => Promise<T>,
-): Promise<NavigationMetrics> {
-  return evaluate(() => {
-    const nav = performance.getEntriesByType("navigation")[0] as
-      | PerformanceNavigationTiming
-      | undefined;
+/** Compatible with Playwright `page.evaluate` and tauri-playwright string eval. */
+export type EvaluateFn = {
+  evaluate<T>(pageFunction: string | (() => T)): Promise<T>;
+};
+
+export async function readNavigationMetrics(page: EvaluateFn): Promise<NavigationMetrics> {
+  // String form is required for TauriPage; Playwright accepts it too.
+  return page.evaluate(`(() => {
+    const nav = performance.getEntriesByType("navigation")[0];
     return {
       domContentLoadedMs: nav?.domContentLoadedEventEnd ?? null,
       loadEventEndMs: nav?.loadEventEnd ?? null,
       performanceNowMs: performance.now(),
     };
-  });
+  })()`);
 }
 
 export interface HeapSnapshot {
