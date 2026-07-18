@@ -141,8 +141,8 @@ A view never duplicates records.
 
 The view schema (`ViewDef`/`ViewLayout` in `lattice-data`) supports six layout
 types: `grid`, `list`, `board`, `gallery`, `calendar`, and `form`. Phase 2
-desktop rendering implements `grid` (default), `list`, `board`, and `gallery`;
-a view saved with `calendar` or `form` loads and validates correctly, but the
+desktop rendering implements `grid` (default), `list`, `board`, `gallery`, and
+`calendar`; a view saved with `form` loads and validates correctly, but the
 desktop shell currently renders it with the `grid` layout until dedicated UI
 lands in a follow-up.
 
@@ -150,7 +150,7 @@ lands in a follow-up.
 - **List** — scrollable rows using the first non-`id` column as the title and the next as a subtitle; row click opens record detail.
 - **Board** — kanban lanes grouped by `layout.group_by` when set, otherwise a column named `status`, otherwise the first text/boolean column. Row cards reuse the list title/subtitle fields and open record detail on click.
 - **Gallery** — card grid using `layout.cover_field` when set, otherwise the first image-like text column (for example `photo` or `cover`), otherwise the primary title text in the cover area. Card click opens record detail.
-- **Calendar** — records placed on a calendar using `layout.date_field` as the date column.
+- **Calendar** — month (and optional week) calendar using `layout.date_field` when set, otherwise the first `date` column, otherwise a date-like column name (for example `due_date`). Records parse `YYYY-MM-DD` and ISO datetimes to a day; unparseable values appear in an **Undated** bucket. Prev/next navigation, today shortcut, and event click open record detail.
 - **Form** — single-record input surface using `layout.columns` for field order; no new required field.
 
 Layout fields are exclusive to their layout type and are rejected otherwise:

@@ -1,6 +1,16 @@
-import { cellValueToDisplay, type DataColumn, type DataRow } from "./types";
+import {
+  cellValueToDisplay,
+  type CellValue,
+  type DataColumn,
+  type DataRow,
+} from "./types";
 
 const GROUPABLE_FIELD_TYPES = new Set(["text", "boolean"]);
+
+const ISO_DATE_PREFIX = /^(\d{4}-\d{2}-\d{2})/;
+
+const DATE_LIKE_COLUMN_PATTERN =
+  /^(?:date|due_date|due|start_date|start|end_date|end|scheduled|deadline|created_at|updated_at|timestamp)(?:_|$)/i;
 
 const IMAGE_LIKE_COLUMN_PATTERN =
   /^(?:photo|image|cover|thumbnail|thumb|picture|avatar|poster|icon|banner)(?:_|$)/i;
@@ -88,6 +98,86 @@ export function resolveGroupByColumn(
 export interface BoardLane {
   key: string;
   rows: DataRow[];
+}
+
+/**
+ * Calendar date column: explicit `date_field` when present and valid,
+ * otherwise the first `date` field type, otherwise a date-like column name.
+ */
+export function resolveCalendarDateColumn(
+  columns: DataColumn[],
+  explicit?: string | null,
+): string | undefined {
+  if (explicit && columns.some((column) => column.name === explicit)) {
+    return explicit;
+  }
+  const typed = columns.find(
+    (column) => column.name !== "id" && column.field_type === "date",
+  );
+  if (typed) {
+    return typed.name;
+  }
+  return columns.find(
+    (column) => column.name !== "id" && DATE_LIKE_COLUMN_PATTERN.test(column.name),
+  )?.name;
+}
+
+/** Parse a cell value to `YYYY-MM-DD`, or `undefined` when unparseable. */
+export function parseCalendarDate(value: CellValue | undefined): string | undefined {
+  const raw = cellValueToDisplay(value).trim();
+  if (!raw) {
+    return undefined;
+  }
+  const match = raw.match(ISO_DATE_PREFIX);
+  if (!match) {
+    return undefined;
+  }
+  const isoDate = match[1]!;
+  const [year, month, day] = isoDate.split("-").map((part) => Number.parseInt(part, 10));
+  if (!year || !month || !day) {
+    return undefined;
+  }
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  if (
+    probe.getUTCFullYear() !== year ||
+    probe.getUTCMonth() !== month - 1 ||
+    probe.getUTCDate() !== day
+  ) {
+    return undefined;
+  }
+  return isoDate;
+}
+
+export interface CalendarDayBucket {
+  /** `YYYY-MM-DD` for dated rows; `undated` for rows without a parseable date. */
+  key: string;
+  rows: DataRow[];
+}
+
+/** Group rows by calendar date (`YYYY-MM-DD`) or an undated bucket. */
+export function groupRowsByCalendarDate(rows: DataRow[], dateColumn: string): CalendarDayBucket[] {
+  const dated = new Map<string, DataRow[]>();
+  const undated: DataRow[] = [];
+  for (const row of rows) {
+    const isoDate = parseCalendarDate(row.values[dateColumn]);
+    if (!isoDate) {
+      undated.push(row);
+      continue;
+    }
+    const bucket = dated.get(isoDate);
+    if (bucket) {
+      bucket.push(row);
+    } else {
+      dated.set(isoDate, [row]);
+    }
+  }
+  const buckets: CalendarDayBucket[] = [...dated.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, bucketRows]) => ({ key, rows: bucketRows }));
+  if (undated.length > 0) {
+    buckets.push({ key: "undated", rows: undated });
+  }
+  return buckets;
 }
 
 export function groupRowsByColumn(rows: DataRow[], column: string): BoardLane[] {
