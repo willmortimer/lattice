@@ -44,6 +44,14 @@ Use for:
 
 Run in a worker. Do not make it the only Python runtime because of package, process, networking, and performance limits.
 
+**Phase N3 (desktop):** code-cell Run loads Pyodide lazily from jsDelivr
+(`cdn.jsdelivr.net/pyodide/v0.27.7/full/`) inside a module Web Worker. The
+desktop bundle does not ship the runtime; first Run downloads roughly
+6–8 MB compressed (~10–15 MB uncompressed cached). Missing or failed loads
+leave the notebook readable and show a degraded banner. Cell outputs are
+merged into the `.ipynb` JSON and persisted through `ResourceUpdate` (undoable)
+or, in the browser demo, in-memory `demoNotebooks` mutation.
+
 ### Native Python through `uv`
 
 Default serious Python execution:
