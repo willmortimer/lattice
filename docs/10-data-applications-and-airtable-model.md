@@ -128,7 +128,8 @@ tables:
 
 - `relation_table` names a target table in the same `.data` package.
 - Cells hold zero or more linked record ids; insert/update validates each id exists in the target table.
-- Lookup, Rollup, reverse links, and junction tables remain later work.
+- On `RecordDelete` / `delete_row`, Lattice strips the deleted id from every relation column that targets that table (same package), in the same SQLite transaction as the DELETE. Command undo restores the deleted row **and** the prior inbound relation cells captured in history (`DeletedRowSnapshot`).
+- Lookup, Rollup, reverse-link UX, and junction tables remain later work.
 
 Linked-record UX should make relational modeling approachable:
 

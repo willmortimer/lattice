@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 use crate::app::{app_manifest_path, database_path, schema_path, write_default_view, AppManifest};
 use crate::csv::{cell_from_csv, CsvTable};
 use crate::error::Error;
-use crate::types::{CellValue, ColumnMeta, FieldType, NewColumn, Row};
+use crate::types::{CellValue, ColumnMeta, FieldType, NewColumn, RelationStrip, Row};
 use crate::view::{build_view_query, row_from_view_sql, view_path, visible_columns, ViewDef};
 use crate::Result;
 
@@ -300,16 +300,56 @@ impl DataApp {
         Ok(())
     }
 
-    pub fn delete_row(&self, table: &str, id: &str) -> Result<()> {
+    /// Delete a row and strip its id from every inbound relation cell.
+    ///
+    /// Returns [`RelationStrip`] entries describing prior relation values so
+    /// callers (command undo) can restore those cells after
+    /// [`Self::restore_row`]. Cleanup and the DELETE share one SQLite
+    /// transaction.
+    pub fn delete_row(&self, table: &str, id: &str) -> Result<Vec<RelationStrip>> {
         validate_identifier(table)?;
         ensure_table_exists(&self.conn, table)?;
         ensure_id_column(&self.conn, table)?;
 
+        let tx = self.conn.unchecked_transaction()?;
+        let strips = strip_incoming_relation_ids(self, table, id)?;
         let updated = self
             .conn
             .execute(&format!("DELETE FROM {table} WHERE id = ?1"), params![id])?;
         if updated == 0 {
             return Err(Error::table(table, format!("row not found for id {id:?}")));
+        }
+        tx.commit()?;
+        Ok(strips)
+    }
+
+    /// Re-apply relation cells captured by [`Self::delete_row`] (undo helper).
+    pub fn restore_relation_strips(&self, strips: &[RelationStrip]) -> Result<()> {
+        for strip in strips {
+            validate_identifier(&strip.table)?;
+            validate_identifier(&strip.column)?;
+            let encoded = serde_json::to_string(&strip.prior_record_ids).map_err(|source| {
+                Error::table(
+                    &strip.table,
+                    format!(
+                        "failed to encode relation strip for {:?}: {source}",
+                        strip.column
+                    ),
+                )
+            })?;
+            let updated = self.conn.execute(
+                &format!(
+                    "UPDATE {} SET {} = ?1 WHERE id = ?2",
+                    strip.table, strip.column
+                ),
+                params![encoded, strip.row_id],
+            )?;
+            if updated == 0 {
+                return Err(Error::table(
+                    &strip.table,
+                    format!("row not found for id {:?}", strip.row_id),
+                ));
+            }
         }
         Ok(())
     }
@@ -400,10 +440,7 @@ impl DataApp {
                     let target = column.relation_table.ok_or_else(|| {
                         Error::table(
                             table,
-                            format!(
-                                "relation column {:?} requires relation_table",
-                                column.name
-                            ),
+                            format!("relation column {:?} requires relation_table", column.name),
                         )
                     })?;
                     validate_identifier(target)?;
@@ -423,7 +460,10 @@ impl DataApp {
             };
 
             let sqlite_type = column.field_type.sqlite_type();
-            let alter = format!("ALTER TABLE {table} ADD COLUMN {} {sqlite_type};\n", column.name);
+            let alter = format!(
+                "ALTER TABLE {table} ADD COLUMN {} {sqlite_type};\n",
+                column.name
+            );
             self.conn
                 .execute_batch(&alter)
                 .map_err(|source| Error::table(table, source.to_string()))?;
@@ -567,6 +607,77 @@ fn ensure_id_column(conn: &Connection, table: &str) -> Result<()> {
     Err(Error::table(table, "table is missing required id column"))
 }
 
+/// Remove `deleted_id` from every relation column that targets `target_table`.
+fn strip_incoming_relation_ids(
+    app: &DataApp,
+    target_table: &str,
+    deleted_id: &str,
+) -> Result<Vec<RelationStrip>> {
+    let mut strips = Vec::new();
+    for table in app.list_tables()? {
+        let columns = app.columns(&table)?;
+        for meta in columns {
+            if meta.field_type != FieldType::Relation {
+                continue;
+            }
+            if meta.relation_table.as_deref() != Some(target_table) {
+                continue;
+            }
+            validate_identifier(&meta.name)?;
+
+            let sql = format!("SELECT id, {} FROM {table}", meta.name);
+            let mut stmt = app.conn.prepare(&sql)?;
+            let rows = stmt.query_map([], |row| {
+                let row_id: String = row.get(0)?;
+                let value = CellValue::from_sqlite(row.get_ref(1)?, FieldType::Relation)?;
+                Ok((row_id, value))
+            })?;
+
+            let mut updates = Vec::new();
+            for row in rows {
+                let (row_id, value) = row.map_err(Error::from)?;
+                // The row being deleted will be removed; skip rewriting it.
+                if table == target_table && row_id == deleted_id {
+                    continue;
+                }
+                let CellValue::Relation { record_ids } = value else {
+                    continue;
+                };
+                if !record_ids.iter().any(|id| id == deleted_id) {
+                    continue;
+                }
+                let next_ids: Vec<String> = record_ids
+                    .iter()
+                    .filter(|id| id.as_str() != deleted_id)
+                    .cloned()
+                    .collect();
+                strips.push(RelationStrip {
+                    table: table.clone(),
+                    row_id: row_id.clone(),
+                    column: meta.name.clone(),
+                    prior_record_ids: record_ids,
+                });
+                updates.push((row_id, next_ids));
+            }
+            drop(stmt);
+
+            for (row_id, next_ids) in updates {
+                let encoded = serde_json::to_string(&next_ids).map_err(|source| {
+                    Error::table(
+                        &table,
+                        format!("failed to encode relation column {:?}: {source}", meta.name),
+                    )
+                })?;
+                app.conn.execute(
+                    &format!("UPDATE {table} SET {} = ?1 WHERE id = ?2", meta.name),
+                    params![encoded, row_id],
+                )?;
+            }
+        }
+    }
+    Ok(strips)
+}
+
 /// Validate relation cells (and type shape) for the values being written.
 fn validate_row_values(
     conn: &Connection,
@@ -600,7 +711,10 @@ fn validate_relation_cell(
     let target = meta.relation_table.as_deref().ok_or_else(|| {
         Error::table(
             table,
-            format!("relation column {:?} is missing relation_table metadata", meta.name),
+            format!(
+                "relation column {:?} is missing relation_table metadata",
+                meta.name
+            ),
         )
     })?;
     validate_identifier(target)?;
@@ -613,10 +727,7 @@ fn validate_relation_cell(
                 if record_id.is_empty() {
                     return Err(Error::table(
                         table,
-                        format!(
-                            "relation column {:?} rejects empty record id",
-                            meta.name
-                        ),
+                        format!("relation column {:?} rejects empty record id", meta.name),
                     ));
                 }
                 let exists: i64 = conn.query_row(

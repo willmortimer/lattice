@@ -221,7 +221,11 @@ fn list_and_board_views_load_with_layout_metadata() {
 
     let mut list_view = ViewDef::new_grid("records");
     list_view.layout.layout_type = LAYOUT_LIST.to_string();
-    std::fs::write(views_dir.join("List.yaml"), app.render_view_yaml(&list_view).unwrap()).unwrap();
+    std::fs::write(
+        views_dir.join("List.yaml"),
+        app.render_view_yaml(&list_view).unwrap(),
+    )
+    .unwrap();
 
     let mut board_view = ViewDef::new_grid("records");
     board_view.layout.layout_type = LAYOUT_BOARD.to_string();
@@ -331,11 +335,7 @@ fn layout_field_misuse_is_rejected() {
     assert!(err.contains("date_field"));
 
     let group_by_on_gallery = "format: lattice-view\nversion: 1\nsource:\n  database: ../database.sqlite\n  table: records\nlayout:\n  type: gallery\n  group_by: status\n";
-    std::fs::write(
-        views_dir.join("GroupByOnGallery.yaml"),
-        group_by_on_gallery,
-    )
-    .unwrap();
+    std::fs::write(views_dir.join("GroupByOnGallery.yaml"), group_by_on_gallery).unwrap();
     let err = app.load_view("GroupByOnGallery").unwrap_err().to_string();
     assert!(err.contains("group_by"));
 
@@ -523,3 +523,113 @@ fn relation_column_requires_relation_table_metadata() {
     assert!(err.contains("requires relation_table"));
 }
 
+#[test]
+fn delete_row_strips_orphan_relation_ids() {
+    use crate::NewColumn;
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Org.data");
+    let mut app = DataApp::create(&package_path, "Org", "contacts").unwrap();
+    app.add_columns(
+        "contacts",
+        &[
+            NewColumn::new("name", FieldType::Text),
+            NewColumn::relation("reports_to", "contacts"),
+        ],
+    )
+    .unwrap();
+
+    let ada_id = app
+        .insert_row(
+            "contacts",
+            &BTreeMap::from([("name".into(), CellValue::Text("Ada".into()))]),
+        )
+        .unwrap();
+    let grace_id = app
+        .insert_row(
+            "contacts",
+            &BTreeMap::from([
+                ("name".into(), CellValue::Text("Grace".into())),
+                (
+                    "reports_to".into(),
+                    CellValue::Relation {
+                        record_ids: vec![ada_id.clone()],
+                    },
+                ),
+            ]),
+        )
+        .unwrap();
+
+    let strips = app.delete_row("contacts", &ada_id).unwrap();
+    assert_eq!(strips.len(), 1);
+    assert_eq!(strips[0].table, "contacts");
+    assert_eq!(strips[0].row_id, grace_id);
+    assert_eq!(strips[0].column, "reports_to");
+    assert_eq!(strips[0].prior_record_ids, vec![ada_id.clone()]);
+
+    let grace = app.get_row("contacts", &grace_id).unwrap().unwrap();
+    assert_eq!(
+        grace.values.get("reports_to"),
+        Some(&CellValue::Relation { record_ids: vec![] })
+    );
+    assert!(app.get_row("contacts", &ada_id).unwrap().is_none());
+
+    // Honest undo: restore Ada, then re-apply the captured inbound link.
+    app.restore_row(
+        "contacts",
+        &crate::Row {
+            id: ada_id.clone(),
+            values: BTreeMap::from([("name".into(), CellValue::Text("Ada".into()))]),
+        },
+    )
+    .unwrap();
+    app.restore_relation_strips(&strips).unwrap();
+    let grace = app.get_row("contacts", &grace_id).unwrap().unwrap();
+    assert_eq!(
+        grace.values.get("reports_to"),
+        Some(&CellValue::Relation {
+            record_ids: vec![ada_id],
+        })
+    );
+}
+
+#[test]
+fn delete_row_strips_cross_table_relation_ids() {
+    use crate::NewColumn;
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("CRM.data");
+    let mut app = DataApp::create(&package_path, "CRM", "companies").unwrap();
+    app.add_table("contacts").unwrap();
+    app.add_columns(
+        "contacts",
+        &[
+            NewColumn::new("name", FieldType::Text),
+            NewColumn::relation("company", "companies"),
+        ],
+    )
+    .unwrap();
+
+    let company_id = app.insert_row("companies", &BTreeMap::new()).unwrap();
+    let other_id = app.insert_row("companies", &BTreeMap::new()).unwrap();
+    let contact_id = app
+        .insert_row(
+            "contacts",
+            &BTreeMap::from([(
+                "company".into(),
+                CellValue::Relation {
+                    record_ids: vec![company_id.clone(), other_id.clone()],
+                },
+            )]),
+        )
+        .unwrap();
+
+    app.delete_row("companies", &company_id).unwrap();
+    let contact = app.get_row("contacts", &contact_id).unwrap().unwrap();
+    assert_eq!(
+        contact.values.get("company"),
+        Some(&CellValue::Relation {
+            record_ids: vec![other_id],
+        })
+    );
+}
