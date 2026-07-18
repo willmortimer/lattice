@@ -13,6 +13,7 @@ serde_yaml.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
 walkdir.workspace = true
+ignore.workspace = true
 lattice-storage.workspace = true
 lattice-profile.workspace = true
 lattice-data.workspace = true
