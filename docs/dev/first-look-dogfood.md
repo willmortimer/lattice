@@ -11,6 +11,20 @@ on BASE commit `f90fb9535cbbd993a6d097c798ce8c710f6025c4`
 | Surface | Vite browser demo (`pnpm --filter @lattice/desktop dev`, fixture `inBrowser`) plus code review / existing unit tests for Tauri-only steps |
 | Method | Fixture + shell code paths under `apps/desktop/src/`; contracts in `docs/39-resource-runtime-contracts.md`; link-repair / batch-move coverage in desktop + `lattice-commands` / `lattice-index` tests. A Playwright dogfood harness was started against `:5173` but did not finish within timeout (shell chrome wait); results below do not depend on that run. |
 
+## Wave 2 landed (notebooks, canvas views, package forms)
+
+Nodes N1–N3, C1, and F1–F3 (merged on `main` after Wave 1) added notebook
+open/viewer, Pyodide Run with `ResourceUpdate` undo, canvas `subpath` → data
+`viewName` navigation, and package `forms/*.form.yaml` list/load/submit. Contracts:
+
+- [Data applications — package forms](../10-data-applications-and-airtable-model.md#package-form-definitions-mvp) — `list_forms` / `load_form`, `ContactIntake` seed, distinct from `layout.type: form`.
+- [Resource runtime — notebooks](../39-resource-runtime-contracts.md#notebook-resources-phase-n3) — `notebook-viewer`, Pyodide Run, persist + undo.
+- [Resource runtime — canvas data views](../39-resource-runtime-contracts.md#canvas-data-view-navigation-phase-c1) — `viewNameFromCanvasSubpath` on double-click.
+- [Jupyter — Phase 1 scope](../14-jupyter-python-nix-and-compute.md#phase-1-desktop-scope-current-sprint) — Pyodide-only this sprint; native Jupyter deferred.
+
+Re-run the [[Home]] tour on a current build for notebook Run, canvas CRM nodes,
+and **Forms → Contact intake**.
+
 ## Wave 1 landed (relation integrity + batch link-repair)
 
 Subsequent nodes (D0/R1/R2/B1/R3/T1, merged on `main`) closed the gaps called

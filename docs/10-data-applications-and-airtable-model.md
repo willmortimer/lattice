@@ -302,8 +302,12 @@ Form definitions are readable YAML/JSON and can render in Lattice or a published
 
 ### Package form definitions (MVP)
 
-Separate from table view `layout.type: form` (the in-app DataFormView create
-surface), a `.data` package may ship named form resources under `forms/`:
+**Distinct from view layout `form`:** table view `layout.type: form` is the
+in-app **DataFormView** create surface inside the data-app chrome (field order
+from `layout.columns`, submit → `insert_record`, then **Open record**). Package
+forms under `forms/` are separate named resources listed in the **Forms** panel.
+
+A `.data` package may ship named form resources under `forms/`:
 
 ```text
 forms/{name}.form.yaml
@@ -334,8 +338,9 @@ the open `.data` package, opens one in a side panel (separate from
 (`RecordInsert`) using the form's `table` and field values. Undo uses the
 existing command history (`undo_last`). Browser demo mode mutates the local
 snapshot and lists forms from the compiled First Look template seed
-(`forms/ContactIntake.form.yaml` in `CRM.data`). A form designer and public
-publish remain future work.
+(`forms/ContactIntake.form.yaml` in `CRM.data` — `contacts` table,
+`name` / `email` / `status` / `company` fields, title **Contact intake**). A
+form designer and public publish remain future work.
 
 ## Interfaces
 

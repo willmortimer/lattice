@@ -7,8 +7,10 @@ implementations and conformance fixtures must honor. It complements
 
 ## Coarse kinds and format profiles
 
-`ResourceKind` stays coarse (`page`, `canvas`, `data-app`, `file`, `folder`).
-Ordinary files are always `file`; a derived `ResourceFormatProfile` and
+`ResourceKind` stays coarse for shell surfaces (`page`, `canvas`, `data-app`,
+`notebook`, `file`, `folder`). `.ipynb` files classify as `notebook`, not
+`file`. Ordinary unrecognized files are always `file`; a derived
+`ResourceFormatProfile` and
 `FormatCapabilities` describe how Lattice may inspect, read, validate, and
 update them.
 
@@ -147,6 +149,70 @@ Cleanup expectations when a resource closes or a load is superseded:
 Blob URLs, workers, and GPU scenes must not leak across resource switches.
 Tests cover the object-URL lease, renderer-load cancellation, and load-gate
 supersession; integration smoke for PDF worker teardown remains manual.
+
+## Notebook resources (Phase N3)
+
+`.ipynb` files open as `ResourceKind::Notebook` with profile `Json` and
+`can_update`. The desktop shell registers renderer `notebook-viewer`
+(lazy-loaded) ahead of the generic `file` fallback.
+
+**Open and viewer**
+
+- Load reads canonical UTF-8 JSON and parses nbformat v4 into a stable
+  read-model (`parseNotebook`).
+- Markdown cells render through the page preview path; code cells show source
+  (CodeMirror) and any persisted `outputs` (stream, execute_result,
+  display_data, error).
+- Parse failures surface a degraded error panel; the file remains inspectable
+  outside Lattice.
+
+**Pyodide Run**
+
+- Per-cell **Run** and toolbar **Run all** execute Python in a module Web
+  Worker. Pyodide loads lazily from jsDelivr on first Run (not bundled into
+  the desktop app). Cancel aborts the in-flight worker run.
+- Load or runtime failure sets a degraded banner; the notebook stays readable
+  and editable source is unchanged until a successful run.
+- After run, `execution_count` and `outputs` merge into the `.ipynb` JSON
+  (output strings capped per `MAX_NOTEBOOK_OUTPUT_CHARS`).
+
+**Persistence and undo**
+
+- Native: persist through semantic `ResourceUpdate` with `base_revision`
+  optimistic concurrency (`applyResourceUpdate` → Tauri `apply_transaction`).
+  `undo_last` restores the prior notebook bytes (see
+  `resource_update_persists_notebook_json_with_undo` in `lattice-commands`).
+- Browser demo: mutates the in-memory `demoNotebooks` map; no command-history
+  undo stack.
+
+Native Jupyter / ipykernel execution remains deferred
+([Jupyter and compute](./14-jupyter-python-nix-and-compute.md)).
+
+| Asset | Owner | Cleanup |
+|---|---|---|
+| Pyodide worker | `NotebookViewer` / `pyodideRuntime` | `AbortController` on cancel; worker terminated when superseded |
+
+## Canvas data-view navigation (Phase C1)
+
+JSON Canvas `file` nodes may carry optional `subpath` (relative to the
+referenced resource). Double-click / open passes `(path, subpath)` through
+`CanvasViewer` → `onOpenFile`.
+
+For `.data` package nodes, `viewNameFromCanvasSubpath` maps:
+
+- `views/{name}` — bare view stem.
+- `views/{name}.yaml` or `views/{name}.view.yaml` — saved view file.
+
+to a `viewName` passed into `open_data_app` so the data-app chrome opens on
+that saved view (Board, Gallery, and so on). Unrecognized subpaths open the
+package default view.
+
+First Look fixture: `Canvases/Product Strategy.canvas` CRM nodes use
+`subpath: views/Board` and `subpath: views/Gallery.yaml` on `CRM.data`.
+
+This is navigation via JSON Canvas `subpath`, distinct from in-table
+`layout.type: form` and from future `lattice-canvas-profile` sidecars that
+embed a `data-view` renderer inline.
 
 ## Conformance fixtures
 
