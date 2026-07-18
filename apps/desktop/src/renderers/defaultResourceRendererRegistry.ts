@@ -60,6 +60,11 @@ export function createDefaultResourceRendererRegistry(): ResourceRendererRegistr
       definition("data-table", "data-app", ["sqlite"], (signal) =>
         lazyImport(() => import("./DataResourceRenderer").then((module) => module.DataResourceRenderer), signal),
       ),
+    )
+    .register(
+      definition("notebook-viewer", "notebook", undefined, (signal) =>
+        lazyImport(() => import("./NotebookResourceRenderer").then((module) => module.NotebookResourceRenderer), signal),
+      ),
     );
   registerMediaResourceRenderers(registry);
   registerTextResourceRenderers(registry);

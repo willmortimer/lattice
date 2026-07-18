@@ -215,6 +215,9 @@ test("demo template emits kitchen-sink browser fixture", () => {
   assert.match(source, /CRM\.data/);
   assert.match(source, /"relation_targets"/);
   assert.match(source, /mermaid/);
+  assert.match(source, /export const demoNotebooks/);
+  assert.match(source, /Notebooks\/CRM exploration\.ipynb/);
+  assert.match(source, /# CRM exploration/);
 });
 
 test("template compiler rejects invalid dataPackages", () => {

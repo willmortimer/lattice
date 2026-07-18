@@ -21,6 +21,12 @@ describe("createDefaultResourceRendererRegistry", () => {
     );
     expect(registry.resolve({ kind: "file", path: "config.json" }).definition.id).toBe(textResourceRendererDefinition.id);
     expect(registry.resolve({ kind: "page", path: "Notes.page.md" }, ["pages"]).definition.id).toBe("page-editor");
+    expect(registry.resolve({ kind: "notebook", path: "Notebooks/CRM exploration.ipynb" }).definition.id).toBe(
+      "notebook-viewer",
+    );
+    expect(
+      registry.resolve({ kind: "notebook", path: "Notebooks/CRM exploration.ipynb" }, ["pages", "canvas"]).mode,
+    ).toBe("native");
   });
 
   it("registers each media renderer id exactly once", () => {

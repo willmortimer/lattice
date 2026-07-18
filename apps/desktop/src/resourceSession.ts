@@ -40,6 +40,12 @@ export type OpenResourceSession =
       editable: boolean;
     }
   | {
+      kind: "notebook";
+      resource: Resource;
+      content: string;
+      revision: string;
+    }
+  | {
       kind: "unknown";
       resource: Resource;
     };

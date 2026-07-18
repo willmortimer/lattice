@@ -1,0 +1,124 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+import { parseNotebook } from "./parseNotebook";
+
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../../..");
+const crmNotebook = readFileSync(
+  join(repoRoot, "templates/workspaces/demo/files/Notebooks/CRM exploration.ipynb"),
+  "utf8",
+);
+
+describe("parseNotebook", () => {
+  it("parses the First Look CRM exploration notebook", () => {
+    const result = parseNotebook(crmNotebook);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.notebook.nbformat).toBe(4);
+    expect(result.notebook.cells.length).toBeGreaterThan(0);
+    expect(result.notebook.cells[0]?.cellType).toBe("markdown");
+    expect(result.notebook.cells[0]?.source).toContain("# CRM exploration");
+    const codeCell = result.notebook.cells.find((cell) => cell.cellType === "code");
+    expect(codeCell?.source).toContain("pandas");
+    expect(codeCell?.outputs).toEqual([]);
+  });
+
+  it("joins multiline source arrays and preserves execution metadata", () => {
+    const result = parseNotebook(JSON.stringify({
+      nbformat: 4,
+      nbformat_minor: 5,
+      metadata: { kernelspec: { name: "python3" } },
+      cells: [
+        {
+          cell_type: "markdown",
+          metadata: {},
+          source: ["# Title\n", "Body"],
+        },
+        {
+          cell_type: "code",
+          execution_count: 2,
+          metadata: {},
+          outputs: [
+            {
+              output_type: "stream",
+              name: "stdout",
+              text: ["hello", "\nworld"],
+            },
+            {
+              output_type: "execute_result",
+              execution_count: 2,
+              metadata: {},
+              data: {
+                "text/plain": ["42"],
+                "image/png": "aGVsbG8=",
+              },
+            },
+          ],
+          source: "1 + 1",
+        },
+      ],
+    }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.notebook.cells[0]?.source).toBe("# Title\nBody");
+    const code = result.notebook.cells[1];
+    expect(code?.executionCount).toBe(2);
+    expect(code?.outputs).toEqual([
+      { kind: "stream", name: "stdout", text: "hello\nworld" },
+      {
+        kind: "execute-result",
+        executionCount: 2,
+        data: { textPlain: "42", imageDataUrl: "data:image/png;base64,aGVsbG8=" },
+      },
+    ]);
+  });
+
+  it("parses stderr streams and error outputs", () => {
+    const result = parseNotebook(JSON.stringify({
+      nbformat: 4,
+      nbformat_minor: 5,
+      metadata: {},
+      cells: [
+        {
+          cell_type: "code",
+          execution_count: null,
+          metadata: {},
+          outputs: [
+            { output_type: "stream", name: "stderr", text: "warn\n" },
+            {
+              output_type: "error",
+              ename: "ValueError",
+              evalue: "bad input",
+              traceback: ["Traceback...", "ValueError: bad input"],
+            },
+          ],
+          source: "raise ValueError('bad input')",
+        },
+      ],
+    }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.notebook.cells[0]?.outputs).toEqual([
+      { kind: "stream", name: "stderr", text: "warn\n" },
+      {
+        kind: "error",
+        ename: "ValueError",
+        evalue: "bad input",
+        traceback: ["Traceback...", "ValueError: bad input"],
+      },
+    ]);
+  });
+
+  it("rejects unsupported nbformat versions and malformed roots", () => {
+    expect(parseNotebook("{")).toEqual({ ok: false, error: expect.any(String) });
+    expect(parseNotebook(JSON.stringify({ nbformat: 3, cells: [] }))).toEqual({
+      ok: false,
+      error: "Unsupported nbformat 3; expected 4.",
+    });
+    expect(parseNotebook(JSON.stringify({ nbformat: 4 }))).toEqual({
+      ok: false,
+      error: "Notebook cells must be an array.",
+    });
+  });
+});
