@@ -41,7 +41,7 @@ The root manifest should remain small. Most metadata belongs beside the resource
 | Canvas | JSON Canvas | Lattice canvas profile sidecar |
 | Data application | SQLite package | SQL schema, migrations, YAML views/forms/interfaces |
 | Analytical dataset | Parquet directory | DuckDB catalog, SQLite annotations, semantic model |
-| Notebook | Jupyter `.ipynb` | Lattice environment/profile sidecar |
+| Notebook | Jupyter `.ipynb` | Lattice environment/profile sidecar; Phase 1 execution is Pyodide-only (see below) |
 | Ink | Lattice Ink package | Arrow strokes, SVG preview, platform cache |
 | Diagram | Mermaid, Graphviz DOT, SVG | rendered preview |
 | Chart | Vega-Lite/Vega | SVG/PNG/HTML preview |
@@ -53,6 +53,15 @@ The root manifest should remain small. Most metadata belongs beside the resource
 | Citation library | CSL JSON, BibTeX, RIS | SQLite index |
 | Geospatial | GeoJSON, GeoParquet | map view manifests |
 | Scientific arrays | Zarr | notebook and visualization profiles |
+
+## Notebook execution (Phase 1)
+
+Desktop classifies `.ipynb` as `ResourceKind::Notebook` (not a generic
+`file`). The shell opens notebooks through the `notebook-viewer` renderer.
+**Run** executes code cells in a Pyodide worker; merged outputs persist in the
+canonical JSON through `ResourceUpdate` with command-history undo on native.
+Kernel sidecars, native `uv` / ipykernel execution, and Jupyter server attach
+remain future work ([Jupyter and compute](./14-jupyter-python-nix-and-compute.md)).
 
 ## Format requirements
 

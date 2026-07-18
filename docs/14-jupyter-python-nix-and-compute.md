@@ -16,6 +16,18 @@ A notebook can be:
 
 The canonical file remains standard `.ipynb`.
 
+## Phase 1 desktop scope (current sprint)
+
+Phase 1 N3 ships **notebook open**, a read-only-to-interactive viewer, and
+**Pyodide Run** for code cells. Outputs merge into the canonical `.ipynb` and
+persist through semantic `ResourceUpdate` (undoable on native).
+
+**Deferred after this sprint:** native Jupyter / ipykernel sessions, `uv` task
+execution, Nix-backed reproducible environments, remote kernels, scheduled
+notebook runs, and rich widget MIME bundles. Do not assume those surfaces are
+available in the desktop build yet; specifications below describe the target
+architecture.
+
 ## Kernel architecture
 
 Jupyter's language-independent kernel protocol supports:
