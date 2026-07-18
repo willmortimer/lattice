@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "r
 import type { CellValue, DataColumn, DataRow } from "./types";
 import {
   buildRelationLabelIndex,
+  findInboundRelationLinks,
   formatRelationDisplay,
   parseRelationDraft,
   relationRecordLabel,
@@ -20,21 +21,27 @@ import {
 interface RecordDetailPanelProps {
   row: DataRow;
   columns: DataColumn[];
+  activeTable: string;
+  rows: DataRow[];
   relationTargets?: Record<string, DataRow[]>;
   readOnly: boolean;
   saving: boolean;
   onClose: () => void;
   onSave: (values: Record<string, CellValue>) => Promise<void>;
+  onOpenRecord?: (row: DataRow) => void;
 }
 
 export function RecordDetailPanel({
   row,
   columns,
+  activeTable,
+  rows,
   relationTargets,
   readOnly,
   saving,
   onClose,
   onSave,
+  onOpenRecord,
 }: RecordDetailPanelProps) {
   const [draft, setDraft] = useState(() => draftValuesFromRow(row, columns));
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -42,6 +49,11 @@ export function RecordDetailPanel({
     () => buildRelationLabelIndex(relationTargets),
     [relationTargets],
   );
+  const inboundLinks = useMemo(
+    () => findInboundRelationLinks(row.id, activeTable, columns, rows, relationTargets),
+    [activeTable, columns, relationTargets, row.id, rows],
+  );
+  const activeRowIds = useMemo(() => new Set(rows.map((candidate) => candidate.id)), [rows]);
 
   useEffect(() => {
     setDraft(draftValuesFromRow(row, columns));
@@ -171,6 +183,41 @@ export function RecordDetailPanel({
           );
         })}
       </div>
+
+      {inboundLinks.length > 0 && (
+        <section className="record-detail-inbound" aria-label="Linked from">
+          <h2 className="record-detail-inbound-title">Linked from</h2>
+          <ul className="record-detail-inbound-list">
+            {inboundLinks.map((link) => {
+              const canOpen = onOpenRecord !== undefined && activeRowIds.has(link.sourceRow.id);
+              const itemKey = `${link.table ?? activeTable}:${link.sourceRow.id}:${link.column}`;
+              const viaLabel =
+                link.table && link.table !== activeTable
+                  ? `${link.column} · ${link.table}`
+                  : link.column;
+              return (
+                <li key={itemKey}>
+                  {canOpen ? (
+                    <button
+                      type="button"
+                      className="record-detail-inbound-item"
+                      onClick={() => onOpenRecord(link.sourceRow)}
+                    >
+                      <span className="record-detail-inbound-item-label">{link.label}</span>
+                      <span className="record-detail-inbound-item-via">{viaLabel}</span>
+                    </button>
+                  ) : (
+                    <span className="record-detail-inbound-item record-detail-inbound-item-static">
+                      <span className="record-detail-inbound-item-label">{link.label}</span>
+                      <span className="record-detail-inbound-item-via">{viaLabel}</span>
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
 
       {(saveError || dirty) && (
         <footer className="record-detail-foot">

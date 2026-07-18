@@ -1078,11 +1078,14 @@ export function DataTableView({
           <RecordDetailPanel
             row={detailRow}
             columns={snapshot.columns}
+            activeTable={snapshot.default_table}
+            rows={snapshot.rows}
             relationTargets={snapshot.relation_targets}
             readOnly={busy || stale}
             saving={busy}
             onClose={() => setDetailRowId(null)}
             onSave={(values) => updateRecordValues(detailRow, values)}
+            onOpenRecord={openRecordDetail}
           />
         )}
       </div>
