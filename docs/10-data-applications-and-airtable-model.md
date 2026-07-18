@@ -328,9 +328,13 @@ description: Collect a new candidate row
 - `title` and `description` are optional display metadata.
 
 Runtime APIs: `list_forms` / `load_form` on `DataApp`, and Tauri
-`list_data_forms` / `load_data_form`. Submit UI, seeds, and a form designer are
-out of scope for this MVP; this is the package schema and list/load path only.
-Public publish and full Airtable-style form features remain future work.
+`list_data_forms` / `load_data_form`. Desktop chrome lists package forms from
+the open `.data` package, opens one in a side panel (separate from
+`DataFormView` layout), and **Submit** inserts a row through `insert_record`
+(`RecordInsert`) using the form's `table` and field values. Undo uses the
+existing command history (`undo_last`). Browser demo mode mutates the local
+snapshot and ships a fixture form until F3 seeds `ContactIntake.form.yaml`.
+A form designer and public publish remain future work.
 
 ## Interfaces
 

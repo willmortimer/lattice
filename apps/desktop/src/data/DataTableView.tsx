@@ -13,6 +13,7 @@ import DataEditor, {
 import "@glideapps/glide-data-grid/dist/index.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RecordDetailPanel } from "./RecordDetailPanel";
+import { PackageFormPanel } from "./PackageFormPanel";
 import { DataBoardView } from "./DataBoardView";
 import { DataCalendarView } from "./DataCalendarView";
 import { DataGalleryView } from "./DataGalleryView";
@@ -44,6 +45,11 @@ import {
   syncRelationTargetsAfterDelete,
   syncRelationTargetsAfterUpsert,
 } from "./relationDisplay";
+import {
+  loadPackageForm,
+  listPackageForms,
+  type FormSummary,
+} from "./forms";
 
 const STALE_REVISION_PREFIX = "STALE_REVISION:";
 
@@ -166,6 +172,10 @@ export function DataTableView({
   const [visibleCellCount, setVisibleCellCount] = useState(0);
   const [detailRowId, setDetailRowId] = useState<string | null>(null);
   const [gridSelection, setGridSelection] = useState<GridSelection | undefined>(undefined);
+  const [formPanelOpen, setFormPanelOpen] = useState(false);
+  const [packageForms, setPackageForms] = useState<FormSummary[]>([]);
+  const [activePackageForm, setActivePackageForm] = useState<FormSummary | null>(null);
+  const [formsError, setFormsError] = useState<string | null>(null);
   const revisionRef = useRef(snapshot.package_revision);
   const snapshotRef = useRef(snapshot);
 
@@ -187,6 +197,10 @@ export function DataTableView({
     setError(null);
     setDetailRowId(null);
     setGridSelection(undefined);
+    setFormPanelOpen(false);
+    setPackageForms([]);
+    setActivePackageForm(null);
+    setFormsError(null);
   }, [initialSnapshot, relPath]);
 
   useEffect(() => {
@@ -437,6 +451,103 @@ export function DataTableView({
     [activeView, applySnapshot, demoMutate, handleMutationError, relPath, root],
   );
 
+  const submitPackageForm = useCallback(
+    async (form: FormSummary, values: Record<string, CellValue>): Promise<{ id: string }> => {
+      if (demoMutate) {
+        const current = snapshotRef.current;
+        if (form.table !== current.default_table) {
+          throw new Error(
+            `Demo form table ${form.table} does not match open table ${current.default_table}`,
+          );
+        }
+        return createRecord(values);
+      }
+
+      setBusy(true);
+      try {
+        const result = await invoke<{ id: string; revision: string }>("insert_record", {
+          root,
+          relPath,
+          table: form.table,
+          values,
+        });
+        const fresh = await invoke<DataAppSnapshot>("open_data_app", {
+          root,
+          relPath,
+          viewName: activeView,
+        });
+        applySnapshot({
+          ...fresh,
+          package_revision: result.revision,
+        });
+        setStale(false);
+        setError(null);
+        return { id: result.id };
+      } catch (err) {
+        handleMutationError(err);
+        throw err;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [activeView, applySnapshot, createRecord, demoMutate, handleMutationError, relPath, root],
+  );
+
+  const openFormsPanel = useCallback(async () => {
+    setFormPanelOpen(true);
+    setActivePackageForm(null);
+    setFormsError(null);
+    setDetailRowId(null);
+    try {
+      const names = await listPackageForms({
+        root,
+        relPath,
+        demo: Boolean(demoMutate),
+      });
+      const loaded: FormSummary[] = [];
+      for (const name of names) {
+        loaded.push(
+          await loadPackageForm({
+            root,
+            relPath,
+            name,
+            demo: Boolean(demoMutate),
+          }),
+        );
+      }
+      setPackageForms(loaded);
+    } catch (err) {
+      setPackageForms([]);
+      setFormsError(String(err));
+    }
+  }, [demoMutate, relPath, root]);
+
+  const selectPackageForm = useCallback(
+    async (name: string) => {
+      setFormsError(null);
+      const cached = packageForms.find((form) => form.name === name);
+      if (cached) {
+        setActivePackageForm(cached);
+        return;
+      }
+      try {
+        const form = await loadPackageForm({
+          root,
+          relPath,
+          name,
+          demo: Boolean(demoMutate),
+        });
+        setActivePackageForm(form);
+        setPackageForms((current) =>
+          current.some((entry) => entry.name === form.name) ? current : [...current, form],
+        );
+      } catch (err) {
+        setFormsError(String(err));
+      }
+    },
+    [demoMutate, packageForms, relPath, root],
+  );
+
   const deleteRow = useCallback(
     async (row: DataRow) => {
       if (demoMutate) {
@@ -561,6 +672,8 @@ export function DataTableView({
   }, [detailRow, detailRowId]);
 
   const openRecordDetail = useCallback((row: DataRow) => {
+    setFormPanelOpen(false);
+    setActivePackageForm(null);
     setDetailRowId(row.id);
   }, []);
 
@@ -572,6 +685,8 @@ export function DataTableView({
       if (rowIndex === undefined) return;
       const row = displayRows[rowIndex];
       if (row) {
+        setFormPanelOpen(false);
+        setActivePackageForm(null);
         setDetailRowId(row.id);
       }
     },
@@ -882,6 +997,15 @@ export function DataTableView({
           </button>
           <button
             type="button"
+            className="secondary-button"
+            onClick={() => void openFormsPanel()}
+            disabled={busy}
+            aria-pressed={formPanelOpen}
+          >
+            Forms
+          </button>
+          <button
+            type="button"
             className="secondary-button data-table-add"
             onClick={() => void addRow()}
             disabled={busy || layoutType === "form"}
@@ -1086,6 +1210,26 @@ export function DataTableView({
             onClose={() => setDetailRowId(null)}
             onSave={(values) => updateRecordValues(detailRow, values)}
             onOpenRecord={openRecordDetail}
+          />
+        )}
+
+        {formPanelOpen && (
+          <PackageFormPanel
+            forms={packageForms}
+            activeForm={activePackageForm}
+            columns={snapshot.columns}
+            relationTargets={snapshot.relation_targets}
+            busy={busy}
+            readOnly={busy || stale}
+            loadError={formsError}
+            onSelectForm={(name) => void selectPackageForm(name)}
+            onBackToList={() => setActivePackageForm(null)}
+            onClose={() => {
+              setFormPanelOpen(false);
+              setActivePackageForm(null);
+              setFormsError(null);
+            }}
+            onSubmit={submitPackageForm}
           />
         )}
       </div>
