@@ -80,6 +80,7 @@
         # Browser-only React UI (demo workspace; no Tauri / no filesystem).
         desktop-web = "pnpm install && pnpm --filter @lattice/desktop dev";
         desktop-perf = "pnpm install && pnpm --filter @lattice/desktop exec playwright install chromium && pnpm --filter @lattice/desktop test:perf";
+        desktop-perf-tauri = "pnpm install && pnpm --filter @lattice/desktop test:perf:tauri";
         # Native window without Vite: reuse apps/desktop/dist if present,
         # otherwise build the frontend once. Tauri's built-in static server
         # serves dist (beforeDevCommand cleared via config merge).
@@ -103,7 +104,7 @@
           shellHook = ''
             echo "lattice dev shell — rust $(rustc --version | cut -d' ' -f2), node $(node --version), pnpm $(pnpm --version)"
             echo "tasks: lattice-{test,lint,fmt,check,site-dev,site-build,docs-sync,compile-theme,"
-            echo "              desktop-dev,desktop-web,desktop-perf,desktop,desktop-build}"
+            echo "              desktop-dev,desktop-web,desktop-perf,desktop-perf-tauri,desktop,desktop-build}"
             echo "       (equivalently: nix run .#<task> from anywhere)"
           '';
         };

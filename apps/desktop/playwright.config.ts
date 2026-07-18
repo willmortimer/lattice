@@ -1,8 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * Browser-mode perf harness for the Vite desktop demo (`inBrowser` fixture).
- * Measures shell and page-open budgets from docs/23-frontend-rendering-and-performance.md.
+ * Perf harness:
+ * - `browser` — Vite demo in Chromium (plain Playwright; CI-friendly)
+ * - `tauri` — real Lattice WebView via `tauri-plugin-playwright`
+ *   (start with `pnpm test:perf:tauri` or `pnpm tauri:dev:e2e` + `--project=tauri`)
  */
 export default defineConfig({
   testDir: "./e2e",
@@ -11,6 +13,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   workers: 1,
+  timeout: 60_000,
   reporter: [["list"], ["html", { open: "never", outputFolder: "playwright-report" }]],
   outputDir: "test-results",
   use: {
@@ -19,15 +22,29 @@ export default defineConfig({
   },
   projects: [
     {
-      name: "chromium",
+      name: "browser",
+      testIgnore: "**/*.tauri.perf.spec.ts",
       use: { ...devices["Desktop Chrome"] },
     },
+    {
+      name: "tauri",
+      testMatch: "**/*.tauri.perf.spec.ts",
+      use: {
+        // @ts-expect-error custom fixture option from @srsholmes/tauri-playwright
+        mode: "tauri",
+        // Playwright browser traces capture a blank page in Tauri mode.
+        trace: "off",
+        screenshot: "off",
+      },
+    },
   ],
-  webServer: {
-    command: "pnpm --filter @lattice/desktop dev",
-    url: "http://localhost:5173",
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-    cwd: "../..",
-  },
+  webServer: process.env.LATTICE_PERF_SKIP_WEBSERVER
+    ? undefined
+    : {
+        command: "pnpm --filter @lattice/desktop dev",
+        url: "http://localhost:5173",
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+        cwd: "../..",
+      },
 });

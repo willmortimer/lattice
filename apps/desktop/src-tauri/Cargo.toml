@@ -14,11 +14,19 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+[features]
+# Enables the Playwright socket bridge for native WebView E2E / perf.
+# Keep off for normal runs; use `pnpm tauri:dev:e2e` or `--features e2e-testing`.
+e2e-testing = []
+
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-global-shortcut = "2"
+# Always linked so `playwright:default` stays in the ACL schema; only initialized
+# when the `e2e-testing` feature is enabled (see lib.rs).
+tauri-plugin-playwright = "0.4.1"
 lattice-theme.workspace = true
 lattice-profile.workspace = true
 serde.workspace = true

@@ -18,7 +18,7 @@ test.describe("page open", () => {
     await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
     const elapsedMs = Date.now() - startedAt;
 
-    const nav = await readNavigationMetrics((fn) => page.evaluate(fn));
+    const nav = await readNavigationMetrics(page);
     test.info().annotations.push({
       type: "perf",
       description: [
