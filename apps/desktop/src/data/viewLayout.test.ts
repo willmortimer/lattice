@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 import type { DataColumn, DataRow } from "./types";
 import {
   groupRowsByColumn,
+  isImageCoverValue,
+  isImageLikeColumn,
+  resolveGalleryCoverColumn,
   resolveGroupByColumn,
+  resolveImageLikeColumn,
   resolveListPrimaryColumn,
   resolveListSubtitleColumn,
 } from "./viewLayout";
@@ -71,5 +75,34 @@ describe("viewLayout helpers", () => {
     expect(lanes.map((lane) => lane.key)).toEqual(["Active", "Done"]);
     expect(lanes[0]?.rows.map((row) => row.id)).toEqual(["b"]);
     expect(lanes[1]?.rows.map((row) => row.id)).toEqual(["a", "c"]);
+  });
+
+  it("detects image-like columns and cover values", () => {
+    const galleryColumns: DataColumn[] = [
+      { name: "id", field_type: "text", sqlite_type: "TEXT" },
+      { name: "name", field_type: "text", sqlite_type: "TEXT" },
+      { name: "photo", field_type: "text", sqlite_type: "TEXT" },
+      { name: "notes", field_type: "long_text", sqlite_type: "TEXT" },
+    ];
+
+    expect(isImageLikeColumn(galleryColumns[2]!)).toBe(true);
+    expect(isImageLikeColumn(galleryColumns[1]!)).toBe(false);
+    expect(resolveImageLikeColumn(galleryColumns)).toBe("photo");
+    expect(resolveGalleryCoverColumn(galleryColumns, "notes")).toBe("notes");
+    expect(resolveGalleryCoverColumn(galleryColumns, null)).toBe("photo");
+    expect(
+      resolveGalleryCoverColumn(
+        galleryColumns.filter((column) => column.name !== "photo"),
+        null,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("recognizes image cover values", () => {
+    expect(isImageCoverValue("assets/photo.png")).toBe(true);
+    expect(isImageCoverValue("https://example.com/cover.jpg?size=large")).toBe(true);
+    expect(isImageCoverValue("data:image/png;base64,abc")).toBe(true);
+    expect(isImageCoverValue("Draft notes")).toBe(false);
+    expect(isImageCoverValue("https://example.com/page")).toBe(false);
   });
 });

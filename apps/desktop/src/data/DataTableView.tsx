@@ -14,6 +14,7 @@ import "@glideapps/glide-data-grid/dist/index.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { RecordDetailPanel } from "./RecordDetailPanel";
 import { DataBoardView } from "./DataBoardView";
+import { DataGalleryView } from "./DataGalleryView";
 import { DataListView } from "./DataListView";
 import {
   cellValueToDisplay,
@@ -109,6 +110,7 @@ export function DataTableView({
     initialSnapshot.layout_type ?? "grid",
   );
   const [groupBy, setGroupBy] = useState<string | undefined>(initialSnapshot.group_by);
+  const [coverField, setCoverField] = useState<string | undefined>(initialSnapshot.cover_field);
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(() => new Set());
   const [filterField, setFilterField] = useState("");
   const [filterOperator, setFilterOperator] = useState<"equals" | "contains">("contains");
@@ -133,6 +135,7 @@ export function DataTableView({
     setFilters(next.filters);
     setLayoutType(next.layout_type ?? "grid");
     setGroupBy(next.group_by);
+    setCoverField(next.cover_field);
     setHiddenColumns(new Set());
     revisionRef.current = next.package_revision;
     snapshotRef.current = next;
@@ -165,6 +168,7 @@ export function DataTableView({
     setFilters(cloned.filters);
     setLayoutType(cloned.layout_type ?? "grid");
     setGroupBy(cloned.group_by);
+    setCoverField(cloned.cover_field);
     setHiddenColumns(new Set());
     snapshotRef.current = cloned;
     revisionRef.current = cloned.package_revision;
@@ -770,6 +774,15 @@ export function DataTableView({
               rows={displayRows}
               columns={visibleColumns}
               groupBy={groupBy}
+              selectedRowId={detailRowId}
+              onRowOpen={openRecordDetail}
+            />
+          ) : layoutType === "gallery" ? (
+            <DataGalleryView
+              root={root}
+              rows={displayRows}
+              columns={visibleColumns}
+              coverField={coverField}
               selectedRowId={detailRowId}
               onRowOpen={openRecordDetail}
             />
