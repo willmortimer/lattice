@@ -44,7 +44,7 @@ export interface DesktopShellProps { model: ReturnType<typeof useDesktopControll
 
 export function DesktopShell({ model }: DesktopShellProps) {
   const {
-    profile, profileReady, settings, startup, snapshot, selected, session, error, busy, saveState,
+    profile, profileReady, settings, startup, snapshot, selected, selectedPaths, session, error, busy, saveState,
     externalConflict, reloadToken, newWorkspaceOpen, workspacesDir, templates, statusToast,
     profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth,
     treeCollapsedPaths, revealPath, linkPicker, linkRepairReview, handleLinkRepairAccept, handleLinkRepairDefer,
@@ -55,7 +55,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
     setDismissedNoticeCodes, setEditingTitle, setTitleDraft, applyThemeCatalog,
     clearRecents, resetSettings, handleGetStarted, handleOpenWorkspace, openRecent,
     handleCreateWorkspace, openNewWorkspaceDialog, pickWorkspaceFolder, handleNewPage, handleQuickNote,
-    handleNewTable, handleImportCsv, handleSelect, handleOpenExternally, handleOpenFile,
+    handleNewTable, handleImportCsv, handleSelect, applyTreeSelection, handleOpenExternally, handleOpenFile,
     handleKeepIncoming, handleKeepLocal, handleKeepBoth, handleTreeCollapsedPathsChange,
     handleTreeResourceContextMenu, handleTreeFolderContextMenu, handleTreeRename, handleMoveToFolder,
     treeRenameRequest,
@@ -249,8 +249,8 @@ export function DesktopShell({ model }: DesktopShellProps) {
           <nav className="resource-list">
             <ResourceTree
               resources={snapshot.resources}
-              selectedPath={selected?.path ?? null}
-              onSelect={handleSelect}
+              selectedPaths={selectedPaths}
+              onTreeSelect={applyTreeSelection}
               directoryPurposes={directoryPurposes}
               workspaceKey={snapshot.id}
               collapsedPaths={treeCollapsedPaths}
@@ -258,7 +258,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
               onResourceContextMenu={handleTreeResourceContextMenu}
               onFolderContextMenu={handleTreeFolderContextMenu}
               onRename={handleTreeRename}
-              onMoveToFolder={(from, toDir) => void handleMoveToFolder(from, toDir)}
+              onMoveToFolder={(fromPaths, toDir) => void handleMoveToFolder(fromPaths, toDir)}
               renameRequest={treeRenameRequest}
               revealPath={revealPath}
             />

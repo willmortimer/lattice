@@ -60,6 +60,12 @@ Contract:
   auto-select.
 - Undo of a rename/move returns path remaps so open tabs and selection follow
   the restored paths.
+- **Batch moves/deletes** record one transaction with N `ResourceMove` /
+  `ResourceDelete` commands so a single undo restores the whole set. Path remaps
+  from undo cover every relocated path in that transaction.
+- **Batch link repair** is out of scope. Single-path Lattice moves still offer
+  the review modal; multi-select batch moves skip repair orchestration
+  (best-effort / first-path-only is not a full substitute for per-path repair).
 
 ### Revision history presentation
 

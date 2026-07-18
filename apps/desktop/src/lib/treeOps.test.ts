@@ -8,6 +8,7 @@ import {
   parentDirectory,
   resourcePathExists,
   validateMoveResource,
+  validateMoveResources,
 } from "./treeOps";
 
 const page = (path: string): Resource => ({ path, kind: "page" });
@@ -52,5 +53,25 @@ describe("validateMoveResource", () => {
   it("checks path existence", () => {
     expect(resourcePathExists(resources, "Notes/A.md")).toBe(true);
     expect(resourcePathExists(resources, "Missing.md")).toBe(false);
+  });
+});
+
+describe("validateMoveResources", () => {
+  const resources = [page("A.md"), page("B.md"), page("Notes/C.md")];
+
+  it("accepts a batch move into an empty folder", () => {
+    expect(validateMoveResources(["A.md", "B.md"], "Archive", resources)).toEqual({
+      ok: true,
+      destinations: ["Archive/A.md", "Archive/B.md"],
+    });
+  });
+
+  it("rejects basename collisions within the batch", () => {
+    expect(
+      validateMoveResources(["A.md", "Notes/A.md"], "Archive", [
+        page("A.md"),
+        page("Notes/A.md"),
+      ]).ok,
+    ).toBe(false);
   });
 });
