@@ -15,8 +15,12 @@ export function fieldEditorKind(fieldType: FieldType): RecordFieldEditorKind {
     case "date":
       return "date";
     case "text":
-    default:
+    case "relation":
       return "text";
+    default: {
+      const _exhaustive: never = fieldType;
+      return _exhaustive;
+    }
   }
 }
 
@@ -32,9 +36,14 @@ export function fieldTypeLabel(fieldType: FieldType): string {
       return "Boolean";
     case "date":
       return "Date";
+    case "relation":
+      return "Relation";
     case "text":
-    default:
       return "Text";
+    default: {
+      const _exhaustive: never = fieldType;
+      return _exhaustive;
+    }
   }
 }
 
@@ -102,8 +111,12 @@ export function validateDraftField(text: string, fieldType: FieldType): string |
     case "text":
     case "long_text":
     case "boolean":
-    default:
+    case "relation":
       return null;
+    default: {
+      const _exhaustive: never = fieldType;
+      return _exhaustive;
+    }
   }
 }
 

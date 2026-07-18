@@ -5,7 +5,8 @@ export type FieldType =
   | "integer"
   | "decimal"
   | "boolean"
-  | "date";
+  | "date"
+  | "relation";
 
 /** Externally tagged `CellValue` from `lattice-data`. */
 export type CellValue =
@@ -14,12 +15,15 @@ export type CellValue =
   | { Integer: number }
   | { Decimal: number }
   | { Boolean: boolean }
-  | { Date: string };
+  | { Date: string }
+  | { Relation: { record_ids: string[] } };
 
 export interface DataColumn {
   name: string;
   field_type: FieldType;
   sqlite_type: string;
+  /** Target table for relation fields (same `.data` package). */
+  relation_table?: string;
 }
 
 export interface DataRow {
@@ -75,6 +79,7 @@ export function cellValueToDisplay(value: CellValue | undefined): string {
   if ("Decimal" in value) return String(value.Decimal);
   if ("Boolean" in value) return value.Boolean ? "true" : "false";
   if ("Date" in value) return value.Date;
+  if ("Relation" in value) return value.Relation.record_ids.join(", ");
   return "";
 }
 
@@ -92,10 +97,22 @@ export function displayToCellValue(text: string, fieldType: FieldType): CellValu
       };
     case "date":
       return { Date: trimmed };
+    case "relation":
+      return {
+        Relation: {
+          record_ids: trimmed
+            .split(",")
+            .map((id) => id.trim())
+            .filter(Boolean),
+        },
+      };
     case "text":
     case "long_text":
-    default:
       return { Text: text };
+    default: {
+      const _exhaustive: never = fieldType;
+      return _exhaustive;
+    }
   }
 }
 

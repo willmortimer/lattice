@@ -130,6 +130,15 @@ pub fn cell_from_csv(text: &str, field_type: FieldType) -> Result<CellValue> {
             .map_err(|_| Error::table("csv", format!("invalid decimal value {trimmed:?}"))),
         FieldType::Date => Ok(CellValue::Date(trimmed.to_string())),
         FieldType::Text | FieldType::LongText => Ok(CellValue::Text(trimmed.to_string())),
+        FieldType::Relation => {
+            let record_ids: Vec<String> = serde_json::from_str(trimmed).map_err(|_| {
+                Error::table(
+                    "csv",
+                    format!("invalid relation JSON array {trimmed:?}"),
+                )
+            })?;
+            Ok(CellValue::Relation { record_ids })
+        }
     }
 }
 

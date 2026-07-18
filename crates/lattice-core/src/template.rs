@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use lattice_data::{write_package_view, CellValue, DataApp, FieldType, ViewDef};
+use lattice_data::{write_package_view, CellValue, DataApp, FieldType, NewColumn, ViewDef};
 use lattice_storage::atomic_write_file;
 use serde::{Deserialize, Serialize};
 
@@ -504,25 +504,35 @@ fn materialize_data_package(
         directories.push(package_path.clone());
     }
 
-    let columns: Vec<(&str, FieldType)> = package
+    let columns: Vec<NewColumn<'_>> = package
         .columns
         .iter()
         .map(|column| {
-            Ok((
-                column.name,
+            let field_type =
                 parse_field_type(column.field_type).ok_or_else(|| Error::TemplateValidation {
                     message: format!(
                         "data package {} has unknown column type {:?}",
                         package.path, column.field_type
                     ),
-                })?,
-            ))
+                })?;
+            if field_type == FieldType::Relation {
+                return Err(Error::TemplateValidation {
+                    message: format!(
+                        "data package {}: relation columns are not supported in template seeds yet",
+                        package.path
+                    ),
+                });
+            }
+            Ok(NewColumn::new(column.name, field_type))
         })
         .collect::<Result<_>>()?;
     app.add_columns(package.table, &columns)
         .map_err(map_data_error)?;
 
-    let column_types: BTreeMap<&str, FieldType> = columns.into_iter().collect();
+    let column_types: BTreeMap<&str, FieldType> = columns
+        .iter()
+        .map(|column| (column.name, column.field_type))
+        .collect();
     for row_json in package.rows_json {
         let values = row_values_from_json(row_json, &column_types, package.path)?;
         app.insert_row(package.table, &values)
@@ -646,6 +656,11 @@ fn cell_from_json(
                 FieldType::Text | FieldType::LongText | FieldType::Date => {
                     Ok(CellValue::Text(number.to_string()))
                 }
+                FieldType::Relation => Err(Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path}: relation cells must be a JSON array of record ids"
+                    ),
+                }),
             }
         }
         serde_json::Value::String(text) => {
@@ -670,15 +685,39 @@ fn cell_from_json(
                         ),
                     }
                 }),
+                FieldType::Relation => Err(Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path}: relation cells must be a JSON array of record ids"
+                    ),
+                }),
             }
         }
-        serde_json::Value::Array(_) | serde_json::Value::Object(_) => {
-            Err(Error::TemplateValidation {
+        serde_json::Value::Array(items) => match field_type {
+            FieldType::Relation => {
+                let mut record_ids = Vec::with_capacity(items.len());
+                for item in items {
+                    let Some(text) = item.as_str() else {
+                        return Err(Error::TemplateValidation {
+                            message: format!(
+                                "data package {package_path}: relation record ids must be strings"
+                            ),
+                        });
+                    };
+                    record_ids.push(text.to_string());
+                }
+                Ok(CellValue::Relation { record_ids })
+            }
+            _ => Err(Error::TemplateValidation {
                 message: format!(
                     "data package {package_path}: row cells must be JSON primitives or null"
                 ),
-            })
-        }
+            }),
+        },
+        serde_json::Value::Object(_) => Err(Error::TemplateValidation {
+            message: format!(
+                "data package {package_path}: row cells must be JSON primitives or null"
+            ),
+        }),
     }
 }
 
@@ -690,6 +729,7 @@ fn parse_field_type(value: &str) -> Option<FieldType> {
         "decimal" => Some(FieldType::Decimal),
         "boolean" => Some(FieldType::Boolean),
         "date" => Some(FieldType::Date),
+        "relation" => Some(FieldType::Relation),
         _ => None,
     }
 }

@@ -68,6 +68,8 @@ pub struct ColumnDto {
     pub name: String,
     pub field_type: String,
     pub sqlite_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relation_table: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -81,6 +83,7 @@ fn column_dto(column: ColumnMeta) -> ColumnDto {
         name: column.name,
         field_type: column.field_type.to_string(),
         sqlite_type: column.sqlite_type,
+        relation_table: column.relation_table,
     }
 }
 
