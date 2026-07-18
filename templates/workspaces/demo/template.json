@@ -14,7 +14,7 @@
     { "path": "Projects", "purpose": "Active workstreams with a clear outcome." },
     { "path": "Product", "purpose": "Product narrative, vision, principles, and roadmap pages." },
     { "path": "Research", "purpose": "Notes, comparisons, long reads, and diagrams." },
-    { "path": "Notebooks", "purpose": "Reserved for notebook resources." },
+    { "path": "Notebooks", "purpose": "Reproducible analysis notebooks beside CRM and CSV seeds." },
     { "path": "Canvases", "purpose": "Spatial boards that link into workspace files." },
     { "path": "Templates", "purpose": "Page templates with {{title}} and {{date}} placeholders." },
     { "path": "Data", "purpose": "Tabular seeds and imported tables." },
@@ -30,6 +30,7 @@
     "Canvases/Product Strategy.canvas",
     "Inbox/Sample capture.md",
     "Templates/Daily Note.md",
+    "Notebooks/CRM exploration.ipynb",
     "Resources/"
   ],
   "files": [
@@ -46,6 +47,7 @@
     "Research/Interview Synthesis.md",
     "Templates/Daily Note.md",
     "Templates/Meeting Note.md",
+    "Notebooks/CRM exploration.ipynb",
     "Canvases/Product Strategy.canvas",
     "Data/sample.csv",
     "Resources/config.json",
