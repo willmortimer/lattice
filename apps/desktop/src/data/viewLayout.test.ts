@@ -8,6 +8,7 @@ import {
   isImageLikeColumn,
   parseCalendarDate,
   resolveCalendarDateColumn,
+  resolveFormColumns,
   resolveGalleryCoverColumn,
   resolveGroupByColumn,
   resolveImageLikeColumn,
@@ -60,6 +61,22 @@ describe("viewLayout helpers", () => {
   it("picks primary and subtitle columns for list layout", () => {
     expect(resolveListPrimaryColumn(columns)).toBe("name");
     expect(resolveListSubtitleColumn(columns, "name")).toBe("status");
+  });
+
+  it("orders form fields from layout.columns and excludes id", () => {
+    expect(resolveFormColumns(columns)).toEqual([
+      columns[1],
+      columns[2],
+      columns[3],
+      columns[4],
+    ]);
+    expect(resolveFormColumns(columns, ["count", "name", "id", "missing"])).toEqual([
+      columns[4],
+      columns[1],
+    ]);
+    expect(resolveFormColumns(columns.filter((column) => column.name !== "count"), ["count", "name"])).toEqual([
+      columns[1],
+    ]);
   });
 
   it("prefers explicit group_by, then status, then first groupable field", () => {

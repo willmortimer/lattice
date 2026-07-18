@@ -16,6 +16,7 @@ import { RecordDetailPanel } from "./RecordDetailPanel";
 import { DataBoardView } from "./DataBoardView";
 import { DataCalendarView } from "./DataCalendarView";
 import { DataGalleryView } from "./DataGalleryView";
+import { DataFormView } from "./DataFormView";
 import { DataListView } from "./DataListView";
 import {
   cellValueToDisplay,
@@ -331,6 +332,55 @@ export function DataTableView({
       setBusy(false);
     }
   }, [activeView, applySnapshot, demoMutate, handleMutationError, relPath, root]);
+
+  const createRecord = useCallback(
+    async (values: Record<string, CellValue>): Promise<{ id: string }> => {
+      if (demoMutate) {
+        const current = snapshotRef.current;
+        const demoId = `demo-row-${current.rows.length + 1}`;
+        const rowValues: Record<string, CellValue> = { id: { Text: demoId } };
+        for (const column of editableColumns(current.columns)) {
+          rowValues[column.name] = values[column.name] ?? { Null: null };
+        }
+        applySnapshot(
+          demoMutate({
+            ...current,
+            rows: [...current.rows, { id: demoId, values: rowValues }],
+            package_revision: `${current.package_revision}:demo`,
+          }),
+        );
+        return { id: demoId };
+      }
+
+      setBusy(true);
+      try {
+        const result = await invoke<{ id: string; revision: string }>("insert_record", {
+          root,
+          relPath,
+          table: snapshotRef.current.default_table,
+          values,
+        });
+        const fresh = await invoke<DataAppSnapshot>("open_data_app", {
+          root,
+          relPath,
+          viewName: activeView,
+        });
+        applySnapshot({
+          ...fresh,
+          package_revision: result.revision,
+        });
+        setStale(false);
+        setError(null);
+        return { id: result.id };
+      } catch (err) {
+        handleMutationError(err);
+        throw err;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [activeView, applySnapshot, demoMutate, handleMutationError, relPath, root],
+  );
 
   const deleteRow = useCallback(
     async (row: DataRow) => {
@@ -682,7 +732,7 @@ export function DataTableView({
             type="button"
             className="secondary-button data-table-add"
             onClick={() => void addRow()}
-            disabled={busy}
+            disabled={busy || layoutType === "form"}
           >
             Add row
           </button>
@@ -763,7 +813,16 @@ export function DataTableView({
         className={`data-table-main${detailRow ? " data-table-main--detail-open" : ""}`}
       >
         <div className="data-grid-frame">
-          {displayRows.length === 0 ? (
+          {layoutType === "form" ? (
+            <DataFormView
+              columns={snapshot.columns}
+              rows={displayRows}
+              readOnly={busy || stale}
+              busy={busy}
+              onSubmit={createRecord}
+              onRowOpen={openRecordDetail}
+            />
+          ) : displayRows.length === 0 ? (
             <div className="data-table-empty">No rows match this view.</div>
           ) : layoutType === "list" ? (
             <DataListView

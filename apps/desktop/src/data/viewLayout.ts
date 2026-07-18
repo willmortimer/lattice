@@ -22,6 +22,33 @@ export function resolveListPrimaryColumn(columns: DataColumn[]): string | undefi
   return columns.find((column) => column.name !== "id")?.name;
 }
 
+/**
+ * Form field columns: explicit `layout.columns` order when non-empty (excluding `id`),
+ * otherwise all non-`id` columns in table order.
+ */
+export function resolveFormColumns(
+  columns: DataColumn[],
+  columnOrder: readonly string[] = [],
+): DataColumn[] {
+  const byName = new Map(columns.map((column) => [column.name, column]));
+
+  if (columnOrder.length > 0) {
+    const resolved: DataColumn[] = [];
+    for (const name of columnOrder) {
+      if (name === "id") {
+        continue;
+      }
+      const column = byName.get(name);
+      if (column) {
+        resolved.push(column);
+      }
+    }
+    return resolved;
+  }
+
+  return columns.filter((column) => column.name !== "id");
+}
+
 /** Column names commonly used for gallery cover images. */
 export function isImageLikeColumn(column: DataColumn): boolean {
   if (column.name === "id") {

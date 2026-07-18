@@ -121,3 +121,30 @@ export function draftFieldErrors(
   }
   return errors;
 }
+
+export function emptyDraftValues(columns: DataColumn[]): Record<string, string> {
+  const draft: Record<string, string> = {};
+  for (const column of columns) {
+    draft[column.name] = column.field_type === "boolean" ? "false" : "";
+  }
+  return draft;
+}
+
+/** Build an insert payload from a create-form draft. */
+export function collectFormValues(
+  draft: Record<string, string>,
+  columns: DataColumn[],
+): Record<string, CellValue> {
+  const values: Record<string, CellValue> = {};
+  for (const column of columns) {
+    if (column.name === "id") {
+      continue;
+    }
+    const text = draft[column.name] ?? "";
+    if (!text.trim() && column.field_type !== "boolean") {
+      continue;
+    }
+    values[column.name] = parseDraftField(text, column.field_type);
+  }
+  return values;
+}
