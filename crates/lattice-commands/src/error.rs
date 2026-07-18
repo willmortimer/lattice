@@ -44,6 +44,10 @@ pub enum Error {
     #[error("cannot move into {path}: not a directory")]
     NotADirectory { path: PathBuf },
 
+    /// Undo of `FolderCreate` refused because the directory is no longer empty.
+    #[error("cannot undo folder creation at {path}: directory is not empty")]
+    DirectoryNotEmpty { path: PathBuf },
+
     /// Two commands in one transaction touch the same path. Sequential
     /// dependencies inside a single transaction are unsupported in v0.
     #[error(

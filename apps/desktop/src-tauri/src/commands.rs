@@ -409,34 +409,19 @@ pub fn duplicate_resource(root: String, path: String) -> Result<String, String> 
         .replace('\\', "/"))
 }
 
-/// Create an empty folder beneath the workspace root.
-///
-/// Folders are ordinary directories discovered by workspace scan. There is
-/// no `FolderCreate` semantic command yet, so this mirrors template
-/// provisioning (`create_dir`) rather than inventing an undeclared command.
-/// The operation is not recorded in command history and is not undoable.
+/// Create an empty folder beneath the workspace root through the semantic
+/// command core.
 #[tauri::command]
 pub fn create_folder(root: String, path: String) -> Result<(), String> {
     let (canonical_root, relative) = join_within_root(&root, &path)?;
-    let target = canonical_root.join(&relative);
-    if target.exists() {
-        return Err(format!("{path:?} already exists"));
-    }
-    let parent = target
-        .parent()
-        .filter(|parent| parent.starts_with(&canonical_root))
-        .ok_or_else(|| format!("invalid folder path {path:?}"))?;
-    if parent == canonical_root {
-        // Creating a top-level folder is allowed.
-    } else if !parent.is_dir() {
-        return Err(format!(
-            "parent directory {} does not exist",
-            parent.strip_prefix(&canonical_root)
-                .unwrap_or(parent)
-                .to_string_lossy()
-        ));
-    }
-    std::fs::create_dir(&target).map_err(|err| err.to_string())
+    let mut engine = CommandEngine::open(&canonical_root).map_err(command_error_to_string)?;
+    engine
+        .apply(Transaction::new(
+            format!("Create folder {path}"),
+            vec![SemanticCommand::FolderCreate { path: relative }],
+        ))
+        .map_err(command_error_to_string)?;
+    Ok(())
 }
 
 #[derive(Debug, Serialize)]
@@ -812,9 +797,25 @@ mod tests {
         create_folder(root.clone(), "Projects/New".to_string()).unwrap();
 
         assert!(dir.path().join("Projects/New").is_dir());
-        let resources = list_resources(root).unwrap();
+        let resources = list_resources(root.clone()).unwrap();
         assert!(resources
             .iter()
             .any(|resource| resource.path == PathBuf::from("Projects/New")));
+        let history = list_history(root.clone(), 10).unwrap();
+        assert_eq!(history[0].summary, "Create folder Projects/New");
+    }
+
+    #[test]
+    fn create_folder_undo_removes_empty_directory() {
+        let dir = init_workspace();
+        std::fs::create_dir(dir.path().join("Projects")).unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        create_folder(root.clone(), "Projects/New".to_string()).unwrap();
+        assert!(dir.path().join("Projects/New").is_dir());
+
+        let summary = undo_last(root.clone()).unwrap();
+        assert_eq!(summary.as_deref(), Some("Create folder Projects/New"));
+        assert!(!dir.path().join("Projects/New").exists());
     }
 }

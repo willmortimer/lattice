@@ -645,6 +645,12 @@ impl CommandEngine {
                 }
                 Ok(())
             }
+            Command::FolderCreate { path } => {
+                if self.metadata_opt(path)?.is_some() {
+                    return Err(Error::AlreadyExists { path: path.clone() });
+                }
+                self.ensure_parent_directory(path)
+            }
             Command::TableCreate { path, .. } => match self.metadata_opt(path)? {
                 None => Ok(()),
                 Some(_) => Err(Error::AlreadyExists { path: path.clone() }),
@@ -957,6 +963,18 @@ impl CommandEngine {
                         from: dest,
                         to: from.clone(),
                     },
+                    prior_content: None,
+                    after_content: None,
+                    resulting_revision: Some(hash),
+                })
+            }
+            Command::FolderCreate { path } => {
+                let full = self.root.join(path);
+                std::fs::create_dir(&full).map_err(|source| Error::io(path, source))?;
+                let hash = self.store.metadata(path)?.revision.hash;
+                Ok(AppliedOp {
+                    forward: command.clone(),
+                    inverse: Command::ResourceDelete { path: path.clone() },
                     prior_content: None,
                     after_content: None,
                     resulting_revision: Some(hash),
@@ -1371,6 +1389,9 @@ impl CommandEngine {
             | Command::CanvasRemoveNodes { .. } => {
                 unreachable!("canvas commands are never stored as inverse operations")
             }
+            Command::FolderCreate { .. } => {
+                unreachable!("folder create commands are never stored as inverse operations")
+            }
         }
     }
 
@@ -1412,6 +1433,13 @@ impl CommandEngine {
                         expected: "(absent)".into(),
                         found,
                     });
+                }
+                Ok(())
+            }
+            Command::FolderCreate { path } => {
+                self.guard_hash(path, resulting_revision.as_deref())?;
+                if !self.is_dir_empty(path)? {
+                    return Err(Error::DirectoryNotEmpty { path: path.clone() });
                 }
                 Ok(())
             }
@@ -1505,6 +1533,33 @@ impl CommandEngine {
     /// Current content hash of `path`, or `None` if absent.
     fn current_hash(&self, path: &Path) -> Result<Option<String>> {
         Ok(self.metadata_opt(path)?.map(|m| m.revision.hash))
+    }
+
+    fn ensure_parent_directory(&self, path: &Path) -> Result<()> {
+        let Some(parent) = path.parent() else {
+            return Ok(());
+        };
+        if parent.as_os_str().is_empty() {
+            return Ok(());
+        }
+        let meta = self
+            .metadata_opt(parent)?
+            .ok_or_else(|| Error::NotFound {
+                path: parent.to_path_buf(),
+            })?;
+        if meta.is_dir {
+            Ok(())
+        } else {
+            Err(Error::NotADirectory {
+                path: parent.to_path_buf(),
+            })
+        }
+    }
+
+    fn is_dir_empty(&self, path: &Path) -> Result<bool> {
+        let full = self.root.join(path);
+        let mut entries = std::fs::read_dir(&full).map_err(|source| Error::io(path, source))?;
+        Ok(entries.next().is_none())
     }
 
     fn open_data_app(&self, path: &Path) -> Result<DataApp> {

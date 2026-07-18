@@ -3,9 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 /**
  * Thin adapters for workspace resource mutations exposed by the desktop shell.
  *
- * Delete, move, duplicate, and rename flow through the semantic command core
- * and participate in command history / undo. Folder creation uses direct
- * `create_dir` until a `FolderCreate` semantic command exists.
+ * Delete, move, duplicate, rename, and folder creation flow through the
+ * semantic command core and participate in command history / undo.
  */
 
 export async function deleteResource(root: string, path: string): Promise<void> {

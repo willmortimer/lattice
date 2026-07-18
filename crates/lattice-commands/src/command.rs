@@ -124,6 +124,10 @@ pub enum Command {
     /// Precondition: `path` present.
     ResourceDelete { path: PathBuf },
 
+    /// Create an empty folder at `path`. Precondition: `path` is absent and
+    /// its parent directory exists (or `path` is top-level).
+    FolderCreate { path: PathBuf },
+
     /// Create a `.data` package at `path`. Precondition: `path` is absent.
     TableCreate {
         path: PathBuf,
@@ -245,6 +249,7 @@ impl Command {
             Command::ResourceRename { to, .. } => to.clone(),
             Command::ResourceMove { from, to_dir } => to_dir.join(file_name(from)),
             Command::ResourceDelete { path } => path.clone(),
+            Command::FolderCreate { path } => path.clone(),
             Command::TableCreate { path, .. } => path.clone(),
             Command::RecordInsert { path, .. }
             | Command::RecordUpdate { path, .. }
@@ -274,6 +279,7 @@ impl Command {
                 vec![from.clone(), to_dir.join(file_name(from))]
             }
             Command::ResourceDelete { path } => vec![path.clone()],
+            Command::FolderCreate { path } => vec![path.clone()],
             Command::TableCreate { path, .. } => vec![path.clone()],
             Command::RecordInsert { path, .. }
             | Command::RecordUpdate { path, .. }
