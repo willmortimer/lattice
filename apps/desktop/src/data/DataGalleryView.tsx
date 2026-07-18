@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import { isAbsoluteSrc } from "../editor/assets";
 import { loadImageAsset } from "../viewers/media/imageSource";
+import type { RelationLabelIndex } from "./relationDisplay";
+import { formatCellForColumnName } from "./relationDisplay";
 import { cellValueToDisplay, type DataColumn, type DataRow } from "./types";
 import {
   isImageCoverValue,
@@ -14,6 +16,7 @@ interface DataGalleryViewProps {
   root: string;
   rows: DataRow[];
   columns: DataColumn[];
+  relationLabelIndex: RelationLabelIndex;
   coverField?: string | null;
   selectedRowId?: string | null;
   onRowOpen: (row: DataRow) => void;
@@ -89,6 +92,7 @@ export function DataGalleryView({
   root,
   rows,
   columns,
+  relationLabelIndex,
   coverField,
   selectedRowId,
   onRowOpen,
@@ -107,10 +111,10 @@ export function DataGalleryView({
     <div className="data-gallery-view" role="list">
       {rows.map((row) => {
         const primary = primaryColumn
-          ? cellValueToDisplay(row.values[primaryColumn])
+          ? formatCellForColumnName(row, primaryColumn, columns, relationLabelIndex)
           : row.id;
         const subtitle = subtitleColumn
-          ? cellValueToDisplay(row.values[subtitleColumn])
+          ? formatCellForColumnName(row, subtitleColumn, columns, relationLabelIndex)
           : "";
         const coverValue = coverColumn ? cellValueToDisplay(row.values[coverColumn]) : "";
         const selected = selectedRowId === row.id;

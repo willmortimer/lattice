@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 
+import type { RelationLabelIndex } from "./relationDisplay";
+import { formatCellForColumnName } from "./relationDisplay";
 import { cellValueToDisplay, type DataColumn, type DataRow } from "./types";
 import {
   groupRowsByCalendarDate,
@@ -13,6 +15,7 @@ type CalendarMode = "month" | "week";
 interface DataCalendarViewProps {
   rows: DataRow[];
   columns: DataColumn[];
+  relationLabelIndex: RelationLabelIndex;
   dateField?: string | null;
   selectedRowId?: string | null;
   onRowOpen: (row: DataRow) => void;
@@ -134,6 +137,7 @@ function shiftWeek(isoDate: string, deltaWeeks: number): string {
 export function DataCalendarView({
   rows,
   columns,
+  relationLabelIndex,
   dateField,
   selectedRowId,
   onRowOpen,
@@ -271,10 +275,10 @@ export function DataCalendarView({
               <div className="data-calendar-events">
                 {dayRows.map((row) => {
                   const primary = primaryColumn
-                    ? cellValueToDisplay(row.values[primaryColumn])
+                    ? formatCellForColumnName(row, primaryColumn, columns, relationLabelIndex)
                     : row.id;
                   const subtitle = subtitleColumn
-                    ? cellValueToDisplay(row.values[subtitleColumn])
+                    ? formatCellForColumnName(row, subtitleColumn, columns, relationLabelIndex)
                     : "";
                   const selected = selectedRowId === row.id;
                   const rawDate = cellValueToDisplay(row.values[dateColumn]);
@@ -311,10 +315,10 @@ export function DataCalendarView({
           <div className="data-calendar-undated-list">
             {undatedRows.map((row) => {
               const primary = primaryColumn
-                ? cellValueToDisplay(row.values[primaryColumn])
+                ? formatCellForColumnName(row, primaryColumn, columns, relationLabelIndex)
                 : row.id;
               const subtitle = subtitleColumn
-                ? cellValueToDisplay(row.values[subtitleColumn])
+                ? formatCellForColumnName(row, subtitleColumn, columns, relationLabelIndex)
                 : "";
               const selected = selectedRowId === row.id;
 

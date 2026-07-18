@@ -41,6 +41,8 @@ import {
 import {
   buildRelationLabelIndex,
   formatRelationCellValue,
+  syncRelationTargetsAfterDelete,
+  syncRelationTargetsAfterUpsert,
 } from "./relationDisplay";
 
 const STALE_REVISION_PREFIX = "STALE_REVISION:";
@@ -274,21 +276,20 @@ export function DataTableView({
 
       if (demoMutate) {
         const currentSnapshot = snapshotRef.current;
+        const updatedRow = {
+          ...row,
+          values: { ...row.values, ...values },
+        };
         const updatedRows = currentSnapshot.rows.map((candidate) =>
-          candidate.id === row.id
-            ? {
-                ...candidate,
-                values: { ...candidate.values, ...values },
-              }
-            : candidate,
+          candidate.id === row.id ? updatedRow : candidate,
         );
-        applySnapshot(
-          demoMutate({
-            ...currentSnapshot,
-            rows: updatedRows,
-            package_revision: `${currentSnapshot.package_revision}:demo`,
-          }),
-        );
+        const nextSnapshot = {
+          ...currentSnapshot,
+          rows: updatedRows,
+          package_revision: `${currentSnapshot.package_revision}:demo`,
+          relation_targets: syncRelationTargetsAfterUpsert(currentSnapshot, updatedRow),
+        };
+        applySnapshot(demoMutate(nextSnapshot));
         return;
       }
 
@@ -303,17 +304,17 @@ export function DataTableView({
           baseRevision: revisionRef.current,
         });
         setSnapshot((prev) => {
+          const updatedRow = {
+            ...row,
+            values: { ...row.values, ...values },
+          };
           const next = {
             ...prev,
             package_revision: revision,
             rows: prev.rows.map((candidate) =>
-              candidate.id === row.id
-                ? {
-                    ...candidate,
-                    values: { ...candidate.values, ...values },
-                  }
-                : candidate,
+              candidate.id === row.id ? updatedRow : candidate,
             ),
+            relation_targets: syncRelationTargetsAfterUpsert(prev, updatedRow),
           };
           snapshotRef.current = next;
           revisionRef.current = revision;
@@ -351,13 +352,14 @@ export function DataTableView({
       for (const column of editableColumns(current.columns)) {
         values[column.name] = { Null: null };
       }
-      applySnapshot(
-        demoMutate({
-          ...current,
-          rows: [...current.rows, { id: demoId, values }],
-          package_revision: `${current.package_revision}:demo`,
-        }),
-      );
+      const newRow = { id: demoId, values };
+      const nextSnapshot = {
+        ...current,
+        rows: [...current.rows, newRow],
+        package_revision: `${current.package_revision}:demo`,
+        relation_targets: syncRelationTargetsAfterUpsert(current, newRow),
+      };
+      applySnapshot(demoMutate(nextSnapshot));
       return;
     }
 
@@ -394,13 +396,14 @@ export function DataTableView({
         for (const column of editableColumns(current.columns)) {
           rowValues[column.name] = values[column.name] ?? { Null: null };
         }
-        applySnapshot(
-          demoMutate({
-            ...current,
-            rows: [...current.rows, { id: demoId, values: rowValues }],
-            package_revision: `${current.package_revision}:demo`,
-          }),
-        );
+        const newRow = { id: demoId, values: rowValues };
+        const nextSnapshot = {
+          ...current,
+          rows: [...current.rows, newRow],
+          package_revision: `${current.package_revision}:demo`,
+          relation_targets: syncRelationTargetsAfterUpsert(current, newRow),
+        };
+        applySnapshot(demoMutate(nextSnapshot));
         return { id: demoId };
       }
 
@@ -438,13 +441,13 @@ export function DataTableView({
     async (row: DataRow) => {
       if (demoMutate) {
         const current = snapshotRef.current;
-        applySnapshot(
-          demoMutate({
-            ...current,
-            rows: current.rows.filter((candidate) => candidate.id !== row.id),
-            package_revision: `${current.package_revision}:demo`,
-          }),
-        );
+        const nextSnapshot = {
+          ...current,
+          rows: current.rows.filter((candidate) => candidate.id !== row.id),
+          package_revision: `${current.package_revision}:demo`,
+          relation_targets: syncRelationTargetsAfterDelete(current, row.id),
+        };
+        applySnapshot(demoMutate(nextSnapshot));
         return;
       }
 
@@ -462,6 +465,7 @@ export function DataTableView({
             ...prev,
             package_revision: revision,
             rows: prev.rows.filter((candidate) => candidate.id !== row.id),
+            relation_targets: syncRelationTargetsAfterDelete(prev, row.id),
           };
           snapshotRef.current = next;
           revisionRef.current = revision;
@@ -976,6 +980,7 @@ export function DataTableView({
             <DataListView
               rows={displayRows}
               columns={visibleColumns}
+              relationLabelIndex={relationLabelIndex}
               selectedRowId={detailRowId}
               zebraRows={preferences.zebraRows}
               onRowOpen={openRecordDetail}
@@ -984,6 +989,7 @@ export function DataTableView({
             <DataBoardView
               rows={displayRows}
               columns={visibleColumns}
+              relationLabelIndex={relationLabelIndex}
               groupBy={groupBy}
               selectedRowId={detailRowId}
               onRowOpen={openRecordDetail}
@@ -993,6 +999,7 @@ export function DataTableView({
               root={root}
               rows={displayRows}
               columns={visibleColumns}
+              relationLabelIndex={relationLabelIndex}
               coverField={coverField}
               selectedRowId={detailRowId}
               onRowOpen={openRecordDetail}
@@ -1001,6 +1008,7 @@ export function DataTableView({
             <DataCalendarView
               rows={displayRows}
               columns={visibleColumns}
+              relationLabelIndex={relationLabelIndex}
               dateField={dateField}
               selectedRowId={detailRowId}
               onRowOpen={openRecordDetail}

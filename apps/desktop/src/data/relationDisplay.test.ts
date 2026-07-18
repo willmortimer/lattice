@@ -4,13 +4,18 @@ import type { DataRow } from "./types";
 import {
   buildRelationLabelIndex,
   extractRelationIds,
+  formatCellForColumnName,
+  formatColumnCellDisplay,
   formatRelationDisplay,
   parseRelationDraft,
   relationCellValue,
   relationDraftFromIds,
   relationIdsEqual,
   relationRecordLabel,
+  syncRelationTargetsAfterDelete,
+  syncRelationTargetsAfterUpsert,
 } from "./relationDisplay";
+import type { DataAppSnapshot } from "./types";
 
 const companyRows: DataRow[] = [
   {
@@ -75,5 +80,96 @@ describe("relationDisplay helpers", () => {
     );
     expect(formatRelationDisplay(["missing"], "companies", index)).toBe("missing");
     expect(formatRelationDisplay([], "companies", index)).toBe("");
+  });
+
+  it("formats relation columns via shared column helpers", () => {
+    const index = buildRelationLabelIndex({ companies: companyRows });
+    const relationColumn = {
+      name: "company",
+      field_type: "relation" as const,
+      sqlite_type: "TEXT",
+      relation_table: "companies",
+    };
+    const textColumn = {
+      name: "name",
+      field_type: "text" as const,
+      sqlite_type: "TEXT",
+    };
+    const relationValue = { Relation: { record_ids: ["co_1"] } };
+    expect(formatColumnCellDisplay(relationValue, relationColumn, index)).toBe(
+      "Analytical Engines",
+    );
+    expect(formatColumnCellDisplay({ Text: "Ada" }, textColumn, index)).toBe("Ada");
+    expect(
+      formatCellForColumnName(
+        {
+          id: "row_1",
+          values: { company: relationValue },
+        },
+        "company",
+        [relationColumn],
+        index,
+      ),
+    ).toBe("Analytical Engines");
+  });
+
+  it("keeps relation_targets in sync after row upsert and delete", () => {
+    const snapshot: DataAppSnapshot = {
+      title: "CRM",
+      default_table: "contacts",
+      package_revision: "rev:0",
+      columns: [
+        { name: "id", field_type: "text", sqlite_type: "TEXT" },
+        { name: "name", field_type: "text", sqlite_type: "TEXT" },
+        {
+          name: "reports_to",
+          field_type: "relation",
+          sqlite_type: "TEXT",
+          relation_table: "contacts",
+        },
+      ],
+      rows: [
+        {
+          id: "c_1",
+          values: {
+            id: { Text: "c_1" },
+            name: { Text: "Ada" },
+            reports_to: { Null: null },
+          },
+        },
+      ],
+      available_views: ["All"],
+      active_view: "All",
+      filters: [],
+      layout_type: "grid",
+      relation_targets: {
+        contacts: [
+          {
+            id: "c_1",
+            values: {
+              id: { Text: "c_1" },
+              name: { Text: "Ada" },
+              reports_to: { Null: null },
+            },
+          },
+        ],
+      },
+    };
+    const updatedRow = {
+      id: "c_1",
+      values: {
+        id: { Text: "c_1" },
+        name: { Text: "Augusta Ada King" },
+        reports_to: { Null: null },
+      },
+    };
+    const afterUpsert = syncRelationTargetsAfterUpsert(snapshot, updatedRow);
+    expect(afterUpsert?.contacts?.[0]?.values.name).toEqual({ Text: "Augusta Ada King" });
+
+    const afterDelete = syncRelationTargetsAfterDelete(
+      { ...snapshot, relation_targets: afterUpsert },
+      "c_1",
+    );
+    expect(afterDelete?.contacts).toBeUndefined();
   });
 });
