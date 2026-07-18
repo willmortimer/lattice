@@ -5,16 +5,25 @@
       "type": "text",
       "x": 60,
       "y": 60,
-      "width": 260,
-      "height": 120,
-      "text": "Sample canvas — double-click a file node to open it."
+      "width": 280,
+      "height": 140,
+      "text": "First Look canvas — double-click file nodes. Links mirror Home.md tour."
     },
     {
       "id": "vision",
       "type": "file",
       "file": "Product/Vision.md",
-      "x": 360,
-      "y": 60,
+      "x": 400,
+      "y": 40,
+      "width": 220,
+      "height": 120
+    },
+    {
+      "id": "principles",
+      "type": "file",
+      "file": "Product/Principles.md",
+      "x": 400,
+      "y": 200,
       "width": 220,
       "height": 120
     },
@@ -22,14 +31,45 @@
       "id": "roadmap",
       "type": "file",
       "file": "Product/Roadmap.md",
-      "x": 620,
-      "y": 60,
+      "x": 660,
+      "y": 40,
       "width": 220,
       "height": 120
+    },
+    {
+      "id": "long-read",
+      "type": "file",
+      "file": "Research/Long Read.md",
+      "x": 660,
+      "y": 200,
+      "width": 240,
+      "height": 120
+    },
+    {
+      "id": "architecture",
+      "type": "file",
+      "file": "Research/Architecture.md",
+      "x": 400,
+      "y": 360,
+      "width": 220,
+      "height": 120
+    },
+    {
+      "id": "crm",
+      "type": "file",
+      "file": "CRM.data",
+      "x": 920,
+      "y": 120,
+      "width": 200,
+      "height": 100
     }
   ],
   "edges": [
     { "id": "e1", "fromNode": "intro", "toNode": "vision" },
-    { "id": "e2", "fromNode": "vision", "toNode": "roadmap" }
+    { "id": "e2", "fromNode": "vision", "toNode": "roadmap" },
+    { "id": "e3", "fromNode": "vision", "toNode": "principles" },
+    { "id": "e4", "fromNode": "principles", "toNode": "architecture" },
+    { "id": "e5", "fromNode": "roadmap", "toNode": "long-read" },
+    { "id": "e6", "fromNode": "long-read", "toNode": "crm" }
   ]
 }

@@ -1,0 +1,16 @@
+{
+  "workspace": "first-look-demo",
+  "hooks": {
+    "onQuickCapture": {
+      "targetDirectory": "Inbox",
+      "template": "Templates/Daily Note.md"
+    },
+    "onArchive": {
+      "targetDirectory": "Archive"
+    }
+  },
+  "search": {
+    "indexBody": true,
+    "boostPaths": ["Product/", "Research/"]
+  }
+}

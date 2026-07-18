@@ -770,7 +770,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
     "order": 60,
     "name": "First Look",
     "category": "Sample",
-    "description": "A kitchen-sink sample with pages, canvas, files, CSV, Mermaid, an image, and a CRM data app.",
+    "description": "Kitchen-sink sample for dogfooding: long pages, CRM, canvas, templates, Mermaid, embeds, and assorted files.",
     "visibility": "sample",
     "recommended": false,
     "recommendedTitle": "First Look",
@@ -785,11 +785,11 @@ export const GENERATED_TEMPLATE_CATALOG = [
       },
       {
         "path": "Product",
-        "purpose": "Product narrative, vision, and roadmap pages."
+        "purpose": "Product narrative, vision, principles, and roadmap pages."
       },
       {
         "path": "Research",
-        "purpose": "Notes, comparisons, and diagrams."
+        "purpose": "Notes, comparisons, long reads, and diagrams."
       },
       {
         "path": "Notebooks",
@@ -800,12 +800,16 @@ export const GENERATED_TEMPLATE_CATALOG = [
         "purpose": "Spatial boards that link into workspace files."
       },
       {
+        "path": "Templates",
+        "purpose": "Page templates with {{title}} and {{date}} placeholders."
+      },
+      {
         "path": "Data",
         "purpose": "Tabular seeds and imported tables."
       },
       {
         "path": "Resources",
-        "purpose": "Ordinary files — JSON, YAML, code, images."
+        "purpose": "Ordinary files — JSON, YAML, code, SQL, images."
       },
       {
         "path": "Archive",
@@ -814,14 +818,14 @@ export const GENERATED_TEMPLATE_CATALOG = [
     ],
     "preview": [
       "Home.md",
+      "Research/Long Read.md",
       "Product/Vision.md",
-      "Product/Roadmap.md",
-      "Research/Competitor Analysis.md",
-      "Research/Architecture.md",
-      "Canvases/Product Strategy.canvas",
+      "Product/Principles.md",
       "CRM.data",
-      "Data/sample.csv",
-      "Resources/config.json"
+      "Canvases/Product Strategy.canvas",
+      "Inbox/Sample capture.md",
+      "Templates/Daily Note.md",
+      "Resources/"
     ],
     "capabilities": [
       "pages",
@@ -830,6 +834,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
     ],
     "workspaceDefaults": {
       "quickNoteDirectory": "Inbox",
+      "templateDirectory": "Templates",
       "archiveDirectory": "Archive"
     },
     "openOnCreate": "Home.md",
@@ -844,18 +849,186 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "type": "text"
           },
           {
+            "name": "email",
+            "type": "text"
+          },
+          {
+            "name": "company",
+            "type": "text"
+          },
+          {
+            "name": "due_date",
+            "type": "date"
+          },
+          {
             "name": "status",
             "type": "text"
+          },
+          {
+            "name": "notes",
+            "type": "long_text"
           }
         ],
         "rows": [
           {
             "name": "Ada Lovelace",
-            "status": "Active"
+            "email": "ada@analytical.io",
+            "company": "Analytical Engines",
+            "due_date": "2026-08-15",
+            "status": "Active",
+            "notes": "Champion for typed tables beside narrative docs."
           },
           {
             "name": "Grace Hopper",
-            "status": "Active"
+            "email": "grace@navy.mil",
+            "company": "US Navy",
+            "due_date": "2026-07-25",
+            "status": "Active",
+            "notes": "Asked for honest SQL export from CRM views."
+          },
+          {
+            "name": "Alan Turing",
+            "email": "alan@bletchley.uk",
+            "company": "Bletchley Park",
+            "due_date": "2026-09-01",
+            "status": "Nurture",
+            "notes": "Interested after notebook preview ships."
+          },
+          {
+            "name": "Katherine Johnson",
+            "email": "katherine@nasa.gov",
+            "company": "NASA",
+            "due_date": "2026-08-02",
+            "status": "Active",
+            "notes": "Needs calendar layout on due dates for standup."
+          },
+          {
+            "name": "Dorothy Vaughan",
+            "email": "dorothy@nasa.gov",
+            "company": "NASA",
+            "due_date": null,
+            "status": "Partner",
+            "notes": "Coordinating team rollout; gallery view by company."
+          },
+          {
+            "name": "Mary Jackson",
+            "email": "mary@nasa.gov",
+            "company": "NASA",
+            "due_date": "2026-07-30",
+            "status": "Active",
+            "notes": "Wants board grouped by status for sprint review."
+          },
+          {
+            "name": "Tim Berners-Lee",
+            "email": "tim@w3.org",
+            "company": "W3C",
+            "due_date": "2026-10-12",
+            "status": "Lead",
+            "notes": "Linked data angle — follow up on wiki link semantics."
+          },
+          {
+            "name": "Brendan Eich",
+            "email": "brendan@mozilla.org",
+            "company": "Mozilla",
+            "due_date": "2026-08-20",
+            "status": "Nurture",
+            "notes": "Curious about Tauri shell performance budgets."
+          },
+          {
+            "name": "Margaret Hamilton",
+            "email": "margaret@mit.edu",
+            "company": "MIT Instrumentation Lab",
+            "due_date": "2026-07-22",
+            "status": "Active",
+            "notes": "Long-page scroll tests map to her reliability bar."
+          },
+          {
+            "name": "Donald Knuth",
+            "email": "knuth@stanford.edu",
+            "company": "Stanford",
+            "due_date": null,
+            "status": "Lead",
+            "notes": "Literate programming — pages + code in Resources/."
+          },
+          {
+            "name": "Linus Torvalds",
+            "email": "linus@linux.foundation",
+            "company": "Linux Foundation",
+            "due_date": "2026-11-05",
+            "status": "Nurture",
+            "notes": "Git-friendly workspace layout is the hook."
+          },
+          {
+            "name": "Guido van Rossum",
+            "email": "guido@python.org",
+            "company": "Python Software Foundation",
+            "due_date": "2026-08-08",
+            "status": "Active",
+            "notes": "Notebook story — track under Notebooks/ when ready."
+          },
+          {
+            "name": "Radia Perlman",
+            "email": "radia@ieee.org",
+            "company": "IEEE",
+            "due_date": "2026-09-18",
+            "status": "Lead",
+            "notes": "Spanning-tree metaphor for canvas + outline sync."
+          },
+          {
+            "name": "Shafi Goldwasser",
+            "email": "shafi@mit.edu",
+            "company": "MIT",
+            "due_date": "2026-07-28",
+            "status": "Active",
+            "notes": "Security review of command preconditions."
+          },
+          {
+            "name": "Barbara Liskov",
+            "email": "liskov@mit.edu",
+            "company": "MIT",
+            "due_date": null,
+            "status": "Partner",
+            "notes": "Substitution principle maps to resource adapters."
+          },
+          {
+            "name": "Frances Allen",
+            "email": "frances@ibm.com",
+            "company": "IBM Research",
+            "due_date": "2026-08-30",
+            "status": "Churned",
+            "notes": "Paused — re-engage after perf benchmarks published."
+          },
+          {
+            "name": "Edsger Dijkstra",
+            "email": "edsger@utexas.edu",
+            "company": "UT Austin",
+            "due_date": "2026-12-01",
+            "status": "Lead",
+            "notes": "Structured note templates under Templates/."
+          },
+          {
+            "name": "Grace Brewster",
+            "email": "grace.b@example.com",
+            "company": "Example Corp",
+            "due_date": "2026-07-19",
+            "status": "Lead",
+            "notes": "Inbound from conference booth — assign owner."
+          },
+          {
+            "name": "Leslie Lamport",
+            "email": "lamport@microsoft.com",
+            "company": "Microsoft Research",
+            "due_date": "2026-09-25",
+            "status": "Nurture",
+            "notes": "Formal methods audience — link Research/Architecture."
+          },
+          {
+            "name": "Vint Cerf",
+            "email": "vint@google.com",
+            "company": "Google",
+            "due_date": "2026-10-01",
+            "status": "Active",
+            "notes": "Offline-first narrative resonates; wants demo workspace zip."
           }
         ]
       }
