@@ -91,6 +91,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "due": "2026-07-21"
           }
         ],
+        "extraTables": [],
         "views": []
       }
     ]
@@ -260,6 +261,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "response": "Polish the opening before sending."
           }
         ],
+        "extraTables": [],
         "views": []
       }
     ]
@@ -365,6 +367,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "confidence": 0.7
           }
         ],
+        "extraTables": [],
         "views": []
       }
     ]
@@ -475,6 +478,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "notes": "Smoke test of data pipeline."
           }
         ],
+        "extraTables": [],
         "views": []
       }
     ]
@@ -655,6 +659,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "category": "Reliability"
           }
         ],
+        "extraTables": [],
         "views": [
           {
             "name": "Board",
@@ -798,6 +803,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "notes": "Capture steps in Runbooks/ before the next release."
           }
         ],
+        "extraTables": [],
         "views": []
       }
     ]
@@ -912,7 +918,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
           },
           {
             "name": "company",
-            "type": "text"
+            "type": "relation",
+            "relation_table": "companies"
           },
           {
             "name": "due_date",
@@ -936,7 +943,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
           {
             "name": "Ada Lovelace",
             "email": "ada@analytical.io",
-            "company": "Analytical Engines",
+            "company": [
+              "Analytical Engines"
+            ],
             "due_date": "2026-08-15",
             "status": "Active",
             "notes": "Champion for typed tables beside narrative docs."
@@ -944,7 +953,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
           {
             "name": "Grace Hopper",
             "email": "grace@navy.mil",
-            "company": "US Navy",
+            "company": [
+              "US Navy"
+            ],
             "due_date": "2026-07-25",
             "status": "Active",
             "notes": "Asked for honest SQL export from CRM views.",
@@ -955,7 +966,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
           {
             "name": "Alan Turing",
             "email": "alan@bletchley.uk",
-            "company": "Bletchley Park",
+            "company": [
+              "Bletchley Park"
+            ],
             "due_date": "2026-09-01",
             "status": "Nurture",
             "notes": "Interested after notebook preview ships."
@@ -963,7 +976,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
           {
             "name": "Katherine Johnson",
             "email": "katherine@nasa.gov",
-            "company": "NASA",
+            "company": [
+              "NASA"
+            ],
             "due_date": "2026-08-02",
             "status": "Active",
             "notes": "Needs calendar layout on due dates for standup.",
@@ -974,7 +989,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
           {
             "name": "Dorothy Vaughan",
             "email": "dorothy@nasa.gov",
-            "company": "NASA",
+            "company": [
+              "NASA"
+            ],
             "due_date": null,
             "status": "Partner",
             "notes": "Coordinating team rollout; gallery view by company."
@@ -982,7 +999,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
           {
             "name": "Mary Jackson",
             "email": "mary@nasa.gov",
-            "company": "NASA",
+            "company": [
+              "NASA"
+            ],
             "due_date": "2026-07-30",
             "status": "Active",
             "notes": "Wants board grouped by status for sprint review.",
@@ -993,7 +1012,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
           {
             "name": "Tim Berners-Lee",
             "email": "tim@w3.org",
-            "company": "W3C",
+            "company": [
+              "W3C"
+            ],
             "due_date": "2026-10-12",
             "status": "Lead",
             "notes": "Linked data angle — follow up on wiki link semantics."
@@ -1001,7 +1022,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
           {
             "name": "Brendan Eich",
             "email": "brendan@mozilla.org",
-            "company": "Mozilla",
+            "company": [
+              "Mozilla"
+            ],
             "due_date": "2026-08-20",
             "status": "Nurture",
             "notes": "Curious about Tauri shell performance budgets."
@@ -1009,7 +1032,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
           {
             "name": "Margaret Hamilton",
             "email": "margaret@mit.edu",
-            "company": "MIT Instrumentation Lab",
+            "company": [
+              "MIT Instrumentation Lab"
+            ],
             "due_date": "2026-07-22",
             "status": "Active",
             "notes": "Long-page scroll tests map to her reliability bar."
@@ -1017,7 +1042,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
           {
             "name": "Donald Knuth",
             "email": "knuth@stanford.edu",
-            "company": "Stanford",
+            "company": [
+              "Stanford"
+            ],
             "due_date": null,
             "status": "Lead",
             "notes": "Literate programming — pages + code in Resources/."
@@ -1025,7 +1052,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
           {
             "name": "Linus Torvalds",
             "email": "linus@linux.foundation",
-            "company": "Linux Foundation",
+            "company": [
+              "Linux Foundation"
+            ],
             "due_date": "2026-11-05",
             "status": "Nurture",
             "notes": "Git-friendly workspace layout is the hook."
@@ -1033,7 +1062,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
           {
             "name": "Guido van Rossum",
             "email": "guido@python.org",
-            "company": "Python Software Foundation",
+            "company": [
+              "Python Software Foundation"
+            ],
             "due_date": "2026-08-08",
             "status": "Active",
             "notes": "Notebook story — track under Notebooks/ when ready."
@@ -1041,7 +1072,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
           {
             "name": "Radia Perlman",
             "email": "radia@ieee.org",
-            "company": "IEEE",
+            "company": [
+              "IEEE"
+            ],
             "due_date": "2026-09-18",
             "status": "Lead",
             "notes": "Spanning-tree metaphor for canvas + outline sync."
@@ -1049,7 +1082,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
           {
             "name": "Shafi Goldwasser",
             "email": "shafi@mit.edu",
-            "company": "MIT",
+            "company": [
+              "MIT"
+            ],
             "due_date": "2026-07-28",
             "status": "Active",
             "notes": "Security review of command preconditions.",
@@ -1060,7 +1095,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
           {
             "name": "Barbara Liskov",
             "email": "liskov@mit.edu",
-            "company": "MIT",
+            "company": [
+              "MIT"
+            ],
             "due_date": null,
             "status": "Partner",
             "notes": "Substitution principle maps to resource adapters."
@@ -1068,7 +1105,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
           {
             "name": "Frances Allen",
             "email": "frances@ibm.com",
-            "company": "IBM Research",
+            "company": [
+              "IBM Research"
+            ],
             "due_date": "2026-08-30",
             "status": "Churned",
             "notes": "Paused — re-engage after perf benchmarks published."
@@ -1076,7 +1115,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
           {
             "name": "Edsger Dijkstra",
             "email": "edsger@utexas.edu",
-            "company": "UT Austin",
+            "company": [
+              "UT Austin"
+            ],
             "due_date": "2026-12-01",
             "status": "Lead",
             "notes": "Structured note templates under Templates/."
@@ -1084,7 +1125,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
           {
             "name": "Grace Brewster",
             "email": "grace.b@example.com",
-            "company": "Example Corp",
+            "company": [
+              "Example Corp"
+            ],
             "due_date": "2026-07-19",
             "status": "Lead",
             "notes": "Inbound from conference booth — assign owner."
@@ -1092,7 +1135,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
           {
             "name": "Leslie Lamport",
             "email": "lamport@microsoft.com",
-            "company": "Microsoft Research",
+            "company": [
+              "Microsoft Research"
+            ],
             "due_date": "2026-09-25",
             "status": "Nurture",
             "notes": "Formal methods audience — link Research/Architecture."
@@ -1100,10 +1145,76 @@ export const GENERATED_TEMPLATE_CATALOG = [
           {
             "name": "Vint Cerf",
             "email": "vint@google.com",
-            "company": "Google",
+            "company": [
+              "Google"
+            ],
             "due_date": "2026-10-01",
             "status": "Active",
             "notes": "Offline-first narrative resonates; wants demo workspace zip."
+          }
+        ],
+        "extraTables": [
+          {
+            "table": "companies",
+            "columns": [
+              {
+                "name": "name",
+                "type": "text"
+              }
+            ],
+            "rows": [
+              {
+                "name": "Analytical Engines"
+              },
+              {
+                "name": "US Navy"
+              },
+              {
+                "name": "Bletchley Park"
+              },
+              {
+                "name": "NASA"
+              },
+              {
+                "name": "W3C"
+              },
+              {
+                "name": "Mozilla"
+              },
+              {
+                "name": "MIT Instrumentation Lab"
+              },
+              {
+                "name": "Stanford"
+              },
+              {
+                "name": "Linux Foundation"
+              },
+              {
+                "name": "Python Software Foundation"
+              },
+              {
+                "name": "IEEE"
+              },
+              {
+                "name": "MIT"
+              },
+              {
+                "name": "IBM Research"
+              },
+              {
+                "name": "UT Austin"
+              },
+              {
+                "name": "Example Corp"
+              },
+              {
+                "name": "Microsoft Research"
+              },
+              {
+                "name": "Google"
+              }
+            ]
           }
         ],
         "views": [
