@@ -38,6 +38,10 @@ import {
   VIEW_LAYOUT_TYPES,
   type LayoutFieldPickerKind,
 } from "./viewLayout";
+import {
+  buildRelationLabelIndex,
+  formatRelationCellValue,
+} from "./relationDisplay";
 
 const STALE_REVISION_PREFIX = "STALE_REVISION:";
 
@@ -501,6 +505,10 @@ export function DataTableView({
       }),
     [coverField, dateField, groupBy, layoutType, snapshot.columns],
   );
+  const relationLabelIndex = useMemo(
+    () => buildRelationLabelIndex(snapshot.relation_targets),
+    [snapshot.relation_targets],
+  );
 
   const displayRows = useMemo(() => {
     let rows = [...snapshot.rows];
@@ -593,8 +601,16 @@ export function DataTableView({
           readonly: true,
         };
       }
-      const display = cellValueToDisplay(row.values[column.name]);
-      const readOnly = column.name === "id" || busy || stale;
+      const display =
+        column.field_type === "relation"
+          ? formatRelationCellValue(
+              row.values[column.name],
+              column.relation_table,
+              relationLabelIndex,
+            )
+          : cellValueToDisplay(row.values[column.name]);
+      const readOnly =
+        column.name === "id" || busy || stale || column.field_type === "relation";
       const zebraTheme =
         preferences.zebraRows && rowIndex % 2 === 1
           ? { bgCell: token("--lt-bg-raise", "#11161f") }
@@ -627,7 +643,7 @@ export function DataTableView({
         themeOverride: zebraTheme,
       };
     },
-    [busy, displayRows, preferences.zebraRows, stale, visibleColumns],
+    [busy, displayRows, preferences.zebraRows, relationLabelIndex, stale, visibleColumns],
   );
 
   const handleCellEdited = useCallback(
@@ -1054,6 +1070,7 @@ export function DataTableView({
           <RecordDetailPanel
             row={detailRow}
             columns={snapshot.columns}
+            relationTargets={snapshot.relation_targets}
             readOnly={busy || stale}
             saving={busy}
             onClose={() => setDetailRowId(null)}

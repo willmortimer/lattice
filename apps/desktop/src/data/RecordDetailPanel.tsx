@@ -2,17 +2,25 @@ import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "r
 
 import type { CellValue, DataColumn, DataRow } from "./types";
 import {
+  buildRelationLabelIndex,
+  formatRelationDisplay,
+  parseRelationDraft,
+  relationRecordLabel,
+} from "./relationDisplay";
+import {
   collectDirtyValues,
   draftFieldErrors,
   draftValuesFromRow,
   fieldEditorKind,
   fieldTypeLabel,
   hasDraftChanges,
+  toggleRelationDraftId,
 } from "./recordDetail";
 
 interface RecordDetailPanelProps {
   row: DataRow;
   columns: DataColumn[];
+  relationTargets?: Record<string, DataRow[]>;
   readOnly: boolean;
   saving: boolean;
   onClose: () => void;
@@ -22,6 +30,7 @@ interface RecordDetailPanelProps {
 export function RecordDetailPanel({
   row,
   columns,
+  relationTargets,
   readOnly,
   saving,
   onClose,
@@ -29,6 +38,10 @@ export function RecordDetailPanel({
 }: RecordDetailPanelProps) {
   const [draft, setDraft] = useState(() => draftValuesFromRow(row, columns));
   const [saveError, setSaveError] = useState<string | null>(null);
+  const relationLabelIndex = useMemo(
+    () => buildRelationLabelIndex(relationTargets),
+    [relationTargets],
+  );
 
   useEffect(() => {
     setDraft(draftValuesFromRow(row, columns));
@@ -134,6 +147,15 @@ export function RecordDetailPanel({
                   rows={4}
                   onChange={(event) => updateField(column.name, event.currentTarget.value)}
                 />
+              ) : editorKind === "relation" ? (
+                <RelationFieldPicker
+                  column={column}
+                  draftValue={value}
+                  options={relationTargets?.[column.relation_table ?? ""] ?? []}
+                  labelIndex={relationLabelIndex}
+                  readOnly={fieldReadOnly}
+                  onChange={(next) => updateField(column.name, next)}
+                />
               ) : (
                 <input
                   className="record-detail-input"
@@ -176,5 +198,91 @@ export function RecordDetailPanel({
         </footer>
       )}
     </aside>
+  );
+}
+
+interface RelationFieldPickerProps {
+  column: DataColumn;
+  draftValue: string;
+  options: DataRow[];
+  labelIndex: ReturnType<typeof buildRelationLabelIndex>;
+  readOnly: boolean;
+  onChange: (draftValue: string) => void;
+}
+
+function RelationFieldPicker({
+  column,
+  draftValue,
+  options,
+  labelIndex,
+  readOnly,
+  onChange,
+}: RelationFieldPickerProps) {
+  const selectedIds = useMemo(() => parseRelationDraft(draftValue), [draftValue]);
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const summary = useMemo(
+    () => formatRelationDisplay(selectedIds, column.relation_table, labelIndex),
+    [column.relation_table, labelIndex, selectedIds],
+  );
+  const missingSelected = selectedIds.filter(
+    (recordId) => !options.some((option) => option.id === recordId),
+  );
+
+  if (!column.relation_table) {
+    return (
+      <p className="record-detail-relation-empty">
+        This relation field is missing <code>relation_table</code> metadata.
+      </p>
+    );
+  }
+
+  return (
+    <div className="record-detail-relation">
+      {summary && <p className="record-detail-relation-summary">{summary}</p>}
+      {options.length === 0 && missingSelected.length === 0 ? (
+        <p className="record-detail-relation-empty">No rows in {column.relation_table}.</p>
+      ) : (
+        <div className="record-detail-relation-options" role="group" aria-label={column.name}>
+          {options.map((option) => {
+            const label = relationRecordLabel(option);
+            const checked = selectedSet.has(option.id);
+            return (
+              <label key={option.id} className="record-detail-relation-option">
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={readOnly}
+                  onChange={(event) =>
+                    onChange(
+                      toggleRelationDraftId(
+                        draftValue,
+                        option.id,
+                        event.currentTarget.checked,
+                      ),
+                    )
+                  }
+                />
+                <span className="record-detail-relation-option-label">{label || option.id}</span>
+                <span className="record-detail-relation-option-id">{option.id}</span>
+              </label>
+            );
+          })}
+          {missingSelected.map((recordId) => (
+            <label key={recordId} className="record-detail-relation-option">
+              <input
+                type="checkbox"
+                checked
+                disabled={readOnly}
+                onChange={(event) =>
+                  onChange(toggleRelationDraftId(draftValue, recordId, event.currentTarget.checked))
+                }
+              />
+              <span className="record-detail-relation-option-label">{recordId}</span>
+              <span className="record-detail-relation-option-id">missing target row</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

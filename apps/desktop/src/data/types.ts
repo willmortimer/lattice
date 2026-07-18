@@ -69,6 +69,8 @@ export interface DataAppSnapshot {
   date_field?: string;
   /** Browser demo: per-view layout metadata from template `dataPackages[].views`. */
   saved_views?: DataViewSnapshot[];
+  /** Rows from tables referenced by relation columns (for picker labels). */
+  relation_targets?: Record<string, DataRow[]>;
 }
 
 export function cellValueToDisplay(value: CellValue | undefined): string {
@@ -131,5 +133,16 @@ export function cloneSnapshot(snapshot: DataAppSnapshot): DataAppSnapshot {
     cover_field: snapshot.cover_field,
     date_field: snapshot.date_field,
     saved_views: snapshot.saved_views?.map((view) => ({ ...view })),
+    relation_targets: snapshot.relation_targets
+      ? Object.fromEntries(
+          Object.entries(snapshot.relation_targets).map(([table, rows]) => [
+            table,
+            rows.map((row) => ({
+              id: row.id,
+              values: { ...row.values },
+            })),
+          ]),
+        )
+      : undefined,
   };
 }
