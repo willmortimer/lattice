@@ -77,15 +77,23 @@ Playwright-only via `test:perf` / `test:perf:tauri`.
 
 ## CI
 
-Browser harness is optional for `nix run .#check`. Suggested jobs:
+Browser harness is optional for `nix run .#check`. GitHub Actions runs it on
+push and pull requests to `main` via
+[`.github/workflows/desktop-perf.yml`](../../.github/workflows/desktop-perf.yml):
+
+- **Runner:** `ubuntu-latest`
+- **Command:** `pnpm --filter @lattice/desktop test:perf` (Chromium + Vite demo)
+- **Blocking:** no — the perf step uses `continue-on-error: true` so soft budget
+  regressions surface in the check without failing the workflow
+- **Tauri:** not in CI — native WebView perf stays local (`test:perf:tauri` or
+  `nix run .#desktop-perf-tauri`)
+
+Local reproduction of the CI job:
 
 ```sh
-# Fast / Linux CI
+pnpm install --frozen-lockfile
 pnpm --filter @lattice/desktop exec playwright install --with-deps chromium
 pnpm --filter @lattice/desktop test:perf
-
-# Native WebView (macOS runner recommended)
-pnpm --filter @lattice/desktop test:perf:tauri
 ```
 
 ## Dependencies
