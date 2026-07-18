@@ -53,7 +53,7 @@ export function LinkRepairReviewModal({
         <DialogBackdrop className="modal-backdrop" />
         <DialogPopup className="modal-panel link-repair-panel">
           <DialogTitle id="link-repair-title">
-            {mode === "lattice-rename" ? "Update links for rename?" : "Repair links after external rename"}
+            {mode === "lattice-rename" ? "Update links for path change?" : "Repair links after external rename"}
           </DialogTitle>
           <p className="modal-copy">
             {plan.renameFrom} → {plan.renameTo}. Select which link references to rewrite.

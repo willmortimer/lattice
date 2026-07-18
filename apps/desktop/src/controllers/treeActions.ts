@@ -5,7 +5,6 @@ import {
   createFolder,
   deleteResource,
   duplicateResource,
-  moveResource,
 } from "../lib/resourceMutations";
 import {
   showNativeTreeFolderMenu,
@@ -37,6 +36,7 @@ export interface TreeActionsOptions {
   refreshResources: () => Promise<void>;
   handleSelect: (resource: Resource, options?: { recordHistory?: boolean }) => Promise<void>;
   renameResource: (resource: Resource, title: string) => Promise<void>;
+  moveResourceToFolder: (from: string, toDir: string) => Promise<void>;
   clearSelectionIf: (path: string) => void;
   removeTabs: (predicate: (resource: Resource) => boolean) => void;
   createAndOpenPage: (
@@ -60,6 +60,7 @@ export function useTreeActionsController(options: TreeActionsOptions) {
     refreshResources,
     handleSelect,
     renameResource,
+    moveResourceToFolder,
     clearSelectionIf,
     removeTabs,
     createAndOpenPage,
@@ -148,42 +149,14 @@ export function useTreeActionsController(options: TreeActionsOptions) {
       return;
     }
 
-    if (inBrowser) {
-      const destination = validation.destination;
-      setSnapshot((current) => {
-        if (!current) return current;
-        return {
-          ...current,
-          resources: current.resources.map((entry) => {
-            if (entry.path === from) return { ...entry, path: destination };
-            if (entry.path.startsWith(`${from}/`)) {
-              return { ...entry, path: destination + entry.path.slice(from.length) };
-            }
-            return entry;
-          }),
-        };
-      });
-      clearSelectionIf(from);
-      setError(null);
-      return;
-    }
-
-    setBusy(true);
     try {
-      await moveResource(workspace.root, from, toDir);
-      clearSelectionIf(from);
-      await refreshResources();
-      const refreshed = snapshotRef.current;
-      const moved = refreshed?.resources.find((entry) => entry.path === validation.destination);
-      if (moved) await handleSelect(moved, { recordHistory: false });
+      await moveResourceToFolder(from, toDir);
       setError(null);
     } catch (error) {
       setStatusToast(String(error));
       window.setTimeout(() => setStatusToast(null), 3200);
-    } finally {
-      setBusy(false);
     }
-  }, [clearSelectionIf, handleSelect, refreshResources, setBusy, setError, setSnapshot, setStatusToast, snapshot, snapshotRef]);
+  }, [moveResourceToFolder, setError, setStatusToast, snapshot, snapshotRef]);
 
   const handleNewPageInFolder = useCallback(async (folderPath: string) => {
     const name = window.prompt("New page name", `Untitled ${fileTimestamp()}.md`);

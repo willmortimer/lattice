@@ -384,6 +384,7 @@ export function useDesktopController() {
     setActivityArea: (area) => navigationController.setActivityArea(area),
     setRevealPath, setLinkPicker, refreshResources, handleSelect,
     openCreatedResource: resourceController.openCreatedResource,
+    reconcilePathRemaps: resourceController.reconcilePathRemaps,
   });
   const {
     handleQuickNote, handleNewPage, handleNewTable, handleImportCsv, handleUndo,
@@ -410,6 +411,7 @@ export function useDesktopController() {
     refreshResources,
     handleSelect,
     renameResource: resourceController.renameResource,
+    moveResourceToFolder: resourceController.moveResourceToFolder,
     clearSelectionIf: resourceController.clearSelectionIf,
     removeTabs: navigationController.removeTabs,
     createAndOpenPage,

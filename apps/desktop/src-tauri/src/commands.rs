@@ -457,16 +457,40 @@ pub fn list_history(root: String, limit: usize) -> Result<Vec<HistoryItem>, Stri
         .collect())
 }
 
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UndoPathRemap {
+    pub from: String,
+    pub to: String,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UndoResult {
+    pub summary: String,
+    pub path_remaps: Vec<UndoPathRemap>,
+}
+
 /// Undo the most recent transaction recorded in this workspace's history,
 /// if any. Used by the command palette's "Undo" action.
 ///
-/// Returns the summary of the transaction that was undone, or `None` if
-/// there was nothing left to undo.
+/// Returns the summary and any rename/move path remaps so the shell can
+/// retarget open tabs/selection, or `None` if there was nothing left to undo.
 #[tauri::command]
-pub fn undo_last(root: String) -> Result<Option<String>, String> {
+pub fn undo_last(root: String) -> Result<Option<UndoResult>, String> {
     let mut engine = CommandEngine::open(Path::new(&root)).map_err(command_error_to_string)?;
     let report = engine.undo().map_err(command_error_to_string)?;
-    Ok(report.map(|r| r.summary))
+    Ok(report.map(|r| UndoResult {
+        summary: r.summary,
+        path_remaps: r
+            .path_remaps
+            .into_iter()
+            .map(|remap| UndoPathRemap {
+                from: remap.from.to_string_lossy().replace('\\', "/"),
+                to: remap.to.to_string_lossy().replace('\\', "/"),
+            })
+            .collect(),
+    }))
 }
 
 /// Explicitly initialize Lattice home, provisioning a workspace only when no valid
@@ -707,7 +731,10 @@ mod tests {
         assert!(dir.path().join("Inbox/Note.md").exists());
 
         let summary = undo_last(root).unwrap();
-        assert_eq!(summary, Some("Create page Inbox/Note.md".to_string()));
+        assert_eq!(
+            summary.as_ref().map(|result| result.summary.as_str()),
+            Some("Create page Inbox/Note.md")
+        );
         assert!(!dir.path().join("Inbox/Note.md").exists());
     }
 
@@ -815,7 +842,29 @@ mod tests {
         assert!(dir.path().join("Projects/New").is_dir());
 
         let summary = undo_last(root.clone()).unwrap();
-        assert_eq!(summary.as_deref(), Some("Create folder Projects/New"));
+        assert_eq!(
+            summary.as_ref().map(|result| result.summary.as_str()),
+            Some("Create folder Projects/New")
+        );
         assert!(!dir.path().join("Projects/New").exists());
+    }
+
+    #[test]
+    fn undo_last_returns_path_remaps_for_moves() {
+        let dir = init_workspace();
+        std::fs::create_dir(dir.path().join("Archive")).unwrap();
+        std::fs::write(dir.path().join("Note.md"), "# Note\n").unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        move_resource(root.clone(), "Note.md".to_string(), "Archive".to_string()).unwrap();
+        assert!(dir.path().join("Archive/Note.md").exists());
+
+        let result = undo_last(root).unwrap().expect("undo result");
+        assert_eq!(result.summary, "Move Note.md into Archive");
+        assert_eq!(result.path_remaps.len(), 1);
+        assert_eq!(result.path_remaps[0].from, "Archive/Note.md");
+        assert_eq!(result.path_remaps[0].to, "Note.md");
+        assert!(dir.path().join("Note.md").exists());
+        assert!(!dir.path().join("Archive/Note.md").exists());
     }
 }

@@ -358,11 +358,46 @@ pub struct TransactionReceipt {
     pub idempotent_replay: bool,
 }
 
+/// A path that changed as a result of undo/redo (shell tabs/selection follow these).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PathRemap {
+    /// Path before the undo/redo was applied (where open tabs may still point).
+    pub from: PathBuf,
+    /// Path after the undo/redo (restored or re-applied destination).
+    pub to: PathBuf,
+}
+
 /// The result of an undo or redo.
 #[derive(Debug, Clone)]
 pub struct UndoReport {
     pub transaction_id: String,
     pub summary: String,
+    /// Rename/move path pairs implied by applied inverse (undo) or forward (redo)
+    /// commands. Empty when the transaction did not relocate resources.
+    pub path_remaps: Vec<PathRemap>,
+}
+
+/// Extract rename/move remaps from commands that are about to run (inverses for
+/// undo, forwards for redo). `ResourceMove` is included for completeness even
+/// though move inverses are recorded as `ResourceRename` today.
+pub fn path_remaps_from_commands(commands: &[Command]) -> Vec<PathRemap> {
+    commands
+        .iter()
+        .filter_map(|command| match command {
+            Command::ResourceRename { from, to } => Some(PathRemap {
+                from: from.clone(),
+                to: to.clone(),
+            }),
+            Command::ResourceMove { from, to_dir } => {
+                let dest = to_dir.join(file_name(from));
+                Some(PathRemap {
+                    from: from.clone(),
+                    to: dest,
+                })
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 /// One row in the transaction history listing.

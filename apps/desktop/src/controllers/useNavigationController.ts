@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { remapWorkspacePath } from "../lib/pathRemap";
 import type { Resource } from "../types";
 
 export type ActivityArea = "home" | "files" | "search" | "quick-note" | "settings";
@@ -123,7 +124,7 @@ export function useNavigationController(options: NavigationControllerOptions): N
   const replacePath = useCallback((from: string, to: string) => {
     setState((current) => ({
       ...current,
-      paths: current.paths.map((path) => (path === from ? to : path)),
+      paths: current.paths.map((path) => remapWorkspacePath(path, from, to)),
     }));
   }, []);
 
@@ -150,7 +151,12 @@ export function useNavigationController(options: NavigationControllerOptions): N
   }, []);
 
   const replaceTab = useCallback((from: string, to: Resource) => {
-    setOpenTabs((tabs) => tabs.map((tab) => tab.path === from ? to : tab));
+    setOpenTabs((tabs) => tabs.map((tab) => {
+      const nextPath = remapWorkspacePath(tab.path, from, to.path);
+      if (nextPath === tab.path) return tab;
+      if (nextPath === to.path) return to;
+      return { ...tab, path: nextPath };
+    }));
   }, []);
 
   const removeTabs = useCallback((predicate: (resource: Resource) => boolean) => {

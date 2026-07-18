@@ -9,8 +9,8 @@ use lattice_storage::{
 
 use crate::canvas::{self, CanvasEdit};
 use crate::command::{
-    file_name, view_file_path, Command, CommandOutcome, HistoryEntry, Transaction,
-    TransactionReceipt, UndoReport,
+    file_name, path_remaps_from_commands, view_file_path, Command, CommandOutcome, HistoryEntry,
+    Transaction, TransactionReceipt, UndoReport,
 };
 use crate::history::{unix_now, unix_to_system, HistoryStore};
 use crate::revisions::{
@@ -322,6 +322,7 @@ impl CommandEngine {
         }
 
         // Apply inverses newest-first.
+        let inverses: Vec<Command> = parsed.iter().map(|(_, inverse)| inverse.clone()).collect();
         for ((_, inverse), op) in parsed.iter().zip(&ops).rev() {
             self.apply_inverse(inverse, op.prior_content.as_deref())?;
         }
@@ -330,6 +331,7 @@ impl CommandEngine {
         Ok(Some(UndoReport {
             transaction_id: stored.tx_id,
             summary: stored.summary,
+            path_remaps: path_remaps_from_commands(&inverses),
         }))
     }
 
@@ -384,6 +386,7 @@ impl CommandEngine {
         Ok(Some(UndoReport {
             transaction_id: stored.tx_id,
             summary: stored.summary,
+            path_remaps: path_remaps_from_commands(&forwards),
         }))
     }
 
