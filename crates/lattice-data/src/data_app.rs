@@ -7,6 +7,7 @@ use sha2::{Digest, Sha256};
 use crate::app::{app_manifest_path, database_path, schema_path, write_default_view, AppManifest};
 use crate::csv::{cell_from_csv, CsvTable};
 use crate::error::Error;
+use crate::form::{form_name_from_path, form_path, FormDef};
 use crate::types::{CellValue, ColumnMeta, FieldType, NewColumn, RelationStrip, Row};
 use crate::view::{build_view_query, row_from_view_sql, view_path, visible_columns, ViewDef};
 use crate::Result;
@@ -381,6 +382,57 @@ impl DataApp {
     /// Load `views/{name}.yaml`.
     pub fn load_view(&self, name: &str) -> Result<ViewDef> {
         ViewDef::load(&view_path(&self.path, name))
+    }
+
+    /// List saved form names from `forms/*.form.yaml`.
+    pub fn list_forms(&self) -> Result<Vec<String>> {
+        let forms_dir = self.path.join("forms");
+        if !forms_dir.is_dir() {
+            return Ok(Vec::new());
+        }
+
+        let mut names = Vec::new();
+        for entry in
+            std::fs::read_dir(&forms_dir).map_err(|source| Error::io(&forms_dir, source))?
+        {
+            let entry = entry.map_err(|source| Error::io(&forms_dir, source))?;
+            let path = entry.path();
+            if let Some(name) = form_name_from_path(&path) {
+                names.push(name);
+            }
+        }
+        names.sort();
+        Ok(names)
+    }
+
+    /// Load `forms/{name}.form.yaml` and validate fields ⊆ table columns.
+    pub fn load_form(&self, name: &str) -> Result<FormDef> {
+        validate_identifier(name)?;
+        let path = form_path(&self.path, name);
+        let form = FormDef::load(&path)?;
+        self.validate_form_fields(&form)?;
+        Ok(form)
+    }
+
+    /// Serialize a form definition to YAML.
+    pub fn render_form_yaml(&self, form: &FormDef) -> Result<String> {
+        form.to_yaml()
+    }
+
+    fn validate_form_fields(&self, form: &FormDef) -> Result<()> {
+        ensure_table_exists(&self.conn, &form.table)?;
+        let columns = self.columns(&form.table)?;
+        let column_names: std::collections::BTreeSet<_> =
+            columns.iter().map(|column| column.name.as_str()).collect();
+        for field in &form.fields {
+            if !column_names.contains(field.as_str()) {
+                return Err(Error::table(
+                    form.table.clone(),
+                    format!("form references unknown column {field:?}"),
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// Serialize a view definition to YAML for [`ViewSave`].

@@ -300,6 +300,38 @@ Forms map input into transactions:
 
 Form definitions are readable YAML/JSON and can render in Lattice or a published app.
 
+### Package form definitions (MVP)
+
+Separate from table view `layout.type: form` (the in-app DataFormView create
+surface), a `.data` package may ship named form resources under `forms/`:
+
+```text
+forms/{name}.form.yaml
+```
+
+Shipped MVP shape (`FormDef` in `lattice-data`):
+
+```yaml
+format: lattice-form
+version: 1
+name: intake
+table: candidates
+fields: [name, email, status]
+title: Candidate intake
+description: Collect a new candidate row
+```
+
+- `name` must match the file stem (`intake` for `intake.form.yaml`).
+- `table` names the SQLite table the form writes to.
+- `fields` is an ordered list of column names; on load, each field must exist on
+  that table (`fields ⊆ columns`).
+- `title` and `description` are optional display metadata.
+
+Runtime APIs: `list_forms` / `load_form` on `DataApp`, and Tauri
+`list_data_forms` / `load_data_form`. Submit UI, seeds, and a form designer are
+out of scope for this MVP; this is the package schema and list/load path only.
+Public publish and full Airtable-style form features remain future work.
+
 ## Interfaces
 
 Interfaces are canvas-based frontends over shared data:

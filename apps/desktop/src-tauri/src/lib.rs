@@ -170,6 +170,8 @@ pub fn run() {
             data::list_data_views,
             data::load_data_view,
             data::save_data_view,
+            data::list_data_forms,
+            data::load_data_form,
             data::import_csv_table,
             canvas::read_canvas,
             canvas::canvas_place_resource,

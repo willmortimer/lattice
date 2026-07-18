@@ -67,6 +67,18 @@ pub struct ViewSummary {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FormSummary {
+    pub name: String,
+    pub table: String,
+    pub fields: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct ColumnDto {
     pub name: String,
     pub field_type: String,
@@ -220,6 +232,27 @@ pub fn load_data_view(root: String, rel_path: String, name: String) -> Result<Vi
         group_by: view.layout.group_by.clone(),
         cover_field: view.layout.cover_field.clone(),
         date_field: view.layout.date_field.clone(),
+    })
+}
+
+/// List saved form names for a `.data` package (`forms/*.form.yaml`).
+#[tauri::command]
+pub fn list_data_forms(root: String, rel_path: String) -> Result<Vec<String>, String> {
+    let app = open_app_at(&root, &rel_path)?;
+    app.list_forms().map_err(|err| err.to_string())
+}
+
+/// Load one saved form definition, validating fields against the table.
+#[tauri::command]
+pub fn load_data_form(root: String, rel_path: String, name: String) -> Result<FormSummary, String> {
+    let app = open_app_at(&root, &rel_path)?;
+    let form = app.load_form(&name).map_err(|err| err.to_string())?;
+    Ok(FormSummary {
+        name: form.name,
+        table: form.table,
+        fields: form.fields,
+        title: form.title,
+        description: form.description,
     })
 }
 

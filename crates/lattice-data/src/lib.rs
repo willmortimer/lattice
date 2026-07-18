@@ -1,12 +1,13 @@
 //! Lattice `.data` package open/create and SQLite row CRUD.
 //!
 //! A data application is a directory ending in `.data/` with `app.yaml`,
-//! `schema.sql`, `database.sqlite`, and optional view definitions.
+//! `schema.sql`, `database.sqlite`, and optional view/form definitions.
 
 mod app;
 mod csv;
 mod data_app;
 mod error;
+mod form;
 mod types;
 mod view;
 
@@ -17,6 +18,7 @@ pub use app::{AppManifest, DATA_APP_FORMAT, DEFAULT_VIEW_NAME};
 pub use csv::{cell_from_csv, infer_field_type, parse_csv_file, sanitize_column_name, CsvTable};
 pub use data_app::DataApp;
 pub use error::Error;
+pub use form::{write_package_form, FormDef, FORM_FILE_SUFFIX, FORM_FORMAT, FORM_VERSION};
 pub use types::{
     CellValue, ColumnMeta, DeletedRowSnapshot, FieldType, NewColumn, RelationStrip, Row,
 };
