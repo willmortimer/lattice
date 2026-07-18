@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import type { DataColumn, DataRow } from "./types";
 import {
+  groupRowsByCalendarDate,
   groupRowsByColumn,
   isImageCoverValue,
   isImageLikeColumn,
+  parseCalendarDate,
+  resolveCalendarDateColumn,
   resolveGalleryCoverColumn,
   resolveGroupByColumn,
   resolveImageLikeColumn,
@@ -104,5 +107,62 @@ describe("viewLayout helpers", () => {
     expect(isImageCoverValue("data:image/png;base64,abc")).toBe(true);
     expect(isImageCoverValue("Draft notes")).toBe(false);
     expect(isImageCoverValue("https://example.com/page")).toBe(false);
+  });
+
+  it("prefers explicit date_field, then date type, then date-like names", () => {
+    const calendarColumns: DataColumn[] = [
+      { name: "id", field_type: "text", sqlite_type: "TEXT" },
+      { name: "name", field_type: "text", sqlite_type: "TEXT" },
+      { name: "due_date", field_type: "text", sqlite_type: "TEXT" },
+      { name: "created_at", field_type: "date", sqlite_type: "TEXT" },
+    ];
+
+    expect(resolveCalendarDateColumn(calendarColumns, "due_date")).toBe("due_date");
+    expect(resolveCalendarDateColumn(calendarColumns, null)).toBe("created_at");
+    expect(
+      resolveCalendarDateColumn(
+        calendarColumns.filter((column) => column.name !== "created_at"),
+        null,
+      ),
+    ).toBe("due_date");
+  });
+
+  it("parses YYYY-MM-DD and ISO datetimes to calendar dates", () => {
+    expect(parseCalendarDate({ Date: "2026-07-04" })).toBe("2026-07-04");
+    expect(parseCalendarDate({ Text: "2026-07-04T14:30:00Z" })).toBe("2026-07-04");
+    expect(parseCalendarDate({ Text: "2026-13-40" })).toBeUndefined();
+    expect(parseCalendarDate({ Text: "soon" })).toBeUndefined();
+    expect(parseCalendarDate({ Null: null })).toBeUndefined();
+  });
+
+  it("groups rows by calendar date with an undated bucket", () => {
+    const datedRows: DataRow[] = [
+      {
+        id: "a",
+        values: {
+          id: { Text: "a" },
+          due_date: { Date: "2026-07-04" },
+        },
+      },
+      {
+        id: "b",
+        values: {
+          id: { Text: "b" },
+          due_date: { Text: "2026-07-04T09:00:00Z" },
+        },
+      },
+      {
+        id: "c",
+        values: {
+          id: { Text: "c" },
+          due_date: { Text: "TBD" },
+        },
+      },
+    ];
+
+    const buckets = groupRowsByCalendarDate(datedRows, "due_date");
+    expect(buckets.map((bucket) => bucket.key)).toEqual(["2026-07-04", "undated"]);
+    expect(buckets[0]?.rows.map((row) => row.id)).toEqual(["a", "b"]);
+    expect(buckets[1]?.rows.map((row) => row.id)).toEqual(["c"]);
   });
 });
