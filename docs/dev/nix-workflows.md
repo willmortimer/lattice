@@ -66,7 +66,10 @@ Run them from the repo root (they use relative paths).
 | `desktop` | Native window **without Vite** — reuses `apps/desktop/dist` if present, else builds once |
 | `desktop-build` | release binary, unbundled (`tauri build --no-bundle`) |
 
-CI should run exactly one thing: `nix run .#check`.
+CI should run exactly one **blocking** thing: `nix run .#check`. Browser perf
+runs separately as a non-blocking GitHub Action on `main`
+([`desktop-perf.yml`](../../.github/workflows/desktop-perf.yml)); see
+[perf-harness.md](./perf-harness.md). Tauri perf is not in CI.
 
 ### Three different “web” surfaces
 
