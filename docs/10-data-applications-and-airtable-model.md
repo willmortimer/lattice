@@ -139,11 +139,25 @@ Views are saved queries plus presentation:
 
 A view never duplicates records.
 
-Phase 2 desktop rendering supports `grid` (default), `list`, and `board` layout types. Gallery, calendar, and form layouts are reserved for later phases.
+The view schema (`ViewDef`/`ViewLayout` in `lattice-data`) supports six layout
+types: `grid`, `list`, `board`, `gallery`, `calendar`, and `form`. Phase 2
+desktop rendering implements `grid` (default), `list`, and `board`; a view
+saved with `gallery`, `calendar`, or `form` loads and validates correctly, but
+the desktop shell currently renders it with the `grid` layout until dedicated
+UI lands in a follow-up.
 
 - **Grid** — editable spreadsheet surface (default for saved views and the built-in `All` view).
 - **List** — scrollable rows using the first non-`id` column as the title and the next as a subtitle; row click opens record detail.
 - **Board** — kanban lanes grouped by `layout.group_by` when set, otherwise a column named `status`, otherwise the first text/boolean column. Row cards reuse the list title/subtitle fields and open record detail on click.
+- **Gallery** — card grid using `layout.cover_field` as each card's image/cover column.
+- **Calendar** — records placed on a calendar using `layout.date_field` as the date column.
+- **Form** — single-record input surface using `layout.columns` for field order; no new required field.
+
+Layout fields are exclusive to their layout type and are rejected otherwise:
+
+- `layout.group_by` — board only.
+- `layout.cover_field` — gallery only.
+- `layout.date_field` — calendar only.
 
 ```yaml
 format: lattice-view
@@ -165,6 +179,30 @@ List views omit `group_by`:
 ```yaml
 layout:
   type: list
+```
+
+Gallery views set `cover_field` instead of `group_by`:
+
+```yaml
+layout:
+  type: gallery
+  cover_field: photo
+```
+
+Calendar views set `date_field`:
+
+```yaml
+layout:
+  type: calendar
+  date_field: due_date
+```
+
+Form views reuse `columns` to order fields; no layout-specific field is required:
+
+```yaml
+layout:
+  type: form
+  columns: [name, email, status]
 ```
 
 ## Forms

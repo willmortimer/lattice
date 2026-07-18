@@ -33,7 +33,7 @@ export interface ViewFilter {
   value: string;
 }
 
-export type ViewLayoutType = "grid" | "list" | "board";
+export type ViewLayoutType = "grid" | "list" | "board" | "gallery" | "calendar" | "form";
 
 export interface DataAppSnapshot {
   title: string;
@@ -46,10 +46,14 @@ export interface DataAppSnapshot {
   sort_field?: string;
   sort_direction?: "asc" | "desc";
   filters: ViewFilter[];
-  /** Active view layout: `grid`, `list`, or `board`. */
+  /** Active view layout: `grid`, `list`, `board`, `gallery`, `calendar`, or `form`. */
   layout_type: ViewLayoutType;
   /** Board layout: explicit group-by column from the view YAML. */
   group_by?: string;
+  /** Gallery layout: column rendered as each card's cover. */
+  cover_field?: string;
+  /** Calendar layout: column used to place records on the calendar. */
+  date_field?: string;
 }
 
 export function cellValueToDisplay(value: CellValue | undefined): string {
@@ -96,5 +100,7 @@ export function cloneSnapshot(snapshot: DataAppSnapshot): DataAppSnapshot {
     filters: snapshot.filters.map((filter) => ({ ...filter })),
     layout_type: snapshot.layout_type,
     group_by: snapshot.group_by,
+    cover_field: snapshot.cover_field,
+    date_field: snapshot.date_field,
   };
 }

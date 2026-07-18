@@ -12,8 +12,18 @@ pub const VIEW_VERSION: u32 = 1;
 pub const LAYOUT_GRID: &str = "grid";
 pub const LAYOUT_LIST: &str = "list";
 pub const LAYOUT_BOARD: &str = "board";
+pub const LAYOUT_GALLERY: &str = "gallery";
+pub const LAYOUT_CALENDAR: &str = "calendar";
+pub const LAYOUT_FORM: &str = "form";
 
-const SUPPORTED_LAYOUT_TYPES: &[&str] = &[LAYOUT_GRID, LAYOUT_LIST, LAYOUT_BOARD];
+pub const SUPPORTED_LAYOUT_TYPES: &[&str] = &[
+    LAYOUT_GRID,
+    LAYOUT_LIST,
+    LAYOUT_BOARD,
+    LAYOUT_GALLERY,
+    LAYOUT_CALENDAR,
+    LAYOUT_FORM,
+];
 
 /// Parsed `views/{name}.yaml` grid view definition.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -43,6 +53,12 @@ pub struct ViewLayout {
     /// Board layout only: column used to group cards into lanes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group_by: Option<String>,
+    /// Gallery layout only: column rendered as each card's cover.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cover_field: Option<String>,
+    /// Calendar layout only: column used to place records on the calendar.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub date_field: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -90,6 +106,8 @@ impl ViewDef {
                 layout_type: LAYOUT_GRID.to_string(),
                 columns: Vec::new(),
                 group_by: None,
+                cover_field: None,
+                date_field: None,
             },
             sort: None,
             filter: Vec::new(),
@@ -141,6 +159,22 @@ impl ViewDef {
             if self.layout.layout_type != LAYOUT_BOARD {
                 return Err(invalid(
                     "layout.group_by is only supported for board views".to_string(),
+                ));
+            }
+        }
+        if let Some(cover_field) = &self.layout.cover_field {
+            validate_identifier(cover_field)?;
+            if self.layout.layout_type != LAYOUT_GALLERY {
+                return Err(invalid(
+                    "layout.cover_field is only supported for gallery views".to_string(),
+                ));
+            }
+        }
+        if let Some(date_field) = &self.layout.date_field {
+            validate_identifier(date_field)?;
+            if self.layout.layout_type != LAYOUT_CALENDAR {
+                return Err(invalid(
+                    "layout.date_field is only supported for calendar views".to_string(),
                 ));
             }
         }

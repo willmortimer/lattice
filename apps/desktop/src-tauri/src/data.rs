@@ -30,6 +30,10 @@ pub struct DataAppSnapshot {
     pub layout_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cover_field: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub date_field: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,6 +56,10 @@ pub struct ViewSummary {
     pub layout_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cover_field: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub date_field: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -115,6 +123,8 @@ fn snapshot_from_app(app: &DataApp, view_name: Option<&str>) -> Result<DataAppSn
         filters: view.filter.iter().map(filter_dto).collect(),
         layout_type: view.layout.layout_type.clone(),
         group_by: view.layout.group_by.clone(),
+        cover_field: view.layout.cover_field.clone(),
+        date_field: view.layout.date_field.clone(),
     })
 }
 
@@ -184,6 +194,8 @@ pub fn load_data_view(root: String, rel_path: String, name: String) -> Result<Vi
         filters: view.filter.iter().map(filter_dto).collect(),
         layout_type: view.layout.layout_type.clone(),
         group_by: view.layout.group_by.clone(),
+        cover_field: view.layout.cover_field.clone(),
+        date_field: view.layout.date_field.clone(),
     })
 }
 

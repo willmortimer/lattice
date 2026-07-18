@@ -225,7 +225,8 @@ export const demoDataApp: DataAppSnapshot = {
     "All"
   ],
   "active_view": "All",
-  "filters": []
+  "filters": [],
+  "layout_type": "grid"
 };
 
 export const demoPages: Record<string, string> = {
