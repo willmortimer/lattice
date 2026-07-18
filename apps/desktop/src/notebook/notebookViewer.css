@@ -37,6 +37,31 @@
   cursor: not-allowed;
 }
 
+.lattice-notebook-run-active {
+  color: var(--lt-color-text-primary);
+  cursor: pointer;
+}
+
+.lattice-notebook-run-active:disabled {
+  color: var(--lt-color-text-muted);
+  cursor: not-allowed;
+}
+
+.lattice-notebook-banner {
+  margin: 0;
+  padding: var(--lt-space-2) var(--lt-space-3);
+  border-radius: var(--lt-radius-sm);
+  background: var(--lt-color-surface-sunken);
+  color: var(--lt-color-text-secondary);
+  font-size: var(--lt-font-size-sm);
+}
+
+.lattice-notebook-banner-warn {
+  border: 1px solid color-mix(in srgb, var(--lt-color-danger) 40%, transparent);
+  background: color-mix(in srgb, var(--lt-color-danger) 8%, transparent);
+  color: var(--lt-color-text-primary);
+}
+
 .lattice-notebook-cells {
   display: flex;
   flex-direction: column;

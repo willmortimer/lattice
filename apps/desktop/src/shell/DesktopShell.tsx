@@ -61,7 +61,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
     handleTreeResourceContextMenu, handleTreeFolderContextMenu, handleTreeRename, handleMoveToFolder,
     treeRenameRequest,
     navigateHistory, closeTab, reorderTab, beginSidebarResize, commitTitle, updateWorkspaceSettings,
-    handleOpenWiki, openLinkTarget,
+    handleOpenWiki, openLinkTarget, handleNotebookContentChange,
   } = model;
 
   // Manifest-authored purposes (editable in lattice.yaml) win over the
@@ -485,6 +485,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
                           onRevisionChange: (revision) => {
                             currentPageRevisionRef.current = revision;
                           },
+                          onNotebookContentChange: handleNotebookContentChange,
                           onOpenWiki: (target) => {
                             void handleOpenWiki(target);
                             if (settings.editor.linkClickBehavior === "inspect") setInspectorOpen(true);
@@ -528,6 +529,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
                             onRevisionChange: (revision) => {
                               currentPageRevisionRef.current = revision;
                             },
+                            onNotebookContentChange: handleNotebookContentChange,
                             onOpenWiki: (target) => {
                               void handleOpenWiki(target);
                               if (settings.editor.linkClickBehavior === "inspect") setInspectorOpen(true);

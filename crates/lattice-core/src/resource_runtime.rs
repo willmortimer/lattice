@@ -629,7 +629,7 @@ fn profile_for_extension(extension: &str) -> Option<ResourceFormatProfile> {
         "png" | "jpg" | "jpeg" | "gif" | "webp" | "avif" | "tif" | "tiff" | "bmp" | "svg" => {
             ResourceFormatProfile::Image
         }
-        "json" => ResourceFormatProfile::Json,
+        "json" | "ipynb" => ResourceFormatProfile::Json,
         "yaml" | "yml" => ResourceFormatProfile::Yaml,
         "txt" | "text" | "log" | "csv" | "tsv" => ResourceFormatProfile::PlainText,
         "rs" | "ts" | "tsx" | "js" | "jsx" | "css" | "scss" | "html" | "htm" | "toml" | "sh"
@@ -981,6 +981,16 @@ mod tests {
                 .capabilities
                 .can_update
         );
+        std::fs::write(
+            directory.path().join("scratch.ipynb"),
+            br#"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#,
+        )
+        .unwrap();
+        let notebook = inspect_resource(directory.path(), Path::new("scratch.ipynb")).unwrap();
+        assert_eq!(notebook.kind, crate::ResourceKind::Notebook);
+        assert_eq!(notebook.profile, ResourceFormatProfile::Json);
+        assert!(notebook.capabilities.can_update);
+        assert!(notebook.encoding.is_some());
     }
 
     #[test]

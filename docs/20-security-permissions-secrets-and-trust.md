@@ -154,9 +154,9 @@ Opening an unknown workspace should default to safe mode:
 
 - No automatic scripts.
 - No workflow schedules.
-- No notebook execution.
+- No automatic notebook execution (user-initiated Pyodide Run is explicit).
 - No app builds.
-- No network access.
+- No network access beyond approved capability surfaces (Pyodide CDN load on Run).
 - No plugin activation without review.
 
 The user can trust specific capabilities rather than the entire directory indiscriminately.

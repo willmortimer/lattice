@@ -306,9 +306,18 @@ export function useDesktopController() {
   resourceResetRef.current = resourceController.resetResources;
   resourceSelectRef.current = resourceController.handleSelect;
   resourceClearRef.current = resourceController.clearSelection;
-  const { selected, selectedPaths, session, pageRef, currentPageRevisionRef, reloadToken, handleSelect } = resourceController;
+  const { selected, selectedPaths, session, pageRef, currentPageRevisionRef, reloadToken, handleSelect, setSession } = resourceController;
   const page = session?.kind === "page" ? session : null;
   useEffect(() => { selectedRef.current = selected; }, [selected]);
+
+  const handleNotebookContentChange = useCallback((content: string, revision: string) => {
+    setSession((previous) =>
+      previous?.kind === "notebook"
+        ? { ...previous, content, revision }
+        : previous,
+    );
+    currentPageRevisionRef.current = revision;
+  }, [currentPageRevisionRef, setSession]);
   const profileNotices = [runtimeNotice, ...profile.notices]
     .filter((notice): notice is NonNullable<typeof notice> => notice !== null)
     .filter((notice) => !dismissedNoticeCodes.includes(notice.code));
@@ -682,5 +691,6 @@ export function useDesktopController() {
     handleKeepIncoming, handleKeepLocal, handleKeepBoth,
     handleTreeResourceContextMenu, handleTreeFolderContextMenu, handleTreeRename, handleMoveToFolder,
     treeRenameRequest,
+    handleNotebookContentChange,
   };
 }

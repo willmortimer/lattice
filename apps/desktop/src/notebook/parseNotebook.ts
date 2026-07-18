@@ -82,7 +82,7 @@ function extractDisplayData(data: Record<string, unknown>): NotebookDisplayData 
   return result;
 }
 
-function parseOutput(raw: unknown, index: number): NotebookOutput | null {
+function parseOutput(raw: unknown): NotebookOutput | null {
   const output = asRecord(raw);
   if (!output) return null;
   const outputType = output.output_type;
@@ -122,8 +122,8 @@ function parseCell(raw: unknown, index: number): NotebookCell | null {
   if (cellType !== "markdown" && cellType !== "code" && cellType !== "raw") return null;
   const outputs: NotebookOutput[] = [];
   if (cellType === "code" && Array.isArray(cell.outputs)) {
-    for (const [outputIndex, entry] of cell.outputs.entries()) {
-      const parsed = parseOutput(entry, outputIndex);
+    for (const entry of cell.outputs) {
+      const parsed = parseOutput(entry);
       if (parsed) outputs.push(parsed);
     }
   }

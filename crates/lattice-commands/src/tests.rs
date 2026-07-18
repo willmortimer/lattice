@@ -498,6 +498,44 @@ fn resource_update_preserves_exact_text_bytes_and_is_undoable() {
 }
 
 #[test]
+fn resource_update_persists_notebook_json_with_undo() {
+    let (dir, mut engine) = engine();
+    let original = br#"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[]}"#;
+    engine
+        .apply(Transaction::new(
+            "Create notebook",
+            vec![Command::ResourceCreate {
+                path: PathBuf::from("Notebooks/scratch.ipynb"),
+                content: original.to_vec(),
+            }],
+        ))
+        .unwrap();
+    let base = NativeWorkspaceStore::new(dir.path())
+        .metadata(Path::new("Notebooks/scratch.ipynb"))
+        .unwrap()
+        .revision
+        .hash;
+    let updated = br#"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[{"cell_type":"code","execution_count":1,"metadata":{},"outputs":[{"output_type":"stream","name":"stdout","text":["hi\n"]}],"source":["print('hi')\n"]}]}"#;
+
+    engine
+        .apply(Transaction::new(
+            "Update notebook outputs",
+            vec![Command::ResourceUpdate {
+                path: PathBuf::from("Notebooks/scratch.ipynb"),
+                content: updated.to_vec(),
+                base_revision: base,
+            }],
+        ))
+        .unwrap();
+    assert_eq!(read(&dir, "Notebooks/scratch.ipynb"), updated);
+
+    engine.undo().unwrap().unwrap();
+    assert_eq!(read(&dir, "Notebooks/scratch.ipynb"), original);
+    engine.redo().unwrap().unwrap();
+    assert_eq!(read(&dir, "Notebooks/scratch.ipynb"), updated);
+}
+
+#[test]
 fn resource_update_rejects_stale_and_oversized_edits_without_history() {
     let (dir, mut engine) = engine();
     engine

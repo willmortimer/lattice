@@ -16,6 +16,7 @@ export interface ResourceRendererContext {
   callbacks: {
     onSaveStateChange: (state: SaveState) => void;
     onRevisionChange: (revision: string | null) => void;
+    onNotebookContentChange?: (content: string, revision: string) => void;
     onOpenWiki: (target: string) => void;
     onCreateTable: () => Promise<void> | void;
     onSearchWiki?: (query: string) => Promise<ResourceLinkTarget[]>;
