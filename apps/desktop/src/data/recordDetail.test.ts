@@ -10,8 +10,11 @@ import {
   fieldEditorKind,
   fieldTypeLabel,
   hasDraftChanges,
+  parseDraftField,
+  toggleRelationDraftId,
   validateDraftField,
 } from "./recordDetail";
+import { relationDraftFromIds } from "./relationDisplay";
 
 const columns: DataColumn[] = [
   { name: "id", field_type: "text", sqlite_type: "TEXT" },
@@ -103,6 +106,50 @@ describe("recordDetail helpers", () => {
       count: { Integer: 2 },
       active: { Boolean: true },
       due: { Date: "2026-07-18" },
+    });
+  });
+
+  it("round-trips relation drafts and detects relation changes", () => {
+    const relationColumns: DataColumn[] = [
+      { name: "id", field_type: "text", sqlite_type: "TEXT" },
+      {
+        name: "company",
+        field_type: "relation",
+        sqlite_type: "TEXT",
+        relation_table: "companies",
+      },
+    ];
+    const relationRow: DataRow = {
+      id: "rec_1",
+      values: {
+        id: { Text: "rec_1" },
+        company: { Relation: { record_ids: ["co_1"] } },
+      },
+    };
+
+    expect(fieldEditorKind("relation")).toBe("relation");
+    expect(fieldTypeLabel("relation")).toBe("Relation");
+    expect(draftValuesFromRow(relationRow, relationColumns)).toEqual({
+      id: "rec_1",
+      company: relationDraftFromIds(["co_1"]),
+    });
+    expect(parseDraftField(relationDraftFromIds(["co_1", "co_2"]), "relation")).toEqual({
+      Relation: { record_ids: ["co_1", "co_2"] },
+    });
+    expect(validateDraftField('["co_1"]', "relation")).toBeNull();
+    expect(validateDraftField("bad", "relation")).toBe(
+      "Relation value must be a JSON array of record ids",
+    );
+
+    const draft = draftValuesFromRow(relationRow, relationColumns);
+    expect(hasDraftChanges(draft, relationRow, relationColumns)).toBe(false);
+    const updatedDraft = {
+      ...draft,
+      company: toggleRelationDraftId(draft.company, "co_2", true),
+    };
+    expect(hasDraftChanges(updatedDraft, relationRow, relationColumns)).toBe(true);
+    expect(collectDirtyValues(updatedDraft, relationRow, relationColumns)).toEqual({
+      company: { Relation: { record_ids: ["co_1", "co_2"] } },
     });
   });
 });

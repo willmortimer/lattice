@@ -3574,6 +3574,57 @@ html[data-motion="always"] *::after {
   font-size: 13px;
 }
 
+.record-detail-relation {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.record-detail-relation-summary {
+  margin: 0;
+  color: var(--lt-text-soft);
+  font-size: 12px;
+}
+
+.record-detail-relation-empty {
+  margin: 0;
+  color: var(--lt-muted);
+  font-size: 12px;
+}
+
+.record-detail-relation-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--lt-line);
+  border-radius: 6px;
+  background: var(--lt-bg-raise);
+}
+
+.record-detail-relation-option {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  color: var(--lt-text);
+  font-size: 12px;
+}
+
+.record-detail-relation-option-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.record-detail-relation-option-id {
+  color: var(--lt-faint);
+  font-family: var(--lt-font-mono);
+  font-size: 10px;
+}
+
 .record-detail-field-error {
   color: var(--lt-danger);
   font-size: 11px;

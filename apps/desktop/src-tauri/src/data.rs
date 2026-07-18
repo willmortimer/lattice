@@ -35,6 +35,9 @@ pub struct DataAppSnapshot {
     pub cover_field: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub date_field: Option<String>,
+    /// Rows from tables referenced by relation columns (for picker labels).
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    pub relation_targets: BTreeMap<String, Vec<Row>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -107,9 +110,25 @@ fn snapshot_from_app(app: &DataApp, view_name: Option<&str>) -> Result<DataAppSn
     let (column_meta, rows) = app
         .list_rows_with_view(&table, &view, ROW_LIMIT, 0)
         .map_err(|err| err.to_string())?;
-    let columns = column_meta.into_iter().map(column_dto).collect();
+    let columns: Vec<ColumnDto> = column_meta.iter().cloned().map(column_dto).collect();
     let package_revision = app.package_revision().map_err(|err| err.to_string())?;
     let available_views = app.list_views().map_err(|err| err.to_string())?;
+    let mut relation_targets = BTreeMap::new();
+    for column in &column_meta {
+        if column.field_type != lattice_data::FieldType::Relation {
+            continue;
+        }
+        let Some(target_table) = column.relation_table.as_deref() else {
+            continue;
+        };
+        if relation_targets.contains_key(target_table) {
+            continue;
+        }
+        let target_rows = app
+            .list_rows(target_table, ROW_LIMIT, 0)
+            .map_err(|err| err.to_string())?;
+        relation_targets.insert(target_table.to_string(), target_rows);
+    }
 
     Ok(DataAppSnapshot {
         title: app.title().to_string(),
@@ -129,6 +148,7 @@ fn snapshot_from_app(app: &DataApp, view_name: Option<&str>) -> Result<DataAppSn
         group_by: view.layout.group_by.clone(),
         cover_field: view.layout.cover_field.clone(),
         date_field: view.layout.date_field.clone(),
+        relation_targets,
     })
 }
 
@@ -628,6 +648,60 @@ mod tests {
 
         let after_delete = open_data_app(root, rel_path, None).unwrap();
         assert!(after_delete.rows.is_empty());
+    }
+
+    #[test]
+    fn open_data_app_includes_relation_target_rows() {
+        use lattice_data::{DataApp, FieldType, NewColumn};
+
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let rel_path = "CRM.data".to_string();
+
+        create_table_package(
+            root.clone(),
+            rel_path.clone(),
+            "CRM".to_string(),
+            "contacts".to_string(),
+        )
+        .unwrap();
+
+        let package_path = dir.path().join("CRM.data");
+        let mut app = DataApp::open(&package_path).unwrap();
+        app.add_table("companies").unwrap();
+        app.add_columns(
+            "companies",
+            &[NewColumn::new("name", FieldType::Text)],
+        )
+        .unwrap();
+        app.add_columns(
+            "contacts",
+            &[NewColumn::relation("company", "companies")],
+        )
+        .unwrap();
+        app.insert_row(
+            "companies",
+            &BTreeMap::from([("name".into(), CellValue::Text("Acme".into()))]),
+        )
+        .unwrap();
+
+        let snapshot = open_data_app(root, rel_path, None).unwrap();
+        let companies = snapshot
+            .relation_targets
+            .get("companies")
+            .expect("companies relation target rows");
+        assert_eq!(companies.len(), 1);
+        assert_eq!(
+            companies[0].values.get("name"),
+            Some(&CellValue::Text("Acme".into()))
+        );
+        let company_column = snapshot
+            .columns
+            .iter()
+            .find(|column| column.name == "company")
+            .expect("company relation column");
+        assert_eq!(company_column.field_type, "relation");
+        assert_eq!(company_column.relation_table.as_deref(), Some("companies"));
     }
 
     #[test]
