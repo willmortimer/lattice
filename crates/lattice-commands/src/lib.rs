@@ -35,8 +35,9 @@ mod template;
 mod trash;
 
 pub use command::{
-    CanvasMoveNodes, CanvasNodeMove, CanvasPlaceResource, CanvasRemoveNodes, Command,
-    CommandOutcome, HistoryEntry, Transaction, TransactionReceipt, UndoReport,
+    path_remaps_from_commands, CanvasMoveNodes, CanvasNodeMove, CanvasPlaceResource,
+    CanvasRemoveNodes, Command, CommandOutcome, HistoryEntry, PathRemap, Transaction,
+    TransactionReceipt, UndoReport,
 };
 pub use engine::CommandEngine;
 pub use error::Error;

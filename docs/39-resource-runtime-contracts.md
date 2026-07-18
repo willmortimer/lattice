@@ -38,21 +38,28 @@ model ([ADR 0028](decisions/0028-unified-conflict-revisions.md)).
 
 ## Link repair review
 
-Path renames that affect parseable links produce a `LinkRepairPlan` in
+Path renames and moves that affect parseable links produce a `LinkRepairPlan` in
 `lattice-core` ([ADR 0027](decisions/0027-progressive-resource-identity-and-path-repair.md),
 [ADR 0034](decisions/0034-typed-resource-link-resolution.md)).
 
 Contract:
 
-- Lattice-initiated renames may offer an apply path after review.
+- Lattice-initiated renames and moves may offer an apply path after review.
+  Moves reuse rename-shaped `from`/`to` full paths; accepting repair applies
+  `ResourceRename(from, destination)` plus page updates in one transaction
+  (equivalent filesystem rename to `ResourceMove`, without double-applying a
+  prior move). Pure moves with no link candidates still record `ResourceMove`.
 - External renames create a repair proposal; source files are not silently
   rewritten.
 - The desktop presents a review modal listing candidates with
   `resolved`, `ambiguous`, and `skipped` statuses.
 - Apply accepts an explicit subset of candidate IDs; defer leaves stale paths
-  marked nonportable until the user revisits the proposal.
+  marked nonportable until the user revisits the proposal (the path change
+  itself still applies).
 - Repair preserves link syntax and display labels; ambiguous targets never
   auto-select.
+- Undo of a rename/move returns path remaps so open tabs and selection follow
+  the restored paths.
 
 ## Performance budgets (Phase 1)
 

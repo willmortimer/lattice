@@ -6,7 +6,7 @@ use serde_json::Value;
 use tempfile::TempDir;
 
 use crate::{
-    CanvasNodeMove, Command, CommandEngine, Error, Transaction, TrashPolicy,
+    CanvasNodeMove, Command, CommandEngine, Error, PathRemap, Transaction, TrashPolicy,
     MAX_RESOURCE_EDIT_BYTES,
 };
 
@@ -703,7 +703,14 @@ fn move_into_directory_and_undo() {
     assert!(!exists(&dir, "A.md"));
     assert_eq!(read(&dir, "Sub/A.md"), b"content\n");
 
-    engine.undo().unwrap().unwrap();
+    let undone = engine.undo().unwrap().unwrap();
+    assert_eq!(
+        undone.path_remaps,
+        vec![PathRemap {
+            from: PathBuf::from("Sub/A.md"),
+            to: PathBuf::from("A.md"),
+        }]
+    );
     assert_eq!(read(&dir, "A.md"), b"content\n");
     assert!(!exists(&dir, "Sub/A.md"));
 }

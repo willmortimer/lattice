@@ -4,10 +4,13 @@ import { demoCanvas, demoDataApp, demoPages, demoTextFiles, inBrowser } from "..
 import type { DataAppSnapshot } from "../data/types";
 import { createDemoPageIO, createNativePageIO } from "../editor/pageIO";
 import { readNativeCanvas } from "../canvas/adapter";
+import { previewLinkRepair, type LinkRepairPlan } from "../lib/linkRepair";
+import { applyPathRemaps, type PathRemap } from "../lib/pathRemap";
+import { moveResource } from "../lib/resourceMutations";
+import { destinationPath } from "../lib/treeOps";
 import type { OpenResourceSession } from "../resourceSession";
 import { deriveResourceFormatId } from "../resourceRendererRegistry";
 import type { Resource, WorkspaceSnapshot } from "../types";
-import { previewLinkRepair, type LinkRepairPlan } from "../lib/linkRepair";
 import { createResourceLoadGate, isTextFormatId, loadTextResource, type ResourceLoadGate, type ResourceLoadTicket } from "./resourceLoad";
 
 export interface ResourceControllerOptions {
@@ -52,6 +55,8 @@ export interface ResourceController {
   clearSelectionIf: (path: string) => void;
   commitTitle: (title: string) => Promise<void>;
   renameResource: (resource: Resource, title: string) => Promise<void>;
+  moveResourceToFolder: (from: string, toDir: string) => Promise<void>;
+  reconcilePathRemaps: (remaps: PathRemap[]) => Promise<void>;
   resetResources: () => void;
 }
 
@@ -348,6 +353,67 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     applyPageContent(raw, revision);
   }, [applyPageContent]);
 
+  const reconcileAfterPathChange = useCallback(async (
+    from: string,
+    to: string,
+    fallbackResource?: Resource,
+  ) => {
+    const workspace = snapshotRef.current;
+    const remappedSelectedPath = selectedRef.current
+      ? applyPathRemaps(selectedRef.current.path, [{ from, to }])
+      : null;
+    const nextResource = workspace?.resources.find((entry) => entry.path === to)
+      ?? fallbackResource
+      ?? (selectedRef.current && remappedSelectedPath && remappedSelectedPath !== selectedRef.current.path
+        ? { ...selectedRef.current, path: remappedSelectedPath }
+        : null);
+
+    if (nextResource) {
+      onReplaceTab(from, nextResource);
+    } else {
+      onReplaceTab(from, { path: to, kind: "page" });
+    }
+    onReplaceHistoryPath(from, to);
+
+    const selected = selectedRef.current;
+    if (!selected || !remappedSelectedPath || remappedSelectedPath === selected.path) return;
+
+    const resolved = workspace?.resources.find((entry) => entry.path === remappedSelectedPath)
+      ?? (nextResource && nextResource.path === remappedSelectedPath
+        ? nextResource
+        : { ...selected, path: remappedSelectedPath });
+    setSelected(resolved);
+    selectedRef.current = resolved;
+    onTitle(fileTitle(resolved.path));
+    await handleSelect(resolved, { recordHistory: false });
+  }, [handleSelect, onReplaceHistoryPath, onReplaceTab, onTitle, snapshotRef]);
+
+  const reconcilePathRemaps = useCallback(async (remaps: PathRemap[]) => {
+    if (remaps.length === 0) return;
+    for (const remap of remaps) {
+      const workspace = snapshotRef.current;
+      const toResource = workspace?.resources.find((entry) => entry.path === remap.to);
+      if (toResource) {
+        onReplaceTab(remap.from, toResource);
+      } else {
+        onReplaceTab(remap.from, { path: remap.to, kind: "page" });
+      }
+      onReplaceHistoryPath(remap.from, remap.to);
+    }
+
+    const selected = selectedRef.current;
+    if (!selected) return;
+    const remapped = applyPathRemaps(selected.path, remaps);
+    if (remapped === selected.path) return;
+    const workspace = snapshotRef.current;
+    const resolved = workspace?.resources.find((entry) => entry.path === remapped)
+      ?? { ...selected, path: remapped };
+    setSelected(resolved);
+    selectedRef.current = resolved;
+    onTitle(fileTitle(resolved.path));
+    await handleSelect(resolved, { recordHistory: false });
+  }, [handleSelect, onReplaceHistoryPath, onReplaceTab, onTitle, snapshotRef]);
+
   const renameResource = useCallback(async (resource: Resource, title: string) => {
     const current = snapshotRef.current ?? snapshot;
     if (!current) return;
@@ -395,20 +461,93 @@ export function useResourceController(options: ResourceControllerOptions): Resou
         await invoke("rename_resource", { root: current.root, from: resource.path, to: nextPath });
       }
       await refreshResources();
-      if (selectedRef.current?.path === resource.path) {
-        setSelected(nextResource);
-        selectedRef.current = nextResource;
-        onReplaceTab(resource.path, nextResource);
-        onReplaceHistoryPath(resource.path, nextPath);
-        await handleSelect(nextResource, { recordHistory: false });
-      }
+      await reconcileAfterPathChange(resource.path, nextPath, nextResource);
     } catch (error) {
       onError(String(error));
       if (selectedRef.current?.path === resource.path) onTitle(fileTitle(resource.path));
     } finally {
       onBusy(false);
     }
-  }, [handleSelect, onBusy, onError, onLinkRepairReview, onReplaceHistoryPath, onReplaceTab, onTitle, refreshResources, setSnapshot, snapshot, snapshotRef]);
+  }, [
+    onBusy,
+    onError,
+    onLinkRepairReview,
+    onReplaceHistoryPath,
+    onReplaceTab,
+    onTitle,
+    reconcileAfterPathChange,
+    refreshResources,
+    setSnapshot,
+    snapshot,
+    snapshotRef,
+  ]);
+
+  /**
+   * Move a resource into a folder. Link repair reuses rename-shaped from/to
+   * full paths: when inbound links would break, the existing review modal runs
+   * and `apply_link_repair` prepends ResourceRename(from, destination) — same
+   * filesystem rename as ResourceMove, without double-applying a prior move.
+   * Pure moves (no candidates) still use ResourceMove for honest history.
+   */
+  const moveResourceToFolder = useCallback(async (from: string, toDir: string) => {
+    const current = snapshotRef.current ?? snapshot;
+    if (!current) return;
+    const destination = destinationPath(from, toDir);
+    const resource = current.resources.find((entry) => entry.path === from);
+    if (!resource || destination === from) return;
+    const nextResource = { ...resource, path: destination };
+
+    if (inBrowser) {
+      setSnapshot((workspace) => {
+        if (!workspace) return workspace;
+        return {
+          ...workspace,
+          resources: workspace.resources.map((entry) => {
+            if (entry.path === from) return { ...entry, path: destination };
+            if (entry.path.startsWith(`${from}/`)) {
+              return { ...entry, path: destination + entry.path.slice(from.length) };
+            }
+            return entry;
+          }),
+        };
+      });
+      await reconcileAfterPathChange(from, destination, nextResource);
+      return;
+    }
+
+    onBusy(true);
+    try {
+      const plan = await previewLinkRepair(current.root, from, destination, "lattice-rename");
+      if (plan.candidates.length > 0) {
+        const decision = await onLinkRepairReview({
+          plan,
+          from,
+          to: destination,
+          mode: "lattice-rename",
+        });
+        if (decision === "cancelled") return;
+      } else {
+        await moveResource(current.root, from, toDir);
+      }
+      await refreshResources();
+      const refreshed = snapshotRef.current;
+      const moved = refreshed?.resources.find((entry) => entry.path === destination) ?? nextResource;
+      await reconcileAfterPathChange(from, destination, moved);
+    } catch (error) {
+      onError(String(error));
+    } finally {
+      onBusy(false);
+    }
+  }, [
+    onBusy,
+    onError,
+    onLinkRepairReview,
+    reconcileAfterPathChange,
+    refreshResources,
+    setSnapshot,
+    snapshot,
+    snapshotRef,
+  ]);
 
   const commitTitle = useCallback(async (title: string) => {
     const resource = selectedRef.current;
@@ -419,6 +558,6 @@ export function useResourceController(options: ResourceControllerOptions): Resou
   return {
     selected, setSelected, session, setSession, pageRef, currentPageRevisionRef, reloadToken,
     handleSelect, reloadPageFromDisk, applyPageContent, saveLocalPage, openCreatedResource, clearSelection, clearSelectionIf,
-    commitTitle, renameResource, resetResources,
+    commitTitle, renameResource, moveResourceToFolder, reconcilePathRemaps, resetResources,
   };
 }

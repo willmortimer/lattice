@@ -49,13 +49,14 @@ export interface DesktopActionsOptions {
   refreshResources: () => Promise<void>;
   handleSelect: (resource: Resource, options?: { recordHistory?: boolean }) => Promise<void>;
   openCreatedResource: (resource: Resource, session: OpenResourceSession) => void;
+  reconcilePathRemaps?: (remaps: { from: string; to: string }[]) => Promise<void>;
 }
 
 export function useDesktopActionsController(options: DesktopActionsOptions) {
   const {
     snapshot, snapshotRef, setSnapshot, selected, pageRef, wikiTargets, setError, setBusy,
     setStatusToast, setSaveStateIdle, setActivityArea, setRevealPath, setLinkPicker,
-    refreshResources, handleSelect, openCreatedResource,
+    refreshResources, handleSelect, openCreatedResource, reconcilePathRemaps,
   } = options;
   const workspaceSettingsTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   useEffect(() => () => {
@@ -119,12 +120,18 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
   const handleUndo = useCallback(async () => {
     if (!snapshot) return;
     try {
-      await invoke<string | null>("undo_last", { root: snapshot.root });
+      const result = await invoke<{
+        summary: string;
+        pathRemaps: { from: string; to: string }[];
+      } | null>("undo_last", { root: snapshot.root });
       await refreshResources();
+      if (result?.pathRemaps?.length && reconcilePathRemaps) {
+        await reconcilePathRemaps(result.pathRemaps);
+      }
     } catch (error) {
       setError(String(error));
     }
-  }, [refreshResources, setError, snapshot]);
+  }, [reconcilePathRemaps, refreshResources, setError, snapshot]);
 
   const handleImportCsv = useCallback(async () => {
     if (inBrowser) {
