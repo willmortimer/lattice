@@ -51,6 +51,7 @@ const SQLITE_TYPES = {
   decimal: "REAL",
   boolean: "INTEGER",
   date: "TEXT",
+  relation: "TEXT",
 };
 const TEMPLATE_CATEGORIES = [
   "Everyday",
@@ -66,7 +67,15 @@ const WORKSPACE_DEFAULT_KEYS = [
   "templateDirectory",
   "archiveDirectory",
 ];
-const FIELD_TYPES = new Set(["text", "long_text", "integer", "decimal", "boolean", "date"]);
+const FIELD_TYPES = new Set([
+  "text",
+  "long_text",
+  "integer",
+  "decimal",
+  "boolean",
+  "date",
+  "relation",
+]);
 const VIEW_LAYOUTS = new Set(["grid", "list", "board", "gallery", "calendar", "form"]);
 // Flat seed files (including binaries) are embedded via include_bytes!; declarative
 // dataPackages are JSON-only and materialized to SQLite at provision time.
@@ -247,10 +256,28 @@ function normalizeDataPackage(entry, template, index) {
         `${template}: ${columnLabel}.type must be one of ${[...FIELD_TYPES].join(", ")}`,
       );
     }
+    let relationTable;
+    if (column.type === "relation") {
+      if (typeof column.relation_table !== "string" || !isSqlIdentifier(column.relation_table)) {
+        throw new Error(
+          `${template}: ${columnLabel}.relation_table must be a valid SQL identifier for relation columns`,
+        );
+      }
+      relationTable = column.relation_table;
+    } else if (column.relation_table !== undefined) {
+      throw new Error(
+        `${template}: ${columnLabel}.relation_table is only supported for relation columns`,
+      );
+    }
     columnNames.add(column.name);
-    columns.push({ name: column.name, type: column.type });
+    columns.push({
+      name: column.name,
+      type: column.type,
+      ...(relationTable === undefined ? {} : { relation_table: relationTable }),
+    });
   }
 
+  const columnTypes = new Map(columns.map((column) => [column.name, column.type]));
   const rows = entry.rows.map((row, rowIndex) => {
     const rowLabel = `${label}.rows[${rowIndex}]`;
     if (!row || typeof row !== "object" || Array.isArray(row)) {
@@ -260,7 +287,7 @@ function normalizeDataPackage(entry, template, index) {
       if (!columnNames.has(key)) {
         throw new Error(`${template}: ${rowLabel} unknown column ${key}`);
       }
-      assertJsonCell(row[key], template, `${rowLabel}.${key}`);
+      assertJsonCell(row[key], template, `${rowLabel}.${key}`, columnTypes.get(key));
     }
     return row;
   });
@@ -356,8 +383,21 @@ function normalizeDataPackageView(entry, template, label, allowedColumns, viewNa
   };
 }
 
-function assertJsonCell(value, template, label) {
+function assertJsonCell(value, template, label, fieldType) {
   const kind = value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
+  if (fieldType === "relation") {
+    if (kind !== "array") {
+      throw new Error(`${template}: ${label} must be a JSON array of record ids for relation columns`);
+    }
+    for (const [index, item] of value.entries()) {
+      if (typeof item !== "string" || item.length === 0) {
+        throw new Error(
+          `${template}: ${label}[${index}] must be a non-empty string record id for relation columns`,
+        );
+      }
+    }
+    return;
+  }
   if (kind === "object" || kind === "array" || kind === "undefined" || kind === "function") {
     throw new Error(`${template}: ${label} must be a JSON primitive or null`);
   }
@@ -500,7 +540,7 @@ function rustDirectory(directory) {
 }
 
 function rustDataColumn(column) {
-  return `SeedDataColumn { name: ${rustString(column.name)}, field_type: ${rustString(column.type)} }`;
+  return `SeedDataColumn { name: ${rustString(column.name)}, field_type: ${rustString(column.type)}, relation_table: ${rustOptionString(column.relation_table)} }`;
 }
 
 function rustDataView(view) {
@@ -656,6 +696,12 @@ function cellValueForField(value, fieldType) {
     case "text":
     case "long_text":
       return { Text: String(value) };
+    case "relation": {
+      if (!Array.isArray(value)) {
+        throw new Error("relation cells must be a JSON array of record ids");
+      }
+      return { Relation: { record_ids: value.map((item) => String(item)) } };
+    }
     default: {
       const _exhaustive = fieldType;
       throw new Error(`unsupported demo field type ${String(_exhaustive)}`);
@@ -742,6 +788,19 @@ function demoSnapshotLayoutFields(view) {
   return fields;
 }
 
+function resolveDemoRelationRefs(references, targetTable, rowIdsByName, knownIds) {
+  return references.map((reference) => {
+    if (knownIds.has(reference)) return reference;
+    const resolved = rowIdsByName.get(reference);
+    if (!resolved) {
+      throw new Error(
+        `${DEMO_TEMPLATE_ID}: relation reference ${JSON.stringify(reference)} not found in table ${targetTable}`,
+      );
+    }
+    return resolved;
+  });
+}
+
 function buildDemoDataApp(template) {
   const packageDef =
     template.dataPackages.find((entry) => entry.path === "CRM.data") ?? template.dataPackages[0];
@@ -754,19 +813,57 @@ function buildDemoDataApp(template) {
       name: column.name,
       field_type: column.type,
       sqlite_type: SQLITE_TYPES[column.type],
+      ...(column.relation_table === undefined
+        ? {}
+        : { relation_table: column.relation_table }),
     })),
   ];
   const rows = packageDef.rows.map((row, index) => {
     const id = demoRowId(row, index);
     const values = { id: { Text: id } };
     for (const column of packageDef.columns) {
+      if (column.type === "relation") continue;
       const raw = Object.prototype.hasOwnProperty.call(row, column.name) ? row[column.name] : null;
       values[column.name] = cellValueForField(raw, column.type);
     }
-    return { id, values };
+    return { id, values, row };
   });
+  const rowIdsByName = new Map(
+    rows.map((entry) => {
+      if (typeof entry.row.name !== "string") {
+        throw new Error(`${DEMO_TEMPLATE_ID}: demo CRM rows require a name column for relation seeds`);
+      }
+      return [entry.row.name, entry.id];
+    }),
+  );
+  const knownIds = new Set(rows.map((entry) => entry.id));
+  for (const entry of rows) {
+    for (const column of packageDef.columns) {
+      if (column.type !== "relation") continue;
+      const raw = Object.prototype.hasOwnProperty.call(entry.row, column.name)
+        ? entry.row[column.name]
+        : null;
+      if (raw === null) {
+        entry.values[column.name] = { Null: null };
+        continue;
+      }
+      if (!Array.isArray(raw)) {
+        throw new Error(
+          `${DEMO_TEMPLATE_ID}: relation column ${column.name} must be a JSON array of record ids`,
+        );
+      }
+      const recordIds = resolveDemoRelationRefs(
+        raw,
+        column.relation_table,
+        rowIdsByName,
+        knownIds,
+      );
+      entry.values[column.name] = { Relation: { record_ids: recordIds } };
+    }
+  }
+  const demoRows = rows.map(({ id, values }) => ({ id, values }));
   const rowIds = new Set();
-  for (const row of rows) {
+  for (const row of demoRows) {
     if (rowIds.has(row.id)) {
       throw new Error(
         `${DEMO_TEMPLATE_ID}: duplicate demo data-app row id ${JSON.stringify(row.id)}`,
@@ -786,7 +883,7 @@ function buildDemoDataApp(template) {
     default_table: packageDef.table,
     package_revision: "demo:0",
     columns,
-    rows,
+    rows: demoRows,
     available_views,
     active_view,
     filters: [],

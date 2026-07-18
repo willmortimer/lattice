@@ -13,9 +13,37 @@ ordinary file under a real directory — open it in any editor, or stay inside L
 2. Scroll [[Research/Long Read]] — long-form perf and virtualization fixture.
 3. Open `Canvases/Product Strategy.canvas` — double-click file nodes to jump.
 4. Capture with **⌘N** into `Inbox/` (see [[Inbox/Sample capture]]).
-5. Open `CRM.data` — ~20 contacts with multiple column types.
+5. Open `CRM.data` — ~20 contacts with multiple column types and a relation field.
 6. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.
 7. Create pages from `Templates/` — daily and meeting note scaffolds.
+
+## First Look tour — new surfaces
+
+Work through this checklist to exercise the latest desktop shell and data features.
+Each step is safe in the sample workspace; undo where noted.
+
+### CRM layouts and saved views
+
+1. Open `CRM.data` and switch **Board**, **Gallery**, **Calendar**, and **Form** from the view picker.
+2. In each layout, change the layout field pickers (group-by, cover field, date field, visible columns).
+3. Click **Save view** to persist the layout under `CRM.data/views/`.
+4. Open a contact row and inspect the **reports_to** relation column — a few contacts are pre-linked; add or change links in the record detail panel.
+
+### Resource tree
+
+5. Create a folder under `Projects/` (context menu or **New folder**).
+6. Press **⌘Z** to undo the folder creation.
+7. Move [[Product/Vision]] into another folder; accept link repair when prompted so wiki links update.
+8. **⌘-click** two pages in the tree, then drag the selection to a folder (multi-select move).
+9. Select multiple items and delete — confirm the batch operation.
+
+### Where to look next
+
+| Surface | Try |
+| --- | --- |
+| [[Research/Long Read]] | Scroll perf, embeds, extended checklist |
+| [[Product/Release Notes]] | What shipped in this sample |
+| `Canvases/Product Strategy.canvas` | Spatial links between Product pages |
 
 ## Product
 
@@ -67,6 +95,9 @@ views under `CRM.data/views/` (one YAML file per view):
 Supported layout types also include `grid` and `list`. Board groups contacts by
 `status`; calendar plots `due_date`; gallery uses `company` as a cover field.
 
+The **reports_to** column is a self-relation on `contacts` — open a row to link peers
+or managers. Template seeds resolve contact **names** to record ids at provision time.
+
 Embed a view from a page (see [[Research/Long Read]]):
 
 ```markdown
@@ -98,7 +129,7 @@ fallback: "Open CRM board view"
 | [[Product/Roadmap]] | page |
 | [[Product/Release Notes]] | page |
 | [[Research/Long Read]] | page (long / embed) |
-| [[Research/Architecture]] | page (Mermaid) |
+| [[Research/Architecture]] | page |
 | [[Research/Competitor Analysis]] | page |
 | [[Research/Market Notes]] | page |
 | [[Research/Interview Synthesis]] | page |

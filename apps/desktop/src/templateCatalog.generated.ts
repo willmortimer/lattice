@@ -925,6 +925,11 @@ export const GENERATED_TEMPLATE_CATALOG = [
           {
             "name": "notes",
             "type": "long_text"
+          },
+          {
+            "name": "reports_to",
+            "type": "relation",
+            "relation_table": "contacts"
           }
         ],
         "rows": [
@@ -942,7 +947,10 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "company": "US Navy",
             "due_date": "2026-07-25",
             "status": "Active",
-            "notes": "Asked for honest SQL export from CRM views."
+            "notes": "Asked for honest SQL export from CRM views.",
+            "reports_to": [
+              "Ada Lovelace"
+            ]
           },
           {
             "name": "Alan Turing",
@@ -958,7 +966,10 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "company": "NASA",
             "due_date": "2026-08-02",
             "status": "Active",
-            "notes": "Needs calendar layout on due dates for standup."
+            "notes": "Needs calendar layout on due dates for standup.",
+            "reports_to": [
+              "Dorothy Vaughan"
+            ]
           },
           {
             "name": "Dorothy Vaughan",
@@ -974,7 +985,10 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "company": "NASA",
             "due_date": "2026-07-30",
             "status": "Active",
-            "notes": "Wants board grouped by status for sprint review."
+            "notes": "Wants board grouped by status for sprint review.",
+            "reports_to": [
+              "Katherine Johnson"
+            ]
           },
           {
             "name": "Tim Berners-Lee",
@@ -1038,7 +1052,10 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "company": "MIT",
             "due_date": "2026-07-28",
             "status": "Active",
-            "notes": "Security review of command preconditions."
+            "notes": "Security review of command preconditions.",
+            "reports_to": [
+              "Barbara Liskov"
+            ]
           },
           {
             "name": "Barbara Liskov",

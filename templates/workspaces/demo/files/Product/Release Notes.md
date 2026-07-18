@@ -9,10 +9,11 @@ Sample changelog page for the First Look workspace — not a live feed.
 
 ## 2026.07 — First Look enrichment
 
-- Expanded `CRM.data` with email, company, due dates, notes, and saved views
+- Expanded `CRM.data` with email, company, due dates, notes, saved views, and a `reports_to` relation column
 - Added [[Research/Long Read]] for scroll and search perf fixtures
 - New [[Templates/Daily Note]] and [[Templates/Meeting Note]] page templates
 - Extra files under `Resources/` for code and config samples
+- [[Home]] tour checklist for layouts, Save view, folder undo, link repair, multi-select, and relations
 
 ## 2026.06 — Kitchen sink baseline
 
@@ -26,6 +27,6 @@ Tracked on [[Product/Roadmap]]:
 
 1. Notebook seeds under `Notebooks/`
 2. Richer canvas profiles linking data views
-3. Relations between CRM contacts and project pages
+3. Cross-package relations (CRM contacts ↔ project pages)
 
 #product
