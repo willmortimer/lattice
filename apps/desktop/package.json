@@ -34,13 +34,14 @@
     "@codemirror/language": "^6.12.4",
     "@codemirror/state": "^6.7.1",
     "@codemirror/view": "^6.43.6",
-    "@lezer/highlight": "^1.2.3",
     "@fontsource-variable/fraunces": "^5.2.9",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@fontsource-variable/space-grotesk": "^5.2.10",
     "@glideapps/glide-data-grid": "^6.0.3",
     "@lattice/ui": "workspace:*",
+    "@lezer/highlight": "^1.2.3",
     "@phosphor-icons/react": "^2.1.10",
+    "@shikijs/langs": "4.3.1",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-global-shortcut": "^2.3.1",
@@ -66,6 +67,7 @@
     "prosemirror-model": "^1.25.11",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "shiki": "^4.3.1",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
