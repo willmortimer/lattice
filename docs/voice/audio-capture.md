@@ -15,9 +15,9 @@ One internal format for the shared protocol:
 | Encoding | Signed PCM |
 | Sample rate | 16,000 Hz |
 | Channels | Mono |
-| Sample format | Prefer the cleanest FluidAudio bridge contract: either 16-bit little-endian **or** normalized `f32`. Pick one in M0/M1 and keep the protocol runtime-neutral via an explicit `AudioSampleFormat` enum. |
+| Sample format | **`f32` (Float32)** for the FluidAudio bridge — M0 confirmed this is the cleanest provider contract ([RESULTS.md](../../research/voice-m0-fluidaudio/RESULTS.md)). The protocol keeps `AudioSampleFormat::I16Le` in the enum for runtime neutrality; clients targeting FluidAudio **should** resample to Float32 before handoff. |
 | Frame duration | 20 ms |
-| Transport chunk duration | 40–100 ms |
+| Transport chunk duration | 40–100 ms (FluidAudio streaming uses **160 ms** chunks at the provider boundary per M0) |
 
 Clients **must** resample and downmix before sending chunks to the voice
 service. Providers **must not** assume device-native rates on the wire.
@@ -32,6 +32,8 @@ Input-device native sample rate
 Channel downmix
     ↓
 Resampling to 16 kHz mono
+    ↓
+Convert to Float32 (canonical for FluidAudio)
     ↓
 Optional conservative preprocessing
     ↓
@@ -65,7 +67,7 @@ Documented requirements:
 
 | Concern | Policy |
 |---------|--------|
-| Maximum queued audio duration | Bound (suggested starting point: 5–10 s of pending chunks). Exact value set after M0 latency measurements. |
+| Maximum queued audio duration | Bound (suggested starting point: 5–10 s of pending chunks). M0 warm first partial **~405 ms** on M2; queue bounds still need product tuning. |
 | Dropped frames | Emit gap events with sequence discontinuity; do not silently continue |
 | Sequence numbers | Monotonic `u64` per session |
 | Gap detection | Client and server validate contiguous sequences |
@@ -80,6 +82,7 @@ Start conservatively.
 
 - Mono downmix
 - Sample-rate conversion
+- Float32 normalization (canonical for FluidAudio)
 - DC offset removal if necessary
 - Basic gain normalization when proven beneficial
 
@@ -106,6 +109,7 @@ See `AudioChunk` in [daemon-protocol.md](./daemon-protocol.md).
 ## Testing requirements
 
 - Resampler correctness across common device rates (44.1 / 48 / 96 kHz)
+- Float32 output matches FluidAudio fixture expectations
 - Pre-roll inclusion on push-to-talk
 - Sequence gap detection
 - UI-thread non-blocking under load
@@ -113,13 +117,12 @@ See `AudioChunk` in [daemon-protocol.md](./daemon-protocol.md).
 
 ## Open questions
 
-- Exact sample type for FluidAudio bridge (i16 vs f32)
 - Pre-roll duration (research Q11)
-- Whether a separate VAD improves segmentation (research Q10)
+- Whether a separate VAD improves segmentation beyond Parakeet EOU (research Q10)
 
 ## Acceptance criteria
 
-- [ ] One canonical on-wire format is fixed before M2
+- [x] Canonical on-wire format fixed for FluidAudio bridge (Float32 @ 16 kHz mono)
 - [ ] Pre-roll is measurable in fixture tests
 - [ ] Backpressure cancels rather than unbounded queue growth
 - [ ] No capture work on the UI thread
