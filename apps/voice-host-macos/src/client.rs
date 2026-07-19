@@ -186,6 +186,7 @@ impl VoiceHostClient {
                             glossary_terms: Vec::new(),
                             command_mode: false,
                         }),
+                        endpoint: None,
                     }),
                 })),
             })

@@ -180,6 +180,7 @@ pub(super) async fn start_session(
         session_id: session_id.clone(),
         language: Some("en".into()),
         context,
+        endpoint: lattice_voice::EndpointOptions::default(),
     };
 
     let speech_session = provider
@@ -216,6 +217,7 @@ pub(super) async fn start_session(
                 VoiceEvent::FinalTranscript(_)
                 | VoiceEvent::SessionReady { .. }
                 | VoiceEvent::SpeechStarted { .. }
+                | VoiceEvent::EndpointDetected { .. }
                 | VoiceEvent::CommandCandidate(_)
                 | VoiceEvent::SessionCompleted { .. } => continue,
             };

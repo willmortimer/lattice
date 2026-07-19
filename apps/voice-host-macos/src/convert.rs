@@ -81,6 +81,17 @@ pub fn event_from_domain(sequence: u64, event: VoiceEvent) -> Result<Event, Voic
             utterance_id,
             started_at_ms,
         }),
+        VoiceEvent::EndpointDetected {
+            session_id,
+            utterance_id,
+            ended_at_ms,
+            reason,
+        } => event::Body::EndpointDetected(lattice_protocol::EndpointDetected {
+            session_id,
+            utterance_id,
+            ended_at_ms,
+            reason: endpoint_reason_to_proto(reason).into(),
+        }),
         VoiceEvent::PartialTranscript(partial) => {
             event::Body::PartialTranscript(partial_to_proto(partial))
         }
@@ -200,6 +211,45 @@ fn session_config_from_proto(config: ProtoSessionConfig) -> SpeechSessionConfig 
                 known_paths: Vec::new(),
                 command_mode: false,
             }),
+        endpoint: config
+            .endpoint
+            .map(endpoint_options_from_proto)
+            .unwrap_or_default(),
+    }
+}
+
+fn endpoint_options_from_proto(
+    options: lattice_protocol::EndpointOptions,
+) -> lattice_voice::EndpointOptions {
+    use lattice_voice::{DEFAULT_MAX_UTTERANCE_MS, DEFAULT_SILENCE_DEBOUNCE_MS};
+    lattice_voice::EndpointOptions {
+        auto_finalize_on_endpoint: options.auto_finalize_on_endpoint,
+        silence_debounce_ms: if options.silence_debounce_ms == 0 {
+            DEFAULT_SILENCE_DEBOUNCE_MS
+        } else {
+            options.silence_debounce_ms
+        },
+        max_utterance_ms: if options.max_utterance_ms == 0 {
+            DEFAULT_MAX_UTTERANCE_MS
+        } else {
+            options.max_utterance_ms
+        },
+    }
+}
+
+fn endpoint_reason_to_proto(
+    reason: lattice_voice::EndpointReason,
+) -> lattice_protocol::EndpointReason {
+    match reason {
+        lattice_voice::EndpointReason::SilenceDebounce => {
+            lattice_protocol::EndpointReason::SilenceDebounce
+        }
+        lattice_voice::EndpointReason::MaxUtteranceLength => {
+            lattice_protocol::EndpointReason::MaxUtteranceLength
+        }
+        lattice_voice::EndpointReason::ProviderEou => {
+            lattice_protocol::EndpointReason::ProviderEou
+        }
     }
 }
 

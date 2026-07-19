@@ -183,6 +183,7 @@ async fn voice_rpcs_proxy_through_daemon_with_fake_host() {
                         glossary_terms: vec!["Lattice".into()],
                         command_mode: false,
                     }),
+                    endpoint: None,
                 }),
             })),
         })
@@ -206,6 +207,7 @@ async fn voice_rpcs_proxy_through_daemon_with_fake_host() {
                     session_id: "daemon-voice-2".into(),
                     language: None,
                     context: None,
+                    endpoint: None,
                 }),
             })),
         })
@@ -303,6 +305,7 @@ async fn voice_rpcs_proxy_through_daemon_with_fake_host() {
                     session_id: "daemon-voice-3".into(),
                     language: None,
                     context: None,
+                    endpoint: None,
                 }),
             })),
         })

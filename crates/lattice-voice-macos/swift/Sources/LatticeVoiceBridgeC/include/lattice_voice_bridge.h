@@ -34,7 +34,10 @@ typedef enum lattice_voice_event_kind {
     LATTICE_VOICE_EVENT_PARTIAL = 1,
     LATTICE_VOICE_EVENT_STABLE = 2,
     LATTICE_VOICE_EVENT_FINAL = 3,
-    LATTICE_VOICE_EVENT_ERROR = 4
+    LATTICE_VOICE_EVENT_ERROR = 4,
+    LATTICE_VOICE_EVENT_SPEECH_STARTED = 5,
+    /** error_code: 0=silence, 1=max_utterance, 2=provider_eou */
+    LATTICE_VOICE_EVENT_ENDPOINT = 6
 } lattice_voice_event_kind_t;
 
 typedef struct lattice_voice_event {

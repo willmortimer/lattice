@@ -107,6 +107,7 @@ async fn fake_backend_transcribes_fixture_over_uds() {
         events.try_recv().ok().and_then(|event| event.body),
         None | Some(event::Body::SessionCompleted(_))
             | Some(event::Body::SpeechStarted(_))
+            | Some(event::Body::EndpointDetected(_))
             | Some(event::Body::PartialTranscript(_))
             | Some(event::Body::FinalTranscript(_))
             | Some(event::Body::ModelStatus(_))

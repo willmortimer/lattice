@@ -84,8 +84,10 @@ async fn live_fixture_streams_partials_and_final() {
         context: SessionContext {
             document_id: None,
             glossary_terms: Vec::new(),
+            known_paths: Vec::new(),
             command_mode: false,
         },
+        endpoint: lattice_voice::EndpointOptions::default(),
     };
 
     let mut session = provider.start_session(config, events).await.expect("session");
