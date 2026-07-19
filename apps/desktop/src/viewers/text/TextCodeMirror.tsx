@@ -4,6 +4,8 @@ import { EditorView, keymap } from "@codemirror/view";
 import type { LanguageSupport } from "@codemirror/language";
 import { useEffect, useRef } from "react";
 
+import { latticeCodeMirrorTheme } from "../../editor/codemirrorTheme";
+
 export type TextSyntax = "plain-text" | "code" | "json" | "yaml";
 
 export interface TextCodeMirrorProps {
@@ -62,6 +64,7 @@ export function TextCodeMirror({ initialValue, syntax, language, readOnly, reset
     void loadLanguage(syntax, language, controller.signal).then((languageSupport) => {
       if (disposed || controller.signal.aborted) return;
       const extensions = [
+        ...latticeCodeMirrorTheme(),
         history(),
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
         EditorState.readOnly.of(readOnly),
