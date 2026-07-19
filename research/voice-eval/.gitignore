@@ -1,0 +1,15 @@
+# Local model caches and generated outputs
+.cache/
+.results/
+*.mlmodelc/
+*.mlpackage/
+
+# Real microphone / private fixtures (never commit)
+private-audio/**
+!private-audio/.gitkeep
+!private-audio/README.md
+
+# Generated WAV/AIFF if someone dumps fixtures here
+*.wav
+*.aiff
+!references/

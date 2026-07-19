@@ -1,0 +1,1 @@
+Lattice voice dictation should preserve CamelCase identifiers like AsrManager, file paths such as /Users/will/Developer/lattice, and punctuation around code.
