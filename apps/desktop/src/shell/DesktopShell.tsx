@@ -57,7 +57,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
     treeCollapsedPaths, revealPath, linkPicker, linkRepairReview, handleLinkRepairAccept, handleLinkRepairDefer,
     openTabs, navigation, inspectorOpen, editingTitle, titleDraft, assetRoot,
     wikiTargets, pageEditorRef, paletteItems, hasCapability, setSettings, setStartup, setError,
-    recents, page, currentPageRevisionRef, setSaveState, setLinkPicker, handleImportEditorAsset,
+    recents, page, setSaveState, setLinkPicker, handleImportEditorAsset,
     setNewWorkspaceOpen, setSearchPaneOpen, setPaletteOpen, setActivityArea, setInspectorOpen,
     setDismissedNoticeCodes, setEditingTitle, setTitleDraft, applyThemeCatalog,
     clearRecents, resetSettings, handleGetStarted, handleOpenWorkspace, openRecent,
@@ -67,7 +67,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
     handleTreeResourceContextMenu, handleTreeFolderContextMenu, handleTreeRename, handleMoveToFolder,
     treeRenameRequest,
     navigateHistory, closeTab, reorderTab, beginSidebarResize, commitTitle, updateWorkspaceSettings,
-    handleOpenWiki, openLinkTarget, handleNotebookContentChange,
+    handleOpenWiki, openLinkTarget, handleNotebookContentChange, handleRevisionChange,
   } = model;
 
   const splashVisible = useStartupSplash({
@@ -519,9 +519,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
                         reloadToken,
                         callbacks: {
                           onSaveStateChange: setSaveState,
-                          onRevisionChange: (revision) => {
-                            currentPageRevisionRef.current = revision;
-                          },
+                          onRevisionChange: handleRevisionChange,
                           onNotebookContentChange: handleNotebookContentChange,
                           onOpenWiki: (target) => {
                             void handleOpenWiki(target);
@@ -567,9 +565,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
                           reloadToken,
                           callbacks: {
                             onSaveStateChange: setSaveState,
-                            onRevisionChange: (revision) => {
-                              currentPageRevisionRef.current = revision;
-                            },
+                            onRevisionChange: handleRevisionChange,
                             onNotebookContentChange: handleNotebookContentChange,
                             onOpenWiki: (target) => {
                               void handleOpenWiki(target);

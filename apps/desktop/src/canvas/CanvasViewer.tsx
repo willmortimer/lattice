@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CanvasOutline } from "./CanvasOutline";
-import { CanvasStaleRevisionError, keyboardMoveDelta, previewPlaceResource, type CanvasAdapter } from "./adapter";
+import { CanvasStaleRevisionError, keyboardMoveDelta, previewMoveNodes, previewPlaceResource, type CanvasAdapter } from "./adapter";
 import { CanvasParseError, parseCanvas, type CanvasData } from "./types";
 import { CanvasScene } from "./scene";
 import { LATTICE_RESOURCE_MIME, readResourceDragPayload } from "../lib/resourceDrag";
+
+const OUTLINE_OPEN_KEY = "lattice.canvas.outlineOpen";
 
 interface CanvasViewerProps {
   json: unknown;
@@ -27,37 +29,78 @@ function parse(json: unknown): ParseResult {
   }
 }
 
+function readOutlineOpen(): boolean {
+  try {
+    const raw = localStorage.getItem(OUTLINE_OPEN_KEY);
+    if (raw === null) return true;
+    return raw !== "0";
+  } catch {
+    return true;
+  }
+}
+
 /** Pixi owns the scene hot loop; the DOM outline remains the accessible action surface. */
 export function CanvasViewer({ json, onOpenFile, adapter, baseRevision, onRevisionChange, onError }: CanvasViewerProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const onOpenFileRef = useRef(onOpenFile);
   const adapterRef = useRef(adapter);
   const revisionRef = useRef(baseRevision);
+  const onRevisionChangeRef = useRef(onRevisionChange);
+  const onErrorRef = useRef(onError);
   const sceneRef = useRef<CanvasScene | null>(null);
+  const fitNextLoadRef = useRef(true);
   onOpenFileRef.current = onOpenFile;
   adapterRef.current = adapter;
-  revisionRef.current = baseRevision;
+  onRevisionChangeRef.current = onRevisionChange;
+  onErrorRef.current = onError;
 
   const parsed = useMemo(() => parse(json), [json]);
   const [data, setData] = useState<CanvasData | null>(parsed.data);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [outlineOpen, setOutlineOpen] = useState(readOutlineOpen);
+
+  // Keep the optimistic write base in a ref. Syncing from the prop on every
+  // render would clobber the revision returned by the last successful mutate
+  // whenever selection / toolbar state re-renders (session.revision often
+  // lags until the parent applies onRevisionChange).
+  useEffect(() => {
+    revisionRef.current = baseRevision;
+  }, [baseRevision]);
 
   const reportError = (message: string) => {
     setErrorMessage(message);
-    onError?.(message);
+    onErrorRef.current?.(message);
+  };
+
+  const commitRevision = (revision: string) => {
+    revisionRef.current = revision;
+    setErrorMessage(null);
+    onRevisionChangeRef.current?.(revision);
+  };
+
+  const setOutlineOpenPersisted = (open: boolean) => {
+    setOutlineOpen(open);
+    try {
+      localStorage.setItem(OUTLINE_OPEN_KEY, open ? "1" : "0");
+    } catch {
+      // private mode / quota — in-memory toggle still works
+    }
   };
 
   useEffect(() => {
+    fitNextLoadRef.current = true;
     setData(parsed.data);
     setSelectedId(null);
   }, [parsed.data]);
 
+  // Pixi scene is long-lived across local edits; only recreate when the host mounts.
+  const hasCanvasHost = data !== null;
   useEffect(() => {
+    if (!hasCanvasHost) return;
     const host = hostRef.current;
-    if (!host || !data) return;
+    if (!host) return;
 
-    let cancelled = false;
     const scene = new CanvasScene(host, {
       onOpenFile: (path, subpath) => onOpenFileRef.current(path, subpath),
       onSelectNode: setSelectedId,
@@ -65,9 +108,9 @@ export function CanvasViewer({ json, onOpenFile, adapter, baseRevision, onRevisi
         const currentAdapter = adapterRef.current;
         if (!currentAdapter) return;
         void currentAdapter.moveNodes(nodes, revisionRef.current).then((revision) => {
-          revisionRef.current = revision;
-          setErrorMessage(null);
-          onRevisionChange?.(revision);
+          commitRevision(revision);
+          fitNextLoadRef.current = false;
+          setData((current) => (current ? previewMoveNodes(current, nodes) : current));
         }).catch((error: unknown) => {
           reportError(error instanceof CanvasStaleRevisionError ? `Canvas changed externally: ${error.message}` : String(error));
         });
@@ -76,9 +119,8 @@ export function CanvasViewer({ json, onOpenFile, adapter, baseRevision, onRevisi
         const currentAdapter = adapterRef.current;
         if (!currentAdapter) return;
         void currentAdapter.removeNodes(nodeIds, revisionRef.current).then((revision) => {
-          revisionRef.current = revision;
-          setErrorMessage(null);
-          onRevisionChange?.(revision);
+          commitRevision(revision);
+          fitNextLoadRef.current = false;
           setData((current) => current ? {
             nodes: current.nodes.filter((node) => !nodeIds.includes(node.id)),
             edges: current.edges.filter((edge) => !nodeIds.includes(edge.fromNode) && !nodeIds.includes(edge.toNode)),
@@ -89,16 +131,22 @@ export function CanvasViewer({ json, onOpenFile, adapter, baseRevision, onRevisi
       },
     });
     sceneRef.current = scene;
-
-    scene.ready.then(() => {
-      if (!cancelled) scene.setData(data);
-    });
     return () => {
-      cancelled = true;
       sceneRef.current = null;
       scene.destroy();
     };
-  }, [data, onError, onRevisionChange]);
+  }, [hasCanvasHost]);
+
+  useEffect(() => {
+    if (!data) return;
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const fit = fitNextLoadRef.current;
+    fitNextLoadRef.current = false;
+    void scene.ready.then(() => {
+      if (sceneRef.current === scene) scene.setData(data, { fit });
+    });
+  }, [data]);
 
   if (parsed.error) {
     return (
@@ -120,9 +168,7 @@ export function CanvasViewer({ json, onOpenFile, adapter, baseRevision, onRevisi
       return;
     }
     void currentAdapter.removeNodes([id], revisionRef.current).then((revision) => {
-      revisionRef.current = revision;
-      setErrorMessage(null);
-      onRevisionChange?.(revision);
+      commitRevision(revision);
       setData((current) => current ? {
         nodes: current.nodes.filter((node) => node.id !== id),
         edges: current.edges.filter((edge) => edge.fromNode !== id && edge.toNode !== id),
@@ -154,9 +200,7 @@ export function CanvasViewer({ json, onOpenFile, adapter, baseRevision, onRevisi
         baseRevision: revisionRef.current,
       })
       .then((revision) => {
-        revisionRef.current = revision;
-        setErrorMessage(null);
-        onRevisionChange?.(revision);
+        commitRevision(revision);
         setData((current) => (current ? previewPlaceResource(current, resourcePath, node) : current));
       })
       .catch((error: unknown) =>
@@ -176,7 +220,7 @@ export function CanvasViewer({ json, onOpenFile, adapter, baseRevision, onRevisi
 
   return (
     <div
-      className="canvas-surface"
+      className={`canvas-surface${outlineOpen ? "" : " is-outline-collapsed"}`}
       tabIndex={0}
       onDragOver={(event) => {
         if (
@@ -211,23 +255,36 @@ export function CanvasViewer({ json, onOpenFile, adapter, baseRevision, onRevisi
         }
       }}
     >
-      <div className="canvas-toolbar" aria-label="Canvas editing actions">
-        <button type="button" onClick={placeResource}>Insert Resource</button>
-        <button type="button" onClick={placeResource}>Place on Canvas</button>
-        <button type="button" onClick={() => sceneRef.current?.moveSelectedBy(10, 0)}>Move</button>
-        <button type="button" onClick={() => sceneRef.current?.removeSelected()}>Remove</button>
+      <div className="canvas-main">
+        <div className="canvas-toolbar" aria-label="Canvas editing actions">
+          <button type="button" onClick={placeResource}>Insert Resource</button>
+          <button type="button" onClick={placeResource}>Place on Canvas</button>
+          <button type="button" onClick={() => sceneRef.current?.moveSelectedBy(10, 0)}>Move</button>
+          <button type="button" onClick={() => sceneRef.current?.removeSelected()}>Remove</button>
+          <button
+            type="button"
+            className={outlineOpen ? "is-active" : undefined}
+            aria-pressed={outlineOpen}
+            onClick={() => setOutlineOpenPersisted(!outlineOpen)}
+          >
+            Outline
+          </button>
+        </div>
+        {errorMessage && <p className="canvas-conflict" role="alert">{errorMessage}</p>}
+        <div ref={hostRef} className="canvas-viewer" />
       </div>
-      {errorMessage && <p className="canvas-conflict" role="alert">{errorMessage}</p>}
-      <div ref={hostRef} className="canvas-viewer" />
-      <CanvasOutline
-        nodes={data.nodes}
-        selectedId={selectedId}
-        onSelect={(id) => {
-          setSelectedId(id);
-          sceneRef.current?.selectNode(id);
-        }}
-        onRemove={removeFromOutline}
-      />
+      {outlineOpen && (
+        <CanvasOutline
+          nodes={data.nodes}
+          selectedId={selectedId}
+          onSelect={(id) => {
+            setSelectedId(id);
+            sceneRef.current?.selectNode(id);
+          }}
+          onRemove={removeFromOutline}
+          onClose={() => setOutlineOpenPersisted(false)}
+        />
+      )}
     </div>
   );
 }

@@ -1,3 +1,5 @@
+import { IconButton } from "@lattice/ui";
+import { X } from "@phosphor-icons/react";
 import type { CanvasNode } from "./types";
 
 interface CanvasOutlineProps {
@@ -5,6 +7,7 @@ interface CanvasOutlineProps {
   selectedId: string | null;
   onSelect: (id: string) => void;
   onRemove: (id: string) => void;
+  onClose: () => void;
 }
 
 function nodeLabel(node: CanvasNode): string {
@@ -15,10 +18,15 @@ function nodeLabel(node: CanvasNode): string {
 }
 
 /** Small DOM reading order/keyboard surface for the GPU canvas. */
-export function CanvasOutline({ nodes, selectedId, onSelect, onRemove }: CanvasOutlineProps) {
+export function CanvasOutline({ nodes, selectedId, onSelect, onRemove, onClose }: CanvasOutlineProps) {
   return (
     <nav className="canvas-outline" aria-label="Canvas outline">
-      <p className="canvas-outline-title">Outline</p>
+      <header className="canvas-outline-head">
+        <p className="canvas-outline-title">Outline</p>
+        <IconButton label="Hide outline" onClick={onClose}>
+          <X size={14} />
+        </IconButton>
+      </header>
       <ol>
         {nodes.map((node) => (
           <li key={node.id}>
