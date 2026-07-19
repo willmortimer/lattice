@@ -139,6 +139,9 @@ pub async fn serve_with_shutdown_and_semantic(
     info!(path = %socket_path.display(), "latticed listening");
 
     let state = DaemonState::new_with_semantic(config, runtime, semantic);
+    let api_shutdown = state.config.api_port.map(|port| {
+        crate::http::spawn_localhost_api(state.clone(), port)
+    });
     let mut shutdown = shutdown;
     loop {
         tokio::select! {
@@ -165,6 +168,9 @@ pub async fn serve_with_shutdown_and_semantic(
         }
     }
 
+    if let Some(tx) = api_shutdown {
+        let _ = tx.send(());
+    }
     if let Some(semantic) = state.semantic.as_ref() {
         semantic.shutdown();
     }

@@ -2,10 +2,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use lattice_daemon::{
-    default_socket_path, serve, serve_with_shutdown_and_semantic, DaemonConfig, SemanticController,
-    SemanticProviderMode,
+    default_socket_path, mcp, serve, serve_with_shutdown_and_semantic, DaemonConfig,
+    SemanticController, SemanticProviderMode, DEFAULT_API_PORT,
 };
 use lattice_runtime::LatticeRuntime;
 use tracing_subscriber::EnvFilter;
@@ -15,20 +15,37 @@ use uuid::Uuid;
 #[command(
     name = "latticed",
     version,
-    about = "Lattice daemon: private Unix-domain control plane"
+    about = "Lattice daemon: private Unix-domain control plane + localhost API/MCP"
 )]
 struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+
     /// Unix-domain socket path.
     #[arg(long, default_value_os_t = default_socket_path())]
     socket: PathBuf,
 
-    /// Shared authentication token for the connection handshake.
-    #[arg(long)]
+    /// Shared authentication token for the connection handshake and local API.
+    #[arg(long, env = "LATTICE_AUTH_TOKEN")]
     auth_token: Option<String>,
 
     /// Optional fixed instance id (default: UUIDv7).
     #[arg(long)]
     instance_id: Option<String>,
+
+    /// Localhost HTTP API port (127.0.0.1 only). Pass 0 to disable.
+    #[arg(long, default_value_t = DEFAULT_API_PORT)]
+    api_port: u16,
+}
+
+#[derive(Debug, Subcommand)]
+enum Commands {
+    /// Serve MCP tools over stdio (search/read/related/build_context).
+    Mcp {
+        /// Shared auth token (informational / launcher parity with the HTTP API).
+        #[arg(long, env = "LATTICE_AUTH_TOKEN")]
+        auth_token: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -41,6 +58,16 @@ async fn main() -> Result<()> {
         .init();
 
     let cli = Cli::parse();
+
+    if let Some(Commands::Mcp { auth_token }) = cli.command {
+        let token = auth_token
+            .or(cli.auth_token)
+            .unwrap_or_else(|| Uuid::now_v7().to_string());
+        let runtime = Arc::new(LatticeRuntime::new());
+        mcp::serve_stdio(runtime, &token).context("mcp stdio serve failed")?;
+        return Ok(());
+    }
+
     let auth_token_provided = cli.auth_token.is_some();
     let auth_token = cli.auth_token.unwrap_or_else(|| Uuid::now_v7().to_string());
     if !auth_token_provided {
@@ -52,6 +79,11 @@ async fn main() -> Result<()> {
     if let Some(instance_id) = cli.instance_id {
         config = config.with_instance_id(instance_id);
     }
+    config = config.with_api_port(if cli.api_port == 0 {
+        None
+    } else {
+        Some(cli.api_port)
+    });
 
     let runtime = Arc::new(LatticeRuntime::new());
     match SemanticProviderMode::from_env() {

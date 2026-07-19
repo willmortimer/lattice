@@ -1058,6 +1058,13 @@ Expose:
 
 Apply the same permission and provenance policy as the desktop.
 
+**First land (pragmatic):** `latticed` serves an authenticated localhost HTTP
+API on `127.0.0.1` (`--api-port`, default `18787`) with
+`POST /v1/search|read|related|build_context`, plus `latticed mcp` stdio tools
+that call the same handlers. See `apps/daemon/README.md`. The demo
+`lattice-bridge` remains non-authoritative; prefer the daemon client in
+production.
+
 ## Phase D7: optional background service
 
 After on-demand launch is stable:

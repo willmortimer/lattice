@@ -16,6 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
+axum.workspace = true
 bytes.workspace = true
 clap.workspace = true
 dirs.workspace = true
@@ -23,6 +24,7 @@ lattice-client.workspace = true
 lattice-core.workspace = true
 lattice-embedding.workspace = true
 lattice-handlers.workspace = true
+lattice-index.workspace = true
 lattice-protocol.workspace = true
 lattice-runtime.workspace = true
 serde.workspace = true
@@ -34,7 +36,9 @@ tracing-subscriber.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+http-body-util = "0.1"
 lattice-handlers.workspace = true
 serde_json.workspace = true
 tempfile = "3"
 tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time", "process"] }
+tower = { version = "0.5", features = ["util"] }
