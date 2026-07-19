@@ -39,6 +39,9 @@ message Request {
     UpdateSessionContextRequest update_session_context = 25;
     CancelVoiceSessionRequest cancel_voice_session = 26;
     EndVoiceSessionRequest end_voice_session = 27;
+    // Voice-host admin (private host UDS; daemon may proxy in D5).
+    VoiceHostStatusRequest voice_host_status = 40;
+    UnloadVoiceModelRequest unload_voice_model = 41;
   }
 }
 
@@ -57,6 +60,8 @@ message Response {
     UpdateSessionContextResponse update_session_context = 25;
     CancelVoiceSessionResponse cancel_voice_session = 26;
     EndVoiceSessionResponse end_voice_session = 27;
+    VoiceHostStatusResponse voice_host_status = 40;
+    UnloadVoiceModelResponse unload_voice_model = 41;
   }
 }
 
@@ -95,6 +100,8 @@ message HealthResponse {
   string status = 1;
   uint32 protocol_version = 2;
   string instance_id = 3;
+  // Optional backend name (e.g. voice-host "fake" / "fluidaudio").
+  optional string backend = 4;
 }
 
 message PingRequest {
@@ -328,6 +335,24 @@ message EndVoiceSessionRequest {
 }
 
 message EndVoiceSessionResponse {}
+
+// Host-process status for lattice-voice-host (and future daemon proxy).
+message VoiceHostStatusRequest {}
+
+message VoiceHostStatusResponse {
+  string backend = 1;
+  ModelStatus model_status = 2;
+  uint64 active_sessions = 3;
+  uint64 chunks_accepted = 4;
+  uint64 finals_emitted = 5;
+  optional string loaded_model_id = 6;
+}
+
+message UnloadVoiceModelRequest {}
+
+message UnloadVoiceModelResponse {
+  ModelStatus status = 1;
+}
 
 message ModelStatusChanged {
   ModelStatus status = 1;

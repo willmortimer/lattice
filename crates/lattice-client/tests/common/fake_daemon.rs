@@ -127,6 +127,7 @@ async fn serve_connection(
                             status: "ok".into(),
                             protocol_version: PROTOCOL_VERSION,
                             instance_id: config.instance_id.clone(),
+                            backend: None,
                         })),
                     },
                 ),

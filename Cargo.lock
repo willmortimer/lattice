@@ -2638,6 +2638,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-voice-host"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "bytes",
+ "clap",
+ "lattice-protocol",
+ "lattice-voice",
+ "lattice-voice-macos",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "lattice-voice-macos"
 version = "0.1.0"
 dependencies = [
