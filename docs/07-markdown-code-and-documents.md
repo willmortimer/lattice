@@ -122,7 +122,7 @@ Supported presentation metadata:
 - Send to notebook.
 - Run as task.
 
-Shiki or an equivalent TextMate-based highlighter is suitable for static and read-only presentation. Tree-sitter is suitable for incremental structural understanding.
+Shiki (TextMate grammars) highlights fenced code in the desktop page editor and preview via a deferred worker; `mermaid` fences skip Shiki and render diagrams instead. Tree-sitter remains the planned path for incremental structural understanding (symbols/regions), not fence coloring.
 
 ## File-backed code snippets
 

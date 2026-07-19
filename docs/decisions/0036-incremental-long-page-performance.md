@@ -70,6 +70,7 @@ are measured and editor invariants for virtual block lists are designed.
 - Future heavy embed previews (PDF thumbnails, live data views) should
   reuse the same visibility-deferral hook rather than inventing per-type
   scroll listeners.
-- Block virtualization, inactive-page cached renderers, and off-thread
-  syntax highlighting remain open follow-ups tracked against performance
-  budgets in `docs/23`.
+- Off-thread fence highlighting shipped via a visibility-gated Shiki
+  worker under `CodeBlockView` (shared by edit and preview). Block
+  virtualization and inactive-page cached renderers remain open
+  follow-ups tracked against performance budgets in `docs/23`.
