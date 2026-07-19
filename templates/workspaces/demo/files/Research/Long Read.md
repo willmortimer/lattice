@@ -28,7 +28,7 @@ leaving the narrative.
 
 ## Why this page exists
 
-Daily dogfooding needs realistic volume: headings, lists, tables, code fences,
+Daily demo use needs realistic volume: headings, lists, tables, code fences,
 Mermaid diagrams, and cross-links that mirror how teams actually write. This page
 ties together [[Product/Vision]], [[Product/Principles]], [[Product/Roadmap]], and
 [[Research/Architecture]] so perf work catches regressions in real reading paths.

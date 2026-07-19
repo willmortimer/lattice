@@ -196,7 +196,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             ],
             rows_json: &[
                 "{\"objective\":\"Ship the spring release\",\"key_result\":\"All launch blockers closed by the freeze date\",\"owner\":\"you\",\"status\":\"on-track\",\"confidence\":0.8}",
-                "{\"objective\":\"Ship the spring release\",\"key_result\":\"Two dogfood rounds with written findings\",\"owner\":\"you\",\"status\":\"at-risk\",\"confidence\":0.5}",
+                "{\"objective\":\"Ship the spring release\",\"key_result\":\"Two demo rounds with written findings\",\"owner\":\"you\",\"status\":\"at-risk\",\"confidence\":0.5}",
                 "{\"objective\":\"Grow the team sustainably\",\"key_result\":\"Every report has a current growth plan\",\"owner\":\"you\",\"status\":\"on-track\",\"confidence\":0.7}"
             ],
             extra_tables: &[],
@@ -493,7 +493,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
         order: 60,
         name: "First Look",
         category: "Sample",
-        description: "Kitchen-sink sample for dogfooding: long pages, CRM, canvas, templates, Mermaid, embeds, and assorted files.",
+        description: "Kitchen-sink sample for demos: long pages, CRM, canvas, templates, Mermaid, embeds, and assorted files.",
         visibility: "sample",
         recommended: false,
         recommended_title: "First Look",

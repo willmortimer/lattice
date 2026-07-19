@@ -188,7 +188,7 @@ repo `.devcontainer`.
 ## Architecture notes
 
 - Prefer **amd64/x86_64** for the DevCell appliance lab; arm64 images may work
-  for local Docker on Apple Silicon but are not the dogfood target.
+  for local Docker on Apple Silicon but are not the demo target.
 - Cold image build needs network for `rustup` and apt; first `cargo test` and
   `pnpm install` also pull caches (volume mounts for cargo registry/git and the
   pnpm store are declared in `devcontainer.json`).

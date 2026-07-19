@@ -37,7 +37,7 @@ flowchart TD
   P204[P2-04 CLI schema alter]
   P205[P2-05 CSV import profiling]
   P206[P2-06 CSV preview promote]
-  P207[P2-07 Docs + dogfood checklist]
+  P207[P2-07 Docs + demo checklist]
 
   P201 --> P202
   P201 --> P204
@@ -188,10 +188,10 @@ Design/taste for column designer chrome and import wizard layout stays with the 
 - **Effort / scope bound:** No in-place conversion of the CSV file; creates a sibling/new `.data` package.
 - **Return:** summary, diff stats, test commands+results, risks
 
-### Task `P2-07`: Docs + dogfood checklist
+### Task `P2-07`: Docs + demo checklist
 
-- **Problem:** Docs still describe aspirational schema/import flows; dogfood checklist should match Wave 1.
-- **Solution:** Update `docs/10-data-applications-and-airtable-model.md` only where behavior changed; update `docs/dev/first-look-dogfood.md` with column designer + CSV profile + promote steps.
+- **Problem:** Docs still describe aspirational schema/import flows; demo checklist should match Wave 1.
+- **Solution:** Update `docs/10-data-applications-and-airtable-model.md` only where behavior changed; update `docs/dev/first-look-demo.md` with column designer + CSV profile + promote steps.
 - **Implement:** docs only; link this DAG file as the Wave 1 tracker.
 - **End state:** Docs match shipped Wave 1 behavior; no Phase 3 claims.
 - **Depends on:** P2-02, P2-04, P2-06

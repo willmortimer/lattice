@@ -356,7 +356,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
           },
           {
             "objective": "Ship the spring release",
-            "key_result": "Two dogfood rounds with written findings",
+            "key_result": "Two demo rounds with written findings",
             "owner": "you",
             "status": "at-risk",
             "confidence": 0.5
@@ -840,7 +840,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
     "order": 60,
     "name": "First Look",
     "category": "Sample",
-    "description": "Kitchen-sink sample for dogfooding: long pages, CRM, canvas, templates, Mermaid, embeds, and assorted files.",
+    "description": "Kitchen-sink sample for demos: long pages, CRM, canvas, templates, Mermaid, embeds, and assorted files.",
     "visibility": "sample",
     "recommended": false,
     "recommendedTitle": "First Look",
