@@ -168,8 +168,11 @@ Success: OneNote-class mixed typed and handwritten workflows.
 - Audio-synchronized ink.
 - Local voice dictation on macOS (FluidAudio / Parakeet); see
   [docs/voice/](voice/README.md), [ADR 0040](decisions/0040-local-voice-dictation-documentation.md),
-  and the capture/finalization review in
-  [current-implementation-review-and-ml-architecture.md](voice/current-implementation-review-and-ml-architecture.md).
+  [ADR 0043](decisions/0043-voice-ownership-in-latticed.md),
+  the capture/finalization review in
+  [current-implementation-review-and-ml-architecture.md](voice/current-implementation-review-and-ml-architecture.md),
+  and the active sprint DAG
+  [voice-d5-quick-note-dag.md](dev/voice-d5-quick-note-dag.md).
 - Remote GPU/Jupyter execution.
 - Full spreadsheet engine through IronCalc or equivalent.
 - ODS-native or documented sheet packages.

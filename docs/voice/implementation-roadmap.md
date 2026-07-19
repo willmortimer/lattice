@@ -96,6 +96,10 @@ Milestone 2.
 ## Milestone 2: in-process Tauri prototype
 
 **Status:** **Landed** (mic + PTT + provisional overlay + final insert + setup UI).
+**Supersession:** Production capture moves to native client PCM
+([ADR 0008](adr/0008-native-client-capture.md)); model ownership moves to
+`latticed` ([ADR 0043](../decisions/0043-voice-ownership-in-latticed.md)).
+See sprint DAG [docs/dev/voice-d5-quick-note-dag.md](../dev/voice-d5-quick-note-dag.md).
 
 **Deliver:** Microphone permission; audio capture; push-to-talk toolbar;
 provisional text overlay; final transcript insertion; cancel; model setup UI.
@@ -104,10 +108,12 @@ provisional text overlay; final transcript insertion; cancel; model setup UI.
 entering document storage.
 
 **Notes:** Desktop build with `--features voice` (default `pnpm tauri:dev`).
-Capture is WebView `getUserMedia` → Float32 @ 16 kHz →
+M2 capture was WebView `getUserMedia` → Float32 @ 16 kHz →
 `FluidAudioSpeechProvider`. Provisional text uses editor decorations only.
 
 ## Milestone 3: editor semantics
+
+**Status:** **In progress** (voice-d5 sprint).
 
 **Deliver:** Logical dictation anchors; one-transaction final insertion; undo;
 new paragraph/line controls; cursor-movement policy; error recovery;
@@ -118,13 +124,19 @@ operations.
 
 ## Milestone 4: latticed service
 
+**Status:** **In progress** (voice-d5 sprint / Phase D5).
+
 **Deliver:** Local IPC; versioned protocol; model manager; shared model
 residency; client authentication; session ownership; daemon restart recovery;
-capability negotiation.
+capability negotiation; `lattice-voice-host` supervision.
 
-**Exit criterion:** The Tauri app no longer owns model state directly.
+**Exit criterion:** The Tauri app no longer owns model state directly
+([ADR 0043](../decisions/0043-voice-ownership-in-latticed.md)).
 
 ## Milestone 5: Quick Note
+
+**Status:** **Partial** — text Quick Note + global shortcut landed; voice
+dictation blocked on M4 exit.
 
 **Deliver:** Global shortcut; pre-roll; background model residency; minimal
 overlay; configurable destination; atomic note creation; failure recovery
