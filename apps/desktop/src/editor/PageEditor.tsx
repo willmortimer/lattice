@@ -30,10 +30,6 @@ import {
 } from "@phosphor-icons/react";
 
 import { ConflictEnvelope } from "./ConflictEnvelope";
-import {
-  dictationProvisionalKey,
-  type DictationProvisionalState,
-} from "./DictationProvisional";
 import { liveEditorExtensions } from "./richEditorExtensions";
 import {
   joinFrontmatter,
@@ -464,23 +460,15 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
       },
       setDictationProvisional: (text: string, from: number) => {
         if (!editor) return;
-        const meta: DictationProvisionalState = { text, from };
-        editor.view.dispatch(editor.state.tr.setMeta(dictationProvisionalKey, meta));
+        editor.commands.setDictationProvisional(text, from);
       },
       clearDictationProvisional: () => {
         if (!editor) return;
-        const meta: DictationProvisionalState = { text: "", from: 0 };
-        editor.view.dispatch(editor.state.tr.setMeta(dictationProvisionalKey, meta));
+        editor.commands.clearDictationProvisional();
       },
       commitDictationFinal: (text: string, from: number) => {
         if (!editor) return;
-        const clear: DictationProvisionalState = { text: "", from: 0 };
-        // Clear ghost text first so italics cannot linger beside the insert.
-        editor.view.dispatch(editor.state.tr.setMeta(dictationProvisionalKey, clear));
-        const trimmed = text.trim();
-        if (!trimmed) return;
-        const insertAt = Math.min(Math.max(1, from), editor.state.doc.content.size);
-        editor.view.dispatch(editor.state.tr.insertText(trimmed, insertAt));
+        editor.commands.commitDictationFinal(text, from);
         editor.commands.focus();
       },
     }),
@@ -558,6 +546,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
       setDraftBody(result.draftBody);
       draftBodyRef.current = result.draftBody;
       if (result.editContent && editor) {
+        editor.commands.clearDictationProvisional();
         editor.commands.setContent(result.editContent);
       }
       if (result.mode === "source") {
@@ -834,6 +823,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     setSourceParseError(null);
     setMode("edit");
     modeRef.current = "edit";
+    editor.commands.clearDictationProvisional();
     editor.commands.setContent(parseMarkdownToJSON(body));
     setSaveState({ status: "idle" });
   }
