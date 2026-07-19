@@ -1,6 +1,6 @@
 [package]
 name = "lattice-voice-macos"
-description = "macOS FluidAudio C ABI bridge stub (Swift owns the native library)"
+description = "macOS FluidAudio C ABI bridge and SpeechProvider for Lattice voice"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,9 +10,25 @@ license.workspace = true
 name = "lattice_voice_macos"
 path = "src/lib.rs"
 
+[features]
+default = []
+# Links `libLatticeVoiceBridge.dylib` (set automatically by build.rs when found/built).
+link-bridge = []
+# Live ASR integration test against cached FluidAudio models + fixture WAV.
+live-asr = ["link-bridge"]
+
 [dependencies]
-# Full SpeechProvider wiring is Task R. This crate only exports the ABI
-# version constant expected by a linked LatticeVoiceBridge dylib.
+async-trait.workspace = true
+lattice-voice.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
+tracing = { workspace = true, optional = true }
+
+[dev-dependencies]
+bytes.workspace = true
+hound = "3"
+lattice-voice.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
 
 [package.metadata.docs.rs]
 targets = ["aarch64-apple-darwin"]
