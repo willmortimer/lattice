@@ -130,8 +130,13 @@ export function ResourceInspector({
           <>
             {resource?.kind !== "page" && <p className="inspector-empty">Links are available for pages.</p>}
             {resource?.kind === "page" && backlinks.length === 0 && <p className="inspector-empty">No indexed backlinks.</p>}
-            {backlinks.map((link) => (
-              <button type="button" className="inspector-link" key={`${link.source_path}:${link.target}`} onClick={() => onOpenFile(link.source_path)}>
+            {backlinks.map((link, index) => (
+              <button
+                type="button"
+                className="inspector-link"
+                key={`${link.source_path}:${link.target}:${link.anchor ?? ""}:${index}`}
+                onClick={() => onOpenFile(link.source_path)}
+              >
                 {link.source_path}
               </button>
             ))}

@@ -54,8 +54,8 @@ export function BacklinksFooter({ root, path, onOpenFile, demoBacklinks }: Backl
     <footer className="backlinks-footer">
       <h2 className="backlinks-title">Linked from</h2>
       <ul className="backlinks-list">
-        {backlinks.map((link) => (
-          <li key={`${link.source_path}:${link.target}:${link.anchor ?? ""}`}>
+        {backlinks.map((link, index) => (
+          <li key={`${link.source_path}:${link.target}:${link.anchor ?? ""}:${index}`}>
             <button className="backlinks-item" onClick={() => onOpenFile(link.source_path)}>
               {link.source_path}
             </button>
