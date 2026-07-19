@@ -21,7 +21,8 @@ Invalid sources remain untouched until an explicit save or reset, which first
 preserves a backup. Frequently changing recents, sessions, window state, and
 sidebar state use SQLite.
 
-Native WebView `localStorage` is limited to the first-paint theme mirror. The
+Native WebView `localStorage` is limited to the first-paint theme mirror (including
+separate dark/light variants when appearance mode is auto). The
 browser demo may use separate fixture state. Existing native localStorage keys
 are imported once and removed only after profile persistence succeeds.
 

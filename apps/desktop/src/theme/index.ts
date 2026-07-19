@@ -15,7 +15,11 @@ export type {
   ThemeCatalogPayload,
   ThemeSummaryPayload,
 } from "./apply";
-export { applyResolvedTheme, detectSystemAppearance } from "./apply";
+export {
+  applyResolvedTheme,
+  detectSystemAppearance,
+  selectThemeMirrorEntry,
+} from "./apply";
 
 function workspaceArg(root: string | null | undefined): string | null {
   return root && root.length > 0 ? root : null;
