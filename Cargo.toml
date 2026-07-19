@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "apps/bridge",
     "apps/cli",
+    "apps/daemon",
     "apps/embed-host",
     "crates/lattice-core",
     "crates/lattice-profile",
@@ -45,6 +46,7 @@ lattice-voice = { path = "crates/lattice-voice" }
 lattice-voice-macos = { path = "crates/lattice-voice-macos" }
 lattice-protocol = { path = "crates/lattice-protocol" }
 lattice-client = { path = "crates/lattice-client" }
+lattice-daemon = { path = "apps/daemon" }
 prost = "0.14"
 prost-build = "0.14"
 tokio-util = { version = "0.7", features = ["codec"] }
