@@ -2356,6 +2356,7 @@ dependencies = [
 name = "lattice-desktop"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "lattice-commands",
  "lattice-core",
  "lattice-data",
@@ -2365,6 +2366,8 @@ dependencies = [
  "lattice-storage",
  "lattice-terminal",
  "lattice-theme",
+ "lattice-voice",
+ "lattice-voice-macos",
  "notify",
  "notify-debouncer-full",
  "rusqlite",
@@ -2378,6 +2381,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-playwright",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]

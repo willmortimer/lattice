@@ -96,14 +96,54 @@ fn emit_link(lib_dir: &Path) {
     let lib_dir = lib_dir
         .canonicalize()
         .unwrap_or_else(|_| lib_dir.to_path_buf());
+    let dylib = lib_dir.join("libLatticeVoiceBridge.dylib");
+
+    // `rustc-link-arg` rpaths from a library crate often do not reach the final
+    // binary (lattice-desktop). Copy the dylib next to profile artifacts and
+    // rely on the desktop package to set `@loader_path` (see src-tauri/build.rs).
+    if let Some(profile_dir) = profile_target_dir() {
+        let dest = profile_dir.join("libLatticeVoiceBridge.dylib");
+        if let Err(err) = std::fs::copy(&dylib, &dest) {
+            println!(
+                "cargo:warning=failed to copy LatticeVoiceBridge to {}: {err}",
+                dest.display()
+            );
+        } else {
+            println!(
+                "cargo:warning=Copied LatticeVoiceBridge → {}",
+                dest.display()
+            );
+        }
+        let deps = profile_dir.join("deps").join("libLatticeVoiceBridge.dylib");
+        let _ = std::fs::copy(&dylib, deps);
+    }
+
     println!("cargo:rustc-cfg=link_bridge");
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
     println!("cargo:rustc-link-lib=dylib=LatticeVoiceBridge");
+    // Absolute rpath as a belt-and-suspenders for unit tests of this crate.
     println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib_dir.display());
     println!(
         "cargo:warning=Linking LatticeVoiceBridge from {}",
         lib_dir.display()
     );
+}
+
+/// Resolve `target/{debug,release}` from `OUT_DIR`.
+fn profile_target_dir() -> Option<PathBuf> {
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").ok()?);
+    let profile = std::env::var("PROFILE").unwrap_or_else(|_| "debug".into());
+    let mut dir = out_dir;
+    while let Some(parent) = dir.parent() {
+        if dir
+            .file_name()
+            .is_some_and(|name| name == profile.as_str())
+        {
+            return Some(dir);
+        }
+        dir = parent.to_path_buf();
+    }
+    None
 }
 
 fn try_swift_build(swift_dir: &Path) -> bool {
