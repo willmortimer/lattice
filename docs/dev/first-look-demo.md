@@ -1,4 +1,4 @@
-# First Look dogfood — 2026-07-18
+# First Look demo — 2026-07-18
 
 Evidence pass against the Home.md **First Look tour — new surfaces** checklist
 on BASE commit `f90fb9535cbbd993a6d097c798ce8c710f6025c4`
@@ -9,7 +9,7 @@ on BASE commit `f90fb9535cbbd993a6d097c798ce8c710f6025c4`
 | Date | 2026-07-18 |
 | BASE | `f90fb9535cbbd993a6d097c798ce8c710f6025c4` |
 | Surface | Vite browser demo (`pnpm --filter @lattice/desktop dev`, fixture `inBrowser`) plus code review / existing unit tests for Tauri-only steps |
-| Method | Fixture + shell code paths under `apps/desktop/src/`; contracts in `docs/39-resource-runtime-contracts.md`; link-repair / batch-move coverage in desktop + `lattice-commands` / `lattice-index` tests. A Playwright dogfood harness was started against `:5173` but did not finish within timeout (shell chrome wait); results below do not depend on that run. |
+| Method | Fixture + shell code paths under `apps/desktop/src/`; contracts in `docs/39-resource-runtime-contracts.md`; link-repair / batch-move coverage in desktop + `lattice-commands` / `lattice-index` tests. A Playwright demo harness was started against `:5173` but did not finish within timeout (shell chrome wait); results below do not depend on that run. |
 
 ## Wave 2 landed (notebooks, canvas views, package forms)
 
@@ -37,7 +37,7 @@ The checklist table is unchanged: it records what **failed or was skipped on BAS
 
 Still deferred after Wave 1: Lookup/Rollup/junction relations, cross-package
 relation links, browser-demo **Save view** / native tree affordances, and a full
-native Tauri dogfood pass for folder undo and trash.
+native Tauri demo pass for folder undo and trash.
 
 ## Checklist
 
@@ -76,10 +76,10 @@ Wave 1 (items 1–4, 6) shipped on `main`. Remaining items are post–Wave 1.
 2. ~~**P0 — Refresh `relation_targets` after row mutations**~~ — done (R3).
 3. ~~**P1 — Relation-aware list / board (and gallery subtitle) display**~~ — done (R1).
 4. ~~**P1 — Cascade or scrub orphan relation ids on `RecordDelete`**~~ — done (R2).
-5. **P1 — Browser-demo tree affordances** for New Folder / delete when native menus no-op — otherwise checklist 5–6 cannot be dogfooded without Tauri.
+5. **P1 — Browser-demo tree affordances** for New Folder / delete when native menus no-op — otherwise checklist 5–6 cannot be exercised in the demo without Tauri.
 6. ~~**P2 — Batch move link-repair**~~ — done (B1).
 7. **P2 — Persist Save view in demo or clear CTA** — today the button exists then errors; either hide in `demoMutate` or document “native only” on the control.
-8. **P2 — Native dogfood pass** for folder undo, single-path move+repair, multi-select trash+undo on `nix run .#desktop-dev` / Tauri e2e — still marked skip above.
+8. **P2 — Native demo pass** for folder undo, single-path move+repair, multi-select trash+undo on `nix run .#desktop-dev` / Tauri e2e — still marked skip above.
 
 ## How to re-run
 

@@ -56,7 +56,7 @@
         },
         {
           "objective": "Ship the spring release",
-          "key_result": "Two dogfood rounds with written findings",
+          "key_result": "Two demo rounds with written findings",
           "owner": "you",
           "status": "at-risk",
           "confidence": 0.5

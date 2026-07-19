@@ -50,7 +50,7 @@ Test at least:
 ## Testing requirements
 
 Automated micro-benchmarks where feasible; hardware matrix in CI or scheduled
-dogfood harness ([docs/dev/perf-harness.md](../dev/perf-harness.md) patterns).
+demo harness ([docs/dev/perf-harness.md](../dev/perf-harness.md) patterns).
 
 ## Open questions
 

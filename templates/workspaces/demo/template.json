@@ -5,7 +5,7 @@
   "order": 60,
   "name": "First Look",
   "category": "Sample",
-  "description": "Kitchen-sink sample for dogfooding: long pages, CRM, canvas, templates, Mermaid, embeds, and assorted files.",
+  "description": "Kitchen-sink sample for demos: long pages, CRM, canvas, templates, Mermaid, embeds, and assorted files.",
   "visibility": "sample",
   "recommended": false,
   "recommendedTitle": "First Look",

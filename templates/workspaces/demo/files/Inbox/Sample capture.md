@@ -9,7 +9,7 @@ Quick note seeded in `Inbox/` — triage into [[Product/]] or [[Research/]] when
 
 ## Raw thought
 
-Dogfood the First Look template daily: open [[Research/Long Read]], add a CRM row,
+Use the First Look demo daily: open [[Research/Long Read]], add a CRM row,
 capture here with **⌘N**, promote to a full page from [[Templates/Daily Note]].
 
 - [ ] Review [[Product/Release Notes]]
