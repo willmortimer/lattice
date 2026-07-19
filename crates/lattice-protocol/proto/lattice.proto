@@ -3,6 +3,11 @@ syntax = "proto3";
 package lattice.v1;
 
 // Top-level length-delimited frame payload for daemon IPC (ADR 0041).
+//
+// Voice control and events share this Envelope (ADR 0043 / docs/voice/daemon-protocol.md).
+// There is no parallel framed stream type: PCM travels as `bytes` inside
+// PushAudioChunkRequest on the same UDS control plane. Public HTTP/MCP must
+// never carry raw audio.
 message Envelope {
   uint32 protocol_version = 1;
   string request_id = 2;
@@ -25,6 +30,15 @@ message Request {
     OpenWorkspaceRequest open_workspace = 12;
     SearchRequest search = 13;
     ApplyPageUpdateRequest apply_page_update = 14;
+    // Voice session plane (field numbers 20–29 reserved for voice requests).
+    PrepareModelRequest prepare_model = 20;
+    GetVoiceCapabilitiesRequest get_voice_capabilities = 21;
+    StartVoiceSessionRequest start_voice_session = 22;
+    PushAudioChunkRequest push_audio_chunk = 23;
+    FinishUtteranceRequest finish_utterance = 24;
+    UpdateSessionContextRequest update_session_context = 25;
+    CancelVoiceSessionRequest cancel_voice_session = 26;
+    EndVoiceSessionRequest end_voice_session = 27;
   }
 }
 
@@ -35,6 +49,14 @@ message Response {
     OpenWorkspaceResponse open_workspace = 12;
     SearchResponse search = 13;
     ApplyPageUpdateResponse apply_page_update = 14;
+    PrepareModelResponse prepare_model = 20;
+    GetVoiceCapabilitiesResponse get_voice_capabilities = 21;
+    StartVoiceSessionResponse start_voice_session = 22;
+    PushAudioChunkResponse push_audio_chunk = 23;
+    FinishUtteranceResponse finish_utterance = 24;
+    UpdateSessionContextResponse update_session_context = 25;
+    CancelVoiceSessionResponse cancel_voice_session = 26;
+    EndVoiceSessionResponse end_voice_session = 27;
   }
 }
 
@@ -46,6 +68,18 @@ message Event {
     WorkspaceLeaseChanged lease_changed = 10;
     ResourceChanged resource_changed = 11;
     IndexProgress index_progress = 12;
+    // Voice events (field numbers 20–39 reserved).
+    ModelStatusChanged model_status = 20;
+    SessionReady session_ready = 21;
+    SpeechStarted speech_started = 22;
+    PartialTranscript partial_transcript = 23;
+    StableTranscript stable_transcript = 24;
+    FinalTranscript final_transcript = 25;
+    CommandCandidate command_candidate = 26;
+    SessionCompleted session_completed = 27;
+    SessionFailed session_failed = 28;
+    // Capture/queue discontinuity; never silently skip missing PCM sequences.
+    AudioGap audio_gap = 29;
   }
 }
 
@@ -141,4 +175,230 @@ message IndexProgress {
   string phase = 1;
   optional string path = 2;
   optional string detail = 3;
+}
+
+// ---------------------------------------------------------------------------
+// Voice plane (docs/voice/daemon-protocol.md, ADR 0043, voice ADR 0007)
+// Maps domain concepts from crates/lattice-voice/src/protocol.rs onto wire.
+// ---------------------------------------------------------------------------
+
+// How finals are produced (voice ADR 0007). Replaces a misleading boolean
+// "offline_final_decode" capability claim.
+enum FinalizationMode {
+  FINALIZATION_MODE_UNSPECIFIED = 0;
+  // Authoritative flush of the streaming checkpoint (current Unified finish()).
+  FINALIZATION_MODE_STREAMING_FLUSH = 1;
+  // Separate offline encoder in the same model family re-decodes utterance audio.
+  FINALIZATION_MODE_SAME_FAMILY_OFFLINE_REDECODE = 2;
+  // Distinct final model (e.g. Parakeet TDT v2) re-decodes the full utterance.
+  FINALIZATION_MODE_INDEPENDENT_OFFLINE_REDECODE = 3;
+}
+
+// Canonical PCM sample encoding on the wire.
+enum AudioSampleFormat {
+  AUDIO_SAMPLE_FORMAT_UNSPECIFIED = 0;
+  // Packed little-endian IEEE Float32 samples (canonical for FluidAudio).
+  AUDIO_SAMPLE_FORMAT_F32 = 1;
+  // Packed little-endian signed 16-bit integer samples.
+  AUDIO_SAMPLE_FORMAT_I16_LE = 2;
+}
+
+enum ModelState {
+  MODEL_STATE_UNSPECIFIED = 0;
+  MODEL_STATE_UNAVAILABLE = 1;
+  MODEL_STATE_DOWNLOADING = 2;
+  MODEL_STATE_VERIFYING = 3;
+  MODEL_STATE_PREPARING = 4;
+  MODEL_STATE_READY = 5;
+  MODEL_STATE_UNLOADING = 6;
+  MODEL_STATE_FAILED = 7;
+}
+
+enum TranscriptionSessionState {
+  TRANSCRIPTION_SESSION_STATE_UNSPECIFIED = 0;
+  TRANSCRIPTION_SESSION_STATE_CREATED = 1;
+  TRANSCRIPTION_SESSION_STATE_PREPARING = 2;
+  TRANSCRIPTION_SESSION_STATE_READY = 3;
+  TRANSCRIPTION_SESSION_STATE_LISTENING = 4;
+  TRANSCRIPTION_SESSION_STATE_SPEECH_ACTIVE = 5;
+  TRANSCRIPTION_SESSION_STATE_FINALIZING = 6;
+  TRANSCRIPTION_SESSION_STATE_COMPLETED = 7;
+  TRANSCRIPTION_SESSION_STATE_CANCELLED = 8;
+  TRANSCRIPTION_SESSION_STATE_FAILED = 9;
+}
+
+message SpeechCapabilities {
+  bool streaming = 1;
+  bool partial_transcripts = 2;
+  FinalizationMode finalization_mode = 3;
+  bool punctuation = 4;
+  bool word_timestamps = 5;
+  bool language_detection = 6;
+  bool vocabulary_biasing = 7;
+  bool endpoint_detection = 8;
+  repeated string supported_languages = 9;
+}
+
+message ModelStatus {
+  ModelState state = 1;
+  optional string model_version = 2;
+  optional string provider_version = 3;
+  optional string message = 4;
+}
+
+message SessionContext {
+  optional string document_id = 1;
+  repeated string glossary_terms = 2;
+  bool command_mode = 3;
+}
+
+message SpeechSessionConfig {
+  string session_id = 1;
+  optional string language = 2;
+  SessionContext context = 3;
+}
+
+// Download / verify / warm a speech model before sessions.
+message PrepareModelRequest {
+  string model_id = 1;
+  bool warm = 2;
+}
+
+message PrepareModelResponse {
+  ModelStatus status = 1;
+}
+
+message GetVoiceCapabilitiesRequest {}
+
+message GetVoiceCapabilitiesResponse {
+  SpeechCapabilities capabilities = 1;
+}
+
+message StartVoiceSessionRequest {
+  SpeechSessionConfig config = 1;
+}
+
+message StartVoiceSessionResponse {
+  string session_id = 1;
+  uint32 protocol_version = 2;
+  SpeechCapabilities capabilities = 3;
+}
+
+// Stream one PCM chunk. `payload` is packed binary samples matching
+// `sample_format` — never `repeated float` / JSON number arrays.
+message PushAudioChunkRequest {
+  string session_id = 1;
+  uint64 sequence = 2;
+  uint64 captured_at_ns = 3;
+  uint32 sample_rate_hz = 4;
+  // Channel count (typically 1). Proto has no uint8; values above 255 are invalid.
+  uint32 channels = 5;
+  AudioSampleFormat sample_format = 6;
+  bytes payload = 7;
+}
+
+message PushAudioChunkResponse {
+  // Echo of the accepted chunk sequence for client backpressure accounting.
+  uint64 sequence = 1;
+}
+
+message FinishUtteranceRequest {
+  string session_id = 1;
+  string utterance_id = 2;
+}
+
+message FinishUtteranceResponse {}
+
+message UpdateSessionContextRequest {
+  string session_id = 1;
+  SessionContext context = 2;
+}
+
+message UpdateSessionContextResponse {}
+
+message CancelVoiceSessionRequest {
+  string session_id = 1;
+  optional string reason = 2;
+}
+
+message CancelVoiceSessionResponse {}
+
+message EndVoiceSessionRequest {
+  string session_id = 1;
+}
+
+message EndVoiceSessionResponse {}
+
+message ModelStatusChanged {
+  ModelStatus status = 1;
+}
+
+message SessionReady {
+  string session_id = 1;
+  uint32 protocol_version = 2;
+  SpeechCapabilities capabilities = 3;
+}
+
+message SpeechStarted {
+  string session_id = 1;
+  string utterance_id = 2;
+  uint64 started_at_ms = 3;
+}
+
+message PartialTranscript {
+  string session_id = 1;
+  string utterance_id = 2;
+  uint64 revision = 3;
+  string text = 4;
+  uint32 stable_prefix_bytes = 5;
+  uint64 started_at_ms = 6;
+  uint64 ended_at_ms = 7;
+}
+
+message StableTranscript {
+  string session_id = 1;
+  string utterance_id = 2;
+  uint64 revision = 3;
+  string text = 4;
+  uint32 stable_prefix_bytes = 5;
+}
+
+message FinalTranscript {
+  string session_id = 1;
+  string utterance_id = 2;
+  uint64 replaces_revision = 3;
+  string text = 4;
+  FinalizationMode finalization_mode = 5;
+  uint64 duration_ms = 6;
+  uint64 processing_ms = 7;
+}
+
+message CommandCandidate {
+  string session_id = 1;
+  string utterance_id = 2;
+  string command_id = 3;
+  float confidence = 4;
+  string raw_text = 5;
+}
+
+message SessionCompleted {
+  string session_id = 1;
+  TranscriptionSessionState state = 2;
+}
+
+message SessionFailed {
+  string session_id = 1;
+  string message = 2;
+  TranscriptionSessionState state = 3;
+}
+
+// Emitted when capture/queue drops frames or sequence is non-contiguous.
+message AudioGap {
+  string session_id = 1;
+  // Last contiguous sequence observed before the discontinuity.
+  uint64 last_contiguous_sequence = 2;
+  // Next sequence observed after the gap (exclusive of missing range).
+  uint64 next_sequence = 3;
+  uint64 detected_at_ns = 4;
+  optional string reason = 5;
 }

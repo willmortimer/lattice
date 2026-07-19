@@ -2,7 +2,9 @@
 //!
 //! Frames are length-delimited Protobuf [`Envelope`] messages. Domain payloads
 //! include Health/Ping, OpenWorkspace/Search, ApplyPageUpdate (D3 one-writer
-//! mutations), and sequenced ResourceChanged / IndexProgress events (D4).
+//! mutations), sequenced ResourceChanged / IndexProgress events (D4), and the
+//! voice session plane (PrepareModel / StartVoiceSession / PushAudioChunk /
+//! transcripts / AudioGap) on the same Envelope (ADR 0043).
 
 mod error;
 mod framing;
