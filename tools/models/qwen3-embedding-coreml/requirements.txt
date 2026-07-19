@@ -1,0 +1,11 @@
+# Placeholder pins for Core ML conversion research.
+# Release engineering will replace these with tested, reproducible locks
+# (requirements.lock) when conversion is production-ready.
+#
+# Do not assume these versions convert Qwen3 cleanly — verify before pinning.
+
+torch==2.5.1
+coremltools==8.1
+transformers==4.47.1
+numpy==2.2.1
+safetensors==0.5.2

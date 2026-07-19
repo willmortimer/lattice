@@ -107,3 +107,10 @@ Tests use the fake backend and tiny fixture artifacts only.
 
 Clients talk over UDS. If the host process exits, the client surfaces an I/O /
 connection error; workspace state in other processes is unaffected.
+
+## Core ML (research only)
+
+Core ML conversion and benchmarking live under
+[`tools/models/qwen3-embedding-coreml/`](../../tools/models/qwen3-embedding-coreml/).
+It is not a production backend and does not change the default `fake` / `llama-cpp`
+selection here.
