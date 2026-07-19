@@ -8,6 +8,7 @@ members = [
     "crates/lattice-storage",
     "crates/lattice-commands",
     "crates/lattice-index",
+    "crates/lattice-embedding",
     "crates/lattice-data",
     "crates/lattice-theme",
     "crates/lattice-handlers",
@@ -30,6 +31,7 @@ lattice-profile = { path = "crates/lattice-profile" }
 lattice-storage = { path = "crates/lattice-storage" }
 lattice-commands = { path = "crates/lattice-commands" }
 lattice-index = { path = "crates/lattice-index" }
+lattice-embedding = { path = "crates/lattice-embedding" }
 lattice-data = { path = "crates/lattice-data" }
 lattice-theme = { path = "crates/lattice-theme" }
 lattice-handlers = { path = "crates/lattice-handlers" }

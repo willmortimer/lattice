@@ -2406,6 +2406,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-embedding"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "lattice-handlers"
 version = "0.1.0"
 dependencies = [
@@ -2424,6 +2438,7 @@ version = "0.1.0"
 dependencies = [
  "hex",
  "lattice-core",
+ "lattice-embedding",
  "rusqlite",
  "serde",
  "serde_json",
