@@ -1,7 +1,8 @@
 //! Shared LatticeClient contract for embedded and daemon IPC modes (ADR 0041).
 //!
 //! D0 provides Health/Ping parity across [`EmbeddedClient`] and [`DaemonClient`].
-//! Event subscription and full runtime wiring arrive in later migration phases.
+//! D1 lets [`EmbeddedClient`] optionally dispatch OpenWorkspace/Search through
+//! an in-process [`lattice_runtime::LatticeRuntime`].
 
 mod client;
 mod daemon;
@@ -21,6 +22,8 @@ pub use handshake::{
 
 // Re-export protocol types callers need for request construction.
 pub use lattice_protocol::{
-    request, response, Event, HealthRequest, HealthResponse, PingRequest, PingResponse, Request,
-    Response, PROTOCOL_VERSION,
+    request, response, Event, HealthRequest, HealthResponse, OpenWorkspaceRequest,
+    OpenWorkspaceResponse, PingRequest, PingResponse, Request, Response, SearchRequest,
+    SearchResponse, PROTOCOL_VERSION,
 };
+pub use lattice_runtime::{default_runtime, LatticeRuntime, WorkspaceSession};
