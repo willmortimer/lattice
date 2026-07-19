@@ -277,6 +277,7 @@ fn start_voice_session_request() -> lattice_protocol::Envelope {
                             glossary_terms: vec!["Lattice".into(), "latticed".into()],
                             command_mode: false,
                         }),
+                        endpoint: None,
                     }),
                 },
             )),

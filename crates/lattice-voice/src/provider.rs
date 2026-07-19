@@ -87,7 +87,8 @@ impl NullSpeechProvider {
                 word_timestamps: false,
                 language_detection: false,
                 vocabulary_biasing: false,
-                endpoint_detection: false,
+                // In-process energy VAD + silence debounce (Unified has no EOU API).
+                endpoint_detection: true,
                 supported_languages: vec!["en".into()],
             },
             offline: Arc::new(UnimplementedOfflineRedecode),
@@ -306,6 +307,7 @@ mod tests {
                 known_paths: Vec::new(),
                 command_mode: false,
             },
+            endpoint: crate::endpoint::EndpointOptions::default(),
         }
     }
 

@@ -100,7 +100,8 @@ impl FluidAudioSpeechProvider {
             word_timestamps: false,
             language_detection: false,
             vocabulary_biasing: false,
-            endpoint_detection: false,
+            // Wired via Swift energy VAD (+ EOU callback when using StreamingEouAsrManager).
+            endpoint_detection: true,
             supported_languages: vec!["en".into()],
         }
     }
@@ -425,7 +426,9 @@ fn spawn_event_dispatcher(
                         guard.revision += 1;
                         guard.final_text = Some(event.text.clone());
                     }
-                    LatticeVoiceEventKind::Error => {}
+                    LatticeVoiceEventKind::SpeechStarted
+                    | LatticeVoiceEventKind::Endpoint
+                    | LatticeVoiceEventKind::Error => {}
                 }
                 guard.revision
             };
@@ -464,6 +467,24 @@ fn spawn_event_dispatcher(
                         processing_ms: 0,
                     },
                 )),
+                LatticeVoiceEventKind::SpeechStarted => events.send(VoiceEvent::SpeechStarted {
+                    session_id: session_id.clone(),
+                    utterance_id: utterance_id.clone(),
+                    started_at_ms: 0,
+                }),
+                LatticeVoiceEventKind::Endpoint => {
+                    let reason = match event.error_code {
+                        1 => lattice_voice::EndpointReason::MaxUtteranceLength,
+                        2 => lattice_voice::EndpointReason::ProviderEou,
+                        _ => lattice_voice::EndpointReason::SilenceDebounce,
+                    };
+                    events.send(VoiceEvent::EndpointDetected {
+                        session_id: session_id.clone(),
+                        utterance_id: utterance_id.clone(),
+                        ended_at_ms: 0,
+                        reason,
+                    })
+                }
                 LatticeVoiceEventKind::Error => {
                     if event.error_code == 0 {
                         continue;
@@ -515,6 +536,7 @@ mod tests {
                 known_paths: Vec::new(),
                 command_mode: false,
             },
+            endpoint: lattice_voice::EndpointOptions::default(),
         }
     }
 
@@ -542,6 +564,52 @@ mod tests {
             provider.capabilities().finalization_mode,
             FinalizationMode::StreamingFlush
         );
+    }
+
+    #[tokio::test]
+    async fn capabilities_report_endpoint_detection() {
+        let bridge = Arc::new(MockBridge::new(LATTICE_VOICE_BRIDGE_ABI_VERSION));
+        let provider = FluidAudioSpeechProvider::with_backend(bridge, PathBuf::new());
+        assert!(provider.capabilities().endpoint_detection);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn mock_bridge_maps_speech_started_and_endpoint() {
+        let bridge = Arc::new(MockBridge::new(LATTICE_VOICE_BRIDGE_ABI_VERSION));
+        let provider = FluidAudioSpeechProvider::with_backend(bridge.clone(), PathBuf::new());
+        provider
+            .prepare(PrepareModelRequest {
+                model_id: DEFAULT_MODEL_ID.into(),
+                warm: true,
+            })
+            .await
+            .unwrap();
+
+        let (events, mut rx) = SpeechEventSender::pair();
+        let _session = provider
+            .start_session(sample_config(), events)
+            .await
+            .unwrap();
+
+        assert!(bridge.emit_speech_started());
+        assert!(bridge.emit_endpoint(0));
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let mut saw_started = false;
+        let mut saw_endpoint = false;
+        while let Ok(event) = rx.try_recv() {
+            match event {
+                VoiceEvent::SpeechStarted { .. } => saw_started = true,
+                VoiceEvent::EndpointDetected {
+                    reason: lattice_voice::EndpointReason::SilenceDebounce,
+                    ..
+                } => saw_endpoint = true,
+                _ => {}
+            }
+        }
+        assert!(saw_started);
+        assert!(saw_endpoint);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

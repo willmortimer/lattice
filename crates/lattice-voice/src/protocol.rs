@@ -106,11 +106,24 @@ pub struct SessionContext {
     pub command_mode: bool,
 }
 
+/// Why an utterance endpoint was declared (VAD / continuous policy).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EndpointReason {
+    SilenceDebounce,
+    MaxUtteranceLength,
+    /// FluidAudio EOU callback (historical EOU path) or bridge-native detector.
+    ProviderEou,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpeechSessionConfig {
     pub session_id: VoiceSessionId,
     pub language: Option<LanguageTag>,
     pub context: SessionContext,
+    /// Continuous dictation / silence policy. Defaults keep hold-to-talk unchanged.
+    #[serde(default)]
+    pub endpoint: crate::endpoint::EndpointOptions,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -213,6 +226,13 @@ pub enum VoiceEvent {
         session_id: VoiceSessionId,
         utterance_id: UtteranceId,
         started_at_ms: u64,
+    },
+    /// Utterance boundary from endpoint policy (silence debounce, max length, or EOU).
+    EndpointDetected {
+        session_id: VoiceSessionId,
+        utterance_id: UtteranceId,
+        ended_at_ms: u64,
+        reason: EndpointReason,
     },
     PartialTranscript(PartialTranscriptPayload),
     StableTranscript(StableTranscriptPayload),

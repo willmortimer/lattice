@@ -332,6 +332,7 @@ pub(super) async fn start_session(
                     session_id: session_id.clone(),
                     language: Some("en".into()),
                     context: Some(context),
+                    endpoint: None,
                 }),
             })),
         })
@@ -433,6 +434,7 @@ pub(super) async fn start_session(
                 },
                 event::Body::SessionReady(_)
                 | event::Body::SpeechStarted(_)
+                | event::Body::EndpointDetected(_)
                 | event::Body::SessionCompleted(_)
                 | event::Body::CommandCandidate(_) => continue,
                 _ => continue,

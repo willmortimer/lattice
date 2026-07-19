@@ -405,19 +405,21 @@ Use:
 
 ## 11. No endpoint detection or utterance segmentation is active
 
-The current provider reports:
+~~The current provider reports `endpoint_detection: false`.~~
 
-```text
-endpoint_detection: false
-```
+**Status (v13):** Endpoint policy is wired. `SpeechCapabilities.endpoint_detection`
+is `true` for the FluidAudio / null providers. Lattice owns energy VAD + silence
+debounce + max utterance length (Unified has no FluidAudio `setEouCallback`).
+Continuous mode auto-finalizes via `EndpointOptions.auto_finalize_on_endpoint`
+or `LATTICE_VOICE_AUTO_FINALIZE_ON_ENDPOINT=1`. Hold-to-talk still finalizes via
+explicit `FinishUtterance` without requiring VAD onset.
 
-Hold-to-talk can work without VAD, but continuous dictation and Quick Note
-need:
+Suggested knobs (defaults):
 
 - Speech start.
 - Speech end.
-- Silence debounce.
-- Maximum utterance length.
+- Silence debounce (default 800 ms domain / 1280 ms Swift bridge to match EOU).
+- Maximum utterance length (default 45 s).
 - Interruption.
 - Cancellation.
 - Optional automatic finalization.
