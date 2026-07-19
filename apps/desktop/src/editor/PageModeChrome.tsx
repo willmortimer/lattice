@@ -1,3 +1,4 @@
+import type { PageWidth } from "../lib/pageWidth";
 import type { PageMode } from "./pageDraft";
 
 const MODE_LABELS: Record<PageMode, string> = {
@@ -6,13 +7,27 @@ const MODE_LABELS: Record<PageMode, string> = {
   source: "Source",
 };
 
+const WIDTH_LABELS: Record<PageWidth, string> = {
+  standard: "Standard",
+  wide: "Wide",
+  full: "Full",
+};
+
 export interface PageModeChromeProps {
   mode: PageMode;
   sourceParseError: string | null;
   onModeChange: (mode: PageMode) => void;
+  pageWidth: PageWidth;
+  onPageWidthChange: (width: PageWidth) => void;
 }
 
-export function PageModeChrome({ mode, sourceParseError, onModeChange }: PageModeChromeProps) {
+export function PageModeChrome({
+  mode,
+  sourceParseError,
+  onModeChange,
+  pageWidth,
+  onPageWidthChange,
+}: PageModeChromeProps) {
   return (
     <div className="page-mode-chrome">
       <div className="page-mode-tabs" role="tablist" aria-label="Page view mode">
@@ -26,6 +41,22 @@ export function PageModeChrome({ mode, sourceParseError, onModeChange }: PageMod
             onClick={() => onModeChange(candidate)}
           >
             {MODE_LABELS[candidate]}
+          </button>
+        ))}
+      </div>
+      <div className="page-width-tabs" role="radiogroup" aria-label="Page width">
+        {(Object.keys(WIDTH_LABELS) as PageWidth[]).map((candidate) => (
+          <button
+            key={candidate}
+            type="button"
+            role="radio"
+            aria-checked={pageWidth === candidate}
+            className={
+              pageWidth === candidate ? "page-mode-tab page-mode-tab-active" : "page-mode-tab"
+            }
+            onClick={() => onPageWidthChange(candidate)}
+          >
+            {WIDTH_LABELS[candidate]}
           </button>
         ))}
       </div>

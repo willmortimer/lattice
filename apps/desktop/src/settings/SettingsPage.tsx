@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import { inBrowser } from "../demo";
 import type { ThemeCatalogPayload } from "../theme";
 import type { WorkspaceStartupSettings } from "../lib/profile";
+import type { PageWidth } from "../lib/pageWidth";
 import { getVoiceStatus, listenVoiceEvents, prepareVoiceModel, type VoiceStatus } from "../lib/voice";
 import type { WorkspaceSnapshot } from "../types";
 import { HistoryRetentionSettings } from "./HistoryRetentionSettings";
@@ -227,6 +228,23 @@ export function SettingsPage({
               >
                 <option value="navigate">Navigate</option>
                 <option value="inspect">Inspect first</option>
+              </select>
+            </SettingRow>
+            <SettingRow
+              title="Page width"
+              description="How wide the page column is. Standard keeps a readable measure; wide and full use more of the window."
+            >
+              <select
+                value={settings.editor.pageWidth}
+                onChange={(event) =>
+                  update("editor", {
+                    pageWidth: event.currentTarget.value as PageWidth,
+                  })
+                }
+              >
+                <option value="standard">Standard</option>
+                <option value="wide">Wide</option>
+                <option value="full">Full</option>
               </select>
             </SettingRow>
           </>

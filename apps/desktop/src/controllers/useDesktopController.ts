@@ -119,6 +119,9 @@ export function useDesktopController() {
     document.documentElement.dataset.motion = settings.performance.reducedMotion;
   }, [settings.performance.reducedMotion]);
   useEffect(() => {
+    document.documentElement.dataset.pageWidth = settings.editor.pageWidth;
+  }, [settings.editor.pageWidth]);
+  useEffect(() => {
     if (profile.sidebarWidth && profile.sidebarWidth >= 210 && profile.sidebarWidth <= 480) {
       setSidebarWidth(profile.sidebarWidth);
     }

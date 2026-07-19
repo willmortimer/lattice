@@ -47,6 +47,8 @@ export function PageResourceRenderer({
           spellcheck={settings.editor.spellcheck}
           slashCommands={settings.editor.slashCommands}
           showFrontmatter={settings.editor.showFrontmatter}
+          pageWidth={settings.editor.pageWidth}
+          onPageWidthChange={callbacks.onPageWidthChange}
           onRevisionChange={callbacks.onRevisionChange}
         />
       </AssetContextProvider>

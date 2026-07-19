@@ -7,6 +7,9 @@ import {
   serializeResourceTreeCollapseState,
   type ResourceTreeCollapseState,
 } from "./treeCollapse";
+import { normalizePageWidth, type PageWidth } from "./pageWidth";
+
+export type { PageWidth };
 
 export interface RecentWorkspace {
   root: string;
@@ -45,6 +48,7 @@ export interface DesktopSettings {
     slashCommands: boolean;
     showFrontmatter: boolean;
     linkClickBehavior: "navigate" | "inspect";
+    pageWidth: PageWidth;
   };
   files: {
     confirmCloseWithUnsavedChanges: boolean;
@@ -118,6 +122,7 @@ export function defaultDesktopSettings(): DesktopSettings {
       slashCommands: true,
       showFrontmatter: true,
       linkClickBehavior: "navigate",
+      pageWidth: "standard",
     },
     files: { confirmCloseWithUnsavedChanges: true },
     keybindings: {
@@ -231,11 +236,21 @@ export async function loadProfile(): Promise<ProfileSnapshot> {
 }
 
 function normalizeProfile(profile: ProfileSnapshot): ProfileSnapshot {
+  const desktopDefaults = defaultDesktopSettings();
   return {
     ...profile,
     resourceTreeCollapsedByWorkspace: profile.resourceTreeCollapsedByWorkspace ?? {},
     settings: {
       ...profile.settings,
+      desktop: {
+        ...desktopDefaults,
+        ...profile.settings.desktop,
+        editor: {
+          ...desktopDefaults.editor,
+          ...profile.settings.desktop?.editor,
+          pageWidth: normalizePageWidth(profile.settings.desktop?.editor?.pageWidth),
+        },
+      },
       workspaces: {
         ...defaultWorkspaceStartupSettings(),
         ...profile.settings.workspaces,
