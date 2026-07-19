@@ -12,9 +12,11 @@ sandboxing.
 
 ## Decision
 
-The **Tauri client** (or Quick Note helper) owns microphone access and sends
-normalized PCM to the voice service / `latticed`. The daemon does not access
-audio hardware.
+The **trusted native desktop client** (or Quick Note helper) owns microphone
+access via platform capture (`AVAudioEngine` on macOS) and sends normalized
+PCM to the voice service / `latticed`. The daemon does not access audio
+hardware. “Client-owned” does **not** mean WebView/`getUserMedia` for
+production — see [ADR 0008](0008-native-client-capture.md).
 
 ## Consequences
 
