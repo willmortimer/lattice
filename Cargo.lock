@@ -2325,7 +2325,9 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "bytes",
+ "lattice-core",
  "lattice-protocol",
+ "lattice-runtime",
  "prost",
  "tempfile",
  "thiserror 2.0.18",
@@ -2440,6 +2442,7 @@ dependencies = [
  "lattice-commands",
  "lattice-core",
  "lattice-index",
+ "lattice-runtime",
  "lattice-storage",
  "serde",
  "serde_yaml",
@@ -2490,6 +2493,17 @@ dependencies = [
  "protoc-bin-vendored",
  "thiserror 2.0.18",
  "tokio-util",
+]
+
+[[package]]
+name = "lattice-runtime"
+version = "0.1.0"
+dependencies = [
+ "lattice-commands",
+ "lattice-core",
+ "lattice-index",
+ "tempfile",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

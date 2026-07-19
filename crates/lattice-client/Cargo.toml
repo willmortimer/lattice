@@ -10,10 +10,12 @@ license.workspace = true
 async-trait.workspace = true
 bytes.workspace = true
 lattice-protocol.workspace = true
+lattice-runtime.workspace = true
 prost.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
 tokio-util = { workspace = true, features = ["codec"] }
 
 [dev-dependencies]
+lattice-core.workspace = true
 tempfile = "3"

@@ -12,6 +12,7 @@ members = [
     "crates/lattice-data",
     "crates/lattice-theme",
     "crates/lattice-handlers",
+    "crates/lattice-runtime",
     "crates/lattice-terminal",
     "crates/lattice-voice",
     "crates/lattice-voice-macos",
@@ -36,6 +37,7 @@ lattice-embedding = { path = "crates/lattice-embedding" }
 lattice-data = { path = "crates/lattice-data" }
 lattice-theme = { path = "crates/lattice-theme" }
 lattice-handlers = { path = "crates/lattice-handlers" }
+lattice-runtime = { path = "crates/lattice-runtime" }
 lattice-terminal = { path = "crates/lattice-terminal" }
 lattice-voice = { path = "crates/lattice-voice" }
 lattice-voice-macos = { path = "crates/lattice-voice-macos" }
