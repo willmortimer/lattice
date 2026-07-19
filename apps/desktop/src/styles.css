@@ -914,6 +914,8 @@ html[data-platform="macos"] .startup-splash {
   cursor: grab;
   opacity: 0;
   transition: opacity 120ms ease;
+  user-select: none;
+  -webkit-user-drag: element;
 }
 
 .page-editor-content .ProseMirror:hover .block-drag-handle,

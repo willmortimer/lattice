@@ -3,10 +3,15 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
 const key = new PluginKey("latticeBlockDragHandle");
+export const BLOCK_DRAG_MIME = "application/x-lattice-block-pos";
 
 /**
  * Pointer drag handles for top-level blocks. Keyboard Alt+↑/↓ move commands
  * from StarterKit remain available; this only adds a mouse affordance.
+ *
+ * HTML5 drag from inside `contenteditable` only works when the handle is
+ * marked `contentEditable=false` and mousedown does not hand focus back to
+ * ProseMirror (which cancels the drag in WebKit/Chromium).
  */
 export const BlockDragHandle = Extension.create({
   name: "blockDragHandle",
@@ -29,13 +34,18 @@ export const BlockDragHandle = Extension.create({
                     handle.className = "block-drag-handle";
                     handle.title = "Drag to reorder block";
                     handle.setAttribute("aria-label", "Drag to reorder block");
+                    handle.contentEditable = "false";
                     handle.draggable = true;
                     handle.dataset.blockPos = String(offset);
+                    handle.addEventListener("mousedown", (event) => {
+                      // Keep ProseMirror from taking selection/focus before dragstart.
+                      event.preventDefault();
+                    });
                     handle.addEventListener("dragstart", (event) => {
-                      event.dataTransfer?.setData(
-                        "application/x-lattice-block-pos",
-                        String(handle.dataset.blockPos),
-                      );
+                      event.stopPropagation();
+                      const pos = handle.dataset.blockPos ?? String(offset);
+                      event.dataTransfer?.setData(BLOCK_DRAG_MIME, pos);
+                      event.dataTransfer?.setData("text/plain", pos);
                       if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
                       handle.classList.add("block-drag-handle-active");
                     });
@@ -44,7 +54,7 @@ export const BlockDragHandle = Extension.create({
                     });
                     return handle;
                   },
-                  { side: -1 },
+                  { side: -1, key: `block-drag-${offset}` },
                 ),
               );
             });
@@ -52,7 +62,7 @@ export const BlockDragHandle = Extension.create({
           },
           handleDOMEvents: {
             dragover(_view, event) {
-              if (!event.dataTransfer?.types.includes("application/x-lattice-block-pos")) {
+              if (!event.dataTransfer?.types.includes(BLOCK_DRAG_MIME)) {
                 return false;
               }
               event.preventDefault();
@@ -60,7 +70,7 @@ export const BlockDragHandle = Extension.create({
               return true;
             },
             drop(view, event) {
-              const raw = event.dataTransfer?.getData("application/x-lattice-block-pos");
+              const raw = event.dataTransfer?.getData(BLOCK_DRAG_MIME);
               if (!raw) return false;
               event.preventDefault();
               const fromPos = Number(raw);
