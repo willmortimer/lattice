@@ -18,6 +18,7 @@ import type { WorkspaceStartupSettings } from "../lib/profile";
 import type { WorkspaceSnapshot } from "../types";
 import { HistoryRetentionSettings } from "./HistoryRetentionSettings";
 import type { AppSettings } from "./model";
+import { TOGGLEABLE_WORKSPACE_CAPABILITIES } from "./workspaceCapabilities";
 
 type SettingsSection =
   | "appearance"
@@ -385,12 +386,8 @@ export function SettingsPage({
               These switches control bundled shell surfaces. Canonical formats remain readable
               even when an optional renderer is hidden.
             </p>
-            {(["canvas", "sqlite"] as const).map((key) => (
-              <SettingRow
-                key={key}
-                title={key === "sqlite" ? "Data apps" : "Canvas"}
-                description="Workspace-owned and materialized through the semantic manifest command."
-              >
+            {TOGGLEABLE_WORKSPACE_CAPABILITIES.map(({ key, title, description }) => (
+              <SettingRow key={key} title={title} description={description}>
                 <Toggle
                   label={key}
                   checked={workspace.capabilities.includes(key)}
