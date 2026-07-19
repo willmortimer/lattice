@@ -191,6 +191,7 @@ pub fn run() {
             voice::voice_push_audio,
             voice::voice_finish_session,
             voice::voice_cancel_session,
+            voice::voice_cancel_active,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
