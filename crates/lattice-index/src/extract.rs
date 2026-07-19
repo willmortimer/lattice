@@ -37,6 +37,8 @@ pub enum LinkKind {
 pub struct PageIndexData {
     pub title: String,
     pub body: String,
+    /// Byte offset of [`Self::body`] within the original page source.
+    pub body_start_byte: usize,
     pub headings: Vec<Heading>,
     pub links: Vec<ExtractedLink>,
     pub tags: Vec<String>,
@@ -132,9 +134,11 @@ pub fn parse_page(path: &Path, content: &str) -> PageIndexData {
     tags.sort();
     tags.dedup();
 
+    let body_start_byte = body.as_ptr() as usize - content.as_ptr() as usize;
     PageIndexData {
         title,
         body: body.to_string(),
+        body_start_byte,
         headings,
         links,
         tags,
