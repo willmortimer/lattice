@@ -8,6 +8,7 @@ import {
 export {
   demoCanvas,
   demoDataApp,
+  demoDataApps,
   demoNotebooks,
   demoPages,
   demoSnapshot,
