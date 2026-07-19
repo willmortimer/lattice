@@ -18,6 +18,12 @@ tauri-build = { version = "2", features = [] }
 # Enables the Playwright socket bridge for native WebView E2E / perf.
 # Keep off for normal runs; use `pnpm tauri:dev:e2e` or `--features e2e-testing`.
 e2e-testing = []
+# Local FluidAudio dictation (macOS arm64). Links the Swift bridge via
+# `lattice-voice-macos/link-bridge`.
+voice = ["dep:lattice-voice", "dep:lattice-voice-macos", "dep:bytes", "lattice-voice-macos/link-bridge"]
+# Voice is opt-in so Linux CI and machines without the Swift dylib still build.
+# Dev: `cargo tauri dev --features voice` (or pnpm script).
+default = []
 
 [dependencies]
 tauri = { version = "2", features = [] }
@@ -41,6 +47,11 @@ lattice-handlers.workspace = true
 lattice-terminal.workspace = true
 notify.workspace = true
 notify-debouncer-full.workspace = true
+tokio.workspace = true
+# Optional: enabled by the `voice` feature (macOS FluidAudio path).
+lattice-voice = { workspace = true, optional = true }
+lattice-voice-macos = { workspace = true, optional = true }
+bytes = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = "3"

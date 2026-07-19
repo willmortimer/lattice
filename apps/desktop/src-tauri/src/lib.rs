@@ -8,6 +8,7 @@ mod revisions;
 mod search;
 mod terminal;
 mod theme;
+mod voice;
 mod watcher;
 
 #[cfg(debug_assertions)]
@@ -26,7 +27,8 @@ pub fn run() {
         .manage(watcher::WatcherState::default())
         .manage(terminal::TerminalState::default())
         .manage(theme::ThemeWatchState::default())
-        .manage(resource_links::ResourceCatalogState::default());
+        .manage(resource_links::ResourceCatalogState::default())
+        .manage(voice::VoiceState::default());
 
     // Socket bridge for `@srsholmes/tauri-playwright` (WKWebView / WebView2 / WebKitGTK).
     // Only listen when explicitly enabled so normal debug runs stay quiet.
@@ -183,6 +185,12 @@ pub fn run() {
             canvas::canvas_place_resource,
             canvas::canvas_move_nodes,
             canvas::canvas_remove_nodes,
+            voice::voice_status,
+            voice::voice_prepare,
+            voice::voice_start_session,
+            voice::voice_push_audio,
+            voice::voice_finish_session,
+            voice::voice_cancel_session,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
