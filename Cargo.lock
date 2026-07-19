@@ -2411,6 +2411,8 @@ dependencies = [
  "lattice-profile",
  "lattice-protocol",
  "lattice-runtime",
+ "lattice-voice",
+ "lattice-voice-host",
  "serde",
  "serde_json",
  "tempfile",

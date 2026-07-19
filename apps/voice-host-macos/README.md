@@ -83,5 +83,5 @@ connection error; workspace state in other processes is unaffected.
 
 ## Client library
 
-`VoiceHostClient` (in this crate) is the EmbedHostClient analogue for later
-`latticed` supervision. It is not wired into the daemon yet.
+`VoiceHostClient` (in this crate) is the EmbedHostClient analogue used by
+`latticed` supervision (`apps/daemon/src/voice_host.rs`).

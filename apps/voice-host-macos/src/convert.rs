@@ -197,6 +197,7 @@ fn session_config_from_proto(config: ProtoSessionConfig) -> SpeechSessionConfig 
             .unwrap_or(SessionContext {
                 document_id: None,
                 glossary_terms: Vec::new(),
+                known_paths: Vec::new(),
                 command_mode: false,
             }),
     }
@@ -206,6 +207,7 @@ fn session_context_from_proto(context: ProtoSessionContext) -> SessionContext {
     SessionContext {
         document_id: context.document_id,
         glossary_terms: context.glossary_terms,
+        known_paths: Vec::new(),
         command_mode: context.command_mode,
     }
 }
@@ -245,6 +247,7 @@ fn update_context_from_proto(req: ProtoUpdateContext) -> UpdateSessionContextReq
             .unwrap_or(SessionContext {
                 document_id: None,
                 glossary_terms: Vec::new(),
+                known_paths: Vec::new(),
                 command_mode: false,
             }),
     }
