@@ -69,7 +69,7 @@ impl NullSpeechProvider {
             capabilities: SpeechCapabilities {
                 streaming: true,
                 partial_transcripts: true,
-                offline_final_decode: true,
+                finalization_mode: crate::protocol::FinalizationMode::StreamingFlush,
                 punctuation: false,
                 word_timestamps: false,
                 language_detection: false,
@@ -183,7 +183,7 @@ impl SpeechSession for NullSpeechSession {
             utterance_id: self.utterance_id.clone(),
             replaces_revision: self.revision,
             text: final_text,
-            decode_mode: crate::protocol::DecodeMode::Offline,
+            finalization_mode: crate::protocol::FinalizationMode::StreamingFlush,
             duration_ms: 0,
             processing_ms: 0,
         };
@@ -267,6 +267,9 @@ mod tests {
         let final_transcript = session.finish_utterance().await.unwrap();
 
         assert!(matches!(rx.recv().await.unwrap(), VoiceEvent::PartialTranscript(_)));
-        assert!(final_transcript.text.contains("final"));
+        assert_eq!(
+            final_transcript.finalization_mode,
+            crate::protocol::FinalizationMode::StreamingFlush
+        );
     }
 }

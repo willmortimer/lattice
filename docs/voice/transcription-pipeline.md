@@ -112,7 +112,7 @@ Example final event:
   "utterance_id": "utt_7",
   "replaces_revision": 14,
   "text": "The application architecture should separate audio capture from inference.",
-  "decode_mode": "offline",
+  "finalization_mode": "streaming_flush",
   "duration_ms": 5120,
   "processing_ms": 92
 }

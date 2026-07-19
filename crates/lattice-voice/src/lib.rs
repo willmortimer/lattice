@@ -13,7 +13,8 @@ pub use error::SpeechError;
 pub use in_process::{record_transcript_revision, InProcessVoiceService};
 pub use protocol::{
     AudioChunk, AudioSampleFormat, CancelVoiceSessionRequest, CommandCandidatePayload,
-    DecodeMode, EndVoiceSessionRequest, FinalTranscript, FinishUtteranceRequest, LanguageTag,
+    EndVoiceSessionRequest, FinalTranscript, FinalizationMode, FinishUtteranceRequest,
+    LanguageTag,
     ModelState, ModelStatus, PartialTranscriptPayload, PrepareModelRequest, PROTOCOL_VERSION,
     SessionContext, SpeechCapabilities, SpeechSessionConfig, StableTranscriptPayload,
     StartVoiceSessionRequest, TranscriptionSessionState, UpdateSessionContextRequest, UtteranceId,
