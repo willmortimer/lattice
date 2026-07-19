@@ -418,6 +418,8 @@ pub struct EditorSettings {
     pub show_frontmatter: bool,
     #[serde(default = "default_link_behavior")]
     pub link_click_behavior: String,
+    #[serde(default = "default_page_width")]
+    pub page_width: String,
 }
 
 impl Default for EditorSettings {
@@ -428,6 +430,7 @@ impl Default for EditorSettings {
             slash_commands: true,
             show_frontmatter: true,
             link_click_behavior: default_link_behavior(),
+            page_width: default_page_width(),
         }
     }
 }
@@ -596,6 +599,9 @@ fn default_autosave() -> u64 {
 }
 fn default_link_behavior() -> String {
     "navigate".into()
+}
+fn default_page_width() -> String {
+    "standard".into()
 }
 fn search_key() -> String {
     "Mod+K".into()

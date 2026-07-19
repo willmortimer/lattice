@@ -55,6 +55,7 @@ import { applyModeSwitch, bodyForPersistence, type PageMode } from "./pageDraft"
 import { StaleRevisionError, type PageIO } from "./pageIO";
 import { type SaveState } from "./saveState";
 import { KindMark } from "../KindMark";
+import type { PageWidth } from "../lib/pageWidth";
 import type { ResourceLinkTarget } from "../lib/resourceLinks";
 export { isUnsaved, saveIndicatorText, type SaveState } from "./saveState";
 
@@ -120,6 +121,8 @@ interface PageEditorProps {
   spellcheck?: boolean;
   slashCommands?: boolean;
   showFrontmatter?: boolean;
+  pageWidth?: PageWidth;
+  onPageWidthChange?: (width: PageWidth) => void;
 }
 
 /** Imperative escape hatch for a parent that needs the live buffer outside
@@ -163,6 +166,8 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     spellcheck = true,
     slashCommands = true,
     showFrontmatter = true,
+    pageWidth = "standard",
+    onPageWidthChange,
   },
   ref,
 ) {
@@ -452,7 +457,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
           bodyForPersistence(modeRef.current, draftBodyRef.current, editor?.getJSON() ?? null),
         ),
       beginDictation: () => {
-        if (!editor) return 0;
+        if (!editor) return 1;
         const from = editor.state.selection.from;
         editor.commands.focus();
         return from;
@@ -470,15 +475,16 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
       commitDictationFinal: (text: string, from: number) => {
         if (!editor) return;
         const clear: DictationProvisionalState = { text: "", from: 0 };
-        if (!text.trim()) {
-          editor.view.dispatch(editor.state.tr.setMeta(dictationProvisionalKey, clear));
-          return;
-        }
-        const insertAt = Math.min(Math.max(0, from), editor.state.doc.content.size);
-        const tr = editor.state.tr
-          .setMeta(dictationProvisionalKey, clear)
-          .insertText(text, insertAt);
-        editor.view.dispatch(tr);
+        // Clear ghost text first so italics cannot linger beside the insert.
+        editor.view.dispatch(editor.state.tr.setMeta(dictationProvisionalKey, clear));
+        const trimmed = text.trim();
+        if (!trimmed) return;
+        const insertAt = Math.min(Math.max(1, from), editor.state.doc.content.size);
+        const needsLeadingSpace =
+          insertAt > 1 &&
+          !/\s$/.test(editor.state.doc.textBetween(Math.max(1, insertAt - 1), insertAt, "", ""));
+        const payload = needsLeadingSpace ? ` ${trimmed}` : trimmed;
+        editor.view.dispatch(editor.state.tr.insertText(payload, insertAt));
         editor.commands.focus();
       },
     }),
@@ -866,6 +872,8 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
         mode={mode}
         sourceParseError={sourceParseError}
         onModeChange={requestModeChange}
+        pageWidth={pageWidth}
+        onPageWidthChange={onPageWidthChange ?? (() => undefined)}
       />
 
       {mode === "source" && (

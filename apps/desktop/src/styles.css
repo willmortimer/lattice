@@ -612,8 +612,20 @@ html[data-platform="macos"] .startup-splash {
    Markdown page rendering — the editorial voice
    ========================================================================== */
 
+:root {
+  --lt-page-content-width: 68ch;
+}
+
+html[data-page-width="wide"] {
+  --lt-page-content-width: 96ch;
+}
+
+html[data-page-width="full"] {
+  --lt-page-content-width: 100%;
+}
+
 .markdown-body {
-  max-width: 68ch;
+  max-width: var(--lt-page-content-width);
   margin: 0 auto;
   user-select: text;
   cursor: auto;
@@ -809,20 +821,30 @@ html[data-platform="macos"] .startup-splash {
    ========================================================================== */
 
 .page-editor {
-  max-width: 68ch;
+  max-width: var(--lt-page-content-width);
   margin: 0 auto;
 }
 
 .page-mode-chrome {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
   margin-bottom: 16px;
 }
 
 .page-mode-tabs {
   display: inline-flex;
-  align-self: flex-start;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius-sm);
+  background: var(--lt-surface-raised);
+}
+
+.page-width-tabs {
+  display: inline-flex;
   gap: 2px;
   padding: 2px;
   border: 1px solid var(--lt-line);
@@ -853,6 +875,7 @@ html[data-platform="macos"] .startup-splash {
 
 .page-mode-parse-error {
   margin: 0;
+  flex-basis: 100%;
   font-size: 12px;
   color: var(--lt-warning, var(--lt-accent-deep));
 }

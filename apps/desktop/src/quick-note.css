@@ -85,7 +85,7 @@ html[data-platform="macos"] .quick-note-native-titlebar {
 
 .quick-note-editor {
   display: block;
-  width: min(100%, 68ch);
+  width: min(100%, var(--lt-page-content-width, 68ch));
   min-height: 100%;
   margin: 0 auto;
   padding: 0;

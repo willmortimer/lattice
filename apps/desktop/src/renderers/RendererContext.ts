@@ -1,6 +1,7 @@
 import type { RefObject } from "react";
 import type { AppSettings } from "../settings/model";
 import type { ResourceLinkTarget } from "../lib/resourceLinks";
+import type { PageWidth } from "../lib/pageWidth";
 import type { PageEditorHandle } from "../editor/PageEditor";
 import type { SaveState } from "../editor/saveState";
 import type { Resource } from "../types";
@@ -26,6 +27,7 @@ export interface ResourceRendererContext {
     onKeepBoth: () => void;
     onOpenFile: (path: string, subpath?: string) => void;
     onOpenExternally?: (resource: Resource) => void;
+    onPageWidthChange?: (width: PageWidth) => void;
   };
   missingCapabilities?: readonly string[];
 }

@@ -45,6 +45,7 @@ export function QuickNoteApp() {
     if (page) return;
     const profile = await loadProfile();
     autosaveDelayRef.current = profile.settings.desktop.editor.autosaveDelayMs;
+    document.documentElement.dataset.pageWidth = profile.settings.desktop.editor.pageWidth;
     const root =
       requestedRoot ??
       profile.recents[0]?.root ??

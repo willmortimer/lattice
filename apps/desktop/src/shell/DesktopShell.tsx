@@ -537,6 +537,10 @@ export function DesktopShell({ model }: DesktopShellProps) {
                           onKeepBoth: () => void handleKeepBoth(),
                           onOpenFile: handleOpenFile,
                           onOpenExternally: inBrowser ? undefined : (resource) => void handleOpenExternally(resource),
+                          onPageWidthChange: (pageWidth) => setSettings((current) => ({
+                            ...current,
+                            editor: { ...current.editor, pageWidth },
+                          })),
                         },
                       }}
                     />
@@ -581,6 +585,10 @@ export function DesktopShell({ model }: DesktopShellProps) {
                             onKeepBoth: () => void handleKeepBoth(),
                             onOpenFile: handleOpenFile,
                             onOpenExternally: inBrowser ? undefined : (resource) => void handleOpenExternally(resource),
+                            onPageWidthChange: (pageWidth) => setSettings((current) => ({
+                              ...current,
+                              editor: { ...current.editor, pageWidth },
+                            })),
                           },
                         }}
                       />
