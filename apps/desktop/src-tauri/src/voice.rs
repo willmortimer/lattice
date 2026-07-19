@@ -7,7 +7,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
@@ -284,15 +284,43 @@ pub async fn voice_cancel_active(
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct VoiceSessionContextHints {
+    pub document_id: Option<String>,
+    pub document_path: Option<String>,
+    pub page_title: Option<String>,
+    pub workspace_name: Option<String>,
+    pub tags: Vec<String>,
+    pub heading_path: Vec<String>,
+    pub glossary_terms: Vec<String>,
+}
+
+impl Default for VoiceSessionContextHints {
+    fn default() -> Self {
+        Self {
+            document_id: None,
+            document_path: None,
+            page_title: None,
+            workspace_name: None,
+            tags: Vec::new(),
+            heading_path: Vec::new(),
+            glossary_terms: Vec::new(),
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn voice_start_session(
     app: AppHandle,
     state: State<'_, VoiceState>,
+    hints: Option<VoiceSessionContextHints>,
 ) -> Result<VoiceSessionStart, String> {
     #[cfg(all(target_os = "macos", feature = "voice"))]
     {
         use lattice_voice::{
-            SessionContext, SpeechEventSender, SpeechProvider, SpeechSessionConfig, VoiceEvent,
+            SessionContext, SpeechEventSender, SpeechProvider, SpeechSessionConfig, VoiceContextBuilder,
+            VoiceContextInput, VoiceEvent,
         };
 
         // Preempt any leftover session from a release-during-start race.
@@ -304,14 +332,40 @@ pub async fn voice_start_session(
 
         let session_id = format!("voice-{}", NEXT_SESSION.fetch_add(1, Ordering::Relaxed));
         let (events, mut rx) = SpeechEventSender::pair();
-        let config = SpeechSessionConfig {
-            session_id: session_id.clone(),
-            language: Some("en".into()),
-            context: SessionContext {
+        let hints = hints.unwrap_or_default();
+        let context = if hints.document_id.is_some()
+            || hints.document_path.is_some()
+            || hints.page_title.is_some()
+            || hints.workspace_name.is_some()
+            || !hints.tags.is_empty()
+            || !hints.heading_path.is_empty()
+            || !hints.glossary_terms.is_empty()
+        {
+            VoiceContextBuilder::new().build_session_context(
+                &VoiceContextInput {
+                    document_id: hints.document_id,
+                    heading_path: hints.heading_path,
+                    page_title: hints.page_title,
+                    workspace_name: hints.workspace_name,
+                    document_path: hints.document_path,
+                    tags: hints.tags,
+                    extra_glossary_terms: hints.glossary_terms,
+                    ..VoiceContextInput::default()
+                },
+                false,
+                None,
+            )
+        } else {
+            SessionContext {
                 document_id: None,
                 glossary_terms: Vec::new(),
                 command_mode: false,
-            },
+            }
+        };
+        let config = SpeechSessionConfig {
+            session_id: session_id.clone(),
+            language: Some("en".into()),
+            context,
         };
 
         let session = provider
