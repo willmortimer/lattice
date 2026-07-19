@@ -22,9 +22,7 @@ mod types;
 mod vector;
 
 pub use chunks::{chunk_resource, SearchChunkDraft, CHUNKER_VERSION};
-pub use embedding::{
-    default_chunker_version, ChunkEmbeddingState, EmbeddingNamespace,
-};
+pub use embedding::{default_chunker_version, ChunkEmbeddingState, EmbeddingNamespace};
 pub use error::{Error, Result};
 pub use extract::{
     extract_structured_paths, parse_page, ExtractedLink, Heading, LinkKind, PageIndexData,

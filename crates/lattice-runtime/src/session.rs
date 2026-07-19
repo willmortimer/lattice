@@ -5,11 +5,16 @@ use std::time::Duration;
 
 use lattice_commands::CommandEngine;
 use lattice_core::{ResourceCatalog, Workspace};
+use lattice_embedding::EmbeddingProvider;
 use lattice_index::{Backlink, ChunkSearchHit, SearchHit, WorkspaceIndex};
 
 use crate::events::SharedEventBus;
 use crate::idempotency::IdempotencyCache;
 use crate::lease::{LeaseClaim, WorkspaceLeaseFile};
+use crate::semantic::{
+    start_session_semantic_worker, SemanticAvailability, SemanticWorkerConfig,
+    SessionSemanticWorker,
+};
 use crate::watch::{default_watch_debounce, start_session_index_watcher, SessionIndexWatcher};
 use crate::Result;
 
@@ -27,6 +32,8 @@ pub struct WorkspaceSession {
     idempotency: IdempotencyCache,
     /// Active filesystem watcher that incrementally maintains the warm index.
     index_watcher: Mutex<Option<SessionIndexWatcher>>,
+    /// Optional background semantic embedding worker.
+    semantic_worker: Mutex<Option<SessionSemanticWorker>>,
 }
 
 impl WorkspaceSession {
@@ -48,6 +55,7 @@ impl WorkspaceSession {
             write_lease: Mutex::new(None),
             idempotency: IdempotencyCache::default(),
             index_watcher: Mutex::new(None),
+            semantic_worker: Mutex::new(None),
         })
     }
 
@@ -161,10 +169,7 @@ impl WorkspaceSession {
     ) -> Result<()> {
         self.stop_watching();
         let watcher = start_session_index_watcher(Arc::clone(self), events, debounce)?;
-        *self
-            .index_watcher
-            .lock()
-            .expect("index watcher poisoned") = Some(watcher);
+        *self.index_watcher.lock().expect("index watcher poisoned") = Some(watcher);
         Ok(())
     }
 
@@ -184,10 +189,123 @@ impl WorkspaceSession {
             watcher.stop();
         }
     }
+
+    /// Start (or restart) background semantic embedding for this session.
+    pub fn start_semantic_indexing(
+        self: &Arc<Self>,
+        events: SharedEventBus,
+        config: SemanticWorkerConfig,
+    ) -> Result<()> {
+        self.stop_semantic_indexing();
+        let worker = start_session_semantic_worker(Arc::clone(self), events, config)?;
+        *self
+            .semantic_worker
+            .lock()
+            .expect("semantic worker poisoned") = Some(worker);
+        Ok(())
+    }
+
+    /// Stop the semantic embedding worker if running.
+    pub fn stop_semantic_indexing(&self) {
+        if let Some(worker) = self
+            .semantic_worker
+            .lock()
+            .expect("semantic worker poisoned")
+            .take()
+        {
+            worker.stop();
+        }
+    }
+
+    pub fn is_semantic_indexing(&self) -> bool {
+        self.semantic_worker
+            .lock()
+            .expect("semantic worker poisoned")
+            .is_some()
+    }
+
+    /// Enqueue a catch-up pass over pending/stale chunks (no-op if no worker).
+    pub fn kick_semantic_jobs(&self) {
+        if let Some(worker) = self
+            .semantic_worker
+            .lock()
+            .expect("semantic worker poisoned")
+            .as_ref()
+        {
+            worker.kick();
+        }
+    }
+
+    pub fn pause_semantic_jobs(&self) {
+        if let Some(worker) = self
+            .semantic_worker
+            .lock()
+            .expect("semantic worker poisoned")
+            .as_ref()
+        {
+            worker.pause();
+        }
+    }
+
+    pub fn resume_semantic_jobs(&self) {
+        if let Some(worker) = self
+            .semantic_worker
+            .lock()
+            .expect("semantic worker poisoned")
+            .as_ref()
+        {
+            worker.resume();
+        }
+    }
+
+    pub fn set_semantic_degraded(&self, degraded: bool) {
+        if let Some(worker) = self
+            .semantic_worker
+            .lock()
+            .expect("semantic worker poisoned")
+            .as_ref()
+        {
+            worker.set_degraded(degraded);
+        }
+    }
+
+    pub fn semantic_availability(&self) -> Option<SemanticAvailability> {
+        self.semantic_worker
+            .lock()
+            .expect("semantic worker poisoned")
+            .as_ref()
+            .map(SessionSemanticWorker::availability)
+    }
+
+    pub fn semantic_namespace_id(&self) -> Option<i64> {
+        self.semantic_worker
+            .lock()
+            .expect("semantic worker poisoned")
+            .as_ref()
+            .and_then(SessionSemanticWorker::namespace_id)
+    }
+
+    /// Snapshot of provider + namespace for hybrid search, when the worker is live.
+    pub(crate) fn semantic_worker_snapshot(
+        &self,
+    ) -> Option<(Arc<dyn EmbeddingProvider>, i64, SemanticAvailability)> {
+        let guard = self
+            .semantic_worker
+            .lock()
+            .expect("semantic worker poisoned");
+        let worker = guard.as_ref()?;
+        let namespace_id = worker.namespace_id()?;
+        Some((
+            Arc::clone(worker.provider()),
+            namespace_id,
+            worker.availability(),
+        ))
+    }
 }
 
 impl Drop for WorkspaceSession {
     fn drop(&mut self) {
+        self.stop_semantic_indexing();
         self.stop_watching();
     }
 }

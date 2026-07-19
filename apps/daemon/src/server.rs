@@ -33,16 +33,26 @@ use crate::lease::{daemon_lease_claim, lease_to_wire, require_workspace_lease};
 pub struct DaemonState {
     pub config: Arc<DaemonConfig>,
     pub runtime: Arc<LatticeRuntime>,
+    pub semantic: Option<Arc<crate::embed_host::SemanticController>>,
     event_tx: broadcast::Sender<Event>,
     next_event_seq: Arc<AtomicU64>,
 }
 
 impl DaemonState {
     pub fn new(config: DaemonConfig, runtime: Arc<LatticeRuntime>) -> Self {
+        Self::new_with_semantic(config, runtime, None)
+    }
+
+    pub fn new_with_semantic(
+        config: DaemonConfig,
+        runtime: Arc<LatticeRuntime>,
+        semantic: Option<Arc<crate::embed_host::SemanticController>>,
+    ) -> Self {
         let (event_tx, _) = broadcast::channel(64);
         let state = Self {
             config: Arc::new(config),
             runtime,
+            semantic,
             event_tx,
             next_event_seq: Arc::new(AtomicU64::new(1)),
         };
@@ -107,6 +117,16 @@ pub async fn serve_with_shutdown(
     runtime: Arc<LatticeRuntime>,
     shutdown: oneshot::Receiver<()>,
 ) -> Result<()> {
+    serve_with_shutdown_and_semantic(config, runtime, None, shutdown).await
+}
+
+/// Bind and serve with an optional semantic indexing controller.
+pub async fn serve_with_shutdown_and_semantic(
+    config: DaemonConfig,
+    runtime: Arc<LatticeRuntime>,
+    semantic: Option<Arc<crate::embed_host::SemanticController>>,
+    shutdown: oneshot::Receiver<()>,
+) -> Result<()> {
     let socket_path = config.socket_path.clone();
     prepare_socket_path(&socket_path)?;
     let listener = UnixListener::bind(&socket_path)?;
@@ -118,7 +138,7 @@ pub async fn serve_with_shutdown(
     }
     info!(path = %socket_path.display(), "latticed listening");
 
-    let state = DaemonState::new(config, runtime);
+    let state = DaemonState::new_with_semantic(config, runtime, semantic);
     let mut shutdown = shutdown;
     loop {
         tokio::select! {
@@ -145,6 +165,9 @@ pub async fn serve_with_shutdown(
         }
     }
 
+    if let Some(semantic) = state.semantic.as_ref() {
+        semantic.shutdown();
+    }
     let _ = std::fs::remove_file(&socket_path);
     Ok(())
 }
@@ -342,6 +365,10 @@ fn handle_open_workspace(
         .open_workspace_session_for_write(path.as_str(), &claim)
         .map_err(runtime_error_to_wire)?;
 
+    if let Some(semantic) = state.semantic.as_ref() {
+        semantic.attach_session(&session);
+    }
+
     let wire_lease = lease_to_wire(&lease_file);
     let workspace_id = session.workspace_id().to_string();
     Ok((
@@ -486,7 +513,9 @@ async fn read_handshake(reader: &mut OwnedReadHalf) -> Result<HandshakeRequest> 
             }
             let frame_len = 4usize.saturating_add(declared);
             if buf.len() >= frame_len {
-                return Ok(decode_handshake_frame::<HandshakeRequest>(&buf[..frame_len])?);
+                return Ok(decode_handshake_frame::<HandshakeRequest>(
+                    &buf[..frame_len],
+                )?);
             }
         }
         let n = reader.read(&mut tmp).await?;

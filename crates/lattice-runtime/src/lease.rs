@@ -120,10 +120,7 @@ pub fn read_workspace_lease(
             Ok(Some(lease))
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(source) => Err(Error::Io {
-            path,
-            source,
-        }),
+        Err(source) => Err(Error::Io { path, source }),
     }
 }
 
@@ -191,7 +188,8 @@ pub fn acquire_workspace_lease(
             write_workspace_lease(root, &lease)?;
             Ok(lease)
         }
-        Some(existing) if lease_is_stale(&existing) || same_owner_start_rotation(&existing, claim) =>
+        Some(existing)
+            if lease_is_stale(&existing) || same_owner_start_rotation(&existing, claim) =>
         {
             tracing_reclaim(&existing, claim);
             let lease = claim.to_lease_file();
@@ -327,13 +325,7 @@ mod tests {
         let root = dir.path();
         fs::create_dir_all(root.join(".lattice")).unwrap();
 
-        let claim = LeaseClaim::latticed(
-            std::process::id(),
-            42,
-            "/tmp/latticed.sock",
-            1,
-            "inst-1",
-        );
+        let claim = LeaseClaim::latticed(std::process::id(), 42, "/tmp/latticed.sock", 1, "inst-1");
         let lease = claim.to_lease_file();
         let path = write_workspace_lease(root, &lease).unwrap();
 

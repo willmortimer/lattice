@@ -52,7 +52,7 @@ impl ResourceChangeKind {
     }
 }
 
-/// Incremental FTS maintenance phase for a single path (or watcher lifecycle).
+/// Incremental FTS / semantic maintenance phase for a path or worker lifecycle.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IndexProgressPhase {
     Started,
@@ -60,6 +60,16 @@ pub enum IndexProgressPhase {
     Upserted,
     Removed,
     Error,
+    /// Semantic embedding worker started (or resumed after pause).
+    EmbeddingStarted,
+    /// One embed batch completed; `detail` carries counts.
+    EmbeddingBatch,
+    /// Semantic embedding worker idle / stopped.
+    EmbeddingIdle,
+    /// Embed host unavailable; FTS/hybrid FTS-fallback still works.
+    SemanticDegraded,
+    /// Embed host / provider ready again after degradation.
+    SemanticReady,
 }
 
 impl IndexProgressPhase {
@@ -70,6 +80,11 @@ impl IndexProgressPhase {
             Self::Upserted => "upserted",
             Self::Removed => "removed",
             Self::Error => "error",
+            Self::EmbeddingStarted => "embedding_started",
+            Self::EmbeddingBatch => "embedding_batch",
+            Self::EmbeddingIdle => "embedding_idle",
+            Self::SemanticDegraded => "semantic_degraded",
+            Self::SemanticReady => "semantic_ready",
         }
     }
 }
@@ -93,14 +108,8 @@ pub struct RuntimeIndexProgress {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuntimeEvent {
-    SessionOpened {
-        root: PathBuf,
-        workspace_id: String,
-    },
-    SessionClosed {
-        root: PathBuf,
-        workspace_id: String,
-    },
+    SessionOpened { root: PathBuf, workspace_id: String },
+    SessionClosed { root: PathBuf, workspace_id: String },
     ResourceChanged(RuntimeResourceChanged),
     IndexProgress(RuntimeIndexProgress),
 }

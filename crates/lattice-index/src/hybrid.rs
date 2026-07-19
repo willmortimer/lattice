@@ -2,9 +2,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::types::{ChunkSearchHit, HybridSearchHit};
 use crate::provenance::{ExportPolicy, SearchProvenance};
 use crate::semantic::{ChunkHydrationRow, SemanticHit};
+use crate::types::{ChunkSearchHit, HybridSearchHit};
 
 /// Reciprocal-rank fusion constant (Cormack et al.).
 pub const RRF_K: u32 = 60;
@@ -171,23 +171,13 @@ mod tests {
 
     #[test]
     fn rrf_prefers_items_present_in_both_lists() {
-        let lexical = vec![
-            ("a".into(), 1),
-            ("b".into(), 2),
-            ("c".into(), 3),
-        ];
-        let semantic = vec![
-            ("c".into(), 1),
-            ("a".into(), 2),
-            ("d".into(), 3),
-        ];
+        let lexical = vec![("a".into(), 1), ("b".into(), 2), ("c".into(), 3)];
+        let semantic = vec![("c".into(), 1), ("a".into(), 2), ("d".into(), 3)];
         let fused = reciprocal_rank_fuse(&lexical, &semantic);
         assert_eq!(fused[0].0, "a");
         assert!(fused[0].1.fused_score > fused[1].1.fused_score);
         assert!(fused.iter().any(|(id, accum)| {
-            id == "c"
-                && accum.lexical_rank == Some(3)
-                && accum.semantic_rank == Some(1)
+            id == "c" && accum.lexical_rank == Some(3) && accum.semantic_rank == Some(1)
         }));
     }
 

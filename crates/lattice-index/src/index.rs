@@ -14,14 +14,14 @@ use rusqlite::types::ToSql;
 use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::catalog::{encoding_db, kind_db, metadata_from_row, parser_status_db, profile_db};
+use crate::chunks::{self, CHUNKER_VERSION};
 use crate::embedding::{
-    self, chunk_embedding_state, chunk_embedding_states_for_namespace,
-    embedding_namespace_by_id, is_chunk_embedding_stale, register_embedding_namespace,
-    ChunkEmbeddingState, EmbeddingNamespace,
+    self, chunk_embedding_state, chunk_embedding_states_for_namespace, embedding_namespace_by_id,
+    is_chunk_embedding_stale, register_embedding_namespace, ChunkEmbeddingState,
+    EmbeddingNamespace,
 };
 use crate::error::{Error, Result};
 use crate::extract::{LinkKind, StructuredPath};
-use crate::chunks::{self, CHUNKER_VERSION};
 use crate::hybrid::{
     diversify_by_resource, fts_only_hits, fused_chunk_ids, hydrate_fused_hits, lexical_rank_list,
     reciprocal_rank_fuse, semantic_rank_list, ProvenanceBase, DEFAULT_MAX_CHUNKS_PER_RESOURCE,
@@ -210,7 +210,10 @@ impl WorkspaceIndex {
         let Some(provider) = provider else {
             let conn = self.conn.lock().unwrap();
             let lexical = search_chunk_hits(&conn, query, candidate_limit)?;
-            let chunk_ids = lexical.iter().map(|hit| hit.chunk_id.clone()).collect::<Vec<_>>();
+            let chunk_ids = lexical
+                .iter()
+                .map(|hit| hit.chunk_id.clone())
+                .collect::<Vec<_>>();
             let rows = load_chunk_rows(&conn, &chunk_ids)?
                 .into_iter()
                 .map(|row| (row.chunk_id.clone(), row))
@@ -259,7 +262,8 @@ impl WorkspaceIndex {
         let lexical = lexical_result?;
         let semantic = semantic_result?;
 
-        let fused = reciprocal_rank_fuse(&lexical_rank_list(&lexical), &semantic_rank_list(&semantic));
+        let fused =
+            reciprocal_rank_fuse(&lexical_rank_list(&lexical), &semantic_rank_list(&semantic));
         let chunk_ids = fused_chunk_ids(&fused);
         let rows = {
             let conn = self.conn.lock().unwrap();
@@ -351,13 +355,13 @@ impl WorkspaceIndex {
                 }
             };
             if vectors.len() != batch.len() {
-                return Err(Error::Embedding(lattice_embedding::EmbeddingError::provider(
-                    format!(
+                return Err(Error::Embedding(
+                    lattice_embedding::EmbeddingError::provider(format!(
                         "embed_documents returned {} vectors for {} requests",
                         vectors.len(),
                         batch.len()
-                    ),
-                )));
+                    )),
+                ));
             }
 
             let conn = self.conn.lock().unwrap();
@@ -465,12 +469,7 @@ impl WorkspaceIndex {
         current_embedding_input_hash: &str,
     ) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
-        is_chunk_embedding_stale(
-            &conn,
-            chunk_id,
-            namespace_id,
-            current_embedding_input_hash,
-        )
+        is_chunk_embedding_stale(&conn, chunk_id, namespace_id, current_embedding_input_hash)
     }
 
     /// List resources that link to `path`, preserving source labels, anchors,
@@ -864,6 +863,13 @@ fn block_on_embed<F, T>(future: F) -> Result<T>
 where
     F: std::future::Future<Output = std::result::Result<T, lattice_embedding::EmbeddingError>>,
 {
+    // Prefer the caller's runtime when one is already entered (e.g. embed-host
+    // session IO bound to a long-lived runtime owned by the semantic worker).
+    // Use `Handle::block_on` rather than `block_in_place` so this works from a
+    // plain std thread that has called `Handle::enter()`.
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        return handle.block_on(future).map_err(Error::from);
+    }
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -1205,9 +1211,7 @@ mod tests {
 
     #[test]
     fn hybrid_search_fuses_lexical_and_semantic_with_fake_provider() {
-        use lattice_embedding::{
-            DistanceMetric, FakeEmbeddingProvider, PoolingStrategy,
-        };
+        use lattice_embedding::{DistanceMetric, FakeEmbeddingProvider, PoolingStrategy};
 
         let dir = TempDir::new().unwrap();
         sample_workspace(dir.path());
@@ -1252,9 +1256,7 @@ mod tests {
 
     #[test]
     fn embed_pending_chunks_is_idempotent_for_ready_state() {
-        use lattice_embedding::{
-            DistanceMetric, FakeEmbeddingProvider, PoolingStrategy,
-        };
+        use lattice_embedding::{DistanceMetric, FakeEmbeddingProvider, PoolingStrategy};
 
         let dir = TempDir::new().unwrap();
         sample_workspace(dir.path());

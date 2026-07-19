@@ -51,12 +51,13 @@ pub fn start_session_index_watcher(
 ) -> Result<SessionIndexWatcher> {
     let root = session.root().to_path_buf();
     let workspace_id = session.workspace_id().to_string();
-    let (watcher, rx) = WorkspaceWatcher::start_with_debounce(root.clone(), debounce).map_err(
-        |source| Error::Watch {
-            path: root.clone(),
-            source,
-        },
-    )?;
+    let (watcher, rx) =
+        WorkspaceWatcher::start_with_debounce(root.clone(), debounce).map_err(|source| {
+            Error::Watch {
+                path: root.clone(),
+                source,
+            }
+        })?;
 
     let stop = Arc::new(AtomicBool::new(false));
     let stop_flag = Arc::clone(&stop);
@@ -95,10 +96,7 @@ pub fn start_session_index_watcher(
                 detail: None,
             }));
         })
-        .map_err(|source| Error::Io {
-            path: root,
-            source,
-        })?;
+        .map_err(|source| Error::Io { path: root, source })?;
 
     Ok(SessionIndexWatcher {
         stop,
@@ -132,6 +130,8 @@ fn dispatch_watch_event(
                 path: Some(path),
                 detail: None,
             }));
+            // FTS is already updated; ask semantic worker to catch up hashes.
+            session.kick_semantic_jobs();
         }
         IndexApplyOutcome::Removed { path } => {
             events.publish(RuntimeEvent::IndexProgress(RuntimeIndexProgress {
@@ -140,6 +140,7 @@ fn dispatch_watch_event(
                 path: Some(path),
                 detail: None,
             }));
+            session.kick_semantic_jobs();
         }
         IndexApplyOutcome::Renamed { from, to } => {
             events.publish(RuntimeEvent::IndexProgress(RuntimeIndexProgress {
@@ -154,6 +155,7 @@ fn dispatch_watch_event(
                 path: Some(to),
                 detail: None,
             }));
+            session.kick_semantic_jobs();
         }
         IndexApplyOutcome::Skipped { path, reason } => {
             events.publish(RuntimeEvent::IndexProgress(RuntimeIndexProgress {

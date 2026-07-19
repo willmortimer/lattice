@@ -9,8 +9,8 @@ use lattice_runtime::{LeaseClaim, WorkspaceLeaseFile};
 use crate::config::DaemonConfig;
 
 pub use lattice_runtime::{
-    lease_path, require_workspace_lease, write_workspace_lease, LEASE_RELATIVE_PATH, OWNER_EMBEDDED,
-    OWNER_LATTICED,
+    lease_path, require_workspace_lease, write_workspace_lease, LEASE_RELATIVE_PATH,
+    OWNER_EMBEDDED, OWNER_LATTICED,
 };
 
 /// Build a latticed lease claim for the current daemon process.

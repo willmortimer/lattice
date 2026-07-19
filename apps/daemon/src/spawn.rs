@@ -98,12 +98,9 @@ pub async fn spawn_latticed(opts: SpawnOptions) -> Result<SpawnedDaemon> {
         cmd.arg("--instance-id").arg(instance_id);
     }
 
-    let child = cmd.spawn().map_err(|err| {
-        Error::Spawn(format!(
-            "failed to spawn {}: {err}",
-            opts.binary.display()
-        ))
-    })?;
+    let child = cmd
+        .spawn()
+        .map_err(|err| Error::Spawn(format!("failed to spawn {}: {err}", opts.binary.display())))?;
 
     match wait_for_ready(&opts.socket_path, &opts.auth_token, opts.ready_timeout).await {
         Ok(instance_id) => Ok(SpawnedDaemon {

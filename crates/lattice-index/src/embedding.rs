@@ -212,11 +212,7 @@ fn namespace_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<EmbeddingName
 fn state_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ChunkEmbeddingState> {
     let status_raw: String = row.get(3)?;
     let status = ChunkEmbeddingStatus::parse(&status_raw).ok_or_else(|| {
-        rusqlite::Error::InvalidColumnType(
-            3,
-            status_raw,
-            rusqlite::types::Type::Text,
-        )
+        rusqlite::Error::InvalidColumnType(3, status_raw, rusqlite::types::Type::Text)
     })?;
     Ok(ChunkEmbeddingState {
         chunk_id: row.get(0)?,
