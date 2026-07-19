@@ -1,0 +1,15 @@
+[package]
+name = "lattice-audio"
+description = "Provider-neutral audio capture types, ring buffers, and CaptureProvider for Lattice"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+bytes.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "sync"] }
