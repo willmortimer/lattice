@@ -5,6 +5,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { PageEditorHandle } from "../editor/PageEditor";
 import { inBrowser } from "../demo";
 import {
+  cancelActiveVoiceSession,
   cancelVoiceSession,
   DictationCapture,
   getVoiceStatus,
@@ -37,6 +38,17 @@ export function DictationControls({ enabled, pageEditorRef, onError }: Dictation
   const highestRevisionRef = useRef(0);
   const holdingRef = useRef(false);
   const startGenerationRef = useRef(0);
+  /** Serialize start/stop so release-during-start cannot orphan a Rust session. */
+  const opChainRef = useRef(Promise.resolve());
+
+  const enqueue = useCallback((op: () => Promise<void>) => {
+    const next = opChainRef.current.then(op, op);
+    opChainRef.current = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  }, []);
 
   useEffect(() => {
     if (inBrowser || !enabled) {
@@ -109,83 +121,108 @@ export function DictationControls({ enabled, pageEditorRef, onError }: Dictation
     };
   }, [enabled, onError, pageEditorRef]);
 
-  const beginHold = useCallback(async () => {
-    if (!enabled || inBrowser || phase === "unavailable" || phase === "preparing") return;
+  const beginHold = useCallback(() => {
+    if (!enabled || inBrowser) return;
     if (holdingRef.current) return;
     holdingRef.current = true;
     highestRevisionRef.current = 0;
     const generation = ++startGenerationRef.current;
 
-    try {
-      if (!status?.prepared) {
-        setPhase("preparing");
-        const prepared = await prepareVoiceModel();
-        if (!holdingRef.current || generation !== startGenerationRef.current) return;
-        setStatus(prepared);
-      }
+    void enqueue(async () => {
       if (!holdingRef.current || generation !== startGenerationRef.current) return;
 
-      setPhase("listening");
-      const anchor = pageEditorRef.current?.beginDictation() ?? 0;
-      anchorRef.current = anchor;
-      const { sessionId } = await startVoiceSession();
-      if (!holdingRef.current || generation !== startGenerationRef.current) {
-        await cancelVoiceSession(sessionId).catch(() => undefined);
-        setPhase("idle");
-        return;
-      }
-      sessionIdRef.current = sessionId;
-      await captureRef.current.start(sessionId);
-      if (!holdingRef.current || generation !== startGenerationRef.current) {
-        await captureRef.current.cancel().catch(() => undefined);
-        sessionIdRef.current = null;
-        setPhase("idle");
-      }
-    } catch (err) {
-      if (generation !== startGenerationRef.current) return;
-      holdingRef.current = false;
-      sessionIdRef.current = null;
-      pageEditorRef.current?.clearDictationProvisional();
-      setPhase("idle");
-      onError(err instanceof Error ? err.message : String(err));
-    }
-  }, [enabled, onError, pageEditorRef, phase, status?.prepared]);
+      try {
+        if (!status?.prepared) {
+          setPhase("preparing");
+          const prepared = await prepareVoiceModel();
+          if (!holdingRef.current || generation !== startGenerationRef.current) {
+            await cancelActiveVoiceSession().catch(() => undefined);
+            setPhase("idle");
+            return;
+          }
+          setStatus(prepared);
+        }
+        if (!holdingRef.current || generation !== startGenerationRef.current) {
+          await cancelActiveVoiceSession().catch(() => undefined);
+          setPhase("idle");
+          return;
+        }
 
-  const endHold = useCallback(async () => {
+        setPhase("listening");
+        const anchor = pageEditorRef.current?.beginDictation() ?? 0;
+        anchorRef.current = anchor;
+        const { sessionId } = await startVoiceSession();
+        if (!holdingRef.current || generation !== startGenerationRef.current) {
+          await cancelVoiceSession(sessionId).catch(() => undefined);
+          await cancelActiveVoiceSession().catch(() => undefined);
+          sessionIdRef.current = null;
+          setPhase("idle");
+          return;
+        }
+        sessionIdRef.current = sessionId;
+        await captureRef.current.start(sessionId);
+        if (!holdingRef.current || generation !== startGenerationRef.current) {
+          await captureRef.current.cancel().catch(() => undefined);
+          sessionIdRef.current = null;
+          setPhase("idle");
+        }
+      } catch (err) {
+        if (generation !== startGenerationRef.current) return;
+        holdingRef.current = false;
+        sessionIdRef.current = null;
+        pageEditorRef.current?.clearDictationProvisional();
+        await cancelActiveVoiceSession().catch(() => undefined);
+        setPhase("idle");
+        onError(err instanceof Error ? err.message : String(err));
+      }
+    });
+  }, [enabled, enqueue, onError, pageEditorRef, status?.prepared]);
+
+  const endHold = useCallback(() => {
     if (!holdingRef.current) return;
     holdingRef.current = false;
     startGenerationRef.current += 1;
     const sessionId = sessionIdRef.current;
     sessionIdRef.current = null;
-    if (!sessionId) {
-      // Released during prepare / session start — abandon without finishing.
-      pageEditorRef.current?.clearDictationProvisional();
-      setPhase("idle");
-      return;
-    }
-    setPhase("finalizing");
-    try {
-      await captureRef.current.stopAndFinish();
-    } catch (err) {
-      pageEditorRef.current?.clearDictationProvisional();
-      setPhase("idle");
-      onError(err instanceof Error ? err.message : String(err));
-    }
-  }, [onError, pageEditorRef]);
 
-  const cancelHold = useCallback(async () => {
+    void enqueue(async () => {
+      if (!sessionId) {
+        // Released during prepare / session start — clear any orphan on the Rust side.
+        pageEditorRef.current?.clearDictationProvisional();
+        await cancelActiveVoiceSession().catch(() => undefined);
+        setPhase("idle");
+        return;
+      }
+      setPhase("finalizing");
+      try {
+        await captureRef.current.stopAndFinish(sessionId);
+      } catch (err) {
+        pageEditorRef.current?.clearDictationProvisional();
+        await cancelVoiceSession(sessionId).catch(() => undefined);
+        await cancelActiveVoiceSession().catch(() => undefined);
+        setPhase("idle");
+        onError(err instanceof Error ? err.message : String(err));
+      }
+    });
+  }, [enqueue, onError, pageEditorRef]);
+
+  const cancelHold = useCallback(() => {
     holdingRef.current = false;
     startGenerationRef.current += 1;
+    const sessionId = sessionIdRef.current;
     sessionIdRef.current = null;
     pageEditorRef.current?.clearDictationProvisional();
-    try {
-      await captureRef.current.cancel();
-    } catch {
-      // Best-effort cancel.
-    }
-    setPhase("idle");
-    setHint(null);
-  }, [pageEditorRef]);
+
+    void enqueue(async () => {
+      try {
+        await captureRef.current.cancel(sessionId);
+      } catch {
+        await cancelActiveVoiceSession().catch(() => undefined);
+      }
+      setPhase("idle");
+      setHint(null);
+    });
+  }, [enqueue, pageEditorRef]);
 
   if (!enabled || phase === "unavailable") {
     return null;
@@ -224,40 +261,44 @@ export function DictationControls({ enabled, pageEditorRef, onError }: Dictation
           if (event.button !== 0) return;
           event.preventDefault();
           event.currentTarget.setPointerCapture(event.pointerId);
-          void beginHold();
+          beginHold();
         }}
         onPointerUp={(event) => {
           if (event.currentTarget.hasPointerCapture(event.pointerId)) {
             event.currentTarget.releasePointerCapture(event.pointerId);
           }
-          void endHold();
+          endHold();
         }}
         onPointerCancel={() => {
-          void cancelHold();
+          cancelHold();
         }}
         onLostPointerCapture={() => {
-          if (holdingRef.current) void endHold();
+          if (holdingRef.current) endHold();
         }}
         onKeyDown={(event) => {
           if (event.key === "Escape" && holdingRef.current) {
             event.preventDefault();
-            void cancelHold();
+            cancelHold();
           }
           if (event.key === " " || event.key === "Enter") {
             if (event.repeat) return;
             event.preventDefault();
-            void beginHold();
+            beginHold();
           }
         }}
         onKeyUp={(event) => {
           if (event.key === " " || event.key === "Enter") {
             event.preventDefault();
-            void endHold();
+            endHold();
           }
         }}
       >
         <span className="dictation-ptt-glyph" aria-hidden>
-          {busy ? <CircleNotch size={15} className="dictation-spinner" /> : <Microphone size={15} weight={listening ? "fill" : "regular"} />}
+          {busy ? (
+            <CircleNotch size={15} className="dictation-spinner" />
+          ) : (
+            <Microphone size={15} weight={listening ? "fill" : "regular"} />
+          )}
         </span>
         {listening && <span className="dictation-pulse" aria-hidden />}
       </button>

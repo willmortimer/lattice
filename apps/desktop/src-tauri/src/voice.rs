@@ -219,6 +219,18 @@ async fn ensure_provider(
     }
 }
 
+#[cfg(all(target_os = "macos", feature = "voice"))]
+async fn take_active_session(state: &VoiceState) -> Option<ActiveSession> {
+    let mut inner = state.inner.lock().await;
+    inner.active.take()
+}
+
+#[cfg(all(target_os = "macos", feature = "voice"))]
+async fn cancel_taken_session(active: ActiveSession) {
+    let ActiveSession { session, .. } = active;
+    let _ = session.cancel().await;
+}
+
 #[tauri::command]
 pub async fn voice_prepare(
     app: AppHandle,
@@ -244,6 +256,34 @@ pub async fn voice_prepare(
     }
 }
 
+/// Cancel whatever session is active (id optional). Used when the UI releases
+/// during startup before it has a session id.
+#[tauri::command]
+pub async fn voice_cancel_active(
+    app: AppHandle,
+    state: State<'_, VoiceState>,
+) -> Result<(), String> {
+    #[cfg(all(target_os = "macos", feature = "voice"))]
+    {
+        if let Some(active) = take_active_session(&state).await {
+            cancel_taken_session(active).await;
+        }
+        let _ = app.emit(
+            VOICE_EVENT,
+            VoiceUiEvent::Status {
+                state: "idle".into(),
+                message: None,
+            },
+        );
+        Ok(())
+    }
+    #[cfg(not(all(target_os = "macos", feature = "voice")))]
+    {
+        let _ = (app, state);
+        Ok(())
+    }
+}
+
 #[tauri::command]
 pub async fn voice_start_session(
     app: AppHandle,
@@ -255,19 +295,12 @@ pub async fn voice_start_session(
             SessionContext, SpeechEventSender, SpeechProvider, SpeechSessionConfig, VoiceEvent,
         };
 
-        {
-            let inner = state.inner.lock().await;
-            if inner.active.is_some() {
-                return Err("a dictation session is already active".into());
-            }
+        // Preempt any leftover session from a release-during-start race.
+        if let Some(stale) = take_active_session(&state).await {
+            cancel_taken_session(stale).await;
         }
 
         let provider = ensure_provider(&app, &state).await?;
-
-        let mut inner = state.inner.lock().await;
-        if inner.active.is_some() {
-            return Err("a dictation session is already active".into());
-        }
 
         let session_id = format!("voice-{}", NEXT_SESSION.fetch_add(1, Ordering::Relaxed));
         let (events, mut rx) = SpeechEventSender::pair();
@@ -323,6 +356,20 @@ pub async fn voice_start_session(
             }
         });
 
+        // Another start may have raced; keep only this session.
+        if let Some(stale) = take_active_session(&state).await {
+            cancel_taken_session(stale).await;
+        }
+        {
+            let mut inner = state.inner.lock().await;
+            inner.active = Some(ActiveSession {
+                session_id: session_id.clone(),
+                sequence: 0,
+                session,
+                _forwarder: forwarder,
+            });
+        }
+
         let _ = app.emit(
             VOICE_EVENT,
             VoiceUiEvent::Status {
@@ -330,13 +377,6 @@ pub async fn voice_start_session(
                 message: None,
             },
         );
-
-        inner.active = Some(ActiveSession {
-            session_id: session_id.clone(),
-            sequence: 0,
-            session,
-            _forwarder: forwarder,
-        });
 
         Ok(VoiceSessionStart { session_id })
     }

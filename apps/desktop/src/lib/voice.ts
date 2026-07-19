@@ -56,6 +56,11 @@ export async function cancelVoiceSession(sessionId: string): Promise<void> {
   await invoke("voice_cancel_session", { sessionId });
 }
 
+/** Cancel any active session without needing its id (release-during-start). */
+export async function cancelActiveVoiceSession(): Promise<void> {
+  await invoke("voice_cancel_active");
+}
+
 export async function listenVoiceEvents(
   onEvent: (event: VoiceUiEvent) => void,
 ): Promise<UnlistenFn> {
@@ -178,11 +183,10 @@ export class DictationCapture {
     }
   }
 
-  async stopAndFinish(): Promise<void> {
-    const sessionId = this.sessionId;
+  async stopAndFinish(sessionId = this.sessionId): Promise<void> {
     if (!sessionId) return;
     // Flush remaining audio before finish.
-    if (this.pending.length > 0) {
+    if (this.pending.length > 0 && this.sessionId === sessionId) {
       const rest = this.pending.splice(0, this.pending.length);
       await pushVoiceAudio(sessionId, Float32Array.from(rest));
     }
@@ -191,13 +195,14 @@ export class DictationCapture {
     await finishVoiceSession(sessionId);
   }
 
-  async cancel(): Promise<void> {
-    const sessionId = this.sessionId;
+  async cancel(sessionId = this.sessionId): Promise<void> {
     await this.stopMediaOnly();
     this.sessionId = null;
     this.pending = [];
     if (sessionId) {
       await cancelVoiceSession(sessionId);
+    } else {
+      await cancelActiveVoiceSession();
     }
   }
 
