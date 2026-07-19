@@ -23,6 +23,7 @@ export interface NotebookViewerProps {
   root: string | null;
   onRevisionChange?: (revision: string | null) => void;
   onContentChange?: (content: string, revision: string) => void;
+  onOpenWiki?: (target: string) => void;
 }
 
 type RunStatus =
@@ -113,6 +114,7 @@ function NotebookCellView({
   runDisabled,
   runTitle,
   onRun,
+  onOpenWiki,
 }: {
   cell: NotebookCell;
   language: string;
@@ -121,6 +123,7 @@ function NotebookCellView({
   runDisabled: boolean;
   runTitle: string;
   onRun: (index: number) => void;
+  onOpenWiki?: (target: string) => void;
 }) {
   return (
     <article className={`lattice-notebook-cell lattice-notebook-cell-${cell.cellType}`} aria-label={`${cellLabel(cell)} cell`}>
@@ -141,7 +144,7 @@ function NotebookCellView({
       <div className="lattice-notebook-cell-body">
         {cell.cellType === "markdown" && (
           <div className="lattice-notebook-markdown">
-            <PagePreview draftBody={cell.source} parseError={null} />
+            <PagePreview draftBody={cell.source} parseError={null} onOpenWiki={onOpenWiki} />
           </div>
         )}
         {cell.cellType === "raw" && <pre className="lattice-notebook-raw">{cell.source}</pre>}
@@ -204,6 +207,7 @@ export function NotebookViewer({
   root,
   onRevisionChange,
   onContentChange,
+  onOpenWiki,
 }: NotebookViewerProps) {
   const [notebookContent, setNotebookContent] = useState(content);
   const [notebookRevision, setNotebookRevision] = useState(revision);
@@ -395,6 +399,7 @@ export function NotebookViewer({
             path={path}
             runDisabled={busy || cell.cellType !== "code"}
             runTitle={runTitle}
+            onOpenWiki={onOpenWiki}
             onRun={(cellIndex) => {
               if (status.kind === "degraded") setStatus({ kind: "idle" });
               void beginRun([cellIndex]);

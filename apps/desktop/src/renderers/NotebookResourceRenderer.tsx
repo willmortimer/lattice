@@ -16,6 +16,7 @@ export function NotebookResourceRenderer({
       root={context.workspaceRoot}
       onRevisionChange={context.callbacks.onRevisionChange}
       onContentChange={context.callbacks.onNotebookContentChange}
+      onOpenWiki={context.callbacks.onOpenWiki}
     />
   );
 }
