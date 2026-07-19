@@ -95,11 +95,17 @@ Milestone 2.
 
 ## Milestone 2: in-process Tauri prototype
 
+**Status:** **Landed** (mic + PTT + provisional overlay + final insert + setup UI).
+
 **Deliver:** Microphone permission; audio capture; push-to-talk toolbar;
 provisional text overlay; final transcript insertion; cancel; model setup UI.
 
 **Exit criterion:** A user can dictate into one document without unstable text
 entering document storage.
+
+**Notes:** Desktop build with `--features voice` (default `pnpm tauri:dev`).
+Capture is WebView `getUserMedia` → Float32 @ 16 kHz →
+`FluidAudioSpeechProvider`. Provisional text uses editor decorations only.
 
 ## Milestone 3: editor semantics
 
