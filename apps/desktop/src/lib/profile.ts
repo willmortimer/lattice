@@ -83,6 +83,8 @@ export interface WorkspaceStartupSettings {
   defaultWorkspace: string | null;
   reopenLastWorkspace: boolean;
   restoreSession: boolean;
+  /** Brief branded splash before revealing the shell on launch. */
+  showStartupSplash: boolean;
 }
 
 export interface ProfileSnapshot {
@@ -154,6 +156,7 @@ export function defaultWorkspaceStartupSettings(): WorkspaceStartupSettings {
     defaultWorkspace: null,
     reopenLastWorkspace: true,
     restoreSession: true,
+    showStartupSplash: true,
   };
 }
 
@@ -231,6 +234,13 @@ function normalizeProfile(profile: ProfileSnapshot): ProfileSnapshot {
   return {
     ...profile,
     resourceTreeCollapsedByWorkspace: profile.resourceTreeCollapsedByWorkspace ?? {},
+    settings: {
+      ...profile.settings,
+      workspaces: {
+        ...defaultWorkspaceStartupSettings(),
+        ...profile.settings.workspaces,
+      },
+    },
   };
 }
 

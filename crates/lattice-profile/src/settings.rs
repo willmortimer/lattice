@@ -570,6 +570,9 @@ pub struct WorkspaceStartupSettings {
     pub reopen_last_workspace: bool,
     #[serde(default = "yes")]
     pub restore_session: bool,
+    /// Brief branded splash before revealing the shell on launch.
+    #[serde(default = "yes")]
+    pub show_startup_splash: bool,
 }
 
 impl Default for WorkspaceStartupSettings {
@@ -580,6 +583,7 @@ impl Default for WorkspaceStartupSettings {
             default_workspace: None,
             reopen_last_workspace: true,
             restore_session: true,
+            show_startup_splash: true,
         }
     }
 }

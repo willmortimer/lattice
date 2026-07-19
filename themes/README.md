@@ -40,6 +40,10 @@ Desktop and site `predev` / `prebuild` hooks run the compiler automatically.
 ## Runtime (desktop)
 
 - Loader applies `--lt-*` vars to `:root`; mirror in `localStorage` wins first paint.
+- Auto appearance mode stores separate dark/light mirror variants so first paint
+  follows `prefers-color-scheme` instead of the last session’s theme only.
+- Startup shows a branded splash (mark + wordmark) for about a second by default;
+  toggle under Settings → Workspaces & startup → Startup splash.
 - Command palette: `Theme: Lattice Slate`, `Theme: Lattice Paper`, `Theme: Follow system`.
 - CLI: `lattice theme list|check|set|mode`.
 - Editing a user theme or `appearance.yaml` live-reloads the UI.

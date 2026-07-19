@@ -71,7 +71,8 @@ button {
    Empty state — the only place the app raises its voice
    ========================================================================== */
 
-.empty-state {
+.empty-state,
+.startup-splash {
   position: relative;
   height: 100%;
   display: flex;
@@ -81,6 +82,11 @@ button {
   gap: 14px;
   padding: 24px;
   text-align: center;
+}
+
+.startup-splash {
+  background: var(--lt-bg);
+  color: var(--lt-text);
 }
 
 .fatal-error {
@@ -124,7 +130,8 @@ button {
 
 /* Grid backdrop with node dots at the intersections, fading out toward the
    edges so the mark sits in a pool of structure (same language as the site). */
-.empty-state::before {
+.empty-state::before,
+.startup-splash::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -144,7 +151,8 @@ button {
   mask-image: radial-gradient(ellipse 75% 65% at 50% 42%, #000 30%, transparent 100%);
 }
 
-.empty-state > * {
+.empty-state > *,
+.startup-splash > * {
   position: relative;
 }
 
@@ -326,7 +334,8 @@ html[data-platform="macos"] .shell {
   padding-top: var(--lt-titlebar);
 }
 
-html[data-platform="macos"] .empty-state {
+html[data-platform="macos"] .empty-state,
+html[data-platform="macos"] .startup-splash {
   padding-top: calc(var(--lt-titlebar) + 24px);
 }
 
