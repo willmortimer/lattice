@@ -108,6 +108,11 @@ impl AppliedOp {
                 path,
                 base_revision,
                 ..
+            }
+            | Command::CanvasAddEdge {
+                path,
+                base_revision,
+                ..
             } => Some(RevisionCapture {
                 path: path.clone(),
                 parent_revision: Some(base_revision.clone()),
@@ -762,6 +767,24 @@ impl CommandEngine {
                     },
                 )
             }
+            Command::CanvasAddEdge {
+                path,
+                base_revision,
+                edge_id,
+                from_node,
+                to_node,
+            } => {
+                self.ensure_canvas_revision(path, base_revision)?;
+                canvas::validate_edit(
+                    path,
+                    &self.store.read(path)?,
+                    &CanvasEdit::AddEdge {
+                        edge_id: edge_id.clone(),
+                        from_node: from_node.clone(),
+                        to_node: to_node.clone(),
+                    },
+                )
+            }
         }
     }
 
@@ -1204,6 +1227,22 @@ impl CommandEngine {
                     node_ids: node_ids.clone(),
                 },
             ),
+            Command::CanvasAddEdge {
+                path,
+                base_revision,
+                edge_id,
+                from_node,
+                to_node,
+            } => self.apply_canvas_edit(
+                command,
+                path,
+                base_revision,
+                CanvasEdit::AddEdge {
+                    edge_id: edge_id.clone(),
+                    from_node: from_node.clone(),
+                    to_node: to_node.clone(),
+                },
+            ),
         }
     }
 
@@ -1400,7 +1439,8 @@ impl CommandEngine {
             }
             Command::CanvasPlaceResource { .. }
             | Command::CanvasMoveNodes { .. }
-            | Command::CanvasRemoveNodes { .. } => {
+            | Command::CanvasRemoveNodes { .. }
+            | Command::CanvasAddEdge { .. } => {
                 unreachable!("canvas commands are never stored as inverse operations")
             }
             Command::FolderCreate { .. } => {
@@ -1508,7 +1548,8 @@ impl CommandEngine {
             }
             Command::CanvasPlaceResource { .. }
             | Command::CanvasMoveNodes { .. }
-            | Command::CanvasRemoveNodes { .. } => {
+            | Command::CanvasRemoveNodes { .. }
+            | Command::CanvasAddEdge { .. } => {
                 self.guard_hash(&forward.guard_path(), resulting_revision.as_deref())
             }
         }

@@ -49,6 +49,20 @@ pub struct CanvasRemoveNodes {
     pub node_ids: Vec<String>,
 }
 
+/// Create a directed edge between two existing JSON Canvas nodes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CanvasAddEdge {
+    pub path: PathBuf,
+    #[serde(rename = "base-revision")]
+    pub base_revision: String,
+    #[serde(rename = "edge-id")]
+    pub edge_id: String,
+    #[serde(rename = "from-node")]
+    pub from_node: String,
+    #[serde(rename = "to-node")]
+    pub to_node: String,
+}
+
 /// The v0 semantic command set.
 ///
 /// These are whole-file (whole-resource) operations; block-level and
@@ -207,6 +221,19 @@ pub enum Command {
         #[serde(rename = "node-ids")]
         node_ids: Vec<String>,
     },
+
+    /// Connect two existing JSON Canvas nodes with a directed edge.
+    CanvasAddEdge {
+        path: PathBuf,
+        #[serde(rename = "base-revision")]
+        base_revision: String,
+        #[serde(rename = "edge-id")]
+        edge_id: String,
+        #[serde(rename = "from-node")]
+        from_node: String,
+        #[serde(rename = "to-node")]
+        to_node: String,
+    },
 }
 
 mod base64_bytes {
@@ -259,7 +286,8 @@ impl Command {
             } => view_file_path(path, view_name),
             Command::CanvasPlaceResource { path, .. }
             | Command::CanvasMoveNodes { path, .. }
-            | Command::CanvasRemoveNodes { path, .. } => path.clone(),
+            | Command::CanvasRemoveNodes { path, .. }
+            | Command::CanvasAddEdge { path, .. } => path.clone(),
         }
     }
 
@@ -289,7 +317,8 @@ impl Command {
             } => vec![view_file_path(path, view_name)],
             Command::CanvasPlaceResource { path, .. }
             | Command::CanvasMoveNodes { path, .. }
-            | Command::CanvasRemoveNodes { path, .. } => vec![path.clone()],
+            | Command::CanvasRemoveNodes { path, .. }
+            | Command::CanvasAddEdge { path, .. } => vec![path.clone()],
         }
     }
 }

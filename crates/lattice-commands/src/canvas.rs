@@ -29,6 +29,11 @@ pub(crate) enum CanvasEdit {
     Remove {
         node_ids: Vec<String>,
     },
+    AddEdge {
+        edge_id: String,
+        from_node: String,
+        to_node: String,
+    },
 }
 
 pub(crate) fn validate_canvas_path(path: &Path) -> Result<()> {
@@ -111,6 +116,37 @@ pub(crate) fn validate_edit(path: &Path, original: &[u8], edit: &CanvasEdit) -> 
                 }
             }
         }
+        CanvasEdit::AddEdge {
+            edge_id,
+            from_node,
+            to_node,
+        } => {
+            validate_id(path, edge_id)?;
+            validate_id(path, from_node)?;
+            validate_id(path, to_node)?;
+            if from_node == to_node {
+                return invalid(path, "edge endpoints must be distinct nodes");
+            }
+            if !nodes
+                .iter()
+                .any(|node| node_id_of(node) == Some(from_node.as_str()))
+            {
+                return invalid(path, format!("fromNode {:?} does not exist", from_node));
+            }
+            if !nodes
+                .iter()
+                .any(|node| node_id_of(node) == Some(to_node.as_str()))
+            {
+                return invalid(path, format!("toNode {:?} does not exist", to_node));
+            }
+            if canvas_edges(&document)
+                .into_iter()
+                .flatten()
+                .any(|edge| edge_id_of(edge) == Some(edge_id.as_str()))
+            {
+                return invalid(path, format!("edge id {:?} already exists", edge_id));
+            }
+        }
     }
     Ok(())
 }
@@ -170,6 +206,18 @@ pub(crate) fn patch(path: &Path, original: &[u8], edit: &CanvasEdit) -> Result<V
                 });
             }
         }
+        CanvasEdit::AddEdge {
+            edge_id,
+            from_node,
+            to_node,
+        } => {
+            let edges = canvas_edges_mut(path, &mut document)?;
+            edges.push(json!({
+                "id": edge_id,
+                "fromNode": from_node,
+                "toNode": to_node,
+            }));
+        }
     }
 
     serde_json::to_vec_pretty(&document).map_err(Error::from)
@@ -204,6 +252,23 @@ fn canvas_nodes_mut<'a>(path: &Path, document: &'a mut Value) -> Result<&'a mut 
         .get_mut("nodes")
         .and_then(Value::as_array_mut)
         .ok_or_else(|| invalid_value(path, "nodes must be an array"))
+}
+
+fn canvas_edges<'a>(document: &'a Value) -> Option<&'a Vec<Value>> {
+    document.get("edges").and_then(Value::as_array)
+}
+
+fn canvas_edges_mut<'a>(path: &Path, document: &'a mut Value) -> Result<&'a mut Vec<Value>> {
+    if document.get("edges").is_none() {
+        document
+            .as_object_mut()
+            .ok_or_else(|| invalid_value(path, "document must be a JSON object"))?
+            .insert("edges".into(), json!([]));
+    }
+    document
+        .get_mut("edges")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| invalid_value(path, "edges must be an array"))
 }
 
 fn validate_existing_nodes(path: &Path, nodes: &[Value]) -> Result<()> {
@@ -260,6 +325,10 @@ fn validate_finite(path: &Path, field: &str, value: f64) -> Result<()> {
 
 fn node_id_of(node: &Value) -> Option<&str> {
     node.get("id").and_then(Value::as_str)
+}
+
+fn edge_id_of(edge: &Value) -> Option<&str> {
+    edge.get("id").and_then(Value::as_str)
 }
 
 fn relative_resource_path(canvas: &Path, resource: &Path) -> Result<String> {
