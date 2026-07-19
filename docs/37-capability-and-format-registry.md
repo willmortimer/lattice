@@ -53,7 +53,7 @@ Status vocabulary:
 |---|---|---|
 | SQLite | Canonical mutable relational data application | Bundled |
 | SQL schema and migrations | Readable database definition and evolution | Bundled |
-| CSV/TSV | Simple interchange and small linked tables | Bundled |
+| CSV/TSV | Interchange, Import CSV into `.data`, and bounded read-only table preview in the text viewer (not a spreadsheet engine) | Bundled |
 | JSON/JSONL/NDJSON | Structured interchange and logs | Bundled |
 | Lattice view/form/interface manifests | Presentation over data without duplication | Bundled |
 | Optional Drizzle adapter | Type-safe TypeScript development over SQLite | Pack |
