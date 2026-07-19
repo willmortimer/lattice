@@ -1,0 +1,31 @@
+[package]
+name = "lattice-audio-macos"
+description = "macOS AVAudioEngine capture bridge (C ABI + Swift) for Lattice voice"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "lattice_audio_macos"
+path = "src/lib.rs"
+
+[features]
+default = []
+# Links `libLatticeAudioBridge.dylib` (set automatically by build.rs when found/built).
+link-bridge = []
+# Live microphone integration test (requires linked bridge + mic permission).
+live-capture = ["link-bridge"]
+
+[dependencies]
+lattice-audio = { path = "../lattice-audio" }
+thiserror.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "sync"] }
+tracing = { workspace = true, optional = true }
+
+[dev-dependencies]
+lattice-audio = { path = "../lattice-audio" }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
+
+[package.metadata.docs.rs]
+targets = ["aarch64-apple-darwin"]
