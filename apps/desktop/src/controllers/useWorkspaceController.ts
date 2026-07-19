@@ -187,6 +187,7 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
     workspaces: string;
     default_workspace: WorkspaceSnapshot | null;
     diagnostics: Array<{ message: string }>;
+    demoReset?: boolean;
   };
 
   const provisionDefaultHome = useCallback(async () => {
@@ -296,25 +297,43 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
 
     if (inBrowser || !hasTauri) return;
     startupAttemptedRef.current = true;
-    const candidates = [
-      ...(startup.reopenLastWorkspace ? recents.map((recent) => recent.root) : []),
-      profile.effectiveDefaultWorkspace,
-    ].filter((path, index, all): path is string => Boolean(path) && all.indexOf(path) === index);
-    if (candidates.length === 0) {
-      let cancelled = false;
-      void (async () => {
-        try {
-          await provisionDefaultHome();
-        } catch (error) {
-          if (!cancelled) setError(String(error));
-        }
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }
     let cancelled = false;
     void (async () => {
+      // Always run ensure_home first so LATTICE_DEV_RESET_DEMO can re-seed First Look
+      // before we try reopen-last paths (those would otherwise skip the reset).
+      let home: EnsureHomeResult | null = null;
+      try {
+        home = await invoke<EnsureHomeResult>("ensure_home");
+        if (cancelled) return;
+        setWorkspacesDir(home.workspaces);
+      } catch (error) {
+        if (!cancelled) setError(String(error));
+        return;
+      }
+
+      if (home.demoReset && home.default_workspace) {
+        await adoptWorkspace(home.default_workspace);
+        if (home.diagnostics.length > 0) {
+          setStatusToast(home.diagnostics.map((item) => item.message).join(" "));
+        }
+        return;
+      }
+
+      const candidates = [
+        ...(startup.reopenLastWorkspace ? recents.map((recent) => recent.root) : []),
+        profile.effectiveDefaultWorkspace,
+        home.default_workspace?.root ?? null,
+      ].filter((path, index, all): path is string => Boolean(path) && all.indexOf(path) === index);
+
+      if (candidates.length === 0) {
+        if (home.default_workspace) {
+          await adoptWorkspace(home.default_workspace);
+        } else {
+          setError("Lattice home is ready, but no default workspace was found.");
+        }
+        return;
+      }
+
       for (const path of candidates) {
         try {
           const next = await invoke<WorkspaceSnapshot>("open_workspace", { path });
@@ -324,9 +343,14 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
           if (recents.some((recent) => recent.root === path)) removeRecent(path);
         }
       }
+      if (!cancelled && home.default_workspace) {
+        await adoptWorkspace(home.default_workspace);
+      }
     })();
-    return () => { cancelled = true; };
-  }, [adoptWorkspace, demoStartEmpty, profile.effectiveDefaultWorkspace, profileReady, provisionDefaultHome, recents, removeRecent, setError, snapshot, startup.reopenLastWorkspace]);
+    return () => {
+      cancelled = true;
+    };
+  }, [adoptWorkspace, demoStartEmpty, profile.effectiveDefaultWorkspace, profileReady, recents, removeRecent, setError, setStatusToast, snapshot, startup.reopenLastWorkspace]);
 
   useEffect(() => {
     if (!snapshot || sessionRestoredRootRef.current === snapshot.root) return;

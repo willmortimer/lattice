@@ -1,8 +1,9 @@
 use std::path::PathBuf;
 
 use lattice_core::{
-    ensure_lattice_home, initialize_active_lattice_home, DefaultWorkspaceStatus, ProvisionDiagnostic,
-    TemplateDescriptor, WorkspaceCreationMode, WorkspaceCreationPlan, WorkspaceProvisioner,
+    ensure_lattice_home, initialize_active_lattice_home, lattice_dev_reset_demo_enabled,
+    DefaultWorkspaceStatus, ProvisionDiagnostic, TemplateDescriptor, WorkspaceCreationMode,
+    WorkspaceCreationPlan, WorkspaceProvisioner,
 };
 use serde::Serialize;
 
@@ -16,6 +17,9 @@ pub struct LatticeHomeInfo {
     pub settings: String,
     pub default_workspace: Option<WorkspaceSnapshot>,
     pub diagnostics: Vec<ProvisionDiagnostic>,
+    /// True when `LATTICE_DEV_RESET_DEMO` wiped and re-seeded First Look.
+    #[serde(rename = "demoReset")]
+    pub demo_reset: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -27,6 +31,7 @@ pub struct WorkspaceProvisionResult {
 }
 
 pub fn ensure_home() -> Result<LatticeHomeInfo, String> {
+    let demo_reset = lattice_dev_reset_demo_enabled();
     let (home, outcome) = initialize_active_lattice_home().map_err(|err| err.to_string())?;
     let default_workspace = Some(snapshot_from_workspace(&outcome.workspace)?);
     Ok(LatticeHomeInfo {
@@ -35,6 +40,7 @@ pub fn ensure_home() -> Result<LatticeHomeInfo, String> {
         settings: home.settings.to_string_lossy().into_owned(),
         default_workspace,
         diagnostics: outcome.diagnostics,
+        demo_reset,
     })
 }
 

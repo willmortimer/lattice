@@ -95,6 +95,25 @@
 .image-content { display: block; max-width: none; max-height: none; transform-origin: center center; will-change: transform; }
 .image-hint { position: absolute; right: 12px; bottom: 10px; padding: 4px 8px; border-radius: var(--lt-radius-sm); color: var(--lt-muted); background: color-mix(in oklch, var(--lt-bg) 80%, transparent); font-size: 0.78rem; pointer-events: none; }
 
+.image-svg-source {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 16px 18px;
+  overflow: auto;
+  color: var(--lt-text);
+  background: var(--lt-bg-raise);
+  border: 0;
+  font: 0.85rem/1.45 var(--lt-font-mono);
+  white-space: pre;
+  tab-size: 2;
+}
+
+.image-svg-source:focus-visible {
+  outline: 2px solid var(--lt-accent);
+  outline-offset: -2px;
+}
+
 .pdf-viewer { display: flex; flex: 1; min-height: 0; flex-direction: column; }
 .media-viewer-state { display: grid; min-height: 280px; place-items: center; color: var(--lt-muted); }
 .pdf-pages-viewport { position: relative; flex: 1 1 auto; min-height: 0; overflow: auto; background: var(--lt-bg-raise); }

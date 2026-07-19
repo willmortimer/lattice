@@ -253,6 +253,7 @@ test("demo template emits kitchen-sink browser fixture", () => {
   assert.match(source, /Research\/Architecture\.md/);
   assert.match(source, /Resources\/config\.json/);
   assert.match(source, /Resources\/mark\.svg/);
+  assert.match(source, /"formatId": "file:image"/);
   assert.match(source, /"formatId": "file:text"/);
   assert.match(source, /CRM\.data/);
   assert.match(source, /"relation_targets"/);

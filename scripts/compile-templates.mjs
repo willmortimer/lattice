@@ -884,8 +884,7 @@ function resourceKindForPath(path) {
 
 function formatIdForPath(path) {
   const extension = fileExtension(path);
-  if (extension === "svg") return "file:text";
-  if (IMAGE_EXTENSIONS.has(extension)) return "file:image";
+  if (extension === "svg" || IMAGE_EXTENSIONS.has(extension)) return "file:image";
   if (extension === "pdf") return "file:pdf";
   if (["txt", "md", "markdown", "log", "csv", "tsv"].includes(extension)) return "file:text";
   if (CODE_EXTENSIONS.has(extension)) return "file:code";

@@ -168,10 +168,17 @@
               pnpm install
               pnpm --filter @lattice/desktop exec tauri build --bundles app
 
-              app_src="apps/desktop/src-tauri/target/release/bundle/macos/Lattice.app"
+              # Cargo workspace target dir is repo-root `target/`, not src-tauri/target.
+              app_src="target/release/bundle/macos/Lattice.app"
               if [ ! -d "$app_src" ]; then
-                echo "desktop-install: missing bundle at $app_src" >&2
-                exit 1
+                # Older / alternate layouts may still use the crate-local target.
+                alt_src="apps/desktop/src-tauri/target/release/bundle/macos/Lattice.app"
+                if [ -d "$alt_src" ]; then
+                  app_src="$alt_src"
+                else
+                  echo "desktop-install: missing bundle at $app_src (also checked $alt_src)" >&2
+                  exit 1
+                fi
               fi
 
               # Ensure the identity we expect is on the bundle (Tauri may already have signed).

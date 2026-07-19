@@ -5,9 +5,8 @@ use std::path::{Path, PathBuf};
 pub use lattice_profile::{
     default_debug_home_path, lattice_dev_home_enabled, lattice_dev_reset_demo_enabled,
     lattice_force_prod_home_enabled, lattice_home_path, LatticeHome, DEFAULT_DEBUG_HOME_RELATIVE,
-    DEFAULT_WORKSPACE_NAME, LATTICE_DEV_HOME_ENV, LATTICE_DEV_RESET_DEMO_ENV,
-    LATTICE_FORCE_PROD_HOME_ENV, LATTICE_HOME_ENV, LATTICE_HOME_NAME, SETTINGS_DIR_NAME,
-    STATE_DIR_NAME, WORKSPACES_DIR_NAME,
+    DEFAULT_WORKSPACE_NAME, LATTICE_DEV_HOME_ENV, LATTICE_FORCE_PROD_HOME_ENV, LATTICE_HOME_ENV,
+    LATTICE_HOME_NAME, SETTINGS_DIR_NAME, STATE_DIR_NAME, WORKSPACES_DIR_NAME,
 };
 
 use crate::template::{
@@ -227,6 +226,7 @@ fn profile_error(error: lattice_profile::Error) -> Error {
 mod tests {
     use super::*;
     use crate::ResourceKind;
+    use lattice_profile::LATTICE_DEV_RESET_DEMO_ENV;
     use std::sync::{Mutex, OnceLock};
 
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
