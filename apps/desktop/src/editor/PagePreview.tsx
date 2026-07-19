@@ -1,6 +1,6 @@
 import { EditorContent, useEditor } from "@tiptap/react";
 
-import { editorExtensions } from "./extensions";
+import { richEditorExtensions } from "./richEditorExtensions";
 import { handleEditorLinkClick } from "./linkClick";
 import { tryParseMarkdownToJSON } from "./markdown";
 
@@ -17,7 +17,7 @@ export function PagePreview({ draftBody, parseError, onOpenWiki }: PagePreviewPr
   const content = canRender ? parsed.json : { type: "doc", content: [{ type: "paragraph" }] };
 
   const editor = useEditor({
-    extensions: editorExtensions,
+    extensions: richEditorExtensions,
     content,
     editable: false,
     editorProps: {
