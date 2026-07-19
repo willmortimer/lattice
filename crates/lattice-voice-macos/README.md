@@ -107,21 +107,27 @@ Events: `PARTIAL` / `STABLE` / `FINAL` / `ERROR` via
 `lattice_voice_event_callback`. Transcript pointers are valid only for the
 callback duration.
 
-## Rust stub
+## Rust provider
 
 ```sh
+# Unit tests (mock backend; no dylib required)
 cargo test -p lattice-voice-macos
+
+# Link the Swift dylib (optional for local dev)
+export LATTICE_VOICE_BRIDGE_LIB="$(pwd)/crates/lattice-voice-macos/swift/.build/arm64-apple-macosx/release"
+cargo build -p lattice-voice-macos --features link-bridge
+
+# Live ASR integration test (cached models + fixture WAV)
+export LATTICE_VOICE_MODEL_CACHE="$(pwd)/research/voice-m0-fluidaudio/.cache/Models"
+./research/voice-m0-fluidaudio/scripts/generate-fixture.sh
+cargo test -p lattice-voice-macos --features live-asr --test live_asr -- --nocapture
 ```
 
-Linking the dylib into Cargo (when Task R lands):
-
-```sh
-export LATTICE_VOICE_BRIDGE_LIB="$(pwd)/crates/lattice-voice-macos/swift/.build/release"
-cargo build -p lattice-voice-macos
-```
+`FluidAudioSpeechProvider` in this crate implements `lattice_voice::SpeechProvider` when
+`link-bridge` / `live-asr` features link `libLatticeVoiceBridge.dylib`. See
+`tests/LIVE_RESULTS.md` for a warm-cache run excerpt.
 
 ## Out of scope (this crate)
 
-- Full Rust `SpeechProvider` / live cargo integration tests (Task R)
 - Tauri / desktop GUI
 - ADR doc updates (Task D)
