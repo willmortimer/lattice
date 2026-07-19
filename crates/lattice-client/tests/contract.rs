@@ -7,6 +7,7 @@ use lattice_client::{
     request, response, ClientError, DaemonClient, EmbeddedClient, EventFilter, HealthRequest,
     LatticeClient, PingRequest, Request, PROTOCOL_VERSION,
 };
+use std::time::Duration;
 
 fn health_request() -> Request {
     Request {
@@ -126,7 +127,7 @@ async fn embedded_subscribe_returns_empty_stream() {
 }
 
 #[tokio::test]
-async fn daemon_subscribe_is_unimplemented() {
+async fn daemon_subscribe_yields_filtered_stream() {
     let config = FakeDaemonConfig {
         auth_token: "tok".into(),
         instance_id: "id".into(),
@@ -135,11 +136,13 @@ async fn daemon_subscribe_is_unimplemented() {
     let client = DaemonClient::connect(&socket_path, config.auth_token)
         .await
         .expect("connect");
-    let err = client
+    let mut stream = client
         .subscribe(EventFilter {
             workspace_id: Some("ws".into()),
         })
         .await
-        .expect_err("subscribe stub");
-    assert!(matches!(err, ClientError::Unimplemented(_)));
+        .expect("subscribe");
+    // Fake daemon does not push events; the stream stays open without closing.
+    let next = tokio::time::timeout(Duration::from_millis(50), stream.next()).await;
+    assert!(next.is_err(), "no events expected from fake daemon yet");
 }

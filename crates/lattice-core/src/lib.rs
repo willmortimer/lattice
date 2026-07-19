@@ -58,7 +58,9 @@ pub use template::{
     WorkspaceProvisioner, WorkspaceTemplate,
 };
 pub use validate::{Diagnostic, Severity};
-pub use watcher::{WorkspaceEvent, WorkspaceWatcher};
+pub use watcher::{
+    WorkspaceEvent, WorkspaceWatcher, DEFAULT_DEBOUNCE_TIMEOUT, TEST_DEBOUNCE_TIMEOUT,
+};
 pub use workspace::{Workspace, OPERATIONAL_DIR};
 
 pub type Result<T> = std::result::Result<T, Error>;

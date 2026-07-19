@@ -6,9 +6,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use lattice_client::{
-    request, response, ApplyPageUpdateRequest, DaemonClient, EmbeddedClient, HealthRequest,
-    LatticeClient, OpenWorkspaceRequest, PingRequest, Request, SearchRequest, SearchResponse,
-    PROTOCOL_VERSION,
+    request, response, ApplyPageUpdateRequest, DaemonClient, EmbeddedClient, EventFilter,
+    HealthRequest, LatticeClient, OpenWorkspaceRequest, PingRequest, Request, SearchRequest,
+    SearchResponse, PROTOCOL_VERSION,
 };
 use lattice_core::Workspace;
 use lattice_daemon::{
@@ -45,7 +45,10 @@ async fn spawn_in_process_daemon(instance_id: &str) -> (ServerGuard, Arc<Lattice
     let config = DaemonConfig::new(&socket_path, auth_token.clone())
         .with_instance_id(instance_id)
         .with_process_start(1_234_567);
-    let runtime = Arc::new(LatticeRuntime::new());
+    // Short debounce so watcher contract tests settle quickly.
+    let runtime = Arc::new(LatticeRuntime::with_watch_debounce(
+        lattice_core::TEST_DEBOUNCE_TIMEOUT,
+    ));
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
     let join = tokio::spawn(serve_with_shutdown(
         config,
@@ -413,6 +416,129 @@ async fn rejects_bad_auth_token() {
         Ok(_) => panic!("must reject bad auth token"),
         Err(other) => panic!("expected HandshakeRejected, got {other:?}"),
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn open_workspace_watcher_indexes_external_file_and_emits_events() {
+    use lattice_protocol::event::Body;
+
+    let fixture = init_fixture();
+    let path = fixture.path().to_string_lossy().into_owned();
+    let (guard, runtime) = spawn_in_process_daemon("watch-fts").await;
+    let client = DaemonClient::connect(&guard.socket_path, &guard.auth_token)
+        .await
+        .expect("connect");
+
+    let mut events = client
+        .subscribe(EventFilter::default())
+        .await
+        .expect("subscribe");
+
+    let open = client
+        .request(open_request(&path))
+        .await
+        .expect("open workspace");
+    let workspace_id = match open.body {
+        Some(response::Body::OpenWorkspace(resp)) => resp.workspace_id,
+        other => panic!("unexpected open: {other:?}"),
+    };
+
+    let session = runtime
+        .get_session_by_id(&workspace_id)
+        .expect("warm session");
+    assert!(session.is_watching(), "write open must start the watcher");
+
+    // Wait for IndexProgress::started (may race with lease_changed).
+    let mut saw_started = false;
+    let mut sequences = Vec::new();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+    while tokio::time::Instant::now() < deadline && !saw_started {
+        match tokio::time::timeout(
+            deadline.saturating_duration_since(tokio::time::Instant::now()),
+            events.next(),
+        )
+        .await
+        {
+            Ok(Some(Ok(evt))) => {
+                sequences.push(evt.sequence);
+                if matches!(
+                    evt.body,
+                    Some(Body::IndexProgress(ref p)) if p.phase == "started"
+                ) {
+                    saw_started = true;
+                }
+            }
+            Ok(Some(Err(err))) => panic!("event stream error: {err}"),
+            Ok(None) => break,
+            Err(_) => break,
+        }
+    }
+    assert!(saw_started, "expected IndexProgress started after open");
+
+    fs::write(
+        fixture.path().join("External.md"),
+        "# External\n\ndaemon-watcher-unique-token\n",
+    )
+    .expect("write external file");
+
+    let mut saw_upsert = false;
+    let mut saw_resource = false;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while tokio::time::Instant::now() < deadline && !(saw_upsert && saw_resource) {
+        match tokio::time::timeout(
+            deadline.saturating_duration_since(tokio::time::Instant::now()),
+            events.next(),
+        )
+        .await
+        {
+            Ok(Some(Ok(evt))) => {
+                sequences.push(evt.sequence);
+                match evt.body {
+                    Some(Body::IndexProgress(ref p))
+                        if p.phase == "upserted"
+                            && p.path.as_deref() == Some("External.md") =>
+                    {
+                        saw_upsert = true;
+                    }
+                    Some(Body::ResourceChanged(ref c))
+                        if c.path == "External.md"
+                            && (c.change == "created" || c.change == "modified") =>
+                    {
+                        saw_resource = true;
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Some(Err(err))) => panic!("event stream error: {err}"),
+            Ok(None) => break,
+            Err(_) => break,
+        }
+    }
+    assert!(saw_resource, "expected ResourceChanged for External.md");
+    assert!(saw_upsert, "expected IndexProgress upsert for External.md");
+    assert!(
+        sequences.windows(2).all(|w| w[1] > w[0]),
+        "event sequences must be strictly increasing: {sequences:?}"
+    );
+
+    // SearchResponse has no hit payload yet; assert via warm session index.
+    let hits = session
+        .search("daemon-watcher-unique-token", 10)
+        .expect("search");
+    assert!(
+        hits.iter().any(|h| h.path.ends_with("External.md")),
+        "incremental FTS should find externally written file"
+    );
+
+    // Exercise the daemon Search RPC path as well.
+    let search = client
+        .request(search_request(&workspace_id, "daemon-watcher-unique-token"))
+        .await
+        .expect("daemon search");
+    assert!(matches!(
+        search.body,
+        Some(response::Body::Search(SearchResponse {}))
+    ));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

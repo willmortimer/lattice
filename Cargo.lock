@@ -2424,6 +2424,7 @@ dependencies = [
  "lattice-handlers",
  "lattice-index",
  "lattice-profile",
+ "lattice-runtime",
  "lattice-storage",
  "lattice-terminal",
  "lattice-theme",

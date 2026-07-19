@@ -39,7 +39,10 @@ use crate::{Error, Result};
 /// reported. Coalesces an editor's write burst, or a temp-file-then-rename
 /// save, into a single event (docs/05: "wait for stable write / atomic
 /// rename").
-const DEBOUNCE_TIMEOUT: Duration = Duration::from_millis(400);
+pub const DEFAULT_DEBOUNCE_TIMEOUT: Duration = Duration::from_millis(400);
+
+/// Quiet period used by integration tests that need faster settle times.
+pub const TEST_DEBOUNCE_TIMEOUT: Duration = Duration::from_millis(50);
 
 /// A reconciled, workspace-relative filesystem change.
 ///
@@ -75,19 +78,30 @@ pub struct WorkspaceWatcher {
 }
 
 impl WorkspaceWatcher {
-    /// Start watching `root` (recursively) for changes.
+    /// Start watching `root` (recursively) for changes with the default debounce.
     ///
     /// `root` is canonicalized so that stripping the watched root back off
     /// reported paths is reliable even when it traverses a symlink (e.g. a
     /// macOS temp directory).
     pub fn start(root: PathBuf) -> Result<(Self, Receiver<WorkspaceEvent>)> {
+        Self::start_with_debounce(root, DEFAULT_DEBOUNCE_TIMEOUT)
+    }
+
+    /// Start watching `root` with an explicit debounce quiet period.
+    ///
+    /// Prefer [`DEFAULT_DEBOUNCE_TIMEOUT`] in production and
+    /// [`TEST_DEBOUNCE_TIMEOUT`] in tests that wait on settled events.
+    pub fn start_with_debounce(
+        root: PathBuf,
+        debounce: Duration,
+    ) -> Result<(Self, Receiver<WorkspaceEvent>)> {
         let canonical_root = root.canonicalize().map_err(|e| Error::io(&root, e))?;
         let store = NativeWorkspaceStore::new(canonical_root.clone());
         let (tx, rx) = mpsc::channel();
 
         let watch_root = canonical_root.clone();
         let mut debouncer = new_debouncer(
-            DEBOUNCE_TIMEOUT,
+            debounce,
             None,
             move |result: DebounceEventResult| match result {
                 Ok(events) => {
@@ -518,8 +532,8 @@ mod tests {
         std::fs::write(dir.path().join(".#Note.md"), "lock").unwrap();
         std::fs::remove_file(dir.path().join(".Note.md.swp")).unwrap();
 
-        // Give the debounce window (400ms) time to flush, then some slack.
-        assert_no_event(&rx, Duration::from_millis(900));
+        // Give the debounce window time to flush, then some slack.
+        assert_no_event(&rx, DEFAULT_DEBOUNCE_TIMEOUT + Duration::from_millis(500));
         watcher.stop();
     }
 
@@ -535,7 +549,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_no_event(&rx, Duration::from_millis(900));
+        assert_no_event(&rx, DEFAULT_DEBOUNCE_TIMEOUT + Duration::from_millis(500));
         watcher.stop();
     }
 
