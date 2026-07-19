@@ -2282,6 +2282,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-audio"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "lattice-audio-macos"
+version = "0.1.0"
+dependencies = [
+ "lattice-audio",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "lattice-bridge"
 version = "0.1.0"
 dependencies = [
