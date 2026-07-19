@@ -40,6 +40,7 @@ struct VoiceInner {
 #[cfg(all(target_os = "macos", feature = "voice"))]
 struct ActiveSession {
     session_id: String,
+    normalization_context: lattice_voice::NormalizationContext,
     /// Shared with the capture pump until finish/cancel takes ownership.
     session: Arc<Mutex<Option<Box<dyn lattice_voice::SpeechSession>>>>,
     _forwarder: tokio::task::JoinHandle<()>,
@@ -79,6 +80,8 @@ pub enum VoiceUiEvent {
         session_id: String,
         text: String,
         replaces_revision: Option<u64>,
+        raw_text: Option<String>,
+        corrections: Vec<lattice_voice::CorrectionProvenance>,
     },
     #[serde(rename_all = "camelCase")]
     Status {
@@ -497,6 +500,7 @@ pub struct VoiceSessionContextHints {
     pub tags: Vec<String>,
     pub heading_path: Vec<String>,
     pub glossary_terms: Vec<String>,
+    pub known_paths: Vec<String>,
 }
 
 impl Default for VoiceSessionContextHints {
@@ -509,6 +513,7 @@ impl Default for VoiceSessionContextHints {
             tags: Vec::new(),
             heading_path: Vec::new(),
             glossary_terms: Vec::new(),
+            known_paths: Vec::new(),
         }
     }
 }
@@ -523,8 +528,8 @@ pub async fn voice_start_session(
     {
         use lattice_audio::CaptureProvider;
         use lattice_voice::{
-            SessionContext, SpeechEventSender, SpeechProvider, SpeechSessionConfig, VoiceContextBuilder,
-            VoiceContextInput, VoiceEvent,
+            normalize_final_transcript, SessionContext, SpeechEventSender, SpeechProvider,
+            SpeechSessionConfig, VoiceContextBuilder, VoiceContextInput, VoiceEvent,
         };
 
         // Preempt any leftover session from a release-during-start race.
@@ -537,6 +542,17 @@ pub async fn voice_start_session(
         let session_id = format!("voice-{}", NEXT_SESSION.fetch_add(1, Ordering::Relaxed));
         let (events, mut rx) = SpeechEventSender::pair();
         let hints = hints.unwrap_or_default();
+        let context_input = VoiceContextInput {
+            document_id: hints.document_id.clone(),
+            heading_path: hints.heading_path.clone(),
+            page_title: hints.page_title.clone(),
+            workspace_name: hints.workspace_name.clone(),
+            document_path: hints.document_path.clone(),
+            tags: hints.tags.clone(),
+            extra_glossary_terms: hints.glossary_terms.clone(),
+            known_paths: hints.known_paths.clone(),
+            known_symbols: Vec::new(),
+        };
         let context = if hints.document_id.is_some()
             || hints.document_path.is_some()
             || hints.page_title.is_some()
@@ -544,28 +560,18 @@ pub async fn voice_start_session(
             || !hints.tags.is_empty()
             || !hints.heading_path.is_empty()
             || !hints.glossary_terms.is_empty()
+            || !hints.known_paths.is_empty()
         {
-            VoiceContextBuilder::new().build_session_context(
-                &VoiceContextInput {
-                    document_id: hints.document_id,
-                    heading_path: hints.heading_path,
-                    page_title: hints.page_title,
-                    workspace_name: hints.workspace_name,
-                    document_path: hints.document_path,
-                    tags: hints.tags,
-                    extra_glossary_terms: hints.glossary_terms,
-                    ..VoiceContextInput::default()
-                },
-                false,
-                None,
-            )
+            VoiceContextBuilder::new().build_session_context(&context_input, false, None)
         } else {
             SessionContext {
                 document_id: None,
                 glossary_terms: Vec::new(),
+                known_paths: Vec::new(),
                 command_mode: false,
             }
         };
+        let normalization_context = lattice_voice::NormalizationContext::from(&context);
         let config = SpeechSessionConfig {
             session_id: session_id.clone(),
             language: Some("en".into()),
@@ -651,6 +657,7 @@ pub async fn voice_start_session(
             let mut inner = state.inner.lock().await;
             inner.active = Some(ActiveSession {
                 session_id: session_id.clone(),
+                normalization_context,
                 session: session_slot,
                 _forwarder: forwarder,
                 pump,
@@ -715,6 +722,7 @@ pub async fn voice_finish_session(
             _forwarder,
             pump,
             session_id: sid,
+            normalization_context,
         } = active;
         // Stop forwarding immediately so late partials cannot re-paint provisional
         // ghost text after the authoritative final is inserted.
@@ -738,12 +746,16 @@ pub async fn voice_finish_session(
 
         match speech.finish_utterance().await {
             Ok(final_transcript) => {
+                let final_transcript =
+                    normalize_final_transcript(final_transcript, &normalization_context);
                 let _ = app.emit(
                     VOICE_EVENT,
                     VoiceUiEvent::Final {
                         session_id: sid,
                         text: final_transcript.text,
                         replaces_revision: Some(final_transcript.replaces_revision),
+                        raw_text: final_transcript.raw_text,
+                        corrections: final_transcript.corrections,
                     },
                 );
                 let _ = app.emit(

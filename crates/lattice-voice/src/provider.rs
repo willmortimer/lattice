@@ -183,6 +183,8 @@ impl SpeechSession for NullSpeechSession {
             utterance_id: self.utterance_id.clone(),
             replaces_revision: self.revision,
             text: final_text,
+            raw_text: None,
+            corrections: Vec::new(),
             finalization_mode: crate::protocol::FinalizationMode::StreamingFlush,
             duration_ms: 0,
             processing_ms: 0,
@@ -228,6 +230,7 @@ mod tests {
             context: SessionContext {
                 document_id: None,
                 glossary_terms: Vec::new(),
+                known_paths: Vec::new(),
                 command_mode: false,
             },
         };
@@ -255,6 +258,7 @@ mod tests {
             context: SessionContext {
                 document_id: None,
                 glossary_terms: Vec::new(),
+                known_paths: Vec::new(),
                 command_mode: false,
             },
         };

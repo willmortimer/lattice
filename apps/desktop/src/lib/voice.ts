@@ -27,6 +27,15 @@ export type VoiceSessionContextHints = {
   tags?: string[];
   headingPath?: string[];
   glossaryTerms?: string[];
+  knownPaths?: string[];
+};
+
+export type VoiceTranscriptCorrection = {
+  kind: "spoken_punctuation" | "path_reconstruction" | "identifier_casing";
+  rawStart: number;
+  rawEnd: number;
+  replacement: string;
+  source: "deterministic_rule" | "glossary_exact_match" | "known_path_match";
 };
 
 export type VoiceUiEvent =
@@ -36,6 +45,8 @@ export type VoiceUiEvent =
       sessionId: string;
       text: string;
       replacesRevision: number | null;
+      rawText?: string | null;
+      corrections?: VoiceTranscriptCorrection[];
     }
   | { type: "status"; state: string; message: string | null }
   | { type: "failed"; sessionId: string | null; message: string };
@@ -57,6 +68,7 @@ function serializeVoiceHints(hints: VoiceSessionContextHints) {
     tags: hints.tags ?? [],
     headingPath: hints.headingPath ?? [],
     glossaryTerms: hints.glossaryTerms ?? [],
+    knownPaths: hints.knownPaths ?? [],
   };
 }
 

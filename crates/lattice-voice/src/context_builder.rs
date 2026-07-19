@@ -144,6 +144,7 @@ impl VoiceContextBuilder {
         SessionContext {
             document_id: built.document_id,
             glossary_terms: built.glossary_terms,
+            known_paths: input.known_paths.clone(),
             command_mode,
         }
     }

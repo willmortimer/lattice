@@ -6,6 +6,7 @@
 mod context_builder;
 mod error;
 mod in_process;
+mod normalize;
 mod protocol;
 mod provider;
 mod session;
@@ -16,6 +17,10 @@ pub use context_builder::{
 };
 pub use error::SpeechError;
 pub use in_process::{record_transcript_revision, InProcessVoiceService};
+pub use normalize::{
+    normalize_final_transcript, normalize_transcript, CorrectionKind, CorrectionProvenance,
+    CorrectionSource, NormalizationContext, NormalizedTranscript, NORMALIZER_VERSION,
+};
 pub use protocol::{
     AudioChunk, AudioSampleFormat, CancelVoiceSessionRequest, CommandCandidatePayload,
     EndVoiceSessionRequest, FinalTranscript, FinalizationMode, FinishUtteranceRequest,
