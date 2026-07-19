@@ -214,6 +214,12 @@ This is navigation via JSON Canvas `subpath`, distinct from in-table
 `layout.type: form` and from future `lattice-canvas-profile` sidecars that
 embed a `data-view` renderer inline.
 
+Markdown page content subsets (heading anchors, `#fragment` previews, or
+partial page cards on a canvas) are **not** specified yet. Do not overload
+`file.subpath` for page headings until an ADR defines that contract; today
+page file nodes open the full page, and low-zoom LOD uses thumbnails /
+summaries per [canvas and composition](./08-canvas-and-composition.md).
+
 ## Conformance fixtures
 
 Mixed-format fixtures live under `test/fixtures/resource-runtime/`. The Rust
