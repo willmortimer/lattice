@@ -14,6 +14,8 @@ pub use state::{DesktopSession, ProfileStateStore, RecentWorkspace};
 pub const LATTICE_DEV_HOME_ENV: &str = "LATTICE_DEV_HOME";
 pub const LATTICE_HOME_ENV: &str = "LATTICE_HOME";
 pub const LATTICE_FORCE_PROD_HOME_ENV: &str = "LATTICE_FORCE_PROD_HOME";
+/// When set (`1`/`true`/`yes`), wipe and re-seed First Look on each desktop-dev launch.
+pub const LATTICE_DEV_RESET_DEMO_ENV: &str = "LATTICE_DEV_RESET_DEMO";
 pub const LATTICE_HOME_NAME: &str = "Lattice";
 pub const DEFAULT_DEBUG_HOME_RELATIVE: &str = "target/dev-home";
 pub const WORKSPACES_DIR_NAME: &str = "Workspaces";
@@ -73,8 +75,22 @@ impl LatticeHome {
 }
 
 pub fn lattice_force_prod_home_enabled() -> bool {
-    std::env::var(LATTICE_FORCE_PROD_HOME_ENV)
-        .map(|value| matches!(value.as_str(), "1" | "true" | "yes"))
+    env_flag_enabled(LATTICE_FORCE_PROD_HOME_ENV)
+}
+
+/// When true, wipe and re-seed the First Look demo workspace on startup.
+pub fn lattice_dev_reset_demo_enabled() -> bool {
+    env_flag_enabled(LATTICE_DEV_RESET_DEMO_ENV)
+}
+
+fn env_flag_enabled(name: &str) -> bool {
+    std::env::var(name)
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes"
+            )
+        })
         .unwrap_or(false)
 }
 

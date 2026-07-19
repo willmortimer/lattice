@@ -3,10 +3,11 @@
 use std::path::{Path, PathBuf};
 
 pub use lattice_profile::{
-    default_debug_home_path, lattice_dev_home_enabled, lattice_force_prod_home_enabled,
-    lattice_home_path, LatticeHome, DEFAULT_DEBUG_HOME_RELATIVE, DEFAULT_WORKSPACE_NAME,
-    LATTICE_DEV_HOME_ENV, LATTICE_FORCE_PROD_HOME_ENV, LATTICE_HOME_ENV, LATTICE_HOME_NAME,
-    SETTINGS_DIR_NAME, STATE_DIR_NAME, WORKSPACES_DIR_NAME,
+    default_debug_home_path, lattice_dev_home_enabled, lattice_dev_reset_demo_enabled,
+    lattice_force_prod_home_enabled, lattice_home_path, LatticeHome, DEFAULT_DEBUG_HOME_RELATIVE,
+    DEFAULT_WORKSPACE_NAME, LATTICE_DEV_HOME_ENV, LATTICE_DEV_RESET_DEMO_ENV,
+    LATTICE_FORCE_PROD_HOME_ENV, LATTICE_HOME_ENV, LATTICE_HOME_NAME, SETTINGS_DIR_NAME,
+    STATE_DIR_NAME, WORKSPACES_DIR_NAME,
 };
 
 use crate::template::{
@@ -75,9 +76,15 @@ pub fn initialize_lattice_home() -> Result<(LatticeHome, WorkspaceProvisionOutco
 /// explicit `LATTICE_DEV_HOME`, or debug builds without `LATTICE_HOME` /
 /// `LATTICE_FORCE_PROD_HOME`. Production and release paths must keep using
 /// [`initialize_lattice_home`].
+///
+/// When [`lattice_dev_reset_demo_enabled`] is true (`LATTICE_DEV_RESET_DEMO`),
+/// any existing First Look workspace is removed and re-provisioned from the
+/// current `demo` template so desktop-dev always reflects template changes.
 pub fn initialize_dev_lattice_home() -> Result<(LatticeHome, WorkspaceProvisionOutcome)> {
     let home = ensure_lattice_home()?;
-    if let Ok(path) = effective_default_workspace(&home) {
+    if lattice_dev_reset_demo_enabled() {
+        remove_first_look_workspaces(&home)?;
+    } else if let Ok(path) = effective_default_workspace(&home) {
         return Ok((
             home,
             WorkspaceProvisionOutcome {
@@ -109,6 +116,35 @@ pub fn initialize_dev_lattice_home() -> Result<(LatticeHome, WorkspaceProvisionO
         }
     }
     Ok((home, outcome))
+}
+
+fn remove_first_look_workspaces(home: &LatticeHome) -> Result<()> {
+    let entries = match std::fs::read_dir(&home.workspaces) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(Error::io(&home.workspaces, error)),
+    };
+    for entry in entries {
+        let entry = entry.map_err(|error| Error::io(&home.workspaces, error))?;
+        let path = entry.path();
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        let is_first_look = name == DEV_WORKSPACE_NAME
+            || name
+                .strip_prefix(DEV_WORKSPACE_NAME)
+                .is_some_and(|rest| rest.starts_with(' '));
+        if !is_first_look {
+            continue;
+        }
+        if entry
+            .file_type()
+            .map_err(|error| Error::io(&path, error))?
+            .is_dir()
+        {
+            std::fs::remove_dir_all(&path).map_err(|error| Error::io(&path, error))?;
+        }
+    }
+    Ok(())
 }
 
 /// Initialize the active Lattice home for the current process environment.
@@ -305,6 +341,26 @@ mod tests {
         assert!(outcome.workspace.root().join("Welcome.md").is_file());
         assert!(!outcome.workspace.root().join("CRM.data").exists());
         std::env::remove_var(LATTICE_HOME_ENV);
+    }
+
+    #[test]
+    fn dev_reset_replaces_existing_first_look_workspace() {
+        let _guard = env_lock();
+        let directory = tempfile::tempdir().unwrap();
+        std::env::set_var(LATTICE_DEV_HOME_ENV, directory.path());
+        std::env::remove_var(LATTICE_DEV_RESET_DEMO_ENV);
+        let (_home, first) = initialize_dev_lattice_home().unwrap();
+        let marker = first.workspace.root().join("CUSTOM_MARKER.txt");
+        std::fs::write(&marker, "stale").unwrap();
+        assert!(marker.is_file());
+
+        std::env::set_var(LATTICE_DEV_RESET_DEMO_ENV, "1");
+        let (_home, second) = initialize_dev_lattice_home().unwrap();
+        assert!(!marker.exists());
+        assert!(second.workspace.root().join("CRM.data").is_dir());
+        assert!(second.workspace.root().join("Home.md").is_file());
+        std::env::remove_var(LATTICE_DEV_RESET_DEMO_ENV);
+        std::env::remove_var(LATTICE_DEV_HOME_ENV);
     }
 
     #[test]
