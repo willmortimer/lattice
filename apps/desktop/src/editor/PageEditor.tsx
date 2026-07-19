@@ -7,8 +7,8 @@ import {
   useRef,
   useState,
 } from "react";
-import type { Editor, Extensions } from "@tiptap/core";
-import { EditorContent, ReactNodeViewRenderer, useEditor } from "@tiptap/react";
+import type { Editor } from "@tiptap/core";
+import { EditorContent, useEditor } from "@tiptap/react";
 import { DOMParser as ProseMirrorDOMParser, Slice } from "@tiptap/pm/model";
 import { TextSelection } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
@@ -29,17 +29,12 @@ import {
   TextStrikethrough,
 } from "@phosphor-icons/react";
 
-import { CodeBlockView } from "./CodeBlockView";
 import { ConflictEnvelope } from "./ConflictEnvelope";
-import { BlockDragHandle } from "./BlockDragHandle";
 import {
-  DictationProvisional,
   dictationProvisionalKey,
   type DictationProvisionalState,
 } from "./DictationProvisional";
-import { editorExtensions } from "./extensions";
-import { ImageView } from "./ImageView";
-import { LatticeEmbedView } from "./LatticeEmbedView";
+import { liveEditorExtensions } from "./richEditorExtensions";
 import {
   joinFrontmatter,
   parseMarkdownToJSON,
@@ -94,30 +89,6 @@ const SLASH_COMMANDS = [
   { id: "table", label: "Table", description: "Create a typed SQLite-backed table" },
   { id: "markdown-table", label: "Markdown table", description: "Static 3 × 3 page table" },
 ] as const;
-
-/**
- * The live editor's extension list: `editorExtensions` (the schema
- * `markdown.ts` also builds from — see its doc comment) with read-view
- * node views layered on for `image` and `codeBlock`. `.extend()` only
- * adds `addNodeView`, so the schema itself — what a document can contain —
- * stays identical between live editing and the standalone codec.
- */
-const liveExtensions: Extensions = [
-  ...editorExtensions.map((extension) => {
-    if (extension.name === "image") {
-      return extension.extend({ addNodeView: () => ReactNodeViewRenderer(ImageView) });
-    }
-    if (extension.name === "codeBlock") {
-      return extension.extend({ addNodeView: () => ReactNodeViewRenderer(CodeBlockView) });
-    }
-    if (extension.name === "latticeEmbed") {
-      return extension.extend({ addNodeView: () => ReactNodeViewRenderer(LatticeEmbedView) });
-    }
-    return extension;
-  }),
-  BlockDragHandle,
-  DictationProvisional,
-];
 
 interface PageEditorProps {
   raw: string;
@@ -364,7 +335,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
   }, []);
 
   const editor = useEditor({
-    extensions: liveExtensions,
+    extensions: liveEditorExtensions,
     content: initialDoc,
     editorProps: {
       attributes: {
