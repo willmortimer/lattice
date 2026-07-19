@@ -350,6 +350,7 @@ fn handle_request(
                     status: "ok".into(),
                     protocol_version: PROTOCOL_VERSION,
                     instance_id: state.config.instance_id.clone(),
+                    backend: None,
                 })),
             },
             None,
@@ -389,7 +390,9 @@ fn handle_request(
             | request::Body::FinishUtterance(_)
             | request::Body::UpdateSessionContext(_)
             | request::Body::CancelVoiceSession(_)
-            | request::Body::EndVoiceSession(_),
+            | request::Body::EndVoiceSession(_)
+            | request::Body::VoiceHostStatus(_)
+            | request::Body::UnloadVoiceModel(_),
         ) => Err(WireError {
             code: "unimplemented".into(),
             message: "voice requests are not handled yet".into(),
