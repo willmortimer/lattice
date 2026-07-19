@@ -23,8 +23,12 @@ pub use home::{
 pub use page::{apply_page_update, create_page, read_page, PageContent};
 pub use path::{join_within_root, resolve_within_root, validate_workspace_relative};
 pub use search::{
-    get_backlinks, get_backlinks_with_runtime, get_backlinks_with_session, rebuild_index,
-    rebuild_index_with_runtime, rebuild_index_with_session, search_workspace,
+    embed_workspace_pending_chunks, embed_workspace_pending_chunks_with_runtime,
+    embed_workspace_pending_chunks_with_session, get_backlinks, get_backlinks_with_runtime,
+    get_backlinks_with_session, hybrid_search_workspace,
+    hybrid_search_workspace_with_provider, hybrid_search_workspace_with_runtime,
+    hybrid_search_workspace_with_runtime_and_provider, hybrid_search_workspace_with_session,
+    rebuild_index, rebuild_index_with_runtime, rebuild_index_with_session, search_workspace,
     search_workspace_chunks, search_workspace_chunks_with_runtime,
     search_workspace_chunks_with_session, search_workspace_with_runtime,
     search_workspace_with_session,

@@ -1,0 +1,15 @@
+# Stub query set for hybrid retrieval evaluation.
+version: 1
+queries:
+  - id: exact-filename
+    text: Architecture.md
+    class: exact-identifier
+  - id: paraphrase-capabilities
+    text: how plugins receive filesystem permissions
+    class: paraphrase
+  - id: architecture-decision
+    text: reciprocal rank fusion for local search
+    class: architecture-decision
+  - id: negative-ambiguous
+    text: unrelated cooking recipes
+    class: negative
