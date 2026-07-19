@@ -73,15 +73,23 @@ export interface DataAppSnapshot {
   relation_targets?: Record<string, DataRow[]>;
 }
 
-export function cellValueToDisplay(value: CellValue | undefined): string {
-  if (!value) return "";
+/**
+ * Display string for a cell. Tolerates Rust externally-tagged IPC shapes,
+ * including unit `Null` serialized as the JSON string `"Null"` (not `{Null:null}`).
+ */
+export function cellValueToDisplay(value: CellValue | undefined | null | string): string {
+  if (value == null || value === "" || value === "Null") return "";
+  if (typeof value !== "object") return String(value);
   if ("Null" in value) return "";
-  if ("Text" in value) return value.Text;
+  if ("Text" in value) return value.Text ?? "";
   if ("Integer" in value) return String(value.Integer);
   if ("Decimal" in value) return String(value.Decimal);
   if ("Boolean" in value) return value.Boolean ? "true" : "false";
-  if ("Date" in value) return value.Date;
-  if ("Relation" in value) return value.Relation.record_ids.join(", ");
+  if ("Date" in value) return value.Date ?? "";
+  if ("Relation" in value) {
+    const ids = value.Relation?.record_ids;
+    return Array.isArray(ids) ? ids.join(", ") : "";
+  }
   return "";
 }
 

@@ -76,4 +76,8 @@ describe("ResourceRendererRegistry", () => {
     resolve((() => null) as Loaded);
     await expect(loading).rejects.toMatchObject({ name: "AbortError" });
   });
+
+  it("maps svg to the image format id (not text)", () => {
+    expect(deriveResourceFormatId({ path: "Resources/mark.svg", kind: "file" })).toBe("file:image");
+  });
 });

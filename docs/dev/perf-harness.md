@@ -16,6 +16,18 @@ Browser mode intentionally does **not** use `createTauriTest({ mode: "browser" }
 that helper injects a mock `__TAURI_INTERNALS__`, which would exit Lattice’s
 demo fixture and break the Vite harness.
 
+## Warm-shell critical path
+
+Warm reload budgets measure time until workspace title, resource tree, and
+activity rail are visible. On adopt, Lattice must not await wiki-link catalog
+refresh or index rebuild before painting chrome — those run in the background
+(`refresh_resource_catalog` / `rebuild_index`). Theme catalog load also starts
+after snapshot adopt and should not gate the chrome selectors above.
+
+When profiling regressions, prefer First Look tree virtualization, theme
+resolve IPC, and `ensure_home` / `open_workspace` scan cost over expanding the
+Playwright harness itself.
+
 ## Run — browser
 
 ```sh

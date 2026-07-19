@@ -76,7 +76,9 @@ const contactRows: DataRow[] = [
 describe("relationDisplay helpers", () => {
   it("extracts relation ids and builds cell values", () => {
     expect(extractRelationIds({ Null: null })).toEqual([]);
+    expect(extractRelationIds("Null")).toEqual([]);
     expect(extractRelationIds({ Relation: { record_ids: ["a", "b"] } })).toEqual(["a", "b"]);
+    expect(extractRelationIds({ Relation: {} as { record_ids: string[] } })).toEqual([]);
     expect(relationCellValue([])).toEqual({ Null: null });
     expect(relationCellValue(["a"])).toEqual({ Relation: { record_ids: ["a"] } });
   });

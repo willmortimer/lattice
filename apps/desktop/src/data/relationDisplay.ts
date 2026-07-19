@@ -7,12 +7,20 @@ export type RelationLabelIndex = Map<string, Map<string, string>>;
 const NAME_LIKE_FIELDS = ["name", "title", "label"] as const;
 
 /** Record ids stored in a relation cell, or an empty list for null/empty values. */
-export function extractRelationIds(value: CellValue | undefined): string[] {
-  if (!value || "Null" in value) {
+export function extractRelationIds(value: CellValue | undefined | null | string): string[] {
+  // Unit Null arrives over Tauri IPC as the JSON string `"Null"`.
+  if (value == null || value === "" || value === "Null") {
+    return [];
+  }
+  if (typeof value !== "object") {
+    return [];
+  }
+  if ("Null" in value) {
     return [];
   }
   if ("Relation" in value) {
-    return [...value.Relation.record_ids];
+    const ids = value.Relation?.record_ids;
+    return Array.isArray(ids) ? [...ids] : [];
   }
   return [];
 }

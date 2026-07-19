@@ -106,7 +106,9 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
         if (watchingRootRef.current === next.root) watchingRootRef.current = null;
         console.error("failed to start workspace watcher:", error);
       });
-      await refreshResourceCatalog(next.root);
+      // Do not await catalog refresh on the adopt critical path — wiki-link
+      // resolution can catch up after shell chrome paints (warm-shell budget).
+      void refreshResourceCatalog(next.root).catch(() => undefined);
     }
     if (hasTauri || inBridgeMode) {
       void invoke("rebuild_index", { root: next.root }).catch(() => undefined);

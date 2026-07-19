@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { demoTextFiles, inBrowser } from "../../demo";
 import type { Resource } from "../../types";
 import type { ResourceRendererContext } from "../../renderers/RendererContext";
 import { formatBytes, MAX_IMAGE_DECODED_PIXELS } from "./mediaLimits";
-import { loadImageAsset, type ImageAsset } from "./imageSource";
+import { createObjectUrlLease, loadImageAsset, type ImageAsset } from "./imageSource";
+import { readImageDimensions } from "./imageMetadata";
 import { MediaDegraded } from "./MediaDegraded";
 import "./media.css";
 
@@ -13,6 +15,24 @@ function clampZoom(value: number): number { return Math.max(MIN_ZOOM, Math.min(M
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** Browser demo fixture for SVG seeds without native filesystem reads. */
+function loadDemoSvgAsset(path: string): ImageAsset {
+  const content = demoTextFiles[path];
+  if (!content) {
+    throw new Error(`Demo image fixture missing for ${path}`);
+  }
+  const bytes = new TextEncoder().encode(content);
+  const dimensions = readImageDimensions(bytes);
+  const blobBytes = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  const lease = createObjectUrlLease(new Blob([blobBytes], { type: "image/svg+xml" }));
+  return {
+    lease,
+    dimensions,
+    encodedBytes: bytes.byteLength,
+    mimeType: "image/svg+xml",
+  };
 }
 
 export function ImageViewer({ context, resource }: { context: ResourceRendererContext; resource: Resource }) {
@@ -34,9 +54,12 @@ export function ImageViewer({ context, resource }: { context: ResourceRendererCo
     setNaturalSize(null);
     setPan({ x: 0, y: 0 });
     setMode("fit");
-    void (context.workspaceRoot
+    const load = context.workspaceRoot
       ? loadImageAsset({ root: context.workspaceRoot, path: resource.path }, controller.signal)
-      : Promise.reject(new Error("Native media reads are unavailable in browser preview.")))
+      : inBrowser && resource.path.toLowerCase().endsWith(".svg")
+        ? Promise.resolve(loadDemoSvgAsset(resource.path))
+        : Promise.reject(new Error("Native media reads are unavailable in browser preview."));
+    void load
       .then((next) => {
         if (controller.signal.aborted) {
           next.lease.revoke();
