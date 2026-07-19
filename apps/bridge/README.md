@@ -3,8 +3,12 @@
 Localhost HTTP server that exposes the MVP [`lattice-handlers`](../../crates/lattice-handlers)
 surface to the browser demo (Vite on port 5173) without Tauri.
 
-Single-tenant only: binds to loopback by default. See
-[ADR 0037](../../docs/decisions/0037-localhost-bridge-shares-handlers-with-tauri.md).
+**Production / AI automation path:** use [`latticed`](../daemon)'s authenticated
+localhost API (`127.0.0.1`, bearer token) or `latticed mcp` — not this bridge.
+The bridge is a single-tenant demo fixture and must not be treated as a second
+write authority or as proof that browser mode has native filesystem authority.
+
+See [ADR 0037](../../docs/decisions/0037-localhost-bridge-shares-handlers-with-tauri.md).
 
 ## Run
 
@@ -13,15 +17,25 @@ cargo run -p lattice-bridge -- --port 8787
 
 # Optional default workspace (omits `root` in request bodies):
 cargo run -p lattice-bridge -- --root /path/to/workspace
+
+# Optional auth (also via LATTICE_BRIDGE_TOKEN):
+cargo run -p lattice-bridge -- --auth-token secret
 ```
 
 Flags:
 
 | Flag | Default | Description |
 | --- | --- | --- |
-| `--host` | `127.0.0.1` | Bind address |
+| `--host` | `127.0.0.1` | Bind address (keep loopback) |
 | `--port` | `8787` | Listen port |
 | `--root` | _(none)_ | Default workspace root |
+| `--auth-token` / `LATTICE_BRIDGE_TOKEN` | _(none)_ | When set, require `Authorization: Bearer` or `X-Lattice-Token` |
+
+## CORS
+
+CORS allows only Vite loopback origins (`http://localhost:5173` and
+`http://127.0.0.1:5173`). This is a local debug aid — do not widen for general
+cross-origin use.
 
 ## API
 

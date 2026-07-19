@@ -5,10 +5,10 @@ use lattice_bridge::{serve, BridgeState};
 #[command(
     name = "lattice-bridge",
     version,
-    about = "Localhost HTTP bridge over lattice-handlers for the browser demo"
+    about = "Localhost HTTP bridge over lattice-handlers for the browser demo (prefer latticed for production)"
 )]
 struct Cli {
-    /// Bind address (default: 127.0.0.1).
+    /// Bind address (default: 127.0.0.1). Prefer loopback; do not expose off-host.
     #[arg(long, default_value = "127.0.0.1")]
     host: String,
 
@@ -19,6 +19,10 @@ struct Cli {
     /// Default workspace root for routes that accept an optional `root` field.
     #[arg(long)]
     root: Option<String>,
+
+    /// Optional auth token (overrides `LATTICE_BRIDGE_TOKEN` when set).
+    #[arg(long, env = "LATTICE_BRIDGE_TOKEN")]
+    auth_token: Option<String>,
 }
 
 #[tokio::main]
@@ -38,9 +42,7 @@ async fn main() -> std::io::Result<()> {
     serve(
         &cli.host,
         cli.port,
-        BridgeState {
-            default_root: cli.root,
-        },
+        BridgeState::new(cli.root).with_auth_token(cli.auth_token),
     )
     .await
 }

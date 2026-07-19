@@ -44,7 +44,8 @@ async fn spawn_in_process_daemon(instance_id: &str) -> (ServerGuard, Arc<Lattice
     let auth_token = "contract-token".to_string();
     let config = DaemonConfig::new(&socket_path, auth_token.clone())
         .with_instance_id(instance_id)
-        .with_process_start(1_234_567);
+        .with_process_start(1_234_567)
+        .with_api_port(None);
     // Short debounce so watcher contract tests settle quickly.
     let runtime = Arc::new(LatticeRuntime::with_watch_debounce(
         lattice_core::TEST_DEBOUNCE_TIMEOUT,

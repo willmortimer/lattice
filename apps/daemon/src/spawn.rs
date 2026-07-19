@@ -91,6 +91,10 @@ pub async fn spawn_latticed(opts: SpawnOptions) -> Result<SpawnedDaemon> {
         .arg(&opts.socket_path)
         .arg("--auth-token")
         .arg(&opts.auth_token)
+        // Spawned helpers are for the Unix socket control plane; disable the
+        // localhost HTTP API unless a caller starts latticed directly.
+        .arg("--api-port")
+        .arg("0")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -191,7 +195,9 @@ mod tests {
     async fn wait_for_ready_against_in_process_server() {
         let dir = tempdir().unwrap();
         let socket = dir.path().join("latticed.sock");
-        let config = DaemonConfig::new(&socket, "ready-tok").with_instance_id("ready-id");
+        let config = DaemonConfig::new(&socket, "ready-tok")
+            .with_instance_id("ready-id")
+            .with_api_port(None);
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
         let runtime = Arc::new(LatticeRuntime::new());
         let serve = tokio::spawn(serve_with_shutdown(config, runtime, shutdown_rx));

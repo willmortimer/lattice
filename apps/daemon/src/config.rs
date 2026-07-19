@@ -3,6 +3,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use uuid::Uuid;
 
+/// Default localhost API port (`127.0.0.1` only). Use `0` / [`None`] to disable.
+pub const DEFAULT_API_PORT: u16 = 18787;
+
 /// Runtime configuration for a `latticed` instance.
 #[derive(Debug, Clone)]
 pub struct DaemonConfig {
@@ -14,6 +17,8 @@ pub struct DaemonConfig {
     pub instance_id: String,
     /// Process start identity paired with `pid` in workspace leases.
     pub process_start: u64,
+    /// Optional localhost HTTP API port. Always bound to `127.0.0.1` when set.
+    pub api_port: Option<u16>,
 }
 
 impl DaemonConfig {
@@ -24,6 +29,7 @@ impl DaemonConfig {
             auth_token: auth_token.into(),
             instance_id: Uuid::now_v7().to_string(),
             process_start: unix_now_secs(),
+            api_port: Some(DEFAULT_API_PORT),
         }
     }
 
@@ -36,6 +42,12 @@ impl DaemonConfig {
     /// Override process start identity.
     pub fn with_process_start(mut self, process_start: u64) -> Self {
         self.process_start = process_start;
+        self
+    }
+
+    /// Enable or disable the localhost HTTP API (`None` disables).
+    pub fn with_api_port(mut self, api_port: Option<u16>) -> Self {
+        self.api_port = api_port;
         self
     }
 }
