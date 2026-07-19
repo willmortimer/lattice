@@ -5,6 +5,7 @@ import {
   Files,
   Gauge,
   Keyboard,
+  Microphone,
   Palette,
   Pulse,
   PuzzlePiece,
@@ -15,6 +16,7 @@ import { useEffect, useState } from "react";
 import { inBrowser } from "../demo";
 import type { ThemeCatalogPayload } from "../theme";
 import type { WorkspaceStartupSettings } from "../lib/profile";
+import { getVoiceStatus, listenVoiceEvents, prepareVoiceModel, type VoiceStatus } from "../lib/voice";
 import type { WorkspaceSnapshot } from "../types";
 import { HistoryRetentionSettings } from "./HistoryRetentionSettings";
 import type { AppSettings } from "./model";
@@ -28,6 +30,7 @@ type SettingsSection =
   | "keybindings"
   | "data"
   | "capabilities"
+  | "voice"
   | "performance"
   | "diagnostics";
 
@@ -56,6 +59,7 @@ const SECTIONS = [
   { id: "keybindings" as const, label: "Keybindings", icon: Keyboard },
   { id: "data" as const, label: "Data defaults", icon: Database },
   { id: "capabilities" as const, label: "Enabled capabilities", icon: PuzzlePiece },
+  { id: "voice" as const, label: "Voice dictation", icon: Microphone },
   { id: "performance" as const, label: "Performance & lifecycle", icon: Gauge },
   { id: "diagnostics" as const, label: "Advanced diagnostics", icon: Pulse },
 ];
@@ -421,6 +425,8 @@ export function SettingsPage({
           </>
         )}
 
+        {section === "voice" && <VoiceDictationSettings />}
+
         {section === "performance" && (
           <>
             <h1>Performance and lifecycle</h1>
@@ -526,5 +532,145 @@ export function SettingsPage({
         )}
       </section>
     </div>
+  );
+}
+
+function VoiceDictationSettings() {
+  const [status, setStatus] = useState<VoiceStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (inBrowser) return;
+    let cancelled = false;
+    void getVoiceStatus()
+      .then((next) => {
+        if (!cancelled) {
+          setStatus(next);
+          if (next.preparing) setBusy(true);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (inBrowser) return;
+    let unlisten: (() => void) | undefined;
+    void listenVoiceEvents((event) => {
+      if (event.type === "status") {
+        if (event.state === "preparing") {
+          setBusy(true);
+          setStatus((prev) =>
+            prev
+              ? { ...prev, preparing: true, message: event.message }
+              : {
+                  available: true,
+                  prepared: false,
+                  preparing: true,
+                  listening: false,
+                  platform: "macos",
+                  message: event.message,
+                },
+          );
+        }
+        if (event.state === "ready") {
+          setBusy(false);
+          setStatus((prev) =>
+            prev
+              ? { ...prev, prepared: true, preparing: false, message: event.message }
+              : {
+                  available: true,
+                  prepared: true,
+                  preparing: false,
+                  listening: false,
+                  platform: "macos",
+                  message: event.message,
+                },
+          );
+        }
+        if (event.state === "idle") {
+          setBusy(false);
+        }
+      }
+      if (event.type === "failed") {
+        setBusy(false);
+        setError(event.message);
+      }
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
+  const engineLabel = (() => {
+    if (!status) return "Checking…";
+    if (!status.available) return "Unavailable";
+    if (status.preparing || busy) return "Preparing…";
+    if (status.prepared) return "Ready";
+    return "Available (not prepared)";
+  })();
+
+  return (
+    <>
+      <h1>Voice dictation</h1>
+      <p>
+        Local, on-device speech-to-text via FluidAudio / Parakeet Unified. Hold the microphone
+        button in the page header to dictate. Provisional text never enters document storage.
+      </p>
+      {inBrowser ? (
+        <div className="diagnostics-card">
+          <strong>Unavailable in browser demo</strong>
+          <span>Voice requires the native macOS desktop build with the FluidAudio bridge.</span>
+        </div>
+      ) : (
+        <>
+          <SettingRow
+            title="Engine status"
+            description="Availability of the local recognition runtime on this Mac."
+          >
+            <span>{engineLabel}</span>
+          </SettingRow>
+          <SettingRow
+            title="Prepare model"
+            description="Download and warm Parakeet Unified (~first run may take several minutes)."
+          >
+            <Button
+              size="sm"
+              disabled={busy || status?.available === false || status?.prepared === true}
+              onClick={() => {
+                setBusy(true);
+                setError(null);
+                void prepareVoiceModel()
+                  .then((next) => setStatus(next))
+                  .catch((err: unknown) =>
+                    setError(err instanceof Error ? err.message : String(err)),
+                  )
+                  .finally(() => setBusy(false));
+              }}
+            >
+              {busy ? "Preparing…" : status?.prepared ? "Prepared" : "Prepare now"}
+            </Button>
+          </SettingRow>
+          {status?.message && (
+            <div className="diagnostics-card">
+              <span>{status.message}</span>
+            </div>
+          )}
+          {error && (
+            <div className="diagnostics-card" role="alert">
+              <strong>Voice error</strong>
+              <span>{error}</span>
+            </div>
+          )}
+        </>
+      )}
+    </>
   );
 }
