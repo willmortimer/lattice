@@ -1,0 +1,151 @@
+syntax = "proto3";
+
+package lattice.embed_host.v1;
+
+// Private Unix-domain socket protocol for lattice-embed-host.
+// Frames are length-delimited Envelope messages (4-byte big-endian length).
+
+message Envelope {
+  uint32 protocol_version = 1;
+  string request_id = 2;
+  oneof payload {
+    Request request = 10;
+    Response response = 11;
+    Error error = 12;
+  }
+}
+
+message Request {
+  optional uint64 deadline_unix_ms = 1;
+  oneof body {
+    HealthRequest health = 10;
+    StatusRequest status = 11;
+    LoadModelRequest load_model = 12;
+    UnloadModelRequest unload_model = 13;
+    EmbedQueryRequest embed_query = 14;
+    EmbedDocumentsRequest embed_documents = 15;
+    CancelRequest cancel = 16;
+    InstallModelRequest install_model = 17;
+  }
+}
+
+message Response {
+  oneof body {
+    HealthResponse health = 10;
+    StatusResponse status = 11;
+    LoadModelResponse load_model = 12;
+    UnloadModelResponse unload_model = 13;
+    EmbedQueryResponse embed_query = 14;
+    EmbedDocumentsResponse embed_documents = 15;
+    CancelResponse cancel = 16;
+    InstallModelResponse install_model = 17;
+  }
+}
+
+message Error {
+  string code = 1;
+  string message = 2;
+  optional string details = 3;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;
+  uint32 protocol_version = 2;
+  string instance_id = 3;
+  string backend = 4;
+}
+
+message StatusRequest {}
+
+message StatusResponse {
+  string install_state = 1;
+  string backend = 2;
+  optional EmbeddingSpec spec = 3;
+  uint64 queries_completed = 4;
+  uint64 documents_completed = 5;
+  uint64 active_requests = 6;
+  uint64 cancel_count = 7;
+  optional string loaded_model_id = 8;
+}
+
+message EmbeddingSpec {
+  string provider_id = 1;
+  string model_id = 2;
+  string model_revision = 3;
+  string artifact_sha256 = 4;
+  uint32 dimensions = 5;
+  uint32 native_dimensions = 6;
+  string distance = 7;
+  string pooling = 8;
+  bool normalized = 9;
+  string instruction_version = 10;
+}
+
+message LoadModelRequest {
+  // Directory containing manifest.json and the artifact file.
+  string model_dir = 1;
+  // Optional override; defaults to manifest.default_dimensions.
+  optional uint32 dimensions = 2;
+}
+
+message LoadModelResponse {
+  EmbeddingSpec spec = 1;
+  string install_state = 2;
+}
+
+message UnloadModelRequest {}
+
+message UnloadModelResponse {
+  string install_state = 1;
+}
+
+message EmbedQueryRequest {
+  string text = 1;
+}
+
+message EmbedQueryResponse {
+  repeated float values = 1;
+}
+
+message EmbedDocument {
+  string chunk_id = 1;
+  string text = 2;
+}
+
+message EmbedDocumentsRequest {
+  repeated EmbedDocument documents = 1;
+}
+
+message EmbeddingVector {
+  repeated float values = 1;
+}
+
+message EmbedDocumentsResponse {
+  repeated EmbeddingVector vectors = 1;
+}
+
+message CancelRequest {
+  // Request id of the in-flight embed call to cancel.
+  string target_request_id = 1;
+}
+
+message CancelResponse {
+  bool cancelled = 1;
+}
+
+message InstallModelRequest {
+  // Path to source manifest.json.
+  string manifest_path = 1;
+  // Path to source artifact (GGUF or fixture).
+  string artifact_path = 2;
+  // Destination models root (host creates <models_dir>/<model_slug>/).
+  string models_dir = 3;
+}
+
+message InstallModelResponse {
+  string model_dir = 1;
+  string artifact_sha256 = 2;
+  string install_state = 3;
+}
