@@ -17,7 +17,7 @@ pub use home::{
 };
 pub use page::{apply_page_update, create_page, read_page, PageContent};
 pub use path::{join_within_root, resolve_within_root, validate_workspace_relative};
-pub use search::{get_backlinks, rebuild_index, search_workspace};
+pub use search::{get_backlinks, rebuild_index, search_workspace, search_workspace_chunks};
 pub use workspace::{
     list_resources, open_workspace, snapshot_from_workspace, WorkspaceSnapshot,
 };

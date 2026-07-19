@@ -25,6 +25,8 @@ pub(crate) struct IndexedRecord {
     pub tags: Vec<String>,
     pub structured_paths: Vec<StructuredPath>,
     pub text_truncated: bool,
+    pub chunk_text: String,
+    pub chunk_text_base_byte: usize,
 }
 
 pub(crate) fn record_from_resource(
@@ -66,6 +68,8 @@ pub(crate) fn record_from_resource(
             tags: Vec::new(),
             structured_paths: Vec::new(),
             text_truncated: false,
+            chunk_text: String::new(),
+            chunk_text_base_byte: 0,
         })
     }
 }
@@ -108,6 +112,8 @@ pub(crate) fn record_from_text(
             tags: Vec::new(),
             structured_paths: Vec::new(),
             text_truncated: truncated,
+            chunk_text: String::new(),
+            chunk_text_base_byte: 0,
         };
     };
 
@@ -117,6 +123,8 @@ pub(crate) fn record_from_text(
     let mut links = Vec::new();
     let mut tags = Vec::new();
     let mut structured_paths = Vec::new();
+    let mut chunk_text = text.to_string();
+    let mut chunk_text_base_byte = 0;
     let mut status = if truncated {
         ParserStatus::Truncated
     } else {
@@ -132,9 +140,11 @@ pub(crate) fn record_from_text(
             .map(|heading| format!("{}\t{}\t{}", heading.level, heading.text, heading.line))
             .collect::<Vec<_>>()
             .join("\n");
-        body = page.body;
+        body = page.body.clone();
         links = page.links;
         tags = page.tags;
+        chunk_text = page.body;
+        chunk_text_base_byte = page.body_start_byte;
     }
 
     if !truncated
@@ -168,6 +178,8 @@ pub(crate) fn record_from_text(
         tags,
         structured_paths,
         text_truncated: truncated,
+        chunk_text,
+        chunk_text_base_byte,
     }
 }
 

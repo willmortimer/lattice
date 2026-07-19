@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use lattice_index::{Backlink, SearchHit, WorkspaceIndex};
+use lattice_index::{Backlink, ChunkSearchHit, SearchHit, WorkspaceIndex};
 
 fn ensure_index(root: &Path) -> Result<WorkspaceIndex, String> {
     let index = WorkspaceIndex::open(root).map_err(|err| err.to_string())?;
@@ -27,6 +27,19 @@ pub fn search_workspace(
     let root = PathBuf::from(root);
     let index = ensure_index(&root)?;
     index.search(&query, limit).map_err(|err| err.to_string())
+}
+
+/// Full-text search over structural chunks in the workspace index.
+pub fn search_workspace_chunks(
+    root: String,
+    query: String,
+    limit: usize,
+) -> Result<Vec<ChunkSearchHit>, String> {
+    let root = PathBuf::from(root);
+    let index = ensure_index(&root)?;
+    index
+        .search_chunks(&query, limit)
+        .map_err(|err| err.to_string())
 }
 
 /// List resources that link to `rel_path`, for the backlinks footer.
@@ -68,6 +81,24 @@ mod tests {
 
         let backlinks = get_backlinks(root, "Target.md".to_string()).unwrap();
         assert!(backlinks.iter().any(|b| b.source_path.ends_with("Home.md")));
+    }
+
+    #[test]
+    fn search_workspace_chunks_returns_structural_hits() {
+        let dir = init_workspace();
+        std::fs::write(
+            dir.path().join("Guide.md"),
+            "# Intro\n\nWelcome to structural chunks.\n",
+        )
+        .unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        let hits = search_workspace_chunks(root, "structural".to_string(), 10).unwrap();
+        assert!(hits.iter().any(|hit| hit.path.ends_with("Guide.md")));
+        assert!(hits
+            .iter()
+            .any(|hit| hit.heading_path.contains(&"Intro".to_string())));
+        assert!(hits.iter().all(|hit| hit.source_end_byte > hit.source_start_byte));
     }
 
     #[test]
