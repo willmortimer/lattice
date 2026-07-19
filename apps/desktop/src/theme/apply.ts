@@ -2,12 +2,19 @@
 
 export const THEME_MIRROR_KEY = "lattice.theme.mirror";
 
-export interface ThemeMirror {
+export interface ThemeMirrorEntry {
   background: string;
   appearance: "dark" | "light" | string;
   vars: Record<string, string>;
   id: string;
+}
+
+export interface ThemeMirror extends ThemeMirrorEntry {
   updatedAt: number;
+  /** `auto` picks `byAppearance` from prefers-color-scheme on first paint. */
+  mode?: "fixed" | "auto" | string;
+  /** Last-resolved theme for each system appearance (auto-mode first paint). */
+  byAppearance?: Partial<Record<"dark" | "light", ThemeMirrorEntry>>;
 }
 
 export interface ResolvedThemePayload {
@@ -46,6 +53,49 @@ export function detectSystemAppearance(): "dark" | "light" {
   return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
 }
 
+function appearanceKey(appearance: string): "dark" | "light" {
+  return appearance === "light" ? "light" : "dark";
+}
+
+/** Pick the first-paint entry for the current (or given) system appearance. */
+export function selectThemeMirrorEntry(
+  mirror: ThemeMirror,
+  system: "dark" | "light" = detectSystemAppearance(),
+): ThemeMirrorEntry {
+  if (mirror.mode === "auto" && mirror.byAppearance?.[system]) {
+    return mirror.byAppearance[system]!;
+  }
+  return {
+    background: mirror.background,
+    appearance: mirror.appearance,
+    vars: mirror.vars,
+    id: mirror.id,
+  };
+}
+
+/** Build the persisted first-paint mirror from a resolved theme. */
+export function buildThemeMirror(
+  resolved: ResolvedThemePayload,
+  previous: ThemeMirror | null,
+  updatedAt: number = Date.now(),
+): ThemeMirror {
+  const entry: ThemeMirrorEntry = {
+    background: resolved.background,
+    appearance: resolved.appearance,
+    vars: resolved.vars,
+    id: resolved.id,
+  };
+  return {
+    ...entry,
+    updatedAt,
+    mode: resolved.settings.mode === "auto" ? "auto" : "fixed",
+    byAppearance: {
+      ...previous?.byAppearance,
+      [appearanceKey(resolved.appearance)]: entry,
+    },
+  };
+}
+
 /** Apply CSS variables to `:root` and persist a first-paint mirror. */
 export function applyResolvedTheme(resolved: ResolvedThemePayload): void {
   const root = document.documentElement;
@@ -65,14 +115,7 @@ export function applyResolvedTheme(resolved: ResolvedThemePayload): void {
     root.style.setProperty(key, value);
   }
 
-  persistThemeMirror({
-    background: resolved.background,
-    appearance: resolved.appearance,
-    vars: resolved.vars,
-    id: resolved.id,
-    updatedAt: Date.now(),
-  });
-
+  persistThemeMirror(buildThemeMirror(resolved, readThemeMirror()));
   void syncNativeWindowBackground(resolved.background);
 }
 
