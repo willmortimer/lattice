@@ -12,8 +12,10 @@ mod config;
 mod embed_host;
 mod error;
 mod http;
+mod idle;
 mod lease;
 pub mod mcp;
+mod preferences;
 mod server;
 mod spawn;
 
@@ -22,7 +24,10 @@ pub use api::{
     BuildContextResponse, ReadParams, ReadResponse, RelatedParams, RelatedResponse, SearchParams,
     SearchResponse, MAX_CONTEXT_BYTES, MAX_HIT_LIMIT, MAX_READ_BYTES,
 };
-pub use config::{default_run_dir, default_socket_path, DaemonConfig, DEFAULT_API_PORT};
+pub use config::{
+    default_run_dir, default_socket_path, DaemonConfig, DEFAULT_API_PORT,
+    DEFAULT_IDLE_SHUTDOWN_TIMEOUT,
+};
 pub use embed_host::{
     SemanticController, SemanticProviderMode, ENV_EMBED_HOST_BIN, ENV_EMBED_HOST_SOCKET,
     ENV_SEMANTIC_FAKE,
@@ -39,3 +44,6 @@ pub use lease::{
 };
 pub use server::{serve, serve_with_shutdown, serve_with_shutdown_and_semantic, DaemonState};
 pub use spawn::{spawn_latticed, wait_for_ready, SpawnOptions, SpawnedDaemon};
+pub use preferences::{
+    DaemonPreferences, LATTICE_IDLE_SHUTDOWN_SECS_ENV, LATTICE_KEEP_SERVICES_RUNNING_ENV,
+};

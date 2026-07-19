@@ -4,7 +4,7 @@ mod state;
 use std::path::{Path, PathBuf};
 
 pub use settings::{
-    DesktopSettings, SettingsDiagnostic, SettingsDiagnosticSeverity, SettingsLoad,
+    DesktopSettings, ServicesSettings, SettingsDiagnostic, SettingsDiagnosticSeverity, SettingsLoad,
     SettingsSnapshot, SettingsSpec, SettingsStore, WorkspaceStartupSettings,
     DESKTOP_SETTINGS_FILENAME, DESKTOP_SETTINGS_SPEC, WORKSPACE_SETTINGS_FILENAME,
     WORKSPACE_SETTINGS_SPEC,

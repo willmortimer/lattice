@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use lattice_daemon::{
     default_socket_path, mcp, serve, serve_with_shutdown_and_semantic, DaemonConfig,
-    SemanticController, SemanticProviderMode, DEFAULT_API_PORT,
+    DaemonPreferences, SemanticController, SemanticProviderMode, DEFAULT_API_PORT,
 };
 use lattice_runtime::LatticeRuntime;
 use tracing_subscriber::EnvFilter;
@@ -36,6 +36,15 @@ struct Cli {
     /// Localhost HTTP API port (127.0.0.1 only). Pass 0 to disable.
     #[arg(long, default_value_t = DEFAULT_API_PORT)]
     api_port: u16,
+
+    /// Remain running after the last client disconnects (overrides profile preference).
+    #[arg(long)]
+    keep_services_running: bool,
+
+    /// Seconds of idle time after the last client disconnects before exit when
+    /// keep-services-running is false (default 30).
+    #[arg(long)]
+    idle_shutdown_secs: Option<u64>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -84,6 +93,25 @@ async fn main() -> Result<()> {
     } else {
         Some(cli.api_port)
     });
+
+    let prefs = DaemonPreferences::load();
+    let keep_services_running = cli.keep_services_running || prefs.keep_services_running;
+    let idle_shutdown_timeout = cli
+        .idle_shutdown_secs
+        .map(std::time::Duration::from_secs)
+        .unwrap_or(prefs.idle_shutdown_timeout);
+    config = config
+        .with_keep_services_running(keep_services_running)
+        .with_idle_shutdown_timeout(idle_shutdown_timeout);
+
+    if keep_services_running {
+        tracing::info!("keep-services-running enabled; daemon will stay up after clients disconnect");
+    } else {
+        tracing::info!(
+            secs = idle_shutdown_timeout.as_secs(),
+            "idle shutdown enabled after last client disconnects"
+        );
+    }
 
     let runtime = Arc::new(LatticeRuntime::new());
     match SemanticProviderMode::from_env() {

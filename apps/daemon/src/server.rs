@@ -26,6 +26,7 @@ use tracing::{debug, info, warn};
 
 use crate::config::DaemonConfig;
 use crate::error::{Error, Result};
+use crate::idle::ConnectionTracker;
 use crate::lease::{daemon_lease_claim, lease_to_wire, require_workspace_lease};
 
 /// Shared daemon state for accepted connections.
@@ -34,6 +35,7 @@ pub struct DaemonState {
     pub config: Arc<DaemonConfig>,
     pub runtime: Arc<LatticeRuntime>,
     pub semantic: Option<Arc<crate::embed_host::SemanticController>>,
+    connections: Option<Arc<ConnectionTracker>>,
     event_tx: broadcast::Sender<Event>,
     next_event_seq: Arc<AtomicU64>,
 }
@@ -53,11 +55,17 @@ impl DaemonState {
             config: Arc::new(config),
             runtime,
             semantic,
+            connections: None,
             event_tx,
             next_event_seq: Arc::new(AtomicU64::new(1)),
         };
         state.spawn_event_bridge();
         state
+    }
+
+    fn with_connections(mut self, connections: Arc<ConnectionTracker>) -> Self {
+        self.connections = Some(connections);
+        self
     }
 
     fn next_sequence(&self) -> u64 {
@@ -138,15 +146,27 @@ pub async fn serve_with_shutdown_and_semantic(
     }
     info!(path = %socket_path.display(), "latticed listening");
 
-    let state = DaemonState::new_with_semantic(config, runtime, semantic);
+    let (idle_shutdown_tx, idle_shutdown_rx) = oneshot::channel();
+    let connections = ConnectionTracker::new(
+        config.keep_services_running,
+        config.idle_shutdown_timeout,
+        idle_shutdown_tx,
+    );
+    let state = DaemonState::new_with_semantic(config, runtime, semantic)
+        .with_connections(Arc::clone(&connections));
     let api_shutdown = state.config.api_port.map(|port| {
         crate::http::spawn_localhost_api(state.clone(), port)
     });
     let mut shutdown = shutdown;
+    let mut idle_shutdown = idle_shutdown_rx;
     loop {
         tokio::select! {
             _ = &mut shutdown => {
                 info!("latticed shutting down");
+                break;
+            }
+            _ = &mut idle_shutdown => {
+                info!("latticed idle shutdown after last client disconnected");
                 break;
             }
             accepted = listener.accept() => {
@@ -174,6 +194,7 @@ pub async fn serve_with_shutdown_and_semantic(
     if let Some(semantic) = state.semantic.as_ref() {
         semantic.shutdown();
     }
+    state.runtime.shutdown_all_sessions();
     let _ = std::fs::remove_file(&socket_path);
     Ok(())
 }
@@ -231,6 +252,13 @@ async fn serve_connection(stream: UnixStream, state: DaemonState) -> Result<()> 
     if !accepted {
         return Err(Error::HandshakeRejected);
     }
+
+    let _connection_guard = if let Some(tracker) = state.connections.as_ref() {
+        tracker.on_connect().await;
+        Some(tracker.guard())
+    } else {
+        None
+    };
 
     let writer = Arc::new(Mutex::new(writer));
     let mut event_rx = state.event_tx.subscribe();

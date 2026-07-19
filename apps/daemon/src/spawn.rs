@@ -8,6 +8,7 @@ use lattice_client::DaemonClient;
 use tokio::time::{sleep, Instant};
 
 use crate::error::{Error, Result};
+use crate::preferences::DaemonPreferences;
 
 /// Options for spawning a `latticed` child process.
 #[derive(Debug, Clone)]
@@ -22,6 +23,10 @@ pub struct SpawnOptions {
     pub instance_id: Option<String>,
     /// How long to wait for the socket / handshake to become ready.
     pub ready_timeout: Duration,
+    /// Override profile keep-running preference (`None` reads desktop settings).
+    pub keep_services_running: Option<bool>,
+    /// Override idle shutdown seconds when keep-running is false.
+    pub idle_shutdown_secs: Option<u64>,
 }
 
 impl SpawnOptions {
@@ -36,6 +41,8 @@ impl SpawnOptions {
             auth_token: auth_token.into(),
             instance_id: None,
             ready_timeout: Duration::from_secs(5),
+            keep_services_running: None,
+            idle_shutdown_secs: None,
         }
     }
 
@@ -46,6 +53,18 @@ impl SpawnOptions {
 
     pub fn with_ready_timeout(mut self, timeout: Duration) -> Self {
         self.ready_timeout = timeout;
+        self
+    }
+
+    /// Override keep-running lifecycle behavior for the spawned child.
+    pub fn with_keep_services_running(mut self, keep_services_running: bool) -> Self {
+        self.keep_services_running = Some(keep_services_running);
+        self
+    }
+
+    /// Override idle shutdown seconds for the spawned child.
+    pub fn with_idle_shutdown_secs(mut self, idle_shutdown_secs: u64) -> Self {
+        self.idle_shutdown_secs = Some(idle_shutdown_secs);
         self
     }
 }
@@ -69,6 +88,11 @@ impl SpawnedDaemon {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
+
+    /// Non-blocking check whether the child has exited.
+    pub fn try_wait(&mut self) -> std::io::Result<Option<std::process::ExitStatus>> {
+        self.child.try_wait()
+    }
 }
 
 impl Drop for SpawnedDaemon {
@@ -86,6 +110,14 @@ pub async fn spawn_latticed(opts: SpawnOptions) -> Result<SpawnedDaemon> {
         std::fs::remove_file(&opts.socket_path)?;
     }
 
+    let prefs = DaemonPreferences::load();
+    let keep_services_running = opts
+        .keep_services_running
+        .unwrap_or(prefs.keep_services_running);
+    let idle_shutdown_secs = opts.idle_shutdown_secs.unwrap_or_else(|| {
+        prefs.idle_shutdown_timeout.as_secs().max(1)
+    });
+
     let mut cmd = Command::new(&opts.binary);
     cmd.arg("--socket")
         .arg(&opts.socket_path)
@@ -98,6 +130,11 @@ pub async fn spawn_latticed(opts: SpawnOptions) -> Result<SpawnedDaemon> {
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
+    if keep_services_running {
+        cmd.arg("--keep-services-running");
+    } else {
+        cmd.arg("--idle-shutdown-secs").arg(idle_shutdown_secs.to_string());
+    }
     if let Some(instance_id) = &opts.instance_id {
         cmd.arg("--instance-id").arg(instance_id);
     }

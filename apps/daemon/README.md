@@ -77,3 +77,63 @@ Example Claude Desktop snippet:
 ```sh
 cargo test -p lattice-daemon
 ```
+
+## Lifecycle and keep-running (D7)
+
+By default `latticed` shuts down after the last client disconnects and a
+short idle period (30 seconds). This keeps on-demand launches from leaving a
+background process running unintentionally.
+
+### Preference
+
+The desktop profile stores the preference in
+`~/Lattice/Settings/desktop.yaml`:
+
+```yaml
+services:
+  keepServicesRunning: true
+```
+
+When `keepServicesRunning` is `true`, the daemon remains running after clients
+disconnect until it receives `SIGTERM`/`SIGINT` or an explicit stop. The
+desktop shell can set this preference; the on-demand spawn helper
+([`spawn_latticed`](src/spawn.rs)) reads it automatically.
+
+### CLI overrides
+
+```sh
+# Stay resident after clients disconnect
+latticed --keep-services-running
+
+# Short idle timeout (seconds) when keep-running is off
+latticed --idle-shutdown-secs 5
+```
+
+Environment overrides (tests / launchers):
+
+- `LATTICE_KEEP_SERVICES_RUNNING=1`
+- `LATTICE_IDLE_SHUTDOWN_SECS=0.5`
+
+### Clean shutdown
+
+On exit (signal, idle timeout, or explicit stop), `latticed`:
+
+1. Stops the localhost HTTP API and semantic workers
+2. Releases held workspace leases and stops index watchers
+3. Removes the Unix socket file under
+   `~/Library/Application Support/Lattice/run/latticed.sock` (macOS) or the
+   platform equivalent
+
+### Disable / uninstall
+
+There is **no login item or LaunchAgent** in this phase. To stop the daemon:
+
+- Quit clients that hold connections, then wait for the idle timeout (default),
+  or send `SIGTERM` to the `latticed` process
+- Set `services.keepServicesRunning: false` in desktop settings if you do not
+  want it to stay resident between sessions
+- Remove the socket manually only if a process crashed without cleaning up:
+  `rm ~/Library/Application\ Support/Lattice/run/latticed.sock`
+
+A user-controlled login item for always-on Quick Note and schedules remains
+future work (see `docs/architecture/latticed-daemon-migration-plan.md` Phase D7).
