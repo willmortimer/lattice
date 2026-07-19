@@ -1,7 +1,39 @@
 # latticed
 
 Long-lived Lattice daemon: Unix-domain control plane, optional semantic indexing,
-and an authenticated **localhost-only** HTTP / MCP context API.
+optional voice-host supervision, and an authenticated **localhost-only** HTTP /
+MCP context API.
+
+## Voice host (D5)
+
+`latticed` can supervise `lattice-voice-host` the same way it supervises
+`lattice-embed-host`. Voice RPCs on the control-plane socket
+(`PrepareModel`, `StartVoiceSession`, `PushAudioChunk`, `FinishUtterance`,
+`UpdateSessionContext`, `CancelVoiceSession` / `EndVoiceSession`,
+`GetVoiceCapabilities`, `VoiceHostStatus`, `UnloadVoiceModel`) are forwarded to
+the host. Partial / final / gap / model-status events are fanned out to
+subscribed clients.
+
+Session policy: **one active voice session per daemon**. A second
+`StartVoiceSession` fails with `voice_session_busy` until the first session is
+ended or cancelled.
+
+### Environment
+
+| Variable | Purpose |
+| --- | --- |
+| `LATTICE_VOICE_FAKE=1` | Spawn a fake-backend `lattice-voice-host` (tests / CI) |
+| `LATTICE_VOICE_HOST_BIN` | Path to the `lattice-voice-host` binary |
+| `LATTICE_VOICE_HOST_SOCKET` | Existing host UDS (connect only), or socket path when spawning |
+
+Without these, voice RPCs return `voice_unavailable` (not `unimplemented`).
+
+```sh
+# Example: supervised fake host for local testing
+LATTICE_VOICE_FAKE=1 \
+  LATTICE_VOICE_HOST_BIN=./target/debug/lattice-voice-host \
+  cargo run -p lattice-daemon -- --auth-token dev-token --api-port 0
+```
 
 ## Local HTTP API (D6)
 
@@ -75,8 +107,12 @@ Example Claude Desktop snippet:
 ## Tests
 
 ```sh
+cargo build -p lattice-voice-host
 cargo test -p lattice-daemon
 ```
+
+Voice contract tests spawn a fake `lattice-voice-host` (from
+`LATTICE_VOICE_HOST_BIN`, `PATH`, or `target/debug`).
 
 ## Lifecycle and keep-running (D7)
 

@@ -275,6 +275,84 @@ impl VoiceHostClient {
         .await
     }
 
+    /// Update session glossary / document context.
+    pub async fn update_session_context(
+        &self,
+        session_id: impl Into<String>,
+        context: SessionContext,
+    ) -> Result<(), VoiceHostError> {
+        let response = self
+            .call(Request {
+                deadline_unix_ms: None,
+                idempotency_key: None,
+                body: Some(request::Body::UpdateSessionContext(
+                    lattice_protocol::UpdateSessionContextRequest {
+                        session_id: session_id.into(),
+                        context: Some(context),
+                    },
+                )),
+            })
+            .await?;
+        match response.body {
+            Some(response::Body::UpdateSessionContext(_)) => Ok(()),
+            other => Err(VoiceHostError::protocol(format!(
+                "unexpected update_session_context response: {other:?}"
+            ))),
+        }
+    }
+
+    /// Cancel an active voice session.
+    pub async fn cancel_session(
+        &self,
+        session_id: impl Into<String>,
+        reason: Option<String>,
+    ) -> Result<(), VoiceHostError> {
+        let response = self
+            .call(Request {
+                deadline_unix_ms: None,
+                idempotency_key: None,
+                body: Some(request::Body::CancelVoiceSession(
+                    lattice_protocol::CancelVoiceSessionRequest {
+                        session_id: session_id.into(),
+                        reason,
+                    },
+                )),
+            })
+            .await?;
+        match response.body {
+            Some(response::Body::CancelVoiceSession(_)) => Ok(()),
+            other => Err(VoiceHostError::protocol(format!(
+                "unexpected cancel_session response: {other:?}"
+            ))),
+        }
+    }
+
+    /// End an active voice session cleanly.
+    pub async fn end_session(&self, session_id: impl Into<String>) -> Result<(), VoiceHostError> {
+        let response = self
+            .call(Request {
+                deadline_unix_ms: None,
+                idempotency_key: None,
+                body: Some(request::Body::EndVoiceSession(
+                    lattice_protocol::EndVoiceSessionRequest {
+                        session_id: session_id.into(),
+                    },
+                )),
+            })
+            .await?;
+        match response.body {
+            Some(response::Body::EndVoiceSession(_)) => Ok(()),
+            other => Err(VoiceHostError::protocol(format!(
+                "unexpected end_session response: {other:?}"
+            ))),
+        }
+    }
+
+    /// Forward an arbitrary request envelope body to the host (daemon proxy).
+    pub async fn forward(&self, request: Request) -> Result<Response, VoiceHostError> {
+        self.call(request).await
+    }
+
     async fn call(&self, request: Request) -> Result<Response, VoiceHostError> {
         let request_id = self.alloc_request_id();
         let envelope = request_envelope(request_id.clone(), request);
