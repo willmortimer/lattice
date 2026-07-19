@@ -2406,6 +2406,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-embed-host"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "bytes",
+ "clap",
+ "hex",
+ "lattice-embedding",
+ "prost",
+ "prost-build",
+ "protoc-bin-vendored",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "lattice-embedding"
 version = "0.1.0"
 dependencies = [
