@@ -4,9 +4,16 @@
 //! rebuildable from generic resources on disk. Text extraction is deliberately
 //! bounded; binary resources retain searchable names and runtime metadata.
 
+mod catalog;
 mod error;
 mod extract;
 mod index;
+mod lexical;
+mod links;
+mod paths;
+mod record;
+mod schema;
+mod types;
 
 pub use error::{Error, Result};
 pub use extract::{
@@ -18,6 +25,6 @@ pub use index::{
     WorkspaceIndex, MAX_INDEX_TEXT_BYTES,
 };
 pub use lattice_core::{
-    build_link_repair_plan, LinkOccurrence, LinkRepairCandidate, LinkRepairPlan,
-    LinkRepairSource, LinkRepairStatus,
+    build_link_repair_plan, LinkOccurrence, LinkRepairCandidate, LinkRepairPlan, LinkRepairSource,
+    LinkRepairStatus,
 };
