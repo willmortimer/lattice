@@ -2320,6 +2320,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-client"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "lattice-protocol",
+ "prost",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
 name = "lattice-commands"
 version = "0.1.0"
 dependencies = [
