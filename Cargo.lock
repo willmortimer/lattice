@@ -2464,6 +2464,7 @@ version = "0.1.0"
 dependencies = [
  "lattice-commands",
  "lattice-core",
+ "lattice-embedding",
  "lattice-index",
  "lattice-storage",
  "serde",
@@ -2485,6 +2486,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
  "walkdir",
 ]
 
