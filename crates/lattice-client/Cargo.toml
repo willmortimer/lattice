@@ -1,0 +1,19 @@
+[package]
+name = "lattice-client"
+description = "Shared LatticeClient contract for embedded and daemon IPC modes"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+bytes.workspace = true
+lattice-protocol.workspace = true
+prost.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
+tokio-util = { workspace = true, features = ["codec"] }
+
+[dev-dependencies]
+tempfile = "3"
