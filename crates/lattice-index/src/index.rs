@@ -6,10 +6,16 @@ use lattice_core::{
     build_link_repair_plan, resolution_targets_path, LinkOccurrence, LinkRepairPlan,
     LinkRepairSource, Resource, ResourceCatalog, ResourceKind, ResourceLinkResolution, Workspace,
 };
+use lattice_embedding::{ChunkEmbeddingStatus, EmbeddingSpecification};
 use rusqlite::types::ToSql;
 use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::catalog::{encoding_db, kind_db, metadata_from_row, parser_status_db, profile_db};
+use crate::embedding::{
+    self, chunk_embedding_state, chunk_embedding_states_for_namespace,
+    embedding_namespace_by_id, is_chunk_embedding_stale, register_embedding_namespace,
+    ChunkEmbeddingState, EmbeddingNamespace,
+};
 use crate::error::{Error, Result};
 use crate::extract::{LinkKind, StructuredPath};
 use crate::chunks::{self, CHUNKER_VERSION};
@@ -174,6 +180,79 @@ impl WorkspaceIndex {
     pub fn search_chunks(&self, query: &str, limit: usize) -> Result<Vec<ChunkSearchHit>> {
         let conn = self.conn.lock().unwrap();
         search_chunk_hits(&conn, query, limit)
+    }
+
+    /// Register or refresh one embedding namespace for status tracking.
+    pub fn register_embedding_namespace(
+        &self,
+        specification: &EmbeddingSpecification,
+        chunker_version: &str,
+    ) -> Result<EmbeddingNamespace> {
+        let conn = self.conn.lock().unwrap();
+        register_embedding_namespace(&conn, specification, chunker_version, current_time_ms())
+    }
+
+    /// Return one embedding namespace by id.
+    pub fn embedding_namespace(&self, namespace_id: i64) -> Result<Option<EmbeddingNamespace>> {
+        let conn = self.conn.lock().unwrap();
+        embedding_namespace_by_id(&conn, namespace_id)
+    }
+
+    /// Upsert per-chunk embedding state for one namespace.
+    pub fn upsert_chunk_embedding_state(
+        &self,
+        chunk_id: &str,
+        namespace_id: i64,
+        embedding_input_hash: &str,
+        status: ChunkEmbeddingStatus,
+        last_error: Option<&str>,
+        indexed_at_ms: Option<i64>,
+    ) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        embedding::upsert_chunk_embedding_state(
+            &conn,
+            chunk_id,
+            namespace_id,
+            embedding_input_hash,
+            status,
+            last_error,
+            indexed_at_ms,
+        )
+    }
+
+    /// Return one chunk embedding state row.
+    pub fn chunk_embedding_state(
+        &self,
+        chunk_id: &str,
+        namespace_id: i64,
+    ) -> Result<Option<ChunkEmbeddingState>> {
+        let conn = self.conn.lock().unwrap();
+        chunk_embedding_state(&conn, chunk_id, namespace_id)
+    }
+
+    /// List all chunk embedding state rows for one namespace.
+    pub fn chunk_embedding_states_for_namespace(
+        &self,
+        namespace_id: i64,
+    ) -> Result<Vec<ChunkEmbeddingState>> {
+        let conn = self.conn.lock().unwrap();
+        chunk_embedding_states_for_namespace(&conn, namespace_id)
+    }
+
+    /// Return whether a chunk needs re-embedding for the supplied input hash.
+    pub fn is_chunk_embedding_stale(
+        &self,
+        chunk_id: &str,
+        namespace_id: i64,
+        current_embedding_input_hash: &str,
+    ) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        is_chunk_embedding_stale(
+            &conn,
+            chunk_id,
+            namespace_id,
+            current_embedding_input_hash,
+        )
     }
 
     /// List resources that link to `path`, preserving source labels, anchors,
@@ -788,6 +867,74 @@ mod tests {
         let stats = index.rebuild(dir.path()).unwrap();
         assert_eq!(stats.resources_removed, 1);
         assert!(index.metadata(Path::new("one.txt")).unwrap().is_none());
+    }
+
+    #[test]
+    fn embedding_namespace_and_stale_state_tracking() {
+        use lattice_embedding::{DistanceMetric, EmbeddingSpecification, PoolingStrategy};
+
+        let dir = TempDir::new().unwrap();
+        sample_workspace(dir.path());
+        let index = WorkspaceIndex::open(dir.path()).unwrap();
+        index.rebuild(dir.path()).unwrap();
+
+        let hits = index.search_chunks("welcome", 10).unwrap();
+        let chunk_id = hits
+            .first()
+            .map(|hit| hit.chunk_id.clone())
+            .expect("chunk hit");
+
+        let namespace = index
+            .register_embedding_namespace(
+                &EmbeddingSpecification {
+                    provider_id: "fake".into(),
+                    model_id: "fake-model".into(),
+                    model_revision: "rev-1".into(),
+                    artifact_sha256: "sha256:artifact".into(),
+                    dimensions: 8,
+                    native_dimensions: 8,
+                    distance: DistanceMetric::Cosine,
+                    pooling: PoolingStrategy::Last,
+                    normalized: true,
+                    instruction_version: "test-v1".into(),
+                },
+                CHUNKER_VERSION,
+            )
+            .unwrap();
+
+        assert!(index
+            .is_chunk_embedding_stale(&chunk_id, namespace.id, "hash-v1")
+            .unwrap());
+
+        index
+            .upsert_chunk_embedding_state(
+                &chunk_id,
+                namespace.id,
+                "hash-v1",
+                lattice_embedding::ChunkEmbeddingStatus::Ready,
+                None,
+                Some(42),
+            )
+            .unwrap();
+
+        let state = index
+            .chunk_embedding_state(&chunk_id, namespace.id)
+            .unwrap()
+            .expect("state row");
+        assert_eq!(state.embedding_input_hash, "hash-v1");
+        assert!(!index
+            .is_chunk_embedding_stale(&chunk_id, namespace.id, "hash-v1")
+            .unwrap());
+        assert!(index
+            .is_chunk_embedding_stale(&chunk_id, namespace.id, "hash-v2")
+            .unwrap());
+        assert_eq!(
+            index
+                .chunk_embedding_states_for_namespace(namespace.id)
+                .unwrap()
+                .len(),
+            1
+        );
     }
 
     #[test]
