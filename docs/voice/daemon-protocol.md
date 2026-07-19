@@ -58,6 +58,7 @@ audio or commands.
 | `ModelStatusChanged` | Download/prepare/warm/unload |
 | `SessionReady` | Accepting audio |
 | `SpeechStarted` | Endpoint / VAD speech onset |
+| `EndpointDetected` | Utterance boundary (silence debounce, max length, or provider EOU) |
 | `PartialTranscript` | Provisional |
 | `StableTranscript` | Stable prefix update |
 | `FinalTranscript` | Authoritative (`FinalizationMode` per voice ADR 0007) |

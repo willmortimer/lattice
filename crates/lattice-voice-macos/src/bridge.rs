@@ -39,6 +39,8 @@ impl OwnedBridgeEvent {
             2 => LatticeVoiceEventKind::Stable,
             3 => LatticeVoiceEventKind::Final,
             4 => LatticeVoiceEventKind::Error,
+            5 => LatticeVoiceEventKind::SpeechStarted,
+            6 => LatticeVoiceEventKind::Endpoint,
             _ => LatticeVoiceEventKind::Error,
         };
 
@@ -265,6 +267,46 @@ impl MockBridge {
             text,
             0,
             LATTICE_VOICE_OK,
+        )
+    }
+
+    pub(crate) fn emit_speech_started(&self) -> bool {
+        let Ok(sessions) = self.sessions.lock() else {
+            return false;
+        };
+        let Some(session) = sessions.first() else {
+            return false;
+        };
+        if session.cancelled.load(Ordering::Acquire) || session.destroyed {
+            return false;
+        }
+        Self::fire_callback(
+            session.callback,
+            session.context,
+            LatticeVoiceEventKind::SpeechStarted,
+            "",
+            0,
+            LATTICE_VOICE_OK,
+        )
+    }
+
+    pub(crate) fn emit_endpoint(&self, reason_code: i32) -> bool {
+        let Ok(sessions) = self.sessions.lock() else {
+            return false;
+        };
+        let Some(session) = sessions.first() else {
+            return false;
+        };
+        if session.cancelled.load(Ordering::Acquire) || session.destroyed {
+            return false;
+        }
+        Self::fire_callback(
+            session.callback,
+            session.context,
+            LatticeVoiceEventKind::Endpoint,
+            "",
+            0,
+            reason_code,
         )
     }
 

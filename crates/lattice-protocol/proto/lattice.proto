@@ -85,6 +85,8 @@ message Event {
     SessionFailed session_failed = 28;
     // Capture/queue discontinuity; never silently skip missing PCM sequences.
     AudioGap audio_gap = 29;
+    // Utterance boundary from VAD / EOU / max-length policy.
+    EndpointDetected endpoint_detected = 30;
   }
 }
 
@@ -259,10 +261,20 @@ message SessionContext {
   bool command_mode = 3;
 }
 
+message EndpointOptions {
+  // Continuous mode: auto-finalize when endpoint policy fires.
+  bool auto_finalize_on_endpoint = 1;
+  // Silence debounce in ms (0 on wire → domain default 800).
+  uint32 silence_debounce_ms = 2;
+  // Max utterance length in ms (0 on wire → domain default 45000).
+  uint32 max_utterance_ms = 3;
+}
+
 message SpeechSessionConfig {
   string session_id = 1;
   optional string language = 2;
   SessionContext context = 3;
+  EndpointOptions endpoint = 4;
 }
 
 // Download / verify / warm a speech model before sessions.
@@ -368,6 +380,20 @@ message SpeechStarted {
   string session_id = 1;
   string utterance_id = 2;
   uint64 started_at_ms = 3;
+}
+
+enum EndpointReason {
+  ENDPOINT_REASON_UNSPECIFIED = 0;
+  ENDPOINT_REASON_SILENCE_DEBOUNCE = 1;
+  ENDPOINT_REASON_MAX_UTTERANCE_LENGTH = 2;
+  ENDPOINT_REASON_PROVIDER_EOU = 3;
+}
+
+message EndpointDetected {
+  string session_id = 1;
+  string utterance_id = 2;
+  uint64 ended_at_ms = 3;
+  EndpointReason reason = 4;
 }
 
 message PartialTranscript {

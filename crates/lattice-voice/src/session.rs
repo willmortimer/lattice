@@ -77,6 +77,8 @@ fn is_valid_transition(
         (Ready, Listening) => true,
         (Listening, SpeechActive) => true,
         (SpeechActive, Finalizing) => true,
+        // Continuous dictation: finalize one utterance, then accept the next.
+        (Finalizing, Listening) => true,
         (Finalizing, Completed) => true,
         (Created | Preparing | Ready | Listening | SpeechActive | Finalizing, Cancelled) => true,
         (Created | Preparing | Ready | Listening | SpeechActive | Finalizing, Failed) => true,
@@ -162,5 +164,27 @@ mod tests {
             .transition(TranscriptionSessionState::Failed)
             .unwrap_err();
         assert!(matches!(err, SpeechError::SessionTerminal { .. }));
+    }
+
+    #[test]
+    fn continuous_resume_after_finalize() {
+        let mut machine = SessionStateMachine::new("voice_1".into());
+        machine
+            .transition(TranscriptionSessionState::Preparing)
+            .unwrap();
+        machine.transition(TranscriptionSessionState::Ready).unwrap();
+        machine
+            .transition(TranscriptionSessionState::Listening)
+            .unwrap();
+        machine
+            .transition(TranscriptionSessionState::SpeechActive)
+            .unwrap();
+        machine
+            .transition(TranscriptionSessionState::Finalizing)
+            .unwrap();
+        machine
+            .transition(TranscriptionSessionState::Listening)
+            .unwrap();
+        assert_eq!(machine.state(), TranscriptionSessionState::Listening);
     }
 }
