@@ -9,48 +9,69 @@ ordinary file under a real directory — open it in any editor, or stay inside L
 
 ## Quick start
 
-1. Search with **⌘K** — pages are indexed by path, title, tags, and body.
+1. Search with **⌘K** — hybrid FTS over chunks (try `latticed` or `FinalizationMode`).
 2. Scroll [[Research/Long Read]] — long-form perf and virtualization fixture.
 3. Open `Canvases/Product Strategy.canvas` — double-click file nodes to jump.
-4. Capture with **⌘N** into `Inbox/` (see [[Inbox/Sample capture]]).
-5. Open `CRM.data` — ~20 contacts with multiple column types, a **company** relation to a `companies` table, and a **reports_to** self-relation.
-6. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.
-7. Open `Notebooks/CRM exploration.ipynb` — CRM tour notebook (markdown + commented code stubs).
-8. Create pages from `Templates/` — daily and meeting note scaffolds.
+4. Capture with **⌘N** into `Inbox/` — type or **hold-to-dictate** (see [[Inbox/Sample capture]]).
+5. Open `CRM.data` — contacts + companies, relations, board/gallery/calendar/form.
+6. Also open `Projects/Delivery.data`, `Data/Metrics.data`, and `OKRs.data` for more table shapes.
+7. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.
+8. Open `Notebooks/CRM exploration.ipynb` — CRM tour notebook (markdown + code stubs).
+9. Create pages from `Templates/` — daily and meeting note scaffolds.
+10. Read [[Research/Local Runtime]] — daemon, search, and voice process model.
 
 ## First Look tour — new surfaces
 
-Work through this checklist to exercise the latest desktop shell and data features.
-Each step is safe in the sample workspace; undo where noted.
+Work through this checklist to exercise the latest desktop shell, data, search,
+and voice features. Each step is safe in the sample workspace; undo where noted.
+
+### Search & local runtime
+
+1. Press **⌘K** and search for `VoiceContextBuilder` or `EndpointDetected` (seeded on [[Research/Local Runtime]]).
+2. Open a hit and confirm the heading path / chunk feel honest in the result list.
+3. Skim [[Research/Architecture]] for the core vs latticed diagrams.
+
+### Voice & Quick Note
+
+4. Open any page → hold the microphone control to dictate; release for a single final insert (provisional text is ghost-only).
+5. Press **⌘N** for Quick Note → hold-to-dictate → release → note saves once; Escape cancels without junk ASR text.
+6. Optional continuous mode: set `LATTICE_VOICE_AUTO_FINALIZE_ON_ENDPOINT=1` before launch (silence debounce endpoints); default hold-to-talk needs no VAD.
 
 ### CRM layouts and saved views
 
-1. Open `CRM.data` and switch **Board**, **Gallery**, **Calendar**, and **Form** from the view picker.
-2. In each layout, change the layout field pickers (group-by, cover field, date field, visible columns).
-3. Click **Save view** to persist the layout under `CRM.data/views/`.
-4. Open a contact row and inspect the **company** and **reports_to** relation columns — a few contacts are pre-linked; add or change links in the record detail panel.
+7. Open `CRM.data` and switch **Board**, **Gallery**, **Calendar**, and **Form** from the view picker.
+8. In each layout, change the layout field pickers (group-by, cover field, date field, visible columns).
+9. Click **Save view** to persist the layout under `CRM.data/views/` (native).
+10. Open a contact row and inspect **company** and **reports_to** — add or change links in record detail.
+
+### More data apps
+
+11. Open `Projects/Delivery.data` — board by status + calendar on `due` (no relations; simpler schema).
+12. Open `Data/Metrics.data` — decimal metrics board by category (Voice / Search / Data / Editor).
+13. Open `OKRs.data` — objectives board by confidence status.
 
 ### CRM package forms
 
-5. Open `CRM.data` and click **Forms** in the data-app chrome.
-6. Choose **Contact intake** — the seeded `forms/ContactIntake.form.yaml` maps `name`, `email`, `status`, and **company**.
-7. Submit a new contact; the row appears in the grid and relation pickers stay in sync with the `companies` table.
+14. Open `CRM.data` → **Forms** → **Contact intake**.
+15. Submit a new contact; the row appears and relation pickers stay in sync with `companies`.
+16. Open `Projects/Delivery.data` → **Forms** → **Delivery intake** and add an item.
 
 ### Resource tree
 
-8. Create a folder under `Projects/` (context menu or **New folder**).
-9. Press **⌘Z** to undo the folder creation.
-10. Move [[Product/Vision]] into another folder; accept link repair when prompted so wiki links update.
-11. **⌘-click** two pages in the tree, then drag the selection to a folder (multi-select move).
-12. Select multiple items and delete — confirm the batch operation.
+17. Create a folder under `Projects/` (context menu or **New folder**).
+18. Press **⌘Z** to undo the folder creation.
+19. Move [[Product/Vision]] into another folder; accept link repair when prompted.
+20. **⌘-click** two pages, drag to a folder (multi-select move).
+21. Select multiple items and delete — confirm the batch operation.
 
 ### Where to look next
 
 | Surface | Try |
 | --- | --- |
+| [[Research/Local Runtime]] | Daemon, hybrid search, voice ownership |
 | [[Research/Long Read]] | Scroll perf, embeds, extended checklist |
 | [[Product/Release Notes]] | What shipped in this sample |
-| `Canvases/Product Strategy.canvas` | Spatial links between Product pages |
+| `Canvases/Product Strategy.canvas` | Spatial links + CRM view subpaths |
 
 ## Product
 
@@ -65,15 +86,16 @@ Each step is safe in the sample workspace; undo where noted.
 
 | Page | What to try |
 | --- | --- |
+| [[Research/Local Runtime]] | latticed, hybrid search, Quick Note voice |
 | [[Research/Long Read]] | Scroll perf, Mermaid, wiki links, `:::lattice-embed` |
-| [[Research/Architecture]] | System diagram (Mermaid) |
+| [[Research/Architecture]] | System diagrams (core + daemon) |
 | [[Research/Competitor Analysis]] | Comparison table |
 | [[Research/Market Notes]] | Segments and hypotheses |
 | [[Research/Interview Synthesis]] | Quotes mapped to CRM fields |
 
 ## Inbox & templates
 
-- [[Inbox/Sample capture]] — triage-ready quick note
+- [[Inbox/Sample capture]] — triage-ready quick note (dictation-friendly)
 - [[Templates/Daily Note]] — `{{date}}` / `{{title}}` placeholders preserved at provision
 - [[Templates/Meeting Note]] — agenda, decisions, action items
 
@@ -83,8 +105,11 @@ Workspace defaults point quick capture at `Inbox/` and templates at `Templates/`
 
 | Resource | Kind |
 | --- | --- |
-| `Canvases/Product Strategy.canvas` | Spatial board linking Product pages |
-| `CRM.data` | SQLite data app (`companies` + `contacts` tables) |
+| `Canvases/Product Strategy.canvas` | Spatial board linking Product pages + CRM views |
+| `CRM.data` | SQLite CRM (`companies` + `contacts`, relations, forms) |
+| `Projects/Delivery.data` | Delivery board/calendar (status + due) |
+| `Data/Metrics.data` | Decimal metrics by category |
+| `OKRs.data` | Objectives / key results board |
 | `Data/sample.csv` | Flat CSV import sample |
 | `Notebooks/CRM exploration.ipynb` | CRM tour notebook (nbformat v4) |
 
@@ -104,20 +129,15 @@ Supported layout types also include `grid` and `list`. Board groups contacts by
 `status`; calendar plots `due_date`; gallery uses `company` as a cover field.
 
 The **company** column links each contact to a row in the seeded `companies` table.
-The **reports_to** column is a self-relation on `contacts` — open a row to link peers
-or managers. Template relation seeds accept **record ids** or display **names** (matched
-via each target table's `name` column at provision time); prefer ids when you need
-stable references across renames.
+The **reports_to** column is a self-relation on `contacts`. Template relation seeds
+accept **record ids** or display **names** (matched via each target table's `name`
+column at provision time).
 
 ### CRM package forms
-
-Package forms live beside views under `CRM.data/forms/` (one YAML file per form):
 
 | Form | Table | Fields |
 | ---- | ----- | ------ |
 | ContactIntake | `contacts` | `name`, `email`, `status`, `company` |
-
-Open **Forms** in the data-app chrome to submit a new contact through the seeded intake form.
 
 Embed a view from a page (see [[Research/Long Read]]):
 
@@ -149,6 +169,7 @@ fallback: "Open CRM board view"
 | [[Product/Principles]] | page |
 | [[Product/Roadmap]] | page |
 | [[Product/Release Notes]] | page |
+| [[Research/Local Runtime]] | page (daemon / search / voice) |
 | [[Research/Long Read]] | page (long / embed) |
 | [[Research/Architecture]] | page |
 | [[Research/Competitor Analysis]] | page |
@@ -158,6 +179,9 @@ fallback: "Open CRM board view"
 | `Templates/` | page templates |
 | `Canvases/Product Strategy.canvas` | canvas |
 | `CRM.data` | data app |
+| `Projects/Delivery.data` | data app |
+| `Data/Metrics.data` | data app |
+| `OKRs.data` | data app |
 | `Data/sample.csv` | CSV file |
 | `Notebooks/CRM exploration.ipynb` | notebook |
 | `Resources/` | code & config files |
