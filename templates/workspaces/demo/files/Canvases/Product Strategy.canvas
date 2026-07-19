@@ -7,7 +7,7 @@
       "y": 60,
       "width": 300,
       "height": 160,
-      "text": "First Look canvas — double-click file nodes. CRM nodes open saved Board/Gallery views via subpath."
+      "text": "First Look canvas — double-click file nodes. Data apps open grids; CRM nodes can target saved Board/Gallery views via subpath."
     },
     {
       "id": "vision",
@@ -109,6 +109,63 @@
       "y": 280,
       "width": 240,
       "height": 120
+    },
+    {
+      "id": "delivery-label",
+      "type": "text",
+      "x": 900,
+      "y": 440,
+      "width": 160,
+      "height": 40,
+      "text": "Delivery board"
+    },
+    {
+      "id": "delivery",
+      "type": "file",
+      "file": "Projects/Delivery.data",
+      "subpath": "views/Board",
+      "x": 900,
+      "y": 480,
+      "width": 200,
+      "height": 100
+    },
+    {
+      "id": "metrics-label",
+      "type": "text",
+      "x": 1120,
+      "y": 440,
+      "width": 160,
+      "height": 40,
+      "text": "Metrics board"
+    },
+    {
+      "id": "metrics",
+      "type": "file",
+      "file": "Data/Metrics.data",
+      "subpath": "views/Board",
+      "x": 1120,
+      "y": 480,
+      "width": 200,
+      "height": 100
+    },
+    {
+      "id": "okrs-label",
+      "type": "text",
+      "x": 1340,
+      "y": 440,
+      "width": 120,
+      "height": 40,
+      "text": "OKRs board"
+    },
+    {
+      "id": "okrs",
+      "type": "file",
+      "file": "OKRs.data",
+      "subpath": "views/Board",
+      "x": 1340,
+      "y": 480,
+      "width": 200,
+      "height": 100
     }
   ],
   "edges": [
@@ -119,6 +176,9 @@
     { "id": "e5", "fromNode": "roadmap", "toNode": "long-read" },
     { "id": "e6", "fromNode": "long-read", "toNode": "crm-board" },
     { "id": "e7", "fromNode": "crm-board", "toNode": "crm-gallery" },
-    { "id": "e8", "fromNode": "crm-board", "toNode": "crm-notebook" }
+    { "id": "e8", "fromNode": "crm-board", "toNode": "crm-notebook" },
+    { "id": "e9", "fromNode": "crm-notebook", "toNode": "delivery" },
+    { "id": "e10", "fromNode": "delivery", "toNode": "metrics" },
+    { "id": "e11", "fromNode": "metrics", "toNode": "okrs" }
   ]
 }

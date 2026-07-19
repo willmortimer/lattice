@@ -9,7 +9,8 @@ Your map of content — start here and branch out.
 ## Capture
 
 - [[Inbox/]] — quick captures and unsorted notes
-- Press **⌘N** or **Ctrl+N** for a quick note
+- Press **⌘N** or **Ctrl+N** for a quick note — type or hold-to-dictate
+- Press **⌘K** to search pages and tables
 
 ## Active work
 
