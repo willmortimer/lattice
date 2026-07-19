@@ -4,9 +4,13 @@ import {
   canvasRelativePath,
   keyboardMoveDelta,
   previewAddEdge,
+  previewAddTextNode,
   previewMoveNodes,
   previewPlaceResource,
+  previewRemoveEdges,
   previewRemoveNodes,
+  previewResizeNodes,
+  previewUpdateTextNode,
 } from "./adapter";
 import type { CanvasData } from "./types";
 
@@ -36,6 +40,20 @@ describe("canvasRelativePath", () => {
     expect(previewRemoveNodes(data, ["a"]).edges).toHaveLength(0);
     expect(previewPlaceResource(data, "Product/C.md", { id: "c", x: 8, y: 9, width: 20, height: 30 }).nodes).toHaveLength(3);
     expect(previewAddEdge(data, { id: "ac", fromNode: "a", toNode: "b" }).edges).toHaveLength(2);
+    expect(previewRemoveEdges(data, ["ab"]).edges).toHaveLength(0);
+    expect(previewResizeNodes(data, [{ id: "a", width: 220, height: 160 }]).nodes[0]).toMatchObject({
+      width: 220,
+      height: 160,
+    });
+    expect(previewAddTextNode(data, {
+      id: "note",
+      text: "Sticky",
+      x: 0,
+      y: 0,
+      width: 120,
+      height: 80,
+    }).nodes).toHaveLength(3);
+    expect(previewUpdateTextNode(data, "a", "Updated").nodes[0]).toMatchObject({ text: "Updated" });
   });
 
   it("maps keyboard movement to bounded semantic deltas", () => {
