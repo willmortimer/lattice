@@ -129,8 +129,9 @@ export class DictationCapture {
     this.media = await navigator.mediaDevices.getUserMedia({
       audio: {
         channelCount: 1,
-        echoCancellation: true,
-        noiseSuppression: true,
+        // Browser DSP often hurts on-device ASR more than it helps.
+        echoCancellation: false,
+        noiseSuppression: false,
         autoGainControl: true,
       },
       video: false,

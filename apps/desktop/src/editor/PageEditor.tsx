@@ -480,11 +480,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
         const trimmed = text.trim();
         if (!trimmed) return;
         const insertAt = Math.min(Math.max(1, from), editor.state.doc.content.size);
-        const needsLeadingSpace =
-          insertAt > 1 &&
-          !/\s$/.test(editor.state.doc.textBetween(Math.max(1, insertAt - 1), insertAt, "", ""));
-        const payload = needsLeadingSpace ? ` ${trimmed}` : trimmed;
-        editor.view.dispatch(editor.state.tr.insertText(payload, insertAt));
+        editor.view.dispatch(editor.state.tr.insertText(trimmed, insertAt));
         editor.commands.focus();
       },
     }),
