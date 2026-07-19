@@ -38,6 +38,8 @@ export function DictationControls({ enabled, pageEditorRef, onError }: Dictation
   const highestRevisionRef = useRef(0);
   const holdingRef = useRef(false);
   const startGenerationRef = useRef(0);
+  /** While false, ignore partial events (finalizing / idle) so ghost text cannot return. */
+  const acceptPartialsRef = useRef(false);
   /** Serialize start/stop so release-during-start cannot orphan a Rust session. */
   const opChainRef = useRef(Promise.resolve());
 
@@ -78,12 +80,15 @@ export function DictationControls({ enabled, pageEditorRef, onError }: Dictation
     let unlisten: (() => void) | undefined;
     void listenVoiceEvents((event) => {
       if (event.type === "partial") {
+        if (!acceptPartialsRef.current) return;
+        if (sessionIdRef.current && event.sessionId !== sessionIdRef.current) return;
         if (event.revision < highestRevisionRef.current) return;
         highestRevisionRef.current = event.revision;
         pageEditorRef.current?.setDictationProvisional(event.text, anchorRef.current);
         return;
       }
       if (event.type === "final") {
+        acceptPartialsRef.current = false;
         pageEditorRef.current?.commitDictationFinal(event.text, anchorRef.current);
         highestRevisionRef.current = 0;
         setPhase("idle");
@@ -92,8 +97,15 @@ export function DictationControls({ enabled, pageEditorRef, onError }: Dictation
       }
       if (event.type === "status") {
         setHint(event.message);
-        if (event.state === "listening") setPhase("listening");
-        if (event.state === "finalizing") setPhase("finalizing");
+        if (event.state === "listening") {
+          acceptPartialsRef.current = true;
+          setPhase("listening");
+        }
+        if (event.state === "finalizing") {
+          acceptPartialsRef.current = false;
+          pageEditorRef.current?.clearDictationProvisional();
+          setPhase("finalizing");
+        }
         if (event.state === "preparing") setPhase("preparing");
         if (event.state === "ready") {
           setStatus((prev) =>
@@ -103,10 +115,14 @@ export function DictationControls({ enabled, pageEditorRef, onError }: Dictation
           );
           if (!holdingRef.current) setPhase("idle");
         }
-        if (event.state === "idle" && !holdingRef.current) setPhase("idle");
+        if (event.state === "idle" && !holdingRef.current) {
+          acceptPartialsRef.current = false;
+          setPhase("idle");
+        }
         return;
       }
       if (event.type === "failed") {
+        acceptPartialsRef.current = false;
         pageEditorRef.current?.clearDictationProvisional();
         holdingRef.current = false;
         sessionIdRef.current = null;
@@ -126,6 +142,7 @@ export function DictationControls({ enabled, pageEditorRef, onError }: Dictation
     if (holdingRef.current) return;
     holdingRef.current = true;
     highestRevisionRef.current = 0;
+    acceptPartialsRef.current = false;
     const generation = ++startGenerationRef.current;
 
     void enqueue(async () => {
@@ -149,10 +166,12 @@ export function DictationControls({ enabled, pageEditorRef, onError }: Dictation
         }
 
         setPhase("listening");
-        const anchor = pageEditorRef.current?.beginDictation() ?? 0;
+        acceptPartialsRef.current = true;
+        const anchor = pageEditorRef.current?.beginDictation() ?? 1;
         anchorRef.current = anchor;
         const { sessionId } = await startVoiceSession();
         if (!holdingRef.current || generation !== startGenerationRef.current) {
+          acceptPartialsRef.current = false;
           await cancelVoiceSession(sessionId).catch(() => undefined);
           await cancelActiveVoiceSession().catch(() => undefined);
           sessionIdRef.current = null;
@@ -162,12 +181,14 @@ export function DictationControls({ enabled, pageEditorRef, onError }: Dictation
         sessionIdRef.current = sessionId;
         await captureRef.current.start(sessionId);
         if (!holdingRef.current || generation !== startGenerationRef.current) {
+          acceptPartialsRef.current = false;
           await captureRef.current.cancel().catch(() => undefined);
           sessionIdRef.current = null;
           setPhase("idle");
         }
       } catch (err) {
         if (generation !== startGenerationRef.current) return;
+        acceptPartialsRef.current = false;
         holdingRef.current = false;
         sessionIdRef.current = null;
         pageEditorRef.current?.clearDictationProvisional();
@@ -181,14 +202,14 @@ export function DictationControls({ enabled, pageEditorRef, onError }: Dictation
   const endHold = useCallback(() => {
     if (!holdingRef.current) return;
     holdingRef.current = false;
+    acceptPartialsRef.current = false;
     startGenerationRef.current += 1;
     const sessionId = sessionIdRef.current;
     sessionIdRef.current = null;
+    pageEditorRef.current?.clearDictationProvisional();
 
     void enqueue(async () => {
       if (!sessionId) {
-        // Released during prepare / session start — clear any orphan on the Rust side.
-        pageEditorRef.current?.clearDictationProvisional();
         await cancelActiveVoiceSession().catch(() => undefined);
         setPhase("idle");
         return;
@@ -208,6 +229,7 @@ export function DictationControls({ enabled, pageEditorRef, onError }: Dictation
 
   const cancelHold = useCallback(() => {
     holdingRef.current = false;
+    acceptPartialsRef.current = false;
     startGenerationRef.current += 1;
     const sessionId = sessionIdRef.current;
     sessionIdRef.current = null;

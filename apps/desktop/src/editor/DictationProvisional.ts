@@ -66,14 +66,19 @@ export const DictationProvisional = Extension.create({
               | undefined;
             if (meta) return meta;
             if (!value.text) return value;
+            // Drop provisional across doc changes that aren't our own meta updates
+            // (e.g. the final insert transaction if meta were missing).
+            if (tr.docChanged) return { text: "", from: 0 };
             return { text: value.text, from: tr.mapping.map(value.from) };
           },
         },
         props: {
           decorations(state: EditorState) {
             const value = dictationProvisionalKey.getState(state);
-            if (!value?.text) return null;
-            const from = Math.min(Math.max(0, value.from), state.doc.content.size);
+            if (!value?.text) return DecorationSet.empty;
+            const from = Math.min(Math.max(1, value.from), state.doc.content.size);
+            // Key forces widget DOM recreation when text changes so stale italics
+            // cannot linger beside the inserted final.
             return DecorationSet.create(state.doc, [
               Decoration.widget(
                 from,
@@ -85,7 +90,7 @@ export const DictationProvisional = Extension.create({
                   span.textContent = value.text;
                   return span;
                 },
-                { side: 1 },
+                { side: 1, key: `dictation-provisional:${value.from}:${value.text}` },
               ),
             ]);
           },

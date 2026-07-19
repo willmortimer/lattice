@@ -471,7 +471,10 @@ pub async fn voice_finish_session(
             session_id: sid,
             ..
         } = active;
-        // Drop the lock while finishing so partials can still flush.
+        // Stop forwarding immediately so late partials cannot re-paint provisional
+        // ghost text after the authoritative final is inserted.
+        _forwarder.abort();
+        // Drop the lock while finishing.
         drop(inner);
 
         match session.finish_utterance().await {
@@ -529,7 +532,8 @@ pub async fn voice_cancel_session(
             inner.active = Some(active);
             return Err("session id mismatch".into());
         }
-        let ActiveSession { session, .. } = active;
+        let ActiveSession { session, _forwarder, .. } = active;
+        _forwarder.abort();
         drop(inner);
         let _ = session.cancel().await;
         let _ = app.emit(
