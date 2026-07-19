@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent }
 
 import { fileTitle } from "./controllers/useResourceController";
 import { KindMark, KIND_LABELS } from "./KindMark";
-import { readResourceDragPayload, writeResourceDragPayload } from "./lib/resourceDrag";
+import { hasLatticeResourceDrag, readResourceDragPayload, writeResourceDragPayload } from "./lib/resourceDrag";
 import { folderTreeIcon, resourceTreeIcon } from "./lib/resourceIcons";
 import {
   buildResourceTree,
@@ -63,7 +63,7 @@ function acceptsResourceDrop(
   fromPaths: readonly string[],
   toDir: string,
 ): boolean {
-  if (!event.dataTransfer.types.includes("application/x-lattice-resource")) return false;
+  if (!hasLatticeResourceDrag(event.dataTransfer)) return false;
   return validateMoveResources(fromPaths, toDir, resources).ok;
 }
 
@@ -136,6 +136,8 @@ export function ResourceTree({
   const [dropTargetPath, setDropTargetPath] = useState<string | null>(null);
   const selectionAnchorRef = useRef<string | null>(null);
   const selectedPathsRef = useRef(selectedPaths);
+  /** Paths captured at dragstart — dragover cannot read DataTransfer payloads. */
+  const dragPathsRef = useRef<string[] | null>(null);
   selectedPathsRef.current = selectedPaths;
   const collapsed = collapsedPaths ?? localCollapsed;
   const { rootRef, scrollParentRef, scrollTop, viewportHeight } = useResourceListScroll();
@@ -254,9 +256,8 @@ export function ResourceTree({
   }
 
   function handleFolderDragOver(event: DragEvent, folderPath: string) {
-    const payload = readResourceDragPayload(event.dataTransfer);
-    if (!payload) return;
-    const fromPaths = dragPathsFor(payload.path);
+    const fromPaths = dragPathsRef.current;
+    if (!fromPaths) return;
     if (!acceptsResourceDrop(event, resources, fromPaths, folderPath)) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
@@ -267,8 +268,9 @@ export function ResourceTree({
     event.preventDefault();
     setDropTargetPath(null);
     const payload = readResourceDragPayload(event.dataTransfer);
-    if (!payload) return;
-    const fromPaths = dragPathsFor(payload.path);
+    const fromPaths = payload ? dragPathsFor(payload.path) : dragPathsRef.current;
+    dragPathsRef.current = null;
+    if (!fromPaths || fromPaths.length === 0) return;
     if (!validateMoveResources(fromPaths, folderPath, resources).ok) return;
     onMoveToFolder?.(fromPaths, folderPath);
   }
@@ -298,6 +300,11 @@ export function ResourceTree({
           draggable={!isEditing}
           onDragStart={(event) => {
             writeResourceDragPayload(event.dataTransfer, resource);
+            dragPathsRef.current = dragPathsFor(resource.path);
+          }}
+          onDragEnd={() => {
+            dragPathsRef.current = null;
+            setDropTargetPath(null);
           }}
           onClick={(event) => handleFileClick(event, resource)}
           onContextMenu={(event) => {
