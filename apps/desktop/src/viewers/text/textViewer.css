@@ -143,6 +143,63 @@
   color: var(--lt-accent);
 }
 
+.lattice-csv-preview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 420px;
+  border-left: 1px solid var(--lt-line);
+  color: var(--lt-text-soft);
+  background: var(--lt-panel);
+  font: 11px/1.45 var(--lt-font-mono);
+}
+
+.lattice-csv-preview-note,
+.lattice-csv-preview-empty {
+  margin: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--lt-line);
+  color: var(--lt-muted);
+}
+
+.lattice-csv-preview-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.lattice-csv-preview-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+}
+
+.lattice-csv-preview-table th,
+.lattice-csv-preview-table td {
+  max-width: 220px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--lt-line);
+  border-right: 1px solid var(--lt-line);
+  text-align: left;
+  vertical-align: top;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.lattice-csv-preview-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: var(--lt-text);
+  background: var(--lt-bg-raise);
+  font-weight: 650;
+}
+
+.lattice-csv-preview-table tbody tr:hover td {
+  color: var(--lt-text);
+  background: var(--lt-bg-raise);
+}
+
 .lattice-text-diagnostic {
   margin: 0;
   padding: 8px 14px;
@@ -154,6 +211,7 @@
 
 @media (max-width: 780px) {
   .lattice-text-layout-with-tree { grid-template-columns: 1fr; }
-  .lattice-structured-tree { border-top: 1px solid var(--lt-line); border-left: 0; }
+  .lattice-structured-tree,
+  .lattice-csv-preview { border-top: 1px solid var(--lt-line); border-left: 0; }
   .lattice-text-toolbar { align-items: flex-start; flex-direction: column; }
 }
