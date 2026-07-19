@@ -2357,6 +2357,7 @@ dependencies = [
  "lattice-index",
  "lattice-profile",
  "lattice-storage",
+ "lattice-terminal",
  "lattice-theme",
  "notify",
  "notify-debouncer-full",
