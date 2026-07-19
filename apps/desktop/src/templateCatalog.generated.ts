@@ -840,7 +840,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
     "order": 60,
     "name": "First Look",
     "category": "Sample",
-    "description": "Kitchen-sink sample for demos: long pages, CRM, canvas, templates, Mermaid, embeds, and assorted files.",
+    "description": "Kitchen-sink sample: CRM + Delivery + Metrics + OKRs data apps, canvas, notebooks, hybrid search try-queries, voice/Quick Note tips, daemon runtime diagram, templates, and assorted files.",
     "visibility": "sample",
     "recommended": false,
     "recommendedTitle": "First Look",
@@ -888,10 +888,13 @@ export const GENERATED_TEMPLATE_CATALOG = [
     ],
     "preview": [
       "Home.md",
+      "Research/Local Runtime.md",
       "Research/Long Read.md",
       "Product/Vision.md",
-      "Product/Principles.md",
       "CRM.data",
+      "Projects/Delivery.data",
+      "Data/Metrics.data",
+      "OKRs.data",
       "Canvases/Product Strategy.canvas",
       "Inbox/Sample capture.md",
       "Templates/Daily Note.md",
@@ -1266,6 +1269,283 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "description": "Create a contact from the package form."
           }
         ]
+      },
+      {
+        "path": "Projects/Delivery.data",
+        "title": "Delivery",
+        "table": "items",
+        "columns": [
+          {
+            "name": "title",
+            "type": "text"
+          },
+          {
+            "name": "owner",
+            "type": "text"
+          },
+          {
+            "name": "status",
+            "type": "text"
+          },
+          {
+            "name": "due",
+            "type": "date"
+          },
+          {
+            "name": "notes",
+            "type": "long_text"
+          }
+        ],
+        "rows": [
+          {
+            "title": "Native capture polish",
+            "owner": "Will",
+            "status": "Done",
+            "due": "2026-07-18",
+            "notes": "AVAudioEngine path landed; exercise mic in First Look."
+          },
+          {
+            "title": "Hybrid search demo queries",
+            "owner": "Will",
+            "status": "In progress",
+            "due": "2026-07-22",
+            "notes": "Seed Local Runtime with glossary tokens."
+          },
+          {
+            "title": "Phase 2 column designer",
+            "owner": "TBD",
+            "status": "Backlog",
+            "due": "2026-08-15",
+            "notes": "Wave 1 tables DAG — schema commands first."
+          },
+          {
+            "title": "Quick Note dictation QA",
+            "owner": "Will",
+            "status": "In progress",
+            "due": "2026-07-20",
+            "notes": "Hold-to-dictate + silence discard."
+          },
+          {
+            "title": "Canvas CRM subpaths",
+            "owner": "Will",
+            "status": "Done",
+            "due": "2026-07-17",
+            "notes": "Board/Gallery file nodes already wired."
+          },
+          {
+            "title": "CSV type-review import",
+            "owner": "TBD",
+            "status": "Backlog",
+            "due": null,
+            "notes": "Promote Data/sample.csv after profiling lands."
+          }
+        ],
+        "extraTables": [],
+        "views": [
+          {
+            "name": "Board",
+            "layout": "board",
+            "group_by": "status",
+            "columns": [
+              "title",
+              "owner",
+              "status"
+            ]
+          },
+          {
+            "name": "Calendar",
+            "layout": "calendar",
+            "date_field": "due",
+            "columns": []
+          },
+          {
+            "name": "Form",
+            "layout": "form",
+            "columns": []
+          }
+        ],
+        "forms": [
+          {
+            "name": "Intake",
+            "table": "items",
+            "fields": [
+              "title",
+              "owner",
+              "status",
+              "due"
+            ],
+            "title": "Delivery intake",
+            "description": "Add a delivery item without opening the grid."
+          }
+        ]
+      },
+      {
+        "path": "Data/Metrics.data",
+        "title": "Metrics",
+        "table": "metrics",
+        "columns": [
+          {
+            "name": "metric",
+            "type": "text"
+          },
+          {
+            "name": "value",
+            "type": "decimal"
+          },
+          {
+            "name": "recorded_on",
+            "type": "date"
+          },
+          {
+            "name": "category",
+            "type": "text"
+          }
+        ],
+        "rows": [
+          {
+            "metric": "warm_first_partial_ms",
+            "value": 158.3,
+            "recorded_on": "2026-07-10",
+            "category": "Voice"
+          },
+          {
+            "metric": "search_p95_ms",
+            "value": 42,
+            "recorded_on": "2026-07-12",
+            "category": "Search"
+          },
+          {
+            "metric": "crm_open_ms",
+            "value": 120,
+            "recorded_on": "2026-07-15",
+            "category": "Data"
+          },
+          {
+            "metric": "warm_first_partial_ms",
+            "value": 149.1,
+            "recorded_on": "2026-07-18",
+            "category": "Voice"
+          },
+          {
+            "metric": "search_p95_ms",
+            "value": 38,
+            "recorded_on": "2026-07-18",
+            "category": "Search"
+          },
+          {
+            "metric": "long_read_scroll_fps",
+            "value": 58,
+            "recorded_on": "2026-07-18",
+            "category": "Editor"
+          }
+        ],
+        "extraTables": [],
+        "views": [
+          {
+            "name": "Board",
+            "layout": "board",
+            "group_by": "category",
+            "columns": [
+              "metric",
+              "value",
+              "category"
+            ]
+          },
+          {
+            "name": "Calendar",
+            "layout": "calendar",
+            "date_field": "recorded_on",
+            "columns": []
+          },
+          {
+            "name": "Gallery",
+            "layout": "gallery",
+            "cover_field": "metric",
+            "columns": []
+          },
+          {
+            "name": "Form",
+            "layout": "form",
+            "columns": []
+          }
+        ],
+        "forms": []
+      },
+      {
+        "path": "OKRs.data",
+        "title": "OKRs",
+        "table": "okrs",
+        "columns": [
+          {
+            "name": "objective",
+            "type": "text"
+          },
+          {
+            "name": "key_result",
+            "type": "text"
+          },
+          {
+            "name": "owner",
+            "type": "text"
+          },
+          {
+            "name": "status",
+            "type": "text"
+          },
+          {
+            "name": "confidence",
+            "type": "decimal"
+          }
+        ],
+        "rows": [
+          {
+            "objective": "Ship local runtime",
+            "key_result": "Daemon + hybrid search on main",
+            "owner": "platform",
+            "status": "on-track",
+            "confidence": 0.9
+          },
+          {
+            "objective": "Ship local runtime",
+            "key_result": "Voice thin client + Quick Note dictate",
+            "owner": "platform",
+            "status": "on-track",
+            "confidence": 0.85
+          },
+          {
+            "objective": "Credible data apps",
+            "key_result": "Schema commands + column designer",
+            "owner": "data",
+            "status": "at-risk",
+            "confidence": 0.45
+          },
+          {
+            "objective": "Credible data apps",
+            "key_result": "Multiple .data fixtures in First Look",
+            "owner": "data",
+            "status": "on-track",
+            "confidence": 0.8
+          }
+        ],
+        "extraTables": [],
+        "views": [
+          {
+            "name": "Board",
+            "layout": "board",
+            "group_by": "status",
+            "columns": [
+              "objective",
+              "key_result",
+              "status"
+            ]
+          },
+          {
+            "name": "Form",
+            "layout": "form",
+            "columns": []
+          }
+        ],
+        "forms": []
       }
     ]
   },

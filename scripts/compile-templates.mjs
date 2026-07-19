@@ -924,16 +924,16 @@ function buildDemoTableSnapshot(tableName, columns, rows, rowIdsByTable, legacyI
     }
     return { id, values, row };
   });
-  const rowIdsByName = new Map(
-    demoRows.map((entry) => {
-      if (typeof entry.row.name !== "string") {
-        throw new Error(
-          `${DEMO_TEMPLATE_ID}: demo CRM rows require a name column for relation seeds`,
-        );
-      }
-      return [entry.row.name, entry.id];
-    }),
-  );
+  const rowIdsByName = new Map();
+  for (const entry of demoRows) {
+    if (typeof entry.row.name === "string") {
+      rowIdsByName.set(entry.row.name, entry.id);
+    } else if (columns.some((column) => column.type === "relation")) {
+      throw new Error(
+        `${DEMO_TEMPLATE_ID}: demo relation seeds require a name column on table ${tableName}`,
+      );
+    }
+  }
   rowIdsByTable.set(tableName, rowIdsByName);
   for (const entry of demoRows) {
     for (const column of columns) {
@@ -1097,12 +1097,7 @@ function demoSnapshotLayoutFields(view) {
   return fields;
 }
 
-function buildDemoDataApp(template) {
-  const packageDef =
-    template.dataPackages.find((entry) => entry.path === "CRM.data") ?? template.dataPackages[0];
-  if (!packageDef) {
-    throw new Error(`${DEMO_TEMPLATE_ID}: expected a dataPackages entry for browser demo CRM`);
-  }
+function buildDemoDataAppFromPackage(packageDef) {
   const columns = [
     { name: "id", field_type: "text", sqlite_type: "TEXT" },
     ...packageDef.columns.map((column) => ({
@@ -1150,7 +1145,9 @@ function buildDemoDataApp(template) {
   const active_view = "All";
   const activeView = saved_views.find((view) => view.name === active_view);
   if (!activeView) {
-    throw new Error(`${DEMO_TEMPLATE_ID}: missing default All view in browser demo CRM`);
+    throw new Error(
+      `${DEMO_TEMPLATE_ID}: missing default All view for ${packageDef.path}`,
+    );
   }
   return {
     title: packageDef.title,
@@ -1165,6 +1162,31 @@ function buildDemoDataApp(template) {
     ...(Object.keys(relation_targets).length > 0 ? { relation_targets } : {}),
     ...demoSnapshotLayoutFields(activeView),
   };
+}
+
+function buildDemoDataApp(template) {
+  const packageDef =
+    template.dataPackages.find((entry) => entry.path === "CRM.data") ?? template.dataPackages[0];
+  if (!packageDef) {
+    throw new Error(`${DEMO_TEMPLATE_ID}: expected a dataPackages entry for browser demo CRM`);
+  }
+  return buildDemoDataAppFromPackage(packageDef);
+}
+
+function buildDemoDataApps(template) {
+  const apps = {};
+  for (const packageDef of template.dataPackages) {
+    apps[packageDef.path] = buildDemoDataAppFromPackage(packageDef);
+  }
+  return apps;
+}
+
+function buildDemoPackageFormsByPath(template) {
+  const forms = {};
+  for (const packageDef of template.dataPackages) {
+    forms[packageDef.path] = buildDemoFormCatalog(packageDef);
+  }
+  return forms;
 }
 
 export function emitDemoWorkspace(templates) {
@@ -1199,11 +1221,14 @@ export function emitDemoWorkspace(templates) {
   if (!crmPackage) {
     throw new Error(`${DEMO_TEMPLATE_ID}: expected a dataPackages entry for browser demo CRM`);
   }
+  const demoDataApps = buildDemoDataApps(template);
   const module = {
     demoSnapshot: snapshot,
     demoCanvas: buildDemoCanvas(template),
-    demoDataApp: buildDemoDataApp(template),
+    demoDataApp: demoDataApps[crmPackage.path],
+    demoDataApps,
     demoPackageForms: buildDemoFormCatalog(crmPackage),
+    demoPackageFormsByPath: buildDemoPackageFormsByPath(template),
     demoPages: buildDemoPages(template),
     demoTextFiles: buildDemoTextFiles(template),
     demoNotebooks: buildDemoNotebooks(template),
@@ -1219,7 +1244,11 @@ export const demoCanvas = ${JSON.stringify(module.demoCanvas, null, 2)};
 
 export const demoDataApp: DataAppSnapshot = ${JSON.stringify(module.demoDataApp, null, 2)};
 
+export const demoDataApps: Record<string, DataAppSnapshot> = ${JSON.stringify(module.demoDataApps, null, 2)};
+
 export const demoPackageForms: FormSummary[] = ${JSON.stringify(module.demoPackageForms, null, 2)};
+
+export const demoPackageFormsByPath: Record<string, FormSummary[]> = ${JSON.stringify(module.demoPackageFormsByPath, null, 2)};
 
 export const demoPages: Record<string, string> = ${JSON.stringify(module.demoPages, null, 2)};
 

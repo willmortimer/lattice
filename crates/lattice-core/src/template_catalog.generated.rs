@@ -493,7 +493,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
         order: 60,
         name: "First Look",
         category: "Sample",
-        description: "Kitchen-sink sample for demos: long pages, CRM, canvas, templates, Mermaid, embeds, and assorted files.",
+        description: "Kitchen-sink sample: CRM + Delivery + Metrics + OKRs data apps, canvas, notebooks, hybrid search try-queries, voice/Quick Note tips, daemon runtime diagram, templates, and assorted files.",
         visibility: "sample",
         recommended: false,
         recommended_title: "First Look",
@@ -509,7 +509,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             SeedDirectory { path: "Resources", purpose: Some("Ordinary files — JSON, YAML, code, SQL, images."), default_kind: None, icon: None },
             SeedDirectory { path: "Archive", purpose: Some("Finished or inactive material."), default_kind: None, icon: None }
         ],
-        preview: &["Home.md", "Research/Long Read.md", "Product/Vision.md", "Product/Principles.md", "CRM.data", "Canvases/Product Strategy.canvas", "Inbox/Sample capture.md", "Templates/Daily Note.md", "Notebooks/CRM exploration.ipynb", "Resources/"],
+        preview: &["Home.md", "Research/Local Runtime.md", "Research/Long Read.md", "Product/Vision.md", "CRM.data", "Projects/Delivery.data", "Data/Metrics.data", "OKRs.data", "Canvases/Product Strategy.canvas", "Inbox/Sample capture.md", "Templates/Daily Note.md", "Notebooks/CRM exploration.ipynb", "Resources/"],
         capabilities: &["pages", "canvas", "sqlite"],
         quick_note_directory: "Inbox",
         daily_note_directory: None,
@@ -524,6 +524,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             SeedFile { path: "Product/Principles.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Product/Principles.md")) },
             SeedFile { path: "Product/Roadmap.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Product/Roadmap.md")) },
             SeedFile { path: "Product/Release Notes.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Product/Release Notes.md")) },
+            SeedFile { path: "Research/Local Runtime.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Research/Local Runtime.md")) },
             SeedFile { path: "Research/Long Read.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Research/Long Read.md")) },
             SeedFile { path: "Research/Competitor Analysis.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Research/Competitor Analysis.md")) },
             SeedFile { path: "Research/Architecture.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Research/Architecture.md")) },
@@ -657,6 +658,172 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 description: Some("Create a contact from the package form."),
             }
             ],
+        },
+            SeedDataPackage {
+            path: "Projects/Delivery.data",
+            title: "Delivery",
+            table: "items",
+            columns: &[
+                SeedDataColumn { name: "title", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "owner", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "status", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "due", field_type: "date", relation_table: None },
+                SeedDataColumn { name: "notes", field_type: "long_text", relation_table: None }
+            ],
+            rows_json: &[
+                "{\"title\":\"Native capture polish\",\"owner\":\"Will\",\"status\":\"Done\",\"due\":\"2026-07-18\",\"notes\":\"AVAudioEngine path landed; exercise mic in First Look.\"}",
+                "{\"title\":\"Hybrid search demo queries\",\"owner\":\"Will\",\"status\":\"In progress\",\"due\":\"2026-07-22\",\"notes\":\"Seed Local Runtime with glossary tokens.\"}",
+                "{\"title\":\"Phase 2 column designer\",\"owner\":\"TBD\",\"status\":\"Backlog\",\"due\":\"2026-08-15\",\"notes\":\"Wave 1 tables DAG — schema commands first.\"}",
+                "{\"title\":\"Quick Note dictation QA\",\"owner\":\"Will\",\"status\":\"In progress\",\"due\":\"2026-07-20\",\"notes\":\"Hold-to-dictate + silence discard.\"}",
+                "{\"title\":\"Canvas CRM subpaths\",\"owner\":\"Will\",\"status\":\"Done\",\"due\":\"2026-07-17\",\"notes\":\"Board/Gallery file nodes already wired.\"}",
+                "{\"title\":\"CSV type-review import\",\"owner\":\"TBD\",\"status\":\"Backlog\",\"due\":null,\"notes\":\"Promote Data/sample.csv after profiling lands.\"}"
+            ],
+            extra_tables: &[],
+            views: &[
+                SeedDataView {
+                name: "Board",
+                layout: "board",
+                group_by: Some("status"),
+                cover_field: None,
+                date_field: None,
+                columns: &[
+                    "title",
+                    "owner",
+                    "status"
+                ],
+            },
+                SeedDataView {
+                name: "Calendar",
+                layout: "calendar",
+                group_by: None,
+                cover_field: None,
+                date_field: Some("due"),
+                columns: &[],
+            },
+                SeedDataView {
+                name: "Form",
+                layout: "form",
+                group_by: None,
+                cover_field: None,
+                date_field: None,
+                columns: &[],
+            }
+            ],
+            forms: &[
+                SeedDataForm {
+                name: "Intake",
+                table: "items",
+                fields: &[
+                    "title",
+                    "owner",
+                    "status",
+                    "due"
+                ],
+                title: Some("Delivery intake"),
+                description: Some("Add a delivery item without opening the grid."),
+            }
+            ],
+        },
+            SeedDataPackage {
+            path: "Data/Metrics.data",
+            title: "Metrics",
+            table: "metrics",
+            columns: &[
+                SeedDataColumn { name: "metric", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "value", field_type: "decimal", relation_table: None },
+                SeedDataColumn { name: "recorded_on", field_type: "date", relation_table: None },
+                SeedDataColumn { name: "category", field_type: "text", relation_table: None }
+            ],
+            rows_json: &[
+                "{\"metric\":\"warm_first_partial_ms\",\"value\":158.3,\"recorded_on\":\"2026-07-10\",\"category\":\"Voice\"}",
+                "{\"metric\":\"search_p95_ms\",\"value\":42,\"recorded_on\":\"2026-07-12\",\"category\":\"Search\"}",
+                "{\"metric\":\"crm_open_ms\",\"value\":120,\"recorded_on\":\"2026-07-15\",\"category\":\"Data\"}",
+                "{\"metric\":\"warm_first_partial_ms\",\"value\":149.1,\"recorded_on\":\"2026-07-18\",\"category\":\"Voice\"}",
+                "{\"metric\":\"search_p95_ms\",\"value\":38,\"recorded_on\":\"2026-07-18\",\"category\":\"Search\"}",
+                "{\"metric\":\"long_read_scroll_fps\",\"value\":58,\"recorded_on\":\"2026-07-18\",\"category\":\"Editor\"}"
+            ],
+            extra_tables: &[],
+            views: &[
+                SeedDataView {
+                name: "Board",
+                layout: "board",
+                group_by: Some("category"),
+                cover_field: None,
+                date_field: None,
+                columns: &[
+                    "metric",
+                    "value",
+                    "category"
+                ],
+            },
+                SeedDataView {
+                name: "Calendar",
+                layout: "calendar",
+                group_by: None,
+                cover_field: None,
+                date_field: Some("recorded_on"),
+                columns: &[],
+            },
+                SeedDataView {
+                name: "Gallery",
+                layout: "gallery",
+                group_by: None,
+                cover_field: Some("metric"),
+                date_field: None,
+                columns: &[],
+            },
+                SeedDataView {
+                name: "Form",
+                layout: "form",
+                group_by: None,
+                cover_field: None,
+                date_field: None,
+                columns: &[],
+            }
+            ],
+            forms: &[],
+        },
+            SeedDataPackage {
+            path: "OKRs.data",
+            title: "OKRs",
+            table: "okrs",
+            columns: &[
+                SeedDataColumn { name: "objective", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "key_result", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "owner", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "status", field_type: "text", relation_table: None },
+                SeedDataColumn { name: "confidence", field_type: "decimal", relation_table: None }
+            ],
+            rows_json: &[
+                "{\"objective\":\"Ship local runtime\",\"key_result\":\"Daemon + hybrid search on main\",\"owner\":\"platform\",\"status\":\"on-track\",\"confidence\":0.9}",
+                "{\"objective\":\"Ship local runtime\",\"key_result\":\"Voice thin client + Quick Note dictate\",\"owner\":\"platform\",\"status\":\"on-track\",\"confidence\":0.85}",
+                "{\"objective\":\"Credible data apps\",\"key_result\":\"Schema commands + column designer\",\"owner\":\"data\",\"status\":\"at-risk\",\"confidence\":0.45}",
+                "{\"objective\":\"Credible data apps\",\"key_result\":\"Multiple .data fixtures in First Look\",\"owner\":\"data\",\"status\":\"on-track\",\"confidence\":0.8}"
+            ],
+            extra_tables: &[],
+            views: &[
+                SeedDataView {
+                name: "Board",
+                layout: "board",
+                group_by: Some("status"),
+                cover_field: None,
+                date_field: None,
+                columns: &[
+                    "objective",
+                    "key_result",
+                    "status"
+                ],
+            },
+                SeedDataView {
+                name: "Form",
+                layout: "form",
+                group_by: None,
+                cover_field: None,
+                date_field: None,
+                columns: &[],
+            }
+            ],
+            forms: &[],
         }
         ],
     },
