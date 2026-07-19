@@ -18,6 +18,12 @@ pub enum Error {
     #[error("index database error: {0}")]
     Sqlite(#[from] rusqlite::Error),
 
+    #[error("vector index error: {0}")]
+    Vector(#[from] crate::vector::VectorIndexError),
+
+    #[error("embedding error: {0}")]
+    Embedding(#[from] lattice_embedding::EmbeddingError),
+
     #[error("path {path} is not valid UTF-8")]
     NonUtf8Path { path: PathBuf },
 
@@ -26,6 +32,9 @@ pub enum Error {
 
     #[error("index operation cancelled")]
     Cancelled,
+
+    #[error("embedding namespace not found: {0}")]
+    NamespaceNotFound(i64),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -6,7 +6,10 @@ use lattice_core::{
     build_link_repair_plan, resolution_targets_path, LinkOccurrence, LinkRepairPlan,
     LinkRepairSource, Resource, ResourceCatalog, ResourceKind, ResourceLinkResolution, Workspace,
 };
-use lattice_embedding::{ChunkEmbeddingStatus, EmbeddingSpecification};
+use lattice_embedding::{
+    ChunkEmbeddingStatus, EmbedDocumentRequest, EmbedQueryRequest, EmbeddingProvider,
+    EmbeddingSpecification,
+};
 use rusqlite::types::ToSql;
 use rusqlite::{params, Connection, OptionalExtension};
 
@@ -19,6 +22,10 @@ use crate::embedding::{
 use crate::error::{Error, Result};
 use crate::extract::{LinkKind, StructuredPath};
 use crate::chunks::{self, CHUNKER_VERSION};
+use crate::hybrid::{
+    diversify_by_resource, fts_only_hits, fused_chunk_ids, hydrate_fused_hits, lexical_rank_list,
+    reciprocal_rank_fuse, semantic_rank_list, ProvenanceBase, DEFAULT_MAX_CHUNKS_PER_RESOURCE,
+};
 use crate::lexical::{search_chunk_hits, search_hits};
 use crate::links::query_link_occurrences;
 use crate::paths::{normalize_workspace_path, path_key};
@@ -26,11 +33,15 @@ use crate::record::{
     check_cancel, parse_headings_for_record, record_from_page, record_from_resource, IndexedRecord,
 };
 use crate::schema::{init_schema, INDEX_FILENAME};
+use crate::semantic::{
+    embedding_input_hash, list_chunks_for_embedding, load_chunk_rows, search_semantic,
+};
+use crate::vector::upsert_vector;
 
 pub use crate::record::MAX_INDEX_TEXT_BYTES;
 pub use crate::types::{
-    Backlink, BacklinkKind, ChunkSearchHit, ParserStatus, RebuildStats, ResourceMetadata,
-    SearchHit,
+    Backlink, BacklinkKind, ChunkSearchHit, EmbedPendingStats, HybridSearchHit, ParserStatus,
+    RebuildStats, ResourceMetadata, SearchHit,
 };
 
 /// Derived, rebuildable workspace search index at `.lattice/index.sqlite`.
@@ -180,6 +191,213 @@ impl WorkspaceIndex {
     pub fn search_chunks(&self, query: &str, limit: usize) -> Result<Vec<ChunkSearchHit>> {
         let conn = self.conn.lock().unwrap();
         search_chunk_hits(&conn, query, limit)
+    }
+
+    /// Hybrid chunk search: FTS + optional semantic exact-scan fused with RRF.
+    ///
+    /// When `provider` is `None`, returns an FTS-only ranking shaped as
+    /// [`HybridSearchHit`] so lexical search remains available without a model.
+    pub fn hybrid_search(
+        &self,
+        query: &str,
+        limit: usize,
+        provider: Option<&dyn EmbeddingProvider>,
+        namespace_id: Option<i64>,
+    ) -> Result<Vec<HybridSearchHit>> {
+        let candidate_limit = limit.max(10).saturating_mul(5).min(200);
+        let db_path = self.db_path();
+
+        let Some(provider) = provider else {
+            let conn = self.conn.lock().unwrap();
+            let lexical = search_chunk_hits(&conn, query, candidate_limit)?;
+            let chunk_ids = lexical.iter().map(|hit| hit.chunk_id.clone()).collect::<Vec<_>>();
+            let rows = load_chunk_rows(&conn, &chunk_ids)?
+                .into_iter()
+                .map(|row| (row.chunk_id.clone(), row))
+                .collect();
+            return Ok(fts_only_hits(&lexical, rows, limit));
+        };
+
+        let namespace_id = namespace_id.ok_or_else(|| {
+            Error::Embedding(lattice_embedding::EmbeddingError::provider(
+                "hybrid semantic search requires a namespace id",
+            ))
+        })?;
+        let namespace = {
+            let conn = self.conn.lock().unwrap();
+            embedding_namespace_by_id(&conn, namespace_id)?
+                .ok_or(Error::NamespaceNotFound(namespace_id))?
+        };
+
+        let query_vector = block_on_embed(async {
+            provider
+                .embed_query(EmbedQueryRequest {
+                    text: query.to_string(),
+                })
+                .await
+        })?;
+
+        let query_owned = query.to_string();
+        let namespace_for_sem = namespace.clone();
+        let query_values = query_vector.values.clone();
+        let (lexical_result, semantic_result) = std::thread::scope(|scope| {
+            let lexical_handle = scope.spawn(|| {
+                let conn = Connection::open(&db_path)?;
+                conn.pragma_update(None, "foreign_keys", "ON")?;
+                search_chunk_hits(&conn, &query_owned, candidate_limit)
+            });
+            let semantic_handle = scope.spawn(|| {
+                let conn = Connection::open(&db_path)?;
+                conn.pragma_update(None, "foreign_keys", "ON")?;
+                search_semantic(&conn, &namespace_for_sem, &query_values, candidate_limit)
+            });
+            (
+                lexical_handle.join().expect("lexical search thread"),
+                semantic_handle.join().expect("semantic search thread"),
+            )
+        });
+        let lexical = lexical_result?;
+        let semantic = semantic_result?;
+
+        let fused = reciprocal_rank_fuse(&lexical_rank_list(&lexical), &semantic_rank_list(&semantic));
+        let chunk_ids = fused_chunk_ids(&fused);
+        let rows = {
+            let conn = self.conn.lock().unwrap();
+            load_chunk_rows(&conn, &chunk_ids)?
+                .into_iter()
+                .map(|row| (row.chunk_id.clone(), row))
+                .collect()
+        };
+        let provenance = ProvenanceBase {
+            namespace_key: Some(namespace.namespace_key.clone()),
+            model_id: Some(namespace.specification.model_id.clone()),
+            model_revision: Some(namespace.specification.model_revision.clone()),
+            instruction_version: Some(namespace.specification.instruction_version.clone()),
+        };
+        let hits = hydrate_fused_hits(fused, rows, provenance, limit);
+        Ok(diversify_by_resource(hits, DEFAULT_MAX_CHUNKS_PER_RESOURCE)
+            .into_iter()
+            .take(limit)
+            .collect())
+    }
+
+    /// Embed pending/stale chunks for `namespace_id` using `provider` and upsert vectors.
+    pub fn embed_pending_chunks(
+        &self,
+        namespace_id: i64,
+        provider: &dyn EmbeddingProvider,
+        batch_size: usize,
+    ) -> Result<EmbedPendingStats> {
+        let batch_size = batch_size.max(1);
+        let namespace = {
+            let conn = self.conn.lock().unwrap();
+            embedding_namespace_by_id(&conn, namespace_id)?
+                .ok_or(Error::NamespaceNotFound(namespace_id))?
+        };
+        if provider.specification().dimensions != namespace.specification.dimensions {
+            return Err(Error::Embedding(
+                lattice_embedding::EmbeddingError::InvalidDimensions {
+                    requested: provider.specification().dimensions,
+                    supported: namespace.specification.dimensions,
+                },
+            ));
+        }
+
+        let pending = {
+            let conn = self.conn.lock().unwrap();
+            let chunks = list_chunks_for_embedding(&conn)?;
+            let mut out = Vec::new();
+            for chunk in chunks {
+                let hash = embedding_input_hash(&chunk.content_hash, &namespace.namespace_key);
+                if is_chunk_embedding_stale(&conn, &chunk.chunk_id, namespace.id, &hash)? {
+                    out.push((chunk, hash));
+                }
+            }
+            out
+        };
+
+        let mut stats = EmbedPendingStats::default();
+        stats.skipped = {
+            let conn = self.conn.lock().unwrap();
+            let total = list_chunks_for_embedding(&conn)?.len();
+            total.saturating_sub(pending.len())
+        };
+
+        for batch in pending.chunks(batch_size) {
+            let requests = batch
+                .iter()
+                .map(|(chunk, _)| EmbedDocumentRequest {
+                    chunk_id: chunk.chunk_id.clone(),
+                    text: chunk.text.clone(),
+                })
+                .collect::<Vec<_>>();
+            let vectors = match block_on_embed(async { provider.embed_documents(requests).await }) {
+                Ok(vectors) => vectors,
+                Err(err) => {
+                    let conn = self.conn.lock().unwrap();
+                    for (chunk, hash) in batch {
+                        embedding::upsert_chunk_embedding_state(
+                            &conn,
+                            &chunk.chunk_id,
+                            namespace.id,
+                            hash,
+                            ChunkEmbeddingStatus::Failed,
+                            Some(&err.to_string()),
+                            None,
+                        )?;
+                        stats.failed += 1;
+                    }
+                    continue;
+                }
+            };
+            if vectors.len() != batch.len() {
+                return Err(Error::Embedding(lattice_embedding::EmbeddingError::provider(
+                    format!(
+                        "embed_documents returned {} vectors for {} requests",
+                        vectors.len(),
+                        batch.len()
+                    ),
+                )));
+            }
+
+            let conn = self.conn.lock().unwrap();
+            let now = current_time_ms();
+            for ((chunk, hash), vector) in batch.iter().zip(vectors.into_iter()) {
+                match upsert_vector(&conn, &namespace, &chunk.chunk_id, &vector.values) {
+                    Ok(()) => {
+                        embedding::upsert_chunk_embedding_state(
+                            &conn,
+                            &chunk.chunk_id,
+                            namespace.id,
+                            hash,
+                            ChunkEmbeddingStatus::Ready,
+                            None,
+                            Some(now),
+                        )?;
+                        stats.embedded += 1;
+                    }
+                    Err(err) => {
+                        embedding::upsert_chunk_embedding_state(
+                            &conn,
+                            &chunk.chunk_id,
+                            namespace.id,
+                            hash,
+                            ChunkEmbeddingStatus::Failed,
+                            Some(&err.to_string()),
+                            None,
+                        )?;
+                        stats.failed += 1;
+                    }
+                }
+            }
+        }
+        Ok(stats)
+    }
+
+    fn db_path(&self) -> PathBuf {
+        self.workspace_root
+            .join(lattice_core::OPERATIONAL_DIR)
+            .join(INDEX_FILENAME)
     }
 
     /// Register or refresh one embedding namespace for status tracking.
@@ -642,6 +860,20 @@ fn current_time_ms() -> i64 {
         .unwrap_or(0)
 }
 
+fn block_on_embed<F, T>(future: F) -> Result<T>
+where
+    F: std::future::Future<Output = std::result::Result<T, lattice_embedding::EmbeddingError>>,
+{
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|err| {
+            Error::Embedding(lattice_embedding::EmbeddingError::provider(err.to_string()))
+        })?
+        .block_on(future)
+        .map_err(Error::from)
+}
+
 /// Thin compatibility hook for page writes.
 pub fn upsert_page(index: &WorkspaceIndex, path: &Path, content: &str) -> Result<()> {
     index.upsert_page(path, content)
@@ -952,5 +1184,107 @@ mod tests {
         assert_eq!(hit.title, "Home");
         assert!(!hit.chunk_id.is_empty());
         assert!(hit.source_end_byte > hit.source_start_byte);
+    }
+
+    #[test]
+    fn hybrid_search_falls_back_to_fts_without_provider() {
+        let dir = TempDir::new().unwrap();
+        sample_workspace(dir.path());
+        let index = WorkspaceIndex::open(dir.path()).unwrap();
+        index.rebuild(dir.path()).unwrap();
+
+        let hits = index.hybrid_search("welcome", 10, None, None).unwrap();
+        assert!(!hits.is_empty());
+        assert!(hits.iter().any(|hit| hit.resource_uri == "Notes/Home.md"));
+        assert!(hits.iter().all(|hit| hit.lexical_rank.is_some()));
+        assert!(hits.iter().all(|hit| hit.semantic_rank.is_none()));
+        assert!(hits
+            .iter()
+            .all(|hit| hit.export_policy == crate::provenance::ExportPolicy::Ask));
+    }
+
+    #[test]
+    fn hybrid_search_fuses_lexical_and_semantic_with_fake_provider() {
+        use lattice_embedding::{
+            DistanceMetric, FakeEmbeddingProvider, PoolingStrategy,
+        };
+
+        let dir = TempDir::new().unwrap();
+        sample_workspace(dir.path());
+        let index = WorkspaceIndex::open(dir.path()).unwrap();
+        index.rebuild(dir.path()).unwrap();
+
+        let spec = EmbeddingSpecification {
+            provider_id: "fake".into(),
+            model_id: "fake-model".into(),
+            model_revision: "rev-1".into(),
+            artifact_sha256: "sha256:artifact".into(),
+            dimensions: 16,
+            native_dimensions: 16,
+            distance: DistanceMetric::Cosine,
+            pooling: PoolingStrategy::Last,
+            normalized: true,
+            instruction_version: "test-v1".into(),
+        };
+        let namespace = index
+            .register_embedding_namespace(&spec, CHUNKER_VERSION)
+            .unwrap();
+        let provider = FakeEmbeddingProvider::new(spec);
+        let stats = index
+            .embed_pending_chunks(namespace.id, &provider, 8)
+            .unwrap();
+        assert!(stats.embedded > 0);
+        assert_eq!(stats.failed, 0);
+
+        let hits = index
+            .hybrid_search("welcome", 10, Some(&provider), Some(namespace.id))
+            .unwrap();
+        assert!(!hits.is_empty());
+        assert!(hits.iter().any(|hit| {
+            hit.resource_uri == "Notes/Home.md"
+                && (hit.lexical_rank.is_some() || hit.semantic_rank.is_some())
+        }));
+        assert!(hits.iter().any(|hit| hit.fused_score > 0.0));
+        assert!(hits
+            .iter()
+            .any(|hit| hit.provenance.model_id.as_deref() == Some("fake-model")));
+    }
+
+    #[test]
+    fn embed_pending_chunks_is_idempotent_for_ready_state() {
+        use lattice_embedding::{
+            DistanceMetric, FakeEmbeddingProvider, PoolingStrategy,
+        };
+
+        let dir = TempDir::new().unwrap();
+        sample_workspace(dir.path());
+        let index = WorkspaceIndex::open(dir.path()).unwrap();
+        index.rebuild(dir.path()).unwrap();
+
+        let spec = EmbeddingSpecification {
+            provider_id: "fake".into(),
+            model_id: "fake-model".into(),
+            model_revision: "rev-1".into(),
+            artifact_sha256: "sha256:artifact".into(),
+            dimensions: 8,
+            native_dimensions: 8,
+            distance: DistanceMetric::Cosine,
+            pooling: PoolingStrategy::Last,
+            normalized: true,
+            instruction_version: "test-v1".into(),
+        };
+        let namespace = index
+            .register_embedding_namespace(&spec, CHUNKER_VERSION)
+            .unwrap();
+        let provider = FakeEmbeddingProvider::new(spec);
+        let first = index
+            .embed_pending_chunks(namespace.id, &provider, 4)
+            .unwrap();
+        let second = index
+            .embed_pending_chunks(namespace.id, &provider, 4)
+            .unwrap();
+        assert!(first.embedded > 0);
+        assert_eq!(second.embedded, 0);
+        assert!(second.skipped > 0);
     }
 }

@@ -61,6 +61,33 @@ pub struct ChunkSearchHit {
     pub rank: f64,
 }
 
+/// One hybrid lexical+semantic search hit with provenance.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HybridSearchHit {
+    pub resource_uri: String,
+    pub resource_id: String,
+    pub chunk_id: String,
+    pub title: String,
+    pub heading_path: Vec<String>,
+    pub excerpt: String,
+    pub source_start_byte: u64,
+    pub source_end_byte: u64,
+    pub lexical_rank: Option<u32>,
+    pub semantic_rank: Option<u32>,
+    pub fused_score: f32,
+    pub provenance: crate::provenance::SearchProvenance,
+    pub export_policy: crate::provenance::ExportPolicy,
+}
+
+/// Statistics from embedding pending chunks into a vector namespace.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct EmbedPendingStats {
+    pub embedded: usize,
+    pub skipped: usize,
+    pub failed: usize,
+}
+
 /// A resource that links to a target path, including a repairable source span.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Backlink {
