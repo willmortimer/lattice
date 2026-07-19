@@ -6,8 +6,8 @@ use serde_json::Value;
 use tempfile::TempDir;
 
 use crate::{
-    CanvasNodeMove, Command, CommandEngine, Error, PathRemap, Transaction, TrashPolicy,
-    MAX_RESOURCE_EDIT_BYTES,
+    CanvasNodeMove, CanvasNodeResize, Command, CommandEngine, Error, PathRemap, Transaction,
+    TrashPolicy, MAX_RESOURCE_EDIT_BYTES,
 };
 
 /// A fresh workspace + engine. Tests use [`TrashPolicy::LocalFallbackOnly`]
@@ -187,15 +187,111 @@ fn canvas_add_edge_connects_existing_nodes() {
                 edge_id: "ba".into(),
                 from_node: "b".into(),
                 to_node: "a".into(),
+                from_side: Some("left".into()),
+                to_side: Some("right".into()),
             }],
         ))
         .unwrap();
     assert!(receipt.outcomes[0].resulting_revision.is_some());
     let value: Value = serde_json::from_slice(&read(&dir, "Boards/Main.canvas")).unwrap();
     assert!(value["edges"].as_array().unwrap().iter().any(|edge| {
-        edge["id"] == "ba" && edge["fromNode"] == "b" && edge["toNode"] == "a"
+        edge["id"] == "ba"
+            && edge["fromNode"] == "b"
+            && edge["toNode"] == "a"
+            && edge["fromSide"] == "left"
+            && edge["toSide"] == "right"
     }));
     assert_eq!(value["edges"][0]["pluginEdge"]["keep"], true);
+}
+
+#[test]
+fn canvas_remove_edges_resize_and_text_nodes() {
+    let (dir, mut engine) = engine();
+    let base = create_canvas(&mut engine, &dir);
+
+    let after_text = engine
+        .apply(Transaction::new(
+            "Add sticky note",
+            vec![Command::CanvasAddTextNode {
+                path: PathBuf::from("Boards/Main.canvas"),
+                base_revision: base,
+                node_id: "note".into(),
+                text: "Hello sticky".into(),
+                x: 10.0,
+                y: 20.0,
+                width: 160.0,
+                height: 100.0,
+            }],
+        ))
+        .unwrap()
+        .outcomes[0]
+        .resulting_revision
+        .clone()
+        .unwrap();
+
+    let after_resize = engine
+        .apply(Transaction::new(
+            "Resize sticky",
+            vec![Command::CanvasResizeNodes {
+                path: PathBuf::from("Boards/Main.canvas"),
+                base_revision: after_text,
+                nodes: vec![CanvasNodeResize {
+                    id: "note".into(),
+                    width: 200.0,
+                    height: 140.0,
+                }],
+            }],
+        ))
+        .unwrap()
+        .outcomes[0]
+        .resulting_revision
+        .clone()
+        .unwrap();
+
+    let after_update = engine
+        .apply(Transaction::new(
+            "Edit sticky",
+            vec![Command::CanvasUpdateTextNode {
+                path: PathBuf::from("Boards/Main.canvas"),
+                base_revision: after_resize,
+                node_id: "note".into(),
+                text: "Updated sticky".into(),
+            }],
+        ))
+        .unwrap()
+        .outcomes[0]
+        .resulting_revision
+        .clone()
+        .unwrap();
+
+    let after_remove_edge = engine
+        .apply(Transaction::new(
+            "Remove edge",
+            vec![Command::CanvasRemoveEdges {
+                path: PathBuf::from("Boards/Main.canvas"),
+                base_revision: after_update,
+                edge_ids: vec!["ab".into()],
+            }],
+        ))
+        .unwrap();
+    assert!(after_remove_edge.outcomes[0].resulting_revision.is_some());
+
+    let value: Value = serde_json::from_slice(&read(&dir, "Boards/Main.canvas")).unwrap();
+    let note = value["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|node| node["id"] == "note")
+        .unwrap();
+    assert_eq!(note["type"], "text");
+    assert_eq!(note["text"], "Updated sticky");
+    assert_eq!(note["width"], 200.0);
+    assert_eq!(note["height"], 140.0);
+    assert!(value["edges"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|edge| edge["id"] != "ab"));
 }
 
 #[test]

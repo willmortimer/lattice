@@ -11,7 +11,7 @@ use std::path::{Component, Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use crate::command::CanvasNodeMove;
+use crate::command::{CanvasNodeMove, CanvasNodeResize};
 use crate::{Error, Result};
 
 pub(crate) enum CanvasEdit {
@@ -26,6 +26,9 @@ pub(crate) enum CanvasEdit {
     Move {
         nodes: Vec<CanvasNodeMove>,
     },
+    Resize {
+        nodes: Vec<CanvasNodeResize>,
+    },
     Remove {
         node_ids: Vec<String>,
     },
@@ -33,6 +36,23 @@ pub(crate) enum CanvasEdit {
         edge_id: String,
         from_node: String,
         to_node: String,
+        from_side: Option<String>,
+        to_side: Option<String>,
+    },
+    RemoveEdges {
+        edge_ids: Vec<String>,
+    },
+    AddText {
+        node_id: String,
+        text: String,
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+    },
+    UpdateText {
+        node_id: String,
+        text: String,
     },
 }
 
@@ -120,10 +140,14 @@ pub(crate) fn validate_edit(path: &Path, original: &[u8], edit: &CanvasEdit) -> 
             edge_id,
             from_node,
             to_node,
+            from_side,
+            to_side,
         } => {
             validate_id(path, edge_id)?;
             validate_id(path, from_node)?;
             validate_id(path, to_node)?;
+            validate_side(path, from_side)?;
+            validate_side(path, to_side)?;
             if from_node == to_node {
                 return invalid(path, "edge endpoints must be distinct nodes");
             }
@@ -145,6 +169,74 @@ pub(crate) fn validate_edit(path: &Path, original: &[u8], edit: &CanvasEdit) -> 
                 .any(|edge| edge_id_of(edge) == Some(edge_id.as_str()))
             {
                 return invalid(path, format!("edge id {:?} already exists", edge_id));
+            }
+        }
+        CanvasEdit::Resize { nodes: resizes } => {
+            if resizes.is_empty() {
+                return invalid(path, "at least one node is required");
+            }
+            let mut ids = HashSet::new();
+            for node in resizes {
+                validate_id(path, &node.id)?;
+                validate_finite(path, "width", node.width)?;
+                validate_finite(path, "height", node.height)?;
+                if node.width <= 0.0 || node.height <= 0.0 {
+                    return invalid(path, "node width and height must be positive");
+                }
+                if !ids.insert(node.id.as_str()) {
+                    return invalid(path, format!("duplicate node id {:?}", node.id));
+                }
+                if !nodes
+                    .iter()
+                    .any(|candidate| node_id_of(candidate) == Some(node.id.as_str()))
+                {
+                    return invalid(path, format!("node id {:?} does not exist", node.id));
+                }
+            }
+        }
+        CanvasEdit::RemoveEdges { edge_ids } => {
+            if edge_ids.is_empty() {
+                return invalid(path, "at least one edge id is required");
+            }
+            let mut ids = HashSet::new();
+            let edges = canvas_edges(&document).map(Vec::as_slice).unwrap_or(&[]);
+            for id in edge_ids {
+                validate_id(path, id)?;
+                if !ids.insert(id.as_str()) {
+                    return invalid(path, format!("duplicate edge id {:?}", id));
+                }
+                if !edges.iter().any(|edge| edge_id_of(edge) == Some(id)) {
+                    return invalid(path, format!("edge id {:?} does not exist", id));
+                }
+            }
+        }
+        CanvasEdit::AddText {
+            node_id,
+            text,
+            x,
+            y,
+            width,
+            height,
+        } => {
+            validate_id(path, node_id)?;
+            validate_position(path, *x, *y, *width, *height)?;
+            if text.trim().is_empty() {
+                return invalid(path, "text nodes must not be empty");
+            }
+            if nodes.iter().any(|node| node_id_of(node) == Some(node_id)) {
+                return invalid(path, format!("node id {:?} already exists", node_id));
+            }
+        }
+        CanvasEdit::UpdateText { node_id, text } => {
+            validate_id(path, node_id)?;
+            if text.trim().is_empty() {
+                return invalid(path, "text nodes must not be empty");
+            }
+            let Some(node) = nodes.iter().find(|node| node_id_of(node) == Some(node_id)) else {
+                return invalid(path, format!("node id {:?} does not exist", node_id));
+            };
+            if node.get("type").and_then(Value::as_str) != Some("text") {
+                return invalid(path, format!("node id {:?} is not a text node", node_id));
             }
         }
     }
@@ -210,13 +302,79 @@ pub(crate) fn patch(path: &Path, original: &[u8], edit: &CanvasEdit) -> Result<V
             edge_id,
             from_node,
             to_node,
+            from_side,
+            to_side,
         } => {
             let edges = canvas_edges_mut(path, &mut document)?;
-            edges.push(json!({
+            let mut edge = json!({
                 "id": edge_id,
                 "fromNode": from_node,
                 "toNode": to_node,
+            });
+            if let Some(side) = from_side {
+                edge.as_object_mut()
+                    .expect("edge object")
+                    .insert("fromSide".into(), json!(side));
+            }
+            if let Some(side) = to_side {
+                edge.as_object_mut()
+                    .expect("edge object")
+                    .insert("toSide".into(), json!(side));
+            }
+            edges.push(edge);
+        }
+        CanvasEdit::Resize { nodes: resizes } => {
+            let nodes = canvas_nodes_mut(path, &mut document)?;
+            for CanvasNodeResize { id, width, height } in resizes {
+                let node = nodes
+                    .iter_mut()
+                    .find(|node| node_id_of(node) == Some(id.as_str()))
+                    .ok_or_else(|| {
+                        invalid_value(path, format!("node id {:?} does not exist", id))
+                    })?;
+                let object = node
+                    .as_object_mut()
+                    .ok_or_else(|| invalid_value(path, "canvas node must be an object"))?;
+                object.insert("width".into(), json!(width));
+                object.insert("height".into(), json!(height));
+            }
+        }
+        CanvasEdit::RemoveEdges { edge_ids } => {
+            let ids: HashSet<&str> = edge_ids.iter().map(String::as_str).collect();
+            if let Some(edges) = document.get_mut("edges").and_then(Value::as_array_mut) {
+                edges.retain(|edge| edge_id_of(edge).is_none_or(|id| !ids.contains(id)));
+            }
+        }
+        CanvasEdit::AddText {
+            node_id,
+            text,
+            x,
+            y,
+            width,
+            height,
+        } => {
+            canvas_nodes_mut(path, &mut document)?.push(json!({
+                "id": node_id,
+                "type": "text",
+                "text": text,
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height,
             }));
+        }
+        CanvasEdit::UpdateText { node_id, text } => {
+            let nodes = canvas_nodes_mut(path, &mut document)?;
+            let node = nodes
+                .iter_mut()
+                .find(|node| node_id_of(node) == Some(node_id.as_str()))
+                .ok_or_else(|| {
+                    invalid_value(path, format!("node id {:?} does not exist", node_id))
+                })?;
+            let object = node
+                .as_object_mut()
+                .ok_or_else(|| invalid_value(path, "canvas node must be an object"))?;
+            object.insert("text".into(), json!(text));
         }
     }
 
@@ -312,6 +470,17 @@ fn validate_id(path: &Path, id: &str) -> Result<()> {
         invalid(path, "node ids must not be empty")
     } else {
         Ok(())
+    }
+}
+
+fn validate_side(path: &Path, side: &Option<String>) -> Result<()> {
+    match side.as_deref() {
+        None => Ok(()),
+        Some("top" | "right" | "bottom" | "left") => Ok(()),
+        Some(other) => invalid(
+            path,
+            format!("side {other:?} must be one of top/right/bottom/left"),
+        ),
     }
 }
 

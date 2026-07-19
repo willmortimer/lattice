@@ -113,6 +113,26 @@ impl AppliedOp {
                 path,
                 base_revision,
                 ..
+            }
+            | Command::CanvasResizeNodes {
+                path,
+                base_revision,
+                ..
+            }
+            | Command::CanvasRemoveEdges {
+                path,
+                base_revision,
+                ..
+            }
+            | Command::CanvasAddTextNode {
+                path,
+                base_revision,
+                ..
+            }
+            | Command::CanvasUpdateTextNode {
+                path,
+                base_revision,
+                ..
             } => Some(RevisionCapture {
                 path: path.clone(),
                 parent_revision: Some(base_revision.clone()),
@@ -773,6 +793,8 @@ impl CommandEngine {
                 edge_id,
                 from_node,
                 to_node,
+                from_side,
+                to_side,
             } => {
                 self.ensure_canvas_revision(path, base_revision)?;
                 canvas::validate_edit(
@@ -782,6 +804,76 @@ impl CommandEngine {
                         edge_id: edge_id.clone(),
                         from_node: from_node.clone(),
                         to_node: to_node.clone(),
+                        from_side: from_side.clone(),
+                        to_side: to_side.clone(),
+                    },
+                )
+            }
+            Command::CanvasResizeNodes {
+                path,
+                base_revision,
+                nodes,
+            } => {
+                self.ensure_canvas_revision(path, base_revision)?;
+                canvas::validate_edit(
+                    path,
+                    &self.store.read(path)?,
+                    &CanvasEdit::Resize {
+                        nodes: nodes.clone(),
+                    },
+                )
+            }
+            Command::CanvasRemoveEdges {
+                path,
+                base_revision,
+                edge_ids,
+            } => {
+                self.ensure_canvas_revision(path, base_revision)?;
+                canvas::validate_edit(
+                    path,
+                    &self.store.read(path)?,
+                    &CanvasEdit::RemoveEdges {
+                        edge_ids: edge_ids.clone(),
+                    },
+                )
+            }
+            Command::CanvasAddTextNode {
+                path,
+                base_revision,
+                node_id,
+                text,
+                x,
+                y,
+                width,
+                height,
+            } => {
+                self.ensure_canvas_revision(path, base_revision)?;
+                canvas::validate_edit(
+                    path,
+                    &self.store.read(path)?,
+                    &CanvasEdit::AddText {
+                        node_id: node_id.clone(),
+                        text: text.clone(),
+                        x: *x,
+                        y: *y,
+                        width: *width,
+                        height: *height,
+                    },
+                )
+            }
+            Command::CanvasUpdateTextNode {
+                path,
+                base_revision,
+                node_id,
+                text,
+            } => {
+                self.ensure_canvas_revision(path, base_revision)?;
+                canvas::validate_edit(
+                    path,
+                    &self.store.read(path)?,
+                    &CanvasEdit::UpdateText {
+                        node_id: node_id.clone(),
+                        text: text.clone(),
                     },
                 )
             }
@@ -1233,6 +1325,8 @@ impl CommandEngine {
                 edge_id,
                 from_node,
                 to_node,
+                from_side,
+                to_side,
             } => self.apply_canvas_edit(
                 command,
                 path,
@@ -1241,6 +1335,68 @@ impl CommandEngine {
                     edge_id: edge_id.clone(),
                     from_node: from_node.clone(),
                     to_node: to_node.clone(),
+                    from_side: from_side.clone(),
+                    to_side: to_side.clone(),
+                },
+            ),
+            Command::CanvasResizeNodes {
+                path,
+                base_revision,
+                nodes,
+            } => self.apply_canvas_edit(
+                command,
+                path,
+                base_revision,
+                CanvasEdit::Resize {
+                    nodes: nodes.clone(),
+                },
+            ),
+            Command::CanvasRemoveEdges {
+                path,
+                base_revision,
+                edge_ids,
+            } => self.apply_canvas_edit(
+                command,
+                path,
+                base_revision,
+                CanvasEdit::RemoveEdges {
+                    edge_ids: edge_ids.clone(),
+                },
+            ),
+            Command::CanvasAddTextNode {
+                path,
+                base_revision,
+                node_id,
+                text,
+                x,
+                y,
+                width,
+                height,
+            } => self.apply_canvas_edit(
+                command,
+                path,
+                base_revision,
+                CanvasEdit::AddText {
+                    node_id: node_id.clone(),
+                    text: text.clone(),
+                    x: *x,
+                    y: *y,
+                    width: *width,
+                    height: *height,
+                },
+            ),
+            Command::CanvasUpdateTextNode {
+                path,
+                base_revision,
+                node_id,
+                text,
+            } => self.apply_canvas_edit(
+                command,
+                path,
+                base_revision,
+                CanvasEdit::UpdateText {
+                    node_id: node_id.clone(),
+                    text: text.clone(),
                 },
             ),
         }
@@ -1440,7 +1596,11 @@ impl CommandEngine {
             Command::CanvasPlaceResource { .. }
             | Command::CanvasMoveNodes { .. }
             | Command::CanvasRemoveNodes { .. }
-            | Command::CanvasAddEdge { .. } => {
+            | Command::CanvasAddEdge { .. }
+            | Command::CanvasResizeNodes { .. }
+            | Command::CanvasRemoveEdges { .. }
+            | Command::CanvasAddTextNode { .. }
+            | Command::CanvasUpdateTextNode { .. } => {
                 unreachable!("canvas commands are never stored as inverse operations")
             }
             Command::FolderCreate { .. } => {
@@ -1549,7 +1709,11 @@ impl CommandEngine {
             Command::CanvasPlaceResource { .. }
             | Command::CanvasMoveNodes { .. }
             | Command::CanvasRemoveNodes { .. }
-            | Command::CanvasAddEdge { .. } => {
+            | Command::CanvasAddEdge { .. }
+            | Command::CanvasResizeNodes { .. }
+            | Command::CanvasRemoveEdges { .. }
+            | Command::CanvasAddTextNode { .. }
+            | Command::CanvasUpdateTextNode { .. } => {
                 self.guard_hash(&forward.guard_path(), resulting_revision.as_deref())
             }
         }
