@@ -528,8 +528,8 @@ pub async fn voice_start_session(
     {
         use lattice_audio::CaptureProvider;
         use lattice_voice::{
-            normalize_final_transcript, SessionContext, SpeechEventSender, SpeechProvider,
-            SpeechSessionConfig, VoiceContextBuilder, VoiceContextInput, VoiceEvent,
+            SessionContext, SpeechEventSender, SpeechProvider, SpeechSessionConfig,
+            VoiceContextBuilder, VoiceContextInput, VoiceEvent,
         };
 
         // Preempt any leftover session from a release-during-start race.
@@ -576,6 +576,7 @@ pub async fn voice_start_session(
             session_id: session_id.clone(),
             language: Some("en".into()),
             context,
+            endpoint: lattice_voice::EndpointOptions::default(),
         };
 
         let speech_session = provider
@@ -613,6 +614,7 @@ pub async fn voice_start_session(
                     VoiceEvent::FinalTranscript(_)
                     | VoiceEvent::SessionReady { .. }
                     | VoiceEvent::SpeechStarted { .. }
+                    | VoiceEvent::EndpointDetected { .. }
                     | VoiceEvent::CommandCandidate(_)
                     | VoiceEvent::SessionCompleted { .. } => continue,
                 };
@@ -703,6 +705,8 @@ pub async fn voice_finish_session(
 ) -> Result<(), String> {
     #[cfg(all(target_os = "macos", feature = "voice"))]
     {
+        use lattice_voice::normalize_final_transcript;
+
         let mut inner = state.inner.lock().await;
         let active = inner
             .active

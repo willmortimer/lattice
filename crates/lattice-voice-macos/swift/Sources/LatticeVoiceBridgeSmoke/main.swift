@@ -205,6 +205,10 @@ final class EventSink: @unchecked Sendable {
         case LATTICE_VOICE_EVENT_FINAL:
             sink.finalText = text
             fputs("  [final] \(text)\n", stdout)
+        case LATTICE_VOICE_EVENT_SPEECH_STARTED:
+            fputs("  [speech_started]\n", stdout)
+        case LATTICE_VOICE_EVENT_ENDPOINT:
+            fputs("  [endpoint reason=\(event.error_code)]\n", stdout)
         case LATTICE_VOICE_EVENT_ERROR:
             sink.errorText = text
             fputs("  [error] \(text)\n", stderr)

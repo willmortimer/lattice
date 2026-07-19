@@ -10,6 +10,12 @@ import os
 /// `StreamingUnifiedAsrManager.finish()` and emits one authoritative final
 /// (`StreamingFlush`).
 ///
+/// Endpoint policy: Unified has no `setEouCallback`. This session runs a
+/// Lattice energy VAD (silence debounce + max utterance) and emits
+/// `SPEECH_STARTED` / `ENDPOINT`. When a future path uses
+/// `StreamingEouAsrManager`, wire `setEouCallback` / `eouDebounceMs` and emit
+/// `ENDPOINT` with reason `provider_eou` (error_code=2).
+///
 /// TODO(voice-v11): Buffer float samples for the full utterance and, when
 /// `LATTICE_VOICE_INDEPENDENT_FINAL=1` is adopted after eval wins, call
 /// FluidAudio offline (`UnifiedAsrManager`) or TDT v2 (`AsrManager`) over that
@@ -27,6 +33,7 @@ final class VoiceSession: @unchecked Sendable {
     private var finishing = false
     private var revision: UInt64 = 0
     private var lastPartial: String = ""
+    private let endpointDetector: EnergyEndpointDetector
 
     init(
         id: UInt64,
@@ -38,6 +45,11 @@ final class VoiceSession: @unchecked Sendable {
         self.engine = engine
         self.callback = callback
         self.context = context
+        // Match FluidAudio EOU default debounce when emulating endpoint policy.
+        self.endpointDetector = EnergyEndpointDetector(
+            silenceDebounceMs: EnergyEndpointDetector.defaultSilenceDebounceMs,
+            maxUtteranceMs: EnergyEndpointDetector.defaultMaxUtteranceMs
+        )
     }
 
     func start() async throws {
@@ -46,12 +58,18 @@ final class VoiceSession: @unchecked Sendable {
         await manager.setPartialTranscriptCallback { [weak self] text in
             self?.emitPartial(text)
         }
+        // Unified has no setEouCallback. Historical EOU path would register here:
+        // await eouManager.setEouCallback { [weak self] text in
+        //     self?.emitEndpoint(reason: .providerEou, text: text)
+        // }
     }
 
     /// Copy samples and feed the Unified streamer. Never retains the caller's buffer.
     func pushAudio(samples: [Float]) async throws {
         try ensureActive()
         guard !samples.isEmpty else { return }
+
+        emitEndpointSignals(for: samples)
 
         let manager = try engine.takeManager()
         let buffer = try Self.makePCMBuffer(samples: samples, sampleRate: 16_000)
@@ -76,6 +94,7 @@ final class VoiceSession: @unchecked Sendable {
             try ensureActive()
             emitFinal(text)
             await manager.setPartialTranscriptCallback { _ in }
+            lock.withLock { endpointDetector.reset() }
         } catch {
             lock.withLock { finishing = false }
             throw error
@@ -86,6 +105,7 @@ final class VoiceSession: @unchecked Sendable {
         let shouldDrop = lock.withLock { () -> Bool in
             if cancelled || destroyed { return false }
             cancelled = true
+            endpointDetector.reset()
             return true
         }
         guard shouldDrop else { return }
@@ -104,6 +124,40 @@ final class VoiceSession: @unchecked Sendable {
     }
 
     // MARK: - Events
+
+    private func emitEndpointSignals(for samples: [Float]) {
+        let signals = lock.withLock { () -> [EnergyEndpointDetector.Signal] in
+            if cancelled || destroyed || finishing { return [] }
+            return endpointDetector.push(samples: samples, sampleRateHz: 16_000)
+        }
+        for signal in signals {
+            switch signal {
+            case .speechStarted:
+                emitEvent(
+                    kind: LATTICE_VOICE_EVENT_SPEECH_STARTED,
+                    text: "",
+                    stablePrefixBytes: 0,
+                    errorCode: Int32(LATTICE_VOICE_OK)
+                )
+            case .endpoint(let reason):
+                emitEndpoint(reason: reason, text: "")
+            }
+        }
+    }
+
+    private func emitEndpoint(reason: EnergyEndpointDetector.EndpointReason, text: String) {
+        let shouldEmit = lock.withLock { () -> Bool in
+            if cancelled || destroyed || finishing { return false }
+            return true
+        }
+        guard shouldEmit else { return }
+        emitEvent(
+            kind: LATTICE_VOICE_EVENT_ENDPOINT,
+            text: text,
+            stablePrefixBytes: 0,
+            errorCode: reason.rawValue
+        )
+    }
 
     private func emitPartial(_ text: String) {
         let shouldEmit = lock.withLock { () -> Bool in
@@ -197,6 +251,95 @@ final class VoiceSession: @unchecked Sendable {
             channel.update(from: base, count: samples.count)
         }
         return buffer
+    }
+}
+
+/// Lattice-owned energy VAD for Unified (no FluidAudio EOU callback).
+///
+/// Defaults align with FluidAudio EOU `eouDebounceMs` (1280) and the
+/// transcription-pipeline max utterance guidance (45 s).
+final class EnergyEndpointDetector {
+    enum EndpointReason: Int32 {
+        case silenceDebounce = 0
+        case maxUtterance = 1
+        case providerEou = 2
+    }
+
+    enum Signal {
+        case speechStarted
+        case endpoint(EndpointReason)
+    }
+
+    static let defaultSilenceDebounceMs: Int = 1_280
+    static let defaultMaxUtteranceMs: Int = 45_000
+
+    private let silenceDebounceMs: Int
+    private let maxUtteranceMs: Int
+    private let speechRmsThreshold: Float
+    private var speechActive = false
+    private var utteranceElapsedMs: Int = 0
+    private var silenceElapsedMs: Int = 0
+
+    init(
+        silenceDebounceMs: Int = defaultSilenceDebounceMs,
+        maxUtteranceMs: Int = defaultMaxUtteranceMs,
+        speechRmsThreshold: Float = 0.015
+    ) {
+        self.silenceDebounceMs = max(1, silenceDebounceMs)
+        self.maxUtteranceMs = max(1, maxUtteranceMs)
+        self.speechRmsThreshold = speechRmsThreshold
+    }
+
+    func reset() {
+        speechActive = false
+        utteranceElapsedMs = 0
+        silenceElapsedMs = 0
+    }
+
+    func push(samples: [Float], sampleRateHz: Int) -> [Signal] {
+        guard !samples.isEmpty, sampleRateHz > 0 else { return [] }
+        let durationMs = samples.count * 1000 / sampleRateHz
+        let rms = Self.rms(samples)
+        let isSpeech = rms >= speechRmsThreshold
+        var out: [Signal] = []
+
+        if !speechActive {
+            if isSpeech {
+                speechActive = true
+                utteranceElapsedMs = durationMs
+                silenceElapsedMs = 0
+                out.append(.speechStarted)
+            }
+            return out
+        }
+
+        utteranceElapsedMs += durationMs
+        if utteranceElapsedMs >= maxUtteranceMs {
+            reset()
+            out.append(.endpoint(.maxUtterance))
+            return out
+        }
+
+        if isSpeech {
+            silenceElapsedMs = 0
+            return out
+        }
+
+        silenceElapsedMs += durationMs
+        if silenceElapsedMs >= silenceDebounceMs {
+            reset()
+            out.append(.endpoint(.silenceDebounce))
+        }
+        return out
+    }
+
+    private static func rms(_ samples: [Float]) -> Float {
+        guard !samples.isEmpty else { return 0 }
+        var sum: Float = 0
+        for sample in samples {
+            sum += sample * sample
+        }
+        return (sum / Float(samples.count)).squareRoot()
     }
 }
 

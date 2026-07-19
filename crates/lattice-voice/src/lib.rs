@@ -4,6 +4,7 @@
 //! state machine, and an in-process dispatcher used before `latticed` IPC lands.
 
 mod context_builder;
+mod endpoint;
 mod error;
 mod final_model_memory;
 mod in_process;
@@ -17,6 +18,10 @@ mod utterance_buffer;
 pub use context_builder::{
     BuiltVoiceContext, EmbeddingGlossaryHook, VoiceContextBuilder, VoiceContextInput,
     DEFAULT_MAX_GLOSSARY_TERMS, DEFAULT_MIN_GLOSSARY_TERMS,
+};
+pub use endpoint::{
+    decode_f32_le, env_auto_finalize_enabled, EndpointOptions, EndpointPolicy, EndpointSignal,
+    DEFAULT_MAX_UTTERANCE_MS, DEFAULT_SILENCE_DEBOUNCE_MS, ENV_AUTO_FINALIZE_ON_ENDPOINT,
 };
 pub use error::SpeechError;
 pub use final_model_memory::{
@@ -35,12 +40,11 @@ pub use normalize::{
 };
 pub use protocol::{
     AudioChunk, AudioSampleFormat, CancelVoiceSessionRequest, CommandCandidatePayload,
-    EndVoiceSessionRequest, FinalTranscript, FinalizationMode, FinishUtteranceRequest,
-    LanguageTag,
-    ModelState, ModelStatus, PartialTranscriptPayload, PrepareModelRequest, PROTOCOL_VERSION,
-    SessionContext, SpeechCapabilities, SpeechSessionConfig, StableTranscriptPayload,
-    StartVoiceSessionRequest, TranscriptionSessionState, UpdateSessionContextRequest, UtteranceId,
-    VoiceEvent, VoiceRequest, VoiceSessionId,
+    EndVoiceSessionRequest, EndpointReason, FinalTranscript, FinalizationMode,
+    FinishUtteranceRequest, LanguageTag, ModelState, ModelStatus, PartialTranscriptPayload,
+    PrepareModelRequest, PROTOCOL_VERSION, SessionContext, SpeechCapabilities, SpeechSessionConfig,
+    StableTranscriptPayload, StartVoiceSessionRequest, TranscriptionSessionState,
+    UpdateSessionContextRequest, UtteranceId, VoiceEvent, VoiceRequest, VoiceSessionId,
 };
 pub use provider::{
     NullSpeechProvider, SpeechEventSender, SpeechProvider, SpeechSession,

@@ -27,6 +27,8 @@ pub enum LatticeVoiceEventKind {
     Stable = 2,
     Final = 3,
     Error = 4,
+    SpeechStarted = 5,
+    Endpoint = 6,
 }
 
 #[repr(C)]
