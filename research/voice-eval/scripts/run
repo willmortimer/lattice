@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Thin wrapper so `scripts/run` matches embed-host / M0 README style.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+exec python3 "$ROOT/scripts/voice_eval.py" "$@"
