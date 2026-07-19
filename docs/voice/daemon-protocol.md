@@ -8,13 +8,16 @@ Versioned local IPC between Tauri clients (and future CLI/helpers) and
 
 ## Transport
 
-Recommended initial transports:
+Locked by [ADR 0041](../decisions/0041-daemon-ipc-protobuf.md) and
+[ADR 0043](../decisions/0043-voice-ownership-in-latticed.md):
 
 - Unix-domain sockets on macOS and Linux
 - Named pipes on Windows (future)
-- Length-prefixed binary frames
-- MessagePack, CBOR, or Protobuf payloads — **choose in an ADR before locking
-  crates**; examples below are schema-shaped, not library-mandating
+- Length-prefixed Protobuf [`Envelope`](../../crates/lattice-protocol/proto/lattice.proto)
+  frames (`prost`) shared with the daemon control plane
+- Voice requests and events nest in `Request` / `Response` / `Event` oneofs —
+  not a parallel stream type
+- PCM travels as `bytes` (packed Float32 / I16LE) inside `PushAudioChunkRequest`
 - **No** TCP listener by default
 
 Raw audio **must not** travel over Lattice’s public HTTP or MCP APIs.
@@ -55,10 +58,11 @@ audio or commands.
 | `SpeechStarted` | Endpoint / VAD speech onset |
 | `PartialTranscript` | Provisional |
 | `StableTranscript` | Stable prefix update |
-| `FinalTranscript` | Authoritative |
+| `FinalTranscript` | Authoritative (`FinalizationMode` per voice ADR 0007) |
 | `CommandCandidate` | Parsed voice command (pre-exec) |
 | `SessionCompleted` | Terminal success |
 | `SessionFailed` | Terminal failure |
+| `AudioGap` | Sequence discontinuity / dropped capture frames |
 
 ## Audio chunk structure
 
@@ -109,12 +113,11 @@ injection is a primary threat.
 
 ## Open questions
 
-- Exact serialization format (MessagePack vs CBOR vs Protobuf)
 - Executable identity attestation quality on macOS
 
 ## Acceptance criteria
 
-- [ ] Schema is shared by in-process and daemon modes
+- [x] Schema is shared by in-process and daemon modes (Protobuf Envelope)
 - [ ] Auth rejects unauthenticated local peers
-- [ ] No audio on public HTTP/MCP surfaces
+- [x] No audio on public HTTP/MCP surfaces (PCM only on private UDS Envelope)
 - [ ] Capability negotiation is tested

@@ -1,7 +1,7 @@
 use bytes::BytesMut;
 use lattice_protocol::{
-    encode_frame, request_envelope, try_decode_frame, HealthRequest, ProtocolError, Request,
-    MAX_FRAME_LENGTH,
+    decode_frame, encode_frame, request_envelope, try_decode_frame, AudioSampleFormat,
+    HealthRequest, ProtocolError, PushAudioChunkRequest, Request, MAX_FRAME_LENGTH,
 };
 
 fn sample_frame() -> bytes::Bytes {
@@ -14,6 +14,32 @@ fn sample_frame() -> bytes::Bytes {
         },
     );
     encode_frame(&envelope).expect("encode sample")
+}
+
+fn push_audio_frame() -> bytes::Bytes {
+    let payload: Vec<u8> = [0.25f32.to_le_bytes(), (-0.25f32).to_le_bytes()]
+        .into_iter()
+        .flatten()
+        .collect();
+    let envelope = request_envelope(
+        "framing-audio",
+        Request {
+            deadline_unix_ms: None,
+            idempotency_key: None,
+            body: Some(lattice_protocol::request::Body::PushAudioChunk(
+                PushAudioChunkRequest {
+                    session_id: "vs-frame".into(),
+                    sequence: 7,
+                    captured_at_ns: 99,
+                    sample_rate_hz: 16_000,
+                    channels: 1,
+                    sample_format: AudioSampleFormat::F32 as i32,
+                    payload,
+                },
+            )),
+        },
+    );
+    encode_frame(&envelope).expect("encode audio")
 }
 
 #[test]
@@ -68,4 +94,21 @@ fn oversized_declared_length_rejects_clearly() {
         }
         other => panic!("expected FrameTooLarge, got {other}"),
     }
+}
+
+#[test]
+fn voice_push_audio_chunk_round_trips_through_framing() {
+    let frame = push_audio_frame();
+    let decoded = decode_frame(&frame).expect("decode audio frame");
+    assert_eq!(decoded.request_id, "framing-audio");
+    let Some(lattice_protocol::envelope::Payload::Request(req)) = decoded.payload else {
+        panic!("expected request payload");
+    };
+    let Some(lattice_protocol::request::Body::PushAudioChunk(chunk)) = req.body else {
+        panic!("expected push audio chunk");
+    };
+    assert_eq!(chunk.sequence, 7);
+    assert_eq!(chunk.captured_at_ns, 99);
+    assert_eq!(chunk.payload.len(), 8);
+    assert_eq!(chunk.sample_format, AudioSampleFormat::F32 as i32);
 }
