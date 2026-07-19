@@ -3,15 +3,49 @@
 ## Scope
 
 Model installation, verification, caching, loading, updates, and residency for
-voice providers. M0 measured a **dual-artifact** FluidAudio stack: EOU streaming
-plus TDT v2 offline ([research/voice-m0-fluidaudio/RESULTS.md](../../research/voice-m0-fluidaudio/RESULTS.md)).
-Production must still decide whether to ship that pair or the upstream
-**Unified** single-checkpoint alternative (`parakeet-unified-en-0.6b-coreml`).
+voice providers. Production pins **Unified**
+(`parakeet-unified-en-0.6b-coreml`, 320 ms streaming tier) per
+[research/voice-m0-fluidaudio/DECISION.md](../../research/voice-m0-fluidaudio/DECISION.md).
+M0 measured a **dual-artifact** EOU+TDT stack as a historical spike
+([research/voice-m0-fluidaudio/RESULTS.md](../../research/voice-m0-fluidaudio/RESULTS.md));
+that pair is a documented non-production alternative.
 
 ## Model manifest
 
-M0 used two artifacts. Example manifests (hashes and sizes are placeholders
-until install-time verification is wired; pins and licenses are from M0):
+### Primary (production)
+
+```json
+{
+  "schema_version": 1,
+  "id": "parakeet-unified-en-0.6b-coreml",
+  "display_name": "Parakeet Unified English 0.6B (320ms)",
+  "provider": "fluid-audio",
+  "version": "0.15.5",
+  "upstream_id": "FluidInference/parakeet-unified-en-0.6b-coreml",
+  "languages": ["en"],
+  "license": "CC-BY-4.0",
+  "source": "FluidAudio HuggingFace cache (converted from nvidia/parakeet-unified-en-0.6b)",
+  "sha256": "verify-at-install",
+  "size_bytes": 0,
+  "runtime": "coreml",
+  "streaming": true,
+  "offline_decode": false,
+  "streaming_variant": "parakeet-unified-320ms",
+  "authoritative_final": "streaming_finish"
+}
+```
+
+Streaming partials and the authoritative final both use one loaded streaming
+checkpoint (`StreamingUnifiedAsrManager.finish()`). An optional offline encoder
+from the same HF repo (~+578 MB) is **not** required for the production
+stream→final path
+([RESULTS-unified.md](../../research/voice-m0-fluidaudio/RESULTS-unified.md)).
+
+### Non-production alternative (M0 measured EOU+TDT)
+
+The following manifests document the historical M0 spike path. Hashes and sizes
+are placeholders until install-time verification is wired; pins and licenses are
+from M0:
 
 ```json
 {
@@ -30,7 +64,8 @@ until install-time verification is wired; pins and licenses are from M0):
   "runtime": "coreml",
   "streaming": true,
   "offline_decode": false,
-  "chunk_variant_ms": 160
+  "chunk_variant_ms": 160,
+  "production": false
 }
 ```
 
@@ -49,18 +84,15 @@ until install-time verification is wired; pins and licenses are from M0):
   "size_bytes": 0,
   "runtime": "coreml",
   "streaming": false,
-  "offline_decode": true
+  "offline_decode": true,
+  "production": false
 }
 ```
 
-**Unified alternative (not measured in M0):** upstream also ships
-`FluidInference/parakeet-unified-en-0.6b-coreml` via `UnifiedAsrManager` /
-`StreamingUnifiedAsrManager` — one checkpoint for streaming and offline. If
-production pins Unified, manifests collapse to a single entry; the EOU+TDT pair
-above remains the documented M0 spike path until that decision lands.
-
-Combined cache footprint after M0 download: **~890 MB** under FluidAudio’s
-`.cache/Models/` (gitignored in the research spike).
+Combined EOU+TDT cache footprint after M0 download: **~890 MB** under
+FluidAudio’s `.cache/Models/`. Streaming-only Unified cache after Task U:
+**~608 MB**
+([RESULTS-unified.md](../../research/voice-m0-fluidaudio/RESULTS-unified.md)).
 
 ## Installation flow
 
@@ -85,9 +117,7 @@ Example (macOS):
   voice/
     manifests/
     models/
-      parakeet-realtime-eou-120m-coreml/
-        <version>/
-      parakeet-tdt-0.6b-v2-coreml/
+      parakeet-unified-en-0.6b-coreml/
         <version>/
     compiled/
     downloads/
@@ -126,9 +156,11 @@ Also define:
 Owner of residency policy long-term: `latticed`
 ([architecture.md](./architecture.md)).
 
-M0 warm loads (cached `.mlmodelc`, M2 MacBook Air): streaming **~681 ms**,
-offline **~399 ms**. Cold first download + Core ML compile: **~98–110 s** per
-model ([RESULTS.md](../../research/voice-m0-fluidaudio/RESULTS.md)).
+Unified warm streaming load (cached `.mlmodelc`, M2 MacBook Air): **~504 ms**
+([RESULTS-unified.md](../../research/voice-m0-fluidaudio/RESULTS-unified.md)).
+M0 EOU/TDT warm loads for comparison: streaming **~681 ms**, offline **~399 ms**.
+Cold first download + Core ML compile: **~59.7 s** Unified streaming (Task U) vs
+**~98–110 s** per EOU/TDT model on M0 host.
 
 ## Security implications
 
@@ -145,13 +177,11 @@ model ([RESULTS.md](../../research/voice-m0-fluidaudio/RESULTS.md)).
 
 ## Open questions
 
-- **Unified vs EOU+TDT production pin** — Unified exists upstream but was not
-  measured in M0; dual residency memory cost (research Q4) also remains open.
 - Core ML compile reuse across app updates — **partially answered**: warm load
   reuses cached `.mlmodelc` under FluidAudio cache; cross-app-update policy TBD.
-- Attribution text for converted weights — **resolved for M0 pins** (Apache-2.0
-  FluidAudio + NVIDIA Open Model EOU + CC-BY-4.0 TDT v2); see
-  [licensing-distribution.md](./licensing-distribution.md).
+- Attribution text for converted weights — **resolved for production pin**
+  (Apache-2.0 FluidAudio + CC-BY-4.0 Unified); EOU+TDT adds NVIDIA Open Model
+  if used as fallback. See [licensing-distribution.md](./licensing-distribution.md).
 
 ## Acceptance criteria
 

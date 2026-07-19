@@ -189,15 +189,22 @@ pub struct SpeechCapabilities {
 }
 ```
 
-The initial macOS provider is FluidAudio `0.15.5` with the M0-measured
-**EOU streaming + TDT v2 offline** pair
-([adr/0002](./adr/0002-fluid-audio-macos-provider.md),
-[RESULTS.md](../../research/voice-m0-fluidaudio/RESULTS.md)). Production may
-instead pin upstream **Unified** (`parakeet-unified-en-0.6b-coreml`); that path
-was not benchmarked in M0.
+The initial macOS provider is FluidAudio `0.15.5` with **Unified**
+(`parakeet-unified-en-0.6b-coreml`, `parakeet-unified-320ms` streaming tier).
+Streaming partials and the authoritative final both use one loaded checkpoint
+(`StreamingUnifiedAsrManager.finish()`). Decision:
+[DECISION.md](../../research/voice-m0-fluidaudio/DECISION.md);
+measurements:
+[RESULTS-unified.md](../../research/voice-m0-fluidaudio/RESULTS-unified.md);
+bridge:
+[adr/0002](./adr/0002-fluid-audio-macos-provider.md),
+[crates/lattice-voice-macos](../../crates/lattice-voice-macos/README.md).
+The M0 EOU+TDT pair remains documented as a measured non-production alternative
+([RESULTS.md](../../research/voice-m0-fluidaudio/RESULTS.md)).
 
 Shared protocol types and the in-process `SpeechProvider` foundation live in
-`crates/lattice-voice`. Linux and Windows providers are future
+`crates/lattice-voice`. The macOS bridge and `FluidAudioSpeechProvider` live in
+`crates/lattice-voice-macos`. Linux and Windows providers are future
 `SpeechProvider` implementations and are out of scope for the first release.
 
 ## Interfaces

@@ -115,27 +115,39 @@ The ADR directory records accepted decisions. Major accepted choices include:
 
 Architecture is locked in [docs/voice/](voice/README.md). M0 research
 ([research/voice-m0-fluidaudio/RESULTS.md](../research/voice-m0-fluidaudio/RESULTS.md))
+and M1 production-path decision
+([research/voice-m0-fluidaudio/DECISION.md](../research/voice-m0-fluidaudio/DECISION.md))
 resolved:
 
 - FluidAudio pin: **0.15.5** / `19600a485baa4998812e4654b70d2bab8f2c9949`.
-- Measured artifacts: streaming **EOU 120M 160ms**; offline **TDT v2** (not
-  Unified).
-- Partial-token stability for provisional UI (warm first partial **~405 ms** on M2).
+- **Production model pin: Unified** — `parakeet-unified-en-0.6b-coreml` /
+  `parakeet-unified-320ms`; stream + authoritative `finish()` from one
+  checkpoint. Warm first-partial **158.3 ms** on M0 fixture
+  ([RESULTS-unified.md](../research/voice-m0-fluidaudio/RESULTS-unified.md)).
+- M0 EOU+TDT pair — measured historical spike only; not production.
+- M1 Rust/Swift bridge — **landed** in `crates/lattice-voice-macos` (C ABI v1,
+  `FluidAudioSpeechProvider`; live fixture test in
+  [LIVE_RESULTS.md](../crates/lattice-voice-macos/tests/LIVE_RESULTS.md)).
+- Partial-token stability for provisional UI (Unified: 37 partials Task U;
+  live Rust: 36 partials warm).
 - Callback scheduling: background threads; Rust must hop before shared state.
-- Core ML cache reuse on warm load (**~681 ms / ~399 ms** vs cold **~98–110 s**).
-- Endpoint-detection API surface (`eouDebounceMs`, callbacks).
-- Attributions for M0 pins: Apache-2.0 + NVIDIA Open Model + CC-BY-4.0.
+- Core ML cache reuse on warm load (Unified streaming **~504 ms** warm load
+  Task U; M0 EOU/TDT **~681 ms / ~399 ms** vs cold **~98–110 s**).
+- Endpoint-detection API surface (`eouDebounceMs`, callbacks) — EOU path only;
+  Unified uses streaming `finish()` for finals.
+- Attributions for production pin: Apache-2.0 + CC-BY-4.0 (Unified).
 - Sample format: **Float32 @ 16 kHz mono** for FluidAudio bridge.
 
 Still open:
 
-- **Unified vs EOU+TDT** production model pin (`parakeet-unified-en-0.6b-coreml`
-  not measured in M0).
 - **Apple dictation baseline** for technical prose (M0 did not compare).
 - **Glossary / vocabulary biasing** for CamelCase, paths, and technical tokens.
-- Memory cost of dual-model residency (Q4); oldest M-series latency (Q5).
+- Memory cost of optional Unified offline encoder (~+578 MB); oldest M-series
+  latency (Q5).
 - Separate VAD value (Q10); pre-roll duration (Q11); final-vs-provisional UX (Q12).
+- `latticed` process placement and model ownership timing (Q13).
 - Quick Note background reliability vs login-item helper (Q14).
+- Desktop GUI for dictation (Milestone 2 — capture, overlay, setup UI).
 
 See [docs/voice/implementation-roadmap.md](voice/implementation-roadmap.md).
 
