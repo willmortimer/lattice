@@ -8,15 +8,19 @@ issues or a project DAG.
 
 M0 findings:
 [research/voice-m0-fluidaudio/RESULTS.md](../../research/voice-m0-fluidaudio/RESULTS.md).
+Unified production decision:
+[research/voice-m0-fluidaudio/DECISION.md](../../research/voice-m0-fluidaudio/DECISION.md),
+[research/voice-m0-fluidaudio/RESULTS-unified.md](../../research/voice-m0-fluidaudio/RESULTS-unified.md).
 Protocol foundation: `crates/lattice-voice`.
+macOS bridge: `crates/lattice-voice-macos`.
 
 ## Research questions (M0 status)
 
 | # | Question | M0 status |
 |---|----------|-----------|
-| 1 | Exact Parakeet artifact + FluidAudio pin | **Resolved** — FluidAudio `0.15.5` / `19600a4…`; streaming EOU 120M 160ms; offline TDT v2. Unified exists separately. |
-| 2 | Stable partial tokens for provisional UI? | **Resolved** — 39 monotonic partials; warm first partial **~405 ms** (M2). |
-| 3 | Same model for streaming + offline? | **Resolved for spike** — two model families (~890 MB cache). Unified claims one checkpoint; **not measured**. |
+| 1 | Exact Parakeet artifact + FluidAudio pin | **Resolved** — FluidAudio `0.15.5` / `19600a4…`; production **Unified** `parakeet-unified-320ms`. EOU+TDT was M0 spike only. |
+| 2 | Stable partial tokens for provisional UI? | **Resolved** — Unified: 37 partials (Task U); warm first partial **158.3 ms** (M0 EOU was **~405 ms**). |
+| 3 | Same model for streaming + offline? | **Resolved** — Unified streaming checkpoint serves stream + `finish()` final (~608 MB one family). EOU+TDT (~890 MB) is non-production. |
 | 4 | Memory cost of both decoder states | **Open** — not instrumented; sequential load OK. |
 | 5 | First-partial latency on oldest M-series | **Partial** — **~405 ms warm** / **~5 s cold-first-inference** on M2; oldest-target pass still open. |
 | 6 | Offline improves technical dictation? | **Resolved (negative for strict quality)** — better casing/punctuation; CamelCase/paths still lost; no Apple baseline. |
@@ -32,10 +36,9 @@ Protocol foundation: `crates/lattice-voice`.
 
 **Still open for production:**
 
-- **Unified vs EOU+TDT** production model pin
 - **Apple dictation baseline** comparison for technical prose (M0 exit criterion interpreted strictly)
 - **Glossary / vocabulary biasing** for technical tokens (CamelCase, paths)
-- Oldest M-series latency pass; dual-model residency memory (Q4, Q5)
+- Oldest M-series latency pass; optional Unified offline encoder residency (Q4, Q5)
 
 These are mirrored in
 [docs/31-open-questions-and-decision-register.md](../31-open-questions-and-decision-register.md).
@@ -67,12 +70,28 @@ partial) demonstrate workflow advantage.
 
 ## Milestone 1: Rust and Swift bridge
 
-**Deliver:** Stable C ABI; Rust wrapper crate; engine/session lifecycle; audio
-chunk input; partial transcript callback; offline finalization; error
-translation; memory-safety tests.
+**Status:** **Complete** (2026-07-18). Bridge landed in `crates/lattice-voice-macos`
+with C ABI v1, `FluidAudioSpeechProvider`, and Unified (`parakeet-unified-320ms`)
+wiring.
+
+**Delivered:**
+
+- Stable C ABI (`LATTICE_VOICE_BRIDGE_ABI_VERSION = 1`)
+- Rust wrapper crate with `FluidAudioSpeechProvider`
+- Engine/session lifecycle; Float32 audio chunk input
+- Partial transcript callbacks (background-thread hop in Rust)
+- Authoritative final via `finish_utterance()` (Unified `finish()`)
+- Error translation; memory-safety and ABI-version tests
+- Live ASR integration test on M0 fixture
+  ([crates/lattice-voice-macos/tests/LIVE_RESULTS.md](../../crates/lattice-voice-macos/tests/LIVE_RESULTS.md))
 
 **Exit criterion:** A Rust integration test can transcribe fixture audio
-through both streaming and offline paths.
+through both streaming and authoritative final paths.
+
+**Verdict:** **Met** — warm-cache live run: **36 partials**, final in **~1.5 s**
+([LIVE_RESULTS.md](../../crates/lattice-voice-macos/tests/LIVE_RESULTS.md)).
+**No GUI** — microphone capture, provisional overlay, and model setup UI remain
+Milestone 2.
 
 ## Milestone 2: in-process Tauri prototype
 
