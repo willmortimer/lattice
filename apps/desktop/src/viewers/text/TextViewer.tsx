@@ -4,6 +4,8 @@ import { loadTextResource } from "../../controllers/resourceLoad";
 import type { OpenResourceSession } from "../../resourceSession";
 import type { Resource } from "../../types";
 import type { SaveState } from "../../editor/saveState";
+import { CsvTablePreview } from "./CsvTablePreview";
+import { canShowCsvPreview, parseCsvPreview, type CsvPreviewResult } from "./csvPreview";
 import { StructuredTree } from "./StructuredTree";
 import { parseStructuredInWorker, type StructuredParseResult } from "./structuredParser";
 import { TextCodeMirror, syntaxForPath } from "./TextCodeMirror";
@@ -61,11 +63,18 @@ export function TextViewer({ session, root, onSaveStateChange, onRevisionChange,
   const [dirty, setDirty] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [parseResult, setParseResult] = useState<StructuredParseResult | null>(null);
+  const [csvPreview, setCsvPreview] = useState<CsvPreviewResult | null>(null);
   const [showTree, setShowTree] = useState(true);
+  const [showTable, setShowTable] = useState(true);
   const saveController = useRef<AbortController | null>(null);
   const syntaxInfo = useMemo(() => syntaxForPath(session.resource.path, session.resource.formatId), [session.resource.formatId, session.resource.path]);
   const structuredSyntax = syntaxInfo.syntax === "json" || syntaxInfo.syntax === "yaml" ? syntaxInfo.syntax : null;
   const isStructured = structuredSyntax !== null && !activeSession.truncated;
+  const csvEligible = canShowCsvPreview({
+    path: activeSession.resource.path,
+    truncated: activeSession.truncated,
+    totalSize: activeSession.totalSize,
+  });
 
   useEffect(() => {
     setActiveSession(session);
@@ -87,6 +96,14 @@ export function TextViewer({ session, root, onSaveStateChange, onRevisionChange,
     });
     return () => controller.abort();
   }, [content, isStructured, structuredSyntax]);
+
+  useEffect(() => {
+    if (!csvEligible) {
+      setCsvPreview(null);
+      return;
+    }
+    setCsvPreview(parseCsvPreview(content, { path: activeSession.resource.path }));
+  }, [activeSession.resource.path, content, csvEligible]);
 
   useEffect(() => () => saveController.current?.abort(), []);
 
@@ -139,6 +156,8 @@ export function TextViewer({ session, root, onSaveStateChange, onRevisionChange,
   };
 
   const treeAvailable = parseResult?.ok === true;
+  const tableAvailable = csvPreview?.ok === true;
+  const sidePanelOpen = (showTree && treeAvailable) || (showTable && tableAvailable);
   return (
     <section className="lattice-text-viewer" aria-label="Text resource viewer">
       <header className="lattice-text-toolbar">
@@ -149,6 +168,7 @@ export function TextViewer({ session, root, onSaveStateChange, onRevisionChange,
         </div>
         <div className="lattice-text-toolbar-group">
           {treeAvailable && <button type="button" className="lattice-text-button" aria-pressed={showTree} onClick={() => setShowTree((value) => !value)}>{showTree ? "Hide tree" : "Show tree"}</button>}
+          {tableAvailable && <button type="button" className="lattice-text-button" aria-pressed={showTable} onClick={() => setShowTable((value) => !value)}>{showTable ? "Hide table" : "Show table"}</button>}
           {activeSession.editable && <button type="button" className="lattice-text-button lattice-text-button-primary" disabled={!dirty} onClick={() => void save()}>Save</button>}
           {!activeSession.editable && onOpenExternally && (
             <button type="button" className="lattice-text-button" onClick={() => onOpenExternally(activeSession.resource)}>Open externally</button>
@@ -163,7 +183,7 @@ export function TextViewer({ session, root, onSaveStateChange, onRevisionChange,
           <button type="button" className="lattice-text-button" disabled={activeSession.offset + activeSession.content.length >= activeSession.totalSize} onClick={() => void moveWindow(1)}>Next window</button>
         </div>
       )}
-      <div className={`lattice-text-layout${showTree && treeAvailable ? " lattice-text-layout-with-tree" : ""}`}>
+      <div className={`lattice-text-layout${sidePanelOpen ? " lattice-text-layout-with-tree" : ""}`}>
         <TextCodeMirror
           initialValue={content}
           syntax={syntaxInfo.syntax}
@@ -173,9 +193,13 @@ export function TextViewer({ session, root, onSaveStateChange, onRevisionChange,
           onChange={updateContent}
         />
         {showTree && treeAvailable && parseResult.ok && <StructuredTree root={parseResult.root} />}
+        {showTable && tableAvailable && csvPreview.ok && <CsvTablePreview preview={csvPreview} />}
       </div>
       {parseResult && !parseResult.ok && isStructured && (
         <p className="lattice-text-diagnostic" role="note">Structured view unavailable: {parseResult.diagnostics[0]?.message ?? "source is malformed"}. The source remains editable.</p>
+      )}
+      {csvPreview && !csvPreview.ok && csvEligible && (
+        <p className="lattice-text-diagnostic" role="note">Table preview unavailable: {csvPreview.message}. The source remains available.</p>
       )}
     </section>
   );
