@@ -3,7 +3,7 @@ use rusqlite::Connection;
 use crate::error::Result;
 
 pub(crate) const INDEX_FILENAME: &str = "index.sqlite";
-pub(crate) const SCHEMA_VERSION: i64 = 2;
+pub(crate) const SCHEMA_VERSION: i64 = 3;
 
 pub(crate) fn init_schema(conn: &Connection) -> Result<()> {
     conn.execute_batch(
@@ -57,6 +57,33 @@ pub(crate) fn init_schema(conn: &Connection) -> Result<()> {
         );
         CREATE VIRTUAL TABLE IF NOT EXISTS resources_fts USING fts5(
             title, headings, body, content='resources', content_rowid='id'
+        );
+        CREATE TABLE IF NOT EXISTS search_chunks (
+            id                  INTEGER PRIMARY KEY,
+            chunk_id            TEXT NOT NULL UNIQUE,
+            resource_id         INTEGER NOT NULL
+                                REFERENCES resources(id) ON DELETE CASCADE,
+            block_id            TEXT,
+            ordinal             INTEGER NOT NULL,
+            heading_path_json   TEXT NOT NULL,
+            source_start_byte   INTEGER NOT NULL,
+            source_end_byte     INTEGER NOT NULL,
+            text                TEXT NOT NULL,
+            content_hash        TEXT NOT NULL,
+            chunker_version     TEXT NOT NULL,
+            title               TEXT NOT NULL DEFAULT '',
+            heading_path        TEXT NOT NULL DEFAULT '',
+            tags                TEXT NOT NULL DEFAULT '',
+            sensitivity         TEXT NOT NULL DEFAULT 'workspace',
+            export_policy       TEXT NOT NULL DEFAULT 'ask',
+            created_at_ms       INTEGER NOT NULL,
+            updated_at_ms       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS search_chunks_resource_idx
+            ON search_chunks(resource_id, ordinal);
+        CREATE VIRTUAL TABLE IF NOT EXISTS search_chunks_fts USING fts5(
+            title, heading_path, text, tags,
+            content='search_chunks', content_rowid='id'
         );",
     )?;
 
@@ -107,6 +134,20 @@ pub(crate) fn init_schema(conn: &Connection) -> Result<()> {
             VALUES ('delete', old.id, old.title, old.headings, old.body);
             INSERT INTO resources_fts(rowid, title, headings, body)
             VALUES (new.id, new.title, new.headings, new.body);
+        END;
+        CREATE TRIGGER IF NOT EXISTS search_chunks_ai AFTER INSERT ON search_chunks BEGIN
+            INSERT INTO search_chunks_fts(rowid, title, heading_path, text, tags)
+            VALUES (new.id, new.title, new.heading_path, new.text, new.tags);
+        END;
+        CREATE TRIGGER IF NOT EXISTS search_chunks_ad AFTER DELETE ON search_chunks BEGIN
+            INSERT INTO search_chunks_fts(search_chunks_fts, rowid, title, heading_path, text, tags)
+            VALUES ('delete', old.id, old.title, old.heading_path, old.text, old.tags);
+        END;
+        CREATE TRIGGER IF NOT EXISTS search_chunks_au AFTER UPDATE ON search_chunks BEGIN
+            INSERT INTO search_chunks_fts(search_chunks_fts, rowid, title, heading_path, text, tags)
+            VALUES ('delete', old.id, old.title, old.heading_path, old.text, old.tags);
+            INSERT INTO search_chunks_fts(rowid, title, heading_path, text, tags)
+            VALUES (new.id, new.title, new.heading_path, new.text, new.tags);
         END;",
     )?;
     Ok(())
@@ -232,5 +273,32 @@ mod tests {
         assert_eq!(metadata.revision, "sha256:keep");
         assert_eq!(metadata.profile, ResourceFormatProfile::Markdown);
         assert_eq!(table_columns(&conn, "resources").len(), 14);
+    }
+
+    #[test]
+    fn migrates_v2_index_schema_to_chunk_tables() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE resources (id INTEGER PRIMARY KEY, path TEXT UNIQUE,
+                kind TEXT NOT NULL DEFAULT 'page', format_profile TEXT NOT NULL DEFAULT 'markdown',
+                mime TEXT, size INTEGER NOT NULL DEFAULT 0, revision TEXT, encoding TEXT,
+                parser_status TEXT NOT NULL DEFAULT 'metadata-only', text_truncated INTEGER NOT NULL DEFAULT 0,
+                title TEXT NOT NULL DEFAULT '', headings TEXT NOT NULL DEFAULT '',
+                body TEXT NOT NULL DEFAULT '', content_hash TEXT);
+             CREATE VIRTUAL TABLE resources_fts USING fts5(title, headings, body,
+                content='resources', content_rowid='id');
+             PRAGMA user_version = 2;",
+        )
+        .unwrap();
+
+        init_schema(&conn).unwrap();
+
+        let version: i64 = conn
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+        assert!(table_columns(&conn, "search_chunks")
+            .iter()
+            .any(|column| column == "chunk_id"));
     }
 }

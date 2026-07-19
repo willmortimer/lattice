@@ -12,7 +12,8 @@ use rusqlite::{params, Connection, OptionalExtension};
 use crate::catalog::{encoding_db, kind_db, metadata_from_row, parser_status_db, profile_db};
 use crate::error::{Error, Result};
 use crate::extract::{LinkKind, StructuredPath};
-use crate::lexical::search_hits;
+use crate::chunks::{self, CHUNKER_VERSION};
+use crate::lexical::{search_chunk_hits, search_hits};
 use crate::links::query_link_occurrences;
 use crate::paths::{normalize_workspace_path, path_key};
 use crate::record::{
@@ -22,7 +23,8 @@ use crate::schema::{init_schema, INDEX_FILENAME};
 
 pub use crate::record::MAX_INDEX_TEXT_BYTES;
 pub use crate::types::{
-    Backlink, BacklinkKind, ParserStatus, RebuildStats, ResourceMetadata, SearchHit,
+    Backlink, BacklinkKind, ChunkSearchHit, ParserStatus, RebuildStats, ResourceMetadata,
+    SearchHit,
 };
 
 /// Derived, rebuildable workspace search index at `.lattice/index.sqlite`.
@@ -168,6 +170,12 @@ impl WorkspaceIndex {
         search_hits(&conn, query, limit)
     }
 
+    /// Full-text search over structural chunks with source ranges and heading paths.
+    pub fn search_chunks(&self, query: &str, limit: usize) -> Result<Vec<ChunkSearchHit>> {
+        let conn = self.conn.lock().unwrap();
+        search_chunk_hits(&conn, query, limit)
+    }
+
     /// List resources that link to `path`, preserving source labels, anchors,
     /// and spans for later reviewed repairs.
     pub fn backlinks(&self, path: &Path) -> Result<Vec<Backlink>> {
@@ -302,7 +310,18 @@ impl WorkspaceIndex {
     }
 
     fn persist(&self, record: IndexedRecord) -> Result<()> {
-        let metadata = record.metadata;
+        let IndexedRecord {
+            metadata,
+            title,
+            headings,
+            body,
+            links,
+            tags,
+            structured_paths,
+            text_truncated,
+            chunk_text,
+            chunk_text_base_byte,
+        } = record;
         let conn = self.conn.lock().unwrap();
         let tx = conn.unchecked_transaction()?;
         tx.execute(
@@ -332,10 +351,10 @@ impl WorkspaceIndex {
                 metadata.revision,
                 metadata.encoding.map(encoding_db),
                 parser_status_db(metadata.parser_status),
-                record.text_truncated as i64,
-                record.title,
-                record.headings,
-                record.body,
+                text_truncated as i64,
+                title,
+                headings,
+                body,
             ],
         )?;
         let resource_id: i64 = tx.query_row(
@@ -360,14 +379,15 @@ impl WorkspaceIndex {
             params![resource_id],
         )?;
 
-        for heading in parse_headings_for_record(&record.headings) {
+        let headings_for_db = headings;
+        for heading in parse_headings_for_record(&headings_for_db) {
             tx.execute(
                 "INSERT INTO headings (resource_id, level, text, line)
                  VALUES (?1, ?2, ?3, ?4)",
                 params![resource_id, heading.0, heading.1, heading.2],
             )?;
         }
-        for link in &record.links {
+        for link in &links {
             tx.execute(
                 "INSERT INTO links
                     (source_id, target, kind, anchor, label,
@@ -393,13 +413,13 @@ impl WorkspaceIndex {
                 ],
             )?;
         }
-        for tag in &record.tags {
+        for tag in &tags {
             tx.execute(
                 "INSERT INTO tags (resource_id, tag) VALUES (?1, ?2)",
                 params![resource_id, tag],
             )?;
         }
-        for structured_path in &record.structured_paths {
+        for structured_path in &structured_paths {
             tx.execute(
                 "INSERT INTO structured_paths (resource_id, path, value_type)
                  VALUES (?1, ?2, ?3)",
@@ -410,8 +430,24 @@ impl WorkspaceIndex {
                 ],
             )?;
         }
+        persist_search_chunks(
+            &tx,
+            &self.workspace_id()?,
+            resource_id,
+            &metadata.path,
+            metadata.profile,
+            &title,
+            &tags,
+            &chunk_text,
+            chunk_text_base_byte,
+        )?;
         tx.commit()?;
         Ok(())
+    }
+
+    fn workspace_id(&self) -> Result<String> {
+        let workspace = Workspace::open(&self.workspace_root)?;
+        Ok(workspace.manifest().id.clone())
     }
 
     fn remove_stale(&self, keep_paths: &[String]) -> Result<(usize, usize)> {
@@ -458,6 +494,73 @@ impl WorkspaceIndex {
         }
         Ok((resources_removed as usize, pages_removed as usize))
     }
+}
+
+fn persist_search_chunks(
+    tx: &rusqlite::Transaction<'_>,
+    workspace_id: &str,
+    resource_id: i64,
+    resource_path: &Path,
+    profile: lattice_core::ResourceFormatProfile,
+    title: &str,
+    tags: &[String],
+    chunk_text: &str,
+    chunk_text_base_byte: usize,
+) -> Result<()> {
+    tx.execute(
+        "DELETE FROM search_chunks WHERE resource_id = ?1",
+        params![resource_id],
+    )?;
+    let drafts = chunks::chunk_resource(
+        workspace_id,
+        resource_path,
+        chunk_text,
+        chunk_text_base_byte,
+        profile,
+        title,
+        tags,
+    );
+    if drafts.is_empty() {
+        return Ok(());
+    }
+    let now_ms = current_time_ms();
+    let tag_text = tags.join(" ");
+    for draft in drafts {
+        let heading_path_json = serde_json::to_string(&draft.heading_path)?;
+        let heading_path = draft.heading_path.join(" > ");
+        tx.execute(
+            "INSERT INTO search_chunks
+                (chunk_id, resource_id, block_id, ordinal, heading_path_json,
+                 source_start_byte, source_end_byte, text, content_hash, chunker_version,
+                 title, heading_path, tags, created_at_ms, updated_at_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                draft.chunk_id,
+                resource_id,
+                draft.block_id,
+                draft.ordinal as i64,
+                heading_path_json,
+                draft.source_start_byte as i64,
+                draft.source_end_byte as i64,
+                draft.text,
+                draft.content_hash,
+                CHUNKER_VERSION,
+                title,
+                heading_path,
+                tag_text,
+                now_ms,
+                now_ms,
+            ],
+        )?;
+    }
+    Ok(())
+}
+
+fn current_time_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as i64)
+        .unwrap_or(0)
 }
 
 /// Thin compatibility hook for page writes.
@@ -685,5 +788,22 @@ mod tests {
         let stats = index.rebuild(dir.path()).unwrap();
         assert_eq!(stats.resources_removed, 1);
         assert!(index.metadata(Path::new("one.txt")).unwrap().is_none());
+    }
+
+    #[test]
+    fn chunk_search_returns_heading_path_and_source_range() {
+        let dir = TempDir::new().unwrap();
+        sample_workspace(dir.path());
+        let index = WorkspaceIndex::open(dir.path()).unwrap();
+        index.rebuild(dir.path()).unwrap();
+
+        let hits = index.search_chunks("welcome", 10).unwrap();
+        let hit = hits
+            .iter()
+            .find(|hit| hit.path == Path::new("Notes/Home.md"))
+            .expect("chunk hit for Home.md");
+        assert_eq!(hit.title, "Home");
+        assert!(!hit.chunk_id.is_empty());
+        assert!(hit.source_end_byte > hit.source_start_byte);
     }
 }
