@@ -5,6 +5,7 @@ members = [
     "apps/cli",
     "apps/daemon",
     "apps/embed-host",
+    "apps/voice-host-macos",
     "crates/lattice-core",
     "crates/lattice-profile",
     "crates/lattice-storage",
@@ -39,6 +40,7 @@ lattice-commands = { path = "crates/lattice-commands" }
 lattice-index = { path = "crates/lattice-index" }
 lattice-embedding = { path = "crates/lattice-embedding" }
 lattice-embed-host = { path = "apps/embed-host" }
+lattice-voice-host = { path = "apps/voice-host-macos" }
 lattice-data = { path = "crates/lattice-data" }
 lattice-theme = { path = "crates/lattice-theme" }
 lattice-handlers = { path = "crates/lattice-handlers" }

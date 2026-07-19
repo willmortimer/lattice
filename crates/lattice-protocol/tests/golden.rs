@@ -45,6 +45,7 @@ fn health_response() -> lattice_protocol::Envelope {
                 status: "ok".into(),
                 protocol_version: PROTOCOL_VERSION,
                 instance_id: "0190abcdef0123456789".into(),
+                backend: None,
             })),
         },
     )

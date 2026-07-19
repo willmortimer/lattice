@@ -48,6 +48,8 @@ audio or commands.
 | `UpdateSessionContext` | Glossary, document id, command mode |
 | `CancelVoiceSession` | Abort |
 | `EndVoiceSession` | Clean shutdown |
+| `VoiceHostStatus` | Host metrics / model state (voice-host UDS; daemon may proxy) |
+| `UnloadVoiceModel` | Unload ASR models in voice-host |
 
 ## Event messages
 

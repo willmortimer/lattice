@@ -209,6 +209,7 @@ mod tests {
                     status: "ok".into(),
                     protocol_version: PROTOCOL_VERSION,
                     instance_id: "0190deadbeef".into(),
+                    backend: None,
                 })),
             },
         );
