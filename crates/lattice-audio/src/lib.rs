@@ -10,6 +10,7 @@ mod event;
 mod format;
 mod frame;
 mod provider;
+mod queue;
 mod ring;
 
 pub use error::CaptureError;
@@ -17,4 +18,5 @@ pub use event::{CaptureEvent, GapEvent};
 pub use format::{AudioFormat, SampleFormat, CANONICAL_AUDIO_FORMAT, DEFAULT_PRE_ROLL_MS};
 pub use frame::{AudioDiagnostics, AudioFrame};
 pub use provider::{CaptureEventSender, CaptureProvider, SyntheticCaptureProvider};
+pub use queue::{BoundedFrameQueue, DEFAULT_FRAME_QUEUE_CAPACITY};
 pub use ring::{PreRollBuffer, RingBuffer};
