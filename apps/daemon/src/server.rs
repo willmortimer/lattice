@@ -35,6 +35,7 @@ pub struct DaemonState {
     pub config: Arc<DaemonConfig>,
     pub runtime: Arc<LatticeRuntime>,
     pub semantic: Option<Arc<crate::embed_host::SemanticController>>,
+    pub voice: Option<Arc<crate::voice_host::VoiceController>>,
     connections: Option<Arc<ConnectionTracker>>,
     event_tx: broadcast::Sender<Event>,
     next_event_seq: Arc<AtomicU64>,
@@ -42,7 +43,7 @@ pub struct DaemonState {
 
 impl DaemonState {
     pub fn new(config: DaemonConfig, runtime: Arc<LatticeRuntime>) -> Self {
-        Self::new_with_semantic(config, runtime, None)
+        Self::new_with_controllers(config, runtime, None, None)
     }
 
     pub fn new_with_semantic(
@@ -50,14 +51,28 @@ impl DaemonState {
         runtime: Arc<LatticeRuntime>,
         semantic: Option<Arc<crate::embed_host::SemanticController>>,
     ) -> Self {
+        Self::new_with_controllers(config, runtime, semantic, None)
+    }
+
+    pub fn new_with_controllers(
+        config: DaemonConfig,
+        runtime: Arc<LatticeRuntime>,
+        semantic: Option<Arc<crate::embed_host::SemanticController>>,
+        voice: Option<Arc<crate::voice_host::VoiceController>>,
+    ) -> Self {
         let (event_tx, _) = broadcast::channel(64);
+        let next_event_seq = Arc::new(AtomicU64::new(1));
+        if let Some(voice) = voice.as_ref() {
+            voice.attach_event_fanout(event_tx.clone(), Arc::clone(&next_event_seq));
+        }
         let state = Self {
             config: Arc::new(config),
             runtime,
             semantic,
+            voice,
             connections: None,
             event_tx,
-            next_event_seq: Arc::new(AtomicU64::new(1)),
+            next_event_seq,
         };
         state.spawn_event_bridge();
         state
@@ -125,7 +140,7 @@ pub async fn serve_with_shutdown(
     runtime: Arc<LatticeRuntime>,
     shutdown: oneshot::Receiver<()>,
 ) -> Result<()> {
-    serve_with_shutdown_and_semantic(config, runtime, None, shutdown).await
+    serve_with_shutdown_and_controllers(config, runtime, None, None, shutdown).await
 }
 
 /// Bind and serve with an optional semantic indexing controller.
@@ -133,6 +148,17 @@ pub async fn serve_with_shutdown_and_semantic(
     config: DaemonConfig,
     runtime: Arc<LatticeRuntime>,
     semantic: Option<Arc<crate::embed_host::SemanticController>>,
+    shutdown: oneshot::Receiver<()>,
+) -> Result<()> {
+    serve_with_shutdown_and_controllers(config, runtime, semantic, None, shutdown).await
+}
+
+/// Bind and serve with optional semantic + voice controllers.
+pub async fn serve_with_shutdown_and_controllers(
+    config: DaemonConfig,
+    runtime: Arc<LatticeRuntime>,
+    semantic: Option<Arc<crate::embed_host::SemanticController>>,
+    voice: Option<Arc<crate::voice_host::VoiceController>>,
     shutdown: oneshot::Receiver<()>,
 ) -> Result<()> {
     let socket_path = config.socket_path.clone();
@@ -152,7 +178,7 @@ pub async fn serve_with_shutdown_and_semantic(
         config.idle_shutdown_timeout,
         idle_shutdown_tx,
     );
-    let state = DaemonState::new_with_semantic(config, runtime, semantic)
+    let state = DaemonState::new_with_controllers(config, runtime, semantic, voice)
         .with_connections(Arc::clone(&connections));
     let api_shutdown = state.config.api_port.map(|port| {
         crate::http::spawn_localhost_api(state.clone(), port)
@@ -193,6 +219,9 @@ pub async fn serve_with_shutdown_and_semantic(
     }
     if let Some(semantic) = state.semantic.as_ref() {
         semantic.shutdown();
+    }
+    if let Some(voice) = state.voice.as_ref() {
+        voice.shutdown();
     }
     state.runtime.shutdown_all_sessions();
     let _ = std::fs::remove_file(&socket_path);
@@ -299,7 +328,7 @@ async fn serve_connection(stream: UnixStream, state: DaemonState) -> Result<()> 
 
             let request_id = envelope.request_id.clone();
             let reply = match envelope.payload {
-                Some(envelope::Payload::Request(req)) => match handle_request(&state, req) {
+                Some(envelope::Payload::Request(req)) => match handle_request(&state, req).await {
                     Ok((response, lease_event)) => {
                         if let Some((workspace_id, lease_body)) = lease_event {
                             state.publish_event(
@@ -337,7 +366,7 @@ async fn serve_connection(stream: UnixStream, state: DaemonState) -> Result<()> 
     result
 }
 
-fn handle_request(
+async fn handle_request(
     state: &DaemonState,
     req: Request,
 ) -> std::result::Result<(Response, Option<(String, lattice_protocol::WorkspaceLease)>), WireError>
@@ -381,9 +410,8 @@ fn handle_request(
             expected_revision,
             idempotency_key,
         ),
-        // Voice plane is schema-ready (D5 protocol); handlers land with voice-host.
         Some(
-            request::Body::PrepareModel(_)
+            body @ (request::Body::PrepareModel(_)
             | request::Body::GetVoiceCapabilities(_)
             | request::Body::StartVoiceSession(_)
             | request::Body::PushAudioChunk(_)
@@ -392,12 +420,22 @@ fn handle_request(
             | request::Body::CancelVoiceSession(_)
             | request::Body::EndVoiceSession(_)
             | request::Body::VoiceHostStatus(_)
-            | request::Body::UnloadVoiceModel(_),
-        ) => Err(WireError {
-            code: "unimplemented".into(),
-            message: "voice requests are not handled yet".into(),
-            details: None,
-        }),
+            | request::Body::UnloadVoiceModel(_)),
+        ) => {
+            let voice = state.voice.as_ref().ok_or_else(|| WireError {
+                code: "voice_unavailable".into(),
+                message: "voice-host is not configured (set LATTICE_VOICE_FAKE=1 or LATTICE_VOICE_HOST_SOCKET)".into(),
+                details: None,
+            })?;
+            let response = voice
+                .handle_request(Request {
+                    deadline_unix_ms: req.deadline_unix_ms,
+                    idempotency_key,
+                    body: Some(body),
+                })
+                .await?;
+            Ok((response, None))
+        }
         None => Err(WireError {
             code: "invalid_request".into(),
             message: "request body is required".into(),

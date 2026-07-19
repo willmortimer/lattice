@@ -4,8 +4,9 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use lattice_daemon::{
-    default_socket_path, mcp, serve, serve_with_shutdown_and_semantic, DaemonConfig,
-    DaemonPreferences, SemanticController, SemanticProviderMode, DEFAULT_API_PORT,
+    default_socket_path, mcp, serve, serve_with_shutdown_and_controllers, DaemonConfig,
+    DaemonPreferences, SemanticController, SemanticProviderMode, VoiceController,
+    VoiceProviderMode, DEFAULT_API_PORT,
 };
 use lattice_runtime::LatticeRuntime;
 use tracing_subscriber::EnvFilter;
@@ -114,27 +115,43 @@ async fn main() -> Result<()> {
     }
 
     let runtime = Arc::new(LatticeRuntime::new());
-    match SemanticProviderMode::from_env() {
+    let semantic = match SemanticProviderMode::from_env() {
         Some(mode) => {
             tracing::info!("semantic indexing enabled via environment");
-            let semantic = SemanticController::start(Arc::clone(&runtime), mode)
-                .context("start semantic controller")?;
-            let (tx, rx) = tokio::sync::oneshot::channel();
-            tokio::spawn(async move {
-                if let Err(err) = wait_for_shutdown_signal().await {
-                    tracing::warn!(error = %err, "signal handler failed");
-                }
-                let _ = tx.send(());
-            });
-            serve_with_shutdown_and_semantic(config, runtime, Some(semantic), rx)
-                .await
-                .context("latticed serve failed")?;
+            Some(
+                SemanticController::start(Arc::clone(&runtime), mode)
+                    .context("start semantic controller")?,
+            )
         }
-        None => {
-            serve(config, runtime)
-                .await
-                .context("latticed serve failed")?;
+        None => None,
+    };
+    let voice = match VoiceProviderMode::from_env() {
+        Some(mode) => {
+            tracing::info!("voice-host supervision enabled via environment");
+            Some(
+                VoiceController::start(mode)
+                    .await
+                    .context("start voice controller")?,
+            )
         }
+        None => None,
+    };
+
+    if semantic.is_some() || voice.is_some() {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        tokio::spawn(async move {
+            if let Err(err) = wait_for_shutdown_signal().await {
+                tracing::warn!(error = %err, "signal handler failed");
+            }
+            let _ = tx.send(());
+        });
+        serve_with_shutdown_and_controllers(config, runtime, semantic, voice, rx)
+            .await
+            .context("latticed serve failed")?;
+    } else {
+        serve(config, runtime)
+            .await
+            .context("latticed serve failed")?;
     }
     Ok(())
 }
