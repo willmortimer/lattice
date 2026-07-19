@@ -80,4 +80,9 @@ describe("ResourceRendererRegistry", () => {
   it("maps svg to the image format id (not text)", () => {
     expect(deriveResourceFormatId({ path: "Resources/mark.svg", kind: "file" })).toBe("file:image");
   });
+
+  it("maps csv and tsv to the text format id", () => {
+    expect(deriveResourceFormatId({ path: "Data/sample.csv", kind: "file" })).toBe("file:text");
+    expect(deriveResourceFormatId({ path: "Data/sample.tsv", kind: "file" })).toBe("file:text");
+  });
 });

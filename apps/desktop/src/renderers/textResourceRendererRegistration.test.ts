@@ -24,6 +24,8 @@ describe("registerTextResourceRenderers", () => {
     );
     expect(registry.resolve({ kind: "file", path: "config.json" }).definition.id).toBe(textResourceRendererDefinition.id);
     expect(registry.resolve({ kind: "file", path: "schema.yml" }).definition.id).toBe(textResourceRendererDefinition.id);
+    expect(registry.resolve({ kind: "file", path: "Data/sample.csv" }).definition.id).toBe(textResourceRendererDefinition.id);
+    expect(registry.resolve({ kind: "file", path: "Data/sample.tsv" }).definition.id).toBe(textResourceRendererDefinition.id);
     expect(registry.resolve({ kind: "file", path: "archive.zip", formatId: "file:unknown" }).definition.id).toBe(
       fileFallbackResourceRendererDefinition.id,
     );
