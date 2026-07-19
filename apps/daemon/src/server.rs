@@ -11,11 +11,13 @@ use lattice_client::{
 use lattice_protocol::{
     encode_frame, envelope, error_envelope, event, event_envelope, request, response,
     response_envelope, ApplyPageUpdateRequest, ApplyPageUpdateResponse, Error as WireError, Event,
-    FrameDecoder, HealthRequest, HealthResponse, OpenWorkspaceRequest, OpenWorkspaceResponse,
-    PingRequest, PingResponse, Request, Response, SearchRequest, SearchResponse,
-    WorkspaceLeaseChanged, PROTOCOL_VERSION,
+    FrameDecoder, HealthRequest, HealthResponse, IndexProgress, OpenWorkspaceRequest,
+    OpenWorkspaceResponse, PingRequest, PingResponse, Request, ResourceChanged, Response,
+    SearchRequest, SearchResponse, WorkspaceLeaseChanged, PROTOCOL_VERSION,
 };
-use lattice_runtime::{IdempotentOutcome, LatticeRuntime, RuntimeEvent};
+use lattice_runtime::{
+    IdempotentOutcome, LatticeRuntime, RuntimeEvent, RuntimeIndexProgress, RuntimeResourceChanged,
+};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::unix::OwnedReadHalf;
 use tokio::net::{UnixListener, UnixStream};
@@ -61,10 +63,11 @@ impl DaemonState {
         let _ = self.event_tx.send(event);
     }
 
-    /// Bridge synchronous [`lattice_runtime::EventBus`] signals into tracing
-    /// (wire lease events are published from OpenWorkspace).
+    /// Bridge synchronous [`lattice_runtime::EventBus`] signals into sequenced
+    /// wire events fan-out to connected clients.
     fn spawn_event_bridge(&self) {
         let runtime = Arc::clone(&self.runtime);
+        let state = self.clone();
         std::thread::Builder::new()
             .name("latticed-event-bridge".into())
             .spawn(move || {
@@ -76,6 +79,20 @@ impl DaemonState {
                         }
                         RuntimeEvent::SessionClosed { workspace_id, .. } => {
                             debug!(%workspace_id, "runtime session closed");
+                        }
+                        RuntimeEvent::ResourceChanged(changed) => {
+                            let workspace_id = changed.workspace_id.clone();
+                            state.publish_event(
+                                workspace_id,
+                                event::Body::ResourceChanged(resource_changed_to_wire(changed)),
+                            );
+                        }
+                        RuntimeEvent::IndexProgress(progress) => {
+                            let workspace_id = progress.workspace_id.clone();
+                            state.publish_event(
+                                workspace_id,
+                                event::Body::IndexProgress(index_progress_to_wire(progress)),
+                            );
                         }
                     }
                 }
@@ -509,4 +526,25 @@ fn is_eof(err: &Error) -> bool {
         err,
         Error::Io(e) if e.kind() == std::io::ErrorKind::UnexpectedEof
     )
+}
+
+fn resource_changed_to_wire(changed: RuntimeResourceChanged) -> ResourceChanged {
+    ResourceChanged {
+        path: path_string(&changed.path),
+        change: changed.kind.as_str().to_string(),
+        revision: changed.revision,
+        from_path: changed.from_path.as_ref().map(|p| path_string(p)),
+    }
+}
+
+fn index_progress_to_wire(progress: RuntimeIndexProgress) -> IndexProgress {
+    IndexProgress {
+        phase: progress.phase.as_str().to_string(),
+        path: progress.path.as_ref().map(|p| path_string(p)),
+        detail: progress.detail,
+    }
+}
+
+fn path_string(path: &std::path::Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
 }

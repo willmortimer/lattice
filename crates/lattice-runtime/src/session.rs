@@ -1,13 +1,16 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use lattice_commands::CommandEngine;
 use lattice_core::{ResourceCatalog, Workspace};
 use lattice_index::{Backlink, ChunkSearchHit, SearchHit, WorkspaceIndex};
 
+use crate::events::SharedEventBus;
 use crate::idempotency::IdempotencyCache;
 use crate::lease::{LeaseClaim, WorkspaceLeaseFile};
+use crate::watch::{default_watch_debounce, start_session_index_watcher, SessionIndexWatcher};
 use crate::Result;
 
 /// Long-lived open workspace: warm index, command engine, and optional catalog.
@@ -22,6 +25,8 @@ pub struct WorkspaceSession {
     write_lease: Mutex<Option<LeaseClaim>>,
     /// Recent mutation outcomes keyed by caller idempotency key.
     idempotency: IdempotencyCache,
+    /// Active filesystem watcher that incrementally maintains the warm index.
+    index_watcher: Mutex<Option<SessionIndexWatcher>>,
 }
 
 impl WorkspaceSession {
@@ -42,6 +47,7 @@ impl WorkspaceSession {
             index_rebuild_count: AtomicU64::new(0),
             write_lease: Mutex::new(None),
             idempotency: IdempotencyCache::default(),
+            index_watcher: Mutex::new(None),
         })
     }
 
@@ -135,5 +141,53 @@ impl WorkspaceSession {
     /// Re-read the on-disk lease when this session holds a write claim.
     pub fn current_lease_file(&self) -> Result<Option<WorkspaceLeaseFile>> {
         crate::lease::read_workspace_lease(&self.root)
+    }
+
+    /// Whether an index watcher is currently attached.
+    pub fn is_watching(&self) -> bool {
+        self.index_watcher
+            .lock()
+            .expect("index watcher poisoned")
+            .is_some()
+    }
+
+    /// Start (or restart) the filesystem watcher that incrementally updates FTS.
+    ///
+    /// Intended for write sessions and daemon ownership of index maintenance.
+    pub fn start_watching(
+        self: &Arc<Self>,
+        events: SharedEventBus,
+        debounce: Duration,
+    ) -> Result<()> {
+        self.stop_watching();
+        let watcher = start_session_index_watcher(Arc::clone(self), events, debounce)?;
+        *self
+            .index_watcher
+            .lock()
+            .expect("index watcher poisoned") = Some(watcher);
+        Ok(())
+    }
+
+    /// Start watching with the production debounce interval.
+    pub fn start_watching_default(self: &Arc<Self>, events: SharedEventBus) -> Result<()> {
+        self.start_watching(events, default_watch_debounce())
+    }
+
+    /// Stop the index watcher if running.
+    pub fn stop_watching(&self) {
+        if let Some(watcher) = self
+            .index_watcher
+            .lock()
+            .expect("index watcher poisoned")
+            .take()
+        {
+            watcher.stop();
+        }
+    }
+}
+
+impl Drop for WorkspaceSession {
+    fn drop(&mut self) {
+        self.stop_watching();
     }
 }

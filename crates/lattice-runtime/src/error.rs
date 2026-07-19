@@ -36,4 +36,10 @@ pub enum Error {
     Index(#[from] lattice_index::Error),
     #[error("workspace session not found for id {0}")]
     SessionNotFound(String),
+    #[error("failed to start workspace watcher at {path}: {source}")]
+    Watch {
+        path: PathBuf,
+        #[source]
+        source: lattice_core::Error,
+    },
 }

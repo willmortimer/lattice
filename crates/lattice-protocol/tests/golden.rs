@@ -1,8 +1,9 @@
 use lattice_protocol::{
     decode_frame, encode_frame, event_envelope, request_envelope, response_envelope,
     ApplyPageUpdateRequest, ApplyPageUpdateResponse, Event, HealthRequest, HealthResponse,
-    OpenWorkspaceRequest, OpenWorkspaceResponse, PingRequest, Request, Response, SearchRequest,
-    SearchResponse, WorkspaceLease, WorkspaceLeaseChanged, PROTOCOL_VERSION,
+    IndexProgress, OpenWorkspaceRequest, OpenWorkspaceResponse, PingRequest, Request, Response,
+    ResourceChanged, SearchRequest, SearchResponse, WorkspaceLease, WorkspaceLeaseChanged,
+    PROTOCOL_VERSION,
 };
 use prost::Message;
 use std::path::PathBuf;
@@ -172,6 +173,39 @@ fn lease_changed_event() -> lattice_protocol::Envelope {
     )
 }
 
+fn resource_changed_event() -> lattice_protocol::Envelope {
+    event_envelope(
+        "",
+        Event {
+            sequence: 8,
+            workspace_id: "ws-1".into(),
+            body: Some(lattice_protocol::event::Body::ResourceChanged(
+                ResourceChanged {
+                    path: "Notes.md".into(),
+                    change: "modified".into(),
+                    revision: Some("sha256:abc".into()),
+                    from_path: None,
+                },
+            )),
+        },
+    )
+}
+
+fn index_progress_event() -> lattice_protocol::Envelope {
+    event_envelope(
+        "",
+        Event {
+            sequence: 9,
+            workspace_id: "ws-1".into(),
+            body: Some(lattice_protocol::event::Body::IndexProgress(IndexProgress {
+                phase: "upserted".into(),
+                path: Some("Notes.md".into()),
+                detail: None,
+            })),
+        },
+    )
+}
+
 fn assert_golden(name: &str, envelope: &lattice_protocol::Envelope) {
     let expected = load_hex_fixture(name);
     let actual = envelope.encode_to_vec();
@@ -242,6 +276,16 @@ fn golden_apply_page_update_response() {
 #[test]
 fn golden_lease_changed_event() {
     assert_golden("lease_changed_event.hex", &lease_changed_event());
+}
+
+#[test]
+fn golden_resource_changed_event() {
+    assert_golden("resource_changed_event.hex", &resource_changed_event());
+}
+
+#[test]
+fn golden_index_progress_event() {
+    assert_golden("index_progress_event.hex", &index_progress_event());
 }
 
 #[test]

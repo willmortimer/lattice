@@ -1,8 +1,8 @@
 //! Versioned Protobuf IPC contract for Lattice daemon clients (ADR 0041).
 //!
 //! Frames are length-delimited Protobuf [`Envelope`] messages. Domain payloads
-//! include Health/Ping, OpenWorkspace/Search, and ApplyPageUpdate (D3 one-writer
-//! mutations with Request-level idempotency keys).
+//! include Health/Ping, OpenWorkspace/Search, ApplyPageUpdate (D3 one-writer
+//! mutations), and sequenced ResourceChanged / IndexProgress events (D4).
 
 mod error;
 mod framing;

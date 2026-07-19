@@ -8,8 +8,9 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use lattice_core::{Resource, ResourceKind, WorkspaceEvent, WorkspaceWatcher};
+use lattice_core::{ResourceKind, WorkspaceEvent, WorkspaceWatcher};
 use lattice_index::WorkspaceIndex;
+use lattice_runtime::apply_workspace_event_to_index;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
@@ -139,93 +140,26 @@ fn stop(state: &WatcherState) {
 }
 
 fn apply_to_index(index: &WorkspaceIndex, event: &WorkspaceEvent, root: &Path) {
-    match event {
-        WorkspaceEvent::RootDeleted => {}
-        WorkspaceEvent::Created { path, .. } | WorkspaceEvent::Modified { path, .. } => {
-            reindex_if_resource(index, root, path);
-        }
-        WorkspaceEvent::Deleted { path } => remove_if_resource(index, path),
-        WorkspaceEvent::Renamed { from, to, .. } => {
-            // Capture repair candidates before removing the old index rows;
-            // inbound link spans still name `from` until pages are rewritten.
-            if let Err(err) = crate::link_repair::save_external_link_repair_proposal(root, from, to)
-            {
-                eprintln!("lattice: failed to save external link-repair proposal: {err}");
-            }
-            remove_if_resource(index, from);
-            reindex_if_resource(index, root, to);
+    if let WorkspaceEvent::Renamed { from, to, .. } = event {
+        // Capture repair candidates before removing the old index rows;
+        // inbound link spans still name `from` until pages are rewritten.
+        if let Err(err) = crate::link_repair::save_external_link_repair_proposal(root, from, to) {
+            eprintln!("lattice: failed to save external link-repair proposal: {err}");
         }
     }
+    let _ = apply_workspace_event_to_index(index, event);
 }
 
 #[cfg(test)]
 fn is_page(path: &Path) -> bool {
-    resource_for_event(path).is_some_and(|resource| resource.kind == ResourceKind::Page)
-}
-
-fn resource_for_event(path: &Path) -> Option<Resource> {
-    // Workspace::scan yields package directories as one resource and does not
-    // expose their children. Keep this check local; do not scan the workspace
-    // synchronously for every event.
-    if path.components().any(|component| {
-        component
-            .as_os_str()
-            .to_str()
-            .is_some_and(|name| name.starts_with('.'))
-    }) {
-        return None;
-    }
-    if path
-        .parent()
-        .into_iter()
-        .flat_map(Path::components)
-        .filter_map(|component| component.as_os_str().to_str())
-        .any(is_package_directory_name)
-    {
-        return None;
-    }
-    Some(Resource {
-        path: path.to_path_buf(),
-        kind: ResourceKind::classify(path, false),
-    })
-}
-
-fn is_package_directory_name(name: &str) -> bool {
-    matches!(
-        name.rsplit_once('.').map(|(_, extension)| extension),
-        Some("data" | "dataset" | "ink" | "artifact" | "app" | "task")
-    )
-}
-
-fn remove_if_resource(index: &WorkspaceIndex, path: &Path) {
-    if resource_for_event(path).is_none() {
-        return;
-    }
-    if let Err(err) = index.remove_resource(path) {
-        eprintln!(
-            "lattice: failed to remove {} from index: {err}",
-            path.display()
-        );
-    }
-}
-
-fn reindex_if_resource(index: &WorkspaceIndex, _root: &Path, path: &Path) {
-    let Some(resource) = resource_for_event(path) else {
-        return;
-    };
-    if let Err(err) = index.upsert_resource(&resource) {
-        // Benign race: the file was replaced or removed again before the
-        // bounded runtime probe completed. The next settled event retries it.
-        eprintln!(
-            "lattice: skipped indexing {} after watch event: {err}",
-            path.display()
-        );
-    }
+    lattice_runtime::resource_for_event(path)
+        .is_some_and(|resource| resource.kind == ResourceKind::Page)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     #[test]
     fn payload_from_event_preserves_forward_slash_paths() {
@@ -255,16 +189,6 @@ mod tests {
         assert!(is_page(Path::new("Notes/Idea.md")));
         assert!(!is_page(Path::new("Board.canvas")));
         assert!(!is_page(Path::new(".lattice/index.sqlite")));
-    }
-
-    #[test]
-    fn reindex_if_resource_is_a_noop_for_missing_non_page() {
-        let dir = tempfile::tempdir().unwrap();
-        lattice_core::Workspace::init(dir.path(), "Test").unwrap();
-        let index = WorkspaceIndex::open(dir.path()).unwrap();
-        // No file exists at this path; a page would error attempting to
-        // read it, but a non-page path must return before ever trying.
-        reindex_if_resource(&index, dir.path(), Path::new("missing.canvas"));
     }
 
     #[test]
@@ -334,7 +258,7 @@ mod tests {
 
     #[test]
     fn package_children_are_not_indexed_as_separate_resources() {
-        assert!(resource_for_event(Path::new("Notes/Idea.md")).is_some());
-        assert!(resource_for_event(Path::new("CRM.data/app.yaml")).is_none());
+        assert!(lattice_runtime::resource_for_event(Path::new("Notes/Idea.md")).is_some());
+        assert!(lattice_runtime::resource_for_event(Path::new("CRM.data/app.yaml")).is_none());
     }
 }

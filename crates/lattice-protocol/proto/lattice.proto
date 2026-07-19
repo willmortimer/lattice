@@ -44,6 +44,8 @@ message Event {
   string workspace_id = 2;
   oneof body {
     WorkspaceLeaseChanged lease_changed = 10;
+    ResourceChanged resource_changed = 11;
+    IndexProgress index_progress = 12;
   }
 }
 
@@ -120,4 +122,23 @@ message ApplyPageUpdateResponse {
 
 message WorkspaceLeaseChanged {
   WorkspaceLease lease = 1;
+}
+
+// External (or reconciled) resource filesystem change.
+message ResourceChanged {
+  // Workspace-relative path (destination for renames).
+  string path = 1;
+  // created | modified | deleted | renamed | root_deleted
+  string change = 2;
+  optional string revision = 3;
+  // Present when change == renamed.
+  optional string from_path = 4;
+}
+
+// Incremental FTS / index maintenance progress for a workspace.
+message IndexProgress {
+  // started | stopped | upserted | removed | error
+  string phase = 1;
+  optional string path = 2;
+  optional string detail = 3;
 }
