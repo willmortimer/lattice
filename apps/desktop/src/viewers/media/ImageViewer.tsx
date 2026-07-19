@@ -83,16 +83,6 @@ export function ImageViewer({ context, resource }: { context: ResourceRendererCo
     return Math.min(1, stageSize.width / naturalSize.width, stageSize.height / naturalSize.height);
   }, [naturalSize, stageSize]);
 
-  useEffect(() => {
-    const stage = stageRef.current;
-    if (!stage) return;
-    const update = () => setStageSize({ width: stage.clientWidth, height: stage.clientHeight });
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(stage);
-    return () => observer.disconnect();
-  }, []);
-
   const effectiveZoom = mode === "fit" ? fitZoom : zoom;
   const setZoomMode = useCallback((nextMode: "fit" | "actual") => {
     setMode(nextMode);
@@ -103,6 +93,29 @@ export function ImageViewer({ context, resource }: { context: ResourceRendererCo
     setMode("actual");
     setZoom((value) => clampZoom(value * delta));
   }, []);
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const update = () => setStageSize({ width: stage.clientWidth, height: stage.clientHeight });
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, [asset]);
+
+  // React's onWheel is passive in modern browsers, so preventDefault there
+  // cannot stop .main-scroll from also consuming the gesture.
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      adjustZoom(event.deltaY < 0 ? 1.1 : 0.9);
+    };
+    stage.addEventListener("wheel", onWheel, { passive: false });
+    return () => stage.removeEventListener("wheel", onWheel);
+  }, [adjustZoom, asset]);
 
   const onImageLoad = (event: React.SyntheticEvent<HTMLImageElement>) => {
     const image = event.currentTarget;
@@ -133,10 +146,6 @@ export function ImageViewer({ context, resource }: { context: ResourceRendererCo
   const stopPointer = (event: React.PointerEvent<HTMLDivElement>) => {
     if (dragRef.current?.pointerId === event.pointerId) dragRef.current = null;
   };
-  const onWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    adjustZoom(event.deltaY < 0 ? 1.1 : 0.9);
-  };
 
   return (
     <div className="media-viewer image-viewer">
@@ -163,7 +172,6 @@ export function ImageViewer({ context, resource }: { context: ResourceRendererCo
         onPointerMove={onPointerMove}
         onPointerUp={stopPointer}
         onPointerCancel={stopPointer}
-        onWheel={onWheel}
       >
         <div className="image-canvas">
           <img
