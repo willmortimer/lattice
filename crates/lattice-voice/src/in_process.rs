@@ -3,8 +3,9 @@ use std::sync::Arc;
 
 use crate::error::SpeechError;
 use crate::protocol::{
-    AudioChunk, FinishUtteranceRequest, PROTOCOL_VERSION, TranscriptionSessionState,
-    VoiceEvent, VoiceRequest, VoiceSessionId,
+    AudioChunk, FinishUtteranceRequest, PROTOCOL_VERSION, SessionContext,
+    TranscriptionSessionState, UpdateSessionContextRequest, VoiceEvent, VoiceRequest,
+    VoiceSessionId,
 };
 use crate::provider::{SpeechEventSender, SpeechProvider, SpeechSession};
 use crate::session::SessionStateMachine;
@@ -12,6 +13,7 @@ use crate::session::SessionStateMachine;
 struct ActiveSession {
     state: SessionStateMachine,
     provider_session: Box<dyn SpeechSession>,
+    session_context: SessionContext,
     next_sequence: u64,
     last_revision: u64,
 }
@@ -57,8 +59,8 @@ impl InProcessVoiceService {
             VoiceRequest::FinishUtterance(request) => {
                 self.finish_utterance(request, events).await?;
             }
-            VoiceRequest::UpdateSessionContext(_request) => {
-                // Context updates are accepted in the skeleton; provider hooks arrive in M1.
+            VoiceRequest::UpdateSessionContext(request) => {
+                self.update_session_context(request)?;
             }
             VoiceRequest::CancelVoiceSession(request) => {
                 self.cancel_session(&request.session_id, events).await?;
@@ -105,12 +107,36 @@ impl InProcessVoiceService {
             ActiveSession {
                 state,
                 provider_session,
+                session_context: config.context.clone(),
                 next_sequence: 0,
                 last_revision: 0,
             },
         );
 
         Ok(())
+    }
+
+    fn update_session_context(
+        &mut self,
+        request: UpdateSessionContextRequest,
+    ) -> Result<(), SpeechError> {
+        let session = self.session_mut(&request.session_id)?;
+        session.session_context = request.context;
+        Ok(())
+    }
+
+    /// Returns the stored session context for tests and diagnostics.
+    pub fn session_context(
+        &self,
+        session_id: &VoiceSessionId,
+    ) -> Result<SessionContext, SpeechError> {
+        let session = self
+            .sessions
+            .get(session_id)
+            .ok_or_else(|| SpeechError::SessionNotFound {
+                session_id: session_id.clone(),
+            })?;
+        Ok(session.session_context.clone())
     }
 
     async fn push_audio(
@@ -261,6 +287,7 @@ mod tests {
     use bytes::Bytes;
     use crate::protocol::{
         AudioSampleFormat, SessionContext, SpeechSessionConfig, StartVoiceSessionRequest,
+        UpdateSessionContextRequest,
     };
     use crate::provider::NullSpeechProvider;
 
@@ -369,6 +396,53 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, SpeechError::SequenceGap { .. }));
+    }
+
+    #[tokio::test]
+    async fn update_session_context_stores_glossary_on_session() {
+        let provider = Arc::new(NullSpeechProvider::new());
+        let mut service = InProcessVoiceService::new(provider);
+        let (events, mut rx) = SpeechEventSender::pair();
+
+        service
+            .handle_request(
+                VoiceRequest::StartVoiceSession(StartVoiceSessionRequest {
+                    config: SpeechSessionConfig {
+                        session_id: "voice_1".into(),
+                        language: None,
+                        context: SessionContext {
+                            document_id: Some("doc-1".into()),
+                            glossary_terms: vec!["Home".into()],
+                            command_mode: false,
+                        },
+                    },
+                }),
+                &events,
+            )
+            .await
+            .unwrap();
+        let _ = rx.recv().await;
+
+        service
+            .handle_request(
+                VoiceRequest::UpdateSessionContext(UpdateSessionContextRequest {
+                    session_id: "voice_1".into(),
+                    context: SessionContext {
+                        document_id: Some("doc-1".into()),
+                        glossary_terms: vec!["Quick Note".into(), "Lattice".into()],
+                        command_mode: false,
+                    },
+                }),
+                &events,
+            )
+            .await
+            .unwrap();
+
+        let context = service.session_context(&"voice_1".into()).unwrap();
+        assert_eq!(
+            context.glossary_terms,
+            vec![String::from("Quick Note"), String::from("Lattice")]
+        );
     }
 
     #[test]

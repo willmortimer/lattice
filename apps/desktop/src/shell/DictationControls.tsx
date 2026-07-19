@@ -12,6 +12,7 @@ import {
   listenVoiceEvents,
   prepareVoiceModel,
   startVoiceSession,
+  type VoiceSessionContextHints,
   type VoiceStatus,
 } from "../lib/voice";
 
@@ -20,6 +21,7 @@ type DictationPhase = "idle" | "preparing" | "listening" | "finalizing" | "unava
 interface DictationControlsProps {
   enabled: boolean;
   documentKey: string | null;
+  voiceContext: VoiceSessionContextHints | null;
   pageEditorRef: RefObject<PageEditorHandle | null>;
   onError: (message: string) => void;
 }
@@ -31,6 +33,7 @@ interface DictationControlsProps {
 export function DictationControls({
   enabled,
   documentKey,
+  voiceContext,
   pageEditorRef,
   onError,
 }: DictationControlsProps) {
@@ -143,6 +146,11 @@ export function DictationControls({
     };
   }, [enabled, onError, pageEditorRef]);
 
+  const voiceContextRef = useRef(voiceContext);
+  useEffect(() => {
+    voiceContextRef.current = voiceContext;
+  }, [voiceContext]);
+
   const beginHold = useCallback(() => {
     if (!enabled || inBrowser) return;
     if (holdingRef.current) return;
@@ -175,7 +183,7 @@ export function DictationControls({
         acceptPartialsRef.current = true;
         const anchor = pageEditorRef.current?.beginDictation() ?? 1;
         anchorRef.current = anchor;
-        const { sessionId } = await startVoiceSession();
+        const { sessionId } = await startVoiceSession(voiceContextRef.current ?? undefined);
         if (!holdingRef.current || generation !== startGenerationRef.current) {
           acceptPartialsRef.current = false;
           await cancelVoiceSession(sessionId).catch(() => undefined);
