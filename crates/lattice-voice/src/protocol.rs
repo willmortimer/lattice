@@ -101,6 +101,8 @@ pub struct PrepareModelRequest {
 pub struct SessionContext {
     pub document_id: Option<String>,
     pub glossary_terms: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub known_paths: Vec<String>,
     pub command_mode: bool,
 }
 
@@ -179,6 +181,10 @@ pub struct FinalTranscript {
     pub utterance_id: UtteranceId,
     pub replaces_revision: u64,
     pub text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_text: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub corrections: Vec<crate::normalize::CorrectionProvenance>,
     pub finalization_mode: FinalizationMode,
     pub duration_ms: u64,
     pub processing_ms: u64,

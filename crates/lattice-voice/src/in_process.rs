@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::error::SpeechError;
+use crate::normalize::{normalize_final_transcript, NormalizationContext};
 use crate::protocol::{
     AudioChunk, FinishUtteranceRequest, PROTOCOL_VERSION, SessionContext,
     TranscriptionSessionState, UpdateSessionContextRequest, VoiceEvent, VoiceRequest,
@@ -189,6 +190,9 @@ impl InProcessVoiceService {
         )?;
         session.last_revision = final_transcript.replaces_revision;
 
+        let normalization_context = NormalizationContext::from(&session.session_context);
+        let final_transcript = normalize_final_transcript(final_transcript, &normalization_context);
+
         events.send(VoiceEvent::FinalTranscript(final_transcript))?;
         session
             .state
@@ -318,6 +322,7 @@ mod tests {
                         context: SessionContext {
                             document_id: None,
                             glossary_terms: Vec::new(),
+                            known_paths: Vec::new(),
                             command_mode: false,
                         },
                     },
@@ -385,6 +390,7 @@ mod tests {
                         context: SessionContext {
                             document_id: None,
                             glossary_terms: Vec::new(),
+                            known_paths: Vec::new(),
                             command_mode: false,
                         },
                     },
@@ -421,6 +427,7 @@ mod tests {
                         context: SessionContext {
                             document_id: Some("doc-1".into()),
                             glossary_terms: vec!["Home".into()],
+                            known_paths: Vec::new(),
                             command_mode: false,
                         },
                     },
@@ -438,6 +445,7 @@ mod tests {
                     context: SessionContext {
                         document_id: Some("doc-1".into()),
                         glossary_terms: vec!["Quick Note".into(), "Lattice".into()],
+                        known_paths: Vec::new(),
                         command_mode: false,
                     },
                 }),
