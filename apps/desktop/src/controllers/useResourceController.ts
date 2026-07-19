@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { demoCanvas, demoDataApp, demoNotebooks, demoPages, demoTextFiles, inBrowser } from "../demo";
+import { demoCanvas, demoDataApp, demoDataApps, demoNotebooks, demoPages, demoTextFiles, inBrowser } from "../demo";
 import type { DataAppSnapshot } from "../data/types";
 import { createDemoPageIO, createNativePageIO } from "../editor/pageIO";
 import { readNativeCanvas } from "../canvas/adapter";
@@ -235,9 +235,11 @@ export function useResourceController(options: ResourceControllerOptions): Resou
       const viewName = selectionOptions.viewName ?? null;
       if (inBrowser) {
         if (isCurrentLoad(ticket)) {
-          const snapshot = viewName && demoDataApp.available_views.includes(viewName)
-            ? { ...demoDataApp, active_view: viewName }
-            : demoDataApp;
+          const base = demoDataApps[resource.path] ?? demoDataApp;
+          const snapshot =
+            viewName && base.available_views.includes(viewName)
+              ? { ...base, active_view: viewName }
+              : base;
           setSession({ kind: "data-app", resource, snapshot });
         }
         return;

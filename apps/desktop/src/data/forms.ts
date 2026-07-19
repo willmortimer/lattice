@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import { demoPackageForms } from "../demoWorkspace.generated";
+import { demoPackageForms, demoPackageFormsByPath } from "../demoWorkspace.generated";
 import type { CellValue, DataColumn } from "./types";
 import { collectFormValues, emptyDraftValues } from "./recordDetail";
 
@@ -18,6 +18,14 @@ export interface FormSummary {
  * Used when `demoMutate` is active so the Forms chrome matches native seeds.
  */
 export const DEMO_PACKAGE_FORMS: FormSummary[] = demoPackageForms;
+
+/** Forms keyed by `.data` package path for multi-app browser demos. */
+export const DEMO_PACKAGE_FORMS_BY_PATH: Record<string, FormSummary[]> =
+  demoPackageFormsByPath ?? {};
+
+export function demoFormsForPackage(relPath: string): FormSummary[] {
+  return DEMO_PACKAGE_FORMS_BY_PATH[relPath] ?? DEMO_PACKAGE_FORMS;
+}
 
 export function formDisplayTitle(form: FormSummary): string {
   return form.title?.trim() || form.name;
@@ -76,7 +84,9 @@ export async function listPackageForms(options: {
   demoForms?: FormSummary[];
 }): Promise<string[]> {
   if (options.demo) {
-    return (options.demoForms ?? DEMO_PACKAGE_FORMS).map((form) => form.name);
+    return (options.demoForms ?? demoFormsForPackage(options.relPath)).map(
+      (form) => form.name,
+    );
   }
   return listDataForms(options.root, options.relPath);
 }
@@ -90,7 +100,7 @@ export async function loadPackageForm(options: {
   demoForms?: FormSummary[];
 }): Promise<FormSummary> {
   if (options.demo) {
-    const forms = options.demoForms ?? DEMO_PACKAGE_FORMS;
+    const forms = options.demoForms ?? demoFormsForPackage(options.relPath);
     const match = forms.find((form) => form.name === options.name);
     if (!match) {
       throw new Error(`Unknown demo form: ${options.name}`);
