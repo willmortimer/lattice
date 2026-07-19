@@ -1,0 +1,14 @@
+[package]
+name = "lattice-terminal"
+description = "Tauri-free PTY session core for Lattice's embedded terminal"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+portable-pty.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
