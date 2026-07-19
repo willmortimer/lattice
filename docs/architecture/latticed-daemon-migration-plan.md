@@ -962,6 +962,15 @@ Move into long-lived sessions:
 - Watcher lifecycle.
 - Event bus.
 
+**Status (MVP):** `crates/lattice-runtime` provides `LatticeRuntime` /
+`WorkspaceSession` with open-once session registry, warm `WorkspaceIndex`,
+`CommandEngine`, optional `ResourceCatalog`, and a simple in-process
+`EventBus`. `lattice-handlers` String-path APIs reuse sessions via
+`default_runtime()` (documented compatibility singleton) and expose
+`*_with_runtime` / `*_with_session` variants. `EmbeddedClient` can take an
+`Arc<LatticeRuntime>` and dispatch OpenWorkspace/Search through it. Watcher
+lifecycle and daemon event streaming remain later phases.
+
 Keep Tauri in embedded mode initially. No user-visible process change yet.
 
 This phase is essential: moving stateless handlers directly behind a socket

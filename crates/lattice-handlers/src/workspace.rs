@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use lattice_core::{Resource, Workspace, WorkspaceDefaults};
+use lattice_runtime::{default_runtime, LatticeRuntime, WorkspaceSession};
 use lattice_storage::{NativeWorkspaceStore, WorkspaceStore};
 use serde::Serialize;
 
@@ -23,18 +24,48 @@ pub struct WorkspaceSnapshot {
     pub manifest_revision: String,
 }
 
-pub fn open_workspace(path: String) -> Result<WorkspaceSnapshot, String> {
-    let root = PathBuf::from(path);
-    let workspace = Workspace::open(&root).map_err(|err| err.to_string())?;
-    let resources = workspace.scan().map_err(|err| err.to_string())?;
+fn map_runtime_err(err: lattice_runtime::Error) -> String {
+    err.to_string()
+}
 
-    snapshot_from_parts(&workspace, resources)
+/// Open a workspace and register a warm runtime session (process-default runtime).
+pub fn open_workspace(path: String) -> Result<WorkspaceSnapshot, String> {
+    open_workspace_with_runtime(&default_runtime(), path)
+}
+
+pub fn open_workspace_with_runtime(
+    runtime: &LatticeRuntime,
+    path: String,
+) -> Result<WorkspaceSnapshot, String> {
+    let session = runtime
+        .open_workspace_session(PathBuf::from(path))
+        .map_err(map_runtime_err)?;
+    open_workspace_with_session(&session)
+}
+
+pub fn open_workspace_with_session(
+    session: &WorkspaceSession,
+) -> Result<WorkspaceSnapshot, String> {
+    snapshot_from_workspace(session.workspace())
 }
 
 /// Re-scan a workspace's resource listing without re-reading its manifest.
 pub fn list_resources(root: String) -> Result<Vec<Resource>, String> {
-    let workspace = Workspace::open(Path::new(&root)).map_err(|err| err.to_string())?;
-    workspace.scan().map_err(|err| err.to_string())
+    list_resources_with_runtime(&default_runtime(), root)
+}
+
+pub fn list_resources_with_runtime(
+    runtime: &LatticeRuntime,
+    root: String,
+) -> Result<Vec<Resource>, String> {
+    let session = runtime
+        .open_workspace_session(PathBuf::from(root))
+        .map_err(map_runtime_err)?;
+    list_resources_with_session(&session)
+}
+
+pub fn list_resources_with_session(session: &WorkspaceSession) -> Result<Vec<Resource>, String> {
+    session.workspace().scan().map_err(|err| err.to_string())
 }
 
 pub fn snapshot_from_workspace(workspace: &Workspace) -> Result<WorkspaceSnapshot, String> {
@@ -78,6 +109,7 @@ pub(crate) fn snapshot_from_parts(
 mod tests {
     use super::*;
     use lattice_core::Workspace;
+    use std::sync::Arc;
 
     fn init_workspace() -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
@@ -112,5 +144,17 @@ mod tests {
 
         let resources = list_resources(root).unwrap();
         assert!(resources.iter().any(|r| r.path.ends_with("Notes.md")));
+    }
+
+    #[test]
+    fn open_workspace_registers_runtime_session() {
+        let dir = init_workspace();
+        let runtime = Arc::new(LatticeRuntime::new());
+        let snapshot =
+            open_workspace_with_runtime(&runtime, dir.path().to_string_lossy().into_owned())
+                .unwrap();
+        assert_eq!(runtime.session_count(), 1);
+        let session = runtime.get_session_by_id(&snapshot.id).unwrap();
+        assert_eq!(session.workspace_id(), snapshot.id);
     }
 }

@@ -11,6 +11,7 @@ lattice-core.workspace = true
 lattice-commands.workspace = true
 lattice-storage.workspace = true
 lattice-index.workspace = true
+lattice-runtime.workspace = true
 serde.workspace = true
 serde_yaml.workspace = true
 
