@@ -1,0 +1,42 @@
+[package]
+name = "lattice-embed-host"
+description = "Isolated embedding inference host for Lattice (fake + optional llama.cpp)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "lattice-embed-host"
+path = "src/main.rs"
+
+[features]
+default = []
+# Optional llama.cpp backend. Requires a local llama.cpp build; see README.
+llama-cpp = []
+
+[dependencies]
+lattice-embedding.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+bytes.workspace = true
+clap.workspace = true
+hex.workspace = true
+prost.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-util = { workspace = true, features = ["codec"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+
+[build-dependencies]
+prost-build.workspace = true
+protoc-bin-vendored = "3"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "process", "time"] }
