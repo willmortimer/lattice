@@ -1,0 +1,16 @@
+[package]
+name = "lattice-runtime"
+description = "Long-lived LatticeRuntime and workspace sessions for embedded and daemon hosts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+lattice-commands.workspace = true
+lattice-core.workspace = true
+lattice-index.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

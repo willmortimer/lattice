@@ -1,8 +1,13 @@
 //! Tauri-free handlers for the desktop shell's MVP command surface.
 //!
 //! These functions own the in-process API over [`CommandEngine`], [`Workspace`],
-//! and [`WorkspaceIndex`]. The Tauri desktop shell and a future localhost HTTP
-//! bridge should call the same entry points so behavior and DTO shapes stay aligned.
+//! and warm [`WorkspaceSession`] state from [`lattice_runtime`]. The Tauri
+//! desktop shell and a future localhost HTTP bridge should call the same entry
+//! points so behavior and DTO shapes stay aligned.
+//!
+//! String-path entry points use [`lattice_runtime::default_runtime`] for
+//! compatibility. Prefer the `*_with_runtime` / `*_with_session` variants when
+//! the host already holds an explicit runtime handle.
 
 mod error;
 mod home;
@@ -17,7 +22,15 @@ pub use home::{
 };
 pub use page::{apply_page_update, create_page, read_page, PageContent};
 pub use path::{join_within_root, resolve_within_root, validate_workspace_relative};
-pub use search::{get_backlinks, rebuild_index, search_workspace, search_workspace_chunks};
+pub use search::{
+    get_backlinks, get_backlinks_with_runtime, get_backlinks_with_session, rebuild_index,
+    rebuild_index_with_runtime, rebuild_index_with_session, search_workspace,
+    search_workspace_chunks, search_workspace_chunks_with_runtime,
+    search_workspace_chunks_with_session, search_workspace_with_runtime,
+    search_workspace_with_session,
+};
 pub use workspace::{
-    list_resources, open_workspace, snapshot_from_workspace, WorkspaceSnapshot,
+    list_resources, list_resources_with_runtime, list_resources_with_session, open_workspace,
+    open_workspace_with_runtime, open_workspace_with_session, snapshot_from_workspace,
+    WorkspaceSnapshot,
 };
