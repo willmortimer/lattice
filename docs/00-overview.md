@@ -82,6 +82,7 @@ Lattice is not a proprietary AI brain, a bundled agent, or a universal database 
 - [UX, capability discovery, and product scope](./25-ux-capability-discovery-and-product-scope.md)
 - [Import, export, interoperability, and standards](./26-import-export-interoperability-and-standards.md)
 - [Platforms, accessibility, localization, and mobile](./36-platforms-accessibility-localization-and-mobile.md)
+- [Voice dictation (local macOS STT)](./voice/README.md)
 
 ### Delivery and reference
 

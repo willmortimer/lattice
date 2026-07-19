@@ -31,6 +31,9 @@ The ADR directory records accepted decisions. Major accepted choices include:
 - Generated-resource ownership and build semantics.
 - Incremental long-page performance before full block virtualization
   ([ADR 0036](decisions/0036-incremental-long-page-performance.md)).
+- Local voice dictation documentation package
+  ([ADR 0040](decisions/0040-local-voice-dictation-documentation.md);
+  subsystem ADRs in [docs/voice/adr/](voice/adr/)).
 
 ## Open implementation questions
 
@@ -107,6 +110,27 @@ The ADR directory records accepted decisions. Major accepted choices include:
 - Separate origin implementation across platforms.
 - Package manager and build sandbox.
 - Static data snapshot convention.
+
+### Voice dictation (macOS, local)
+
+Architecture is locked in [docs/voice/](voice/README.md). Research spikes must
+still resolve:
+
+- Exact Parakeet Unified Core ML artifact and FluidAudio release pin.
+- Stability of partial-token / provisional rendering from the chosen model.
+- Whether one loaded model efficiently supports streaming and offline final decode.
+- Memory cost of retaining streaming and offline decoder state.
+- First-partial latency on the oldest supported M-series Mac.
+- Whether offline re-decode materially beats the final streaming hypothesis for technical prose.
+- FluidAudio callback scheduling vs Swift concurrency and Rust executors.
+- Core ML compilation reuse across application updates.
+- FluidAudio endpoint-detection surface; value of a separate VAD.
+- Pre-roll duration to avoid clipped speech.
+- UX when final text diverges significantly from provisional text.
+- Reliable Quick Note via main app background mode vs login-item helper.
+- Exact attributions and notices for the converted model artifact.
+
+See [docs/voice/implementation-roadmap.md](voice/implementation-roadmap.md).
 
 ## Resolved by the first design-review addendum
 

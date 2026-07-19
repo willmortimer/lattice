@@ -39,3 +39,8 @@ These records capture architecture choices that should not be silently reversed.
 - [ADR 0035: Keep File kinds coarse and derive ResourceFormatProfile](0035-format-first-file-resources-and-resource-format-profile.md)
 - [ADR 0036: Incremental long-page performance before ProseMirror block virtualization](0036-incremental-long-page-performance.md)
 - [ADR 0037: Localhost headless bridge shares handlers with Tauri](0037-localhost-bridge-shares-handlers-with-tauri.md)
+- [ADR 0038: Workspace encryption uses OS keychain and LocalAuthentication in Rust](0038-workspace-encryption-os-keychain-and-local-authentication.md)
+- [ADR 0039: Embedded terminal uses Rust PTY and xterm.js](0039-embedded-terminal-rust-pty-and-xtermjs.md)
+- [ADR 0040: Local voice dictation documentation package](0040-local-voice-dictation-documentation.md)
+
+Voice subsystem ADRs (FluidAudio, provisional/final transcripts, capture ownership, commands) live under [`docs/voice/adr/`](../voice/adr/).

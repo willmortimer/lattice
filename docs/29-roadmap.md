@@ -161,6 +161,8 @@ Success: OneNote-class mixed typed and handwritten workflows.
 - Advanced WebGPU compute and rendering.
 - Windows Ink and Android stylus-native plugins.
 - Audio-synchronized ink.
+- Local voice dictation on macOS (FluidAudio / Parakeet); see
+  [docs/voice/](voice/README.md) and [ADR 0040](decisions/0040-local-voice-dictation-documentation.md).
 - Remote GPU/Jupyter execution.
 - Full spreadsheet engine through IronCalc or equivalent.
 - ODS-native or documented sheet packages.
