@@ -18,7 +18,7 @@ const RESET_UI_STATE_MENU_ID: &str = "developer.reset-ui-state";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let mut builder = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -29,15 +29,15 @@ pub fn run() {
     // Socket bridge for `@srsholmes/tauri-playwright` (WKWebView / WebView2 / WebKitGTK).
     // Only listen when explicitly enabled so normal debug runs stay quiet.
     #[cfg(feature = "e2e-testing")]
-    {
+    let builder = {
         let mut config = tauri_plugin_playwright::PluginConfig::new();
         if let Ok(path) = std::env::var("TAURI_PLAYWRIGHT_SOCKET") {
             if !path.is_empty() {
                 config = config.socket_path(path);
             }
         }
-        builder = builder.plugin(tauri_plugin_playwright::init_with_config(config));
-    }
+        builder.plugin(tauri_plugin_playwright::init_with_config(config))
+    };
 
     builder
         .menu(|app| {

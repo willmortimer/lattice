@@ -11,6 +11,7 @@ describe("media renderer registration", () => {
     const registry = new ResourceRendererRegistry<ResourceRendererContext, OpenResourceSession>({ capabilityFallback: fallback, unknownFallback: fallback });
     registerMediaResourceRenderers(registry);
     expect(registry.resolve({ kind: "file", path: "photo.png", formatId: "file:image" }).definition.id).toBe(imageResourceRendererDefinition.id);
+    expect(registry.resolve({ kind: "file", path: "Resources/mark.svg" }).definition.id).toBe(imageResourceRendererDefinition.id);
     expect(registry.resolve({ kind: "file", path: "report.pdf", formatId: "file:pdf" }).definition.id).toBe(pdfResourceRendererDefinition.id);
     expect(registry.resolve({ kind: "file", path: "archive.zip", formatId: "file:unknown" }).definition.id).toBe(fileFallbackResourceRendererDefinition.id);
     expect(registry.entries()).toHaveLength(3);
