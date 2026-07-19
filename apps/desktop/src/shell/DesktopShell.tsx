@@ -13,6 +13,7 @@ import { SettingsPage } from "../settings/SettingsPage";
 import { TerminalPanel } from "../terminal/TerminalPanel";
 import { BrandMark } from "../shell/BrandMark";
 import { DictationControls } from "../shell/DictationControls";
+import { voiceHintsFromPage } from "../lib/voice";
 import { HomeDashboard } from "../shell/HomeDashboard";
 import { ResourceInspector } from "../shell/ResourceInspector";
 import { ResourceSurface } from "../shell/ResourceSurface";
@@ -385,6 +386,12 @@ export function DesktopShell({ model }: DesktopShellProps) {
                       ? `${selected.path}#${reloadToken}`
                       : null
                   }
+                  voiceContext={voiceHintsFromPage({
+                    documentPath: selected.path,
+                    pageTitle: fileTitle(selected.path),
+                    workspaceName: snapshot?.title ?? null,
+                    rawContent: page.content,
+                  })}
                   pageEditorRef={pageEditorRef}
                   onError={(message) => setError(message)}
                 />
