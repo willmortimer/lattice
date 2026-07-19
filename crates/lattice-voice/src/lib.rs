@@ -5,18 +5,30 @@
 
 mod context_builder;
 mod error;
+mod final_model_memory;
 mod in_process;
+mod independent_final;
 mod normalize;
 mod protocol;
 mod provider;
 mod session;
+mod utterance_buffer;
 
 pub use context_builder::{
     BuiltVoiceContext, EmbeddingGlossaryHook, VoiceContextBuilder, VoiceContextInput,
     DEFAULT_MAX_GLOSSARY_TERMS, DEFAULT_MIN_GLOSSARY_TERMS,
 };
 pub use error::SpeechError;
+pub use final_model_memory::{
+    FinalModelLoadAction, FinalModelMemoryPolicy, FinalModelResidency,
+};
 pub use in_process::{record_transcript_revision, InProcessVoiceService};
+pub use independent_final::{
+    attempt_independent_final, capability_allows_offline_redecode, commit_final_transcript,
+    independent_final_env_enabled, FakeIndependentOfflineRedecode, IndependentFinalAttempt,
+    IndependentFinalPolicy, OfflineRedecodeBackend, UnimplementedOfflineRedecode,
+    ENV_INDEPENDENT_FINAL,
+};
 pub use normalize::{
     normalize_final_transcript, normalize_transcript, CorrectionKind, CorrectionProvenance,
     CorrectionSource, NormalizationContext, NormalizedTranscript, NORMALIZER_VERSION,
@@ -34,3 +46,4 @@ pub use provider::{
     NullSpeechProvider, SpeechEventSender, SpeechProvider, SpeechSession,
 };
 pub use session::SessionStateMachine;
+pub use utterance_buffer::{FrozenUtteranceAudio, UtteranceAudioBuffer};

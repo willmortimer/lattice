@@ -7,7 +7,15 @@ import os
 /// One utterance stream against a prepared Unified engine.
 ///
 /// Streaming partials fire during `pushAudio`; `finishUtterance` runs
-/// `StreamingUnifiedAsrManager.finish()` and emits one authoritative final.
+/// `StreamingUnifiedAsrManager.finish()` and emits one authoritative final
+/// (`StreamingFlush`).
+///
+/// TODO(voice-v11): Buffer float samples for the full utterance and, when
+/// `LATTICE_VOICE_INDEPENDENT_FINAL=1` is adopted after eval wins, call
+/// FluidAudio offline (`UnifiedAsrManager`) or TDT v2 (`AsrManager`) over that
+/// buffer. Rust already buffers PCM in `FluidAudioSpeechSession`; report
+/// `IndependentOfflineRedecode` / `SameFamilyOfflineRedecode` only when that
+/// second decode actually runs (ADR 0007).
 final class VoiceSession: @unchecked Sendable {
     let id: UInt64
     private let engine: VoiceEngine

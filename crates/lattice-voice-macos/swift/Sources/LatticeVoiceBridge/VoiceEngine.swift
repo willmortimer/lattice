@@ -5,6 +5,11 @@ import os
 /// Owns the loaded Unified streaming checkpoint (`parakeet-unified-320ms`).
 /// Dual-path finals use `StreamingUnifiedAsrManager.finish()` from this manager;
 /// the optional offline Unified encoder is intentionally not loaded for M1.
+///
+/// TODO(voice-v11): Lazy-load TDT v2 / Unified offline for independent final
+/// when eval adopts it; unload after idle via `FinalModelMemoryPolicy` hooks.
+/// Do not report `IndependentOfflineRedecode` until that path re-decodes
+/// buffered utterance PCM.
 final class VoiceEngine: @unchecked Sendable {
     let id: UInt64
     let modelsRoot: URL

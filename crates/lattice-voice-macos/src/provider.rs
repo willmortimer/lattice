@@ -7,9 +7,11 @@ use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use lattice_voice::{
-    AudioChunk, AudioSampleFormat, FinalTranscript, FinalizationMode, ModelState, ModelStatus,
-    PartialTranscriptPayload, PrepareModelRequest, SpeechCapabilities, SpeechError, SpeechEventSender,
-    SpeechProvider, SpeechSession, SpeechSessionConfig, StableTranscriptPayload, VoiceEvent,
+    commit_final_transcript, AudioChunk, AudioSampleFormat, FinalModelMemoryPolicy,
+    FinalTranscript, FinalizationMode, IndependentFinalPolicy, ModelState, ModelStatus,
+    PartialTranscriptPayload, PrepareModelRequest, SpeechCapabilities, SpeechError,
+    SpeechEventSender, SpeechProvider, SpeechSession, SpeechSessionConfig,
+    StableTranscriptPayload, UnimplementedOfflineRedecode, UtteranceAudioBuffer, VoiceEvent,
 };
 use tokio::task::JoinHandle;
 
@@ -32,11 +34,18 @@ struct SessionSharedState {
 }
 
 /// macOS FluidAudio Unified provider (Parakeet 320 ms streaming tier).
+///
+/// Production finals are [`FinalizationMode::StreamingFlush`]. Full-utterance
+/// PCM is buffered for a future independent/TDT path gated by
+/// `LATTICE_VOICE_INDEPENDENT_FINAL=1`. Offline re-decode is not wired through
+/// the Swift bridge yet ([`UnimplementedOfflineRedecode`]).
 pub struct FluidAudioSpeechProvider {
     backend: Arc<dyn VoiceBridgeBackend>,
     model_cache_dir: PathBuf,
     engine: Mutex<Option<LatticeVoiceEngine>>,
     prepared: AtomicBool,
+    /// Optional final-model residency (lazy load / idle unload stubs).
+    final_model_memory: Mutex<FinalModelMemoryPolicy>,
 }
 
 impl FluidAudioSpeechProvider {
@@ -61,7 +70,25 @@ impl FluidAudioSpeechProvider {
             model_cache_dir,
             engine: Mutex::new(None),
             prepared: AtomicBool::new(false),
+            final_model_memory: Mutex::new(FinalModelMemoryPolicy::default()),
         }
+    }
+
+    /// Stub hook: request lazy load of an optional final model when independent
+    /// final is enabled. No-op until FluidAudio offline/TDT is bridged.
+    pub fn request_final_model_load(&self) -> lattice_voice::FinalModelLoadAction {
+        self.final_model_memory
+            .lock()
+            .map(|mut policy| policy.request_load())
+            .unwrap_or(lattice_voice::FinalModelLoadAction::LoadInProgress)
+    }
+
+    /// Stub hook: unload the optional final model after idle.
+    pub fn maybe_unload_final_model_idle(&self) -> bool {
+        let Ok(mut policy) = self.final_model_memory.lock() else {
+            return false;
+        };
+        policy.maybe_unload_idle(std::time::Instant::now())
     }
 
     fn capabilities_inner() -> SpeechCapabilities {
@@ -182,6 +209,11 @@ impl SpeechProvider for FluidAudioSpeechProvider {
             Arc::clone(&shared),
         );
 
+        let policy = IndependentFinalPolicy::from_env_and_capabilities(&Self::capabilities_inner());
+        if policy.should_attempt() {
+            let _ = self.request_final_model_load();
+        }
+
         Ok(Box::new(FluidAudioSpeechSession {
             backend,
             session,
@@ -192,6 +224,8 @@ impl SpeechProvider for FluidAudioSpeechProvider {
             shared,
             dispatcher: Some(dispatcher),
             next_sequence: 0,
+            utterance_audio: UtteranceAudioBuffer::new(),
+            policy,
         }))
     }
 }
@@ -206,6 +240,9 @@ struct FluidAudioSpeechSession {
     shared: Arc<Mutex<SessionSharedState>>,
     dispatcher: Option<JoinHandle<()>>,
     next_sequence: u64,
+    /// Full utterance PCM for optional offline re-decode (ADR 0007).
+    utterance_audio: UtteranceAudioBuffer,
+    policy: IndependentFinalPolicy,
 }
 
 impl FluidAudioSpeechSession {
@@ -275,6 +312,8 @@ impl SpeechSession for FluidAudioSpeechSession {
 
         let samples = Self::decode_f32_samples(&chunk)?;
         self.next_sequence = self.next_sequence.saturating_add(1);
+        self.utterance_audio
+            .push_f32(&samples, chunk.sample_rate_hz, chunk.channels)?;
         if samples.is_empty() {
             return Ok(());
         }
@@ -296,6 +335,7 @@ impl SpeechSession for FluidAudioSpeechSession {
         let session = self.session;
         let started = Instant::now();
 
+        // Baseline: StreamingUnifiedAsrManager.finish() (StreamingFlush).
         tokio::task::spawn_blocking(move || backend.session_finish_utterance(session))
             .await
             .map_err(|err| SpeechError::provider(format!("finish_utterance task failed: {err}")))??;
@@ -311,7 +351,7 @@ impl SpeechSession for FluidAudioSpeechSession {
             .map(|guard| (guard.revision, guard.final_text.clone()))
             .map_err(|_| SpeechError::provider("session state lock poisoned"))?;
 
-        Ok(FinalTranscript {
+        let streaming_flush = FinalTranscript {
             session_id: self.config.session_id.clone(),
             utterance_id: self.utterance_id.clone(),
             replaces_revision: revision,
@@ -321,7 +361,17 @@ impl SpeechSession for FluidAudioSpeechSession {
             finalization_mode: FinalizationMode::StreamingFlush,
             duration_ms: 0,
             processing_ms,
-        })
+        };
+
+        // Optional second path: only replaces the committed final when a real
+        // offline backend is implemented. Stub keeps StreamingFlush (honest).
+        let frozen = std::mem::take(&mut self.utterance_audio).freeze();
+        Ok(commit_final_transcript(
+            streaming_flush,
+            self.policy,
+            &UnimplementedOfflineRedecode,
+            &frozen,
+        ))
     }
 
     async fn cancel(mut self: Box<Self>) -> Result<(), SpeechError> {
@@ -462,6 +512,7 @@ mod tests {
             context: SessionContext {
                 document_id: None,
                 glossary_terms: Vec::new(),
+                known_paths: Vec::new(),
                 command_mode: false,
             },
         }
@@ -570,6 +621,55 @@ mod tests {
         }
         assert!(saw_partial);
         assert!(saw_final);
+    }
+
+    #[tokio::test]
+    async fn final_model_memory_hooks_are_callable() {
+        let bridge = Arc::new(MockBridge::new(LATTICE_VOICE_BRIDGE_ABI_VERSION));
+        let provider = FluidAudioSpeechProvider::with_backend(bridge, PathBuf::new());
+        let action = provider.request_final_model_load();
+        assert_eq!(
+            action,
+            lattice_voice::FinalModelLoadAction::StartLazyLoad
+        );
+        // Idle unload is a no-op until mark_ready; stub must not panic.
+        assert!(!provider.maybe_unload_final_model_idle());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn mock_provider_buffers_utterance_and_keeps_streaming_flush() {
+        let bridge = Arc::new(MockBridge::new(LATTICE_VOICE_BRIDGE_ABI_VERSION));
+        let provider = FluidAudioSpeechProvider::with_backend(bridge, PathBuf::new());
+        provider
+            .prepare(PrepareModelRequest {
+                model_id: DEFAULT_MODEL_ID.into(),
+                warm: true,
+            })
+            .await
+            .unwrap();
+
+        let (events, _rx) = SpeechEventSender::pair();
+        let mut session = provider
+            .start_session(sample_config(), events)
+            .await
+            .unwrap();
+
+        session
+            .push_audio(f32_chunk("voice_test", 0, &[0.0, 0.1]))
+            .await
+            .unwrap();
+        session
+            .push_audio(f32_chunk("voice_test", 1, &[0.2, 0.3]))
+            .await
+            .unwrap();
+
+        let final_transcript = session.finish_utterance().await.unwrap();
+        // Buffer retained frames through finish; production mode stays flush
+        // (offline/TDT not bridged — UnimplementedOfflineRedecode).
+        assert_eq!(
+            final_transcript.finalization_mode,
+            FinalizationMode::StreamingFlush
+        );
     }
 
     #[tokio::test]

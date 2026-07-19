@@ -94,14 +94,23 @@ At finalization:
 
 1. Freeze the utterance audio buffer.
 2. Stop accepting audio for that utterance.
-3. Run offline decoding over the complete utterance.
-4. Apply punctuation and text normalization.
-5. Apply glossary correction.
-6. Parse explicit formatting or command phrases
+3. Always produce a **StreamingFlush** baseline (Unified `finish()`).
+4. If `LATTICE_VOICE_INDEPENDENT_FINAL=1` or capabilities allow **and** an
+   offline backend is implemented, re-decode the frozen buffer (TDT v2 /
+   Unified offline) and commit that text with
+   `IndependentOfflineRedecode` or `SameFamilyOfflineRedecode`.
+5. Otherwise keep StreamingFlush — stubs must not claim offline modes
+   (ADR 0007). Rust buffers PCM in-session even when the second path is off.
+6. Apply punctuation and text normalization.
+7. Apply glossary correction.
+8. Parse explicit formatting or command phrases
    ([voice-commands.md](./voice-commands.md)).
-7. Emit one authoritative final transcript.
-8. Discard raw audio unless the user enabled retention
+9. Emit one authoritative final transcript.
+10. Discard raw audio unless the user enabled retention
    ([privacy-security.md](./privacy-security.md)).
+
+How to enable after eval wins:
+[research/voice-eval/RESULTS.md](../../research/voice-eval/RESULTS.md#enabling-independent-final-after-eval-wins).
 
 Example final event:
 
