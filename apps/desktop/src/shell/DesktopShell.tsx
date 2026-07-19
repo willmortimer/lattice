@@ -184,13 +184,15 @@ export function DesktopShell({ model }: DesktopShellProps) {
               </IconButton>
             ))}
           </nav>
-          <IconButton
-            label="Terminal"
-            className={terminalOpen ? "activity-button-active" : ""}
-            onClick={() => setTerminalOpen((open) => !open)}
-          >
-            <Terminal size={17} />
-          </IconButton>
+          {hasCapability("terminal") && (
+            <IconButton
+              label="Terminal"
+              className={terminalOpen ? "activity-button-active" : ""}
+              onClick={() => setTerminalOpen((open) => !open)}
+            >
+              <Terminal size={17} />
+            </IconButton>
+          )}
           <div className="activity-spacer" />
           <IconButton
             label="Settings"
