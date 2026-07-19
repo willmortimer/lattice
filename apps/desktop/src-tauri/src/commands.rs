@@ -604,7 +604,8 @@ pub fn update_workspace_manifest(
     }
     let workspace = Workspace::open(Path::new(&root)).map_err(|error| error.to_string())?;
     let mut manifest = workspace.manifest().clone();
-    const MUTABLE_CAPABILITIES: [&str; 2] = ["canvas", "sqlite"];
+    // Keep in sync with apps/desktop Settings → Enabled capabilities toggles.
+    const MUTABLE_CAPABILITIES: [&str; 3] = ["canvas", "sqlite", "terminal"];
     let mut capabilities = manifest
         .capabilities
         .enabled
@@ -978,5 +979,25 @@ mod tests {
         assert_eq!(result.summary, "Delete 2 resources");
         assert_eq!(std::fs::read(dir.path().join("A.md")).unwrap(), b"a\n");
         assert_eq!(std::fs::read(dir.path().join("B.md")).unwrap(), b"b\n");
+    }
+
+    #[test]
+    fn update_workspace_manifest_persists_terminal_capability() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let before = open_workspace(root.clone()).unwrap();
+        assert!(!before.capabilities.iter().any(|c| c == "terminal"));
+
+        let after = update_workspace_manifest(
+            root.clone(),
+            vec!["terminal".into()],
+            before.defaults.quick_note_directory.clone(),
+            before.manifest_revision,
+        )
+        .unwrap();
+
+        assert!(after.capabilities.iter().any(|c| c == "terminal"));
+        let reopened = open_workspace(root).unwrap();
+        assert!(reopened.capabilities.iter().any(|c| c == "terminal"));
     }
 }
