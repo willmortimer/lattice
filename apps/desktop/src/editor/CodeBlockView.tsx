@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { NodeViewContent, NodeViewWrapper } from "@tiptap/react";
 import type { NodeViewProps } from "@tiptap/react";
 
+import { useCodeBlockHighlight } from "./CodeBlockHighlight";
 import { useDeferredUntilVisible } from "./visibilityDeferred";
 
 let mermaidInitialized = false;
@@ -19,13 +20,9 @@ async function ensureMermaidInitialized(): Promise<typeof import("mermaid").defa
 }
 
 /**
- * Read-view Mermaid embed: the fenced code stays fully editable through
- * `NodeViewContent` (ProseMirror owns that DOM directly); a block whose
- * language is `mermaid` additionally renders its diagram underneath,
- * loaded lazily so pages without one never pay for the dependency.
- *
- * Diagram layout is further deferred until the block is near the viewport
- * (ADR 0036).
+ * Code fence node view: editable source stays in `NodeViewContent` while
+ * Shiki highlighting paints an overlay (ADR 0036 / docs/07). Mermaid fences
+ * skip Shiki and render a deferred SVG diagram underneath instead.
  */
 export function CodeBlockView({ node }: NodeViewProps) {
   const language = node.attrs.language as string | null;
@@ -34,6 +31,13 @@ export function CodeBlockView({ node }: NodeViewProps) {
   const { ref, isVisible } = useDeferredUntilVisible();
   const [svg, setSvg] = useState<string | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
+
+  const highlightHtml = useCodeBlockHighlight({
+    text,
+    language,
+    isVisible: isVisible && !isMermaid,
+  });
+  const showHighlight = !isMermaid && highlightHtml != null;
 
   useEffect(() => {
     if (!isVisible || !isMermaid || text.trim().length === 0) {
@@ -65,11 +69,26 @@ export function CodeBlockView({ node }: NodeViewProps) {
     };
   }, [isVisible, isMermaid, text]);
 
+  const preClassName = showHighlight ? "code-block-pre code-block-pre--highlighted" : "code-block-pre";
+
   return (
     <NodeViewWrapper className="code-block-view">
       <div ref={ref}>
-        <pre>
-          <NodeViewContent<"code"> as="code" />
+        <pre className={preClassName}>
+          <span className="code-block-stack">
+            {showHighlight && (
+              // eslint-disable-next-line react/no-danger -- Shiki token HTML from our worker, not raw user HTML
+              <span
+                className="code-block-highlight-layer"
+                aria-hidden="true"
+                dangerouslySetInnerHTML={{ __html: highlightHtml }}
+              />
+            )}
+            <NodeViewContent<"code">
+              as="code"
+              className={showHighlight ? "code-block-edit-layer" : undefined}
+            />
+          </span>
         </pre>
         {isMermaid && !isVisible && (
           <p className="page-embed-deferred-hint" role="status">
