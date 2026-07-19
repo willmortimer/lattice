@@ -61,6 +61,63 @@ pub struct CanvasAddEdge {
     pub from_node: String,
     #[serde(rename = "to-node")]
     pub to_node: String,
+    #[serde(rename = "from-side", default, skip_serializing_if = "Option::is_none")]
+    pub from_side: Option<String>,
+    #[serde(rename = "to-side", default, skip_serializing_if = "Option::is_none")]
+    pub to_side: Option<String>,
+}
+
+/// One node's new size in a batched canvas resize.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CanvasNodeResize {
+    pub id: String,
+    pub width: f64,
+    pub height: f64,
+}
+
+/// A batched resize of existing JSON Canvas nodes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CanvasResizeNodes {
+    pub path: PathBuf,
+    #[serde(rename = "base-revision")]
+    pub base_revision: String,
+    pub nodes: Vec<CanvasNodeResize>,
+}
+
+/// Removal of existing JSON Canvas edges.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CanvasRemoveEdges {
+    pub path: PathBuf,
+    #[serde(rename = "base-revision")]
+    pub base_revision: String,
+    #[serde(rename = "edge-ids")]
+    pub edge_ids: Vec<String>,
+}
+
+/// Place a Markdown sticky / text node on a JSON Canvas.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CanvasAddTextNode {
+    pub path: PathBuf,
+    #[serde(rename = "base-revision")]
+    pub base_revision: String,
+    #[serde(rename = "node-id")]
+    pub node_id: String,
+    pub text: String,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+/// Update the body of an existing JSON Canvas text node.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CanvasUpdateTextNode {
+    pub path: PathBuf,
+    #[serde(rename = "base-revision")]
+    pub base_revision: String,
+    #[serde(rename = "node-id")]
+    pub node_id: String,
+    pub text: String,
 }
 
 /// The v0 semantic command set.
@@ -233,6 +290,51 @@ pub enum Command {
         from_node: String,
         #[serde(rename = "to-node")]
         to_node: String,
+        #[serde(rename = "from-side", default, skip_serializing_if = "Option::is_none")]
+        from_side: Option<String>,
+        #[serde(rename = "to-side", default, skip_serializing_if = "Option::is_none")]
+        to_side: Option<String>,
+    },
+
+    /// Resize one or more JSON Canvas nodes in one semantic transaction.
+    CanvasResizeNodes {
+        path: PathBuf,
+        #[serde(rename = "base-revision")]
+        base_revision: String,
+        nodes: Vec<CanvasNodeResize>,
+    },
+
+    /// Remove edges from a JSON Canvas.
+    CanvasRemoveEdges {
+        path: PathBuf,
+        #[serde(rename = "base-revision")]
+        base_revision: String,
+        #[serde(rename = "edge-ids")]
+        edge_ids: Vec<String>,
+    },
+
+    /// Add a sticky / text node to a JSON Canvas.
+    CanvasAddTextNode {
+        path: PathBuf,
+        #[serde(rename = "base-revision")]
+        base_revision: String,
+        #[serde(rename = "node-id")]
+        node_id: String,
+        text: String,
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+    },
+
+    /// Update the text of an existing sticky / text node.
+    CanvasUpdateTextNode {
+        path: PathBuf,
+        #[serde(rename = "base-revision")]
+        base_revision: String,
+        #[serde(rename = "node-id")]
+        node_id: String,
+        text: String,
     },
 }
 
@@ -287,7 +389,11 @@ impl Command {
             Command::CanvasPlaceResource { path, .. }
             | Command::CanvasMoveNodes { path, .. }
             | Command::CanvasRemoveNodes { path, .. }
-            | Command::CanvasAddEdge { path, .. } => path.clone(),
+            | Command::CanvasAddEdge { path, .. }
+            | Command::CanvasResizeNodes { path, .. }
+            | Command::CanvasRemoveEdges { path, .. }
+            | Command::CanvasAddTextNode { path, .. }
+            | Command::CanvasUpdateTextNode { path, .. } => path.clone(),
         }
     }
 
@@ -318,7 +424,11 @@ impl Command {
             Command::CanvasPlaceResource { path, .. }
             | Command::CanvasMoveNodes { path, .. }
             | Command::CanvasRemoveNodes { path, .. }
-            | Command::CanvasAddEdge { path, .. } => vec![path.clone()],
+            | Command::CanvasAddEdge { path, .. }
+            | Command::CanvasResizeNodes { path, .. }
+            | Command::CanvasRemoveEdges { path, .. }
+            | Command::CanvasAddTextNode { path, .. }
+            | Command::CanvasUpdateTextNode { path, .. } => vec![path.clone()],
         }
     }
 }
