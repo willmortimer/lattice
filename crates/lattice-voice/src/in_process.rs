@@ -303,7 +303,8 @@ mod tests {
             sample_rate_hz: 16_000,
             channels: 1,
             sample_format: AudioSampleFormat::F32,
-            payload: Bytes::from_static(b"pcm"),
+            // 4-byte F32 sample (aligned); unaligned payloads fail utterance buffer decode.
+            payload: Bytes::from_static(&[0, 0, 0, 0]),
         }
     }
 

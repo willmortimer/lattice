@@ -71,3 +71,32 @@ adopt_independent_offline_redecode: pending
 ```
 
 Rationale (one paragraph):
+
+## Enabling independent final after eval wins
+
+Production remains **`StreamingFlush`** until the checklist above passes and
+`adopt_independent_offline_redecode` flips to `true`.
+
+When measurements win and the FluidAudio offline/TDT bridge is implemented:
+
+1. Set `LATTICE_VOICE_INDEPENDENT_FINAL=1` for the voice host / desktop process
+   (or report `IndependentOfflineRedecode` / `SameFamilyOfflineRedecode` on
+   provider capabilities once the second decode is real — ADR 0007).
+2. Sessions already buffer full-utterance PCM in Rust
+   (`UtteranceAudioBuffer` in `lattice-voice` / `FluidAudioSpeechSession`).
+3. Wire `OfflineRedecodeBackend` in `lattice-voice-macos` to FluidAudio
+   TDT v2 (`AsrManager`) or Unified offline (`UnifiedAsrManager`); replace
+   `UnimplementedOfflineRedecode`.
+4. Final-model memory: lazy load on first independent attempt, idle unload via
+   `FinalModelMemoryPolicy` (stubs exist; `latticed` will own residency).
+5. Do **not** claim offline modes while the backend is still a stub — env alone
+   keeps `StreamingFlush` until re-decode actually runs.
+
+Eval-only measurement (no production flip) continues to use this harness:
+
+```sh
+python3 scripts/voice_eval.py run --provider tdt_v2
+# or: --provider unified_offline / --provider all
+```
+
+See [README.md](./README.md#acceptance-criteria--adopt-independentofflineredecode).

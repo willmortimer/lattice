@@ -156,6 +156,23 @@ Also define:
 Owner of residency policy long-term: `latticed`
 ([architecture.md](./architecture.md)).
 
+### Optional independent final model (stub hooks)
+
+When eval adopts `IndependentOfflineRedecode` (see
+[research/voice-eval/RESULTS.md](../../research/voice-eval/RESULTS.md)):
+
+- **Lazy load** the second model (TDT v2 or Unified offline encoder) on first
+  independent-final attempt (`FinalModelMemoryPolicy::request_load`).
+- **Unload after idle** (default ~60s) or under memory pressure
+  (`maybe_unload_idle` / `force_unload`).
+- Gate attempts with `LATTICE_VOICE_INDEPENDENT_FINAL=1` or honest capability
+  reporting — never claim offline modes while the backend is
+  `UnimplementedOfflineRedecode`.
+
+Production streaming Unified stays on `StreamingFlush` until that adopt gate
+passes. Hooks live in `lattice-voice` (`final_model_memory`) and
+`FluidAudioSpeechProvider`.
+
 Unified warm streaming load (cached `.mlmodelc`, M2 MacBook Air): **~504 ms**
 ([RESULTS-unified.md](../../research/voice-m0-fluidaudio/RESULTS-unified.md)).
 M0 EOU/TDT warm loads for comparison: streaming **~681 ms**, offline **~399 ms**.

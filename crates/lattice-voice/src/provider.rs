@@ -1,11 +1,18 @@
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 
 use crate::error::SpeechError;
+use crate::independent_final::{
+    commit_final_transcript, IndependentFinalPolicy, OfflineRedecodeBackend,
+    UnimplementedOfflineRedecode,
+};
 use crate::protocol::{
     AudioChunk, FinalTranscript, ModelStatus, PrepareModelRequest, SpeechCapabilities,
     SpeechSessionConfig, VoiceEvent,
 };
+use crate::utterance_buffer::UtteranceAudioBuffer;
 
 /// Delivers streaming voice events to a local subscriber.
 #[derive(Clone, Debug)]
@@ -58,9 +65,15 @@ pub trait SpeechSession: Send {
 }
 
 /// Test-only provider that validates chunk sequencing and emits fake transcripts.
-#[derive(Debug)]
+///
+/// Buffers full-utterance PCM like production sessions. The committed final stays
+/// [`crate::protocol::FinalizationMode::StreamingFlush`] unless an implemented
+/// offline backend is selected via policy (see `LATTICE_VOICE_INDEPENDENT_FINAL`).
 pub struct NullSpeechProvider {
     capabilities: SpeechCapabilities,
+    offline: Arc<dyn OfflineRedecodeBackend>,
+    /// When set, overrides env/capability policy (unit tests).
+    policy_override: Option<IndependentFinalPolicy>,
 }
 
 impl NullSpeechProvider {
@@ -77,7 +90,27 @@ impl NullSpeechProvider {
                 endpoint_detection: false,
                 supported_languages: vec!["en".into()],
             },
+            offline: Arc::new(UnimplementedOfflineRedecode),
+            policy_override: None,
         }
+    }
+
+    /// Inject an offline re-decode backend (tests / harnesses).
+    pub fn with_offline(mut self, offline: Arc<dyn OfflineRedecodeBackend>) -> Self {
+        self.offline = offline;
+        self
+    }
+
+    /// Override independent-final attempt policy (avoids process-wide env in tests).
+    pub fn with_policy(mut self, policy: IndependentFinalPolicy) -> Self {
+        self.policy_override = Some(policy);
+        self
+    }
+}
+
+impl Default for NullSpeechProvider {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -104,7 +137,15 @@ impl SpeechProvider for NullSpeechProvider {
         config: SpeechSessionConfig,
         events: SpeechEventSender,
     ) -> Result<Box<dyn SpeechSession>, SpeechError> {
-        Ok(Box::new(NullSpeechSession::new(config, events)))
+        let policy = self.policy_override.unwrap_or_else(|| {
+            IndependentFinalPolicy::from_env_and_capabilities(&self.capabilities)
+        });
+        Ok(Box::new(NullSpeechSession::new(
+            config,
+            events,
+            Arc::clone(&self.offline),
+            policy,
+        )))
     }
 }
 
@@ -115,10 +156,18 @@ struct NullSpeechSession {
     revision: u64,
     utterance_id: String,
     partial_text: String,
+    utterance_audio: UtteranceAudioBuffer,
+    offline: Arc<dyn OfflineRedecodeBackend>,
+    policy: IndependentFinalPolicy,
 }
 
 impl NullSpeechSession {
-    fn new(config: SpeechSessionConfig, events: SpeechEventSender) -> Self {
+    fn new(
+        config: SpeechSessionConfig,
+        events: SpeechEventSender,
+        offline: Arc<dyn OfflineRedecodeBackend>,
+        policy: IndependentFinalPolicy,
+    ) -> Self {
         Self {
             config,
             events,
@@ -126,6 +175,9 @@ impl NullSpeechSession {
             revision: 0,
             utterance_id: "utt_1".into(),
             partial_text: String::new(),
+            utterance_audio: UtteranceAudioBuffer::new(),
+            offline,
+            policy,
         }
     }
 
@@ -162,6 +214,7 @@ impl SpeechSession for NullSpeechSession {
         }
 
         self.next_sequence += 1;
+        self.utterance_audio.push_chunk(&chunk)?;
 
         if chunk.payload.is_empty() {
             return Ok(());
@@ -178,7 +231,7 @@ impl SpeechSession for NullSpeechSession {
             format!("{} final", self.partial_text)
         };
 
-        let final_transcript = FinalTranscript {
+        let streaming_flush = FinalTranscript {
             session_id: self.config.session_id.clone(),
             utterance_id: self.utterance_id.clone(),
             replaces_revision: self.revision,
@@ -190,7 +243,13 @@ impl SpeechSession for NullSpeechSession {
             processing_ms: 0,
         };
 
-        Ok(final_transcript)
+        let frozen = std::mem::take(&mut self.utterance_audio).freeze();
+        Ok(commit_final_transcript(
+            streaming_flush,
+            self.policy,
+            self.offline.as_ref(),
+            &frozen,
+        ))
     }
 
     async fn cancel(self: Box<Self>) -> Result<(), SpeechError> {
@@ -204,9 +263,10 @@ mod tests {
 
     use super::*;
     use bytes::Bytes;
-    use crate::protocol::{
-        AudioSampleFormat, SessionContext, VoiceEvent,
+    use crate::independent_final::{
+        FakeIndependentOfflineRedecode, IndependentFinalPolicy,
     };
+    use crate::protocol::{AudioSampleFormat, FinalizationMode, SessionContext, VoiceEvent};
 
     fn sample_chunk(session_id: &str, sequence: u64) -> AudioChunk {
         AudioChunk {
@@ -216,16 +276,29 @@ mod tests {
             sample_rate_hz: 16_000,
             channels: 1,
             sample_format: AudioSampleFormat::F32,
-            payload: Bytes::from_static(b"pcm"),
+            payload: Bytes::from_static(b"pcm\0"),
         }
     }
 
-    #[tokio::test]
-    async fn null_provider_rejects_sequence_gaps() {
-        let provider = NullSpeechProvider::new();
-        let (events, _rx) = SpeechEventSender::pair();
-        let config = SpeechSessionConfig {
-            session_id: "voice_1".into(),
+    fn f32_chunk(session_id: &str, sequence: u64, samples: &[f32]) -> AudioChunk {
+        let mut payload = Vec::with_capacity(samples.len() * 4);
+        for sample in samples {
+            payload.extend_from_slice(&sample.to_le_bytes());
+        }
+        AudioChunk {
+            session_id: session_id.into(),
+            sequence,
+            captured_at_ns: 0,
+            sample_rate_hz: 16_000,
+            channels: 1,
+            sample_format: AudioSampleFormat::F32,
+            payload: Bytes::from(payload),
+        }
+    }
+
+    fn sample_config(session_id: &str) -> SpeechSessionConfig {
+        SpeechSessionConfig {
+            session_id: session_id.into(),
             language: Some("en".into()),
             context: SessionContext {
                 document_id: None,
@@ -233,9 +306,17 @@ mod tests {
                 known_paths: Vec::new(),
                 command_mode: false,
             },
-        };
+        }
+    }
 
-        let mut session = provider.start_session(config, events).await.unwrap();
+    #[tokio::test]
+    async fn null_provider_rejects_sequence_gaps() {
+        let provider = NullSpeechProvider::new();
+        let (events, _rx) = SpeechEventSender::pair();
+        let mut session = provider
+            .start_session(sample_config("voice_1"), events)
+            .await
+            .unwrap();
         session
             .push_audio(sample_chunk("voice_1", 0))
             .await
@@ -249,31 +330,84 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn null_provider_emits_partial_then_final() {
+    async fn null_provider_emits_partial_then_streaming_flush_final() {
         let provider = Arc::new(NullSpeechProvider::new());
         let (events, mut rx) = SpeechEventSender::pair();
-        let config = SpeechSessionConfig {
-            session_id: "voice_1".into(),
-            language: Some("en".into()),
-            context: SessionContext {
-                document_id: None,
-                glossary_terms: Vec::new(),
-                known_paths: Vec::new(),
-                command_mode: false,
-            },
-        };
-
-        let mut session = provider.start_session(config, events).await.unwrap();
+        let mut session = provider
+            .start_session(sample_config("voice_1"), events)
+            .await
+            .unwrap();
         session
             .push_audio(sample_chunk("voice_1", 0))
             .await
             .unwrap();
         let final_transcript = session.finish_utterance().await.unwrap();
 
-        assert!(matches!(rx.recv().await.unwrap(), VoiceEvent::PartialTranscript(_)));
+        assert!(matches!(
+            rx.recv().await.unwrap(),
+            VoiceEvent::PartialTranscript(_)
+        ));
         assert_eq!(
             final_transcript.finalization_mode,
-            crate::protocol::FinalizationMode::StreamingFlush
+            FinalizationMode::StreamingFlush
         );
+    }
+
+    #[tokio::test]
+    async fn null_provider_buffers_frames_and_keeps_flush_without_backend() {
+        let provider = NullSpeechProvider::new().with_policy(IndependentFinalPolicy::for_tests(
+            true, false,
+        ));
+        let (events, _rx) = SpeechEventSender::pair();
+        let mut session = provider
+            .start_session(sample_config("voice_buf"), events)
+            .await
+            .unwrap();
+
+        session
+            .push_audio(f32_chunk("voice_buf", 0, &[0.0, 0.25]))
+            .await
+            .unwrap();
+        session
+            .push_audio(f32_chunk("voice_buf", 1, &[0.5, 0.75]))
+            .await
+            .unwrap();
+
+        let final_transcript = session.finish_utterance().await.unwrap();
+        // Env requested independent final, but stub backend → honest StreamingFlush.
+        assert_eq!(
+            final_transcript.finalization_mode,
+            FinalizationMode::StreamingFlush
+        );
+        assert!(final_transcript.text.ends_with(" final"));
+    }
+
+    #[tokio::test]
+    async fn null_provider_commits_independent_when_backend_implemented() {
+        let backend = Arc::new(FakeIndependentOfflineRedecode::default());
+        let provider = NullSpeechProvider::new()
+            .with_offline(backend)
+            .with_policy(IndependentFinalPolicy::for_tests(true, false));
+        let (events, _rx) = SpeechEventSender::pair();
+        let mut session = provider
+            .start_session(sample_config("voice_ind"), events)
+            .await
+            .unwrap();
+
+        session
+            .push_audio(f32_chunk("voice_ind", 0, &[0.1, 0.2]))
+            .await
+            .unwrap();
+        session
+            .push_audio(f32_chunk("voice_ind", 1, &[0.3]))
+            .await
+            .unwrap();
+
+        let final_transcript = session.finish_utterance().await.unwrap();
+        assert_eq!(
+            final_transcript.finalization_mode,
+            FinalizationMode::IndependentOfflineRedecode
+        );
+        assert_eq!(final_transcript.text, "independent-frames-2-samples-3");
     }
 }

@@ -11,6 +11,12 @@ reporting. See ADR
 evaluation plan in
 [current-implementation-review-and-ml-architecture.md](../../docs/voice/current-implementation-review-and-ml-architecture.md).
 
+After a winning RESULTS.md decision, enable production independent final via
+`LATTICE_VOICE_INDEPENDENT_FINAL=1` plus a real `OfflineRedecodeBackend` —
+see [RESULTS.md](./RESULTS.md#enabling-independent-final-after-eval-wins).
+Utterance PCM buffering already exists in `lattice-voice`; CI does not download
+TDT models.
+
 ## Layout
 
 ```text
