@@ -1,0 +1,105 @@
+syntax = "proto3";
+
+package lattice.v1;
+
+// Top-level length-delimited frame payload for daemon IPC (ADR 0041).
+message Envelope {
+  uint32 protocol_version = 1;
+  string request_id = 2;
+  oneof payload {
+    Request request = 10;
+    Response response = 11;
+    Event event = 12;
+    Error error = 13;
+  }
+}
+
+message Request {
+  // Absolute deadline as Unix milliseconds; omit for no deadline.
+  optional uint64 deadline_unix_ms = 1;
+  // Caller-supplied key so retried mutations are not applied twice.
+  optional string idempotency_key = 2;
+  oneof body {
+    HealthRequest health = 10;
+    PingRequest ping = 11;
+    OpenWorkspaceRequest open_workspace = 12;
+    SearchRequest search = 13;
+  }
+}
+
+message Response {
+  oneof body {
+    HealthResponse health = 10;
+    PingResponse ping = 11;
+    OpenWorkspaceResponse open_workspace = 12;
+    SearchResponse search = 13;
+  }
+}
+
+// Sequenced daemon-to-client notifications. Gaps imply a missed event.
+message Event {
+  uint64 sequence = 1;
+  string workspace_id = 2;
+  oneof body {
+    WorkspaceLeaseChanged lease_changed = 10;
+  }
+}
+
+message Error {
+  string code = 1;
+  string message = 2;
+  optional string details = 3;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  string status = 1;
+  uint32 protocol_version = 2;
+  string instance_id = 3;
+}
+
+message PingRequest {
+  string nonce = 1;
+}
+
+message PingResponse {
+  string nonce = 1;
+}
+
+// Mirrors `.lattice/locks/runtime.json` lease semantics for IPC.
+message WorkspaceLease {
+  uint32 schema_version = 1;
+  string owner = 2;
+  uint32 pid = 3;
+  uint64 process_start = 4;
+  string socket = 5;
+  uint32 protocol_version = 6;
+  string instance_id = 7;
+  // RFC 3339 timestamp.
+  string acquired_at = 8;
+}
+
+// Placeholder request filled by later daemon tasks.
+message OpenWorkspaceRequest {
+  string path = 1;
+}
+
+message OpenWorkspaceResponse {
+  string workspace_id = 1;
+  WorkspaceLease lease = 2;
+}
+
+// Placeholder request filled by later hybrid-search tasks.
+message SearchRequest {
+  string workspace_id = 1;
+  string query = 2;
+}
+
+message SearchResponse {
+  // Intentionally empty in D0; later tasks add hit payloads.
+}
+
+message WorkspaceLeaseChanged {
+  WorkspaceLease lease = 1;
+}
