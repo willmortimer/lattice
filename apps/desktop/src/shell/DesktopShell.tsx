@@ -10,6 +10,7 @@ import { KindMark } from "../KindMark";
 import { QUICK_NOTE_SHORTCUT } from "../quickNoteWindow";
 import { directoryPurposesFromCatalog } from "../lib/templates";
 import { SettingsPage } from "../settings/SettingsPage";
+import { TerminalPanel } from "../terminal/TerminalPanel";
 import { BrandMark } from "../shell/BrandMark";
 import { HomeDashboard } from "../shell/HomeDashboard";
 import { ResourceInspector } from "../shell/ResourceInspector";
@@ -35,15 +36,17 @@ import {
   Sidebar,
   Sparkle,
   Table,
+  Terminal,
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { useDesktopController } from "../controllers/useDesktopController";
 
 export interface DesktopShellProps { model: ReturnType<typeof useDesktopController>; }
 
 export function DesktopShell({ model }: DesktopShellProps) {
+  const [terminalOpen, setTerminalOpen] = useState(false);
   const {
     profile, profileReady, settings, startup, snapshot, selected, selectedPaths, session, error, busy, saveState,
     externalConflict, reloadToken, newWorkspaceOpen, workspacesDir, templates, statusToast,
@@ -181,6 +184,13 @@ export function DesktopShell({ model }: DesktopShellProps) {
               </IconButton>
             ))}
           </nav>
+          <IconButton
+            label="Terminal"
+            className={terminalOpen ? "activity-button-active" : ""}
+            onClick={() => setTerminalOpen((open) => !open)}
+          >
+            <Terminal size={17} />
+          </IconButton>
           <div className="activity-spacer" />
           <IconButton
             label="Settings"
@@ -587,6 +597,14 @@ export function DesktopShell({ model }: DesktopShellProps) {
               />
             )}
           </div>
+
+          {terminalOpen && (
+            <TerminalPanel
+              workspaceRoot={inBrowser ? null : snapshot.root}
+              hasTerminalCapability={hasCapability("terminal")}
+              onClose={() => setTerminalOpen(false)}
+            />
+          )}
         </main>
 
       {paletteOpen && (

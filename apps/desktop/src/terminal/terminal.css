@@ -1,0 +1,66 @@
+.terminal-dock {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 0 0 220px;
+  border-top: 1px solid var(--lt-line-strong);
+  background: var(--lt-bg);
+}
+
+.terminal-dock-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 8px 0 12px;
+  border-bottom: 1px solid var(--lt-line);
+  color: var(--lt-muted);
+  background: color-mix(in oklch, var(--lt-bg) 82%, var(--lt-panel));
+}
+
+.terminal-dock-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--lt-font-mono);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-dock-body {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+}
+
+.terminal-dock-host {
+  position: absolute;
+  inset: 0;
+  padding: 6px 8px 8px;
+}
+
+.terminal-dock-host .xterm {
+  height: 100%;
+}
+
+.terminal-dock-host .xterm-viewport {
+  background: transparent !important;
+}
+
+.terminal-dock-placeholder {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  place-items: center;
+  padding: 16px;
+  color: var(--lt-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.terminal-dock-placeholder p {
+  margin: 0;
+  max-width: 36ch;
+  line-height: 1.45;
+}
