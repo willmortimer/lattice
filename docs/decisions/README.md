@@ -42,5 +42,7 @@ These records capture architecture choices that should not be silently reversed.
 - [ADR 0038: Workspace encryption uses OS keychain and LocalAuthentication in Rust](0038-workspace-encryption-os-keychain-and-local-authentication.md)
 - [ADR 0039: Embedded terminal uses Rust PTY and xterm.js](0039-embedded-terminal-rust-pty-and-xtermjs.md)
 - [ADR 0040: Local voice dictation documentation package](0040-local-voice-dictation-documentation.md)
+- [ADR 0041: Daemon IPC uses Protobuf over a private Unix-domain socket](0041-daemon-ipc-protobuf.md)
+- [ADR 0042: Hybrid local search with FTS5 and Qwen3 embeddings](0042-hybrid-search-qwen3-embedding.md)
 
 Voice subsystem ADRs (FluidAudio, provisional/final transcripts, capture ownership, commands) live under [`docs/voice/adr/`](../voice/adr/).

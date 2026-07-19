@@ -80,12 +80,17 @@ Success: external agents and scripts can build and reorganize real workspace app
 - Typed events.
 - Workflow YAML.
 - Scheduler.
-- `latticed`.
+- `latticed` (stateful runtime, on-demand launch, workspace lease); see
+  [daemon migration plan](architecture/latticed-daemon-migration-plan.md) and
+  [ADR 0041](decisions/0041-daemon-ipc-protobuf.md).
 - Durable jobs and logs.
 - Derived-resource lineage and staleness.
 - Connector refresh.
 - Notebook and app builds.
 - OTLP ingestion.
+- Hybrid FTS5 + local Qwen3 embeddings (chunk index, embed host, RRF); see
+  [hybrid search plan](search/fts5-qwen3-embedding-implementation.md) and
+  [ADR 0042](decisions/0042-hybrid-search-qwen3-embedding.md).
 
 Success: reliable automation while desktop is closed.
 
@@ -162,7 +167,9 @@ Success: OneNote-class mixed typed and handwritten workflows.
 - Windows Ink and Android stylus-native plugins.
 - Audio-synchronized ink.
 - Local voice dictation on macOS (FluidAudio / Parakeet); see
-  [docs/voice/](voice/README.md) and [ADR 0040](decisions/0040-local-voice-dictation-documentation.md).
+  [docs/voice/](voice/README.md), [ADR 0040](decisions/0040-local-voice-dictation-documentation.md),
+  and the capture/finalization review in
+  [current-implementation-review-and-ml-architecture.md](voice/current-implementation-review-and-ml-architecture.md).
 - Remote GPU/Jupyter execution.
 - Full spreadsheet engine through IronCalc or equivalent.
 - ODS-native or documented sheet packages.
