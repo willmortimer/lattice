@@ -99,7 +99,8 @@ Tauri) use `.devcontainer/` and `scripts/devcontainer/` — see
 `docs/dev/devcontainer.md`.
 Nix remains the source of truth for the native desktop shell.
 
-Prefer the documented Nix entry points:
+Prefer the documented Nix entry points (or [nxr](https://github.com/willmortimer/nxr)
+equivalents — `nxr test`, `nxr task check`, …):
 
 ```sh
 nix run .#test
