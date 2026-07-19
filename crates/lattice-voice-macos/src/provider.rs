@@ -191,6 +191,7 @@ impl SpeechProvider for FluidAudioSpeechProvider {
             cancelled,
             shared,
             dispatcher: Some(dispatcher),
+            next_sequence: 0,
         }))
     }
 }
@@ -204,6 +205,7 @@ struct FluidAudioSpeechSession {
     cancelled: Arc<AtomicBool>,
     shared: Arc<Mutex<SessionSharedState>>,
     dispatcher: Option<JoinHandle<()>>,
+    next_sequence: u64,
 }
 
 impl FluidAudioSpeechSession {
@@ -259,7 +261,20 @@ impl SpeechSession for FluidAudioSpeechSession {
             return Err(SpeechError::provider("session was cancelled"));
         }
 
+        if chunk.session_id != self.config.session_id {
+            return Err(SpeechError::provider("audio chunk session mismatch"));
+        }
+
+        if chunk.sequence != self.next_sequence {
+            return Err(SpeechError::SequenceGap {
+                session_id: chunk.session_id,
+                expected: self.next_sequence,
+                received: chunk.sequence,
+            });
+        }
+
         let samples = Self::decode_f32_samples(&chunk)?;
+        self.next_sequence = self.next_sequence.saturating_add(1);
         if samples.is_empty() {
             return Ok(());
         }
@@ -456,7 +471,7 @@ mod tests {
         AudioChunk {
             session_id: session_id.into(),
             sequence,
-            captured_at_ns: 0,
+            captured_at_ns: 1_000 + sequence,
             sample_rate_hz: 16_000,
             channels: 1,
             sample_format: AudioSampleFormat::F32,
@@ -472,6 +487,42 @@ mod tests {
             provider.capabilities().finalization_mode,
             FinalizationMode::StreamingFlush
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn mock_provider_rejects_sequence_gaps() {
+        let bridge = Arc::new(MockBridge::new(LATTICE_VOICE_BRIDGE_ABI_VERSION));
+        let provider = FluidAudioSpeechProvider::with_backend(bridge, PathBuf::new());
+        provider
+            .prepare(PrepareModelRequest {
+                model_id: DEFAULT_MODEL_ID.into(),
+                warm: true,
+            })
+            .await
+            .unwrap();
+
+        let (events, _rx) = SpeechEventSender::pair();
+        let mut session = provider
+            .start_session(sample_config(), events)
+            .await
+            .unwrap();
+
+        session
+            .push_audio(f32_chunk("voice_test", 0, &[0.0]))
+            .await
+            .unwrap();
+        let err = session
+            .push_audio(f32_chunk("voice_test", 2, &[0.1]))
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            SpeechError::SequenceGap {
+                expected: 1,
+                received: 2,
+                ..
+            }
+        ));
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

@@ -1,8 +1,9 @@
-//! In-process voice dictation for the Tauri desktop shell (M2).
+//! In-process voice dictation for the Tauri desktop shell.
 //!
-//! The WebView owns microphone capture and pushes Float32 @ 16 kHz mono
-//! samples here. Recognition runs through `FluidAudioSpeechProvider` when
-//! built with `--features voice` on macOS arm64.
+//! On macOS with `--features voice`, microphone capture is owned by
+//! `lattice-audio-macos` (AVAudioEngine → 16 kHz mono Float32). Packed frames
+//! with sequence + `captured_at_ns` are pushed in-process to
+//! `FluidAudioSpeechProvider`. The WebView only drives session intent.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -28,14 +29,21 @@ struct VoiceInner {
     preparing: bool,
     #[cfg(all(target_os = "macos", feature = "voice"))]
     active: Option<ActiveSession>,
+    #[cfg(all(target_os = "macos", feature = "voice"))]
+    capture: Option<lattice_audio_macos::MacOsCaptureProvider>,
+    #[cfg(all(target_os = "macos", feature = "voice"))]
+    capture_rx: Option<tokio::sync::mpsc::UnboundedReceiver<lattice_audio::CaptureEvent>>,
+    #[cfg(all(target_os = "macos", feature = "voice"))]
+    capture_armed: bool,
 }
 
 #[cfg(all(target_os = "macos", feature = "voice"))]
 struct ActiveSession {
     session_id: String,
-    sequence: u64,
-    session: Box<dyn lattice_voice::SpeechSession>,
+    /// Shared with the capture pump until finish/cancel takes ownership.
+    session: Arc<Mutex<Option<Box<dyn lattice_voice::SpeechSession>>>>,
     _forwarder: tokio::task::JoinHandle<()>,
+    pump: tokio::task::JoinHandle<()>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -45,6 +53,8 @@ pub struct VoiceStatus {
     pub prepared: bool,
     pub preparing: bool,
     pub listening: bool,
+    /// True when native (non-WebView) capture owns the microphone.
+    pub native_capture: bool,
     pub platform: String,
     pub message: Option<String>,
 }
@@ -84,8 +94,177 @@ pub enum VoiceUiEvent {
 
 #[cfg(not(all(target_os = "macos", feature = "voice")))]
 fn unsupported() -> String {
-    "voice dictation requires macOS arm64 with `--features voice` and the FluidAudio bridge"
+    "voice dictation requires macOS arm64 with `--features voice`, FluidAudio, and native capture"
         .into()
+}
+
+#[cfg(all(target_os = "macos", feature = "voice"))]
+fn chunk_from_frame(
+    session_id: &str,
+    frame: &lattice_audio::AudioFrame,
+) -> lattice_voice::AudioChunk {
+    use lattice_voice::{AudioChunk, AudioSampleFormat};
+
+    AudioChunk {
+        session_id: session_id.to_string(),
+        sequence: frame.sequence,
+        captured_at_ns: frame.captured_at_ns,
+        sample_rate_hz: frame.format.sample_rate_hz,
+        channels: frame.format.channels,
+        sample_format: AudioSampleFormat::F32,
+        payload: frame.payload.clone(),
+    }
+}
+
+#[cfg(all(target_os = "macos", feature = "voice"))]
+fn ensure_capture(inner: &mut VoiceInner) -> Result<(), String> {
+    use lattice_audio::CaptureProvider;
+    use lattice_audio_macos::MacOsCaptureProvider;
+
+    if inner.capture.is_none() {
+        let mut provider = MacOsCaptureProvider::new();
+        let rx = provider.subscribe();
+        inner.capture = Some(provider);
+        inner.capture_rx = Some(rx);
+        inner.capture_armed = false;
+    }
+
+    if !inner.capture_armed {
+        let capture = inner
+            .capture
+            .as_mut()
+            .expect("capture created above");
+        capture.arm().map_err(|err| err.to_string())?;
+        inner.capture_armed = true;
+    }
+
+    Ok(())
+}
+
+#[cfg(all(target_os = "macos", feature = "voice"))]
+fn stop_capture_and_rearm(inner: &mut VoiceInner) {
+    use lattice_audio::CaptureProvider;
+
+    let Some(capture) = inner.capture.as_mut() else {
+        return;
+    };
+    let _ = capture.stop();
+    inner.capture_armed = false;
+    // Fresh subscriber for the next arm/start cycle.
+    let rx = capture.subscribe();
+    inner.capture_rx = Some(rx);
+    match capture.arm() {
+        Ok(()) => inner.capture_armed = true,
+        Err(err) => {
+            eprintln!("voice: failed to re-arm capture after stop: {err}");
+        }
+    }
+}
+
+#[cfg(all(target_os = "macos", feature = "voice"))]
+async fn pump_capture_to_session(
+    mut rx: tokio::sync::mpsc::UnboundedReceiver<lattice_audio::CaptureEvent>,
+    session: Arc<Mutex<Option<Box<dyn lattice_voice::SpeechSession>>>>,
+    session_id: String,
+    app: AppHandle,
+) {
+    use lattice_audio::{BoundedFrameQueue, CaptureEvent};
+
+    let mut queue = BoundedFrameQueue::canonical_default();
+    let mut expected_sequence = 0_u64;
+
+    while let Some(event) = rx.recv().await {
+        match event {
+            CaptureEvent::Started { .. } => {}
+            CaptureEvent::Frame(frame) => {
+                if frame.sequence != expected_sequence {
+                    let message = format!(
+                        "capture sequence gap: expected {expected_sequence}, got {}",
+                        frame.sequence
+                    );
+                    eprintln!("voice: {message}");
+                    let _ = app.emit(
+                        VOICE_EVENT,
+                        VoiceUiEvent::Failed {
+                            session_id: Some(session_id.clone()),
+                            message,
+                        },
+                    );
+                    return;
+                }
+                expected_sequence = expected_sequence.saturating_add(1);
+
+                if let Err(gap) = queue.try_push(frame) {
+                    let message = format!(
+                        "audio backpressure gap: dropped sequence near {} (missing {})",
+                        gap.to_sequence.saturating_sub(1),
+                        gap.missing_count()
+                    );
+                    eprintln!("voice: {message}");
+                    let _ = app.emit(
+                        VOICE_EVENT,
+                        VoiceUiEvent::Failed {
+                            session_id: Some(session_id.clone()),
+                            message,
+                        },
+                    );
+                    return;
+                }
+
+                while let Some(frame) = queue.pop_front() {
+                    let chunk = chunk_from_frame(&session_id, &frame);
+                    let mut guard = session.lock().await;
+                    let Some(speech) = guard.as_mut() else {
+                        return;
+                    };
+                    if let Err(err) = speech.push_audio(chunk).await {
+                        let message = err.to_string();
+                        eprintln!("voice: push_audio failed: {message}");
+                        let _ = app.emit(
+                            VOICE_EVENT,
+                            VoiceUiEvent::Failed {
+                                session_id: Some(session_id.clone()),
+                                message,
+                            },
+                        );
+                        return;
+                    }
+                }
+            }
+            CaptureEvent::Gap(gap) => {
+                let message = format!(
+                    "native capture gap: from {} to {} (missing {})",
+                    gap.from_sequence,
+                    gap.to_sequence,
+                    gap.missing_count()
+                );
+                eprintln!("voice: {message}");
+                expected_sequence = gap.to_sequence;
+                let _ = app.emit(
+                    VOICE_EVENT,
+                    VoiceUiEvent::Status {
+                        state: "listening".into(),
+                        message: Some(message),
+                    },
+                );
+            }
+            CaptureEvent::Stopped { .. } => break,
+            CaptureEvent::Error {
+                message,
+                captured_at_ns: _,
+            } => {
+                eprintln!("voice: capture error: {message}");
+                let _ = app.emit(
+                    VOICE_EVENT,
+                    VoiceUiEvent::Failed {
+                        session_id: Some(session_id.clone()),
+                        message,
+                    },
+                );
+                break;
+            }
+        }
+    }
 }
 
 #[tauri::command]
@@ -98,6 +277,7 @@ pub async fn voice_status(state: State<'_, VoiceState>) -> Result<VoiceStatus, S
             prepared: inner.provider.is_some(),
             preparing: inner.preparing,
             listening: inner.active.is_some(),
+            native_capture: true,
             platform: "macos".into(),
             message: if inner.preparing {
                 Some(
@@ -117,6 +297,7 @@ pub async fn voice_status(state: State<'_, VoiceState>) -> Result<VoiceStatus, S
             prepared: false,
             preparing: false,
             listening: false,
+            native_capture: false,
             platform: std::env::consts::OS.into(),
             message: Some(unsupported()),
         })
@@ -189,6 +370,18 @@ async fn ensure_provider(
     match prepare_result {
         Ok(_) => {
             inner.provider = Some(Arc::clone(&provider));
+            // Arm native capture so pre-roll fills before the next PTT press.
+            if let Err(err) = ensure_capture(&mut inner) {
+                eprintln!("voice: capture arm after prepare failed: {err}");
+                let _ = app.emit(
+                    VOICE_EVENT,
+                    VoiceUiEvent::Failed {
+                        session_id: None,
+                        message: format!("native capture unavailable: {err}"),
+                    },
+                );
+                return Err(format!("native capture unavailable: {err}"));
+            }
             let _ = app.emit(
                 VOICE_EVENT,
                 VoiceUiEvent::Status {
@@ -226,9 +419,18 @@ async fn take_active_session(state: &VoiceState) -> Option<ActiveSession> {
 }
 
 #[cfg(all(target_os = "macos", feature = "voice"))]
-async fn cancel_taken_session(active: ActiveSession) {
-    let ActiveSession { session, .. } = active;
-    let _ = session.cancel().await;
+async fn shutdown_active_session(active: ActiveSession, rearm: bool, state: &VoiceState) {
+    active.pump.abort();
+    {
+        let mut guard = active.session.lock().await;
+        if let Some(session) = guard.take() {
+            let _ = session.cancel().await;
+        }
+    }
+    if rearm {
+        let mut inner = state.inner.lock().await;
+        stop_capture_and_rearm(&mut inner);
+    }
 }
 
 #[tauri::command]
@@ -245,6 +447,7 @@ pub async fn voice_prepare(
             prepared: true,
             preparing: false,
             listening: inner.active.is_some(),
+            native_capture: true,
             platform: "macos".into(),
             message: Some("Local voice model ready".into()),
         })
@@ -266,7 +469,7 @@ pub async fn voice_cancel_active(
     #[cfg(all(target_os = "macos", feature = "voice"))]
     {
         if let Some(active) = take_active_session(&state).await {
-            cancel_taken_session(active).await;
+            shutdown_active_session(active, true, &state).await;
         }
         let _ = app.emit(
             VOICE_EVENT,
@@ -318,6 +521,7 @@ pub async fn voice_start_session(
 ) -> Result<VoiceSessionStart, String> {
     #[cfg(all(target_os = "macos", feature = "voice"))]
     {
+        use lattice_audio::CaptureProvider;
         use lattice_voice::{
             SessionContext, SpeechEventSender, SpeechProvider, SpeechSessionConfig, VoiceContextBuilder,
             VoiceContextInput, VoiceEvent,
@@ -325,7 +529,7 @@ pub async fn voice_start_session(
 
         // Preempt any leftover session from a release-during-start race.
         if let Some(stale) = take_active_session(&state).await {
-            cancel_taken_session(stale).await;
+            shutdown_active_session(stale, true, &state).await;
         }
 
         let provider = ensure_provider(&app, &state).await?;
@@ -368,7 +572,7 @@ pub async fn voice_start_session(
             context,
         };
 
-        let session = provider
+        let speech_session = provider
             .start_session(config, events)
             .await
             .map_err(|err| err.to_string())?;
@@ -410,17 +614,46 @@ pub async fn voice_start_session(
             }
         });
 
+        let session_slot = Arc::new(Mutex::new(Some(speech_session)));
+
+        // Start native capture (flushes armed pre-roll, then live frames).
+        let capture_rx = {
+            let mut inner = state.inner.lock().await;
+            ensure_capture(&mut inner)?;
+            let rx = inner
+                .capture_rx
+                .take()
+                .ok_or_else(|| "native capture subscriber missing".to_string())?;
+            let Some(capture) = inner.capture.as_mut() else {
+                inner.capture_rx = Some(rx);
+                return Err("native capture provider missing".into());
+            };
+            if let Err(err) = capture.start() {
+                inner.capture_rx = Some(rx);
+                return Err(err.to_string());
+            }
+            inner.capture_armed = false;
+            rx
+        };
+
+        let pump = tokio::spawn(pump_capture_to_session(
+            capture_rx,
+            Arc::clone(&session_slot),
+            session_id.clone(),
+            app.clone(),
+        ));
+
         // Another start may have raced; keep only this session.
         if let Some(stale) = take_active_session(&state).await {
-            cancel_taken_session(stale).await;
+            shutdown_active_session(stale, false, &state).await;
         }
         {
             let mut inner = state.inner.lock().await;
             inner.active = Some(ActiveSession {
                 session_id: session_id.clone(),
-                sequence: 0,
-                session,
+                session: session_slot,
                 _forwarder: forwarder,
+                pump,
             });
         }
 
@@ -441,56 +674,18 @@ pub async fn voice_start_session(
     }
 }
 
+/// Retired: WebView JSON float arrays are no longer accepted.
+/// Native capture pushes PCM in-process from Rust.
 #[tauri::command]
 pub async fn voice_push_audio(
-    state: State<'_, VoiceState>,
-    session_id: String,
-    samples: Vec<f32>,
+    _state: State<'_, VoiceState>,
+    _session_id: String,
+    _samples: Vec<f32>,
 ) -> Result<(), String> {
-    #[cfg(all(target_os = "macos", feature = "voice"))]
-    {
-        use bytes::Bytes;
-        use lattice_voice::{AudioChunk, AudioSampleFormat};
-
-        let mut inner = state.inner.lock().await;
-        let active = inner
-            .active
-            .as_mut()
-            .ok_or_else(|| "no active dictation session".to_string())?;
-        if active.session_id != session_id {
-            return Err("session id mismatch".into());
-        }
-        if samples.is_empty() {
-            return Ok(());
-        }
-
-        let mut payload = Vec::with_capacity(samples.len() * 4);
-        for sample in &samples {
-            payload.extend_from_slice(&sample.to_le_bytes());
-        }
-
-        let sequence = active.sequence;
-        active.sequence += 1;
-        let chunk = AudioChunk {
-            session_id: session_id.clone(),
-            sequence,
-            captured_at_ns: 0,
-            sample_rate_hz: 16_000,
-            channels: 1,
-            sample_format: AudioSampleFormat::F32,
-            payload: Bytes::from(payload),
-        };
-        active
-            .session
-            .push_audio(chunk)
-            .await
-            .map_err(|err| err.to_string())
-    }
-    #[cfg(not(all(target_os = "macos", feature = "voice")))]
-    {
-        let _ = (state, session_id, samples);
-        Err(unsupported())
-    }
+    Err(
+        "voice_push_audio is retired: macOS dictation uses native capture (no WebView PCM)"
+            .into(),
+    )
 }
 
 #[tauri::command]
@@ -511,6 +706,28 @@ pub async fn voice_finish_session(
             return Err("session id mismatch".into());
         }
 
+        // Stop capture before finishing so the pump drains and releases the session.
+        stop_capture_and_rearm(&mut inner);
+        drop(inner);
+
+        let ActiveSession {
+            session,
+            _forwarder,
+            pump,
+            session_id: sid,
+        } = active;
+        // Stop forwarding immediately so late partials cannot re-paint provisional
+        // ghost text after the authoritative final is inserted.
+        _forwarder.abort();
+        pump.abort();
+
+        let mut speech = {
+            let mut guard = session.lock().await;
+            guard
+                .take()
+                .ok_or_else(|| "dictation session already closed".to_string())?
+        };
+
         let _ = app.emit(
             VOICE_EVENT,
             VoiceUiEvent::Status {
@@ -519,19 +736,7 @@ pub async fn voice_finish_session(
             },
         );
 
-        let ActiveSession {
-            mut session,
-            _forwarder,
-            session_id: sid,
-            ..
-        } = active;
-        // Stop forwarding immediately so late partials cannot re-paint provisional
-        // ghost text after the authoritative final is inserted.
-        _forwarder.abort();
-        // Drop the lock while finishing.
-        drop(inner);
-
-        match session.finish_utterance().await {
+        match speech.finish_utterance().await {
             Ok(final_transcript) => {
                 let _ = app.emit(
                     VOICE_EVENT,
@@ -586,10 +791,17 @@ pub async fn voice_cancel_session(
             inner.active = Some(active);
             return Err("session id mismatch".into());
         }
-        let ActiveSession { session, _forwarder, .. } = active;
-        _forwarder.abort();
+        stop_capture_and_rearm(&mut inner);
         drop(inner);
-        let _ = session.cancel().await;
+
+        active.pump.abort();
+        active._forwarder.abort();
+        {
+            let mut guard = active.session.lock().await;
+            if let Some(session) = guard.take() {
+                let _ = session.cancel().await;
+            }
+        }
         let _ = app.emit(
             VOICE_EVENT,
             VoiceUiEvent::Status {
@@ -603,5 +815,24 @@ pub async fn voice_cancel_session(
     {
         let _ = (app, state, session_id);
         Err(unsupported())
+    }
+}
+
+#[cfg(all(test, target_os = "macos", feature = "voice"))]
+mod tests {
+    use super::chunk_from_frame;
+    use lattice_audio::AudioFrame;
+
+    #[test]
+    fn chunk_from_frame_preserves_sequence_and_timestamp() {
+        let frame = AudioFrame::from_f32_le(7, 1_234_567_890, &[0.25, -0.5], false);
+        let chunk = chunk_from_frame("voice-1", &frame);
+        assert_eq!(chunk.session_id, "voice-1");
+        assert_eq!(chunk.sequence, 7);
+        assert_eq!(chunk.captured_at_ns, 1_234_567_890);
+        assert_ne!(chunk.captured_at_ns, 0);
+        assert_eq!(chunk.sample_rate_hz, 16_000);
+        assert_eq!(chunk.channels, 1);
+        assert_eq!(chunk.payload.len(), 8);
     }
 }
