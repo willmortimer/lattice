@@ -1,0 +1,18 @@
+[package]
+name = "lattice-voice-macos"
+description = "macOS FluidAudio C ABI bridge stub (Swift owns the native library)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "lattice_voice_macos"
+path = "src/lib.rs"
+
+[dependencies]
+# Full SpeechProvider wiring is Task R. This crate only exports the ABI
+# version constant expected by a linked LatticeVoiceBridge dylib.
+
+[package.metadata.docs.rs]
+targets = ["aarch64-apple-darwin"]
