@@ -12,8 +12,8 @@ use lattice_client::{
 };
 use lattice_core::Workspace;
 use lattice_daemon::{
-    lease_path, serve_with_shutdown, spawn_latticed, DaemonConfig, SpawnOptions, WorkspaceLeaseFile,
-    OWNER_EMBEDDED, OWNER_LATTICED,
+    lease_path, serve_with_shutdown, spawn_latticed, DaemonConfig, SpawnOptions,
+    WorkspaceLeaseFile, OWNER_EMBEDDED, OWNER_LATTICED,
 };
 use lattice_runtime::{is_process_alive, write_workspace_lease, LatticeRuntime};
 use tempfile::TempDir;
@@ -164,10 +164,7 @@ async fn health_and_ping_over_socket() {
         other => panic!("unexpected health: {other:?}"),
     }
 
-    let ping = client
-        .request(ping_request("nonce-1"))
-        .await
-        .expect("ping");
+    let ping = client.request(ping_request("nonce-1")).await.expect("ping");
     match ping.body {
         Some(response::Body::Ping(p)) => assert_eq!(p.nonce, "nonce-1"),
         other => panic!("unexpected ping: {other:?}"),
@@ -252,7 +249,9 @@ async fn open_writes_lease_and_search_matches_embedded() {
     assert_eq!(daemon_search, embedded_search);
 
     // Warm index: second search must not force another rebuild on the daemon session.
-    let session = daemon_runtime.get_session_by_id(&daemon_ws).expect("session");
+    let session = daemon_runtime
+        .get_session_by_id(&daemon_ws)
+        .expect("session");
     let rebuilds = session.index_rebuild_count();
     let _ = daemon
         .request(search_request(&daemon_ws, "Contract"))
@@ -270,7 +269,10 @@ async fn daemon_lease_blocks_embedded_open() {
     let daemon = DaemonClient::connect(&guard.socket_path, &guard.auth_token)
         .await
         .expect("connect");
-    let _ = daemon.request(open_request(&path)).await.expect("daemon open");
+    let _ = daemon
+        .request(open_request(&path))
+        .await
+        .expect("daemon open");
 
     let embedded = EmbeddedClient::new("xor-embedded")
         .with_process_start(3)
@@ -342,7 +344,10 @@ async fn stale_lease_is_reclaimed_on_open() {
     let daemon = DaemonClient::connect(&guard.socket_path, &guard.auth_token)
         .await
         .expect("connect");
-    let open = daemon.request(open_request(&path)).await.expect("reclaim open");
+    let open = daemon
+        .request(open_request(&path))
+        .await
+        .expect("reclaim open");
     match open.body {
         Some(response::Body::OpenWorkspace(resp)) => {
             let lease = resp.lease.expect("lease");
@@ -495,8 +500,7 @@ async fn open_workspace_watcher_indexes_external_file_and_emits_events() {
                 sequences.push(evt.sequence);
                 match evt.body {
                     Some(Body::IndexProgress(ref p))
-                        if p.phase == "upserted"
-                            && p.path.as_deref() == Some("External.md") =>
+                        if p.phase == "upserted" && p.path.as_deref() == Some("External.md") =>
                     {
                         saw_upsert = true;
                     }

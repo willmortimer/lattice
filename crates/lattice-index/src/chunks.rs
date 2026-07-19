@@ -195,7 +195,10 @@ fn can_merge(active: &MergedBlock, piece: &BlockPiece) -> bool {
     if matches!(active.kind, BlockKind::CodeFence | BlockKind::Table) {
         return false;
     }
-    if matches!(piece.block.kind, BlockKind::CodeFence | BlockKind::Table | BlockKind::Heading) {
+    if matches!(
+        piece.block.kind,
+        BlockKind::CodeFence | BlockKind::Table | BlockKind::Heading
+    ) {
         return false;
     }
     let combined = active.char_len() + 2 + piece.block.text.chars().count();
@@ -211,11 +214,7 @@ fn update_heading_stack(stack: &mut Vec<(u8, String)>, block: &SourceBlock) {
             while stack.last().is_some_and(|(existing, _)| *existing >= level) {
                 stack.pop();
             }
-            let heading_text = block
-                .text
-                .trim_start_matches('#')
-                .trim()
-                .to_string();
+            let heading_text = block.text.trim_start_matches('#').trim().to_string();
             stack.push((level, heading_text));
         }
     }
@@ -294,14 +293,14 @@ fn split_plain_text_blocks(text: &str) -> Vec<SourceBlock> {
     let mut index = 0;
     while index <= text.len() {
         let at_end = index == text.len();
-        let paragraph_break = !at_end
-            && text.as_bytes()[index] == b'\n'
-            && text[index + 1..].starts_with('\n');
+        let paragraph_break =
+            !at_end && text.as_bytes()[index] == b'\n' && text[index + 1..].starts_with('\n');
         if at_end || paragraph_break {
             let end = if at_end { text.len() } else { index };
             let slice = text[paragraph_start..end].trim();
             if !slice.is_empty() {
-                let start_byte = paragraph_start + text[paragraph_start..end].find(slice).unwrap_or(0);
+                let start_byte =
+                    paragraph_start + text[paragraph_start..end].find(slice).unwrap_or(0);
                 let end_byte = start_byte + slice.len();
                 blocks.push(SourceBlock {
                     kind: BlockKind::Paragraph,
@@ -343,7 +342,11 @@ fn parse_code_fence(text: &str, index: usize) -> Option<SourceBlock> {
     if !line.starts_with("```") && !line.starts_with("~~~") {
         return None;
     }
-    let marker = if line.starts_with("```") { "```" } else { "~~~" };
+    let marker = if line.starts_with("```") {
+        "```"
+    } else {
+        "~~~"
+    };
     let mut cursor = next_line_start(text, line_end);
     while cursor < text.len() {
         let (next_start, next_end) = line_bounds(text, cursor)?;
@@ -446,7 +449,10 @@ fn parse_paragraph(text: &str, line_start: usize) -> Option<SourceBlock> {
     if slice.trim().is_empty() {
         return None;
     }
-    let trimmed_start = start_byte + text[start_byte..cursor].find(slice.trim_start()).unwrap_or(0);
+    let trimmed_start = start_byte
+        + text[start_byte..cursor]
+            .find(slice.trim_start())
+            .unwrap_or(0);
     let trimmed = slice.trim();
     Some(SourceBlock {
         kind: BlockKind::Paragraph,
@@ -499,11 +505,7 @@ fn is_list_line(line: &str) -> bool {
     trimmed.starts_with("- ")
         || trimmed.starts_with("* ")
         || trimmed.starts_with("+ ")
-        || trimmed
-            .chars()
-            .take_while(|ch| ch.is_ascii_digit())
-            .count()
-            > 0
+        || trimmed.chars().take_while(|ch| ch.is_ascii_digit()).count() > 0
             && trimmed.contains(". ")
 }
 
@@ -536,7 +538,13 @@ fn split_block_by_char_budget(block: MergedBlock) -> Vec<MergedBlock> {
             if char_count >= HARD_MAX_CHUNK_CHARS {
                 break;
             }
-            end = cursor + offset + remaining[offset..].chars().next().map(char::len_utf8).unwrap_or(0);
+            end = cursor
+                + offset
+                + remaining[offset..]
+                    .chars()
+                    .next()
+                    .map(char::len_utf8)
+                    .unwrap_or(0);
             char_count += 1;
         }
         if end <= cursor {
@@ -690,7 +698,10 @@ mod tests {
             .iter()
             .find(|chunk| chunk.text.contains("Body under two."))
             .expect("body chunk");
-        assert_eq!(body.heading_path, vec!["One".to_string(), "Two".to_string()]);
+        assert_eq!(
+            body.heading_path,
+            vec!["One".to_string(), "Two".to_string()]
+        );
     }
 
     #[test]
@@ -723,6 +734,8 @@ mod tests {
             &[],
         );
         assert!(chunks.len() >= 2);
-        assert!(chunks.iter().all(|chunk| estimate_tokens(&chunk.text) <= 1_100));
+        assert!(chunks
+            .iter()
+            .all(|chunk| estimate_tokens(&chunk.text) <= 1_100));
     }
 }

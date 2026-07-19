@@ -21,6 +21,7 @@ clap.workspace = true
 dirs.workspace = true
 lattice-client.workspace = true
 lattice-core.workspace = true
+lattice-embedding.workspace = true
 lattice-handlers.workspace = true
 lattice-protocol.workspace = true
 lattice-runtime.workspace = true

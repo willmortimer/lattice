@@ -898,6 +898,20 @@ Measure:
 - Rebuild only changed chunks.
 - Add battery and memory-pressure policies.
 
+**Status (runtime):** `lattice-runtime` owns a per-session semantic job
+worker (`SessionSemanticWorker`) that calls `embed_pending_chunks` on kick
+(from FTS upsert / explicit `kick_semantic_jobs`). Pause is a simple flag.
+`latticed` optionally starts a `SemanticController` when:
+
+| Env | Effect |
+| --- | --- |
+| `LATTICE_SEMANTIC_FAKE=1` | In-process `FakeEmbeddingProvider` (tests/CI) |
+| `LATTICE_EMBED_HOST_SOCKET` | Watch an existing embed-host UDS; degrade when missing |
+| `LATTICE_EMBED_HOST_BIN` | With socket: spawn/supervise `lattice-embed-host` (bounded backoff) |
+
+When the host is unavailable, sessions are marked `SemanticDegraded` and
+hybrid search falls back to FTS (`semantic_rank` none).
+
 ### Milestone S7: Core ML research backend
 
 - Build reproducible conversion.

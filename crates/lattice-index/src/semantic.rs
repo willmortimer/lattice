@@ -110,9 +110,8 @@ pub(crate) struct PendingChunk {
 }
 
 pub(crate) fn list_chunks_for_embedding(conn: &Connection) -> Result<Vec<PendingChunk>> {
-    let mut stmt = conn.prepare(
-        "SELECT chunk_id, text, content_hash FROM search_chunks ORDER BY chunk_id",
-    )?;
+    let mut stmt =
+        conn.prepare("SELECT chunk_id, text, content_hash FROM search_chunks ORDER BY chunk_id")?;
     let rows = stmt
         .query_map([], |row| {
             Ok(PendingChunk {

@@ -13,6 +13,7 @@ mod events;
 mod idempotency;
 mod index_apply;
 mod lease;
+mod semantic;
 mod session;
 mod watch;
 
@@ -27,6 +28,10 @@ pub use lease::{
     acquire_workspace_lease, clear_workspace_lease, is_process_alive, lease_is_stale, lease_path,
     read_workspace_lease, require_workspace_lease, rfc3339_utc, write_workspace_lease, LeaseClaim,
     WorkspaceLeaseFile, LEASE_RELATIVE_PATH, OWNER_EMBEDDED, OWNER_LATTICED,
+};
+pub use semantic::{
+    hybrid_search_with_session_semantic, SemanticAvailability, SemanticWorkerConfig,
+    SessionSemanticWorker, DEFAULT_EMBED_BATCH_SIZE,
 };
 pub use session::WorkspaceSession;
 pub use watch::{default_watch_debounce, SessionIndexWatcher};
@@ -86,10 +91,7 @@ impl LatticeRuntime {
     ///
     /// Prefer [`Self::open_workspace_session_for_write`] when the caller will
     /// mutate the workspace.
-    pub fn open_workspace_session(
-        &self,
-        root: impl AsRef<Path>,
-    ) -> Result<Arc<WorkspaceSession>> {
+    pub fn open_workspace_session(&self, root: impl AsRef<Path>) -> Result<Arc<WorkspaceSession>> {
         self.open_or_get_session(root.as_ref(), false)
     }
 
@@ -148,8 +150,7 @@ impl LatticeRuntime {
 
         if start_watcher {
             // Non-fatal: workspace stays usable without live reconciliation.
-            if let Err(err) =
-                session.start_watching(Arc::clone(&self.events), self.watch_debounce)
+            if let Err(err) = session.start_watching(Arc::clone(&self.events), self.watch_debounce)
             {
                 eprintln!(
                     "lattice: failed to start workspace index watcher at {}: {err}",
@@ -195,6 +196,7 @@ impl LatticeRuntime {
 
         match removed {
             Some(session) => {
+                session.stop_semantic_indexing();
                 session.stop_watching();
                 let workspace_id = session.workspace_id().to_string();
                 {
@@ -226,11 +228,10 @@ impl Default for LatticeRuntime {
 }
 
 fn canonicalize_root(root: &Path) -> Result<PathBuf> {
-    root.canonicalize()
-        .map_err(|source| Error::Io {
-            path: root.to_path_buf(),
-            source,
-        })
+    root.canonicalize().map_err(|source| Error::Io {
+        path: root.to_path_buf(),
+        source,
+    })
 }
 
 #[cfg(test)]
@@ -426,7 +427,10 @@ mod tests {
                 }) if path.ends_with("Watched.md")
             )
         });
-        assert!(progress.is_some(), "expected IndexProgress upsert for Watched.md");
+        assert!(
+            progress.is_some(),
+            "expected IndexProgress upsert for Watched.md"
+        );
 
         let changed = recv_matching(&events, Duration::from_secs(1), |e| {
             matches!(
@@ -486,8 +490,7 @@ mod tests {
                     phase: IndexProgressPhase::Upserted,
                     path: Some(path),
                     ..
-                })) if path.ends_with("Seq.md") =>
-                {
+                })) if path.ends_with("Seq.md") => {
                     saw_index = true;
                 }
                 Ok(_) => {}
