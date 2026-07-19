@@ -185,6 +185,7 @@ pub fn run() {
             canvas::canvas_place_resource,
             canvas::canvas_move_nodes,
             canvas::canvas_remove_nodes,
+            canvas::canvas_add_edge,
             voice::voice_status,
             voice::voice_prepare,
             voice::voice_start_session,

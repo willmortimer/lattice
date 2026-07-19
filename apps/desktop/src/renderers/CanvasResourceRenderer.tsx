@@ -14,6 +14,8 @@ export function CanvasResourceRenderer({
     <CanvasViewer
       key={session.resource.path}
       json={session.json}
+      canvasPath={session.resource.path}
+      resources={context.resources}
       adapter={adapter}
       baseRevision={session.revision}
       onRevisionChange={context.callbacks.onRevisionChange}

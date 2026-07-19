@@ -3,6 +3,7 @@ import {
   canvasOutline,
   canvasRelativePath,
   keyboardMoveDelta,
+  previewAddEdge,
   previewMoveNodes,
   previewPlaceResource,
   previewRemoveNodes,
@@ -34,6 +35,7 @@ describe("canvasRelativePath", () => {
     expect(data.nodes[0]).toMatchObject({ x: 1, y: 2 });
     expect(previewRemoveNodes(data, ["a"]).edges).toHaveLength(0);
     expect(previewPlaceResource(data, "Product/C.md", { id: "c", x: 8, y: 9, width: 20, height: 30 }).nodes).toHaveLength(3);
+    expect(previewAddEdge(data, { id: "ac", fromNode: "a", toNode: "b" }).edges).toHaveLength(2);
   });
 
   it("maps keyboard movement to bounded semantic deltas", () => {
