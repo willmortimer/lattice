@@ -21,6 +21,9 @@ pub enum Error {
     #[error("path {path} is not valid UTF-8")]
     NonUtf8Path { path: PathBuf },
 
+    #[error("json serialization error: {0}")]
+    Json(#[from] serde_json::Error),
+
     #[error("index operation cancelled")]
     Cancelled,
 }

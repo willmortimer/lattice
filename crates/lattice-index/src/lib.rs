@@ -5,6 +5,7 @@
 //! bounded; binary resources retain searchable names and runtime metadata.
 
 mod catalog;
+mod chunks;
 mod error;
 mod extract;
 mod index;
@@ -15,14 +16,15 @@ mod record;
 mod schema;
 mod types;
 
+pub use chunks::{chunk_resource, SearchChunkDraft, CHUNKER_VERSION};
 pub use error::{Error, Result};
 pub use extract::{
     extract_structured_paths, parse_page, ExtractedLink, Heading, LinkKind, PageIndexData,
     StructuredExtraction, StructuredFormat, StructuredPath,
 };
 pub use index::{
-    upsert_page, Backlink, BacklinkKind, ParserStatus, RebuildStats, ResourceMetadata, SearchHit,
-    WorkspaceIndex, MAX_INDEX_TEXT_BYTES,
+    upsert_page, Backlink, BacklinkKind, ChunkSearchHit, ParserStatus, RebuildStats,
+    ResourceMetadata, SearchHit, WorkspaceIndex, MAX_INDEX_TEXT_BYTES,
 };
 pub use lattice_core::{
     build_link_repair_plan, LinkOccurrence, LinkRepairCandidate, LinkRepairPlan, LinkRepairSource,

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use rusqlite::{params, Connection, Row};
 
 use crate::error::Result;
-use crate::types::SearchHit;
+use crate::types::{ChunkSearchHit, SearchHit};
 
 pub(crate) const SEARCH_SQL: &str = "SELECT r.path, r.title,
                     snippet(resources_fts, 2, '', '', '…', 32) AS snippet,
@@ -11,6 +11,17 @@ pub(crate) const SEARCH_SQL: &str = "SELECT r.path, r.title,
              FROM resources_fts
              JOIN resources r ON r.id = resources_fts.rowid
              WHERE resources_fts MATCH ?1
+             ORDER BY rank
+             LIMIT ?2";
+
+pub(crate) const CHUNK_SEARCH_SQL: &str = "SELECT r.path, c.title, c.chunk_id, c.ordinal,
+                    c.heading_path_json, c.source_start_byte, c.source_end_byte,
+                    snippet(search_chunks_fts, 2, '', '', '…', 32) AS snippet,
+                    bm25(search_chunks_fts) AS rank
+             FROM search_chunks_fts
+             JOIN search_chunks c ON c.id = search_chunks_fts.rowid
+             JOIN resources r ON r.id = c.resource_id
+             WHERE search_chunks_fts MATCH ?1
              ORDER BY rank
              LIMIT ?2";
 
@@ -35,12 +46,41 @@ pub(crate) fn search_hits(conn: &Connection, query: &str, limit: usize) -> Resul
     Ok(hits)
 }
 
+pub(crate) fn search_chunk_hits(
+    conn: &Connection,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<ChunkSearchHit>> {
+    let fts_query = escape_fts_query(query);
+    let mut stmt = conn.prepare(CHUNK_SEARCH_SQL)?;
+    let hits = stmt
+        .query_map(params![fts_query, limit as i64], chunk_search_hit_from_row)?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(hits)
+}
+
 fn search_hit_from_row(row: &Row<'_>) -> rusqlite::Result<SearchHit> {
     Ok(SearchHit {
         path: PathBuf::from(row.get::<_, String>(0)?),
         title: row.get(1)?,
         snippet: row.get(2)?,
         rank: row.get(3)?,
+    })
+}
+
+fn chunk_search_hit_from_row(row: &Row<'_>) -> rusqlite::Result<ChunkSearchHit> {
+    let heading_path_json: String = row.get(4)?;
+    let heading_path = serde_json::from_str(&heading_path_json).unwrap_or_default();
+    Ok(ChunkSearchHit {
+        path: PathBuf::from(row.get::<_, String>(0)?),
+        title: row.get(1)?,
+        chunk_id: row.get(2)?,
+        ordinal: row.get::<_, i64>(3)? as u32,
+        heading_path,
+        source_start_byte: row.get::<_, i64>(5)? as u64,
+        source_end_byte: row.get::<_, i64>(6)? as u64,
+        snippet: row.get(7)?,
+        rank: row.get(8)?,
     })
 }
 

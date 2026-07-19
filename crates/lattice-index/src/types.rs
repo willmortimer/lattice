@@ -46,6 +46,21 @@ pub struct SearchHit {
     pub rank: f64,
 }
 
+/// One structural chunk search hit.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChunkSearchHit {
+    pub path: PathBuf,
+    pub title: String,
+    pub chunk_id: String,
+    pub ordinal: u32,
+    pub heading_path: Vec<String>,
+    pub source_start_byte: u64,
+    pub source_end_byte: u64,
+    pub snippet: Option<String>,
+    pub rank: f64,
+}
+
 /// A resource that links to a target path, including a repairable source span.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Backlink {
