@@ -219,6 +219,29 @@ impl LatticeRuntime {
             .expect("sessions poisoned")
             .len()
     }
+
+    /// Stop watchers, release held workspace leases, and drop all warm sessions.
+    ///
+    /// Used during daemon shutdown so workspaces are not left locked.
+    pub fn shutdown_all_sessions(&self) {
+        let roots: Vec<PathBuf> = {
+            let by_root = self.sessions_by_root.read().expect("sessions poisoned");
+            by_root.keys().cloned().collect()
+        };
+        for root in roots {
+            if let Ok(Some(session)) = self.get_session(&root) {
+                if let Some(claim) = session.write_lease_claim() {
+                    if let Ok(Some(lease)) = read_workspace_lease(session.root()) {
+                        if claim.matches_lease(&lease) {
+                            let _ = clear_workspace_lease(session.root());
+                        }
+                    }
+                    session.clear_write_lease();
+                }
+            }
+            let _ = self.close_session(&root);
+        }
+    }
 }
 
 impl Default for LatticeRuntime {
@@ -290,6 +313,26 @@ mod tests {
         assert!(runtime.get_session(dir.path()).unwrap().is_none());
         assert!(runtime.get_session_by_id(&id).is_none());
         assert!(!runtime.close_session(dir.path()).unwrap());
+    }
+
+    #[test]
+    fn shutdown_all_sessions_releases_write_lease() {
+        use crate::lease::{lease_path, read_workspace_lease, LeaseClaim};
+
+        let dir = init_workspace();
+        let runtime = LatticeRuntime::new();
+        let claim = LeaseClaim::latticed(42, 99, "/tmp/latticed.sock", 1, "inst");
+        let (_session, _lease) = runtime
+            .open_workspace_session_for_write(dir.path(), &claim)
+            .unwrap();
+        assert!(lease_path(dir.path()).is_file());
+
+        runtime.shutdown_all_sessions();
+        assert_eq!(runtime.session_count(), 0);
+        assert!(
+            read_workspace_lease(dir.path()).unwrap().is_none(),
+            "shutdown should clear on-disk lease"
+        );
     }
 
     #[test]

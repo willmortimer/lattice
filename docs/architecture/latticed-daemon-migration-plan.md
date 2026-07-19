@@ -1067,13 +1067,16 @@ production.
 
 ## Phase D7: optional background service
 
-After on-demand launch is stable:
+**Landed (partial):** user preference `services.keepServicesRunning` in desktop
+settings, idle shutdown when false (default), clean lease/socket teardown, and
+spawn-helper parity. See `apps/daemon/README.md`.
+
+Still future:
 
 - Add a user-controlled login item.
-- Add "keep Lattice services running."
 - Support Quick Note while the main window is closed.
 - Support schedules and connector refresh.
-- Add clean uninstall and disable behavior.
+- Add clean uninstall for a login-item install.
 
 Do not make the daemon permanently resident before lifecycle behavior is
 trustworthy.

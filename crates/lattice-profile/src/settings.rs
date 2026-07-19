@@ -388,6 +388,8 @@ pub struct DesktopSettings {
     pub performance: PerformanceSettings,
     #[serde(default)]
     pub diagnostics: DiagnosticSettings,
+    #[serde(default)]
+    pub services: ServicesSettings,
 }
 
 impl Default for DesktopSettings {
@@ -401,6 +403,23 @@ impl Default for DesktopSettings {
             data: DataSettings::default(),
             performance: PerformanceSettings::default(),
             diagnostics: DiagnosticSettings::default(),
+            services: ServicesSettings::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServicesSettings {
+    /// When true, `latticed` stays running after the last client disconnects.
+    #[serde(default)]
+    pub keep_services_running: bool,
+}
+
+impl Default for ServicesSettings {
+    fn default() -> Self {
+        Self {
+            keep_services_running: false,
         }
     }
 }

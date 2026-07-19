@@ -1,10 +1,13 @@
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use uuid::Uuid;
 
 /// Default localhost API port (`127.0.0.1` only). Use `0` / [`None`] to disable.
 pub const DEFAULT_API_PORT: u16 = 18787;
+
+/// Default idle shutdown after the last client disconnects when keep-running is off.
+pub const DEFAULT_IDLE_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Runtime configuration for a `latticed` instance.
 #[derive(Debug, Clone)]
@@ -19,6 +22,10 @@ pub struct DaemonConfig {
     pub process_start: u64,
     /// Optional localhost HTTP API port. Always bound to `127.0.0.1` when set.
     pub api_port: Option<u16>,
+    /// Remain running after the last client disconnects.
+    pub keep_services_running: bool,
+    /// Idle time before shutdown when [`Self::keep_services_running`] is false.
+    pub idle_shutdown_timeout: Duration,
 }
 
 impl DaemonConfig {
@@ -30,6 +37,8 @@ impl DaemonConfig {
             instance_id: Uuid::now_v7().to_string(),
             process_start: unix_now_secs(),
             api_port: Some(DEFAULT_API_PORT),
+            keep_services_running: false,
+            idle_shutdown_timeout: DEFAULT_IDLE_SHUTDOWN_TIMEOUT,
         }
     }
 
@@ -48,6 +57,18 @@ impl DaemonConfig {
     /// Enable or disable the localhost HTTP API (`None` disables).
     pub fn with_api_port(mut self, api_port: Option<u16>) -> Self {
         self.api_port = api_port;
+        self
+    }
+
+    /// Override keep-running lifecycle behavior.
+    pub fn with_keep_services_running(mut self, keep_services_running: bool) -> Self {
+        self.keep_services_running = keep_services_running;
+        self
+    }
+
+    /// Override idle shutdown timeout after the last client disconnects.
+    pub fn with_idle_shutdown_timeout(mut self, idle_shutdown_timeout: Duration) -> Self {
+        self.idle_shutdown_timeout = idle_shutdown_timeout;
         self
     }
 }

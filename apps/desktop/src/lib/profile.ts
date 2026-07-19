@@ -79,6 +79,9 @@ export interface DesktopSettings {
     verboseErrors: boolean;
     showRendererStats: boolean;
   };
+  services: {
+    keepServicesRunning: boolean;
+  };
 }
 
 export interface WorkspaceStartupSettings {
@@ -150,6 +153,9 @@ export function defaultDesktopSettings(): DesktopSettings {
       commandTimings: false,
       verboseErrors: false,
       showRendererStats: false,
+    },
+    services: {
+      keepServicesRunning: false,
     },
   };
 }

@@ -25,6 +25,7 @@ lattice-core.workspace = true
 lattice-embedding.workspace = true
 lattice-handlers.workspace = true
 lattice-index.workspace = true
+lattice-profile.workspace = true
 lattice-protocol.workspace = true
 lattice-runtime.workspace = true
 serde.workspace = true
