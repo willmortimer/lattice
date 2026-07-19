@@ -380,6 +380,21 @@ fn handle_request(
             expected_revision,
             idempotency_key,
         ),
+        // Voice plane is schema-ready (D5 protocol); handlers land with voice-host.
+        Some(
+            request::Body::PrepareModel(_)
+            | request::Body::GetVoiceCapabilities(_)
+            | request::Body::StartVoiceSession(_)
+            | request::Body::PushAudioChunk(_)
+            | request::Body::FinishUtterance(_)
+            | request::Body::UpdateSessionContext(_)
+            | request::Body::CancelVoiceSession(_)
+            | request::Body::EndVoiceSession(_),
+        ) => Err(WireError {
+            code: "unimplemented".into(),
+            message: "voice requests are not handled yet".into(),
+            details: None,
+        }),
         None => Err(WireError {
             code: "invalid_request".into(),
             message: "request body is required".into(),
