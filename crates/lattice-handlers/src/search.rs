@@ -1,5 +1,4 @@
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use lattice_embedding::EmbeddingProvider;
 use lattice_index::{
@@ -233,6 +232,8 @@ pub fn get_backlinks_with_session(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
+
     use lattice_core::Workspace;
     use lattice_embedding::{
         DistanceMetric, EmbeddingSpecification, FakeEmbeddingProvider, PoolingStrategy,
