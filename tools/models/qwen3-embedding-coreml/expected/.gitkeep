@@ -1,0 +1,2 @@
+# Placeholder reference embeddings for parity checks.
+# Populate from PyTorch / llama.cpp after export and before Core ML adoption.

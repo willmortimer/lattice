@@ -1,0 +1,3 @@
+# Placeholder fixtures for tokenizer and input validation.
+# Add JSON or text samples covering: ASCII, Unicode, Markdown, code, paths,
+# long inputs, empty/whitespace, and Qwen special tokens.
