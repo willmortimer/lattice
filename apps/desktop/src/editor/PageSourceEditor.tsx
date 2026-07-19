@@ -3,6 +3,8 @@ import { EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { useEffect, useRef } from "react";
 
+import { latticeCodeMirrorTheme } from "./codemirrorTheme";
+
 export interface PageSourceEditorProps {
   value: string;
   resetKey: string;
@@ -28,6 +30,7 @@ export function PageSourceEditor({ value, resetKey, onChange }: PageSourceEditor
           state: EditorState.create({
             doc: value,
             extensions: [
+              ...latticeCodeMirrorTheme(),
               history(),
               keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
               loadMarkdown(),
