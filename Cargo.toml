@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "apps/bridge",
     "apps/cli",
+    "apps/embed-host",
     "crates/lattice-core",
     "crates/lattice-profile",
     "crates/lattice-storage",
@@ -32,6 +33,7 @@ lattice-storage = { path = "crates/lattice-storage" }
 lattice-commands = { path = "crates/lattice-commands" }
 lattice-index = { path = "crates/lattice-index" }
 lattice-embedding = { path = "crates/lattice-embedding" }
+lattice-embed-host = { path = "apps/embed-host" }
 lattice-data = { path = "crates/lattice-data" }
 lattice-theme = { path = "crates/lattice-theme" }
 lattice-handlers = { path = "crates/lattice-handlers" }
