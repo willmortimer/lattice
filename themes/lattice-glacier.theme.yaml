@@ -1,0 +1,49 @@
+# Lattice Glacier — light theme, icy blue-whites with a cold blue accent.
+
+name: Lattice Glacier
+id: lattice-glacier
+appearance: light
+
+palette:
+  ground: "#f2f7fa"
+  ground_raise: "#e8f0f6"
+  panel: "#ffffff"
+  slate: "#5d7286"
+  text: "#10222e"
+  text_soft: "#38505f"
+  muted: "#6a8090"
+  faint: "#8fa2af"
+  accent: "#0b7fc4"
+  accent_bright: "#086298"
+  accent_deep: "#064a74"
+  danger: "#c22f2f"
+  ink_shadow: "#0a0d13"
+  on_accent: "#f2faff"
+
+roles:
+  bg: $ground
+  bg_raise: $ground_raise
+  panel: $panel
+  slate: $slate
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $accent
+  accent_bright: $accent_bright
+  accent_deep: $accent_deep
+  danger: $danger
+  shadow: $ink_shadow
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 9px
+  radius_sm: 6px
+  radius_lg: 14px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px

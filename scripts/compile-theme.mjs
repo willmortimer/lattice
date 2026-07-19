@@ -154,7 +154,34 @@ function validateTheme(theme) {
     "shadow",
   ];
   requireKeys(theme.roles, roleKeys, "roles");
+
+  if (theme.terminal !== undefined) {
+    if (typeof theme.terminal !== "object" || Array.isArray(theme.terminal)) {
+      throw new Error("terminal must be a map");
+    }
+    requireKeys(theme.terminal, TERMINAL_ANSI_KEYS, "terminal");
+  }
 }
+
+/** ANSI slots a `terminal:` block must provide when present. */
+const TERMINAL_ANSI_KEYS = [
+  "black",
+  "red",
+  "green",
+  "yellow",
+  "blue",
+  "magenta",
+  "cyan",
+  "white",
+  "bright_black",
+  "bright_red",
+  "bright_green",
+  "bright_yellow",
+  "bright_blue",
+  "bright_magenta",
+  "bright_cyan",
+  "bright_white",
+];
 
 // ---------------------------------------------------------------------------
 // Emit CSS
@@ -175,6 +202,17 @@ function emitCss(theme, sourcePath) {
   const rel = sourcePath.startsWith(ROOT)
     ? sourcePath.slice(ROOT.length + 1)
     : sourcePath;
+
+  const terminalLines = theme.terminal
+    ? [
+        ``,
+        `  /* Terminal (ANSI) — from the theme's terminal: block */`,
+        ...Object.entries(theme.terminal).map(
+          ([k, v]) =>
+            `  --lt-term-${k.replace(/_/g, "-")}: ${resolveRef(v, palette)};`,
+        ),
+      ]
+    : [];
 
   const lines = [
     `/* GENERATED from ${rel} — do not edit by hand.`,
@@ -218,6 +256,7 @@ function emitCss(theme, sourcePath) {
     `  --lt-scrim-deep: color-mix(in oklch, var(--lt-bg) 72%, #06080c);`,
     `  --lt-shadow-md: color-mix(in oklch, var(--lt-shadow) 35%, transparent);`,
     `  --lt-shadow-lg: color-mix(in oklch, var(--lt-shadow) 45%, transparent);`,
+    ...terminalLines,
     ``,
     `  /* Fonts */`,
     `  --lt-font-display: ${theme.fonts.display};`,

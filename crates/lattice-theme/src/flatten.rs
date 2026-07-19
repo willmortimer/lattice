@@ -109,6 +109,13 @@ pub fn flatten_theme(theme: &ThemeDocument, path: &Path) -> Result<BTreeMap<Stri
         "color-mix(in oklch, var(--lt-shadow) 45%, transparent)".into(),
     );
 
+    // Terminal (optional ANSI palette from the theme's `terminal:` block).
+    if let Some(terminal) = theme.resolved_terminal(path)? {
+        for (key, value) in terminal {
+            vars.insert(format!("--lt-term-{}", key.replace('_', "-")), value);
+        }
+    }
+
     // Fonts / shape
     vars.insert("--lt-font-display".into(), theme.fonts.display.clone());
     vars.insert("--lt-font-ui".into(), theme.fonts.ui.clone());

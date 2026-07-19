@@ -1,0 +1,79 @@
+# Solarized Dark — adopted terminal-theme standard (MIT, Ethan Schoonover).
+# Canonical base03..base3 monotones with the blue accent; the `terminal:`
+# block carries Solarized's own ANSI mapping verbatim.
+
+name: Solarized Dark
+id: solarized-dark
+appearance: dark
+
+palette:
+  base03: "#002b36"
+  base02: "#073642"
+  base01: "#586e75"
+  base00: "#657b83"
+  base0: "#839496"
+  base1: "#93a1a1"
+  base2: "#eee8d5"
+  base3: "#fdf6e3"
+  yellow: "#b58900"
+  orange: "#cb4b16"
+  red: "#dc322f"
+  magenta: "#d33682"
+  violet: "#6c71c4"
+  blue: "#268bd2"
+  blue_bright: "#5bb3e8"
+  blue_deep: "#1a6398"
+  cyan: "#2aa198"
+  green: "#859900"
+  panel_mix: "#0f4a58"
+  ink: "#001b21"
+  on_accent: "#fdf6e3"
+
+roles:
+  bg: $base03
+  bg_raise: $base02
+  panel: $panel_mix
+  slate: $base01
+  text: $base1
+  text_soft: $base0
+  muted: $base00
+  faint: $base01
+  accent: $blue
+  accent_bright: $blue_bright
+  accent_deep: $blue_deep
+  danger: $red
+  shadow: $ink
+
+terminal:
+  black: $base02
+  red: $red
+  green: $green
+  yellow: $yellow
+  blue: $blue
+  magenta: $magenta
+  cyan: $cyan
+  white: $base2
+  bright_black: $base03
+  bright_red: $orange
+  bright_green: $base01
+  bright_yellow: $base00
+  bright_blue: $base0
+  bright_magenta: $violet
+  bright_cyan: $base1
+  bright_white: $base3
+  cursor: $base0
+  cursor_text: $base03
+  selection: $base02
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 9px
+  radius_sm: 6px
+  radius_lg: 14px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px

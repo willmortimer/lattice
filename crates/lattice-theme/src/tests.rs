@@ -28,6 +28,85 @@ fn builtins_parse_and_flatten() {
 }
 
 #[test]
+fn terminal_standards_flatten_ansi_palette() {
+    // Adopted terminal themes must carry their real ANSI palette through
+    // flatten as --lt-term-* vars.
+    for id in ["catppuccin-mocha", "nord", "github-dark", "dracula", "solarized-dark"] {
+        let doc = load_builtin(id).unwrap();
+        let vars = flatten_theme(&doc, &builtin_path(id)).unwrap();
+        for key in crate::document::TERMINAL_ANSI_KEYS {
+            let var = format!("--lt-term-{}", key.replace('_', "-"));
+            assert!(vars.contains_key(&var), "{id} missing {var}");
+        }
+    }
+    // Dracula ANSI green is canonical, not role-derived.
+    let doc = load_builtin("dracula").unwrap();
+    let vars = flatten_theme(&doc, &builtin_path("dracula")).unwrap();
+    assert_eq!(
+        vars.get("--lt-term-green").map(String::as_str),
+        Some("#50fa7b")
+    );
+}
+
+#[test]
+fn themes_without_terminal_block_emit_no_term_vars() {
+    let doc = load_builtin("lattice-slate").unwrap();
+    let vars = flatten_theme(&doc, &builtin_path("lattice-slate")).unwrap();
+    assert!(!vars.keys().any(|k| k.starts_with("--lt-term-")));
+}
+
+#[test]
+fn terminal_block_requires_all_ansi_slots() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("partial.theme.yaml");
+    let yaml = r##"
+name: Partial
+id: partial
+appearance: dark
+palette:
+  ground: "#000000"
+roles:
+  bg: $ground
+  bg_raise: "#111111"
+  panel: "#222222"
+  slate: "#333333"
+  text: "#ffffff"
+  text_soft: "#eeeeee"
+  muted: "#cccccc"
+  faint: "#999999"
+  accent: "#ff0000"
+  accent_bright: "#ff8888"
+  accent_deep: "#aa0000"
+  danger: "#ff6666"
+  shadow: "#000000"
+terminal:
+  black: "#000000"
+  red: "#ff0000"
+fonts:
+  display: Serif
+  ui: Sans
+  mono: Mono
+shape:
+  radius: 9px
+  radius_sm: 6px
+  radius_lg: 14px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px
+"##;
+    std::fs::write(&path, yaml).unwrap();
+    let err = check_theme_file(&path).unwrap_err();
+    assert!(err.to_string().contains("terminal missing required ANSI key"));
+}
+
+#[test]
+fn oled_ground_is_true_black() {
+    let doc = load_builtin("lattice-oled").unwrap();
+    let vars = flatten_theme(&doc, &builtin_path("lattice-oled")).unwrap();
+    assert_eq!(vars.get("--lt-bg").map(String::as_str), Some("#000000"));
+}
+
+#[test]
 fn slate_ground_matches_shipped_default() {
     let doc = load_builtin("lattice-slate").unwrap();
     let vars = flatten_theme(&doc, &builtin_path("lattice-slate")).unwrap();

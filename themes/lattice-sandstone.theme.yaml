@@ -1,0 +1,49 @@
+# Lattice Sandstone — light theme, warm desert sand with a terracotta accent.
+
+name: Lattice Sandstone
+id: lattice-sandstone
+appearance: light
+
+palette:
+  ground: "#f7f1e6"
+  ground_raise: "#f0e7d6"
+  panel: "#fdfaf3"
+  slate: "#837465"
+  text: "#2b2118"
+  text_soft: "#55483a"
+  muted: "#7b6d5e"
+  faint: "#9c8f80"
+  accent: "#c05621"
+  accent_bright: "#9c3f12"
+  accent_deep: "#7c300b"
+  danger: "#b3261e"
+  ink_shadow: "#0a0d13"
+  on_accent: "#fff6ee"
+
+roles:
+  bg: $ground
+  bg_raise: $ground_raise
+  panel: $panel
+  slate: $slate
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $accent
+  accent_bright: $accent_bright
+  accent_deep: $accent_deep
+  danger: $danger
+  shadow: $ink_shadow
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 9px
+  radius_sm: 6px
+  radius_lg: 14px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px

@@ -1,0 +1,50 @@
+# Lattice OLED — AMOLED-ready dark theme. True #000000 ground so OLED panels
+# switch pixels fully off; high-contrast text and an electric mint accent.
+
+name: Lattice OLED
+id: lattice-oled
+appearance: dark
+
+palette:
+  ground: "#000000"
+  ground_raise: "#050507"
+  panel: "#0a0a0c"
+  slate: "#9aa3b2"
+  text: "#f2f4f8"
+  text_soft: "#c2c8d2"
+  muted: "#878e9b"
+  faint: "#565c66"
+  accent: "#2ee6a8"
+  accent_bright: "#8dffd9"
+  accent_deep: "#0fae7c"
+  danger: "#ff8095"
+  ink_shadow: "#000000"
+  on_accent: "#001a10"
+
+roles:
+  bg: $ground
+  bg_raise: $ground_raise
+  panel: $panel
+  slate: $slate
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $accent
+  accent_bright: $accent_bright
+  accent_deep: $accent_deep
+  danger: $danger
+  shadow: $ink_shadow
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 9px
+  radius_sm: 6px
+  radius_lg: 14px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px

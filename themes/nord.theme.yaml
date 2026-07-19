@@ -1,0 +1,79 @@
+# Nord — adopted terminal-theme standard (MIT, nordtheme.com).
+# Polar Night grounds, Snow Storm text, Frost accent. The `terminal:` block
+# carries Nord's own ANSI mapping verbatim.
+
+name: Nord
+id: nord
+appearance: dark
+
+palette:
+  nord0: "#2e3440"
+  nord1: "#3b4252"
+  nord2: "#434c5e"
+  nord3: "#4c566a"
+  nord4: "#d8dee9"
+  nord5: "#e5e9f0"
+  nord6: "#eceff4"
+  nord7: "#8fbcbb"
+  nord8: "#88c0d0"
+  nord9: "#81a1c1"
+  nord10: "#5e81ac"
+  nord11: "#bf616a"
+  nord12: "#d08770"
+  nord13: "#ebcb8b"
+  nord14: "#a3be8c"
+  nord15: "#b48ead"
+  frost_bright: "#b8e0ea"
+  muted_mix: "#a6b0c3"
+  faint_mix: "#7b88a1"
+  ink: "#242933"
+  on_accent: "#2e3440"
+
+roles:
+  bg: $nord0
+  bg_raise: $nord1
+  panel: $nord2
+  slate: $nord9
+  text: $nord6
+  text_soft: $nord4
+  muted: $muted_mix
+  faint: $faint_mix
+  accent: $nord8
+  accent_bright: $frost_bright
+  accent_deep: $nord10
+  danger: $nord11
+  shadow: $ink
+
+terminal:
+  black: $nord1
+  red: $nord11
+  green: $nord14
+  yellow: $nord13
+  blue: $nord9
+  magenta: $nord15
+  cyan: $nord8
+  white: $nord5
+  bright_black: $nord3
+  bright_red: $nord11
+  bright_green: $nord14
+  bright_yellow: $nord13
+  bright_blue: $nord9
+  bright_magenta: $nord15
+  bright_cyan: $nord7
+  bright_white: $nord6
+  cursor: $nord4
+  cursor_text: $nord0
+  selection: $nord2
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 9px
+  radius_sm: 6px
+  radius_lg: 14px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px

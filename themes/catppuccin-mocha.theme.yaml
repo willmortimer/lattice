@@ -1,0 +1,83 @@
+# Catppuccin Mocha — adopted terminal-theme standard (MIT, catppuccin.com).
+# Roles map the canonical Mocha palette onto Lattice tokens; the `terminal:`
+# block carries Catppuccin's own ANSI mapping verbatim.
+
+name: Catppuccin Mocha
+id: catppuccin-mocha
+appearance: dark
+
+palette:
+  crust: "#11111b"
+  mantle: "#181825"
+  base: "#1e1e2e"
+  surface0: "#313244"
+  surface1: "#45475a"
+  surface2: "#585b70"
+  overlay0: "#6c7086"
+  overlay1: "#7f849c"
+  overlay2: "#9399b2"
+  subtext0: "#a6adc8"
+  subtext1: "#bac2de"
+  text: "#cdd6f4"
+  rosewater: "#f5e0dc"
+  pink: "#f5c2e7"
+  mauve: "#cba6f7"
+  mauve_deep: "#a06fe0"
+  red: "#f38ba8"
+  peach: "#fab387"
+  yellow: "#f9e2af"
+  green: "#a6e3a1"
+  teal: "#94e2d5"
+  sky: "#89dceb"
+  blue: "#89b4fa"
+  lavender: "#b4befe"
+  on_accent: "#1e1e2e"
+
+roles:
+  bg: $mantle
+  bg_raise: $base
+  panel: $surface0
+  slate: $overlay2
+  text: $text
+  text_soft: $subtext1
+  muted: $subtext0
+  faint: $overlay1
+  accent: $mauve
+  accent_bright: $pink
+  accent_deep: $mauve_deep
+  danger: $red
+  shadow: $crust
+
+terminal:
+  black: $surface1
+  red: $red
+  green: $green
+  yellow: $yellow
+  blue: $blue
+  magenta: $pink
+  cyan: $teal
+  white: $subtext1
+  bright_black: $surface2
+  bright_red: $red
+  bright_green: $green
+  bright_yellow: $yellow
+  bright_blue: $blue
+  bright_magenta: $pink
+  bright_cyan: $teal
+  bright_white: $subtext0
+  cursor: $rosewater
+  cursor_text: $base
+  selection: "#585b7066"
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 9px
+  radius_sm: 6px
+  radius_lg: 14px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px

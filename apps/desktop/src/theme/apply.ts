@@ -52,6 +52,15 @@ export function applyResolvedTheme(resolved: ResolvedThemePayload): void {
   root.style.colorScheme = resolved.appearance === "light" ? "light" : "dark";
   root.style.background = resolved.background;
 
+  // Optional vars (e.g. --lt-term-* from a theme's terminal block) must not
+  // leak from the previous theme when the new one omits them.
+  for (let i = root.style.length - 1; i >= 0; i--) {
+    const name = root.style[i];
+    if (name.startsWith("--lt-term-") && !(name in resolved.vars)) {
+      root.style.removeProperty(name);
+    }
+  }
+
   for (const [key, value] of Object.entries(resolved.vars)) {
     root.style.setProperty(key, value);
   }
