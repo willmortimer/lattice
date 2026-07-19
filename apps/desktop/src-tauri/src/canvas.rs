@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use lattice_commands::{CanvasNodeMove, Command as SemanticCommand, CommandEngine, Transaction};
+use lattice_commands::{
+    CanvasNodeMove, CanvasNodeResize, Command as SemanticCommand, CommandEngine, Transaction,
+};
 use lattice_storage::{NativeWorkspaceStore, WorkspaceStore};
 use serde::{Deserialize, Serialize};
 
@@ -68,6 +70,58 @@ pub struct CanvasAddEdgeRequest {
     pub edge_id: String,
     pub from_node: String,
     pub to_node: String,
+    pub from_side: Option<String>,
+    pub to_side: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CanvasResizeNodeRequest {
+    pub id: String,
+    pub width: f64,
+    pub height: f64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CanvasResizeNodesRequest {
+    pub root: String,
+    pub canvas_path: String,
+    pub base_revision: String,
+    pub nodes: Vec<CanvasResizeNodeRequest>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CanvasRemoveEdgesRequest {
+    pub root: String,
+    pub canvas_path: String,
+    pub base_revision: String,
+    pub edge_ids: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CanvasAddTextNodeRequest {
+    pub root: String,
+    pub canvas_path: String,
+    pub base_revision: String,
+    pub node_id: String,
+    pub text: String,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CanvasUpdateTextNodeRequest {
+    pub root: String,
+    pub canvas_path: String,
+    pub base_revision: String,
+    pub node_id: String,
+    pub text: String,
 }
 
 #[tauri::command]
@@ -171,6 +225,101 @@ pub fn canvas_add_edge(request: CanvasAddEdgeRequest) -> Result<CanvasMutation, 
                 edge_id: request.edge_id,
                 from_node: request.from_node,
                 to_node: request.to_node,
+                from_side: request.from_side,
+                to_side: request.to_side,
+            }],
+        ))
+        .map_err(command_error_to_string)?;
+    Ok(CanvasMutation {
+        revision: receipt_revision(receipt)?,
+    })
+}
+
+#[tauri::command]
+pub fn canvas_resize_nodes(request: CanvasResizeNodesRequest) -> Result<CanvasMutation, String> {
+    let (canonical_root, _) = resolve_within_root(&request.root, &request.canvas_path)?;
+    let mut engine = CommandEngine::open(&canonical_root).map_err(command_error_to_string)?;
+    let nodes = request
+        .nodes
+        .into_iter()
+        .map(|node| CanvasNodeResize {
+            id: node.id,
+            width: node.width,
+            height: node.height,
+        })
+        .collect();
+    let receipt = engine
+        .apply(Transaction::new(
+            format!("Resize nodes on canvas {}", request.canvas_path),
+            vec![SemanticCommand::CanvasResizeNodes {
+                path: PathBuf::from(&request.canvas_path),
+                base_revision: request.base_revision,
+                nodes,
+            }],
+        ))
+        .map_err(command_error_to_string)?;
+    Ok(CanvasMutation {
+        revision: receipt_revision(receipt)?,
+    })
+}
+
+#[tauri::command]
+pub fn canvas_remove_edges(request: CanvasRemoveEdgesRequest) -> Result<CanvasMutation, String> {
+    let (canonical_root, _) = resolve_within_root(&request.root, &request.canvas_path)?;
+    let mut engine = CommandEngine::open(&canonical_root).map_err(command_error_to_string)?;
+    let receipt = engine
+        .apply(Transaction::new(
+            format!("Remove edges from canvas {}", request.canvas_path),
+            vec![SemanticCommand::CanvasRemoveEdges {
+                path: PathBuf::from(&request.canvas_path),
+                base_revision: request.base_revision,
+                edge_ids: request.edge_ids,
+            }],
+        ))
+        .map_err(command_error_to_string)?;
+    Ok(CanvasMutation {
+        revision: receipt_revision(receipt)?,
+    })
+}
+
+#[tauri::command]
+pub fn canvas_add_text_node(request: CanvasAddTextNodeRequest) -> Result<CanvasMutation, String> {
+    let (canonical_root, _) = resolve_within_root(&request.root, &request.canvas_path)?;
+    let mut engine = CommandEngine::open(&canonical_root).map_err(command_error_to_string)?;
+    let receipt = engine
+        .apply(Transaction::new(
+            format!("Add text node on canvas {}", request.canvas_path),
+            vec![SemanticCommand::CanvasAddTextNode {
+                path: PathBuf::from(&request.canvas_path),
+                base_revision: request.base_revision,
+                node_id: request.node_id,
+                text: request.text,
+                x: request.x,
+                y: request.y,
+                width: request.width,
+                height: request.height,
+            }],
+        ))
+        .map_err(command_error_to_string)?;
+    Ok(CanvasMutation {
+        revision: receipt_revision(receipt)?,
+    })
+}
+
+#[tauri::command]
+pub fn canvas_update_text_node(
+    request: CanvasUpdateTextNodeRequest,
+) -> Result<CanvasMutation, String> {
+    let (canonical_root, _) = resolve_within_root(&request.root, &request.canvas_path)?;
+    let mut engine = CommandEngine::open(&canonical_root).map_err(command_error_to_string)?;
+    let receipt = engine
+        .apply(Transaction::new(
+            format!("Update text node on canvas {}", request.canvas_path),
+            vec![SemanticCommand::CanvasUpdateTextNode {
+                path: PathBuf::from(&request.canvas_path),
+                base_revision: request.base_revision,
+                node_id: request.node_id,
+                text: request.text,
             }],
         ))
         .map_err(command_error_to_string)?;

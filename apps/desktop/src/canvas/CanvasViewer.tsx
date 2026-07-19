@@ -5,8 +5,12 @@ import {
   canvasRelativePath,
   keyboardMoveDelta,
   previewAddEdge,
+  previewAddTextNode,
   previewMoveNodes,
   previewPlaceResource,
+  previewRemoveEdges,
+  previewResizeNodes,
+  previewUpdateTextNode,
   type CanvasAdapter,
 } from "./adapter";
 import { CanvasParseError, parseCanvas, type CanvasData } from "./types";
@@ -15,6 +19,8 @@ import { LATTICE_RESOURCE_MIME, readResourceDragPayload } from "../lib/resourceD
 import type { Resource } from "../types";
 
 const OUTLINE_OPEN_KEY = "lattice.canvas.outlineOpen";
+const DEFAULT_NOTE_WIDTH = 200;
+const DEFAULT_NOTE_HEIGHT = 140;
 
 interface CanvasViewerProps {
   json: unknown;
@@ -89,6 +95,8 @@ export function CanvasViewer({
   const [placeQuery, setPlaceQuery] = useState("");
   const [connectMode, setConnectMode] = useState(false);
   const [connectFromId, setConnectFromId] = useState<string | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [textEdit, setTextEdit] = useState<{ id: string; text: string } | null>(null);
 
   connectModeRef.current = connectMode;
   connectFromIdRef.current = connectFromId;
@@ -130,14 +138,28 @@ export function CanvasViewer({
     fitNextLoadRef.current = true;
     setData(parsed.data);
     setSelectedId(null);
+    setSelectedEdgeId(null);
     setConnectFromId(null);
+    setTextEdit(null);
   }, [parsed.data]);
 
-  const connectNodes = (fromNode: string, toNode: string) => {
+  const dropWorldPoint = (clientX: number, clientY: number) => {
+    const world = sceneRef.current?.clientToWorld(clientX, clientY);
+    if (world) return { x: world.x - 40, y: world.y - 40 };
+    return { x: 120, y: 120 };
+  };
+  const connectNodes = (
+    fromNode: string,
+    toNode: string,
+    fromSide?: "top" | "right" | "bottom" | "left",
+    toSide?: "top" | "right" | "bottom" | "left",
+  ) => {
     const edge = {
       id: `edge-${crypto.randomUUID()}`,
       fromNode,
       toNode,
+      fromSide,
+      toSide,
     };
     const currentAdapter = adapterRef.current;
     if (!currentAdapter) {
@@ -150,6 +172,8 @@ export function CanvasViewer({
         edgeId: edge.id,
         fromNode: edge.fromNode,
         toNode: edge.toNode,
+        fromSide: edge.fromSide,
+        toSide: edge.toSide,
         baseRevision: revisionRef.current,
       })
       .then((revision) => {
@@ -189,6 +213,32 @@ export function CanvasViewer({
       return;
     }
     setSelectedId(id);
+    setSelectedEdgeId(null);
+  };
+
+  const commitTextEdit = (id: string, text: string) => {
+    const next = text.trim() || "New note";
+    setTextEdit(null);
+    const currentAdapter = adapterRef.current;
+    if (!currentAdapter) {
+      fitNextLoadRef.current = false;
+      setData((current) => (current ? previewUpdateTextNode(current, id, next) : current));
+      return;
+    }
+    void currentAdapter
+      .updateTextNode(id, next, revisionRef.current)
+      .then((revision) => {
+        commitRevision(revision);
+        fitNextLoadRef.current = false;
+        setData((current) => (current ? previewUpdateTextNode(current, id, next) : current));
+      })
+      .catch((error: unknown) =>
+        reportError(
+          error instanceof CanvasStaleRevisionError
+            ? `Canvas changed externally: ${error.message}`
+            : String(error),
+        ),
+      );
   };
 
   // Pixi scene is long-lived across local edits; only recreate when the host mounts.
@@ -201,6 +251,13 @@ export function CanvasViewer({
     const scene = new CanvasScene(host, {
       onOpenFile: (path, subpath) => onOpenFileRef.current(path, subpath),
       onSelectNode: handleSelectNode,
+      onSelectEdge: (id) => {
+        setSelectedEdgeId(id);
+        if (id) setSelectedId(null);
+      },
+      onConnectNodes: ({ fromNode, toNode, fromSide, toSide }) => {
+        connectNodes(fromNode, toNode, fromSide, toSide);
+      },
       onMoveNodes: (nodes) => {
         const currentAdapter = adapterRef.current;
         if (!currentAdapter) return;
@@ -212,9 +269,31 @@ export function CanvasViewer({
           reportError(error instanceof CanvasStaleRevisionError ? `Canvas changed externally: ${error.message}` : String(error));
         });
       },
+      onResizeNodes: (nodes) => {
+        const currentAdapter = adapterRef.current;
+        if (!currentAdapter) {
+          fitNextLoadRef.current = false;
+          setData((current) => (current ? previewResizeNodes(current, nodes) : current));
+          return;
+        }
+        void currentAdapter.resizeNodes(nodes, revisionRef.current).then((revision) => {
+          commitRevision(revision);
+          fitNextLoadRef.current = false;
+          setData((current) => (current ? previewResizeNodes(current, nodes) : current));
+        }).catch((error: unknown) => {
+          reportError(error instanceof CanvasStaleRevisionError ? `Canvas changed externally: ${error.message}` : String(error));
+        });
+      },
       onRemoveNodes: (nodeIds) => {
         const currentAdapter = adapterRef.current;
-        if (!currentAdapter) return;
+        if (!currentAdapter) {
+          fitNextLoadRef.current = false;
+          setData((current) => current ? {
+            nodes: current.nodes.filter((node) => !nodeIds.includes(node.id)),
+            edges: current.edges.filter((edge) => !nodeIds.includes(edge.fromNode) && !nodeIds.includes(edge.toNode)),
+          } : current);
+          return;
+        }
         void currentAdapter.removeNodes(nodeIds, revisionRef.current).then((revision) => {
           commitRevision(revision);
           fitNextLoadRef.current = false;
@@ -225,6 +304,26 @@ export function CanvasViewer({
         }).catch((error: unknown) => {
           reportError(error instanceof CanvasStaleRevisionError ? `Canvas changed externally: ${error.message}` : String(error));
         });
+      },
+      onRemoveEdges: (edgeIds) => {
+        const currentAdapter = adapterRef.current;
+        if (!currentAdapter) {
+          fitNextLoadRef.current = false;
+          setSelectedEdgeId(null);
+          setData((current) => (current ? previewRemoveEdges(current, edgeIds) : current));
+          return;
+        }
+        void currentAdapter.removeEdges(edgeIds, revisionRef.current).then((revision) => {
+          commitRevision(revision);
+          fitNextLoadRef.current = false;
+          setSelectedEdgeId(null);
+          setData((current) => (current ? previewRemoveEdges(current, edgeIds) : current));
+        }).catch((error: unknown) => {
+          reportError(error instanceof CanvasStaleRevisionError ? `Canvas changed externally: ${error.message}` : String(error));
+        });
+      },
+      onEditText: (nodeId, text) => {
+        setTextEdit({ id: nodeId, text });
       },
     });
     sceneRef.current = scene;
@@ -323,6 +422,47 @@ export function CanvasViewer({
       );
   };
 
+  const addTextNoteAt = (x = 120, y = 120) => {
+    const node = {
+      id: `text-${crypto.randomUUID()}`,
+      text: "New note",
+      x,
+      y,
+      width: DEFAULT_NOTE_WIDTH,
+      height: DEFAULT_NOTE_HEIGHT,
+    };
+    const currentAdapter = adapterRef.current;
+    if (!currentAdapter) {
+      fitNextLoadRef.current = false;
+      setData((current) => (current ? previewAddTextNode(current, node) : current));
+      setTextEdit({ id: node.id, text: node.text });
+      return;
+    }
+    void currentAdapter
+      .addTextNode({
+        nodeId: node.id,
+        text: node.text,
+        x: node.x,
+        y: node.y,
+        width: node.width,
+        height: node.height,
+        baseRevision: revisionRef.current,
+      })
+      .then((revision) => {
+        commitRevision(revision);
+        fitNextLoadRef.current = false;
+        setData((current) => (current ? previewAddTextNode(current, node) : current));
+        setTextEdit({ id: node.id, text: node.text });
+      })
+      .catch((error: unknown) =>
+        reportError(
+          error instanceof CanvasStaleRevisionError
+            ? `Canvas changed externally: ${error.message}`
+            : String(error),
+        ),
+      );
+  };
+
   return (
     <div
       className={`canvas-surface${outlineOpen ? "" : " is-outline-collapsed"}`}
@@ -340,10 +480,8 @@ export function CanvasViewer({
         const payload = readResourceDragPayload(event.dataTransfer);
         if (payload) {
           event.preventDefault();
-          const host = hostRef.current?.getBoundingClientRect();
-          const x = host ? Math.max(40, event.clientX - host.left - 40) : 120;
-          const y = host ? Math.max(40, event.clientY - host.top - 40) : 120;
-          placeResourceAt(payload.path, x, y);
+          const point = dropWorldPoint(event.clientX, event.clientY);
+          placeResourceAt(payload.path, point.x, point.y);
           return;
         }
         const files = Array.from(event.dataTransfer?.files ?? []);
@@ -353,6 +491,13 @@ export function CanvasViewer({
         }
       }}
       onKeyDown={(event) => {
+        if (textEdit) {
+          if (event.key === "Escape") {
+            setTextEdit(null);
+            event.preventDefault();
+          }
+          return;
+        }
         if (event.key === "Escape") {
           if (placeOpen) {
             setPlaceOpen(false);
@@ -390,6 +535,20 @@ export function CanvasViewer({
           </button>
           <button
             type="button"
+            onClick={() => {
+              const point = dropWorldPoint(
+                (hostRef.current?.getBoundingClientRect().left ?? 0) + 160,
+                (hostRef.current?.getBoundingClientRect().top ?? 0) + 120,
+              );
+              addTextNoteAt(point.x, point.y);
+              setPlaceOpen(false);
+              setConnectMode(false);
+            }}
+          >
+            Add note
+          </button>
+          <button
+            type="button"
             className={connectMode ? "is-active" : undefined}
             aria-pressed={connectMode}
             onClick={() => {
@@ -400,7 +559,9 @@ export function CanvasViewer({
           >
             Connect
           </button>
-          <button type="button" onClick={() => sceneRef.current?.removeSelected()}>Remove</button>
+          <button type="button" onClick={() => sceneRef.current?.removeSelected()}>
+            {selectedEdgeId ? "Delete edge" : "Remove"}
+          </button>
           <button
             type="button"
             className={outlineOpen ? "is-active" : undefined}
@@ -414,7 +575,9 @@ export function CanvasViewer({
               ? connectFromId
                 ? "Click a second node to draw an arrow"
                 : "Click the first node to connect"
-              : "Drag files from the tree, or Place resource"}
+              : selectedEdgeId
+                ? "Press Delete to remove the selected edge"
+                : "Drag ports to connect · SE corner to resize · drop resources under pan/zoom"}
           </span>
         </div>
         {placeOpen && (
@@ -441,6 +604,28 @@ export function CanvasViewer({
                 ))
               )}
             </ul>
+          </div>
+        )}
+        {textEdit && (
+          <div className="canvas-text-editor" role="dialog" aria-label="Edit sticky note">
+            <textarea
+              value={textEdit.text}
+              autoFocus
+              rows={5}
+              onChange={(event) => setTextEdit({ id: textEdit.id, text: event.target.value })}
+              onKeyDown={(event) => {
+                if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                  event.preventDefault();
+                  commitTextEdit(textEdit.id, textEdit.text);
+                }
+              }}
+            />
+            <div className="canvas-text-editor-actions">
+              <button type="button" onClick={() => setTextEdit(null)}>Cancel</button>
+              <button type="button" onClick={() => commitTextEdit(textEdit.id, textEdit.text)}>
+                Save note
+              </button>
+            </div>
           </div>
         )}
         {errorMessage && <p className="canvas-conflict" role="alert">{errorMessage}</p>}

@@ -1,24 +1,49 @@
 import { Application, Container, FederatedPointerEvent, Graphics, Rectangle, Text } from "pixi.js";
-import type { CanvasNodeMove } from "./adapter";
+import type { CanvasNodeMove, CanvasNodeSize } from "./adapter";
 import type { CanvasData, CanvasEdge, CanvasNode } from "./types";
 import { classifyPath } from "./classify";
 import { KIND_LABELS } from "../KindMark";
-import { observeThemeChange, readCanvasPalette, type CanvasPalette } from "./colors";
+import { hexToRgba, observeThemeChange, readCanvasPalette, type CanvasPalette } from "./colors";
 
 const MIN_SCALE = 0.1;
 const MAX_SCALE = 3;
 const DOUBLE_CLICK_MS = 400;
 const CARD_RADIUS = 8;
 const CARD_PADDING = 12;
+const PORT_RADIUS = 5;
+const PORT_HIT = 12;
+const RESIZE_HANDLE = 10;
+const MIN_NODE_SIZE = 80;
+const SIDES = ["top", "right", "bottom", "left"] as const;
+
+interface CanvasConnectRequest {
+  fromNode: string;
+  toNode: string;
+  fromSide: Side;
+  toSide: Side;
+}
 
 interface CanvasSceneOptions {
   onOpenFile: (path: string, subpath?: string) => void;
   onSelectNode?: (id: string | null) => void;
+  onSelectEdge?: (id: string | null) => void;
   onMoveNodes?: (nodes: CanvasNodeMove[]) => void;
+  onResizeNodes?: (nodes: CanvasNodeSize[]) => void;
   onRemoveNodes?: (nodeIds: string[]) => void;
+  onRemoveEdges?: (edgeIds: string[]) => void;
+  onConnectNodes?: (edge: CanvasConnectRequest) => void;
+  onEditText?: (nodeId: string, text: string) => void;
 }
 
 type Side = "top" | "right" | "bottom" | "left";
+
+interface NodeCard {
+  container: Container;
+  bg: Graphics;
+  node: CanvasNode;
+  ports: Map<Side, Graphics>;
+  resizeHandle: Graphics;
+}
 
 const SIDE_NORMAL: Record<Side, { x: number; y: number }> = {
   top: { x: 0, y: -1 },
@@ -76,8 +101,11 @@ export class CanvasScene {
   private edgesLayer = new Container();
   private nodesLayer = new Container();
 
-  private nodeCards = new Map<string, { container: Container; bg: Graphics; node: CanvasNode }>();
+  private nodeCards = new Map<string, NodeCard>();
+  private edgeGraphics = new Map<string, Graphics>();
   private selectedId: string | null = null;
+  private selectedEdgeId: string | null = null;
+  private hoveredId: string | null = null;
   private lastTapAt = new Map<string, number>();
   private suppressTapFor: string | null = null;
   private dragging: {
@@ -87,6 +115,19 @@ export class CanvasScene {
     nodeX: number;
     nodeY: number;
     moved: boolean;
+  } | null = null;
+  private resizing: {
+    id: string;
+    startX: number;
+    startY: number;
+    width: number;
+    height: number;
+    moved: boolean;
+  } | null = null;
+  private linking: {
+    fromId: string;
+    fromSide: Side;
+    preview: Graphics;
   } | null = null;
 
   private resizeObserver: ResizeObserver | null = null;
@@ -176,9 +217,17 @@ export class CanvasScene {
     this.rebuild(data, { fit: options.fit !== false });
   }
 
+  /** Convert a browser client point into canvas world coordinates (pan/zoom aware). */
+  clientToWorld(clientX: number, clientY: number): { x: number; y: number } {
+    const rect = this.app.canvas.getBoundingClientRect();
+    return this.toWorld(clientX - rect.left, clientY - rect.top);
+  }
+
   private rebuild(data: CanvasData, options: { fit: boolean }) {
     if (!this.initialized || this.destroyed) return;
+    this.cancelLink();
     const selectedId = this.selectedId;
+    const selectedEdgeId = this.selectedEdgeId;
     const preserveCamera = !options.fit;
     const camera = preserveCamera
       ? { x: this.world.position.x, y: this.world.position.y, scale: this.world.scale.x }
@@ -189,7 +238,10 @@ export class CanvasScene {
     this.edgesLayer.removeChildren();
     this.nodesLayer.removeChildren();
     this.nodeCards.clear();
+    this.edgeGraphics.clear();
     this.selectedId = null;
+    this.selectedEdgeId = null;
+    this.hoveredId = null;
 
     const byId = new Map(data.nodes.map((n) => [n.id, n]));
 
@@ -203,13 +255,22 @@ export class CanvasScene {
       }
     }
 
-    const edgeGraphics = new Graphics();
-    this.edgesLayer.addChild(edgeGraphics);
     for (const edge of data.edges) {
       const from = byId.get(edge.fromNode);
       const to = byId.get(edge.toNode);
       if (!from || !to) continue;
-      this.drawEdge(edgeGraphics, edge, from, to);
+      const shell = new Container();
+      const g = new Graphics();
+      g.eventMode = "static";
+      g.cursor = "pointer";
+      g.on("pointertap", (e: FederatedPointerEvent) => {
+        e.stopPropagation();
+        this.selectEdge(edge.id);
+      });
+      shell.addChild(g);
+      this.drawEdge(g, shell, edge, from, to, false);
+      this.edgesLayer.addChild(shell);
+      this.edgeGraphics.set(edge.id, g);
     }
 
     if (options.fit) {
@@ -221,6 +282,8 @@ export class CanvasScene {
 
     if (selectedId && this.nodeCards.has(selectedId)) {
       this.selectNode(selectedId);
+    } else if (selectedEdgeId && this.edgeGraphics.has(selectedEdgeId)) {
+      this.selectEdge(selectedEdgeId);
     }
   }
 
@@ -261,7 +324,7 @@ export class CanvasScene {
     return container;
   }
 
-  private buildCard(node: CanvasNode): { container: Container; bg: Graphics; node: CanvasNode } {
+  private buildCard(node: CanvasNode): NodeCard {
     const container = new Container();
     container.position.set(node.x, node.y);
 
@@ -350,27 +413,121 @@ export class CanvasScene {
       container.addChild(bodyText);
     }
 
+    const ports = new Map<Side, Graphics>();
+    for (const side of SIDES) {
+      const port = this.buildPort(node, side);
+      container.addChild(port);
+      ports.set(side, port);
+    }
+
+    const resizeHandle = this.buildResizeHandle(node);
+    container.addChild(resizeHandle);
+
     container.eventMode = "static";
     container.cursor = "pointer";
     container.hitArea = new Rectangle(0, 0, node.width, node.height);
     container.on("pointerdown", (e: FederatedPointerEvent) => {
+      if (this.linking) return;
       e.stopPropagation();
       this.beginNodeDrag(node.id, e);
     });
     container.on("pointertap", () => this.onNodeTap(node));
+    container.on("pointerover", () => {
+      this.hoveredId = node.id;
+      this.refreshPortVisibility();
+    });
+    container.on("pointerout", () => {
+      if (this.hoveredId === node.id) this.hoveredId = null;
+      this.refreshPortVisibility();
+    });
 
-    return { container, bg, node };
+    return { container, bg, node, ports, resizeHandle };
+  }
+
+  private buildResizeHandle(node: CanvasNode): Graphics {
+    const handle = new Graphics();
+    handle.eventMode = "static";
+    handle.cursor = "nwse-resize";
+    handle.visible = false;
+    handle.hitArea = new Rectangle(-2, -2, RESIZE_HANDLE + 4, RESIZE_HANDLE + 4);
+    this.layoutResizeHandle(handle, node);
+    this.paintResizeHandle(handle);
+    handle.on("pointerdown", (e: FederatedPointerEvent) => {
+      e.stopPropagation();
+      this.beginResize(node.id, e);
+    });
+    return handle;
+  }
+
+  private layoutResizeHandle(handle: Graphics, node: CanvasNode) {
+    handle.position.set(node.width - RESIZE_HANDLE, node.height - RESIZE_HANDLE);
+  }
+
+  private paintResizeHandle(handle: Graphics) {
+    handle
+      .clear()
+      .roundRect(0, 0, RESIZE_HANDLE, RESIZE_HANDLE, 2)
+      .fill(this.palette.AMBER)
+      .stroke({ width: 1, color: this.palette.AMBER_BRIGHT });
+  }
+
+  private buildPort(node: CanvasNode, side: Side): Graphics {
+    const port = new Graphics();
+    const local = portLocal(node, side);
+    port.position.set(local.x, local.y);
+    port.eventMode = "static";
+    port.cursor = "crosshair";
+    port.hitArea = new Rectangle(-PORT_HIT, -PORT_HIT, PORT_HIT * 2, PORT_HIT * 2);
+    port.alpha = 0.4;
+    this.paintPort(port, false);
+    port.on("pointerdown", (e: FederatedPointerEvent) => {
+      e.stopPropagation();
+      this.beginLink(node.id, side, e);
+    });
+    return port;
+  }
+
+  private paintPort(port: Graphics, active: boolean) {
+    port.clear()
+      .circle(0, 0, PORT_RADIUS)
+      .fill(active ? this.palette.AMBER : this.palette.PANEL)
+      .stroke({ width: 1.5, color: active ? this.palette.AMBER_BRIGHT : this.palette.AMBER });
+  }
+
+  private refreshPortVisibility() {
+    for (const [id, card] of this.nodeCards) {
+      const emphasize =
+        this.linking !== null
+        || this.selectedId === id
+        || this.hoveredId === id;
+      for (const [side, port] of card.ports) {
+        const isSource = this.linking?.fromId === id && this.linking.fromSide === side;
+        port.alpha = isSource || emphasize ? 1 : 0.4;
+        this.paintPort(port, isSource);
+      }
+    }
   }
 
   private paintCard(bg: Graphics, node: CanvasNode, selected: boolean) {
+    const fill =
+      node.type === "text"
+        ? (hexToRgba(this.palette.AMBER, 0.14) ?? this.palette.AMBER_WASH)
+        : this.palette.PANEL;
     bg
       .clear()
       .roundRect(0, 0, node.width, node.height, CARD_RADIUS)
-      .fill(this.palette.PANEL)
+      .fill(fill)
       .stroke({ width: selected ? 2 : 1, color: selected ? this.palette.AMBER : this.palette.BORDER });
   }
 
-  private drawEdge(g: Graphics, edge: CanvasEdge, from: CanvasNode, to: CanvasNode) {
+  private drawEdge(
+    g: Graphics,
+    shell: Container,
+    edge: CanvasEdge,
+    from: CanvasNode,
+    to: CanvasNode,
+    selected: boolean,
+  ) {
     const fromSide = edge.fromSide ?? autoSide(from, to);
     const toSide = edge.toSide ?? autoSide(to, from);
     const start = sidePoint(from, fromSide);
@@ -383,9 +540,18 @@ export class CanvasScene {
     const cp1 = { x: start.x + n1.x * bend, y: start.y + n1.y * bend };
     const cp2 = { x: end.x + n2.x * bend, y: end.y + n2.y * bend };
 
-    const stroke = nodeAccent(edge.color) ?? this.palette.LINE_STRONG;
+    const stroke = selected
+      ? this.palette.AMBER
+      : (nodeAccent(edge.color) ?? this.palette.LINE_STRONG);
+    g.clear();
+    // Wide near-invisible stroke for easier hit testing.
     g.moveTo(start.x, start.y).bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, end.x, end.y).stroke({
-      width: 1.5,
+      width: 14,
+      color: 0xffffff,
+      alpha: 0.001,
+    });
+    g.moveTo(start.x, start.y).bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, end.x, end.y).stroke({
+      width: selected ? 2.5 : 1.5,
       color: stroke,
     });
 
@@ -398,6 +564,10 @@ export class CanvasScene {
     const right = { x: tip.x - dir.x * size - perp.x * (size * 0.55), y: tip.y - dir.y * size - perp.y * (size * 0.55) };
     g.poly([tip.x, tip.y, left.x, left.y, right.x, right.y]).fill(stroke);
 
+    // Drop previous label children (everything except the path graphics at index 0).
+    while (shell.children.length > 1) {
+      shell.removeChildAt(1).destroy();
+    }
     if (edge.label) {
       const mid = bezierPoint(start, cp1, cp2, end, 0.5);
       const label = new Text({
@@ -420,7 +590,7 @@ export class CanvasScene {
           4,
         )
         .fill(this.palette.PANEL);
-      this.edgesLayer.addChild(backdrop, label);
+      shell.addChild(backdrop, label);
     }
   }
 
@@ -430,27 +600,83 @@ export class CanvasScene {
       return;
     }
     this.selectNode(node.id);
-    if (node.type !== "file") return;
-
     const now = performance.now();
     const last = this.lastTapAt.get(node.id) ?? 0;
     this.lastTapAt.set(node.id, now);
-    if (now - last < DOUBLE_CLICK_MS) {
-      this.lastTapAt.delete(node.id);
+    if (now - last >= DOUBLE_CLICK_MS) return;
+    this.lastTapAt.delete(node.id);
+    if (node.type === "file") {
       this.options.onOpenFile(node.file, node.subpath);
+    } else if (node.type === "text") {
+      this.options.onEditText?.(node.id, node.text);
     }
   }
 
   selectNode(id: string | null) {
-    if (this.selectedId === id) return;
+    if (this.selectedEdgeId) {
+      this.clearEdgeSelection();
+    }
+    if (this.selectedId === id) {
+      this.refreshSelectionChrome();
+      return;
+    }
     const prev = this.selectedId ? this.nodeCards.get(this.selectedId) : undefined;
-    if (prev) this.paintCard(prev.bg, prev.node, false);
+    if (prev) {
+      this.paintCard(prev.bg, prev.node, false);
+      prev.resizeHandle.visible = false;
+    }
 
     this.selectedId = id;
     const next = id ? this.nodeCards.get(id) : undefined;
-    if (next) this.paintCard(next.bg, next.node, true);
-
+    if (next) {
+      this.paintCard(next.bg, next.node, true);
+      next.resizeHandle.visible = true;
+    }
+    this.refreshPortVisibility();
     this.options.onSelectNode?.(id);
+  }
+
+  selectEdge(id: string | null) {
+    if (this.selectedId) {
+      const prev = this.nodeCards.get(this.selectedId);
+      if (prev) {
+        this.paintCard(prev.bg, prev.node, false);
+        prev.resizeHandle.visible = false;
+      }
+      this.selectedId = null;
+      this.options.onSelectNode?.(null);
+    }
+    if (this.selectedEdgeId === id) {
+      this.refreshEdgeSelection();
+      return;
+    }
+    this.selectedEdgeId = id;
+    this.refreshEdgeSelection();
+    this.options.onSelectEdge?.(id);
+  }
+
+  private clearEdgeSelection() {
+    this.selectedEdgeId = null;
+    this.refreshEdgeSelection();
+    this.options.onSelectEdge?.(null);
+  }
+
+  private refreshEdgeSelection() {
+    if (!this.data) return;
+    const byId = new Map(this.data.nodes.map((n) => [n.id, n]));
+    for (const edge of this.data.edges) {
+      const g = this.edgeGraphics.get(edge.id);
+      const from = byId.get(edge.fromNode);
+      const to = byId.get(edge.toNode);
+      if (!g || !from || !to || !g.parent) continue;
+      this.drawEdge(g, g.parent as Container, edge, from, to, this.selectedEdgeId === edge.id);
+    }
+  }
+
+  private refreshSelectionChrome() {
+    this.refreshPortVisibility();
+    const card = this.selectedId ? this.nodeCards.get(this.selectedId) : undefined;
+    if (card) card.resizeHandle.visible = true;
   }
 
   moveSelectedBy(dx: number, dy: number): boolean {
@@ -466,6 +692,11 @@ export class CanvasScene {
   }
 
   removeSelected(): boolean {
+    if (this.selectedEdgeId) {
+      const id = this.selectedEdgeId;
+      this.options.onRemoveEdges?.([id]);
+      return true;
+    }
     if (!this.selectedId) return false;
     const id = this.selectedId;
     this.options.onRemoveNodes?.([id]);
@@ -486,6 +717,131 @@ export class CanvasScene {
       nodeY: card.container.y,
       moved: false,
     };
+  }
+
+  private beginResize(id: string, event: FederatedPointerEvent) {
+    const card = this.nodeCards.get(id);
+    if (!card) return;
+    this.selectNode(id);
+    this.resizing = {
+      id,
+      startX: event.global.x,
+      startY: event.global.y,
+      width: card.node.width,
+      height: card.node.height,
+      moved: false,
+    };
+  }
+
+  private applyLiveSize(card: NodeCard, width: number, height: number) {
+    card.node = { ...card.node, width, height };
+    card.container.hitArea = new Rectangle(0, 0, width, height);
+    this.paintCard(card.bg, card.node, this.selectedId === card.node.id);
+    this.layoutResizeHandle(card.resizeHandle, card.node);
+    for (const [side, port] of card.ports) {
+      const local = portLocal(card.node, side);
+      port.position.set(local.x, local.y);
+    }
+  }
+
+  private beginLink(fromId: string, fromSide: Side, event: FederatedPointerEvent) {
+    this.cancelLink();
+    this.selectNode(fromId);
+    const preview = new Graphics();
+    this.world.addChild(preview);
+    this.linking = { fromId, fromSide, preview };
+    this.refreshPortVisibility();
+    this.updateLinkPreview(event.global.x, event.global.y);
+  }
+
+  private cancelLink() {
+    if (!this.linking) return;
+    this.world.removeChild(this.linking.preview);
+    this.linking.preview.destroy();
+    this.linking = null;
+    this.refreshPortVisibility();
+  }
+
+  private updateLinkPreview(globalX: number, globalY: number) {
+    const link = this.linking;
+    if (!link) return;
+    const fromCard = this.nodeCards.get(link.fromId);
+    if (!fromCard) return;
+    const start = {
+      x: fromCard.container.x + portLocal(fromCard.node, link.fromSide).x,
+      y: fromCard.container.y + portLocal(fromCard.node, link.fromSide).y,
+    };
+    const end = this.toWorld(globalX, globalY);
+    const n1 = SIDE_NORMAL[link.fromSide];
+    const bend = Math.min(90, Math.max(24, Math.hypot(end.x - start.x, end.y - start.y) * 0.35));
+    link.preview
+      .clear()
+      .moveTo(start.x, start.y)
+      .bezierCurveTo(
+        start.x + n1.x * bend,
+        start.y + n1.y * bend,
+        end.x,
+        end.y,
+        end.x,
+        end.y,
+      )
+      .stroke({ width: 1.5, color: this.palette.AMBER, alpha: 0.85 });
+  }
+
+  private finishLink(globalX: number, globalY: number) {
+    const link = this.linking;
+    if (!link) return;
+    const target = this.hitTestPort(globalX, globalY)
+      ?? this.hitTestNodeSide(globalX, globalY);
+    this.cancelLink();
+    if (!target || target.id === link.fromId) return;
+    this.options.onConnectNodes?.({
+      fromNode: link.fromId,
+      toNode: target.id,
+      fromSide: link.fromSide,
+      toSide: target.side,
+    });
+  }
+
+  private toWorld(globalX: number, globalY: number): { x: number; y: number } {
+    return {
+      x: (globalX - this.world.position.x) / this.world.scale.x,
+      y: (globalY - this.world.position.y) / this.world.scale.y,
+    };
+  }
+
+  private hitTestPort(globalX: number, globalY: number): { id: string; side: Side } | null {
+    const world = this.toWorld(globalX, globalY);
+    for (const [id, card] of this.nodeCards) {
+      for (const side of SIDES) {
+        const local = portLocal(card.node, side);
+        const px = card.container.x + local.x;
+        const py = card.container.y + local.y;
+        if (Math.hypot(world.x - px, world.y - py) <= PORT_HIT + 2) {
+          return { id, side };
+        }
+      }
+    }
+    return null;
+  }
+
+  private hitTestNodeSide(globalX: number, globalY: number): { id: string; side: Side } | null {
+    const world = this.toWorld(globalX, globalY);
+    for (const [id, card] of this.nodeCards) {
+      const { x, y } = card.container.position;
+      const { width, height } = card.node;
+      if (world.x < x || world.y < y || world.x > x + width || world.y > y + height) continue;
+      const live: CanvasNode = { ...card.node, x, y };
+      const fromCard = this.linking ? this.nodeCards.get(this.linking.fromId) : undefined;
+      if (!fromCard || !this.linking) return { id, side: "left" };
+      const fromLive: CanvasNode = {
+        ...fromCard.node,
+        x: fromCard.container.x,
+        y: fromCard.container.y,
+      };
+      return { id, side: autoSide(live, fromLive) };
+    }
+    return null;
   }
 
   private fitToContent(nodes: CanvasNode[]) {
@@ -514,14 +870,36 @@ export class CanvasScene {
   }
 
   private onStagePointerDown = (e: FederatedPointerEvent) => {
+    if (this.linking) {
+      // Click empty space while linking cancels; otherwise ports handle their own down.
+      if (e.target === this.app.stage) this.cancelLink();
+      return;
+    }
     if (e.target !== this.app.stage) return;
     this.selectNode(null);
+    this.selectEdge(null);
     this.panning = true;
     this.panStart = { x: e.global.x, y: e.global.y };
     this.panOrigin = { x: this.world.position.x, y: this.world.position.y };
   };
 
   private onStagePointerMove = (e: FederatedPointerEvent) => {
+    if (this.linking) {
+      this.updateLinkPreview(e.global.x, e.global.y);
+      return;
+    }
+    if (this.resizing) {
+      const resize = this.resizing;
+      const card = this.nodeCards.get(resize.id);
+      if (!card) return;
+      const dx = (e.global.x - resize.startX) / this.world.scale.x;
+      const dy = (e.global.y - resize.startY) / this.world.scale.y;
+      if (Math.abs(dx) > 1 || Math.abs(dy) > 1) resize.moved = true;
+      const width = Math.max(MIN_NODE_SIZE, resize.width + dx);
+      const height = Math.max(MIN_NODE_SIZE, resize.height + dy);
+      this.applyLiveSize(card, width, height);
+      return;
+    }
     if (this.dragging) {
       const drag = this.dragging;
       const card = this.nodeCards.get(drag.id);
@@ -538,7 +916,25 @@ export class CanvasScene {
     this.world.position.set(this.panOrigin.x + dx, this.panOrigin.y + dy);
   };
 
-  private onStagePointerUp = () => {
+  private onStagePointerUp = (e: FederatedPointerEvent) => {
+    if (this.linking) {
+      this.finishLink(e.global.x, e.global.y);
+      return;
+    }
+    if (this.resizing) {
+      const resize = this.resizing;
+      const card = this.nodeCards.get(resize.id);
+      this.resizing = null;
+      if (card && resize.moved) {
+        this.suppressTapFor = resize.id;
+        this.options.onResizeNodes?.([{
+          id: resize.id,
+          width: card.node.width,
+          height: card.node.height,
+        }]);
+      }
+      return;
+    }
     if (this.dragging) {
       const drag = this.dragging;
       const card = this.nodeCards.get(drag.id);
@@ -577,6 +973,7 @@ export class CanvasScene {
   destroy() {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.cancelLink();
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.disconnectThemeObserver?.();
@@ -590,6 +987,19 @@ export class CanvasScene {
     this.app.stage.off("pointerup", this.onStagePointerUp);
     this.app.stage.off("pointerupoutside", this.onStagePointerUp);
     this.app.destroy(true, { children: true, texture: true });
+  }
+}
+
+function portLocal(node: Pick<CanvasNode, "width" | "height">, side: Side): { x: number; y: number } {
+  switch (side) {
+    case "top":
+      return { x: node.width / 2, y: 0 };
+    case "bottom":
+      return { x: node.width / 2, y: node.height };
+    case "left":
+      return { x: 0, y: node.height / 2 };
+    case "right":
+      return { x: node.width, y: node.height / 2 };
   }
 }
 

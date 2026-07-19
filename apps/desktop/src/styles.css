@@ -1181,6 +1181,42 @@ html[data-page-width="full"] {
   font: 11px var(--lt-font-mono);
 }
 
+.canvas-text-editor {
+  flex-shrink: 0;
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--lt-line);
+  background: var(--lt-panel);
+}
+
+.canvas-text-editor textarea {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  padding: 8px 10px;
+  border: 1px solid var(--lt-line);
+  border-radius: 6px;
+  color: var(--lt-text);
+  background: var(--lt-bg-raise);
+  font: 13px/1.4 var(--lt-font-ui);
+}
+
+.canvas-text-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.canvas-text-editor-actions button {
+  padding: 5px 10px;
+  border: 1px solid var(--lt-line);
+  border-radius: 5px;
+  color: var(--lt-text-soft);
+  background: var(--lt-bg-raise);
+  cursor: pointer;
+}
+
 .canvas-place-panel {
   flex-shrink: 0;
   display: flex;

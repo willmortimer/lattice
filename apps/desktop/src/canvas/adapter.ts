@@ -3,9 +3,25 @@ import type { CanvasData, CanvasEdge, CanvasNode, CanvasNodePosition } from "./t
 
 export type CanvasNodeMove = CanvasNodePosition;
 
+export interface CanvasNodeSize {
+  id: string;
+  width: number;
+  height: number;
+}
+
 export interface CanvasPlacement {
   resourcePath: string;
   nodeId: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  baseRevision: string;
+}
+
+export interface CanvasTextPlacement {
+  nodeId: string;
+  text: string;
   x: number;
   y: number;
   width: number;
@@ -17,14 +33,20 @@ export interface CanvasAdapter {
   read(): Promise<CanvasSnapshot>;
   placeResource(placement: CanvasPlacement): Promise<string>;
   moveNodes(nodes: readonly CanvasNodePosition[], baseRevision: string): Promise<string>;
+  resizeNodes(nodes: readonly CanvasNodeSize[], baseRevision: string): Promise<string>;
   removeNodes(nodeIds: readonly string[], baseRevision: string): Promise<string>;
+  removeEdges(edgeIds: readonly string[], baseRevision: string): Promise<string>;
   addEdge(edge: CanvasEdgePlacement): Promise<string>;
+  addTextNode(placement: CanvasTextPlacement): Promise<string>;
+  updateTextNode(nodeId: string, text: string, baseRevision: string): Promise<string>;
 }
 
 export interface CanvasEdgePlacement {
   edgeId: string;
   fromNode: string;
   toNode: string;
+  fromSide?: "top" | "right" | "bottom" | "left";
+  toSide?: "top" | "right" | "bottom" | "left";
   baseRevision: string;
 }
 
@@ -106,10 +128,30 @@ export function createNativeCanvasAdapter(root: string, canvasPath: string): Can
         return rethrowCanvasError(error);
       }
     },
+    async resizeNodes(nodes, baseRevision) {
+      try {
+        const result = await invoke<{ revision: string }>("canvas_resize_nodes", {
+          request: { root, canvasPath, nodes, baseRevision },
+        });
+        return result.revision;
+      } catch (error) {
+        return rethrowCanvasError(error);
+      }
+    },
     async removeNodes(nodeIds, baseRevision) {
       try {
         const result = await invoke<{ revision: string }>("canvas_remove_nodes", {
           request: { root, canvasPath, nodeIds, baseRevision },
+        });
+        return result.revision;
+      } catch (error) {
+        return rethrowCanvasError(error);
+      }
+    },
+    async removeEdges(edgeIds, baseRevision) {
+      try {
+        const result = await invoke<{ revision: string }>("canvas_remove_edges", {
+          request: { root, canvasPath, edgeIds, baseRevision },
         });
         return result.revision;
       } catch (error) {
@@ -125,8 +167,40 @@ export function createNativeCanvasAdapter(root: string, canvasPath: string): Can
             edgeId: edge.edgeId,
             fromNode: edge.fromNode,
             toNode: edge.toNode,
+            fromSide: edge.fromSide,
+            toSide: edge.toSide,
             baseRevision: edge.baseRevision,
           },
+        });
+        return result.revision;
+      } catch (error) {
+        return rethrowCanvasError(error);
+      }
+    },
+    async addTextNode(placement) {
+      try {
+        const result = await invoke<{ revision: string }>("canvas_add_text_node", {
+          request: {
+            root,
+            canvasPath,
+            nodeId: placement.nodeId,
+            text: placement.text,
+            x: placement.x,
+            y: placement.y,
+            width: placement.width,
+            height: placement.height,
+            baseRevision: placement.baseRevision,
+          },
+        });
+        return result.revision;
+      } catch (error) {
+        return rethrowCanvasError(error);
+      }
+    },
+    async updateTextNode(nodeId, text, baseRevision) {
+      try {
+        const result = await invoke<{ revision: string }>("canvas_update_text_node", {
+          request: { root, canvasPath, nodeId, text, baseRevision },
         });
         return result.revision;
       } catch (error) {
@@ -151,12 +225,31 @@ export function previewMoveNodes(data: CanvasData, moves: readonly CanvasNodeMov
   }) };
 }
 
+export function previewResizeNodes(data: CanvasData, sizes: readonly CanvasNodeSize[]): CanvasData {
+  const byId = new Map(sizes.map((size) => [size.id, size]));
+  return {
+    ...data,
+    nodes: data.nodes.map((node) => {
+      const size = byId.get(node.id);
+      return size ? { ...node, width: size.width, height: size.height } : node;
+    }),
+  };
+}
+
 export function previewRemoveNodes(data: CanvasData, nodeIds: readonly string[]): CanvasData {
   const removed = new Set(nodeIds);
   return {
     ...data,
     nodes: data.nodes.filter((node) => !removed.has(node.id)),
     edges: data.edges.filter((edge) => !removed.has(edge.fromNode) && !removed.has(edge.toNode)),
+  };
+}
+
+export function previewRemoveEdges(data: CanvasData, edgeIds: readonly string[]): CanvasData {
+  const removed = new Set(edgeIds);
+  return {
+    ...data,
+    edges: data.edges.filter((edge) => !removed.has(edge.id)),
   };
 }
 
@@ -172,11 +265,45 @@ export function previewPlaceResource(
   return { ...data, nodes: [...data.nodes, placed] };
 }
 
+export function previewAddTextNode(
+  data: CanvasData,
+  node: Pick<CanvasNode & { type: "text" }, "id" | "text" | "x" | "y" | "width" | "height">,
+): CanvasData {
+  const placed: CanvasNode = {
+    id: node.id,
+    type: "text",
+    text: node.text,
+    x: node.x,
+    y: node.y,
+    width: node.width,
+    height: node.height,
+  };
+  return { ...data, nodes: [...data.nodes, placed] };
+}
+
+export function previewUpdateTextNode(data: CanvasData, nodeId: string, text: string): CanvasData {
+  return {
+    ...data,
+    nodes: data.nodes.map((node) =>
+      node.id === nodeId && node.type === "text" ? { ...node, text } : node,
+    ),
+  };
+}
+
 export function previewAddEdge(
   data: CanvasData,
-  edge: Pick<CanvasEdge, "id" | "fromNode" | "toNode">,
+  edge: Pick<CanvasEdge, "id" | "fromNode" | "toNode" | "fromSide" | "toSide">,
 ): CanvasData {
-  return { ...data, edges: [...data.edges, { id: edge.id, fromNode: edge.fromNode, toNode: edge.toNode }] };
+  return {
+    ...data,
+    edges: [...data.edges, {
+      id: edge.id,
+      fromNode: edge.fromNode,
+      toNode: edge.toNode,
+      fromSide: edge.fromSide,
+      toSide: edge.toSide,
+    }],
+  };
 }
 
 export function keyboardMoveDelta(key: string, shiftKey = false): { x: number; y: number } | null {
