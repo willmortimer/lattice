@@ -9,6 +9,7 @@ import type { Resource } from "../types";
 export interface ResourceRendererContext {
   assetRoot: string | null;
   workspaceRoot: string | null;
+  resources: readonly Resource[];
   settings: AppSettings;
   pageEditorRef: RefObject<PageEditorHandle | null>;
   wikiTargets: readonly ResourceLinkTarget[];

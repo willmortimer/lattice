@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { CanvasData, CanvasNode, CanvasNodePosition } from "./types";
+import type { CanvasData, CanvasEdge, CanvasNode, CanvasNodePosition } from "./types";
 
 export type CanvasNodeMove = CanvasNodePosition;
 
@@ -18,6 +18,14 @@ export interface CanvasAdapter {
   placeResource(placement: CanvasPlacement): Promise<string>;
   moveNodes(nodes: readonly CanvasNodePosition[], baseRevision: string): Promise<string>;
   removeNodes(nodeIds: readonly string[], baseRevision: string): Promise<string>;
+  addEdge(edge: CanvasEdgePlacement): Promise<string>;
+}
+
+export interface CanvasEdgePlacement {
+  edgeId: string;
+  fromNode: string;
+  toNode: string;
+  baseRevision: string;
 }
 
 export interface CanvasSnapshot {
@@ -108,6 +116,23 @@ export function createNativeCanvasAdapter(root: string, canvasPath: string): Can
         return rethrowCanvasError(error);
       }
     },
+    async addEdge(edge) {
+      try {
+        const result = await invoke<{ revision: string }>("canvas_add_edge", {
+          request: {
+            root,
+            canvasPath,
+            edgeId: edge.edgeId,
+            fromNode: edge.fromNode,
+            toNode: edge.toNode,
+            baseRevision: edge.baseRevision,
+          },
+        });
+        return result.revision;
+      } catch (error) {
+        return rethrowCanvasError(error);
+      }
+    },
   };
 }
 
@@ -145,6 +170,13 @@ export function previewPlaceResource(
     x: node.x, y: node.y, width: node.width, height: node.height,
   };
   return { ...data, nodes: [...data.nodes, placed] };
+}
+
+export function previewAddEdge(
+  data: CanvasData,
+  edge: Pick<CanvasEdge, "id" | "fromNode" | "toNode">,
+): CanvasData {
+  return { ...data, edges: [...data.edges, { id: edge.id, fromNode: edge.fromNode, toNode: edge.toNode }] };
 }
 
 export function keyboardMoveDelta(key: string, shiftKey = false): { x: number; y: number } | null {

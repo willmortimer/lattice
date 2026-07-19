@@ -512,6 +512,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
                       context={{
                         assetRoot,
                         workspaceRoot: inBrowser ? null : snapshot.root,
+                        resources: snapshot.resources,
                         settings,
                         pageEditorRef,
                         wikiTargets,
@@ -558,6 +559,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
                         context={{
                           assetRoot,
                           workspaceRoot: inBrowser ? null : snapshot.root,
+                          resources: snapshot.resources,
                           settings,
                           pageEditorRef,
                           wikiTargets,

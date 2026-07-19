@@ -59,6 +59,17 @@ pub struct CanvasRemoveNodesRequest {
     pub node_ids: Vec<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CanvasAddEdgeRequest {
+    pub root: String,
+    pub canvas_path: String,
+    pub base_revision: String,
+    pub edge_id: String,
+    pub from_node: String,
+    pub to_node: String,
+}
+
 #[tauri::command]
 pub fn read_canvas(root: String, canvas_path: String) -> Result<CanvasDocument, String> {
     let (canonical_root, canonical_path) = resolve_within_root(&root, &canvas_path)?;
@@ -139,6 +150,27 @@ pub fn canvas_remove_nodes(request: CanvasRemoveNodesRequest) -> Result<CanvasMu
                 path: PathBuf::from(&request.canvas_path),
                 base_revision: request.base_revision,
                 node_ids: request.node_ids,
+            }],
+        ))
+        .map_err(command_error_to_string)?;
+    Ok(CanvasMutation {
+        revision: receipt_revision(receipt)?,
+    })
+}
+
+#[tauri::command]
+pub fn canvas_add_edge(request: CanvasAddEdgeRequest) -> Result<CanvasMutation, String> {
+    let (canonical_root, _) = resolve_within_root(&request.root, &request.canvas_path)?;
+    let mut engine = CommandEngine::open(&canonical_root).map_err(command_error_to_string)?;
+    let receipt = engine
+        .apply(Transaction::new(
+            format!("Connect nodes on canvas {}", request.canvas_path),
+            vec![SemanticCommand::CanvasAddEdge {
+                path: PathBuf::from(&request.canvas_path),
+                base_revision: request.base_revision,
+                edge_id: request.edge_id,
+                from_node: request.from_node,
+                to_node: request.to_node,
             }],
         ))
         .map_err(command_error_to_string)?;
