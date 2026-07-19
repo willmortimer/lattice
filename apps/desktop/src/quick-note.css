@@ -70,6 +70,35 @@ html[data-platform="macos"] .quick-note-native-titlebar {
   padding: 28px 34px 48px;
 }
 
+.quick-note-editor-stack {
+  position: relative;
+  width: min(100%, var(--lt-page-content-width, 68ch));
+  min-height: 100%;
+  margin: 0 auto;
+}
+
+.quick-note-editor-mirror {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: transparent;
+  font-family: var(--lt-font-mono);
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+
+.quick-note-dictation-provisional {
+  color: color-mix(in srgb, var(--lt-muted) 72%, transparent);
+  font-style: italic;
+}
+
+.quick-note-actions .quick-note-dictation {
+  max-width: min(220px, 34vw);
+}
+
 .quick-note-empty {
   display: grid;
   height: 100%;
@@ -84,10 +113,12 @@ html[data-platform="macos"] .quick-note-native-titlebar {
 }
 
 .quick-note-editor {
+  position: relative;
+  z-index: 1;
   display: block;
-  width: min(100%, var(--lt-page-content-width, 68ch));
+  width: 100%;
   min-height: 100%;
-  margin: 0 auto;
+  margin: 0;
   padding: 0;
   resize: none;
   border: 0;

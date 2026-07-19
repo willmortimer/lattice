@@ -4,12 +4,19 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { ArrowSquareOut, ArrowUpRight, FileText, X } from "@phosphor-icons/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { createNativePageIO } from "./editor/pageIO";
 import { createPage, resolveQuickNoteTemplatePath } from "./lib/pages";
+import { mergeDictationPlainText } from "./lib/mergeDictationPlainText";
 import { loadProfile } from "./lib/profile";
+import { deleteResource } from "./lib/resourceMutations";
 import { quickNotePath } from "./lib/timestamp";
+import { voiceHintsFromPage } from "./lib/voice";
+import {
+  QuickNoteDictation,
+  type QuickNoteDictationHandle,
+} from "./shell/QuickNoteDictation";
 import {
   applyResolvedTheme,
   detectSystemAppearance,
@@ -35,14 +42,21 @@ export function QuickNoteApp() {
   );
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [provisionalText, setProvisionalText] = useState<string | null>(null);
+  const [dictationAnchor, setDictationAnchor] = useState(0);
   const creatingRef = useRef(false);
   const revisionRef = useRef<string | null>(null);
   const autosaveDelayRef = useRef(800);
   const saveTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const userEditedRef = useRef(false);
+  const initialDraftRef = useRef("");
+  const dictationRef = useRef<QuickNoteDictationHandle | null>(null);
+  const pendingRootRef = useRef<string | null | undefined>(undefined);
 
-  const prepare = useCallback(async (requestedRoot?: string | null) => {
-    if (creatingRef.current) return;
-    if (page) return;
+  const prepare = useCallback(async (requestedRoot?: string | null): Promise<boolean> => {
+    if (creatingRef.current) return false;
+    if (page) return true;
     const profile = await loadProfile();
     autosaveDelayRef.current = profile.settings.desktop.editor.autosaveDelayMs;
     document.documentElement.dataset.pageWidth = profile.settings.desktop.editor.pageWidth;
@@ -53,7 +67,7 @@ export function QuickNoteApp() {
       null;
     if (!root) {
       setError("Open a workspace in Lattice before using Quick Note.");
-      return;
+      return false;
     }
 
     creatingRef.current = true;
@@ -66,8 +80,6 @@ export function QuickNoteApp() {
         resources: Resource[];
       }>("open_workspace", { path: root });
       const path = quickNotePath(new Date(), workspace.defaults.quickNoteDirectory);
-      // Quick Note default: `<templateDirectory>/Daily.md` when configured,
-      // else `Templates/Daily.md` when that resource exists.
       const templatePath = resolveQuickNoteTemplatePath(
         workspace.defaults.templateDirectory,
         workspace.resources.map((resource) => resource.path),
@@ -93,10 +105,14 @@ export function QuickNoteApp() {
         path,
       });
       setDraft(loaded.raw);
+      initialDraftRef.current = loaded.raw;
+      userEditedRef.current = false;
       revisionRef.current = loaded.revision;
       setSaveState("idle");
+      return true;
     } catch (err) {
       setError(String(err));
+      return false;
     } finally {
       creatingRef.current = false;
       setLoading(false);
@@ -124,6 +140,7 @@ export function QuickNoteApp() {
   );
 
   function updateDraft(value: string) {
+    userEditedRef.current = true;
     setDraft(value);
     setSaveState("dirty");
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
@@ -146,9 +163,71 @@ export function QuickNoteApp() {
     await saveDraft(draft);
   }
 
+  const resetNoteState = useCallback(() => {
+    setPage(null);
+    setDraft("");
+    initialDraftRef.current = "";
+    userEditedRef.current = false;
+    setProvisionalText(null);
+    setDictationAnchor(0);
+    setSaveState("idle");
+    setError(null);
+  }, []);
+
+  const discardEmptyDictationNote = useCallback(async () => {
+    if (!page) {
+      resetNoteState();
+      return;
+    }
+    const { root, path } = page;
+    resetNoteState();
+    try {
+      await deleteResource(root, path);
+    } catch (err) {
+      setError(String(err));
+    }
+  }, [page, resetNoteState]);
+
+  const commitDictationFinal = useCallback(
+    async (text: string, anchor: number) => {
+      if (!page) return;
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+
+      const trimmedFinal = text.trim();
+      if (!trimmedFinal && !userEditedRef.current && draft.trim() === initialDraftRef.current.trim()) {
+        // Silence-only capture on a fresh note: remove the empty inbox page.
+        await discardEmptyDictationNote();
+        return;
+      }
+
+      const merged = mergeDictationPlainText(draft, text, anchor);
+      setDraft(merged);
+      setProvisionalText(null);
+      await saveDraft(merged);
+    },
+    [discardEmptyDictationNote, draft, page, saveDraft],
+  );
+
+  const ensurePageReady = useCallback(async () => {
+    if (page) return true;
+    const root = pendingRootRef.current;
+    return prepare(root);
+  }, [page, prepare]);
+
+  const voiceContext = useMemo(() => {
+    if (!page) return null;
+    return voiceHintsFromPage({
+      documentPath: page.path,
+      pageTitle: page.path.split("/").pop()?.replace(/\.md$/i, "") ?? "Quick Note",
+      workspaceName: page.workspaceTitle,
+      rawContent: draft,
+    });
+  }, [draft, page]);
+
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     void listen<OpenPayload>("quick-note-open", (event) => {
+      pendingRootRef.current = event.payload.root;
       void prepare(event.payload.root);
     }).then((stop) => {
       unlisten = stop;
@@ -160,6 +239,7 @@ export function QuickNoteApp() {
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         event.preventDefault();
+        dictationRef.current?.cancel();
         void getCurrentWindow().hide();
       }
     }
@@ -169,6 +249,7 @@ export function QuickNoteApp() {
 
   async function openInMain() {
     if (!page) return;
+    dictationRef.current?.cancel();
     await flushDraft();
     await emitTo("main", "open-resource", { root: page.root, path: page.path });
     await getCurrentWindow().hide();
@@ -176,25 +257,28 @@ export function QuickNoteApp() {
 
   async function openExternally() {
     if (!page) return;
+    dictationRef.current?.cancel();
     await flushDraft();
     await openPath(`${page.root}/${page.path}`);
   }
 
   async function openInCode() {
     if (!page) return;
+    dictationRef.current?.cancel();
     await flushDraft();
     const absolute = `${page.root}/${page.path}`;
     await openUrl(`vscode://file/${encodeURI(absolute)}`);
   }
 
   async function closeWindow() {
+    dictationRef.current?.cancel();
     await flushDraft();
     await getCurrentWindow().hide();
-    setPage(null);
-    setDraft("");
-    setSaveState("idle");
-    setError(null);
+    resetNoteState();
   }
+
+  const mirrorBefore = draft.slice(0, dictationAnchor);
+  const mirrorAfter = draft.slice(dictationAnchor);
 
   return (
     <TooltipProvider>
@@ -207,6 +291,23 @@ export function QuickNoteApp() {
             {page && <span className="quick-note-workspace">{page.workspaceTitle}</span>}
           </div>
           <div className="quick-note-actions">
+            <QuickNoteDictation
+              ref={dictationRef}
+              enabled
+              ensurePageReady={ensurePageReady}
+              getInsertPosition={() =>
+                textareaRef.current?.selectionStart ?? draft.length
+              }
+              voiceContext={voiceContext}
+              onProvisionalChange={(text, anchor) => {
+                setProvisionalText(text);
+                setDictationAnchor(anchor);
+              }}
+              onFinal={(text, anchor) => {
+                void commitDictationFinal(text, anchor);
+              }}
+              onError={(message) => setError(message)}
+            />
             {page && (
               <>
                 <Button variant="ghost" size="sm" onClick={() => void openInCode()}>
@@ -264,22 +365,36 @@ export function QuickNoteApp() {
             </div>
           )}
           {page && (
-            <textarea
-              className="quick-note-editor"
-              value={draft}
-              autoFocus
-              spellCheck
-              aria-label="Quick Note Markdown"
-              placeholder="Capture a thought… Markdown is saved directly into Inbox."
-              onChange={(event) => updateDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
-                  event.preventDefault();
-                  if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-                  void saveDraft(draft);
-                }
-              }}
-            />
+            <div className="quick-note-editor-stack">
+              <div className="quick-note-editor-mirror" aria-hidden="true">
+                <span>{mirrorBefore}</span>
+                {provisionalText && (
+                  <span className="quick-note-dictation-provisional">{provisionalText}</span>
+                )}
+                <span>{mirrorAfter}</span>
+              </div>
+              <textarea
+                ref={textareaRef}
+                className="quick-note-editor"
+                value={draft}
+                autoFocus
+                spellCheck
+                aria-label="Quick Note Markdown"
+                placeholder="Capture a thought… Markdown is saved directly into Inbox."
+                onChange={(event) => updateDraft(event.target.value)}
+                onSelect={(event) => {
+                  if (provisionalText) return;
+                  setDictationAnchor(event.currentTarget.selectionStart);
+                }}
+                onKeyDown={(event) => {
+                  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+                    event.preventDefault();
+                    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+                    void saveDraft(draft);
+                  }
+                }}
+              />
+            </div>
           )}
         </main>
       </div>
