@@ -231,6 +231,9 @@ test("demo template emits kitchen-sink browser fixture", () => {
   assert.ok(demo);
   assert.equal(demo.openOnCreate, "Home.md");
   assert.ok(demo.dataPackages.some((entry) => entry.path === "CRM.data"));
+  assert.ok(demo.dataPackages.some((entry) => entry.path === "Projects/Delivery.data"));
+  assert.ok(demo.dataPackages.some((entry) => entry.path === "Data/Metrics.data"));
+  assert.ok(demo.dataPackages.some((entry) => entry.path === "OKRs.data"));
   assert.ok(demo.files.some((file) => file.path === "Research/Architecture.md"));
   assert.ok(demo.files.some((file) => file.path === "Data/sample.csv"));
   assert.ok(demo.files.some((file) => file.path === "Resources/mark.svg"));
@@ -238,6 +241,10 @@ test("demo template emits kitchen-sink browser fixture", () => {
 
   const source = emitDemoWorkspace(templates);
   assert.match(source, /export const demoSnapshot/);
+  assert.match(source, /export const demoDataApps/);
+  assert.match(source, /Projects\/Delivery\.data/);
+  assert.match(source, /Data\/Metrics\.data/);
+  assert.match(source, /OKRs\.data/);
   assert.match(source, /"title": "First Look"/);
   assert.match(source, /"sourceTemplate": "demo"/);
   assert.match(source, /"id": "0198-demo"/);

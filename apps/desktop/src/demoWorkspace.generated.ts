@@ -57,6 +57,10 @@ export const demoSnapshot: WorkspaceSnapshot = {
       "kind": "folder"
     },
     {
+      "path": "Data/Metrics.data",
+      "kind": "data-app"
+    },
+    {
       "path": "Data/sample.csv",
       "kind": "file",
       "formatId": "file:text"
@@ -76,6 +80,10 @@ export const demoSnapshot: WorkspaceSnapshot = {
     {
       "path": "Notebooks/CRM exploration.ipynb",
       "kind": "notebook"
+    },
+    {
+      "path": "OKRs.data",
+      "kind": "data-app"
     },
     {
       "path": "Product",
@@ -102,6 +110,10 @@ export const demoSnapshot: WorkspaceSnapshot = {
       "kind": "folder"
     },
     {
+      "path": "Projects/Delivery.data",
+      "kind": "data-app"
+    },
+    {
       "path": "Research",
       "kind": "folder"
     },
@@ -115,6 +127,10 @@ export const demoSnapshot: WorkspaceSnapshot = {
     },
     {
       "path": "Research/Interview Synthesis.md",
+      "kind": "page"
+    },
+    {
+      "path": "Research/Local Runtime.md",
       "kind": "page"
     },
     {
@@ -193,7 +209,7 @@ export const demoCanvas = {
       "y": 60,
       "width": 300,
       "height": 160,
-      "text": "First Look canvas — double-click file nodes. CRM nodes open saved Board/Gallery views via subpath."
+      "text": "First Look canvas — double-click file nodes. Data apps open grids; CRM nodes can target saved Board/Gallery views via subpath."
     },
     {
       "id": "vision",
@@ -295,6 +311,63 @@ export const demoCanvas = {
       "y": 280,
       "width": 240,
       "height": 120
+    },
+    {
+      "id": "delivery-label",
+      "type": "text",
+      "x": 900,
+      "y": 440,
+      "width": 160,
+      "height": 40,
+      "text": "Delivery board"
+    },
+    {
+      "id": "delivery",
+      "type": "file",
+      "file": "Projects/Delivery.data",
+      "subpath": "views/Board",
+      "x": 900,
+      "y": 480,
+      "width": 200,
+      "height": 100
+    },
+    {
+      "id": "metrics-label",
+      "type": "text",
+      "x": 1120,
+      "y": 440,
+      "width": 160,
+      "height": 40,
+      "text": "Metrics board"
+    },
+    {
+      "id": "metrics",
+      "type": "file",
+      "file": "Data/Metrics.data",
+      "subpath": "views/Board",
+      "x": 1120,
+      "y": 480,
+      "width": 200,
+      "height": 100
+    },
+    {
+      "id": "okrs-label",
+      "type": "text",
+      "x": 1340,
+      "y": 440,
+      "width": 120,
+      "height": 40,
+      "text": "OKRs board"
+    },
+    {
+      "id": "okrs",
+      "type": "file",
+      "file": "OKRs.data",
+      "subpath": "views/Board",
+      "x": 1340,
+      "y": 480,
+      "width": 200,
+      "height": 100
     }
   ],
   "edges": [
@@ -337,6 +410,21 @@ export const demoCanvas = {
       "id": "e8",
       "fromNode": "crm-board",
       "toNode": "crm-notebook"
+    },
+    {
+      "id": "e9",
+      "fromNode": "crm-notebook",
+      "toNode": "delivery"
+    },
+    {
+      "id": "e10",
+      "fromNode": "delivery",
+      "toNode": "metrics"
+    },
+    {
+      "id": "e11",
+      "fromNode": "metrics",
+      "toNode": "okrs"
     }
   ]
 };
@@ -1973,6 +2061,2551 @@ export const demoDataApp: DataAppSnapshot = {
   "layout_type": "grid"
 };
 
+export const demoDataApps: Record<string, DataAppSnapshot> = {
+  "CRM.data": {
+    "title": "CRM",
+    "default_table": "contacts",
+    "package_revision": "demo:0",
+    "columns": [
+      {
+        "name": "id",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "name",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "email",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "company",
+        "field_type": "relation",
+        "sqlite_type": "TEXT",
+        "relation_table": "companies"
+      },
+      {
+        "name": "due_date",
+        "field_type": "date",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "status",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "notes",
+        "field_type": "long_text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "reports_to",
+        "field_type": "relation",
+        "sqlite_type": "TEXT",
+        "relation_table": "contacts"
+      }
+    ],
+    "rows": [
+      {
+        "id": "0198-demo-ada-lovelace",
+        "values": {
+          "id": {
+            "Text": "0198-demo-ada-lovelace"
+          },
+          "name": {
+            "Text": "Ada Lovelace"
+          },
+          "email": {
+            "Text": "ada@analytical.io"
+          },
+          "due_date": {
+            "Date": "2026-08-15"
+          },
+          "status": {
+            "Text": "Active"
+          },
+          "notes": {
+            "Text": "Champion for typed tables beside narrative docs."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-analytical-engines"
+              ]
+            }
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-grace-hopper",
+        "values": {
+          "id": {
+            "Text": "0198-demo-grace-hopper"
+          },
+          "name": {
+            "Text": "Grace Hopper"
+          },
+          "email": {
+            "Text": "grace@navy.mil"
+          },
+          "due_date": {
+            "Date": "2026-07-25"
+          },
+          "status": {
+            "Text": "Active"
+          },
+          "notes": {
+            "Text": "Asked for honest SQL export from CRM views."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-us-navy"
+              ]
+            }
+          },
+          "reports_to": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-ada-lovelace"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "0198-demo-alan-turing",
+        "values": {
+          "id": {
+            "Text": "0198-demo-alan-turing"
+          },
+          "name": {
+            "Text": "Alan Turing"
+          },
+          "email": {
+            "Text": "alan@bletchley.uk"
+          },
+          "due_date": {
+            "Date": "2026-09-01"
+          },
+          "status": {
+            "Text": "Nurture"
+          },
+          "notes": {
+            "Text": "Interested after notebook preview ships."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-bletchley-park"
+              ]
+            }
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-katherine-johnson",
+        "values": {
+          "id": {
+            "Text": "0198-demo-katherine-johnson"
+          },
+          "name": {
+            "Text": "Katherine Johnson"
+          },
+          "email": {
+            "Text": "katherine@nasa.gov"
+          },
+          "due_date": {
+            "Date": "2026-08-02"
+          },
+          "status": {
+            "Text": "Active"
+          },
+          "notes": {
+            "Text": "Needs calendar layout on due dates for standup."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-nasa"
+              ]
+            }
+          },
+          "reports_to": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-dorothy-vaughan"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "0198-demo-dorothy-vaughan",
+        "values": {
+          "id": {
+            "Text": "0198-demo-dorothy-vaughan"
+          },
+          "name": {
+            "Text": "Dorothy Vaughan"
+          },
+          "email": {
+            "Text": "dorothy@nasa.gov"
+          },
+          "due_date": {
+            "Null": null
+          },
+          "status": {
+            "Text": "Partner"
+          },
+          "notes": {
+            "Text": "Coordinating team rollout; gallery view by company."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-nasa"
+              ]
+            }
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-mary-jackson",
+        "values": {
+          "id": {
+            "Text": "0198-demo-mary-jackson"
+          },
+          "name": {
+            "Text": "Mary Jackson"
+          },
+          "email": {
+            "Text": "mary@nasa.gov"
+          },
+          "due_date": {
+            "Date": "2026-07-30"
+          },
+          "status": {
+            "Text": "Active"
+          },
+          "notes": {
+            "Text": "Wants board grouped by status for sprint review."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-nasa"
+              ]
+            }
+          },
+          "reports_to": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-katherine-johnson"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "0198-demo-tim-berners-lee",
+        "values": {
+          "id": {
+            "Text": "0198-demo-tim-berners-lee"
+          },
+          "name": {
+            "Text": "Tim Berners-Lee"
+          },
+          "email": {
+            "Text": "tim@w3.org"
+          },
+          "due_date": {
+            "Date": "2026-10-12"
+          },
+          "status": {
+            "Text": "Lead"
+          },
+          "notes": {
+            "Text": "Linked data angle — follow up on wiki link semantics."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-w3c"
+              ]
+            }
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-brendan-eich",
+        "values": {
+          "id": {
+            "Text": "0198-demo-brendan-eich"
+          },
+          "name": {
+            "Text": "Brendan Eich"
+          },
+          "email": {
+            "Text": "brendan@mozilla.org"
+          },
+          "due_date": {
+            "Date": "2026-08-20"
+          },
+          "status": {
+            "Text": "Nurture"
+          },
+          "notes": {
+            "Text": "Curious about Tauri shell performance budgets."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-mozilla"
+              ]
+            }
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-margaret-hamilton",
+        "values": {
+          "id": {
+            "Text": "0198-demo-margaret-hamilton"
+          },
+          "name": {
+            "Text": "Margaret Hamilton"
+          },
+          "email": {
+            "Text": "margaret@mit.edu"
+          },
+          "due_date": {
+            "Date": "2026-07-22"
+          },
+          "status": {
+            "Text": "Active"
+          },
+          "notes": {
+            "Text": "Long-page scroll tests map to her reliability bar."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-mit-instrumentation-lab"
+              ]
+            }
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-donald-knuth",
+        "values": {
+          "id": {
+            "Text": "0198-demo-donald-knuth"
+          },
+          "name": {
+            "Text": "Donald Knuth"
+          },
+          "email": {
+            "Text": "knuth@stanford.edu"
+          },
+          "due_date": {
+            "Null": null
+          },
+          "status": {
+            "Text": "Lead"
+          },
+          "notes": {
+            "Text": "Literate programming — pages + code in Resources/."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-stanford"
+              ]
+            }
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-linus-torvalds",
+        "values": {
+          "id": {
+            "Text": "0198-demo-linus-torvalds"
+          },
+          "name": {
+            "Text": "Linus Torvalds"
+          },
+          "email": {
+            "Text": "linus@linux.foundation"
+          },
+          "due_date": {
+            "Date": "2026-11-05"
+          },
+          "status": {
+            "Text": "Nurture"
+          },
+          "notes": {
+            "Text": "Git-friendly workspace layout is the hook."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-linux-foundation"
+              ]
+            }
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-guido-van-rossum",
+        "values": {
+          "id": {
+            "Text": "0198-demo-guido-van-rossum"
+          },
+          "name": {
+            "Text": "Guido van Rossum"
+          },
+          "email": {
+            "Text": "guido@python.org"
+          },
+          "due_date": {
+            "Date": "2026-08-08"
+          },
+          "status": {
+            "Text": "Active"
+          },
+          "notes": {
+            "Text": "Notebook story — track under Notebooks/ when ready."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-python-software-foundation"
+              ]
+            }
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-radia-perlman",
+        "values": {
+          "id": {
+            "Text": "0198-demo-radia-perlman"
+          },
+          "name": {
+            "Text": "Radia Perlman"
+          },
+          "email": {
+            "Text": "radia@ieee.org"
+          },
+          "due_date": {
+            "Date": "2026-09-18"
+          },
+          "status": {
+            "Text": "Lead"
+          },
+          "notes": {
+            "Text": "Spanning-tree metaphor for canvas + outline sync."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-ieee"
+              ]
+            }
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-shafi-goldwasser",
+        "values": {
+          "id": {
+            "Text": "0198-demo-shafi-goldwasser"
+          },
+          "name": {
+            "Text": "Shafi Goldwasser"
+          },
+          "email": {
+            "Text": "shafi@mit.edu"
+          },
+          "due_date": {
+            "Date": "2026-07-28"
+          },
+          "status": {
+            "Text": "Active"
+          },
+          "notes": {
+            "Text": "Security review of command preconditions."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-mit"
+              ]
+            }
+          },
+          "reports_to": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-barbara-liskov"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "0198-demo-barbara-liskov",
+        "values": {
+          "id": {
+            "Text": "0198-demo-barbara-liskov"
+          },
+          "name": {
+            "Text": "Barbara Liskov"
+          },
+          "email": {
+            "Text": "liskov@mit.edu"
+          },
+          "due_date": {
+            "Null": null
+          },
+          "status": {
+            "Text": "Partner"
+          },
+          "notes": {
+            "Text": "Substitution principle maps to resource adapters."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-mit"
+              ]
+            }
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-frances-allen",
+        "values": {
+          "id": {
+            "Text": "0198-demo-frances-allen"
+          },
+          "name": {
+            "Text": "Frances Allen"
+          },
+          "email": {
+            "Text": "frances@ibm.com"
+          },
+          "due_date": {
+            "Date": "2026-08-30"
+          },
+          "status": {
+            "Text": "Churned"
+          },
+          "notes": {
+            "Text": "Paused — re-engage after perf benchmarks published."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-ibm-research"
+              ]
+            }
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-edsger-dijkstra",
+        "values": {
+          "id": {
+            "Text": "0198-demo-edsger-dijkstra"
+          },
+          "name": {
+            "Text": "Edsger Dijkstra"
+          },
+          "email": {
+            "Text": "edsger@utexas.edu"
+          },
+          "due_date": {
+            "Date": "2026-12-01"
+          },
+          "status": {
+            "Text": "Lead"
+          },
+          "notes": {
+            "Text": "Structured note templates under Templates/."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-ut-austin"
+              ]
+            }
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-grace-brewster",
+        "values": {
+          "id": {
+            "Text": "0198-demo-grace-brewster"
+          },
+          "name": {
+            "Text": "Grace Brewster"
+          },
+          "email": {
+            "Text": "grace.b@example.com"
+          },
+          "due_date": {
+            "Date": "2026-07-19"
+          },
+          "status": {
+            "Text": "Lead"
+          },
+          "notes": {
+            "Text": "Inbound from conference booth — assign owner."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-example-corp"
+              ]
+            }
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-leslie-lamport",
+        "values": {
+          "id": {
+            "Text": "0198-demo-leslie-lamport"
+          },
+          "name": {
+            "Text": "Leslie Lamport"
+          },
+          "email": {
+            "Text": "lamport@microsoft.com"
+          },
+          "due_date": {
+            "Date": "2026-09-25"
+          },
+          "status": {
+            "Text": "Nurture"
+          },
+          "notes": {
+            "Text": "Formal methods audience — link Research/Architecture."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-microsoft-research"
+              ]
+            }
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      },
+      {
+        "id": "0198-demo-vint-cerf",
+        "values": {
+          "id": {
+            "Text": "0198-demo-vint-cerf"
+          },
+          "name": {
+            "Text": "Vint Cerf"
+          },
+          "email": {
+            "Text": "vint@google.com"
+          },
+          "due_date": {
+            "Date": "2026-10-01"
+          },
+          "status": {
+            "Text": "Active"
+          },
+          "notes": {
+            "Text": "Offline-first narrative resonates; wants demo workspace zip."
+          },
+          "company": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-companies-google"
+              ]
+            }
+          },
+          "reports_to": {
+            "Null": null
+          }
+        }
+      }
+    ],
+    "available_views": [
+      "All",
+      "Board",
+      "Calendar",
+      "Form",
+      "Gallery"
+    ],
+    "active_view": "All",
+    "filters": [],
+    "saved_views": [
+      {
+        "name": "All",
+        "layout_type": "grid"
+      },
+      {
+        "name": "Board",
+        "layout_type": "board",
+        "group_by": "status"
+      },
+      {
+        "name": "Calendar",
+        "layout_type": "calendar",
+        "date_field": "due_date"
+      },
+      {
+        "name": "Form",
+        "layout_type": "form"
+      },
+      {
+        "name": "Gallery",
+        "layout_type": "gallery",
+        "cover_field": "company"
+      }
+    ],
+    "relation_targets": {
+      "companies": [
+        {
+          "id": "0198-demo-companies-analytical-engines",
+          "values": {
+            "id": {
+              "Text": "0198-demo-companies-analytical-engines"
+            },
+            "name": {
+              "Text": "Analytical Engines"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-companies-us-navy",
+          "values": {
+            "id": {
+              "Text": "0198-demo-companies-us-navy"
+            },
+            "name": {
+              "Text": "US Navy"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-companies-bletchley-park",
+          "values": {
+            "id": {
+              "Text": "0198-demo-companies-bletchley-park"
+            },
+            "name": {
+              "Text": "Bletchley Park"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-companies-nasa",
+          "values": {
+            "id": {
+              "Text": "0198-demo-companies-nasa"
+            },
+            "name": {
+              "Text": "NASA"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-companies-w3c",
+          "values": {
+            "id": {
+              "Text": "0198-demo-companies-w3c"
+            },
+            "name": {
+              "Text": "W3C"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-companies-mozilla",
+          "values": {
+            "id": {
+              "Text": "0198-demo-companies-mozilla"
+            },
+            "name": {
+              "Text": "Mozilla"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-companies-mit-instrumentation-lab",
+          "values": {
+            "id": {
+              "Text": "0198-demo-companies-mit-instrumentation-lab"
+            },
+            "name": {
+              "Text": "MIT Instrumentation Lab"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-companies-stanford",
+          "values": {
+            "id": {
+              "Text": "0198-demo-companies-stanford"
+            },
+            "name": {
+              "Text": "Stanford"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-companies-linux-foundation",
+          "values": {
+            "id": {
+              "Text": "0198-demo-companies-linux-foundation"
+            },
+            "name": {
+              "Text": "Linux Foundation"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-companies-python-software-foundation",
+          "values": {
+            "id": {
+              "Text": "0198-demo-companies-python-software-foundation"
+            },
+            "name": {
+              "Text": "Python Software Foundation"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-companies-ieee",
+          "values": {
+            "id": {
+              "Text": "0198-demo-companies-ieee"
+            },
+            "name": {
+              "Text": "IEEE"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-companies-mit",
+          "values": {
+            "id": {
+              "Text": "0198-demo-companies-mit"
+            },
+            "name": {
+              "Text": "MIT"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-companies-ibm-research",
+          "values": {
+            "id": {
+              "Text": "0198-demo-companies-ibm-research"
+            },
+            "name": {
+              "Text": "IBM Research"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-companies-ut-austin",
+          "values": {
+            "id": {
+              "Text": "0198-demo-companies-ut-austin"
+            },
+            "name": {
+              "Text": "UT Austin"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-companies-example-corp",
+          "values": {
+            "id": {
+              "Text": "0198-demo-companies-example-corp"
+            },
+            "name": {
+              "Text": "Example Corp"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-companies-microsoft-research",
+          "values": {
+            "id": {
+              "Text": "0198-demo-companies-microsoft-research"
+            },
+            "name": {
+              "Text": "Microsoft Research"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-companies-google",
+          "values": {
+            "id": {
+              "Text": "0198-demo-companies-google"
+            },
+            "name": {
+              "Text": "Google"
+            }
+          }
+        }
+      ],
+      "contacts": [
+        {
+          "id": "0198-demo-ada-lovelace",
+          "values": {
+            "id": {
+              "Text": "0198-demo-ada-lovelace"
+            },
+            "name": {
+              "Text": "Ada Lovelace"
+            },
+            "email": {
+              "Text": "ada@analytical.io"
+            },
+            "due_date": {
+              "Date": "2026-08-15"
+            },
+            "status": {
+              "Text": "Active"
+            },
+            "notes": {
+              "Text": "Champion for typed tables beside narrative docs."
+            },
+            "company": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-companies-analytical-engines"
+                ]
+              }
+            },
+            "reports_to": {
+              "Null": null
+            }
+          }
+        },
+        {
+          "id": "0198-demo-grace-hopper",
+          "values": {
+            "id": {
+              "Text": "0198-demo-grace-hopper"
+            },
+            "name": {
+              "Text": "Grace Hopper"
+            },
+            "email": {
+              "Text": "grace@navy.mil"
+            },
+            "due_date": {
+              "Date": "2026-07-25"
+            },
+            "status": {
+              "Text": "Active"
+            },
+            "notes": {
+              "Text": "Asked for honest SQL export from CRM views."
+            },
+            "company": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-companies-us-navy"
+                ]
+              }
+            },
+            "reports_to": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-ada-lovelace"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "0198-demo-alan-turing",
+          "values": {
+            "id": {
+              "Text": "0198-demo-alan-turing"
+            },
+            "name": {
+              "Text": "Alan Turing"
+            },
+            "email": {
+              "Text": "alan@bletchley.uk"
+            },
+            "due_date": {
+              "Date": "2026-09-01"
+            },
+            "status": {
+              "Text": "Nurture"
+            },
+            "notes": {
+              "Text": "Interested after notebook preview ships."
+            },
+            "company": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-companies-bletchley-park"
+                ]
+              }
+            },
+            "reports_to": {
+              "Null": null
+            }
+          }
+        },
+        {
+          "id": "0198-demo-katherine-johnson",
+          "values": {
+            "id": {
+              "Text": "0198-demo-katherine-johnson"
+            },
+            "name": {
+              "Text": "Katherine Johnson"
+            },
+            "email": {
+              "Text": "katherine@nasa.gov"
+            },
+            "due_date": {
+              "Date": "2026-08-02"
+            },
+            "status": {
+              "Text": "Active"
+            },
+            "notes": {
+              "Text": "Needs calendar layout on due dates for standup."
+            },
+            "company": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-companies-nasa"
+                ]
+              }
+            },
+            "reports_to": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-dorothy-vaughan"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "0198-demo-dorothy-vaughan",
+          "values": {
+            "id": {
+              "Text": "0198-demo-dorothy-vaughan"
+            },
+            "name": {
+              "Text": "Dorothy Vaughan"
+            },
+            "email": {
+              "Text": "dorothy@nasa.gov"
+            },
+            "due_date": {
+              "Null": null
+            },
+            "status": {
+              "Text": "Partner"
+            },
+            "notes": {
+              "Text": "Coordinating team rollout; gallery view by company."
+            },
+            "company": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-companies-nasa"
+                ]
+              }
+            },
+            "reports_to": {
+              "Null": null
+            }
+          }
+        },
+        {
+          "id": "0198-demo-mary-jackson",
+          "values": {
+            "id": {
+              "Text": "0198-demo-mary-jackson"
+            },
+            "name": {
+              "Text": "Mary Jackson"
+            },
+            "email": {
+              "Text": "mary@nasa.gov"
+            },
+            "due_date": {
+              "Date": "2026-07-30"
+            },
+            "status": {
+              "Text": "Active"
+            },
+            "notes": {
+              "Text": "Wants board grouped by status for sprint review."
+            },
+            "company": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-companies-nasa"
+                ]
+              }
+            },
+            "reports_to": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-katherine-johnson"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "0198-demo-tim-berners-lee",
+          "values": {
+            "id": {
+              "Text": "0198-demo-tim-berners-lee"
+            },
+            "name": {
+              "Text": "Tim Berners-Lee"
+            },
+            "email": {
+              "Text": "tim@w3.org"
+            },
+            "due_date": {
+              "Date": "2026-10-12"
+            },
+            "status": {
+              "Text": "Lead"
+            },
+            "notes": {
+              "Text": "Linked data angle — follow up on wiki link semantics."
+            },
+            "company": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-companies-w3c"
+                ]
+              }
+            },
+            "reports_to": {
+              "Null": null
+            }
+          }
+        },
+        {
+          "id": "0198-demo-brendan-eich",
+          "values": {
+            "id": {
+              "Text": "0198-demo-brendan-eich"
+            },
+            "name": {
+              "Text": "Brendan Eich"
+            },
+            "email": {
+              "Text": "brendan@mozilla.org"
+            },
+            "due_date": {
+              "Date": "2026-08-20"
+            },
+            "status": {
+              "Text": "Nurture"
+            },
+            "notes": {
+              "Text": "Curious about Tauri shell performance budgets."
+            },
+            "company": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-companies-mozilla"
+                ]
+              }
+            },
+            "reports_to": {
+              "Null": null
+            }
+          }
+        },
+        {
+          "id": "0198-demo-margaret-hamilton",
+          "values": {
+            "id": {
+              "Text": "0198-demo-margaret-hamilton"
+            },
+            "name": {
+              "Text": "Margaret Hamilton"
+            },
+            "email": {
+              "Text": "margaret@mit.edu"
+            },
+            "due_date": {
+              "Date": "2026-07-22"
+            },
+            "status": {
+              "Text": "Active"
+            },
+            "notes": {
+              "Text": "Long-page scroll tests map to her reliability bar."
+            },
+            "company": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-companies-mit-instrumentation-lab"
+                ]
+              }
+            },
+            "reports_to": {
+              "Null": null
+            }
+          }
+        },
+        {
+          "id": "0198-demo-donald-knuth",
+          "values": {
+            "id": {
+              "Text": "0198-demo-donald-knuth"
+            },
+            "name": {
+              "Text": "Donald Knuth"
+            },
+            "email": {
+              "Text": "knuth@stanford.edu"
+            },
+            "due_date": {
+              "Null": null
+            },
+            "status": {
+              "Text": "Lead"
+            },
+            "notes": {
+              "Text": "Literate programming — pages + code in Resources/."
+            },
+            "company": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-companies-stanford"
+                ]
+              }
+            },
+            "reports_to": {
+              "Null": null
+            }
+          }
+        },
+        {
+          "id": "0198-demo-linus-torvalds",
+          "values": {
+            "id": {
+              "Text": "0198-demo-linus-torvalds"
+            },
+            "name": {
+              "Text": "Linus Torvalds"
+            },
+            "email": {
+              "Text": "linus@linux.foundation"
+            },
+            "due_date": {
+              "Date": "2026-11-05"
+            },
+            "status": {
+              "Text": "Nurture"
+            },
+            "notes": {
+              "Text": "Git-friendly workspace layout is the hook."
+            },
+            "company": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-companies-linux-foundation"
+                ]
+              }
+            },
+            "reports_to": {
+              "Null": null
+            }
+          }
+        },
+        {
+          "id": "0198-demo-guido-van-rossum",
+          "values": {
+            "id": {
+              "Text": "0198-demo-guido-van-rossum"
+            },
+            "name": {
+              "Text": "Guido van Rossum"
+            },
+            "email": {
+              "Text": "guido@python.org"
+            },
+            "due_date": {
+              "Date": "2026-08-08"
+            },
+            "status": {
+              "Text": "Active"
+            },
+            "notes": {
+              "Text": "Notebook story — track under Notebooks/ when ready."
+            },
+            "company": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-companies-python-software-foundation"
+                ]
+              }
+            },
+            "reports_to": {
+              "Null": null
+            }
+          }
+        },
+        {
+          "id": "0198-demo-radia-perlman",
+          "values": {
+            "id": {
+              "Text": "0198-demo-radia-perlman"
+            },
+            "name": {
+              "Text": "Radia Perlman"
+            },
+            "email": {
+              "Text": "radia@ieee.org"
+            },
+            "due_date": {
+              "Date": "2026-09-18"
+            },
+            "status": {
+              "Text": "Lead"
+            },
+            "notes": {
+              "Text": "Spanning-tree metaphor for canvas + outline sync."
+            },
+            "company": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-companies-ieee"
+                ]
+              }
+            },
+            "reports_to": {
+              "Null": null
+            }
+          }
+        },
+        {
+          "id": "0198-demo-shafi-goldwasser",
+          "values": {
+            "id": {
+              "Text": "0198-demo-shafi-goldwasser"
+            },
+            "name": {
+              "Text": "Shafi Goldwasser"
+            },
+            "email": {
+              "Text": "shafi@mit.edu"
+            },
+            "due_date": {
+              "Date": "2026-07-28"
+            },
+            "status": {
+              "Text": "Active"
+            },
+            "notes": {
+              "Text": "Security review of command preconditions."
+            },
+            "company": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-companies-mit"
+                ]
+              }
+            },
+            "reports_to": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-barbara-liskov"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "0198-demo-barbara-liskov",
+          "values": {
+            "id": {
+              "Text": "0198-demo-barbara-liskov"
+            },
+            "name": {
+              "Text": "Barbara Liskov"
+            },
+            "email": {
+              "Text": "liskov@mit.edu"
+            },
+            "due_date": {
+              "Null": null
+            },
+            "status": {
+              "Text": "Partner"
+            },
+            "notes": {
+              "Text": "Substitution principle maps to resource adapters."
+            },
+            "company": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-companies-mit"
+                ]
+              }
+            },
+            "reports_to": {
+              "Null": null
+            }
+          }
+        },
+        {
+          "id": "0198-demo-frances-allen",
+          "values": {
+            "id": {
+              "Text": "0198-demo-frances-allen"
+            },
+            "name": {
+              "Text": "Frances Allen"
+            },
+            "email": {
+              "Text": "frances@ibm.com"
+            },
+            "due_date": {
+              "Date": "2026-08-30"
+            },
+            "status": {
+              "Text": "Churned"
+            },
+            "notes": {
+              "Text": "Paused — re-engage after perf benchmarks published."
+            },
+            "company": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-companies-ibm-research"
+                ]
+              }
+            },
+            "reports_to": {
+              "Null": null
+            }
+          }
+        },
+        {
+          "id": "0198-demo-edsger-dijkstra",
+          "values": {
+            "id": {
+              "Text": "0198-demo-edsger-dijkstra"
+            },
+            "name": {
+              "Text": "Edsger Dijkstra"
+            },
+            "email": {
+              "Text": "edsger@utexas.edu"
+            },
+            "due_date": {
+              "Date": "2026-12-01"
+            },
+            "status": {
+              "Text": "Lead"
+            },
+            "notes": {
+              "Text": "Structured note templates under Templates/."
+            },
+            "company": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-companies-ut-austin"
+                ]
+              }
+            },
+            "reports_to": {
+              "Null": null
+            }
+          }
+        },
+        {
+          "id": "0198-demo-grace-brewster",
+          "values": {
+            "id": {
+              "Text": "0198-demo-grace-brewster"
+            },
+            "name": {
+              "Text": "Grace Brewster"
+            },
+            "email": {
+              "Text": "grace.b@example.com"
+            },
+            "due_date": {
+              "Date": "2026-07-19"
+            },
+            "status": {
+              "Text": "Lead"
+            },
+            "notes": {
+              "Text": "Inbound from conference booth — assign owner."
+            },
+            "company": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-companies-example-corp"
+                ]
+              }
+            },
+            "reports_to": {
+              "Null": null
+            }
+          }
+        },
+        {
+          "id": "0198-demo-leslie-lamport",
+          "values": {
+            "id": {
+              "Text": "0198-demo-leslie-lamport"
+            },
+            "name": {
+              "Text": "Leslie Lamport"
+            },
+            "email": {
+              "Text": "lamport@microsoft.com"
+            },
+            "due_date": {
+              "Date": "2026-09-25"
+            },
+            "status": {
+              "Text": "Nurture"
+            },
+            "notes": {
+              "Text": "Formal methods audience — link Research/Architecture."
+            },
+            "company": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-companies-microsoft-research"
+                ]
+              }
+            },
+            "reports_to": {
+              "Null": null
+            }
+          }
+        },
+        {
+          "id": "0198-demo-vint-cerf",
+          "values": {
+            "id": {
+              "Text": "0198-demo-vint-cerf"
+            },
+            "name": {
+              "Text": "Vint Cerf"
+            },
+            "email": {
+              "Text": "vint@google.com"
+            },
+            "due_date": {
+              "Date": "2026-10-01"
+            },
+            "status": {
+              "Text": "Active"
+            },
+            "notes": {
+              "Text": "Offline-first narrative resonates; wants demo workspace zip."
+            },
+            "company": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-companies-google"
+                ]
+              }
+            },
+            "reports_to": {
+              "Null": null
+            }
+          }
+        }
+      ]
+    },
+    "layout_type": "grid"
+  },
+  "Projects/Delivery.data": {
+    "title": "Delivery",
+    "default_table": "items",
+    "package_revision": "demo:0",
+    "columns": [
+      {
+        "name": "id",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "title",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "owner",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "status",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "due",
+        "field_type": "date",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "notes",
+        "field_type": "long_text",
+        "sqlite_type": "TEXT"
+      }
+    ],
+    "rows": [
+      {
+        "id": "0198-demo-row-0",
+        "values": {
+          "id": {
+            "Text": "0198-demo-row-0"
+          },
+          "title": {
+            "Text": "Native capture polish"
+          },
+          "owner": {
+            "Text": "Will"
+          },
+          "status": {
+            "Text": "Done"
+          },
+          "due": {
+            "Date": "2026-07-18"
+          },
+          "notes": {
+            "Text": "AVAudioEngine path landed; exercise mic in First Look."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-row-1",
+        "values": {
+          "id": {
+            "Text": "0198-demo-row-1"
+          },
+          "title": {
+            "Text": "Hybrid search demo queries"
+          },
+          "owner": {
+            "Text": "Will"
+          },
+          "status": {
+            "Text": "In progress"
+          },
+          "due": {
+            "Date": "2026-07-22"
+          },
+          "notes": {
+            "Text": "Seed Local Runtime with glossary tokens."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-row-2",
+        "values": {
+          "id": {
+            "Text": "0198-demo-row-2"
+          },
+          "title": {
+            "Text": "Phase 2 column designer"
+          },
+          "owner": {
+            "Text": "TBD"
+          },
+          "status": {
+            "Text": "Backlog"
+          },
+          "due": {
+            "Date": "2026-08-15"
+          },
+          "notes": {
+            "Text": "Wave 1 tables DAG — schema commands first."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-row-3",
+        "values": {
+          "id": {
+            "Text": "0198-demo-row-3"
+          },
+          "title": {
+            "Text": "Quick Note dictation QA"
+          },
+          "owner": {
+            "Text": "Will"
+          },
+          "status": {
+            "Text": "In progress"
+          },
+          "due": {
+            "Date": "2026-07-20"
+          },
+          "notes": {
+            "Text": "Hold-to-dictate + silence discard."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-row-4",
+        "values": {
+          "id": {
+            "Text": "0198-demo-row-4"
+          },
+          "title": {
+            "Text": "Canvas CRM subpaths"
+          },
+          "owner": {
+            "Text": "Will"
+          },
+          "status": {
+            "Text": "Done"
+          },
+          "due": {
+            "Date": "2026-07-17"
+          },
+          "notes": {
+            "Text": "Board/Gallery file nodes already wired."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-row-5",
+        "values": {
+          "id": {
+            "Text": "0198-demo-row-5"
+          },
+          "title": {
+            "Text": "CSV type-review import"
+          },
+          "owner": {
+            "Text": "TBD"
+          },
+          "status": {
+            "Text": "Backlog"
+          },
+          "due": {
+            "Null": null
+          },
+          "notes": {
+            "Text": "Promote Data/sample.csv after profiling lands."
+          }
+        }
+      }
+    ],
+    "available_views": [
+      "All",
+      "Board",
+      "Calendar",
+      "Form"
+    ],
+    "active_view": "All",
+    "filters": [],
+    "saved_views": [
+      {
+        "name": "All",
+        "layout_type": "grid"
+      },
+      {
+        "name": "Board",
+        "layout_type": "board",
+        "group_by": "status"
+      },
+      {
+        "name": "Calendar",
+        "layout_type": "calendar",
+        "date_field": "due"
+      },
+      {
+        "name": "Form",
+        "layout_type": "form"
+      }
+    ],
+    "relation_targets": {
+      "items": [
+        {
+          "id": "0198-demo-row-0",
+          "values": {
+            "id": {
+              "Text": "0198-demo-row-0"
+            },
+            "title": {
+              "Text": "Native capture polish"
+            },
+            "owner": {
+              "Text": "Will"
+            },
+            "status": {
+              "Text": "Done"
+            },
+            "due": {
+              "Date": "2026-07-18"
+            },
+            "notes": {
+              "Text": "AVAudioEngine path landed; exercise mic in First Look."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-row-1",
+          "values": {
+            "id": {
+              "Text": "0198-demo-row-1"
+            },
+            "title": {
+              "Text": "Hybrid search demo queries"
+            },
+            "owner": {
+              "Text": "Will"
+            },
+            "status": {
+              "Text": "In progress"
+            },
+            "due": {
+              "Date": "2026-07-22"
+            },
+            "notes": {
+              "Text": "Seed Local Runtime with glossary tokens."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-row-2",
+          "values": {
+            "id": {
+              "Text": "0198-demo-row-2"
+            },
+            "title": {
+              "Text": "Phase 2 column designer"
+            },
+            "owner": {
+              "Text": "TBD"
+            },
+            "status": {
+              "Text": "Backlog"
+            },
+            "due": {
+              "Date": "2026-08-15"
+            },
+            "notes": {
+              "Text": "Wave 1 tables DAG — schema commands first."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-row-3",
+          "values": {
+            "id": {
+              "Text": "0198-demo-row-3"
+            },
+            "title": {
+              "Text": "Quick Note dictation QA"
+            },
+            "owner": {
+              "Text": "Will"
+            },
+            "status": {
+              "Text": "In progress"
+            },
+            "due": {
+              "Date": "2026-07-20"
+            },
+            "notes": {
+              "Text": "Hold-to-dictate + silence discard."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-row-4",
+          "values": {
+            "id": {
+              "Text": "0198-demo-row-4"
+            },
+            "title": {
+              "Text": "Canvas CRM subpaths"
+            },
+            "owner": {
+              "Text": "Will"
+            },
+            "status": {
+              "Text": "Done"
+            },
+            "due": {
+              "Date": "2026-07-17"
+            },
+            "notes": {
+              "Text": "Board/Gallery file nodes already wired."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-row-5",
+          "values": {
+            "id": {
+              "Text": "0198-demo-row-5"
+            },
+            "title": {
+              "Text": "CSV type-review import"
+            },
+            "owner": {
+              "Text": "TBD"
+            },
+            "status": {
+              "Text": "Backlog"
+            },
+            "due": {
+              "Null": null
+            },
+            "notes": {
+              "Text": "Promote Data/sample.csv after profiling lands."
+            }
+          }
+        }
+      ]
+    },
+    "layout_type": "grid"
+  },
+  "Data/Metrics.data": {
+    "title": "Metrics",
+    "default_table": "metrics",
+    "package_revision": "demo:0",
+    "columns": [
+      {
+        "name": "id",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "metric",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "value",
+        "field_type": "decimal",
+        "sqlite_type": "REAL"
+      },
+      {
+        "name": "recorded_on",
+        "field_type": "date",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "category",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      }
+    ],
+    "rows": [
+      {
+        "id": "0198-demo-row-0",
+        "values": {
+          "id": {
+            "Text": "0198-demo-row-0"
+          },
+          "metric": {
+            "Text": "warm_first_partial_ms"
+          },
+          "value": {
+            "Decimal": 158.3
+          },
+          "recorded_on": {
+            "Date": "2026-07-10"
+          },
+          "category": {
+            "Text": "Voice"
+          }
+        }
+      },
+      {
+        "id": "0198-demo-row-1",
+        "values": {
+          "id": {
+            "Text": "0198-demo-row-1"
+          },
+          "metric": {
+            "Text": "search_p95_ms"
+          },
+          "value": {
+            "Decimal": 42
+          },
+          "recorded_on": {
+            "Date": "2026-07-12"
+          },
+          "category": {
+            "Text": "Search"
+          }
+        }
+      },
+      {
+        "id": "0198-demo-row-2",
+        "values": {
+          "id": {
+            "Text": "0198-demo-row-2"
+          },
+          "metric": {
+            "Text": "crm_open_ms"
+          },
+          "value": {
+            "Decimal": 120
+          },
+          "recorded_on": {
+            "Date": "2026-07-15"
+          },
+          "category": {
+            "Text": "Data"
+          }
+        }
+      },
+      {
+        "id": "0198-demo-row-3",
+        "values": {
+          "id": {
+            "Text": "0198-demo-row-3"
+          },
+          "metric": {
+            "Text": "warm_first_partial_ms"
+          },
+          "value": {
+            "Decimal": 149.1
+          },
+          "recorded_on": {
+            "Date": "2026-07-18"
+          },
+          "category": {
+            "Text": "Voice"
+          }
+        }
+      },
+      {
+        "id": "0198-demo-row-4",
+        "values": {
+          "id": {
+            "Text": "0198-demo-row-4"
+          },
+          "metric": {
+            "Text": "search_p95_ms"
+          },
+          "value": {
+            "Decimal": 38
+          },
+          "recorded_on": {
+            "Date": "2026-07-18"
+          },
+          "category": {
+            "Text": "Search"
+          }
+        }
+      },
+      {
+        "id": "0198-demo-row-5",
+        "values": {
+          "id": {
+            "Text": "0198-demo-row-5"
+          },
+          "metric": {
+            "Text": "long_read_scroll_fps"
+          },
+          "value": {
+            "Decimal": 58
+          },
+          "recorded_on": {
+            "Date": "2026-07-18"
+          },
+          "category": {
+            "Text": "Editor"
+          }
+        }
+      }
+    ],
+    "available_views": [
+      "All",
+      "Board",
+      "Calendar",
+      "Form",
+      "Gallery"
+    ],
+    "active_view": "All",
+    "filters": [],
+    "saved_views": [
+      {
+        "name": "All",
+        "layout_type": "grid"
+      },
+      {
+        "name": "Board",
+        "layout_type": "board",
+        "group_by": "category"
+      },
+      {
+        "name": "Calendar",
+        "layout_type": "calendar",
+        "date_field": "recorded_on"
+      },
+      {
+        "name": "Form",
+        "layout_type": "form"
+      },
+      {
+        "name": "Gallery",
+        "layout_type": "gallery",
+        "cover_field": "metric"
+      }
+    ],
+    "relation_targets": {
+      "metrics": [
+        {
+          "id": "0198-demo-row-0",
+          "values": {
+            "id": {
+              "Text": "0198-demo-row-0"
+            },
+            "metric": {
+              "Text": "warm_first_partial_ms"
+            },
+            "value": {
+              "Decimal": 158.3
+            },
+            "recorded_on": {
+              "Date": "2026-07-10"
+            },
+            "category": {
+              "Text": "Voice"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-row-1",
+          "values": {
+            "id": {
+              "Text": "0198-demo-row-1"
+            },
+            "metric": {
+              "Text": "search_p95_ms"
+            },
+            "value": {
+              "Decimal": 42
+            },
+            "recorded_on": {
+              "Date": "2026-07-12"
+            },
+            "category": {
+              "Text": "Search"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-row-2",
+          "values": {
+            "id": {
+              "Text": "0198-demo-row-2"
+            },
+            "metric": {
+              "Text": "crm_open_ms"
+            },
+            "value": {
+              "Decimal": 120
+            },
+            "recorded_on": {
+              "Date": "2026-07-15"
+            },
+            "category": {
+              "Text": "Data"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-row-3",
+          "values": {
+            "id": {
+              "Text": "0198-demo-row-3"
+            },
+            "metric": {
+              "Text": "warm_first_partial_ms"
+            },
+            "value": {
+              "Decimal": 149.1
+            },
+            "recorded_on": {
+              "Date": "2026-07-18"
+            },
+            "category": {
+              "Text": "Voice"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-row-4",
+          "values": {
+            "id": {
+              "Text": "0198-demo-row-4"
+            },
+            "metric": {
+              "Text": "search_p95_ms"
+            },
+            "value": {
+              "Decimal": 38
+            },
+            "recorded_on": {
+              "Date": "2026-07-18"
+            },
+            "category": {
+              "Text": "Search"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-row-5",
+          "values": {
+            "id": {
+              "Text": "0198-demo-row-5"
+            },
+            "metric": {
+              "Text": "long_read_scroll_fps"
+            },
+            "value": {
+              "Decimal": 58
+            },
+            "recorded_on": {
+              "Date": "2026-07-18"
+            },
+            "category": {
+              "Text": "Editor"
+            }
+          }
+        }
+      ]
+    },
+    "layout_type": "grid"
+  },
+  "OKRs.data": {
+    "title": "OKRs",
+    "default_table": "okrs",
+    "package_revision": "demo:0",
+    "columns": [
+      {
+        "name": "id",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "objective",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "key_result",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "owner",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "status",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "confidence",
+        "field_type": "decimal",
+        "sqlite_type": "REAL"
+      }
+    ],
+    "rows": [
+      {
+        "id": "0198-demo-row-0",
+        "values": {
+          "id": {
+            "Text": "0198-demo-row-0"
+          },
+          "objective": {
+            "Text": "Ship local runtime"
+          },
+          "key_result": {
+            "Text": "Daemon + hybrid search on main"
+          },
+          "owner": {
+            "Text": "platform"
+          },
+          "status": {
+            "Text": "on-track"
+          },
+          "confidence": {
+            "Decimal": 0.9
+          }
+        }
+      },
+      {
+        "id": "0198-demo-row-1",
+        "values": {
+          "id": {
+            "Text": "0198-demo-row-1"
+          },
+          "objective": {
+            "Text": "Ship local runtime"
+          },
+          "key_result": {
+            "Text": "Voice thin client + Quick Note dictate"
+          },
+          "owner": {
+            "Text": "platform"
+          },
+          "status": {
+            "Text": "on-track"
+          },
+          "confidence": {
+            "Decimal": 0.85
+          }
+        }
+      },
+      {
+        "id": "0198-demo-row-2",
+        "values": {
+          "id": {
+            "Text": "0198-demo-row-2"
+          },
+          "objective": {
+            "Text": "Credible data apps"
+          },
+          "key_result": {
+            "Text": "Schema commands + column designer"
+          },
+          "owner": {
+            "Text": "data"
+          },
+          "status": {
+            "Text": "at-risk"
+          },
+          "confidence": {
+            "Decimal": 0.45
+          }
+        }
+      },
+      {
+        "id": "0198-demo-row-3",
+        "values": {
+          "id": {
+            "Text": "0198-demo-row-3"
+          },
+          "objective": {
+            "Text": "Credible data apps"
+          },
+          "key_result": {
+            "Text": "Multiple .data fixtures in First Look"
+          },
+          "owner": {
+            "Text": "data"
+          },
+          "status": {
+            "Text": "on-track"
+          },
+          "confidence": {
+            "Decimal": 0.8
+          }
+        }
+      }
+    ],
+    "available_views": [
+      "All",
+      "Board",
+      "Form"
+    ],
+    "active_view": "All",
+    "filters": [],
+    "saved_views": [
+      {
+        "name": "All",
+        "layout_type": "grid"
+      },
+      {
+        "name": "Board",
+        "layout_type": "board",
+        "group_by": "status"
+      },
+      {
+        "name": "Form",
+        "layout_type": "form"
+      }
+    ],
+    "relation_targets": {
+      "okrs": [
+        {
+          "id": "0198-demo-row-0",
+          "values": {
+            "id": {
+              "Text": "0198-demo-row-0"
+            },
+            "objective": {
+              "Text": "Ship local runtime"
+            },
+            "key_result": {
+              "Text": "Daemon + hybrid search on main"
+            },
+            "owner": {
+              "Text": "platform"
+            },
+            "status": {
+              "Text": "on-track"
+            },
+            "confidence": {
+              "Decimal": 0.9
+            }
+          }
+        },
+        {
+          "id": "0198-demo-row-1",
+          "values": {
+            "id": {
+              "Text": "0198-demo-row-1"
+            },
+            "objective": {
+              "Text": "Ship local runtime"
+            },
+            "key_result": {
+              "Text": "Voice thin client + Quick Note dictate"
+            },
+            "owner": {
+              "Text": "platform"
+            },
+            "status": {
+              "Text": "on-track"
+            },
+            "confidence": {
+              "Decimal": 0.85
+            }
+          }
+        },
+        {
+          "id": "0198-demo-row-2",
+          "values": {
+            "id": {
+              "Text": "0198-demo-row-2"
+            },
+            "objective": {
+              "Text": "Credible data apps"
+            },
+            "key_result": {
+              "Text": "Schema commands + column designer"
+            },
+            "owner": {
+              "Text": "data"
+            },
+            "status": {
+              "Text": "at-risk"
+            },
+            "confidence": {
+              "Decimal": 0.45
+            }
+          }
+        },
+        {
+          "id": "0198-demo-row-3",
+          "values": {
+            "id": {
+              "Text": "0198-demo-row-3"
+            },
+            "objective": {
+              "Text": "Credible data apps"
+            },
+            "key_result": {
+              "Text": "Multiple .data fixtures in First Look"
+            },
+            "owner": {
+              "Text": "data"
+            },
+            "status": {
+              "Text": "on-track"
+            },
+            "confidence": {
+              "Decimal": 0.8
+            }
+          }
+        }
+      ]
+    },
+    "layout_type": "grid"
+  }
+};
+
 export const demoPackageForms: FormSummary[] = [
   {
     "name": "ContactIntake",
@@ -1988,16 +4621,50 @@ export const demoPackageForms: FormSummary[] = [
   }
 ];
 
+export const demoPackageFormsByPath: Record<string, FormSummary[]> = {
+  "CRM.data": [
+    {
+      "name": "ContactIntake",
+      "table": "contacts",
+      "fields": [
+        "name",
+        "email",
+        "status",
+        "company"
+      ],
+      "title": "Contact intake",
+      "description": "Create a contact from the package form."
+    }
+  ],
+  "Projects/Delivery.data": [
+    {
+      "name": "Intake",
+      "table": "items",
+      "fields": [
+        "title",
+        "owner",
+        "status",
+        "due"
+      ],
+      "title": "Delivery intake",
+      "description": "Add a delivery item without opening the grid."
+    }
+  ],
+  "Data/Metrics.data": [],
+  "OKRs.data": []
+};
+
 export const demoPages: Record<string, string> = {
-  "Home.md": "---\ntitle: Home\n---\n\n# Home\n\nKitchen-sink tour of the **First Look** sample workspace. Everything here is an\nordinary file under a real directory — open it in any editor, or stay inside Lattice.\n\n## Quick start\n\n1. Search with **⌘K** — pages are indexed by path, title, tags, and body.\n2. Scroll [[Research/Long Read]] — long-form perf and virtualization fixture.\n3. Open `Canvases/Product Strategy.canvas` — double-click file nodes to jump.\n4. Capture with **⌘N** into `Inbox/` (see [[Inbox/Sample capture]]).\n5. Open `CRM.data` — ~20 contacts with multiple column types, a **company** relation to a `companies` table, and a **reports_to** self-relation.\n6. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.\n7. Open `Notebooks/CRM exploration.ipynb` — CRM tour notebook (markdown + commented code stubs).\n8. Create pages from `Templates/` — daily and meeting note scaffolds.\n\n## First Look tour — new surfaces\n\nWork through this checklist to exercise the latest desktop shell and data features.\nEach step is safe in the sample workspace; undo where noted.\n\n### CRM layouts and saved views\n\n1. Open `CRM.data` and switch **Board**, **Gallery**, **Calendar**, and **Form** from the view picker.\n2. In each layout, change the layout field pickers (group-by, cover field, date field, visible columns).\n3. Click **Save view** to persist the layout under `CRM.data/views/`.\n4. Open a contact row and inspect the **company** and **reports_to** relation columns — a few contacts are pre-linked; add or change links in the record detail panel.\n\n### CRM package forms\n\n5. Open `CRM.data` and click **Forms** in the data-app chrome.\n6. Choose **Contact intake** — the seeded `forms/ContactIntake.form.yaml` maps `name`, `email`, `status`, and **company**.\n7. Submit a new contact; the row appears in the grid and relation pickers stay in sync with the `companies` table.\n\n### Resource tree\n\n8. Create a folder under `Projects/` (context menu or **New folder**).\n9. Press **⌘Z** to undo the folder creation.\n10. Move [[Product/Vision]] into another folder; accept link repair when prompted so wiki links update.\n11. **⌘-click** two pages in the tree, then drag the selection to a folder (multi-select move).\n12. Select multiple items and delete — confirm the batch operation.\n\n### Where to look next\n\n| Surface | Try |\n| --- | --- |\n| [[Research/Long Read]] | Scroll perf, embeds, extended checklist |\n| [[Product/Release Notes]] | What shipped in this sample |\n| `Canvases/Product Strategy.canvas` | Spatial links between Product pages |\n\n## Product\n\n| Page | What to try |\n| --- | --- |\n| [[Product/Vision]] | Short north-star narrative |\n| [[Product/Principles]] | Invariants and constraints |\n| [[Product/Roadmap]] | Phased delivery themes |\n| [[Product/Release Notes]] | Changelog-style sample |\n\n## Research\n\n| Page | What to try |\n| --- | --- |\n| [[Research/Long Read]] | Scroll perf, Mermaid, wiki links, `:::lattice-embed` |\n| [[Research/Architecture]] | System diagram (Mermaid) |\n| [[Research/Competitor Analysis]] | Comparison table |\n| [[Research/Market Notes]] | Segments and hypotheses |\n| [[Research/Interview Synthesis]] | Quotes mapped to CRM fields |\n\n## Inbox & templates\n\n- [[Inbox/Sample capture]] — triage-ready quick note\n- [[Templates/Daily Note]] — `{{date}}` / `{{title}}` placeholders preserved at provision\n- [[Templates/Meeting Note]] — agenda, decisions, action items\n\nWorkspace defaults point quick capture at `Inbox/` and templates at `Templates/`.\n\n## Canvas & data\n\n| Resource | Kind |\n| --- | --- |\n| `Canvases/Product Strategy.canvas` | Spatial board linking Product pages |\n| `CRM.data` | SQLite data app (`companies` + `contacts` tables) |\n| `Data/sample.csv` | Flat CSV import sample |\n| `Notebooks/CRM exploration.ipynb` | CRM tour notebook (nbformat v4) |\n\n### CRM views\n\nOpen `CRM.data` and switch layouts from the view picker. The template seeds saved\nviews under `CRM.data/views/` (one YAML file per view):\n\n| View | Layout | Key field |\n| ---- | ------ | --------- |\n| Board | `board` | `status` |\n| Calendar | `calendar` | `due_date` |\n| Gallery | `gallery` | `company` (cover) |\n| Form | `form` | — |\n\nSupported layout types also include `grid` and `list`. Board groups contacts by\n`status`; calendar plots `due_date`; gallery uses `company` as a cover field.\n\nThe **company** column links each contact to a row in the seeded `companies` table.\nThe **reports_to** column is a self-relation on `contacts` — open a row to link peers\nor managers. Template relation seeds accept **record ids** or display **names** (matched\nvia each target table's `name` column at provision time); prefer ids when you need\nstable references across renames.\n\n### CRM package forms\n\nPackage forms live beside views under `CRM.data/forms/` (one YAML file per form):\n\n| Form | Table | Fields |\n| ---- | ----- | ------ |\n| ContactIntake | `contacts` | `name`, `email`, `status`, `company` |\n\nOpen **Forms** in the data-app chrome to submit a new contact through the seeded intake form.\n\nEmbed a view from a page (see [[Research/Long Read]]):\n\n```markdown\n:::lattice-embed\nresource: CRM.data/views/Board.yaml\nfallback: \"Open CRM board view\"\n:::\n```\n\n## Resources\n\n| File | Notes |\n| --- | --- |\n| `Resources/config.json` | Feature flags sample |\n| `Resources/schema.yaml` | Small YAML schema |\n| `Resources/hooks.json` | Workspace hook sketch |\n| `Resources/example.ts` | Tiny TypeScript export |\n| `Resources/types.ts` | CRM-related types |\n| `Resources/queries.sql` | Example SELECT statements |\n| `Resources/notes.txt` | Plain text |\n| `Resources/mark.svg` | Generated Lattice mark |\n\n## Map\n\n| Path | Kind |\n| --- | --- |\n| [[Product/Vision]] | page |\n| [[Product/Principles]] | page |\n| [[Product/Roadmap]] | page |\n| [[Product/Release Notes]] | page |\n| [[Research/Long Read]] | page (long / embed) |\n| [[Research/Architecture]] | page |\n| [[Research/Competitor Analysis]] | page |\n| [[Research/Market Notes]] | page |\n| [[Research/Interview Synthesis]] | page |\n| [[Inbox/Sample capture]] | page |\n| `Templates/` | page templates |\n| `Canvases/Product Strategy.canvas` | canvas |\n| `CRM.data` | data app |\n| `Data/sample.csv` | CSV file |\n| `Notebooks/CRM exploration.ipynb` | notebook |\n| `Resources/` | code & config files |\n",
-  "Inbox/Sample capture.md": "---\ntitle: Sample capture\ntags: [inbox]\n---\n\n# Sample capture\n\nQuick note seeded in `Inbox/` — triage into [[Product/]] or [[Research/]] when ready.\n\n## Raw thought\n\nUse the First Look demo daily: open [[Research/Long Read]], add a CRM row,\ncapture here with **⌘N**, promote to a full page from [[Templates/Daily Note]].\n\n- [ ] Review [[Product/Release Notes]]\n- [ ] Check `CRM.data` calendar layout for August due dates\n- [ ] Pin [[Canvases/Product Strategy.canvas]] in sidebar\n\n#inbox\n",
+  "Home.md": "---\ntitle: Home\n---\n\n# Home\n\nKitchen-sink tour of the **First Look** sample workspace. Everything here is an\nordinary file under a real directory — open it in any editor, or stay inside Lattice.\n\n## Quick start\n\n1. Search with **⌘K** — hybrid FTS over chunks (try `latticed` or `FinalizationMode`).\n2. Scroll [[Research/Long Read]] — long-form perf and virtualization fixture.\n3. Open `Canvases/Product Strategy.canvas` — double-click file nodes to jump.\n4. Capture with **⌘N** into `Inbox/` — type or **hold-to-dictate** (see [[Inbox/Sample capture]]).\n5. Open `CRM.data` — contacts + companies, relations, board/gallery/calendar/form.\n6. Also open `Projects/Delivery.data`, `Data/Metrics.data`, and `OKRs.data` for more table shapes.\n7. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.\n8. Open `Notebooks/CRM exploration.ipynb` — CRM tour notebook (markdown + code stubs).\n9. Create pages from `Templates/` — daily and meeting note scaffolds.\n10. Read [[Research/Local Runtime]] — daemon, search, and voice process model.\n\n## First Look tour — new surfaces\n\nWork through this checklist to exercise the latest desktop shell, data, search,\nand voice features. Each step is safe in the sample workspace; undo where noted.\n\n### Search & local runtime\n\n1. Press **⌘K** and search for `VoiceContextBuilder` or `EndpointDetected` (seeded on [[Research/Local Runtime]]).\n2. Open a hit and confirm the heading path / chunk feel honest in the result list.\n3. Skim [[Research/Architecture]] for the core vs latticed diagrams.\n\n### Voice & Quick Note\n\n4. Open any page → hold the microphone control to dictate; release for a single final insert (provisional text is ghost-only).\n5. Press **⌘N** for Quick Note → hold-to-dictate → release → note saves once; Escape cancels without junk ASR text.\n6. Optional continuous mode: set `LATTICE_VOICE_AUTO_FINALIZE_ON_ENDPOINT=1` before launch (silence debounce endpoints); default hold-to-talk needs no VAD.\n\n### CRM layouts and saved views\n\n7. Open `CRM.data` and switch **Board**, **Gallery**, **Calendar**, and **Form** from the view picker.\n8. In each layout, change the layout field pickers (group-by, cover field, date field, visible columns).\n9. Click **Save view** to persist the layout under `CRM.data/views/` (native).\n10. Open a contact row and inspect **company** and **reports_to** — add or change links in record detail.\n\n### More data apps\n\n11. Open `Projects/Delivery.data` — board by status + calendar on `due` (no relations; simpler schema).\n12. Open `Data/Metrics.data` — decimal metrics board by category (Voice / Search / Data / Editor).\n13. Open `OKRs.data` — objectives board by confidence status.\n\n### CRM package forms\n\n14. Open `CRM.data` → **Forms** → **Contact intake**.\n15. Submit a new contact; the row appears and relation pickers stay in sync with `companies`.\n16. Open `Projects/Delivery.data` → **Forms** → **Delivery intake** and add an item.\n\n### Resource tree\n\n17. Create a folder under `Projects/` (context menu or **New folder**).\n18. Press **⌘Z** to undo the folder creation.\n19. Move [[Product/Vision]] into another folder; accept link repair when prompted.\n20. **⌘-click** two pages, drag to a folder (multi-select move).\n21. Select multiple items and delete — confirm the batch operation.\n\n### Where to look next\n\n| Surface | Try |\n| --- | --- |\n| [[Research/Local Runtime]] | Daemon, hybrid search, voice ownership |\n| [[Research/Long Read]] | Scroll perf, embeds, extended checklist |\n| [[Product/Release Notes]] | What shipped in this sample |\n| `Canvases/Product Strategy.canvas` | Spatial links + CRM view subpaths |\n\n## Product\n\n| Page | What to try |\n| --- | --- |\n| [[Product/Vision]] | Short north-star narrative |\n| [[Product/Principles]] | Invariants and constraints |\n| [[Product/Roadmap]] | Phased delivery themes |\n| [[Product/Release Notes]] | Changelog-style sample |\n\n## Research\n\n| Page | What to try |\n| --- | --- |\n| [[Research/Local Runtime]] | latticed, hybrid search, Quick Note voice |\n| [[Research/Long Read]] | Scroll perf, Mermaid, wiki links, `:::lattice-embed` |\n| [[Research/Architecture]] | System diagrams (core + daemon) |\n| [[Research/Competitor Analysis]] | Comparison table |\n| [[Research/Market Notes]] | Segments and hypotheses |\n| [[Research/Interview Synthesis]] | Quotes mapped to CRM fields |\n\n## Inbox & templates\n\n- [[Inbox/Sample capture]] — triage-ready quick note (dictation-friendly)\n- [[Templates/Daily Note]] — `{{date}}` / `{{title}}` placeholders preserved at provision\n- [[Templates/Meeting Note]] — agenda, decisions, action items\n\nWorkspace defaults point quick capture at `Inbox/` and templates at `Templates/`.\n\n## Canvas & data\n\n| Resource | Kind |\n| --- | --- |\n| `Canvases/Product Strategy.canvas` | Spatial board linking Product pages + CRM views |\n| `CRM.data` | SQLite CRM (`companies` + `contacts`, relations, forms) |\n| `Projects/Delivery.data` | Delivery board/calendar (status + due) |\n| `Data/Metrics.data` | Decimal metrics by category |\n| `OKRs.data` | Objectives / key results board |\n| `Data/sample.csv` | Flat CSV import sample |\n| `Notebooks/CRM exploration.ipynb` | CRM tour notebook (nbformat v4) |\n\n### CRM views\n\nOpen `CRM.data` and switch layouts from the view picker. The template seeds saved\nviews under `CRM.data/views/` (one YAML file per view):\n\n| View | Layout | Key field |\n| ---- | ------ | --------- |\n| Board | `board` | `status` |\n| Calendar | `calendar` | `due_date` |\n| Gallery | `gallery` | `company` (cover) |\n| Form | `form` | — |\n\nSupported layout types also include `grid` and `list`. Board groups contacts by\n`status`; calendar plots `due_date`; gallery uses `company` as a cover field.\n\nThe **company** column links each contact to a row in the seeded `companies` table.\nThe **reports_to** column is a self-relation on `contacts`. Template relation seeds\naccept **record ids** or display **names** (matched via each target table's `name`\ncolumn at provision time).\n\n### CRM package forms\n\n| Form | Table | Fields |\n| ---- | ----- | ------ |\n| ContactIntake | `contacts` | `name`, `email`, `status`, `company` |\n\nEmbed a view from a page (see [[Research/Long Read]]):\n\n```markdown\n:::lattice-embed\nresource: CRM.data/views/Board.yaml\nfallback: \"Open CRM board view\"\n:::\n```\n\n## Resources\n\n| File | Notes |\n| --- | --- |\n| `Resources/config.json` | Feature flags sample |\n| `Resources/schema.yaml` | Small YAML schema |\n| `Resources/hooks.json` | Workspace hook sketch |\n| `Resources/example.ts` | Tiny TypeScript export |\n| `Resources/types.ts` | CRM-related types |\n| `Resources/queries.sql` | Example SELECT statements |\n| `Resources/notes.txt` | Plain text |\n| `Resources/mark.svg` | Generated Lattice mark |\n\n## Map\n\n| Path | Kind |\n| --- | --- |\n| [[Product/Vision]] | page |\n| [[Product/Principles]] | page |\n| [[Product/Roadmap]] | page |\n| [[Product/Release Notes]] | page |\n| [[Research/Local Runtime]] | page (daemon / search / voice) |\n| [[Research/Long Read]] | page (long / embed) |\n| [[Research/Architecture]] | page |\n| [[Research/Competitor Analysis]] | page |\n| [[Research/Market Notes]] | page |\n| [[Research/Interview Synthesis]] | page |\n| [[Inbox/Sample capture]] | page |\n| `Templates/` | page templates |\n| `Canvases/Product Strategy.canvas` | canvas |\n| `CRM.data` | data app |\n| `Projects/Delivery.data` | data app |\n| `Data/Metrics.data` | data app |\n| `OKRs.data` | data app |\n| `Data/sample.csv` | CSV file |\n| `Notebooks/CRM exploration.ipynb` | notebook |\n| `Resources/` | code & config files |\n",
+  "Inbox/Sample capture.md": "---\ntitle: Sample capture\ntags: [inbox]\n---\n\n# Sample capture\n\nQuick note seeded in `Inbox/` — triage into [[Product/]] or [[Research/]] when ready.\n\n## Raw thought\n\nUse the First Look demo daily: open [[Research/Long Read]], add a CRM row,\ncapture here with **⌘N** (type or hold-to-dictate), promote to a full page from\n[[Templates/Daily Note]].\n\nDictation tip: say identifiers like `VoiceContextBuilder` or paths like\n`Inbox/Sample capture` — finals run glossary / ITN normalize before save.\n\n- [ ] Review [[Product/Release Notes]]\n- [ ] Skim [[Research/Local Runtime]] for daemon / search / voice\n- [ ] Check `CRM.data` calendar layout for August due dates\n- [ ] Pin [[Canvases/Product Strategy.canvas]] in sidebar\n\n#inbox\n",
   "Product/Vision.md": "---\ntitle: Vision\n---\n\n# Vision\n\nA fast local workspace that treats documents, data, notebooks, and canvases as ordinary files.\n\nSee also [[Product/Principles]], [[Product/Roadmap]], [[Product/Release Notes]], and\n[[Research/Competitor Analysis]]. For volume testing, open [[Research/Long Read]].\n",
   "Product/Principles.md": "---\ntitle: Principles\ntags: [product]\n---\n\n# Principles\n\nGuiding constraints for Lattice — referenced from [[Product/Vision]] and [[Product/Roadmap]].\n\n## Local-first\n\nThe workspace is a directory on disk. Canonical content stays inspectable outside\nLattice. Offline is the normal state.\n\n## Commands, not side doors\n\nEvery mutation flows through the semantic command core. The React shell coordinates;\nit does not become a privileged writer.\n\n## Progressive disclosure\n\nPrimary creation vocabulary: **Page**, **Canvas**, **Table**, **Notebook**, **File**.\nAdvanced source, history, and conflicts belong under per-resource Inspect surfaces.\n\n## Honest reconciliation\n\nExternal edits are legitimate. Lattice watches the tree and reconciles without\nsilent data loss.\n\n## Performance as product\n\nLarge pages like [[Research/Long Read]], wide tables in `CRM.data`, and canvas\npanning should meet documented budgets before new abstractions land.\n\nSee [[Home]] for a tour of this sample workspace.\n",
-  "Product/Roadmap.md": "---\ntitle: Roadmap\n---\n\n# Roadmap\n\n1. Daily-driver editing and search — exercise [[Research/Long Read]]\n2. Rich data-app surface — expand `CRM.data` views and layouts\n3. Capture from anywhere — `Inbox/` + [[Templates/Daily Note]]\n\nAligned with [[Product/Principles]]. Shipped items noted in [[Product/Release Notes]].\n\nBack to [[Home]].\n",
-  "Product/Release Notes.md": "---\ntitle: Release Notes\ntags: [product]\n---\n\n# Release Notes\n\nSample changelog page for the First Look workspace — not a live feed.\n\n## 2026.07 — First Look enrichment\n\n- Expanded `CRM.data` with email, company, due dates, notes, saved views, and a `reports_to` relation column\n- Seeded `CRM.data/forms/ContactIntake.form.yaml` for package form intake (name, email, status, company); **Forms** panel lists, loads, and submits via `RecordInsert` (undoable)\n- Added [[Research/Long Read]] for scroll and search perf fixtures\n- New [[Templates/Daily Note]] and [[Templates/Meeting Note]] page templates\n- Extra files under `Resources/` for code and config samples\n- [[Home]] tour checklist for layouts, Save view, folder undo, link repair, multi-select, and relations\n- [[Home]] tour step for CRM package forms (`forms/ContactIntake.form.yaml`)\n- `Notebooks/CRM exploration.ipynb` — CRM tour notebook seed referencing `Data/sample.csv`\n- Notebook viewer for `.ipynb` resources; **Run** executes code cells with Pyodide and persists outputs through `ResourceUpdate` (native undo restores prior `.ipynb`)\n- `Canvases/Product Strategy.canvas` — CRM file nodes open `CRM.data` **Board** and **Gallery** saved views via JSON Canvas `subpath` (`views/Board`, `views/Gallery.yaml`)\n\n## 2026.06 — Kitchen sink baseline\n\n- Home tour, Product and Research pages, sample canvas\n- Mermaid in [[Research/Architecture]]\n- CSV under `Data/sample.csv`\n\n## Next\n\nTracked on [[Product/Roadmap]]:\n\n1. Cross-package relations (CRM contacts ↔ project pages)\n2. Native Jupyter / ipykernel execution (Pyodide-only this sprint)\n3. Richer `lattice-canvas-profile` data-view embedding (subpath navigation is landed)\n\n#product\n",
+  "Product/Roadmap.md": "---\ntitle: Roadmap\n---\n\n# Roadmap\n\n1. Daily-driver editing, hybrid search, and voice — [[Research/Local Runtime]], [[Research/Long Read]]\n2. Rich data-app surface — expand `CRM.data` (Phase 2 tables Wave 1 next)\n3. Capture from anywhere — `Inbox/` + **⌘N** dictation + [[Templates/Daily Note]]\n\nAligned with [[Product/Principles]]. Shipped items noted in [[Product/Release Notes]].\n\nBack to [[Home]].\n",
+  "Product/Release Notes.md": "---\ntitle: Release Notes\ntags: [product]\n---\n\n# Release Notes\n\nSample changelog page for the First Look workspace — not a live feed.\n\n## 2026.07 — Daemon, hybrid search, voice\n\n- **latticed** — local UDS daemon with workspace sessions, one-writer lease, watcher + incremental FTS, keep-running idle shutdown\n- **Hybrid search** — structural chunks + FTS5; optional embed-host; RRF fusion with provenance\n- **Voice D5** — `lattice-voice-host`, daemon voice proxy, Tauri thin client (native mic stays in-process; PCM over daemon)\n- **Native capture** — AVAudioEngine + AVAudioConverter, binary PCM, pre-roll, bounded queue (no WebView `number[]` PCM)\n- **Finalization** — honest `FinalizationMode`; glossary / ITN normalize on finals; Lattice energy VAD + optional continuous auto-finalize\n- **Quick Note dictation** — **⌘N** hold-to-dictate, provisional overlay, atomic save; silence-only discard\n- Multiple `.data` fixtures: `CRM.data`, `Projects/Delivery.data`, `Data/Metrics.data`, `OKRs.data`\n- [[Research/Local Runtime]] — tour page for the process model and try-queries\n\n## 2026.07 — First Look enrichment (earlier)\n\n- Expanded `CRM.data` with email, company, due dates, notes, saved views, and a `reports_to` relation column\n- Seeded `CRM.data/forms/ContactIntake.form.yaml` for package form intake\n- Added [[Research/Long Read]] for scroll and search perf fixtures\n- New [[Templates/Daily Note]] and [[Templates/Meeting Note]] page templates\n- Extra files under `Resources/` for code and config samples\n- [[Home]] tour checklist for layouts, Save view, folder undo, link repair, multi-select, and relations\n- `Notebooks/CRM exploration.ipynb` — CRM tour notebook seed\n- Notebook viewer + Pyodide **Run** with undoable `ResourceUpdate`\n- `Canvases/Product Strategy.canvas` — CRM view subpaths (`views/Board`, `views/Gallery.yaml`)\n\n## 2026.06 — Kitchen sink baseline\n\n- Home tour, Product and Research pages, sample canvas\n- Mermaid in [[Research/Architecture]]\n- CSV under `Data/sample.csv`\n\n## Next\n\nTracked on [[Product/Roadmap]]:\n\n1. Phase 2 tables Wave 1 — schema commands, column designer, CSV type review, windowed open\n2. Cross-package relations (CRM contacts ↔ project pages)\n3. Native Jupyter / ipykernel (Pyodide-only for notebooks today)\n4. Login-item / always-on Quick Note (out of scope; keep-running covers warm daemon)\n\n#product\n",
+  "Research/Local Runtime.md": "---\ntitle: Local Runtime\ntags: [architecture, search, voice]\n---\n\n# Local Runtime\n\nHow Lattice keeps authority local after the daemon + voice sprints. Everything\nbelow is a real directory on disk — `latticed` is optional warmth, not a cloud.\n\n## Process model\n\n```mermaid\nflowchart TB\n  Desktop[lattice-desktop]\n  Daemon[latticed]\n  Embed[lattice-embed-host]\n  Voice[lattice-voice-host]\n\n  Desktop -->|UDS Protobuf| Daemon\n  Desktop -->|native mic PCM| Daemon\n  Daemon --> Embed\n  Daemon --> Voice\n  Desktop -->|embedded fallback| VoiceBridge[in-process FluidAudio]\n```\n\n| Process | Owns |\n| --- | --- |\n| **Desktop** | UI, mic capture, page/canvas hot loops |\n| **latticed** | Workspace sessions, search jobs, voice session policy, one-writer lease |\n| **embed-host** | Embedding model isolation (fake or llama stub today) |\n| **voice-host** | ASR isolation (fake UDS or FluidAudio) |\n\nDev tip: `pnpm tauri:dev:voice-daemon` / `LATTICE_VOICE_DAEMON=1` forces the thin\ndaemon path. Default `desktop-dev` still allows `voice-embedded` fallback.\n\n## Search\n\n**⌘K** hits a hybrid index:\n\n1. **Lexical** — FTS5 over structural chunks (headings, paths, body spans)\n2. **Semantic** — optional embedding namespace when a provider is warm\n3. **Fusion** — RRF merge with provenance (chunk offsets, heading path)\n\nTry queries that hit this page: `latticed`, `EndpointDetected`,\n`VoiceContextBuilder`, or `CRM.data/views/Board`.\n\nGlossary-friendly tokens for dictation ITN demos:\n\n- Identifiers: `VoiceContextBuilder`, `FinalizationMode`, `EndpointOptions`\n- Paths: `/Users/shared/lattice/CRM.data`, `Inbox/Sample capture.md`\n- Commands: `ApplyPageUpdate`, `StartVoiceSession`\n\n## Voice & Quick Note\n\n| Surface | How |\n| --- | --- |\n| In-page hold-to-talk | Microphone control in the page header |\n| Quick Note | **⌘N** → hold-to-dictate → provisional ghost → one save |\n| Continuous (opt-in) | `LATTICE_VOICE_AUTO_FINALIZE_ON_ENDPOINT=1` or session endpoint options |\n\nProvisional text never enters Markdown storage. Finals go through the command\ncore (one editor transaction / one Quick Note save). Cancel clears ghosts.\n\nHold-to-talk still uses explicit finish; Lattice energy VAD reports\n`endpoint_detection` for continuous mode — Unified FluidAudio has no EOU\ncallback.\n\n## Related\n\n- [[Research/Architecture]] — simpler core diagram\n- [[Product/Release Notes]] — what shipped in this sample\n- [[Home]] — full tour checklist\n- `CRM.data` — data application package beside this narrative\n\nBack to [[Home]].\n",
   "Research/Long Read.md": "---\ntitle: Long Read\ntags: [research, perf, scroll]\n---\n\n# Long Read\n\nA deliberately long page for scroll, virtualization, and search-index stress tests.\nSkim the table of contents, follow wiki links, and open embedded resources without\nleaving the narrative.\n\n## Table of contents\n\n1. [[#Why this page exists]]\n2. [[#System map]]\n3. [[#Data flow]]\n4. [[#Collaboration model]]\n5. [[#Search and indexing]]\n6. [[#Canvas composition]]\n7. [[#CRM in context]]\n8. [[#Release rhythm]]\n9. [[#Interview themes]]\n10. [[#Competitive landscape]]\n11. [[#Principles in practice]]\n12. [[#Embedded resource]]\n13. [[#Appendix A — glossary]]\n14. [[#Appendix B — checklist]]\n\n## Why this page exists\n\nDaily demo use needs realistic volume: headings, lists, tables, code fences,\nMermaid diagrams, and cross-links that mirror how teams actually write. This page\nties together [[Product/Vision]], [[Product/Principles]], [[Product/Roadmap]], and\n[[Research/Architecture]] so perf work catches regressions in real reading paths.\n\nRelated notes: [[Research/Market Notes]], [[Research/Interview Synthesis]],\n[[Research/Competitor Analysis]], and the quick capture in [[Inbox/Sample capture]].\n\n## System map\n\nLattice keeps the workspace directory authoritative. The desktop shell coordinates;\nRust owns commands, validation, and storage.\n\n```mermaid\nflowchart TB\n  subgraph workspace [Workspace on disk]\n    Pages[Pages .md]\n    Canvas[Canvases .canvas]\n    Data[Data apps .data]\n    Files[Ordinary files]\n  end\n  subgraph core [Rust core]\n    Cmd[Command core]\n    Idx[Search index]\n    Store[Resource store]\n  end\n  subgraph ui [Desktop shell]\n    Shell[Shell UI]\n    Editor[Page editor]\n    Grid[Data views]\n  end\n  Pages --> Store\n  Canvas --> Store\n  Data --> Store\n  Files --> Store\n  Shell --> Cmd\n  Editor --> Cmd\n  Grid --> Cmd\n  Cmd --> Store\n  Cmd --> Idx\n```\n\n## Data flow\n\nExternal edits and Lattice mutations must reconcile honestly. Nothing in the UI\nbecomes a privileged writer.\n\n```mermaid\nsequenceDiagram\n  participant User\n  participant UI as Desktop shell\n  participant Core as Command core\n  participant Disk as Workspace files\n  User->>UI: Edit page / table row\n  UI->>Core: Semantic command\n  Core->>Core: Validate + transaction\n  Core->>Disk: Atomic write\n  Core-->>UI: Coarse state update\n  Disk-->>Core: External change (watcher)\n  Core-->>UI: Reconcile + notify\n```\n\nSee `Resources/queries.sql` for example read patterns against tabular data.\n\n## Collaboration model\n\nPages accumulate block-level identity over time. Wiki links like [[Home]] and\n[[Product/Release Notes]] stay readable in any Markdown tool. Canvas nodes can\nanchor back to blocks once IDs are assigned.\n\n| Concern | Lattice stance |\n| --- | --- |\n| Canonical storage | Real files and folders |\n| Offline | Default, not exceptional |\n| Rich tables | `.data` packages beside pages |\n| Deep tooling | Inspect surfaces per resource |\n\n## Search and indexing\n\n⌘K should find this page by title, tags, and body text. Repeated keywords below\nexercise index tokenization without nonsense padding.\n\n- workspace workspace workspace\n- canvas canvas canvas\n- sqlite sqlite sqlite\n- mermaid mermaid mermaid\n- embed embed embed\n\nLong paragraphs also matter: teams paste meeting notes, specs, and interview\ntranscripts that run thousands of words. Scroll performance should stay stable\nwhen the caret moves from the first heading through nested lists, tables, and\nfenced code blocks.\n\n## Canvas composition\n\nOpen [[Canvases/Product Strategy.canvas]] and double-click file nodes. The board\nlinks [[Product/Vision]] to [[Product/Roadmap]] spatially — a different reading\norder than this linear page.\n\n```mermaid\nflowchart LR\n  Intro[Canvas intro] --> Vision[[Product/Vision]]\n  Vision --> Roadmap[[Product/Roadmap]]\n  Roadmap --> CRM[CRM.data]\n  CRM --> Long[Long Read]\n```\n\n## CRM in context\n\n`CRM.data` ships ~20 sample contacts with email, company, due dates, status,\nnotes, and a **reports_to** self-relation. Open the data app from [[Home]] or\nsearch for a name like **Grace Hopper**.\n\nIn the data app header, switch layouts (grid, list, board, gallery, calendar, form)\nfrom the view picker. Adjust layout field pickers and **Save view** to persist YAML\nunder `CRM.data/views/`. Board, Calendar, Gallery, and Form are seeded from the\ntemplate manifest (see [[Home#CRM views]] and [[Home#First Look tour — new surfaces]]).\n\n## Release rhythm\n\nCross-link to [[Product/Release Notes]] for a changelog-style page. Roadmap themes\nfrom [[Product/Roadmap]] should stay aligned with principles in [[Product/Principles]].\n\n1. Instrument perf budgets before adding shell weight.\n2. Keep browser demo honest about filesystem authority.\n3. Prefer bounded queries over hydrating entire workspaces.\n\n## Interview themes\n\n[[Research/Interview Synthesis]] summarizes recurring quotes. [[Research/Market Notes]]\ntracks segments and pricing assumptions. Together they inform [[Research/Competitor Analysis]].\n\n> \"I want Notion-like tables without giving up my git repo.\"\n>\n> \"Canvas is for spatial thinking, not replacing the outline.\"\n\n## Competitive landscape\n\n| Product | Strength | Tradeoff |\n| --- | --- | --- |\n| Obsidian | Local Markdown | Weak relational data |\n| Notion | Polished blocks | Export friction |\n| Airtable | Typed columns | Cloud-centric |\n| Lattice | Files + commands | Young surface area |\n\n#research #product #strategy\n\n## Principles in practice\n\nFrom [[Product/Principles]]:\n\n- **Local-first** — edits work on a plane without Wi‑Fi.\n- **Inspectable** — `Resources/` holds JSON, YAML, TypeScript, and SVG you can diff.\n- **Progressive disclosure** — Page, Canvas, Table, Notebook, File as primary vocabulary.\n\n```typescript\n// Resources/example.ts — tiny module referenced from docs\nexport function greet(name: string): string {\n  return `Hello, ${name}`;\n}\n```\n\n## Embedded resource\n\nThe block below embeds [[Product/Vision]] inline. In read mode it renders a preview\ncard; activate it to open the full page.\n\n:::lattice-embed\nresource: ../Product/Vision.md\nfallback: \"[[Product/Vision]]\"\n:::\n\n## Appendix A — glossary\n\n| Term | Meaning |\n| --- | --- |\n| Data app | `.data` directory with SQLite + manifest |\n| Command | Validated mutation through Rust core |\n| Canvas | Spatial `.canvas` JSON graph |\n| View | YAML layout over a table (`views/*.yaml`) |\n\n## Appendix B — checklist\n\nUse this list when benchmarking scroll and typing on this page:\n\n- [ ] Scroll from top to bottom without layout thrash\n- [ ] Collapse and expand a long section mentally — caret stable\n- [ ] Follow five wiki links and return via history\n- [ ] Render all Mermaid blocks\n- [ ] Open the lattice-embed card\n- [ ] Search for \"Grace Hopper\" and jump to CRM\n- [ ] Complete the [[Home#First Look tour — new surfaces]] checklist (layouts, relations, tree)\n\n---\n\nBack to [[Home]]. Architecture diagram: [[Research/Architecture]].\n",
   "Research/Competitor Analysis.md": "---\ntitle: Competitor Analysis\ntags: [research]\n---\n\n# Competitor Analysis\n\n| Tool | Keeps | Traps |\n| --- | --- | --- |\n| Obsidian | plain files | rich data |\n| Notion | interaction | your files |\n| Airtable | typed records | API lock-in |\n\nDeeper context: [[Research/Market Notes]] and [[Research/Interview Synthesis]].\n\n#research\n",
-  "Research/Architecture.md": "---\ntitle: Architecture\ntags: [diagram]\n---\n\n# Architecture\n\nA tiny Mermaid sketch of how Lattice keeps the workspace honest:\n\n```mermaid\nflowchart LR\n  Files[Workspace files] --> Core[Rust command core]\n  Core --> UI[Desktop shell]\n  Core --> Index[Search index]\n  UI -->|semantic commands| Core\n```\n\nRelated: [[Product/Vision]] and [[Home]].\n",
+  "Research/Architecture.md": "---\ntitle: Architecture\ntags: [diagram]\n---\n\n# Architecture\n\nLattice keeps the workspace honest: files on disk stay canonical; Rust owns\nmutations; the shell never becomes a privileged writer.\n\n## Core loop\n\n```mermaid\nflowchart LR\n  Files[Workspace files] --> Core[Rust command core]\n  Core --> UI[Desktop shell]\n  Core --> Index[Search index]\n  UI -->|semantic commands| Core\n```\n\n## With latticed (warm local runtime)\n\n```mermaid\nflowchart LR\n  Files[Workspace directory] --> Daemon[latticed]\n  Daemon --> Index[FTS + chunks + vectors]\n  Daemon --> EmbedHost[embed-host]\n  Daemon --> VoiceHost[voice-host]\n  Desktop[Desktop / CLI] -->|UDS| Daemon\n  Desktop -->|native capture| VoiceHost\n```\n\nDetails and try-paths: [[Research/Local Runtime]].\n\nRelated: [[Product/Vision]] and [[Home]].\n",
   "Research/Market Notes.md": "---\ntitle: Market Notes\ntags: [research]\n---\n\n# Market Notes\n\nWorking assumptions for positioning — link to [[Research/Competitor Analysis]] and\n[[Research/Interview Synthesis]].\n\n## Segments\n\n| Segment | Pain | Lattice fit |\n| --- | --- | --- |\n| Individual knowledge workers | Tool sprawl | Unified files + search |\n| Small product teams | Roadmap + research scattered | Pages + canvas + tables |\n| Data-curious builders | SQL without ops burden | `.data` apps beside Markdown |\n\n## Pricing hypotheses\n\n- Free local core; paid sync/collab later (out of scope for this template)\n- Teams value export and auditability over infinite block types\n\n## Open questions\n\n- How much calendar view usage appears in CRM-style tables?\n- Do users expect `Templates/` to mirror daily-note plugins from other tools?\n\nRelated: [[Product/Principles]] and [[Research/Long Read]].\n\n#research\n",
   "Research/Interview Synthesis.md": "---\ntitle: Interview Synthesis\ntags: [research]\n---\n\n# Interview Synthesis\n\nThemes from five fictional discovery calls — seeds for [[Product/Vision]] and CRM\nstatus values in `CRM.data`.\n\n## Recurring requests\n\n1. **Keep my files** — git-friendly Markdown and JSON, not opaque databases.\n2. **Typed tables inline** — contacts and tasks beside narrative docs.\n3. **Spatial overview** — canvas for strategy, not just pretty wallpapers.\n4. **Fast search** — path + body, tolerating long pages like [[Research/Long Read]].\n\n## Representative quotes\n\n| Speaker | Quote | Implied column |\n| --- | --- | --- |\n| PM | \"Board view by status is how I run standup.\" | `status` |\n| Engineer | \"Due dates on leads, not on archived contacts.\" | `due_date` |\n| Designer | \"Gallery cover from company name is enough for now.\" | `company` |\n\n## Follow-ups\n\n- [x] Saved board view under `CRM.data/views/Board.yaml` (see [[Home#CRM views]])\n- [ ] Link interview pages from canvas nodes\n- [ ] Export subset to `Data/sample.csv` for comparison\n\n#research\n",
   "Templates/Daily Note.md": "---\ntitle: \"{{title}}\"\ndate: {{date}}\n---\n\n# {{date}}\n\n## Focus\n\n-\n\n## Log\n\n-\n\n## Open loops\n\n- [ ]\n\n## Links\n\n-\n",
