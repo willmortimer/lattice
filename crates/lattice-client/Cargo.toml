@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 async-trait.workspace = true
 bytes.workspace = true
+lattice-handlers.workspace = true
 lattice-protocol.workspace = true
 lattice-runtime.workspace = true
 prost.workspace = true

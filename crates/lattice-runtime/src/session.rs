@@ -6,6 +6,8 @@ use lattice_commands::CommandEngine;
 use lattice_core::{ResourceCatalog, Workspace};
 use lattice_index::{Backlink, ChunkSearchHit, SearchHit, WorkspaceIndex};
 
+use crate::idempotency::IdempotencyCache;
+use crate::lease::{LeaseClaim, WorkspaceLeaseFile};
 use crate::Result;
 
 /// Long-lived open workspace: warm index, command engine, and optional catalog.
@@ -16,6 +18,10 @@ pub struct WorkspaceSession {
     index: WorkspaceIndex,
     catalog: Mutex<Option<ResourceCatalog>>,
     index_rebuild_count: AtomicU64,
+    /// Lease claim used when this session was opened for write, if any.
+    write_lease: Mutex<Option<LeaseClaim>>,
+    /// Recent mutation outcomes keyed by caller idempotency key.
+    idempotency: IdempotencyCache,
 }
 
 impl WorkspaceSession {
@@ -34,6 +40,8 @@ impl WorkspaceSession {
             index,
             catalog: Mutex::new(catalog),
             index_rebuild_count: AtomicU64::new(0),
+            write_lease: Mutex::new(None),
+            idempotency: IdempotencyCache::default(),
         })
     }
 
@@ -98,5 +106,34 @@ impl WorkspaceSession {
     pub fn backlinks(&self, rel_path: &Path) -> Result<Vec<Backlink>> {
         self.ensure_index_warm()?;
         Ok(self.index.backlinks(rel_path)?)
+    }
+
+    /// Record the lease claim that owns writes for this session.
+    pub fn set_write_lease(&self, claim: LeaseClaim) {
+        let mut guard = self.write_lease.lock().expect("write lease poisoned");
+        *guard = Some(claim);
+    }
+
+    /// Lease claim recorded by the last successful open-for-write, if any.
+    pub fn write_lease_claim(&self) -> Option<LeaseClaim> {
+        self.write_lease
+            .lock()
+            .expect("write lease poisoned")
+            .clone()
+    }
+
+    /// Clear the in-memory write-lease claim (does not delete the on-disk file).
+    pub fn clear_write_lease(&self) {
+        let mut guard = self.write_lease.lock().expect("write lease poisoned");
+        *guard = None;
+    }
+
+    pub fn idempotency(&self) -> &IdempotencyCache {
+        &self.idempotency
+    }
+
+    /// Re-read the on-disk lease when this session holds a write claim.
+    pub fn current_lease_file(&self) -> Result<Option<WorkspaceLeaseFile>> {
+        crate::lease::read_workspace_lease(&self.root)
     }
 }

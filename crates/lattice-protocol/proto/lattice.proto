@@ -24,6 +24,7 @@ message Request {
     PingRequest ping = 11;
     OpenWorkspaceRequest open_workspace = 12;
     SearchRequest search = 13;
+    ApplyPageUpdateRequest apply_page_update = 14;
   }
 }
 
@@ -33,6 +34,7 @@ message Response {
     PingResponse ping = 11;
     OpenWorkspaceResponse open_workspace = 12;
     SearchResponse search = 13;
+    ApplyPageUpdateResponse apply_page_update = 14;
   }
 }
 
@@ -98,6 +100,22 @@ message SearchRequest {
 
 message SearchResponse {
   // Intentionally empty in D0; later tasks add hit payloads.
+}
+
+// Apply a page content update through the semantic command core (D3).
+// Idempotency is carried on the parent Request.idempotency_key.
+message ApplyPageUpdateRequest {
+  string workspace_id = 1;
+  // Workspace-relative page path.
+  string path = 2;
+  string content = 3;
+  // Content-hash revision the caller last read (optimistic concurrency).
+  string expected_revision = 4;
+}
+
+message ApplyPageUpdateResponse {
+  // Resulting content-hash revision after a successful apply.
+  string revision = 1;
 }
 
 message WorkspaceLeaseChanged {

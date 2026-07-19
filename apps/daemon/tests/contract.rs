@@ -6,15 +6,16 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use lattice_client::{
-    request, response, DaemonClient, EmbeddedClient, HealthRequest, LatticeClient,
-    OpenWorkspaceRequest, PingRequest, Request, SearchRequest, SearchResponse, PROTOCOL_VERSION,
+    request, response, ApplyPageUpdateRequest, DaemonClient, EmbeddedClient, HealthRequest,
+    LatticeClient, OpenWorkspaceRequest, PingRequest, Request, SearchRequest, SearchResponse,
+    PROTOCOL_VERSION,
 };
 use lattice_core::Workspace;
 use lattice_daemon::{
-    lease_path, serve_with_shutdown, spawn_latticed, DaemonConfig, SpawnOptions,
-    WorkspaceLeaseFile,
+    lease_path, serve_with_shutdown, spawn_latticed, DaemonConfig, SpawnOptions, WorkspaceLeaseFile,
+    OWNER_EMBEDDED, OWNER_LATTICED,
 };
-use lattice_runtime::LatticeRuntime;
+use lattice_runtime::{is_process_alive, write_workspace_lease, LatticeRuntime};
 use tempfile::TempDir;
 use tokio::sync::oneshot;
 
@@ -112,6 +113,25 @@ fn search_request(workspace_id: &str, query: &str) -> Request {
     }
 }
 
+fn apply_request(
+    workspace_id: &str,
+    path: &str,
+    content: &str,
+    expected_revision: &str,
+    idempotency_key: Option<&str>,
+) -> Request {
+    Request {
+        deadline_unix_ms: None,
+        idempotency_key: idempotency_key.map(str::to_string),
+        body: Some(request::Body::ApplyPageUpdate(ApplyPageUpdateRequest {
+            workspace_id: workspace_id.into(),
+            path: path.into(),
+            content: content.into(),
+            expected_revision: expected_revision.into(),
+        })),
+    }
+}
+
 fn init_fixture() -> TempDir {
     let dir = TempDir::new().expect("fixture");
     Workspace::init(dir.path(), "Daemon Contract").expect("init");
@@ -162,22 +182,15 @@ async fn open_writes_lease_and_search_matches_embedded() {
         .await
         .expect("daemon connect");
 
-    let embedded_runtime = Arc::new(LatticeRuntime::new());
-    let embedded = EmbeddedClient::new(instance_id).with_runtime(Arc::clone(&embedded_runtime));
-
     let daemon_open = daemon
         .request(open_request(&path))
         .await
         .expect("daemon open");
-    let embedded_open = embedded
-        .request(open_request(&path))
-        .await
-        .expect("embedded open");
 
     let daemon_ws = match daemon_open.body {
         Some(response::Body::OpenWorkspace(resp)) => {
             let lease = resp.lease.expect("daemon lease");
-            assert_eq!(lease.owner, "latticed");
+            assert_eq!(lease.owner, OWNER_LATTICED);
             assert_eq!(lease.instance_id, instance_id);
             assert_eq!(lease.protocol_version, PROTOCOL_VERSION);
             assert_eq!(lease.process_start, 1_234_567);
@@ -186,21 +199,11 @@ async fn open_writes_lease_and_search_matches_embedded() {
         }
         other => panic!("unexpected daemon open: {other:?}"),
     };
-    let embedded_ws = match embedded_open.body {
-        Some(response::Body::OpenWorkspace(resp)) => {
-            assert_eq!(resp.workspace_id, daemon_ws);
-            let lease = resp.lease.expect("embedded lease");
-            assert_eq!(lease.owner, "embedded");
-            resp.workspace_id
-        }
-        other => panic!("unexpected embedded open: {other:?}"),
-    };
-    assert_eq!(daemon_ws, embedded_ws);
 
     let lease_raw = fs::read_to_string(lease_path(fixture.path())).expect("lease file");
     let lease_file: WorkspaceLeaseFile =
         serde_json::from_str(&lease_raw).expect("parse lease json");
-    assert_eq!(lease_file.owner, "latticed");
+    assert_eq!(lease_file.owner, OWNER_LATTICED);
     assert_eq!(lease_file.instance_id, instance_id);
     assert_eq!(lease_file.schema_version, 1);
     assert_eq!(lease_file.process_start, 1_234_567);
@@ -208,6 +211,28 @@ async fn open_writes_lease_and_search_matches_embedded() {
     assert!(lease_raw.contains("\"processStart\""));
 
     assert_eq!(daemon_runtime.session_count(), 1);
+
+    // Embedded open on a separate fixture should acquire its own lease and
+    // produce matching search response shapes.
+    let embedded_fixture = init_fixture();
+    let embedded_path = embedded_fixture.path().to_string_lossy().into_owned();
+    let embedded_runtime = Arc::new(LatticeRuntime::new());
+    let embedded = EmbeddedClient::new(instance_id)
+        .with_process_start(99)
+        .with_runtime(Arc::clone(&embedded_runtime));
+    let embedded_open = embedded
+        .request(open_request(&embedded_path))
+        .await
+        .expect("embedded open");
+    let embedded_ws = match embedded_open.body {
+        Some(response::Body::OpenWorkspace(resp)) => {
+            let lease = resp.lease.expect("embedded lease");
+            assert_eq!(lease.owner, OWNER_EMBEDDED);
+            assert_eq!(lease.process_start, 99);
+            resp.workspace_id
+        }
+        other => panic!("unexpected embedded open: {other:?}"),
+    };
 
     let daemon_search = daemon
         .request(search_request(&daemon_ws, "Contract"))
@@ -231,6 +256,153 @@ async fn open_writes_lease_and_search_matches_embedded() {
         .await
         .expect("daemon search again");
     assert_eq!(session.index_rebuild_count(), rebuilds);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn daemon_lease_blocks_embedded_open() {
+    let fixture = init_fixture();
+    let path = fixture.path().to_string_lossy().into_owned();
+
+    let (guard, _) = spawn_in_process_daemon("xor-daemon").await;
+    let daemon = DaemonClient::connect(&guard.socket_path, &guard.auth_token)
+        .await
+        .expect("connect");
+    let _ = daemon.request(open_request(&path)).await.expect("daemon open");
+
+    let embedded = EmbeddedClient::new("xor-embedded")
+        .with_process_start(3)
+        .with_runtime(Arc::new(LatticeRuntime::new()));
+    let err = embedded
+        .request(open_request(&path))
+        .await
+        .expect_err("embedded must be blocked");
+    match err {
+        lattice_client::ClientError::Remote { code, .. } => assert_eq!(code, "lease_held"),
+        other => panic!("expected lease_held, got {other:?}"),
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn embedded_lease_blocks_daemon_open() {
+    let fixture = init_fixture();
+    let path = fixture.path().to_string_lossy().into_owned();
+
+    let embedded = EmbeddedClient::new("emb-holder")
+        .with_process_start(4)
+        .with_runtime(Arc::new(LatticeRuntime::new()));
+    let _ = embedded
+        .request(open_request(&path))
+        .await
+        .expect("embedded open");
+    let lease_raw = fs::read_to_string(lease_path(fixture.path())).expect("lease");
+    assert!(lease_raw.contains("\"owner\": \"embedded\""));
+
+    let (guard, _) = spawn_in_process_daemon("xor-blocked").await;
+    let daemon = DaemonClient::connect(&guard.socket_path, &guard.auth_token)
+        .await
+        .expect("connect");
+    let err = daemon
+        .request(open_request(&path))
+        .await
+        .expect_err("daemon must be blocked");
+    match err {
+        lattice_client::ClientError::Remote { code, .. } => assert_eq!(code, "lease_held"),
+        other => panic!("expected lease_held, got {other:?}"),
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn stale_lease_is_reclaimed_on_open() {
+    let fixture = init_fixture();
+    let path = fixture.path().to_string_lossy().into_owned();
+
+    let dead_pid = (50_000..60_000)
+        .rev()
+        .find(|pid| !is_process_alive(*pid))
+        .expect("dead pid");
+    write_workspace_lease(
+        fixture.path(),
+        &WorkspaceLeaseFile {
+            schema_version: 1,
+            owner: OWNER_LATTICED.into(),
+            pid: dead_pid,
+            process_start: 1,
+            socket: "/tmp/gone.sock".into(),
+            protocol_version: PROTOCOL_VERSION,
+            instance_id: "stale".into(),
+            acquired_at: "1970-01-01T00:00:00Z".into(),
+        },
+    )
+    .expect("write stale");
+
+    let (guard, _) = spawn_in_process_daemon("reclaim").await;
+    let daemon = DaemonClient::connect(&guard.socket_path, &guard.auth_token)
+        .await
+        .expect("connect");
+    let open = daemon.request(open_request(&path)).await.expect("reclaim open");
+    match open.body {
+        Some(response::Body::OpenWorkspace(resp)) => {
+            let lease = resp.lease.expect("lease");
+            assert_eq!(lease.owner, OWNER_LATTICED);
+            assert_eq!(lease.instance_id, "reclaim");
+            assert_ne!(lease.pid, dead_pid);
+        }
+        other => panic!("unexpected: {other:?}"),
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn apply_page_update_happy_path_and_idempotent_retry() {
+    let fixture = init_fixture();
+    let path = fixture.path().to_string_lossy().into_owned();
+
+    let (guard, _) = spawn_in_process_daemon("mutate").await;
+    let daemon = DaemonClient::connect(&guard.socket_path, &guard.auth_token)
+        .await
+        .expect("connect");
+    let open = daemon.request(open_request(&path)).await.expect("open");
+    let workspace_id = match open.body {
+        Some(response::Body::OpenWorkspace(resp)) => resp.workspace_id,
+        other => panic!("unexpected open: {other:?}"),
+    };
+
+    let before = lattice_handlers::read_page(path.clone(), "Notes.md".into()).unwrap();
+    let first = daemon
+        .request(apply_request(
+            &workspace_id,
+            "Notes.md",
+            "# Notes\n\nUpdated via daemon.\n",
+            &before.revision,
+            Some("idem-mutate-1"),
+        ))
+        .await
+        .expect("apply");
+    let rev1 = match first.body {
+        Some(response::Body::ApplyPageUpdate(r)) => r.revision,
+        other => panic!("unexpected apply: {other:?}"),
+    };
+
+    let after = lattice_handlers::read_page(path.clone(), "Notes.md".into()).unwrap();
+    assert_eq!(after.content, "# Notes\n\nUpdated via daemon.\n");
+    assert_eq!(after.revision, rev1);
+
+    let retry = daemon
+        .request(apply_request(
+            &workspace_id,
+            "Notes.md",
+            "# Notes\n\nWould double-apply.\n",
+            &before.revision, // stale; must not re-apply
+            Some("idem-mutate-1"),
+        ))
+        .await
+        .expect("idempotent retry");
+    let rev2 = match retry.body {
+        Some(response::Body::ApplyPageUpdate(r)) => r.revision,
+        other => panic!("unexpected retry: {other:?}"),
+    };
+    assert_eq!(rev1, rev2);
+    let still = lattice_handlers::read_page(path, "Notes.md".into()).unwrap();
+    assert_eq!(still.content, "# Notes\n\nUpdated via daemon.\n");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

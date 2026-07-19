@@ -10,6 +10,9 @@ license.workspace = true
 lattice-commands.workspace = true
 lattice-core.workspace = true
 lattice-index.workspace = true
+libc = "0.2"
+serde = { workspace = true }
+serde_json.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

@@ -10,11 +10,12 @@ use lattice_client::{
 };
 use lattice_protocol::{
     encode_frame, envelope, error_envelope, event, event_envelope, request, response,
-    response_envelope, Error as WireError, Event, FrameDecoder, HealthRequest, HealthResponse,
-    OpenWorkspaceRequest, OpenWorkspaceResponse, PingRequest, PingResponse, Request, Response,
-    SearchRequest, SearchResponse, WorkspaceLeaseChanged, PROTOCOL_VERSION,
+    response_envelope, ApplyPageUpdateRequest, ApplyPageUpdateResponse, Error as WireError, Event,
+    FrameDecoder, HealthRequest, HealthResponse, OpenWorkspaceRequest, OpenWorkspaceResponse,
+    PingRequest, PingResponse, Request, Response, SearchRequest, SearchResponse,
+    WorkspaceLeaseChanged, PROTOCOL_VERSION,
 };
-use lattice_runtime::{LatticeRuntime, RuntimeEvent};
+use lattice_runtime::{IdempotentOutcome, LatticeRuntime, RuntimeEvent};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::unix::OwnedReadHalf;
 use tokio::net::{UnixListener, UnixStream};
@@ -23,7 +24,7 @@ use tracing::{debug, info, warn};
 
 use crate::config::DaemonConfig;
 use crate::error::{Error, Result};
-use crate::lease::{write_workspace_lease, WorkspaceLeaseFile};
+use crate::lease::{daemon_lease_claim, lease_to_wire, require_workspace_lease};
 
 /// Shared daemon state for accepted connections.
 #[derive(Clone)]
@@ -267,6 +268,7 @@ fn handle_request(
     req: Request,
 ) -> std::result::Result<(Response, Option<(String, lattice_protocol::WorkspaceLease)>), WireError>
 {
+    let idempotency_key = req.idempotency_key.clone();
     match req.body {
         Some(request::Body::Health(HealthRequest {})) => Ok((
             Response {
@@ -291,6 +293,19 @@ fn handle_request(
             workspace_id,
             query,
         })) => handle_search(state, workspace_id, query),
+        Some(request::Body::ApplyPageUpdate(ApplyPageUpdateRequest {
+            workspace_id,
+            path,
+            content,
+            expected_revision,
+        })) => handle_apply_page_update(
+            state,
+            workspace_id,
+            path,
+            content,
+            expected_revision,
+            idempotency_key,
+        ),
         None => Err(WireError {
             code: "invalid_request".into(),
             message: "request body is required".into(),
@@ -304,23 +319,13 @@ fn handle_open_workspace(
     path: String,
 ) -> std::result::Result<(Response, Option<(String, lattice_protocol::WorkspaceLease)>), WireError>
 {
-    let session = state
+    let claim = daemon_lease_claim(&state.config);
+    let (session, lease_file) = state
         .runtime
-        .open_workspace_session(path.as_str())
-        .map_err(|err| WireError {
-            code: "open_workspace_failed".into(),
-            message: err.to_string(),
-            details: None,
-        })?;
+        .open_workspace_session_for_write(path.as_str(), &claim)
+        .map_err(runtime_error_to_wire)?;
 
-    let lease_file = WorkspaceLeaseFile::for_daemon(&state.config);
-    write_workspace_lease(session.root(), &lease_file).map_err(|err| WireError {
-        code: "lease_write_failed".into(),
-        message: err.to_string(),
-        details: None,
-    })?;
-
-    let wire_lease = lease_file.to_wire();
+    let wire_lease = lease_to_wire(&lease_file);
     let workspace_id = session.workspace_id().to_string();
     Ok((
         Response {
@@ -359,6 +364,93 @@ fn handle_search(
         },
         None,
     ))
+}
+
+fn handle_apply_page_update(
+    state: &DaemonState,
+    workspace_id: String,
+    path: String,
+    content: String,
+    expected_revision: String,
+    idempotency_key: Option<String>,
+) -> std::result::Result<(Response, Option<(String, lattice_protocol::WorkspaceLease)>), WireError>
+{
+    let session = state
+        .runtime
+        .get_session_by_id(&workspace_id)
+        .ok_or_else(|| WireError {
+            code: "workspace_not_found".into(),
+            message: format!("workspace session not found for id {workspace_id}"),
+            details: None,
+        })?;
+
+    let claim = session
+        .write_lease_claim()
+        .unwrap_or_else(|| daemon_lease_claim(&state.config));
+    require_workspace_lease(session.root(), &claim).map_err(runtime_error_to_wire)?;
+
+    if let Some(key) = idempotency_key.as_ref() {
+        if let Some(cached) = session.idempotency().get(key) {
+            return Ok((
+                Response {
+                    body: Some(response::Body::ApplyPageUpdate(ApplyPageUpdateResponse {
+                        revision: cached.revision,
+                    })),
+                },
+                None,
+            ));
+        }
+    }
+
+    let revision = lattice_handlers::apply_page_update(
+        session.root().to_string_lossy().into_owned(),
+        path,
+        content,
+        expected_revision,
+    )
+    .map_err(|message| WireError {
+        code: "apply_page_update_failed".into(),
+        message,
+        details: None,
+    })?;
+
+    if let Some(key) = idempotency_key {
+        session.idempotency().insert(
+            key,
+            IdempotentOutcome {
+                revision: revision.clone(),
+            },
+        );
+    }
+
+    Ok((
+        Response {
+            body: Some(response::Body::ApplyPageUpdate(ApplyPageUpdateResponse {
+                revision,
+            })),
+        },
+        None,
+    ))
+}
+
+fn runtime_error_to_wire(err: lattice_runtime::Error) -> WireError {
+    match &err {
+        lattice_runtime::Error::LeaseHeld { .. } => WireError {
+            code: "lease_held".into(),
+            message: err.to_string(),
+            details: None,
+        },
+        lattice_runtime::Error::LeaseNotHeld { .. } => WireError {
+            code: "lease_not_held".into(),
+            message: err.to_string(),
+            details: None,
+        },
+        _ => WireError {
+            code: "runtime_error".into(),
+            message: err.to_string(),
+            details: None,
+        },
+    }
 }
 
 async fn read_handshake(reader: &mut OwnedReadHalf) -> Result<HandshakeRequest> {
