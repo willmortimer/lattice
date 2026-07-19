@@ -2443,6 +2443,8 @@ name = "lattice-desktop"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "lattice-audio",
+ "lattice-audio-macos",
  "lattice-commands",
  "lattice-core",
  "lattice-data",

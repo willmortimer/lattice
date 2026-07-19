@@ -123,6 +123,7 @@ See `AudioChunk` in [daemon-protocol.md](./daemon-protocol.md).
 ## Acceptance criteria
 
 - [x] Canonical on-wire format fixed for FluidAudio bridge (Float32 @ 16 kHz mono)
+- [x] Desktop macOS path uses native capture + packed frames (`captured_at_ns`, sequence); WebView JSON `number[]` PCM retired
 - [ ] Pre-roll is measurable in fixture tests
-- [ ] Backpressure cancels rather than unbounded queue growth
-- [ ] No capture work on the UI thread
+- [x] Backpressure cancels rather than unbounded queue growth (`BoundedFrameQueue` in Tauri pump)
+- [x] No capture work on the UI thread (native `AVAudioEngine` path)
