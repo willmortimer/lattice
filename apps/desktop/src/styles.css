@@ -1105,6 +1105,8 @@ html[data-page-width="full"] {
 .canvas-pane {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   position: relative;
   overflow: hidden;
   background-image:
@@ -1115,8 +1117,11 @@ html[data-page-width="full"] {
 }
 
 .canvas-viewer {
-  position: absolute;
-  inset: 0;
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .canvas-viewer canvas {
@@ -1126,16 +1131,32 @@ html[data-page-width="full"] {
 .canvas-surface {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 220px;
+  flex: 1;
   min-height: 0;
-  height: 100%;
+  min-width: 0;
+}
+
+.canvas-surface.is-outline-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.canvas-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .canvas-toolbar {
   display: flex;
-  grid-column: 1;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   padding: 8px 10px;
   border-bottom: 1px solid var(--lt-line);
+  background: var(--lt-panel);
 }
 
 .canvas-toolbar button {
@@ -1148,29 +1169,24 @@ html[data-page-width="full"] {
 }
 
 .canvas-toolbar button:hover,
-.canvas-toolbar button:focus-visible {
-  border-color: var(--lt-amber);
+.canvas-toolbar button:focus-visible,
+.canvas-toolbar button.is-active {
+  border-color: var(--lt-accent);
   color: var(--lt-text);
 }
 
 .canvas-conflict {
-  grid-column: 1;
+  flex-shrink: 0;
   margin: 0;
   padding: 6px 10px;
-  color: var(--lt-amber-deep);
+  color: var(--lt-accent-deep);
   background: var(--lt-bg-raise);
   font: 11px var(--lt-font-mono);
 }
 
-.canvas-surface > .canvas-viewer {
-  grid-column: 1;
-  grid-row: 2;
-  min-height: 0;
-}
-
 .canvas-outline {
-  grid-column: 2;
-  grid-row: 1 / span 2;
+  position: relative;
+  z-index: 1;
   min-width: 0;
   overflow: auto;
   padding: 14px 10px;
@@ -1178,8 +1194,16 @@ html[data-page-width="full"] {
   background: var(--lt-panel);
 }
 
+.canvas-outline-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
 .canvas-outline-title {
-  margin: 0 0 8px;
+  margin: 0;
   color: var(--lt-text-soft);
   font: 600 11px var(--lt-font-mono);
   letter-spacing: .08em;
@@ -1235,7 +1259,7 @@ html[data-page-width="full"] {
   height: 22px;
   place-items: center;
   border-radius: 4px;
-  color: var(--lt-amber-deep);
+  color: var(--lt-accent-deep);
   background: var(--lt-bg-raise);
   font: 10px var(--lt-font-mono);
 }
@@ -1484,7 +1508,7 @@ html[data-page-width="full"] {
    ========================================================================== */
 
 .backlinks-footer {
-  max-width: 68ch;
+  max-width: var(--lt-page-content-width);
   margin: 40px auto 0;
   padding-top: 20px;
   border-top: 1px solid var(--lt-line);

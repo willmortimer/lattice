@@ -321,6 +321,16 @@ export function useDesktopController() {
     );
     currentPageRevisionRef.current = revision;
   }, [currentPageRevisionRef, setSession]);
+
+  const handleRevisionChange = useCallback((revision: string | null) => {
+    currentPageRevisionRef.current = revision;
+    if (!revision) return;
+    setSession((previous) =>
+      previous?.kind === "canvas"
+        ? { ...previous, revision }
+        : previous,
+    );
+  }, [currentPageRevisionRef, setSession]);
   const profileNotices = [runtimeNotice, ...profile.notices]
     .filter((notice): notice is NonNullable<typeof notice> => notice !== null)
     .filter((notice) => !dismissedNoticeCodes.includes(notice.code));
@@ -695,5 +705,6 @@ export function useDesktopController() {
     handleTreeResourceContextMenu, handleTreeFolderContextMenu, handleTreeRename, handleMoveToFolder,
     treeRenameRequest,
     handleNotebookContentChange,
+    handleRevisionChange,
   };
 }

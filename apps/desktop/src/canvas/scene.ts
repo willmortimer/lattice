@@ -3,7 +3,7 @@ import type { CanvasNodeMove } from "./adapter";
 import type { CanvasData, CanvasEdge, CanvasNode } from "./types";
 import { classifyPath } from "./classify";
 import { KIND_LABELS } from "../KindMark";
-import * as colors from "./colors";
+import { observeThemeChange, readCanvasPalette, type CanvasPalette } from "./colors";
 
 const MIN_SCALE = 0.1;
 const MAX_SCALE = 3;
@@ -59,7 +59,7 @@ function autoSide(from: CanvasNode, to: CanvasNode): Side {
   return dy >= 0 ? "bottom" : "top";
 }
 
-/** Parse a JSON Canvas node color: only hex is honored (see colors.ts note). */
+/** Parse a JSON Canvas node color: only hex is honored (Pixi cannot resolve CSS color-mix). */
 function nodeAccent(color?: string): string | null {
   if (color && /^#[0-9a-fA-F]{3,8}$/.test(color)) return color;
   return null;
@@ -90,8 +90,11 @@ export class CanvasScene {
   } | null = null;
 
   private resizeObserver: ResizeObserver | null = null;
+  private disconnectThemeObserver: (() => void) | null = null;
   private host: HTMLElement;
   private options: CanvasSceneOptions;
+  private palette: CanvasPalette = readCanvasPalette();
+  private data: CanvasData | null = null;
 
   private panning = false;
   private panStart = { x: 0, y: 0 };
@@ -162,10 +165,26 @@ export class CanvasScene {
       }
     });
     this.resizeObserver.observe(this.host);
+
+    this.disconnectThemeObserver = observeThemeChange(() => {
+      this.palette = readCanvasPalette();
+      if (this.data) this.rebuild(this.data, { fit: false });
+    });
   }
 
-  setData(data: CanvasData) {
+  setData(data: CanvasData, options: { fit?: boolean } = {}) {
+    this.rebuild(data, { fit: options.fit !== false });
+  }
+
+  private rebuild(data: CanvasData, options: { fit: boolean }) {
     if (!this.initialized || this.destroyed) return;
+    const selectedId = this.selectedId;
+    const preserveCamera = !options.fit;
+    const camera = preserveCamera
+      ? { x: this.world.position.x, y: this.world.position.y, scale: this.world.scale.x }
+      : null;
+
+    this.data = data;
     this.groupsLayer.removeChildren();
     this.edgesLayer.removeChildren();
     this.nodesLayer.removeChildren();
@@ -193,7 +212,16 @@ export class CanvasScene {
       this.drawEdge(edgeGraphics, edge, from, to);
     }
 
-    this.fitToContent(data.nodes);
+    if (options.fit) {
+      this.fitToContent(data.nodes);
+    } else if (camera) {
+      this.world.scale.set(camera.scale);
+      this.world.position.set(camera.x, camera.y);
+    }
+
+    if (selectedId && this.nodeCards.has(selectedId)) {
+      this.selectNode(selectedId);
+    }
   }
 
   private buildGroup(node: CanvasNode & { type: "group" }): Container {
@@ -203,18 +231,18 @@ export class CanvasScene {
     const accent = nodeAccent(node.color);
     const bg = new Graphics()
       .roundRect(0, 0, node.width, node.height, CARD_RADIUS + 4)
-      .fill(accent ? withAlpha(accent, 0.08) : colors.BG_RAISE)
-      .stroke({ width: 1, color: accent ?? colors.LINE_STRONG });
+      .fill(accent ? withAlpha(accent, 0.08) : this.palette.BG_RAISE)
+      .stroke({ width: 1, color: accent ?? this.palette.LINE_STRONG });
     container.addChild(bg);
 
     if (node.label) {
       const label = new Text({
         text: node.label,
         style: {
-          fontFamily: colors.FONT_DISPLAY,
+          fontFamily: this.palette.FONT_DISPLAY,
           fontSize: 14,
           fontWeight: "600",
-          fill: colors.TEXT_SOFT,
+          fill: this.palette.TEXT_SOFT,
         },
       });
       label.position.set(2, -22);
@@ -255,10 +283,10 @@ export class CanvasScene {
       const title = new Text({
         text: basename(node.file),
         style: {
-          fontFamily: colors.FONT_UI,
+          fontFamily: this.palette.FONT_UI,
           fontSize: 13,
           fontWeight: "600",
-          fill: colors.TEXT,
+          fill: this.palette.TEXT,
           wordWrap: true,
           wordWrapWidth: textWidth,
           breakWords: true,
@@ -270,10 +298,10 @@ export class CanvasScene {
       const kindLabel = new Text({
         text: KIND_LABELS[kind].toUpperCase(),
         style: {
-          fontFamily: colors.FONT_MONO,
+          fontFamily: this.palette.FONT_MONO,
           fontSize: 10,
           letterSpacing: 0.6,
-          fill: colors.AMBER_DEEP,
+          fill: this.palette.AMBER_DEEP,
         },
       });
       kindLabel.position.set(textX, CARD_PADDING + title.height + 6);
@@ -282,10 +310,10 @@ export class CanvasScene {
       const title = new Text({
         text: "Link",
         style: {
-          fontFamily: colors.FONT_MONO,
+          fontFamily: this.palette.FONT_MONO,
           fontSize: 10,
           letterSpacing: 0.6,
-          fill: colors.FAINT,
+          fill: this.palette.FAINT,
         },
       });
       title.position.set(textX, CARD_PADDING);
@@ -294,9 +322,9 @@ export class CanvasScene {
       const url = new Text({
         text: node.url,
         style: {
-          fontFamily: colors.FONT_MONO,
+          fontFamily: this.palette.FONT_MONO,
           fontSize: 12,
-          fill: colors.AMBER,
+          fill: this.palette.AMBER,
           wordWrap: true,
           wordWrapWidth: textWidth,
           breakWords: true,
@@ -309,10 +337,10 @@ export class CanvasScene {
       const bodyText = new Text({
         text: body,
         style: {
-          fontFamily: colors.FONT_UI,
+          fontFamily: this.palette.FONT_UI,
           fontSize: 12.5,
           lineHeight: 18,
-          fill: colors.TEXT_SOFT,
+          fill: this.palette.TEXT_SOFT,
           wordWrap: true,
           wordWrapWidth: textWidth,
           breakWords: true,
@@ -338,8 +366,8 @@ export class CanvasScene {
     bg
       .clear()
       .roundRect(0, 0, node.width, node.height, CARD_RADIUS)
-      .fill(colors.PANEL)
-      .stroke({ width: selected ? 2 : 1, color: selected ? colors.AMBER : colors.BORDER });
+      .fill(this.palette.PANEL)
+      .stroke({ width: selected ? 2 : 1, color: selected ? this.palette.AMBER : this.palette.BORDER });
   }
 
   private drawEdge(g: Graphics, edge: CanvasEdge, from: CanvasNode, to: CanvasNode) {
@@ -355,7 +383,7 @@ export class CanvasScene {
     const cp1 = { x: start.x + n1.x * bend, y: start.y + n1.y * bend };
     const cp2 = { x: end.x + n2.x * bend, y: end.y + n2.y * bend };
 
-    const stroke = nodeAccent(edge.color) ?? colors.LINE_STRONG;
+    const stroke = nodeAccent(edge.color) ?? this.palette.LINE_STRONG;
     g.moveTo(start.x, start.y).bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, end.x, end.y).stroke({
       width: 1.5,
       color: stroke,
@@ -375,9 +403,9 @@ export class CanvasScene {
       const label = new Text({
         text: edge.label,
         style: {
-          fontFamily: colors.FONT_UI,
+          fontFamily: this.palette.FONT_UI,
           fontSize: 11,
-          fill: colors.MUTED,
+          fill: this.palette.MUTED,
         },
       });
       label.anchor.set(0.5);
@@ -391,7 +419,7 @@ export class CanvasScene {
           label.height + pad,
           4,
         )
-        .fill(colors.PANEL);
+        .fill(this.palette.PANEL);
       this.edgesLayer.addChild(backdrop, label);
     }
   }
@@ -448,12 +476,14 @@ export class CanvasScene {
     const card = this.nodeCards.get(id);
     if (!card) return;
     this.selectNode(id);
+    // Prefer the live container pose — card.node can lag if a prior drag
+    // committed visually before React/disk state caught up.
     this.dragging = {
       id,
       startX: event.global.x,
       startY: event.global.y,
-      nodeX: card.node.x,
-      nodeY: card.node.y,
+      nodeX: card.container.x,
+      nodeY: card.container.y,
       moved: false,
     };
   }
@@ -514,12 +544,11 @@ export class CanvasScene {
       const card = this.nodeCards.get(drag.id);
       this.dragging = null;
       if (card && drag.moved) {
+        const x = card.container.x;
+        const y = card.container.y;
+        card.node = { ...card.node, x, y };
         this.suppressTapFor = drag.id;
-        this.options.onMoveNodes?.([{
-          id: drag.id,
-          x: card.container.x,
-          y: card.container.y,
-        }]);
+        this.options.onMoveNodes?.([{ id: drag.id, x, y }]);
       }
     }
     this.panning = false;
@@ -550,6 +579,8 @@ export class CanvasScene {
     this.destroyed = true;
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+    this.disconnectThemeObserver?.();
+    this.disconnectThemeObserver = null;
     // Before init resolves, app.canvas/stage don't exist yet; the ready
     // handler above notices `destroyed` and finishes the teardown itself.
     if (!this.initialized) return;
