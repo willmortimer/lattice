@@ -22,8 +22,8 @@ pub use handshake::{
 
 // Re-export protocol types callers need for request construction.
 pub use lattice_protocol::{
-    request, response, Event, HealthRequest, HealthResponse, OpenWorkspaceRequest,
-    OpenWorkspaceResponse, PingRequest, PingResponse, Request, Response, SearchRequest,
-    SearchResponse, PROTOCOL_VERSION,
+    request, response, ApplyPageUpdateRequest, ApplyPageUpdateResponse, Event, HealthRequest,
+    HealthResponse, OpenWorkspaceRequest, OpenWorkspaceResponse, PingRequest, PingResponse,
+    Request, Response, SearchRequest, SearchResponse, PROTOCOL_VERSION,
 };
 pub use lattice_runtime::{default_runtime, LatticeRuntime, WorkspaceSession};

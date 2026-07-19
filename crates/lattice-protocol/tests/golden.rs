@@ -1,8 +1,8 @@
 use lattice_protocol::{
-    decode_frame, encode_frame, event_envelope, request_envelope, response_envelope, Event,
-    HealthRequest, HealthResponse, OpenWorkspaceRequest, OpenWorkspaceResponse, PingRequest,
-    Request, Response, SearchRequest, SearchResponse, WorkspaceLease, WorkspaceLeaseChanged,
-    PROTOCOL_VERSION,
+    decode_frame, encode_frame, event_envelope, request_envelope, response_envelope,
+    ApplyPageUpdateRequest, ApplyPageUpdateResponse, Event, HealthRequest, HealthResponse,
+    OpenWorkspaceRequest, OpenWorkspaceResponse, PingRequest, Request, Response, SearchRequest,
+    SearchResponse, WorkspaceLease, WorkspaceLeaseChanged, PROTOCOL_VERSION,
 };
 use prost::Message;
 use std::path::PathBuf;
@@ -117,6 +117,37 @@ fn search_response() -> lattice_protocol::Envelope {
     )
 }
 
+fn apply_page_update_request() -> lattice_protocol::Envelope {
+    request_envelope(
+        "golden-apply",
+        Request {
+            deadline_unix_ms: None,
+            idempotency_key: Some("idem-apply-1".into()),
+            body: Some(lattice_protocol::request::Body::ApplyPageUpdate(
+                ApplyPageUpdateRequest {
+                    workspace_id: "ws-1".into(),
+                    path: "Notes.md".into(),
+                    content: "# Updated\n".into(),
+                    expected_revision: "sha256:abc".into(),
+                },
+            )),
+        },
+    )
+}
+
+fn apply_page_update_response() -> lattice_protocol::Envelope {
+    response_envelope(
+        "golden-apply",
+        Response {
+            body: Some(lattice_protocol::response::Body::ApplyPageUpdate(
+                ApplyPageUpdateResponse {
+                    revision: "sha256:def".into(),
+                },
+            )),
+        },
+    )
+}
+
 fn lease_changed_event() -> lattice_protocol::Envelope {
     event_envelope(
         "",
@@ -190,6 +221,22 @@ fn golden_search_request() {
 #[test]
 fn golden_search_response() {
     assert_golden("search_response.hex", &search_response());
+}
+
+#[test]
+fn golden_apply_page_update_request() {
+    assert_golden(
+        "apply_page_update_request.hex",
+        &apply_page_update_request(),
+    );
+}
+
+#[test]
+fn golden_apply_page_update_response() {
+    assert_golden(
+        "apply_page_update_response.hex",
+        &apply_page_update_response(),
+    );
 }
 
 #[test]

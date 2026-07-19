@@ -10,10 +10,18 @@
 
 mod error;
 mod events;
+mod idempotency;
+mod lease;
 mod session;
 
 pub use error::{Error, Result};
 pub use events::{EventBus, RuntimeEvent};
+pub use idempotency::{IdempotencyCache, IdempotentOutcome, DEFAULT_IDEMPOTENCY_CAPACITY};
+pub use lease::{
+    acquire_workspace_lease, clear_workspace_lease, is_process_alive, lease_is_stale, lease_path,
+    read_workspace_lease, require_workspace_lease, rfc3339_utc, write_workspace_lease, LeaseClaim,
+    WorkspaceLeaseFile, LEASE_RELATIVE_PATH, OWNER_EMBEDDED, OWNER_LATTICED,
+};
 pub use session::WorkspaceSession;
 
 use std::collections::HashMap;
@@ -56,15 +64,34 @@ impl LatticeRuntime {
         &self.events
     }
 
-    /// Open (or return) a warm session for `root`.
+    /// Open (or return) a warm session for `root` without acquiring a write lease.
     ///
-    /// The second open of the same canonical path returns the same
-    /// [`Arc<WorkspaceSession>`]. The search index is opened once and kept warm.
+    /// Prefer [`Self::open_workspace_session_for_write`] when the caller will
+    /// mutate the workspace.
     pub fn open_workspace_session(
         &self,
         root: impl AsRef<Path>,
     ) -> Result<Arc<WorkspaceSession>> {
-        let canonical = canonicalize_root(root.as_ref())?;
+        self.open_or_get_session(root.as_ref())
+    }
+
+    /// Open a warm session and acquire the workspace write lease for `claim`.
+    ///
+    /// Fails with [`Error::LeaseHeld`] when another live owner holds the lease
+    /// (embedded XOR `latticed`).
+    pub fn open_workspace_session_for_write(
+        &self,
+        root: impl AsRef<Path>,
+        claim: &LeaseClaim,
+    ) -> Result<(Arc<WorkspaceSession>, WorkspaceLeaseFile)> {
+        let lease = acquire_workspace_lease(root.as_ref(), claim)?;
+        let session = self.open_or_get_session(root.as_ref())?;
+        session.set_write_lease(claim.clone());
+        Ok((session, lease))
+    }
+
+    fn open_or_get_session(&self, root: &Path) -> Result<Arc<WorkspaceSession>> {
+        let canonical = canonicalize_root(root)?;
         {
             let by_root = self.sessions_by_root.read().expect("sessions poisoned");
             if let Some(existing) = by_root.get(&canonical) {
@@ -246,5 +273,50 @@ mod tests {
         assert!(results
             .iter()
             .all(|hits| hits.iter().any(|h| h.path.ends_with("Guide.md"))));
+    }
+
+    #[test]
+    fn open_for_write_acquires_lease() {
+        let dir = init_workspace();
+        let runtime = LatticeRuntime::new();
+        let claim = LeaseClaim::embedded(std::process::id(), 11, 1, "emb");
+        let (session, lease) = runtime
+            .open_workspace_session_for_write(dir.path(), &claim)
+            .unwrap();
+        assert_eq!(lease.owner, OWNER_EMBEDDED);
+        assert!(session.write_lease_claim().is_some());
+        let on_disk = read_workspace_lease(dir.path()).unwrap().unwrap();
+        assert_eq!(on_disk.instance_id, "emb");
+    }
+
+    #[test]
+    fn open_for_write_xor_blocks_second_owner() {
+        let dir = init_workspace();
+        let runtime = LatticeRuntime::new();
+        // PID 1 (init/launchd) is alive on Unix and distinct from this process.
+        write_workspace_lease(
+            dir.path(),
+            &WorkspaceLeaseFile {
+                schema_version: 1,
+                owner: OWNER_LATTICED.into(),
+                pid: 1,
+                process_start: 1,
+                socket: "/tmp/latticed.sock".into(),
+                protocol_version: 1,
+                instance_id: "d1".into(),
+                acquired_at: "2026-01-01T00:00:00Z".into(),
+            },
+        )
+        .unwrap();
+        assert!(!lease_is_stale(
+            &read_workspace_lease(dir.path()).unwrap().unwrap()
+        ));
+
+        let embedded = LeaseClaim::embedded(std::process::id(), 2, 1, "e1");
+        let err = runtime
+            .open_workspace_session_for_write(dir.path(), &embedded)
+            .err()
+            .expect("must fail");
+        assert!(matches!(err, Error::LeaseHeld { .. }), "{err:?}");
     }
 }

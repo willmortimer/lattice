@@ -12,6 +12,10 @@ mod spawn;
 
 pub use config::{default_run_dir, default_socket_path, DaemonConfig};
 pub use error::{Error, Result};
-pub use lease::{lease_path, write_workspace_lease, WorkspaceLeaseFile, LEASE_RELATIVE_PATH};
+pub use lease::{
+    daemon_lease_claim, lease_file_for_daemon, lease_path, lease_to_wire, write_workspace_lease,
+    DaemonWorkspaceLeaseFile as WorkspaceLeaseFile, LEASE_RELATIVE_PATH, OWNER_EMBEDDED,
+    OWNER_LATTICED,
+};
 pub use server::{serve, serve_with_shutdown, DaemonState};
 pub use spawn::{spawn_latticed, wait_for_ready, SpawnOptions, SpawnedDaemon};

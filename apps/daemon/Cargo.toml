@@ -21,6 +21,7 @@ clap.workspace = true
 dirs.workspace = true
 lattice-client.workspace = true
 lattice-core.workspace = true
+lattice-handlers.workspace = true
 lattice-protocol.workspace = true
 lattice-runtime.workspace = true
 serde.workspace = true
@@ -32,6 +33,7 @@ tracing-subscriber.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+lattice-handlers.workspace = true
 serde_json.workspace = true
 tempfile = "3"
 tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time", "process"] }
