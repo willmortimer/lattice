@@ -6,6 +6,7 @@ mod profile;
 mod resource_links;
 mod revisions;
 mod search;
+mod terminal;
 mod theme;
 mod watcher;
 
@@ -23,6 +24,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(watcher::WatcherState::default())
+        .manage(terminal::TerminalState::default())
         .manage(theme::ThemeWatchState::default())
         .manage(resource_links::ResourceCatalogState::default());
 
@@ -156,6 +158,10 @@ pub fn run() {
             search::rebuild_index,
             watcher::start_watching,
             watcher::stop_watching,
+            terminal::terminal_spawn,
+            terminal::terminal_write,
+            terminal::terminal_resize,
+            terminal::terminal_kill,
             theme::list_themes,
             theme::get_resolved_theme,
             theme::set_theme,
