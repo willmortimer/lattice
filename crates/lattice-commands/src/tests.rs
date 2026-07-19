@@ -175,6 +175,30 @@ fn canvas_remove_removes_incident_edges_but_preserves_other_edges_and_unknown_fi
 }
 
 #[test]
+fn canvas_add_edge_connects_existing_nodes() {
+    let (dir, mut engine) = engine();
+    let base = create_canvas(&mut engine, &dir);
+    let receipt = engine
+        .apply(Transaction::new(
+            "Connect canvas nodes",
+            vec![Command::CanvasAddEdge {
+                path: PathBuf::from("Boards/Main.canvas"),
+                base_revision: base,
+                edge_id: "ba".into(),
+                from_node: "b".into(),
+                to_node: "a".into(),
+            }],
+        ))
+        .unwrap();
+    assert!(receipt.outcomes[0].resulting_revision.is_some());
+    let value: Value = serde_json::from_slice(&read(&dir, "Boards/Main.canvas")).unwrap();
+    assert!(value["edges"].as_array().unwrap().iter().any(|edge| {
+        edge["id"] == "ba" && edge["fromNode"] == "b" && edge["toNode"] == "a"
+    }));
+    assert_eq!(value["edges"][0]["pluginEdge"]["keep"], true);
+}
+
+#[test]
 fn canvas_stale_invalid_and_undo_are_guarded() {
     let (dir, mut engine) = engine();
     let base = create_canvas(&mut engine, &dir);
