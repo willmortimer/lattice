@@ -101,6 +101,7 @@ macOS FluidAudio bridge and `FluidAudioSpeechProvider`: **`crates/lattice-voice-
 | [observability-testing.md](./observability-testing.md) | Metrics, unit/integration tests, golden audio suite |
 | [performance-budget.md](./performance-budget.md) | Latency and quality targets |
 | [implementation-roadmap.md](./implementation-roadmap.md) | Milestones M0–M8 with exit criteria |
+| [current-implementation-review-and-ml-architecture.md](./current-implementation-review-and-ml-architecture.md) | Capture/finalization review and Mac-first ML pipeline (post-M1) |
 | [adr/](./adr/) | Accepted subsystem architecture decisions |
 | [research/voice-m0-fluidaudio/RESULTS.md](../../research/voice-m0-fluidaudio/RESULTS.md) | M0 FluidAudio spike measurements (EOU+TDT historical path) |
 | [research/voice-m0-fluidaudio/DECISION.md](../../research/voice-m0-fluidaudio/DECISION.md) | M1 production path decision (`production_path: unified`) |
