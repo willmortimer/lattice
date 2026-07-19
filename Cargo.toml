@@ -11,6 +11,7 @@ members = [
     "crates/lattice-data",
     "crates/lattice-theme",
     "crates/lattice-handlers",
+    "crates/lattice-terminal",
     "apps/desktop/src-tauri",
 ]
 
@@ -29,6 +30,9 @@ lattice-index = { path = "crates/lattice-index" }
 lattice-data = { path = "crates/lattice-data" }
 lattice-theme = { path = "crates/lattice-theme" }
 lattice-handlers = { path = "crates/lattice-handlers" }
+lattice-terminal = { path = "crates/lattice-terminal" }
+# Cross-platform PTY for the embedded terminal (ADR 0039); WezTerm's portable-pty.
+portable-pty = "0.9"
 axum = { version = "0.8", features = ["json"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net"] }
 tower-http = { version = "0.6", features = ["cors"] }
