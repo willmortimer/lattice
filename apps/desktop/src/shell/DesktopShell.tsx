@@ -380,6 +380,11 @@ export function DesktopShell({ model }: DesktopShellProps) {
               {selected?.kind === "page" && page && !inBrowser && (
                 <DictationControls
                   enabled
+                  documentKey={
+                    selected?.kind === "page" && page
+                      ? `${selected.path}#${reloadToken}`
+                      : null
+                  }
                   pageEditorRef={pageEditorRef}
                   onError={(message) => setError(message)}
                 />

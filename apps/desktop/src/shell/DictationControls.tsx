@@ -19,6 +19,7 @@ type DictationPhase = "idle" | "preparing" | "listening" | "finalizing" | "unava
 
 interface DictationControlsProps {
   enabled: boolean;
+  documentKey: string | null;
   pageEditorRef: RefObject<PageEditorHandle | null>;
   onError: (message: string) => void;
 }
@@ -27,7 +28,12 @@ interface DictationControlsProps {
  * Hold-to-talk dictation control for the page header (M2).
  * Provisional text is decoration-only; finals insert through the editor handle.
  */
-export function DictationControls({ enabled, pageEditorRef, onError }: DictationControlsProps) {
+export function DictationControls({
+  enabled,
+  documentKey,
+  pageEditorRef,
+  onError,
+}: DictationControlsProps) {
   const labelId = useId();
   const [phase, setPhase] = useState<DictationPhase>("idle");
   const [status, setStatus] = useState<VoiceStatus | null>(null);
@@ -245,6 +251,13 @@ export function DictationControls({ enabled, pageEditorRef, onError }: Dictation
       setHint(null);
     });
   }, [enqueue, pageEditorRef]);
+
+  const documentKeyRef = useRef(documentKey);
+  useEffect(() => {
+    if (documentKeyRef.current === documentKey) return;
+    documentKeyRef.current = documentKey;
+    cancelHold();
+  }, [cancelHold, documentKey]);
 
   if (!enabled || phase === "unavailable") {
     return null;
