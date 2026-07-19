@@ -29,12 +29,24 @@ pub struct AudioChunk {
     pub payload: Bytes,
 }
 
+/// How a provider produces authoritative finals (voice ADR 0007).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FinalizationMode {
+    /// Authoritative flush of the streaming checkpoint (Unified `finish()`).
+    StreamingFlush,
+    /// Separate offline encoder in the same model family re-decodes utterance audio.
+    SameFamilyOfflineRedecode,
+    /// Distinct final model re-decodes the full utterance.
+    IndependentOfflineRedecode,
+}
+
 /// Provider capability negotiation surface.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpeechCapabilities {
     pub streaming: bool,
     pub partial_transcripts: bool,
-    pub offline_final_decode: bool,
+    pub finalization_mode: FinalizationMode,
     pub punctuation: bool,
     pub word_timestamps: bool,
     pub language_detection: bool,
@@ -142,13 +154,6 @@ pub enum VoiceRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum DecodeMode {
-    Streaming,
-    Offline,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PartialTranscriptPayload {
     pub session_id: VoiceSessionId,
     pub utterance_id: UtteranceId,
@@ -174,7 +179,7 @@ pub struct FinalTranscript {
     pub utterance_id: UtteranceId,
     pub replaces_revision: u64,
     pub text: String,
-    pub decode_mode: DecodeMode,
+    pub finalization_mode: FinalizationMode,
     pub duration_ms: u64,
     pub processing_ms: u64,
 }

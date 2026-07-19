@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use lattice_voice::{
-    AudioChunk, AudioSampleFormat, DecodeMode, FinalTranscript, ModelState, ModelStatus,
+    AudioChunk, AudioSampleFormat, FinalTranscript, FinalizationMode, ModelState, ModelStatus,
     PartialTranscriptPayload, PrepareModelRequest, SpeechCapabilities, SpeechError, SpeechEventSender,
     SpeechProvider, SpeechSession, SpeechSessionConfig, StableTranscriptPayload, VoiceEvent,
 };
@@ -68,7 +68,7 @@ impl FluidAudioSpeechProvider {
         SpeechCapabilities {
             streaming: true,
             partial_transcripts: true,
-            offline_final_decode: true,
+            finalization_mode: FinalizationMode::StreamingFlush,
             punctuation: false,
             word_timestamps: false,
             language_detection: false,
@@ -301,7 +301,7 @@ impl SpeechSession for FluidAudioSpeechSession {
             utterance_id: self.utterance_id.clone(),
             replaces_revision: revision,
             text: final_text,
-            decode_mode: DecodeMode::Offline,
+            finalization_mode: FinalizationMode::StreamingFlush,
             duration_ms: 0,
             processing_ms,
         })
@@ -390,7 +390,7 @@ fn spawn_event_dispatcher(
                         utterance_id: utterance_id.clone(),
                         replaces_revision: revision,
                         text: event.text,
-                        decode_mode: DecodeMode::Offline,
+                        finalization_mode: FinalizationMode::StreamingFlush,
                         duration_ms: 0,
                         processing_ms: 0,
                     },
@@ -464,6 +464,16 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn capabilities_report_streaming_flush() {
+        let bridge = Arc::new(MockBridge::new(LATTICE_VOICE_BRIDGE_ABI_VERSION));
+        let provider = FluidAudioSpeechProvider::with_backend(bridge, PathBuf::new());
+        assert_eq!(
+            provider.capabilities().finalization_mode,
+            FinalizationMode::StreamingFlush
+        );
+    }
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn mock_provider_streams_partial_and_final() {
         let bridge = Arc::new(MockBridge::new(LATTICE_VOICE_BRIDGE_ABI_VERSION));
@@ -489,7 +499,10 @@ mod tests {
             .unwrap();
 
         let final_transcript = session.finish_utterance().await.unwrap();
-        assert_eq!(final_transcript.text, "mock final");
+        assert_eq!(
+            final_transcript.finalization_mode,
+            FinalizationMode::StreamingFlush
+        );
 
         let mut saw_partial = false;
         let mut saw_final = false;

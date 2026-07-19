@@ -179,7 +179,7 @@ Capabilities are independent of providers:
 pub struct SpeechCapabilities {
     pub streaming: bool,
     pub partial_transcripts: bool,
-    pub offline_final_decode: bool,
+    pub finalization_mode: FinalizationMode,
     pub punctuation: bool,
     pub word_timestamps: bool,
     pub language_detection: bool,

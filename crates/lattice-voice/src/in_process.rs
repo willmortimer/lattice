@@ -329,7 +329,15 @@ mod tests {
             .unwrap();
 
         let final_event = rx.recv().await.unwrap();
-        assert!(matches!(final_event, VoiceEvent::FinalTranscript(_)));
+        match final_event {
+            VoiceEvent::FinalTranscript(transcript) => {
+                assert_eq!(
+                    transcript.finalization_mode,
+                    crate::protocol::FinalizationMode::StreamingFlush
+                );
+            }
+            other => panic!("expected FinalTranscript, got {other:?}"),
+        }
 
         let completed = rx.recv().await.unwrap();
         assert!(matches!(completed, VoiceEvent::SessionCompleted { .. }));
