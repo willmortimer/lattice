@@ -1,14 +1,17 @@
 import { EditorContent, useEditor } from "@tiptap/react";
 
 import { editorExtensions } from "./extensions";
+import { handleEditorLinkClick } from "./linkClick";
 import { tryParseMarkdownToJSON } from "./markdown";
 
 export interface PagePreviewProps {
   draftBody: string;
   parseError: string | null;
+  /** Same workspace-link navigation as the live editor. */
+  onOpenWiki?: (target: string) => void;
 }
 
-export function PagePreview({ draftBody, parseError }: PagePreviewProps) {
+export function PagePreview({ draftBody, parseError, onOpenWiki }: PagePreviewProps) {
   const parsed = parseError ? null : tryParseMarkdownToJSON(draftBody);
   const canRender = parsed?.ok === true;
   const content = canRender ? parsed.json : { type: "doc", content: [{ type: "paragraph" }] };
@@ -34,5 +37,9 @@ export function PagePreview({ draftBody, parseError }: PagePreviewProps) {
     );
   }
 
-  return <EditorContent editor={editor} className="markdown-body page-editor-content page-preview" />;
+  return (
+    <div onClick={(event) => handleEditorLinkClick(event, onOpenWiki)}>
+      <EditorContent editor={editor} className="markdown-body page-editor-content page-preview" />
+    </div>
+  );
 }

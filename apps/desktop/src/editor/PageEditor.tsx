@@ -50,6 +50,7 @@ import {
 import { PageModeChrome } from "./PageModeChrome";
 import { PagePreview } from "./PagePreview";
 import { PageSourceEditor } from "./PageSourceEditor";
+import { handleEditorLinkClick } from "./linkClick";
 import { applyModeSwitch, bodyForPersistence, type PageMode } from "./pageDraft";
 import { StaleRevisionError, type PageIO } from "./pageIO";
 import { type SaveState } from "./saveState";
@@ -125,7 +126,10 @@ interface PageEditorProps {
    * a remount on every autosave.
    */
   onRevisionChange?: (revision: string | null) => void;
-  /** Navigate when the user clicks a `wiki:…` link (`[[Target]]`). */
+  /**
+   * Navigate when the user clicks a workspace link — `wiki:…` (`[[Target]]`)
+   * or a relative/root-relative Markdown resource href.
+   */
   onOpenWiki?: (target: string) => void;
   /** Create and open a canonical `.data` table package. */
   onCreateTable?: () => Promise<void> | void;
@@ -858,21 +862,18 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
       )}
 
       {mode === "preview" && (
-        <PagePreview draftBody={draftBody} parseError={sourceParseError} />
+        <PagePreview
+          draftBody={draftBody}
+          parseError={sourceParseError}
+          onOpenWiki={onOpenWiki}
+        />
       )}
 
       {mode === "edit" && (
       <div
         ref={editorContainerRef}
         onClick={(event) => {
-          if (!onOpenWiki) return;
-          const anchor = (event.target as HTMLElement | null)?.closest?.("a");
-          if (!anchor) return;
-          const href = anchor.getAttribute("href");
-          if (!href?.startsWith("wiki:")) return;
-          event.preventDefault();
-          event.stopPropagation();
-          onOpenWiki(decodeURIComponent(href.slice("wiki:".length)));
+          handleEditorLinkClick(event, onOpenWiki);
         }}
       >
         <EditorContent editor={editor} className="markdown-body page-editor-content" />

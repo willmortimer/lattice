@@ -25,6 +25,11 @@ import { BlockDragHandle } from "./BlockDragHandle";
  *
  * Wiki links `[[Target]]` are stored as ordinary `link` marks whose href
  * uses the `wiki:` scheme (see `markdown.ts` preprocess/serialize).
+ *
+ * Do not default `target="_blank"`: Tauri's opener plugin treats blank
+ * targets as system-browser navigations, which would yank workspace
+ * relative Markdown links out of the app. Clicks are routed in
+ * `linkClick.ts` instead (in-app for workspace targets, opener for http).
  */
 export const editorExtensions: Extensions = [
   StarterKit.configure({ underline: false, link: false }),
@@ -33,11 +38,15 @@ export const editorExtensions: Extensions = [
   Link.configure({
     openOnClick: false,
     autolink: true,
-    HTMLAttributes: { class: "editor-link" },
+    HTMLAttributes: { class: "editor-link", target: null, rel: null },
   }),
   LatticeEmbed,
   OpaqueDirective,
 ];
 
-/** Live editor only — drag handles are presentation, not part of the codec schema. */
-export const liveEditorExtensions: Extensions = [...editorExtensions, BlockDragHandle];
+/** Live editor only — drag handles and dictation chrome are presentation, not codec schema. */
+export const liveEditorExtensions: Extensions = [
+  ...editorExtensions,
+  BlockDragHandle,
+  DictationProvisional,
+];
