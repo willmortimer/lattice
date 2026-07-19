@@ -51,6 +51,11 @@ export function readResourceDragPayload(data: DataTransfer | null | undefined): 
   return decodeResourceDragPayload(data.getData(LATTICE_RESOURCE_MIME));
 }
 
+/** True when a drag carries a Lattice resource — safe during dragover (types only). */
+export function hasLatticeResourceDrag(data: DataTransfer | null | undefined): boolean {
+  return Boolean(data?.types.includes(LATTICE_RESOURCE_MIME));
+}
+
 export function writeResourceDragPayload(data: DataTransfer, resource: Resource): void {
   const encoded = encodeResourceDragPayload(resource);
   data.setData(LATTICE_RESOURCE_MIME, encoded);
