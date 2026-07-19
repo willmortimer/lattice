@@ -26,6 +26,7 @@ facts.
 ## Repository map
 
 - `apps/cli/`: headless `lattice` CLI.
+- `apps/daemon/`: `latticed` Unix-domain daemon (control plane over LatticeRuntime).
 - `apps/desktop/`: Tauri 2 desktop shell using React, TypeScript, and Vite.
 - `crates/`: Rust domain crates for resources, storage, commands, indexing,
   data applications, and themes.
