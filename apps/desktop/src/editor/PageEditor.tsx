@@ -32,6 +32,11 @@ import {
 import { CodeBlockView } from "./CodeBlockView";
 import { ConflictEnvelope } from "./ConflictEnvelope";
 import { BlockDragHandle } from "./BlockDragHandle";
+import {
+  DictationProvisional,
+  dictationProvisionalKey,
+  type DictationProvisionalState,
+} from "./DictationProvisional";
 import { editorExtensions } from "./extensions";
 import { ImageView } from "./ImageView";
 import { LatticeEmbedView } from "./LatticeEmbedView";
@@ -111,6 +116,7 @@ const liveExtensions: Extensions = [
     return extension;
   }),
   BlockDragHandle,
+  DictationProvisional,
 ];
 
 interface PageEditorProps {
@@ -153,6 +159,14 @@ export interface PageEditorHandle {
   /** The editor's current content, serialized back to full page text
    * (frontmatter included, verbatim). */
   getRaw(): string;
+  /** Capture the current caret as the dictation insertion anchor. */
+  beginDictation(): number;
+  /** Update provisional ghost text without touching document storage. */
+  setDictationProvisional(text: string, from: number): void;
+  /** Clear provisional ghost text. */
+  clearDictationProvisional(): void;
+  /** Insert authoritative final transcript at the dictation anchor. */
+  commitDictationFinal(text: string, from: number): void;
 }
 
 /**
@@ -466,6 +480,36 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
           frontmatter,
           bodyForPersistence(modeRef.current, draftBodyRef.current, editor?.getJSON() ?? null),
         ),
+      beginDictation: () => {
+        if (!editor) return 0;
+        const from = editor.state.selection.from;
+        editor.commands.focus();
+        return from;
+      },
+      setDictationProvisional: (text: string, from: number) => {
+        if (!editor) return;
+        const meta: DictationProvisionalState = { text, from };
+        editor.view.dispatch(editor.state.tr.setMeta(dictationProvisionalKey, meta));
+      },
+      clearDictationProvisional: () => {
+        if (!editor) return;
+        const meta: DictationProvisionalState = { text: "", from: 0 };
+        editor.view.dispatch(editor.state.tr.setMeta(dictationProvisionalKey, meta));
+      },
+      commitDictationFinal: (text: string, from: number) => {
+        if (!editor) return;
+        const clear: DictationProvisionalState = { text: "", from: 0 };
+        if (!text.trim()) {
+          editor.view.dispatch(editor.state.tr.setMeta(dictationProvisionalKey, clear));
+          return;
+        }
+        const insertAt = Math.min(Math.max(0, from), editor.state.doc.content.size);
+        const tr = editor.state.tr
+          .setMeta(dictationProvisionalKey, clear)
+          .insertText(text, insertAt);
+        editor.view.dispatch(tr);
+        editor.commands.focus();
+      },
     }),
     [editor, frontmatter],
   );

@@ -7,6 +7,7 @@ import Link from "@tiptap/extension-link";
 import { LatticeEmbed } from "./LatticeEmbedExtension";
 import { OpaqueDirective } from "./OpaqueDirectiveExtension";
 import { BlockDragHandle } from "./BlockDragHandle";
+import { DictationProvisional } from "./DictationProvisional";
 
 /**
  * The single source of truth for the editor's node/mark set. Both the live
