@@ -673,21 +673,89 @@ html[data-platform="macos"] .startup-splash {
   color: var(--lt-accent-bright);
 }
 
-.markdown-body pre {
+.markdown-body pre,
+.code-block-pre {
   background: var(--lt-bg-raise);
   border: 1px solid var(--lt-line);
   border-radius: var(--lt-radius);
   padding: 14px 16px;
   overflow-x: auto;
+  font-family: var(--lt-font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  tab-size: 2;
 }
 
-.markdown-body pre code {
+.markdown-body pre code,
+.code-block-pre code {
   background: none;
   border: none;
   padding: 0;
   color: var(--lt-text-soft);
-  font-size: 12.5px;
-  line-height: 1.6;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  tab-size: inherit;
+}
+
+/* Shiki CSS-variables theme mapped to Lattice semantic tokens (matches CodeMirror). */
+.code-block-view,
+.markdown-body {
+  --shiki-foreground: var(--lt-text-soft);
+  --shiki-background: transparent;
+  --shiki-token-constant: var(--lt-accent-bright);
+  --shiki-token-string: var(--lt-accent-bright);
+  --shiki-token-comment: var(--lt-faint);
+  --shiki-token-keyword: var(--lt-accent);
+  --shiki-token-parameter: var(--lt-text-soft);
+  --shiki-token-function: var(--lt-slate);
+  --shiki-token-string-expression: var(--lt-accent);
+  --shiki-token-punctuation: var(--lt-faint);
+  --shiki-token-link: var(--lt-accent);
+  --shiki-token-inserted: var(--lt-accent-bright);
+  --shiki-token-deleted: var(--lt-danger);
+  --shiki-token-changed: var(--lt-slate);
+}
+
+/* Stack highlight + editable text in one grid cell so scroll/metrics stay aligned. */
+.code-block-stack {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.code-block-stack > .code-block-highlight-layer,
+.code-block-stack > .code-block-edit-layer {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+
+.code-block-highlight-layer {
+  margin: 0;
+  pointer-events: none;
+  white-space: pre;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  tab-size: inherit;
+  color: var(--shiki-foreground);
+}
+
+.code-block-highlight-layer .line {
+  display: block;
+  min-height: 1.6em;
+}
+
+.code-block-pre--highlighted .code-block-edit-layer {
+  z-index: 1;
+  color: transparent;
+  caret-color: var(--lt-text);
+  background: transparent;
+}
+
+.code-block-pre--highlighted .code-block-edit-layer::selection,
+.code-block-pre--highlighted .code-block-edit-layer *::selection {
+  color: transparent;
+  background: var(--lt-accent-wash);
 }
 
 .markdown-body blockquote {
