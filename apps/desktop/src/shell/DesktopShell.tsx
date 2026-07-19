@@ -377,6 +377,13 @@ export function DesktopShell({ model }: DesktopShellProps) {
                   {externalConflict ? "Conflict" : saveIndicatorText(saveState) || "Saved"}
                 </span>
               )}
+              {selected?.kind === "page" && page && !inBrowser && (
+                <DictationControls
+                  enabled
+                  pageEditorRef={pageEditorRef}
+                  onError={(message) => setError(message)}
+                />
+              )}
               {selected && !inBrowser && (
                 <Button
                   variant="ghost"
