@@ -12,9 +12,12 @@ import { directoryPurposesFromCatalog } from "../lib/templates";
 import { SettingsPage } from "../settings/SettingsPage";
 import { TerminalPanel } from "../terminal/TerminalPanel";
 import { BrandMark } from "../shell/BrandMark";
+import { DictationControls } from "../shell/DictationControls";
 import { HomeDashboard } from "../shell/HomeDashboard";
 import { ResourceInspector } from "../shell/ResourceInspector";
 import { ResourceSurface } from "../shell/ResourceSurface";
+import { StartupSplash } from "../shell/StartupSplash";
+import { useStartupSplash } from "../shell/useStartupSplash";
 import { setAppearanceMode, setFixedTheme } from "../theme";
 import { fileTitle } from "../controllers/useResourceController";
 import { isUnsaved, saveIndicatorText } from "../editor/saveState";
@@ -67,6 +70,12 @@ export function DesktopShell({ model }: DesktopShellProps) {
     handleOpenWiki, openLinkTarget, handleNotebookContentChange,
   } = model;
 
+  const splashVisible = useStartupSplash({
+    enabled: startup.showStartupSplash !== false,
+    profileReady,
+    themeReady: themeCatalog !== null,
+  });
+
   // Manifest-authored purposes (editable in lattice.yaml) win over the
   // catalog hints derived from the provisioning template.
   const directoryPurposes = useMemo(
@@ -76,6 +85,15 @@ export function DesktopShell({ model }: DesktopShellProps) {
     }),
     [snapshot?.sourceTemplate, snapshot?.directoryPurposes],
   );
+
+  if (splashVisible) {
+    return (
+      <>
+        <div className="native-titlebar" data-tauri-drag-region />
+        <StartupSplash />
+      </>
+    );
+  }
 
   if (!snapshot) {
     return (

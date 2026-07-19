@@ -302,6 +302,18 @@ export function SettingsPage({
                 }
               />
             </SettingRow>
+            <SettingRow
+              title="Startup splash"
+              description="Hold the branded loading screen for about a second so theme colors can settle before the workspace appears."
+            >
+              <Toggle
+                label="Show startup splash"
+                checked={startup.showStartupSplash}
+                onChange={(showStartupSplash) =>
+                  onStartupChange({ ...startup, showStartupSplash })
+                }
+              />
+            </SettingRow>
             <SettingRow title="Recent workspaces" description="Remove operational history without touching workspace files.">
               <Button variant="secondary" onClick={onClearRecents}>
                 Clear recents
