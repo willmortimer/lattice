@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "providers": [
+    {
+      "id": "streaming_flush",
+      "finalization_mode": "StreamingFlush",
+      "description": "Baseline: StreamingUnifiedAsrManager.finish() authoritative flush of the loaded streaming checkpoint (current production final path).",
+      "runner": "fluidaudio_m0",
+      "m0_mode": "unified",
+      "m0_path": "streaming"
+    },
+    {
+      "id": "unified_offline",
+      "finalization_mode": "SameFamilyOfflineRedecode",
+      "description": "Optional Unified offline encoder re-decode of buffered utterance audio (same HF repo as streaming Unified).",
+      "runner": "fluidaudio_m0",
+      "m0_mode": "unified",
+      "m0_path": "offline",
+      "optional": true
+    },
+    {
+      "id": "tdt_v2",
+      "finalization_mode": "IndependentOfflineRedecode",
+      "description": "Parakeet TDT v2 English offline re-decode (distinct final model family).",
+      "runner": "fluidaudio_m0",
+      "m0_mode": "eou-tdt",
+      "m0_path": "offline",
+      "optional": true
+    }
+  ],
+  "fixtures": [
+    {
+      "id": "m0-technical-dictation",
+      "category": "technical_prose",
+      "audio": "../voice-m0-fluidaudio/Fixtures/technical-dictation-16k-mono.wav",
+      "reference": "references/technical-dictation.txt",
+      "sample_rate_hz": 16000,
+      "channels": 1,
+      "sample_format": "f32",
+      "technical_tokens": ["AsrManager", "CamelCase"],
+      "path_tokens": ["/Users/will/Developer/lattice"],
+      "generate_hint": "From research/voice-m0-fluidaudio: ./scripts/generate-fixture.sh",
+      "notes": "Shared M0 / live-asr fixture. Generated via macOS say + afconvert; regenerate after clone (WAV is gitignored in voice-m0-fluidaudio)."
+    },
+    {
+      "id": "ordinary-prose-stub",
+      "category": "ordinary_prose",
+      "audio": "private-audio/ordinary-prose-16k-mono.wav",
+      "reference": "references/ordinary-prose.txt",
+      "sample_rate_hz": 16000,
+      "channels": 1,
+      "sample_format": "f32",
+      "technical_tokens": [],
+      "path_tokens": [],
+      "optional": true,
+      "notes": "Placeholder for a real-mic or synthesized ordinary-prose clip. Drop WAV under private-audio/ before enabling in a full run."
+    },
+    {
+      "id": "live-asr-m0-pointer",
+      "category": "technical_prose",
+      "audio": "../voice-m0-fluidaudio/Fixtures/technical-dictation-16k-mono.wav",
+      "reference": "references/technical-dictation.txt",
+      "sample_rate_hz": 16000,
+      "channels": 1,
+      "sample_format": "f32",
+      "technical_tokens": ["AsrManager"],
+      "path_tokens": ["/Users/will/Developer/lattice"],
+      "related_test": "crates/lattice-voice-macos/tests/live_asr.rs",
+      "notes": "Same audio used by lattice-voice-macos live-asr integration test (see crates/lattice-voice-macos/tests/LIVE_RESULTS.md)."
+    }
+  ],
+  "categories": [
+    "ordinary_prose",
+    "technical_prose",
+    "camelcase_snake",
+    "absolute_relative_paths",
+    "urls_emails",
+    "rust_typescript_sql_shell",
+    "slash_commands",
+    "punctuation_words",
+    "long_dictation",
+    "corrections_restarts",
+    "background_noise",
+    "builtin_mac_mic",
+    "airpods_bluetooth",
+    "first_word_clipping",
+    "silence_endpoint"
+  ]
+}
