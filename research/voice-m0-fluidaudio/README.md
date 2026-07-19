@@ -1,7 +1,7 @@
 # Voice M0 — FluidAudio research spike
 
 Standalone SwiftPM executable that pins [FluidAudio](https://github.com/FluidInference/FluidAudio)
-and measures Parakeet **EOU streaming** plus **TDT v2 offline** re-decode on one spoken-English fixture.
+and measures Parakeet ASR paths on one spoken-English fixture.
 
 This package is intentionally outside Lattice’s Cargo/Tauri build graph.
 
@@ -41,21 +41,30 @@ run_swift() {
 }
 
 run_swift build -c release
+
+# M0 baseline: EOU streaming + TDT v2 offline (default)
 run_swift run -c release voice-m0-fluidaudio
+# or: run_swift run -c release voice-m0-fluidaudio --mode eou-tdt
+
+# Task U: Parakeet Unified streaming (320ms) + optional offline Unified
+run_swift run -c release voice-m0-fluidaudio --mode unified
 ```
 
-Models land under `.cache/Models/` (~890 MB after first download; gitignored).
-Do not commit them. First run is slow (download + Core ML compile); warm loads
-are sub-second to low hundreds of ms — see RESULTS.md.
+Models land under `.cache/Models/` (gitignored). Do not commit them.
+First run is slow (download + Core ML compile); warm loads are sub-second to
+low hundreds of ms — see RESULTS.md / RESULTS-unified.md.
 
 ## What it measures
 
-| Path | API | Model ID |
-|------|-----|----------|
-| Streaming | `StreamingEouAsrManager` | `FluidInference/parakeet-realtime-eou-120m-coreml` (160ms) |
-| Offline | `AsrManager` + `AsrModels` `.v2` | `FluidInference/parakeet-tdt-0.6b-v2-coreml` |
+| Mode | Path | API | Model ID |
+|------|------|-----|----------|
+| `eou-tdt` (default) | Streaming | `StreamingEouAsrManager` | `FluidInference/parakeet-realtime-eou-120m-coreml` (160ms) |
+| `eou-tdt` | Offline | `AsrManager` + `AsrModels` `.v2` | `FluidInference/parakeet-tdt-0.6b-v2-coreml` |
+| `unified` | Streaming | `StreamingUnifiedAsrManager` | `FluidInference/parakeet-unified-en-0.6b-coreml` (`parakeet-unified-320ms`) |
+| `unified` | Offline (optional compare) | `UnifiedAsrManager` | same HF repo, offline 15s encoder |
 
-See [RESULTS.md](./RESULTS.md) for pins, timings, licenses, and research Q answers.
+Production path decision (Task U): [DECISION.md](./DECISION.md).
+Measurement details: [RESULTS.md](./RESULTS.md) (EOU+TDT), [RESULTS-unified.md](./RESULTS-unified.md) (Unified).
 
 ## Out of scope
 
