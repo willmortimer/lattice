@@ -1,0 +1,83 @@
+# Dracula — adopted terminal-theme standard (MIT, draculatheme.com).
+# Canonical background/current-line/comment scale with the purple accent;
+# the `terminal:` block carries Dracula's own ANSI spec verbatim.
+
+name: Dracula
+id: dracula
+appearance: dark
+
+palette:
+  bg: "#282a36"
+  bg_raise: "#343746"
+  current_line: "#44475a"
+  comment: "#6272a4"
+  fg: "#f8f8f2"
+  fg_soft: "#d5d7e0"
+  fg_muted: "#9ea1b9"
+  fg_faint: "#6b6f8c"
+  purple: "#bd93f9"
+  purple_bright: "#d6acff"
+  purple_deep: "#8b5fd6"
+  pink: "#ff79c6"
+  red: "#ff5555"
+  green: "#50fa7b"
+  yellow: "#f1fa8c"
+  cyan: "#8be9fd"
+  ansi_black: "#21222c"
+  ansi_bright_red: "#ff6e6e"
+  ansi_bright_green: "#69ff94"
+  ansi_bright_yellow: "#ffffa5"
+  ansi_bright_magenta: "#ff92df"
+  ansi_bright_cyan: "#a4ffff"
+  ansi_bright_white: "#ffffff"
+  ink: "#191a21"
+  on_accent: "#21222c"
+
+roles:
+  bg: $bg
+  bg_raise: $bg_raise
+  panel: $current_line
+  slate: $comment
+  text: $fg
+  text_soft: $fg_soft
+  muted: $fg_muted
+  faint: $fg_faint
+  accent: $purple
+  accent_bright: $purple_bright
+  accent_deep: $purple_deep
+  danger: $red
+  shadow: $ink
+
+terminal:
+  black: $ansi_black
+  red: $red
+  green: $green
+  yellow: $yellow
+  blue: $purple
+  magenta: $pink
+  cyan: $cyan
+  white: $fg
+  bright_black: $comment
+  bright_red: $ansi_bright_red
+  bright_green: $ansi_bright_green
+  bright_yellow: $ansi_bright_yellow
+  bright_blue: $purple_bright
+  bright_magenta: $ansi_bright_magenta
+  bright_cyan: $ansi_bright_cyan
+  bright_white: $ansi_bright_white
+  cursor: $fg
+  cursor_text: $bg
+  selection: $current_line
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 9px
+  radius_sm: 6px
+  radius_lg: 14px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px

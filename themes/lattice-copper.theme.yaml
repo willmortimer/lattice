@@ -1,0 +1,49 @@
+# Lattice Copper — dark theme, burnished browns with a copper accent.
+
+name: Lattice Copper
+id: lattice-copper
+appearance: dark
+
+palette:
+  ground: "#100d0b"
+  ground_raise: "#171310"
+  panel: "#1f1a15"
+  slate: "#b3a494"
+  text: "#f5efe8"
+  text_soft: "#d7cdc0"
+  muted: "#a2968a"
+  faint: "#6f665c"
+  accent: "#e08d49"
+  accent_bright: "#ffc08a"
+  accent_deep: "#b0661f"
+  danger: "#ff8f8f"
+  ink_shadow: "#000000"
+  on_accent: "#241203"
+
+roles:
+  bg: $ground
+  bg_raise: $ground_raise
+  panel: $panel
+  slate: $slate
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $accent
+  accent_bright: $accent_bright
+  accent_deep: $accent_deep
+  danger: $danger
+  shadow: $ink_shadow
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 9px
+  radius_sm: 6px
+  radius_lg: 14px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px

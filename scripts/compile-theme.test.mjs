@@ -32,6 +32,76 @@ test("default Lattice Slate theme compiles", () => {
   assert.match(ts, /export const AMBER = LT\.accent;/);
 });
 
+test("terminal-standard themes compile with --lt-term-* vars", () => {
+  const r = spawnSync(
+    process.execPath,
+    [COMPILE, join(ROOT, "themes/catppuccin-mocha.theme.yaml")],
+    { cwd: ROOT, encoding: "utf8" },
+  );
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const css = readFileSync(join(ROOT, "apps/desktop/src/theme-tokens.css"), "utf8");
+  assert.match(css, /--lt-term-green: #a6e3a1;/);
+  assert.match(css, /--lt-term-bright-black: #585b70;/);
+  assert.match(css, /--lt-term-cursor: #f5e0dc;/);
+
+  // Restore the shipped default tokens.
+  const restore = spawnSync(process.execPath, [COMPILE], { cwd: ROOT, encoding: "utf8" });
+  assert.equal(restore.status, 0, restore.stderr || restore.stdout);
+});
+
+test("rejects terminal blocks missing ANSI slots", () => {
+  const dir = mkdtempSync(join(tmpdir(), "lt-theme-"));
+  try {
+    const partial = join(dir, "partial.theme.yaml");
+    writeFileSync(
+      partial,
+      `
+name: Partial
+id: partial
+appearance: dark
+palette:
+  ground: "#000000"
+roles:
+  bg: $ground
+  bg_raise: "#111"
+  panel: "#222"
+  slate: "#333"
+  text: "#fff"
+  text_soft: "#eee"
+  muted: "#ccc"
+  faint: "#999"
+  accent: "#f00"
+  accent_bright: "#f88"
+  accent_deep: "#a00"
+  danger: "#f66"
+  shadow: "#000"
+terminal:
+  black: "#000"
+  red: "#f00"
+fonts:
+  display: Serif
+  ui: Sans
+  mono: Mono
+shape:
+  radius: 9px
+  radius_sm: 6px
+  radius_lg: 14px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px
+`,
+    );
+    const r = spawnSync(process.execPath, [COMPILE, partial], {
+      cwd: ROOT,
+      encoding: "utf8",
+    });
+    assert.notEqual(r.status, 0);
+    assert.match(r.stderr + r.stdout, /terminal missing required key/i);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("rejects unknown palette refs", () => {
   const dir = mkdtempSync(join(tmpdir(), "lt-theme-"));
   try {

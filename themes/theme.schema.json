@@ -22,6 +22,29 @@
       "minProperties": 1,
       "additionalProperties": { "type": "string", "minLength": 1 }
     },
+    "terminal": {
+      "type": "object",
+      "description": "Optional ANSI terminal palette ($paletteKey refs or literals). All 16 ANSI slots are required when present; cursor, cursor_text, and selection are optional.",
+      "required": [
+        "black",
+        "red",
+        "green",
+        "yellow",
+        "blue",
+        "magenta",
+        "cyan",
+        "white",
+        "bright_black",
+        "bright_red",
+        "bright_green",
+        "bright_yellow",
+        "bright_blue",
+        "bright_magenta",
+        "bright_cyan",
+        "bright_white"
+      ],
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    },
     "fonts": {
       "type": "object",
       "additionalProperties": false,

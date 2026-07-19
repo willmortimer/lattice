@@ -1,0 +1,49 @@
+# Lattice Rosewood — dark theme, warm plum-brown ground with a rose accent.
+
+name: Lattice Rosewood
+id: lattice-rosewood
+appearance: dark
+
+palette:
+  ground: "#140b10"
+  ground_raise: "#1c1017"
+  panel: "#26161f"
+  slate: "#bb98a8"
+  text: "#f8ecf1"
+  text_soft: "#dcc4ce"
+  muted: "#a68a97"
+  faint: "#745e68"
+  accent: "#f26d8f"
+  accent_bright: "#ffa8bd"
+  accent_deep: "#c04165"
+  danger: "#ff9a6b"
+  ink_shadow: "#000000"
+  on_accent: "#2b0713"
+
+roles:
+  bg: $ground
+  bg_raise: $ground_raise
+  panel: $panel
+  slate: $slate
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $accent
+  accent_bright: $accent_bright
+  accent_deep: $accent_deep
+  danger: $danger
+  shadow: $ink_shadow
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 9px
+  radius_sm: 6px
+  radius_lg: 14px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px

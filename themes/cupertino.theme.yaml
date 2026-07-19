@@ -1,0 +1,50 @@
+# Cupertino — light theme in the macOS idiom: neutral grays, system blue,
+# SF-first font stacks, and slightly rounder corners.
+
+name: Cupertino
+id: cupertino
+appearance: light
+
+palette:
+  ground: "#f5f5f7"
+  ground_raise: "#ebebf0"
+  panel: "#ffffff"
+  slate: "#6e6e73"
+  text: "#1d1d1f"
+  text_soft: "#48484a"
+  muted: "#86868b"
+  faint: "#aeaeb2"
+  accent: "#0071e3"
+  accent_bright: "#0058b0"
+  accent_deep: "#003e85"
+  danger: "#d70015"
+  ink_shadow: "#1d1d1f"
+  on_accent: "#ffffff"
+
+roles:
+  bg: $ground
+  bg_raise: $ground_raise
+  panel: $panel
+  slate: $slate
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $accent
+  accent_bright: $accent_bright
+  accent_deep: $accent_deep
+  danger: $danger
+  shadow: $ink_shadow
+
+fonts:
+  display: '-apple-system, "SF Pro Display", "Helvetica Neue", system-ui, sans-serif'
+  ui: '-apple-system, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif'
+  mono: '"SF Mono", ui-monospace, Menlo, "JetBrains Mono", monospace'
+
+shape:
+  radius: 10px
+  radius_sm: 7px
+  radius_lg: 16px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px

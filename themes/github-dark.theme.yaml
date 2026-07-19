@@ -1,0 +1,88 @@
+# GitHub Dark — adopted terminal-theme standard (MIT, primer.style).
+# Primer dark scale with the GitHub blue accent; the `terminal:` block carries
+# GitHub's dark ANSI palette verbatim.
+
+name: GitHub Dark
+id: github-dark
+appearance: dark
+
+palette:
+  canvas: "#0d1117"
+  canvas_raise: "#161b22"
+  canvas_panel: "#21262d"
+  gray: "#8b949e"
+  fg: "#e6edf3"
+  fg_soft: "#c9d1d9"
+  fg_muted: "#848d97"
+  fg_faint: "#6e7681"
+  blue: "#58a6ff"
+  blue_bright: "#79c0ff"
+  blue_deep: "#1f6feb"
+  red: "#f85149"
+  ansi_black: "#484f58"
+  ansi_red: "#ff7b72"
+  ansi_green: "#3fb950"
+  ansi_yellow: "#d29922"
+  ansi_blue: "#58a6ff"
+  ansi_magenta: "#bc8cff"
+  ansi_cyan: "#39c5cf"
+  ansi_white: "#b1bac4"
+  ansi_bright_black: "#6e7681"
+  ansi_bright_red: "#ffa198"
+  ansi_bright_green: "#56d364"
+  ansi_bright_yellow: "#e3b341"
+  ansi_bright_blue: "#79c0ff"
+  ansi_bright_magenta: "#d2a8ff"
+  ansi_bright_cyan: "#56d4dd"
+  ansi_bright_white: "#ffffff"
+  ink: "#010409"
+  on_accent: "#05192d"
+
+roles:
+  bg: $canvas
+  bg_raise: $canvas_raise
+  panel: $canvas_panel
+  slate: $gray
+  text: $fg
+  text_soft: $fg_soft
+  muted: $fg_muted
+  faint: $fg_faint
+  accent: $blue
+  accent_bright: $blue_bright
+  accent_deep: $blue_deep
+  danger: $red
+  shadow: $ink
+
+terminal:
+  black: $ansi_black
+  red: $ansi_red
+  green: $ansi_green
+  yellow: $ansi_yellow
+  blue: $ansi_blue
+  magenta: $ansi_magenta
+  cyan: $ansi_cyan
+  white: $ansi_white
+  bright_black: $ansi_bright_black
+  bright_red: $ansi_bright_red
+  bright_green: $ansi_bright_green
+  bright_yellow: $ansi_bright_yellow
+  bright_blue: $ansi_bright_blue
+  bright_magenta: $ansi_bright_magenta
+  bright_cyan: $ansi_bright_cyan
+  bright_white: $ansi_bright_white
+  cursor: $blue
+  cursor_text: $canvas
+  selection: "#388bfd66"
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 6px
+  radius_sm: 4px
+  radius_lg: 12px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px

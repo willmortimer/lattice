@@ -26,6 +26,11 @@ pub struct ThemeDocument {
     pub roles: BTreeMap<String, String>,
     pub fonts: ThemeFonts,
     pub shape: ThemeShape,
+    /// Optional ANSI terminal palette (adoption path for terminal theme
+    /// standards like Catppuccin/Nord). When present, all 16 ANSI slots are
+    /// required; `cursor`, `cursor_text`, and `selection` are optional.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub terminal: Option<BTreeMap<String, String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -44,6 +49,26 @@ pub struct ThemeShape {
     pub titlebar: String,
     pub max_width: String,
 }
+
+/// ANSI slots a `terminal:` block must provide when present.
+pub const TERMINAL_ANSI_KEYS: &[&str] = &[
+    "black",
+    "red",
+    "green",
+    "yellow",
+    "blue",
+    "magenta",
+    "cyan",
+    "white",
+    "bright_black",
+    "bright_red",
+    "bright_green",
+    "bright_yellow",
+    "bright_blue",
+    "bright_magenta",
+    "bright_cyan",
+    "bright_white",
+];
 
 const REQUIRED_ROLES: &[&str] = &[
     "bg",
@@ -102,6 +127,19 @@ impl ThemeDocument {
         for (role, value) in &self.roles {
             self.resolve_ref(path, role, value)?;
         }
+        if let Some(terminal) = &self.terminal {
+            for key in TERMINAL_ANSI_KEYS {
+                if !terminal.contains_key(*key) {
+                    return Err(Error::invalid(
+                        path,
+                        format!("terminal missing required ANSI key: {key}"),
+                    ));
+                }
+            }
+            for (key, value) in terminal {
+                self.resolve_ref(path, &format!("terminal.{key}"), value)?;
+            }
+        }
         Ok(())
     }
 
@@ -131,6 +169,21 @@ impl ThemeDocument {
             }
         }
         Ok(out)
+    }
+
+    /// Resolved terminal palette (refs expanded), if the theme declares one.
+    pub fn resolved_terminal(&self, path: &Path) -> Result<Option<BTreeMap<String, String>>> {
+        let Some(terminal) = &self.terminal else {
+            return Ok(None);
+        };
+        let mut out = BTreeMap::new();
+        for (key, value) in terminal {
+            out.insert(
+                key.clone(),
+                self.resolve_ref(path, &format!("terminal.{key}"), value)?,
+            );
+        }
+        Ok(Some(out))
     }
 }
 

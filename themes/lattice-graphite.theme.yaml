@@ -1,0 +1,49 @@
+# Lattice Graphite — dark theme, neutral graphite grays with a chartreuse accent.
+
+name: Lattice Graphite
+id: lattice-graphite
+appearance: dark
+
+palette:
+  ground: "#0c0d0f"
+  ground_raise: "#121417"
+  panel: "#191c20"
+  slate: "#9aa4ae"
+  text: "#eef1f4"
+  text_soft: "#c6ccd2"
+  muted: "#8c959e"
+  faint: "#5e666e"
+  accent: "#bfe34d"
+  accent_bright: "#dcf28f"
+  accent_deep: "#8fb61e"
+  danger: "#ff8d8d"
+  ink_shadow: "#000000"
+  on_accent: "#1a2003"
+
+roles:
+  bg: $ground
+  bg_raise: $ground_raise
+  panel: $panel
+  slate: $slate
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $accent
+  accent_bright: $accent_bright
+  accent_deep: $accent_deep
+  danger: $danger
+  shadow: $ink_shadow
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 9px
+  radius_sm: 6px
+  radius_lg: 14px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px

@@ -22,7 +22,7 @@ pub use discover::{
     check_theme_file, discover_themes, load_theme_by_id, theme_dirs, ThemeDiagnostic, ThemeSource,
     ThemeSummary,
 };
-pub use document::{Appearance, ThemeDocument, THEME_FILE_SUFFIX};
+pub use document::{Appearance, ThemeDocument, TERMINAL_ANSI_KEYS, THEME_FILE_SUFFIX};
 pub use error::Error;
 pub use flatten::{apply_accent_override, flatten_theme};
 pub use override_file::{

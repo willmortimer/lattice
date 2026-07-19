@@ -1,0 +1,49 @@
+# Lattice Orchid — light theme, soft lavender whites with a violet accent.
+
+name: Lattice Orchid
+id: lattice-orchid
+appearance: light
+
+palette:
+  ground: "#f7f4fb"
+  ground_raise: "#efeaf7"
+  panel: "#ffffff"
+  slate: "#756b8c"
+  text: "#211a30"
+  text_soft: "#473d5c"
+  muted: "#6f6585"
+  faint: "#948bab"
+  accent: "#7a3ff2"
+  accent_bright: "#5f28cc"
+  accent_deep: "#4a1da6"
+  danger: "#c22f52"
+  ink_shadow: "#0a0d13"
+  on_accent: "#f7f2ff"
+
+roles:
+  bg: $ground
+  bg_raise: $ground_raise
+  panel: $panel
+  slate: $slate
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $accent
+  accent_bright: $accent_bright
+  accent_deep: $accent_deep
+  danger: $danger
+  shadow: $ink_shadow
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 9px
+  radius_sm: 6px
+  radius_lg: 14px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px
