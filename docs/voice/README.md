@@ -41,30 +41,26 @@ Explicitly excluded:
 ```text
 Microphone
     ↓
-Tauri/macOS capture layer
+Tauri/macOS native capture (client-owned mic; ADR 0008)
     ↓
-Float32 PCM @ 16 kHz mono
+Float32 PCM @ 16 kHz mono (packed binary chunks)
     ↓
-latticed voice session (or in-process prototype via crates/lattice-voice)
+latticed voice session (DaemonClient thin client — M4 preferred)
     ↓
-FluidAudio 0.15.5 (crates/lattice-voice-macos bridge)
+lattice-voice-host (FluidAudio / Parakeet; supervised like embed-host)
     ↓
-Parakeet Unified streaming decoder (parakeet-unified-en-0.6b-coreml, 320ms tier)
-    ↓
-Provisional transcript
-    ↓
-Editor composition/decorations
+Provisional transcript events → Tauri `voice-event` → editor decorations
 
 At utterance boundary:
-Buffered utterance
+FinishUtterance → FinalTranscript (daemon may normalize glossary)
     ↓
-StreamingUnifiedAsrManager.finish() (same loaded checkpoint)
-    ↓
-Transcript normalization
-    ↓
-Voice-command parsing
-    ↓
-Final editor transaction
+Editor transaction via semantic command core
+
+Transitional fallback (feature `voice-embedded` only):
+  if latticed/voice-host is unavailable, Tauri may prepare in-process
+  FluidAudio with an explicit "degraded embedded" log. Set
+  `LATTICE_VOICE_DAEMON=1` to require the daemon path (no FluidAudio
+  symbols when building with `--features voice` alone).
 ```
 
 Production provider stack (normative — see

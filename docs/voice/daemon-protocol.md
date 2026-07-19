@@ -100,6 +100,30 @@ During prototype, the same request/event types **may** be dispatched in-process
 without a socket. The daemon mode **must** remain a thin transport over the
 same message schema.
 
+Desktop (`apps/desktop/src-tauri/src/voice/`): preferred path is
+`DaemonClient` → latticed → voice-host. Native capture stays in Tauri; packed
+PCM uses `PushAudioChunk`. Events fan out as Tauri `voice-event`.
+
+### Manual smoke (daemon + fake host)
+
+```sh
+# Terminal 1 — voice-capable latticed
+cargo build -p lattice-voice-host --bin lattice-voice-host
+LATTICE_VOICE_FAKE=1 \
+  LATTICE_VOICE_HOST_BIN=./target/debug/lattice-voice-host \
+  LATTICE_AUTH_TOKEN=dev-token \
+  cargo run -p lattice-daemon -- --auth-token dev-token --api-port 0
+
+# Terminal 2 — desktop thin client (no FluidAudio link)
+LATTICE_VOICE_DAEMON=1 \
+  LATTICE_SOCKET="$HOME/Library/Application Support/Lattice/run/latticed.sock" \
+  LATTICE_AUTH_TOKEN=dev-token \
+  pnpm --filter @lattice/desktop tauri:dev:voice-daemon
+```
+
+Then use in-app push-to-talk: prepare → hold → release → confirm provisional
+and final text. Contract coverage: `cargo test -p lattice-daemon --test voice_contract`.
+
 ## Security implications
 
 See [privacy-security.md](./privacy-security.md). Untrusted local process

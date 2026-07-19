@@ -2445,14 +2445,17 @@ name = "lattice-desktop"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "dirs",
  "lattice-audio",
  "lattice-audio-macos",
+ "lattice-client",
  "lattice-commands",
  "lattice-core",
  "lattice-data",
  "lattice-handlers",
  "lattice-index",
  "lattice-profile",
+ "lattice-protocol",
  "lattice-runtime",
  "lattice-storage",
  "lattice-terminal",
@@ -2473,6 +2476,7 @@ dependencies = [
  "tauri-plugin-playwright",
  "tempfile",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

@@ -18,19 +18,28 @@ tauri-build = { version = "2", features = [] }
 # Enables the Playwright socket bridge for native WebView E2E / perf.
 # Keep off for normal runs; use `pnpm tauri:dev:e2e` or `--features e2e-testing`.
 e2e-testing = []
-# Local FluidAudio dictation (macOS arm64). Links the Swift bridge via
-# `lattice-voice-macos/link-bridge`.
+# Native capture + latticed thin client (preferred M4 path). Does not link
+# FluidAudio; set LATTICE_VOICE_DAEMON=1 to require daemon-only operation.
 voice = [
     "dep:lattice-voice",
-    "dep:lattice-voice-macos",
     "dep:lattice-audio",
     "dep:lattice-audio-macos",
+    "dep:lattice-client",
+    "dep:lattice-protocol",
     "dep:bytes",
-    "lattice-voice-macos/link-bridge",
+    "dep:dirs",
+    "dep:uuid",
     "lattice-audio-macos/link-bridge",
 ]
+# Transitional in-process FluidAudio fallback when latticed/voice-host is down.
+# Production daemon-only builds: `--features voice` (omit voice-embedded).
+voice-embedded = [
+    "voice",
+    "dep:lattice-voice-macos",
+    "lattice-voice-macos/link-bridge",
+]
 # Voice is opt-in so Linux CI and machines without the Swift dylib still build.
-# Dev: `cargo tauri dev --features voice` (or pnpm script).
+# Dev with fallback: `cargo tauri dev --features voice-embedded` (pnpm tauri:dev).
 default = []
 
 [dependencies]
@@ -57,12 +66,16 @@ lattice-terminal.workspace = true
 notify.workspace = true
 notify-debouncer-full.workspace = true
 tokio.workspace = true
-# Optional: enabled by the `voice` feature (macOS FluidAudio + native capture).
+# Optional: enabled by the `voice` / `voice-embedded` features.
 lattice-voice = { workspace = true, optional = true }
 lattice-voice-macos = { workspace = true, optional = true }
 lattice-audio = { workspace = true, optional = true }
 lattice-audio-macos = { workspace = true, optional = true }
+lattice-client = { workspace = true, optional = true }
+lattice-protocol = { workspace = true, optional = true }
 bytes = { workspace = true, optional = true }
+dirs = { workspace = true, optional = true }
+uuid = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = "3"

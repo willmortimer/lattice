@@ -28,6 +28,15 @@ ended or cancelled.
 
 Without these, voice RPCs return `voice_unavailable` (not `unimplemented`).
 
+Desktop thin client (`apps/desktop` voice module) connects with:
+
+| Variable | Purpose |
+| --- | --- |
+| `LATTICE_VOICE_DAEMON=1` | Require latticed path (no in-process FluidAudio fallback) |
+| `LATTICE_SOCKET` | Daemon UDS (default: `~/Library/Application Support/Lattice/run/latticed.sock`) |
+| `LATTICE_AUTH_TOKEN` | Handshake token (required when connecting to an existing socket) |
+| `LATTICE_LATTICED_BIN` | Optional path for on-demand `latticed` spawn |
+
 ```sh
 # Example: supervised fake host for local testing
 LATTICE_VOICE_FAKE=1 \

@@ -107,7 +107,9 @@ provisional text overlay; final transcript insertion; cancel; model setup UI.
 **Exit criterion:** A user can dictate into one document without unstable text
 entering document storage.
 
-**Notes:** Desktop build with `--features voice` (default `pnpm tauri:dev`).
+**Notes:** Desktop build with `--features voice-embedded` (default
+`pnpm tauri:dev`) includes transitional in-process FluidAudio. Daemon-only:
+`pnpm tauri:dev:voice-daemon` / `--features voice` + `LATTICE_VOICE_DAEMON=1`.
 M2 capture was WebView `getUserMedia` → Float32 @ 16 kHz →
 `FluidAudioSpeechProvider`. Provisional text uses editor decorations only.
 
@@ -124,7 +126,9 @@ operations.
 
 ## Milestone 4: latticed service
 
-**Status:** **In progress** (voice-d5 sprint / Phase D5).
+**Status:** **In progress** (voice-d5 sprint / Phase D5) — desktop thin client
+landed: Tauri prefers `DaemonClient` + native capture; optional
+`voice-embedded` FluidAudio fallback for transition.
 
 **Deliver:** Local IPC; versioned protocol; model manager; shared model
 residency; client authentication; session ownership; daemon restart recovery;
@@ -132,6 +136,8 @@ capability negotiation; `lattice-voice-host` supervision.
 
 **Exit criterion:** The Tauri app no longer owns model state directly
 ([ADR 0043](../decisions/0043-voice-ownership-in-latticed.md)).
+Build with `--features voice` (daemon path only) or set `LATTICE_VOICE_DAEMON=1`
+so production does not require FluidAudio symbols in the UI process.
 
 ## Milestone 5: Quick Note
 
