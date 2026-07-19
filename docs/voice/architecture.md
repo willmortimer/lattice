@@ -137,6 +137,13 @@ Advantages:
 3. Move model ownership into latticed before shipping global Quick Note
    (roadmap M4 before M5).
 
+**Current ownership (D5 thin client):** Tauri owns native capture only and
+streams PCM through `lattice_client::DaemonClient`. Inference / session policy
+live in `latticed` + `lattice-voice-host`. The optional `voice-embedded` Cargo
+feature keeps in-process FluidAudio as a **degraded** transition path when the
+daemon is unavailable; production builds use `--features voice` (no FluidAudio
+link) with `LATTICE_VOICE_DAEMON=1` when forcing daemon-only.
+
 ## Provider abstraction
 
 Shared Rust interface (illustrative; serialization library not locked):
