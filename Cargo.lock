@@ -2374,6 +2374,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-daemon"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "clap",
+ "dirs",
+ "lattice-client",
+ "lattice-core",
+ "lattice-protocol",
+ "lattice-runtime",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "lattice-data"
 version = "0.1.0"
 dependencies = [

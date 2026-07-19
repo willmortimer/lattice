@@ -1,0 +1,267 @@
+//! Contract tests: DaemonClient against real latticed vs EmbeddedClient.
+
+use std::fs;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::time::Duration;
+
+use lattice_client::{
+    request, response, DaemonClient, EmbeddedClient, HealthRequest, LatticeClient,
+    OpenWorkspaceRequest, PingRequest, Request, SearchRequest, SearchResponse, PROTOCOL_VERSION,
+};
+use lattice_core::Workspace;
+use lattice_daemon::{
+    lease_path, serve_with_shutdown, spawn_latticed, DaemonConfig, SpawnOptions,
+    WorkspaceLeaseFile,
+};
+use lattice_runtime::LatticeRuntime;
+use tempfile::TempDir;
+use tokio::sync::oneshot;
+
+struct ServerGuard {
+    shutdown: Option<oneshot::Sender<()>>,
+    join: Option<tokio::task::JoinHandle<lattice_daemon::Result<()>>>,
+    _dir: TempDir,
+    socket_path: PathBuf,
+    auth_token: String,
+}
+
+impl Drop for ServerGuard {
+    fn drop(&mut self) {
+        if let Some(tx) = self.shutdown.take() {
+            let _ = tx.send(());
+        }
+        if let Some(join) = self.join.take() {
+            join.abort();
+        }
+    }
+}
+
+async fn spawn_in_process_daemon(instance_id: &str) -> (ServerGuard, Arc<LatticeRuntime>) {
+    let dir = TempDir::new().expect("tempdir");
+    let socket_path = dir.path().join("latticed.sock");
+    let auth_token = "contract-token".to_string();
+    let config = DaemonConfig::new(&socket_path, auth_token.clone())
+        .with_instance_id(instance_id)
+        .with_process_start(1_234_567);
+    let runtime = Arc::new(LatticeRuntime::new());
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let join = tokio::spawn(serve_with_shutdown(
+        config,
+        Arc::clone(&runtime),
+        shutdown_rx,
+    ));
+
+    // Wait until the socket exists.
+    for _ in 0..100 {
+        if socket_path.exists() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(socket_path.exists(), "daemon socket should appear");
+
+    (
+        ServerGuard {
+            shutdown: Some(shutdown_tx),
+            join: Some(join),
+            _dir: dir,
+            socket_path,
+            auth_token,
+        },
+        runtime,
+    )
+}
+
+fn health_request() -> Request {
+    Request {
+        deadline_unix_ms: None,
+        idempotency_key: None,
+        body: Some(request::Body::Health(HealthRequest {})),
+    }
+}
+
+fn ping_request(nonce: &str) -> Request {
+    Request {
+        deadline_unix_ms: None,
+        idempotency_key: Some("idem-ping".into()),
+        body: Some(request::Body::Ping(PingRequest {
+            nonce: nonce.into(),
+        })),
+    }
+}
+
+fn open_request(path: &str) -> Request {
+    Request {
+        deadline_unix_ms: None,
+        idempotency_key: None,
+        body: Some(request::Body::OpenWorkspace(OpenWorkspaceRequest {
+            path: path.into(),
+        })),
+    }
+}
+
+fn search_request(workspace_id: &str, query: &str) -> Request {
+    Request {
+        deadline_unix_ms: None,
+        idempotency_key: None,
+        body: Some(request::Body::Search(SearchRequest {
+            workspace_id: workspace_id.into(),
+            query: query.into(),
+        })),
+    }
+}
+
+fn init_fixture() -> TempDir {
+    let dir = TempDir::new().expect("fixture");
+    Workspace::init(dir.path(), "Daemon Contract").expect("init");
+    fs::write(
+        dir.path().join("Notes.md"),
+        "# Notes\n\nContract search target phrase.\n",
+    )
+    .expect("write");
+    dir
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn health_and_ping_over_socket() {
+    let (guard, _) = spawn_in_process_daemon("daemon-health").await;
+    let client = DaemonClient::connect(&guard.socket_path, &guard.auth_token)
+        .await
+        .expect("connect");
+    assert_eq!(client.instance_id(), "daemon-health");
+
+    let health = client.request(health_request()).await.expect("health");
+    match health.body {
+        Some(response::Body::Health(h)) => {
+            assert_eq!(h.status, "ok");
+            assert_eq!(h.protocol_version, PROTOCOL_VERSION);
+            assert_eq!(h.instance_id, "daemon-health");
+        }
+        other => panic!("unexpected health: {other:?}"),
+    }
+
+    let ping = client
+        .request(ping_request("nonce-1"))
+        .await
+        .expect("ping");
+    match ping.body {
+        Some(response::Body::Ping(p)) => assert_eq!(p.nonce, "nonce-1"),
+        other => panic!("unexpected ping: {other:?}"),
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn open_writes_lease_and_search_matches_embedded() {
+    let fixture = init_fixture();
+    let path = fixture.path().to_string_lossy().into_owned();
+    let instance_id = "parity-instance";
+
+    let (guard, daemon_runtime) = spawn_in_process_daemon(instance_id).await;
+    let daemon = DaemonClient::connect(&guard.socket_path, &guard.auth_token)
+        .await
+        .expect("daemon connect");
+
+    let embedded_runtime = Arc::new(LatticeRuntime::new());
+    let embedded = EmbeddedClient::new(instance_id).with_runtime(Arc::clone(&embedded_runtime));
+
+    let daemon_open = daemon
+        .request(open_request(&path))
+        .await
+        .expect("daemon open");
+    let embedded_open = embedded
+        .request(open_request(&path))
+        .await
+        .expect("embedded open");
+
+    let daemon_ws = match daemon_open.body {
+        Some(response::Body::OpenWorkspace(resp)) => {
+            let lease = resp.lease.expect("daemon lease");
+            assert_eq!(lease.owner, "latticed");
+            assert_eq!(lease.instance_id, instance_id);
+            assert_eq!(lease.protocol_version, PROTOCOL_VERSION);
+            assert_eq!(lease.process_start, 1_234_567);
+            assert!(!lease.socket.is_empty());
+            resp.workspace_id
+        }
+        other => panic!("unexpected daemon open: {other:?}"),
+    };
+    let embedded_ws = match embedded_open.body {
+        Some(response::Body::OpenWorkspace(resp)) => {
+            assert_eq!(resp.workspace_id, daemon_ws);
+            let lease = resp.lease.expect("embedded lease");
+            assert_eq!(lease.owner, "embedded");
+            resp.workspace_id
+        }
+        other => panic!("unexpected embedded open: {other:?}"),
+    };
+    assert_eq!(daemon_ws, embedded_ws);
+
+    let lease_raw = fs::read_to_string(lease_path(fixture.path())).expect("lease file");
+    let lease_file: WorkspaceLeaseFile =
+        serde_json::from_str(&lease_raw).expect("parse lease json");
+    assert_eq!(lease_file.owner, "latticed");
+    assert_eq!(lease_file.instance_id, instance_id);
+    assert_eq!(lease_file.schema_version, 1);
+    assert_eq!(lease_file.process_start, 1_234_567);
+    assert!(lease_raw.contains("\"schemaVersion\""));
+    assert!(lease_raw.contains("\"processStart\""));
+
+    assert_eq!(daemon_runtime.session_count(), 1);
+
+    let daemon_search = daemon
+        .request(search_request(&daemon_ws, "Contract"))
+        .await
+        .expect("daemon search");
+    let embedded_search = embedded
+        .request(search_request(&embedded_ws, "Contract"))
+        .await
+        .expect("embedded search");
+    assert!(matches!(
+        daemon_search.body,
+        Some(response::Body::Search(SearchResponse {}))
+    ));
+    assert_eq!(daemon_search, embedded_search);
+
+    // Warm index: second search must not force another rebuild on the daemon session.
+    let session = daemon_runtime.get_session_by_id(&daemon_ws).expect("session");
+    let rebuilds = session.index_rebuild_count();
+    let _ = daemon
+        .request(search_request(&daemon_ws, "Contract"))
+        .await
+        .expect("daemon search again");
+    assert_eq!(session.index_rebuild_count(), rebuilds);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn rejects_bad_auth_token() {
+    let (guard, _) = spawn_in_process_daemon("auth-id").await;
+    match DaemonClient::connect(&guard.socket_path, "wrong-token").await {
+        Err(lattice_client::ClientError::HandshakeRejected { .. }) => {}
+        Ok(_) => panic!("must reject bad auth token"),
+        Err(other) => panic!("expected HandshakeRejected, got {other:?}"),
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn spawn_helper_launches_binary() {
+    let dir = TempDir::new().expect("tempdir");
+    let socket = dir.path().join("spawned.sock");
+    let opts = SpawnOptions::new(env!("CARGO_BIN_EXE_latticed"), &socket, "spawn-token")
+        .with_instance_id("spawned-id")
+        .with_ready_timeout(Duration::from_secs(10));
+
+    let mut spawned = spawn_latticed(opts).await.expect("spawn latticed");
+    assert_eq!(spawned.instance_id, "spawned-id");
+
+    let client = DaemonClient::connect(&spawned.socket_path, &spawned.auth_token)
+        .await
+        .expect("connect spawned");
+    let health = client.request(health_request()).await.expect("health");
+    match health.body {
+        Some(response::Body::Health(h)) => assert_eq!(h.instance_id, "spawned-id"),
+        other => panic!("unexpected: {other:?}"),
+    }
+
+    spawned.kill();
+}
