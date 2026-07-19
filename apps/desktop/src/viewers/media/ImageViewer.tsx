@@ -36,7 +36,10 @@ function loadDemoSvgAsset(path: string): ImageAsset {
 }
 
 export function ImageViewer({ context, resource }: { context: ResourceRendererContext; resource: Resource }) {
+  const isSvg = resource.path.toLowerCase().endsWith(".svg");
   const [asset, setAsset] = useState<ImageAsset | null>(null);
+  const [sourceText, setSourceText] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"preview" | "source">("preview");
   const [error, setError] = useState<string | null>(null);
   const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
   const [mode, setMode] = useState<"fit" | "actual">("fit");
@@ -50,17 +53,19 @@ export function ImageViewer({ context, resource }: { context: ResourceRendererCo
     const controller = new AbortController();
     let loaded: ImageAsset | null = null;
     setAsset(null);
+    setSourceText(null);
+    setViewMode("preview");
     setError(null);
     setNaturalSize(null);
     setPan({ x: 0, y: 0 });
     setMode("fit");
     const load = context.workspaceRoot
       ? loadImageAsset({ root: context.workspaceRoot, path: resource.path }, controller.signal)
-      : inBrowser && resource.path.toLowerCase().endsWith(".svg")
+      : inBrowser && isSvg
         ? Promise.resolve(loadDemoSvgAsset(resource.path))
         : Promise.reject(new Error("Native media reads are unavailable in browser preview."));
     void load
-      .then((next) => {
+      .then(async (next) => {
         if (controller.signal.aborted) {
           next.lease.revoke();
           return;
@@ -68,6 +73,22 @@ export function ImageViewer({ context, resource }: { context: ResourceRendererCo
         loaded = next;
         setAsset(next);
         if (next.dimensions?.width && next.dimensions.height) setNaturalSize(next.dimensions);
+        if (isSvg) {
+          try {
+            if (inBrowser) {
+              setSourceText(demoTextFiles[resource.path] ?? null);
+            } else if (context.workspaceRoot) {
+              const text = new TextDecoder().decode(
+                await (
+                  await fetch(next.lease.url)
+                ).arrayBuffer().then((buffer) => new Uint8Array(buffer)),
+              );
+              if (!controller.signal.aborted) setSourceText(text);
+            }
+          } catch {
+            // Preview still works without source text.
+          }
+        }
       })
       .catch((nextError: unknown) => {
         if (!controller.signal.aborted) setError(errorMessage(nextError));
@@ -76,7 +97,7 @@ export function ImageViewer({ context, resource }: { context: ResourceRendererCo
       controller.abort();
       loaded?.lease.revoke();
     };
-  }, [context.workspaceRoot, resource.path]);
+  }, [context.workspaceRoot, isSvg, resource.path]);
 
   const fitZoom = useMemo(() => {
     if (!naturalSize || stageSize.width <= 0 || stageSize.height <= 0) return 1;
@@ -150,18 +171,44 @@ export function ImageViewer({ context, resource }: { context: ResourceRendererCo
   return (
     <div className="media-viewer image-viewer">
       <div className="media-toolbar" role="toolbar" aria-label="Image viewer controls">
-        <div className="media-toolbar-group">
-          <button className={`media-button${mode === "fit" ? " media-button-active" : ""}`} type="button" onClick={() => setZoomMode("fit")}>Fit</button>
-          <button className={`media-button${mode === "actual" && zoom === 1 ? " media-button-active" : ""}`} type="button" onClick={() => setZoomMode("actual")}>Actual</button>
-          <button className="media-button" type="button" onClick={() => adjustZoom(0.8)} aria-label="Zoom out">−</button>
-          <span className="media-toolbar-status" aria-live="polite">{Math.round(effectiveZoom * 100)}%</span>
-          <button className="media-button" type="button" onClick={() => adjustZoom(1.25)} aria-label="Zoom in">+</button>
-        </div>
+        {isSvg ? (
+          <div className="media-toolbar-group" role="group" aria-label="SVG view mode">
+            <button
+              className={`media-button${viewMode === "preview" ? " media-button-active" : ""}`}
+              type="button"
+              onClick={() => setViewMode("preview")}
+            >
+              Preview
+            </button>
+            <button
+              className={`media-button${viewMode === "source" ? " media-button-active" : ""}`}
+              type="button"
+              onClick={() => setViewMode("source")}
+              disabled={!sourceText}
+            >
+              Source
+            </button>
+          </div>
+        ) : null}
+        {viewMode === "preview" ? (
+          <div className="media-toolbar-group">
+            <button className={`media-button${mode === "fit" ? " media-button-active" : ""}`} type="button" onClick={() => setZoomMode("fit")}>Fit</button>
+            <button className={`media-button${mode === "actual" && zoom === 1 ? " media-button-active" : ""}`} type="button" onClick={() => setZoomMode("actual")}>Actual</button>
+            <button className="media-button" type="button" onClick={() => adjustZoom(0.8)} aria-label="Zoom out">−</button>
+            <span className="media-toolbar-status" aria-live="polite">{Math.round(effectiveZoom * 100)}%</span>
+            <button className="media-button" type="button" onClick={() => adjustZoom(1.25)} aria-label="Zoom in">+</button>
+          </div>
+        ) : null}
         <span className="media-toolbar-spacer" />
         <span className="media-toolbar-status">
           {naturalSize ? `${naturalSize.width} × ${naturalSize.height}` : "Dimensions unavailable"} · {formatBytes(asset.encodedBytes)}
         </span>
       </div>
+      {viewMode === "source" && sourceText ? (
+        <pre className="image-svg-source" tabIndex={0} aria-label={`SVG source for ${resource.path}`}>
+          {sourceText}
+        </pre>
+      ) : (
       <div
         ref={stageRef}
         className="image-stage"
@@ -188,6 +235,7 @@ export function ImageViewer({ context, resource }: { context: ResourceRendererCo
         </div>
         <span className="image-hint">Drag to pan · wheel to zoom</span>
       </div>
+      )}
     </div>
   );
 }

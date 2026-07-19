@@ -163,7 +163,7 @@ export const demoSnapshot: WorkspaceSnapshot = {
     {
       "path": "Resources/mark.svg",
       "kind": "file",
-      "formatId": "file:text"
+      "formatId": "file:image"
     },
     {
       "path": "Resources/notes.txt",
@@ -4680,7 +4680,7 @@ export const demoTextFiles: Record<string, string> = {
   "Resources/example.ts": "export function greet(name: string): string {\n  return `Hello, ${name}`;\n}\n",
   "Resources/types.ts": "/** Shared types for demo Resources — not imported by the app. */\nexport type ContactStatus = \"Lead\" | \"Active\" | \"Nurture\" | \"Churned\" | \"Partner\";\n\nexport interface CrmContactSeed {\n  name: string;\n  email: string;\n  company: string;\n  due_date: string | null;\n  status: ContactStatus;\n  notes: string;\n}\n\nexport function formatDueLabel(isoDate: string | null): string {\n  if (!isoDate) return \"No date\";\n  return new Date(isoDate).toLocaleDateString(undefined, {\n    month: \"short\",\n    day: \"numeric\",\n    year: \"numeric\",\n  });\n}\n",
   "Resources/queries.sql": "-- Example read-only queries for CRM contacts (illustrative; run outside Lattice).\nSELECT name, email, company, status, due_date\nFROM contacts\nWHERE status = 'Active'\nORDER BY due_date ASC\nLIMIT 25;\n\nSELECT status, COUNT(*) AS count\nFROM contacts\nGROUP BY status\nORDER BY count DESC;\n\nSELECT company, COUNT(*) AS contacts\nFROM contacts\nWHERE company IS NOT NULL\nGROUP BY company\nHAVING contacts > 1;\n",
-  "Resources/mark.svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"32\" height=\"32\" viewBox=\"0 0 32 32\" role=\"img\" aria-label=\"Lattice mark\">\n  <rect width=\"32\" height=\"32\" fill=\"#1a1a1a\"/>\n  <path fill=\"#e8a87c\" d=\"M8 22 L16 8 L24 22 Z\"/>\n</svg>\n"
+  "Resources/mark.svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"256\" height=\"256\" viewBox=\"0 0 256 256\" fill=\"none\" role=\"img\" aria-label=\"Lattice mark\">\n  <!-- Axonometric unit-cell mark (same geometry as site/scripts/generate-mark.mjs). -->\n  <rect width=\"256\" height=\"256\" rx=\"28\" fill=\"#14120f\"/>\n  <g transform=\"translate(48 48) scale(5)\">\n    <g stroke=\"#f5a623\" stroke-linecap=\"round\">\n      <path d=\"M16 16L27.43 22.6M16 16L16 2.8M16 16L4.57 22.6\" stroke-width=\"0.98\" opacity=\"0.28\"/>\n      <path d=\"M21.72 6.1L10.28 12.7M10.28 6.1L21.72 12.7M27.43 16L16 22.6M21.72 25.9L21.72 12.7M10.28 25.9L10.28 12.7M4.57 16L16 22.6\" stroke-width=\"1.05\" opacity=\"0.45\"/>\n      <path d=\"M16 2.8L27.43 9.4M27.43 9.4L27.43 22.6M27.43 22.6L16 29.2M16 29.2L4.57 22.6M4.57 22.6L4.57 9.4M4.57 9.4L16 2.8\" stroke-width=\"1.4\" opacity=\"0.9\"/>\n      <path d=\"M16 16L27.43 9.4M16 16L4.57 9.4M16 16L16 29.2\" stroke-width=\"1.4\" opacity=\"0.95\"/>\n    </g>\n    <g fill=\"#ffce8a\">\n      <circle cx=\"16\" cy=\"2.8\" r=\"1.65\"/>\n      <circle cx=\"27.43\" cy=\"9.4\" r=\"1.65\"/>\n      <circle cx=\"27.43\" cy=\"22.6\" r=\"1.65\"/>\n      <circle cx=\"16\" cy=\"29.2\" r=\"1.65\"/>\n      <circle cx=\"4.57\" cy=\"22.6\" r=\"1.65\"/>\n      <circle cx=\"4.57\" cy=\"9.4\" r=\"1.65\"/>\n    </g>\n    <circle cx=\"16\" cy=\"16\" r=\"2.51\" fill=\"#f5a623\"/>\n  </g>\n</svg>\n"
 };
 
 export const demoNotebooks: Record<string, string> = {
