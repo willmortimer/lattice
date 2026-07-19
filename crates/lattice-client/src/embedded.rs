@@ -92,6 +92,7 @@ impl EmbeddedClient {
                 status: "ok".into(),
                 protocol_version: PROTOCOL_VERSION,
                 instance_id: self.instance_id.clone(),
+                backend: None,
             })),
         }
     }
