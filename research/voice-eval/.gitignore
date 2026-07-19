@@ -3,6 +3,8 @@
 .results/
 *.mlmodelc/
 *.mlpackage/
+scripts/__pycache__/
+*.pyc
 
 # Real microphone / private fixtures (never commit)
 private-audio/**
