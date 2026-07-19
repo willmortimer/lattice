@@ -189,10 +189,16 @@ pub struct SpeechCapabilities {
 }
 ```
 
-The initial macOS provider is FluidAudio + Parakeet Unified English Core ML
-([adr/0002](./adr/0002-fluid-audio-macos-provider.md)). Linux and Windows
-providers are future `SpeechProvider` implementations and are out of scope for
-the first release.
+The initial macOS provider is FluidAudio `0.15.5` with the M0-measured
+**EOU streaming + TDT v2 offline** pair
+([adr/0002](./adr/0002-fluid-audio-macos-provider.md),
+[RESULTS.md](../../research/voice-m0-fluidaudio/RESULTS.md)). Production may
+instead pin upstream **Unified** (`parakeet-unified-en-0.6b-coreml`); that path
+was not benchmarked in M0.
+
+Shared protocol types and the in-process `SpeechProvider` foundation live in
+`crates/lattice-voice`. Linux and Windows providers are future
+`SpeechProvider` implementations and are out of scope for the first release.
 
 ## Interfaces
 

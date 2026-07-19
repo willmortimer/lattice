@@ -113,22 +113,29 @@ The ADR directory records accepted decisions. Major accepted choices include:
 
 ### Voice dictation (macOS, local)
 
-Architecture is locked in [docs/voice/](voice/README.md). Research spikes must
-still resolve:
+Architecture is locked in [docs/voice/](voice/README.md). M0 research
+([research/voice-m0-fluidaudio/RESULTS.md](../research/voice-m0-fluidaudio/RESULTS.md))
+resolved:
 
-- Exact Parakeet Unified Core ML artifact and FluidAudio release pin.
-- Stability of partial-token / provisional rendering from the chosen model.
-- Whether one loaded model efficiently supports streaming and offline final decode.
-- Memory cost of retaining streaming and offline decoder state.
-- First-partial latency on the oldest supported M-series Mac.
-- Whether offline re-decode materially beats the final streaming hypothesis for technical prose.
-- FluidAudio callback scheduling vs Swift concurrency and Rust executors.
-- Core ML compilation reuse across application updates.
-- FluidAudio endpoint-detection surface; value of a separate VAD.
-- Pre-roll duration to avoid clipped speech.
-- UX when final text diverges significantly from provisional text.
-- Reliable Quick Note via main app background mode vs login-item helper.
-- Exact attributions and notices for the converted model artifact.
+- FluidAudio pin: **0.15.5** / `19600a485baa4998812e4654b70d2bab8f2c9949`.
+- Measured artifacts: streaming **EOU 120M 160ms**; offline **TDT v2** (not
+  Unified).
+- Partial-token stability for provisional UI (warm first partial **~405 ms** on M2).
+- Callback scheduling: background threads; Rust must hop before shared state.
+- Core ML cache reuse on warm load (**~681 ms / ~399 ms** vs cold **~98–110 s**).
+- Endpoint-detection API surface (`eouDebounceMs`, callbacks).
+- Attributions for M0 pins: Apache-2.0 + NVIDIA Open Model + CC-BY-4.0.
+- Sample format: **Float32 @ 16 kHz mono** for FluidAudio bridge.
+
+Still open:
+
+- **Unified vs EOU+TDT** production model pin (`parakeet-unified-en-0.6b-coreml`
+  not measured in M0).
+- **Apple dictation baseline** for technical prose (M0 did not compare).
+- **Glossary / vocabulary biasing** for CamelCase, paths, and technical tokens.
+- Memory cost of dual-model residency (Q4); oldest M-series latency (Q5).
+- Separate VAD value (Q10); pre-roll duration (Q11); final-vs-provisional UX (Q12).
+- Quick Note background reliability vs login-item helper (Q14).
 
 See [docs/voice/implementation-roadmap.md](voice/implementation-roadmap.md).
 
