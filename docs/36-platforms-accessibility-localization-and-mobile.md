@@ -128,7 +128,7 @@ The editor must respect:
 
 - IME composition;
 - dead keys;
-- dictation;
+- dictation ([docs/voice/](voice/README.md) for local macOS STT);
 - handwriting conversion;
 - right-to-left scripts;
 - platform clipboard conventions;

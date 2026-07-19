@@ -14,6 +14,11 @@ Before making architectural or product-surface changes, read:
 - `docs/29-roadmap.md`
 - `docs/38-design-review-addendum.md`
 
+For local voice dictation (FluidAudio / Parakeet, capture, editor provisional
+text, `latticed` protocol), read `docs/voice/README.md` and
+`docs/decisions/0040-local-voice-dictation-documentation.md` before changing
+boundaries.
+
 Use the ADRs in `docs/decisions/` for accepted decisions. New irreversible
 choices should receive an ADR rather than silently becoming implementation
 facts.
