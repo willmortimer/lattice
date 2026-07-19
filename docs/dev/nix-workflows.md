@@ -1,8 +1,8 @@
 # Nix workflows
 
 Everything automatable in this repo runs through the flake. This page is the
-complete inventory: setup, the dev shell, every task, and how the desktop /
-site / browser surfaces relate.
+complete inventory: setup, the dev shell, every app, nxr tasks, and how the
+desktop / site / browser surfaces relate.
 
 ## One-time setup
 
@@ -17,8 +17,7 @@ Without this, every `nix run`/`nix develop` invocation needs
 `--extra-experimental-features 'nix-command flakes'` prepended.
 
 Optional but recommended: [direnv](https://direnv.net). The repo's `.envrc`
-loads the dev shell automatically when you `cd` in. First use requires
-approval:
+loads the dev shell and, when present, a local `.env` (gitignored):
 
 ```sh
 direnv allow
@@ -29,6 +28,14 @@ direnv allow
 > does not — which is why the shell can load fine while `nix run` fails.
 > Enable flakes globally (above) and both work.
 
+Optional: install [nxr](https://github.com/willmortimer/nxr) on your user
+profile so `nxr` works outside `nix develop` (the flake also pins it and puts
+it on `PATH` inside the shell):
+
+```sh
+nix profile install .#nxr
+```
+
 ## The dev shell
 
 ```sh
@@ -36,19 +43,43 @@ nix develop        # or just cd in, with direnv
 ```
 
 Provides: rustc, cargo, rustfmt, clippy, rust-analyzer, node 22, pnpm,
-pkg-config (plus Tauri's GTK/WebKit stack on Linux). macOS app bundling
-additionally needs Xcode Command Line Tools (outside nix).
+pkg-config, **nxr** (plus Tauri's GTK/WebKit stack on Linux). macOS app
+bundling additionally needs Xcode Command Line Tools / Xcode (outside nix).
 
-## Tasks
+Session-local nxr completion is enabled via `nxr.shellIntegration` (no global
+dotfile writes). After `direnv allow`, `nxr` should tab-complete in zsh/bash
+inside the shell.
 
-Each task exists in two equivalent forms:
+## Runners
 
-- `nix run .#<task>` — from anywhere, no shell needed, brings its own toolchain
-- `lattice-<task>` — plain command available inside the dev shell
+Prefer **nxr** for day-to-day work. Every leaf is still a normal flake app, so
+`nix run` remains a first-class escape hatch.
+
+| Form | Example |
+| --- | --- |
+| nxr app | `nxr desktop-dev` |
+| nxr task DAG | `nxr task codegen -j 2` |
+| nix run | `nix run .#desktop-dev` |
+| legacy shell command | `lattice-desktop-dev` (inside `nix develop`) |
+
+```sh
+nxr list                 # apps + tasks
+nxr graph codegen        # mermaid/text/dot via --format
+nxr task validate -j 4   # parallel ready-set scheduling
+nxr task check           # monolithic CI gate (alias: nxr task ci)
+nxr desktop-install      # macOS local signed install (needs .env)
+```
+
+## Apps
+
+Each app exists in three equivalent forms:
+
+- `nxr <app>` / `nix run .#<app>` — from anywhere (nxr from profile or shell)
+- `lattice-<app>` — plain command inside the dev shell
 
 Run them from the repo root (they use relative paths).
 
-| Task | What it does |
+| App | What it does |
 | --- | --- |
 | `test` | `cargo test --workspace` |
 | `lint` | clippy with `-D warnings` + `rustfmt --check` |
@@ -65,20 +96,52 @@ Run them from the repo root (they use relative paths).
 | `desktop-perf-tauri` | Native WebView perf via `tauri-plugin-playwright` (see [perf-harness.md](./perf-harness.md)) |
 | `desktop` | Native window **without Vite** — reuses `apps/desktop/dist` if present, else builds once |
 | `desktop-build` | release binary, unbundled (`tauri build --no-bundle`) |
+| `desktop-ui-build` | Vite production build for `@lattice/desktop` only |
+| `desktop-install` | macOS: `tauri build --bundles app`, Apple Development codesign, install to `/Applications/Lattice.app` |
+| `ok` | no-op success (join node for nxr task DAGs) |
 
-CI should run exactly one **blocking** thing: `nix run .#check`. Browser perf
-runs separately as a non-blocking GitHub Action on `main`
-([`desktop-perf.yml`](../../.github/workflows/desktop-perf.yml)); see
-[perf-harness.md](./perf-harness.md). Tauri perf is not in CI.
+### Notable tasks (orchestration)
+
+Tasks coordinate apps; they do not replace them. Useful graphs:
+
+| Task | What it runs |
+| --- | --- |
+| `codegen` (alias `compile`) | `compile-theme` ∥ `compile-templates` |
+| `validate` | `lint` ∥ `test` ∥ `desktop-ui-build` ∥ `site-build` |
+| `check` (alias `ci`) | monolithic `apps.check` (what CI should keep calling) |
+| `desktop-install` (alias `install`) | local signed macOS install |
+
+CI should run exactly one **blocking** thing: `nix run .#check` (or
+`nxr task check`). Browser perf runs separately as a non-blocking GitHub
+Action on `main` ([`desktop-perf.yml`](../../.github/workflows/desktop-perf.yml));
+see [perf-harness.md](./perf-harness.md). Tauri perf is not in CI.
+
+### Local macOS install
+
+`desktop-install` is for **your** Mac (Apple Development identity). It is not
+Developer ID + notarization — other machines will still Gatekeeper-block until
+you have a paid Apple account and notarize.
+
+Requires (via `.env` + direnv, or exported in the shell):
+
+- `APPLE_SIGNING_IDENTITY` — e.g. `Apple Development: you@example.com (…)`
+- `APPLE_TEAM_ID` — recommended; required later for notarization
+
+Optional: `LATTICE_INSTALL_DIR` (default `/Applications`).
+
+```sh
+nxr desktop-install
+# or: nix run .#desktop-install
+```
 
 ### Three different “web” surfaces
 
 | Surface | How to run | URL (typical) | What it is |
 | --- | --- | --- | --- |
-| **Desktop app (native, HMR)** | `nix run .#desktop-dev` | Tauri window ← Vite :5173 | Real Lattice shell with hot reload |
-| **Desktop app (native, no Vite)** | `nix run .#desktop` | Tauri window ← static `dist` | Real shell; rebuild UI with `pnpm --filter @lattice/desktop build` when needed |
-| **Desktop frontend only (browser)** | `nix run .#desktop-web` | <http://localhost:5173> | Same React UI, **demo fixture**, no filesystem |
-| **Marketing / docs site** | `nix run .#site-dev` | Astro (often :4321) | Public site + Starlight docs |
+| **Desktop app (native, HMR)** | `nxr desktop-dev` | Tauri window ← Vite :5173 | Real Lattice shell with hot reload |
+| **Desktop app (native, no Vite)** | `nxr desktop` | Tauri window ← static `dist` | Real shell; rebuild UI with `pnpm --filter @lattice/desktop build` when needed |
+| **Desktop frontend only (browser)** | `nxr desktop-web` | <http://localhost:5173> | Same React UI, **demo fixture**, no filesystem |
+| **Marketing / docs site** | `nxr site-dev` | Astro (often :4321) | Public site + Starlight docs |
 | **Cell / Dev Container demo** | `./scripts/devcontainer/web` (+ `site`) | :5173 / :4321 on `0.0.0.0` | Same browser + site surfaces without Nix; see [devcontainer.md](./devcontainer.md) |
 
 ### Why `desktop-dev` also starts :5173
@@ -88,7 +151,7 @@ runs separately as a non-blocking GitHub Action on `main`
 1. **Vite** — serves the React UI with HMR on port **5173**.
 2. **Rust / Tauri** — native WebView pointed at that Vite URL.
 
-Seeing Vite on 5173 alongside the native window is expected for `desktop-dev`. Prefer `nix run .#desktop` when you want the native app without a Vite process.
+Seeing Vite on 5173 alongside the native window is expected for `desktop-dev`. Prefer `nxr desktop` when you want the native app without a Vite process.
 
 ### Lattice home directory
 
@@ -109,14 +172,16 @@ Production first-run (**Create Lattice home**) creates:
     └── desktop.sqlite     # recents, sessions, and shell state
 ```
 
-`nix run .#desktop-dev` (and `pnpm --filter @lattice/desktop tauri:dev`) set
+`nxr desktop-dev` (and `pnpm --filter @lattice/desktop tauri:dev`) set
 `LATTICE_DEV_HOME` to an absolute `target/dev-home` under the repo root so local
-Tauri development uses an isolated profile instead of `~/Lattice`. **Debug**
-builds launched without any profile env vars also default to `target/dev-home`
-(relative to the process cwd) and seed First Look on first run; set
-`LATTICE_HOME` or `LATTICE_FORCE_PROD_HOME=1` to opt into real `~/Lattice`
+Tauri development uses an isolated profile instead of `~/Lattice`. They also set
+`LATTICE_DEV_RESET_DEMO=1` so **First Look** is wiped and re-seeded from the
+current `demo` template on every launch (use `tauri:dev:keep` to preserve edits).
+**Debug** builds launched without any profile env vars also default to
+`target/dev-home` (relative to the process cwd) and seed First Look on first run;
+set `LATTICE_HOME` or `LATTICE_FORCE_PROD_HOME=1` to opt into real `~/Lattice`
 Personal seeding instead. Release builds always use `~/Lattice` unless overridden.
-First-run in dev-home mode seeds the **First Look** demo template:
+First-run / reset in dev-home mode seeds the **First Look** demo template:
 
 ```text
 target/dev-home/
@@ -125,14 +190,17 @@ target/dev-home/
 │       ├── lattice.yaml
 │       ├── Home.md
 │       ├── CRM.data
+│       ├── Projects/Delivery.data
+│       ├── Data/Metrics.data
+│       ├── OKRs.data
 │       ├── Product/
 │       └── …
 ├── Settings/
 └── State/
 ```
 
-Delete `target/dev-home` to regenerate the dev profile from scratch. Your real
-`~/Lattice` profile is untouched.
+Delete `target/dev-home` (or rely on `LATTICE_DEV_RESET_DEMO`) to regenerate.
+Your real `~/Lattice` profile is untouched.
 
 `Personal` is the production workspace folder; `Home.md` is just a page inside
 it. Run `lattice templates list` for the current template catalog (gallery,
@@ -150,14 +218,14 @@ See [environment.md](./environment.md) for `LATTICE_DEV_HOME` and `LATTICE_HOME`
 | `.envrc is blocked` | `direnv allow` after reviewing the file. |
 | `Git tree ... is dirty` warning | Harmless; nix is telling you the working tree has uncommitted changes. |
 | Task can't find `site/scripts/...` or workspace packages | Run tasks from the repo root. |
-| `tauri build` (bundled) fails outside the shell | macOS bundling needs Xcode CLT; the nix shell doesn't provide it. |
+| `tauri build` (bundled) / `desktop-install` fails | Needs real Xcode or CLT; script sets `DEVELOPER_DIR` when Xcode.app is present. |
+| `APPLE_SIGNING_IDENTITY: unbound variable` | Load `.env` via direnv (`dotenv_if_exists`) or export the var before `desktop-install`. |
 | Browser on :5173 shows “Engineering Workspace” | That is the **demo fixture** (`demoWorkspace.generated.ts` from the `demo` template), not your disk. Use the Tauri window to open a real folder. |
-| Want Astro but ran `desktop-dev` | Use `nix run .#site-dev` instead. |
+| Want Astro but ran `desktop-dev` | Use `nxr site-dev` instead. |
 
 ## How it fits together
 
-- [flake.nix](../../flake.nix) — toolchain list, `tasks` (name → script),
-  exposed as both flake `apps` and dev-shell `lattice-*` commands.
-- [.envrc](../../.envrc) — `use flake`, for direnv users.
-- `flake.lock` — pinned nixpkgs; update deliberately with `nix flake update`.
-- [environment.md](./environment.md) — env vars (`LATTICE_DEV_HOME`, `LATTICE_HOME`, etc.).
+- [flake.nix](../../flake.nix) — flake-parts + [nxr](https://github.com/willmortimer/nxr) module; toolchain, `nxr.apps`, `nxr.tasks`, shell integration.
+- [.envrc](../../.envrc) — `use flake` + `dotenv_if_exists .env`.
+- `flake.lock` — pinned nixpkgs and nxr; update deliberately with `nix flake update`.
+- [environment.md](./environment.md) — env vars (`LATTICE_DEV_HOME`, Apple signing, etc.).

@@ -29,7 +29,7 @@ lattice/
 ├── docs/                 # architecture specification and ADRs
 ├── design/               # brand mark / visual identity notes
 ├── site/                 # Astro marketing + Starlight docs
-└── flake.nix             # Nix dev shell and task runners
+└── flake.nix             # Nix dev shell, flake apps, and nxr tasks
 ```
 
 ## Status
@@ -52,7 +52,9 @@ Requires flakes; if not enabled globally, add
 or pass `--extra-experimental-features 'nix-command flakes'`. Direnv users
 can `direnv allow` to load the shell automatically via `.envrc`.
 
-Common tasks are flake apps (and `lattice-<task>` inside the dev shell).
+Common tasks are flake apps. Prefer [nxr](https://github.com/willmortimer/nxr)
+(`nxr list`, `nxr <app>`, `nxr task <name>`); `nix run .#<app>` and
+`lattice-<app>` inside the shell still work.
 Full guide: [docs/dev/nix-workflows.md](docs/dev/nix-workflows.md).
 Environment variables: [docs/dev/environment.md](docs/dev/environment.md).
 
@@ -60,18 +62,22 @@ For a Linux Dev Container / DevCell cell (browser demo + docs site, no Tauri):
 [docs/dev/devcontainer.md](docs/dev/devcontainer.md).
 
 ```sh
-nix run .#test            # cargo test --workspace
-nix run .#lint            # clippy -D warnings + rustfmt check
-nix run .#fmt             # rustfmt
-nix run .#check           # everything CI would run (rust + both frontends)
-nix run .#compile-theme   # themes/*.theme.yaml → CSS/TS tokens
-nix run .#site-dev        # Astro marketing/docs site
-nix run .#site-build      # static site build
-nix run .#docs-sync       # regenerate site docs content from docs/
-nix run .#desktop-dev     # Tauri native window + Vite HMR on :5173
-nix run .#desktop-web     # browser-only demo UI
-nix run .#desktop         # native without Vite (reuses dist)
-nix run .#desktop-build   # tauri release build, unbundled
+nxr list                  # discover apps + tasks
+nxr test                  # cargo test --workspace
+nxr lint                  # clippy -D warnings + rustfmt check
+nxr fmt                   # rustfmt
+nxr task check            # everything CI would run (alias: nxr task ci)
+nxr task codegen -j 2     # theme ∥ templates
+nxr compile-theme         # themes/*.theme.yaml → CSS/TS tokens
+nxr compile-templates     # template packages → embedded catalogs
+nxr site-dev              # Astro marketing/docs site
+nxr site-build            # static site build
+nxr docs-sync             # regenerate site docs content from docs/
+nxr desktop-dev           # Tauri native window + Vite HMR on :5173
+nxr desktop-web           # browser-only demo UI
+nxr desktop               # native without Vite (reuses dist)
+nxr desktop-build         # tauri release build, unbundled
+nxr desktop-install       # macOS: sign + install to /Applications
 ```
 
 `desktop-dev` starts **both** the native app and Vite on :5173. Opening :5173
