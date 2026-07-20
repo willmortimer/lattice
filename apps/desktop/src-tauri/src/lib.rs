@@ -211,6 +211,8 @@ pub fn run() {
             data::save_data_form,
             data::list_data_actions,
             data::load_data_action,
+            data::list_data_interfaces,
+            data::load_data_interface,
             data::import_csv_table,
             data::preview_csv_import,
             data::commit_csv_import,

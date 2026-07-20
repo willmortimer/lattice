@@ -308,6 +308,13 @@ function normalizeDataPackage(entry, template, index) {
     columnNames,
     forms,
   );
+  const interfaces = normalizeDataPackageInterfaces(
+    entry.interfaces,
+    template,
+    label,
+    views,
+    forms,
+  );
 
   const extraTables = normalizeExtraTables(
     entry.extraTables,
@@ -327,6 +334,7 @@ function normalizeDataPackage(entry, template, index) {
     views,
     forms,
     actions,
+    interfaces,
   };
 }
 
@@ -614,6 +622,26 @@ function normalizeDataPackageActions(raw, template, label, defaultTable, columnN
   );
 }
 
+function normalizeDataPackageInterfaces(raw, template, label, views, forms) {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) {
+    throw new Error(`${template}: ${label}.interfaces must be an array`);
+  }
+  const knownViews = new Set(["All", ...views.map((view) => view.name)]);
+  const knownForms = new Set(forms.map((form) => form.name));
+  const interfaceNames = new Set();
+  return raw.map((entry, index) =>
+    normalizeDataPackageInterface(
+      entry,
+      template,
+      `${label}.interfaces[${index}]`,
+      knownViews,
+      knownForms,
+      interfaceNames,
+    ),
+  );
+}
+
 function normalizeDataPackageAction(
   entry,
   template,
@@ -726,6 +754,70 @@ function normalizeDataPackageAction(
     scope,
     action,
   };
+}
+
+function normalizeDataPackageInterface(
+  entry,
+  template,
+  label,
+  knownViews,
+  knownForms,
+  interfaceNames,
+) {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    throw new Error(`${template}: ${label} must be an object`);
+  }
+  if (typeof entry.name !== "string" || !isSqlIdentifier(entry.name)) {
+    throw new Error(`${template}: ${label}.name must be a valid SQL identifier`);
+  }
+  if (interfaceNames.has(entry.name)) {
+    throw new Error(`${template}: ${label} duplicate interface name ${entry.name}`);
+  }
+  interfaceNames.add(entry.name);
+
+  const views = normalizeInterfaceNameList(entry.views, template, `${label}.views`, knownViews, "view");
+  const forms = normalizeInterfaceNameList(entry.forms, template, `${label}.forms`, knownForms, "form");
+  if (views.length === 0 && forms.length === 0) {
+    throw new Error(`${template}: ${label} must bind at least one view or form`);
+  }
+  if (entry.title !== undefined && (typeof entry.title !== "string" || entry.title.trim() === "")) {
+    throw new Error(`${template}: ${label}.title must be a non-empty string`);
+  }
+  if (
+    entry.description !== undefined &&
+    (typeof entry.description !== "string" || entry.description.trim() === "")
+  ) {
+    throw new Error(`${template}: ${label}.description must be a non-empty string`);
+  }
+  return {
+    name: entry.name,
+    views,
+    forms,
+    title: entry.title,
+    description: entry.description,
+  };
+}
+
+function normalizeInterfaceNameList(raw, template, label, allowed, kind) {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) {
+    throw new Error(`${template}: ${label} must be an array`);
+  }
+  const seen = new Set();
+  return raw.map((name, index) => {
+    const itemLabel = `${label}[${index}]`;
+    if (typeof name !== "string" || !isSqlIdentifier(name)) {
+      throw new Error(`${template}: ${itemLabel} must be a valid SQL identifier`);
+    }
+    if (!allowed.has(name)) {
+      throw new Error(`${template}: ${itemLabel} references unknown ${kind} ${name}`);
+    }
+    if (seen.has(name)) {
+      throw new Error(`${template}: ${itemLabel} duplicate ${kind} ${name}`);
+    }
+    seen.add(name);
+    return name;
+  });
 }
 
 function assertJsonCell(value, template, label, fieldType) {
@@ -925,6 +1017,18 @@ function rustDataAction(action) {
             }`;
 }
 
+function rustDataInterface(iface) {
+  const views = iface.views.map((view) => rustString(view)).join(",\n                    ");
+  const forms = iface.forms.map((form) => rustString(form)).join(",\n                    ");
+  return `SeedDataInterface {
+                name: ${rustString(iface.name)},
+                views: &[${views ? `\n                    ${views}\n                ` : ""}],
+                forms: &[${forms ? `\n                    ${forms}\n                ` : ""}],
+                title: ${rustOptionString(iface.title)},
+                description: ${rustOptionString(iface.description)},
+            }`;
+}
+
 function rustDataView(view) {
   const columns = view.columns.map((column) => rustString(column)).join(",\n                    ");
   return `SeedDataView {
@@ -957,6 +1061,7 @@ function rustDataPackage(packageDef) {
   const views = packageDef.views.map(rustDataView).join(",\n                ");
   const forms = packageDef.forms.map(rustDataForm).join(",\n                ");
   const actions = (packageDef.actions ?? []).map(rustDataAction).join(",\n                ");
+  const interfaces = (packageDef.interfaces ?? []).map(rustDataInterface).join(",\n                ");
   const extraTables = packageDef.extraTables.map(rustExtraTable).join(",\n                ");
   return `SeedDataPackage {
             path: ${rustString(packageDef.path)},
@@ -972,6 +1077,7 @@ function rustDataPackage(packageDef) {
             views: &[${views ? `\n                ${views}\n            ` : ""}],
             forms: &[${forms ? `\n                ${forms}\n            ` : ""}],
             actions: &[${actions ? `\n                ${actions}\n            ` : ""}],
+            interfaces: &[${interfaces ? `\n                ${interfaces}\n            ` : ""}],
         }`;
 }
 
@@ -1264,6 +1370,16 @@ function buildDemoActionCatalog(packageDef) {
   }));
 }
 
+function buildDemoInterfaceCatalog(packageDef) {
+  return (packageDef.interfaces ?? []).map((iface) => ({
+    name: iface.name,
+    views: iface.views,
+    forms: iface.forms,
+    ...(iface.title === undefined ? {} : { title: iface.title }),
+    ...(iface.description === undefined ? {} : { description: iface.description }),
+  }));
+}
+
 function buildDemoViewCatalog(packageDef) {
   const views = [
     { name: "All", layout_type: "grid" },
@@ -1385,6 +1501,14 @@ function buildDemoPackageActionsByPath(template) {
   return actions;
 }
 
+function buildDemoPackageInterfacesByPath(template) {
+  const interfaces = {};
+  for (const packageDef of template.dataPackages) {
+    interfaces[packageDef.path] = buildDemoInterfaceCatalog(packageDef);
+  }
+  return interfaces;
+}
+
 export function emitDemoWorkspace(templates) {
   const template = templates.find((entry) => entry.id === DEMO_TEMPLATE_ID);
   if (!template) {
@@ -1427,6 +1551,8 @@ export function emitDemoWorkspace(templates) {
     demoPackageFormsByPath: buildDemoPackageFormsByPath(template),
     demoPackageActions: buildDemoActionCatalog(crmPackage),
     demoPackageActionsByPath: buildDemoPackageActionsByPath(template),
+    demoPackageInterfaces: buildDemoInterfaceCatalog(crmPackage),
+    demoPackageInterfacesByPath: buildDemoPackageInterfacesByPath(template),
     demoPages: buildDemoPages(template),
     demoTextFiles: buildDemoTextFiles(template),
     demoNotebooks: buildDemoNotebooks(template),
@@ -1436,6 +1562,7 @@ import type { WorkspaceSnapshot } from "./types";
 import type { DataAppSnapshot } from "./data/types";
 import type { FormSummary } from "./data/forms";
 import type { ActionSummary } from "./data/actions";
+import type { InterfaceSummary } from "./data/interfaces";
 
 export const demoSnapshot: WorkspaceSnapshot = ${JSON.stringify(module.demoSnapshot, null, 2)};
 
@@ -1452,6 +1579,10 @@ export const demoPackageFormsByPath: Record<string, FormSummary[]> = ${JSON.stri
 export const demoPackageActions: ActionSummary[] = ${JSON.stringify(module.demoPackageActions, null, 2)};
 
 export const demoPackageActionsByPath: Record<string, ActionSummary[]> = ${JSON.stringify(module.demoPackageActionsByPath, null, 2)};
+
+export const demoPackageInterfaces: InterfaceSummary[] = ${JSON.stringify(module.demoPackageInterfaces, null, 2)};
+
+export const demoPackageInterfacesByPath: Record<string, InterfaceSummary[]> = ${JSON.stringify(module.demoPackageInterfacesByPath, null, 2)};
 
 export const demoPages: Record<string, string> = ${JSON.stringify(module.demoPages, null, 2)};
 

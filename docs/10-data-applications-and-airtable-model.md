@@ -401,7 +401,36 @@ form designer and public publish remain future work.
 
 ## Interfaces
 
-Interfaces are canvas-based frontends over shared data:
+Interfaces are named package resources under `interfaces/` that bind one or more
+saved views and/or package forms:
+
+```text
+interfaces/{name}.interface.yaml
+```
+
+MVP shape (`InterfaceDef` in `lattice-data`):
+
+```yaml
+format: lattice-interface
+version: 1
+name: ContactOps
+views: [Board]
+forms: [ContactIntake]
+title: Contact operations
+description: Board view plus contact intake form.
+```
+
+- `name` must match the file stem.
+- At least one of `views` / `forms` must be non-empty; names must exist in the
+  package on load.
+- Canvas open uses JSON Canvas `subpath: interfaces/{name}` (same `subpath`
+  field as views — not a separate node property). The desktop resolves the
+  interface and opens the primary bound view (first `views` entry).
+
+Demo CRM ships `interfaces/ContactOps.interface.yaml` (Board + ContactIntake).
+A full interface builder / drag layout editor remains future work.
+
+Airtable-like operational surfaces over shared data can also include:
 
 - Record list and selector.
 - Detail panel.

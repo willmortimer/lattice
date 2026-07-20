@@ -53,6 +53,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             views: &[],
             forms: &[],
             actions: &[],
+            interfaces: &[],
         }
         ],
     },
@@ -149,6 +150,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             views: &[],
             forms: &[],
             actions: &[],
+            interfaces: &[],
         }
         ],
     },
@@ -205,6 +207,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             views: &[],
             forms: &[],
             actions: &[],
+            interfaces: &[],
         }
         ],
     },
@@ -262,6 +265,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             views: &[],
             forms: &[],
             actions: &[],
+            interfaces: &[],
         }
         ],
     },
@@ -401,6 +405,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             ],
             forms: &[],
             actions: &[],
+            interfaces: &[],
         }
         ],
     },
@@ -464,6 +469,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             views: &[],
             forms: &[],
             actions: &[],
+            interfaces: &[],
         }
         ],
     },
@@ -678,6 +684,19 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 defaults: &[],
             }
             ],
+            interfaces: &[
+                SeedDataInterface {
+                name: "ContactOps",
+                views: &[
+                    "Board"
+                ],
+                forms: &[
+                    "ContactIntake"
+                ],
+                title: Some("Contact operations"),
+                description: Some("Board view plus contact intake form for CRM canvas open."),
+            }
+            ],
         },
             SeedDataPackage {
             path: "Projects/Delivery.data",
@@ -744,6 +763,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             }
             ],
             actions: &[],
+            interfaces: &[],
         },
             SeedDataPackage {
             path: "Data/Metrics.data",
@@ -804,6 +824,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             ],
             forms: &[],
             actions: &[],
+            interfaces: &[],
         },
             SeedDataPackage {
             path: "OKRs.data",
@@ -847,6 +868,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             ],
             forms: &[],
             actions: &[],
+            interfaces: &[],
         }
         ],
     },

@@ -318,6 +318,15 @@
             "form": "ContactIntake"
           }
         }
+      ],
+      "interfaces": [
+        {
+          "name": "ContactOps",
+          "views": ["Board"],
+          "forms": ["ContactIntake"],
+          "title": "Contact operations",
+          "description": "Board view plus contact intake form for CRM canvas open."
+        }
       ]
     },
     {
