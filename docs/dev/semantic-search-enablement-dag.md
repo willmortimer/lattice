@@ -1,10 +1,15 @@
 # Semantic Search Enablement — Subagent DAG (E1–E7)
 
-**Status:** Active  
+**Status:** Superseded by `fix/semantic-search-p0-p2` (P0–P2 wiring + quality fixes)  
 **Created:** 2026-07-19  
 **BASE:** `feat/semantic-search-enablement` from `origin/main` @ `0778165`  
 **Subagent models:** `composer-2.5` (routine) and `cursor-grok-4.5-high` (architecture)  
 **Parent:** plans, reviews diffs, merges; keeps SearchPane / confirm-dialog taste in-loop.
+
+> **2026-07-20 follow-up:** Production defaults, desktop→latticed routing, host
+> multiplexing, stable chunk IDs, enriched embedding inputs, FTS AND parsing, and
+> the Fake eval harness landed on `fix/semantic-search-p0-p2`. See that branch
+> / PR for the honest enable path (no silent Fake after Qwen download).
 
 ## Problem / end state
 

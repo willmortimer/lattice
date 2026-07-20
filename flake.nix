@@ -205,6 +205,19 @@
                 fi
               done
 
+              # Semantic search + voice thin-clients expect latticed (and embed-host)
+              # as MacOS siblings of the app binary (see docs/search/…).
+              for bin in latticed lattice-embed-host lattice-voice-host; do
+                src="target/release/$bin"
+                if [ -f "$src" ]; then
+                  cp -f "$src" "$macos_dir/$bin"
+                  chmod +x "$macos_dir/$bin"
+                  echo "desktop-install: bundled $bin"
+                else
+                  echo "desktop-install: warning: missing $src (daemon thin-client may fail)" >&2
+                fi
+              done
+
               # Ensure the identity we expect is on the bundle (Tauri may already have signed).
               if ! codesign --force --deep --sign "$APPLE_SIGNING_IDENTITY" "$app_src"; then
                 echo "desktop-install: codesign failed for identity: $APPLE_SIGNING_IDENTITY" >&2

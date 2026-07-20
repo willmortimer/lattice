@@ -509,6 +509,16 @@ The helper process provides:
 Do not expose the helper on a public TCP port. Use a private Unix-domain socket
 or inherited file descriptors.
 
+### Desktop packaging (macOS siblings)
+
+Ship `latticed` and `lattice-embed-host` as **siblings** of the Lattice app
+binary (same `Contents/MacOS/` directory), or ensure they are on `PATH` /
+discoverable next to a developer `target/{debug,release}/` build. Desktop
+Settings → Semantic search spawns or connects to `latticed` and passes
+`LATTICE_EMBED_HOST_BIN` when the host binary is found; it never auto-sets
+`LATTICE_SEMANTIC_FAKE`. The Nix `desktop-install` script copies these
+release binaries into the `.app` bundle when present under `target/release/`.
+
 ### llama.cpp integration
 
 Pin a tested llama.cpp commit. Build only the required library and Metal
@@ -649,6 +659,7 @@ pub struct HybridSearchHit {
     pub semantic_rank: Option<u32>,
     pub fused_score: f32,
     pub provenance: SearchProvenance,
+    pub sensitivity: Sensitivity,
     pub export_policy: ExportPolicy,
 }
 ```
@@ -662,6 +673,8 @@ Each semantic result must be traceable to:
 
 - Canonical workspace.
 - Resource ID and path.
+- Durable resource URI of the form `lattice://resource/{workspace-relative-path}`
+  (forward-slash path; e.g. `lattice://resource/Notes/Home.md`).
 - Block or structural ID.
 - Byte range.
 - Content hash.
@@ -671,6 +684,16 @@ Each semantic result must be traceable to:
   instruction version.
 - Index timestamp.
 - Sensitivity and external-export policy.
+
+Sensitivity enforcement on hybrid hits:
+
+- Chunks persist `sensitivity` (`workspace` | `private` | `secret`) and
+  `export_policy` (`ask` | `allow` | `deny`) explicitly (defaults
+  `workspace` / `ask`; Markdown frontmatter may override).
+- `secret` chunks are excluded from hybrid search results entirely.
+- `private` may appear in local search; export surfaces (`/v1/search`,
+  `build_context`) redact excerpts and set `export_redacted`.
+- `export_policy` of `ask` or `deny` likewise redacts excerpts on export APIs.
 
 Vectors are derived state:
 
@@ -905,19 +928,22 @@ Measure:
 **Status (runtime):** `lattice-runtime` owns a per-session semantic job
 worker (`SessionSemanticWorker`) that calls `embed_pending_chunks` on kick
 (from FTS upsert / explicit `kick_semantic_jobs`). Pause is a simple flag.
-`latticed` always starts a `SemanticController` (Fake by default; env can
-select socket / spawn modes). Indexing is **user-driven** via
-`EnableSemanticSearch` / `DisableSemanticSearch` / `GetSemanticStatus`
-(desktop Settings toggle → Tauri → handlers or daemon RPCs). Env still
-selects provider mode:
+`latticed` always starts a `SemanticController` via `from_env_or_default`
+(discovers/spawns `lattice-embed-host`; never silently defaults to Fake).
+Indexing is **user-driven** via `EnableSemanticSearch` /
+`DisableSemanticSearch` / `GetSemanticStatus` (desktop Settings toggle →
+Tauri thin-client → latticed RPCs → `SemanticController` /
+`lattice-embed-host`). The embedded `lattice_handlers` enable path is
+Fake-only (`LATTICE_SEMANTIC_FAKE=1`) for tests/CI. Provider mode:
 
-| Env | Effect |
+| Env / discovery | Effect |
 | --- | --- |
-| (none) | Enable downloads+verifies the pinned Qwen3 Q8 GGUF; FakeInProcess worker unless host env is set |
+| (none) + host binary found | Spawn/supervise `lattice-embed-host` under `Lattice/run/`; Enable prepares pinned Qwen3 Q8 GGUF |
+| (none) + host binary missing | `Unavailable`: Enable returns Failed (FTS still works); no in-process Fake |
 | `LATTICE_SEMANTIC_FAKE=1` | Skip download; in-process `FakeEmbeddingProvider` (CI / offline) |
 | `LATTICE_SEMANTIC_MODEL_SOURCE` | Local fixture path; copy+sha256 verify instead of HTTPS |
 | `LATTICE_EMBED_HOST_SOCKET` | Connect EmbedHostClient to an existing embed-host UDS; degrade when missing |
-| `LATTICE_EMBED_HOST_BIN` | With socket: spawn/supervise `lattice-embed-host` (bounded backoff); jobs use host RPCs |
+| `LATTICE_EMBED_HOST_BIN` | Explicit host binary (with or without socket); spawn/supervise when spawning |
 
 When the host is unavailable, sessions are marked `SemanticDegraded` and
 hybrid search falls back to FTS (`semantic_rank` none). Status states:
