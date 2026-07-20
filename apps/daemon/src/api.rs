@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use lattice_handlers::{get_backlinks_with_session, read_page, search_workspace_with_session};
-use lattice_index::{ExportPolicy, HybridSearchHit};
+use lattice_index::{ExportPolicy, HybridSearchHit, Sensitivity};
 use lattice_runtime::{hybrid_search_with_session_semantic, LatticeRuntime, WorkspaceSession};
 use serde::{Deserialize, Serialize};
 
@@ -113,9 +113,10 @@ pub struct SearchHitDto {
     pub heading_path: Vec<String>,
     pub source_start_byte: Option<u64>,
     pub source_end_byte: Option<u64>,
+    pub sensitivity: String,
     pub export_policy: String,
     pub provenance: Option<ProvenanceDto>,
-    /// True when excerpt was withheld because export_policy is `ask` or `deny`.
+    /// True when excerpt was withheld because of export_policy or private sensitivity.
     pub export_redacted: bool,
 }
 
@@ -169,6 +170,7 @@ pub fn api_search(runtime: &LatticeRuntime, params: SearchParams) -> Result<Sear
                     heading_path: Vec::new(),
                     source_start_byte: None,
                     source_end_byte: None,
+                    sensitivity: Sensitivity::Workspace.as_str().to_string(),
                     export_policy: ExportPolicy::Ask.as_str().to_string(),
                     provenance: None,
                     export_redacted: false,
@@ -195,7 +197,7 @@ pub fn api_search(runtime: &LatticeRuntime, params: SearchParams) -> Result<Sear
 }
 
 fn hybrid_hit_to_dto(hit: HybridSearchHit) -> SearchHitDto {
-    let (excerpt, redacted) = redact_excerpt(&hit.excerpt, hit.export_policy);
+    let (excerpt, redacted) = redact_excerpt_for_export(&hit.excerpt, hit.sensitivity, hit.export_policy);
     SearchHitDto {
         path: resource_path_from_uri(&hit.resource_uri),
         title: hit.title,
@@ -205,6 +207,7 @@ fn hybrid_hit_to_dto(hit: HybridSearchHit) -> SearchHitDto {
         heading_path: hit.heading_path,
         source_start_byte: Some(hit.source_start_byte),
         source_end_byte: Some(hit.source_end_byte),
+        sensitivity: hit.sensitivity.as_str().to_string(),
         export_policy: hit.export_policy.as_str().to_string(),
         provenance: Some(ProvenanceDto {
             content_hash: hit.provenance.content_hash,
@@ -218,12 +221,20 @@ fn hybrid_hit_to_dto(hit: HybridSearchHit) -> SearchHitDto {
     }
 }
 
-/// For `deny`, omit excerpt. For `ask`, omit excerpt and flag redaction so
-/// clients must not exfiltrate freely. `allow` returns content as-is.
-fn redact_excerpt(excerpt: &str, policy: ExportPolicy) -> (Option<String>, bool) {
-    match policy {
-        ExportPolicy::Allow => (Some(excerpt.to_string()), false),
-        ExportPolicy::Ask | ExportPolicy::Deny => (None, true),
+/// Secret hits are filtered before hydration. Private and ask/deny withhold
+/// excerpts on the export API; allow returns content as-is.
+fn redact_excerpt_for_export(
+    excerpt: &str,
+    sensitivity: Sensitivity,
+    policy: ExportPolicy,
+) -> (Option<String>, bool) {
+    match sensitivity {
+        Sensitivity::Secret => (None, true),
+        Sensitivity::Private => (None, true),
+        Sensitivity::Workspace => match policy {
+            ExportPolicy::Allow => (Some(excerpt.to_string()), false),
+            ExportPolicy::Ask | ExportPolicy::Deny => (None, true),
+        },
     }
 }
 
@@ -474,6 +485,30 @@ pub fn api_build_context(
     let mut omitted = 0usize;
 
     for hit in hits {
+        // Secret never reaches here (filtered at hydration). Private is local-only:
+        // treat like ask for export context assembly.
+        if hit.sensitivity == Sensitivity::Private {
+            omitted += 1;
+            excerpts.push(ContextExcerpt {
+                path: resource_path_from_uri(&hit.resource_uri),
+                title: hit.title,
+                excerpt: None,
+                export_policy: hit.export_policy.as_str().to_string(),
+                export_redacted: true,
+                needs_consent: true,
+                provenance: Some(ProvenanceDto {
+                    content_hash: hit.provenance.content_hash,
+                    chunker_version: hit.provenance.chunker_version,
+                    namespace_key: hit.provenance.namespace_key,
+                    model_id: hit.provenance.model_id,
+                    model_revision: hit.provenance.model_revision,
+                    instruction_version: hit.provenance.instruction_version,
+                }),
+                source_start_byte: Some(hit.source_start_byte),
+                source_end_byte: Some(hit.source_end_byte),
+            });
+            continue;
+        }
         match hit.export_policy {
             ExportPolicy::Deny => {
                 omitted += 1;

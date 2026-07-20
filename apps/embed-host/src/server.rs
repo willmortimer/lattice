@@ -47,7 +47,9 @@ impl HostConfig {
 /// Shared host runtime state.
 pub struct HostState {
     pub config: HostConfig,
-    backend: Mutex<Option<LoadedBackend>>,
+    /// Arc so embed handlers can release the mutex while inference runs, letting
+    /// concurrent connections service Health/Status/Cancel/EmbedQuery.
+    backend: Mutex<Option<Arc<LoadedBackend>>>,
     install_state: Mutex<EmbeddingInstallState>,
     loaded_model_id: Mutex<Option<String>>,
     specification: Mutex<Option<EmbeddingSpecification>>,
@@ -300,7 +302,7 @@ async fn handle_load(
 
     match opened {
         Ok((loaded, model_id, spec)) => {
-            *state.backend.lock().await = Some(loaded);
+            *state.backend.lock().await = Some(Arc::new(loaded));
             *state.loaded_model_id.lock().await = Some(model_id);
             *state.specification.lock().await = Some(spec.clone());
             *state.install_state.lock().await = EmbeddingInstallState::Ready;
@@ -338,8 +340,10 @@ async fn handle_embed_query(
     let cancel = register_active(&state, request_id).await;
     let result = async {
         ensure_not_cancelled(&cancel)?;
-        let guard = state.backend.lock().await;
-        let backend = guard.as_ref().ok_or(EmbedHostError::ModelNotLoaded)?;
+        let backend = {
+            let guard = state.backend.lock().await;
+            Arc::clone(guard.as_ref().ok_or(EmbedHostError::ModelNotLoaded)?)
+        };
         ensure_not_cancelled(&cancel)?;
         let vector = backend
             .embed_query(EmbedQueryRequest { text })
@@ -373,8 +377,10 @@ async fn handle_embed_documents(
             })
             .collect();
         let count = requests.len() as u64;
-        let guard = state.backend.lock().await;
-        let backend = guard.as_ref().ok_or(EmbedHostError::ModelNotLoaded)?;
+        let backend = {
+            let guard = state.backend.lock().await;
+            Arc::clone(guard.as_ref().ok_or(EmbedHostError::ModelNotLoaded)?)
+        };
         ensure_not_cancelled(&cancel)?;
         let vectors = backend.embed_documents(requests).await?;
         ensure_not_cancelled(&cancel)?;
