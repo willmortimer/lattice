@@ -26,6 +26,8 @@ pub const ENV_VOICE_HOST_SOCKET: &str = "LATTICE_VOICE_HOST_SOCKET";
 pub const ENV_VOICE_FAKE: &str = "LATTICE_VOICE_FAKE";
 /// Optional path to the `lattice-voice-host` binary to spawn.
 pub const ENV_VOICE_HOST_BIN: &str = "LATTICE_VOICE_HOST_BIN";
+/// Optional FluidAudio / Parakeet model cache for supervised fluidaudio hosts.
+pub const ENV_VOICE_MODEL_CACHE: &str = "LATTICE_VOICE_MODEL_CACHE";
 
 const MAX_RESTARTS: u32 = 5;
 const INITIAL_BACKOFF_MS: u64 = 200;
@@ -47,6 +49,12 @@ pub enum VoiceProviderMode {
 
 impl VoiceProviderMode {
     /// Resolve provider mode from environment variables.
+    ///
+    /// - `LATTICE_VOICE_FAKE=1` → spawn `--backend fake` (auto-resolves the host
+    ///   binary when `LATTICE_VOICE_HOST_BIN` is unset).
+    /// - `LATTICE_VOICE_HOST_BIN` without fake → spawn `--backend fluidaudio`
+    ///   (binary must be built with `--features fluidaudio`).
+    /// - `LATTICE_VOICE_HOST_SOCKET` alone → connect to an existing host.
     pub fn from_env() -> Option<Self> {
         let fake = env_truthy(ENV_VOICE_FAKE);
         let socket = std::env::var(ENV_VOICE_HOST_SOCKET)
@@ -70,7 +78,7 @@ impl VoiceProviderMode {
             return Some(Self::SpawnHost {
                 binary,
                 socket,
-                fake: true, // D5 supervised host uses offline fake backend by default
+                fake,
             });
         }
         socket.map(|socket| Self::ExternalSocket { socket })
@@ -149,6 +157,8 @@ struct ActiveVoiceSession {
     session_id: String,
     /// Glossary terms used to normalize finals at the daemon boundary.
     glossary_terms: Vec<String>,
+    /// Workspace-relative paths for ITN / path normalization on finals.
+    known_paths: Vec<String>,
 }
 
 /// Shared voice-host controller for a daemon instance.
@@ -327,16 +337,17 @@ impl VoiceController {
                     .as_ref()
                     .map(|c| c.session_id.clone())
                     .unwrap_or_default();
-                let glossary_terms = start
+                let (glossary_terms, known_paths) = start
                     .config
                     .as_ref()
                     .and_then(|c| c.context.as_ref())
-                    .map(|c| c.glossary_terms.clone())
+                    .map(|c| (c.glossary_terms.clone(), c.known_paths.clone()))
                     .unwrap_or_default();
                 *self.active_session.lock().expect("active_session poisoned") =
                     Some(ActiveVoiceSession {
                         session_id,
                         glossary_terms,
+                        known_paths,
                     });
             }
             request::Body::UpdateSessionContext(update) => {
@@ -348,6 +359,7 @@ impl VoiceController {
                 {
                     if let Some(context) = update.context.as_ref() {
                         active.glossary_terms = context.glossary_terms.clone();
+                        active.known_paths = context.known_paths.clone();
                     }
                 }
             }
@@ -451,19 +463,19 @@ impl VoiceController {
         let event::Body::FinalTranscript(mut final_transcript) = body else {
             return body;
         };
-        let glossary = self
+        let (glossary, known_paths) = self
             .active_session
             .lock()
             .expect("active_session poisoned")
             .as_ref()
-            .map(|s| s.glossary_terms.clone())
+            .map(|s| (s.glossary_terms.clone(), s.known_paths.clone()))
             .unwrap_or_default();
-        if glossary.is_empty() {
+        if glossary.is_empty() && known_paths.is_empty() {
             return event::Body::FinalTranscript(final_transcript);
         }
         let context = NormalizationContext {
             glossary_terms: glossary,
-            known_paths: Vec::new(),
+            known_paths,
         };
         let normalized = normalize_transcript(&final_transcript.text, &context);
         if !normalized.corrections.is_empty() {
@@ -641,25 +653,45 @@ fn spawn_voice_host(binary: &Path, socket: &Path, fake: bool) -> Result<Child> {
     if socket.exists() {
         let _ = std::fs::remove_file(socket);
     }
-    // Supervised launches always use the offline fake backend unless a future
-    // mode opts into fluidaudio (feature-gated host build).
-    let _ = fake;
-    Command::new(binary)
+    let backend = voice_host_backend_arg(fake);
+    let mut command = Command::new(binary);
+    command
         .arg("serve")
         .arg("--socket")
         .arg(socket)
         .arg("--backend")
-        .arg("fake")
+        .arg(backend);
+    if !fake {
+        if let Some(cache) = model_cache_dir_from_env() {
+            command.arg("--model-cache-dir").arg(cache);
+        }
+    }
+    command
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
         .map_err(|err| {
             Error::Spawn(format!(
-                "failed to spawn voice-host {}: {err}",
+                "failed to spawn voice-host {} (--backend {backend}): {err}",
                 binary.display()
             ))
         })
+}
+
+fn voice_host_backend_arg(fake: bool) -> &'static str {
+    if fake {
+        "fake"
+    } else {
+        "fluidaudio"
+    }
+}
+
+fn model_cache_dir_from_env() -> Option<PathBuf> {
+    std::env::var(ENV_VOICE_MODEL_CACHE)
+        .ok()
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from)
 }
 
 fn wait_for_socket(socket: &Path, timeout: Duration) -> Result<()> {
@@ -697,5 +729,11 @@ mod tests {
     fn resolve_bin_prefers_explicit_env_shape() {
         // Just ensure the helper does not panic when nothing is installed.
         let _ = resolve_voice_host_bin();
+    }
+
+    #[test]
+    fn spawn_backend_arg_honors_fake_flag() {
+        assert_eq!(voice_host_backend_arg(true), "fake");
+        assert_eq!(voice_host_backend_arg(false), "fluidaudio");
     }
 }
