@@ -1,0 +1,67 @@
+.vega-lite-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.vega-lite-chart-canvas {
+  width: 100%;
+  min-height: 280px;
+}
+
+.vega-lite-chart-canvas .vega-embed {
+  width: 100%;
+}
+
+.vega-lite-chart-error {
+  margin: 0;
+  color: var(--lt-danger, #f87171);
+  font: 13px var(--lt-font-sans);
+}
+
+.dataset-panel-tabs {
+  display: inline-flex;
+  gap: 2px;
+  margin-bottom: 16px;
+  padding: 2px;
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius-sm);
+  background: var(--lt-surface-raised);
+}
+
+.dataset-panel-tab {
+  padding: 4px 12px;
+  border: none;
+  border-radius: calc(var(--lt-radius-sm) - 2px);
+  background: transparent;
+  color: var(--lt-muted);
+  font: 12px var(--lt-font-sans);
+  cursor: pointer;
+}
+
+.dataset-panel-tab:hover {
+  color: var(--lt-text);
+  background: var(--lt-line);
+}
+
+.dataset-panel-tab-active {
+  color: var(--lt-text);
+  background: var(--lt-surface);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
+}
+
+.dataset-chart-panel {
+  width: min(960px, 100%);
+  text-align: left;
+}
+
+.dataset-chart-meta {
+  margin: 0 0 12px;
+  color: var(--lt-muted);
+  font: 13px var(--lt-font-sans);
+}
+
+.dataset-chart-meta code {
+  font: 12px var(--lt-font-mono);
+}
