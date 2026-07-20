@@ -10,6 +10,7 @@ import { SearchPane } from "../SearchPane";
 import { KindMark } from "../KindMark";
 import { QUICK_NOTE_SHORTCUT } from "../quickNoteWindow";
 import { directoryPurposesFromCatalog } from "../lib/templates";
+import { newFolderParentPath } from "../lib/treeOps";
 import { SettingsPage } from "../settings/SettingsPage";
 import { TerminalPanel } from "../terminal/TerminalPanel";
 import { BrandMark } from "../shell/BrandMark";
@@ -33,6 +34,7 @@ import {
   DotsThree,
   FilePlus,
   Files,
+  FolderPlus,
   Gear,
   House,
   List as MenuIcon,
@@ -52,6 +54,7 @@ export interface DesktopShellProps { model: ReturnType<typeof useDesktopControll
 
 export function DesktopShell({ model }: DesktopShellProps) {
   const [terminalOpen, setTerminalOpen] = useState(false);
+  const [browserActiveFolderPath, setBrowserActiveFolderPath] = useState<string | null>(null);
   const {
     profile, profileReady, settings, startup, snapshot, selected, selectedPaths, session, error, busy, saveState,
     externalConflict, reloadToken, newWorkspaceOpen, workspacesDir, templates, statusToast,
@@ -69,6 +72,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
     handleNewTable, handleImportCsv, handlePromoteWorkspaceCsv, handleSelect, applyTreeSelection, handleOpenExternally, handleOpenFile,
     handleKeepIncoming, handleKeepLocal, handleKeepBoth, handleTreeCollapsedPathsChange,
     handleTreeResourceContextMenu, handleTreeFolderContextMenu, handleTreeRename, handleMoveToFolder,
+    handleNewFolderInFolder,
     treeRenameRequest,
     navigateHistory, closeTab, reorderTab, beginSidebarResize, commitTitle, updateWorkspaceSettings,
     handleOpenWiki, openLinkTarget, handleNotebookContentChange, handleRevisionChange,
@@ -88,6 +92,11 @@ export function DesktopShell({ model }: DesktopShellProps) {
       ...(snapshot?.directoryPurposes ?? {}),
     }),
     [snapshot?.sourceTemplate, snapshot?.directoryPurposes],
+  );
+
+  const browserNewFolderParent = useMemo(
+    () => newFolderParentPath(selected, { activeFolderPath: browserActiveFolderPath }),
+    [browserActiveFolderPath, selected],
   );
 
   if (splashVisible) {
@@ -280,6 +289,14 @@ export function DesktopShell({ model }: DesktopShellProps) {
                 </MenuPositioner>
               </MenuPortal>
             </MenuRoot>
+            {inBrowser && (
+              <IconButton
+                label={`New folder in ${browserNewFolderParent || "workspace root"}`}
+                onClick={() => void handleNewFolderInFolder(browserNewFolderParent)}
+              >
+                <FolderPlus size={15} />
+              </IconButton>
+            )}
           </div>
           <nav className="resource-list">
             <ResourceTree
@@ -296,6 +313,8 @@ export function DesktopShell({ model }: DesktopShellProps) {
               onMoveToFolder={(fromPaths, toDir) => void handleMoveToFolder(fromPaths, toDir)}
               renameRequest={treeRenameRequest}
               revealPath={revealPath}
+              activeFolderPath={inBrowser ? browserActiveFolderPath : null}
+              onActiveFolderChange={inBrowser ? setBrowserActiveFolderPath : undefined}
             />
           </nav>
           <div className="sidebar-footer">
