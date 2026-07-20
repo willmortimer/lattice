@@ -34,6 +34,9 @@ interface ResourceTreeProps {
   workspaceKey?: string | null;
   collapsedPaths?: ReadonlySet<string>;
   onCollapsedPathsChange?: (paths: ReadonlySet<string>) => void;
+  /** Browser demo: highlight and target the last clicked folder row. */
+  activeFolderPath?: string | null;
+  onActiveFolderChange?: (folderPath: string) => void;
 }
 
 const INDENT_BASE_PX = 9;
@@ -129,6 +132,8 @@ export function ResourceTree({
   workspaceKey: _workspaceKey,
   collapsedPaths,
   onCollapsedPathsChange,
+  activeFolderPath,
+  onActiveFolderChange,
 }: ResourceTreeProps) {
   const [localCollapsed, setLocalCollapsed] = useState<ReadonlySet<string>>(() => new Set());
   const [editingPath, setEditingPath] = useState<string | null>(null);
@@ -364,16 +369,22 @@ export function ResourceTree({
 
     const isCollapsed = collapsed.has(row.path);
     const FolderIcon = folderTreeIcon(isCollapsed);
+    const isActiveFolder = activeFolderPath === row.path;
     return (
       <button
         key={`folder:${row.path}`}
         className={
           "tree-folder-row resource-tree-row"
+          + (isActiveFolder ? " tree-folder-row-active" : "")
           + (dropTargetPath === row.path ? " tree-folder-row-drop-target" : "")
         }
         style={style}
-        onClick={() => toggle(row.path)}
+        onClick={() => {
+          toggle(row.path);
+          onActiveFolderChange?.(row.path);
+        }}
         aria-expanded={!isCollapsed}
+        aria-current={isActiveFolder ? "location" : undefined}
         onContextMenu={(event) => {
           event.preventDefault();
           onFolderContextMenu?.(row.path);

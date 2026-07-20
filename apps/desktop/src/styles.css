@@ -1421,6 +1421,18 @@ html[data-page-width="full"] {
   color: var(--lt-muted);
 }
 
+.tree-folder-row-active,
+.tree-folder-row-active:hover {
+  background: var(--lt-accent-wash);
+  color: var(--lt-text);
+  box-shadow: inset 2px 0 0 var(--lt-accent);
+}
+
+.tree-folder-row-active .resource-tree-folder-icon,
+.tree-folder-row-active:hover .resource-tree-folder-icon {
+  color: var(--lt-accent);
+}
+
 .tree-folder-row-drop-target,
 .tree-folder-row-drop-target:hover {
   background: color-mix(in srgb, var(--lt-accent) 16%, var(--lt-hover));
