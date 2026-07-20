@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use lattice_embedding::EmbeddingProvider;
 use lattice_index::{EmbedPendingStats, HybridSearchHit, CHUNKER_VERSION};
+use serde::{Deserialize, Serialize};
 
 use crate::events::{
     EventBus, IndexProgressPhase, RuntimeEvent, RuntimeIndexProgress, SharedEventBus,
@@ -28,6 +29,75 @@ pub enum SemanticAvailability {
     Degraded,
     Paused,
     Stopped,
+}
+
+/// User-facing semantic session lifecycle for Settings / desktop status.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SemanticStatusState {
+    Stopped,
+    Preparing,
+    Indexing,
+    Ready,
+    Degraded,
+    Failed,
+}
+
+impl SemanticStatusState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Stopped => "stopped",
+            Self::Preparing => "preparing",
+            Self::Indexing => "indexing",
+            Self::Ready => "ready",
+            Self::Degraded => "degraded",
+            Self::Failed => "failed",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "stopped" => Some(Self::Stopped),
+            "preparing" => Some(Self::Preparing),
+            "indexing" => Some(Self::Indexing),
+            "ready" => Some(Self::Ready),
+            "degraded" => Some(Self::Degraded),
+            "failed" => Some(Self::Failed),
+            _ => None,
+        }
+    }
+}
+
+/// Snapshot returned by enable / disable / status queries.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SemanticStatus {
+    pub state: SemanticStatusState,
+    pub pending_chunks: Option<u64>,
+    pub message: Option<String>,
+}
+
+impl SemanticStatus {
+    pub fn stopped() -> Self {
+        Self {
+            state: SemanticStatusState::Stopped,
+            pending_chunks: None,
+            message: None,
+        }
+    }
+
+    pub fn with_message(mut self, message: impl Into<String>) -> Self {
+        self.message = Some(message.into());
+        self
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WorkerPhase {
+    Preparing,
+    Indexing,
+    Idle,
+    Failed,
 }
 
 /// Configuration for starting a session semantic worker.
@@ -66,6 +136,8 @@ struct SharedState {
     degraded: AtomicBool,
     stop: AtomicBool,
     namespace_id: Mutex<Option<i64>>,
+    phase: Mutex<WorkerPhase>,
+    last_error: Mutex<Option<String>>,
 }
 
 impl SharedState {
@@ -77,6 +149,8 @@ impl SharedState {
             degraded: AtomicBool::new(false),
             stop: AtomicBool::new(false),
             namespace_id: Mutex::new(None),
+            phase: Mutex::new(WorkerPhase::Preparing),
+            last_error: Mutex::new(None),
         }
     }
 
@@ -84,6 +158,15 @@ impl SharedState {
         let mut kick = self.kick.lock().expect("semantic kick poisoned");
         *kick = true;
         self.kick_cv.notify_one();
+    }
+
+    fn set_phase(&self, phase: WorkerPhase) {
+        *self.phase.lock().expect("semantic phase poisoned") = phase;
+    }
+
+    fn set_error(&self, detail: String) {
+        *self.last_error.lock().expect("semantic error poisoned") = Some(detail);
+        self.set_phase(WorkerPhase::Failed);
     }
 
     fn wait_for_work(&self) -> bool {
@@ -174,6 +257,88 @@ impl SessionSemanticWorker {
             SemanticAvailability::Ready
         }
     }
+
+    /// Map worker flags + optional pending count into the Settings-facing status.
+    pub fn status(&self, pending_chunks: Option<u64>) -> SemanticStatus {
+        map_worker_status(
+            self.shared.stop.load(Ordering::SeqCst),
+            self.shared.degraded.load(Ordering::SeqCst),
+            *self.shared.phase.lock().expect("semantic phase poisoned"),
+            self.shared
+                .last_error
+                .lock()
+                .expect("semantic error poisoned")
+                .clone(),
+            pending_chunks,
+        )
+    }
+}
+
+/// Pure status mapping for tests and hosts (daemon / Tauri).
+pub fn map_worker_status(
+    stopped: bool,
+    degraded: bool,
+    phase: impl Into<MappedWorkerPhase>,
+    last_error: Option<String>,
+    pending_chunks: Option<u64>,
+) -> SemanticStatus {
+    let phase = phase.into();
+    if stopped {
+        return SemanticStatus::stopped();
+    }
+    if degraded {
+        return SemanticStatus {
+            state: SemanticStatusState::Degraded,
+            pending_chunks,
+            message: last_error.or_else(|| Some("embed host unavailable".into())),
+        };
+    }
+    match phase {
+        MappedWorkerPhase::Preparing => SemanticStatus {
+            state: SemanticStatusState::Preparing,
+            pending_chunks,
+            message: None,
+        },
+        MappedWorkerPhase::Indexing => SemanticStatus {
+            state: SemanticStatusState::Indexing,
+            pending_chunks,
+            message: None,
+        },
+        MappedWorkerPhase::Idle => SemanticStatus {
+            state: if pending_chunks.unwrap_or(0) > 0 {
+                SemanticStatusState::Indexing
+            } else {
+                SemanticStatusState::Ready
+            },
+            pending_chunks,
+            message: None,
+        },
+        MappedWorkerPhase::Failed => SemanticStatus {
+            state: SemanticStatusState::Failed,
+            pending_chunks,
+            message: last_error,
+        },
+    }
+}
+
+/// Test/host-facing phase without exposing private [`WorkerPhase`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MappedWorkerPhase {
+    Preparing,
+    Indexing,
+    Idle,
+    Failed,
+}
+
+impl From<WorkerPhase> for MappedWorkerPhase {
+    fn from(value: WorkerPhase) -> Self {
+        match value {
+            WorkerPhase::Preparing => Self::Preparing,
+            WorkerPhase::Indexing => Self::Indexing,
+            WorkerPhase::Idle => Self::Idle,
+            WorkerPhase::Failed => Self::Failed,
+        }
+    }
 }
 
 /// Start a semantic embedding worker for `session`.
@@ -218,15 +383,20 @@ pub fn start_session_semantic_worker(
                                 .namespace_id
                                 .lock()
                                 .expect("semantic namespace poisoned") = Some(ns.id);
+                            shared_thread.set_phase(WorkerPhase::Idle);
                             Some(ns.id)
                         }
                         Err(err) => {
-                            publish_error(&events, &workspace_id, err.to_string());
+                            let detail = err.to_string();
+                            shared_thread.set_error(detail.clone());
+                            publish_error(&events, &workspace_id, detail);
                             None
                         }
                     },
                     Err(err) => {
-                        publish_error(&events, &workspace_id, err.to_string());
+                        let detail = err.to_string();
+                        shared_thread.set_error(detail.clone());
+                        publish_error(&events, &workspace_id, detail);
                         None
                     }
                 },
@@ -279,6 +449,7 @@ fn run_worker_loop(
         let Some(session) = weak_session.upgrade() else {
             break;
         };
+        shared.set_phase(WorkerPhase::Indexing);
         match session
             .index()
             .embed_pending_chunks(namespace_id, provider, batch_size)
@@ -289,11 +460,17 @@ fn run_worker_loop(
                 if stats.embedded > 0 || stats.failed > 0 {
                     if stats.embedded + stats.failed >= batch_size {
                         shared.request_kick();
+                    } else {
+                        shared.set_phase(WorkerPhase::Idle);
                     }
+                } else {
+                    shared.set_phase(WorkerPhase::Idle);
                 }
             }
             Err(err) => {
-                publish_error(events, workspace_id, err.to_string());
+                let detail = err.to_string();
+                shared.set_error(detail.clone());
+                publish_error(events, workspace_id, detail);
                 // Back off briefly so a hard failure does not spin.
                 thread::sleep(Duration::from_millis(100));
             }
@@ -658,6 +835,102 @@ mod tests {
         assert!(
             final_count >= after + 1,
             "restart should resume pending chunks"
+        );
+
+        runtime.close_session(dir.path()).unwrap();
+    }
+
+    #[test]
+    fn map_worker_status_covers_lifecycle_and_degrade() {
+        assert_eq!(
+            map_worker_status(true, false, MappedWorkerPhase::Idle, None, None).state,
+            SemanticStatusState::Stopped
+        );
+        assert_eq!(
+            map_worker_status(false, true, MappedWorkerPhase::Idle, None, Some(3)).state,
+            SemanticStatusState::Degraded
+        );
+        assert_eq!(
+            map_worker_status(false, false, MappedWorkerPhase::Preparing, None, None).state,
+            SemanticStatusState::Preparing
+        );
+        assert_eq!(
+            map_worker_status(false, false, MappedWorkerPhase::Indexing, None, Some(2)).state,
+            SemanticStatusState::Indexing
+        );
+        assert_eq!(
+            map_worker_status(false, false, MappedWorkerPhase::Idle, None, Some(0)).state,
+            SemanticStatusState::Ready
+        );
+        assert_eq!(
+            map_worker_status(false, false, MappedWorkerPhase::Idle, None, Some(4)).state,
+            SemanticStatusState::Indexing
+        );
+        let failed = map_worker_status(
+            false,
+            false,
+            MappedWorkerPhase::Failed,
+            Some("boom".into()),
+            None,
+        );
+        assert_eq!(failed.state, SemanticStatusState::Failed);
+        assert_eq!(failed.message.as_deref(), Some("boom"));
+    }
+
+    #[test]
+    fn enable_path_status_leaves_stopped_then_returns_on_stop() {
+        let dir = init_workspace();
+        std::fs::write(
+            dir.path().join("Notes.md"),
+            "# Notes\n\nCapability grants for plugins.\n",
+        )
+        .unwrap();
+        let runtime = LatticeRuntime::new();
+        let session = runtime.open_workspace_session(dir.path()).unwrap();
+        assert_eq!(
+            session.semantic_status().state,
+            SemanticStatusState::Stopped
+        );
+
+        session
+            .start_semantic_indexing(
+                Arc::clone(runtime.events()),
+                SemanticWorkerConfig::new(fake_provider()),
+            )
+            .unwrap();
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            let status = session.semantic_status();
+            if matches!(
+                status.state,
+                SemanticStatusState::Ready | SemanticStatusState::Indexing
+            ) {
+                break;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+        let status = session.semantic_status();
+        assert!(
+            matches!(
+                status.state,
+                SemanticStatusState::Ready
+                    | SemanticStatusState::Indexing
+                    | SemanticStatusState::Preparing
+            ),
+            "expected live status, got {status:?}"
+        );
+
+        session.set_semantic_degraded(true);
+        assert_eq!(
+            session.semantic_status().state,
+            SemanticStatusState::Degraded
+        );
+
+        session.stop_semantic_indexing();
+        assert_eq!(
+            session.semantic_status().state,
+            SemanticStatusState::Stopped
         );
 
         runtime.close_session(dir.path()).unwrap();

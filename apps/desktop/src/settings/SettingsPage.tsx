@@ -19,6 +19,14 @@ import type { ThemeCatalogPayload } from "../theme";
 import type { WorkspaceStartupSettings } from "../lib/profile";
 import type { PageWidth } from "../lib/pageWidth";
 import { getVoiceStatus, listenVoiceEvents, prepareVoiceModel, type VoiceStatus } from "../lib/voice";
+import {
+  disableSemanticSearch,
+  enableSemanticSearch,
+  getSemanticStatus,
+  listenSemanticEvents,
+  semanticStatusLabel,
+  type SemanticStatus,
+} from "../lib/semantic";
 import type { WorkspaceSnapshot } from "../types";
 import { HistoryRetentionSettings } from "./HistoryRetentionSettings";
 import type { AppSettings } from "./model";
@@ -448,6 +456,7 @@ export function SettingsPage({
 
         {section === "search" && (
           <SemanticSearchSettings
+            workspaceRoot={workspace.root || null}
             semanticEnabled={settings.search.semanticEnabled}
             onSemanticEnabledChange={(semanticEnabled) => update("search", { semanticEnabled })}
           />
@@ -585,12 +594,106 @@ export function SettingsPage({
 }
 
 function SemanticSearchSettings({
+  workspaceRoot,
   semanticEnabled,
   onSemanticEnabledChange,
 }: {
+  workspaceRoot: string | null;
   semanticEnabled: boolean;
   onSemanticEnabledChange: (semanticEnabled: boolean) => void;
 }) {
+  const [status, setStatus] = useState<SemanticStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (inBrowser || !workspaceRoot) return;
+    let cancelled = false;
+    void getSemanticStatus(workspaceRoot)
+      .then((next) => {
+        if (!cancelled) setStatus(next);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceRoot]);
+
+  // Re-attach the Fake worker when the preference is already on (app relaunch).
+  useEffect(() => {
+    if (inBrowser || !workspaceRoot || !semanticEnabled) return;
+    let cancelled = false;
+    void enableSemanticSearch(workspaceRoot)
+      .then((next) => {
+        if (!cancelled) setStatus(next);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceRoot, semanticEnabled]);
+
+  useEffect(() => {
+    if (inBrowser) return;
+    let unlisten: (() => void) | undefined;
+    void listenSemanticEvents((event) => {
+      if (event.type === "status") {
+        setStatus({
+          state: event.state,
+          pendingChunks: event.pendingChunks,
+          message: event.message,
+        });
+      }
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
+  // Poll while preparing/indexing so pending counts stay fresh.
+  useEffect(() => {
+    if (inBrowser || !workspaceRoot || !semanticEnabled) return;
+    if (!status || (status.state !== "preparing" && status.state !== "indexing")) return;
+    const id = window.setInterval(() => {
+      void getSemanticStatus(workspaceRoot)
+        .then(setStatus)
+        .catch(() => {
+          /* keep last status */
+        });
+    }, 750);
+    return () => window.clearInterval(id);
+  }, [workspaceRoot, semanticEnabled, status?.state]);
+
+  async function handleToggle(next: boolean) {
+    onSemanticEnabledChange(next);
+    if (inBrowser || !workspaceRoot) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = next
+        ? await enableSemanticSearch(workspaceRoot)
+        : await disableSemanticSearch(workspaceRoot);
+      setStatus(updated);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+      onSemanticEnabledChange(!next);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const statusText = status
+    ? semanticStatusLabel(status.state, status.pendingChunks)
+    : semanticEnabled
+      ? "Preparing…"
+      : "Not prepared";
+
   return (
     <>
       <h1>Search</h1>
@@ -612,15 +715,27 @@ function SemanticSearchSettings({
             <Toggle
               label="Semantic search"
               checked={semanticEnabled}
-              onChange={onSemanticEnabledChange}
+              onChange={(checked) => void handleToggle(checked)}
             />
           </SettingRow>
           <SettingRow
             title="Index status"
             description="Whether the local embedding model and workspace index are ready."
           >
-            <span>Not prepared</span>
+            <span>{busy ? "Updating…" : statusText}</span>
           </SettingRow>
+          {error ? (
+            <div className="diagnostics-card" role="alert">
+              <strong>Semantic search error</strong>
+              <span>{error}</span>
+            </div>
+          ) : null}
+          {status?.message && status.state === "failed" ? (
+            <div className="diagnostics-card" role="status">
+              <strong>Details</strong>
+              <span>{status.message}</span>
+            </div>
+          ) : null}
         </>
       )}
     </>

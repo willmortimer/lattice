@@ -1,11 +1,17 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use lattice_embedding::EmbeddingProvider;
+use lattice_embedding::{
+    DistanceMetric, EmbeddingProvider, EmbeddingSpecification, FakeEmbeddingProvider,
+    PoolingStrategy,
+};
 use lattice_index::{
     Backlink, ChunkSearchHit, EmbedPendingStats, EmbeddingNamespace, HybridSearchHit, SearchHit,
     CHUNKER_VERSION,
 };
-use lattice_runtime::{default_runtime, LatticeRuntime, WorkspaceSession};
+use lattice_runtime::{
+    default_runtime, LatticeRuntime, SemanticStatus, SemanticWorkerConfig, WorkspaceSession,
+};
 
 fn map_runtime_err(err: lattice_runtime::Error) -> String {
     err.to_string()
@@ -229,15 +235,97 @@ pub fn get_backlinks_with_session(
         .map_err(map_runtime_err)
 }
 
+fn fake_embedding_provider() -> Arc<dyn EmbeddingProvider> {
+    Arc::new(FakeEmbeddingProvider::new(EmbeddingSpecification {
+        provider_id: "fake".into(),
+        model_id: "fake-model".into(),
+        model_revision: "rev-1".into(),
+        artifact_sha256: "sha256:fake".into(),
+        dimensions: 12,
+        native_dimensions: 12,
+        distance: DistanceMetric::Cosine,
+        pooling: PoolingStrategy::Last,
+        normalized: true,
+        instruction_version: "handlers-fake-v1".into(),
+    }))
+}
+
+/// Start (or restart) Fake semantic indexing for the workspace session.
+pub fn enable_semantic_search(root: String) -> Result<SemanticStatus, String> {
+    enable_semantic_search_with_runtime(&default_runtime(), root)
+}
+
+pub fn enable_semantic_search_with_runtime(
+    runtime: &LatticeRuntime,
+    root: String,
+) -> Result<SemanticStatus, String> {
+    let session = runtime
+        .open_workspace_session(PathBuf::from(root))
+        .map_err(map_runtime_err)?;
+    enable_semantic_search_with_session(runtime, &session)
+}
+
+pub fn enable_semantic_search_with_session(
+    runtime: &LatticeRuntime,
+    session: &Arc<WorkspaceSession>,
+) -> Result<SemanticStatus, String> {
+    session
+        .start_semantic_indexing(
+            Arc::clone(runtime.events()),
+            SemanticWorkerConfig::new(fake_embedding_provider()),
+        )
+        .map_err(map_runtime_err)?;
+    Ok(session.semantic_status())
+}
+
+/// Stop semantic indexing for the workspace session (FTS remains available).
+pub fn disable_semantic_search(root: String) -> Result<SemanticStatus, String> {
+    disable_semantic_search_with_runtime(&default_runtime(), root)
+}
+
+pub fn disable_semantic_search_with_runtime(
+    runtime: &LatticeRuntime,
+    root: String,
+) -> Result<SemanticStatus, String> {
+    let session = runtime
+        .open_workspace_session(PathBuf::from(root))
+        .map_err(map_runtime_err)?;
+    disable_semantic_search_with_session(&session)
+}
+
+pub fn disable_semantic_search_with_session(
+    session: &WorkspaceSession,
+) -> Result<SemanticStatus, String> {
+    session.stop_semantic_indexing();
+    Ok(SemanticStatus::stopped())
+}
+
+/// Current semantic indexing status for the workspace session.
+pub fn semantic_search_status(root: String) -> Result<SemanticStatus, String> {
+    semantic_search_status_with_runtime(&default_runtime(), root)
+}
+
+pub fn semantic_search_status_with_runtime(
+    runtime: &LatticeRuntime,
+    root: String,
+) -> Result<SemanticStatus, String> {
+    let session = runtime
+        .open_workspace_session(PathBuf::from(root))
+        .map_err(map_runtime_err)?;
+    Ok(session.semantic_status())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
+    use std::thread;
+    use std::time::{Duration, Instant};
 
     use lattice_core::Workspace;
     use lattice_embedding::{
         DistanceMetric, EmbeddingSpecification, FakeEmbeddingProvider, PoolingStrategy,
     };
+    use lattice_runtime::SemanticStatusState;
 
     fn init_workspace() -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
@@ -365,5 +453,43 @@ mod tests {
         .unwrap();
         assert!(!hits.is_empty());
         assert!(hits.iter().any(|hit| hit.fused_score > 0.0));
+    }
+
+    #[test]
+    fn enable_disable_semantic_search_updates_status() {
+        let dir = init_workspace();
+        std::fs::write(
+            dir.path().join("Notes.md"),
+            "# Notes\n\nCapability grants for plugins.\n",
+        )
+        .unwrap();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        assert_eq!(
+            semantic_search_status(root.clone()).unwrap().state,
+            SemanticStatusState::Stopped
+        );
+
+        let enabled = enable_semantic_search(root.clone()).unwrap();
+        assert_ne!(enabled.state, SemanticStatusState::Stopped);
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            let status = semantic_search_status(root.clone()).unwrap();
+            if matches!(
+                status.state,
+                SemanticStatusState::Ready | SemanticStatusState::Indexing
+            ) {
+                break;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+
+        let disabled = disable_semantic_search(root.clone()).unwrap();
+        assert_eq!(disabled.state, SemanticStatusState::Stopped);
+        assert_eq!(
+            semantic_search_status(root).unwrap().state,
+            SemanticStatusState::Stopped
+        );
     }
 }
