@@ -220,3 +220,60 @@ fn hive_path_helpers() {
     assert_eq!(parsed.get("year").map(String::as_str), Some("2025"));
     assert_eq!(parsed.get("month").map(String::as_str), Some("07"));
 }
+
+#[test]
+fn annotation_upsert_persists_and_lists() {
+    let dir = tempfile::tempdir().unwrap();
+    let package = dir.path().join("Review.dataset");
+    let dataset = Dataset::create(&package, "Review", None).unwrap();
+
+    assert!(!dataset.annotations_path().exists());
+    dataset
+        .upsert_annotation(&crate::EventAnnotation::new(
+            "e1",
+            Some("keep".into()),
+            Some("looks good".into()),
+            true,
+        ))
+        .unwrap();
+    assert!(dataset.annotations_path().is_file());
+
+    let got = dataset.get_annotation("e1").unwrap().unwrap();
+    assert_eq!(got.event_id, "e1");
+    assert_eq!(got.label.as_deref(), Some("keep"));
+    assert_eq!(got.notes.as_deref(), Some("looks good"));
+    assert!(got.reviewed);
+
+    dataset
+        .upsert_annotation(&crate::EventAnnotation::new(
+            "e1",
+            Some("reject".into()),
+            None,
+            false,
+        ))
+        .unwrap();
+    let updated = dataset.get_annotation("e1").unwrap().unwrap();
+    assert_eq!(updated.label.as_deref(), Some("reject"));
+    assert!(updated.notes.is_none());
+    assert!(!updated.reviewed);
+
+    dataset
+        .upsert_annotation(&crate::EventAnnotation::new("e2", None, None, false))
+        .unwrap();
+    let listed = dataset.list_annotations().unwrap();
+    assert_eq!(listed.len(), 2);
+    assert_eq!(listed[0].event_id, "e1");
+    assert_eq!(listed[1].event_id, "e2");
+}
+
+#[test]
+fn annotation_rejects_empty_event_id() {
+    let dir = tempfile::tempdir().unwrap();
+    let package = dir.path().join("Bad.dataset");
+    let dataset = Dataset::create(&package, "Bad", None).unwrap();
+    let err = dataset
+        .upsert_annotation(&crate::EventAnnotation::new("  ", None, None, false))
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("event_id"), "{err}");
+}

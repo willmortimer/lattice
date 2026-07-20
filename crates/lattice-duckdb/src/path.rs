@@ -65,6 +65,56 @@ fn absolutize(root: &Path, candidate: &Path) -> PathBuf {
     }
 }
 
+/// Resolve a path that may include DuckDB glob metacharacters (`*`, `?`, `[`).
+///
+/// The longest non-glob path prefix must exist under `root`; remaining segments
+/// (including globs) are appended lexically so `read_parquet('facts/**/*.parquet')`
+/// stays inside the workspace allowlist.
+pub fn resolve_glob_under_root(root: &Path, candidate: &Path) -> Result<PathBuf> {
+    let root = canonicalize_dir(root)?;
+    let absolute = absolutize(&root, candidate);
+
+    let mut prefix = PathBuf::new();
+    let mut glob_tail: Vec<std::ffi::OsString> = Vec::new();
+    let mut hit_glob = false;
+    for component in absolute.components() {
+        let text = component.as_os_str().to_string_lossy();
+        if !hit_glob && is_glob_segment(&text) {
+            hit_glob = true;
+        }
+        if hit_glob {
+            glob_tail.push(component.as_os_str().to_owned());
+        } else {
+            prefix.push(component);
+        }
+    }
+
+    if !hit_glob {
+        return resolve_under_root(&root, candidate);
+    }
+
+    let prefix = if prefix.as_os_str().is_empty() {
+        root.clone()
+    } else {
+        prefix
+            .canonicalize()
+            .map_err(|source| Error::io(&prefix, source))?
+    };
+    if !prefix.starts_with(&root) {
+        return Err(Error::path_not_allowed(prefix, root));
+    }
+
+    let mut resolved = prefix;
+    for part in glob_tail {
+        resolved.push(part);
+    }
+    Ok(resolved)
+}
+
+fn is_glob_segment(segment: &str) -> bool {
+    segment.contains('*') || segment.contains('?') || segment.contains('[')
+}
+
 /// Escape a string for use inside a DuckDB single-quoted SQL literal.
 pub fn sql_string_literal(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
