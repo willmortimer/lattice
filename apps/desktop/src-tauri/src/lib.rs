@@ -208,6 +208,8 @@ pub fn run() {
             data::list_data_forms,
             data::load_data_form,
             data::import_csv_table,
+            data::preview_csv_import,
+            data::commit_csv_import,
             canvas::read_canvas,
             canvas::canvas_place_resource,
             canvas::canvas_move_nodes,

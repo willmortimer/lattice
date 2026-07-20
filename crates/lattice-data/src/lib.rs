@@ -15,7 +15,10 @@ mod view;
 mod tests;
 
 pub use app::{AppManifest, DATA_APP_FORMAT, DEFAULT_VIEW_NAME};
-pub use csv::{cell_from_csv, infer_field_type, parse_csv_file, sanitize_column_name, CsvTable};
+pub use csv::{
+    cell_from_csv, infer_field_type, parse_csv_file, parse_field_type_name, resolve_field_types,
+    sanitize_column_name, CsvTable,
+};
 pub use data_app::DataApp;
 pub use error::Error;
 pub use form::{write_package_form, FormDef, FORM_FILE_SUFFIX, FORM_FORMAT, FORM_VERSION};

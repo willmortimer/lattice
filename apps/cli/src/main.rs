@@ -11,7 +11,9 @@ use lattice_core::{
     template_catalog, template_descriptor, Diagnostic, Resource, Severity, TemplateDescriptor,
     TemplateVisibility, Workspace,
 };
-use lattice_data::{parse_csv_file, CellValue, DataApp, FieldType};
+use lattice_data::{
+    parse_csv_file, parse_field_type_name, resolve_field_types, CellValue, DataApp, FieldType,
+};
 use lattice_index::{Backlink, SearchHit, WorkspaceIndex};
 use lattice_storage::{NativeWorkspaceStore, RecoveryJournal, WorkspaceStore};
 use lattice_theme::{
@@ -295,6 +297,9 @@ enum TableCommand {
         /// Table name inside the package. Defaults to `records`.
         #[arg(long, default_value = "records")]
         table: String,
+        /// Override inferred column type as `column:type` (repeatable).
+        #[arg(long = "type", value_name = "COLUMN:TYPE")]
+        column_types: Vec<String>,
     },
     /// Add a column to an existing table.
     AddColumn {
@@ -455,7 +460,8 @@ fn run(command: Command) -> Result<ExitCode> {
                 name,
                 title,
                 table,
-            } => cmd_table_import(csv, name, title, table),
+                column_types,
+            } => cmd_table_import(csv, name, title, table, column_types),
             TableCommand::AddColumn {
                 path,
                 table,
@@ -849,13 +855,37 @@ fn package_path_from_name(name: &str) -> PathBuf {
     PathBuf::from(format!("{trimmed}.data"))
 }
 
+fn parse_column_type_override(value: &str) -> Result<(String, lattice_data::FieldType)> {
+    let (column, field_type) = value
+        .split_once(':')
+        .ok_or_else(|| anyhow::anyhow!("expected column:type, got {value:?}"))?;
+    let column = column.trim();
+    if column.is_empty() {
+        anyhow::bail!("column name is required in column:type override");
+    }
+    let field_type = parse_field_type_name(field_type.trim())
+        .map_err(|err| anyhow::anyhow!("{err}"))?;
+    Ok((column.to_string(), field_type))
+}
+
 fn cmd_table_import(
     csv: PathBuf,
     name: String,
     title: Option<String>,
     table: String,
+    column_types: Vec<String>,
 ) -> Result<ExitCode> {
     let parsed = parse_csv_file(&csv)?;
+    let overrides = column_types
+        .iter()
+        .map(|value| parse_column_type_override(value))
+        .collect::<Result<std::collections::BTreeMap<_, _>>>()?;
+    for column in overrides.keys() {
+        if !parsed.headers.iter().any(|header| header == column) {
+            anyhow::bail!("unknown CSV column {column:?}");
+        }
+    }
+    let field_types = resolve_field_types(&parsed.headers, &parsed.field_types, &overrides);
     let (ws, mut engine) = open_engine()?;
     let rel = workspace_relative(&ws, &package_path_from_name(&name))?;
     let title = title.unwrap_or_else(|| name.trim().replace(".data", "").to_string());
@@ -873,7 +903,7 @@ fn cmd_table_import(
     let columns = parsed
         .headers
         .iter()
-        .zip(&parsed.field_types)
+        .zip(&field_types)
         .map(|(header, field_type)| ColumnSpec::new(header.clone(), *field_type))
         .collect();
     engine.apply(Transaction::new(
@@ -891,7 +921,7 @@ fn cmd_table_import(
         for ((header, field_type), cell) in parsed
             .headers
             .iter()
-            .zip(&parsed.field_types)
+            .zip(&field_types)
             .zip(row.iter())
         {
             values.insert(

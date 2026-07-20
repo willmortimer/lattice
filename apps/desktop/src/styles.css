@@ -2314,6 +2314,99 @@ html[data-page-width="full"] {
   gap: 4px;
 }
 
+/* CSV import type-review dialog */
+.csv-import-review-panel {
+  position: fixed;
+  z-index: 81;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(720px, calc(100vw - 32px));
+  max-height: min(80vh, 720px);
+  display: flex;
+  flex-direction: column;
+}
+
+.csv-import-review-scroll {
+  overflow: auto;
+  margin: 8px 0 4px;
+  border: 1px solid var(--lt-border);
+  border-radius: 8px;
+}
+
+.csv-import-review-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.csv-import-review-table th,
+.csv-import-review-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--lt-border-subtle);
+  text-align: left;
+  vertical-align: top;
+}
+
+.csv-import-review-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--lt-surface-raised);
+  font-weight: 600;
+  z-index: 1;
+}
+
+.csv-import-review-subhead {
+  margin: 12px 10px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--lt-muted);
+}
+
+.csv-import-review-select {
+  width: 100%;
+  min-width: 120px;
+  padding: 6px 8px;
+  border: 1px solid var(--lt-border);
+  border-radius: 6px;
+  background: var(--lt-surface);
+  color: var(--lt-text);
+}
+
+.csv-import-review-samples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.csv-import-review-sample {
+  display: inline-block;
+  max-width: 140px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--lt-surface-sunken);
+  font-family: var(--lt-font-mono, ui-monospace, monospace);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.csv-import-review-inferred {
+  font-size: 11px;
+  color: var(--lt-muted);
+}
+
+.csv-import-review-empty {
+  color: var(--lt-muted);
+}
+
+.csv-import-review-preview-table td {
+  font-family: var(--lt-font-mono, ui-monospace, monospace);
+  font-size: 12px;
+}
+
 .link-picker-list button {
   display: flex;
   align-items: center;
