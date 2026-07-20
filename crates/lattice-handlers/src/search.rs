@@ -76,6 +76,10 @@ pub struct SearchHitUi {
     pub heading_path: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chunk_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sensitivity: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub export_policy: Option<String>,
 }
 
 impl SearchHitUi {
@@ -90,6 +94,8 @@ impl SearchHitUi {
             semantic_rank: None,
             heading_path: None,
             chunk_id: None,
+            sensitivity: None,
+            export_policy: None,
         }
     }
 
@@ -105,6 +111,8 @@ impl SearchHitUi {
             semantic_rank: hit.semantic_rank,
             heading_path: Some(hit.heading_path),
             chunk_id: Some(hit.chunk_id),
+            sensitivity: Some(hit.sensitivity.as_str().to_string()),
+            export_policy: Some(hit.export_policy.as_str().to_string()),
         }
     }
 }
@@ -404,11 +412,13 @@ fn fake_embedding_provider() -> Arc<dyn EmbeddingProvider> {
 
 /// Start (or restart) semantic indexing for the workspace session.
 ///
-/// When [`ENV_SEMANTIC_FAKE`] is set (CI / offline), skips model download and
-/// uses the in-process Fake provider. Otherwise acquires the pinned Qwen3 GGUF
-/// (local fixture via `LATTICE_SEMANTIC_MODEL_SOURCE`, or HTTPS) with progress
-/// on the session prepare status, then starts the Fake worker. Daemon host modes
-/// (`LATTICE_EMBED_HOST_*`) use EmbedHostClient via latticed instead.
+/// **Production enable is latticed-owned** (desktop Settings → Tauri →
+/// `EnableSemanticSearch` on the daemon, which supervises `lattice-embed-host`).
+/// This handlers path is for tests/CI and embedded tooling only.
+///
+/// When [`ENV_SEMANTIC_FAKE`] / [`semantic_fake_enabled`] is set, skips model
+/// download and uses the in-process Fake provider. Otherwise returns an error
+/// directing callers to route enable through latticed / embed-host.
 pub fn enable_semantic_search(root: String) -> Result<SemanticStatus, String> {
     enable_semantic_search_with_runtime(&default_runtime(), root)
 }
@@ -482,11 +492,23 @@ pub fn prepare_semantic_model_for_session(
 }
 
 /// Like [`enable_semantic_search_with_session`], with a progress hook for UI events.
+///
+/// Fake embeddings only when [`semantic_fake_enabled`]. Production desktop must
+/// enable via latticed (`EnableSemanticSearch`) so embeddings run in
+/// `lattice-embed-host`, not an in-process Fake after Qwen download.
 pub fn enable_semantic_search_with_session_and_progress(
     runtime: &LatticeRuntime,
     session: &Arc<WorkspaceSession>,
     mut on_progress: impl FnMut(&SemanticStatus),
 ) -> Result<SemanticStatus, String> {
+    if !semantic_fake_enabled() {
+        return Err(
+            "embedded semantic enable requires LATTICE_SEMANTIC_FAKE=1; \
+             production desktop must route EnableSemanticSearch through latticed \
+             (lattice-embed-host)"
+                .into(),
+        );
+    }
     prepare_semantic_model_for_session(session, &mut on_progress)?;
     session
         .start_semantic_indexing(
@@ -539,6 +561,7 @@ pub fn semantic_search_status_with_runtime(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
     use std::thread;
     use std::time::{Duration, Instant};
 
@@ -548,6 +571,9 @@ mod tests {
         ENV_SEMANTIC_FAKE,
     };
     use lattice_runtime::SemanticStatusState;
+
+    /// Serialize tests that mutate `LATTICE_SEMANTIC_FAKE` (process-global).
+    static SEMANTIC_FAKE_ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn init_workspace() -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
@@ -793,7 +819,30 @@ mod tests {
     }
 
     #[test]
+    fn enable_semantic_search_without_fake_is_rejected() {
+        let _guard = SEMANTIC_FAKE_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let previous = std::env::var(ENV_SEMANTIC_FAKE).ok();
+        std::env::remove_var(ENV_SEMANTIC_FAKE);
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let err = enable_semantic_search(root).unwrap_err();
+        assert!(
+            err.contains("LATTICE_SEMANTIC_FAKE") || err.contains("latticed"),
+            "unexpected error: {err}"
+        );
+        match previous {
+            Some(value) => std::env::set_var(ENV_SEMANTIC_FAKE, value),
+            None => std::env::remove_var(ENV_SEMANTIC_FAKE),
+        }
+    }
+
+    #[test]
     fn enable_disable_semantic_search_updates_status() {
+        let _guard = SEMANTIC_FAKE_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         std::env::set_var(ENV_SEMANTIC_FAKE, "1");
         let dir = init_workspace();
         std::fs::write(
