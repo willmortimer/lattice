@@ -84,6 +84,23 @@ Features:
 - Snapshot manifests.
 - Local and S3-backed partitions.
 
+`dataset.yaml` lists known partitions (path, Hive keys, optional row/byte
+counts). The `lattice-datasets` crate writes and discovers Hive-style paths
+under `facts/`, and can import CSV into Parquet. Parquet I/O uses the Apache
+Arrow Rust crates (`arrow`, `parquet`), licensed **Apache-2.0**.
+
+Example partition entries:
+
+```yaml
+partitions:
+  - path: facts/year=2025/month=12/part-000.parquet
+    keys:
+      month: "12"
+      year: "2025"
+    rows: 3
+    bytes: 1024
+```
+
 ## Mutable annotation overlays
 
 Large facts stay in Parquet while human or AI review state lives in SQLite:

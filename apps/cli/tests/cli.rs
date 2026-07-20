@@ -332,3 +332,44 @@ fn dataset_create_and_show() {
         .stdout(predicates_contains("\"title\": \"Usage\""))
         .stdout(predicates_contains("lattice-dataset"));
 }
+
+#[test]
+fn dataset_import_csv_writes_partition() {
+    let dir = tempfile::tempdir().unwrap();
+    init_blank(dir.path()).success();
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("dataset")
+        .arg("create")
+        .arg("Usage.dataset")
+        .arg("--title")
+        .arg("Usage")
+        .assert()
+        .success();
+
+    let csv_path = dir.path().join("events.csv");
+    std::fs::write(&csv_path, "event_id,count\ne1,10\ne2,20\n").unwrap();
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("dataset")
+        .arg("import-csv")
+        .arg("Usage.dataset")
+        .arg("--csv")
+        .arg(&csv_path)
+        .arg("--partition")
+        .arg("year=2026")
+        .arg("--partition")
+        .arg("month=01")
+        .assert()
+        .success()
+        .stdout(predicates_contains("facts/year=2026/month=01/part-000.parquet"));
+
+    assert!(dir
+        .path()
+        .join("Usage.dataset/facts/year=2026/month=01/part-000.parquet")
+        .is_file());
+    let yaml = std::fs::read_to_string(dir.path().join("Usage.dataset/dataset.yaml")).unwrap();
+    assert!(yaml.contains("facts/year=2026/month=01/part-000.parquet"));
+}
