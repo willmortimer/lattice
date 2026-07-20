@@ -1,11 +1,17 @@
 use std::path::{Path, PathBuf};
 
 use duckdb::{params, types::ValueRef, Connection, Row};
+use rusqlite::Connection as SqliteConnection;
 
 use crate::batch::{DataType, Field, RecordBatch, ScalarValue, Schema};
 use crate::error::Error;
-use crate::path::{resolve_under_root, resolve_under_root_for_create, sql_string_literal};
+use crate::path::{
+    resolve_glob_under_root, resolve_under_root, resolve_under_root_for_create, sql_string_literal,
+};
 use crate::Result;
+
+/// DuckDB table name used when bridging SQLite `event_annotations` offline.
+pub const ANNOTATIONS_TEMP_TABLE: &str = "event_annotations";
 
 /// DuckDB connection scoped to a single workspace root allowlist.
 pub struct DuckDbEngine {
@@ -102,9 +108,6 @@ impl DuckDbEngine {
     }
 
     /// Query a Parquet file under the workspace via `read_parquet`.
-    ///
-    /// TODO(P3-04): add a parquet fixture and integration coverage once
-    /// partitioned `facts/` Parquet packaging lands.
     pub fn query_parquet(&self, path: impl AsRef<Path>) -> Result<RecordBatch> {
         let resolved = self.resolve_path(path)?;
         let sql = format!(
@@ -112,6 +115,110 @@ impl DuckDbEngine {
             sql_string_literal(&path_to_sql(&resolved))
         );
         self.query(&sql)
+    }
+
+    /// Left-join Parquet facts with `event_annotations` from `annotations.sqlite`.
+    ///
+    /// Lattice keeps `enable_external_access=false`, so DuckDB cannot
+    /// autoinstall the community `sqlite` extension for `sqlite_scan` /
+    /// `ATTACH … (TYPE SQLITE)`. Instead this loads annotation rows via
+    /// rusqlite into a DuckDB temp table (same schema/join key as the docs
+    /// example) and joins with `read_parquet`.
+    pub fn query_parquet_left_join_annotations(
+        &self,
+        parquet_glob: impl AsRef<Path>,
+        annotations_sqlite: impl AsRef<Path>,
+    ) -> Result<RecordBatch> {
+        let parquet = resolve_glob_under_root(&self.workspace_root, parquet_glob.as_ref())?;
+        let annotations = self.resolve_path(annotations_sqlite)?;
+        self.load_annotations_temp_table(&annotations)?;
+
+        let parquet_sql = sql_string_literal(&path_to_sql(&parquet));
+        let sql = format!(
+            "SELECT
+                events.*,
+                annotations.label,
+                annotations.notes,
+                annotations.reviewed
+             FROM read_parquet({parquet_sql}, hive_partitioning = true, union_by_name = true) AS events
+             LEFT JOIN {ANNOTATIONS_TEMP_TABLE} AS annotations
+             ON events.event_id = annotations.event_id
+             ORDER BY events.event_id"
+        );
+        self.query(&sql)
+    }
+
+    /// Documented DuckDB SQL shape using `sqlite_scan` (requires the sqlite extension).
+    ///
+    /// Prefer [`Self::query_parquet_left_join_annotations`] under Lattice's
+    /// workspace allowlist; this helper is for environments that can load the
+    /// extension.
+    pub fn annotation_overlay_sqlite_scan_sql(
+        parquet_glob: &str,
+        annotations_sqlite: &str,
+    ) -> String {
+        format!(
+            "SELECT
+    events.*,
+    annotations.label,
+    annotations.notes,
+    annotations.reviewed
+FROM read_parquet({parquet}) AS events
+LEFT JOIN sqlite_scan({annotations}, 'event_annotations') AS annotations
+ON events.event_id = annotations.event_id",
+            parquet = sql_string_literal(parquet_glob),
+            annotations = sql_string_literal(annotations_sqlite),
+        )
+    }
+
+    fn load_annotations_temp_table(&self, annotations_sqlite: &Path) -> Result<()> {
+        self.conn.execute(
+            &format!("DROP TABLE IF EXISTS {ANNOTATIONS_TEMP_TABLE}"),
+            params![],
+        )?;
+        self.conn.execute(
+            &format!(
+                "CREATE TEMP TABLE {ANNOTATIONS_TEMP_TABLE} (
+                    event_id VARCHAR PRIMARY KEY,
+                    label VARCHAR,
+                    notes VARCHAR,
+                    reviewed BOOLEAN
+                )"
+            ),
+            params![],
+        )?;
+
+        let sqlite = SqliteConnection::open(annotations_sqlite)
+            .map_err(|source| Error::sqlite(annotations_sqlite, source))?;
+        let mut stmt = sqlite
+            .prepare(
+                "SELECT event_id, label, notes, reviewed
+                 FROM event_annotations
+                 ORDER BY event_id",
+            )
+            .map_err(|source| Error::sqlite(annotations_sqlite, source))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, i64>(3)? != 0,
+                ))
+            })
+            .map_err(|source| Error::sqlite(annotations_sqlite, source))?;
+
+        let insert_sql = format!(
+            "INSERT INTO {ANNOTATIONS_TEMP_TABLE} (event_id, label, notes, reviewed)
+             VALUES (?, ?, ?, ?)"
+        );
+        for row in rows {
+            let (event_id, label, notes, reviewed) =
+                row.map_err(|source| Error::sqlite(annotations_sqlite, source))?;
+            self.conn
+                .execute(&insert_sql, params![event_id, label, notes, reviewed])?;
+        }
+        Ok(())
     }
 }
 

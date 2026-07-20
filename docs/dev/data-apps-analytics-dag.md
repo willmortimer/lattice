@@ -143,7 +143,7 @@ flowchart TD
 | P3-05 | merged | composer | Profiling |
 | P3-06 | merged | grok | Perspective |
 | P3-07 | merged | composer | Vega-Lite |
-| P3-08 | pending | grok | Annotation overlay |
+| P3-08 | merged | grok | Annotation overlay |
 | P3-09 | pending | composer | Docs wave 3 |
 
 ## Shared-file conflict map (Wave 1)

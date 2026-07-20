@@ -375,6 +375,70 @@ fn dataset_import_csv_writes_partition() {
 }
 
 #[test]
+fn dataset_annotate_and_query_annotated_join() {
+    let dir = tempfile::tempdir().unwrap();
+    init_blank(dir.path()).success();
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("dataset")
+        .arg("create")
+        .arg("Usage.dataset")
+        .arg("--title")
+        .arg("Usage")
+        .assert()
+        .success();
+
+    let csv_path = dir.path().join("events.csv");
+    std::fs::write(&csv_path, "event_id,count\ne1,10\ne2,20\n").unwrap();
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("dataset")
+        .arg("import-csv")
+        .arg("Usage.dataset")
+        .arg("--csv")
+        .arg(&csv_path)
+        .arg("--partition")
+        .arg("year=2026")
+        .assert()
+        .success();
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("dataset")
+        .arg("annotate")
+        .arg("Usage.dataset")
+        .arg("--event-id")
+        .arg("e1")
+        .arg("--label")
+        .arg("keep")
+        .arg("--notes")
+        .arg("looks good")
+        .arg("--reviewed")
+        .assert()
+        .success()
+        .stdout(predicates_contains("event_id=e1"));
+
+    assert!(dir
+        .path()
+        .join("Usage.dataset/annotations.sqlite")
+        .is_file());
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("dataset")
+        .arg("query-annotated")
+        .arg("Usage.dataset")
+        .arg("--json")
+        .assert()
+        .success()
+        .stdout(predicates_contains("\"keep\""))
+        .stdout(predicates_contains("\"e1\""))
+        .stdout(predicates_contains("\"e2\""));
+}
+
+#[test]
 fn query_csv_with_duckdb_engine() {
     let dir = tempfile::tempdir().unwrap();
     init_blank(dir.path()).success();

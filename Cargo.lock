@@ -3220,6 +3220,7 @@ dependencies = [
  "arrow 59.1.0",
  "hex",
  "parquet",
+ "rusqlite",
  "serde",
  "serde_yaml",
  "sha2",
@@ -3277,6 +3278,7 @@ name = "lattice-duckdb"
 version = "0.1.0"
 dependencies = [
  "duckdb",
+ "rusqlite",
  "serde",
  "tempfile",
  "thiserror 2.0.18",
