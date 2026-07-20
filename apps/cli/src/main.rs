@@ -12,7 +12,7 @@ use lattice_core::{
     TemplateVisibility, Workspace,
 };
 use lattice_data::{
-    parse_csv_file, parse_field_type_name, resolve_field_types, CellValue, DataApp, FieldType,
+    parse_field_type_name, parse_tabular_file, resolve_field_types, CellValue, DataApp, FieldType,
 };
 use lattice_index::{Backlink, SearchHit, WorkspaceIndex};
 use lattice_storage::{NativeWorkspaceStore, RecoveryJournal, WorkspaceStore};
@@ -283,11 +283,20 @@ enum TableCommand {
         #[arg(long)]
         json: bool,
     },
-    /// Import a CSV file into a new `.data` package.
+    /// Import a tabular file into a new `.data` package.
     Import {
         /// CSV file to import (may be outside the workspace).
-        #[arg(long)]
-        csv: PathBuf,
+        #[arg(long, group = "source")]
+        csv: Option<PathBuf>,
+        /// Excel workbook to import (first sheet only).
+        #[arg(long, group = "source")]
+        xlsx: Option<PathBuf>,
+        /// JSON array-of-objects file to import.
+        #[arg(long, group = "source")]
+        json: Option<PathBuf>,
+        /// JSON Lines file to import (one object per line).
+        #[arg(long, group = "source")]
+        jsonl: Option<PathBuf>,
         /// Package name (creates `{name}.data` at the workspace root).
         #[arg(long)]
         name: String,
@@ -457,11 +466,14 @@ fn run(command: Command) -> Result<ExitCode> {
             TableCommand::Show { path, json } => cmd_table_show(path, json),
             TableCommand::Import {
                 csv,
+                xlsx,
+                json,
+                jsonl,
                 name,
                 title,
                 table,
                 column_types,
-            } => cmd_table_import(csv, name, title, table, column_types),
+            } => cmd_table_import(csv, xlsx, json, jsonl, name, title, table, column_types),
             TableCommand::AddColumn {
                 path,
                 table,
@@ -868,30 +880,55 @@ fn parse_column_type_override(value: &str) -> Result<(String, lattice_data::Fiel
     Ok((column.to_string(), field_type))
 }
 
+fn resolve_table_import_source(
+    csv: Option<PathBuf>,
+    xlsx: Option<PathBuf>,
+    json: Option<PathBuf>,
+    jsonl: Option<PathBuf>,
+) -> Result<PathBuf> {
+    let mut selected = [csv, xlsx, json, jsonl]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    match selected.len() {
+        0 => bail!("one import source is required: --csv, --xlsx, --json, or --jsonl"),
+        1 => Ok(selected.remove(0)),
+        _ => bail!("only one import source may be provided"),
+    }
+}
+
 fn cmd_table_import(
-    csv: PathBuf,
+    csv: Option<PathBuf>,
+    xlsx: Option<PathBuf>,
+    json: Option<PathBuf>,
+    jsonl: Option<PathBuf>,
     name: String,
     title: Option<String>,
     table: String,
     column_types: Vec<String>,
 ) -> Result<ExitCode> {
-    let parsed = parse_csv_file(&csv)?;
+    let source = resolve_table_import_source(csv, xlsx, json, jsonl)?;
+    let parsed = parse_tabular_file(&source)?;
     let overrides = column_types
         .iter()
         .map(|value| parse_column_type_override(value))
         .collect::<Result<std::collections::BTreeMap<_, _>>>()?;
     for column in overrides.keys() {
         if !parsed.headers.iter().any(|header| header == column) {
-            anyhow::bail!("unknown CSV column {column:?}");
+            anyhow::bail!("unknown import column {column:?}");
         }
     }
     let field_types = resolve_field_types(&parsed.headers, &parsed.field_types, &overrides);
     let (ws, mut engine) = open_engine()?;
     let rel = workspace_relative(&ws, &package_path_from_name(&name))?;
     let title = title.unwrap_or_else(|| name.trim().replace(".data", "").to_string());
+    let source_label = source
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("tabular");
 
     engine.apply(Transaction::new(
-        format!("Create table package {} from CSV", rel.display()),
+        format!("Create table package {} from {source_label}", rel.display()),
         vec![Semantic::TableCreate {
             path: rel.clone(),
             title: title.clone(),
@@ -907,7 +944,7 @@ fn cmd_table_import(
         .map(|(header, field_type)| ColumnSpec::new(header.clone(), *field_type))
         .collect();
     engine.apply(Transaction::new(
-        format!("Add CSV columns to {}.{}", rel.display(), table),
+        format!("Add {source_label} columns to {}.{}", rel.display(), table),
         vec![Semantic::ColumnsAdd {
             path: rel.clone(),
             table: table.clone(),

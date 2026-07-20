@@ -348,7 +348,8 @@ fn layout_field_misuse_is_rejected() {
 
 #[test]
 fn csv_parse_and_import_columns() {
-    use crate::csv::{infer_field_type, parse_csv_file, sanitize_column_name};
+    use crate::csv::parse_csv_file;
+    use crate::tabular::{infer_field_type, sanitize_column_name};
 
     assert_eq!(sanitize_column_name("Full Name"), "full_name");
     assert_eq!(
