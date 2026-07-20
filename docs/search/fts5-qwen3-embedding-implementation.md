@@ -913,11 +913,11 @@ selects provider mode:
 
 | Env | Effect |
 | --- | --- |
-| (none) | Enable downloads+verifies the pinned Qwen3 Q8 GGUF (then Fake worker until E6) |
+| (none) | Enable downloads+verifies the pinned Qwen3 Q8 GGUF; FakeInProcess worker unless host env is set |
 | `LATTICE_SEMANTIC_FAKE=1` | Skip download; in-process `FakeEmbeddingProvider` (CI / offline) |
 | `LATTICE_SEMANTIC_MODEL_SOURCE` | Local fixture path; copy+sha256 verify instead of HTTPS |
-| `LATTICE_EMBED_HOST_SOCKET` | Watch an existing embed-host UDS; degrade when missing |
-| `LATTICE_EMBED_HOST_BIN` | With socket: spawn/supervise `lattice-embed-host` (bounded backoff) |
+| `LATTICE_EMBED_HOST_SOCKET` | Connect EmbedHostClient to an existing embed-host UDS; degrade when missing |
+| `LATTICE_EMBED_HOST_BIN` | With socket: spawn/supervise `lattice-embed-host` (bounded backoff); jobs use host RPCs |
 
 When the host is unavailable, sessions are marked `SemanticDegraded` and
 hybrid search falls back to FTS (`semantic_rank` none). Status states:
