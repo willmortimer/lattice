@@ -16,7 +16,7 @@ import {
   deferLinkRepairProposal,
   getLinkRepairProposal,
 } from "../lib/linkRepair";
-import { installNativeContextMenus } from "../lib/nativeMenus";
+import { installNativeContextMenus, isEditableTarget } from "../lib/nativeMenus";
 import { QUICK_NOTE_SHORTCUT, showQuickNote } from "../quickNoteWindow";
 import { applyResolvedTheme, loadThemeCatalog, setAppearanceMode, setFixedTheme, startThemeWatch, type ThemeCatalogPayload, type ThemeSummaryPayload } from "../theme";
 import type { Resource, WorkspaceSnapshot } from "../types";
@@ -600,9 +600,7 @@ export function useDesktopController() {
       });
     }
 
-    if (hasTauri) {
-      actions.push({ id: "action:undo", label: "Undo last change", run: () => void handleUndo() });
-    }
+    actions.push({ id: "action:undo", label: "Undo last change", run: () => void handleUndo() });
 
     if (selected && session?.kind === "page") {
       actions.push({
@@ -654,6 +652,8 @@ export function useDesktopController() {
   handleQuickNoteRef.current = handleQuickNote;
   const handleNewPageRef = useRef(handleNewPage);
   handleNewPageRef.current = handleNewPage;
+  const handleUndoRef = useRef(handleUndo);
+  handleUndoRef.current = handleUndo;
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -675,6 +675,9 @@ export function useDesktopController() {
       } else if (matchesKeybinding(event, settings.keybindings.settings)) {
         event.preventDefault();
         navigationController.setActivityArea("settings");
+      } else if (!isEditableTarget(event.target) && matchesKeybinding(event, "Mod+Z")) {
+        event.preventDefault();
+        void handleUndoRef.current();
       }
     }
     window.addEventListener("keydown", onKeyDown);
