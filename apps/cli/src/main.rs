@@ -11,7 +11,7 @@ use lattice_core::{
     template_catalog, template_descriptor, Diagnostic, Resource, Severity, TemplateDescriptor,
     TemplateVisibility, Workspace,
 };
-use lattice_data::{parse_csv_file, CellValue, DataApp};
+use lattice_data::{parse_csv_file, CellValue, DataApp, FieldType};
 use lattice_index::{Backlink, SearchHit, WorkspaceIndex};
 use lattice_storage::{NativeWorkspaceStore, RecoveryJournal, WorkspaceStore};
 use lattice_theme::{
@@ -296,6 +296,37 @@ enum TableCommand {
         #[arg(long, default_value = "records")]
         table: String,
     },
+    /// Add a column to an existing table.
+    AddColumn {
+        /// Workspace path of the package.
+        path: PathBuf,
+        /// Table name.
+        #[arg(long)]
+        table: String,
+        /// Column name.
+        #[arg(long)]
+        name: String,
+        /// Field type (`text`, `integer`, `boolean`, `date`, `relation`, …).
+        #[arg(long = "type")]
+        field_type: String,
+        /// Target table for `relation` columns.
+        #[arg(long)]
+        relation_table: Option<String>,
+        /// Base package revision (`sha256:...`). Defaults to the current revision.
+        #[arg(long)]
+        base: Option<String>,
+    },
+    /// Add a table to an existing `.data` package.
+    AddTable {
+        /// Workspace path of the package.
+        path: PathBuf,
+        /// Table name.
+        #[arg(long)]
+        table: String,
+        /// Base package revision (`sha256:...`). Defaults to the current revision.
+        #[arg(long)]
+        base: Option<String>,
+    },
     /// List and inspect saved grid views.
     View {
         #[command(subcommand)]
@@ -425,6 +456,19 @@ fn run(command: Command) -> Result<ExitCode> {
                 title,
                 table,
             } => cmd_table_import(csv, name, title, table),
+            TableCommand::AddColumn {
+                path,
+                table,
+                name,
+                field_type,
+                relation_table,
+                base,
+            } => cmd_table_add_column(path, table, name, field_type, relation_table, base),
+            TableCommand::AddTable {
+                path,
+                table,
+                base,
+            } => cmd_table_add_table(path, table, base),
             TableCommand::View { command } => match command {
                 TableViewCommand::List { path, json } => cmd_table_view_list(path, json),
                 TableViewCommand::Show { path, name, json } => {
@@ -1037,6 +1081,100 @@ fn json_to_cell(value: serde_json::Value) -> Result<CellValue> {
 
 fn package_revision(ws: &Workspace, package: &Path) -> Result<String> {
     Ok(DataApp::open(&ws.root().join(package))?.package_revision()?)
+}
+
+fn parse_field_type(value: &str) -> Result<FieldType> {
+    match value {
+        "text" => Ok(FieldType::Text),
+        "long_text" => Ok(FieldType::LongText),
+        "integer" => Ok(FieldType::Integer),
+        "decimal" => Ok(FieldType::Decimal),
+        "boolean" => Ok(FieldType::Boolean),
+        "date" => Ok(FieldType::Date),
+        "relation" => Ok(FieldType::Relation),
+        other => bail!(
+            "unknown field type {other:?}; expected text, long_text, integer, decimal, boolean, date, or relation"
+        ),
+    }
+}
+
+fn column_spec(
+    name: String,
+    field_type: FieldType,
+    relation_table: Option<String>,
+) -> Result<ColumnSpec> {
+    if field_type == FieldType::Relation {
+        let relation_table = relation_table.with_context(|| {
+            format!("column {name:?} has type relation; pass --relation-table")
+        })?;
+        return Ok(ColumnSpec::relation(name, relation_table));
+    }
+    if relation_table.is_some() {
+        bail!("--relation-table is only valid when --type is relation");
+    }
+    Ok(ColumnSpec::new(name, field_type))
+}
+
+fn cmd_table_add_column(
+    path: PathBuf,
+    table: String,
+    name: String,
+    field_type: String,
+    relation_table: Option<String>,
+    base: Option<String>,
+) -> Result<ExitCode> {
+    let (ws, mut engine) = open_engine()?;
+    let rel = workspace_relative(&ws, &path)?;
+    let base_revision = match base {
+        Some(base) => base,
+        None => package_revision(&ws, &rel)?,
+    };
+    let field_type = parse_field_type(&field_type)?;
+    let column = column_spec(name.clone(), field_type, relation_table)?;
+    let receipt = engine.apply(Transaction::new(
+        format!("Add column {name} to {}.{}", rel.display(), table),
+        vec![Semantic::ColumnsAdd {
+            path: rel.clone(),
+            table,
+            columns: vec![column],
+            base_revision,
+        }],
+    ))?;
+    println!(
+        "added column {name} to {} ({})",
+        rel.display(),
+        receipt.outcomes[0]
+            .resulting_revision
+            .as_deref()
+            .unwrap_or("?")
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_table_add_table(path: PathBuf, table: String, base: Option<String>) -> Result<ExitCode> {
+    let (ws, mut engine) = open_engine()?;
+    let rel = workspace_relative(&ws, &path)?;
+    let base_revision = match base {
+        Some(base) => base,
+        None => package_revision(&ws, &rel)?,
+    };
+    let receipt = engine.apply(Transaction::new(
+        format!("Add table {table} to {}", rel.display()),
+        vec![Semantic::TableAdd {
+            path: rel.clone(),
+            table_name: table.clone(),
+            base_revision,
+        }],
+    ))?;
+    println!(
+        "added table {table} to {} ({})",
+        rel.display(),
+        receipt.outcomes[0]
+            .resulting_revision
+            .as_deref()
+            .unwrap_or("?")
+    );
+    Ok(ExitCode::SUCCESS)
 }
 
 fn cmd_record_insert(
