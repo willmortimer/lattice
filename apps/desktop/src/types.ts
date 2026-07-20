@@ -54,12 +54,24 @@ export type WorkspaceChangeEvent =
   | { type: "deleted"; path: string }
   | { type: "renamed"; from: string; to: string; revision: string };
 
-/** Mirrors `lattice_index::SearchHit` (`crates/lattice-index/src/index.rs`). */
+/** Search backend for `search_workspace` IPC (`fts` | `hybrid` | `auto`). */
+export type SearchMode = "fts" | "hybrid" | "auto";
+
+/**
+ * Mirrors `lattice_handlers::SearchHitUi` from desktop search IPC.
+ * Base fields match historical FTS `SearchHit`; hybrid/auto may set optionals.
+ */
 export interface SearchHit {
   path: string;
   title: string;
   snippet: string | null;
+  /** FTS BM25 rank, or hybrid fused score. */
   rank: number;
+  fusedScore?: number;
+  lexicalRank?: number | null;
+  semanticRank?: number | null;
+  headingPath?: string[];
+  chunkId?: string | null;
 }
 
 /** Mirrors `lattice_index::BacklinkKind`. */
