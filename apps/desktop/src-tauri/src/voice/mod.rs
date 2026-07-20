@@ -227,11 +227,12 @@ async fn ensure_voice_ready(app: &AppHandle, state: &VoiceState) -> Result<(), S
     }
 
     let daemon_result = async {
-        let (client, child) = daemon::connect_or_spawn().await?;
+        let (client, child, fake_host) = daemon::connect_or_spawn().await?;
         let mut backend = daemon::DaemonBackend {
             client,
             _child: child,
             prepared: false,
+            fake_host,
         };
         daemon::prepare(app, &mut backend).await?;
         Ok::<_, String>(backend)

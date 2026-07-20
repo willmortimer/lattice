@@ -15,6 +15,7 @@
     "tauri": "tauri",
     "tauri:dev": "LATTICE_DEV_HOME=\"$(cd ../.. && pwd)/target/dev-home\" LATTICE_DEV_RESET_DEMO=1 tauri dev --features voice-embedded",
     "tauri:dev:voice-daemon": "LATTICE_DEV_HOME=\"$(cd ../.. && pwd)/target/dev-home\" LATTICE_DEV_RESET_DEMO=1 LATTICE_VOICE_DAEMON=1 tauri dev --features voice",
+    "tauri:dev:voice-daemon:fluidaudio": "LATTICE_DEV_HOME=\"$(cd ../.. && pwd)/target/dev-home\" LATTICE_DEV_RESET_DEMO=1 LATTICE_VOICE_DAEMON=1 LATTICE_VOICE_FAKE=0 LATTICE_VOICE_HOST_BIN=\"$(cd ../.. && pwd)/target/debug/lattice-voice-host\" LATTICE_VOICE_MODEL_CACHE=\"$(cd ../.. && pwd)/research/voice-m0-fluidaudio/.cache/Models\" tauri dev --features voice",
     "tauri:dev:e2e": "LATTICE_DEV_HOME=\"$(cd ../.. && pwd)/target/dev-home\" LATTICE_DEV_RESET_DEMO=1 tauri dev --features e2e-testing",
     "tauri:dev:novoice": "LATTICE_DEV_HOME=\"$(cd ../.. && pwd)/target/dev-home\" LATTICE_DEV_RESET_DEMO=1 tauri dev",
     "tauri:dev:keep": "LATTICE_DEV_HOME=\"$(cd ../.. && pwd)/target/dev-home\" tauri dev --features voice-embedded",

@@ -41,6 +41,8 @@ pub(super) struct DaemonBackend {
     /// Keeps a desktop-spawned daemon alive for the app lifetime.
     pub _child: Option<SpawnedDaemon>,
     pub prepared: bool,
+    /// Whether the connected daemon is expected to run a fake voice-host.
+    pub fake_host: bool,
 }
 
 pub(super) struct DaemonActiveSession {
@@ -128,8 +130,27 @@ fn which_bin(name: &str) -> std::io::Result<PathBuf> {
     ))
 }
 
-fn prepare_model_id() -> &'static str {
-    if env_truthy("LATTICE_VOICE_FAKE") {
+fn resolve_voice_host_bin() -> Option<PathBuf> {
+    if let Ok(path) = std::env::var("LATTICE_VOICE_HOST_BIN") {
+        let path = PathBuf::from(path);
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    if let Ok(path) = which_bin("lattice-voice-host") {
+        return Some(path);
+    }
+    let candidates = [
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/debug/lattice-voice-host"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/release/lattice-voice-host"),
+        PathBuf::from("target/debug/lattice-voice-host"),
+        PathBuf::from("target/release/lattice-voice-host"),
+    ];
+    candidates.into_iter().find(|p| p.is_file())
+}
+
+fn prepare_model_id(fake_host: bool) -> &'static str {
+    if fake_host || env_truthy("LATTICE_VOICE_FAKE") {
         FAKE_PREPARE_MODEL_ID
     } else {
         PREPARE_MODEL_ID
@@ -137,10 +158,11 @@ fn prepare_model_id() -> &'static str {
 }
 
 /// Connect to an existing latticed, or spawn one (mirrors `lattice_daemon::spawn_latticed`).
-pub(super) async fn connect_or_spawn() -> Result<(Arc<DaemonClient>, Option<SpawnedDaemon>), String>
-{
+pub(super) async fn connect_or_spawn()
+-> Result<(Arc<DaemonClient>, Option<SpawnedDaemon>, bool), String> {
     let socket = socket_path();
     let env_token = std::env::var(ENV_AUTH_TOKEN).ok().filter(|t| !t.is_empty());
+    let ambient_fake = env_truthy("LATTICE_VOICE_FAKE");
 
     if socket.exists() {
         let token = env_token.ok_or_else(|| {
@@ -153,7 +175,7 @@ pub(super) async fn connect_or_spawn() -> Result<(Arc<DaemonClient>, Option<Spaw
         let client = DaemonClient::connect(&socket, &token)
             .await
             .map_err(|err| format!("connect to latticed at {}: {err}", socket.display()))?;
-        return Ok((Arc::new(client), None));
+        return Ok((Arc::new(client), None, ambient_fake));
     }
 
     let binary = resolve_latticed_bin().ok_or_else(|| {
@@ -164,22 +186,30 @@ pub(super) async fn connect_or_spawn() -> Result<(Arc<DaemonClient>, Option<Spaw
         )
     })?;
     let token = env_token.unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
-    let child = spawn_latticed(&binary, &socket, &token)?;
+    let (child, spawned_fake) = spawn_latticed(&binary, &socket, &token)?;
     wait_for_socket(&socket, Duration::from_secs(8))?;
     let client = DaemonClient::connect(&socket, &token)
         .await
         .map_err(|err| {
             format!(
                 "spawned latticed at {} but handshake failed: {err} \
-                 (ensure voice-host env is set: LATTICE_VOICE_FAKE=1 \
-                 LATTICE_VOICE_HOST_BIN=…)",
+                 (ensure voice-host is available: build lattice-voice-host, or set \
+                 LATTICE_VOICE_FAKE=1 LATTICE_VOICE_HOST_BIN=…)",
                 socket.display()
             )
         })?;
-    Ok((Arc::new(client), Some(SpawnedDaemon { child })))
+    Ok((
+        Arc::new(client),
+        Some(SpawnedDaemon { child }),
+        ambient_fake || spawned_fake,
+    ))
 }
 
-fn spawn_latticed(binary: &Path, socket: &Path, auth_token: &str) -> Result<Child, String> {
+fn spawn_latticed(
+    binary: &Path,
+    socket: &Path,
+    auth_token: &str,
+) -> Result<(Child, bool), String> {
     if let Some(parent) = socket.parent() {
         std::fs::create_dir_all(parent).map_err(|err| err.to_string())?;
     }
@@ -187,19 +217,46 @@ fn spawn_latticed(binary: &Path, socket: &Path, auth_token: &str) -> Result<Chil
         let _ = std::fs::remove_file(socket);
     }
     // Mirrors apps/daemon/src/spawn.rs: private UDS, no HTTP API, keep-running for voice.
-    Command::new(binary)
+    let mut command = Command::new(binary);
+    command
         .arg("--socket")
         .arg(socket)
         .arg("--auth-token")
         .arg(auth_token)
         .arg("--api-port")
         .arg("0")
-        .arg("--keep-services-running")
+        .arg("--keep-services-running");
+
+    // Wire voice-host supervision when the parent did not already configure it.
+    // Prefer an explicit fluidaudio host (`LATTICE_VOICE_HOST_BIN` without FAKE);
+    // otherwise auto-enable the offline fake backend so thin-client smoke works.
+    let host_bin_set = std::env::var_os("LATTICE_VOICE_HOST_BIN")
+        .filter(|v| !v.is_empty())
+        .is_some();
+    let host_socket_set = std::env::var_os("LATTICE_VOICE_HOST_SOCKET")
+        .filter(|v| !v.is_empty())
+        .is_some();
+    let mut auto_fake = false;
+    if !host_bin_set && !host_socket_set {
+        if let Some(host) = resolve_voice_host_bin() {
+            command.env("LATTICE_VOICE_HOST_BIN", &host);
+            // Safe default for auto-discovered host binaries (often built without
+            // `--features fluidaudio`). Leave LATTICE_VOICE_FAKE alone when the
+            // parent already set it (including empty / `0` for fluidaudio).
+            if std::env::var_os("LATTICE_VOICE_FAKE").is_none() {
+                command.env("LATTICE_VOICE_FAKE", "1");
+                auto_fake = true;
+            }
+        }
+    }
+
+    let child = command
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|err| format!("failed to spawn {}: {err}", binary.display()))
+        .map_err(|err| format!("failed to spawn {}: {err}", binary.display()))?;
+    Ok((child, auto_fake))
 }
 
 fn wait_for_socket(socket: &Path, timeout: Duration) -> Result<(), String> {
@@ -232,7 +289,7 @@ pub(super) async fn prepare(
         },
     );
 
-    let model_id = prepare_model_id().to_string();
+    let model_id = prepare_model_id(backend.fake_host).to_string();
     let prepared = backend
         .client
         .request(Request {
@@ -247,7 +304,8 @@ pub(super) async fn prepare(
         .map_err(|err| {
             format!(
                 "latticed PrepareModel failed: {err} \
-                 (start latticed with LATTICE_VOICE_FAKE=1 and LATTICE_VOICE_HOST_BIN, \
+                 (start latticed with a voice-host: LATTICE_VOICE_FAKE=1 \
+                 LATTICE_VOICE_HOST_BIN=…, or a fluidaudio-featured host; \
                  or point {ENV_SOCKET}/{ENV_AUTH_TOKEN} at a voice-capable daemon)"
             )
         })?;
@@ -285,12 +343,7 @@ pub(super) fn push_chunk_from_frame(
 
 fn session_context_from_hints(hints: &VoiceSessionContextHints) -> SessionContext {
     let mut glossary_terms = hints.glossary_terms.clone();
-    for term in hints
-        .tags
-        .iter()
-        .chain(hints.heading_path.iter())
-        .chain(hints.known_paths.iter())
-    {
+    for term in hints.tags.iter().chain(hints.heading_path.iter()) {
         if !term.is_empty() && !glossary_terms.iter().any(|t| t == term) {
             glossary_terms.push(term.clone());
         }
@@ -300,6 +353,12 @@ fn session_context_from_hints(hints: &VoiceSessionContextHints) -> SessionContex
             glossary_terms.push(title.clone());
         }
     }
+    let known_paths: Vec<String> = hints
+        .known_paths
+        .iter()
+        .filter(|path| !path.is_empty())
+        .cloned()
+        .collect();
     SessionContext {
         document_id: hints
             .document_id
@@ -307,6 +366,7 @@ fn session_context_from_hints(hints: &VoiceSessionContextHints) -> SessionContex
             .or_else(|| hints.document_path.clone()),
         glossary_terms,
         command_mode: false,
+        known_paths,
     }
 }
 
@@ -628,8 +688,9 @@ mod tests {
         assert_eq!(ctx.document_id.as_deref(), Some("doc"));
         assert!(ctx.glossary_terms.iter().any(|t| t == "Lattice"));
         assert!(ctx.glossary_terms.iter().any(|t| t == "tag"));
-        assert!(ctx.glossary_terms.iter().any(|t| t == "crates/foo"));
         assert!(ctx.glossary_terms.iter().any(|t| t == "Title"));
+        assert!(ctx.glossary_terms.iter().all(|t| t != "crates/foo"));
+        assert_eq!(ctx.known_paths, vec!["crates/foo".to_string()]);
     }
 
     #[test]
