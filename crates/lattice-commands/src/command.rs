@@ -2,8 +2,40 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
-use lattice_data::CellValue;
+use lattice_data::{CellValue, FieldType};
 use serde::{Deserialize, Serialize};
+
+/// Owned column specification for [`Command::ColumnsAdd`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ColumnSpec {
+    pub name: String,
+    #[serde(rename = "field-type")]
+    pub field_type: FieldType,
+    #[serde(
+        rename = "relation-table",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub relation_table: Option<String>,
+}
+
+impl ColumnSpec {
+    pub fn new(name: impl Into<String>, field_type: FieldType) -> Self {
+        Self {
+            name: name.into(),
+            field_type,
+            relation_table: None,
+        }
+    }
+
+    pub fn relation(name: impl Into<String>, relation_table: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            field_type: FieldType::Relation,
+            relation_table: Some(relation_table.into()),
+        }
+    }
+}
 
 /// A file node placement on a JSON Canvas. The canvas path and resource path
 /// are workspace-relative; the command engine validates both before writing.
@@ -207,6 +239,46 @@ pub enum Command {
         table_name: String,
     },
 
+    /// Add a table to an existing `.data` package. Precondition: package
+    /// `database.sqlite` revision equals `base_revision` and the table is absent.
+    TableAdd {
+        path: PathBuf,
+        #[serde(rename = "table-name")]
+        table_name: String,
+        #[serde(rename = "base-revision")]
+        base_revision: String,
+    },
+
+    /// Drop a table from a `.data` package. Recorded as the inverse of
+    /// [`Command::TableAdd`]; not applied as a forward user command.
+    TableDrop {
+        path: PathBuf,
+        #[serde(rename = "table-name")]
+        table_name: String,
+        #[serde(rename = "base-revision")]
+        base_revision: String,
+    },
+
+    /// Add columns to a table inside a `.data` package. Precondition: package
+    /// revision equals `base_revision`. Existing column names are skipped.
+    ColumnsAdd {
+        path: PathBuf,
+        table: String,
+        columns: Vec<ColumnSpec>,
+        #[serde(rename = "base-revision")]
+        base_revision: String,
+    },
+
+    /// Drop columns from a table. Recorded as the inverse of
+    /// [`Command::ColumnsAdd`]; not applied as a forward user command.
+    ColumnsRemove {
+        path: PathBuf,
+        table: String,
+        columns: Vec<String>,
+        #[serde(rename = "base-revision")]
+        base_revision: String,
+    },
+
     /// Insert a row into a table inside a `.data` package. When `id` is set
     /// (recorded in history after the first apply), the row is restored with
     /// that id instead of generating a new one.
@@ -379,7 +451,11 @@ impl Command {
             Command::ResourceMove { from, to_dir } => to_dir.join(file_name(from)),
             Command::ResourceDelete { path } => path.clone(),
             Command::FolderCreate { path } => path.clone(),
-            Command::TableCreate { path, .. } => path.clone(),
+            Command::TableCreate { path, .. }
+            | Command::TableAdd { path, .. }
+            | Command::TableDrop { path, .. }
+            | Command::ColumnsAdd { path, .. }
+            | Command::ColumnsRemove { path, .. } => path.clone(),
             Command::RecordInsert { path, .. }
             | Command::RecordUpdate { path, .. }
             | Command::RecordDelete { path, .. } => path.clone(),
@@ -414,7 +490,11 @@ impl Command {
             }
             Command::ResourceDelete { path } => vec![path.clone()],
             Command::FolderCreate { path } => vec![path.clone()],
-            Command::TableCreate { path, .. } => vec![path.clone()],
+            Command::TableCreate { path, .. }
+            | Command::TableAdd { path, .. }
+            | Command::TableDrop { path, .. }
+            | Command::ColumnsAdd { path, .. }
+            | Command::ColumnsRemove { path, .. } => vec![path.clone()],
             Command::RecordInsert { path, .. }
             | Command::RecordUpdate { path, .. }
             | Command::RecordDelete { path, .. } => vec![path.clone()],

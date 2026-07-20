@@ -427,9 +427,26 @@ pub fn import_csv_table(
         ))
         .map_err(command_error_to_string)?;
 
-    let mut app = open_app_at(&root, &rel_path)?;
-    app.add_columns_from_csv(&table, &parsed)
+    let base_revision = open_app_at(&root, &rel_path)?
+        .package_revision()
         .map_err(|err| err.to_string())?;
+    let columns = parsed
+        .headers
+        .iter()
+        .zip(&parsed.field_types)
+        .map(|(header, field_type)| lattice_commands::ColumnSpec::new(header.clone(), *field_type))
+        .collect();
+    engine
+        .apply(Transaction::new(
+            format!("Add CSV columns to {rel_path}.{table}"),
+            vec![SemanticCommand::ColumnsAdd {
+                path: rel_path_buf(&rel_path),
+                table: table.clone(),
+                columns,
+                base_revision,
+            }],
+        ))
+        .map_err(command_error_to_string)?;
 
     for row in &parsed.rows {
         let mut values = BTreeMap::new();
