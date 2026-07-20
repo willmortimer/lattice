@@ -112,6 +112,10 @@ pub fn resolve_voice_host_bin() -> Option<PathBuf> {
         return Some(path);
     }
 
+    if let Some(path) = current_exe_sibling("lattice-voice-host") {
+        return Some(path);
+    }
+
     // Walk common cargo target dirs from this crate / cwd.
     let candidates = [
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -143,6 +147,13 @@ fn which_bin(name: &str) -> std::io::Result<PathBuf> {
         std::io::ErrorKind::NotFound,
         format!("{name} not found on PATH"),
     ))
+}
+
+fn current_exe_sibling(name: &str) -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?;
+    let candidate = dir.join(name);
+    candidate.is_file().then_some(candidate)
 }
 
 struct SupervisedHost {

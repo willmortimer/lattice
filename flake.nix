@@ -172,6 +172,27 @@
               # Settings → Voice reports Unavailable (Cargo default features are empty).
               pnpm --filter @lattice/desktop exec tauri build --bundles app --features voice-embedded
 
+              # Thin-client sidecars (semantic + voice) must sit beside lattice-desktop.
+              echo "desktop-install: building latticed / lattice-embed-host / lattice-voice-host"
+              cargo build --release -p lattice-daemon --bin latticed
+              cargo build --release -p lattice-embed-host --bin lattice-embed-host --features llama-cpp
+              cargo build --release -p lattice-voice-host --bin lattice-voice-host --features fluidaudio || \
+                cargo build --release -p lattice-voice-host --bin lattice-voice-host
+
+              echo "desktop-install: verifying production sidecars"
+              for bin in latticed lattice-embed-host lattice-voice-host; do
+                if [ ! -f "target/release/$bin" ]; then
+                  echo "desktop-install: missing target/release/$bin after build" >&2
+                  exit 1
+                fi
+              done
+              backends="$(target/release/lattice-embed-host backends || true)"
+              echo "desktop-install: lattice-embed-host backends:"$'\n'"$backends"
+              if ! printf '%s\n' "$backends" | grep -qx 'llama-cpp'; then
+                echo "desktop-install: lattice-embed-host must list llama-cpp (build with --features llama-cpp)" >&2
+                exit 1
+              fi
+
               # Prefer real Xcode for codesign when the Nix shell points xcode-select
               # at the SDK stub (codesign itself does not need the Nix C++ toolchain).
               if [ -d /Applications/Xcode.app/Contents/Developer ]; then
@@ -209,13 +230,13 @@
               # as MacOS siblings of the app binary (see docs/search/…).
               for bin in latticed lattice-embed-host lattice-voice-host; do
                 src="target/release/$bin"
-                if [ -f "$src" ]; then
-                  cp -f "$src" "$macos_dir/$bin"
-                  chmod +x "$macos_dir/$bin"
-                  echo "desktop-install: bundled $bin"
-                else
-                  echo "desktop-install: warning: missing $src (daemon thin-client may fail)" >&2
+                if [ ! -f "$src" ]; then
+                  echo "desktop-install: missing $src (required production sidecar)" >&2
+                  exit 1
                 fi
+                cp -f "$src" "$macos_dir/$bin"
+                chmod +x "$macos_dir/$bin"
+                echo "desktop-install: bundled $bin"
               done
 
               # Ensure the identity we expect is on the bundle (Tauri may already have signed).

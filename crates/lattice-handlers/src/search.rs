@@ -11,8 +11,9 @@ use lattice_index::{
     HybridSearchHit, SearchHit,
 };
 use lattice_runtime::{
-    default_runtime, hybrid_search_with_session_semantic, LatticeRuntime, SemanticAvailability,
-    SemanticStatus, SemanticStatusState, SemanticWorkerConfig, WorkspaceSession,
+    default_runtime, hybrid_search_with_session_semantic,
+    hybrid_search_with_session_semantic_async, LatticeRuntime, SemanticAvailability, SemanticStatus,
+    SemanticStatusState, SemanticWorkerConfig, WorkspaceSession,
 };
 use serde::Serialize;
 
@@ -220,6 +221,35 @@ pub fn search_workspace_ui_with_session(
         SearchMode::Auto => {
             if session_semantic_ready(session) {
                 hybrid_search_with_session_semantic(session, query, limit)
+                    .map_err(|err| err.to_string())
+                    .map(|hits| hits.into_iter().map(SearchHitUi::from_hybrid).collect())
+            } else {
+                search_workspace_with_session(session, query, limit)
+                    .map(|hits| hits.into_iter().map(SearchHitUi::from_fts).collect())
+            }
+        }
+    }
+}
+
+/// Async twin of [`search_workspace_ui_with_session`] for daemon handlers.
+pub async fn search_workspace_ui_with_session_async(
+    session: &WorkspaceSession,
+    query: &str,
+    limit: usize,
+    mode: Option<&str>,
+) -> Result<Vec<SearchHitUi>, String> {
+    let mode = SearchMode::parse(mode)?;
+    match mode {
+        SearchMode::Fts => search_workspace_with_session(session, query, limit)
+            .map(|hits| hits.into_iter().map(SearchHitUi::from_fts).collect()),
+        SearchMode::Hybrid => hybrid_search_with_session_semantic_async(session, query, limit)
+            .await
+            .map_err(|err| err.to_string())
+            .map(|hits| hits.into_iter().map(SearchHitUi::from_hybrid).collect()),
+        SearchMode::Auto => {
+            if session_semantic_ready(session) {
+                hybrid_search_with_session_semantic_async(session, query, limit)
+                    .await
                     .map_err(|err| err.to_string())
                     .map(|hits| hits.into_iter().map(SearchHitUi::from_hybrid).collect())
             } else {

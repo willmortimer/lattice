@@ -34,8 +34,9 @@ pub use search::{
     rebuild_index, rebuild_index_with_runtime, rebuild_index_with_session, search_workspace,
     search_workspace_chunks, search_workspace_chunks_with_runtime,
     search_workspace_chunks_with_session, search_workspace_ui, search_workspace_ui_with_runtime,
-    search_workspace_ui_with_session, search_workspace_with_runtime, search_workspace_with_session,
-    semantic_search_status, semantic_search_status_with_runtime, SearchHitUi, SearchMode,
+    search_workspace_ui_with_session, search_workspace_ui_with_session_async,
+    search_workspace_with_runtime, search_workspace_with_session, semantic_search_status,
+    semantic_search_status_with_runtime, SearchHitUi, SearchMode,
 };
 pub use workspace::{
     list_resources, list_resources_with_runtime, list_resources_with_session, open_workspace,

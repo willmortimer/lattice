@@ -1,31 +1,245 @@
-# Stub query set for hybrid retrieval evaluation.
-version: 1
+# Labeled query set for hybrid retrieval evaluation.
+version: 2
 queries:
-  # Single-token title match (FTS-friendly).
+  # --- Exact / FTS-friendly ---
   - id: exact-title
     text: Architecture
     class: exact-identifier
     relevant:
       - Architecture.md
-  # Multi-term AND of words present in Architecture.md.
+  - id: exact-plugins-title
+    text: Plugins
+    class: exact-identifier
+    relevant:
+      - Plugins.md
+  - id: exact-voice-title
+    text: Voice Dictation
+    class: exact-identifier
+    relevant:
+      - VoiceDictation.md
   - id: multi-term-and
     text: plugins filesystem grants
     class: exact-identifier
     relevant:
       - Architecture.md
-  # Quoted phrase clause.
+      - Plugins.md
   - id: phrase-rrf
     text: '"reciprocal rank fusion"'
     class: architecture-decision
     relevant:
       - Architecture.md
-  # Long paraphrase: often weak under strict FTS AND; hybrid still runs.
+      - HybridSearch.md
+  - id: phrase-capability-grants
+    text: '"capability grants"'
+    class: exact-identifier
+    relevant:
+      - Plugins.md
+      - Architecture.md
+      - Notes.md
+
+  # --- Paraphrase ---
   - id: paraphrase-capabilities
     text: how plugins receive filesystem permissions
     class: paraphrase
     relevant:
       - Architecture.md
+      - Plugins.md
+  - id: paraphrase-hybrid-degrade
+    text: what happens to search when the embedding host is missing
+    class: paraphrase
+    relevant:
+      - HybridSearch.md
+      - Decisions.md
+  - id: paraphrase-voice-final
+    text: which finalization mode is used for dictation by default
+    class: paraphrase
+    relevant:
+      - VoiceDictation.md
+  - id: paraphrase-crm-layouts
+    text: which table layouts does the CRM data app support
+    class: paraphrase
+    relevant:
+      - DataApps.md
+  - id: paraphrase-parquet-preview
+    text: how do we visualize hive parquet signup facts
+    class: paraphrase
+    relevant:
+      - Analytics.md
+
+  # --- Code symbols / paths ---
+  - id: symbol-hybrid-async
+    text: hybrid_search_async
+    class: code-symbol
+    relevant:
+      - CodeSymbols.md
+  - id: symbol-enable-workspace
+    text: enable_workspace
+    class: code-symbol
+    relevant:
+      - CodeSymbols.md
+  - id: path-hybrid-rs
+    text: crates/lattice-index/src/hybrid.rs
+    class: code-path
+    relevant:
+      - CodeSymbols.md
+  - id: path-embed-host
+    text: apps/daemon/src/embed_host.rs
+    class: code-path
+    relevant:
+      - CodeSymbols.md
+  - id: symbol-voice-context
+    text: VoiceContextBuilder
+    class: code-symbol
+    relevant:
+      - VoiceDictation.md
+
+  # --- Architecture decisions ---
+  - id: decision-vectors-derived
+    text: vectors are rebuildable derived state
+    class: architecture-decision
+    relevant:
+      - Decisions.md
+      - HybridSearch.md
+  - id: decision-rrf-k
+    text: reciprocal rank fusion k=60
+    class: architecture-decision
+    relevant:
+      - Architecture.md
+      - HybridSearch.md
+  - id: decision-no-ambient-grants
+    text: plugin grants are never ambient
+    class: architecture-decision
+    relevant:
+      - Plugins.md
+
+  # --- Tables / structured ---
+  - id: structured-lookup-rollup
+    text: lookup and rollup fields
+    class: structured
+    relevant:
+      - DataApps.md
+  - id: structured-board-gallery
+    text: board gallery calendar form layouts
+    class: structured
+    relevant:
+      - DataApps.md
+  - id: structured-summarize
+    text: DuckDB SUMMARIZE profile
+    class: structured
+    relevant:
+      - Analytics.md
+  - id: structured-annotations
+    text: annotations.sqlite overlay
+    class: structured
+    relevant:
+      - Analytics.md
+
+  # --- Related-note discovery ---
+  - id: related-qwen-from-notes
+    text: hybrid search ADR for Qwen3 embeddings
+    class: related
+    relevant:
+      - Notes.md
+      - HybridSearch.md
+  - id: related-capability-from-notes
+    text: Capability grants appear in Architecture
+    class: related
+    relevant:
+      - Notes.md
+      - Architecture.md
+
+  # --- Privacy-filtered content ---
+  - id: privacy-marker
+    text: private-marker-zeta
+    class: privacy
+    relevant:
+      - Privacy.md
+  - id: secret-marker
+    text: classified-ops-token
+    class: privacy
+    relevant: []
+
+  # --- Ambiguous / negatives ---
   - id: negative-ambiguous
     text: unrelated cooking recipes
     class: negative
     relevant: []
+  - id: negative-weather
+    text: tomorrow's weather forecast seattle
+    class: negative
+    relevant: []
+  - id: negative-stock-ticker
+    text: NVDA earnings call transcript
+    class: negative
+    relevant: []
+
+  # --- Cross-language / alternate phrasing ---
+  - id: alt-permissions-framing
+    text: revocable filesystem and network tokens for extensions
+    class: paraphrase
+    relevant:
+      - Plugins.md
+      - Architecture.md
+  - id: alt-dictation-capture
+    text: microphone pre-roll ring buffer AVAudioEngine
+    class: paraphrase
+    relevant:
+      - VoiceDictation.md
+  - id: alt-perspective-grid
+    text: Perspective grid over parquet facts
+    class: paraphrase
+    relevant:
+      - Analytics.md
+  - id: alt-fts5-lexical
+    text: SQLite FTS5 lexical retrieval
+    class: exact-identifier
+    relevant:
+      - Architecture.md
+      - HybridSearch.md
+  - id: alt-streaming-flush
+    text: StreamingFlush FinalizationMode
+    class: exact-identifier
+    relevant:
+      - VoiceDictation.md
+  - id: alt-inbox-grant
+    text: plugin request Inbox path grant
+    class: paraphrase
+    relevant:
+      - Plugins.md
+  - id: alt-crdt-vectors
+    text: embeddings are not CRDT-synced
+    class: architecture-decision
+    relevant:
+      - Decisions.md
+      - HybridSearch.md
+  - id: alt-forms-actions
+    text: package forms and actions YAML
+    class: structured
+    relevant:
+      - DataApps.md
+  - id: alt-itn-normalize
+    text: glossary and ITN normalize before editor commit
+    class: paraphrase
+    relevant:
+      - VoiceDictation.md
+  - id: alt-hive-partition
+    text: Hive-partitioned Parquet under facts
+    class: structured
+    relevant:
+      - Analytics.md
+  - id: alt-diversify-resource
+    text: diversifying hits by resource after fusion
+    class: architecture-decision
+    relevant:
+      - Architecture.md
+      - HybridSearch.md
+  - id: alt-semantic-controller
+    text: SemanticController llama host supervision
+    class: code-symbol
+    relevant:
+      - CodeSymbols.md
+  - id: alt-workspace-index
+    text: WorkspaceIndex hybrid search method
+    class: code-symbol
+    relevant:
+      - CodeSymbols.md

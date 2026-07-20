@@ -5,6 +5,10 @@ path runs fully offline with `FakeEmbeddingProvider` (no model download, no
 network). An ignored sibling test measures real Qwen3 (llama.cpp) warm latency
 and Recall@10 / MRR when a local GGUF is present.
 
+The labeled set targets paraphrase, code symbols/paths, architecture decisions,
+structured/analytics pages, privacy-filtered content, related-note discovery,
+and ambiguous negatives (~45 queries across ~11 corpus files).
+
 ## Layout
 
 - `corpus/` — small Markdown notes used as a local retrieval fixture
