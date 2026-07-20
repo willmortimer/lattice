@@ -222,7 +222,8 @@ See [environment.md](./environment.md) for `LATTICE_DEV_HOME` and `LATTICE_HOME`
 | `.envrc is blocked` | `direnv allow` after reviewing the file. |
 | `Git tree ... is dirty` warning | Harmless; nix is telling you the working tree has uncommitted changes. |
 | Task can't find `site/scripts/...` or workspace packages | Run tasks from the repo root. |
-| `tauri build` (bundled) / `desktop-install` fails | Needs real Xcode or CLT; script sets `DEVELOPER_DIR` when Xcode.app is present. |
+| `tauri build` (bundled) / `desktop-install` fails | Needs real Xcode or CLT for **codesign**; the script sets `DEVELOPER_DIR` only after the Cargo build. |
+| `libduckdb-sys` fails with `uint8_t` / `intmax_t` / `_CTYPE_*` under `desktop-install` | Do not export Xcode’s `DEVELOPER_DIR` for the Cargo step — it mixes Xcode SDK headers with Nix libcxx. Keep the flake’s Nix apple-sdk for compile; Xcode only for codesign. Wipe the broken cache with `cargo clean -p libduckdb-sys` if a failed release build left junk under `target/release/build/`. |
 | `APPLE_SIGNING_IDENTITY: unbound variable` | Load `.env` via direnv (`dotenv_if_exists`) or export the var before `desktop-install`. |
 | Browser on :5173 shows “Engineering Workspace” | That is the **demo fixture** (`demoWorkspace.generated.ts` from the `demo` template), not your disk. Use the Tauri window to open a real folder. |
 | Want Astro but ran `desktop-dev` | Use `nxr site-dev` instead. |

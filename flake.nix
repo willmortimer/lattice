@@ -164,17 +164,21 @@
                 echo "desktop-install: warning: APPLE_TEAM_ID unset (ok for local Apple Development; needed later for notarization)" >&2
               fi
 
-              # Prefer real Xcode when the Nix shell points xcode-select at the SDK stub.
+              pnpm install
+              # Keep the Nix apple-sdk DEVELOPER_DIR/SDKROOT for the Cargo build.
+              # Overriding to Xcode.app here mixes Xcode's MacOSX.sdk headers with
+              # Nix libcxx and breaks libduckdb-sys (uint8_t / intmax_t / _CTYPE_*).
+              # Same voice path as `nxr desktop-dev` / `pnpm tauri:dev` — without this,
+              # Settings → Voice reports Unavailable (Cargo default features are empty).
+              pnpm --filter @lattice/desktop exec tauri build --bundles app --features voice-embedded
+
+              # Prefer real Xcode for codesign when the Nix shell points xcode-select
+              # at the SDK stub (codesign itself does not need the Nix C++ toolchain).
               if [ -d /Applications/Xcode.app/Contents/Developer ]; then
                 export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
               elif [ -d /Library/Developer/CommandLineTools ]; then
                 export DEVELOPER_DIR=/Library/Developer/CommandLineTools
               fi
-
-              pnpm install
-              # Same voice path as `nxr desktop-dev` / `pnpm tauri:dev` — without this,
-              # Settings → Voice reports Unavailable (Cargo default features are empty).
-              pnpm --filter @lattice/desktop exec tauri build --bundles app --features voice-embedded
 
               # Cargo workspace target dir is repo-root `target/`, not src-tauri/target.
               app_src="target/release/bundle/macos/Lattice.app"

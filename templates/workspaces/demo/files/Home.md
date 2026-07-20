@@ -15,10 +15,12 @@ ordinary file under a real directory — open it in any editor, or stay inside L
 4. Capture with **⌘N** into `Inbox/` — type or **hold-to-dictate** (see [[Inbox/Sample capture]]).
 5. Open `CRM.data` — contacts + companies, relations, board/gallery/calendar/form.
 6. Also open `Projects/Delivery.data`, `Data/Metrics.data`, and `OKRs.data` for more table shapes.
-7. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.
-8. Open `Notebooks/CRM exploration.ipynb` — CRM tour notebook (markdown + code stubs).
-9. Create pages from `Templates/` — daily and meeting note scaffolds.
-10. Read [[Research/Local Runtime]] — daemon, search, and voice process model.
+7. Open `Data/Events.dataset` — DuckDB Parquet facts → Perspective **Preview**, Vega-Lite **Chart**, DuckDB **Profile**.
+8. Open `Dashboards/Signups by region.vl.json` — bound Vega-Lite chart over the same Hive Parquet.
+9. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.
+10. Open `Notebooks/CRM exploration.ipynb` — CRM tour notebook (markdown + code stubs).
+11. Create pages from `Templates/` — daily and meeting note scaffolds.
+12. Read [[Research/Local Runtime]] — daemon, search, and voice process model.
 
 ## First Look tour — new surfaces
 
@@ -56,13 +58,21 @@ and voice features. Each step is safe in the sample workspace; undo where noted.
 15. Submit a new contact; the row appears and relation pickers stay in sync with `companies`.
 16. Open `Projects/Delivery.data` → **Forms** → **Delivery intake** and add an item.
 
+### Analytical datasets (DuckDB / Vega-Lite)
+
+17. Open `Data/Events.dataset` → **Preview** — Perspective grid over Hive Parquet (`facts/year=2026/month=07/`).
+18. Switch to **Chart** — auto Vega-Lite from the same Arrow IPC query.
+19. Switch to **Profile** — DuckDB `SUMMARIZE` column stats.
+20. Open `Dashboards/Signups by region.vl.json` — chart resource bound with `read_parquet(...)`.
+21. Optional CLI: `lattice dataset query-annotated Data/Events.dataset --json` (review overlay in `annotations.sqlite`).
+
 ### Resource tree
 
-17. Create a folder under `Projects/` (context menu or **New folder**).
-18. Press **⌘Z** to undo the folder creation.
-19. Move [[Product/Vision]] into another folder; accept link repair when prompted.
-20. **⌘-click** two pages, drag to a folder (multi-select move).
-21. Select multiple items and delete — confirm the batch operation.
+22. Create a folder under `Projects/` (context menu or **New folder**).
+23. Press **⌘Z** to undo the folder creation.
+24. Move [[Product/Vision]] into another folder; accept link repair when prompted.
+25. **⌘-click** two pages, drag to a folder (multi-select move).
+26. Select multiple items and delete — confirm the batch operation.
 
 ### Where to look next
 
@@ -101,7 +111,7 @@ and voice features. Each step is safe in the sample workspace; undo where noted.
 
 Workspace defaults point quick capture at `Inbox/` and templates at `Templates/`.
 
-## Canvas & data
+## Canvas, data apps & analytics
 
 | Resource | Kind |
 | --- | --- |
@@ -110,6 +120,8 @@ Workspace defaults point quick capture at `Inbox/` and templates at `Templates/`
 | `Projects/Delivery.data` | Delivery board/calendar (status + due) |
 | `Data/Metrics.data` | Decimal metrics by category |
 | `OKRs.data` | Objectives / key results board |
+| `Data/Events.dataset` | Analytical package — Hive Parquet facts + `annotations.sqlite` |
+| `Dashboards/Signups by region.vl.json` | Vega-Lite chart bound to Events via DuckDB |
 | `Data/sample.csv` | Flat CSV import sample |
 | `Notebooks/CRM exploration.ipynb` | CRM tour notebook (nbformat v4) |
 
@@ -182,6 +194,8 @@ fallback: "Open CRM board view"
 | `Projects/Delivery.data` | data app |
 | `Data/Metrics.data` | data app |
 | `OKRs.data` | data app |
+| `Data/Events.dataset` | dataset (Parquet + annotations) |
+| `Dashboards/Signups by region.vl.json` | Vega-Lite chart |
 | `Data/sample.csv` | CSV file |
 | `Notebooks/CRM exploration.ipynb` | notebook |
 | `Resources/` | code & config files |

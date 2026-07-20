@@ -1,0 +1,6 @@
+event_id,region,signups
+evt-north,North,42
+evt-south,South,28
+evt-east,East,35
+evt-west,West,19
+evt-central,Central,31

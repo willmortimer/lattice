@@ -7,6 +7,14 @@ tags: [product]
 
 Sample changelog page for the First Look workspace — not a live feed.
 
+## 2026.07 — Analytical First Look (DuckDB / Vega-Lite)
+
+- `Data/Events.dataset` — Hive Parquet under `facts/year=2026/month=07/`, source CSV in `sources/`
+- `annotations.sqlite` review overlay (`event_annotations`) for annotate / query-annotated demos
+- `Dashboards/Signups by region.vl.json` — Vega-Lite bound with `read_parquet(...)`
+- Desktop viewer tabs: Perspective **Preview**, Vega-Lite **Chart**, DuckDB **Profile**
+- [[Home]] tour steps 17–21 cover the analytics path (native / Tauri; not the browser fixture)
+
 ## 2026.07 — Daemon, hybrid search, voice
 
 - **latticed** — local UDS daemon with workspace sessions, one-writer lease, watcher + incremental FTS, keep-running idle shutdown
@@ -40,8 +48,8 @@ Sample changelog page for the First Look workspace — not a live feed.
 
 Tracked on [[Product/Roadmap]]:
 
-1. Phase 2 tables Wave 1 — schema commands, column designer, CSV type review, windowed open
-2. Cross-package relations (CRM contacts ↔ project pages)
+1. Phase 4 programmable workspace — local HTTP API, MCP, proposed-tx review
+2. Query profiler UI / GeoParquet (Phase 3 polish)
 3. Native Jupyter / ipykernel (Pyodide-only for notebooks today)
 4. Login-item / always-on Quick Note (out of scope; keep-running covers warm daemon)
 

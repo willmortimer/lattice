@@ -2,7 +2,7 @@
   "lattice": {
     "data": {
       "dataset": "Data/Events.dataset",
-      "sql": "SELECT * FROM read_csv_auto('Data/Events.dataset/facts/signups.csv')"
+      "sql": "SELECT region, sum(signups) AS signups FROM read_parquet('Data/Events.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true) GROUP BY region ORDER BY region"
     }
   },
   "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
