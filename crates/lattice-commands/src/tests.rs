@@ -1335,3 +1335,196 @@ fn page_create_from_template_substitutes_title_and_date() {
         .unwrap();
     assert_eq!(read(&dir, "Notes/Blank.md"), b"");
 }
+
+#[test]
+fn columns_add_undo_restores_schema_and_app_yaml() {
+    use crate::ColumnSpec;
+    use lattice_data::FieldType;
+
+    let (dir, mut engine) = engine();
+    engine
+        .apply(Transaction::new(
+            "Create CRM.data",
+            vec![Command::TableCreate {
+                path: PathBuf::from("CRM.data"),
+                title: "CRM".into(),
+                table_name: "contacts".into(),
+            }],
+        ))
+        .unwrap();
+
+    let package = dir.path().join("CRM.data");
+    let schema_before = std::fs::read_to_string(package.join("schema.sql")).unwrap();
+    let app_yaml_before = std::fs::read_to_string(package.join("app.yaml")).unwrap();
+    let base_revision = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+
+    engine
+        .apply(Transaction::new(
+            "Add name column",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("CRM.data"),
+                table: "contacts".into(),
+                columns: vec![ColumnSpec::new("name", FieldType::Text)],
+                base_revision,
+            }],
+        ))
+        .unwrap();
+
+    let app = lattice_data::DataApp::open(&package).unwrap();
+    assert!(app
+        .columns("contacts")
+        .unwrap()
+        .iter()
+        .any(|column| column.name == "name"));
+    assert!(std::fs::read_to_string(package.join("schema.sql"))
+        .unwrap()
+        .contains("ADD COLUMN name"));
+    assert!(std::fs::read_to_string(package.join("app.yaml"))
+        .unwrap()
+        .contains("name:"));
+
+    engine.undo().unwrap().unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(package.join("schema.sql")).unwrap(),
+        schema_before
+    );
+    assert_eq!(
+        std::fs::read_to_string(package.join("app.yaml")).unwrap(),
+        app_yaml_before
+    );
+    let app = lattice_data::DataApp::open(&package).unwrap();
+    assert!(!app
+        .columns("contacts")
+        .unwrap()
+        .iter()
+        .any(|column| column.name == "name"));
+}
+
+#[test]
+fn table_add_undo_removes_table_and_rows() {
+    use std::collections::BTreeMap;
+
+    use crate::ColumnSpec;
+    use lattice_data::{CellValue, FieldType};
+
+    let (dir, mut engine) = engine();
+    engine
+        .apply(Transaction::new(
+            "Create CRM.data",
+            vec![Command::TableCreate {
+                path: PathBuf::from("CRM.data"),
+                title: "CRM".into(),
+                table_name: "contacts".into(),
+            }],
+        ))
+        .unwrap();
+
+    let package = dir.path().join("CRM.data");
+    let schema_before = std::fs::read_to_string(package.join("schema.sql")).unwrap();
+    let app_yaml_before = std::fs::read_to_string(package.join("app.yaml")).unwrap();
+    let base_revision = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+
+    engine
+        .apply(Transaction::new(
+            "Add companies table",
+            vec![Command::TableAdd {
+                path: PathBuf::from("CRM.data"),
+                table_name: "companies".into(),
+                base_revision,
+            }],
+        ))
+        .unwrap();
+
+    let after_table = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Add company name",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("CRM.data"),
+                table: "companies".into(),
+                columns: vec![ColumnSpec::new("name", FieldType::Text)],
+                base_revision: after_table,
+            }],
+        ))
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Insert company",
+            vec![Command::RecordInsert {
+                path: PathBuf::from("CRM.data"),
+                table: "companies".into(),
+                values: BTreeMap::from([("name".into(), CellValue::Text("Acme".into()))]),
+                id: None,
+            }],
+        ))
+        .unwrap();
+    assert_eq!(
+        lattice_data::DataApp::open(&package)
+            .unwrap()
+            .list_rows("companies", 10, 0)
+            .unwrap()
+            .len(),
+        1
+    );
+
+    // Undo insert, then column add, then table add.
+    engine.undo().unwrap().unwrap();
+    engine.undo().unwrap().unwrap();
+    engine.undo().unwrap().unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(package.join("schema.sql")).unwrap(),
+        schema_before
+    );
+    assert_eq!(
+        std::fs::read_to_string(package.join("app.yaml")).unwrap(),
+        app_yaml_before
+    );
+    let tables = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .list_tables()
+        .unwrap();
+    assert_eq!(tables, vec!["contacts".to_string()]);
+}
+
+#[test]
+fn stale_package_revision_on_columns_add_is_refused() {
+    use crate::ColumnSpec;
+    use lattice_data::FieldType;
+
+    let (dir, mut engine) = engine();
+    engine
+        .apply(Transaction::new(
+            "Create CRM.data",
+            vec![Command::TableCreate {
+                path: PathBuf::from("CRM.data"),
+                title: "CRM".into(),
+                table_name: "contacts".into(),
+            }],
+        ))
+        .unwrap();
+
+    let result = engine.apply(Transaction::new(
+        "Stale columns add",
+        vec![Command::ColumnsAdd {
+            path: PathBuf::from("CRM.data"),
+            table: "contacts".into(),
+            columns: vec![ColumnSpec::new("name", FieldType::Text)],
+            base_revision: "sha256:deadbeef".into(),
+        }],
+    ));
+    assert!(matches!(result, Err(Error::StaleBaseRevision { .. })));
+    assert!(!std::fs::read_to_string(dir.path().join("CRM.data/schema.sql"))
+        .unwrap()
+        .contains("ADD COLUMN name"));
+}

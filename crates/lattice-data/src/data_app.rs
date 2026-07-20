@@ -8,7 +8,9 @@ use crate::app::{app_manifest_path, database_path, schema_path, write_default_vi
 use crate::csv::{cell_from_csv, CsvTable};
 use crate::error::Error;
 use crate::form::{form_name_from_path, form_path, FormDef};
-use crate::types::{CellValue, ColumnMeta, FieldType, NewColumn, RelationStrip, Row};
+use crate::types::{
+    CellValue, ColumnMeta, FieldType, NewColumn, RelationStrip, Row, SchemaFilesSnapshot,
+};
 use crate::view::{
     build_view_count_query, build_view_query, row_from_view_sql, view_path, visible_columns, ViewDef,
 };
@@ -597,6 +599,57 @@ impl DataApp {
             .map(|(header, field_type)| NewColumn::new(header.as_str(), *field_type))
             .collect();
         self.add_columns(table, &columns)
+    }
+
+    /// Capture `schema.sql` and `app.yaml` for command-engine undo snapshots.
+    pub fn schema_files_snapshot(&self) -> Result<SchemaFilesSnapshot> {
+        let schema_file = schema_path(&self.path);
+        let app_file = app_manifest_path(&self.path);
+        let schema_sql = std::fs::read_to_string(&schema_file)
+            .map_err(|source| Error::io(&schema_file, source))?;
+        let app_yaml =
+            std::fs::read_to_string(&app_file).map_err(|source| Error::io(&app_file, source))?;
+        Ok(SchemaFilesSnapshot {
+            schema_sql,
+            app_yaml,
+            added_columns: Vec::new(),
+            added_table: None,
+        })
+    }
+
+    /// Restore `schema.sql` and `app.yaml` from a prior snapshot and reload the manifest.
+    pub fn restore_schema_files(&mut self, snapshot: &SchemaFilesSnapshot) -> Result<()> {
+        let schema_file = schema_path(&self.path);
+        let app_file = app_manifest_path(&self.path);
+        std::fs::write(&schema_file, &snapshot.schema_sql)
+            .map_err(|source| Error::io(&schema_file, source))?;
+        std::fs::write(&app_file, &snapshot.app_yaml)
+            .map_err(|source| Error::io(&app_file, source))?;
+        self.manifest = AppManifest::load(&app_file)?;
+        Ok(())
+    }
+
+    /// Drop a table from SQLite only. Caller restores `schema.sql` / `app.yaml`.
+    pub fn drop_table_sqlite(&mut self, table_name: &str) -> Result<()> {
+        validate_identifier(table_name)?;
+        ensure_table_exists(&self.conn, table_name)?;
+        self.conn
+            .execute_batch(&format!("DROP TABLE {table_name};"))
+            .map_err(|source| Error::table(table_name, source.to_string()))?;
+        Ok(())
+    }
+
+    /// Drop columns from SQLite only. Caller restores `schema.sql` / `app.yaml`.
+    pub fn drop_columns_sqlite(&mut self, table: &str, columns: &[String]) -> Result<()> {
+        validate_identifier(table)?;
+        ensure_table_exists(&self.conn, table)?;
+        for column in columns {
+            validate_identifier(column)?;
+            self.conn
+                .execute_batch(&format!("ALTER TABLE {table} DROP COLUMN {column};"))
+                .map_err(|source| Error::table(table, source.to_string()))?;
+        }
+        Ok(())
     }
 
     /// Insert parsed CSV rows into an existing table (caller handles transactions).
