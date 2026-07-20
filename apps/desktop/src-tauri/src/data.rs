@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use lattice_commands::{Command as SemanticCommand, CommandEngine, Transaction};
+use lattice_commands::{ColumnSpec, Command as SemanticCommand, CommandEngine, Transaction};
 use lattice_data::{
-    parse_csv_file, CellValue, ColumnMeta, DataApp, FilterOperator, Row, SortDirection,
-    ViewDef, ViewFilter, ViewSort, LAYOUT_BOARD, LAYOUT_CALENDAR, LAYOUT_GALLERY,
+    parse_csv_file, CellValue, ColumnMeta, DataApp, FieldType, FilterOperator, Row,
+    SortDirection, ViewDef, ViewFilter, ViewSort, LAYOUT_BOARD, LAYOUT_CALENDAR, LAYOUT_GALLERY,
     SUPPORTED_LAYOUT_TYPES,
 };
 use serde::{Deserialize, Serialize};
@@ -228,6 +228,69 @@ pub fn open_data_app(
     limit: Option<usize>,
     offset: Option<usize>,
 ) -> Result<DataAppSnapshot, String> {
+    let app = open_app_at(&root, &rel_path)?;
+    snapshot_from_app(
+        &app,
+        view_name.as_deref(),
+        limit.unwrap_or(ROW_LIMIT),
+        offset.unwrap_or(0),
+    )
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddColumnDto {
+    pub name: String,
+    pub field_type: FieldType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relation_table: Option<String>,
+}
+
+fn column_spec_from_dto(column: AddColumnDto) -> ColumnSpec {
+    if column.field_type == FieldType::Relation {
+        ColumnSpec::relation(column.name, column.relation_table.unwrap_or_default())
+    } else {
+        ColumnSpec::new(column.name, column.field_type)
+    }
+}
+
+/// List table names in a `.data` package (for relation column targets).
+#[tauri::command]
+pub fn list_data_tables(root: String, rel_path: String) -> Result<Vec<String>, String> {
+    let app = open_app_at(&root, &rel_path)?;
+    app.list_tables().map_err(|err| err.to_string())
+}
+
+/// Add typed columns to a table via `ColumnsAdd` and return a refreshed snapshot.
+#[tauri::command]
+pub fn add_data_columns(
+    root: String,
+    rel_path: String,
+    table: String,
+    columns: Vec<AddColumnDto>,
+    base_revision: String,
+    view_name: Option<String>,
+    limit: Option<usize>,
+    offset: Option<usize>,
+) -> Result<DataAppSnapshot, String> {
+    if columns.is_empty() {
+        return Err("at least one column is required".to_string());
+    }
+    let (canonical_root, _) = resolve_within_root(&root, &rel_path)?;
+    let mut engine = CommandEngine::open(&canonical_root).map_err(command_error_to_string)?;
+    let specs = columns.into_iter().map(column_spec_from_dto).collect();
+    engine
+        .apply(Transaction::new(
+            format!("Add columns to {rel_path}.{table}"),
+            vec![SemanticCommand::ColumnsAdd {
+                path: rel_path_buf(&rel_path),
+                table: table.clone(),
+                columns: specs,
+                base_revision,
+            }],
+        ))
+        .map_err(command_error_to_string)?;
+
     let app = open_app_at(&root, &rel_path)?;
     snapshot_from_app(
         &app,
@@ -1052,6 +1115,121 @@ mod tests {
         assert_eq!(
             snapshot.rows[0].values.get("email"),
             Some(&CellValue::Text("ada@example.com".into()))
+        );
+    }
+
+    #[test]
+    fn add_data_columns_extends_schema_and_returns_snapshot() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let rel_path = "CRM.data".to_string();
+
+        create_table_package(
+            root.clone(),
+            rel_path.clone(),
+            "CRM".to_string(),
+            "contacts".to_string(),
+        )
+        .unwrap();
+
+        let base = open_data_app(root.clone(), rel_path.clone(), None, None, None)
+            .unwrap()
+            .package_revision;
+
+        let snapshot = add_data_columns(
+            root.clone(),
+            rel_path.clone(),
+            "contacts".to_string(),
+            vec![
+                AddColumnDto {
+                    name: "name".into(),
+                    field_type: FieldType::Text,
+                    relation_table: None,
+                },
+                AddColumnDto {
+                    name: "age".into(),
+                    field_type: FieldType::Integer,
+                    relation_table: None,
+                },
+            ],
+            base,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(snapshot.columns.len(), 3);
+        assert!(
+            snapshot
+                .columns
+                .iter()
+                .any(|column| column.name == "name" && column.field_type == "text")
+        );
+        assert!(
+            snapshot
+                .columns
+                .iter()
+                .any(|column| column.name == "age" && column.field_type == "integer")
+        );
+        assert!(std::fs::read_to_string(dir.path().join("CRM.data/schema.sql"))
+            .unwrap()
+            .contains("ADD COLUMN name"));
+    }
+
+    #[test]
+    fn add_data_columns_reports_stale_revision() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let rel_path = "CRM.data".to_string();
+
+        create_table_package(
+            root.clone(),
+            rel_path.clone(),
+            "CRM".to_string(),
+            "contacts".to_string(),
+        )
+        .unwrap();
+
+        let err = add_data_columns(
+            root,
+            rel_path,
+            "contacts".to_string(),
+            vec![AddColumnDto {
+                name: "name".into(),
+                field_type: FieldType::Text,
+                relation_table: None,
+            }],
+            "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+            None,
+            None,
+            None,
+        )
+        .unwrap_err();
+
+        assert!(
+            err.starts_with(crate::commands::STALE_REVISION_PREFIX),
+            "expected STALE_REVISION-prefixed error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn list_data_tables_returns_package_tables() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let rel_path = "CRM.data".to_string();
+
+        create_table_package(
+            root.clone(),
+            rel_path.clone(),
+            "CRM".to_string(),
+            "contacts".to_string(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            list_data_tables(root, rel_path).unwrap(),
+            vec!["contacts".to_string()]
         );
     }
 
