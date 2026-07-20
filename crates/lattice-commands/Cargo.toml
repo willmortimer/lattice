@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 lattice-core.workspace = true
 lattice-data.workspace = true
+lattice-datasets.workspace = true
 lattice-storage.workspace = true
 thiserror.workspace = true
 serde.workspace = true

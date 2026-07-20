@@ -62,6 +62,11 @@ export function createDefaultResourceRendererRegistry(): ResourceRendererRegistr
       ),
     )
     .register(
+      definition("dataset-viewer", "dataset", undefined, (signal) =>
+        lazyImport(() => import("./DatasetResourceRenderer").then((module) => module.DatasetResourceRenderer), signal),
+      ),
+    )
+    .register(
       definition("notebook-viewer", "notebook", undefined, (signal) =>
         lazyImport(() => import("./NotebookResourceRenderer").then((module) => module.NotebookResourceRenderer), signal),
       ),
