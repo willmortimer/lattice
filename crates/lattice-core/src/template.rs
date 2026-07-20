@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use lattice_data::{
     write_package_action, write_package_form, write_package_interface, write_package_view,
     ActionDef, ActionKind, ActionScope, CellValue, DataApp, FieldType, FormDef, InterfaceDef,
-    NewColumn, ViewDef,
+    NewColumn, RollupAggregate, ViewDef,
 };
 use lattice_storage::atomic_write_file;
 use serde::{Deserialize, Serialize};
@@ -36,6 +36,11 @@ pub(crate) struct SeedDataColumn {
     pub name: &'static str,
     pub field_type: &'static str,
     pub relation_table: Option<&'static str>,
+    pub lookup_relation: Option<&'static str>,
+    pub lookup_field: Option<&'static str>,
+    pub rollup_relation: Option<&'static str>,
+    pub rollup_aggregate: Option<&'static str>,
+    pub rollup_field: Option<&'static str>,
 }
 
 #[derive(Debug)]
@@ -621,6 +626,7 @@ fn materialize_data_package(
             &known_forms,
         )?;
     }
+    sync_package_backlink_relations(&mut app, package)?;
     Ok(())
 }
 
@@ -692,22 +698,156 @@ fn seed_column_to_new_column<'a>(
         return Ok(NewColumn::relation(column.name, target));
     }
     if field_type == FieldType::Lookup {
-        return Err(Error::TemplateValidation {
+        let lookup_relation = column.lookup_relation.ok_or_else(|| Error::TemplateValidation {
             message: format!(
-                "data package {}: lookup columns are not supported in template seeds yet ({:?})",
+                "data package {}: lookup column {:?} requires lookup_relation",
                 package_path, column.name
             ),
-        });
+        })?;
+        let lookup_field = column.lookup_field.ok_or_else(|| Error::TemplateValidation {
+            message: format!(
+                "data package {}: lookup column {:?} requires lookup_field",
+                package_path, column.name
+            ),
+        })?;
+        return Ok(NewColumn::lookup(column.name, lookup_relation, lookup_field));
     }
     if field_type == FieldType::Rollup {
-        return Err(Error::TemplateValidation {
+        let rollup_relation = column.rollup_relation.ok_or_else(|| Error::TemplateValidation {
             message: format!(
-                "data package {}: rollup columns are not supported in template seeds yet ({:?})",
+                "data package {}: rollup column {:?} requires rollup_relation",
                 package_path, column.name
             ),
-        });
+        })?;
+        let aggregate = column.rollup_aggregate.ok_or_else(|| Error::TemplateValidation {
+            message: format!(
+                "data package {}: rollup column {:?} requires rollup_aggregate",
+                package_path, column.name
+            ),
+        })?;
+        let rollup_aggregate = aggregate.parse::<RollupAggregate>().map_err(|error| {
+            Error::TemplateValidation {
+                message: format!(
+                    "data package {}: rollup column {:?} has invalid rollup_aggregate {:?}: {error}",
+                    package_path, column.name, aggregate
+                ),
+            }
+        })?;
+        return Ok(NewColumn::rollup(
+            column.name,
+            rollup_relation,
+            rollup_aggregate,
+            column.rollup_field,
+        ));
     }
     Ok(NewColumn::new(column.name, field_type))
+}
+
+/// Populate forward relation columns from reciprocal links (e.g. companies.contacts
+/// from contacts.company) so rollup seeds resolve during provisioning.
+fn sync_package_backlink_relations(app: &mut DataApp, package: &SeedDataPackage) -> Result<()> {
+    let mut table_columns: Vec<(&str, &[SeedDataColumn])> = package
+        .extra_tables
+        .iter()
+        .map(|table| (table.table, table.columns))
+        .collect();
+    table_columns.push((package.table, package.columns));
+
+    for (table, columns) in &table_columns {
+        for column in *columns {
+            if column.field_type != "relation" {
+                continue;
+            }
+            let Some(target_table) = column.relation_table else {
+                continue;
+            };
+            let Some(backlink) =
+                find_reciprocal_relation_column(&table_columns, target_table, table)
+            else {
+                continue;
+            };
+            sync_relation_from_backlink(
+                app,
+                package.path,
+                table,
+                column.name,
+                target_table,
+                backlink,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn find_reciprocal_relation_column<'a>(
+    table_columns: &[(&str, &'a [SeedDataColumn])],
+    source_table: &str,
+    target_table: &str,
+) -> Option<&'a str> {
+    let (_, columns) = table_columns
+        .iter()
+        .find(|(table, _)| *table == source_table)?;
+    columns.iter().find_map(|column| {
+        if column.field_type == "relation" && column.relation_table == Some(target_table) {
+            Some(column.name)
+        } else {
+            None
+        }
+    })
+}
+
+fn sync_relation_from_backlink(
+    app: &mut DataApp,
+    package_path: &str,
+    table: &str,
+    relation_column: &str,
+    source_table: &str,
+    backlink_column: &str,
+) -> Result<()> {
+    let rows = app
+        .list_rows(table, 10_000, 0)
+        .map_err(map_data_error)?;
+    let mut links: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for row in rows {
+        links.insert(row.id.clone(), Vec::new());
+    }
+
+    let source_rows = app
+        .list_rows(source_table, 10_000, 0)
+        .map_err(map_data_error)?;
+    for source_row in source_rows {
+        let Some(CellValue::Relation { record_ids }) = source_row.values.get(backlink_column)
+        else {
+            continue;
+        };
+        for target_id in record_ids {
+            if let Some(linked) = links.get_mut(target_id) {
+                linked.push(source_row.id.clone());
+            } else {
+                return Err(Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path}: backlink {backlink_column:?} on {source_table} references unknown row in {table}"
+                    ),
+                });
+            }
+        }
+    }
+
+    for (row_id, record_ids) in links {
+        if record_ids.is_empty() {
+            continue;
+        }
+        app.update_row(
+            table,
+            &row_id,
+            &BTreeMap::from([(
+                relation_column.to_string(),
+                CellValue::Relation { record_ids },
+            )]),
+        )
+        .map_err(map_data_error)?;
+    }
+    Ok(())
 }
 
 fn relation_columns_from_seed<'a>(
@@ -1756,11 +1896,21 @@ mod tests {
                 name: "name",
                 field_type: "text",
                 relation_table: None,
+                lookup_relation: None,
+                lookup_field: None,
+                rollup_relation: None,
+                rollup_aggregate: None,
+                rollup_field: None,
             },
             SeedDataColumn {
                 name: "email",
                 field_type: "text",
                 relation_table: None,
+                lookup_relation: None,
+                lookup_field: None,
+                rollup_relation: None,
+                rollup_aggregate: None,
+                rollup_field: None,
             },
         ];
         static ROWS: &[&str] = &[
@@ -1831,6 +1981,11 @@ mod tests {
             name: "name",
             field_type: "not_a_real_type",
             relation_table: None,
+            lookup_relation: None,
+            lookup_field: None,
+            rollup_relation: None,
+            rollup_aggregate: None,
+            rollup_field: None,
         }];
         static PACKAGES: &[SeedDataPackage] = &[SeedDataPackage {
             path: "Data/Broken.data",
@@ -1892,16 +2047,31 @@ mod tests {
                 name: "name",
                 field_type: "text",
                 relation_table: None,
+                lookup_relation: None,
+                lookup_field: None,
+                rollup_relation: None,
+                rollup_aggregate: None,
+                rollup_field: None,
             },
             SeedDataColumn {
                 name: "status",
                 field_type: "text",
                 relation_table: None,
+                lookup_relation: None,
+                lookup_field: None,
+                rollup_relation: None,
+                rollup_aggregate: None,
+                rollup_field: None,
             },
             SeedDataColumn {
                 name: "company",
                 field_type: "text",
                 relation_table: None,
+                lookup_relation: None,
+                lookup_field: None,
+                rollup_relation: None,
+                rollup_aggregate: None,
+                rollup_field: None,
             },
         ];
         static ROWS: &[&str] = &[r#"{"name":"Ada","status":"Active","company":"Analytical"}"#];
@@ -1993,21 +2163,41 @@ mod tests {
                 name: "name",
                 field_type: "text",
                 relation_table: None,
+                lookup_relation: None,
+                lookup_field: None,
+                rollup_relation: None,
+                rollup_aggregate: None,
+                rollup_field: None,
             },
             SeedDataColumn {
                 name: "email",
                 field_type: "text",
                 relation_table: None,
+                lookup_relation: None,
+                lookup_field: None,
+                rollup_relation: None,
+                rollup_aggregate: None,
+                rollup_field: None,
             },
             SeedDataColumn {
                 name: "status",
                 field_type: "text",
                 relation_table: None,
+                lookup_relation: None,
+                lookup_field: None,
+                rollup_relation: None,
+                rollup_aggregate: None,
+                rollup_field: None,
             },
             SeedDataColumn {
                 name: "company",
                 field_type: "text",
                 relation_table: None,
+                lookup_relation: None,
+                lookup_field: None,
+                rollup_relation: None,
+                rollup_aggregate: None,
+                rollup_field: None,
             },
         ];
         static ROWS: &[&str] = &[r#"{"name":"Ada","email":"ada@example.com","status":"Active","company":"Analytical"}"#];
@@ -2085,11 +2275,21 @@ mod tests {
                 name: "name",
                 field_type: "text",
                 relation_table: None,
+                lookup_relation: None,
+                lookup_field: None,
+                rollup_relation: None,
+                rollup_aggregate: None,
+                rollup_field: None,
             },
             SeedDataColumn {
                 name: "reports_to",
                 field_type: "relation",
                 relation_table: Some("contacts"),
+                lookup_relation: None,
+                lookup_field: None,
+                rollup_relation: None,
+                rollup_aggregate: None,
+                rollup_field: None,
             },
         ];
         static ROWS: &[&str] = &[
@@ -2164,6 +2364,11 @@ mod tests {
             name: "name",
             field_type: "text",
             relation_table: None,
+            lookup_relation: None,
+            lookup_field: None,
+            rollup_relation: None,
+            rollup_aggregate: None,
+            rollup_field: None,
         }];
         static COMPANY_ROWS: &[&str] = &[r#"{"name":"NASA"}"#];
         static EXTRA_TABLES: &[SeedDataExtraTable] = &[SeedDataExtraTable {
@@ -2176,11 +2381,21 @@ mod tests {
                 name: "name",
                 field_type: "text",
                 relation_table: None,
+                lookup_relation: None,
+                lookup_field: None,
+                rollup_relation: None,
+                rollup_aggregate: None,
+                rollup_field: None,
             },
             SeedDataColumn {
                 name: "company",
                 field_type: "relation",
                 relation_table: Some("companies"),
+                lookup_relation: None,
+                lookup_field: None,
+                rollup_relation: None,
+                rollup_aggregate: None,
+                rollup_field: None,
             },
         ];
         static CONTACT_ROWS: &[&str] =
