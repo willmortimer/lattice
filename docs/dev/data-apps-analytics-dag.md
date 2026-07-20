@@ -121,8 +121,8 @@ flowchart TD
 
 | ID | Status | Model | Notes |
 |---|---|---|---|
-| P2-01 | pending | grok | Schema commands |
-| P2-03 | pending | grok | Paginated open |
+| P2-01 | in progress | grok | Schema commands (worktree) |
+| P2-03 | merged | grok | Paginated open → `2a32d0c` |
 | P2-02 | pending | composer | Column designer |
 | P2-04 | pending | composer | CLI schema alter |
 | P2-05 | pending | composer | CSV type-review |
