@@ -23,7 +23,8 @@
     "tauri:build:novoice": "tauri build",
     "test": "vitest run",
     "test:perf": "playwright test --project=browser",
-    "test:perf:tauri": "node ./e2e/run-tauri-perf.mjs"
+    "test:perf:tauri": "node ./e2e/run-tauri-perf.mjs",
+    "test:crm:tauri": "node ./e2e/run-tauri-crm-smoke.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.4",

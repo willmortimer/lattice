@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 /**
- * Starts Lattice with `e2e-testing` (Playwright socket), runs `--project=tauri`
- * perf specs, then tears the app down.
+ * Starts Lattice with `e2e-testing` + First Look reset, runs the CRM Wave 2
+ * Tauri smoke (`e2e/data/crm.smoke.tauri.spec.ts`), then tears the app down.
  *
  * Set `LATTICE_PERF_REUSE_TAURI=1` to attach to an already-running
  * `pnpm tauri:dev:e2e` instead of spawning one.
+ *
+ * Not a CI gate this sprint — local / optional confidence only.
  */
 import { spawn } from "node:child_process";
 import { existsSync, unlinkSync } from "node:fs";
@@ -16,6 +18,7 @@ const desktopRoot = resolve(__dirname, "..");
 const repoRoot = resolve(desktopRoot, "../..");
 const socketPath = process.env.TAURI_PLAYWRIGHT_SOCKET ?? "/tmp/tauri-playwright.sock";
 const startTimeoutMs = Number(process.env.LATTICE_TAURI_PERF_START_MS ?? 180_000);
+const smokeSpec = "e2e/data/crm.smoke.tauri.spec.ts";
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -34,8 +37,7 @@ function runPlaywright() {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(
       "pnpm",
-      // Scope to perf specs so CRM Wave 2 smoke stays on `test:crm:tauri`.
-      ["exec", "playwright", "test", "--project=tauri", "e2e/perf"],
+      ["exec", "playwright", "test", "--project=tauri", smokeSpec],
       {
         cwd: desktopRoot,
         stdio: "inherit",
@@ -58,7 +60,6 @@ function runPlaywright() {
 function stopProcessTree(child) {
   if (!child?.pid) return;
   try {
-    // Kill the whole group started with detached + new process group.
     process.kill(-child.pid, "SIGTERM");
   } catch {
     try {
@@ -102,6 +103,8 @@ async function main() {
       env: {
         ...process.env,
         LATTICE_DEV_HOME: devHome,
+        // Match `pnpm tauri:dev:e2e` so CRM forms/actions match the demo seed.
+        LATTICE_DEV_RESET_DEMO: process.env.LATTICE_DEV_RESET_DEMO ?? "1",
         TAURI_PLAYWRIGHT_SOCKET: socketPath,
       },
     });

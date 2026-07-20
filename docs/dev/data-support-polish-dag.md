@@ -15,6 +15,10 @@ See Cursor plan `data_support_polish` for full handoff packets. Waves:
 
 ## Polish status
 
+- **P2P06** (native CRM Tauri smoke): done — `apps/desktop/e2e/data/crm.smoke.tauri.spec.ts`
+  asserts CRM open, Save view enabled, Actions → Contact intake, and FormSave
+  (`Save form`). Local only: `pnpm --filter @lattice/desktop test:crm:tauri`
+  (not a CI gate this sprint).
 - **P2P08** (field-type docs alignment): done — `docs/10` § Typed fields lists
   only shipped `FieldType` values (`text`, `long_text`, `integer`, `decimal`,
   `boolean`, `date`, `relation`, `lookup`, `rollup`); formula and attachment

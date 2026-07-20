@@ -66,6 +66,11 @@ Nix: `nix run .#desktop-perf-tauri`
 | `shell.perf.spec.ts` / `shell.tauri.perf.spec.ts` | Cold/ready shell chrome + warm reload |
 | `page.perf.spec.ts` / `page.tauri.perf.spec.ts` | Open `Home.md` until ProseMirror; scroll smoke |
 
+Related (not a perf budget / not CI): CRM Wave 2 Tauri smoke lives under
+`e2e/data/crm.smoke.tauri.spec.ts` — run with
+`pnpm --filter @lattice/desktop test:crm:tauri` (resets First Look via
+`LATTICE_DEV_RESET_DEMO`).
+
 Annotations record wall time, Navigation Timing, and (browser only) Chromium JS
 heap via CDP.
 
