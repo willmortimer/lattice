@@ -8,8 +8,9 @@ use crate::app::{
     app_manifest_path, database_path, default_view_path, schema_path, DATABASE_FILENAME,
 };
 use crate::{
-    write_package_action, write_package_form, ActionDef, ActionKind, ActionScope, CellValue,
-    DataApp, FieldType, FilterOperator, FormDef, SortDirection, ViewDef, ViewFilter, ViewSort,
+    write_package_action, write_package_form, write_package_interface, write_package_view,
+    ActionDef, ActionKind, ActionScope, CellValue, DataApp, FieldType, FilterOperator, FormDef,
+    InterfaceDef, SortDirection, ViewDef, ViewFilter, ViewSort,
 };
 
 #[test]
@@ -854,6 +855,90 @@ fn validate_action_url_rejects_parent_segments() {
 }
 
 #[test]
+fn interface_def_round_trip_list_and_load() {
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Hiring.data");
+    let app = DataApp::create(&package_path, "Hiring", "candidates").unwrap();
+
+    rusqlite::Connection::open(database_path(&package_path))
+        .unwrap()
+        .execute_batch(
+            "ALTER TABLE candidates ADD COLUMN name TEXT;
+             ALTER TABLE candidates ADD COLUMN status TEXT;",
+        )
+        .unwrap();
+
+    let mut board = ViewDef::new_grid("candidates");
+    board.layout.layout_type = "board".into();
+    board.layout.group_by = Some("status".into());
+    write_package_view(&package_path, "Board", &board).unwrap();
+
+    let mut form = FormDef::new("intake", "candidates");
+    form.fields = vec!["name".into(), "status".into()];
+    write_package_form(&package_path, &form).unwrap();
+
+    assert!(app.list_interfaces().unwrap().is_empty());
+
+    let mut interface = InterfaceDef::new("CandidateOps");
+    interface.views = vec!["Board".into()];
+    interface.forms = vec!["intake".into()];
+    interface.title = Some("Candidate ops".into());
+    interface.description = Some("Board plus intake".into());
+
+    let yaml = app.render_interface_yaml(&interface).unwrap();
+    assert!(yaml.contains("format: lattice-interface"));
+    assert!(yaml.contains("name: CandidateOps"));
+    assert!(yaml.contains("Board"));
+    assert!(yaml.contains("intake"));
+
+    write_package_interface(&package_path, &interface).unwrap();
+    assert!(package_path
+        .join("interfaces")
+        .join("CandidateOps.interface.yaml")
+        .is_file());
+
+    let interfaces = app.list_interfaces().unwrap();
+    assert_eq!(interfaces, vec!["CandidateOps".to_string()]);
+
+    let loaded = app.load_interface("CandidateOps").unwrap();
+    assert_eq!(loaded, interface);
+    assert_eq!(loaded.primary_view(), Some("Board"));
+}
+
+#[test]
+fn load_interface_rejects_unknown_view_binding() {
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Hiring.data");
+    let app = DataApp::create(&package_path, "Hiring", "candidates").unwrap();
+
+    let mut interface = InterfaceDef::new("Broken");
+    interface.views = vec!["MissingView".into()];
+    write_package_interface(&package_path, &interface).unwrap();
+
+    let err = app.load_interface("Broken").unwrap_err().to_string();
+    assert!(
+        err.contains("unknown view") && err.contains("MissingView"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn load_interface_rejects_empty_bindings() {
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Hiring.data");
+    let _app = DataApp::create(&package_path, "Hiring", "candidates").unwrap();
+
+    let interface = InterfaceDef::new("Empty");
+    let err = write_package_interface(&package_path, &interface)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.contains("at least one view or form"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
 fn lookup_column_resolves_related_field_values() {
     use crate::NewColumn;
 
@@ -1063,4 +1148,13 @@ fn lookup_column_requires_valid_relation_and_field() {
         .unwrap_err()
         .to_string();
     assert!(missing_field.contains("lookup_field"));
+}
+
+#[test]
+fn package_create_materializes_interfaces_folder() {
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Hiring.data");
+    DataApp::create(&package_path, "Hiring", "candidates").unwrap();
+    assert!(package_path.join("interfaces").is_dir());
+    assert!(package_path.join("forms").is_dir());
 }

@@ -225,6 +225,48 @@ test("template compiler accepts declarative dataPackage forms", () => {
   assert.equal(forms[0].title, "Contact intake");
 });
 
+test("template compiler accepts declarative dataPackage interfaces", () => {
+  const templates = compileTemplates(
+    fixture({
+      directories: ["Data"],
+      dataPackages: [
+        {
+          path: "Data/Contacts.data",
+          title: "Contacts",
+          table: "contacts",
+          columns: [
+            { name: "name", type: "text" },
+            { name: "status", type: "text" },
+          ],
+          rows: [{ name: "Ada", status: "Active" }],
+          views: [{ name: "Board", layout: "board", group_by: "status" }],
+          forms: [
+            {
+              name: "ContactIntake",
+              fields: ["name", "status"],
+              title: "Contact intake",
+            },
+          ],
+          interfaces: [
+            {
+              name: "ContactOps",
+              views: ["Board"],
+              forms: ["ContactIntake"],
+              title: "Contact operations",
+            },
+          ],
+        },
+      ],
+    }),
+  );
+  const interfaces = templates[0].dataPackages[0].interfaces;
+  assert.equal(interfaces.length, 1);
+  assert.equal(interfaces[0].name, "ContactOps");
+  assert.deepEqual(interfaces[0].views, ["Board"]);
+  assert.deepEqual(interfaces[0].forms, ["ContactIntake"]);
+  assert.equal(interfaces[0].title, "Contact operations");
+});
+
 test("demo template emits kitchen-sink browser fixture", () => {
   const templates = compileTemplates();
   const demo = templates.find((template) => template.id === "demo");
@@ -263,6 +305,9 @@ test("demo template emits kitchen-sink browser fixture", () => {
   assert.match(source, /# CRM exploration/);
   assert.match(source, /export const demoPackageForms/);
   assert.match(source, /"name": "ContactIntake"/);
+  assert.match(source, /export const demoPackageInterfaces/);
+  assert.match(source, /"name": "ContactOps"/);
+  assert.match(source, /interfaces\/ContactOps/);
 });
 
 test("template compiler rejects invalid dataPackages", () => {
