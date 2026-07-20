@@ -6,6 +6,7 @@ mod profile;
 mod resource_links;
 mod revisions;
 mod search;
+mod semantic;
 mod terminal;
 mod theme;
 mod tray;
@@ -31,7 +32,8 @@ pub fn run() {
         .manage(terminal::TerminalState::default())
         .manage(theme::ThemeWatchState::default())
         .manage(resource_links::ResourceCatalogState::default())
-        .manage(voice::VoiceState::default());
+        .manage(voice::VoiceState::default())
+        .manage(semantic::SemanticState::default());
 
     // Socket bridge for `@srsholmes/tauri-playwright` (WKWebView / WebView2 / WebKitGTK).
     // Only listen when explicitly enabled so normal debug runs stay quiet.
@@ -220,6 +222,9 @@ pub fn run() {
             voice::voice_finish_session,
             voice::voice_cancel_session,
             voice::voice_cancel_active,
+            semantic::semantic_status,
+            semantic::semantic_enable,
+            semantic::semantic_disable,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

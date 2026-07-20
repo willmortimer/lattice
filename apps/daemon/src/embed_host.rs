@@ -15,8 +15,8 @@ use lattice_embedding::{
     PoolingStrategy,
 };
 use lattice_runtime::{
-    IndexProgressPhase, LatticeRuntime, RuntimeEvent, RuntimeIndexProgress, SemanticWorkerConfig,
-    WorkspaceSession,
+    IndexProgressPhase, LatticeRuntime, RuntimeEvent, RuntimeIndexProgress, SemanticStatus,
+    SemanticStatusState, SemanticWorkerConfig, WorkspaceSession,
 };
 use tracing::{info, warn};
 
@@ -50,6 +50,9 @@ pub enum SemanticProviderMode {
 
 impl SemanticProviderMode {
     /// Resolve provider mode from environment variables.
+    ///
+    /// Returns [`None`] when no semantic env is set; hosts may still start a
+    /// Fake controller so user-driven enable works without env gates.
     pub fn from_env() -> Option<Self> {
         if env_truthy(ENV_SEMANTIC_FAKE) {
             return Some(Self::FakeInProcess);
@@ -70,6 +73,11 @@ impl SemanticProviderMode {
             return Some(Self::ExternalSocket { socket });
         }
         None
+    }
+
+    /// Env override when present; otherwise in-process Fake for user enable.
+    pub fn from_env_or_fake() -> Self {
+        Self::from_env().unwrap_or(Self::FakeInProcess)
     }
 }
 
@@ -210,6 +218,47 @@ impl SemanticController {
             .lock()
             .expect("sessions poisoned")
             .push(Arc::downgrade(session));
+    }
+
+    /// Enable semantic indexing for an open workspace (user-driven).
+    pub fn enable_workspace(
+        self: &Arc<Self>,
+        workspace_id: &str,
+    ) -> std::result::Result<SemanticStatus, String> {
+        let session = self
+            .runtime
+            .get_session_by_id(workspace_id)
+            .ok_or_else(|| format!("workspace session not found for id {workspace_id}"))?;
+        self.attach_session(&session);
+        Ok(session.semantic_status())
+    }
+
+    /// Stop semantic indexing for a workspace (FTS remains available).
+    pub fn disable_workspace(&self, workspace_id: &str) -> std::result::Result<SemanticStatus, String> {
+        let session = self
+            .runtime
+            .get_session_by_id(workspace_id)
+            .ok_or_else(|| format!("workspace session not found for id {workspace_id}"))?;
+        session.stop_semantic_indexing();
+        self.prune_sessions();
+        Ok(SemanticStatus::stopped())
+    }
+
+    /// Status for a workspace session, or stopped when unknown / disabled.
+    pub fn status_for_workspace(&self, workspace_id: &str) -> SemanticStatus {
+        match self.runtime.get_session_by_id(workspace_id) {
+            Some(session) => session.semantic_status(),
+            None => SemanticStatus::stopped().with_message(format!(
+                "workspace session not found for id {workspace_id}"
+            )),
+        }
+    }
+
+    fn prune_sessions(&self) {
+        self.sessions
+            .lock()
+            .expect("sessions poisoned")
+            .retain(|weak| weak.strong_count() > 0);
     }
 
     pub fn provider(&self) -> Arc<dyn EmbeddingProvider> {
@@ -467,6 +516,50 @@ mod tests {
             .iter()
             .any(|h| h.resource_uri.ends_with("Notes.md")));
         assert!(fallback.iter().all(|h| h.semantic_rank.is_none()));
+
+        controller.shutdown();
+        runtime.close_session(dir.path()).unwrap();
+    }
+
+    #[test]
+    fn enable_disable_updates_status_without_env_gate() {
+        let dir = tempfile::tempdir().unwrap();
+        Workspace::init(dir.path(), "Daemon Enable").unwrap();
+        std::fs::write(dir.path().join("Notes.md"), "# Notes\n\nhello semantic\n").unwrap();
+
+        let runtime = Arc::new(LatticeRuntime::new());
+        let controller =
+            SemanticController::start(Arc::clone(&runtime), SemanticProviderMode::from_env_or_fake())
+                .unwrap();
+        let session = runtime.open_workspace_session(dir.path()).unwrap();
+        let workspace_id = session.workspace_id().to_string();
+
+        assert_eq!(
+            controller.status_for_workspace(&workspace_id).state,
+            SemanticStatusState::Stopped
+        );
+
+        let enabled = controller.enable_workspace(&workspace_id).unwrap();
+        assert_ne!(enabled.state, SemanticStatusState::Stopped);
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            let status = controller.status_for_workspace(&workspace_id);
+            if matches!(
+                status.state,
+                SemanticStatusState::Ready | SemanticStatusState::Indexing
+            ) {
+                break;
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+
+        let disabled = controller.disable_workspace(&workspace_id).unwrap();
+        assert_eq!(disabled.state, SemanticStatusState::Stopped);
+        assert_eq!(
+            controller.status_for_workspace(&workspace_id).state,
+            SemanticStatusState::Stopped
+        );
 
         controller.shutdown();
         runtime.close_session(dir.path()).unwrap();

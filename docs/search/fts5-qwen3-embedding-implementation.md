@@ -901,16 +901,22 @@ Measure:
 **Status (runtime):** `lattice-runtime` owns a per-session semantic job
 worker (`SessionSemanticWorker`) that calls `embed_pending_chunks` on kick
 (from FTS upsert / explicit `kick_semantic_jobs`). Pause is a simple flag.
-`latticed` optionally starts a `SemanticController` when:
+`latticed` always starts a `SemanticController` (Fake by default; env can
+select socket / spawn modes). Indexing is **user-driven** via
+`EnableSemanticSearch` / `DisableSemanticSearch` / `GetSemanticStatus`
+(desktop Settings toggle → Tauri → handlers or daemon RPCs). Env still
+selects provider mode:
 
 | Env | Effect |
 | --- | --- |
-| `LATTICE_SEMANTIC_FAKE=1` | In-process `FakeEmbeddingProvider` (tests/CI) |
+| (none) | In-process `FakeEmbeddingProvider` (ready for user enable) |
+| `LATTICE_SEMANTIC_FAKE=1` | Explicit Fake (same as default) |
 | `LATTICE_EMBED_HOST_SOCKET` | Watch an existing embed-host UDS; degrade when missing |
 | `LATTICE_EMBED_HOST_BIN` | With socket: spawn/supervise `lattice-embed-host` (bounded backoff) |
 
 When the host is unavailable, sessions are marked `SemanticDegraded` and
-hybrid search falls back to FTS (`semantic_rank` none).
+hybrid search falls back to FTS (`semantic_rank` none). Status states:
+`stopped | preparing | indexing | ready | degraded | failed`.
 
 ### Milestone S7: Core ML research backend
 
