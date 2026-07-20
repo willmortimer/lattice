@@ -3,6 +3,9 @@
 //! Loads a verified GGUF, runs embedding mode with last-token pooling, truncates
 //! to the requested Matryoshka dimensions, then L2-normalizes. Real inference
 //! tests are gated on `LATTICE_EMBED_LLAMA_GGUF` so CI stays offline.
+//!
+//! Keeps one reusable llama context on [`LlamaEngine`] and packs multiple
+//! document sequences into a single [`LlamaBatch`] when they fit.
 
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
@@ -14,16 +17,23 @@ use lattice_embedding::{
     EmbeddingSpecification, EmbeddingVector, ModelManifest,
 };
 use llama_cpp_2::context::params::{LlamaContextParams, LlamaPoolingType};
+use llama_cpp_2::context::LlamaContext;
 use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::model::{AddBos, LlamaModel};
+use llama_cpp_2::token::LlamaToken;
 
 use super::{BackendKind, EmbeddingBackend};
 use crate::error::EmbedHostError;
 
 /// Query instruction template for `lattice-retrieval-v1` (docs/search).
 const QUERY_INSTRUCTION: &str = "Instruct: Retrieve the most relevant passages, code, decisions, records, or notes from a private local workspace for answering the user's query.\nQuery: ";
+
+/// Context / batch token budget (per-sequence max length and decode batch size).
+const N_CTX: u32 = 2_048;
+/// Max sequences packed into one decode for document batching.
+const N_SEQ_MAX: u32 = 8;
 
 fn shared_backend() -> Result<&'static LlamaBackend, EmbedHostError> {
     static BACKEND: OnceLock<LlamaBackend> = OnceLock::new();
@@ -39,9 +49,20 @@ fn shared_backend() -> Result<&'static LlamaBackend, EmbedHostError> {
     })
 }
 
+/// Model + reusable embedding context.
+///
+/// `context` is declared before `model` so Drop clears the context first.
 struct LlamaEngine {
+    /// Reusable embedding context. Lifetime is erased to `'static` but the
+    /// pointer is only valid while `model` lives; see [`Self::ensure_context`].
+    context: Option<LlamaContext<'static>>,
     model: LlamaModel,
 }
+
+// SAFETY: `LlamaContext` is `!Send` because of an internal `NonNull`, but we only
+// touch it while holding `LlamaCppBackend::engine` (a `Mutex`). Cross-thread
+// ownership moves are fine; concurrent use is not.
+unsafe impl Send for LlamaEngine {}
 
 impl LlamaEngine {
     fn load(artifact_path: &Path) -> Result<Self, EmbedHostError> {
@@ -56,21 +77,39 @@ impl LlamaEngine {
                 ))
             },
         )?;
-        Ok(Self { model })
+        Ok(Self {
+            context: None,
+            model,
+        })
     }
 
-    fn embed_text(&self, text: &str, dimensions: u32) -> Result<EmbeddingVector, EmbeddingError> {
-        let backend = shared_backend().map_err(|error| EmbeddingError::provider(error.to_string()))?;
-        let n_ctx = NonZeroU32::new(2_048).expect("non-zero");
-        let ctx_params = LlamaContextParams::default()
-            .with_n_ctx(Some(n_ctx))
-            .with_embeddings(true)
-            .with_pooling_type(LlamaPoolingType::Last);
-        let mut ctx = self
-            .model
-            .new_context(backend, ctx_params)
-            .map_err(|error| EmbeddingError::provider(format!("llama context: {error}")))?;
+    fn ensure_context(&mut self) -> Result<&mut LlamaContext<'static>, EmbeddingError> {
+        if self.context.is_none() {
+            let backend =
+                shared_backend().map_err(|error| EmbeddingError::provider(error.to_string()))?;
+            let n_ctx = NonZeroU32::new(N_CTX).expect("non-zero");
+            let ctx_params = LlamaContextParams::default()
+                .with_n_ctx(Some(n_ctx))
+                .with_n_batch(N_CTX)
+                .with_n_ubatch(N_CTX)
+                .with_n_seq_max(N_SEQ_MAX)
+                .with_embeddings(true)
+                .with_pooling_type(LlamaPoolingType::Last);
+            let ctx = self
+                .model
+                .new_context(backend, ctx_params)
+                .map_err(|error| EmbeddingError::provider(format!("llama context: {error}")))?;
+            // SAFETY: `context` is dropped before `model` (field order). We never
+            // move `model` out of this struct while `context` is live.
+            let ctx: LlamaContext<'static> = unsafe { std::mem::transmute(ctx) };
+            self.context = Some(ctx);
+        }
+        self.context
+            .as_mut()
+            .ok_or_else(|| EmbeddingError::provider("llama context missing after ensure"))
+    }
 
+    fn tokenize(&self, text: &str) -> Result<Vec<LlamaToken>, EmbeddingError> {
         let tokens = self
             .model
             .str_to_token(text, AddBos::Always)
@@ -78,28 +117,84 @@ impl LlamaEngine {
         if tokens.is_empty() {
             return Err(EmbeddingError::provider("empty token sequence"));
         }
-        if tokens.len() as u32 > ctx.n_ctx() {
+        if tokens.len() as u32 > N_CTX {
             return Err(EmbeddingError::provider(format!(
-                "input exceeds context window ({} tokens > {})",
+                "input exceeds context window ({} tokens > {N_CTX})",
                 tokens.len(),
-                ctx.n_ctx()
             )));
         }
+        Ok(tokens)
+    }
 
-        let mut batch = LlamaBatch::new(tokens.len(), 1);
-        batch
-            .add_sequence(&tokens, 0, false)
-            .map_err(|error| EmbeddingError::provider(format!("batch: {error}")))?;
-        ctx.clear_kv_cache();
-        ctx.decode(&mut batch)
-            .map_err(|error| EmbeddingError::provider(format!("decode: {error}")))?;
+    fn embed_text(&mut self, text: &str, dimensions: u32) -> Result<EmbeddingVector, EmbeddingError> {
+        let mut vectors = self.embed_texts(&[text], dimensions)?;
+        vectors.pop().ok_or_else(|| EmbeddingError::provider("empty embed_texts result"))
+    }
 
-        let embedding = ctx
-            .embeddings_seq_ith(0)
-            .map_err(|error| EmbeddingError::provider(format!("embeddings: {error}")))?;
-        Ok(EmbeddingVector {
-            values: matryoshka_l2(embedding, dimensions as usize)?,
-        })
+    /// Embed one or more texts, packing multiple sequences into one decode when
+    /// they fit under [`N_SEQ_MAX`] and the context `n_batch` token budget.
+    fn embed_texts(
+        &mut self,
+        texts: &[&str],
+        dimensions: u32,
+    ) -> Result<Vec<EmbeddingVector>, EmbeddingError> {
+        if texts.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let tokenized: Vec<Vec<LlamaToken>> = texts
+            .iter()
+            .map(|text| self.tokenize(text))
+            .collect::<Result<_, _>>()?;
+
+        let ctx = self.ensure_context()?;
+        let n_batch = ctx.n_batch() as usize;
+        let mut out = Vec::with_capacity(tokenized.len());
+        let mut index = 0;
+
+        while index < tokenized.len() {
+            let mut batch_token_count = 0usize;
+            let mut batch_end = index;
+            while batch_end < tokenized.len() && (batch_end - index) < N_SEQ_MAX as usize {
+                let seq_len = tokenized[batch_end].len();
+                if batch_token_count + seq_len > n_batch && batch_end > index {
+                    break;
+                }
+                if seq_len > n_batch {
+                    return Err(EmbeddingError::provider(format!(
+                        "sequence length {seq_len} exceeds n_batch {n_batch}"
+                    )));
+                }
+                batch_token_count += seq_len;
+                batch_end += 1;
+            }
+
+            let seq_count = batch_end - index;
+            let mut batch = LlamaBatch::new(batch_token_count, seq_count as i32);
+            for (seq_offset, tokens) in tokenized[index..batch_end].iter().enumerate() {
+                batch
+                    .add_sequence(tokens, seq_offset as i32, false)
+                    .map_err(|error| EmbeddingError::provider(format!("batch: {error}")))?;
+            }
+
+            ctx.clear_kv_cache();
+            ctx.decode(&mut batch)
+                .map_err(|error| EmbeddingError::provider(format!("decode: {error}")))?;
+
+            for seq_offset in 0..seq_count {
+                let embedding = ctx.embeddings_seq_ith(seq_offset as i32).map_err(|error| {
+                    EmbeddingError::provider(format!("embeddings: {error}"))
+                })?;
+                // Copy before the next decode reuses context embedding buffers.
+                out.push(EmbeddingVector {
+                    values: matryoshka_l2(embedding, dimensions as usize)?,
+                });
+            }
+
+            index = batch_end;
+        }
+
+        Ok(out)
     }
 }
 
@@ -166,11 +261,24 @@ impl LlamaCppBackend {
 
     fn embed_blocking(&self, text: &str) -> Result<EmbeddingVector, EmbeddingError> {
         let dimensions = self.specification.dimensions;
-        let engine = self
+        let mut engine = self
             .engine
             .lock()
             .map_err(|_| EmbeddingError::provider("llama engine lock poisoned"))?;
         engine.embed_text(text, dimensions)
+    }
+
+    fn embed_documents_blocking(
+        &self,
+        texts: &[String],
+    ) -> Result<Vec<EmbeddingVector>, EmbeddingError> {
+        let dimensions = self.specification.dimensions;
+        let mut engine = self
+            .engine
+            .lock()
+            .map_err(|_| EmbeddingError::provider("llama engine lock poisoned"))?;
+        let refs: Vec<&str> = texts.iter().map(String::as_str).collect();
+        engine.embed_texts(&refs, dimensions)
     }
 }
 
@@ -192,11 +300,8 @@ impl EmbeddingProvider for LlamaCppBackend {
         &self,
         requests: Vec<EmbedDocumentRequest>,
     ) -> Result<Vec<EmbeddingVector>, EmbeddingError> {
-        let mut out = Vec::with_capacity(requests.len());
-        for request in requests {
-            out.push(self.embed_blocking(&request.text)?);
-        }
-        Ok(out)
+        let texts: Vec<String> = requests.into_iter().map(|request| request.text).collect();
+        self.embed_documents_blocking(&texts)
     }
 }
 
@@ -232,5 +337,11 @@ mod tests {
         let formatted = format_query("hello");
         assert!(formatted.contains("Instruct:"));
         assert!(formatted.contains("Query: hello"));
+    }
+
+    #[test]
+    fn pack_budget_constants_are_sane() {
+        assert!(N_SEQ_MAX >= 1);
+        assert!(N_CTX >= N_SEQ_MAX);
     }
 }

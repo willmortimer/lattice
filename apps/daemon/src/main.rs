@@ -115,8 +115,9 @@ async fn main() -> Result<()> {
 
     let runtime = Arc::new(LatticeRuntime::new());
     // Always own a semantic controller so EnableSemanticSearch works without env
-    // gates. Env still selects Fake / ExternalSocket / SpawnHost.
-    let mode = SemanticProviderMode::from_env_or_fake();
+    // gates. Discovers/spawns lattice-embed-host by default; Fake only via
+    // LATTICE_SEMANTIC_FAKE; Unavailable when the host binary cannot be found.
+    let mode = SemanticProviderMode::from_env_or_default();
     tracing::info!(?mode, "semantic controller ready for user-driven enable");
     let semantic = Some(
         SemanticController::start(Arc::clone(&runtime), mode)

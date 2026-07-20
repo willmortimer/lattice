@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use async_trait::async_trait;
 use lattice_embedding::{
     DistanceMetric, EmbedDocumentRequest, EmbedQueryRequest, EmbeddingError, EmbeddingProvider,
@@ -6,6 +8,14 @@ use lattice_embedding::{
 
 use super::{BackendKind, EmbeddingBackend};
 use crate::error::EmbedHostError;
+
+/// Test-only delay: `chunk_id` of `__delay_ms:<n>` sleeps `n` milliseconds before
+/// embedding so integration tests can prove query/control is not HOL-blocked.
+fn test_delay_from_chunk_id(chunk_id: &str) -> Option<Duration> {
+    let rest = chunk_id.strip_prefix("__delay_ms:")?;
+    let ms = rest.parse::<u64>().ok()?;
+    Some(Duration::from_millis(ms))
+}
 
 /// Deterministic in-process backend for CI and protocol tests.
 pub struct FakeBackend {
@@ -45,6 +55,11 @@ impl EmbeddingProvider for FakeBackend {
         &self,
         requests: Vec<EmbedDocumentRequest>,
     ) -> Result<Vec<EmbeddingVector>, EmbeddingError> {
+        for request in &requests {
+            if let Some(delay) = test_delay_from_chunk_id(&request.chunk_id) {
+                tokio::time::sleep(delay).await;
+            }
+        }
         self.provider.embed_documents(requests).await
     }
 }

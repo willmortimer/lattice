@@ -5,7 +5,10 @@
 //! marked semantically degraded so hybrid search falls back to FTS. Restarts use
 //! bounded exponential backoff and reconnect the provider.
 //!
-//! `FakeInProcess` / `LATTICE_SEMANTIC_FAKE=1` keep the in-process Fake for CI.
+//! Production default discovers/spawns `lattice-embed-host`. In-process Fake is
+//! only selected when `LATTICE_SEMANTIC_FAKE=1`. When the host binary cannot be
+//! found, the controller starts in [`SemanticProviderMode::Unavailable`] so FTS
+//! still works and enable reports a clear failure (never a silent Fake).
 
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -22,10 +25,11 @@ use lattice_embedding::{
 };
 use lattice_runtime::{
     IndexProgressPhase, LatticeRuntime, RuntimeEvent, RuntimeIndexProgress, SemanticStatus,
-    SemanticWorkerConfig, WorkspaceSession,
+    SemanticStatusState, SemanticWorkerConfig, WorkspaceSession,
 };
 use tracing::{info, warn};
 
+use crate::config::default_run_dir;
 use crate::error::{Error, Result};
 
 /// Environment variable naming an existing embed-host UDS path.
@@ -35,7 +39,9 @@ pub const ENV_SEMANTIC_FAKE: &str = "LATTICE_SEMANTIC_FAKE";
 /// Optional path to the `lattice-embed-host` binary to spawn.
 pub const ENV_EMBED_HOST_BIN: &str = "LATTICE_EMBED_HOST_BIN";
 /// Optional explicit host backend (`fake` or `llama-cpp`). When unset, prefers
-/// `llama-cpp` only if the pinned GGUF is ready and the binary lists that backend.
+/// `llama-cpp` when the pinned GGUF is ready and the binary lists that backend;
+/// otherwise host `--backend fake` is used only as temporary bootstrap before
+/// prepare + reload (never in-process Fake).
 pub const ENV_EMBED_HOST_BACKEND: &str = "LATTICE_EMBED_HOST_BACKEND";
 
 const MAX_RESTARTS: u32 = 5;
@@ -44,10 +50,13 @@ const MAX_BACKOFF_MS: u64 = 5_000;
 /// Dimensions used for the host fake-backend bootstrap fixture.
 const HOST_FAKE_DIMENSIONS: u32 = 8;
 
+const UNAVAILABLE_MESSAGE: &str =
+    "lattice-embed-host is not available; install it or set LATTICE_EMBED_HOST_BIN. FTS search still works.";
+
 /// How the daemon obtains an embedding provider.
 #[derive(Debug, Clone)]
 pub enum SemanticProviderMode {
-    /// Deterministic in-process fake (tests / CI).
+    /// Deterministic in-process fake (tests / CI via `LATTICE_SEMANTIC_FAKE=1`).
     FakeInProcess,
     /// Connect to an already-running embed-host socket (supervision optional).
     ExternalSocket { socket: PathBuf },
@@ -57,13 +66,17 @@ pub enum SemanticProviderMode {
         socket: PathBuf,
         models_dir: PathBuf,
     },
+    /// Host binary missing; semantic enable fails clearly while FTS remains usable.
+    Unavailable,
 }
 
 impl SemanticProviderMode {
     /// Resolve provider mode from environment variables.
     ///
-    /// Returns [`None`] when no semantic env is set; hosts may still start a
-    /// Fake controller so user-driven enable works without env gates.
+    /// Returns [`None`] when no semantic env is set; callers should use
+    /// [`Self::from_env_or_default`], which discovers `lattice-embed-host` or
+    /// returns [`Self::Unavailable`]. Fake is selected only via
+    /// [`ENV_SEMANTIC_FAKE`].
     pub fn from_env() -> Option<Self> {
         if env_truthy(ENV_SEMANTIC_FAKE) {
             return Some(Self::FakeInProcess);
@@ -86,9 +99,42 @@ impl SemanticProviderMode {
         None
     }
 
-    /// Env override when present; otherwise in-process Fake for user enable.
+    /// Env override when present; otherwise discover/spawn the embed host, or
+    /// [`Self::Unavailable`] when no binary can be found.
+    ///
+    /// Never silently defaults to [`Self::FakeInProcess`].
+    pub fn from_env_or_default() -> Self {
+        Self::resolve_default(Self::from_env, resolve_embed_host_bin)
+    }
+
+    /// Deprecated alias for [`Self::from_env_or_default`].
+    #[deprecated(
+        note = "use from_env_or_default; Fake is only selected via LATTICE_SEMANTIC_FAKE"
+    )]
     pub fn from_env_or_fake() -> Self {
-        Self::from_env().unwrap_or(Self::FakeInProcess)
+        Self::from_env_or_default()
+    }
+
+    fn resolve_default(
+        from_env: impl FnOnce() -> Option<Self>,
+        resolve_bin: impl FnOnce() -> Option<PathBuf>,
+    ) -> Self {
+        if let Some(mode) = from_env() {
+            return mode;
+        }
+        match resolve_bin() {
+            Some(binary) => Self::spawn_host_default(binary),
+            None => Self::Unavailable,
+        }
+    }
+
+    fn spawn_host_default(binary: PathBuf) -> Self {
+        let run_dir = default_run_dir();
+        Self::SpawnHost {
+            binary,
+            socket: run_dir.join("embed-host.sock"),
+            models_dir: run_dir.join("embed-models"),
+        }
     }
 }
 
@@ -114,10 +160,19 @@ fn fake_specification() -> EmbeddingSpecification {
     }
 }
 
+/// Wire-facing embedding provider identity (Settings / GetSemanticStatus).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderIdentity {
+    pub provider_id: String,
+    pub model_id: Option<String>,
+    pub dimensions: Option<u32>,
+}
+
 /// Shared semantic indexing controller for a daemon instance.
 pub struct SemanticController {
     runtime: Arc<LatticeRuntime>,
-    provider: Arc<dyn EmbeddingProvider>,
+    /// Absent in [`SemanticProviderMode::Unavailable`] (never a silent Fake).
+    provider: Option<Arc<dyn EmbeddingProvider>>,
     /// Present for host-backed modes so supervisors can reconnect after restart.
     host_provider: Option<Arc<ReconnectableEmbedHostProvider>>,
     runtime_handle: Option<tokio::runtime::Handle>,
@@ -139,7 +194,7 @@ struct SupervisedHost {
 }
 
 impl SemanticController {
-    /// Build a controller for the given mode (connect/spawn/fake).
+    /// Build a controller for the given mode (connect/spawn/fake/unavailable).
     pub fn start(runtime: Arc<LatticeRuntime>, mode: SemanticProviderMode) -> Result<Arc<Self>> {
         match mode {
             SemanticProviderMode::FakeInProcess => {
@@ -147,7 +202,7 @@ impl SemanticController {
                     Arc::new(FakeEmbeddingProvider::new(fake_specification()));
                 Ok(Arc::new(Self {
                     runtime,
-                    provider,
+                    provider: Some(provider),
                     host_provider: None,
                     runtime_handle: None,
                     _owned_runtime: None,
@@ -158,12 +213,7 @@ impl SemanticController {
                 }))
             }
             SemanticProviderMode::ExternalSocket { socket } => {
-                let owned = tokio::runtime::Builder::new_multi_thread()
-                    .worker_threads(1)
-                    .enable_all()
-                    .build()
-                    .map_err(|err| Error::Spawn(format!("embed runtime: {err}")))?;
-                let handle = owned.handle().clone();
+                let (handle, owned) = take_embed_runtime()?;
                 wait_for_socket(&socket, Duration::from_secs(5))?;
                 let models_dir = socket
                     .parent()
@@ -176,10 +226,10 @@ impl SemanticController {
                     host_provider.clone() as Arc<dyn EmbeddingProvider>;
                 let controller = Arc::new(Self {
                     runtime,
-                    provider,
+                    provider: Some(provider),
                     host_provider: Some(host_provider),
                     runtime_handle: Some(handle),
-                    _owned_runtime: Some(owned),
+                    _owned_runtime: owned,
                     host: Mutex::new(None),
                     sessions: Mutex::new(Vec::new()),
                     stop: Arc::new(AtomicBool::new(false)),
@@ -193,12 +243,7 @@ impl SemanticController {
                 socket,
                 models_dir,
             } => {
-                let owned = tokio::runtime::Builder::new_multi_thread()
-                    .worker_threads(1)
-                    .enable_all()
-                    .build()
-                    .map_err(|err| Error::Spawn(format!("embed runtime: {err}")))?;
-                let handle = owned.handle().clone();
+                let (handle, owned) = take_embed_runtime()?;
                 let (model_dir, dimensions) = ensure_host_model_dir(&models_dir)?;
                 let backend = resolve_spawn_backend(&binary);
                 let child = spawn_embed_host(&binary, &socket, &models_dir, &backend)?;
@@ -209,10 +254,10 @@ impl SemanticController {
                     host_provider.clone() as Arc<dyn EmbeddingProvider>;
                 let controller = Arc::new(Self {
                     runtime,
-                    provider,
+                    provider: Some(provider),
                     host_provider: Some(host_provider),
                     runtime_handle: Some(handle),
-                    _owned_runtime: Some(owned),
+                    _owned_runtime: owned,
                     host: Mutex::new(Some(SupervisedHost {
                         child,
                         socket: socket.clone(),
@@ -228,12 +273,28 @@ impl SemanticController {
                 controller.spawn_host_supervisor();
                 Ok(controller)
             }
+            SemanticProviderMode::Unavailable => Ok(Arc::new(Self {
+                runtime,
+                provider: None,
+                host_provider: None,
+                runtime_handle: None,
+                _owned_runtime: None,
+                host: Mutex::new(None),
+                sessions: Mutex::new(Vec::new()),
+                stop: Arc::new(AtomicBool::new(false)),
+                supervisor: Mutex::new(None),
+            })),
         }
     }
 
     /// Attach semantic indexing to a newly opened workspace session.
+    ///
+    /// No-op when the controller has no provider ([`SemanticProviderMode::Unavailable`]).
     pub fn attach_session(self: &Arc<Self>, session: &Arc<WorkspaceSession>) {
-        let mut config = SemanticWorkerConfig::new(Arc::clone(&self.provider));
+        let Some(provider) = self.provider.as_ref() else {
+            return;
+        };
+        let mut config = SemanticWorkerConfig::new(Arc::clone(provider));
         if let Some(handle) = self.runtime_handle.clone() {
             config = config.with_runtime_handle(handle);
         }
@@ -253,6 +314,8 @@ impl SemanticController {
     /// Acquires the pinned embedding model (unless Fake / already installed),
     /// then attaches the session worker. Progress is published on the session
     /// prepare status for GetSemanticStatus polling.
+    ///
+    /// When the embed host is missing, returns a Failed status (FTS still works).
     pub fn enable_workspace(
         self: &Arc<Self>,
         workspace_id: &str,
@@ -261,6 +324,11 @@ impl SemanticController {
             .runtime
             .get_session_by_id(workspace_id)
             .ok_or_else(|| format!("workspace session not found for id {workspace_id}"))?;
+        if self.provider.is_none() {
+            let status = unavailable_status();
+            session.set_semantic_prepare_status(Some(status.clone()));
+            return Ok(status);
+        }
         lattice_handlers::prepare_semantic_model_for_session(&session, &mut |_| {})?;
         self.reload_host_after_prepare()
             .map_err(|err| err.to_string())?;
@@ -282,8 +350,7 @@ impl SemanticController {
         let model_dir = qwen3_embedding_install_dir();
         if let Some(handle) = self.runtime_handle.as_ref() {
             self.maybe_restart_host_for_llama()?;
-            handle
-                .block_on(host_provider.reload_model(model_dir, None))
+            block_on_embed_io(handle, host_provider.reload_model(model_dir, None))
                 .map_err(|err| Error::Spawn(format!("reload pinned GGUF on embed-host: {err}")))?;
             info!("embed-host reloaded pinned Qwen3 GGUF after prepare");
         }
@@ -352,8 +419,30 @@ impl SemanticController {
             .retain(|weak| weak.strong_count() > 0);
     }
 
-    pub fn provider(&self) -> Arc<dyn EmbeddingProvider> {
-        Arc::clone(&self.provider)
+    pub fn provider(&self) -> Option<Arc<dyn EmbeddingProvider>> {
+        self.provider.as_ref().map(Arc::clone)
+    }
+
+    /// Active provider identity for GetSemanticStatus / wire enrichment.
+    ///
+    /// When no provider is attached ([`SemanticProviderMode::Unavailable`]),
+    /// returns `provider_id = "unavailable"` with unset model/dimensions.
+    pub fn provider_identity(&self) -> ProviderIdentity {
+        match self.provider.as_ref() {
+            Some(provider) => {
+                let spec = provider.specification();
+                ProviderIdentity {
+                    provider_id: spec.provider_id.clone(),
+                    model_id: Some(spec.model_id.clone()),
+                    dimensions: Some(spec.dimensions),
+                }
+            }
+            None => ProviderIdentity {
+                provider_id: "unavailable".into(),
+                model_id: None,
+                dimensions: None,
+            },
+        }
     }
 
     /// True when jobs are backed by the embed-host UDS client (not in-process Fake).
@@ -404,7 +493,7 @@ impl SemanticController {
         let Some(handle) = self.runtime_handle.as_ref() else {
             return;
         };
-        match handle.block_on(host_provider.reconnect()) {
+        match block_on_embed_io(handle, host_provider.reconnect()) {
             Ok(()) => info!("embed-host provider reconnected"),
             Err(err) => warn!(error = %err, "embed-host provider reconnect failed"),
         }
@@ -550,18 +639,45 @@ impl Drop for SemanticController {
     }
 }
 
+/// Prefer an ambient Tokio handle when starting from async `main`; otherwise
+/// own a dedicated multi-thread runtime for host-backed providers.
+fn take_embed_runtime() -> Result<(tokio::runtime::Handle, Option<tokio::runtime::Runtime>)> {
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        return Ok((handle, None));
+    }
+    let owned = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_all()
+        .build()
+        .map_err(|err| Error::Spawn(format!("embed runtime: {err}")))?;
+    let handle = owned.handle().clone();
+    Ok((handle, Some(owned)))
+}
+
+fn block_on_embed_io<F, T>(handle: &tokio::runtime::Handle, future: F) -> T
+where
+    F: std::future::Future<Output = T>,
+{
+    // `Handle::block_on` panics when called from a worker already driving tasks.
+    if tokio::runtime::Handle::try_current().is_ok() {
+        tokio::task::block_in_place(|| handle.block_on(future))
+    } else {
+        handle.block_on(future)
+    }
+}
+
 fn connect_host_provider(
     handle: &tokio::runtime::Handle,
     socket: &Path,
     model_dir: &Path,
     dimensions: Option<u32>,
 ) -> Result<Arc<ReconnectableEmbedHostProvider>> {
-    handle
-        .block_on(ReconnectableEmbedHostProvider::connect(
-            socket, model_dir, dimensions,
-        ))
-        .map(Arc::new)
-        .map_err(|err| Error::Spawn(format!("embed-host connect/load: {err}")))
+    block_on_embed_io(
+        handle,
+        ReconnectableEmbedHostProvider::connect(socket, model_dir, dimensions),
+    )
+    .map(Arc::new)
+    .map_err(|err| Error::Spawn(format!("embed-host connect/load: {err}")))
 }
 
 /// Prefer a verified pinned install; otherwise stage a tiny fake fixture for the
@@ -608,6 +724,9 @@ fn stage_fake_host_model(models_dir: &Path) -> Result<PathBuf> {
     Ok(installed.model_dir)
 }
 
+/// Prefer llama-cpp when the binary supports it and the pinned GGUF is ready.
+/// Otherwise use host `--backend fake` only as temporary bootstrap before
+/// prepare + reload. Never selects in-process [`FakeEmbeddingProvider`].
 fn resolve_spawn_backend(binary: &Path) -> String {
     if let Ok(explicit) = std::env::var(ENV_EMBED_HOST_BACKEND) {
         let trimmed = explicit.trim();
@@ -615,9 +734,10 @@ fn resolve_spawn_backend(binary: &Path) -> String {
             return trimmed.to_string();
         }
     }
-    if pinned_model_is_ready() && binary_supports_backend(binary, "llama-cpp") {
+    if binary_supports_backend(binary, "llama-cpp") && pinned_model_is_ready() {
         return "llama-cpp".into();
     }
+    // Temporary bootstrap until GGUF prepare; reload_host_after_prepare switches.
     "fake".into()
 }
 
@@ -678,7 +798,26 @@ fn wait_for_socket(socket: &Path, timeout: Duration) -> Result<()> {
     })
 }
 
-/// Locate `lattice-embed-host` for tests / local launches.
+fn unavailable_status() -> SemanticStatus {
+    SemanticStatus {
+        state: SemanticStatusState::Failed,
+        pending_chunks: None,
+        message: Some(UNAVAILABLE_MESSAGE.into()),
+        progress_percent: None,
+    }
+}
+
+fn current_exe_sibling(name: &str) -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?;
+    let candidate = dir.join(name);
+    candidate.is_file().then_some(candidate)
+}
+
+/// Locate `lattice-embed-host` for production discovery / tests / local launches.
+///
+/// Order: `LATTICE_EMBED_HOST_BIN`, `PATH`, sibling of `current_exe` (macOS app
+/// bundle `Contents/MacOS/`), then common cargo target dirs.
 pub fn resolve_embed_host_bin() -> Option<PathBuf> {
     if let Ok(path) = std::env::var(ENV_EMBED_HOST_BIN) {
         let path = PathBuf::from(path);
@@ -688,6 +827,10 @@ pub fn resolve_embed_host_bin() -> Option<PathBuf> {
     }
 
     if let Ok(path) = which_bin("lattice-embed-host") {
+        return Some(path);
+    }
+
+    if let Some(path) = current_exe_sibling("lattice-embed-host") {
         return Some(path);
     }
 
@@ -752,6 +895,83 @@ mod tests {
         resolve_embed_host_bin().expect(
             "lattice-embed-host binary missing after build (set LATTICE_EMBED_HOST_BIN)",
         )
+    }
+
+    #[test]
+    fn from_env_or_default_prefers_fake_env_over_discovery() {
+        let mode = SemanticProviderMode::resolve_default(
+            || Some(SemanticProviderMode::FakeInProcess),
+            || Some(PathBuf::from("/tmp/would-not-use")),
+        );
+        assert!(
+            matches!(mode, SemanticProviderMode::FakeInProcess),
+            "LATTICE_SEMANTIC_FAKE / from_env Fake must win over binary discovery"
+        );
+    }
+
+    #[test]
+    fn from_env_or_default_without_binary_is_unavailable() {
+        let mode = SemanticProviderMode::resolve_default(|| None, || None);
+        assert!(matches!(mode, SemanticProviderMode::Unavailable));
+    }
+
+    #[test]
+    fn from_env_or_default_discovers_spawn_host() {
+        let mode = SemanticProviderMode::resolve_default(
+            || None,
+            || Some(PathBuf::from("/tmp/lattice-embed-host")),
+        );
+        match mode {
+            SemanticProviderMode::SpawnHost {
+                binary,
+                socket,
+                models_dir,
+            } => {
+                assert_eq!(binary, PathBuf::from("/tmp/lattice-embed-host"));
+                assert!(socket.ends_with("embed-host.sock"));
+                assert!(models_dir.ends_with("embed-models"));
+            }
+            other => panic!("expected SpawnHost, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn unavailable_enable_returns_failed_without_fake_provider() {
+        let dir = tempfile::tempdir().unwrap();
+        Workspace::init(dir.path(), "Unavailable Semantic").unwrap();
+        let runtime = Arc::new(LatticeRuntime::new());
+        let controller =
+            SemanticController::start(Arc::clone(&runtime), SemanticProviderMode::Unavailable)
+                .unwrap();
+        assert!(!controller.uses_host_provider());
+        assert!(controller.provider().is_none());
+
+        let session = runtime.open_workspace_session(dir.path()).unwrap();
+        let workspace_id = session.workspace_id().to_string();
+        controller.attach_session(&session);
+        assert_eq!(
+            session.semantic_status().state,
+            SemanticStatusState::Stopped,
+            "attach_session is a no-op when Unavailable"
+        );
+
+        let enabled = controller.enable_workspace(&workspace_id).unwrap();
+        assert_eq!(enabled.state, SemanticStatusState::Failed);
+        assert!(
+            enabled
+                .message
+                .as_deref()
+                .is_some_and(|m| m.contains("lattice-embed-host")),
+            "expected missing-host message, got {:?}",
+            enabled.message
+        );
+        assert_eq!(
+            controller.status_for_workspace(&workspace_id).state,
+            SemanticStatusState::Failed
+        );
+
+        controller.shutdown();
+        runtime.close_session(dir.path()).unwrap();
     }
 
     #[test]
@@ -883,7 +1103,7 @@ mod tests {
             "SpawnHost must use EmbedHostClient-backed provider"
         );
         assert_eq!(
-            controller.provider().specification().dimensions,
+            controller.provider().expect("host provider").specification().dimensions,
             HOST_FAKE_DIMENSIONS,
             "host fake fixture dimensions must differ from in-process Fake (12)"
         );
@@ -922,9 +1142,10 @@ mod tests {
         // daemon in-process Fake specification (dims=12).
         let host_probe = {
             let handle = controller.runtime_handle.as_ref().unwrap();
-            handle.block_on(async {
+            block_on_embed_io(handle, async {
                 controller
                     .provider()
+                    .expect("host provider")
                     .embed_query(EmbedQueryRequest {
                         text: "capability grants".into(),
                     })
@@ -935,7 +1156,7 @@ mod tests {
         let local_fake = FakeEmbeddingProvider::new(fake_specification());
         let local_probe = {
             let handle = controller.runtime_handle.as_ref().unwrap();
-            handle.block_on(async {
+            block_on_embed_io(handle, async {
                 local_fake
                     .embed_query(EmbedQueryRequest {
                         text: "capability grants".into(),

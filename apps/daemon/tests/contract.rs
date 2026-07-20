@@ -8,7 +8,7 @@ use std::time::Duration;
 use lattice_client::{
     request, response, ApplyPageUpdateRequest, DaemonClient, EmbeddedClient, EventFilter,
     HealthRequest, LatticeClient, OpenWorkspaceRequest, PingRequest, Request, SearchRequest,
-    SearchResponse, PROTOCOL_VERSION,
+    PROTOCOL_VERSION,
 };
 use lattice_core::Workspace;
 use lattice_daemon::{
@@ -113,6 +113,8 @@ fn search_request(workspace_id: &str, query: &str) -> Request {
         body: Some(request::Body::Search(SearchRequest {
             workspace_id: workspace_id.into(),
             query: query.into(),
+            limit: 0,
+            mode: None,
         })),
     }
 }
@@ -243,11 +245,17 @@ async fn open_writes_lease_and_search_matches_embedded() {
         .request(search_request(&embedded_ws, "Contract"))
         .await
         .expect("embedded search");
-    assert!(matches!(
-        daemon_search.body,
-        Some(response::Body::Search(SearchResponse {}))
-    ));
-    assert_eq!(daemon_search, embedded_search);
+    match (&daemon_search.body, &embedded_search.body) {
+        (
+            Some(response::Body::Search(daemon_hits)),
+            Some(response::Body::Search(embedded_hits)),
+        ) => {
+            assert!(!daemon_hits.hits.is_empty(), "daemon search should return hits");
+            assert_eq!(daemon_hits.hits.len(), embedded_hits.hits.len());
+            assert!(daemon_hits.hits.iter().any(|h| h.path.ends_with(".md")));
+        }
+        other => panic!("unexpected search responses: {other:?}"),
+    }
 
     // Warm index: second search must not force another rebuild on the daemon session.
     let session = daemon_runtime
@@ -526,7 +534,7 @@ async fn open_workspace_watcher_indexes_external_file_and_emits_events() {
         "event sequences must be strictly increasing: {sequences:?}"
     );
 
-    // SearchResponse has no hit payload yet; assert via warm session index.
+    // SearchResponse carries hit payloads; also assert via warm session index.
     let hits = session
         .search("daemon-watcher-unique-token", 10)
         .expect("search");
@@ -540,10 +548,15 @@ async fn open_workspace_watcher_indexes_external_file_and_emits_events() {
         .request(search_request(&workspace_id, "daemon-watcher-unique-token"))
         .await
         .expect("daemon search");
-    assert!(matches!(
-        search.body,
-        Some(response::Body::Search(SearchResponse {}))
-    ));
+    match search.body {
+        Some(response::Body::Search(resp)) => {
+            assert!(
+                resp.hits.iter().any(|h| h.path.ends_with("External.md")),
+                "daemon Search RPC should return External.md hit"
+            );
+        }
+        other => panic!("unexpected search response: {other:?}"),
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

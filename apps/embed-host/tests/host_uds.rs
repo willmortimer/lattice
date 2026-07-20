@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use lattice_embed_host::{
     install_model, run_server, socket_path_in, BackendKind, EmbedHostClient, HostConfig, HostState,
@@ -275,6 +275,90 @@ async fn install_rpc_via_client() {
         .unwrap();
     assert_eq!(installed.artifact_sha256, sha);
     assert!(PathBuf::from(&installed.model_dir).join("fixture.bin").is_file());
+
+    server.abort();
+}
+
+#[tokio::test]
+async fn query_and_cancel_not_blocked_by_slow_documents() {
+    let dir = tempdir().unwrap();
+    let socket = socket_path_in(dir.path());
+    let models_dir = dir.path().join("models");
+    let (manifest_path, artifact_path, _) = write_fixture_model(dir.path());
+    let installed = install_model(&manifest_path, &artifact_path, &models_dir).unwrap();
+
+    let state = HostState::new(HostConfig::new(
+        socket.clone(),
+        BackendKind::Fake,
+        models_dir.clone(),
+    ));
+    let server = tokio::spawn(run_server(Arc::clone(&state)));
+    wait_for_socket(&socket).await;
+
+    let client = Arc::new(EmbedHostClient::connect(&socket).await.unwrap());
+    let session = Arc::new(
+        client
+            .load_model(&installed.model_dir, Some(8))
+            .await
+            .unwrap(),
+    );
+
+    let docs_session = Arc::clone(&session);
+    let docs_task = tokio::spawn(async move {
+        docs_session
+            .embed_documents(vec![EmbedDocumentRequest {
+                chunk_id: "__delay_ms:250".into(),
+                text: "slow doc".into(),
+            }])
+            .await
+    });
+
+    // Let the delayed documents RPC acquire the index connection.
+    sleep(Duration::from_millis(40)).await;
+
+    let health_started = Instant::now();
+    let health = tokio::time::timeout(Duration::from_millis(150), client.health())
+        .await
+        .expect("health timed out behind documents — query lane should be free")
+        .expect("health rpc");
+    assert_eq!(health.status, "ok");
+    assert!(
+        health_started.elapsed() < Duration::from_millis(150),
+        "health took {:?}; separate query connection should not wait for indexing",
+        health_started.elapsed()
+    );
+
+    let query_started = Instant::now();
+    let query = tokio::time::timeout(
+        Duration::from_millis(150),
+        session.embed_query(EmbedQueryRequest {
+            text: "interactive".into(),
+        }),
+    )
+    .await
+    .expect("query timed out behind documents — query lane should be free")
+    .expect("embed_query");
+    assert_eq!(query.values.len(), 8);
+    assert!(
+        query_started.elapsed() < Duration::from_millis(150),
+        "query took {:?}",
+        query_started.elapsed()
+    );
+
+    // Cancel of a non-existent id must also use the query lane and stay fast.
+    let cancel_started = Instant::now();
+    let cancelled = tokio::time::timeout(
+        Duration::from_millis(150),
+        client.cancel("no-such-request"),
+    )
+    .await
+    .expect("cancel timed out behind documents")
+    .expect("cancel rpc");
+    assert!(!cancelled);
+    assert!(cancel_started.elapsed() < Duration::from_millis(150));
+
+    let docs = docs_task.await.expect("docs join").expect("embed_documents");
+    assert_eq!(docs.len(), 1);
 
     server.abort();
 }

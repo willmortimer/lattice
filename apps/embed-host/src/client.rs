@@ -22,27 +22,49 @@ use crate::{
     LoadModelRequest, Request, StatusRequest, UnloadModelRequest, PROTOCOL_VERSION,
 };
 
+/// Which dedicated UDS connection an RPC uses.
+///
+/// Query/control stays free while indexing holds the index connection, so
+/// interactive [`EmbedQuery`] / [`Cancel`] are not head-of-line blocked.
+#[derive(Debug, Clone, Copy)]
+enum ClientLane {
+    /// EmbedQuery, Health, Status, Cancel.
+    Query,
+    /// EmbedDocuments, Load, Unload, Install.
+    Index,
+}
+
 /// Client that speaks the embed-host UDS protocol.
+///
+/// Opens two connections to the same socket so document indexing cannot block
+/// query/control RPCs (the server already accepts concurrent connections).
 pub struct EmbedHostClient {
-    stream: Mutex<UnixStream>,
+    query_stream: Mutex<UnixStream>,
+    index_stream: Mutex<UnixStream>,
 }
 
 impl EmbedHostClient {
     /// Connect to a running embed-host socket.
     pub async fn connect(socket_path: impl AsRef<Path>) -> Result<Self, EmbedHostError> {
-        let stream = UnixStream::connect(socket_path.as_ref()).await?;
+        let path = socket_path.as_ref();
+        let query_stream = UnixStream::connect(path).await?;
+        let index_stream = UnixStream::connect(path).await?;
         Ok(Self {
-            stream: Mutex::new(stream),
+            query_stream: Mutex::new(query_stream),
+            index_stream: Mutex::new(index_stream),
         })
     }
 
     /// Health check.
     pub async fn health(&self) -> Result<crate::HealthResponse, EmbedHostError> {
         let response = self
-            .call(Request {
-                deadline_unix_ms: None,
-                body: Some(request::Body::Health(HealthRequest {})),
-            })
+            .call(
+                ClientLane::Query,
+                Request {
+                    deadline_unix_ms: None,
+                    body: Some(request::Body::Health(HealthRequest {})),
+                },
+            )
             .await?;
         match response.body {
             Some(crate::response::Body::Health(health)) => Ok(health),
@@ -55,10 +77,13 @@ impl EmbedHostClient {
     /// Host status and metrics.
     pub async fn status(&self) -> Result<crate::StatusResponse, EmbedHostError> {
         let response = self
-            .call(Request {
-                deadline_unix_ms: None,
-                body: Some(request::Body::Status(StatusRequest {})),
-            })
+            .call(
+                ClientLane::Query,
+                Request {
+                    deadline_unix_ms: None,
+                    body: Some(request::Body::Status(StatusRequest {})),
+                },
+            )
             .await?;
         match response.body {
             Some(crate::response::Body::Status(status)) => Ok(status),
@@ -76,14 +101,17 @@ impl EmbedHostClient {
         models_dir: impl AsRef<Path>,
     ) -> Result<crate::InstallModelResponse, EmbedHostError> {
         let response = self
-            .call(Request {
-                deadline_unix_ms: None,
-                body: Some(request::Body::InstallModel(InstallModelRequest {
-                    manifest_path: manifest_path.as_ref().display().to_string(),
-                    artifact_path: artifact_path.as_ref().display().to_string(),
-                    models_dir: models_dir.as_ref().display().to_string(),
-                })),
-            })
+            .call(
+                ClientLane::Index,
+                Request {
+                    deadline_unix_ms: None,
+                    body: Some(request::Body::InstallModel(InstallModelRequest {
+                        manifest_path: manifest_path.as_ref().display().to_string(),
+                        artifact_path: artifact_path.as_ref().display().to_string(),
+                        models_dir: models_dir.as_ref().display().to_string(),
+                    })),
+                },
+            )
             .await?;
         match response.body {
             Some(crate::response::Body::InstallModel(install)) => Ok(install),
@@ -100,13 +128,16 @@ impl EmbedHostClient {
         dimensions: Option<u32>,
     ) -> Result<EmbedHostSession, EmbedHostError> {
         let response = self
-            .call(Request {
-                deadline_unix_ms: None,
-                body: Some(request::Body::LoadModel(LoadModelRequest {
-                    model_dir: model_dir.as_ref().display().to_string(),
-                    dimensions,
-                })),
-            })
+            .call(
+                ClientLane::Index,
+                Request {
+                    deadline_unix_ms: None,
+                    body: Some(request::Body::LoadModel(LoadModelRequest {
+                        model_dir: model_dir.as_ref().display().to_string(),
+                        dimensions,
+                    })),
+                },
+            )
             .await?;
         match response.body {
             Some(crate::response::Body::LoadModel(load)) => {
@@ -139,10 +170,13 @@ impl EmbedHostClient {
     /// Unload the current model.
     pub async fn unload_model(&self) -> Result<(), EmbedHostError> {
         let response = self
-            .call(Request {
-                deadline_unix_ms: None,
-                body: Some(request::Body::UnloadModel(UnloadModelRequest {})),
-            })
+            .call(
+                ClientLane::Index,
+                Request {
+                    deadline_unix_ms: None,
+                    body: Some(request::Body::UnloadModel(UnloadModelRequest {})),
+                },
+            )
             .await?;
         match response.body {
             Some(crate::response::Body::UnloadModel(_)) => Ok(()),
@@ -153,17 +187,22 @@ impl EmbedHostClient {
     }
 
     /// Cancel an in-flight request by id.
+    ///
+    /// Uses the query/control connection so cancel is not blocked by indexing.
     pub async fn cancel(
         &self,
         target_request_id: impl Into<String>,
     ) -> Result<bool, EmbedHostError> {
         let response = self
-            .call(Request {
-                deadline_unix_ms: None,
-                body: Some(request::Body::Cancel(CancelRequest {
-                    target_request_id: target_request_id.into(),
-                })),
-            })
+            .call(
+                ClientLane::Query,
+                Request {
+                    deadline_unix_ms: None,
+                    body: Some(request::Body::Cancel(CancelRequest {
+                        target_request_id: target_request_id.into(),
+                    })),
+                },
+            )
             .await?;
         match response.body {
             Some(crate::response::Body::Cancel(cancel)) => Ok(cancel.cancelled),
@@ -178,12 +217,15 @@ impl EmbedHostClient {
         request: EmbedQueryRequest,
     ) -> Result<EmbeddingVector, EmbedHostError> {
         let response = self
-            .call(Request {
-                deadline_unix_ms: None,
-                body: Some(request::Body::EmbedQuery(ProtoEmbedQueryRequest {
-                    text: request.text,
-                })),
-            })
+            .call(
+                ClientLane::Query,
+                Request {
+                    deadline_unix_ms: None,
+                    body: Some(request::Body::EmbedQuery(ProtoEmbedQueryRequest {
+                        text: request.text,
+                    })),
+                },
+            )
             .await?;
         match response.body {
             Some(crate::response::Body::EmbedQuery(embed)) => Ok(EmbeddingVector {
@@ -200,18 +242,21 @@ impl EmbedHostClient {
         requests: Vec<EmbedDocumentRequest>,
     ) -> Result<Vec<EmbeddingVector>, EmbedHostError> {
         let response = self
-            .call(Request {
-                deadline_unix_ms: None,
-                body: Some(request::Body::EmbedDocuments(EmbedDocumentsRequest {
-                    documents: requests
-                        .into_iter()
-                        .map(|request| EmbedDocument {
-                            chunk_id: request.chunk_id,
-                            text: request.text,
-                        })
-                        .collect(),
-                })),
-            })
+            .call(
+                ClientLane::Index,
+                Request {
+                    deadline_unix_ms: None,
+                    body: Some(request::Body::EmbedDocuments(EmbedDocumentsRequest {
+                        documents: requests
+                            .into_iter()
+                            .map(|request| EmbedDocument {
+                                chunk_id: request.chunk_id,
+                                text: request.text,
+                            })
+                            .collect(),
+                    })),
+                },
+            )
             .await?;
         match response.body {
             Some(crate::response::Body::EmbedDocuments(embed)) => Ok(embed
@@ -227,12 +272,20 @@ impl EmbedHostClient {
         }
     }
 
-    async fn call(&self, request: Request) -> Result<crate::Response, EmbedHostError> {
+    async fn call(
+        &self,
+        lane: ClientLane,
+        request: Request,
+    ) -> Result<crate::Response, EmbedHostError> {
         let request_id = Uuid::now_v7().to_string();
         let envelope = request_envelope(request_id.clone(), request);
         let framed = encode_frame(&envelope)?;
 
-        let mut stream = self.stream.lock().await;
+        let stream = match lane {
+            ClientLane::Query => &self.query_stream,
+            ClientLane::Index => &self.index_stream,
+        };
+        let mut stream = stream.lock().await;
         stream.write_all(&framed).await?;
 
         let mut buffer = BytesMut::new();

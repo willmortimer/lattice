@@ -400,7 +400,9 @@ async fn handle_request(
         Some(request::Body::Search(SearchRequest {
             workspace_id,
             query,
-        })) => handle_search(state, workspace_id, query),
+            limit,
+            mode,
+        })) => handle_search(state, workspace_id, query, limit, mode),
         Some(request::Body::ApplyPageUpdate(ApplyPageUpdateRequest {
             workspace_id,
             path,
@@ -477,14 +479,14 @@ fn handle_enable_semantic(
     state.publish_event(
         workspace_id,
         event::Body::SemanticStatus(lattice_protocol::SemanticStatusChanged {
-            status: Some(semantic_status_to_wire(&status)),
+            status: Some(semantic_status_to_wire(&status, Some(semantic))),
         }),
     );
     Ok((
         Response {
             body: Some(response::Body::EnableSemanticSearch(
                 EnableSemanticSearchResponse {
-                    status: Some(semantic_status_to_wire(&status)),
+                    status: Some(semantic_status_to_wire(&status, Some(semantic))),
                 },
             )),
         },
@@ -512,14 +514,14 @@ fn handle_disable_semantic(
     state.publish_event(
         workspace_id,
         event::Body::SemanticStatus(lattice_protocol::SemanticStatusChanged {
-            status: Some(semantic_status_to_wire(&status)),
+            status: Some(semantic_status_to_wire(&status, Some(semantic))),
         }),
     );
     Ok((
         Response {
             body: Some(response::Body::DisableSemanticSearch(
                 DisableSemanticSearchResponse {
-                    status: Some(semantic_status_to_wire(&status)),
+                    status: Some(semantic_status_to_wire(&status, Some(semantic))),
                 },
             )),
         },
@@ -541,19 +543,28 @@ fn handle_get_semantic_status(
     Ok((
         Response {
             body: Some(response::Body::GetSemanticStatus(GetSemanticStatusResponse {
-                status: Some(semantic_status_to_wire(&status)),
+                status: Some(semantic_status_to_wire(&status, Some(semantic))),
             })),
         },
         None,
     ))
 }
 
-fn semantic_status_to_wire(status: &SemanticStatus) -> WireSemanticStatus {
+fn semantic_status_to_wire(
+    status: &SemanticStatus,
+    semantic: Option<&crate::embed_host::SemanticController>,
+) -> WireSemanticStatus {
+    let identity = semantic.map(|controller| controller.provider_identity());
     WireSemanticStatus {
         state: status.state.as_str().to_string(),
         pending_chunks: status.pending_chunks,
         message: status.message.clone(),
         progress_percent: status.progress_percent,
+        provider_id: identity
+            .as_ref()
+            .map(|id| id.provider_id.clone()),
+        model_id: identity.as_ref().and_then(|id| id.model_id.clone()),
+        dimensions: identity.as_ref().and_then(|id| id.dimensions),
     }
 }
 
@@ -588,6 +599,8 @@ fn handle_search(
     state: &DaemonState,
     workspace_id: String,
     query: String,
+    limit: u32,
+    mode: Option<String>,
 ) -> std::result::Result<(Response, Option<(String, lattice_protocol::WorkspaceLease)>), WireError>
 {
     let session = state
@@ -598,18 +611,51 @@ fn handle_search(
             message: format!("workspace session not found for id {workspace_id}"),
             details: None,
         })?;
-    // Exercise the warm index; SearchResponse has no hit payload yet (D0/D2).
-    let _hits = session.search(&query, 10).map_err(|err| WireError {
+    let limit = clamp_search_limit(limit);
+    let hits = lattice_handlers::search_workspace_ui_with_session(
+        &session,
+        &query,
+        limit,
+        mode.as_deref(),
+    )
+    .map_err(|message| WireError {
         code: "search_failed".into(),
-        message: err.to_string(),
+        message,
         details: None,
     })?;
     Ok((
         Response {
-            body: Some(response::Body::Search(SearchResponse {})),
+            body: Some(response::Body::Search(SearchResponse {
+                hits: hits.into_iter().map(search_hit_ui_to_wire).collect(),
+            })),
         },
         None,
     ))
+}
+
+fn clamp_search_limit(limit: u32) -> usize {
+    let raw = if limit == 0 {
+        10
+    } else {
+        limit as usize
+    };
+    raw.clamp(1, crate::api::MAX_HIT_LIMIT)
+}
+
+fn search_hit_ui_to_wire(hit: lattice_handlers::SearchHitUi) -> lattice_protocol::SearchHit {
+    lattice_protocol::SearchHit {
+        path: hit.path,
+        title: hit.title,
+        snippet: hit.snippet,
+        rank: hit.rank,
+        fused_score: hit.fused_score,
+        lexical_rank: hit.lexical_rank,
+        semantic_rank: hit.semantic_rank,
+        heading_path: hit.heading_path.unwrap_or_default(),
+        chunk_id: hit.chunk_id,
+        sensitivity: hit.sensitivity,
+        export_policy: hit.export_policy,
+    }
 }
 
 fn handle_apply_page_update(
