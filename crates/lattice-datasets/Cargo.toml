@@ -10,6 +10,7 @@ license.workspace = true
 arrow.workspace = true
 hex.workspace = true
 parquet.workspace = true
+rusqlite.workspace = true
 serde.workspace = true
 serde_yaml.workspace = true
 sha2.workspace = true

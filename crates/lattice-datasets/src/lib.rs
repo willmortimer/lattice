@@ -8,12 +8,14 @@
 //! under **Apache-2.0**. CSV parsing for import uses `arrow`'s CSV feature
 //! (also Apache-2.0) and the `csv` crate (Unlicense OR MIT) transitively.
 
+mod annotations;
 mod error;
 mod import;
 mod manifest;
 mod package;
 mod partition;
 
+pub use annotations::{EventAnnotation, EVENT_ANNOTATIONS_TABLE};
 pub use error::Error;
 pub use manifest::{
     dataset_manifest_path, DatasetManifest, PartitionEntry, DATASET_FORMAT,

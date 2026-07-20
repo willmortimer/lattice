@@ -32,6 +32,13 @@ pub enum Error {
     #[error("csv error at {path}: {message}")]
     Csv { path: PathBuf, message: String },
 
+    #[error("sqlite error at {path}: {source}")]
+    Sqlite {
+        path: PathBuf,
+        #[source]
+        source: rusqlite::Error,
+    },
+
     #[error("{message}")]
     InvalidArgument { message: String },
 }
@@ -72,6 +79,13 @@ impl Error {
         Error::Csv {
             path: path.into(),
             message: message.into(),
+        }
+    }
+
+    pub(crate) fn sqlite(path: impl Into<PathBuf>, source: rusqlite::Error) -> Self {
+        Error::Sqlite {
+            path: path.into(),
+            source,
         }
     }
 
