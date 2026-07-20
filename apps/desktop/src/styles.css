@@ -4348,6 +4348,10 @@ html[data-motion="always"] *::after {
   font-size: 12px;
 }
 
+.record-detail-relation-search {
+  font-size: 12px;
+}
+
 .record-detail-relation-options {
   display: flex;
   flex-direction: column;
