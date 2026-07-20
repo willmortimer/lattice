@@ -516,6 +516,13 @@ export const demoDataApp: DataAppSnapshot = {
       "relation_table": "companies"
     },
     {
+      "name": "company_name",
+      "field_type": "lookup",
+      "sqlite_type": "TEXT",
+      "lookup_relation": "company",
+      "lookup_field": "name"
+    },
+    {
       "name": "due_date",
       "field_type": "date",
       "sqlite_type": "TEXT"
@@ -566,8 +573,19 @@ export const demoDataApp: DataAppSnapshot = {
             ]
           }
         },
+        "company_name": {
+          "Lookup": {
+            "values": [
+              "Analytical Engines"
+            ]
+          }
+        },
         "reports_to": {
-          "Null": null
+          "Relation": {
+            "record_ids": [
+              "0198-demo-grace-hopper"
+            ]
+          }
         }
       }
     },
@@ -599,12 +617,15 @@ export const demoDataApp: DataAppSnapshot = {
             ]
           }
         },
-        "reports_to": {
-          "Relation": {
-            "record_ids": [
-              "0198-demo-ada-lovelace"
+        "company_name": {
+          "Lookup": {
+            "values": [
+              "US Navy"
             ]
           }
+        },
+        "reports_to": {
+          "Null": null
         }
       }
     },
@@ -633,6 +654,13 @@ export const demoDataApp: DataAppSnapshot = {
           "Relation": {
             "record_ids": [
               "0198-demo-companies-bletchley-park"
+            ]
+          }
+        },
+        "company_name": {
+          "Lookup": {
+            "values": [
+              "Bletchley Park"
             ]
           }
         },
@@ -669,10 +697,17 @@ export const demoDataApp: DataAppSnapshot = {
             ]
           }
         },
+        "company_name": {
+          "Lookup": {
+            "values": [
+              "NASA"
+            ]
+          }
+        },
         "reports_to": {
           "Relation": {
             "record_ids": [
-              "0198-demo-dorothy-vaughan"
+              "0198-demo-mary-jackson"
             ]
           }
         }
@@ -706,8 +741,19 @@ export const demoDataApp: DataAppSnapshot = {
             ]
           }
         },
+        "company_name": {
+          "Lookup": {
+            "values": [
+              "NASA"
+            ]
+          }
+        },
         "reports_to": {
-          "Null": null
+          "Relation": {
+            "record_ids": [
+              "0198-demo-katherine-johnson"
+            ]
+          }
         }
       }
     },
@@ -739,12 +785,15 @@ export const demoDataApp: DataAppSnapshot = {
             ]
           }
         },
-        "reports_to": {
-          "Relation": {
-            "record_ids": [
-              "0198-demo-katherine-johnson"
+        "company_name": {
+          "Lookup": {
+            "values": [
+              "NASA"
             ]
           }
+        },
+        "reports_to": {
+          "Null": null
         }
       }
     },
@@ -773,6 +822,13 @@ export const demoDataApp: DataAppSnapshot = {
           "Relation": {
             "record_ids": [
               "0198-demo-companies-w3c"
+            ]
+          }
+        },
+        "company_name": {
+          "Lookup": {
+            "values": [
+              "W3C"
             ]
           }
         },
@@ -809,6 +865,13 @@ export const demoDataApp: DataAppSnapshot = {
             ]
           }
         },
+        "company_name": {
+          "Lookup": {
+            "values": [
+              "Mozilla"
+            ]
+          }
+        },
         "reports_to": {
           "Null": null
         }
@@ -839,6 +902,13 @@ export const demoDataApp: DataAppSnapshot = {
           "Relation": {
             "record_ids": [
               "0198-demo-companies-mit-instrumentation-lab"
+            ]
+          }
+        },
+        "company_name": {
+          "Lookup": {
+            "values": [
+              "MIT Instrumentation Lab"
             ]
           }
         },
@@ -875,6 +945,13 @@ export const demoDataApp: DataAppSnapshot = {
             ]
           }
         },
+        "company_name": {
+          "Lookup": {
+            "values": [
+              "Stanford"
+            ]
+          }
+        },
         "reports_to": {
           "Null": null
         }
@@ -905,6 +982,13 @@ export const demoDataApp: DataAppSnapshot = {
           "Relation": {
             "record_ids": [
               "0198-demo-companies-linux-foundation"
+            ]
+          }
+        },
+        "company_name": {
+          "Lookup": {
+            "values": [
+              "Linux Foundation"
             ]
           }
         },
@@ -941,6 +1025,13 @@ export const demoDataApp: DataAppSnapshot = {
             ]
           }
         },
+        "company_name": {
+          "Lookup": {
+            "values": [
+              "Python Software Foundation"
+            ]
+          }
+        },
         "reports_to": {
           "Null": null
         }
@@ -971,6 +1062,13 @@ export const demoDataApp: DataAppSnapshot = {
           "Relation": {
             "record_ids": [
               "0198-demo-companies-ieee"
+            ]
+          }
+        },
+        "company_name": {
+          "Lookup": {
+            "values": [
+              "IEEE"
             ]
           }
         },
@@ -1007,12 +1105,15 @@ export const demoDataApp: DataAppSnapshot = {
             ]
           }
         },
-        "reports_to": {
-          "Relation": {
-            "record_ids": [
-              "0198-demo-barbara-liskov"
+        "company_name": {
+          "Lookup": {
+            "values": [
+              "MIT"
             ]
           }
+        },
+        "reports_to": {
+          "Null": null
         }
       }
     },
@@ -1044,8 +1145,19 @@ export const demoDataApp: DataAppSnapshot = {
             ]
           }
         },
+        "company_name": {
+          "Lookup": {
+            "values": [
+              "MIT"
+            ]
+          }
+        },
         "reports_to": {
-          "Null": null
+          "Relation": {
+            "record_ids": [
+              "0198-demo-shafi-goldwasser"
+            ]
+          }
         }
       }
     },
@@ -1074,6 +1186,13 @@ export const demoDataApp: DataAppSnapshot = {
           "Relation": {
             "record_ids": [
               "0198-demo-companies-ibm-research"
+            ]
+          }
+        },
+        "company_name": {
+          "Lookup": {
+            "values": [
+              "IBM Research"
             ]
           }
         },
@@ -1110,6 +1229,13 @@ export const demoDataApp: DataAppSnapshot = {
             ]
           }
         },
+        "company_name": {
+          "Lookup": {
+            "values": [
+              "UT Austin"
+            ]
+          }
+        },
         "reports_to": {
           "Null": null
         }
@@ -1140,6 +1266,13 @@ export const demoDataApp: DataAppSnapshot = {
           "Relation": {
             "record_ids": [
               "0198-demo-companies-example-corp"
+            ]
+          }
+        },
+        "company_name": {
+          "Lookup": {
+            "values": [
+              "Example Corp"
             ]
           }
         },
@@ -1176,6 +1309,13 @@ export const demoDataApp: DataAppSnapshot = {
             ]
           }
         },
+        "company_name": {
+          "Lookup": {
+            "values": [
+              "Microsoft Research"
+            ]
+          }
+        },
         "reports_to": {
           "Null": null
         }
@@ -1206,6 +1346,13 @@ export const demoDataApp: DataAppSnapshot = {
           "Relation": {
             "record_ids": [
               "0198-demo-companies-google"
+            ]
+          }
+        },
+        "company_name": {
+          "Lookup": {
+            "values": [
+              "Google"
             ]
           }
         },
@@ -1263,6 +1410,18 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "name": {
             "Text": "Analytical Engines"
+          },
+          "contacts": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-ada-lovelace"
+              ]
+            }
+          },
+          "contact_count": {
+            "Rollup": {
+              "value": 1
+            }
           }
         }
       },
@@ -1274,6 +1433,18 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "name": {
             "Text": "US Navy"
+          },
+          "contacts": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-grace-hopper"
+              ]
+            }
+          },
+          "contact_count": {
+            "Rollup": {
+              "value": 1
+            }
           }
         }
       },
@@ -1285,6 +1456,18 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "name": {
             "Text": "Bletchley Park"
+          },
+          "contacts": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-alan-turing"
+              ]
+            }
+          },
+          "contact_count": {
+            "Rollup": {
+              "value": 1
+            }
           }
         }
       },
@@ -1296,6 +1479,20 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "name": {
             "Text": "NASA"
+          },
+          "contacts": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-katherine-johnson",
+                "0198-demo-dorothy-vaughan",
+                "0198-demo-mary-jackson"
+              ]
+            }
+          },
+          "contact_count": {
+            "Rollup": {
+              "value": 3
+            }
           }
         }
       },
@@ -1307,6 +1504,18 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "name": {
             "Text": "W3C"
+          },
+          "contacts": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-tim-berners-lee"
+              ]
+            }
+          },
+          "contact_count": {
+            "Rollup": {
+              "value": 1
+            }
           }
         }
       },
@@ -1318,6 +1527,18 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "name": {
             "Text": "Mozilla"
+          },
+          "contacts": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-brendan-eich"
+              ]
+            }
+          },
+          "contact_count": {
+            "Rollup": {
+              "value": 1
+            }
           }
         }
       },
@@ -1329,6 +1550,18 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "name": {
             "Text": "MIT Instrumentation Lab"
+          },
+          "contacts": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-margaret-hamilton"
+              ]
+            }
+          },
+          "contact_count": {
+            "Rollup": {
+              "value": 1
+            }
           }
         }
       },
@@ -1340,6 +1573,18 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "name": {
             "Text": "Stanford"
+          },
+          "contacts": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-donald-knuth"
+              ]
+            }
+          },
+          "contact_count": {
+            "Rollup": {
+              "value": 1
+            }
           }
         }
       },
@@ -1351,6 +1596,18 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "name": {
             "Text": "Linux Foundation"
+          },
+          "contacts": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-linus-torvalds"
+              ]
+            }
+          },
+          "contact_count": {
+            "Rollup": {
+              "value": 1
+            }
           }
         }
       },
@@ -1362,6 +1619,18 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "name": {
             "Text": "Python Software Foundation"
+          },
+          "contacts": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-guido-van-rossum"
+              ]
+            }
+          },
+          "contact_count": {
+            "Rollup": {
+              "value": 1
+            }
           }
         }
       },
@@ -1373,6 +1642,18 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "name": {
             "Text": "IEEE"
+          },
+          "contacts": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-radia-perlman"
+              ]
+            }
+          },
+          "contact_count": {
+            "Rollup": {
+              "value": 1
+            }
           }
         }
       },
@@ -1384,6 +1665,19 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "name": {
             "Text": "MIT"
+          },
+          "contacts": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-shafi-goldwasser",
+                "0198-demo-barbara-liskov"
+              ]
+            }
+          },
+          "contact_count": {
+            "Rollup": {
+              "value": 2
+            }
           }
         }
       },
@@ -1395,6 +1689,18 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "name": {
             "Text": "IBM Research"
+          },
+          "contacts": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-frances-allen"
+              ]
+            }
+          },
+          "contact_count": {
+            "Rollup": {
+              "value": 1
+            }
           }
         }
       },
@@ -1406,6 +1712,18 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "name": {
             "Text": "UT Austin"
+          },
+          "contacts": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-edsger-dijkstra"
+              ]
+            }
+          },
+          "contact_count": {
+            "Rollup": {
+              "value": 1
+            }
           }
         }
       },
@@ -1417,6 +1735,18 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "name": {
             "Text": "Example Corp"
+          },
+          "contacts": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-grace-brewster"
+              ]
+            }
+          },
+          "contact_count": {
+            "Rollup": {
+              "value": 1
+            }
           }
         }
       },
@@ -1428,6 +1758,18 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "name": {
             "Text": "Microsoft Research"
+          },
+          "contacts": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-leslie-lamport"
+              ]
+            }
+          },
+          "contact_count": {
+            "Rollup": {
+              "value": 1
+            }
           }
         }
       },
@@ -1439,6 +1781,18 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "name": {
             "Text": "Google"
+          },
+          "contacts": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-vint-cerf"
+              ]
+            }
+          },
+          "contact_count": {
+            "Rollup": {
+              "value": 1
+            }
           }
         }
       }
@@ -1472,8 +1826,19 @@ export const demoDataApp: DataAppSnapshot = {
               ]
             }
           },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "Analytical Engines"
+              ]
+            }
+          },
           "reports_to": {
-            "Null": null
+            "Relation": {
+              "record_ids": [
+                "0198-demo-grace-hopper"
+              ]
+            }
           }
         }
       },
@@ -1505,12 +1870,15 @@ export const demoDataApp: DataAppSnapshot = {
               ]
             }
           },
-          "reports_to": {
-            "Relation": {
-              "record_ids": [
-                "0198-demo-ada-lovelace"
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "US Navy"
               ]
             }
+          },
+          "reports_to": {
+            "Null": null
           }
         }
       },
@@ -1539,6 +1907,13 @@ export const demoDataApp: DataAppSnapshot = {
             "Relation": {
               "record_ids": [
                 "0198-demo-companies-bletchley-park"
+              ]
+            }
+          },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "Bletchley Park"
               ]
             }
           },
@@ -1575,10 +1950,17 @@ export const demoDataApp: DataAppSnapshot = {
               ]
             }
           },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "NASA"
+              ]
+            }
+          },
           "reports_to": {
             "Relation": {
               "record_ids": [
-                "0198-demo-dorothy-vaughan"
+                "0198-demo-mary-jackson"
               ]
             }
           }
@@ -1612,8 +1994,19 @@ export const demoDataApp: DataAppSnapshot = {
               ]
             }
           },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "NASA"
+              ]
+            }
+          },
           "reports_to": {
-            "Null": null
+            "Relation": {
+              "record_ids": [
+                "0198-demo-katherine-johnson"
+              ]
+            }
           }
         }
       },
@@ -1645,12 +2038,15 @@ export const demoDataApp: DataAppSnapshot = {
               ]
             }
           },
-          "reports_to": {
-            "Relation": {
-              "record_ids": [
-                "0198-demo-katherine-johnson"
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "NASA"
               ]
             }
+          },
+          "reports_to": {
+            "Null": null
           }
         }
       },
@@ -1679,6 +2075,13 @@ export const demoDataApp: DataAppSnapshot = {
             "Relation": {
               "record_ids": [
                 "0198-demo-companies-w3c"
+              ]
+            }
+          },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "W3C"
               ]
             }
           },
@@ -1715,6 +2118,13 @@ export const demoDataApp: DataAppSnapshot = {
               ]
             }
           },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "Mozilla"
+              ]
+            }
+          },
           "reports_to": {
             "Null": null
           }
@@ -1745,6 +2155,13 @@ export const demoDataApp: DataAppSnapshot = {
             "Relation": {
               "record_ids": [
                 "0198-demo-companies-mit-instrumentation-lab"
+              ]
+            }
+          },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "MIT Instrumentation Lab"
               ]
             }
           },
@@ -1781,6 +2198,13 @@ export const demoDataApp: DataAppSnapshot = {
               ]
             }
           },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "Stanford"
+              ]
+            }
+          },
           "reports_to": {
             "Null": null
           }
@@ -1811,6 +2235,13 @@ export const demoDataApp: DataAppSnapshot = {
             "Relation": {
               "record_ids": [
                 "0198-demo-companies-linux-foundation"
+              ]
+            }
+          },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "Linux Foundation"
               ]
             }
           },
@@ -1847,6 +2278,13 @@ export const demoDataApp: DataAppSnapshot = {
               ]
             }
           },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "Python Software Foundation"
+              ]
+            }
+          },
           "reports_to": {
             "Null": null
           }
@@ -1877,6 +2315,13 @@ export const demoDataApp: DataAppSnapshot = {
             "Relation": {
               "record_ids": [
                 "0198-demo-companies-ieee"
+              ]
+            }
+          },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "IEEE"
               ]
             }
           },
@@ -1913,12 +2358,15 @@ export const demoDataApp: DataAppSnapshot = {
               ]
             }
           },
-          "reports_to": {
-            "Relation": {
-              "record_ids": [
-                "0198-demo-barbara-liskov"
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "MIT"
               ]
             }
+          },
+          "reports_to": {
+            "Null": null
           }
         }
       },
@@ -1950,8 +2398,19 @@ export const demoDataApp: DataAppSnapshot = {
               ]
             }
           },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "MIT"
+              ]
+            }
+          },
           "reports_to": {
-            "Null": null
+            "Relation": {
+              "record_ids": [
+                "0198-demo-shafi-goldwasser"
+              ]
+            }
           }
         }
       },
@@ -1980,6 +2439,13 @@ export const demoDataApp: DataAppSnapshot = {
             "Relation": {
               "record_ids": [
                 "0198-demo-companies-ibm-research"
+              ]
+            }
+          },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "IBM Research"
               ]
             }
           },
@@ -2016,6 +2482,13 @@ export const demoDataApp: DataAppSnapshot = {
               ]
             }
           },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "UT Austin"
+              ]
+            }
+          },
           "reports_to": {
             "Null": null
           }
@@ -2046,6 +2519,13 @@ export const demoDataApp: DataAppSnapshot = {
             "Relation": {
               "record_ids": [
                 "0198-demo-companies-example-corp"
+              ]
+            }
+          },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "Example Corp"
               ]
             }
           },
@@ -2082,6 +2562,13 @@ export const demoDataApp: DataAppSnapshot = {
               ]
             }
           },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "Microsoft Research"
+              ]
+            }
+          },
           "reports_to": {
             "Null": null
           }
@@ -2112,6 +2599,13 @@ export const demoDataApp: DataAppSnapshot = {
             "Relation": {
               "record_ids": [
                 "0198-demo-companies-google"
+              ]
+            }
+          },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "Google"
               ]
             }
           },
@@ -2151,6 +2645,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
         "field_type": "relation",
         "sqlite_type": "TEXT",
         "relation_table": "companies"
+      },
+      {
+        "name": "company_name",
+        "field_type": "lookup",
+        "sqlite_type": "TEXT",
+        "lookup_relation": "company",
+        "lookup_field": "name"
       },
       {
         "name": "due_date",
@@ -2203,8 +2704,19 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               ]
             }
           },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "Analytical Engines"
+              ]
+            }
+          },
           "reports_to": {
-            "Null": null
+            "Relation": {
+              "record_ids": [
+                "0198-demo-grace-hopper"
+              ]
+            }
           }
         }
       },
@@ -2236,12 +2748,15 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               ]
             }
           },
-          "reports_to": {
-            "Relation": {
-              "record_ids": [
-                "0198-demo-ada-lovelace"
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "US Navy"
               ]
             }
+          },
+          "reports_to": {
+            "Null": null
           }
         }
       },
@@ -2270,6 +2785,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             "Relation": {
               "record_ids": [
                 "0198-demo-companies-bletchley-park"
+              ]
+            }
+          },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "Bletchley Park"
               ]
             }
           },
@@ -2306,10 +2828,17 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               ]
             }
           },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "NASA"
+              ]
+            }
+          },
           "reports_to": {
             "Relation": {
               "record_ids": [
-                "0198-demo-dorothy-vaughan"
+                "0198-demo-mary-jackson"
               ]
             }
           }
@@ -2343,8 +2872,19 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               ]
             }
           },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "NASA"
+              ]
+            }
+          },
           "reports_to": {
-            "Null": null
+            "Relation": {
+              "record_ids": [
+                "0198-demo-katherine-johnson"
+              ]
+            }
           }
         }
       },
@@ -2376,12 +2916,15 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               ]
             }
           },
-          "reports_to": {
-            "Relation": {
-              "record_ids": [
-                "0198-demo-katherine-johnson"
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "NASA"
               ]
             }
+          },
+          "reports_to": {
+            "Null": null
           }
         }
       },
@@ -2410,6 +2953,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             "Relation": {
               "record_ids": [
                 "0198-demo-companies-w3c"
+              ]
+            }
+          },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "W3C"
               ]
             }
           },
@@ -2446,6 +2996,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               ]
             }
           },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "Mozilla"
+              ]
+            }
+          },
           "reports_to": {
             "Null": null
           }
@@ -2476,6 +3033,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             "Relation": {
               "record_ids": [
                 "0198-demo-companies-mit-instrumentation-lab"
+              ]
+            }
+          },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "MIT Instrumentation Lab"
               ]
             }
           },
@@ -2512,6 +3076,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               ]
             }
           },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "Stanford"
+              ]
+            }
+          },
           "reports_to": {
             "Null": null
           }
@@ -2542,6 +3113,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             "Relation": {
               "record_ids": [
                 "0198-demo-companies-linux-foundation"
+              ]
+            }
+          },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "Linux Foundation"
               ]
             }
           },
@@ -2578,6 +3156,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               ]
             }
           },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "Python Software Foundation"
+              ]
+            }
+          },
           "reports_to": {
             "Null": null
           }
@@ -2608,6 +3193,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             "Relation": {
               "record_ids": [
                 "0198-demo-companies-ieee"
+              ]
+            }
+          },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "IEEE"
               ]
             }
           },
@@ -2644,12 +3236,15 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               ]
             }
           },
-          "reports_to": {
-            "Relation": {
-              "record_ids": [
-                "0198-demo-barbara-liskov"
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "MIT"
               ]
             }
+          },
+          "reports_to": {
+            "Null": null
           }
         }
       },
@@ -2681,8 +3276,19 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               ]
             }
           },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "MIT"
+              ]
+            }
+          },
           "reports_to": {
-            "Null": null
+            "Relation": {
+              "record_ids": [
+                "0198-demo-shafi-goldwasser"
+              ]
+            }
           }
         }
       },
@@ -2711,6 +3317,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             "Relation": {
               "record_ids": [
                 "0198-demo-companies-ibm-research"
+              ]
+            }
+          },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "IBM Research"
               ]
             }
           },
@@ -2747,6 +3360,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               ]
             }
           },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "UT Austin"
+              ]
+            }
+          },
           "reports_to": {
             "Null": null
           }
@@ -2777,6 +3397,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             "Relation": {
               "record_ids": [
                 "0198-demo-companies-example-corp"
+              ]
+            }
+          },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "Example Corp"
               ]
             }
           },
@@ -2813,6 +3440,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               ]
             }
           },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "Microsoft Research"
+              ]
+            }
+          },
           "reports_to": {
             "Null": null
           }
@@ -2843,6 +3477,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             "Relation": {
               "record_ids": [
                 "0198-demo-companies-google"
+              ]
+            }
+          },
+          "company_name": {
+            "Lookup": {
+              "values": [
+                "Google"
               ]
             }
           },
@@ -2900,6 +3541,18 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "name": {
               "Text": "Analytical Engines"
+            },
+            "contacts": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-ada-lovelace"
+                ]
+              }
+            },
+            "contact_count": {
+              "Rollup": {
+                "value": 1
+              }
             }
           }
         },
@@ -2911,6 +3564,18 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "name": {
               "Text": "US Navy"
+            },
+            "contacts": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-grace-hopper"
+                ]
+              }
+            },
+            "contact_count": {
+              "Rollup": {
+                "value": 1
+              }
             }
           }
         },
@@ -2922,6 +3587,18 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "name": {
               "Text": "Bletchley Park"
+            },
+            "contacts": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-alan-turing"
+                ]
+              }
+            },
+            "contact_count": {
+              "Rollup": {
+                "value": 1
+              }
             }
           }
         },
@@ -2933,6 +3610,20 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "name": {
               "Text": "NASA"
+            },
+            "contacts": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-katherine-johnson",
+                  "0198-demo-dorothy-vaughan",
+                  "0198-demo-mary-jackson"
+                ]
+              }
+            },
+            "contact_count": {
+              "Rollup": {
+                "value": 3
+              }
             }
           }
         },
@@ -2944,6 +3635,18 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "name": {
               "Text": "W3C"
+            },
+            "contacts": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-tim-berners-lee"
+                ]
+              }
+            },
+            "contact_count": {
+              "Rollup": {
+                "value": 1
+              }
             }
           }
         },
@@ -2955,6 +3658,18 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "name": {
               "Text": "Mozilla"
+            },
+            "contacts": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-brendan-eich"
+                ]
+              }
+            },
+            "contact_count": {
+              "Rollup": {
+                "value": 1
+              }
             }
           }
         },
@@ -2966,6 +3681,18 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "name": {
               "Text": "MIT Instrumentation Lab"
+            },
+            "contacts": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-margaret-hamilton"
+                ]
+              }
+            },
+            "contact_count": {
+              "Rollup": {
+                "value": 1
+              }
             }
           }
         },
@@ -2977,6 +3704,18 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "name": {
               "Text": "Stanford"
+            },
+            "contacts": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-donald-knuth"
+                ]
+              }
+            },
+            "contact_count": {
+              "Rollup": {
+                "value": 1
+              }
             }
           }
         },
@@ -2988,6 +3727,18 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "name": {
               "Text": "Linux Foundation"
+            },
+            "contacts": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-linus-torvalds"
+                ]
+              }
+            },
+            "contact_count": {
+              "Rollup": {
+                "value": 1
+              }
             }
           }
         },
@@ -2999,6 +3750,18 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "name": {
               "Text": "Python Software Foundation"
+            },
+            "contacts": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-guido-van-rossum"
+                ]
+              }
+            },
+            "contact_count": {
+              "Rollup": {
+                "value": 1
+              }
             }
           }
         },
@@ -3010,6 +3773,18 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "name": {
               "Text": "IEEE"
+            },
+            "contacts": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-radia-perlman"
+                ]
+              }
+            },
+            "contact_count": {
+              "Rollup": {
+                "value": 1
+              }
             }
           }
         },
@@ -3021,6 +3796,19 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "name": {
               "Text": "MIT"
+            },
+            "contacts": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-shafi-goldwasser",
+                  "0198-demo-barbara-liskov"
+                ]
+              }
+            },
+            "contact_count": {
+              "Rollup": {
+                "value": 2
+              }
             }
           }
         },
@@ -3032,6 +3820,18 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "name": {
               "Text": "IBM Research"
+            },
+            "contacts": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-frances-allen"
+                ]
+              }
+            },
+            "contact_count": {
+              "Rollup": {
+                "value": 1
+              }
             }
           }
         },
@@ -3043,6 +3843,18 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "name": {
               "Text": "UT Austin"
+            },
+            "contacts": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-edsger-dijkstra"
+                ]
+              }
+            },
+            "contact_count": {
+              "Rollup": {
+                "value": 1
+              }
             }
           }
         },
@@ -3054,6 +3866,18 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "name": {
               "Text": "Example Corp"
+            },
+            "contacts": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-grace-brewster"
+                ]
+              }
+            },
+            "contact_count": {
+              "Rollup": {
+                "value": 1
+              }
             }
           }
         },
@@ -3065,6 +3889,18 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "name": {
               "Text": "Microsoft Research"
+            },
+            "contacts": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-leslie-lamport"
+                ]
+              }
+            },
+            "contact_count": {
+              "Rollup": {
+                "value": 1
+              }
             }
           }
         },
@@ -3076,6 +3912,18 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "name": {
               "Text": "Google"
+            },
+            "contacts": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-vint-cerf"
+                ]
+              }
+            },
+            "contact_count": {
+              "Rollup": {
+                "value": 1
+              }
             }
           }
         }
@@ -3109,8 +3957,19 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
                 ]
               }
             },
+            "company_name": {
+              "Lookup": {
+                "values": [
+                  "Analytical Engines"
+                ]
+              }
+            },
             "reports_to": {
-              "Null": null
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-grace-hopper"
+                ]
+              }
             }
           }
         },
@@ -3142,12 +4001,15 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
                 ]
               }
             },
-            "reports_to": {
-              "Relation": {
-                "record_ids": [
-                  "0198-demo-ada-lovelace"
+            "company_name": {
+              "Lookup": {
+                "values": [
+                  "US Navy"
                 ]
               }
+            },
+            "reports_to": {
+              "Null": null
             }
           }
         },
@@ -3176,6 +4038,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               "Relation": {
                 "record_ids": [
                   "0198-demo-companies-bletchley-park"
+                ]
+              }
+            },
+            "company_name": {
+              "Lookup": {
+                "values": [
+                  "Bletchley Park"
                 ]
               }
             },
@@ -3212,10 +4081,17 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
                 ]
               }
             },
+            "company_name": {
+              "Lookup": {
+                "values": [
+                  "NASA"
+                ]
+              }
+            },
             "reports_to": {
               "Relation": {
                 "record_ids": [
-                  "0198-demo-dorothy-vaughan"
+                  "0198-demo-mary-jackson"
                 ]
               }
             }
@@ -3249,8 +4125,19 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
                 ]
               }
             },
+            "company_name": {
+              "Lookup": {
+                "values": [
+                  "NASA"
+                ]
+              }
+            },
             "reports_to": {
-              "Null": null
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-katherine-johnson"
+                ]
+              }
             }
           }
         },
@@ -3282,12 +4169,15 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
                 ]
               }
             },
-            "reports_to": {
-              "Relation": {
-                "record_ids": [
-                  "0198-demo-katherine-johnson"
+            "company_name": {
+              "Lookup": {
+                "values": [
+                  "NASA"
                 ]
               }
+            },
+            "reports_to": {
+              "Null": null
             }
           }
         },
@@ -3316,6 +4206,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               "Relation": {
                 "record_ids": [
                   "0198-demo-companies-w3c"
+                ]
+              }
+            },
+            "company_name": {
+              "Lookup": {
+                "values": [
+                  "W3C"
                 ]
               }
             },
@@ -3352,6 +4249,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
                 ]
               }
             },
+            "company_name": {
+              "Lookup": {
+                "values": [
+                  "Mozilla"
+                ]
+              }
+            },
             "reports_to": {
               "Null": null
             }
@@ -3382,6 +4286,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               "Relation": {
                 "record_ids": [
                   "0198-demo-companies-mit-instrumentation-lab"
+                ]
+              }
+            },
+            "company_name": {
+              "Lookup": {
+                "values": [
+                  "MIT Instrumentation Lab"
                 ]
               }
             },
@@ -3418,6 +4329,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
                 ]
               }
             },
+            "company_name": {
+              "Lookup": {
+                "values": [
+                  "Stanford"
+                ]
+              }
+            },
             "reports_to": {
               "Null": null
             }
@@ -3448,6 +4366,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               "Relation": {
                 "record_ids": [
                   "0198-demo-companies-linux-foundation"
+                ]
+              }
+            },
+            "company_name": {
+              "Lookup": {
+                "values": [
+                  "Linux Foundation"
                 ]
               }
             },
@@ -3484,6 +4409,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
                 ]
               }
             },
+            "company_name": {
+              "Lookup": {
+                "values": [
+                  "Python Software Foundation"
+                ]
+              }
+            },
             "reports_to": {
               "Null": null
             }
@@ -3514,6 +4446,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               "Relation": {
                 "record_ids": [
                   "0198-demo-companies-ieee"
+                ]
+              }
+            },
+            "company_name": {
+              "Lookup": {
+                "values": [
+                  "IEEE"
                 ]
               }
             },
@@ -3550,12 +4489,15 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
                 ]
               }
             },
-            "reports_to": {
-              "Relation": {
-                "record_ids": [
-                  "0198-demo-barbara-liskov"
+            "company_name": {
+              "Lookup": {
+                "values": [
+                  "MIT"
                 ]
               }
+            },
+            "reports_to": {
+              "Null": null
             }
           }
         },
@@ -3587,8 +4529,19 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
                 ]
               }
             },
+            "company_name": {
+              "Lookup": {
+                "values": [
+                  "MIT"
+                ]
+              }
+            },
             "reports_to": {
-              "Null": null
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-shafi-goldwasser"
+                ]
+              }
             }
           }
         },
@@ -3617,6 +4570,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               "Relation": {
                 "record_ids": [
                   "0198-demo-companies-ibm-research"
+                ]
+              }
+            },
+            "company_name": {
+              "Lookup": {
+                "values": [
+                  "IBM Research"
                 ]
               }
             },
@@ -3653,6 +4613,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
                 ]
               }
             },
+            "company_name": {
+              "Lookup": {
+                "values": [
+                  "UT Austin"
+                ]
+              }
+            },
             "reports_to": {
               "Null": null
             }
@@ -3683,6 +4650,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               "Relation": {
                 "record_ids": [
                   "0198-demo-companies-example-corp"
+                ]
+              }
+            },
+            "company_name": {
+              "Lookup": {
+                "values": [
+                  "Example Corp"
                 ]
               }
             },
@@ -3719,6 +4693,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
                 ]
               }
             },
+            "company_name": {
+              "Lookup": {
+                "values": [
+                  "Microsoft Research"
+                ]
+              }
+            },
             "reports_to": {
               "Null": null
             }
@@ -3749,6 +4730,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               "Relation": {
                 "record_ids": [
                   "0198-demo-companies-google"
+                ]
+              }
+            },
+            "company_name": {
+              "Lookup": {
+                "values": [
+                  "Google"
                 ]
               }
             },
