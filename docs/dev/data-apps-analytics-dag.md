@@ -129,7 +129,7 @@ flowchart TD
 | P2-06 | merged | composer | CSV promote |
 | P2-07 | merged | composer | Docs wave 1 |
 | P2-08 | done | grok | Lookup |
-| P2-09 | pending | grok | Rollup |
+| P2-09 | merged | grok | Rollup |
 | P2-10 | merged | grok | Canvas interfaces |
 | P2-11 | merged | composer | Buttons/actions |
 | P2-12 | merged | composer | Excel/JSON import |
