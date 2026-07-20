@@ -52,6 +52,8 @@ const SQLITE_TYPES = {
   boolean: "INTEGER",
   date: "TEXT",
   relation: "TEXT",
+  lookup: "TEXT",
+  rollup: "TEXT",
 };
 const TEMPLATE_CATEGORIES = [
   "Everyday",
@@ -75,7 +77,10 @@ const FIELD_TYPES = new Set([
   "boolean",
   "date",
   "relation",
+  "lookup",
+  "rollup",
 ]);
+const ROLLUP_AGGREGATES = new Set(["count", "sum", "min", "max"]);
 const VIEW_LAYOUTS = new Set(["grid", "list", "board", "gallery", "calendar", "form"]);
 // Flat seed files (including binaries) are embedded via include_bytes!; declarative
 // dataPackages are JSON-only and materialized to SQLite at provision time.
@@ -208,6 +213,106 @@ function normalizeDataPackages(raw, template) {
   return raw.map((entry, index) => normalizeDataPackage(entry, template, index));
 }
 
+function normalizeSeedColumn(column, template, columnLabel) {
+  if (!column || typeof column !== "object" || Array.isArray(column)) {
+    throw new Error(`${template}: ${columnLabel} must be an object`);
+  }
+  if (typeof column.name !== "string" || !isSqlIdentifier(column.name)) {
+    throw new Error(`${template}: ${columnLabel}.name must be a valid SQL identifier`);
+  }
+  if (column.name === "id") {
+    throw new Error(`${template}: ${columnLabel}.name cannot be id (reserved)`);
+  }
+  if (typeof column.type !== "string" || !FIELD_TYPES.has(column.type)) {
+    throw new Error(
+      `${template}: ${columnLabel}.type must be one of ${[...FIELD_TYPES].join(", ")}`,
+    );
+  }
+
+  let relationTable;
+  if (column.type === "relation") {
+    if (typeof column.relation_table !== "string" || !isSqlIdentifier(column.relation_table)) {
+      throw new Error(
+        `${template}: ${columnLabel}.relation_table must be a valid SQL identifier for relation columns`,
+      );
+    }
+    relationTable = column.relation_table;
+  } else if (column.relation_table !== undefined) {
+    throw new Error(
+      `${template}: ${columnLabel}.relation_table is only supported for relation columns`,
+    );
+  }
+
+  let lookupRelation;
+  let lookupField;
+  if (column.type === "lookup") {
+    if (typeof column.lookup_relation !== "string" || !isSqlIdentifier(column.lookup_relation)) {
+      throw new Error(
+        `${template}: ${columnLabel}.lookup_relation must be a valid SQL identifier for lookup columns`,
+      );
+    }
+    if (typeof column.lookup_field !== "string" || !isSqlIdentifier(column.lookup_field)) {
+      throw new Error(
+        `${template}: ${columnLabel}.lookup_field must be a valid SQL identifier for lookup columns`,
+      );
+    }
+    lookupRelation = column.lookup_relation;
+    lookupField = column.lookup_field;
+  } else if (column.lookup_relation !== undefined || column.lookup_field !== undefined) {
+    throw new Error(
+      `${template}: ${columnLabel}.lookup_relation / lookup_field are only supported for lookup columns`,
+    );
+  }
+
+  let rollupRelation;
+  let rollupAggregate;
+  let rollupField;
+  if (column.type === "rollup") {
+    if (typeof column.rollup_relation !== "string" || !isSqlIdentifier(column.rollup_relation)) {
+      throw new Error(
+        `${template}: ${columnLabel}.rollup_relation must be a valid SQL identifier for rollup columns`,
+      );
+    }
+    if (
+      typeof column.rollup_aggregate !== "string" ||
+      !ROLLUP_AGGREGATES.has(column.rollup_aggregate)
+    ) {
+      throw new Error(
+        `${template}: ${columnLabel}.rollup_aggregate must be one of ${[...ROLLUP_AGGREGATES].join(", ")}`,
+      );
+    }
+    rollupRelation = column.rollup_relation;
+    rollupAggregate = column.rollup_aggregate;
+    if (column.rollup_field !== undefined) {
+      if (typeof column.rollup_field !== "string" || !isSqlIdentifier(column.rollup_field)) {
+        throw new Error(
+          `${template}: ${columnLabel}.rollup_field must be a valid SQL identifier for rollup columns`,
+        );
+      }
+      rollupField = column.rollup_field;
+    }
+  } else if (
+    column.rollup_relation !== undefined ||
+    column.rollup_aggregate !== undefined ||
+    column.rollup_field !== undefined
+  ) {
+    throw new Error(
+      `${template}: ${columnLabel}.rollup_relation / rollup_aggregate / rollup_field are only supported for rollup columns`,
+    );
+  }
+
+  return {
+    name: column.name,
+    type: column.type,
+    ...(relationTable === undefined ? {} : { relation_table: relationTable }),
+    ...(lookupRelation === undefined ? {} : { lookup_relation: lookupRelation }),
+    ...(lookupField === undefined ? {} : { lookup_field: lookupField }),
+    ...(rollupRelation === undefined ? {} : { rollup_relation: rollupRelation }),
+    ...(rollupAggregate === undefined ? {} : { rollup_aggregate: rollupAggregate }),
+    ...(rollupField === undefined ? {} : { rollup_field: rollupField }),
+  };
+}
+
 function normalizeDataPackage(entry, template, index) {
   const label = `dataPackages[${index}]`;
   if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
@@ -239,42 +344,12 @@ function normalizeDataPackage(entry, template, index) {
   const columnNames = new Set();
   for (const [columnIndex, column] of entry.columns.entries()) {
     const columnLabel = `${label}.columns[${columnIndex}]`;
-    if (!column || typeof column !== "object" || Array.isArray(column)) {
-      throw new Error(`${template}: ${columnLabel} must be an object`);
-    }
-    if (typeof column.name !== "string" || !isSqlIdentifier(column.name)) {
-      throw new Error(`${template}: ${columnLabel}.name must be a valid SQL identifier`);
-    }
-    if (column.name === "id") {
-      throw new Error(`${template}: ${columnLabel}.name cannot be id (reserved)`);
-    }
     if (columnNames.has(column.name)) {
       throw new Error(`${template}: ${columnLabel} duplicate column ${column.name}`);
     }
-    if (typeof column.type !== "string" || !FIELD_TYPES.has(column.type)) {
-      throw new Error(
-        `${template}: ${columnLabel}.type must be one of ${[...FIELD_TYPES].join(", ")}`,
-      );
-    }
-    let relationTable;
-    if (column.type === "relation") {
-      if (typeof column.relation_table !== "string" || !isSqlIdentifier(column.relation_table)) {
-        throw new Error(
-          `${template}: ${columnLabel}.relation_table must be a valid SQL identifier for relation columns`,
-        );
-      }
-      relationTable = column.relation_table;
-    } else if (column.relation_table !== undefined) {
-      throw new Error(
-        `${template}: ${columnLabel}.relation_table is only supported for relation columns`,
-      );
-    }
-    columnNames.add(column.name);
-    columns.push({
-      name: column.name,
-      type: column.type,
-      ...(relationTable === undefined ? {} : { relation_table: relationTable }),
-    });
+    const normalized = normalizeSeedColumn(column, template, columnLabel);
+    columnNames.add(normalized.name);
+    columns.push(normalized);
   }
 
   const columnTypes = new Map(columns.map((column) => [column.name, column.type]));
@@ -379,42 +454,12 @@ function normalizeExtraTable(entry, template, label, mainTable, reservedTables) 
   const columnNames = new Set();
   for (const [columnIndex, column] of entry.columns.entries()) {
     const columnLabel = `${label}.columns[${columnIndex}]`;
-    if (!column || typeof column !== "object" || Array.isArray(column)) {
-      throw new Error(`${template}: ${columnLabel} must be an object`);
-    }
-    if (typeof column.name !== "string" || !isSqlIdentifier(column.name)) {
-      throw new Error(`${template}: ${columnLabel}.name must be a valid SQL identifier`);
-    }
-    if (column.name === "id") {
-      throw new Error(`${template}: ${columnLabel}.name cannot be id (reserved)`);
-    }
     if (columnNames.has(column.name)) {
       throw new Error(`${template}: ${columnLabel} duplicate column ${column.name}`);
     }
-    if (typeof column.type !== "string" || !FIELD_TYPES.has(column.type)) {
-      throw new Error(
-        `${template}: ${columnLabel}.type must be one of ${[...FIELD_TYPES].join(", ")}`,
-      );
-    }
-    let relationTable;
-    if (column.type === "relation") {
-      if (typeof column.relation_table !== "string" || !isSqlIdentifier(column.relation_table)) {
-        throw new Error(
-          `${template}: ${columnLabel}.relation_table must be a valid SQL identifier for relation columns`,
-        );
-      }
-      relationTable = column.relation_table;
-    } else if (column.relation_table !== undefined) {
-      throw new Error(
-        `${template}: ${columnLabel}.relation_table is only supported for relation columns`,
-      );
-    }
-    columnNames.add(column.name);
-    columns.push({
-      name: column.name,
-      type: column.type,
-      ...(relationTable === undefined ? {} : { relation_table: relationTable }),
-    });
+    const normalized = normalizeSeedColumn(column, template, columnLabel);
+    columnNames.add(normalized.name);
+    columns.push(normalized);
   }
 
   const columnTypes = new Map(columns.map((column) => [column.name, column.type]));
@@ -835,6 +880,12 @@ function assertJsonCell(value, template, label, fieldType) {
     }
     return;
   }
+  if (fieldType === "lookup" || fieldType === "rollup") {
+    if (kind !== "null") {
+      throw new Error(`${template}: ${label} must be null for ${fieldType} columns`);
+    }
+    return;
+  }
   if (kind === "object" || kind === "array" || kind === "undefined" || kind === "function") {
     throw new Error(`${template}: ${label} must be a JSON primitive or null`);
   }
@@ -977,7 +1028,7 @@ function rustDirectory(directory) {
 }
 
 function rustDataColumn(column) {
-  return `SeedDataColumn { name: ${rustString(column.name)}, field_type: ${rustString(column.type)}, relation_table: ${rustOptionString(column.relation_table)} }`;
+  return `SeedDataColumn { name: ${rustString(column.name)}, field_type: ${rustString(column.type)}, relation_table: ${rustOptionString(column.relation_table)}, lookup_relation: ${rustOptionString(column.lookup_relation)}, lookup_field: ${rustOptionString(column.lookup_field)}, rollup_relation: ${rustOptionString(column.rollup_relation)}, rollup_aggregate: ${rustOptionString(column.rollup_aggregate)}, rollup_field: ${rustOptionString(column.rollup_field)} }`;
 }
 
 function rustDataForm(form) {
@@ -1198,7 +1249,9 @@ function buildDemoTableSnapshot(tableName, columns, rows, rowIdsByTable, legacyI
     const id = demoRowId(row, index, legacyIds ? undefined : tableName);
     const values = { id: { Text: id } };
     for (const column of columns) {
-      if (column.type === "relation") continue;
+      if (column.type === "relation" || column.type === "lookup" || column.type === "rollup") {
+        continue;
+      }
       const raw = Object.prototype.hasOwnProperty.call(row, column.name) ? row[column.name] : null;
       values[column.name] = cellValueForField(raw, column.type);
     }
@@ -1217,21 +1270,30 @@ function buildDemoTableSnapshot(tableName, columns, rows, rowIdsByTable, legacyI
   rowIdsByTable.set(tableName, rowIdsByName);
   for (const entry of demoRows) {
     for (const column of columns) {
-      if (column.type !== "relation") continue;
-      const raw = Object.prototype.hasOwnProperty.call(entry.row, column.name)
-        ? entry.row[column.name]
-        : null;
-      if (raw === null) {
-        entry.values[column.name] = { Null: null };
+      if (column.type === "relation") {
+        const raw = Object.prototype.hasOwnProperty.call(entry.row, column.name)
+          ? entry.row[column.name]
+          : null;
+        if (raw === null) {
+          entry.values[column.name] = { Null: null };
+          continue;
+        }
+        if (!Array.isArray(raw)) {
+          throw new Error(
+            `${DEMO_TEMPLATE_ID}: relation column ${column.name} must be a JSON array of record ids`,
+          );
+        }
+        const recordIds = resolveDemoRelationRefs(raw, column.relation_table, rowIdsByTable);
+        entry.values[column.name] = { Relation: { record_ids: recordIds } };
         continue;
       }
-      if (!Array.isArray(raw)) {
-        throw new Error(
-          `${DEMO_TEMPLATE_ID}: relation column ${column.name} must be a JSON array of record ids`,
-        );
+      if (column.type === "lookup") {
+        entry.values[column.name] = { Lookup: { values: [] } };
+        continue;
       }
-      const recordIds = resolveDemoRelationRefs(raw, column.relation_table, rowIdsByTable);
-      entry.values[column.name] = { Relation: { record_ids: recordIds } };
+      if (column.type === "rollup") {
+        entry.values[column.name] = { Rollup: { value: null } };
+      }
     }
   }
   return demoRows.map(({ id, values }) => ({ id, values }));
@@ -1250,6 +1312,129 @@ function resolveDemoRelationRefs(references, targetTable, rowIdsByTable) {
     }
     return resolved;
   });
+}
+
+function packageTableColumns(packageDef) {
+  const tables = (packageDef.extraTables ?? []).map((table) => ({
+    table: table.table,
+    columns: table.columns,
+  }));
+  tables.push({ table: packageDef.table, columns: packageDef.columns });
+  return tables;
+}
+
+function findReciprocalRelationColumn(tableColumns, sourceTable, targetTable) {
+  const entry = tableColumns.find((table) => table.table === sourceTable);
+  if (!entry) return undefined;
+  return entry.columns.find(
+    (column) => column.type === "relation" && column.relation_table === targetTable,
+  )?.name;
+}
+
+function syncDemoBacklinkRelations(packageDef, tableSnapshots) {
+  const tableColumns = packageTableColumns(packageDef);
+  for (const { table, columns } of tableColumns) {
+    for (const column of columns) {
+      if (column.type !== "relation" || column.relation_table === undefined) continue;
+      const backlink = findReciprocalRelationColumn(
+        tableColumns,
+        column.relation_table,
+        table,
+      );
+      if (!backlink) continue;
+      const targetRows = tableSnapshots.get(table) ?? [];
+      const sourceRows = tableSnapshots.get(column.relation_table) ?? [];
+      const links = new Map(targetRows.map((row) => [row.id, []]));
+      for (const sourceRow of sourceRows) {
+        const relation = sourceRow.values[backlink];
+        if (!relation || !("Relation" in relation)) continue;
+        for (const targetId of relation.Relation.record_ids) {
+          const linked = links.get(targetId);
+          if (!linked) {
+            throw new Error(
+              `${DEMO_TEMPLATE_ID}: backlink ${backlink} on ${column.relation_table} references unknown row in ${table}`,
+            );
+          }
+          linked.push(sourceRow.id);
+        }
+      }
+      for (const row of targetRows) {
+        const recordIds = links.get(row.id) ?? [];
+        if (recordIds.length === 0) {
+          row.values[column.name] = { Null: null };
+        } else {
+          row.values[column.name] = { Relation: { record_ids: recordIds } };
+        }
+      }
+    }
+  }
+}
+
+function demoCellAsText(value) {
+  if (!value) return null;
+  if ("Text" in value) return value.Text;
+  if ("Date" in value) return value.Date;
+  if ("Integer" in value) return String(value.Integer);
+  if ("Decimal" in value) return String(value.Decimal);
+  return null;
+}
+
+function resolveDemoComputedColumns(tableName, columns, rows, tableSnapshots) {
+  for (const row of rows) {
+    for (const column of columns) {
+      if (column.type === "lookup") {
+        const relationColumn = columns.find((entry) => entry.name === column.lookup_relation);
+        const relation = row.values[column.lookup_relation];
+        const values = [];
+        if (relationColumn && relation && "Relation" in relation) {
+          const targetRows = tableSnapshots.get(relationColumn.relation_table) ?? [];
+          for (const recordId of relation.Relation.record_ids) {
+            const targetRow = targetRows.find((entry) => entry.id === recordId);
+            const text = demoCellAsText(targetRow?.values[column.lookup_field]);
+            if (text !== null) values.push(text);
+          }
+        }
+        row.values[column.name] = { Lookup: { values } };
+        continue;
+      }
+      if (column.type === "rollup") {
+        const relation = row.values[column.rollup_relation];
+        let count = 0;
+        if (relation && "Relation" in relation) {
+          if (column.rollup_aggregate === "count" && !column.rollup_field) {
+            count = relation.Relation.record_ids.length;
+          } else {
+            const relationColumn = columns.find((entry) => entry.name === column.rollup_relation);
+            const targetRows = tableSnapshots.get(relationColumn?.relation_table);
+            for (const recordId of relation.Relation.record_ids) {
+              const targetRow = targetRows?.find((entry) => entry.id === recordId);
+              const projected = targetRow?.values[column.rollup_field];
+              if (projected && !("Null" in projected)) {
+                count += 1;
+              }
+            }
+          }
+        }
+        row.values[column.name] = { Rollup: { value: count } };
+      }
+    }
+  }
+}
+
+function demoColumnMetadata(column) {
+  return {
+    name: column.name,
+    field_type: column.type,
+    sqlite_type: SQLITE_TYPES[column.type],
+    ...(column.relation_table === undefined ? {} : { relation_table: column.relation_table }),
+    ...(column.lookup_relation === undefined ? {} : { lookup_relation: column.lookup_relation }),
+    ...(column.lookup_field === undefined ? {} : { lookup_field: column.lookup_field }),
+    ...(column.rollup_relation === undefined ? {} : { rollup_relation: column.rollup_relation }),
+    ...(column.rollup_aggregate === undefined
+      ? {}
+      : { rollup_aggregate: column.rollup_aggregate }),
+    ...(column.rollup_field === undefined ? {} : { rollup_field: column.rollup_field }),
+  };
 }
 
 function cellValueForField(value, fieldType) {
@@ -1400,14 +1585,7 @@ function demoSnapshotLayoutFields(view) {
 function buildDemoDataAppFromPackage(packageDef) {
   const columns = [
     { name: "id", field_type: "text", sqlite_type: "TEXT" },
-    ...packageDef.columns.map((column) => ({
-      name: column.name,
-      field_type: column.type,
-      sqlite_type: SQLITE_TYPES[column.type],
-      ...(column.relation_table === undefined
-        ? {}
-        : { relation_table: column.relation_table }),
-    })),
+    ...packageDef.columns.map(demoColumnMetadata),
   ];
   const rowIdsByTable = new Map();
   const tableSnapshots = new Map();
@@ -1425,6 +1603,21 @@ function buildDemoDataAppFromPackage(packageDef) {
     true,
   );
   tableSnapshots.set(packageDef.table, demoRows);
+  syncDemoBacklinkRelations(packageDef, tableSnapshots);
+  for (const extraTable of packageDef.extraTables ?? []) {
+    resolveDemoComputedColumns(
+      extraTable.table,
+      extraTable.columns,
+      tableSnapshots.get(extraTable.table) ?? [],
+      tableSnapshots,
+    );
+  }
+  resolveDemoComputedColumns(
+    packageDef.table,
+    packageDef.columns,
+    tableSnapshots.get(packageDef.table) ?? [],
+    tableSnapshots,
+  );
   const rowIds = new Set();
   for (const rows of tableSnapshots.values()) {
     for (const row of rows) {
