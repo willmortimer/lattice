@@ -14,7 +14,7 @@ use lattice_core::{
 use lattice_data::{
     parse_field_type_name, parse_tabular_file, resolve_field_types, CellValue, DataApp, FieldType,
 };
-use lattice_datasets::{parse_partition_key_specs, Dataset};
+use lattice_datasets::{parse_partition_key_specs, Dataset, EventAnnotation};
 use lattice_duckdb::{DuckDbEngine, ScalarValue};
 use lattice_index::{Backlink, SearchHit, WorkspaceIndex};
 use lattice_storage::{NativeWorkspaceStore, RecoveryJournal, WorkspaceStore};
@@ -318,6 +318,31 @@ enum DatasetCommand {
         #[arg(long)]
         file_name: Option<String>,
     },
+    /// Upsert a row into `annotations.sqlite` (`event_annotations`).
+    Annotate {
+        /// Workspace path of the `.dataset` package.
+        path: PathBuf,
+        /// Stable event identity joined to Parquet `event_id`.
+        #[arg(long)]
+        event_id: String,
+        /// Optional review label.
+        #[arg(long)]
+        label: Option<String>,
+        /// Optional free-form notes.
+        #[arg(long)]
+        notes: Option<String>,
+        /// Mark the event as reviewed.
+        #[arg(long, default_value_t = false)]
+        reviewed: bool,
+    },
+    /// Left-join Parquet facts with annotation overlays (DuckDB).
+    QueryAnnotated {
+        /// Workspace path of the `.dataset` package.
+        path: PathBuf,
+        /// Emit output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -593,6 +618,16 @@ fn run(command: Command) -> Result<ExitCode> {
                 partitions,
                 file_name,
             } => cmd_dataset_import_csv(path, csv, partitions, file_name),
+            DatasetCommand::Annotate {
+                path,
+                event_id,
+                label,
+                notes,
+                reviewed,
+            } => cmd_dataset_annotate(path, event_id, label, notes, reviewed),
+            DatasetCommand::QueryAnnotated { path, json } => {
+                cmd_dataset_query_annotated(path, json)
+            },
         },
         Command::Query {
             sql,
@@ -1049,6 +1084,80 @@ fn cmd_dataset_import_csv(
         entry.path,
         entry.rows.unwrap_or(0)
     );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_dataset_annotate(
+    path: PathBuf,
+    event_id: String,
+    label: Option<String>,
+    notes: Option<String>,
+    reviewed: bool,
+) -> Result<ExitCode> {
+    let start = std::env::current_dir().context("failed to determine current directory")?;
+    let ws = Workspace::discover(&start)?;
+    let rel = workspace_relative(&ws, &path)?;
+    let dataset = Dataset::open(&ws.root().join(&rel))?;
+    let annotation = EventAnnotation::new(event_id.clone(), label, notes, reviewed);
+    dataset.upsert_annotation(&annotation)?;
+    println!(
+        "annotated {} event_id={event_id} reviewed={reviewed}",
+        rel.display()
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_dataset_query_annotated(path: PathBuf, json: bool) -> Result<ExitCode> {
+    let start = std::env::current_dir().context("failed to determine current directory")?;
+    let ws = Workspace::discover(&start)?;
+    let rel = workspace_relative(&ws, &path)?;
+    let package = ws.root().join(&rel);
+    let dataset = Dataset::open(&package)?;
+    dataset.ensure_annotations()?;
+
+    let facts_glob = package
+        .join("facts")
+        .join("**")
+        .join("*.parquet")
+        .to_string_lossy()
+        .replace('\\', "/");
+    let annotations = dataset.annotations_path();
+
+    let engine = DuckDbEngine::open_in_memory(ws.root())?;
+    let batch = engine.query_parquet_left_join_annotations(&facts_glob, &annotations)?;
+
+    if json {
+        let columns: Vec<_> = batch
+            .schema
+            .fields
+            .iter()
+            .map(|field| field.name.clone())
+            .collect();
+        let rows: Vec<Vec<serde_json::Value>> = batch
+            .rows()
+            .into_iter()
+            .map(|row| row.into_iter().map(scalar_to_json).collect())
+            .collect();
+        print_json(&serde_json::json!({
+            "engine": "duckdb",
+            "num_rows": batch.num_rows,
+            "columns": columns,
+            "rows": rows,
+        }))?;
+    } else {
+        let header: Vec<_> = batch
+            .schema
+            .fields
+            .iter()
+            .map(|field| field.name.as_str())
+            .collect();
+        println!("{}", header.join("\t"));
+        for row in batch.rows() {
+            let cells: Vec<_> = row.iter().map(format_scalar).collect();
+            println!("{}", cells.join("\t"));
+        }
+        println!("{} row(s)", batch.num_rows);
+    }
     Ok(ExitCode::SUCCESS)
 }
 

@@ -15,6 +15,13 @@ pub enum Error {
     #[error("duckdb error: {0}")]
     DuckDb(#[from] duckdb::Error),
 
+    #[error("sqlite error at {path}: {source}")]
+    Sqlite {
+        path: PathBuf,
+        #[source]
+        source: rusqlite::Error,
+    },
+
     #[error("{0}")]
     Message(String),
 }
@@ -31,6 +38,13 @@ impl Error {
         Error::PathNotAllowed {
             path: path.into(),
             root: root.into(),
+        }
+    }
+
+    pub(crate) fn sqlite(path: impl Into<PathBuf>, source: rusqlite::Error) -> Self {
+        Error::Sqlite {
+            path: path.into(),
+            source,
         }
     }
 

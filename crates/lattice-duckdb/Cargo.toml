@@ -8,8 +8,11 @@ license.workspace = true
 
 [dependencies]
 # DuckDB MIT; `bundled` compiles libduckdb from source (large first build, no
-# system DuckDB required). Matches the rusqlite `bundled` pattern in this repo.
-duckdb = { version = "~1.10504.0", features = ["bundled"] }
+# system DuckDB required). `parquet` statically links the Parquet extension so
+# `read_parquet` works with `enable_external_access=false` (no autoinstall).
+# Matches the rusqlite `bundled` pattern in this repo.
+duckdb = { version = "~1.10504.0", features = ["bundled", "parquet"] }
+rusqlite.workspace = true
 serde = { workspace = true, features = ["derive"] }
 thiserror.workspace = true
 
