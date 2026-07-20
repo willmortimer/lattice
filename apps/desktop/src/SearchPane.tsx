@@ -29,9 +29,9 @@ function searchHitKey(hit: SearchHit, index: number): string {
 }
 
 /**
- * Cmd/Ctrl+Shift+F search pane over `search_workspace` (WS4's FTS index,
- * surfaced in the shell per docs/21's search stack). All hits are pages —
- * the index only covers Markdown — so every result gets a `page` kind mark.
+ * Cmd/Ctrl+K search pane over `search_workspace` (docs/21).
+ * When `semanticEnabled`, uses mode `auto` (hybrid when the semantic worker is
+ * ready; otherwise FTS). Hits use a `page` kind mark for now.
  */
 export function SearchPane({
   root,
