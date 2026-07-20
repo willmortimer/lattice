@@ -6,8 +6,9 @@
  * mutable `.data` grid.
  */
 
-import perspective from "@finos/perspective";
-import perspectiveViewer from "@finos/perspective-viewer";
+import { init_server, worker as createPerspectiveWorker } from "@finos/perspective";
+import { init_client } from "@finos/perspective-viewer";
+// Resolved to the CDN build via vite.config (WKWebView-safe; no CJS chroma-js).
 import "@finos/perspective-viewer-datagrid";
 import "@finos/perspective-viewer/dist/css/pro-dark.css";
 import SERVER_WASM from "@finos/perspective/dist/wasm/perspective-server.wasm?url";
@@ -73,11 +74,11 @@ export async function ensurePerspectiveRuntime(): Promise<PerspectiveRuntime> {
 
 async function bootstrapPerspective(): Promise<PerspectiveRuntime> {
   await Promise.all([
-    perspective.init_server(fetch(SERVER_WASM)),
-    perspectiveViewer.init_client(fetch(CLIENT_WASM)),
+    init_server(fetch(SERVER_WASM)),
+    init_client(fetch(CLIENT_WASM)),
   ]);
 
-  const worker = (await perspective.worker()) as PerspectiveClient;
+  const worker = (await createPerspectiveWorker()) as PerspectiveClient;
   return { worker };
 }
 
