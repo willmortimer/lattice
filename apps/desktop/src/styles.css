@@ -2592,6 +2592,82 @@ html[data-page-width="full"] {
   color: var(--lt-faint);
 }
 
+.data-table-pagination {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--lt-muted);
+}
+
+.data-table-load-more {
+  width: auto;
+  margin-top: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.data-table-add-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius-sm);
+  background: var(--lt-panel);
+}
+
+.data-table-add-column-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.data-table-add-column-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--lt-text);
+}
+
+.data-table-add-column-demo {
+  margin: 0;
+  font-size: 12px;
+  color: var(--lt-muted);
+}
+
+.data-table-add-column-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.data-table-add-column-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--lt-muted);
+}
+
+.data-table-add-column-field input,
+.data-table-add-column-field select {
+  min-width: 160px;
+  padding: 6px 8px;
+  border: 1px solid var(--lt-border);
+  border-radius: 6px;
+  background: var(--lt-surface);
+  color: var(--lt-text);
+}
+
+.data-table-add-column-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .data-table-toolbar {
   display: flex;
   flex-wrap: wrap;
