@@ -246,21 +246,7 @@ pub(crate) struct ViewQuery {
     pub params: Vec<rusqlite::types::Value>,
 }
 
-pub(crate) fn build_view_query(
-    table: &str,
-    visible: &[&ColumnMeta],
-    view: &ViewDef,
-    limit: usize,
-    offset: usize,
-) -> Result<ViewQuery> {
-    validate_identifier(table)?;
-
-    let select_list = visible
-        .iter()
-        .map(|column| column.name.as_str())
-        .collect::<Vec<_>>()
-        .join(", ");
-
+fn view_filter_clause(view: &ViewDef) -> Result<(String, Vec<rusqlite::types::Value>)> {
     let mut clauses = Vec::new();
     let mut params = Vec::new();
     for filter in &view.filter {
@@ -282,6 +268,25 @@ pub(crate) fn build_view_query(
     } else {
         format!(" WHERE {}", clauses.join(" AND "))
     };
+    Ok((where_sql, params))
+}
+
+pub(crate) fn build_view_query(
+    table: &str,
+    visible: &[&ColumnMeta],
+    view: &ViewDef,
+    limit: usize,
+    offset: usize,
+) -> Result<ViewQuery> {
+    validate_identifier(table)?;
+
+    let select_list = visible
+        .iter()
+        .map(|column| column.name.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let (where_sql, mut params) = view_filter_clause(view)?;
 
     let sort_field = view
         .sort
@@ -300,6 +305,14 @@ pub(crate) fn build_view_query(
     params.push(rusqlite::types::Value::Integer(limit as i64));
     params.push(rusqlite::types::Value::Integer(offset as i64));
 
+    Ok(ViewQuery { sql, params })
+}
+
+/// Count rows matching a view's filters (ignores sort/limit/offset).
+pub(crate) fn build_view_count_query(table: &str, view: &ViewDef) -> Result<ViewQuery> {
+    validate_identifier(table)?;
+    let (where_sql, params) = view_filter_clause(view)?;
+    let sql = format!("SELECT COUNT(*) FROM {table}{where_sql}");
     Ok(ViewQuery { sql, params })
 }
 

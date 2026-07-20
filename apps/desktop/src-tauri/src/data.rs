@@ -13,7 +13,7 @@ use crate::commands::{command_error_to_string, resolve_within_root};
 
 const ROW_LIMIT: usize = 500;
 
-/// Snapshot of a `.data` package for the grid viewer (default table, ≤500 rows).
+/// Snapshot of a `.data` package for the grid viewer (default window ≤500 rows).
 #[derive(Debug, Clone, Serialize)]
 pub struct DataAppSnapshot {
     pub title: String,
@@ -21,6 +21,14 @@ pub struct DataAppSnapshot {
     pub package_revision: String,
     pub columns: Vec<ColumnDto>,
     pub rows: Vec<Row>,
+    /// 0-based start of the `rows` window.
+    pub row_offset: usize,
+    /// Requested max rows for this window.
+    pub row_limit: usize,
+    /// Total matching rows after view filters (not just this window).
+    pub row_total: usize,
+    /// True when `row_offset + rows.len() < row_total`.
+    pub has_more: bool,
     pub available_views: Vec<String>,
     pub active_view: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -113,15 +121,24 @@ fn filter_dto(filter: &ViewFilter) -> FilterDto {
     }
 }
 
-fn snapshot_from_app(app: &DataApp, view_name: Option<&str>) -> Result<DataAppSnapshot, String> {
+fn snapshot_from_app(
+    app: &DataApp,
+    view_name: Option<&str>,
+    limit: usize,
+    offset: usize,
+) -> Result<DataAppSnapshot, String> {
     let table = app.default_table().to_string();
     let active_view = view_name
         .map(str::to_string)
         .unwrap_or_else(|| "All".to_string());
     let view = app.load_view(&active_view).map_err(|err| err.to_string())?;
-    let (column_meta, rows) = app
-        .list_rows_with_view(&table, &view, ROW_LIMIT, 0)
+    let row_total = app
+        .count_rows_with_view(&table, &view)
         .map_err(|err| err.to_string())?;
+    let (column_meta, rows) = app
+        .list_rows_with_view(&table, &view, limit, offset)
+        .map_err(|err| err.to_string())?;
+    let has_more = offset.saturating_add(rows.len()) < row_total;
     let columns: Vec<ColumnDto> = column_meta.iter().cloned().map(column_dto).collect();
     let package_revision = app.package_revision().map_err(|err| err.to_string())?;
     let available_views = app.list_views().map_err(|err| err.to_string())?;
@@ -148,6 +165,10 @@ fn snapshot_from_app(app: &DataApp, view_name: Option<&str>) -> Result<DataAppSn
         package_revision,
         columns,
         rows,
+        row_offset: offset,
+        row_limit: limit,
+        row_total,
+        has_more,
         available_views,
         active_view,
         sort_field: view.sort.as_ref().map(|sort| sort.field.clone()),
@@ -196,14 +217,24 @@ fn rel_path_buf(rel_path: &str) -> PathBuf {
 }
 
 /// Read a `.data` package's default table for the grid viewer.
+///
+/// Optional `limit` / `offset` window the returned `rows`. Omitting them
+/// preserves the historical default (limit 500, offset 0).
 #[tauri::command]
 pub fn open_data_app(
     root: String,
     rel_path: String,
     view_name: Option<String>,
+    limit: Option<usize>,
+    offset: Option<usize>,
 ) -> Result<DataAppSnapshot, String> {
     let app = open_app_at(&root, &rel_path)?;
-    snapshot_from_app(&app, view_name.as_deref())
+    snapshot_from_app(
+        &app,
+        view_name.as_deref(),
+        limit.unwrap_or(ROW_LIMIT),
+        offset.unwrap_or(0),
+    )
 }
 
 /// List saved view names for a `.data` package.
@@ -364,7 +395,7 @@ pub fn save_data_view(
         .map_err(command_error_to_string)?;
 
     let app = open_app_at(&root, &rel_path)?;
-    snapshot_from_app(&app, Some(&view_name))
+    snapshot_from_app(&app, Some(&view_name), ROW_LIMIT, 0)
 }
 
 /// Import a CSV file into a new `.data` package and return its snapshot.
@@ -427,7 +458,7 @@ pub fn import_csv_table(
     }
 
     let app = open_app_at(&root, &rel_path)?;
-    Ok((rel_path, snapshot_from_app(&app, None)?))
+    Ok((rel_path, snapshot_from_app(&app, None, ROW_LIMIT, 0)?))
 }
 
 fn package_rel_path(name: &str) -> String {
@@ -459,7 +490,7 @@ pub fn create_table_package(
         .map_err(command_error_to_string)?;
 
     let app = open_app_at(&root, &rel_path)?;
-    snapshot_from_app(&app, None)
+    snapshot_from_app(&app, None, ROW_LIMIT, 0)
 }
 
 /// Insert a row into the default table of a `.data` package.
@@ -610,13 +641,17 @@ mod tests {
         )
         .unwrap();
 
-        let snapshot = open_data_app(root, "CRM.data".to_string(), None).unwrap();
+        let snapshot = open_data_app(root, "CRM.data".to_string(), None, None, None).unwrap();
         assert_eq!(snapshot.title, "CRM");
         assert_eq!(snapshot.default_table, "contacts");
         assert!(snapshot.package_revision.starts_with("sha256:"));
         assert_eq!(snapshot.columns.len(), 1);
         assert_eq!(snapshot.columns[0].name, "id");
         assert!(snapshot.rows.is_empty());
+        assert_eq!(snapshot.row_offset, 0);
+        assert_eq!(snapshot.row_limit, ROW_LIMIT);
+        assert_eq!(snapshot.row_total, 0);
+        assert!(!snapshot.has_more);
     }
 
     #[test]
@@ -638,7 +673,7 @@ mod tests {
             .execute_batch("ALTER TABLE contacts ADD COLUMN name TEXT;")
             .unwrap();
 
-        let base = open_data_app(root.clone(), rel_path.clone(), None)
+        let base = open_data_app(root.clone(), rel_path.clone(), None, None, None)
             .unwrap()
             .package_revision;
         let inserted = insert_record(
@@ -651,8 +686,10 @@ mod tests {
         assert!(!inserted.id.is_empty());
         assert_ne!(inserted.revision, base);
 
-        let after_insert = open_data_app(root.clone(), rel_path.clone(), None).unwrap();
+        let after_insert = open_data_app(root.clone(), rel_path.clone(), None, None, None).unwrap();
         assert_eq!(after_insert.rows.len(), 1);
+        assert_eq!(after_insert.row_total, 1);
+        assert!(!after_insert.has_more);
         assert_eq!(
             after_insert.rows[0].values.get("name"),
             Some(&CellValue::Text("Ada".into()))
@@ -679,8 +716,10 @@ mod tests {
         .unwrap();
         assert!(delete_revision.starts_with("sha256:"));
 
-        let after_delete = open_data_app(root, rel_path, None).unwrap();
+        let after_delete = open_data_app(root, rel_path, None, None, None).unwrap();
         assert!(after_delete.rows.is_empty());
+        assert_eq!(after_delete.row_total, 0);
+        assert!(!after_delete.has_more);
     }
 
     #[test]
@@ -718,7 +757,7 @@ mod tests {
         )
         .unwrap();
 
-        let snapshot = open_data_app(root, rel_path, None).unwrap();
+        let snapshot = open_data_app(root, rel_path, None, None, None).unwrap();
         let companies = snapshot
             .relation_targets
             .get("companies")
@@ -886,8 +925,9 @@ mod tests {
         .unwrap();
         assert_eq!(form.layout_type, lattice_data::LAYOUT_FORM);
 
-        let reloaded_board = open_data_app(root.clone(), rel_path.clone(), Some("ByStatus".into()))
-            .unwrap();
+        let reloaded_board =
+            open_data_app(root.clone(), rel_path.clone(), Some("ByStatus".into()), None, None)
+                .unwrap();
         assert_eq!(reloaded_board.layout_type, LAYOUT_BOARD);
         assert_eq!(reloaded_board.group_by.as_deref(), Some("status"));
 
@@ -986,7 +1026,7 @@ mod tests {
         .unwrap();
         assert!(!inserted.id.is_empty());
 
-        let snapshot = open_data_app(root, rel_path, None).unwrap();
+        let snapshot = open_data_app(root, rel_path, None, None, None).unwrap();
         assert_eq!(snapshot.rows.len(), 1);
         assert_eq!(
             snapshot.rows[0].values.get("name"),
@@ -996,5 +1036,78 @@ mod tests {
             snapshot.rows[0].values.get("email"),
             Some(&CellValue::Text("ada@example.com".into()))
         );
+    }
+
+    #[test]
+    fn open_data_app_windows_rows_and_reports_total() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let rel_path = "CRM.data".to_string();
+
+        create_table_package(
+            root.clone(),
+            rel_path.clone(),
+            "CRM".to_string(),
+            "contacts".to_string(),
+        )
+        .unwrap();
+
+        rusqlite::Connection::open(dir.path().join("CRM.data/database.sqlite"))
+            .unwrap()
+            .execute_batch("ALTER TABLE contacts ADD COLUMN name TEXT;")
+            .unwrap();
+
+        for name in ["Ada", "Grace", "Alan", "Katherine", "Margaret"] {
+            insert_record(
+                root.clone(),
+                rel_path.clone(),
+                "contacts".to_string(),
+                BTreeMap::from([("name".into(), CellValue::Text(name.into()))]),
+            )
+            .unwrap();
+        }
+
+        let first = open_data_app(
+            root.clone(),
+            rel_path.clone(),
+            None,
+            Some(2),
+            Some(0),
+        )
+        .unwrap();
+        assert_eq!(first.row_offset, 0);
+        assert_eq!(first.row_limit, 2);
+        assert_eq!(first.row_total, 5);
+        assert!(first.has_more);
+        assert_eq!(first.rows.len(), 2);
+
+        let second = open_data_app(
+            root.clone(),
+            rel_path.clone(),
+            None,
+            Some(2),
+            Some(2),
+        )
+        .unwrap();
+        assert_eq!(second.row_offset, 2);
+        assert_eq!(second.row_limit, 2);
+        assert_eq!(second.row_total, 5);
+        assert!(second.has_more);
+        assert_eq!(second.rows.len(), 2);
+        assert_ne!(first.rows[0].id, second.rows[0].id);
+
+        let last = open_data_app(root.clone(), rel_path.clone(), None, Some(2), Some(4)).unwrap();
+        assert_eq!(last.row_offset, 4);
+        assert_eq!(last.row_limit, 2);
+        assert_eq!(last.row_total, 5);
+        assert!(!last.has_more);
+        assert_eq!(last.rows.len(), 1);
+
+        let default_window = open_data_app(root, rel_path, None, None, None).unwrap();
+        assert_eq!(default_window.row_offset, 0);
+        assert_eq!(default_window.row_limit, ROW_LIMIT);
+        assert_eq!(default_window.row_total, 5);
+        assert!(!default_window.has_more);
+        assert_eq!(default_window.rows.len(), 5);
     }
 }

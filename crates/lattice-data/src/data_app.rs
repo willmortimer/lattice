@@ -9,7 +9,9 @@ use crate::csv::{cell_from_csv, CsvTable};
 use crate::error::Error;
 use crate::form::{form_name_from_path, form_path, FormDef};
 use crate::types::{CellValue, ColumnMeta, FieldType, NewColumn, RelationStrip, Row};
-use crate::view::{build_view_query, row_from_view_sql, view_path, visible_columns, ViewDef};
+use crate::view::{
+    build_view_count_query, build_view_query, row_from_view_sql, view_path, visible_columns, ViewDef,
+};
 use crate::Result;
 
 /// A opened or newly created `.data` package backed by SQLite.
@@ -145,6 +147,18 @@ impl DataApp {
 
         rows.collect::<rusqlite::Result<Vec<Row>>>()
             .map_err(Error::from)
+    }
+
+    /// Total rows in a table (no view filters).
+    pub fn count_rows(&self, table: &str) -> Result<usize> {
+        validate_identifier(table)?;
+        ensure_table_exists(&self.conn, table)?;
+        let count: i64 = self
+            .conn
+            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                row.get(0)
+            })?;
+        Ok(count as usize)
     }
 
     pub fn get_row(&self, table: &str, id: &str) -> Result<Option<Row>> {
@@ -468,6 +482,22 @@ impl DataApp {
             .collect::<rusqlite::Result<Vec<Row>>>()
             .map_err(Error::from)?;
         Ok((visible_meta, collected))
+    }
+
+    /// Count rows matching a view's filters (same predicates as [`Self::list_rows_with_view`]).
+    pub fn count_rows_with_view(&self, table: &str, view: &ViewDef) -> Result<usize> {
+        validate_identifier(table)?;
+        ensure_table_exists(&self.conn, table)?;
+        // Validate view column references even though COUNT does not project them.
+        let all_columns = self.columns(table)?;
+        let _visible = visible_columns(&all_columns, view)?;
+        let query = build_view_count_query(table, view)?;
+        let count: i64 = self.conn.query_row(
+            &query.sql,
+            rusqlite::params_from_iter(query.params),
+            |row| row.get(0),
+        )?;
+        Ok(count as usize)
     }
 
     /// Add columns and update manifest/schema files. Existing column names are skipped.

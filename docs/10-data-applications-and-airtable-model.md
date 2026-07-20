@@ -156,6 +156,19 @@ the first text value or raw id.
   Rows deleted through `RecordDelete` are removed from the index when the backend
   strips inbound links.
 
+### Snapshot windowing (`limit` / `offset`)
+
+`open_data_app` accepts optional `limit` and `offset` (default **500** / **0**
+for callers that omit them). The returned `DataAppSnapshot` includes:
+
+- `row_offset` / `row_limit` — the window that was requested
+- `row_total` — matching row count after the active view's filters
+- `has_more` — true when `row_offset + rows.length < row_total`
+
+`rows` contains only that window. Relation target rows still use the default
+cap for picker labels. UI infinite-scroll / load-more consumes this contract;
+it does not change the SQLite storage model.
+
 ### Record detail
 
 Record detail is the editable surface for a single row:
