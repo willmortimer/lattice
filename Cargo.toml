@@ -80,6 +80,13 @@ ignore = "0.4"
 rusqlite = { version = "0.37", features = ["bundled"] }
 sha2 = "0.10"
 hex = "0.4"
+# Apache Arrow / Parquet (Apache-2.0) for analytical dataset facts under `facts/`.
+arrow = { version = "59.1", default-features = false, features = ["csv"] }
+parquet = { version = "59.1", default-features = false, features = [
+    "arrow",
+    "snap",
+    "zstd",
+] }
 ureq = { version = "2", default-features = false, features = ["tls"] }
 base64 = "0.22"
 trash = "5"
