@@ -53,5 +53,5 @@ pub use preferences::{
 };
 pub use voice_host::{
     resolve_voice_host_bin, VoiceController, VoiceProviderMode, ENV_VOICE_FAKE,
-    ENV_VOICE_HOST_BIN, ENV_VOICE_HOST_SOCKET,
+    ENV_VOICE_HOST_BIN, ENV_VOICE_HOST_SOCKET, ENV_VOICE_MODEL_CACHE,
 };

@@ -182,6 +182,7 @@ async fn voice_rpcs_proxy_through_daemon_with_fake_host() {
                         document_id: None,
                         glossary_terms: vec!["Lattice".into()],
                         command_mode: false,
+                        known_paths: vec!["Inbox/Sample capture".into()],
                     }),
                     endpoint: None,
                 }),
