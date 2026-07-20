@@ -131,7 +131,7 @@ flowchart TD
 | P2-08 | pending | grok | Lookup |
 | P2-09 | pending | grok | Rollup |
 | P2-10 | pending | grok | Canvas interfaces |
-| P2-11 | pending | composer | Buttons/actions |
+| P2-11 | merged | composer | Buttons/actions |
 | P2-12 | pending | composer | Excel/JSON import |
 | P2-13 | merged | composer | FormSave |
 | P2-14 | pending | composer | Docs wave 2 |
