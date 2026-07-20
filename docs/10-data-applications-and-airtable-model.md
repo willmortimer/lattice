@@ -56,13 +56,11 @@ Lattice should let a user evolve gradually:
 ```text
 Paste or import CSV
     ↓
-profile fields
+review inferred column types (desktop) or pass --type overrides (CLI)
     ↓
-open as simple table
+open as a typed SQLite data app (paginated grid)
     ↓
-convert to SQLite data app
-    ↓
-assign semantic types
+add columns from the column designer
     ↓
 extract repeated values into linked tables
     ↓
@@ -74,6 +72,51 @@ add workflows or custom apps
 ```
 
 Users should not need to design a normalized schema before starting.
+
+### Shipped in Wave 1 (Phase 2 tables)
+
+The following paths are implemented today; Lookup/Rollup, canvas
+interfaces, Excel/JSON import, DuckDB/Arrow analytics, and form designers
+remain later work (see [data-apps analytics DAG](dev/data-apps-analytics-dag.md)).
+
+**Schema via semantic commands.** Adding tables and columns flows through
+`TableAdd` and `ColumnsAdd` in the command engine (ADR 0007). Each command
+carries a package `base_revision` guard; undo restores prior `app.yaml` and
+SQLite schema. CSV import commit and the desktop column designer invoke these
+commands — they do not call `lattice-data` schema helpers directly.
+
+**Column designer.** The data-app toolbar exposes **Add column**: name, field
+type (`text`, `long_text`, `integer`, `decimal`, `boolean`, `date`, or
+`relation`), and optional `relation_table` when the type is `relation`. Submit
+calls `add_data_columns` → `ColumnsAdd` and refreshes the open snapshot. The
+browser demo shows the panel but does not persist schema changes.
+
+**Paginated open.** `open_data_app` accepts `limit` and `offset`; the desktop
+grid shows **Showing *n*–*m* of *total*** and **Load more** when
+`has_more` is true (see [Snapshot windowing](#snapshot-windowing-limit--offset)
+below). Default window size remains 500 rows for callers that omit params.
+
+**CSV type-review.** Desktop import (`preview_csv_import` → review dialog →
+`commit_csv_import`) infers types from the file, lets the user edit per-column
+types (relation excluded), then creates the package via `TableCreate`,
+`ColumnsAdd`, and `RecordInsert`. The CLI stays non-interactive: `lattice table
+import` infers types by default and accepts repeatable `--type col:integer`
+overrides.
+
+**CSV promote.** Opening a workspace `.csv` in the text viewer offers **Create
+table from CSV…**, which enters the same type-review commit path as workspace
+import. The source CSV file is not modified; Lattice creates a sibling `.data`
+package.
+
+**CLI schema alter.** After a package exists:
+
+```sh
+lattice table add-table PATH --table NAME
+lattice table add-column PATH --table NAME --name COL --type integer
+lattice table add-column PATH --table contacts --name company --type relation --relation-table companies
+```
+
+Both subcommands apply `TableAdd` / `ColumnsAdd` through the command engine.
 
 ## Typed fields
 
@@ -166,8 +209,9 @@ for callers that omit them). The returned `DataAppSnapshot` includes:
 - `has_more` — true when `row_offset + rows.length < row_total`
 
 `rows` contains only that window. Relation target rows still use the default
-cap for picker labels. UI infinite-scroll / load-more consumes this contract;
-it does not change the SQLite storage model.
+cap for picker labels. The desktop grid renders **Showing *n*–*m* of
+*total*** and a **Load more** control when `has_more` is true; it does not
+change the SQLite storage model.
 
 ### Record detail
 
