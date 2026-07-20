@@ -93,7 +93,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
         ],
         "extraTables": [],
         "views": [],
-        "forms": []
+        "forms": [],
+        "interfaces": []
       }
     ]
   },
@@ -264,7 +265,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
         ],
         "extraTables": [],
         "views": [],
-        "forms": []
+        "forms": [],
+        "interfaces": []
       }
     ]
   },
@@ -371,7 +373,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
         ],
         "extraTables": [],
         "views": [],
-        "forms": []
+        "forms": [],
+        "interfaces": []
       }
     ]
   },
@@ -483,7 +486,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
         ],
         "extraTables": [],
         "views": [],
-        "forms": []
+        "forms": [],
+        "interfaces": []
       }
     ]
   },
@@ -693,7 +697,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "columns": []
           }
         ],
-        "forms": []
+        "forms": [],
+        "interfaces": []
       }
     ]
   },
@@ -810,7 +815,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
         ],
         "extraTables": [],
         "views": [],
-        "forms": []
+        "forms": [],
+        "interfaces": []
       }
     ]
   },
@@ -1268,6 +1274,19 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "title": "Contact intake",
             "description": "Create a contact from the package form."
           }
+        ],
+        "interfaces": [
+          {
+            "name": "ContactOps",
+            "views": [
+              "Board"
+            ],
+            "forms": [
+              "ContactIntake"
+            ],
+            "title": "Contact operations",
+            "description": "Board view plus contact intake form for CRM canvas open."
+          }
         ]
       },
       {
@@ -1377,7 +1396,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "title": "Delivery intake",
             "description": "Add a delivery item without opening the grid."
           }
-        ]
+        ],
+        "interfaces": []
       },
       {
         "path": "Data/Metrics.data",
@@ -1469,7 +1489,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "columns": []
           }
         ],
-        "forms": []
+        "forms": [],
+        "interfaces": []
       },
       {
         "path": "OKRs.data",
@@ -1545,7 +1566,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "columns": []
           }
         ],
-        "forms": []
+        "forms": [],
+        "interfaces": []
       }
     ]
   },

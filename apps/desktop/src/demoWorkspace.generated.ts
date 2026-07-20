@@ -2,6 +2,7 @@
 import type { WorkspaceSnapshot } from "./types";
 import type { DataAppSnapshot } from "./data/types";
 import type { FormSummary } from "./data/forms";
+import type { InterfaceSummary } from "./data/interfaces";
 
 export const demoSnapshot: WorkspaceSnapshot = {
   "root": "/Users/you/Lattice/Workspaces/First Look",
@@ -209,7 +210,7 @@ export const demoCanvas = {
       "y": 60,
       "width": 300,
       "height": 160,
-      "text": "First Look canvas — double-click file nodes. Data apps open grids; CRM nodes can target saved Board/Gallery views via subpath."
+      "text": "First Look canvas — double-click file nodes. Data apps open grids; CRM nodes can target saved Board/Gallery views or the ContactOps interface via subpath."
     },
     {
       "id": "vision",
@@ -290,6 +291,25 @@ export const demoCanvas = {
       "file": "CRM.data",
       "subpath": "views/Gallery.yaml",
       "x": 1120,
+      "y": 100,
+      "width": 200,
+      "height": 100
+    },
+    {
+      "id": "crm-interface-label",
+      "type": "text",
+      "x": 1340,
+      "y": 60,
+      "width": 160,
+      "height": 40,
+      "text": "CRM ContactOps"
+    },
+    {
+      "id": "crm-interface",
+      "type": "file",
+      "file": "CRM.data",
+      "subpath": "interfaces/ContactOps",
+      "x": 1340,
       "y": 100,
       "width": 200,
       "height": 100
@@ -405,6 +425,11 @@ export const demoCanvas = {
       "id": "e7",
       "fromNode": "crm-board",
       "toNode": "crm-gallery"
+    },
+    {
+      "id": "e7b",
+      "fromNode": "crm-gallery",
+      "toNode": "crm-interface"
     },
     {
       "id": "e8",
@@ -4670,6 +4695,39 @@ export const demoPackageFormsByPath: Record<string, FormSummary[]> = {
       "description": "Add a delivery item without opening the grid."
     }
   ],
+  "Data/Metrics.data": [],
+  "OKRs.data": []
+};
+
+export const demoPackageInterfaces: InterfaceSummary[] = [
+  {
+    "name": "ContactOps",
+    "views": [
+      "Board"
+    ],
+    "forms": [
+      "ContactIntake"
+    ],
+    "title": "Contact operations",
+    "description": "Board view plus contact intake form for CRM canvas open."
+  }
+];
+
+export const demoPackageInterfacesByPath: Record<string, InterfaceSummary[]> = {
+  "CRM.data": [
+    {
+      "name": "ContactOps",
+      "views": [
+        "Board"
+      ],
+      "forms": [
+        "ContactIntake"
+      ],
+      "title": "Contact operations",
+      "description": "Board view plus contact intake form for CRM canvas open."
+    }
+  ],
+  "Projects/Delivery.data": [],
   "Data/Metrics.data": [],
   "OKRs.data": []
 };

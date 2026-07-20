@@ -8,6 +8,7 @@ use crate::app::{app_manifest_path, database_path, schema_path, write_default_vi
 use crate::csv::{cell_from_csv, CsvTable};
 use crate::error::Error;
 use crate::form::{form_name_from_path, form_path, FormDef};
+use crate::interface::{interface_name_from_path, interface_path, InterfaceDef};
 use crate::types::{
     CellValue, ColumnMeta, FieldType, NewColumn, RelationStrip, Row, SchemaFilesSnapshot,
 };
@@ -46,6 +47,13 @@ impl DataApp {
             .map_err(|source| Error::io(&schema_file, source))?;
 
         write_default_view(package_path, table_name)?;
+
+        // Empty package folders so progressive promotion can drop files without
+        // inventing directory layout on first write.
+        for folder in ["forms", "interfaces"] {
+            let dir = package_path.join(folder);
+            std::fs::create_dir_all(&dir).map_err(|source| Error::io(&dir, source))?;
+        }
 
         let readme_path = package_path.join("README.md");
         let readme = format!("# {title}\n");
@@ -435,6 +443,41 @@ impl DataApp {
         form.to_yaml()
     }
 
+    /// List saved interface names from `interfaces/*.interface.yaml`.
+    pub fn list_interfaces(&self) -> Result<Vec<String>> {
+        let interfaces_dir = self.path.join("interfaces");
+        if !interfaces_dir.is_dir() {
+            return Ok(Vec::new());
+        }
+
+        let mut names = Vec::new();
+        for entry in std::fs::read_dir(&interfaces_dir)
+            .map_err(|source| Error::io(&interfaces_dir, source))?
+        {
+            let entry = entry.map_err(|source| Error::io(&interfaces_dir, source))?;
+            let path = entry.path();
+            if let Some(name) = interface_name_from_path(&path) {
+                names.push(name);
+            }
+        }
+        names.sort();
+        Ok(names)
+    }
+
+    /// Load `interfaces/{name}.interface.yaml` and validate bound views/forms exist.
+    pub fn load_interface(&self, name: &str) -> Result<InterfaceDef> {
+        validate_identifier(name)?;
+        let path = interface_path(&self.path, name);
+        let interface = InterfaceDef::load(&path)?;
+        self.validate_interface_bindings(&interface)?;
+        Ok(interface)
+    }
+
+    /// Serialize an interface definition to YAML.
+    pub fn render_interface_yaml(&self, interface: &InterfaceDef) -> Result<String> {
+        interface.to_yaml()
+    }
+
     fn validate_form_fields(&self, form: &FormDef) -> Result<()> {
         ensure_table_exists(&self.conn, &form.table)?;
         let columns = self.columns(&form.table)?;
@@ -446,6 +489,32 @@ impl DataApp {
                     form.table.clone(),
                     format!("form references unknown column {field:?}"),
                 ));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_interface_bindings(&self, interface: &InterfaceDef) -> Result<()> {
+        let views = self.list_views()?;
+        let view_names: std::collections::BTreeSet<_> =
+            views.iter().map(String::as_str).collect();
+        for view in &interface.views {
+            if !view_names.contains(view.as_str()) {
+                return Err(Error::InvalidPackage {
+                    path: interface_path(&self.path, &interface.name),
+                    message: format!("interface references unknown view {view:?}"),
+                });
+            }
+        }
+        let forms = self.list_forms()?;
+        let form_names: std::collections::BTreeSet<_> =
+            forms.iter().map(String::as_str).collect();
+        for form in &interface.forms {
+            if !form_names.contains(form.as_str()) {
+                return Err(Error::InvalidPackage {
+                    path: interface_path(&self.path, &interface.name),
+                    message: format!("interface references unknown form {form:?}"),
+                });
             }
         }
         Ok(())

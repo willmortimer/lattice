@@ -306,6 +306,15 @@
           "title": "Contact intake",
           "description": "Create a contact from the package form."
         }
+      ],
+      "interfaces": [
+        {
+          "name": "ContactOps",
+          "views": ["Board"],
+          "forms": ["ContactIntake"],
+          "title": "Contact operations",
+          "description": "Board view plus contact intake form for CRM canvas open."
+        }
       ]
     },
     {

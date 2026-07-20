@@ -15,7 +15,12 @@ import type { DataAppSnapshot } from "../data/types";
 import type { OpenResourceSession } from "../resourceSession";
 import type { Resource, WorkspaceSnapshot } from "../types";
 import { inBrowser } from "../demo";
-import { viewNameFromCanvasSubpath } from "../canvas/dataViewSubpath";
+import {
+  interfaceNameFromCanvasSubpath,
+  viewNameFromCanvasSubpath,
+  viewNameFromInterfaceBindings,
+} from "../canvas/dataViewSubpath";
+import { loadPackageInterface } from "../data/interfaces";
 
 function dirnameOf(path: string): string {
   const slash = path.lastIndexOf("/");
@@ -319,9 +324,31 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
   const handleOpenFile = useCallback((path: string, subpath?: string) => {
     const resource = snapshot?.resources.find((entry) => entry.path === path);
     if (!resource) return;
-    const viewName = viewNameFromCanvasSubpath(subpath) ?? undefined;
-    void handleSelect(resource, viewName ? { viewName } : undefined);
-  }, [handleSelect, snapshot]);
+    const viewName = viewNameFromCanvasSubpath(subpath);
+    if (viewName) {
+      void handleSelect(resource, { viewName });
+      return;
+    }
+    const interfaceName = interfaceNameFromCanvasSubpath(subpath);
+    if (interfaceName && snapshot) {
+      void (async () => {
+        try {
+          const iface = await loadPackageInterface({
+            root: snapshot.root,
+            relPath: path,
+            name: interfaceName,
+            demo: inBrowser,
+          });
+          const openView = viewNameFromInterfaceBindings(iface);
+          void handleSelect(resource, openView ? { viewName: openView } : undefined);
+        } catch (error) {
+          setError(String(error));
+        }
+      })();
+      return;
+    }
+    void handleSelect(resource);
+  }, [handleSelect, setError, snapshot]);
 
   const updateWorkspaceSettings = useCallback((next: { capabilities: string[]; quickNoteDirectory: string }) => {
     const current = snapshotRef.current;

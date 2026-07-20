@@ -204,11 +204,21 @@ For `.data` package nodes, `viewNameFromCanvasSubpath` maps:
 - `views/{name}.yaml` or `views/{name}.view.yaml` — saved view file.
 
 to a `viewName` passed into `open_data_app` so the data-app chrome opens on
-that saved view (Board, Gallery, and so on). Unrecognized subpaths open the
-package default view.
+that saved view (Board, Gallery, and so on).
+
+`interfaceNameFromCanvasSubpath` maps the same `subpath` field (not a separate
+canvas property) for package interfaces:
+
+- `interfaces/{name}` — bare interface stem.
+- `interfaces/{name}.interface.yaml` — interface file.
+
+Opening an interface loads `interfaces/{name}.interface.yaml`, then opens the
+package on the interface's primary bound view (first entry in `views`).
+Unrecognized subpaths open the package default view.
 
 First Look fixture: `Canvases/Product Strategy.canvas` CRM nodes use
-`subpath: views/Board` and `subpath: views/Gallery.yaml` on `CRM.data`.
+`subpath: views/Board`, `subpath: views/Gallery.yaml`, and
+`subpath: interfaces/ContactOps` on `CRM.data`.
 
 This is navigation via JSON Canvas `subpath`, distinct from in-table
 `layout.type: form` and from future `lattice-canvas-profile` sidecars that
