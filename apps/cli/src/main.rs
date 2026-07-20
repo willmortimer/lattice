@@ -5,7 +5,7 @@ use std::time::SystemTime;
 
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
-use lattice_commands::{Command as Semantic, CommandEngine, Transaction};
+use lattice_commands::{ColumnSpec, Command as Semantic, CommandEngine, Transaction};
 use lattice_core::{
     ensure_lattice_home, init_with_template, initialize_active_lattice_home, resolve_template_id,
     template_catalog, template_descriptor, Diagnostic, Resource, Severity, TemplateDescriptor,
@@ -825,8 +825,22 @@ fn cmd_table_import(
         }],
     ))?;
 
-    let mut app = DataApp::open(&ws.root().join(&rel))?;
-    app.add_columns_from_csv(&table, &parsed)?;
+    let base_revision = DataApp::open(&ws.root().join(&rel))?.package_revision()?;
+    let columns = parsed
+        .headers
+        .iter()
+        .zip(&parsed.field_types)
+        .map(|(header, field_type)| ColumnSpec::new(header.clone(), *field_type))
+        .collect();
+    engine.apply(Transaction::new(
+        format!("Add CSV columns to {}.{}", rel.display(), table),
+        vec![Semantic::ColumnsAdd {
+            path: rel.clone(),
+            table: table.clone(),
+            columns,
+            base_revision,
+        }],
+    ))?;
 
     for row in &parsed.rows {
         let mut values = std::collections::BTreeMap::new();

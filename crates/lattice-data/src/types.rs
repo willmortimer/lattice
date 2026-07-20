@@ -178,6 +178,20 @@ pub struct DeletedRowSnapshot {
     pub relation_strips: Vec<RelationStrip>,
 }
 
+/// Prior `schema.sql` + `app.yaml` bytes for undoing schema mutations
+/// (`ColumnsAdd` / `TableAdd`) through the command engine.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SchemaFilesSnapshot {
+    pub schema_sql: String,
+    pub app_yaml: String,
+    /// Columns actually added by [`Command::ColumnsAdd`] (for undo guards).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub added_columns: Vec<String>,
+    /// Table actually added by [`Command::TableAdd`] (for undo guards).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub added_table: Option<String>,
+}
+
 /// Spec for adding a column via [`crate::DataApp::add_columns`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NewColumn<'a> {

@@ -2,15 +2,15 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use lattice_core::Workspace;
-use lattice_data::{DataApp, DeletedRowSnapshot, Row};
+use lattice_data::{DataApp, DeletedRowSnapshot, NewColumn, Row, SchemaFilesSnapshot};
 use lattice_storage::{
     BufferedWriter, NativeWorkspaceStore, RecoveryJournal, ResourceMetadata, WorkspaceStore,
 };
 
 use crate::canvas::{self, CanvasEdit};
 use crate::command::{
-    file_name, path_remaps_from_commands, view_file_path, Command, CommandOutcome, HistoryEntry,
-    Transaction, TransactionReceipt, UndoReport,
+    file_name, path_remaps_from_commands, view_file_path, ColumnSpec, Command, CommandOutcome,
+    HistoryEntry, Transaction, TransactionReceipt, UndoReport,
 };
 use crate::history::{unix_now, unix_to_system, HistoryStore};
 use crate::revisions::{
@@ -683,6 +683,61 @@ impl CommandEngine {
                 None => Ok(()),
                 Some(_) => Err(Error::AlreadyExists { path: path.clone() }),
             },
+            Command::TableAdd {
+                path,
+                table_name,
+                base_revision,
+            } => {
+                self.ensure_package_revision(path, base_revision)?;
+                let app = self.open_data_app(path)?;
+                if app.list_tables()?.iter().any(|name| name == table_name) {
+                    return Err(Error::AlreadyExists { path: path.clone() });
+                }
+                Ok(())
+            }
+            Command::ColumnsAdd {
+                path,
+                table,
+                columns,
+                base_revision,
+            } => {
+                self.ensure_package_revision(path, base_revision)?;
+                let app = self.open_data_app(path)?;
+                if !app.list_tables()?.iter().any(|name| name == table) {
+                    return Err(Error::NotFound { path: path.clone() });
+                }
+                for column in columns {
+                    if column.field_type == lattice_data::FieldType::Relation {
+                        let Some(target) = column.relation_table.as_deref() else {
+                            return Err(Error::InvalidResourceTarget {
+                                path: path.clone(),
+                                reason: format!(
+                                    "relation column {:?} requires relation-table",
+                                    column.name
+                                ),
+                            });
+                        };
+                        if !app.list_tables()?.iter().any(|name| name == target) {
+                            return Err(Error::NotFound { path: path.clone() });
+                        }
+                    } else if column.relation_table.is_some() {
+                        return Err(Error::InvalidResourceTarget {
+                            path: path.clone(),
+                            reason: format!(
+                                "column {:?} only relation fields may set relation-table",
+                                column.name
+                            ),
+                        });
+                    }
+                }
+                Ok(())
+            }
+            Command::TableDrop { path, .. } | Command::ColumnsRemove { path, .. } => {
+                Err(Error::InvalidResourceTarget {
+                    path: path.clone(),
+                    reason: "schema drop/remove commands are undo inverses only".into(),
+                })
+            }
             Command::RecordInsert { path, .. } => {
                 if self.metadata_opt(path)?.is_none() {
                     return Err(Error::NotFound { path: path.clone() });
@@ -1141,6 +1196,68 @@ impl CommandEngine {
                     resulting_revision: Some(revision),
                 })
             }
+            Command::TableAdd {
+                path,
+                table_name,
+                base_revision,
+            } => {
+                self.ensure_package_revision(path, base_revision)?;
+                let mut app = self.open_data_app(path)?;
+                let mut prior = app.schema_files_snapshot()?;
+                prior.added_table = Some(table_name.clone());
+                app.add_table(table_name)?;
+                let revision = app.package_revision()?;
+                Ok(AppliedOp {
+                    forward: command.clone(),
+                    inverse: Command::TableDrop {
+                        path: path.clone(),
+                        table_name: table_name.clone(),
+                        base_revision: revision.clone(),
+                    },
+                    prior_content: Some(serde_json::to_vec(&prior)?),
+                    after_content: None,
+                    resulting_revision: Some(revision),
+                })
+            }
+            Command::ColumnsAdd {
+                path,
+                table,
+                columns,
+                base_revision,
+            } => {
+                self.ensure_package_revision(path, base_revision)?;
+                let mut app = self.open_data_app(path)?;
+                let mut prior = app.schema_files_snapshot()?;
+                let existing: std::collections::BTreeSet<String> = app
+                    .columns(table)?
+                    .into_iter()
+                    .map(|column| column.name)
+                    .collect();
+                let added: Vec<String> = columns
+                    .iter()
+                    .filter(|column| !existing.contains(&column.name))
+                    .map(|column| column.name.clone())
+                    .collect();
+                prior.added_columns = added.clone();
+                let new_columns = column_specs_as_new_columns(columns);
+                app.add_columns(table, &new_columns)?;
+                let revision = app.package_revision()?;
+                Ok(AppliedOp {
+                    forward: command.clone(),
+                    inverse: Command::ColumnsRemove {
+                        path: path.clone(),
+                        table: table.clone(),
+                        columns: added,
+                        base_revision: revision.clone(),
+                    },
+                    prior_content: Some(serde_json::to_vec(&prior)?),
+                    after_content: None,
+                    resulting_revision: Some(revision),
+                })
+            }
+            Command::TableDrop { .. } | Command::ColumnsRemove { .. } => {
+                unreachable!("schema drop/remove commands are undo inverses only")
+            }
             Command::RecordInsert {
                 path,
                 table,
@@ -1513,6 +1630,38 @@ impl CommandEngine {
                 DataApp::create(&abs, title, table_name)?;
                 Ok(())
             }
+            Command::TableAdd { .. } | Command::ColumnsAdd { .. } => {
+                unreachable!("table/columns add commands are never stored as inverse operations")
+            }
+            Command::TableDrop {
+                path,
+                table_name,
+                base_revision: _,
+            } => {
+                let mut app = self.open_data_app(path)?;
+                app.drop_table_sqlite(table_name)?;
+                if let Some(bytes) = prior_content {
+                    let snapshot: SchemaFilesSnapshot = serde_json::from_slice(bytes)?;
+                    app.restore_schema_files(&snapshot)?;
+                }
+                Ok(())
+            }
+            Command::ColumnsRemove {
+                path,
+                table,
+                columns,
+                base_revision: _,
+            } => {
+                let mut app = self.open_data_app(path)?;
+                if !columns.is_empty() {
+                    app.drop_columns_sqlite(table, columns)?;
+                }
+                if let Some(bytes) = prior_content {
+                    let snapshot: SchemaFilesSnapshot = serde_json::from_slice(bytes)?;
+                    app.restore_schema_files(&snapshot)?;
+                }
+                Ok(())
+            }
             Command::RecordInsert {
                 path,
                 table,
@@ -1675,6 +1824,79 @@ impl CommandEngine {
                         found: "(absent)".into(),
                     })
                 }
+            }
+            Command::TableAdd { path, .. } => {
+                let Some(bytes) = prior_content else {
+                    return Err(Error::RevisionGuard {
+                        op: "undo",
+                        path: path.clone(),
+                        expected: "(schema snapshot)".into(),
+                        found: "(missing prior content)".into(),
+                    });
+                };
+                let snapshot: SchemaFilesSnapshot = serde_json::from_slice(bytes)?;
+                let Some(table_name) = snapshot.added_table.as_deref() else {
+                    return Err(Error::RevisionGuard {
+                        op: "undo",
+                        path: path.clone(),
+                        expected: "(added table name)".into(),
+                        found: "(missing)".into(),
+                    });
+                };
+                let app = self.open_data_app(path)?;
+                if app.list_tables()?.iter().any(|name| name == table_name) {
+                    Ok(())
+                } else {
+                    Err(Error::RevisionGuard {
+                        op: "undo",
+                        path: path.clone(),
+                        expected: format!("table {table_name:?} present"),
+                        found: "(absent)".into(),
+                    })
+                }
+            }
+            Command::ColumnsAdd { path, table, .. } => {
+                // Prefer semantic presence of added columns over the SQLite
+                // file hash: DROP COLUMN does not restore byte-identical DB
+                // pages, so a package-revision guard would refuse legitimate
+                // undo after a later schema change was itself undone.
+                let Some(bytes) = prior_content else {
+                    return Err(Error::RevisionGuard {
+                        op: "undo",
+                        path: path.clone(),
+                        expected: "(schema snapshot)".into(),
+                        found: "(missing prior content)".into(),
+                    });
+                };
+                let snapshot: SchemaFilesSnapshot = serde_json::from_slice(bytes)?;
+                if snapshot.added_columns.is_empty() {
+                    return Ok(());
+                }
+                let app = self.open_data_app(path)?;
+                let existing: std::collections::BTreeSet<String> = app
+                    .columns(table)?
+                    .into_iter()
+                    .map(|column| column.name)
+                    .collect();
+                let missing: Vec<&str> = snapshot
+                    .added_columns
+                    .iter()
+                    .map(String::as_str)
+                    .filter(|name| !existing.contains(*name))
+                    .collect();
+                if missing.is_empty() {
+                    Ok(())
+                } else {
+                    Err(Error::RevisionGuard {
+                        op: "undo",
+                        path: path.clone(),
+                        expected: format!("added columns {:?} present", snapshot.added_columns),
+                        found: format!("missing {missing:?}"),
+                    })
+                }
+            }
+            Command::TableDrop { .. } | Command::ColumnsRemove { .. } => {
+                unreachable!("schema drop/remove commands are never stored as forward operations")
             }
             Command::RecordInsert {
                 path,
@@ -1957,5 +2179,16 @@ fn row_values_without_id(row: &Row) -> std::collections::BTreeMap<String, lattic
         .iter()
         .filter(|(key, _)| key.as_str() != "id")
         .map(|(key, value)| (key.clone(), value.clone()))
+        .collect()
+}
+
+fn column_specs_as_new_columns(columns: &[ColumnSpec]) -> Vec<NewColumn<'_>> {
+    columns
+        .iter()
+        .map(|column| NewColumn {
+            name: column.name.as_str(),
+            field_type: column.field_type,
+            relation_table: column.relation_table.as_deref(),
+        })
         .collect()
 }
