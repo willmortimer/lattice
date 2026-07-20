@@ -24,3 +24,6 @@ See Cursor plan `data_support_polish` for full handoff packets. Waves:
   `boolean`, `date`, `relation`, `lookup`, `rollup`); formula and attachment
   **columns** are Phase 2+ roadmap; workspace `attachmentsDirectory` clarified
   as unrelated.
+- **P2P07** (First Look checklist re-run): done — [first-look-demo.md](first-look-demo.md)
+  refreshed at `5d652ab` (2026-07-20): browser honesty rows pass, CRM seed
+  lookup/rollup pass, native smoke cited for Save view / Actions / FormSave.
