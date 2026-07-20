@@ -890,6 +890,44 @@ pub fn delete_record(
         .ok_or_else(|| "record delete did not produce a resulting revision".to_string())
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActionSummary {
+    pub name: String,
+    pub label: String,
+    pub table: String,
+    pub scope: String,
+    pub action: lattice_data::ActionKind,
+}
+
+/// List saved action names for a `.data` package (`actions/*.action.yaml`).
+#[tauri::command]
+pub fn list_data_actions(root: String, rel_path: String) -> Result<Vec<String>, String> {
+    let app = open_app_at(&root, &rel_path)?;
+    app.list_actions().map_err(|err| err.to_string())
+}
+
+/// Load one saved action definition, validating targets against the package.
+#[tauri::command]
+pub fn load_data_action(
+    root: String,
+    rel_path: String,
+    name: String,
+) -> Result<ActionSummary, String> {
+    let app = open_app_at(&root, &rel_path)?;
+    let action = app.load_action(&name).map_err(|err| err.to_string())?;
+    Ok(ActionSummary {
+        name: action.name,
+        label: action.label,
+        table: action.table,
+        scope: match action.scope {
+            lattice_data::ActionScope::Toolbar => "toolbar".to_string(),
+            lattice_data::ActionScope::Row => "row".to_string(),
+        },
+        action: action.action,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

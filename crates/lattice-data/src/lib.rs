@@ -3,6 +3,7 @@
 //! A data application is a directory ending in `.data/` with `app.yaml`,
 //! `schema.sql`, `database.sqlite`, and optional view/form definitions.
 
+mod action;
 mod app;
 mod csv;
 mod data_app;
@@ -14,7 +15,10 @@ mod view;
 #[cfg(test)]
 mod tests;
 
-pub use app::{AppManifest, DATA_APP_FORMAT, DEFAULT_VIEW_NAME};
+pub use action::{
+    validate_action_url, write_package_action, ActionDef, ActionKind, ActionScope,
+    ACTION_FILE_SUFFIX, ACTION_FORMAT, ACTION_VERSION,
+};
 pub use csv::{
     cell_from_csv, infer_field_type, parse_csv_file, parse_field_type_name, resolve_field_types,
     sanitize_column_name, CsvTable,
