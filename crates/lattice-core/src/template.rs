@@ -699,6 +699,14 @@ fn seed_column_to_new_column<'a>(
             ),
         });
     }
+    if field_type == FieldType::Rollup {
+        return Err(Error::TemplateValidation {
+            message: format!(
+                "data package {}: rollup columns are not supported in template seeds yet ({:?})",
+                package_path, column.name
+            ),
+        });
+    }
     Ok(NewColumn::new(column.name, field_type))
 }
 
@@ -1086,6 +1094,11 @@ fn cell_from_json(
                         "data package {package_path}: lookup columns are read-only and cannot be seeded"
                     ),
                 }),
+                FieldType::Rollup => Err(Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path}: rollup columns are read-only and cannot be seeded"
+                    ),
+                }),
             }
         }
         serde_json::Value::String(text) => {
@@ -1118,6 +1131,11 @@ fn cell_from_json(
                 FieldType::Lookup => Err(Error::TemplateValidation {
                     message: format!(
                         "data package {package_path}: lookup columns are read-only and cannot be seeded"
+                    ),
+                }),
+                FieldType::Rollup => Err(Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path}: rollup columns are read-only and cannot be seeded"
                     ),
                 }),
             }
@@ -1161,6 +1179,7 @@ fn parse_field_type(value: &str) -> Option<FieldType> {
         "date" => Some(FieldType::Date),
         "relation" => Some(FieldType::Relation),
         "lookup" => Some(FieldType::Lookup),
+        "rollup" => Some(FieldType::Rollup),
         _ => None,
     }
 }

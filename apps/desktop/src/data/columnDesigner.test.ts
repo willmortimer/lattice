@@ -65,4 +65,41 @@ describe("buildAddColumnPayload", () => {
       lookup_field: "name",
     });
   });
+
+  it("includes rollup metadata for rollup fields", () => {
+    expect(
+      buildAddColumnPayload(
+        "item_count",
+        "rollup",
+        undefined,
+        undefined,
+        undefined,
+        "items",
+        "count",
+      ),
+    ).toEqual({
+      name: "item_count",
+      field_type: "rollup",
+      rollup_relation: "items",
+      rollup_aggregate: "count",
+    });
+    expect(
+      buildAddColumnPayload(
+        "total_amount",
+        "rollup",
+        undefined,
+        undefined,
+        undefined,
+        "items",
+        "sum",
+        "amount",
+      ),
+    ).toEqual({
+      name: "total_amount",
+      field_type: "rollup",
+      rollup_relation: "items",
+      rollup_aggregate: "sum",
+      rollup_field: "amount",
+    });
+  });
 });

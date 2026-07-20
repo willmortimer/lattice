@@ -707,6 +707,11 @@ impl CommandEngine {
                     return Err(Error::NotFound { path: path.clone() });
                 }
                 for column in columns {
+                    let has_lookup_meta =
+                        column.lookup_relation.is_some() || column.lookup_field.is_some();
+                    let has_rollup_meta = column.rollup_relation.is_some()
+                        || column.rollup_aggregate.is_some()
+                        || column.rollup_field.is_some();
                     if column.field_type == lattice_data::FieldType::Relation {
                         let Some(target) = column.relation_table.as_deref() else {
                             return Err(Error::InvalidResourceTarget {
@@ -720,11 +725,20 @@ impl CommandEngine {
                         if !app.list_tables()?.iter().any(|name| name == target) {
                             return Err(Error::NotFound { path: path.clone() });
                         }
-                        if column.lookup_relation.is_some() || column.lookup_field.is_some() {
+                        if has_lookup_meta {
                             return Err(Error::InvalidResourceTarget {
                                 path: path.clone(),
                                 reason: format!(
                                     "column {:?} only lookup fields may set lookup-relation / lookup-field",
+                                    column.name
+                                ),
+                            });
+                        }
+                        if has_rollup_meta {
+                            return Err(Error::InvalidResourceTarget {
+                                path: path.clone(),
+                                reason: format!(
+                                    "column {:?} only rollup fields may set rollup-relation / rollup-aggregate / rollup-field",
                                     column.name
                                 ),
                             });
@@ -748,6 +762,43 @@ impl CommandEngine {
                                 ),
                             });
                         }
+                        if has_rollup_meta {
+                            return Err(Error::InvalidResourceTarget {
+                                path: path.clone(),
+                                reason: format!(
+                                    "column {:?} only rollup fields may set rollup-relation / rollup-aggregate / rollup-field",
+                                    column.name
+                                ),
+                            });
+                        }
+                    } else if column.field_type == lattice_data::FieldType::Rollup {
+                        if column.relation_table.is_some() {
+                            return Err(Error::InvalidResourceTarget {
+                                path: path.clone(),
+                                reason: format!(
+                                    "column {:?} only relation fields may set relation-table",
+                                    column.name
+                                ),
+                            });
+                        }
+                        if has_lookup_meta {
+                            return Err(Error::InvalidResourceTarget {
+                                path: path.clone(),
+                                reason: format!(
+                                    "column {:?} only lookup fields may set lookup-relation / lookup-field",
+                                    column.name
+                                ),
+                            });
+                        }
+                        if column.rollup_relation.is_none() || column.rollup_aggregate.is_none() {
+                            return Err(Error::InvalidResourceTarget {
+                                path: path.clone(),
+                                reason: format!(
+                                    "rollup column {:?} requires rollup-relation and rollup-aggregate",
+                                    column.name
+                                ),
+                            });
+                        }
                     } else if column.relation_table.is_some() {
                         return Err(Error::InvalidResourceTarget {
                             path: path.clone(),
@@ -756,11 +807,19 @@ impl CommandEngine {
                                 column.name
                             ),
                         });
-                    } else if column.lookup_relation.is_some() || column.lookup_field.is_some() {
+                    } else if has_lookup_meta {
                         return Err(Error::InvalidResourceTarget {
                             path: path.clone(),
                             reason: format!(
                                 "column {:?} only lookup fields may set lookup-relation / lookup-field",
+                                column.name
+                            ),
+                        });
+                    } else if has_rollup_meta {
+                        return Err(Error::InvalidResourceTarget {
+                            path: path.clone(),
+                            reason: format!(
+                                "column {:?} only rollup fields may set rollup-relation / rollup-aggregate / rollup-field",
                                 column.name
                             ),
                         });
@@ -2294,6 +2353,9 @@ fn column_specs_as_new_columns(columns: &[ColumnSpec]) -> Vec<NewColumn<'_>> {
             relation_table: column.relation_table.as_deref(),
             lookup_relation: column.lookup_relation.as_deref(),
             lookup_field: column.lookup_field.as_deref(),
+            rollup_relation: column.rollup_relation.as_deref(),
+            rollup_aggregate: column.rollup_aggregate,
+            rollup_field: column.rollup_field.as_deref(),
         })
         .collect()
 }

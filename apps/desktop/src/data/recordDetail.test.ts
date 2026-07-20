@@ -43,8 +43,10 @@ describe("recordDetail helpers", () => {
     expect(fieldEditorKind("integer")).toBe("number");
     expect(fieldEditorKind("boolean")).toBe("boolean");
     expect(fieldEditorKind("lookup")).toBe("lookup");
+    expect(fieldEditorKind("rollup")).toBe("rollup");
     expect(fieldTypeLabel("decimal")).toBe("Decimal");
     expect(fieldTypeLabel("lookup")).toBe("Lookup");
+    expect(fieldTypeLabel("rollup")).toBe("Rollup");
   });
 
   it("builds draft strings from row values", () => {

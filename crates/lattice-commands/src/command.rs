@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
-use lattice_data::{CellValue, FieldType};
+use lattice_data::{CellValue, FieldType, RollupAggregate};
 use serde::{Deserialize, Serialize};
 
 /// Owned column specification for [`Command::ColumnsAdd`].
@@ -29,6 +29,24 @@ pub struct ColumnSpec {
         skip_serializing_if = "Option::is_none"
     )]
     pub lookup_field: Option<String>,
+    #[serde(
+        rename = "rollup-relation",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub rollup_relation: Option<String>,
+    #[serde(
+        rename = "rollup-aggregate",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub rollup_aggregate: Option<RollupAggregate>,
+    #[serde(
+        rename = "rollup-field",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub rollup_field: Option<String>,
 }
 
 impl ColumnSpec {
@@ -39,6 +57,9 @@ impl ColumnSpec {
             relation_table: None,
             lookup_relation: None,
             lookup_field: None,
+            rollup_relation: None,
+            rollup_aggregate: None,
+            rollup_field: None,
         }
     }
 
@@ -49,6 +70,9 @@ impl ColumnSpec {
             relation_table: Some(relation_table.into()),
             lookup_relation: None,
             lookup_field: None,
+            rollup_relation: None,
+            rollup_aggregate: None,
+            rollup_field: None,
         }
     }
 
@@ -63,6 +87,27 @@ impl ColumnSpec {
             relation_table: None,
             lookup_relation: Some(lookup_relation.into()),
             lookup_field: Some(lookup_field.into()),
+            rollup_relation: None,
+            rollup_aggregate: None,
+            rollup_field: None,
+        }
+    }
+
+    pub fn rollup(
+        name: impl Into<String>,
+        rollup_relation: impl Into<String>,
+        aggregate: RollupAggregate,
+        rollup_field: Option<impl Into<String>>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            field_type: FieldType::Rollup,
+            relation_table: None,
+            lookup_relation: None,
+            lookup_field: None,
+            rollup_relation: Some(rollup_relation.into()),
+            rollup_aggregate: Some(aggregate),
+            rollup_field: rollup_field.map(Into::into),
         }
     }
 }

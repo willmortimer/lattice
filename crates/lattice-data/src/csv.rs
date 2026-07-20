@@ -53,9 +53,10 @@ pub fn parse_field_type_name(value: &str) -> Result<FieldType> {
         "date" => Ok(FieldType::Date),
         "relation" => Ok(FieldType::Relation),
         "lookup" => Ok(FieldType::Lookup),
+        "rollup" => Ok(FieldType::Rollup),
         other => Err(Error::table(
             "csv",
-            format!("unsupported field type {other:?}; expected text, long_text, integer, decimal, boolean, date, relation, or lookup"),
+            format!("unsupported field type {other:?}; expected text, long_text, integer, decimal, boolean, date, relation, lookup, or rollup"),
         )),
     }
 }
@@ -110,6 +111,10 @@ pub fn cell_from_csv(text: &str, field_type: FieldType) -> Result<CellValue> {
         FieldType::Lookup => Err(Error::table(
             "csv",
             "lookup columns are read-only and cannot be imported from CSV",
+        )),
+        FieldType::Rollup => Err(Error::table(
+            "csv",
+            "rollup columns are read-only and cannot be imported from CSV",
         )),
     }
 }

@@ -29,4 +29,10 @@ describe("cellValueToDisplay", () => {
     expect(cellValueToDisplay({ Lookup: { values: ["Acme", "Beta"] } })).toBe("Acme, Beta");
     expect(cellValueToDisplay({ Lookup: { values: [] } })).toBe("");
   });
+
+  it("formats rollup display values", () => {
+    expect(cellValueToDisplay({ Rollup: { value: 2 } })).toBe("2");
+    expect(cellValueToDisplay({ Rollup: { value: 15.5 } })).toBe("15.5");
+    expect(cellValueToDisplay({ Rollup: { value: null } })).toBe("");
+  });
 });

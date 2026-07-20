@@ -110,6 +110,12 @@ pub struct ColumnDto {
     pub lookup_relation: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lookup_field: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rollup_relation: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rollup_aggregate: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rollup_field: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -126,6 +132,9 @@ fn column_dto(column: ColumnMeta) -> ColumnDto {
         relation_table: column.relation_table,
         lookup_relation: column.lookup_relation,
         lookup_field: column.lookup_field,
+        rollup_relation: column.rollup_relation,
+        rollup_aggregate: column.rollup_aggregate.map(|agg| agg.to_string()),
+        rollup_field: column.rollup_field,
     }
 }
 
@@ -267,6 +276,12 @@ pub struct AddColumnDto {
     pub lookup_relation: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lookup_field: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rollup_relation: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rollup_aggregate: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rollup_field: Option<String>,
 }
 
 fn column_spec_from_dto(column: AddColumnDto) -> ColumnSpec {
@@ -277,6 +292,19 @@ fn column_spec_from_dto(column: AddColumnDto) -> ColumnSpec {
             column.name,
             column.lookup_relation.unwrap_or_default(),
             column.lookup_field.unwrap_or_default(),
+        )
+    } else if column.field_type == FieldType::Rollup {
+        let aggregate = column
+            .rollup_aggregate
+            .as_deref()
+            .unwrap_or("count")
+            .parse()
+            .unwrap_or(lattice_data::RollupAggregate::Count);
+        ColumnSpec::rollup(
+            column.name,
+            column.rollup_relation.unwrap_or_default(),
+            aggregate,
+            column.rollup_field,
         )
     } else {
         ColumnSpec::new(column.name, column.field_type)
@@ -1580,6 +1608,9 @@ mod tests {
                     relation_table: None,
                     lookup_relation: None,
                     lookup_field: None,
+                    rollup_relation: None,
+                    rollup_aggregate: None,
+                    rollup_field: None,
                 },
                 AddColumnDto {
                     name: "age".into(),
@@ -1587,6 +1618,9 @@ mod tests {
                     relation_table: None,
                     lookup_relation: None,
                     lookup_field: None,
+                    rollup_relation: None,
+                    rollup_aggregate: None,
+                    rollup_field: None,
                 },
             ],
             base,
@@ -1638,6 +1672,9 @@ mod tests {
                 relation_table: None,
                 lookup_relation: None,
                 lookup_field: None,
+                rollup_relation: None,
+                rollup_aggregate: None,
+                rollup_field: None,
             }],
             "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_string(),
             None,

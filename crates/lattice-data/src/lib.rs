@@ -41,8 +41,8 @@ pub use interface::{
     INTERFACE_VERSION,
 };
 pub use types::{
-    CellValue, ColumnMeta, DeletedRowSnapshot, FieldType, NewColumn, RelationStrip, Row,
-    SchemaFilesSnapshot,
+    CellValue, ColumnMeta, DeletedRowSnapshot, FieldType, NewColumn, RelationStrip, RollupAggregate,
+    Row, SchemaFilesSnapshot,
 };
 pub use view::{
     write_package_view, FilterOperator, SortDirection, ViewDef, ViewFilter, ViewLayout, ViewSort,
