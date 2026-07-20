@@ -192,6 +192,13 @@ Airtable-like interfaces are specialized canvases with:
 - Documents and artifacts.
 - Conditional visibility.
 
+Phase 2 ships package `interfaces/*.interface.yaml` and canvas navigation via
+JSON Canvas `subpath: interfaces/{name}` on `.data` file nodes (primary bound
+view opens in the data-app chrome). See
+[data applications — interfaces](../10-data-applications-and-airtable-model.md#interfaces)
+and [resource runtime — canvas data-view navigation](../39-resource-runtime-contracts.md#canvas-data-view-navigation-phase-c1).
+A full drag-layout interface builder remains future work.
+
 ## Publishing
 
 Canvas publishing modes:

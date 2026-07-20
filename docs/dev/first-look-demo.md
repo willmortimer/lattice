@@ -25,13 +25,46 @@ open/viewer, Pyodide Run with `ResourceUpdate` undo, canvas `subpath` → data
 Re-run the [[Home]] tour on a current build for notebook Run, canvas CRM nodes,
 and **Forms → Contact intake**.
 
+## Wave 2 landed (Lookup/Rollup, interfaces, actions, tabular import, FormSave)
+
+Wave 2 packets P2-08–P2-14 on `feat/data-apps-and-analytics` added read-time
+Lookup/Rollup fields, canvas `subpath: interfaces/{name}` navigation, package
+`actions/*.action.yaml` in the **Actions** menu, Excel/JSON/JSONL type-review
+import, and in-app FormSave for `forms/*.form.yaml`. Tracker:
+[data-apps analytics DAG](data-apps-analytics-dag.md) (Wave 2 merged; Wave 3
+pending).
+
+Contracts:
+
+- [Data applications — Wave 2 shipped](../10-data-applications-and-airtable-model.md#shipped-in-wave-2-airtable-depth) — Lookup/Rollup, interfaces, actions, tabular import, FormSave.
+- [Resource runtime — canvas interfaces](../39-resource-runtime-contracts.md#canvas-data-view-navigation-phase-c1) — `interfaceNameFromCanvasSubpath` + primary view open.
+- [Data applications — package forms](../10-data-applications-and-airtable-model.md#package-form-definitions-mvp) — FormSave designer in **Forms** panel.
+
+**Native demo steps** (Tauri / `nix run .#desktop-dev`; not the browser fixture):
+
+1. Open `CRM.data` → **Add column** → add a `lookup` on `company` → `name` (or a `rollup` `count` on `company`) → confirm resolved values in grid/record detail.
+2. Open `Canvases/Product Strategy.canvas` → double-click the **CRM ContactOps** node → confirm Board opens via `subpath: interfaces/ContactOps`.
+3. In `CRM.data` → **Actions** → **Contact intake** → submit via bound form.
+4. File → **Import…** → pick `.xlsx`, `.json`, or `.jsonl` → adjust inferred types → confirm → new `.data` package opens.
+5. Open `CRM.data` → **Forms** → **New form** (or edit **Contact intake**) → toggle fields → save → confirm `forms/*.form.yaml` on disk.
+
+CLI spot-check:
+
+```sh
+lattice table import --xlsx /path/to/people.xlsx --name People --table rows
+lattice table add-column CRM.data --table contacts --name company_name --type lookup \
+  --lookup-relation company --lookup-field name
+lattice table add-column CRM.data --table companies --name contact_count --type rollup \
+  --rollup-relation contacts --rollup-aggregate count
+```
+
 ## Data apps Wave 1 landed (schema, column designer, CSV)
 
 Wave 1 on `feat/data-apps-and-analytics` (packets P2-01–P2-07) added
 schema-via-commands, the column designer, paginated open with **Load more**,
 CSV type-review import, and CSV promote from the text viewer. Tracker:
-[data-apps analytics DAG](data-apps-analytics-dag.md) (Wave 1 merged; Wave 2+
-pending).
+[data-apps analytics DAG](data-apps-analytics-dag.md) (Wave 1 merged; Wave 2
+merged — see above).
 
 Contracts:
 
@@ -62,9 +95,9 @@ out in **Known expected fails** and the punch-list below. Contracts:
 
 The checklist table is unchanged: it records what **failed or was skipped on BASE** at `f90fb95`. Re-run the tour on a current build to refresh pass/fail; do not treat historical **fail** rows as current regressions.
 
-Still deferred after Wave 1: Lookup/Rollup/junction relations, cross-package
-relation links, browser-demo **Save view** / native tree affordances, and a full
-native Tauri demo pass for folder undo and trash.
+Still deferred after Wave 2: formula fields, junction relations, cross-package
+relation links, full interface builder, browser-demo **Save view** / native tree
+affordances, and a full native Tauri demo pass for folder undo and trash.
 
 ## Checklist
 
@@ -85,6 +118,11 @@ Home.md items 1–9. Status: **pass** / **fail** / **skip**.
 | 11 | **Import CSV…** → type-review → commit | **skip** (browser) / **skip** (native pass) | Browser blocks with explicit error; native `preview_csv_import` / `commit_csv_import` path not exercised in this pass. | `desktopActions.ts:137–215`; `CsvImportReviewDialog.tsx` |
 | 12 | `Data/sample.csv` → **Create table from CSV…** | **skip** (browser) / **skip** (native pass) | Same import path as item 11 via `handlePromoteWorkspaceCsv`; native-only. | `TextViewer.tsx:173–180`; `desktopActions.ts:159–178` |
 | 13 | Paginated grid **Showing N of M** / **Load more** | **skip** (demo window) | `demoMutate` hides pagination chrome; CRM seed `has_more: false`. Native tables >500 rows use `open_data_app` windowing. | `DataTableView.tsx:1074–1091`; `types.ts:62–64` |
+| 14 | **Add column** → `lookup` or `rollup` on relation | **skip** (browser persist) / **skip** (native pass) | Column designer supports lookup/rollup; native `ColumnsAdd` not exercised in this pass. | `AddColumnPanel.tsx`; `types.ts` |
+| 15 | Canvas **CRM ContactOps** → interface open | **pass** (fixture) | Demo canvas node uses `subpath: interfaces/ContactOps`; browser resolves via `interfaceNameFromCanvasSubpath`. | `demoWorkspace.generated.ts:306–312`; `dataViewSubpath.ts` |
+| 16 | **Actions** → Contact intake | **skip** (browser persist) / **skip** (native pass) | Demo seeds `OpenContactIntake` toolbar action; native `list_data_actions` not exercised in this pass. | `actions.ts`; `DataActionsMenu.tsx` |
+| 17 | **Import…** Excel/JSON/JSONL → type-review | **skip** (browser) / **skip** (native pass) | Browser blocks with explicit error; native `preview_tabular_import` not exercised in this pass. | `tabularImport.ts`; `desktopActions.ts` |
+| 18 | **Forms** → create/edit package form | **skip** (browser persist) / **skip** (native pass) | FormSave designer in `PackageFormPanel`; native `save_data_form` not exercised in this pass. | `PackageFormPanel.tsx`; `forms.ts` |
 
 ## Known expected fails on BASE (Wave 1 addressed)
 
@@ -111,7 +149,7 @@ Wave 1 (items 1–4, 6) shipped on `main`. Remaining items are post–Wave 1.
 6. ~~**P2 — Batch move link-repair**~~ — done (B1).
 7. **P2 — Persist Save view in demo or clear CTA** — today the button exists then errors; either hide in `demoMutate` or document “native only” on the control.
 8. **P2 — Native demo pass** for folder undo, single-path move+repair, multi-select trash+undo on `nix run .#desktop-dev` / Tauri e2e — still marked skip above.
-9. **P2 — Native data-apps pass** for Add column, Import CSV type-review, and `Data/sample.csv` promote (checklist 10–12) — native-only; browser fixture documents degraded paths.
+9. **P2 — Native Wave 2 pass** for lookup/rollup columns, **Actions**, tabular import, and FormSave on `nix run .#desktop-dev` — still marked skip above.
 
 ## How to re-run
 
