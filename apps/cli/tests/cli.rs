@@ -227,3 +227,68 @@ fn templates_show_resolves_aliases_and_unknown_fails() {
         .failure()
         .code(1);
 }
+
+#[test]
+fn table_add_column_and_add_table_update_schema() {
+    let dir = tempfile::tempdir().unwrap();
+    init_blank(dir.path()).success();
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("table")
+        .arg("create")
+        .arg("CRM.data")
+        .arg("--title")
+        .arg("CRM")
+        .arg("--table")
+        .arg("contacts")
+        .assert()
+        .success();
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("table")
+        .arg("add-column")
+        .arg("CRM.data")
+        .arg("--table")
+        .arg("contacts")
+        .arg("--name")
+        .arg("name")
+        .arg("--type")
+        .arg("text")
+        .assert()
+        .success()
+        .stdout(predicates_contains("added column name"));
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("table")
+        .arg("show")
+        .arg("CRM.data")
+        .arg("--json")
+        .assert()
+        .success()
+        .stdout(predicates_contains("\"name\""))
+        .stdout(predicates_contains("\"field_type\": \"text\""));
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("table")
+        .arg("add-table")
+        .arg("CRM.data")
+        .arg("--table")
+        .arg("companies")
+        .assert()
+        .success()
+        .stdout(predicates_contains("added table companies"));
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("table")
+        .arg("show")
+        .arg("CRM.data")
+        .arg("--json")
+        .assert()
+        .success()
+        .stdout(predicates_contains("\"companies\""));
+}
