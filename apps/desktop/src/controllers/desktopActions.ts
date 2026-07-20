@@ -178,6 +178,7 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
         kind: "data-app", resource,
         snapshot: { title, default_table: tableName, package_revision: "demo:0",
           columns: [{ name: "id", field_type: "text", sqlite_type: "TEXT" }], rows: [],
+          row_offset: 0, row_limit: 0, row_total: 0, has_more: false,
           available_views: ["All"], active_view: "All", layout_type: "grid", filters: [] },
       });
       return;
