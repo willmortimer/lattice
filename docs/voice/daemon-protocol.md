@@ -122,8 +122,21 @@ LATTICE_VOICE_DAEMON=1 \
   pnpm --filter @lattice/desktop tauri:dev:voice-daemon
 ```
 
+### Manual smoke (daemon + Fluidaudio host)
+
+```sh
+cargo build -p lattice-voice-host --features fluidaudio
+LATTICE_VOICE_HOST_BIN=./target/debug/lattice-voice-host \
+  LATTICE_VOICE_MODEL_CACHE=./research/voice-m0-fluidaudio/.cache/Models \
+  LATTICE_AUTH_TOKEN=dev-token \
+  cargo run -p lattice-daemon -- --auth-token dev-token --api-port 0
+```
+
 Then use in-app push-to-talk: prepare → hold → release → confirm provisional
 and final text. Contract coverage: `cargo test -p lattice-daemon --test voice_contract`.
+
+Desktop can also spawn `latticed` itself (`tauri:dev:voice-daemon`); when voice-host
+env is unset it auto-discovers `lattice-voice-host` and enables the fake backend.
 
 ## Security implications
 

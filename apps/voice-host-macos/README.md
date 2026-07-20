@@ -68,6 +68,10 @@ Requires macOS + the `lattice-voice-macos` Swift bridge (`link-bridge`). Point
 
 Keep `fake` as the default so `cargo test -p lattice-voice-host` stays offline.
 
+`latticed` honors the `fake` flag from `VoiceProviderMode` / `LATTICE_VOICE_FAKE`:
+`--backend fake` for tests, `--backend fluidaudio` when spawning a feature-gated
+host without fake. Pass `--model-cache-dir` via `LATTICE_VOICE_MODEL_CACHE`.
+
 ## Tests
 
 ```sh
