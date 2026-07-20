@@ -13,7 +13,10 @@ diamond. See [philosophy.md](philosophy.md) for the aesthetic rationale.
 - `../site/scripts/generate-mark.mjs` — deterministic SVG generator. Run
   `node site/scripts/generate-mark.mjs` to regenerate
   `site/src/assets/lattice-mark.svg`,
-  `design/generated/lattice-app-icon.svg`, and the inline variants used in
-  `site/src/layouts/Layout.astro` and `apps/desktop/src/App.tsx`. After changing
-  mark geometry, regenerate platform app icons with
-  `pnpm --filter @lattice/desktop exec tauri icon ../../design/generated/lattice-app-icon.svg`.
+  `design/generated/lattice-app-icon.svg`,
+  `design/generated/lattice-tray-icon.svg` / `.png` (macOS menu-bar template),
+  `apps/desktop/src-tauri/icons/tray-template.png`, and the inline variants used
+  in `site/src/layouts/Layout.astro` and `apps/desktop/src/App.tsx`. After
+  changing mark geometry, regenerate platform app icons with
+  `pnpm --filter @lattice/desktop exec tauri icon ../../design/generated/lattice-app-icon.svg`
+  (Dock/app icon only — the tray template is written by generate-mark itself).
