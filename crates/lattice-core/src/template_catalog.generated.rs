@@ -52,6 +52,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             extra_tables: &[],
             views: &[],
             forms: &[],
+            interfaces: &[],
         }
         ],
     },
@@ -147,6 +148,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             extra_tables: &[],
             views: &[],
             forms: &[],
+            interfaces: &[],
         }
         ],
     },
@@ -202,6 +204,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             extra_tables: &[],
             views: &[],
             forms: &[],
+            interfaces: &[],
         }
         ],
     },
@@ -258,6 +261,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             extra_tables: &[],
             views: &[],
             forms: &[],
+            interfaces: &[],
         }
         ],
     },
@@ -396,6 +400,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             }
             ],
             forms: &[],
+            interfaces: &[],
         }
         ],
     },
@@ -458,6 +463,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             extra_tables: &[],
             views: &[],
             forms: &[],
+            interfaces: &[],
         }
         ],
     },
@@ -658,6 +664,19 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 description: Some("Create a contact from the package form."),
             }
             ],
+            interfaces: &[
+                SeedDataInterface {
+                name: "ContactOps",
+                views: &[
+                    "Board"
+                ],
+                forms: &[
+                    "ContactIntake"
+                ],
+                title: Some("Contact operations"),
+                description: Some("Board view plus contact intake form for CRM canvas open."),
+            }
+            ],
         },
             SeedDataPackage {
             path: "Projects/Delivery.data",
@@ -723,6 +742,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 description: Some("Add a delivery item without opening the grid."),
             }
             ],
+            interfaces: &[],
         },
             SeedDataPackage {
             path: "Data/Metrics.data",
@@ -782,6 +802,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             }
             ],
             forms: &[],
+            interfaces: &[],
         },
             SeedDataPackage {
             path: "OKRs.data",
@@ -824,6 +845,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             }
             ],
             forms: &[],
+            interfaces: &[],
         }
         ],
     },

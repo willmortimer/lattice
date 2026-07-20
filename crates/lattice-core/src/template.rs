@@ -4,8 +4,8 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use lattice_data::{
-    write_package_form, write_package_view, CellValue, DataApp, FieldType, FormDef, NewColumn,
-    ViewDef,
+    write_package_form, write_package_interface, write_package_view, CellValue, DataApp, FieldType,
+    FormDef, InterfaceDef, NewColumn, ViewDef,
 };
 use lattice_storage::atomic_write_file;
 use serde::{Deserialize, Serialize};
@@ -57,6 +57,15 @@ pub(crate) struct SeedDataForm {
 }
 
 #[derive(Debug)]
+pub(crate) struct SeedDataInterface {
+    pub name: &'static str,
+    pub views: &'static [&'static str],
+    pub forms: &'static [&'static str],
+    pub title: Option<&'static str>,
+    pub description: Option<&'static str>,
+}
+
+#[derive(Debug)]
 pub(crate) struct SeedDataExtraTable {
     pub table: &'static str,
     pub columns: &'static [SeedDataColumn],
@@ -73,6 +82,7 @@ pub(crate) struct SeedDataPackage {
     pub extra_tables: &'static [SeedDataExtraTable],
     pub views: &'static [SeedDataView],
     pub forms: &'static [SeedDataForm],
+    pub interfaces: &'static [SeedDataInterface],
 }
 
 #[derive(Debug)]
@@ -569,6 +579,23 @@ fn materialize_data_package(
             &known_columns,
         )?;
     }
+    let known_views: std::collections::HashSet<&str> = package
+        .views
+        .iter()
+        .map(|view| view.name)
+        .chain(std::iter::once(lattice_data::DEFAULT_VIEW_NAME))
+        .collect();
+    let known_forms: std::collections::HashSet<&str> =
+        package.forms.iter().map(|form| form.name).collect();
+    for seed_interface in package.interfaces {
+        materialize_seed_interface(
+            &package_path,
+            package.path,
+            seed_interface,
+            &known_views,
+            &known_forms,
+        )?;
+    }
     Ok(())
 }
 
@@ -798,6 +825,49 @@ fn materialize_seed_form(
     form.title = seed.title.map(str::to_string);
     form.description = seed.description.map(str::to_string);
     write_package_form(package_path, &form).map_err(map_data_error)
+}
+
+fn materialize_seed_interface(
+    package_path: &Path,
+    package_path_label: &str,
+    seed: &SeedDataInterface,
+    known_views: &std::collections::HashSet<&str>,
+    known_forms: &std::collections::HashSet<&str>,
+) -> Result<()> {
+    if seed.views.is_empty() && seed.forms.is_empty() {
+        return Err(Error::TemplateValidation {
+            message: format!(
+                "data package {package_path_label} interface {:?} must bind at least one view or form",
+                seed.name
+            ),
+        });
+    }
+    for view in seed.views {
+        if !known_views.contains(view) {
+            return Err(Error::TemplateValidation {
+                message: format!(
+                    "data package {package_path_label} interface {:?} references unknown view {view:?}",
+                    seed.name
+                ),
+            });
+        }
+    }
+    for form in seed.forms {
+        if !known_forms.contains(form) {
+            return Err(Error::TemplateValidation {
+                message: format!(
+                    "data package {package_path_label} interface {:?} references unknown form {form:?}",
+                    seed.name
+                ),
+            });
+        }
+    }
+    let mut interface = InterfaceDef::new(seed.name);
+    interface.views = seed.views.iter().map(|view| (*view).to_string()).collect();
+    interface.forms = seed.forms.iter().map(|form| (*form).to_string()).collect();
+    interface.title = seed.title.map(str::to_string);
+    interface.description = seed.description.map(str::to_string);
+    write_package_interface(package_path, &interface).map_err(map_data_error)
 }
 
 fn row_values_from_json(
@@ -1538,6 +1608,7 @@ mod tests {
             extra_tables: &[],
             views: &[],
             forms: &[],
+            interfaces: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",
@@ -1601,6 +1672,7 @@ mod tests {
             extra_tables: &[],
             views: &[],
             forms: &[],
+            interfaces: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",
@@ -1690,6 +1762,7 @@ mod tests {
             extra_tables: &[],
             views: VIEWS,
             forms: &[],
+            interfaces: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",
@@ -1783,6 +1856,7 @@ mod tests {
             extra_tables: &[],
             views: &[],
             forms: FORMS,
+            interfaces: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",
@@ -1859,6 +1933,7 @@ mod tests {
             extra_tables: &[],
             views: &[],
             forms: &[],
+            interfaces: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",
@@ -1946,6 +2021,7 @@ mod tests {
             extra_tables: EXTRA_TABLES,
             views: &[],
             forms: &[],
+            interfaces: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",

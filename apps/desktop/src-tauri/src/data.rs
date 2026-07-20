@@ -87,6 +87,18 @@ pub struct FormSummary {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InterfaceSummary {
+    pub name: String,
+    pub views: Vec<String>,
+    pub forms: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct ColumnDto {
     pub name: String,
     pub field_type: String,
@@ -347,6 +359,31 @@ pub fn load_data_form(root: String, rel_path: String, name: String) -> Result<Fo
         fields: form.fields,
         title: form.title,
         description: form.description,
+    })
+}
+
+/// List saved interface names for a `.data` package (`interfaces/*.interface.yaml`).
+#[tauri::command]
+pub fn list_data_interfaces(root: String, rel_path: String) -> Result<Vec<String>, String> {
+    let app = open_app_at(&root, &rel_path)?;
+    app.list_interfaces().map_err(|err| err.to_string())
+}
+
+/// Load one saved interface definition, validating bound views/forms exist.
+#[tauri::command]
+pub fn load_data_interface(
+    root: String,
+    rel_path: String,
+    name: String,
+) -> Result<InterfaceSummary, String> {
+    let app = open_app_at(&root, &rel_path)?;
+    let interface = app.load_interface(&name).map_err(|err| err.to_string())?;
+    Ok(InterfaceSummary {
+        name: interface.name,
+        views: interface.views,
+        forms: interface.forms,
+        title: interface.title,
+        description: interface.description,
     })
 }
 
@@ -1254,6 +1291,57 @@ mod tests {
             snapshot.rows[0].values.get("email"),
             Some(&CellValue::Text("ada@example.com".into()))
         );
+    }
+
+    #[test]
+    fn list_and_load_data_interface() {
+        use lattice_data::{write_package_form, write_package_interface, write_package_view, FormDef, InterfaceDef, ViewDef};
+
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let rel_path = "CRM.data".to_string();
+
+        create_table_package(
+            root.clone(),
+            rel_path.clone(),
+            "CRM".to_string(),
+            "contacts".to_string(),
+        )
+        .unwrap();
+
+        rusqlite::Connection::open(dir.path().join("CRM.data/database.sqlite"))
+            .unwrap()
+            .execute_batch(
+                "ALTER TABLE contacts ADD COLUMN name TEXT;
+                 ALTER TABLE contacts ADD COLUMN status TEXT;",
+            )
+            .unwrap();
+
+        let package = dir.path().join("CRM.data");
+        let mut board = ViewDef::new_grid("contacts");
+        board.layout.layout_type = lattice_data::LAYOUT_BOARD.to_string();
+        board.layout.group_by = Some("status".into());
+        write_package_view(&package, "Board", &board).unwrap();
+
+        let mut form = FormDef::new("intake", "contacts");
+        form.fields = vec!["name".into(), "status".into()];
+        write_package_form(&package, &form).unwrap();
+
+        let mut interface = InterfaceDef::new("ContactOps");
+        interface.views = vec!["Board".into()];
+        interface.forms = vec!["intake".into()];
+        interface.title = Some("Contact operations".into());
+        write_package_interface(&package, &interface).unwrap();
+
+        assert_eq!(
+            list_data_interfaces(root.clone(), rel_path.clone()).unwrap(),
+            vec!["ContactOps".to_string()]
+        );
+        let loaded = load_data_interface(root, rel_path, "ContactOps".into()).unwrap();
+        assert_eq!(loaded.name, "ContactOps");
+        assert_eq!(loaded.views, vec!["Board".to_string()]);
+        assert_eq!(loaded.forms, vec!["intake".to_string()]);
+        assert_eq!(loaded.title.as_deref(), Some("Contact operations"));
     }
 
     #[test]
