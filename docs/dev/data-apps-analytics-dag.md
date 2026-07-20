@@ -1,6 +1,6 @@
 # Data Apps + Analytics Subagent DAG
 
-**Status:** Active — Wave 1 merged on `feat/data-apps-and-analytics`; Waves 2–3 pending  
+**Status:** Active — Waves 1–2 merged on `feat/data-apps-and-analytics`; Wave 3 pending  
 **Created:** 2026-07-19  
 **BASE:** `main` @ `9c5694b`  
 **Integration branch:** `feat/data-apps-and-analytics`  
@@ -14,15 +14,16 @@ canonical tracker for Waves 1–3.
 ## Problem / end state
 
 Phase 2 has a demo-grade vertical slice (`.data` SQLite, Glide grid, six
-layouts, relations, package forms, CSV import, CLI CRUD) but is not yet an
-Airtable/Notion alternative. Phase 3 is spec-only.
+layouts, relations, Lookup/Rollup, package forms and FormSave, interfaces,
+actions, tabular import, CLI CRUD) but is not yet an Airtable/Notion
+alternative. Phase 3 is spec-only.
 
 **Done when:**
 
 1. **Wave 1** — schema-via-commands, column designer, paginated open, CSV
    type-review / promote.
 2. **Wave 2** — Lookup/Rollup, canvas interfaces, buttons, Excel/JSON import,
-   FormSave.
+   FormSave. **Merged.**
 3. **Wave 3** — DuckDB, Parquet datasets, Arrow IPC, Perspective, Vega-Lite,
    profiling, annotation overlays (vertical slice; not full BI).
 
@@ -128,13 +129,13 @@ flowchart TD
 | P2-05 | merged | composer | CSV type-review |
 | P2-06 | merged | composer | CSV promote |
 | P2-07 | merged | composer | Docs wave 1 |
-| P2-08 | done | grok | Lookup |
+| P2-08 | merged | grok | Lookup |
 | P2-09 | merged | grok | Rollup |
 | P2-10 | merged | grok | Canvas interfaces |
 | P2-11 | merged | composer | Buttons/actions |
 | P2-12 | merged | composer | Excel/JSON import |
 | P2-13 | merged | composer | FormSave |
-| P2-14 | pending | composer | Docs wave 2 |
+| P2-14 | merged | composer | Docs wave 2 |
 | P3-01 | pending | composer | Dataset package |
 | P3-02 | pending | grok | DuckDB |
 | P3-03 | pending | grok | Arrow IPC |

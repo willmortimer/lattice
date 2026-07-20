@@ -75,9 +75,11 @@ Users should not need to design a normalized schema before starting.
 
 ### Shipped in Wave 1 (Phase 2 tables)
 
-The following paths are implemented today; Lookup/Rollup, canvas
-interfaces, Excel/JSON import, DuckDB/Arrow analytics, and form designers
-remain later work (see [data-apps analytics DAG](dev/data-apps-analytics-dag.md)).
+The following paths are implemented today. Wave 2 depth (Lookup/Rollup,
+interfaces, actions, tabular import beyond CSV, FormSave) is documented in the
+next section. Formula fields, DuckDB/Arrow analytics, MCP dataset writes, and a
+full interface builder remain later work (see
+[data-apps analytics DAG](dev/data-apps-analytics-dag.md)).
 
 **Schema via semantic commands.** Adding tables and columns flows through
 `TableAdd` and `ColumnsAdd` in the command engine (ADR 0007). Each command
@@ -86,10 +88,12 @@ SQLite schema. CSV import commit and the desktop column designer invoke these
 commands — they do not call `lattice-data` schema helpers directly.
 
 **Column designer.** The data-app toolbar exposes **Add column**: name, field
-type (`text`, `long_text`, `integer`, `decimal`, `boolean`, `date`, or
-`relation`), and optional `relation_table` when the type is `relation`. Submit
-calls `add_data_columns` → `ColumnsAdd` and refreshes the open snapshot. The
-browser demo shows the panel but does not persist schema changes.
+type (`text`, `long_text`, `integer`, `decimal`, `boolean`, `date`, `relation`,
+`lookup`, or `rollup`), with relation-specific options (`relation_table`;
+`lookup_relation` + `lookup_field`; `rollup_relation`, `rollup_aggregate`, and
+optional `rollup_field`). Submit calls `add_data_columns` → `ColumnsAdd` and
+refreshes the open snapshot. The browser demo shows the panel but does not
+persist schema changes.
 
 **Paginated open.** `open_data_app` accepts `limit` and `offset`; the desktop
 grid shows **Showing *n*–*m* of *total*** and **Load more** when
@@ -117,6 +121,51 @@ lattice table add-column PATH --table contacts --name company --type relation --
 ```
 
 Both subcommands apply `TableAdd` / `ColumnsAdd` through the command engine.
+
+### Shipped in Wave 2 (Airtable depth)
+
+**Lookup fields.** `FieldType::Lookup` projects a field from the related table
+through an existing relation column on the same table. Values resolve at read
+time (no SQLite storage); grid, list/board/gallery/calendar, and record detail
+show resolved labels. The column designer and CLI `add-column` accept
+`lookup_relation` + `lookup_field`; `ColumnsAdd` validates the relation and
+target field. Lookup columns are read-only and excluded from tabular import.
+
+**Rollup fields.** `FieldType::Rollup` aggregates linked records through a
+relation: `count`, `sum`, `min`, or `max` (`rollup_aggregate`). Sum/min/max
+require a numeric `rollup_field` on the related table; count does not. Same
+read-time resolution and display path as Lookup; column designer and CLI mirror
+Lookup's `ColumnsAdd` flow.
+
+**Canvas interfaces.** Package resources under `interfaces/*.interface.yaml`
+bind saved views and/or package forms. JSON Canvas file nodes open an interface
+via `subpath: interfaces/{name}` (or `interfaces/{name}.interface.yaml`); the
+shell loads the interface and opens the primary bound view (first `views`
+entry). Demo CRM ships `ContactOps` (Board + ContactIntake). A drag-layout
+interface builder remains future work.
+
+**Actions and buttons.** Declarative actions live under `actions/*.action.yaml`.
+Wave 2 MVP kinds: `insert_record` (optional bound form + column defaults),
+`update_field`, and `open_url`. Each action names a `table` and `scope`
+(`toolbar` or `row`). Desktop chrome exposes an **Actions** menu on the data-app
+toolbar and per-row context menu; running an action flows through semantic
+commands (`RecordInsert`, `RecordUpdate`, or opener). Task/workflow runners and
+approval previews remain future work.
+
+**Tabular import (Excel / JSON / JSONL).** Desktop **Import…** and CSV promote
+reuse the shared type-review pipeline: `preview_tabular_import` infers column
+types from `.csv`, `.tsv`, `.xlsx` (first worksheet via `calamine`), `.json`
+(array of objects), or `.jsonl`/`.ndjson`, then `commit_tabular_import` creates
+the package via `TableCreate`, `ColumnsAdd`, and `RecordInsert`. Relation,
+lookup, and rollup types are excluded from import review. CLI:
+`lattice table import --xlsx|--json|--jsonl` with the same non-interactive
+`--type col:integer` overrides as CSV.
+
+**FormSave designer.** The **Forms** panel supports in-app create/edit of
+`forms/*.form.yaml`: pick table, toggle and reorder fields, set title/description,
+and save through `save_data_form` → `FormSave` (revision-guarded; undo restores
+prior YAML). Distinct from view layout `form` (in-table create surface) and
+from public form publish, which remain future work.
 
 ## Typed fields
 
@@ -171,8 +220,9 @@ tables:
 
 - `relation_table` names a target table in the same `.data` package. Cross-table
   relations within one package are supported (for example `contacts.company` →
-  `companies` in First Look `CRM.data`). Cross-package links, junction tables,
-  Lookup, and Rollup remain later work.
+  `companies` in First Look `CRM.data`). Lookup and Rollup build on these
+  same-package relations (see [Shipped in Wave 2](#shipped-in-wave-2-airtable-depth)).
+  Cross-package links and junction tables remain later work.
 - Cells hold zero or more linked record ids; insert/update validates each id
   exists in the target table.
 - On `RecordDelete` / `delete_row`, Lattice strips the deleted id from every
@@ -235,8 +285,7 @@ unresolved references fail template validation. This keeps hand-authored seeds
 readable (for example `"company": ["Analytical Engines"]`) while storing canonical
 ids in SQLite.
 
-Lookup, Rollup, junction tables, and cross-package relation UX remain later
-work.
+Junction tables and cross-package relation UX remain later work.
 
 Linked-record UX should make relational modeling approachable:
 
@@ -396,13 +445,15 @@ the open `.data` package, opens one in a side panel (separate from
 existing command history (`undo_last`). Browser demo mode mutates the local
 snapshot and lists forms from the compiled First Look template seed
 (`forms/ContactIntake.form.yaml` in `CRM.data` — `contacts` table,
-`name` / `email` / `status` / `company` fields, title **Contact intake**). A
-form designer and public publish remain future work.
+`name` / `email` / `status` / `company` fields, title **Contact intake**). The
+in-app FormSave designer (Wave 2) creates and edits package forms; public
+publish remains future work.
 
 ## Interfaces
 
 Interfaces are named package resources under `interfaces/` that bind one or more
-saved views and/or package forms:
+saved views and/or package forms (shipped Wave 2; see
+[Shipped in Wave 2](#shipped-in-wave-2-airtable-depth)):
 
 ```text
 interfaces/{name}.interface.yaml
@@ -447,7 +498,11 @@ This permits Airtable-style operational apps while retaining normal documents an
 
 ## Formulas, lookups, and rollups
 
-Support two levels:
+**Lookup and Rollup (shipped Wave 2)** are read-only derived fields over
+same-package relations; see [Shipped in Wave 2](#shipped-in-wave-2-airtable-depth).
+They resolve at open/read time today rather than as persisted generated columns.
+
+**Formula fields** remain future work. The target model supports two levels:
 
 ### Friendly expression layer
 
@@ -463,23 +518,30 @@ FROM line_items
 WHERE invoice_id = invoices.id
 ```
 
-Lookups and rollups compile to SQL views, generated columns, cached fields, or runtime queries. Generated SQL remains inspectable.
-
-Do not create a proprietary DAX-like language.
+Future formulas, and richer rollup compilation, may use SQL views, generated
+columns, cached fields, or runtime queries. Generated SQL should remain
+inspectable. Do not create a proprietary DAX-like language.
 
 ## Actions and buttons
 
-A button invokes a semantic command, task, workflow, query, or proposed transaction.
+Package actions (shipped Wave 2) are YAML under `actions/` and appear in the
+data-app **Actions** menu. Example toolbar action that opens the ContactIntake
+form:
 
 ```yaml
-label: Generate company brief
+format: lattice-action
+version: 1
+name: OpenContactIntake
+label: Contact intake
+table: contacts
+scope: toolbar
 action:
-  type: task.run
-  task: ../../Scripts/Generate Company Brief.task/task.yaml
-input:
-  company_id: $record.id
-approval: preview-transaction
+  type: insert_record
+  form: ContactIntake
 ```
+
+Row-scoped `update_field` and `open_url` actions are also supported. Task,
+workflow, query, and approval-preview runners remain future work.
 
 ## Generated fields
 
