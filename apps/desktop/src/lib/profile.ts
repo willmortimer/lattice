@@ -83,6 +83,9 @@ export interface DesktopSettings {
     keepServicesRunning: boolean;
     keepAppInMenuBar: boolean;
   };
+  search: {
+    semanticEnabled: boolean;
+  };
 }
 
 export interface WorkspaceStartupSettings {
@@ -158,6 +161,9 @@ export function defaultDesktopSettings(): DesktopSettings {
     services: {
       keepServicesRunning: false,
       keepAppInMenuBar: false,
+    },
+    search: {
+      semanticEnabled: false,
     },
   };
 }
@@ -261,6 +267,10 @@ function normalizeProfile(profile: ProfileSnapshot): ProfileSnapshot {
         services: {
           ...desktopDefaults.services,
           ...profile.settings.desktop?.services,
+        },
+        search: {
+          ...desktopDefaults.search,
+          ...profile.settings.desktop?.search,
         },
       },
       workspaces: {

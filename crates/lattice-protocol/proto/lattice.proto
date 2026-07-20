@@ -42,6 +42,10 @@ message Request {
     // Voice-host admin (private host UDS; daemon may proxy in D5).
     VoiceHostStatusRequest voice_host_status = 40;
     UnloadVoiceModelRequest unload_voice_model = 41;
+    // Semantic search plane (field numbers 50–59).
+    EnableSemanticSearchRequest enable_semantic_search = 50;
+    DisableSemanticSearchRequest disable_semantic_search = 51;
+    GetSemanticStatusRequest get_semantic_status = 52;
   }
 }
 
@@ -62,6 +66,9 @@ message Response {
     EndVoiceSessionResponse end_voice_session = 27;
     VoiceHostStatusResponse voice_host_status = 40;
     UnloadVoiceModelResponse unload_voice_model = 41;
+    EnableSemanticSearchResponse enable_semantic_search = 50;
+    DisableSemanticSearchResponse disable_semantic_search = 51;
+    GetSemanticStatusResponse get_semantic_status = 52;
   }
 }
 
@@ -87,6 +94,8 @@ message Event {
     AudioGap audio_gap = 29;
     // Utterance boundary from VAD / EOU / max-length policy.
     EndpointDetected endpoint_detected = 30;
+    // Semantic status (field 50+; keep voice 20–39).
+    SemanticStatusChanged semantic_status = 50;
   }
 }
 
@@ -180,10 +189,53 @@ message ResourceChanged {
 
 // Incremental FTS / index maintenance progress for a workspace.
 message IndexProgress {
-  // started | stopped | upserted | removed | error
-  string phase = 1;
-  optional string path = 2;
-  optional string detail = 3;
+    // started | stopped | upserted | removed | error |
+    // embedding_started | embedding_batch | embedding_idle |
+    // semantic_degraded | semantic_ready
+    string phase = 1;
+    optional string path = 2;
+    optional string detail = 3;
+}
+
+// ---------------------------------------------------------------------------
+// Semantic search plane (field numbers 50–59; distinct from voice PrepareModel)
+// ---------------------------------------------------------------------------
+
+message EnableSemanticSearchRequest {
+  string workspace_id = 1;
+}
+
+message EnableSemanticSearchResponse {
+  SemanticStatus status = 1;
+}
+
+message DisableSemanticSearchRequest {
+  string workspace_id = 1;
+}
+
+message DisableSemanticSearchResponse {
+  SemanticStatus status = 1;
+}
+
+message GetSemanticStatusRequest {
+  string workspace_id = 1;
+}
+
+message GetSemanticStatusResponse {
+  SemanticStatus status = 1;
+}
+
+// stopped | downloading | preparing | indexing | ready | degraded | failed
+message SemanticStatus {
+  string state = 1;
+  optional uint64 pending_chunks = 2;
+  optional string message = 3;
+  // 0–100 while state is "downloading"; unset otherwise.
+  optional uint32 progress_percent = 4;
+}
+
+message SemanticStatusChanged {
+  SemanticStatus status = 1;
 }
 
 // ---------------------------------------------------------------------------

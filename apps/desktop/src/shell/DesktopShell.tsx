@@ -658,6 +658,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
       {searchPaneOpen && (
         <SearchPane
           root={assetRoot}
+          semanticEnabled={settings.search.semanticEnabled}
           demoSearch={inBrowser ? demoSearch : () => []}
           onOpenFile={(path) => {
             setSearchPaneOpen(false);

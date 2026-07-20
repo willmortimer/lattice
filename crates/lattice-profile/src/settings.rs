@@ -390,6 +390,8 @@ pub struct DesktopSettings {
     pub diagnostics: DiagnosticSettings,
     #[serde(default)]
     pub services: ServicesSettings,
+    #[serde(default)]
+    pub search: SearchSettings,
 }
 
 impl Default for DesktopSettings {
@@ -404,6 +406,22 @@ impl Default for DesktopSettings {
             performance: PerformanceSettings::default(),
             diagnostics: DiagnosticSettings::default(),
             services: ServicesSettings::default(),
+            search: SearchSettings::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchSettings {
+    #[serde(default)]
+    pub semantic_enabled: bool,
+}
+
+impl Default for SearchSettings {
+    fn default() -> Self {
+        Self {
+            semantic_enabled: false,
         }
     }
 }
@@ -807,5 +825,35 @@ mod tests {
             .unwrap();
         assert!(partial.value.services.keep_services_running);
         assert!(!partial.value.services.keep_app_in_menu_bar);
+    }
+
+    #[test]
+    fn search_semantic_enabled_defaults_and_round_trips() {
+        assert!(!SearchSettings::default().semantic_enabled);
+        assert!(!DesktopSettings::default().search.semantic_enabled);
+
+        let directory = tempfile::tempdir().unwrap();
+        let store = SettingsStore::new(directory.path());
+        std::fs::write(
+            store.path(DESKTOP_SETTINGS_SPEC),
+            "format: lattice-desktop-settings\nversion: 1\nsearch:\n  semanticEnabled: true\n",
+        )
+        .unwrap();
+        let loaded = store
+            .load::<DesktopSettings>(DESKTOP_SETTINGS_SPEC)
+            .unwrap();
+        assert!(loaded.value.search.semantic_enabled);
+
+        // Older documents without the new field keep the default (false).
+        std::fs::write(
+            store.path(DESKTOP_SETTINGS_SPEC),
+            "format: lattice-desktop-settings\nversion: 1\neditor:\n  autosaveDelayMs: 1500\n",
+        )
+        .unwrap();
+        let partial = store
+            .load::<DesktopSettings>(DESKTOP_SETTINGS_SPEC)
+            .unwrap();
+        assert_eq!(partial.value.editor.autosave_delay_ms, 1500);
+        assert!(!partial.value.search.semantic_enabled);
     }
 }

@@ -4,9 +4,8 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use lattice_daemon::{
-    default_socket_path, mcp, serve, serve_with_shutdown_and_controllers, DaemonConfig,
-    DaemonPreferences, SemanticController, SemanticProviderMode, VoiceController,
-    VoiceProviderMode, DEFAULT_API_PORT,
+    default_socket_path, mcp, serve_with_shutdown_and_controllers, DaemonConfig, DaemonPreferences,
+    SemanticController, SemanticProviderMode, VoiceController, VoiceProviderMode, DEFAULT_API_PORT,
 };
 use lattice_runtime::LatticeRuntime;
 use tracing_subscriber::EnvFilter;
@@ -115,16 +114,14 @@ async fn main() -> Result<()> {
     }
 
     let runtime = Arc::new(LatticeRuntime::new());
-    let semantic = match SemanticProviderMode::from_env() {
-        Some(mode) => {
-            tracing::info!("semantic indexing enabled via environment");
-            Some(
-                SemanticController::start(Arc::clone(&runtime), mode)
-                    .context("start semantic controller")?,
-            )
-        }
-        None => None,
-    };
+    // Always own a semantic controller so EnableSemanticSearch works without env
+    // gates. Env still selects Fake / ExternalSocket / SpawnHost.
+    let mode = SemanticProviderMode::from_env_or_fake();
+    tracing::info!(?mode, "semantic controller ready for user-driven enable");
+    let semantic = Some(
+        SemanticController::start(Arc::clone(&runtime), mode)
+            .context("start semantic controller")?,
+    );
     let voice = match VoiceProviderMode::from_env() {
         Some(mode) => {
             tracing::info!("voice-host supervision enabled via environment");
@@ -137,7 +134,7 @@ async fn main() -> Result<()> {
         None => None,
     };
 
-    if semantic.is_some() || voice.is_some() {
+    {
         let (tx, rx) = tokio::sync::oneshot::channel();
         tokio::spawn(async move {
             if let Err(err) = wait_for_shutdown_signal().await {
@@ -146,10 +143,6 @@ async fn main() -> Result<()> {
             let _ = tx.send(());
         });
         serve_with_shutdown_and_controllers(config, runtime, semantic, voice, rx)
-            .await
-            .context("latticed serve failed")?;
-    } else {
-        serve(config, runtime)
             .await
             .context("latticed serve failed")?;
     }

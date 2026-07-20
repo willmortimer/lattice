@@ -12,7 +12,7 @@ use crate::events::SharedEventBus;
 use crate::idempotency::IdempotencyCache;
 use crate::lease::{LeaseClaim, WorkspaceLeaseFile};
 use crate::semantic::{
-    start_session_semantic_worker, SemanticAvailability, SemanticWorkerConfig,
+    start_session_semantic_worker, SemanticAvailability, SemanticStatus, SemanticWorkerConfig,
     SessionSemanticWorker,
 };
 use crate::watch::{default_watch_debounce, start_session_index_watcher, SessionIndexWatcher};
@@ -34,6 +34,8 @@ pub struct WorkspaceSession {
     index_watcher: Mutex<Option<SessionIndexWatcher>>,
     /// Optional background semantic embedding worker.
     semantic_worker: Mutex<Option<SessionSemanticWorker>>,
+    /// In-flight model download / prepare status (E5), independent of the worker.
+    semantic_prepare: Mutex<Option<SemanticStatus>>,
 }
 
 impl WorkspaceSession {
@@ -56,6 +58,7 @@ impl WorkspaceSession {
             idempotency: IdempotencyCache::default(),
             index_watcher: Mutex::new(None),
             semantic_worker: Mutex::new(None),
+            semantic_prepare: Mutex::new(None),
         })
     }
 
@@ -207,6 +210,7 @@ impl WorkspaceSession {
 
     /// Stop the semantic embedding worker if running.
     pub fn stop_semantic_indexing(&self) {
+        self.set_semantic_prepare_status(None);
         if let Some(worker) = self
             .semantic_worker
             .lock()
@@ -283,6 +287,40 @@ impl WorkspaceSession {
             .expect("semantic worker poisoned")
             .as_ref()
             .and_then(SessionSemanticWorker::namespace_id)
+    }
+
+    /// Settings-facing status for this session's semantic worker (or stopped).
+    pub fn semantic_status(&self) -> SemanticStatus {
+        if let Some(prepare) = self
+            .semantic_prepare
+            .lock()
+            .expect("semantic prepare poisoned")
+            .clone()
+        {
+            return prepare;
+        }
+        let guard = self
+            .semantic_worker
+            .lock()
+            .expect("semantic worker poisoned");
+        let Some(worker) = guard.as_ref() else {
+            return SemanticStatus::stopped();
+        };
+        let pending = worker.namespace_id().and_then(|ns| {
+            self.index()
+                .count_pending_embeddings(ns)
+                .ok()
+                .map(|n| n as u64)
+        });
+        worker.status(pending)
+    }
+
+    /// Publish in-flight download / prepare status (cleared when prepare finishes).
+    pub fn set_semantic_prepare_status(&self, status: Option<SemanticStatus>) {
+        *self
+            .semantic_prepare
+            .lock()
+            .expect("semantic prepare poisoned") = status;
     }
 
     /// Snapshot of provider + namespace for hybrid search, when the worker is live.

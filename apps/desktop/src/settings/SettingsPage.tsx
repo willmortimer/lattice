@@ -5,6 +5,7 @@ import {
   Files,
   Gauge,
   Keyboard,
+  MagnifyingGlass,
   Microphone,
   Palette,
   Pulse,
@@ -18,6 +19,15 @@ import type { ThemeCatalogPayload } from "../theme";
 import type { WorkspaceStartupSettings } from "../lib/profile";
 import type { PageWidth } from "../lib/pageWidth";
 import { getVoiceStatus, listenVoiceEvents, prepareVoiceModel, type VoiceStatus } from "../lib/voice";
+import {
+  disableSemanticSearch,
+  enableSemanticSearch,
+  getSemanticStatus,
+  listenSemanticEvents,
+  SEMANTIC_MODEL_CONFIRM,
+  semanticStatusLabel,
+  type SemanticStatus,
+} from "../lib/semantic";
 import type { WorkspaceSnapshot } from "../types";
 import { HistoryRetentionSettings } from "./HistoryRetentionSettings";
 import type { AppSettings } from "./model";
@@ -31,6 +41,7 @@ type SettingsSection =
   | "keybindings"
   | "data"
   | "capabilities"
+  | "search"
   | "voice"
   | "performance"
   | "diagnostics";
@@ -60,6 +71,7 @@ const SECTIONS = [
   { id: "keybindings" as const, label: "Keybindings", icon: Keyboard },
   { id: "data" as const, label: "Data defaults", icon: Database },
   { id: "capabilities" as const, label: "Enabled capabilities", icon: PuzzlePiece },
+  { id: "search" as const, label: "Search", icon: MagnifyingGlass },
   { id: "voice" as const, label: "Voice dictation", icon: Microphone },
   { id: "performance" as const, label: "Performance & lifecycle", icon: Gauge },
   { id: "diagnostics" as const, label: "Advanced diagnostics", icon: Pulse },
@@ -443,6 +455,14 @@ export function SettingsPage({
           </>
         )}
 
+        {section === "search" && (
+          <SemanticSearchSettings
+            workspaceRoot={workspace.root || null}
+            semanticEnabled={settings.search.semanticEnabled}
+            onSemanticEnabledChange={(semanticEnabled) => update("search", { semanticEnabled })}
+          />
+        )}
+
         {section === "voice" && <VoiceDictationSettings />}
 
         {section === "performance" && (
@@ -571,6 +591,167 @@ export function SettingsPage({
         )}
       </section>
     </div>
+  );
+}
+
+function SemanticSearchSettings({
+  workspaceRoot,
+  semanticEnabled,
+  onSemanticEnabledChange,
+}: {
+  workspaceRoot: string | null;
+  semanticEnabled: boolean;
+  onSemanticEnabledChange: (semanticEnabled: boolean) => void;
+}) {
+  const [status, setStatus] = useState<SemanticStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (inBrowser || !workspaceRoot) return;
+    let cancelled = false;
+    void getSemanticStatus(workspaceRoot)
+      .then((next) => {
+        if (!cancelled) setStatus(next);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceRoot]);
+
+  // Re-attach the Fake worker when the preference is already on (app relaunch).
+  useEffect(() => {
+    if (inBrowser || !workspaceRoot || !semanticEnabled) return;
+    let cancelled = false;
+    void enableSemanticSearch(workspaceRoot)
+      .then((next) => {
+        if (!cancelled) setStatus(next);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceRoot, semanticEnabled]);
+
+  useEffect(() => {
+    if (inBrowser) return;
+    let unlisten: (() => void) | undefined;
+    void listenSemanticEvents((event) => {
+      if (event.type === "status") {
+        setStatus({
+          state: event.state,
+          pendingChunks: event.pendingChunks,
+          message: event.message,
+          progressPercent: event.progressPercent ?? null,
+        });
+      }
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
+  // Poll while downloading/preparing/indexing so progress stays fresh.
+  useEffect(() => {
+    if (inBrowser || !workspaceRoot || !semanticEnabled) return;
+    if (
+      !status ||
+      (status.state !== "downloading" &&
+        status.state !== "preparing" &&
+        status.state !== "indexing")
+    ) {
+      return;
+    }
+    const id = window.setInterval(() => {
+      void getSemanticStatus(workspaceRoot)
+        .then(setStatus)
+        .catch(() => {
+          /* keep last status */
+        });
+    }, 750);
+    return () => window.clearInterval(id);
+  }, [workspaceRoot, semanticEnabled, status?.state]);
+
+  async function handleToggle(next: boolean) {
+    if (next) {
+      const accepted = window.confirm(SEMANTIC_MODEL_CONFIRM);
+      if (!accepted) return;
+    }
+    onSemanticEnabledChange(next);
+    if (inBrowser || !workspaceRoot) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = next
+        ? await enableSemanticSearch(workspaceRoot)
+        : await disableSemanticSearch(workspaceRoot);
+      setStatus(updated);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+      onSemanticEnabledChange(!next);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const statusText = status
+    ? semanticStatusLabel(status.state, status.pendingChunks, status.progressPercent)
+    : semanticEnabled
+      ? "Preparing…"
+      : "Not prepared";
+
+  return (
+    <>
+      <h1>Search</h1>
+      <p className="settings-copy">
+        Keyword search is always available. Semantic search uses a local embedding model to find
+        related passages by meaning, not just exact words.
+      </p>
+      {inBrowser ? (
+        <div className="diagnostics-card">
+          <strong>Unavailable in browser demo</strong>
+          <span>Semantic search requires the native desktop build with latticed indexing services.</span>
+        </div>
+      ) : (
+        <>
+          <SettingRow
+            title="Semantic search"
+            description="Include vector similarity alongside keyword matches when searching the workspace."
+          >
+            <Toggle
+              label="Semantic search"
+              checked={semanticEnabled}
+              onChange={(checked) => void handleToggle(checked)}
+            />
+          </SettingRow>
+          <SettingRow
+            title="Index status"
+            description="Whether the local embedding model and workspace index are ready."
+          >
+            <span>{busy ? "Updating…" : statusText}</span>
+          </SettingRow>
+          {error ? (
+            <div className="diagnostics-card" role="alert">
+              <strong>Semantic search error</strong>
+              <span>{error}</span>
+            </div>
+          ) : null}
+          {status?.message && status.state === "failed" ? (
+            <div className="diagnostics-card" role="status">
+              <strong>Details</strong>
+              <span>{status.message}</span>
+            </div>
+          ) : null}
+        </>
+      )}
+    </>
   );
 }
 

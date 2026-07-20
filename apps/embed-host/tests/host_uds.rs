@@ -121,6 +121,78 @@ async fn fake_backend_embeds_over_uds() {
 }
 
 #[tokio::test]
+async fn reconnectable_provider_survives_host_restart() {
+    let dir = tempdir().unwrap();
+    let socket = socket_path_in(dir.path());
+    let models_dir = dir.path().join("models");
+    let (manifest_path, artifact_path, _) = write_fixture_model(dir.path());
+    let installed = install_model(&manifest_path, &artifact_path, &models_dir).unwrap();
+
+    let bin = env!("CARGO_BIN_EXE_lattice-embed-host");
+    let mut child = Command::new(bin)
+        .arg("serve")
+        .arg("--socket")
+        .arg(&socket)
+        .arg("--backend")
+        .arg("fake")
+        .arg("--models-dir")
+        .arg(&models_dir)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .expect("spawn embed-host");
+
+    wait_for_socket(&socket).await;
+
+    let provider = Arc::new(
+        lattice_embed_host::ReconnectableEmbedHostProvider::connect(
+            &socket,
+            &installed.model_dir,
+            Some(8),
+        )
+        .await
+        .unwrap(),
+    );
+    let before = provider
+        .embed_query(EmbedQueryRequest {
+            text: "before restart".into(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(before.values.len(), 8);
+
+    child.kill().await.expect("kill host");
+    let _ = child.wait().await;
+    sleep(Duration::from_millis(50)).await;
+
+    let mut child = Command::new(bin)
+        .arg("serve")
+        .arg("--socket")
+        .arg(&socket)
+        .arg("--backend")
+        .arg("fake")
+        .arg("--models-dir")
+        .arg(&models_dir)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .expect("respawn embed-host");
+    wait_for_socket(&socket).await;
+
+    let after = provider
+        .embed_query(EmbedQueryRequest {
+            text: "after restart".into(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(after.values.len(), 8);
+
+    child.kill().await.ok();
+}
+
+#[tokio::test]
 async fn client_tolerates_host_crash() {
     let dir = tempdir().unwrap();
     let socket = socket_path_in(dir.path());
@@ -206,3 +278,69 @@ async fn install_rpc_via_client() {
 
     server.abort();
 }
+
+#[cfg(feature = "llama-cpp")]
+#[tokio::test]
+#[ignore = "requires LATTICE_EMBED_LLAMA_GGUF pointing at the pinned Qwen3 Q8 GGUF (~640MB)"]
+async fn llama_cpp_embeds_512d_when_gguf_present() {
+    use lattice_embedding::qwen3_embedding_0_6b_q8_manifest;
+
+    let gguf = std::env::var("LATTICE_EMBED_LLAMA_GGUF").expect(
+        "set LATTICE_EMBED_LLAMA_GGUF to a verified Qwen3-Embedding-0.6B-Q8_0.gguf path",
+    );
+    let gguf_path = PathBuf::from(&gguf);
+    assert!(
+        gguf_path.is_file(),
+        "GGUF missing at {}",
+        gguf_path.display()
+    );
+
+    let dir = tempdir().unwrap();
+    let socket = socket_path_in(dir.path());
+    let models_dir = dir.path().join("models");
+    let staging = dir.path().join("staging");
+    fs::create_dir_all(&staging).unwrap();
+
+    let manifest = qwen3_embedding_0_6b_q8_manifest();
+    let manifest_path = staging.join("manifest.json");
+    fs::write(
+        &manifest_path,
+        serde_json::to_vec_pretty(&manifest).unwrap(),
+    )
+    .unwrap();
+    let artifact_copy = staging.join(&manifest.artifact);
+    fs::copy(&gguf_path, &artifact_copy).unwrap();
+    let installed = install_model(&manifest_path, &artifact_copy, &models_dir).unwrap();
+
+    let state = HostState::new(HostConfig::new(
+        socket.clone(),
+        BackendKind::LlamaCpp,
+        models_dir,
+    ));
+    let server = tokio::spawn(run_server(state));
+    wait_for_socket(&socket).await;
+
+    let client = Arc::new(EmbedHostClient::connect(&socket).await.unwrap());
+    let session = client
+        .load_model(&installed.model_dir, Some(512))
+        .await
+        .expect("load llama GGUF");
+    assert_eq!(session.specification().dimensions, 512);
+    assert_eq!(session.specification().provider_id, "llama.cpp");
+
+    let vector = session
+        .embed_query(EmbedQueryRequest {
+            text: "capability grants for plugins".into(),
+        })
+        .await
+        .expect("embed_query via llama.cpp");
+    assert_eq!(vector.values.len(), 512);
+    let norm: f32 = vector.values.iter().map(|v| v * v).sum::<f32>().sqrt();
+    assert!(
+        (norm - 1.0).abs() < 1e-3,
+        "expected L2-normalized vector, got norm={norm}"
+    );
+
+    server.abort();
+}
+

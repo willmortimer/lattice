@@ -30,8 +30,9 @@ pub use lease::{
     WorkspaceLeaseFile, LEASE_RELATIVE_PATH, OWNER_EMBEDDED, OWNER_LATTICED,
 };
 pub use semantic::{
-    hybrid_search_with_session_semantic, SemanticAvailability, SemanticWorkerConfig,
-    SessionSemanticWorker, DEFAULT_EMBED_BATCH_SIZE,
+    hybrid_search_with_session_semantic, map_worker_status, MappedWorkerPhase, SemanticAvailability,
+    SemanticStatus, SemanticStatusState, SemanticWorkerConfig, SessionSemanticWorker,
+    DEFAULT_EMBED_BATCH_SIZE,
 };
 pub use session::WorkspaceSession;
 pub use watch::{default_watch_debounce, SessionIndexWatcher};
