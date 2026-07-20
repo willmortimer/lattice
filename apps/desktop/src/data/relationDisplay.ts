@@ -63,6 +63,18 @@ export function relationIdsEqual(left: readonly string[], right: readonly string
 }
 
 /** Human label for a related row: name-like field, else first text value, else id. */
+/** Filter relation picker targets by display label or record id substring. */
+export function filterRelationTargets(targets: readonly DataRow[], query: string): DataRow[] {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) {
+    return [...targets];
+  }
+  return targets.filter((row) => {
+    const label = relationRecordLabel(row).toLowerCase();
+    return label.includes(normalized) || row.id.toLowerCase().includes(normalized);
+  });
+}
+
 export function relationRecordLabel(row: DataRow): string {
   for (const field of NAME_LIKE_FIELDS) {
     const value = row.values[field];
