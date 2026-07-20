@@ -141,7 +141,7 @@ flowchart TD
 | P3-03 | done | grok | Arrow IPC |
 | P3-04 | done | grok | Parquet partitions |
 | P3-05 | pending | composer | Profiling |
-| P3-06 | pending | grok | Perspective |
+| P3-06 | merged | grok | Perspective |
 | P3-07 | merged | composer | Vega-Lite |
 | P3-08 | pending | grok | Annotation overlay |
 | P3-09 | pending | composer | Docs wave 3 |
@@ -276,6 +276,9 @@ flowchart TD
 ### Task `P3-06`: Perspective analytical viewer
 
 - Perspective fed by Arrow batches for `dataset` kind.
+- **Status:** done — `@finos/perspective` (+ viewer + datagrid, Apache-2.0) loads
+  Arrow IPC in `DatasetResourceRenderer`; Glide remains for mutable `.data`;
+  schema dump fallback if WASM init/load fails. Manual check in docs/11.
 - **Depends on:** P3-03 · **Model:** cursor-grok-4.5-high
 
 ### Task `P3-07`: Vega-Lite charts
