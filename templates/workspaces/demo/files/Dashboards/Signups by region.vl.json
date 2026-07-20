@@ -1,0 +1,17 @@
+{
+  "lattice": {
+    "data": {
+      "dataset": "Data/Events.dataset",
+      "sql": "SELECT * FROM read_csv_auto('Data/Events.dataset/facts/signups.csv')"
+    }
+  },
+  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+  "title": "Signups by region",
+  "data": { "name": "table" },
+  "mark": { "type": "bar", "tooltip": true },
+  "encoding": {
+    "x": { "field": "region", "type": "nominal", "title": "Region" },
+    "y": { "field": "signups", "type": "quantitative", "title": "Signups" },
+    "color": { "field": "region", "type": "nominal", "legend": null }
+  }
+}

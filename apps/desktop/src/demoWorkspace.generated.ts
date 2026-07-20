@@ -29,6 +29,7 @@ export const demoSnapshot: WorkspaceSnapshot = {
     "Canvases": "Spatial boards that link into workspace files.",
     "Templates": "Page templates with {{title}} and {{date}} placeholders.",
     "Data": "Tabular seeds and imported tables.",
+    "Dashboards": "Interactive summaries and charts.",
     "Resources": "Ordinary files — JSON, YAML, code, SQL, images.",
     "Archive": "Finished or inactive material."
   },
@@ -55,8 +56,31 @@ export const demoSnapshot: WorkspaceSnapshot = {
       "kind": "data-app"
     },
     {
+      "path": "Dashboards",
+      "kind": "folder"
+    },
+    {
+      "path": "Dashboards/Signups by region.vl.json",
+      "kind": "file",
+      "formatId": "file:json"
+    },
+    {
       "path": "Data",
       "kind": "folder"
+    },
+    {
+      "path": "Data/Events.dataset/dataset.yaml",
+      "kind": "file",
+      "formatId": "file:yaml"
+    },
+    {
+      "path": "Data/Events.dataset/facts/signups.csv",
+      "kind": "file",
+      "formatId": "file:text"
+    },
+    {
+      "path": "Data/Events.dataset/README.md",
+      "kind": "page"
     },
     {
       "path": "Data/Metrics.data",
@@ -4778,11 +4802,15 @@ export const demoPages: Record<string, string> = {
   "Research/Market Notes.md": "---\ntitle: Market Notes\ntags: [research]\n---\n\n# Market Notes\n\nWorking assumptions for positioning — link to [[Research/Competitor Analysis]] and\n[[Research/Interview Synthesis]].\n\n## Segments\n\n| Segment | Pain | Lattice fit |\n| --- | --- | --- |\n| Individual knowledge workers | Tool sprawl | Unified files + search |\n| Small product teams | Roadmap + research scattered | Pages + canvas + tables |\n| Data-curious builders | SQL without ops burden | `.data` apps beside Markdown |\n\n## Pricing hypotheses\n\n- Free local core; paid sync/collab later (out of scope for this template)\n- Teams value export and auditability over infinite block types\n\n## Open questions\n\n- How much calendar view usage appears in CRM-style tables?\n- Do users expect `Templates/` to mirror daily-note plugins from other tools?\n\nRelated: [[Product/Principles]] and [[Research/Long Read]].\n\n#research\n",
   "Research/Interview Synthesis.md": "---\ntitle: Interview Synthesis\ntags: [research]\n---\n\n# Interview Synthesis\n\nThemes from five fictional discovery calls — seeds for [[Product/Vision]] and CRM\nstatus values in `CRM.data`.\n\n## Recurring requests\n\n1. **Keep my files** — git-friendly Markdown and JSON, not opaque databases.\n2. **Typed tables inline** — contacts and tasks beside narrative docs.\n3. **Spatial overview** — canvas for strategy, not just pretty wallpapers.\n4. **Fast search** — path + body, tolerating long pages like [[Research/Long Read]].\n\n## Representative quotes\n\n| Speaker | Quote | Implied column |\n| --- | --- | --- |\n| PM | \"Board view by status is how I run standup.\" | `status` |\n| Engineer | \"Due dates on leads, not on archived contacts.\" | `due_date` |\n| Designer | \"Gallery cover from company name is enough for now.\" | `company` |\n\n## Follow-ups\n\n- [x] Saved board view under `CRM.data/views/Board.yaml` (see [[Home#CRM views]])\n- [ ] Link interview pages from canvas nodes\n- [ ] Export subset to `Data/sample.csv` for comparison\n\n#research\n",
   "Templates/Daily Note.md": "---\ntitle: \"{{title}}\"\ndate: {{date}}\n---\n\n# {{date}}\n\n## Focus\n\n-\n\n## Log\n\n-\n\n## Open loops\n\n- [ ]\n\n## Links\n\n-\n",
-  "Templates/Meeting Note.md": "---\ntitle: \"{{title}}\"\ndate: {{date}}\nattendees: []\n---\n\n# {{title}}\n\n## Agenda\n\n1.\n\n## Notes\n\n## Decisions\n\n## Action items\n\n- [ ] Owner — task (due: )\n\n## Related\n\n-\n"
+  "Templates/Meeting Note.md": "---\ntitle: \"{{title}}\"\ndate: {{date}}\nattendees: []\n---\n\n# {{title}}\n\n## Agenda\n\n1.\n\n## Notes\n\n## Decisions\n\n## Action items\n\n- [ ] Owner — task (due: )\n\n## Related\n\n-\n",
+  "Data/Events.dataset/README.md": "# Events\n\nSample analytical dataset for the First Look demo. Facts live in `facts/`.\n"
 };
 
 export const demoTextFiles: Record<string, string> = {
   "Data/sample.csv": "name,role,status\nAda Lovelace,Analyst,Active\nGrace Hopper,Engineer,Active\n",
+  "Data/Events.dataset/dataset.yaml": "format: lattice-dataset\nversion: 1\nid: demo-events-dataset\ntitle: Events\ndescription: Sample analytical facts for Vega-Lite chart demos.\npartitions: []\n",
+  "Data/Events.dataset/facts/signups.csv": "region,signups\nNorth,42\nSouth,28\nEast,35\nWest,19\n",
+  "Dashboards/Signups by region.vl.json": "{\n  \"lattice\": {\n    \"data\": {\n      \"dataset\": \"Data/Events.dataset\",\n      \"sql\": \"SELECT * FROM read_csv_auto('Data/Events.dataset/facts/signups.csv')\"\n    }\n  },\n  \"$schema\": \"https://vega.github.io/schema/vega-lite/v6.json\",\n  \"title\": \"Signups by region\",\n  \"data\": { \"name\": \"table\" },\n  \"mark\": { \"type\": \"bar\", \"tooltip\": true },\n  \"encoding\": {\n    \"x\": { \"field\": \"region\", \"type\": \"nominal\", \"title\": \"Region\" },\n    \"y\": { \"field\": \"signups\", \"type\": \"quantitative\", \"title\": \"Signups\" },\n    \"color\": { \"field\": \"region\", \"type\": \"nominal\", \"legend\": null }\n  }\n}\n",
   "Resources/config.json": "{\n  \"name\": \"Personal\",\n  \"version\": 1,\n  \"features\": {\n    \"canvas\": true,\n    \"search\": true\n  }\n}\n",
   "Resources/schema.yaml": "title: Sample schema\nversion: 1\nfields:\n  - name: id\n    type: text\n  - name: status\n    type: text\n",
   "Resources/hooks.json": "{\n  \"workspace\": \"first-look-demo\",\n  \"hooks\": {\n    \"onQuickCapture\": {\n      \"targetDirectory\": \"Inbox\",\n      \"template\": \"Templates/Daily Note.md\"\n    },\n    \"onArchive\": {\n      \"targetDirectory\": \"Archive\"\n    }\n  },\n  \"search\": {\n    \"indexBody\": true,\n    \"boostPaths\": [\"Product/\", \"Research/\"]\n  }\n}\n",

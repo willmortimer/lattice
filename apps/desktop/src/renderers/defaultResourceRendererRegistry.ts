@@ -1,6 +1,7 @@
 import { createAbortError, ResourceRendererRegistry, type ResourceRendererDefinition } from "../resourceRendererRegistry";
 import type { OpenResourceSession } from "../resourceSession";
 import type { ResourceKind } from "../types";
+import { registerChartResourceRenderers } from "./chartResourceRendererRegistration";
 import { registerMediaResourceRenderers } from "./mediaResourceRendererRegistration";
 import { registerTextResourceRenderers } from "./textResourceRendererRegistration";
 import type { ResourceRendererContext } from "./RendererContext";
@@ -72,6 +73,7 @@ export function createDefaultResourceRendererRegistry(): ResourceRendererRegistr
       ),
     );
   registerMediaResourceRenderers(registry);
+  registerChartResourceRenderers(registry);
   registerTextResourceRenderers(registry);
   return registry;
 }
