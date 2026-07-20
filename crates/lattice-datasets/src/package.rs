@@ -86,6 +86,10 @@ impl Dataset {
         &self.manifest
     }
 
+    pub(crate) fn manifest_mut(&mut self) -> &mut DatasetManifest {
+        &mut self.manifest
+    }
+
     /// Content hash of `dataset.yaml` for optimistic concurrency later.
     pub fn package_revision(&self) -> Result<String> {
         let manifest_path = dataset_manifest_path(&self.path);

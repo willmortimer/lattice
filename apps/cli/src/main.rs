@@ -16,7 +16,7 @@ use lattice_data::{
 };
 use lattice_index::{Backlink, SearchHit, WorkspaceIndex};
 use lattice_storage::{NativeWorkspaceStore, RecoveryJournal, WorkspaceStore};
-use lattice_datasets::Dataset;
+use lattice_datasets::{parse_partition_key_specs, Dataset};
 use lattice_theme::{
     check_theme_file, discover_themes, load_appearance, save_appearance, AppearanceMode,
 };
@@ -288,6 +288,20 @@ enum DatasetCommand {
         /// Emit output as JSON.
         #[arg(long)]
         json: bool,
+    },
+    /// Import a CSV file into a Hive-style Parquet partition under `facts/`.
+    ImportCsv {
+        /// Workspace path of the `.dataset` package.
+        path: PathBuf,
+        /// CSV file to import (may be outside the workspace).
+        #[arg(long)]
+        csv: PathBuf,
+        /// Hive partition key as `key=value` (repeatable), e.g. `--partition year=2025`.
+        #[arg(long = "partition", value_name = "KEY=VALUE")]
+        partitions: Vec<String>,
+        /// Parquet file name within the partition directory (default: part-000.parquet).
+        #[arg(long)]
+        file_name: Option<String>,
     },
 }
 
@@ -562,6 +576,12 @@ fn run(command: Command) -> Result<ExitCode> {
                 description,
             } => cmd_dataset_create(path, title, description),
             DatasetCommand::Show { path, json } => cmd_dataset_show(path, json),
+            DatasetCommand::ImportCsv {
+                path,
+                csv,
+                partitions,
+                file_name,
+            } => cmd_dataset_import_csv(path, csv, partitions, file_name),
         },
         Command::Record { command } => match command {
             RecordCommand::Insert {
@@ -991,6 +1011,27 @@ fn cmd_dataset_show(path: PathBuf, json: bool) -> Result<ExitCode> {
         println!("format: {} v{}", output.format, output.version);
         println!("revision: {}", output.package_revision);
     }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_dataset_import_csv(
+    path: PathBuf,
+    csv: PathBuf,
+    partitions: Vec<String>,
+    file_name: Option<String>,
+) -> Result<ExitCode> {
+    let start = std::env::current_dir().context("failed to determine current directory")?;
+    let ws = Workspace::discover(&start)?;
+    let rel = workspace_relative(&ws, &path)?;
+    let keys = parse_partition_key_specs(&partitions)?;
+    let mut dataset = Dataset::open(&ws.root().join(&rel))?;
+    let entry = dataset.import_csv(&csv, &keys, file_name.as_deref())?;
+    println!(
+        "imported {} → {} ({} rows)",
+        csv.display(),
+        entry.path,
+        entry.rows.unwrap_or(0)
+    );
     Ok(ExitCode::SUCCESS)
 }
 

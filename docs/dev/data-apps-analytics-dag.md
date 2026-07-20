@@ -139,7 +139,7 @@ flowchart TD
 | P3-01 | merged | composer | Dataset package |
 | P3-02 | pending | grok | DuckDB |
 | P3-03 | pending | grok | Arrow IPC |
-| P3-04 | pending | grok | Parquet partitions |
+| P3-04 | done | grok | Parquet partitions |
 | P3-05 | pending | composer | Profiling |
 | P3-06 | pending | grok | Perspective |
 | P3-07 | pending | composer | Vega-Lite |
@@ -262,6 +262,8 @@ flowchart TD
 ### Task `P3-04`: Parquet partitions + manifests
 
 - Partitioned `facts/` Parquet; dataset.yaml manifest; CSV→Parquet helper.
+- **Status:** done in `lattice-datasets` (`write_partition_*`, `discover_partitions`,
+  `import_csv`; CLI `lattice dataset import-csv`). Arrow/Parquet deps are Apache-2.0.
 - **Depends on:** P3-01 · **Model:** cursor-grok-4.5-high
 
 ### Task `P3-05`: Analytical profiling
