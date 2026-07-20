@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt;
+use std::str::FromStr;
 
 use rusqlite::types::ValueRef;
 use serde::{Deserialize, Serialize};
@@ -18,6 +19,59 @@ pub enum FieldType {
     Relation,
     /// Read-only projection of a field through a relation on the same table.
     Lookup,
+    /// Read-only aggregate over linked records through a relation on the same table.
+    Rollup,
+}
+
+/// Aggregate function for [`FieldType::Rollup`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RollupAggregate {
+    Count,
+    Sum,
+    Min,
+    Max,
+}
+
+impl RollupAggregate {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            RollupAggregate::Count => "count",
+            RollupAggregate::Sum => "sum",
+            RollupAggregate::Min => "min",
+            RollupAggregate::Max => "max",
+        }
+    }
+
+    /// Whether this aggregate requires a numeric target field on the related table.
+    pub fn requires_field(self) -> bool {
+        matches!(
+            self,
+            RollupAggregate::Sum | RollupAggregate::Min | RollupAggregate::Max
+        )
+    }
+}
+
+impl fmt::Display for RollupAggregate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for RollupAggregate {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "count" => Ok(RollupAggregate::Count),
+            "sum" => Ok(RollupAggregate::Sum),
+            "min" => Ok(RollupAggregate::Min),
+            "max" => Ok(RollupAggregate::Max),
+            other => Err(format!(
+                "unknown rollup aggregate {other:?}; expected count, sum, min, or max"
+            )),
+        }
+    }
 }
 
 impl FieldType {
@@ -27,7 +81,8 @@ impl FieldType {
             | FieldType::LongText
             | FieldType::Date
             | FieldType::Relation
-            | FieldType::Lookup => "TEXT",
+            | FieldType::Lookup
+            | FieldType::Rollup => "TEXT",
             FieldType::Integer | FieldType::Boolean => "INTEGER",
             FieldType::Decimal => "REAL",
         }
@@ -46,7 +101,7 @@ impl FieldType {
 
     /// Whether cells of this type are computed at read time and must not be written.
     pub fn is_read_only(self) -> bool {
-        matches!(self, FieldType::Lookup)
+        matches!(self, FieldType::Lookup | FieldType::Rollup)
     }
 }
 
@@ -61,6 +116,7 @@ impl fmt::Display for FieldType {
             FieldType::Date => write!(f, "date"),
             FieldType::Relation => write!(f, "relation"),
             FieldType::Lookup => write!(f, "lookup"),
+            FieldType::Rollup => write!(f, "rollup"),
         }
     }
 }
@@ -82,12 +138,23 @@ pub enum CellValue {
     Lookup {
         values: Vec<String>,
     },
+    /// Resolved rollup aggregate (never persisted to SQLite).
+    ///
+    /// Always uses `Option<f64>` so count/sum/min/max share one IPC shape:
+    /// - `count`: `Some(n)` including `0` when there are no linked records
+    /// - `sum`: `Some(total)` including `0.0` when empty or all null
+    /// - `min` / `max`: `Some(v)` when at least one numeric value exists, else `None`
+    Rollup {
+        value: Option<f64>,
+    },
 }
 
 impl CellValue {
     pub fn as_sqlite_value(&self) -> rusqlite::types::Value {
         match self {
-            CellValue::Null | CellValue::Lookup { .. } => rusqlite::types::Value::Null,
+            CellValue::Null | CellValue::Lookup { .. } | CellValue::Rollup { .. } => {
+                rusqlite::types::Value::Null
+            }
             CellValue::Text(text) | CellValue::Date(text) => {
                 rusqlite::types::Value::Text(text.clone())
             }
@@ -103,28 +170,35 @@ impl CellValue {
     }
 
     pub fn from_sqlite(value_ref: ValueRef<'_>, field_type: FieldType) -> rusqlite::Result<Self> {
-        // Lookup columns are placeholders; resolved values are filled after the SQL read.
+        // Lookup/rollup columns are placeholders; resolved values are filled after the SQL read.
         if field_type == FieldType::Lookup {
             return Ok(CellValue::Lookup { values: Vec::new() });
+        }
+        if field_type == FieldType::Rollup {
+            return Ok(CellValue::Rollup { value: None });
         }
         match value_ref {
             ValueRef::Null => Ok(CellValue::Null),
             ValueRef::Integer(value) => match field_type {
                 FieldType::Boolean => Ok(CellValue::Boolean(value != 0)),
                 FieldType::Date => Ok(CellValue::Date(value.to_string())),
-                FieldType::Relation | FieldType::Lookup => Err(rusqlite::Error::InvalidColumnType(
-                    0,
-                    field_type.to_string(),
-                    value_ref.data_type(),
-                )),
+                FieldType::Relation | FieldType::Lookup | FieldType::Rollup => {
+                    Err(rusqlite::Error::InvalidColumnType(
+                        0,
+                        field_type.to_string(),
+                        value_ref.data_type(),
+                    ))
+                }
                 _ => Ok(CellValue::Integer(value)),
             },
             ValueRef::Real(value) => match field_type {
-                FieldType::Relation | FieldType::Lookup => Err(rusqlite::Error::InvalidColumnType(
-                    0,
-                    field_type.to_string(),
-                    value_ref.data_type(),
-                )),
+                FieldType::Relation | FieldType::Lookup | FieldType::Rollup => {
+                    Err(rusqlite::Error::InvalidColumnType(
+                        0,
+                        field_type.to_string(),
+                        value_ref.data_type(),
+                    ))
+                }
                 _ => Ok(CellValue::Decimal(value)),
             },
             ValueRef::Text(bytes) => {
@@ -156,6 +230,7 @@ impl CellValue {
                         Ok(CellValue::Relation { record_ids })
                     }
                     FieldType::Lookup => Ok(CellValue::Lookup { values: Vec::new() }),
+                    FieldType::Rollup => Ok(CellValue::Rollup { value: None }),
                     _ => Ok(CellValue::Text(text)),
                 }
             }
@@ -183,6 +258,25 @@ impl CellValue {
             }
             CellValue::Relation { record_ids } => record_ids.join(", "),
             CellValue::Lookup { values } => values.join(", "),
+            CellValue::Rollup { value: None } => String::new(),
+            CellValue::Rollup { value: Some(n) } => {
+                // Prefer integer display when the value is whole (typical for count).
+                if n.fract() == 0.0 && *n >= i64::MIN as f64 && *n <= i64::MAX as f64 {
+                    (*n as i64).to_string()
+                } else {
+                    n.to_string()
+                }
+            }
+        }
+    }
+
+    /// Extract a numeric value for rollup sum/min/max (skips null and non-numeric).
+    pub fn as_rollup_number(&self) -> Option<f64> {
+        match self {
+            CellValue::Integer(value) => Some(*value as f64),
+            CellValue::Decimal(value) => Some(*value),
+            CellValue::Null => None,
+            _ => None,
         }
     }
 }
@@ -199,6 +293,12 @@ pub struct ColumnMeta {
     pub lookup_relation: Option<String>,
     /// Field on the related table projected by [`FieldType::Lookup`].
     pub lookup_field: Option<String>,
+    /// Source relation column on this table for [`FieldType::Rollup`].
+    pub rollup_relation: Option<String>,
+    /// Aggregate applied by [`FieldType::Rollup`].
+    pub rollup_aggregate: Option<RollupAggregate>,
+    /// Related-table field aggregated by [`FieldType::Rollup`] (optional for count).
+    pub rollup_field: Option<String>,
 }
 
 /// Prior relation cell state stripped when a target row is deleted.
@@ -244,6 +344,9 @@ pub struct NewColumn<'a> {
     pub relation_table: Option<&'a str>,
     pub lookup_relation: Option<&'a str>,
     pub lookup_field: Option<&'a str>,
+    pub rollup_relation: Option<&'a str>,
+    pub rollup_aggregate: Option<RollupAggregate>,
+    pub rollup_field: Option<&'a str>,
 }
 
 impl<'a> NewColumn<'a> {
@@ -254,6 +357,9 @@ impl<'a> NewColumn<'a> {
             relation_table: None,
             lookup_relation: None,
             lookup_field: None,
+            rollup_relation: None,
+            rollup_aggregate: None,
+            rollup_field: None,
         }
     }
 
@@ -264,6 +370,9 @@ impl<'a> NewColumn<'a> {
             relation_table: Some(relation_table),
             lookup_relation: None,
             lookup_field: None,
+            rollup_relation: None,
+            rollup_aggregate: None,
+            rollup_field: None,
         }
     }
 
@@ -274,6 +383,27 @@ impl<'a> NewColumn<'a> {
             relation_table: None,
             lookup_relation: Some(lookup_relation),
             lookup_field: Some(lookup_field),
+            rollup_relation: None,
+            rollup_aggregate: None,
+            rollup_field: None,
+        }
+    }
+
+    pub fn rollup(
+        name: &'a str,
+        rollup_relation: &'a str,
+        aggregate: RollupAggregate,
+        rollup_field: Option<&'a str>,
+    ) -> Self {
+        Self {
+            name,
+            field_type: FieldType::Rollup,
+            relation_table: None,
+            lookup_relation: None,
+            lookup_field: None,
+            rollup_relation: Some(rollup_relation),
+            rollup_aggregate: Some(aggregate),
+            rollup_field,
         }
     }
 }

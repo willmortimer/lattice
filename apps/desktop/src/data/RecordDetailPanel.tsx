@@ -123,7 +123,11 @@ export function RecordDetailPanel({
           const editorKind = fieldEditorKind(column.field_type);
           const value = draft[column.name] ?? "";
           const error = errors[column.name];
-          const fieldReadOnly = readOnly || column.name === "id" || column.field_type === "lookup";
+          const fieldReadOnly =
+            readOnly ||
+            column.name === "id" ||
+            column.field_type === "lookup" ||
+            column.field_type === "rollup";
 
           return (
             <label key={column.name} className="record-detail-field">
@@ -131,7 +135,7 @@ export function RecordDetailPanel({
                 {column.name}
                 <span className="record-detail-field-type">{fieldTypeLabel(column.field_type)}</span>
               </span>
-              {column.name === "id" || editorKind === "lookup" ? (
+              {column.name === "id" || editorKind === "lookup" || editorKind === "rollup" ? (
                 <input
                   className="record-detail-input record-detail-input-readonly"
                   type="text"

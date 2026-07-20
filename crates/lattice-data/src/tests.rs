@@ -521,6 +521,9 @@ fn relation_column_requires_relation_table_metadata() {
                 relation_table: None,
                 lookup_relation: None,
                 lookup_field: None,
+                rollup_relation: None,
+                rollup_aggregate: None,
+                rollup_field: None,
             }],
         )
         .unwrap_err()
@@ -1149,6 +1152,213 @@ fn lookup_column_requires_valid_relation_and_field() {
         .unwrap_err()
         .to_string();
     assert!(missing_field.contains("lookup_field"));
+}
+
+#[test]
+fn rollup_column_resolves_count_and_sum() {
+    use crate::{NewColumn, RollupAggregate};
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Orders.data");
+    let mut app = DataApp::create(&package_path, "Orders", "orders").unwrap();
+    app.add_columns("orders", &[NewColumn::new("name", FieldType::Text)])
+        .unwrap();
+    app.add_table("line_items").unwrap();
+    app.add_columns(
+        "line_items",
+        &[
+            NewColumn::new("label", FieldType::Text),
+            NewColumn::new("amount", FieldType::Decimal),
+        ],
+    )
+    .unwrap();
+    app.add_columns(
+        "orders",
+        &[
+            NewColumn::relation("items", "line_items"),
+            NewColumn::rollup("item_count", "items", RollupAggregate::Count, None),
+            NewColumn::rollup(
+                "total_amount",
+                "items",
+                RollupAggregate::Sum,
+                Some("amount"),
+            ),
+            NewColumn::rollup("min_amount", "items", RollupAggregate::Min, Some("amount")),
+            NewColumn::rollup("max_amount", "items", RollupAggregate::Max, Some("amount")),
+        ],
+    )
+    .unwrap();
+
+    let columns = app.columns("orders").unwrap();
+    let rollup = columns
+        .iter()
+        .find(|column| column.name == "total_amount")
+        .expect("total_amount rollup");
+    assert_eq!(rollup.field_type, FieldType::Rollup);
+    assert_eq!(rollup.rollup_relation.as_deref(), Some("items"));
+    assert_eq!(rollup.rollup_aggregate, Some(RollupAggregate::Sum));
+    assert_eq!(rollup.rollup_field.as_deref(), Some("amount"));
+
+    let manifest_text = std::fs::read_to_string(app_manifest_path(&package_path)).unwrap();
+    assert!(manifest_text.contains("type: rollup"));
+    assert!(manifest_text.contains("rollup_relation: items"));
+    assert!(manifest_text.contains("rollup_aggregate: sum"));
+    assert!(manifest_text.contains("rollup_field: amount"));
+
+    let order_id = app
+        .insert_row(
+            "orders",
+            &BTreeMap::from([("name".into(), CellValue::Text("PO-1".into()))]),
+        )
+        .unwrap();
+    let item_a = app
+        .insert_row(
+            "line_items",
+            &BTreeMap::from([
+                ("label".into(), CellValue::Text("Widget".into())),
+                ("amount".into(), CellValue::Decimal(10.5)),
+            ]),
+        )
+        .unwrap();
+    let item_b = app
+        .insert_row(
+            "line_items",
+            &BTreeMap::from([
+                ("label".into(), CellValue::Text("Gadget".into())),
+                ("amount".into(), CellValue::Decimal(4.5)),
+            ]),
+        )
+        .unwrap();
+
+    app.update_row(
+        "orders",
+        &order_id,
+        &BTreeMap::from([(
+            "items".into(),
+            CellValue::Relation {
+                record_ids: vec![item_a, item_b],
+            },
+        )]),
+    )
+    .unwrap();
+
+    let row = app.get_row("orders", &order_id).unwrap().unwrap();
+    assert_eq!(
+        row.values.get("item_count"),
+        Some(&CellValue::Rollup { value: Some(2.0) })
+    );
+    assert_eq!(
+        row.values.get("total_amount"),
+        Some(&CellValue::Rollup { value: Some(15.0) })
+    );
+    assert_eq!(
+        row.values.get("min_amount"),
+        Some(&CellValue::Rollup { value: Some(4.5) })
+    );
+    assert_eq!(
+        row.values.get("max_amount"),
+        Some(&CellValue::Rollup { value: Some(10.5) })
+    );
+
+    let empty_id = app
+        .insert_row(
+            "orders",
+            &BTreeMap::from([("name".into(), CellValue::Text("PO-empty".into()))]),
+        )
+        .unwrap();
+    let empty = app.get_row("orders", &empty_id).unwrap().unwrap();
+    assert_eq!(
+        empty.values.get("item_count"),
+        Some(&CellValue::Rollup { value: Some(0.0) })
+    );
+    assert_eq!(
+        empty.values.get("total_amount"),
+        Some(&CellValue::Rollup { value: Some(0.0) })
+    );
+    assert_eq!(
+        empty.values.get("min_amount"),
+        Some(&CellValue::Rollup { value: None })
+    );
+
+    let write_err = app
+        .update_row(
+            "orders",
+            &order_id,
+            &BTreeMap::from([(
+                "item_count".into(),
+                CellValue::Rollup { value: Some(99.0) },
+            )]),
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(write_err.contains("read-only"));
+}
+
+#[test]
+fn rollup_column_requires_valid_relation_and_field() {
+    use crate::{NewColumn, RollupAggregate};
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Orders.data");
+    let mut app = DataApp::create(&package_path, "Orders", "orders").unwrap();
+    app.add_columns("orders", &[NewColumn::new("name", FieldType::Text)])
+        .unwrap();
+    app.add_table("line_items").unwrap();
+    app.add_columns(
+        "line_items",
+        &[
+            NewColumn::new("label", FieldType::Text),
+            NewColumn::new("amount", FieldType::Decimal),
+        ],
+    )
+    .unwrap();
+    app.add_columns(
+        "orders",
+        &[NewColumn::relation("items", "line_items")],
+    )
+    .unwrap();
+
+    let missing_relation = app
+        .add_columns(
+            "orders",
+            &[NewColumn::rollup(
+                "item_count",
+                "missing",
+                RollupAggregate::Count,
+                None,
+            )],
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(missing_relation.contains("rollup_relation"));
+
+    let missing_field = app
+        .add_columns(
+            "orders",
+            &[NewColumn::rollup(
+                "total_amount",
+                "items",
+                RollupAggregate::Sum,
+                None,
+            )],
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(missing_field.contains("rollup_field"));
+
+    let non_numeric = app
+        .add_columns(
+            "orders",
+            &[NewColumn::rollup(
+                "label_sum",
+                "items",
+                RollupAggregate::Sum,
+                Some("label"),
+            )],
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(non_numeric.contains("integer or decimal"));
 }
 
 #[test]
