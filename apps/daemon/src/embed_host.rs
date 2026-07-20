@@ -1,7 +1,11 @@
 //! Optional `lattice-embed-host` supervision for semantic indexing.
 //!
-//! When the host dies, sessions are marked semantically degraded so hybrid
-//! search falls back to FTS. Restarts use bounded exponential backoff.
+//! Host modes (`ExternalSocket` / `SpawnHost`) use [`ReconnectableEmbedHostProvider`]
+//! so embedding jobs call the host over UDS. When the host dies, sessions are
+//! marked semantically degraded so hybrid search falls back to FTS. Restarts use
+//! bounded exponential backoff and reconnect the provider.
+//!
+//! `FakeInProcess` / `LATTICE_SEMANTIC_FAKE=1` keep the in-process Fake for CI.
 
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -10,13 +14,15 @@ use std::sync::{Arc, Mutex, Weak};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
+use lattice_embed_host::{install_model, ReconnectableEmbedHostProvider};
 use lattice_embedding::{
-    DistanceMetric, EmbeddingProvider, EmbeddingSpecification, FakeEmbeddingProvider,
-    PoolingStrategy,
+    pinned_model_is_ready, qwen3_embedding_install_dir, sha256_hex, DistanceMetric,
+    EmbeddingProvider, EmbeddingSpecification, FakeEmbeddingProvider, ModelManifest,
+    PoolingStrategy, MANIFEST_SCHEMA_VERSION,
 };
 use lattice_runtime::{
     IndexProgressPhase, LatticeRuntime, RuntimeEvent, RuntimeIndexProgress, SemanticStatus,
-    SemanticStatusState, SemanticWorkerConfig, WorkspaceSession,
+    SemanticWorkerConfig, WorkspaceSession,
 };
 use tracing::{info, warn};
 
@@ -32,6 +38,8 @@ pub const ENV_EMBED_HOST_BIN: &str = "LATTICE_EMBED_HOST_BIN";
 const MAX_RESTARTS: u32 = 5;
 const INITIAL_BACKOFF_MS: u64 = 200;
 const MAX_BACKOFF_MS: u64 = 5_000;
+/// Dimensions used for the host fake-backend bootstrap fixture.
+const HOST_FAKE_DIMENSIONS: u32 = 8;
 
 /// How the daemon obtains an embedding provider.
 #[derive(Debug, Clone)]
@@ -107,6 +115,8 @@ fn fake_specification() -> EmbeddingSpecification {
 pub struct SemanticController {
     runtime: Arc<LatticeRuntime>,
     provider: Arc<dyn EmbeddingProvider>,
+    /// Present for host-backed modes so supervisors can reconnect after restart.
+    host_provider: Option<Arc<ReconnectableEmbedHostProvider>>,
     runtime_handle: Option<tokio::runtime::Handle>,
     /// Owns the multi-thread runtime used by host-backed providers.
     _owned_runtime: Option<tokio::runtime::Runtime>,
@@ -134,6 +144,7 @@ impl SemanticController {
                 Ok(Arc::new(Self {
                     runtime,
                     provider,
+                    host_provider: None,
                     runtime_handle: None,
                     _owned_runtime: None,
                     host: Mutex::new(None),
@@ -149,13 +160,20 @@ impl SemanticController {
                     .build()
                     .map_err(|err| Error::Spawn(format!("embed runtime: {err}")))?;
                 let handle = owned.handle().clone();
-                // Job processing uses the in-process fake; socket watch marks
-                // degraded when the external host disappears (FTS still works).
+                wait_for_socket(&socket, Duration::from_secs(5))?;
+                let models_dir = socket
+                    .parent()
+                    .unwrap_or_else(|| Path::new("."))
+                    .join("embed-models");
+                let (model_dir, dimensions) = ensure_host_model_dir(&models_dir)?;
+                let host_provider =
+                    connect_host_provider(&handle, &socket, &model_dir, dimensions)?;
                 let provider: Arc<dyn EmbeddingProvider> =
-                    Arc::new(FakeEmbeddingProvider::new(fake_specification()));
+                    host_provider.clone() as Arc<dyn EmbeddingProvider>;
                 let controller = Arc::new(Self {
                     runtime,
                     provider,
+                    host_provider: Some(host_provider),
                     runtime_handle: Some(handle),
                     _owned_runtime: Some(owned),
                     host: Mutex::new(None),
@@ -177,13 +195,17 @@ impl SemanticController {
                     .build()
                     .map_err(|err| Error::Spawn(format!("embed runtime: {err}")))?;
                 let handle = owned.handle().clone();
+                let (model_dir, dimensions) = ensure_host_model_dir(&models_dir)?;
                 let child = spawn_embed_host(&binary, &socket, &models_dir)?;
                 wait_for_socket(&socket, Duration::from_secs(5))?;
+                let host_provider =
+                    connect_host_provider(&handle, &socket, &model_dir, dimensions)?;
                 let provider: Arc<dyn EmbeddingProvider> =
-                    Arc::new(FakeEmbeddingProvider::new(fake_specification()));
+                    host_provider.clone() as Arc<dyn EmbeddingProvider>;
                 let controller = Arc::new(Self {
                     runtime,
                     provider,
+                    host_provider: Some(host_provider),
                     runtime_handle: Some(handle),
                     _owned_runtime: Some(owned),
                     host: Mutex::new(Some(SupervisedHost {
@@ -270,6 +292,11 @@ impl SemanticController {
         Arc::clone(&self.provider)
     }
 
+    /// True when jobs are backed by the embed-host UDS client (not in-process Fake).
+    pub fn uses_host_provider(&self) -> bool {
+        self.host_provider.is_some()
+    }
+
     pub fn mark_all_degraded(&self, degraded: bool) {
         let mut sessions = self.sessions.lock().expect("sessions poisoned");
         sessions.retain(|weak| weak.strong_count() > 0);
@@ -306,6 +333,34 @@ impl SemanticController {
             }));
     }
 
+    fn reconnect_host_provider(&self) {
+        let Some(host_provider) = self.host_provider.as_ref() else {
+            return;
+        };
+        let Some(handle) = self.runtime_handle.as_ref() else {
+            return;
+        };
+        match handle.block_on(host_provider.reconnect()) {
+            Ok(()) => info!("embed-host provider reconnected"),
+            Err(err) => warn!(error = %err, "embed-host provider reconnect failed"),
+        }
+    }
+
+    /// Kill the supervised embed-host child (integration tests only).
+    #[doc(hidden)]
+    pub fn kill_supervised_host_for_test(&self) -> bool {
+        let mut guard = self.host.lock().expect("host poisoned");
+        let Some(host) = guard.as_mut() else {
+            return false;
+        };
+        let _ = host.child.kill();
+        let _ = host.child.wait();
+        // Prevent the supervisor from immediately restarting during the test.
+        host.restarts.store(MAX_RESTARTS, Ordering::SeqCst);
+        self.mark_all_degraded(true);
+        true
+    }
+
     fn spawn_socket_watch(self: &Arc<Self>, socket: PathBuf) {
         let stop = Arc::clone(&self.stop);
         let controller = Arc::clone(self);
@@ -321,6 +376,7 @@ impl SemanticController {
                         warn!(path = %socket.display(), "embed-host socket missing; semantic degraded");
                     } else if alive && degraded {
                         degraded = false;
+                        controller.reconnect_host_provider();
                         controller.mark_all_degraded(false);
                         info!(path = %socket.display(), "embed-host socket restored");
                     }
@@ -392,6 +448,7 @@ impl SemanticController {
                                 {
                                     host.child = child;
                                 }
+                                controller.reconnect_host_provider();
                                 controller.mark_all_degraded(false);
                                 backoff_ms = INITIAL_BACKOFF_MS;
                                 info!(restarts, "embed-host restarted");
@@ -426,6 +483,64 @@ impl Drop for SemanticController {
     fn drop(&mut self) {
         self.shutdown();
     }
+}
+
+fn connect_host_provider(
+    handle: &tokio::runtime::Handle,
+    socket: &Path,
+    model_dir: &Path,
+    dimensions: Option<u32>,
+) -> Result<Arc<ReconnectableEmbedHostProvider>> {
+    handle
+        .block_on(ReconnectableEmbedHostProvider::connect(
+            socket, model_dir, dimensions,
+        ))
+        .map(Arc::new)
+        .map_err(|err| Error::Spawn(format!("embed-host connect/load: {err}")))
+}
+
+/// Prefer a verified pinned install; otherwise stage a tiny fake fixture for the
+/// host fake backend (CI / offline SpawnHost before E7 llama inference).
+///
+/// Returns `(model_dir, optional load dimensions)`. `None` dimensions means the
+/// host uses the manifest default (512 for pinned Qwen3).
+fn ensure_host_model_dir(models_dir: &Path) -> Result<(PathBuf, Option<u32>)> {
+    if pinned_model_is_ready() {
+        return Ok((qwen3_embedding_install_dir(), None));
+    }
+    Ok((stage_fake_host_model(models_dir)?, Some(HOST_FAKE_DIMENSIONS)))
+}
+
+fn stage_fake_host_model(models_dir: &Path) -> Result<PathBuf> {
+    std::fs::create_dir_all(models_dir)?;
+    let staging = models_dir.join(".staging-fake");
+    std::fs::create_dir_all(&staging)?;
+    let artifact_bytes = b"lattice-embed-host-fake-fixture";
+    let sha = sha256_hex(artifact_bytes);
+    let artifact = staging.join("fixture.bin");
+    std::fs::write(&artifact, artifact_bytes)?;
+    let manifest = ModelManifest {
+        schema_version: MANIFEST_SCHEMA_VERSION,
+        provider: "fake".into(),
+        model_id: "lattice/embed-host-fake".into(),
+        model_revision: "e6".into(),
+        artifact: "fixture.bin".into(),
+        sha256: sha,
+        license: "Apache-2.0".into(),
+        native_dimensions: 32,
+        default_dimensions: HOST_FAKE_DIMENSIONS,
+        pooling: PoolingStrategy::Last,
+        instruction_version: "lattice-retrieval-v1".into(),
+    };
+    let manifest_path = staging.join("manifest.json");
+    std::fs::write(
+        &manifest_path,
+        serde_json::to_vec_pretty(&manifest).map_err(|err| Error::Spawn(err.to_string()))?,
+    )?;
+    let installed = install_model(&manifest_path, &artifact, models_dir)
+        .map_err(|err| Error::Spawn(format!("stage fake host model: {err}")))?;
+    let _ = std::fs::remove_dir_all(&staging);
+    Ok(installed.model_dir)
 }
 
 fn spawn_embed_host(binary: &Path, socket: &Path, models_dir: &Path) -> Result<Child> {
@@ -469,12 +584,81 @@ fn wait_for_socket(socket: &Path, timeout: Duration) -> Result<()> {
     })
 }
 
+/// Locate `lattice-embed-host` for tests / local launches.
+pub fn resolve_embed_host_bin() -> Option<PathBuf> {
+    if let Ok(path) = std::env::var(ENV_EMBED_HOST_BIN) {
+        let path = PathBuf::from(path);
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+
+    if let Ok(path) = which_bin("lattice-embed-host") {
+        return Some(path);
+    }
+
+    let candidates = [
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/debug/lattice-embed-host"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/release/lattice-embed-host"),
+        PathBuf::from("target/debug/lattice-embed-host"),
+        PathBuf::from("target/release/lattice-embed-host"),
+    ];
+    for candidate in candidates {
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+fn which_bin(name: &str) -> std::io::Result<PathBuf> {
+    let path = std::env::var_os("PATH").ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::NotFound, "PATH not set")
+    })?;
+    for dir in std::env::split_paths(&path) {
+        let candidate = dir.join(name);
+        if candidate.is_file() {
+            return Ok(candidate);
+        }
+    }
+    Err(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        format!("{name} not found on PATH"),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use lattice_core::Workspace;
-    use lattice_runtime::{hybrid_search_with_session_semantic, SemanticAvailability};
+    use lattice_embedding::{EmbedQueryRequest, FakeEmbeddingProvider};
+    use lattice_runtime::{
+        hybrid_search_with_session_semantic, SemanticAvailability, SemanticStatusState,
+    };
     use std::time::Instant;
+
+    fn ensure_embed_host_bin() -> PathBuf {
+        if let Some(path) = resolve_embed_host_bin() {
+            return path;
+        }
+        let status = std::process::Command::new(env!("CARGO"))
+            .args([
+                "build",
+                "-p",
+                "lattice-embed-host",
+                "--bin",
+                "lattice-embed-host",
+            ])
+            .status()
+            .expect("spawn cargo build lattice-embed-host");
+        assert!(
+            status.success(),
+            "cargo build -p lattice-embed-host failed: {status}"
+        );
+        resolve_embed_host_bin().expect(
+            "lattice-embed-host binary missing after build (set LATTICE_EMBED_HOST_BIN)",
+        )
+    }
 
     #[test]
     fn fake_controller_embeds_and_degraded_fts_fallback() {
@@ -570,5 +754,126 @@ mod tests {
         controller.shutdown();
         runtime.close_session(dir.path()).unwrap();
         std::env::remove_var(ENV_SEMANTIC_FAKE);
+    }
+
+    #[test]
+    fn spawn_host_provider_embeds_via_rpc_and_kills_to_degrade() {
+        let bin = ensure_embed_host_bin();
+        let host_dir = tempfile::tempdir().unwrap();
+        let socket = host_dir.path().join("embed-host.sock");
+        let models_dir = host_dir.path().join("embed-models");
+        // Isolate from any user-installed pinned GGUF so we stage the fake fixture.
+        let profile = tempfile::tempdir().unwrap();
+        std::env::set_var("LATTICE_DEV_HOME", profile.path());
+
+        let workspace = tempfile::tempdir().unwrap();
+        Workspace::init(workspace.path(), "Host Provider").unwrap();
+        std::fs::write(
+            workspace.path().join("Notes.md"),
+            "# Notes\n\nCapability grants for plugins.\n",
+        )
+        .unwrap();
+
+        let runtime = Arc::new(LatticeRuntime::new());
+        let controller = SemanticController::start(
+            Arc::clone(&runtime),
+            SemanticProviderMode::SpawnHost {
+                binary: bin,
+                socket,
+                models_dir,
+            },
+        )
+        .unwrap();
+        assert!(
+            controller.uses_host_provider(),
+            "SpawnHost must use EmbedHostClient-backed provider"
+        );
+        assert_eq!(
+            controller.provider().specification().dimensions,
+            HOST_FAKE_DIMENSIONS,
+            "host fake fixture dimensions must differ from in-process Fake (12)"
+        );
+
+        let session = runtime.open_workspace_session(workspace.path()).unwrap();
+        controller.attach_session(&session);
+
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while Instant::now() < deadline {
+            if let Some(ns) = session.semantic_namespace_id() {
+                let states = session
+                    .index()
+                    .chunk_embedding_states_for_namespace(ns)
+                    .unwrap();
+                if states.iter().any(|s| s.status.as_str() == "ready") {
+                    break;
+                }
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+        assert!(
+            session
+                .semantic_namespace_id()
+                .and_then(|ns| {
+                    session
+                        .index()
+                        .chunk_embedding_states_for_namespace(ns)
+                        .ok()
+                })
+                .map(|states| states.iter().any(|s| s.status.as_str() == "ready"))
+                .unwrap_or(false),
+            "host-backed worker should embed pending chunks"
+        );
+
+        // Vectors must match the host fake backend (manifest dims), not the
+        // daemon in-process Fake specification (dims=12).
+        let host_probe = {
+            let handle = controller.runtime_handle.as_ref().unwrap();
+            handle.block_on(async {
+                controller
+                    .provider()
+                    .embed_query(EmbedQueryRequest {
+                        text: "capability grants".into(),
+                    })
+                    .await
+                    .unwrap()
+            })
+        };
+        let local_fake = FakeEmbeddingProvider::new(fake_specification());
+        let local_probe = {
+            let handle = controller.runtime_handle.as_ref().unwrap();
+            handle.block_on(async {
+                local_fake
+                    .embed_query(EmbedQueryRequest {
+                        text: "capability grants".into(),
+                    })
+                    .await
+                    .unwrap()
+            })
+        };
+        assert_ne!(
+            host_probe.values.len(),
+            local_probe.values.len(),
+            "host RPC vectors must not come from in-process Fake dims"
+        );
+
+        let hits =
+            hybrid_search_with_session_semantic(&session, "capability grants", 10).unwrap();
+        assert!(hits.iter().any(|h| h.semantic_rank.is_some()));
+
+        assert!(controller.kill_supervised_host_for_test());
+        assert_eq!(
+            session.semantic_availability(),
+            Some(SemanticAvailability::Degraded)
+        );
+        let fallback =
+            hybrid_search_with_session_semantic(&session, "capability grants", 10).unwrap();
+        assert!(fallback
+            .iter()
+            .any(|h| h.resource_uri.ends_with("Notes.md")));
+        assert!(fallback.iter().all(|h| h.semantic_rank.is_none()));
+
+        controller.shutdown();
+        runtime.close_session(workspace.path()).unwrap();
+        std::env::remove_var("LATTICE_DEV_HOME");
     }
 }

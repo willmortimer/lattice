@@ -125,6 +125,16 @@ impl EmbedHostClient {
         }
     }
 
+    /// Connect to a host socket and load a model in one step.
+    pub async fn connect_and_load(
+        socket_path: impl AsRef<Path>,
+        model_dir: impl AsRef<Path>,
+        dimensions: Option<u32>,
+    ) -> Result<EmbedHostSession, EmbedHostError> {
+        let client = Arc::new(Self::connect(socket_path).await?);
+        client.load_model(model_dir, dimensions).await
+    }
+
     /// Unload the current model.
     pub async fn unload_model(&self) -> Result<(), EmbedHostError> {
         let response = self
@@ -297,6 +307,115 @@ impl EmbeddingProvider for EmbedHostSession {
             .embed_documents_rpc(requests)
             .await
             .map_err(map_to_embedding_error)
+    }
+}
+
+/// [`EmbeddingProvider`] that talks to embed-host over UDS and reconnects after
+/// host crashes / restarts.
+///
+/// Specification is fixed from the first successful load so embedding namespaces
+/// stay stable across reconnects.
+pub struct ReconnectableEmbedHostProvider {
+    socket: PathBuf,
+    model_dir: PathBuf,
+    dimensions: Option<u32>,
+    specification: EmbeddingSpecification,
+    session: Mutex<Option<EmbedHostSession>>,
+}
+
+impl ReconnectableEmbedHostProvider {
+    /// Connect, load the model, and return a reconnecting provider.
+    pub async fn connect(
+        socket: impl Into<PathBuf>,
+        model_dir: impl Into<PathBuf>,
+        dimensions: Option<u32>,
+    ) -> Result<Self, EmbedHostError> {
+        let socket = socket.into();
+        let model_dir = model_dir.into();
+        let session = EmbedHostClient::connect_and_load(&socket, &model_dir, dimensions).await?;
+        let specification = session.specification().clone();
+        Ok(Self {
+            socket,
+            model_dir,
+            dimensions,
+            specification,
+            session: Mutex::new(Some(session)),
+        })
+    }
+
+    /// Drop the live session and reconnect + reload the model.
+    pub async fn reconnect(&self) -> Result<(), EmbedHostError> {
+        let session =
+            EmbedHostClient::connect_and_load(&self.socket, &self.model_dir, self.dimensions)
+                .await?;
+        *self.session.lock().await = Some(session);
+        Ok(())
+    }
+
+    pub fn socket(&self) -> &Path {
+        &self.socket
+    }
+
+    pub fn model_dir(&self) -> &Path {
+        &self.model_dir
+    }
+
+    async fn client(&self) -> Result<Arc<EmbedHostClient>, EmbedHostError> {
+        {
+            let guard = self.session.lock().await;
+            if let Some(session) = guard.as_ref() {
+                return Ok(Arc::clone(&session.client));
+            }
+        }
+        self.reconnect().await?;
+        let guard = self.session.lock().await;
+        guard
+            .as_ref()
+            .map(|session| Arc::clone(&session.client))
+            .ok_or_else(|| EmbedHostError::protocol("embed-host session missing after reconnect"))
+    }
+}
+
+#[async_trait]
+impl EmbeddingProvider for ReconnectableEmbedHostProvider {
+    fn specification(&self) -> &EmbeddingSpecification {
+        &self.specification
+    }
+
+    async fn embed_query(
+        &self,
+        request: EmbedQueryRequest,
+    ) -> Result<EmbeddingVector, lattice_embedding::EmbeddingError> {
+        let client = self.client().await.map_err(map_to_embedding_error)?;
+        match client.embed_query_rpc(request.clone()).await {
+            Ok(vector) => Ok(vector),
+            Err(_) => {
+                self.reconnect().await.map_err(map_to_embedding_error)?;
+                let client = self.client().await.map_err(map_to_embedding_error)?;
+                client
+                    .embed_query_rpc(request)
+                    .await
+                    .map_err(map_to_embedding_error)
+            }
+        }
+    }
+
+    async fn embed_documents(
+        &self,
+        requests: Vec<EmbedDocumentRequest>,
+    ) -> Result<Vec<EmbeddingVector>, lattice_embedding::EmbeddingError> {
+        let client = self.client().await.map_err(map_to_embedding_error)?;
+        match client.embed_documents_rpc(requests.clone()).await {
+            Ok(vectors) => Ok(vectors),
+            Err(_) => {
+                self.reconnect().await.map_err(map_to_embedding_error)?;
+                let client = self.client().await.map_err(map_to_embedding_error)?;
+                client
+                    .embed_documents_rpc(requests)
+                    .await
+                    .map_err(map_to_embedding_error)
+            }
+        }
     }
 }
 
