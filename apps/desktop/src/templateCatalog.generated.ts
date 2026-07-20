@@ -852,7 +852,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
     "order": 60,
     "name": "First Look",
     "category": "Sample",
-    "description": "Kitchen-sink sample: CRM + Delivery + Metrics + OKRs data apps, canvas, notebooks, hybrid search try-queries, voice/Quick Note tips, daemon runtime diagram, templates, and assorted files.",
+    "description": "Kitchen-sink sample: CRM + Delivery + Metrics + OKRs data apps, Events.dataset (DuckDB Parquet + Vega-Lite), canvas, notebooks, hybrid search try-queries, voice/Quick Note tips, daemon runtime diagram, templates, and assorted files.",
     "visibility": "sample",
     "recommended": false,
     "recommendedTitle": "First Look",

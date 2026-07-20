@@ -40,21 +40,24 @@ Contracts:
 
 **Native demo steps** (Tauri / `nix run .#desktop-dev`; not the browser fixture):
 
-1. Open `Data/Events.dataset` → **Preview** → confirm Perspective grid (not only schema JSON).
+1. Open `Data/Events.dataset` → **Preview** → confirm Perspective grid over Hive Parquet (not only schema JSON).
 2. Switch to **Chart** → confirm Vega-Lite render (or open `Dashboards/Signups by region.vl.json`).
 3. Switch to **Profile** → confirm DuckDB `SUMMARIZE` summary text.
-4. File → create or import facts (CLI below) → confirm `facts/` Parquet + `dataset.yaml` partitions.
+4. Confirm `facts/year=2026/month=07/signups.parquet` and `annotations.sqlite` on disk; optional CLI below.
 
 CLI spot-check:
 
 ```sh
-lattice dataset create Events.dataset --title Events
-lattice dataset import-csv Events.dataset /path/to/events.csv --partitions year=2026/month=01
-lattice query --engine duckdb "SELECT count(*) FROM read_parquet('Events.dataset/facts/**/*.parquet')"
-lattice dataset annotate Events.dataset --event-id evt-1 --label review --reviewed
-lattice dataset query-annotated Events.dataset --json
+lattice query --engine duckdb "SELECT region, sum(signups) FROM read_parquet('Data/Events.dataset/facts/**/*.parquet', hive_partitioning=true) GROUP BY 1"
+lattice dataset query-annotated Data/Events.dataset --json
 ```
 
+Re-seed the template Parquet + annotations from repo root:
+
+```sh
+cargo run -p lattice-datasets --example seed_demo_events
+pnpm compile-templates
+```
 ## Wave 2 landed (Lookup/Rollup, interfaces, actions, tabular import, FormSave)
 
 Wave 2 packets P2-08–P2-14 on `feat/data-apps-and-analytics` added read-time

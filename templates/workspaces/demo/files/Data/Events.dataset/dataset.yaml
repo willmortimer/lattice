@@ -2,5 +2,11 @@ format: lattice-dataset
 version: 1
 id: demo-events-dataset
 title: Events
-description: Sample analytical facts for Vega-Lite chart demos.
-partitions: []
+description: Sample analytical facts for Vega-Lite / Perspective / DuckDB demos (Hive Parquet + annotation overlay).
+partitions:
+- path: facts/year=2026/month=07/signups.parquet
+  keys:
+    month: '07'
+    year: '2026'
+  rows: 5
+  bytes: 1198

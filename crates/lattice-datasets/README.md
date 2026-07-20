@@ -29,3 +29,12 @@ offline-safe temp-table bridge (equivalent to `sqlite_scan`). The desktop chart
 panel lazy-loads Vega-Lite (`vega-lite`, `vega`, `vega-embed`, ~11 MiB installed)
 and decodes bounded Arrow IPC with `apache-arrow` (~7.6 MiB, Apache-2.0). Vega
 packages are BSD-3-Clause; Perspective packages are Apache-2.0.
+
+## First Look demo seed
+
+Regenerate the demo `Events.dataset` Parquet partition + annotation overlay:
+
+```sh
+cargo run -p lattice-datasets --example seed_demo_events
+pnpm compile-templates
+```
