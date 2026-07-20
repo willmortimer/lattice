@@ -78,6 +78,22 @@ audio, that helper owns the permission prompt.
 | Memory pressure | Unload warm model when possible; cancel lowest-priority sessions first |
 | User switches accounts | Tear down sessions; do not reuse another user’s model cache paths |
 
+### Menu-bar residency preference
+
+Desktop setting `services.keepAppInMenuBar` (Settings → Performance & lifecycle)
+controls main-window close behavior:
+
+- **On:** closing the main window **hides** it; the process stays resident with a
+  tray menu (Show Lattice, Quick Note, Quit). The dock icon remains (not
+  `LSUIElement` accessory-only mode). Global Quick Note shortcuts keep working
+  while the main window is hidden.
+- **Off:** closing the main window quits the app.
+- **Not a login item:** this preference does not install a Launch Agent or
+  helper that starts Lattice at login. Use the tray Quit item for a full exit.
+
+Related: `services.keepServicesRunning` leaves `latticed` up after the last
+client disconnects (daemon warm residency), independent of the tray preference.
+
 ## Global shortcut behavior
 
 Configurable shortcuts **must** be separate:

@@ -414,12 +414,17 @@ pub struct ServicesSettings {
     /// When true, `latticed` stays running after the last client disconnects.
     #[serde(default)]
     pub keep_services_running: bool,
+    /// When true, closing the main window hides it and keeps the process in the
+    /// menu bar / tray (not a login item). Quit from the tray exits fully.
+    #[serde(default)]
+    pub keep_app_in_menu_bar: bool,
 }
 
 impl Default for ServicesSettings {
     fn default() -> Self {
         Self {
             keep_services_running: false,
+            keep_app_in_menu_bar: false,
         }
     }
 }
@@ -771,5 +776,36 @@ mod tests {
             ),
             Err(Error::RevisionConflict { .. })
         ));
+    }
+
+    #[test]
+    fn services_menu_bar_residency_defaults_and_round_trips() {
+        assert!(!ServicesSettings::default().keep_app_in_menu_bar);
+        assert!(!ServicesSettings::default().keep_services_running);
+
+        let directory = tempfile::tempdir().unwrap();
+        let store = SettingsStore::new(directory.path());
+        std::fs::write(
+            store.path(DESKTOP_SETTINGS_SPEC),
+            "format: lattice-desktop-settings\nversion: 1\nservices:\n  keepServicesRunning: true\n  keepAppInMenuBar: true\n",
+        )
+        .unwrap();
+        let loaded = store
+            .load::<DesktopSettings>(DESKTOP_SETTINGS_SPEC)
+            .unwrap();
+        assert!(loaded.value.services.keep_services_running);
+        assert!(loaded.value.services.keep_app_in_menu_bar);
+
+        // Older documents without the new field keep the default (false).
+        std::fs::write(
+            store.path(DESKTOP_SETTINGS_SPEC),
+            "format: lattice-desktop-settings\nversion: 1\nservices:\n  keepServicesRunning: true\n",
+        )
+        .unwrap();
+        let partial = store
+            .load::<DesktopSettings>(DESKTOP_SETTINGS_SPEC)
+            .unwrap();
+        assert!(partial.value.services.keep_services_running);
+        assert!(!partial.value.services.keep_app_in_menu_bar);
     }
 }
