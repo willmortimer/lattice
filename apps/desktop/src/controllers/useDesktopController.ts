@@ -411,6 +411,7 @@ export function useDesktopController() {
     handleQuickNote, handleNewPage, handleNewTable, handleImportCsv, handleUndo,
     handleOpenExternally, handleOpenFile, handleImportEditorAsset, handleOpenWiki,
     openLinkTarget, updateWorkspaceSettings, createAndOpenPage,
+    csvImportReview, handleCancelCsvImport, handleConfirmCsvImport, handleCsvImportColumnTypeChange,
   } = actions;
 
   const requestTreeRename = useCallback((resource: Resource) => {
@@ -684,6 +685,7 @@ export function useDesktopController() {
     profile, profileReady, settings, startup, snapshot, snapshotRef, selected, selectedPaths, session, error, busy, saveState,
     externalConflict, reloadToken, newWorkspaceOpen, workspacesDir, templates, statusToast, runtimeNotice,
     profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth, treeCollapsedPaths, revealPath, linkPicker,
+    csvImportReview, handleCancelCsvImport, handleConfirmCsvImport, handleCsvImportColumnTypeChange,
     linkRepairReview, handleLinkRepairAccept, handleLinkRepairDefer,
     openTabs, navigation, inspectorOpen, editingTitle, titleDraft, assetRoot, wikiTargets, pageEditorRef,
     recents, page, currentPageRevisionRef,

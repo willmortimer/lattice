@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use crate::error::Error;
@@ -68,6 +68,36 @@ pub fn parse_csv_file(path: &Path) -> Result<CsvTable> {
         rows,
         field_types,
     })
+}
+
+/// Parse a snake_case field type name (`text`, `integer`, …).
+pub fn parse_field_type_name(value: &str) -> Result<FieldType> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "text" => Ok(FieldType::Text),
+        "long_text" => Ok(FieldType::LongText),
+        "integer" => Ok(FieldType::Integer),
+        "decimal" => Ok(FieldType::Decimal),
+        "boolean" => Ok(FieldType::Boolean),
+        "date" => Ok(FieldType::Date),
+        "relation" => Ok(FieldType::Relation),
+        other => Err(Error::table(
+            "csv",
+            format!("unsupported field type {other:?}; expected text, long_text, integer, decimal, boolean, date, or relation"),
+        )),
+    }
+}
+
+/// Apply per-column type overrides, keeping inferred types for unspecified columns.
+pub fn resolve_field_types(
+    headers: &[String],
+    inferred: &[FieldType],
+    overrides: &BTreeMap<String, FieldType>,
+) -> Vec<FieldType> {
+    headers
+        .iter()
+        .zip(inferred)
+        .map(|(header, default)| overrides.get(header).copied().unwrap_or(*default))
+        .collect()
 }
 
 /// Infer a Lattice field type from non-empty cell samples.
@@ -221,5 +251,23 @@ mod tests {
         let headers =
             sanitize_headers(&["Name".into(), "name".into(), "2024".into(), "".into()]).unwrap();
         assert_eq!(headers, vec!["name", "name_2", "c_2024"]);
+    }
+
+    #[test]
+    fn parse_field_type_name_accepts_snake_case_labels() {
+        assert_eq!(parse_field_type_name("text").unwrap(), FieldType::Text);
+        assert_eq!(parse_field_type_name("INTEGER").unwrap(), FieldType::Integer);
+        assert!(parse_field_type_name("unknown").is_err());
+    }
+
+    #[test]
+    fn resolve_field_types_applies_overrides() {
+        let headers = vec!["name".into(), "count".into()];
+        let inferred = vec![FieldType::Text, FieldType::Integer];
+        let overrides = BTreeMap::from([("count".into(), FieldType::Decimal)]);
+        assert_eq!(
+            resolve_field_types(&headers, &inferred, &overrides),
+            vec![FieldType::Text, FieldType::Decimal]
+        );
     }
 }
