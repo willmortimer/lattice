@@ -12,6 +12,7 @@ import DataEditor, {
 } from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AddColumnPanel } from "./AddColumnPanel";
 import { RecordDetailPanel } from "./RecordDetailPanel";
 import { PackageFormPanel } from "./PackageFormPanel";
 import { DataBoardView } from "./DataBoardView";
@@ -173,11 +174,13 @@ export function DataTableView({
   const [detailRowId, setDetailRowId] = useState<string | null>(null);
   const [gridSelection, setGridSelection] = useState<GridSelection | undefined>(undefined);
   const [formPanelOpen, setFormPanelOpen] = useState(false);
+  const [columnPanelOpen, setColumnPanelOpen] = useState(false);
   const [packageForms, setPackageForms] = useState<FormSummary[]>([]);
   const [activePackageForm, setActivePackageForm] = useState<FormSummary | null>(null);
   const [formsError, setFormsError] = useState<string | null>(null);
   const revisionRef = useRef(snapshot.package_revision);
   const snapshotRef = useRef(snapshot);
+  const rowFetchLimit = preferences.pageSize;
 
   useEffect(() => {
     const next = cloneSnapshot(initialSnapshot);
@@ -198,6 +201,7 @@ export function DataTableView({
     setDetailRowId(null);
     setGridSelection(undefined);
     setFormPanelOpen(false);
+    setColumnPanelOpen(false);
     setPackageForms([]);
     setActivePackageForm(null);
     setFormsError(null);
@@ -236,7 +240,7 @@ export function DataTableView({
   }, []);
 
   const reload = useCallback(
-    async (viewName?: string) => {
+    async (viewName?: string, rowOffset = 0) => {
       if (demoMutate) {
         const targetView = viewName ?? activeView;
         const base = cloneSnapshot(initialSnapshot);
@@ -261,6 +265,8 @@ export function DataTableView({
           root,
           relPath,
           viewName: viewName ?? activeView,
+          limit: rowFetchLimit,
+          offset: rowOffset,
         });
         applySnapshot(fresh);
       } catch (err) {
@@ -269,8 +275,36 @@ export function DataTableView({
         setBusy(false);
       }
     },
-    [activeView, applySnapshot, demoMutate, initialSnapshot, relPath, root],
+    [activeView, applySnapshot, demoMutate, initialSnapshot, relPath, root, rowFetchLimit],
   );
+
+  const loadMoreRows = useCallback(async () => {
+    if (demoMutate || !snapshotRef.current.has_more) {
+      return;
+    }
+    const current = snapshotRef.current;
+    const nextOffset = current.row_offset + current.rows.length;
+    setBusy(true);
+    try {
+      const fresh = await invoke<DataAppSnapshot>("open_data_app", {
+        root,
+        relPath,
+        viewName: activeView,
+        limit: rowFetchLimit,
+        offset: nextOffset,
+      });
+      const merged: DataAppSnapshot = {
+        ...fresh,
+        row_offset: current.row_offset,
+        rows: [...current.rows, ...fresh.rows],
+      };
+      applySnapshot(merged);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  }, [activeView, applySnapshot, demoMutate, relPath, root, rowFetchLimit]);
 
   const handleMutationError = useCallback((err: unknown) => {
     const message = String(err);
@@ -389,6 +423,8 @@ export function DataTableView({
         root,
         relPath,
         viewName: activeView,
+        limit: rowFetchLimit,
+        offset: 0,
       });
       applySnapshot({
         ...fresh,
@@ -399,7 +435,7 @@ export function DataTableView({
     } finally {
       setBusy(false);
     }
-  }, [activeView, applySnapshot, demoMutate, handleMutationError, relPath, root]);
+  }, [activeView, applySnapshot, demoMutate, handleMutationError, relPath, root, rowFetchLimit]);
 
   const createRecord = useCallback(
     async (values: Record<string, CellValue>): Promise<{ id: string }> => {
@@ -433,6 +469,8 @@ export function DataTableView({
           root,
           relPath,
           viewName: activeView,
+          limit: rowFetchLimit,
+          offset: 0,
         });
         applySnapshot({
           ...fresh,
@@ -448,7 +486,7 @@ export function DataTableView({
         setBusy(false);
       }
     },
-    [activeView, applySnapshot, demoMutate, handleMutationError, relPath, root],
+    [activeView, applySnapshot, demoMutate, handleMutationError, relPath, root, rowFetchLimit],
   );
 
   const submitPackageForm = useCallback(
@@ -475,6 +513,8 @@ export function DataTableView({
           root,
           relPath,
           viewName: activeView,
+          limit: rowFetchLimit,
+          offset: 0,
         });
         applySnapshot({
           ...fresh,
@@ -490,11 +530,12 @@ export function DataTableView({
         setBusy(false);
       }
     },
-    [activeView, applySnapshot, createRecord, demoMutate, handleMutationError, relPath, root],
+    [activeView, applySnapshot, createRecord, demoMutate, handleMutationError, relPath, root, rowFetchLimit],
   );
 
   const openFormsPanel = useCallback(async () => {
     setFormPanelOpen(true);
+    setColumnPanelOpen(false);
     setActivePackageForm(null);
     setFormsError(null);
     setDetailRowId(null);
@@ -642,8 +683,8 @@ export function DataTableView({
         return sortDirection === "desc" ? -cmp : cmp;
       });
     }
-    return rows.slice(0, preferences.pageSize);
-  }, [filters, preferences.pageSize, snapshot.rows, sortDirection, sortField]);
+    return rows.slice(0, demoMutate ? preferences.pageSize : rows.length);
+  }, [demoMutate, filters, preferences.pageSize, snapshot.rows, sortDirection, sortField]);
 
   const selectedGridRow = useMemo(() => {
     const currentRow = gridSelection?.current?.cell[1];
@@ -673,6 +714,7 @@ export function DataTableView({
 
   const openRecordDetail = useCallback((row: DataRow) => {
     setFormPanelOpen(false);
+    setColumnPanelOpen(false);
     setActivePackageForm(null);
     setDetailRowId(row.id);
   }, []);
@@ -914,8 +956,8 @@ export function DataTableView({
       <header className="data-table-head">
         <h2 className="data-table-title">{snapshot.title}</h2>
         <span className="data-table-meta">
-          {snapshot.default_table} · {snapshot.rows.length} row
-          {snapshot.rows.length === 1 ? "" : "s"}
+          {snapshot.default_table} · {snapshot.row_total} row
+          {snapshot.row_total === 1 ? "" : "s"}
           {layoutType !== "grid" ? ` · ${layoutType} view` : ""}
         </span>
         <div className="data-table-toolbar">
@@ -1006,6 +1048,20 @@ export function DataTableView({
           </button>
           <button
             type="button"
+            className="secondary-button"
+            onClick={() => {
+              setFormPanelOpen(false);
+              setActivePackageForm(null);
+              setDetailRowId(null);
+              setColumnPanelOpen(true);
+            }}
+            disabled={busy}
+            aria-pressed={columnPanelOpen}
+          >
+            Add column
+          </button>
+          <button
+            type="button"
             className="secondary-button data-table-add"
             onClick={() => void addRow()}
             disabled={busy || layoutType === "form"}
@@ -1014,6 +1070,42 @@ export function DataTableView({
           </button>
         </div>
       </header>
+
+      {!demoMutate && snapshot.row_total > 0 && (
+        <p className="data-table-pagination">
+          Showing{" "}
+          {snapshot.rows.length === 0
+            ? 0
+            : `${snapshot.row_offset + 1}–${snapshot.row_offset + snapshot.rows.length}`}{" "}
+          of {snapshot.row_total}
+          {snapshot.has_more && (
+            <button
+              type="button"
+              className="secondary-button data-table-load-more"
+              disabled={busy}
+              onClick={() => void loadMoreRows()}
+            >
+              Load more
+            </button>
+          )}
+        </p>
+      )}
+
+      {columnPanelOpen && (
+        <AddColumnPanel
+          root={root}
+          relPath={relPath}
+          snapshot={snapshot}
+          busy={busy}
+          readOnly={stale}
+          demo={Boolean(demoMutate)}
+          rowFetchLimit={rowFetchLimit}
+          onClose={() => setColumnPanelOpen(false)}
+          onAdded={applySnapshot}
+          onStale={() => setStale(true)}
+          onError={setError}
+        />
+      )}
 
       <div className="data-table-filter-bar">
         <select
@@ -1264,10 +1356,10 @@ export function DataTableView({
         </div>
       )}
 
-      {editColumns.length === 0 && (
+      {editColumns.length === 0 && !columnPanelOpen && (
         <p className="data-table-hint">
-          This table only has an <code>id</code> column — add fields with the CLI or schema
-          tools, then reload.
+          This table only has an <code>id</code> column. Use <strong>Add column</strong> to define
+          fields{demoMutate ? " (not persisted in the browser demo)" : ""}.
         </p>
       )}
     </div>

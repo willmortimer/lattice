@@ -196,6 +196,8 @@ pub fn run() {
             theme::start_theme_watching,
             theme::stop_theme_watching,
             data::open_data_app,
+            data::list_data_tables,
+            data::add_data_columns,
             data::create_table_package,
             data::insert_record,
             data::update_record,
