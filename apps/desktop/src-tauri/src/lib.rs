@@ -207,6 +207,7 @@ pub fn run() {
             data::save_data_view,
             data::list_data_forms,
             data::load_data_form,
+            data::save_data_form,
             data::import_csv_table,
             data::preview_csv_import,
             data::commit_csv_import,
