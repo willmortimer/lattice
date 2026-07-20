@@ -1,5 +1,39 @@
 # Analytical Data, Arrow, DuckDB, and Parquet
 
+## Phase 3 vertical slice (shipped)
+
+Wave 3 on `feat/data-apps-and-analytics` delivers a local analytical path from
+`.dataset/` packages through DuckDB to bounded Arrow IPC and desktop viewers. It
+is a vertical slice, not full BI (semantic models, cross-filter dashboards, remote
+connectors, and geospatial viewers remain Phase 6+).
+
+| Capability | Crate / surface | Notes |
+| --- | --- | --- |
+| `.dataset/` packages | `lattice-datasets` | `dataset.yaml`, Hive `facts/`, partition manifest, CSV→Parquet import |
+| DuckDB queries | `lattice-duckdb`, `lattice query --engine duckdb` | Workspace allowlist; `read_csv_auto` / `read_parquet` |
+| Arrow IPC transport | `lattice-arrow-transport`, Tauri `query_dataset_arrow` | ADR 0021; row/byte caps below |
+| Preview grid | Perspective (`DatasetResourceRenderer` **Preview** tab) | Arrow IPC in; Glide stays on mutable `.data` |
+| Charts | Vega-Lite (`.vl.json`, **Chart** tab) | Query → Arrow → `vega-embed`; demo `Signups by region.vl.json` |
+| Profiling | DuckDB `SUMMARIZE` (**Profile** tab) | Relation-level stats over dataset SQL |
+| Annotation overlays | `annotations.sqlite` + DuckDB join bridge | CLI `dataset annotate` / `dataset query-annotated` |
+
+**Limits (bounded transfer):** default row cap 10_000 (`truncated: true` beyond),
+encoded IPC byte cap 8 MiB (row count shrinks until the payload fits), preview
+sample 5 rows for schema dumps only. Cancellation is a stub hook; desktop cancel
+wiring is deferred.
+
+**Offline Parquet:** `lattice-duckdb` builds DuckDB with the `parquet` feature
+(bundled `libduckdb-sys`) so `read_parquet` works without network extension
+install. Workspace `allowed_directories` + `enable_external_access=false` block
+autoinstall of `sqlite_scan`; annotation joins bridge `annotations.sqlite` via
+`rusqlite` into a DuckDB temp table instead.
+
+**Annotation bridge:** facts stay in Parquet; human review state lives in
+`annotations.sqlite` (`event_annotations`: label, notes, reviewed). DuckDB
+queries use `query_parquet_left_join_annotations` (offline-safe equivalent of
+the `sqlite_scan` pattern in the example below). Desktop and CLI share the same
+join path.
+
 ## Workload separation
 
 Lattice uses complementary engines and formats:
@@ -103,6 +137,12 @@ partitions:
 
 ## Mutable annotation overlays
 
+**Shipped:** `lattice-datasets` materializes `annotations.sqlite`; CLI
+`lattice dataset annotate` upserts rows and `lattice dataset query-annotated`
+runs the Parquet LEFT JOIN through `lattice-duckdb`. Desktop dataset resources
+can use the same facts + overlay model; full in-app annotation UI is not required
+for the vertical slice.
+
 Large facts stay in Parquet while human or AI review state lives in SQLite:
 
 ```sql
@@ -192,6 +232,11 @@ DuckDB or compatible remote engine
 Users should not be required to edit Substrait directly.
 
 ## Data profiling
+
+**Shipped (dataset Profile tab):** DuckDB `SUMMARIZE` over the dataset relation
+via Tauri `profile_dataset`; formatted summary in the desktop **Profile** tab.
+Tabular import profiling for `.data` packages (Wave 2) remains separate from this
+analytical path.
 
 On import or connection, provide:
 

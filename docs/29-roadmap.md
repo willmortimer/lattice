@@ -49,17 +49,24 @@ Success: credible local Airtable/Notion database alternative.
 
 ## Phase 3: analytical data
 
-- Native DuckDB.
-- Parquet datasets and partition manifests.
-- Arrow batch transport.
-- Perspective analytical viewer.
-- Data profiling.
-- SQLite annotation overlays.
-- Vega-Lite charts and dashboards.
-- Query profiler.
-- GeoParquet/MapLibre basic support.
+**Vertical slice shipped** (Wave 3 on `feat/data-apps-and-analytics`):
 
-Success: smooth analysis of data far beyond SaaS table limits.
+- Native DuckDB (`lattice-duckdb`, `lattice query --engine duckdb`).
+- `.dataset/` packages with Hive Parquet partitions and `dataset import-csv`.
+- Bounded Arrow IPC transport (ADR 0021).
+- Perspective **Preview** tab for analytical grids.
+- DuckDB `SUMMARIZE` **Profile** tab.
+- SQLite annotation overlays + CLI `dataset annotate` / `query-annotated`.
+- Vega-Lite **Chart** tab and `.vl.json` chart resources.
+
+**Still open** (deferred past the vertical slice):
+
+- Query profiler UI (plan inspection, progress, desktop cancel wiring).
+- GeoParquet / MapLibre basic support.
+- Semantic models, live connectors, and full BI dashboards (Phase 6).
+
+Success: smooth analysis of data far beyond SaaS table limits for local
+`.dataset/` workloads; full workbench BI remains a later phase.
 
 ## Phase 4: programmable workspace
 

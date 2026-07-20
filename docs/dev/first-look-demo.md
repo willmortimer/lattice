@@ -25,6 +25,36 @@ open/viewer, Pyodide Run with `ResourceUpdate` undo, canvas `subpath` → data
 Re-run the [[Home]] tour on a current build for notebook Run, canvas CRM nodes,
 and **Forms → Contact intake**.
 
+## Wave 3 landed (analytical datasets)
+
+Wave 3 packets P3-01–P3-09 on `feat/data-apps-and-analytics` added `.dataset/`
+packages, DuckDB queries, bounded Arrow IPC, Perspective **Preview**, Vega-Lite
+**Chart**, DuckDB **Profile** (`SUMMARIZE`), and SQLite annotation overlays.
+Tracker: [data-apps analytics DAG](data-apps-analytics-dag.md) (Wave 3 merged).
+
+Contracts:
+
+- [Analytical data — Phase 3 vertical slice](../11-analytical-data-arrow-duckdb-parquet.md#phase-3-vertical-slice-shipped) — limits, offline Parquet, annotation bridge.
+- [Visualization — Phase 3 viewers](../13-visualization-bi-and-presentation.md#phase-3-vertical-slice-shipped) — Perspective + Vega-Lite; BI gaps explicit.
+- [Roadmap — Phase 3](../29-roadmap.md#phase-3-analytical-data) — shipped vs open items.
+
+**Native demo steps** (Tauri / `nix run .#desktop-dev`; not the browser fixture):
+
+1. Open `Data/Events.dataset` → **Preview** → confirm Perspective grid (not only schema JSON).
+2. Switch to **Chart** → confirm Vega-Lite render (or open `Dashboards/Signups by region.vl.json`).
+3. Switch to **Profile** → confirm DuckDB `SUMMARIZE` summary text.
+4. File → create or import facts (CLI below) → confirm `facts/` Parquet + `dataset.yaml` partitions.
+
+CLI spot-check:
+
+```sh
+lattice dataset create Events.dataset --title Events
+lattice dataset import-csv Events.dataset /path/to/events.csv --partitions year=2026/month=01
+lattice query --engine duckdb "SELECT count(*) FROM read_parquet('Events.dataset/facts/**/*.parquet')"
+lattice dataset annotate Events.dataset --event-id evt-1 --label review --reviewed
+lattice dataset query-annotated Events.dataset --json
+```
+
 ## Wave 2 landed (Lookup/Rollup, interfaces, actions, tabular import, FormSave)
 
 Wave 2 packets P2-08–P2-14 on `feat/data-apps-and-analytics` added read-time
@@ -32,7 +62,7 @@ Lookup/Rollup fields, canvas `subpath: interfaces/{name}` navigation, package
 `actions/*.action.yaml` in the **Actions** menu, Excel/JSON/JSONL type-review
 import, and in-app FormSave for `forms/*.form.yaml`. Tracker:
 [data-apps analytics DAG](data-apps-analytics-dag.md) (Wave 2 merged; Wave 3
-pending).
+merged — see above).
 
 Contracts:
 
@@ -95,9 +125,10 @@ out in **Known expected fails** and the punch-list below. Contracts:
 
 The checklist table is unchanged: it records what **failed or was skipped on BASE** at `f90fb95`. Re-run the tour on a current build to refresh pass/fail; do not treat historical **fail** rows as current regressions.
 
-Still deferred after Wave 2: formula fields, junction relations, cross-package
+Still deferred after Wave 3: formula fields, junction relations, cross-package
 relation links, full interface builder, browser-demo **Save view** / native tree
-affordances, and a full native Tauri demo pass for folder undo and trash.
+affordances, full native Tauri demo pass for folder undo and trash, query
+profiler UI, semantic models, and GeoParquet/MapLibre.
 
 ## Checklist
 
@@ -123,6 +154,8 @@ Home.md items 1–9. Status: **pass** / **fail** / **skip**.
 | 16 | **Actions** → Contact intake | **skip** (browser persist) / **skip** (native pass) | Demo seeds `OpenContactIntake` toolbar action; native `list_data_actions` not exercised in this pass. | `actions.ts`; `DataActionsMenu.tsx` |
 | 17 | **Import…** Excel/JSON/JSONL → type-review | **skip** (browser) / **skip** (native pass) | Browser blocks with explicit error; native `preview_tabular_import` not exercised in this pass. | `tabularImport.ts`; `desktopActions.ts` |
 | 18 | **Forms** → create/edit package form | **skip** (browser persist) / **skip** (native pass) | FormSave designer in `PackageFormPanel`; native `save_data_form` not exercised in this pass. | `PackageFormPanel.tsx`; `forms.ts` |
+| 19 | `Events.dataset` → **Preview** / **Chart** / **Profile** | **skip** (native pass) | Wave 3 Perspective + Vega-Lite + SUMMARIZE; demo seeds `Data/Events.dataset`. Browser fixture does not load WASM viewers. | `DatasetResourceRenderer.tsx`; `Events.dataset/` |
+| 20 | CLI `dataset import-csv` + `query-annotated` | **skip** (native pass) | Annotation overlay join via `lattice-duckdb`; see Wave 3 CLI spot-check above. | `apps/cli/src/main.rs`; `lattice-datasets` |
 
 ## Known expected fails on BASE (Wave 1 addressed)
 
