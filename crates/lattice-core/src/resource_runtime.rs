@@ -257,23 +257,24 @@ pub fn inspect_resource(
     let metadata = std::fs::metadata(&absolute).map_err(|source| io_error(&normalized, source))?;
     let size = metadata.len();
     let classified_kind = ResourceKind::classify(&absolute, metadata.is_dir());
-    let kind = if metadata.is_dir() && classified_kind != ResourceKind::DataApp {
+    let kind = if metadata.is_dir() && !classified_kind.is_package() {
         ResourceKind::Folder
     } else {
         classified_kind
     };
 
     if metadata.is_dir() {
-        let is_data_app = kind == ResourceKind::DataApp;
+        let is_package = kind.is_package();
+        let profile = match kind {
+            ResourceKind::DataApp => ResourceFormatProfile::SqliteDataApp,
+            ResourceKind::Dataset => ResourceFormatProfile::Yaml,
+            _ => ResourceFormatProfile::UnknownDirectory,
+        };
         return Ok(ResourceInspection {
             path: normalized,
             kind,
-            profile: if is_data_app {
-                ResourceFormatProfile::SqliteDataApp
-            } else {
-                ResourceFormatProfile::UnknownDirectory
-            },
-            capabilities: if is_data_app {
+            profile,
+            capabilities: if is_package {
                 FormatCapabilities::package()
             } else {
                 FormatCapabilities::directory()
@@ -283,7 +284,7 @@ pub fn inspect_resource(
             is_directory: true,
             encoding: None,
             probe_bytes: 0,
-            diagnostics: if is_data_app {
+            diagnostics: if is_package {
                 Vec::new()
             } else {
                 vec![diagnostic(

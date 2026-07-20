@@ -292,3 +292,43 @@ fn table_add_column_and_add_table_update_schema() {
         .success()
         .stdout(predicates_contains("\"companies\""));
 }
+
+#[test]
+fn dataset_create_and_show() {
+    let dir = tempfile::tempdir().unwrap();
+    init_blank(dir.path()).success();
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("dataset")
+        .arg("create")
+        .arg("Usage.dataset")
+        .arg("--title")
+        .arg("Usage")
+        .arg("--description")
+        .arg("Sample analytical dataset")
+        .assert()
+        .success()
+        .stdout(predicates_contains("created Usage.dataset"));
+
+    assert!(dir.path().join("Usage.dataset/dataset.yaml").is_file());
+    assert!(dir.path().join("Usage.dataset/facts").is_dir());
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("ls")
+        .assert()
+        .success()
+        .stdout(predicates_contains("Usage.dataset"));
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("dataset")
+        .arg("show")
+        .arg("Usage.dataset")
+        .arg("--json")
+        .assert()
+        .success()
+        .stdout(predicates_contains("\"title\": \"Usage\""))
+        .stdout(predicates_contains("lattice-dataset"));
+}
