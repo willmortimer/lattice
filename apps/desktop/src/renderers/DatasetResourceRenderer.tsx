@@ -9,17 +9,22 @@ import { KindMark } from "../KindMark";
 import type { ArrowQueryResult, ArrowTransportDump } from "../lib/arrowIpc";
 import { queryResultToValues } from "../lib/arrowToVegaData";
 import { loadDatasetArrowDump } from "../lib/datasetQuery";
+import {
+  formatDistinct,
+  formatPercent,
+  formatProfileSummary,
+  profileDataset,
+  type RelationProfile,
+} from "../lib/datasetProfile";
 import { buildAutoBarChartSpec } from "../lib/vegaLiteChart";
 import type { OpenResourceSession } from "../resourceSession";
 import type { ResourceRendererProps } from "../resourceRendererRegistry";
 import type { ResourceRendererContext } from "./RendererContext";
 
-type DatasetPanel = "preview" | "chart";
+type DatasetPanel = "preview" | "chart" | "profile";
 
 /**
- * Dataset resource surface: Arrow IPC query → Perspective analytical grid,
- * with a Chart tab for Vega-Lite (P3-07). Profiling (P3-05) can compose as
- * another sibling panel later.
+ * Dataset surface: Preview (Perspective), Chart (Vega-Lite), Profile (DuckDB SUMMARIZE).
  */
 export function DatasetResourceRenderer({
   context,
@@ -32,6 +37,8 @@ export function DatasetResourceRenderer({
   const [result, setResult] = useState<ArrowQueryResult | null>(null);
   const [dump, setDump] = useState<ArrowTransportDump | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
+  const [profile, setProfile] = useState<RelationProfile | null>(null);
+  const [profileSummary, setProfileSummary] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [viewerFailed, setViewerFailed] = useState(false);
@@ -42,6 +49,8 @@ export function DatasetResourceRenderer({
       setResult(null);
       setDump(null);
       setSummary(null);
+      setProfile(null);
+      setProfileSummary(null);
       setError(null);
       setViewerFailed(false);
       setViewerError(null);
@@ -50,29 +59,45 @@ export function DatasetResourceRenderer({
     let cancelled = false;
     setBusy(true);
     setError(null);
-    setViewerFailed(false);
-    setViewerError(null);
-    void loadDatasetArrowDump(root, path)
-      .then(({ result: nextResult, dump: nextDump, summary: nextSummary }) => {
+
+    const load = async () => {
+      try {
+        if (panel === "profile") {
+          const nextProfile = await profileDataset(root, path);
+          if (cancelled) return;
+          setProfile(nextProfile);
+          setProfileSummary(formatProfileSummary(nextProfile));
+          return;
+        }
+        setViewerFailed(false);
+        setViewerError(null);
+        const {
+          result: nextResult,
+          dump: nextDump,
+          summary: nextSummary,
+        } = await loadDatasetArrowDump(root, path);
         if (cancelled) return;
         setResult(nextResult);
         setDump(nextDump);
         setSummary(nextSummary);
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
         if (cancelled) return;
         setResult(null);
         setDump(null);
         setSummary(null);
+        setProfile(null);
+        setProfileSummary(null);
         setError(err instanceof Error ? err.message : String(err));
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setBusy(false);
-      });
+      }
+    };
+
+    void load();
     return () => {
       cancelled = true;
     };
-  }, [isDataset, root, path, context.reloadToken]);
+  }, [isDataset, root, path, context.reloadToken, panel]);
 
   const chartSpec = useMemo<TopLevelSpec | null>(() => {
     if (!dump || !result) return null;
@@ -97,34 +122,33 @@ export function DatasetResourceRenderer({
             <code>{path}</code>
           </p>
         </div>
-        {summary ? <p className="dataset-surface-meta">{summary}</p> : null}
+        {panel === "profile"
+          ? profileSummary && <p className="dataset-surface-meta">{profileSummary}</p>
+          : summary && <p className="dataset-surface-meta">{summary}</p>}
       </header>
 
       <div className="dataset-panel-tabs" role="tablist" aria-label="Dataset panels">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={panel === "preview"}
-          className={
-            panel === "preview"
-              ? "dataset-panel-tab dataset-panel-tab-active"
-              : "dataset-panel-tab"
-          }
-          onClick={() => setPanel("preview")}
-        >
-          Preview
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={panel === "chart"}
-          className={
-            panel === "chart" ? "dataset-panel-tab dataset-panel-tab-active" : "dataset-panel-tab"
-          }
-          onClick={() => setPanel("chart")}
-        >
-          Chart
-        </button>
+        {(
+          [
+            ["preview", "Preview"],
+            ["chart", "Chart"],
+            ["profile", "Profile"],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={panel === id}
+            className={
+              panel === id ? "dataset-panel-tab dataset-panel-tab-active" : "dataset-panel-tab"
+            }
+            onClick={() => setPanel(id)}
+            disabled={!root || busy}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       <div className="dataset-surface-body">
@@ -137,7 +161,9 @@ export function DatasetResourceRenderer({
             </div>
           ) : busy ? (
             <div className="dataset-surface-fallback">
-              <p className="placeholder-sub">Running bounded query…</p>
+              <p className="placeholder-sub">
+                {panel === "profile" ? "Profiling relation…" : "Running bounded query…"}
+              </p>
             </div>
           ) : error ? (
             <div className="dataset-surface-fallback">
@@ -145,6 +171,41 @@ export function DatasetResourceRenderer({
                 {error}
               </p>
             </div>
+          ) : panel === "profile" ? (
+            profile ? (
+              profile.columns.length > 0 ? (
+                <div className="dataset-profile-panel" style={{ overflow: "auto" }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th scope="col">Column</th>
+                        <th scope="col">Type</th>
+                        <th scope="col">Null %</th>
+                        <th scope="col">Distinct</th>
+                        <th scope="col">Min</th>
+                        <th scope="col">Max</th>
+                        <th scope="col">Q50</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {profile.columns.map((column) => (
+                        <tr key={column.name}>
+                          <th scope="row">{column.name}</th>
+                          <td>{column.dataType}</td>
+                          <td>{formatPercent(column.nullPercentage)}</td>
+                          <td>{formatDistinct(column.approxDistinct)}</td>
+                          <td>{column.min ?? "—"}</td>
+                          <td>{column.max ?? "—"}</td>
+                          <td>{column.q50 ?? "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="placeholder-sub">No columns to profile.</p>
+              )
+            ) : null
           ) : panel === "chart" ? (
             chartSpec ? (
               <div className="dataset-chart-panel">

@@ -10,6 +10,7 @@ license.workspace = true
 # DuckDB MIT; `bundled` compiles libduckdb from source (large first build, no
 # system DuckDB required). Matches the rusqlite `bundled` pattern in this repo.
 duckdb = { version = "~1.10504.0", features = ["bundled"] }
+serde = { workspace = true, features = ["derive"] }
 thiserror.workspace = true
 
 [dev-dependencies]
