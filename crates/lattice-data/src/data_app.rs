@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use rusqlite::{params, Connection};
 use sha2::{Digest, Sha256};
 
+use crate::action::{action_name_from_path, action_path, ActionDef, ActionKind};
 use crate::app::{app_manifest_path, database_path, schema_path, write_default_view, AppManifest};
 use crate::csv::{cell_from_csv, CsvTable};
 use crate::error::Error;
@@ -428,6 +429,89 @@ impl DataApp {
         let form = FormDef::load(&path)?;
         self.validate_form_fields(&form)?;
         Ok(form)
+    }
+
+    /// List saved action names from `actions/*.action.yaml`.
+    pub fn list_actions(&self) -> Result<Vec<String>> {
+        let actions_dir = self.path.join("actions");
+        if !actions_dir.is_dir() {
+            return Ok(Vec::new());
+        }
+
+        let mut names = Vec::new();
+        for entry in
+            std::fs::read_dir(&actions_dir).map_err(|source| Error::io(&actions_dir, source))?
+        {
+            let entry = entry.map_err(|source| Error::io(&actions_dir, source))?;
+            let path = entry.path();
+            if let Some(name) = action_name_from_path(&path) {
+                names.push(name);
+            }
+        }
+        names.sort();
+        Ok(names)
+    }
+
+    /// Load `actions/{name}.action.yaml` and validate against package tables/forms.
+    pub fn load_action(&self, name: &str) -> Result<ActionDef> {
+        validate_identifier(name)?;
+        let path = action_path(&self.path, name);
+        let action = ActionDef::load(&path)?;
+        self.validate_action_targets(&action)?;
+        Ok(action)
+    }
+
+    /// Serialize an action definition to YAML.
+    pub fn render_action_yaml(&self, action: &ActionDef) -> Result<String> {
+        action.to_yaml()
+    }
+
+    fn validate_action_targets(&self, action: &ActionDef) -> Result<()> {
+        ensure_table_exists(&self.conn, &action.table)?;
+        let columns = self.columns(&action.table)?;
+        let column_names: std::collections::BTreeSet<_> =
+            columns.iter().map(|column| column.name.as_str()).collect();
+
+        match &action.action {
+            ActionKind::InsertRecord { form, defaults } => {
+                if let Some(form_name) = form {
+                    let form = self.load_form(form_name)?;
+                    if form.table != action.table {
+                        return Err(Error::table(
+                            action.table.clone(),
+                            format!(
+                                "action references form {form_name:?} for table {:?}, expected {:?}",
+                                form.table, action.table
+                            ),
+                        ));
+                    }
+                }
+                for field in defaults.keys() {
+                    if !column_names.contains(field.as_str()) {
+                        return Err(Error::table(
+                            action.table.clone(),
+                            format!("action default references unknown column {field:?}"),
+                        ));
+                    }
+                }
+            }
+            ActionKind::UpdateField { field, .. } => {
+                if field == "id" {
+                    return Err(Error::table(
+                        action.table.clone(),
+                        "update_field action cannot target the id column".to_string(),
+                    ));
+                }
+                if !column_names.contains(field.as_str()) {
+                    return Err(Error::table(
+                        action.table.clone(),
+                        format!("action references unknown column {field:?}"),
+                    ));
+                }
+            }
+            ActionKind::OpenUrl { .. } => {}
+        }
+        Ok(())
     }
 
     /// Serialize a form definition to YAML.

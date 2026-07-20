@@ -4,8 +4,8 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use lattice_data::{
-    write_package_form, write_package_view, CellValue, DataApp, FieldType, FormDef, NewColumn,
-    ViewDef,
+    write_package_action, write_package_form, write_package_view, ActionDef, ActionKind,
+    ActionScope, CellValue, DataApp, FieldType, FormDef, NewColumn, ViewDef,
 };
 use lattice_storage::atomic_write_file;
 use serde::{Deserialize, Serialize};
@@ -57,6 +57,20 @@ pub(crate) struct SeedDataForm {
 }
 
 #[derive(Debug)]
+pub(crate) struct SeedDataAction {
+    pub name: &'static str,
+    pub label: &'static str,
+    pub table: &'static str,
+    pub scope: &'static str,
+    pub action_type: &'static str,
+    pub form: Option<&'static str>,
+    pub field: Option<&'static str>,
+    pub value: Option<&'static str>,
+    pub url: Option<&'static str>,
+    pub defaults: &'static [(&'static str, &'static str)],
+}
+
+#[derive(Debug)]
 pub(crate) struct SeedDataExtraTable {
     pub table: &'static str,
     pub columns: &'static [SeedDataColumn],
@@ -73,6 +87,7 @@ pub(crate) struct SeedDataPackage {
     pub extra_tables: &'static [SeedDataExtraTable],
     pub views: &'static [SeedDataView],
     pub forms: &'static [SeedDataForm],
+    pub actions: &'static [SeedDataAction],
 }
 
 #[derive(Debug)]
@@ -569,6 +584,15 @@ fn materialize_data_package(
             &known_columns,
         )?;
     }
+    for seed_action in package.actions {
+        materialize_seed_action(
+            &package_path,
+            package.path,
+            package.table,
+            seed_action,
+            &known_columns,
+        )?;
+    }
     Ok(())
 }
 
@@ -798,6 +822,111 @@ fn materialize_seed_form(
     form.title = seed.title.map(str::to_string);
     form.description = seed.description.map(str::to_string);
     write_package_form(package_path, &form).map_err(map_data_error)
+}
+
+fn materialize_seed_action(
+    package_path: &Path,
+    package_path_label: &str,
+    package_table: &str,
+    seed: &SeedDataAction,
+    known_columns: &std::collections::HashSet<&str>,
+) -> Result<()> {
+    if seed.table != package_table {
+        return Err(Error::TemplateValidation {
+            message: format!(
+                "data package {package_path_label} action {:?} targets table {:?}, expected {package_table:?}",
+                seed.name, seed.table
+            ),
+        });
+    }
+    let scope = match seed.scope {
+        "toolbar" => ActionScope::Toolbar,
+        "row" => ActionScope::Row,
+        other => {
+            return Err(Error::TemplateValidation {
+                message: format!(
+                    "data package {package_path_label} action {:?} has invalid scope {other:?}",
+                    seed.name
+                ),
+            });
+        }
+    };
+    let action = match seed.action_type {
+        "insert_record" => {
+            if seed.form.is_none() && seed.defaults.is_empty() {
+                return Err(Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path_label} action {:?} insert_record requires form or defaults",
+                        seed.name
+                    ),
+                });
+            }
+            for (field, _) in seed.defaults {
+                if !known_columns.contains(field) {
+                    return Err(Error::TemplateValidation {
+                        message: format!(
+                            "data package {package_path_label} action {:?} references unknown column {field:?}",
+                            seed.name
+                        ),
+                    });
+                }
+            }
+            ActionKind::InsertRecord {
+                form: seed.form.map(str::to_string),
+                defaults: seed
+                    .defaults
+                    .iter()
+                    .map(|(field, value)| ((*field).to_string(), (*value).to_string()))
+                    .collect(),
+            }
+        }
+        "update_field" => {
+            let field = seed.field.ok_or_else(|| Error::TemplateValidation {
+                message: format!(
+                    "data package {package_path_label} action {:?} update_field requires field",
+                    seed.name
+                ),
+            })?;
+            if !known_columns.contains(field) || field == "id" {
+                return Err(Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path_label} action {:?} references unknown column {field:?}",
+                        seed.name
+                    ),
+                });
+            }
+            ActionKind::UpdateField {
+                field: field.to_string(),
+                value: seed.value.ok_or_else(|| Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path_label} action {:?} update_field requires value",
+                        seed.name
+                    ),
+                })?
+                .to_string(),
+            }
+        }
+        "open_url" => ActionKind::OpenUrl {
+            url: seed.url.ok_or_else(|| Error::TemplateValidation {
+                message: format!(
+                    "data package {package_path_label} action {:?} open_url requires url",
+                    seed.name
+                ),
+            })?
+            .to_string(),
+        },
+        other => {
+            return Err(Error::TemplateValidation {
+                message: format!(
+                    "data package {package_path_label} action {:?} has unsupported type {other:?}",
+                    seed.name
+                ),
+            });
+        }
+    };
+    let mut action_def = ActionDef::new(seed.name, seed.label, seed.table, action);
+    action_def.scope = scope;
+    write_package_action(package_path, &action_def).map_err(map_data_error)
 }
 
 fn row_values_from_json(
@@ -1538,6 +1667,7 @@ mod tests {
             extra_tables: &[],
             views: &[],
             forms: &[],
+            actions: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",
@@ -1601,6 +1731,7 @@ mod tests {
             extra_tables: &[],
             views: &[],
             forms: &[],
+            actions: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",
@@ -1690,6 +1821,7 @@ mod tests {
             extra_tables: &[],
             views: VIEWS,
             forms: &[],
+            actions: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",
@@ -1783,6 +1915,7 @@ mod tests {
             extra_tables: &[],
             views: &[],
             forms: FORMS,
+            actions: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",
@@ -1859,6 +1992,7 @@ mod tests {
             extra_tables: &[],
             views: &[],
             forms: &[],
+            actions: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",
@@ -1946,6 +2080,7 @@ mod tests {
             extra_tables: EXTRA_TABLES,
             views: &[],
             forms: &[],
+            actions: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",

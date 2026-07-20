@@ -13,6 +13,7 @@ import DataEditor, {
 import "@glideapps/glide-data-grid/dist/index.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AddColumnPanel } from "./AddColumnPanel";
+import { DataActionsMenu } from "./DataActionsMenu";
 import { RecordDetailPanel } from "./RecordDetailPanel";
 import { PackageFormPanel } from "./PackageFormPanel";
 import { DataBoardView } from "./DataBoardView";
@@ -589,6 +590,14 @@ export function DataTableView({
     [demoMutate, packageForms, relPath, root],
   );
 
+  const openFormByName = useCallback(
+    async (formName: string) => {
+      await openFormsPanel();
+      await selectPackageForm(formName);
+    },
+    [openFormsPanel, selectPackageForm],
+  );
+
   const deleteRow = useCallback(
     async (row: DataRow) => {
       if (demoMutate) {
@@ -1046,6 +1055,42 @@ export function DataTableView({
           >
             Forms
           </button>
+          <DataActionsMenu
+            root={root}
+            relPath={relPath}
+            table={snapshot.default_table}
+            columns={snapshot.columns}
+            scope="toolbar"
+            activeView={activeView}
+            rowFetchLimit={rowFetchLimit}
+            packageRevision={snapshot.package_revision}
+            busy={busy}
+            readOnly={stale}
+            demo={Boolean(demoMutate)}
+            onOpenForm={openFormByName}
+            onSnapshot={applySnapshot}
+            onStale={() => setStale(true)}
+            onError={setError}
+          />
+          <DataActionsMenu
+            root={root}
+            relPath={relPath}
+            table={snapshot.default_table}
+            columns={snapshot.columns}
+            scope="row"
+            row={selectedGridRow ?? detailRow ?? null}
+            activeView={activeView}
+            rowFetchLimit={rowFetchLimit}
+            packageRevision={snapshot.package_revision}
+            busy={busy}
+            readOnly={stale}
+            demo={Boolean(demoMutate)}
+            menuLabel="Row actions"
+            onOpenForm={openFormByName}
+            onSnapshot={applySnapshot}
+            onStale={() => setStale(true)}
+            onError={setError}
+          />
           <button
             type="button"
             className="secondary-button"
