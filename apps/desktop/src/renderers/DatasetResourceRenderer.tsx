@@ -5,6 +5,7 @@ import { PerspectiveDatasetViewer } from "../analytics/PerspectiveDatasetViewer"
 import "../analytics/perspective.css";
 import { VegaLiteChart } from "../components/VegaLiteChart";
 import "../components/vegaLiteChart.css";
+import { inBrowser } from "../demo";
 import { KindMark } from "../KindMark";
 import type { ArrowQueryResult, ArrowTransportDump } from "../lib/arrowIpc";
 import { queryResultToValues } from "../lib/arrowToVegaData";
@@ -106,6 +107,34 @@ export function DatasetResourceRenderer({
   }, [dump, result]);
 
   if (!isDataset) return null;
+
+  if (inBrowser) {
+    return (
+      <div className="dataset-surface">
+        <header className="dataset-surface-header">
+          <span className="placeholder-mark" aria-hidden>
+            <KindMark kind="dataset" size={28} />
+          </span>
+          <div>
+            <p className="dataset-surface-title">Dataset</p>
+            <p className="dataset-surface-path">
+              <code>{path}</code>
+            </p>
+          </div>
+        </header>
+        <div className="dataset-surface-body">
+          <div className="diagnostics-card" role="status">
+            <strong>Visualization unavailable in browser demo</strong>
+            <span>
+              Perspective Preview, Vega-Lite Chart, and DuckDB Profile need the native desktop app
+              (DuckDB + Arrow IPC). Open this workspace with{" "}
+              <code>nxr desktop-dev</code> or the installed Lattice.app.
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const showPerspective = Boolean(root && result && !viewerFailed && !busy && !error);
   const loadKey = `${path}:${context.reloadToken}`;

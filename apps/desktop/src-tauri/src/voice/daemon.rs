@@ -52,6 +52,8 @@ pub(super) struct DaemonActiveSession {
     pub pump: tokio::task::JoinHandle<()>,
     pub forwarder: tokio::task::JoinHandle<()>,
     pub final_rx: oneshot::Receiver<DaemonFinal>,
+    /// Glossary / paths for deterministic ITN before editor commit (parity with embedded).
+    pub normalization_context: lattice_voice::NormalizationContext,
 }
 
 pub(super) struct DaemonFinal {
@@ -61,10 +63,6 @@ pub(super) struct DaemonFinal {
 
 pub(super) fn daemon_required() -> bool {
     env_truthy(ENV_VOICE_DAEMON)
-}
-
-pub(super) fn socket_path() -> PathBuf {
-    daemon_session::socket_path()
 }
 
 fn env_truthy(name: &str) -> bool {
@@ -82,6 +80,9 @@ fn resolve_voice_host_bin() -> Option<PathBuf> {
         }
     }
     if let Ok(path) = daemon_session::which_bin("lattice-voice-host") {
+        return Some(path);
+    }
+    if let Some(path) = daemon_session::current_exe_sibling("lattice-voice-host") {
         return Some(path);
     }
     let candidates = [
@@ -230,31 +231,41 @@ pub(super) fn push_chunk_from_frame(
 }
 
 fn session_context_from_hints(hints: &VoiceSessionContextHints) -> SessionContext {
-    let mut glossary_terms = hints.glossary_terms.clone();
-    for term in hints.tags.iter().chain(hints.heading_path.iter()) {
-        if !term.is_empty() && !glossary_terms.iter().any(|t| t == term) {
-            glossary_terms.push(term.clone());
-        }
+    use lattice_voice::{VoiceContextBuilder, VoiceContextInput};
+
+    let has_signals = hints.document_id.is_some()
+        || hints.document_path.is_some()
+        || hints.page_title.is_some()
+        || hints.workspace_name.is_some()
+        || !hints.tags.is_empty()
+        || !hints.heading_path.is_empty()
+        || !hints.glossary_terms.is_empty()
+        || !hints.known_paths.is_empty();
+    if !has_signals {
+        return SessionContext {
+            document_id: None,
+            glossary_terms: Vec::new(),
+            known_paths: Vec::new(),
+            command_mode: false,
+        };
     }
-    if let Some(title) = hints.page_title.as_ref().filter(|t| !t.is_empty()) {
-        if !glossary_terms.iter().any(|t| t == title) {
-            glossary_terms.push(title.clone());
-        }
-    }
-    let known_paths: Vec<String> = hints
-        .known_paths
-        .iter()
-        .filter(|path| !path.is_empty())
-        .cloned()
-        .collect();
+    let input = VoiceContextInput {
+        document_id: hints.document_id.clone(),
+        heading_path: hints.heading_path.clone(),
+        page_title: hints.page_title.clone(),
+        workspace_name: hints.workspace_name.clone(),
+        document_path: hints.document_path.clone(),
+        tags: hints.tags.clone(),
+        extra_glossary_terms: hints.glossary_terms.clone(),
+        known_paths: hints.known_paths.clone(),
+        known_symbols: Vec::new(),
+    };
+    let built = VoiceContextBuilder::new().build_session_context(&input, false, None);
     SessionContext {
-        document_id: hints
-            .document_id
-            .clone()
-            .or_else(|| hints.document_path.clone()),
-        glossary_terms,
-        command_mode: false,
-        known_paths,
+        document_id: built.document_id,
+        glossary_terms: built.glossary_terms,
+        known_paths: built.known_paths,
+        command_mode: built.command_mode,
     }
 }
 
@@ -271,6 +282,10 @@ pub(super) async fn start_session(
     let client = Arc::clone(&backend.client);
 
     let context = session_context_from_hints(&hints);
+    let normalization_context = lattice_voice::NormalizationContext {
+        glossary_terms: context.glossary_terms.clone(),
+        known_paths: context.known_paths.clone(),
+    };
     let started = client
         .request(Request {
             deadline_unix_ms: None,
@@ -439,6 +454,7 @@ pub(super) async fn start_session(
         pump,
         forwarder,
         final_rx,
+        normalization_context,
     })
 }
 
@@ -447,6 +463,10 @@ pub(super) async fn finish_session(
     active: DaemonActiveSession,
     inner: &mut VoiceInner,
 ) -> Result<(), String> {
+    use lattice_voice::{
+        normalize_final_transcript, FinalTranscript, FinalizationMode,
+    };
+
     stop_capture_and_rearm(inner);
     active.pump.abort();
     // Keep forwarder alive until final arrives, then abort.
@@ -472,12 +492,28 @@ pub(super) async fn finish_session(
         .await
         .map_err(|err| format!("FinishUtterance failed: {err}"))?;
 
-    let final_transcript = tokio::time::timeout(Duration::from_secs(30), active.final_rx)
+    let daemon_final = tokio::time::timeout(Duration::from_secs(30), active.final_rx)
         .await
         .map_err(|_| "timed out waiting for FinalTranscript from latticed".to_string())?
         .map_err(|_| "final transcript channel closed before FinalTranscript".to_string())?;
 
     active.forwarder.abort();
+
+    // Production stays on StreamingFlush (voice-eval deferred IndependentOfflineRedecode).
+    let final_transcript = normalize_final_transcript(
+        FinalTranscript {
+            session_id: active.session_id.clone(),
+            utterance_id: format!("{}-utt", active.session_id),
+            replaces_revision: daemon_final.replaces_revision,
+            text: daemon_final.text,
+            raw_text: None,
+            corrections: Vec::new(),
+            finalization_mode: FinalizationMode::StreamingFlush,
+            duration_ms: 0,
+            processing_ms: 0,
+        },
+        &active.normalization_context,
+    );
 
     let _ = app.emit(
         VOICE_EVENT,
@@ -485,8 +521,12 @@ pub(super) async fn finish_session(
             session_id: active.session_id.clone(),
             text: final_transcript.text,
             replaces_revision: Some(final_transcript.replaces_revision),
-            raw_text: None,
-            corrections: Vec::new(),
+            raw_text: final_transcript.raw_text,
+            corrections: final_transcript
+                .corrections
+                .iter()
+                .map(super::VoiceTranscriptCorrection::from)
+                .collect(),
         },
     );
 
@@ -582,10 +622,34 @@ mod tests {
     }
 
     #[test]
+    fn session_context_feeds_normalization_context() {
+        let hints = VoiceSessionContextHints {
+            document_id: None,
+            document_path: Some("Inbox/Sample capture.md".into()),
+            page_title: Some("Sample capture".into()),
+            workspace_name: Some("First Look".into()),
+            tags: vec!["inbox".into()],
+            heading_path: Vec::new(),
+            glossary_terms: vec!["VoiceContextBuilder".into()],
+            known_paths: vec!["Inbox/Sample capture".into()],
+        };
+        let ctx = session_context_from_hints(&hints);
+        let norm = lattice_voice::NormalizationContext {
+            glossary_terms: ctx.glossary_terms.clone(),
+            known_paths: ctx.known_paths.clone(),
+        };
+        assert!(norm
+            .glossary_terms
+            .iter()
+            .any(|t| t == "VoiceContextBuilder"));
+        assert_eq!(norm.known_paths, vec!["Inbox/Sample capture".to_string()]);
+    }
+
+    #[test]
     fn daemon_required_reads_env_shape() {
         // Do not mutate process env in parallel tests; just exercise the helper API.
         let _ = daemon_required();
-        let path = socket_path();
+        let path = crate::daemon_session::socket_path();
         assert!(path.file_name().is_some());
     }
 }

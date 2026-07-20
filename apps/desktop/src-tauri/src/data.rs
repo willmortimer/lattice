@@ -4,9 +4,9 @@ use std::path::{Path, PathBuf};
 use lattice_commands::{ColumnSpec, Command as SemanticCommand, CommandEngine, Transaction};
 use lattice_data::{
     cell_from_csv, parse_csv_file, parse_field_type_name, parse_tabular_file, resolve_field_types,
-    save_form, tabular_format, tabular_format_label, CellValue, ColumnMeta, CsvTable, DataApp,
-    FieldType, FilterOperator, Row, SortDirection, TabularTable, ViewDef, ViewFilter, ViewSort,
-    LAYOUT_BOARD, LAYOUT_CALENDAR, LAYOUT_GALLERY, SUPPORTED_LAYOUT_TYPES,
+    save_form, tabular_format, tabular_format_label, CellValue, ColumnMeta, DataApp, FieldType,
+    FilterOperator, Row, SortDirection, TabularTable, ViewDef, ViewFilter, ViewSort, LAYOUT_BOARD,
+    LAYOUT_CALENDAR, LAYOUT_GALLERY, SUPPORTED_LAYOUT_TYPES,
 };
 use serde::{Deserialize, Serialize};
 
@@ -634,7 +634,6 @@ pub struct TabularColumnTypeDto {
     pub field_type: String,
 }
 
-pub type CsvColumnPreviewDto = TabularColumnPreviewDto;
 pub type CsvImportPreviewDto = TabularImportPreviewDto;
 pub type CsvColumnTypeDto = TabularColumnTypeDto;
 
