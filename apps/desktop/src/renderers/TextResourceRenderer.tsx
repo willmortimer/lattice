@@ -15,6 +15,7 @@ export function TextResourceRenderer({
       onSaveStateChange={context.callbacks.onSaveStateChange}
       onRevisionChange={context.callbacks.onRevisionChange}
       onOpenExternally={context.callbacks.onOpenExternally}
+      onPromoteWorkspaceCsv={context.callbacks.onPromoteWorkspaceCsv}
     />
   );
 }
