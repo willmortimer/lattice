@@ -109,4 +109,20 @@ describe("flattenVisibleTree", () => {
       expect.objectContaining({ type: "folder", name: "Inbox", path: "Inbox" }),
     ]);
   });
+
+  it("renders a browser-created folder under its parent directory", () => {
+    const resources = [
+      page("Projects/Example Project.md"),
+      { path: "Projects/Browser Demo", kind: "folder" },
+    ];
+    const tree = buildResourceTree(resources);
+    const projects = tree.find((node) => node.type === "folder" && node.name === "Projects");
+    expect(projects?.type).toBe("folder");
+    if (projects?.type !== "folder") return;
+
+    expect(projects.children.map((node) => node.name)).toEqual([
+      "Browser Demo",
+      "Example Project.md",
+    ]);
+  });
 });

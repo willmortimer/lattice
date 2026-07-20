@@ -446,6 +446,7 @@ export function useDesktopController() {
     handleTreeFolderContextMenu,
     handleTreeRename,
     handleMoveToFolder,
+    handleNewFolderInFolder,
   } = treeActions;
 
   function beginSidebarResize(event: React.PointerEvent<HTMLDivElement>) {
@@ -708,6 +709,7 @@ export function useDesktopController() {
     beginSidebarResize, commitTitle, updateWorkspaceSettings, handleOpenWiki, openLinkTarget,
     handleKeepIncoming, handleKeepLocal, handleKeepBoth,
     handleTreeResourceContextMenu, handleTreeFolderContextMenu, handleTreeRename, handleMoveToFolder,
+    handleNewFolderInFolder,
     treeRenameRequest,
     handleNotebookContentChange,
     handleRevisionChange,

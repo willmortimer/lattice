@@ -18,6 +18,18 @@ export function parentDirectory(path: string): string {
   return slash >= 0 ? path.slice(0, slash) : "";
 }
 
+/** Parent folder for browser "New folder" when native tree context menus are unavailable. */
+export function newFolderParentPath(
+  selected: Resource | null,
+  options?: { activeFolderPath?: string | null; fallback?: string },
+): string {
+  const activeFolderPath = options?.activeFolderPath?.trim();
+  if (activeFolderPath) return activeFolderPath;
+  if (selected?.kind === "folder") return selected.path;
+  if (selected) return parentDirectory(selected.path);
+  return options?.fallback ?? "Projects";
+}
+
 export function destinationPath(from: string, toDir: string): string {
   const name = basename(from);
   return joinWorkspacePath(toDir, name);
