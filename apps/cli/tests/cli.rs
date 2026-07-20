@@ -373,3 +373,29 @@ fn dataset_import_csv_writes_partition() {
     let yaml = std::fs::read_to_string(dir.path().join("Usage.dataset/dataset.yaml")).unwrap();
     assert!(yaml.contains("facts/year=2026/month=01/part-000.parquet"));
 }
+
+#[test]
+fn query_csv_with_duckdb_engine() {
+    let dir = tempfile::tempdir().unwrap();
+    init_blank(dir.path()).success();
+
+    fs::create_dir_all(dir.path().join("facts")).unwrap();
+    fs::write(
+        dir.path().join("facts/sample.csv"),
+        "id,name\n1,alpha\n2,beta\n",
+    )
+    .unwrap();
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("query")
+        .arg("--engine")
+        .arg("duckdb")
+        .arg("--sql")
+        .arg("SELECT count(*) AS n FROM read_csv_auto('facts/sample.csv')")
+        .assert()
+        .success()
+        .stdout(predicates_contains("n"))
+        .stdout(predicates_contains("2"))
+        .stdout(predicates_contains("1 row(s)"));
+}
