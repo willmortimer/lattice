@@ -126,7 +126,7 @@ flowchart TD
 | P2-02 | merged | composer | Column designer |
 | P2-04 | merged | composer | CLI schema alter |
 | P2-05 | merged | composer | CSV type-review |
-| P2-06 | pending | composer | CSV promote |
+| P2-06 | merged | composer | CSV promote |
 | P2-07 | pending | composer | Docs wave 1 |
 | P2-08 | pending | grok | Lookup |
 | P2-09 | pending | grok | Rollup |
