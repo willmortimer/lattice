@@ -25,6 +25,33 @@ open/viewer, Pyodide Run with `ResourceUpdate` undo, canvas `subpath` → data
 Re-run the [[Home]] tour on a current build for notebook Run, canvas CRM nodes,
 and **Forms → Contact intake**.
 
+## Data apps Wave 1 landed (schema, column designer, CSV)
+
+Wave 1 on `feat/data-apps-and-analytics` (packets P2-01–P2-07) added
+schema-via-commands, the column designer, paginated open with **Load more**,
+CSV type-review import, and CSV promote from the text viewer. Tracker:
+[data-apps analytics DAG](data-apps-analytics-dag.md) (Wave 1 merged; Wave 2+
+pending).
+
+Contracts:
+
+- [Data applications — Wave 1 shipped](../10-data-applications-and-airtable-model.md#shipped-in-wave-1-phase-2-tables) — `ColumnsAdd` / `TableAdd`, column designer, paginated open, CSV type-review + promote, CLI `add-column` / `add-table`.
+- Supersedes the draft [phase2-tables-wave1-dag](phase2-tables-wave1-dag.md) packet list.
+
+**Native demo steps** (Tauri / `nix run .#desktop-dev`; not the browser fixture):
+
+1. Open `CRM.data` → **Add column** → add a `text` column → edit a cell.
+2. File → **Import CSV…** → adjust inferred types in the review dialog → confirm → new `.data` package opens.
+3. Open `Data/sample.csv` in the text viewer → **Create table from CSV…** → same review dialog → confirm.
+4. On a table with more than 500 rows, confirm **Showing *n*–*m* of *total*** and **Load more** (First Look CRM seeds are below the default window).
+
+CLI spot-check:
+
+```sh
+lattice table import /path/to/file.csv --name MyTable --table rows --type status:text --type count:integer
+lattice table add-column MyTable.data --table rows --name notes --type long_text
+```
+
 ## Wave 1 landed (relation integrity + batch link-repair)
 
 Subsequent nodes (D0/R1/R2/B1/R3/T1, merged on `main`) closed the gaps called
@@ -54,6 +81,10 @@ Home.md items 1–9. Status: **pass** / **fail** / **skip**.
 | 7 | Move `Product/Vision`; accept link repair | **skip** (browser) / expected native path | Browser remaps paths in memory with **no** repair modal. Native single-path move previews repair via `preview_link_repair`. Not verified live in Tauri this pass; repair pipeline covered by unit tests. | `useResourceController.ts:566–585` (browser); `588–598` (native); `docs/39-resource-runtime-contracts.md:66–68` |
 | 8 | ⌘-click multi-select + drag move | **pass** (selection/move UI) / native batch repair | Tree is `aria-multiselectable`; batch move (2+) previews combined link repair and applies one transaction when accepted. Browser remaps locally; native `preview_batch_link_repair` / `apply_batch_link_repair`. | `ResourceTree.tsx:396`; `useResourceController.ts` batch branch; `docs/39-resource-runtime-contracts.md` |
 | 9 | Multi-select delete + confirm | **pass** (browser local) / **skip** (native trash) | Confirm dialog + batch delete; browser filters snapshot; native `deleteResources` → Trash. Native trash/undo not verified in browser. | `treeActions.ts:83–135` |
+| 10 | `CRM.data` → **Add column** → add `text` column | **skip** (browser persist) / **skip** (native pass) | Panel renders in browser with degraded “not persisted” copy; native `add_data_columns` → `ColumnsAdd` not exercised in this pass. | `AddColumnPanel.tsx`; `DataTableView.tsx:1049–1095` |
+| 11 | **Import CSV…** → type-review → commit | **skip** (browser) / **skip** (native pass) | Browser blocks with explicit error; native `preview_csv_import` / `commit_csv_import` path not exercised in this pass. | `desktopActions.ts:137–215`; `CsvImportReviewDialog.tsx` |
+| 12 | `Data/sample.csv` → **Create table from CSV…** | **skip** (browser) / **skip** (native pass) | Same import path as item 11 via `handlePromoteWorkspaceCsv`; native-only. | `TextViewer.tsx:173–180`; `desktopActions.ts:159–178` |
+| 13 | Paginated grid **Showing N of M** / **Load more** | **skip** (demo window) | `demoMutate` hides pagination chrome; CRM seed `has_more: false`. Native tables >500 rows use `open_data_app` windowing. | `DataTableView.tsx:1074–1091`; `types.ts:62–64` |
 
 ## Known expected fails on BASE (Wave 1 addressed)
 
@@ -80,6 +111,7 @@ Wave 1 (items 1–4, 6) shipped on `main`. Remaining items are post–Wave 1.
 6. ~~**P2 — Batch move link-repair**~~ — done (B1).
 7. **P2 — Persist Save view in demo or clear CTA** — today the button exists then errors; either hide in `demoMutate` or document “native only” on the control.
 8. **P2 — Native demo pass** for folder undo, single-path move+repair, multi-select trash+undo on `nix run .#desktop-dev` / Tauri e2e — still marked skip above.
+9. **P2 — Native data-apps pass** for Add column, Import CSV type-review, and `Data/sample.csv` promote (checklist 10–12) — native-only; browser fixture documents degraded paths.
 
 ## How to re-run
 
