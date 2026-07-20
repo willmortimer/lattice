@@ -3277,6 +3277,7 @@ name = "lattice-duckdb"
 version = "0.1.0"
 dependencies = [
  "duckdb",
+ "serde",
  "tempfile",
  "thiserror 2.0.18",
 ]
