@@ -38,12 +38,15 @@ describe("csvImport", () => {
 
   it("builds review state from preview metadata", () => {
     const preview = {
+      format: "CSV" as const,
       columns: [{ name: "name", field_type: "text", sample_values: ["Ada"] }],
       row_count: 1,
       sample_rows: [["Ada"]],
     };
     expect(buildCsvImportReviewState("/tmp/sample.csv", "Contacts", preview)).toEqual({
       csvPath: "/tmp/sample.csv",
+      sourcePath: "/tmp/sample.csv",
+      format: "CSV",
       packageName: "Contacts",
       title: "Contacts",
       tableName: "contacts",

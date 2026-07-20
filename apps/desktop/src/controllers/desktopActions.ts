@@ -3,7 +3,7 @@ import { invoke as coreInvoke } from "../lib/ipc";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
-import { buildCsvImportReviewState, defaultPackageNameFromCsvPath, type CsvImportPreview, type CsvImportReviewState, tableNameFromPackageLabel, workspaceCsvAbsolutePath } from "../data/csvImport";
+import { buildTabularImportReviewState, defaultPackageNameFromImportPath, TABULAR_IMPORT_FILE_FILTERS, type TabularImportPreview, type TabularImportReviewState, tableNameFromPackageLabel, workspaceTabularAbsolutePath } from "../data/tabularImport";
 import type { FieldType } from "../data/types";
 import { resolveResourceLink, type ResourceLinkTarget } from "../lib/resourceLinks";
 import { createPage } from "../lib/pages";
@@ -64,7 +64,7 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
     refreshResources, handleSelect, openCreatedResource, reconcilePathRemaps,
   } = options;
   const workspaceSettingsTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
-  const [csvImportReview, setCsvImportReview] = useState<CsvImportReviewState | null>(null);
+  const [tabularImportReview, setTabularImportReview] = useState<TabularImportReviewState | null>(null);
   useEffect(() => () => {
     if (workspaceSettingsTimerRef.current) window.clearTimeout(workspaceSettingsTimerRef.current);
   }, []);
@@ -139,20 +139,20 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
     }
   }, [reconcilePathRemaps, refreshResources, setError, snapshot]);
 
-  const handleImportCsv = useCallback(async () => {
+  const handleImportTable = useCallback(async () => {
     if (inBrowser) {
-      setError("CSV import is not available in the browser demo.");
+      setError("Table import is not available in the browser demo.");
       return;
     }
     if (!snapshot) return;
-    const selectedFile = await open({ multiple: false, filters: [{ name: "CSV", extensions: ["csv"] }] });
+    const selectedFile = await open({ multiple: false, filters: [...TABULAR_IMPORT_FILE_FILTERS] });
     if (!selectedFile || typeof selectedFile !== "string") return;
     const name = window.prompt("Package name", "Imported")?.trim();
     if (!name) return;
     setBusy(true);
     try {
-      const preview = await invoke<CsvImportPreview>("preview_csv_import", { csvPath: selectedFile });
-      setCsvImportReview(buildCsvImportReviewState(selectedFile, name, preview));
+      const preview = await invoke<TabularImportPreview>("preview_tabular_import", { sourcePath: selectedFile });
+      setTabularImportReview(buildTabularImportReviewState(selectedFile, name, preview));
       setError(null);
     } catch (error) {
       setError(String(error));
@@ -161,20 +161,22 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
     }
   }, [setBusy, setError, snapshot]);
 
-  const handlePromoteWorkspaceCsv = useCallback(async (resource: Resource) => {
+  const handleImportCsv = handleImportTable;
+
+  const handlePromoteWorkspaceTable = useCallback(async (resource: Resource) => {
     if (inBrowser) {
-      setError("CSV import is not available in the browser demo.");
+      setError("Table import is not available in the browser demo.");
       return;
     }
     if (!snapshot) return;
-    const defaultName = defaultPackageNameFromCsvPath(resource.path);
+    const defaultName = defaultPackageNameFromImportPath(resource.path);
     const name = window.prompt("Package name", defaultName)?.trim();
     if (!name) return;
-    const csvPath = workspaceCsvAbsolutePath(snapshot.root, resource.path);
+    const sourcePath = workspaceTabularAbsolutePath(snapshot.root, resource.path);
     setBusy(true);
     try {
-      const preview = await invoke<CsvImportPreview>("preview_csv_import", { csvPath });
-      setCsvImportReview(buildCsvImportReviewState(csvPath, name, preview));
+      const preview = await invoke<TabularImportPreview>("preview_tabular_import", { sourcePath });
+      setTabularImportReview(buildTabularImportReviewState(sourcePath, name, preview));
       setError(null);
     } catch (error) {
       setError(String(error));
@@ -183,12 +185,16 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
     }
   }, [setBusy, setError, snapshot]);
 
-  const handleCancelCsvImport = useCallback(() => {
-    setCsvImportReview(null);
+  const handlePromoteWorkspaceCsv = handlePromoteWorkspaceTable;
+
+  const handleCancelTabularImport = useCallback(() => {
+    setTabularImportReview(null);
   }, []);
 
-  const handleCsvImportColumnTypeChange = useCallback((columnName: string, fieldType: FieldType) => {
-    setCsvImportReview((current) => {
+  const handleCancelCsvImport = handleCancelTabularImport;
+
+  const handleTabularImportColumnTypeChange = useCallback((columnName: string, fieldType: FieldType) => {
+    setTabularImportReview((current) => {
       if (!current) return current;
       return {
         ...current,
@@ -199,17 +205,19 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
     });
   }, []);
 
-  const handleConfirmCsvImport = useCallback(async () => {
-    if (!snapshot || !csvImportReview) return;
+  const handleCsvImportColumnTypeChange = handleTabularImportColumnTypeChange;
+
+  const handleConfirmTabularImport = useCallback(async () => {
+    if (!snapshot || !tabularImportReview) return;
     setBusy(true);
     try {
-      const [relPath, created] = await invoke<[string, DataAppSnapshot]>("commit_csv_import", {
+      const [relPath, created] = await invoke<[string, DataAppSnapshot]>("commit_tabular_import", {
         root: snapshot.root,
-        csvPath: csvImportReview.csvPath,
-        packageName: csvImportReview.packageName,
-        title: csvImportReview.title,
-        tableName: csvImportReview.tableName,
-        columns: csvImportReview.columns.map((column) => ({
+        sourcePath: tabularImportReview.sourcePath,
+        packageName: tabularImportReview.packageName,
+        title: tabularImportReview.title,
+        tableName: tabularImportReview.tableName,
+        columns: tabularImportReview.columns.map((column) => ({
           name: column.name,
           field_type: column.field_type,
         })),
@@ -217,14 +225,16 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
       await refreshResources();
       const resource: Resource = { path: relPath, kind: "data-app" };
       openCreatedResource(resource, { kind: "data-app", resource, snapshot: created });
-      setCsvImportReview(null);
+      setTabularImportReview(null);
       setError(null);
     } catch (error) {
       setError(String(error));
     } finally {
       setBusy(false);
     }
-  }, [csvImportReview, openCreatedResource, refreshResources, setBusy, setError, snapshot]);
+  }, [tabularImportReview, openCreatedResource, refreshResources, setBusy, setError, snapshot]);
+
+  const handleConfirmCsvImport = handleConfirmTabularImport;
 
   const handleNewTable = useCallback(async () => {
     const name = window.prompt("New table name");
@@ -379,10 +389,14 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
   }, [setError, setSnapshot, setStatusToast, snapshotRef]);
 
   return {
-    createAndOpenPage, handleQuickNote, handleNewPage, handleUndo, handleImportCsv, handlePromoteWorkspaceCsv,
+    createAndOpenPage, handleQuickNote, handleNewPage, handleUndo, handleImportTable, handleImportCsv,
+    handlePromoteWorkspaceTable, handlePromoteWorkspaceCsv,
     handleNewTable,
     handleImportEditorAsset, handleOpenExternally, openLinkTarget, handleOpenWiki, handleOpenFile,
     updateWorkspaceSettings,
-    csvImportReview, handleCancelCsvImport, handleConfirmCsvImport, handleCsvImportColumnTypeChange,
+    tabularImportReview, csvImportReview: tabularImportReview,
+    handleCancelTabularImport, handleCancelCsvImport,
+    handleConfirmTabularImport, handleConfirmCsvImport,
+    handleTabularImportColumnTypeChange, handleCsvImportColumnTypeChange,
   };
 }

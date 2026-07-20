@@ -7,6 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+calamine = "0.26"
 csv = "1"
 rusqlite.workspace = true
 serde.workspace = true

@@ -5,13 +5,16 @@
 
 mod action;
 mod app;
+mod tabular;
 mod csv;
 mod data_app;
 mod error;
 mod form;
 mod interface;
+mod json_import;
 mod types;
 mod view;
+mod xlsx;
 
 #[cfg(test)]
 mod tests;
@@ -22,9 +25,14 @@ pub use action::{
 };
 pub use app::DEFAULT_VIEW_NAME;
 pub use csv::{
-    cell_from_csv, infer_field_type, parse_csv_file, parse_field_type_name, resolve_field_types,
-    sanitize_column_name, CsvTable,
+    cell_from_csv, parse_csv_file, parse_field_type_name, resolve_field_types, CsvTable,
 };
+pub use json_import::{parse_json_file, parse_jsonl_file};
+pub use tabular::{
+    infer_field_type, sanitize_column_name, tabular_format, tabular_format_label, TabularFormat,
+    TabularTable, TABULAR_IMPORT_MAX_ROWS,
+};
+pub use xlsx::parse_xlsx_file;
 pub use data_app::DataApp;
 pub use error::Error;
 pub use form::{save_form, write_package_form, FormDef, FORM_FILE_SUFFIX, FORM_FORMAT, FORM_VERSION};
@@ -43,3 +51,13 @@ pub use view::{
 };
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Parse a supported tabular file by extension (`.csv`, `.tsv`, `.xlsx`, `.json`, `.jsonl`).
+pub fn parse_tabular_file(path: &std::path::Path) -> Result<TabularTable> {
+    match tabular_format(path) {
+        TabularFormat::Csv => parse_csv_file(path),
+        TabularFormat::Xlsx => parse_xlsx_file(path),
+        TabularFormat::Json => parse_json_file(path),
+        TabularFormat::Jsonl => parse_jsonl_file(path),
+    }
+}

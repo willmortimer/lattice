@@ -8,29 +8,30 @@ import {
 } from "@lattice/ui";
 import { useMemo } from "react";
 import {
-  CSV_IMPORT_FIELD_TYPES,
+  TABULAR_IMPORT_FIELD_TYPES,
   fieldTypeLabel,
-  normalizeCsvImportFieldType,
-  type CsvColumnChoice,
-  type CsvImportReviewState,
-} from "./csvImport";
+  normalizeTabularImportFieldType,
+  tabularImportReviewTitle,
+  type TabularColumnChoice,
+  type TabularImportReviewState,
+} from "./tabularImport";
 import type { FieldType } from "./types";
 
-interface CsvImportReviewDialogProps {
-  review: CsvImportReviewState;
+interface TabularImportReviewDialogProps {
+  review: TabularImportReviewState;
   busy: boolean;
   onCancel: () => void;
   onConfirm: () => void;
   onColumnTypeChange: (columnName: string, fieldType: FieldType) => void;
 }
 
-export function CsvImportReviewDialog({
+export function TabularImportReviewDialog({
   review,
   busy,
   onCancel,
   onConfirm,
   onColumnTypeChange,
-}: CsvImportReviewDialogProps) {
+}: TabularImportReviewDialogProps) {
   const columnIndexByName = useMemo(() => {
     const map = new Map<string, number>();
     review.preview.columns.forEach((column, index) => {
@@ -44,7 +45,9 @@ export function CsvImportReviewDialog({
       <DialogPortal>
         <DialogBackdrop className="modal-backdrop" />
         <DialogPopup className="modal-panel csv-import-review-panel">
-          <DialogTitle id="csv-import-review-title">Review CSV import</DialogTitle>
+          <DialogTitle id="tabular-import-review-title">
+            {tabularImportReviewTitle(review.format)}
+          </DialogTitle>
           <p className="modal-copy">
             {review.preview.row_count === 1 ? "1 row" : `${review.preview.row_count} rows`} into{" "}
             <strong>{review.packageName}.data</strong>. Adjust column types before creating the
@@ -64,7 +67,7 @@ export function CsvImportReviewDialog({
                   const previewColumn =
                     review.preview.columns[columnIndexByName.get(column.name) ?? -1];
                   return (
-                    <CsvImportColumnRow
+                    <TabularImportColumnRow
                       key={column.name}
                       column={column}
                       inferredType={previewColumn?.field_type ?? column.field_type}
@@ -116,20 +119,20 @@ export function CsvImportReviewDialog({
   );
 }
 
-function CsvImportColumnRow({
+function TabularImportColumnRow({
   column,
   inferredType,
   sampleValues,
   disabled,
   onTypeChange,
 }: {
-  column: CsvColumnChoice;
+  column: TabularColumnChoice;
   inferredType: string;
   sampleValues: string[];
   disabled: boolean;
   onTypeChange: (columnName: string, fieldType: FieldType) => void;
 }) {
-  const inferredLabel = fieldTypeLabel(normalizeCsvImportFieldType(inferredType));
+  const inferredLabel = fieldTypeLabel(normalizeTabularImportFieldType(inferredType));
   return (
     <tr>
       <th scope="row">{column.name}</th>
@@ -141,7 +144,7 @@ function CsvImportColumnRow({
           aria-label={`Type for ${column.name}`}
           onChange={(event) => onTypeChange(column.name, event.target.value as FieldType)}
         >
-          {CSV_IMPORT_FIELD_TYPES.map((option) => (
+          {TABULAR_IMPORT_FIELD_TYPES.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
@@ -161,3 +164,6 @@ function CsvImportColumnRow({
     </tr>
   );
 }
+
+/** @deprecated Use `TabularImportReviewDialog`. */
+export const CsvImportReviewDialog = TabularImportReviewDialog;
