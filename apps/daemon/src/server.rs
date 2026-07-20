@@ -10,13 +10,17 @@ use lattice_client::{
 };
 use lattice_protocol::{
     encode_frame, envelope, error_envelope, event, event_envelope, request, response,
-    response_envelope, ApplyPageUpdateRequest, ApplyPageUpdateResponse, Error as WireError, Event,
-    FrameDecoder, HealthRequest, HealthResponse, IndexProgress, OpenWorkspaceRequest,
+    response_envelope, ApplyPageUpdateRequest, ApplyPageUpdateResponse,
+    DisableSemanticSearchRequest, DisableSemanticSearchResponse, EnableSemanticSearchRequest,
+    EnableSemanticSearchResponse, Error as WireError, Event, FrameDecoder, GetSemanticStatusRequest,
+    GetSemanticStatusResponse, HealthRequest, HealthResponse, IndexProgress, OpenWorkspaceRequest,
     OpenWorkspaceResponse, PingRequest, PingResponse, Request, ResourceChanged, Response,
-    SearchRequest, SearchResponse, WorkspaceLeaseChanged, PROTOCOL_VERSION,
+    SearchRequest, SearchResponse, SemanticStatus as WireSemanticStatus, WorkspaceLeaseChanged,
+    PROTOCOL_VERSION,
 };
 use lattice_runtime::{
     IdempotentOutcome, LatticeRuntime, RuntimeEvent, RuntimeIndexProgress, RuntimeResourceChanged,
+    SemanticStatus,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::unix::OwnedReadHalf;
@@ -410,6 +414,15 @@ async fn handle_request(
             expected_revision,
             idempotency_key,
         ),
+        Some(request::Body::EnableSemanticSearch(EnableSemanticSearchRequest {
+            workspace_id,
+        })) => handle_enable_semantic(state, workspace_id),
+        Some(request::Body::DisableSemanticSearch(DisableSemanticSearchRequest {
+            workspace_id,
+        })) => handle_disable_semantic(state, workspace_id),
+        Some(request::Body::GetSemanticStatus(GetSemanticStatusRequest { workspace_id })) => {
+            handle_get_semantic_status(state, workspace_id)
+        }
         Some(
             body @ (request::Body::PrepareModel(_)
             | request::Body::GetVoiceCapabilities(_)
@@ -444,6 +457,105 @@ async fn handle_request(
     }
 }
 
+fn handle_enable_semantic(
+    state: &DaemonState,
+    workspace_id: String,
+) -> std::result::Result<(Response, Option<(String, lattice_protocol::WorkspaceLease)>), WireError>
+{
+    let semantic = state.semantic.as_ref().ok_or_else(|| WireError {
+        code: "semantic_unavailable".into(),
+        message: "semantic controller is not configured".into(),
+        details: None,
+    })?;
+    let status = semantic
+        .enable_workspace(&workspace_id)
+        .map_err(|message| WireError {
+            code: "semantic_enable_failed".into(),
+            message,
+            details: None,
+        })?;
+    state.publish_event(
+        workspace_id,
+        event::Body::SemanticStatus(lattice_protocol::SemanticStatusChanged {
+            status: Some(semantic_status_to_wire(&status)),
+        }),
+    );
+    Ok((
+        Response {
+            body: Some(response::Body::EnableSemanticSearch(
+                EnableSemanticSearchResponse {
+                    status: Some(semantic_status_to_wire(&status)),
+                },
+            )),
+        },
+        None,
+    ))
+}
+
+fn handle_disable_semantic(
+    state: &DaemonState,
+    workspace_id: String,
+) -> std::result::Result<(Response, Option<(String, lattice_protocol::WorkspaceLease)>), WireError>
+{
+    let semantic = state.semantic.as_ref().ok_or_else(|| WireError {
+        code: "semantic_unavailable".into(),
+        message: "semantic controller is not configured".into(),
+        details: None,
+    })?;
+    let status = semantic
+        .disable_workspace(&workspace_id)
+        .map_err(|message| WireError {
+            code: "semantic_disable_failed".into(),
+            message,
+            details: None,
+        })?;
+    state.publish_event(
+        workspace_id,
+        event::Body::SemanticStatus(lattice_protocol::SemanticStatusChanged {
+            status: Some(semantic_status_to_wire(&status)),
+        }),
+    );
+    Ok((
+        Response {
+            body: Some(response::Body::DisableSemanticSearch(
+                DisableSemanticSearchResponse {
+                    status: Some(semantic_status_to_wire(&status)),
+                },
+            )),
+        },
+        None,
+    ))
+}
+
+fn handle_get_semantic_status(
+    state: &DaemonState,
+    workspace_id: String,
+) -> std::result::Result<(Response, Option<(String, lattice_protocol::WorkspaceLease)>), WireError>
+{
+    let semantic = state.semantic.as_ref().ok_or_else(|| WireError {
+        code: "semantic_unavailable".into(),
+        message: "semantic controller is not configured".into(),
+        details: None,
+    })?;
+    let status = semantic.status_for_workspace(&workspace_id);
+    Ok((
+        Response {
+            body: Some(response::Body::GetSemanticStatus(GetSemanticStatusResponse {
+                status: Some(semantic_status_to_wire(&status)),
+            })),
+        },
+        None,
+    ))
+}
+
+fn semantic_status_to_wire(status: &SemanticStatus) -> WireSemanticStatus {
+    WireSemanticStatus {
+        state: status.state.as_str().to_string(),
+        pending_chunks: status.pending_chunks,
+        message: status.message.clone(),
+    }
+}
+
 fn handle_open_workspace(
     state: &DaemonState,
     path: String,
@@ -455,9 +567,8 @@ fn handle_open_workspace(
         .open_workspace_session_for_write(path.as_str(), &claim)
         .map_err(runtime_error_to_wire)?;
 
-    if let Some(semantic) = state.semantic.as_ref() {
-        semantic.attach_session(&session);
-    }
+    // Semantic indexing is user-driven via EnableSemanticSearch (E4), not
+    // auto-attached on open.
 
     let wire_lease = lease_to_wire(&lease_file);
     let workspace_id = session.workspace_id().to_string();

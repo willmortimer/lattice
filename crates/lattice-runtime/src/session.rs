@@ -12,7 +12,7 @@ use crate::events::SharedEventBus;
 use crate::idempotency::IdempotencyCache;
 use crate::lease::{LeaseClaim, WorkspaceLeaseFile};
 use crate::semantic::{
-    start_session_semantic_worker, SemanticAvailability, SemanticWorkerConfig,
+    start_session_semantic_worker, SemanticAvailability, SemanticStatus, SemanticWorkerConfig,
     SessionSemanticWorker,
 };
 use crate::watch::{default_watch_debounce, start_session_index_watcher, SessionIndexWatcher};
@@ -283,6 +283,24 @@ impl WorkspaceSession {
             .expect("semantic worker poisoned")
             .as_ref()
             .and_then(SessionSemanticWorker::namespace_id)
+    }
+
+    /// Settings-facing status for this session's semantic worker (or stopped).
+    pub fn semantic_status(&self) -> SemanticStatus {
+        let guard = self
+            .semantic_worker
+            .lock()
+            .expect("semantic worker poisoned");
+        let Some(worker) = guard.as_ref() else {
+            return SemanticStatus::stopped();
+        };
+        let pending = worker.namespace_id().and_then(|ns| {
+            self.index()
+                .count_pending_embeddings(ns)
+                .ok()
+                .map(|n| n as u64)
+        });
+        worker.status(pending)
     }
 
     /// Snapshot of provider + namespace for hybrid search, when the worker is live.
