@@ -1,14 +1,15 @@
 import { defineConfig, devices } from "@playwright/test";
 
 /**
- * Perf harness:
- * - `browser` — Vite demo in Chromium (plain Playwright; CI-friendly)
+ * Desktop Playwright harness:
+ * - `browser` — Vite demo in Chromium (plain Playwright; CI-friendly perf)
  * - `tauri` — real Lattice WebView via `tauri-plugin-playwright`
- *   (start with `pnpm test:perf:tauri` or `pnpm tauri:dev:e2e` + `--project=tauri`)
+ *   (start with `pnpm test:perf:tauri`, `pnpm test:crm:tauri`, or
+ *   `pnpm tauri:dev:e2e` + `--project=tauri`)
  */
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: "**/perf/**/*.spec.ts",
+  testMatch: ["**/perf/**/*.spec.ts", "**/data/**/*.spec.ts"],
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
@@ -23,12 +24,12 @@ export default defineConfig({
   projects: [
     {
       name: "browser",
-      testIgnore: "**/*.tauri.perf.spec.ts",
+      testIgnore: ["**/*tauri*.spec.ts"],
       use: { ...devices["Desktop Chrome"] },
     },
     {
       name: "tauri",
-      testMatch: "**/*.tauri.perf.spec.ts",
+      testMatch: ["**/*.tauri.perf.spec.ts", "**/*.tauri.spec.ts"],
       use: {
         // @ts-expect-error custom fixture option from @srsholmes/tauri-playwright
         mode: "tauri",
