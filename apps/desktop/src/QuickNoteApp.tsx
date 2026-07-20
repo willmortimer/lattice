@@ -47,7 +47,7 @@ export function QuickNoteApp() {
   const creatingRef = useRef(false);
   const revisionRef = useRef<string | null>(null);
   const autosaveDelayRef = useRef(800);
-  const saveTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const saveTimerRef = useRef<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const userEditedRef = useRef(false);
   const initialDraftRef = useRef("");

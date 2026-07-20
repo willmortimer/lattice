@@ -153,12 +153,12 @@ export function buildCsvImportReviewState(
   return { ...state, csvPath: state.sourcePath };
 }
 
-export const TABULAR_IMPORT_FILE_FILTERS = [
+export const TABULAR_IMPORT_FILE_FILTERS: { name: string; extensions: string[] }[] = [
   {
     name: "Tabular data",
     extensions: [...TABULAR_IMPORT_EXTENSIONS],
   },
-] as const;
+];
 
 export function tabularImportReviewTitle(format: TabularImportFormat): string {
   switch (format) {

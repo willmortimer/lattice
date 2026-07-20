@@ -63,7 +63,7 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
     setStatusToast, setSaveStateIdle, setActivityArea, setRevealPath, setLinkPicker,
     refreshResources, handleSelect, openCreatedResource, reconcilePathRemaps,
   } = options;
-  const workspaceSettingsTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const workspaceSettingsTimerRef = useRef<number | null>(null);
   const [tabularImportReview, setTabularImportReview] = useState<TabularImportReviewState | null>(null);
   useEffect(() => () => {
     if (workspaceSettingsTimerRef.current) window.clearTimeout(workspaceSettingsTimerRef.current);
