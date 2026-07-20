@@ -4,7 +4,7 @@ use std::path::Path;
 
 use lattice_arrow_transport::{encode_duckdb_batch, EncodedBatch, EncodeOptions, DEFAULT_MAX_ROWS};
 use lattice_datasets::Dataset;
-use lattice_duckdb::{sql_string_literal, DuckDbEngine};
+use lattice_duckdb::{sql_string_literal, DuckDbEngine, RelationProfile};
 use serde::{Deserialize, Serialize};
 
 use crate::commands::resolve_within_root;
@@ -187,6 +187,63 @@ pub fn query_dataset_arrow(
     Ok(response)
 }
 
+/// Request body for [`profile_dataset`].
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileDatasetRequest {
+    /// Optional DuckDB SQL defining the relation. Defaults to `read_parquet` over `facts/**/*.parquet`.
+    #[serde(default)]
+    pub sql: Option<String>,
+}
+
+/// Run DuckDB `SUMMARIZE` profiling against a `.dataset` package relation.
+#[tauri::command]
+pub fn profile_dataset(
+    root: String,
+    rel_path: String,
+    request: Option<ProfileDatasetRequest>,
+) -> Result<RelationProfile, String> {
+    validate_rel_path(&rel_path)?;
+    let (canonical_root, package_abs) = resolve_within_root(&root, &rel_path)?;
+    let _dataset = Dataset::open(&package_abs).map_err(|err| err.to_string())?;
+
+    let request = request.unwrap_or(ProfileDatasetRequest { sql: None });
+    let explicit_sql = request.sql.filter(|sql| !sql.trim().is_empty());
+    let relation_sql = match explicit_sql {
+        Some(sql) => sql,
+        None => match default_facts_sql(&package_abs) {
+            Some(sql) => sql,
+            None => {
+                return Ok(RelationProfile {
+                    row_count: 0,
+                    columns: Vec::new(),
+                    relation_sql: String::new(),
+                });
+            }
+        },
+    };
+
+    let engine = DuckDbEngine::open_in_memory(&canonical_root).map_err(|err| err.to_string())?;
+    match engine.profile_relation(&relation_sql) {
+        Ok(profile) => Ok(profile),
+        Err(err) => {
+            let message = err.to_string();
+            if message.contains("No files found")
+                || message.contains("cannot open file")
+                || message.contains("IO Error")
+            {
+                Ok(RelationProfile {
+                    row_count: 0,
+                    columns: Vec::new(),
+                    relation_sql,
+                })
+            } else {
+                Err(message)
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -257,5 +314,48 @@ mod tests {
         let response = query_dataset_arrow(root, "Empty.dataset".into(), None).unwrap();
         assert_eq!(response.row_count, 0);
         assert!(response.schema_meta.fields.is_empty() || response.row_count == 0);
+    }
+
+    #[test]
+    fn profile_dataset_returns_column_stats_for_csv_backed_sql() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let package = dir.path().join("Usage.dataset");
+        Dataset::create(&package, "Usage", None).unwrap();
+
+        let csv_path = package.join("facts/sample.csv");
+        std::fs::create_dir_all(csv_path.parent().unwrap()).unwrap();
+        std::fs::write(&csv_path, "id,name\n1,Ada\n2,Grace\n").unwrap();
+
+        let sql = format!(
+            "SELECT * FROM read_csv_auto({})",
+            sql_string_literal(&csv_path.to_string_lossy().replace('\\', "/"))
+        );
+        let profile = profile_dataset(
+            root,
+            "Usage.dataset".into(),
+            Some(ProfileDatasetRequest { sql: Some(sql) }),
+        )
+        .unwrap();
+
+        assert_eq!(profile.row_count, 2);
+        assert_eq!(profile.columns.len(), 2);
+        let id = profile
+            .columns
+            .iter()
+            .find(|col| col.name == "id")
+            .expect("id column");
+        assert_eq!(id.approx_distinct, Some(2));
+    }
+
+    #[test]
+    fn profile_dataset_empty_facts_returns_zero_rows() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        Dataset::create(&dir.path().join("Empty.dataset"), "Empty", None).unwrap();
+
+        let profile = profile_dataset(root, "Empty.dataset".into(), None).unwrap();
+        assert_eq!(profile.row_count, 0);
+        assert!(profile.columns.is_empty());
     }
 }

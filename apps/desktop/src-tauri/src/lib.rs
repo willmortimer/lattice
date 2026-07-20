@@ -220,6 +220,7 @@ pub fn run() {
             data::preview_csv_import,
             data::commit_csv_import,
             dataset::query_dataset_arrow,
+            dataset::profile_dataset,
             canvas::read_canvas,
             canvas::canvas_place_resource,
             canvas::canvas_move_nodes,
