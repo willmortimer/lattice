@@ -133,7 +133,7 @@ flowchart TD
 | P2-10 | pending | grok | Canvas interfaces |
 | P2-11 | pending | composer | Buttons/actions |
 | P2-12 | pending | composer | Excel/JSON import |
-| P2-13 | pending | composer | FormSave |
+| P2-13 | merged | composer | FormSave |
 | P2-14 | pending | composer | Docs wave 2 |
 | P3-01 | pending | composer | Dataset package |
 | P3-02 | pending | grok | DuckDB |
