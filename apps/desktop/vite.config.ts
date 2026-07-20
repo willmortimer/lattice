@@ -19,7 +19,9 @@ export default defineConfig(async () => ({
   worker: {
     format: "es",
   },
+  // Perspective WASM modules require modern syntax (top-level await / esnext).
   build: {
+    target: "esnext",
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
     rollupOptions: {
       input: {
@@ -28,4 +30,12 @@ export default defineConfig(async () => ({
       },
     },
   },
+  optimizeDeps: {
+    exclude: [
+      "@finos/perspective",
+      "@finos/perspective-viewer",
+      "@finos/perspective-viewer-datagrid",
+    ],
+  },
+  assetsInclude: ["**/*.wasm"],
 }));

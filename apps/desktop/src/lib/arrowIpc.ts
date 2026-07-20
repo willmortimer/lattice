@@ -56,6 +56,20 @@ export function ipcBytesToUint8Array(
 }
 
 /**
+ * Detached `ArrayBuffer` for Arrow-native consumers (Perspective `worker.table`).
+ * Always copies so sliced `Uint8Array` views do not share a larger backing store.
+ */
+export function ipcBytesToArrayBuffer(
+  bytes: Uint8Array | number[] | ArrayBuffer,
+): ArrayBuffer {
+  if (bytes instanceof ArrayBuffer) return bytes.slice(0);
+  const view = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes);
+  const copy = new Uint8Array(view.byteLength);
+  copy.set(view);
+  return copy.buffer;
+}
+
+/**
  * Dump schema + a small sample from an Arrow IPC transport payload.
  *
  * Does not decode the full IPC batch into row objects. `ipcBytes` remain available
