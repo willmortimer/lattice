@@ -4,8 +4,8 @@ Workspace-scoped DuckDB analytical queries for Lattice (Phase 3).
 
 Opens an in-memory or file-backed DuckDB connection, allowlists the workspace
 root via DuckDB `allowed_directories` + `enable_external_access=false`, and
-returns columnar `RecordBatch` results (Arrow-ready schema/values; Arrow IPC
-transport lands in P3-03).
+returns columnar `RecordBatch` results (Arrow-ready schema/values). Arrow IPC
+transport lives in `lattice-arrow-transport` (P3-03 / ADR 0021).
 
 ## Dependency
 
