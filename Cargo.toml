@@ -13,6 +13,7 @@ members = [
     "crates/lattice-index",
     "crates/lattice-embedding",
     "crates/lattice-data",
+    "crates/lattice-datasets",
     "crates/lattice-theme",
     "crates/lattice-handlers",
     "crates/lattice-runtime",
@@ -42,6 +43,7 @@ lattice-embedding = { path = "crates/lattice-embedding" }
 lattice-embed-host = { path = "apps/embed-host" }
 lattice-voice-host = { path = "apps/voice-host-macos" }
 lattice-data = { path = "crates/lattice-data" }
+lattice-datasets = { path = "crates/lattice-datasets" }
 lattice-theme = { path = "crates/lattice-theme" }
 lattice-handlers = { path = "crates/lattice-handlers" }
 lattice-runtime = { path = "crates/lattice-runtime" }

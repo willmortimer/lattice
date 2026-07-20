@@ -16,6 +16,7 @@ use lattice_data::{
 };
 use lattice_index::{Backlink, SearchHit, WorkspaceIndex};
 use lattice_storage::{NativeWorkspaceStore, RecoveryJournal, WorkspaceStore};
+use lattice_datasets::Dataset;
 use lattice_theme::{
     check_theme_file, discover_themes, load_appearance, save_appearance, AppearanceMode,
 };
@@ -86,6 +87,11 @@ enum Command {
     Table {
         #[command(subcommand)]
         command: TableCommand,
+    },
+    /// Create and inspect `.dataset` analytical packages.
+    Dataset {
+        #[command(subcommand)]
+        command: DatasetCommand,
     },
     /// Insert, update, and delete rows in `.data` packages.
     Record {
@@ -259,6 +265,29 @@ enum RecoverCommand {
         id: i64,
         /// Path inside the workspace to discover from. Defaults to the current directory.
         path: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum DatasetCommand {
+    /// Create a new `.dataset` package.
+    Create {
+        /// Workspace path of the package (e.g. Usage.dataset).
+        path: PathBuf,
+        /// Human-readable package title.
+        #[arg(long)]
+        title: String,
+        /// Optional package description.
+        #[arg(long)]
+        description: Option<String>,
+    },
+    /// Show package metadata.
+    Show {
+        /// Workspace path of the package.
+        path: PathBuf,
+        /// Emit output as JSON.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -525,6 +554,14 @@ fn run(command: Command) -> Result<ExitCode> {
                     cmd_table_view_show(path, name, json)
                 }
             },
+        },
+        Command::Dataset { command } => match command {
+            DatasetCommand::Create {
+                path,
+                title,
+                description,
+            } => cmd_dataset_create(path, title, description),
+            DatasetCommand::Show { path, json } => cmd_dataset_show(path, json),
         },
         Command::Record { command } => match command {
             RecordCommand::Insert {
@@ -891,6 +928,69 @@ fn cmd_table_create(path: PathBuf, title: String, table: String) -> Result<ExitC
             .as_deref()
             .unwrap_or("?")
     );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_dataset_create(
+    path: PathBuf,
+    title: String,
+    description: Option<String>,
+) -> Result<ExitCode> {
+    let (ws, mut engine) = open_engine()?;
+    let rel = workspace_relative(&ws, &path)?;
+    let receipt = engine.apply(Transaction::new(
+        format!("Create dataset package {}", rel.display()),
+        vec![Semantic::DatasetCreate {
+            path: rel.clone(),
+            title,
+            description,
+        }],
+    ))?;
+    println!(
+        "created {} ({})",
+        rel.display(),
+        receipt.outcomes[0]
+            .resulting_revision
+            .as_deref()
+            .unwrap_or("?")
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+#[derive(serde::Serialize)]
+struct DatasetShowOutput {
+    path: PathBuf,
+    title: String,
+    description: Option<String>,
+    format: String,
+    version: u32,
+    package_revision: String,
+}
+
+fn cmd_dataset_show(path: PathBuf, json: bool) -> Result<ExitCode> {
+    let start = std::env::current_dir().context("failed to determine current directory")?;
+    let ws = Workspace::discover(&start)?;
+    let rel = workspace_relative(&ws, &path)?;
+    let dataset = Dataset::open(&ws.root().join(&rel))?;
+    let output = DatasetShowOutput {
+        path: rel.clone(),
+        title: dataset.title().to_string(),
+        description: dataset.description().map(str::to_string),
+        format: dataset.manifest().format.clone(),
+        version: dataset.manifest().version,
+        package_revision: dataset.package_revision()?,
+    };
+
+    if json {
+        print_json(&output)?;
+    } else {
+        println!("{}  {}", output.path.display(), output.title);
+        if let Some(description) = &output.description {
+            println!("description: {description}");
+        }
+        println!("format: {} v{}", output.format, output.version);
+        println!("revision: {}", output.package_revision);
+    }
     Ok(ExitCode::SUCCESS)
 }
 
