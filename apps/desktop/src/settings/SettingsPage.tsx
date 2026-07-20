@@ -622,20 +622,36 @@ function SemanticSearchSettings({
     };
   }, [workspaceRoot]);
 
-  // Re-attach the Fake worker when the preference is already on (app relaunch).
+  // Single owner for enable/disable — do not also invoke from the toggle handler
+  // (that raced two downloads on the same .partial and produced jumpy % / missing artifact).
   useEffect(() => {
-    if (inBrowser || !workspaceRoot || !semanticEnabled) return;
+    if (inBrowser || !workspaceRoot) return;
     let cancelled = false;
-    void enableSemanticSearch(workspaceRoot)
+    setBusy(true);
+    setError(null);
+    const op = semanticEnabled
+      ? enableSemanticSearch(workspaceRoot)
+      : disableSemanticSearch(workspaceRoot);
+    void op
       .then((next) => {
         if (!cancelled) setStatus(next);
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : String(err));
+        if (semanticEnabled) {
+          // Roll preference back so we do not loop a failed enable.
+          onSemanticEnabledChange(false);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(false);
       });
     return () => {
       cancelled = true;
     };
+    // Intentionally omit onSemanticEnabledChange — parent passes an inline lambda.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- preference + root only
   }, [workspaceRoot, semanticEnabled]);
 
   useEffect(() => {
@@ -643,11 +659,22 @@ function SemanticSearchSettings({
     let unlisten: (() => void) | undefined;
     void listenSemanticEvents((event) => {
       if (event.type === "status") {
-        setStatus({
-          state: event.state,
-          pendingChunks: event.pendingChunks,
-          message: event.message,
-          progressPercent: event.progressPercent ?? null,
+        setStatus((prev) => {
+          const nextPercent = event.progressPercent ?? null;
+          // Keep progress monotonic while downloading so polling / events cannot flicker backward.
+          const progressPercent =
+            event.state === "downloading" &&
+            prev?.state === "downloading" &&
+            prev.progressPercent != null &&
+            nextPercent != null
+              ? Math.max(prev.progressPercent, nextPercent)
+              : nextPercent;
+          return {
+            state: event.state,
+            pendingChunks: event.pendingChunks,
+            message: event.message,
+            progressPercent,
+          };
         });
       }
     }).then((fn) => {
@@ -671,7 +698,22 @@ function SemanticSearchSettings({
     }
     const id = window.setInterval(() => {
       void getSemanticStatus(workspaceRoot)
-        .then(setStatus)
+        .then((next) => {
+          setStatus((prev) => {
+            if (
+              next.state === "downloading" &&
+              prev?.state === "downloading" &&
+              prev.progressPercent != null &&
+              next.progressPercent != null
+            ) {
+              return {
+                ...next,
+                progressPercent: Math.max(prev.progressPercent, next.progressPercent),
+              };
+            }
+            return next;
+          });
+        })
         .catch(() => {
           /* keep last status */
         });
@@ -679,26 +721,13 @@ function SemanticSearchSettings({
     return () => window.clearInterval(id);
   }, [workspaceRoot, semanticEnabled, status?.state]);
 
-  async function handleToggle(next: boolean) {
+  function handleToggle(next: boolean) {
     if (next) {
       const accepted = window.confirm(SEMANTIC_MODEL_CONFIRM);
       if (!accepted) return;
     }
+    // Preference only — the effect above starts/stops the worker exactly once.
     onSemanticEnabledChange(next);
-    if (inBrowser || !workspaceRoot) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const updated = next
-        ? await enableSemanticSearch(workspaceRoot)
-        : await disableSemanticSearch(workspaceRoot);
-      setStatus(updated);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : String(err));
-      onSemanticEnabledChange(!next);
-    } finally {
-      setBusy(false);
-    }
   }
 
   const statusText = status
