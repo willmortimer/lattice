@@ -3,8 +3,8 @@
 //! Desktop workspace search uses the embedded [`lattice_runtime`] path today, so
 //! enable/disable/status go through [`lattice_handlers`] on that same runtime.
 //! Enable acquires the pinned Qwen3 GGUF (unless Fake / fixture override) and
-//! emits download progress on `semantic-event` before starting the Fake worker
-//! (E6 will swap in EmbedHostClient).
+//! emits download progress on `semantic-event` before starting the Fake worker.
+//! Daemon host modes use EmbedHostClient via latticed's SemanticController.
 
 use lattice_runtime::{default_runtime, SemanticStatus, SemanticStatusState};
 use serde::Serialize;

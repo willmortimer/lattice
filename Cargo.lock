@@ -2405,6 +2405,7 @@ dependencies = [
  "http-body-util",
  "lattice-client",
  "lattice-core",
+ "lattice-embed-host",
  "lattice-embedding",
  "lattice-handlers",
  "lattice-index",

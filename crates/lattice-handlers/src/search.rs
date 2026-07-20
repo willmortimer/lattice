@@ -407,8 +407,8 @@ fn fake_embedding_provider() -> Arc<dyn EmbeddingProvider> {
 /// When [`ENV_SEMANTIC_FAKE`] is set (CI / offline), skips model download and
 /// uses the in-process Fake provider. Otherwise acquires the pinned Qwen3 GGUF
 /// (local fixture via `LATTICE_SEMANTIC_MODEL_SOURCE`, or HTTPS) with progress
-/// on the session prepare status, then starts the Fake worker until E6 wires
-/// EmbedHostClient.
+/// on the session prepare status, then starts the Fake worker. Daemon host modes
+/// (`LATTICE_EMBED_HOST_*`) use EmbedHostClient via latticed instead.
 pub fn enable_semantic_search(root: String) -> Result<SemanticStatus, String> {
     enable_semantic_search_with_runtime(&default_runtime(), root)
 }
