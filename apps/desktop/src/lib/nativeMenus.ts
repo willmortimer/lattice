@@ -10,7 +10,7 @@ async function popup(menu: Menu): Promise<void> {
   await menu.popup();
 }
 
-function isEditable(target: EventTarget | null): boolean {
+export function isEditableTarget(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLElement &&
     Boolean(target.closest("input, textarea, [contenteditable='true']"))
@@ -105,7 +105,7 @@ export async function showNativeTreeFolderMenu(actions: TreeFolderMenuActions): 
 export function installNativeContextMenus(enabled: () => boolean): () => void {
   const onContextMenu = (event: MouseEvent) => {
     event.preventDefault();
-    if (enabled() && isEditable(event.target)) {
+    if (enabled() && isEditableTarget(event.target)) {
       void showNativeEditMenu();
     }
   };

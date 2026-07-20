@@ -16,6 +16,10 @@ import type { OpenResourceSession } from "../resourceSession";
 import type { Resource, WorkspaceSnapshot } from "../types";
 import { inBrowser } from "../demo";
 import {
+  BROWSER_UNDO_UNAVAILABLE_MESSAGE,
+  browserUndoBlocked,
+} from "./browserUndoGuard";
+import {
   interfaceNameFromCanvasSubpath,
   viewNameFromCanvasSubpath,
   viewNameFromInterfaceBindings,
@@ -124,6 +128,11 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
   }, [createAndOpenPage, selected]);
 
   const handleUndo = useCallback(async () => {
+    if (browserUndoBlocked(inBrowser)) {
+      setStatusToast(BROWSER_UNDO_UNAVAILABLE_MESSAGE);
+      window.setTimeout(() => setStatusToast(null), 2200);
+      return;
+    }
     if (!snapshot) return;
     try {
       const result = await invoke<{
@@ -137,7 +146,7 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
     } catch (error) {
       setError(String(error));
     }
-  }, [reconcilePathRemaps, refreshResources, setError, snapshot]);
+  }, [reconcilePathRemaps, refreshResources, setError, setStatusToast, snapshot]);
 
   const handleImportTable = useCallback(async () => {
     if (inBrowser) {
