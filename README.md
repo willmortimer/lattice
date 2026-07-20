@@ -107,6 +107,13 @@ pnpm --filter @lattice/site dev
 pnpm compile-theme
 ```
 
+## Notable desktop analytics dependencies
+
+| Package | License | Role | Size (approx.) |
+| --- | --- | --- | --- |
+| `@finos/perspective` + `@finos/perspective-viewer` + datagrid | Apache-2.0 | Analytical grid for `.dataset` Arrow IPC | ~15 MB unpacked (WASM); loaded only with the dataset renderer chunk |
+| `@glideapps/glide-data-grid` | MIT | Mutable `.data` app grid — **not** replaced by Perspective | existing |
+
 ## License
 
 Lattice is licensed under the [GNU Affero General Public License v3.0 or

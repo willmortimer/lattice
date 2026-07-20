@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   dumpArrowTransport,
   formatArrowDumpSummary,
+  ipcBytesToArrayBuffer,
   ipcBytesToUint8Array,
   type ArrowQueryResult,
 } from "./arrowIpc";
@@ -57,5 +58,11 @@ describe("arrowIpc", () => {
     const dump = dumpArrowTransport(fixture({ ipcBytes: bytes, byteLength: 3 }));
     expect(ipcBytesToUint8Array(bytes)).toEqual(bytes);
     expect(dump.ipcByteLength).toBe(3);
+  });
+
+  it("copies ipc into a detached ArrayBuffer for Perspective", () => {
+    const sliced = new Uint8Array([0, 10, 20, 30]).subarray(1, 3);
+    const buffer = ipcBytesToArrayBuffer(sliced);
+    expect(new Uint8Array(buffer)).toEqual(new Uint8Array([10, 20]));
   });
 });
