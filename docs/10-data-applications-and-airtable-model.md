@@ -169,28 +169,46 @@ from public form publish, which remain future work.
 
 ## Typed fields
 
-Native semantic types:
+Lattice distinguishes **shipped** column types (the `FieldType` enum) from
+**roadmap** semantic types that may arrive in later phases. Only shipped values
+are accepted in `app.yaml`, the column designer, CLI `add-column`, and tabular
+import today.
 
-- Text and long text.
-- Rich text.
-- Integer, decimal, currency, percentage.
-- Boolean.
-- Date, datetime, duration.
-- URL, email, phone.
+### Shipped (`FieldType`)
+
+Source of truth: `crates/lattice-data/src/types.rs` (mirrored in
+`apps/desktop/src/data/types.ts`). JSON and `app.yaml` use snake_case:
+
+- `text` — short text.
+- `long_text` — multi-line text.
+- `integer`, `decimal`, `boolean`, `date` — scalar types stored in SQLite.
+- `relation` — multi-record link to another table in the same `.data` package
+  (stored as JSON TEXT).
+- `lookup` — read-only projection through a relation (resolved at read time).
+- `rollup` — read-only aggregate over linked records (`count`, `sum`, `min`,
+  `max`; resolved at read time).
+
+Storage remains ordinary SQLite column types; presentation and semantic metadata
+live in `app.yaml`.
+
+### Roadmap semantic types
+
+These are product targets, **not** current `FieldType` variants:
+
+- Rich text; URL, email, phone; currency, percentage.
 - Enum and multi-enum.
-- Attachment.
-- User.
-- Relation.
-- Lookup.
-- Rollup.
-- Formula.
-- Geolocation.
-- JSON.
-- Page/resource reference.
-- Artifact/app reference.
-- Generated/AI field.
+- **Attachment column** type (see [Workspace attachments vs attachment columns](#workspace-attachments-vs-attachment-columns)).
+- User; geolocation; JSON.
+- Page/resource and artifact/app references.
+- **Formula** fields (see [Formula fields](#formula-fields)).
+- Generated/AI fields (see [Generated fields](#generated-fields)).
 
-Storage remains ordinary SQLite types and tables. Presentation and semantic metadata live in `app.yaml`.
+### Workspace attachments vs attachment columns
+
+Workspace templates may set `attachmentsDirectory` in the workspace manifest — a
+folder where page and file resources store binary attachments. That setting is
+**not** an attachment column in a `.data` app; `FieldType::Attachment` does not
+exist yet and remains Phase 2+ roadmap work.
 
 ## Linked records
 
@@ -397,7 +415,9 @@ layout:
 Forms map input into transactions:
 
 - Create or update records.
-- Upload attachments.
+- Upload attachments (attachment **column** type not shipped; workspace
+  `attachmentsDirectory` is separate — see
+  [Workspace attachments vs attachment columns](#workspace-attachments-vs-attachment-columns)).
 - Create related documents.
 - Create relationships.
 - Trigger approved workflows.
