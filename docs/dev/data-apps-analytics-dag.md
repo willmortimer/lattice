@@ -128,7 +128,7 @@ flowchart TD
 | P2-05 | merged | composer | CSV type-review |
 | P2-06 | merged | composer | CSV promote |
 | P2-07 | merged | composer | Docs wave 1 |
-| P2-08 | pending | grok | Lookup |
+| P2-08 | done | grok | Lookup |
 | P2-09 | pending | grok | Rollup |
 | P2-10 | pending | grok | Canvas interfaces |
 | P2-11 | pending | composer | Buttons/actions |

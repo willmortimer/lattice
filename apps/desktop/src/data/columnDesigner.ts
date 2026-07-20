@@ -10,6 +10,7 @@ export const COLUMN_FIELD_TYPES: FieldType[] = [
   "boolean",
   "date",
   "relation",
+  "lookup",
 ];
 
 export function columnFieldTypeOptions(): Array<{ value: FieldType; label: string }> {
@@ -57,16 +58,48 @@ export function validateRelationTarget(
   return null;
 }
 
+export function validateLookupSpec(
+  fieldType: FieldType,
+  lookupRelation: string | undefined,
+  lookupField: string | undefined,
+  relationColumns: Array<{ name: string; relation_table?: string }>,
+  targetFields: string[],
+): string | null {
+  if (fieldType !== "lookup") {
+    return null;
+  }
+  const relation = lookupRelation?.trim();
+  if (!relation) {
+    return "Choose a relation column for lookup fields.";
+  }
+  const source = relationColumns.find((column) => column.name === relation);
+  if (!source) {
+    return `Relation column "${relation}" was not found on this table.`;
+  }
+  const field = lookupField?.trim();
+  if (!field) {
+    return "Choose a field on the related table.";
+  }
+  if (!targetFields.includes(field)) {
+    return `Field "${field}" was not found on the related table.`;
+  }
+  return null;
+}
+
 export interface AddColumnPayload {
   name: string;
   field_type: FieldType;
   relation_table?: string;
+  lookup_relation?: string;
+  lookup_field?: string;
 }
 
 export function buildAddColumnPayload(
   name: string,
   fieldType: FieldType,
   relationTable: string | undefined,
+  lookupRelation?: string,
+  lookupField?: string,
 ): AddColumnPayload {
   const trimmed = name.trim();
   if (fieldType === "relation") {
@@ -74,6 +107,14 @@ export function buildAddColumnPayload(
       name: trimmed,
       field_type: fieldType,
       relation_table: relationTable?.trim(),
+    };
+  }
+  if (fieldType === "lookup") {
+    return {
+      name: trimmed,
+      field_type: fieldType,
+      lookup_relation: lookupRelation?.trim(),
+      lookup_field: lookupField?.trim(),
     };
   }
   return {

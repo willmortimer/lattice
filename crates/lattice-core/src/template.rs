@@ -639,6 +639,14 @@ fn seed_column_to_new_column<'a>(
         })?;
         return Ok(NewColumn::relation(column.name, target));
     }
+    if field_type == FieldType::Lookup {
+        return Err(Error::TemplateValidation {
+            message: format!(
+                "data package {}: lookup columns are not supported in template seeds yet ({:?})",
+                package_path, column.name
+            ),
+        });
+    }
     Ok(NewColumn::new(column.name, field_type))
 }
 
@@ -873,6 +881,11 @@ fn cell_from_json(
                         "data package {package_path}: relation cells must be a JSON array of record ids"
                     ),
                 }),
+                FieldType::Lookup => Err(Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path}: lookup columns are read-only and cannot be seeded"
+                    ),
+                }),
             }
         }
         serde_json::Value::String(text) => {
@@ -900,6 +913,11 @@ fn cell_from_json(
                 FieldType::Relation => Err(Error::TemplateValidation {
                     message: format!(
                         "data package {package_path}: relation cells must be a JSON array of record ids"
+                    ),
+                }),
+                FieldType::Lookup => Err(Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path}: lookup columns are read-only and cannot be seeded"
                     ),
                 }),
             }
@@ -942,6 +960,7 @@ fn parse_field_type(value: &str) -> Option<FieldType> {
         "boolean" => Some(FieldType::Boolean),
         "date" => Some(FieldType::Date),
         "relation" => Some(FieldType::Relation),
+        "lookup" => Some(FieldType::Lookup),
         _ => None,
     }
 }

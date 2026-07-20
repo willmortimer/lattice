@@ -42,7 +42,9 @@ describe("recordDetail helpers", () => {
     expect(fieldEditorKind("long_text")).toBe("textarea");
     expect(fieldEditorKind("integer")).toBe("number");
     expect(fieldEditorKind("boolean")).toBe("boolean");
+    expect(fieldEditorKind("lookup")).toBe("lookup");
     expect(fieldTypeLabel("decimal")).toBe("Decimal");
+    expect(fieldTypeLabel("lookup")).toBe("Lookup");
   });
 
   it("builds draft strings from row values", () => {
