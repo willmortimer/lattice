@@ -1528,3 +1528,53 @@ fn stale_package_revision_on_columns_add_is_refused() {
         .unwrap()
         .contains("ADD COLUMN name"));
 }
+
+#[test]
+fn form_save_create_update_and_undo() {
+    let (dir, mut engine) = engine();
+
+    engine
+        .apply(Transaction::new(
+            "Create CRM.data",
+            vec![Command::TableCreate {
+                path: PathBuf::from("CRM.data"),
+                title: "CRM".into(),
+                table_name: "contacts".into(),
+            }],
+        ))
+        .unwrap();
+
+    let initial = "format: lattice-form\nversion: 1\nname: intake\ntable: contacts\nfields:\n- name\n";
+    engine
+        .apply(Transaction::new(
+            "Save intake form",
+            vec![Command::FormSave {
+                path: PathBuf::from("CRM.data"),
+                form_name: "intake".into(),
+                content: initial.to_string(),
+            }],
+        ))
+        .unwrap();
+
+    let form_path = dir.path().join("CRM.data/forms/intake.form.yaml");
+    assert_eq!(std::fs::read_to_string(&form_path).unwrap(), initial);
+
+    let updated = "format: lattice-form\nversion: 1\nname: intake\ntable: contacts\nfields:\n- name\n- email\n";
+    engine
+        .apply(Transaction::new(
+            "Update intake form",
+            vec![Command::FormSave {
+                path: PathBuf::from("CRM.data"),
+                form_name: "intake".into(),
+                content: updated.to_string(),
+            }],
+        ))
+        .unwrap();
+    assert_eq!(std::fs::read_to_string(&form_path).unwrap(), updated);
+
+    engine.undo().unwrap().unwrap();
+    assert_eq!(std::fs::read_to_string(&form_path).unwrap(), initial);
+
+    engine.undo().unwrap().unwrap();
+    assert!(!form_path.exists());
+}

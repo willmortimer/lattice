@@ -49,7 +49,9 @@ import {
 import {
   loadPackageForm,
   listPackageForms,
+  saveDataForm,
   type FormSummary,
+  type SaveFormRequest,
 } from "./forms";
 
 const STALE_REVISION_PREFIX = "STALE_REVISION:";
@@ -587,6 +589,31 @@ export function DataTableView({
       }
     },
     [demoMutate, packageForms, relPath, root],
+  );
+
+  const savePackageForm = useCallback(
+    async (request: SaveFormRequest) => {
+      if (demoMutate) {
+        throw new Error("Saving forms is not available in the browser demo.");
+      }
+      setBusy(true);
+      try {
+        const saved = await saveDataForm(root, relPath, request);
+        setPackageForms((current) => {
+          const without = current.filter((form) => form.name !== saved.name);
+          return [...without, saved].sort((left, right) => left.name.localeCompare(right.name));
+        });
+        setActivePackageForm(saved);
+        setFormsError(null);
+        return saved;
+      } catch (err) {
+        setFormsError(String(err));
+        throw err;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [demoMutate, relPath, root],
   );
 
   const deleteRow = useCallback(
@@ -1310,6 +1337,7 @@ export function DataTableView({
             forms={packageForms}
             activeForm={activePackageForm}
             columns={snapshot.columns}
+            defaultTable={snapshot.default_table}
             relationTargets={snapshot.relation_targets}
             busy={busy}
             readOnly={busy || stale}
@@ -1322,6 +1350,7 @@ export function DataTableView({
               setFormsError(null);
             }}
             onSubmit={submitPackageForm}
+            onSaveForm={demoMutate ? undefined : savePackageForm}
           />
         )}
       </div>

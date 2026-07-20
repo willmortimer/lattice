@@ -4,12 +4,18 @@ import type { DataColumn } from "./types";
 import {
   DEMO_PACKAGE_FORMS,
   collectPackageFormValues,
+  emptyFormDesignerDraft,
   emptyPackageFormDraft,
+  formDesignerColumnOptions,
+  formDesignerDraftFromForm,
   formDisplayTitle,
   loadPackageForm,
   listPackageForms,
   missingFormFields,
+  moveFormDesignerField,
   resolvePackageFormColumns,
+  toggleFormDesignerField,
+  validateFormDesignerDraft,
 } from "./forms";
 
 const columns: DataColumn[] = [
@@ -92,5 +98,31 @@ describe("package form helpers", () => {
         demo: true,
       }),
     ).rejects.toThrow(/Unknown demo form/);
+  });
+
+  it("supports form designer field selection and ordering", () => {
+    const options = formDesignerColumnOptions(columns).map((column) => column.name);
+    expect(options).not.toContain("id");
+
+    let fields = toggleFormDesignerField([], "name");
+    fields = toggleFormDesignerField(fields, "email");
+    fields = toggleFormDesignerField(fields, "status");
+    expect(fields).toEqual(["name", "email", "status"]);
+
+    expect(moveFormDesignerField(fields, 2, -1)).toEqual(["name", "status", "email"]);
+    expect(toggleFormDesignerField(fields, "email")).toEqual(["name", "status"]);
+
+    const draft = formDesignerDraftFromForm(DEMO_PACKAGE_FORMS[0]!);
+    expect(draft.formName).toBe("ContactIntake");
+    expect(draft.fields).toEqual(DEMO_PACKAGE_FORMS[0]!.fields);
+    expect(emptyFormDesignerDraft().fields).toEqual([]);
+
+    expect(validateFormDesignerDraft({ ...draft, formName: "" }, columns)).toMatch(
+      /name is required/i,
+    );
+    expect(validateFormDesignerDraft({ ...draft, fields: [] }, columns)).toMatch(
+      /at least one field/i,
+    );
+    expect(validateFormDesignerDraft(draft, columns)).toBeNull();
   });
 });
