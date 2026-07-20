@@ -1873,10 +1873,30 @@ html[data-page-width="full"] {
   border: 1px solid var(--lt-line);
   border-radius: var(--lt-radius);
   overflow-x: auto;
+  color: var(--lt-text);
 }
 
 .mermaid-preview svg {
   max-width: 100%;
+  color: var(--lt-text);
+}
+
+/* Mermaid sometimes emits fills/strokes that ignore themeVariables; keep labels readable. */
+.mermaid-preview svg text,
+.mermaid-preview svg tspan,
+.mermaid-preview svg .nodeLabel,
+.mermaid-preview svg .edgeLabel,
+.mermaid-preview svg .label,
+.mermaid-preview svg .titleText,
+.mermaid-preview svg .actor > text {
+  fill: var(--lt-text) !important;
+  color: var(--lt-text) !important;
+}
+
+.mermaid-preview svg .messageText,
+.mermaid-preview svg .loopText,
+.mermaid-preview svg .noteText {
+  fill: var(--lt-text-soft) !important;
 }
 
 .mermaid-error {

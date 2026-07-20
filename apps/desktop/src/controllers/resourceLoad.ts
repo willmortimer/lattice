@@ -27,10 +27,12 @@ const TEXT_FORMAT_IDS = new Set([
   "code",
   "json",
   "yaml",
+  "vega-lite",
   "file:text",
   "file:code",
   "file:json",
   "file:yaml",
+  "file:vega-lite",
 ]);
 
 export function isTextFormatId(formatId: string): boolean {
