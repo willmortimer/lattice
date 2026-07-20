@@ -11,7 +11,8 @@ use crate::error::Error;
 use crate::form::{form_name_from_path, form_path, FormDef};
 use crate::interface::{interface_name_from_path, interface_path, InterfaceDef};
 use crate::types::{
-    CellValue, ColumnMeta, FieldType, NewColumn, RelationStrip, Row, SchemaFilesSnapshot,
+    CellValue, ColumnMeta, FieldType, NewColumn, RelationStrip, RollupAggregate, Row,
+    SchemaFilesSnapshot,
 };
 use crate::view::{
     build_view_count_query, build_view_query, row_from_view_sql, view_path, visible_columns, ViewDef,
@@ -133,6 +134,9 @@ impl DataApp {
             let relation_table = yaml.and_then(|column| column.relation_table.clone());
             let lookup_relation = yaml.and_then(|column| column.lookup_relation.clone());
             let lookup_field = yaml.and_then(|column| column.lookup_field.clone());
+            let rollup_relation = yaml.and_then(|column| column.rollup_relation.clone());
+            let rollup_aggregate = yaml.and_then(|column| column.rollup_aggregate);
+            let rollup_field = yaml.and_then(|column| column.rollup_field.clone());
             columns.push(ColumnMeta {
                 name,
                 field_type,
@@ -140,6 +144,9 @@ impl DataApp {
                 relation_table,
                 lookup_relation,
                 lookup_field,
+                rollup_relation,
+                rollup_aggregate,
+                rollup_field,
             });
         }
         Ok(columns)
@@ -163,7 +170,7 @@ impl DataApp {
         let mut collected = rows
             .collect::<rusqlite::Result<Vec<Row>>>()
             .map_err(Error::from)?;
-        resolve_lookup_values(self, table, &column_meta, &mut collected)?;
+        resolve_computed_values(self, table, &column_meta, &mut collected)?;
         Ok(collected)
     }
 
@@ -193,7 +200,7 @@ impl DataApp {
         let mut rows = stmt.query(params![id])?;
         if let Some(row) = rows.next()? {
             let mut collected = vec![row_from_sql(row, &column_meta)?];
-            resolve_lookup_values(self, table, &column_meta, &mut collected)?;
+            resolve_computed_values(self, table, &column_meta, &mut collected)?;
             Ok(collected.into_iter().next())
         } else {
             Ok(None)
@@ -655,9 +662,9 @@ impl DataApp {
         let mut collected = rows
             .collect::<rusqlite::Result<Vec<Row>>>()
             .map_err(Error::from)?;
-        // Resolve lookups using full table metadata so source relation columns
+        // Resolve lookups/rollups using full table metadata so source relation columns
         // remain available even when the view hides them.
-        resolve_lookup_values(self, table, &all_columns, &mut collected)?;
+        resolve_computed_values(self, table, &all_columns, &mut collected)?;
         Ok((visible_meta, collected))
     }
 
@@ -705,6 +712,29 @@ impl DataApp {
                     )
                 })?;
                 validate_lookup_spec_for_add(self, table, &existing, columns, relation_name, field_name)?;
+            }
+            if column.field_type == FieldType::Rollup {
+                let relation_name = column.rollup_relation.ok_or_else(|| {
+                    Error::table(
+                        table,
+                        format!("rollup column {:?} requires rollup_relation", column.name),
+                    )
+                })?;
+                let aggregate = column.rollup_aggregate.ok_or_else(|| {
+                    Error::table(
+                        table,
+                        format!("rollup column {:?} requires rollup_aggregate", column.name),
+                    )
+                })?;
+                validate_rollup_spec_for_add(
+                    self,
+                    table,
+                    &existing,
+                    columns,
+                    relation_name,
+                    aggregate,
+                    column.rollup_field,
+                )?;
             }
         }
 
@@ -767,6 +797,41 @@ impl DataApp {
                 _ => (None, None),
             };
 
+            let (rollup_relation, rollup_aggregate, rollup_field) = match column.field_type {
+                FieldType::Rollup => {
+                    let relation_name = column.rollup_relation.ok_or_else(|| {
+                        Error::table(
+                            table,
+                            format!("rollup column {:?} requires rollup_relation", column.name),
+                        )
+                    })?;
+                    let aggregate = column.rollup_aggregate.ok_or_else(|| {
+                        Error::table(
+                            table,
+                            format!("rollup column {:?} requires rollup_aggregate", column.name),
+                        )
+                    })?;
+                    (
+                        Some(relation_name.to_string()),
+                        Some(aggregate),
+                        column.rollup_field.map(str::to_string),
+                    )
+                }
+                _ if column.rollup_relation.is_some()
+                    || column.rollup_aggregate.is_some()
+                    || column.rollup_field.is_some() =>
+                {
+                    return Err(Error::table(
+                        table,
+                        format!(
+                            "column {:?} only rollup fields may set rollup_relation / rollup_aggregate / rollup_field",
+                            column.name
+                        ),
+                    ));
+                }
+                _ => (None, None, None),
+            };
+
             let sqlite_type = column.field_type.sqlite_type();
             let alter = format!(
                 "ALTER TABLE {table} ADD COLUMN {} {sqlite_type};\n",
@@ -784,6 +849,9 @@ impl DataApp {
                     relation_table,
                     lookup_relation,
                     lookup_field,
+                    rollup_relation,
+                    rollup_aggregate,
+                    rollup_field,
                 },
             );
         }
@@ -1125,6 +1193,99 @@ fn validate_lookup_spec_for_add(
     Ok(())
 }
 
+fn validate_rollup_spec_for_add(
+    app: &DataApp,
+    table: &str,
+    existing: &[ColumnMeta],
+    pending: &[NewColumn<'_>],
+    rollup_relation: &str,
+    aggregate: RollupAggregate,
+    rollup_field: Option<&str>,
+) -> Result<()> {
+    validate_identifier(rollup_relation)?;
+
+    let relation_from_existing = existing.iter().find(|column| column.name == rollup_relation);
+    let relation_from_pending = pending.iter().find(|column| column.name == rollup_relation);
+
+    let (is_relation, target_table) = if let Some(meta) = relation_from_existing {
+        (
+            meta.field_type == FieldType::Relation,
+            meta.relation_table.as_deref(),
+        )
+    } else if let Some(pending_col) = relation_from_pending {
+        (
+            pending_col.field_type == FieldType::Relation,
+            pending_col.relation_table,
+        )
+    } else {
+        return Err(Error::table(
+            table,
+            format!("rollup_relation {rollup_relation:?} is not a column on {table}"),
+        ));
+    };
+
+    if !is_relation {
+        return Err(Error::table(
+            table,
+            format!("rollup_relation {rollup_relation:?} must be a relation column"),
+        ));
+    }
+    let target_table = target_table.ok_or_else(|| {
+        Error::table(
+            table,
+            format!("relation column {rollup_relation:?} is missing relation_table metadata"),
+        )
+    })?;
+
+    if aggregate.requires_field() && rollup_field.is_none() {
+        return Err(Error::table(
+            table,
+            format!("rollup aggregate {aggregate} requires rollup_field"),
+        ));
+    }
+
+    if let Some(field_name) = rollup_field {
+        validate_identifier(field_name)?;
+        let target_columns = app.columns(target_table)?;
+        let target_meta = target_columns
+            .iter()
+            .find(|column| column.name == field_name)
+            .ok_or_else(|| {
+                Error::table(
+                    table,
+                    format!(
+                        "rollup_field {field_name:?} is not a column on related table {target_table}"
+                    ),
+                )
+            })?;
+        if aggregate.requires_field()
+            && !matches!(
+                target_meta.field_type,
+                FieldType::Integer | FieldType::Decimal
+            )
+        {
+            return Err(Error::table(
+                table,
+                format!(
+                    "rollup_field {field_name:?} must be integer or decimal for aggregate {aggregate}"
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn resolve_computed_values(
+    app: &DataApp,
+    table: &str,
+    column_meta: &[ColumnMeta],
+    rows: &mut [Row],
+) -> Result<()> {
+    resolve_lookup_values(app, table, column_meta, rows)?;
+    resolve_rollup_values(app, table, column_meta, rows)?;
+    Ok(())
+}
+
 /// Fill lookup cells by projecting related-record field values.
 fn resolve_lookup_values(
     app: &DataApp,
@@ -1216,6 +1377,127 @@ fn resolve_lookup_values(
             }
             row.values
                 .insert(lookup.name.clone(), CellValue::Lookup { values });
+        }
+    }
+    Ok(())
+}
+
+/// Fill rollup cells by aggregating related-record values.
+fn resolve_rollup_values(
+    app: &DataApp,
+    table: &str,
+    column_meta: &[ColumnMeta],
+    rows: &mut [Row],
+) -> Result<()> {
+    let rollup_columns: Vec<&ColumnMeta> = column_meta
+        .iter()
+        .filter(|meta| meta.field_type == FieldType::Rollup)
+        .collect();
+    if rollup_columns.is_empty() || rows.is_empty() {
+        return Ok(());
+    }
+
+    let meta_by_name: BTreeMap<&str, &ColumnMeta> = column_meta
+        .iter()
+        .map(|meta| (meta.name.as_str(), meta))
+        .collect();
+
+    let mut related_cache: BTreeMap<(String, String), Option<Row>> = BTreeMap::new();
+
+    for row in rows.iter_mut() {
+        for rollup in &rollup_columns {
+            if !row.values.contains_key(&rollup.name) {
+                continue;
+            }
+            let relation_name = rollup.rollup_relation.as_deref().ok_or_else(|| {
+                Error::table(
+                    table,
+                    format!(
+                        "rollup column {:?} is missing rollup_relation metadata",
+                        rollup.name
+                    ),
+                )
+            })?;
+            let aggregate = rollup.rollup_aggregate.ok_or_else(|| {
+                Error::table(
+                    table,
+                    format!(
+                        "rollup column {:?} is missing rollup_aggregate metadata",
+                        rollup.name
+                    ),
+                )
+            })?;
+            let relation_meta = meta_by_name.get(relation_name).copied().ok_or_else(|| {
+                Error::table(
+                    table,
+                    format!(
+                        "rollup column {:?} references missing relation {relation_name:?}",
+                        rollup.name
+                    ),
+                )
+            })?;
+            if relation_meta.field_type != FieldType::Relation {
+                return Err(Error::table(
+                    table,
+                    format!(
+                        "rollup column {:?} source {relation_name:?} is not a relation",
+                        rollup.name
+                    ),
+                ));
+            }
+            let target_table = relation_meta.relation_table.as_deref().ok_or_else(|| {
+                Error::table(
+                    table,
+                    format!("relation column {relation_name:?} is missing relation_table"),
+                )
+            })?;
+
+            let record_ids = relation_record_ids_for_row(app, table, row, relation_name)?;
+            let field_name = rollup.rollup_field.as_deref();
+            let mut numbers = Vec::new();
+            let mut count = 0_u64;
+
+            for record_id in &record_ids {
+                let cache_key = (target_table.to_string(), record_id.clone());
+                if !related_cache.contains_key(&cache_key) {
+                    let related = load_related_row_raw(app, target_table, record_id)?;
+                    related_cache.insert(cache_key.clone(), related);
+                }
+                let Some(Some(related_row)) = related_cache.get(&cache_key) else {
+                    continue;
+                };
+                match aggregate {
+                    RollupAggregate::Count => {
+                        if let Some(field) = field_name {
+                            match related_row.values.get(field) {
+                                Some(cell) if !matches!(cell, CellValue::Null) => {
+                                    count += 1;
+                                }
+                                _ => {}
+                            }
+                        } else {
+                            count += 1;
+                        }
+                    }
+                    RollupAggregate::Sum | RollupAggregate::Min | RollupAggregate::Max => {
+                        let field = field_name.expect("validated rollup_field for sum/min/max");
+                        if let Some(cell) = related_row.values.get(field) {
+                            if let Some(number) = cell.as_rollup_number() {
+                                numbers.push(number);
+                            }
+                        }
+                    }
+                }
+            }
+
+            let value = match aggregate {
+                RollupAggregate::Count => Some(count as f64),
+                RollupAggregate::Sum => Some(numbers.iter().sum()),
+                RollupAggregate::Min => numbers.into_iter().reduce(f64::min),
+                RollupAggregate::Max => numbers.into_iter().reduce(f64::max),
+            };
+            row.values
+                .insert(rollup.name.clone(), CellValue::Rollup { value });
         }
     }
     Ok(())

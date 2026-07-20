@@ -7,7 +7,11 @@ export type FieldType =
   | "boolean"
   | "date"
   | "relation"
-  | "lookup";
+  | "lookup"
+  | "rollup";
+
+/** Mirrors `lattice_data::RollupAggregate`. */
+export type RollupAggregate = "count" | "sum" | "min" | "max";
 
 /** Externally tagged `CellValue` from `lattice-data`. */
 export type CellValue =
@@ -18,7 +22,8 @@ export type CellValue =
   | { Boolean: boolean }
   | { Date: string }
   | { Relation: { record_ids: string[] } }
-  | { Lookup: { values: string[] } };
+  | { Lookup: { values: string[] } }
+  | { Rollup: { value: number | null } };
 
 export interface DataColumn {
   name: string;
@@ -30,6 +35,12 @@ export interface DataColumn {
   lookup_relation?: string;
   /** Related-table field projected by lookup fields. */
   lookup_field?: string;
+  /** Source relation column for rollup fields. */
+  rollup_relation?: string;
+  /** Aggregate for rollup fields. */
+  rollup_aggregate?: RollupAggregate;
+  /** Related-table field aggregated by rollup fields. */
+  rollup_field?: string;
 }
 
 export interface DataRow {
@@ -108,6 +119,11 @@ export function cellValueToDisplay(value: CellValue | undefined | null | string)
     const values = value.Lookup?.values;
     return Array.isArray(values) ? values.join(", ") : "";
   }
+  if ("Rollup" in value) {
+    const rollupValue = value.Rollup?.value;
+    if (rollupValue == null) return "";
+    return String(rollupValue);
+  }
   return "";
 }
 
@@ -143,6 +159,11 @@ export function displayToCellValue(text: string, fieldType: FieldType): CellValu
             .filter(Boolean),
         },
       };
+    case "rollup": {
+      if (!trimmed) return { Rollup: { value: null } };
+      const parsed = Number.parseFloat(trimmed);
+      return { Rollup: { value: Number.isNaN(parsed) ? null : parsed } };
+    }
     case "text":
     case "long_text":
       return { Text: text };

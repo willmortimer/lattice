@@ -1718,3 +1718,170 @@ fn columns_add_lookup_undo_removes_lookup_column() {
         .unwrap()
         .contains("company_name"));
 }
+
+#[test]
+fn columns_add_rollup_undo_removes_rollup_column() {
+    use std::collections::BTreeMap;
+
+    use crate::ColumnSpec;
+    use lattice_data::{CellValue, FieldType, RollupAggregate};
+
+    let (dir, mut engine) = engine();
+    engine
+        .apply(Transaction::new(
+            "Create Orders.data",
+            vec![Command::TableCreate {
+                path: PathBuf::from("Orders.data"),
+                title: "Orders".into(),
+                table_name: "orders".into(),
+            }],
+        ))
+        .unwrap();
+
+    let package = dir.path().join("Orders.data");
+    let mut base_revision = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+
+    engine
+        .apply(Transaction::new(
+            "Add order name",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("Orders.data"),
+                table: "orders".into(),
+                columns: vec![ColumnSpec::new("name", FieldType::Text)],
+                base_revision,
+            }],
+        ))
+        .unwrap();
+
+    base_revision = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Add line_items table",
+            vec![Command::TableAdd {
+                path: PathBuf::from("Orders.data"),
+                table_name: "line_items".into(),
+                base_revision,
+            }],
+        ))
+        .unwrap();
+
+    base_revision = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Add line_items columns",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("Orders.data"),
+                table: "line_items".into(),
+                columns: vec![ColumnSpec::new("amount", FieldType::Decimal)],
+                base_revision,
+            }],
+        ))
+        .unwrap();
+
+    base_revision = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Add order items relation",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("Orders.data"),
+                table: "orders".into(),
+                columns: vec![ColumnSpec::relation("items", "line_items")],
+                base_revision,
+            }],
+        ))
+        .unwrap();
+
+    {
+        let app = lattice_data::DataApp::open(&package).unwrap();
+        let order_id = app
+            .insert_row(
+                "orders",
+                &BTreeMap::from([("name".into(), CellValue::Text("PO-1".into()))]),
+            )
+            .unwrap();
+        let item_id = app
+            .insert_row(
+                "line_items",
+                &BTreeMap::from([("amount".into(), CellValue::Decimal(12.0))]),
+            )
+            .unwrap();
+        app.update_row(
+            "orders",
+            &order_id,
+            &BTreeMap::from([(
+                "items".into(),
+                CellValue::Relation {
+                    record_ids: vec![item_id],
+                },
+            )]),
+        )
+        .unwrap();
+    }
+
+    base_revision = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Add item_count and total_amount rollups",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("Orders.data"),
+                table: "orders".into(),
+                columns: vec![
+                    ColumnSpec::rollup("item_count", "items", RollupAggregate::Count, None::<String>),
+                    ColumnSpec::rollup(
+                        "total_amount",
+                        "items",
+                        RollupAggregate::Sum,
+                        Some("amount"),
+                    ),
+                ],
+                base_revision,
+            }],
+        ))
+        .unwrap();
+
+    {
+        let app = lattice_data::DataApp::open(&package).unwrap();
+        let rows = app.list_rows("orders", 10, 0).unwrap();
+        assert_eq!(
+            rows[0].values.get("item_count"),
+            Some(&CellValue::Rollup { value: Some(1.0) })
+        );
+        assert_eq!(
+            rows[0].values.get("total_amount"),
+            Some(&CellValue::Rollup { value: Some(12.0) })
+        );
+        assert!(app
+            .columns("orders")
+            .unwrap()
+            .iter()
+            .any(|column| column.name == "item_count"
+                && column.field_type == FieldType::Rollup));
+    }
+
+    engine.undo().unwrap().unwrap();
+
+    let app = lattice_data::DataApp::open(&package).unwrap();
+    assert!(!app
+        .columns("orders")
+        .unwrap()
+        .iter()
+        .any(|column| column.name == "item_count" || column.name == "total_amount"));
+    let manifest = std::fs::read_to_string(package.join("app.yaml")).unwrap();
+    assert!(!manifest.contains("item_count"));
+    assert!(!manifest.contains("total_amount"));
+}

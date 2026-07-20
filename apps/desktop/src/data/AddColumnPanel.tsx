@@ -3,11 +3,13 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   buildAddColumnPayload,
   columnFieldTypeOptions,
+  rollupAggregateOptions,
   validateColumnName,
   validateLookupSpec,
   validateRelationTarget,
+  validateRollupSpec,
 } from "./columnDesigner";
-import type { DataAppSnapshot, DataColumn, FieldType } from "./types";
+import type { DataAppSnapshot, DataColumn, FieldType, RollupAggregate } from "./types";
 
 interface AddColumnPanelProps {
   root: string;
@@ -41,8 +43,12 @@ export function AddColumnPanel({
   const [relationTable, setRelationTable] = useState("");
   const [lookupRelation, setLookupRelation] = useState("");
   const [lookupField, setLookupField] = useState("");
+  const [rollupRelation, setRollupRelation] = useState("");
+  const [rollupAggregate, setRollupAggregate] = useState<RollupAggregate>("count");
+  const [rollupField, setRollupField] = useState("");
   const [availableTables, setAvailableTables] = useState<string[]>([snapshot.default_table]);
   const [targetFields, setTargetFields] = useState<string[]>([]);
+  const [targetFieldTypes, setTargetFieldTypes] = useState<Record<string, FieldType>>({});
   const [tablesError, setTablesError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -66,6 +72,27 @@ export function AddColumnPanel({
     () => relationColumns.find((column) => column.name === lookupRelation),
     [lookupRelation, relationColumns],
   );
+
+  const selectedRollupRelation = useMemo(
+    () => relationColumns.find((column) => column.name === rollupRelation),
+    [rollupRelation, relationColumns],
+  );
+
+  const numericTargetFields = useMemo(
+    () =>
+      targetFields.filter((field) => {
+        const type = targetFieldTypes[field];
+        return type === "integer" || type === "decimal";
+      }),
+    [targetFieldTypes, targetFields],
+  );
+
+  const rollupFieldOptions = useMemo(() => {
+    if (rollupAggregate === "count") {
+      return targetFields;
+    }
+    return numericTargetFields;
+  }, [numericTargetFields, rollupAggregate, targetFields]);
 
   useEffect(() => {
     if (demo) {
@@ -113,41 +140,74 @@ export function AddColumnPanel({
   }, [fieldType, lookupRelation, relationColumns]);
 
   useEffect(() => {
-    if (fieldType !== "lookup" || !selectedLookupRelation?.relation_table) {
-      setTargetFields([]);
+    if (fieldType !== "rollup") {
       return;
     }
-    const targetTable = selectedLookupRelation.relation_table;
-    const fromTargets = snapshot.relation_targets?.[targetTable];
-    if (fromTargets && fromTargets.length > 0) {
-      const fields = Object.keys(fromTargets[0].values).filter((field) => field !== "id");
-      setTargetFields(fields);
+    if (rollupRelation && relationColumns.some((column) => column.name === rollupRelation)) {
       return;
     }
-    if (demo) {
-      setTargetFields([]);
-      return;
-    }
-    let cancelled = false;
-    void invoke<DataColumn[]>("list_data_table_columns", {
-      root,
-      relPath,
-      table: targetTable,
-    })
-      .then((columns) => {
-        if (!cancelled) {
-          setTargetFields(columns.map((column) => column.name).filter((field) => field !== "id"));
-        }
+    setRollupRelation(relationColumns[0]?.name ?? "");
+  }, [fieldType, relationColumns, rollupRelation]);
+
+  const loadTargetFields = useCallback(
+    (targetTable: string | undefined) => {
+      if (!targetTable) {
+        setTargetFields([]);
+        setTargetFieldTypes({});
+        return () => {};
+      }
+      const fromTargets = snapshot.relation_targets?.[targetTable];
+      if (fromTargets && fromTargets.length > 0) {
+        const fields = Object.keys(fromTargets[0].values).filter((field) => field !== "id");
+        setTargetFields(fields);
+        setTargetFieldTypes({});
+        return () => {};
+      }
+      if (demo) {
+        setTargetFields([]);
+        setTargetFieldTypes({});
+        return () => {};
+      }
+      let cancelled = false;
+      void invoke<DataColumn[]>("list_data_table_columns", {
+        root,
+        relPath,
+        table: targetTable,
       })
-      .catch(() => {
-        if (!cancelled) {
-          setTargetFields([]);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [demo, fieldType, relPath, root, selectedLookupRelation, snapshot.relation_targets]);
+        .then((columns) => {
+          if (cancelled) return;
+          const usable = columns.filter((column) => column.name !== "id");
+          setTargetFields(usable.map((column) => column.name));
+          setTargetFieldTypes(
+            Object.fromEntries(usable.map((column) => [column.name, column.field_type])),
+          );
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setTargetFields([]);
+            setTargetFieldTypes({});
+          }
+        });
+      return () => {
+        cancelled = true;
+      };
+    },
+    [demo, relPath, root, snapshot.relation_targets],
+  );
+
+  useEffect(() => {
+    if (fieldType !== "lookup") {
+      return;
+    }
+    return loadTargetFields(selectedLookupRelation?.relation_table);
+  }, [fieldType, loadTargetFields, selectedLookupRelation]);
+
+  useEffect(() => {
+    if (fieldType !== "rollup") {
+      return;
+    }
+    return loadTargetFields(selectedRollupRelation?.relation_table);
+  }, [fieldType, loadTargetFields, selectedRollupRelation]);
 
   useEffect(() => {
     if (fieldType !== "lookup") {
@@ -158,6 +218,23 @@ export function AddColumnPanel({
     }
     setLookupField(targetFields[0] ?? "");
   }, [fieldType, lookupField, targetFields]);
+
+  useEffect(() => {
+    if (fieldType !== "rollup") {
+      return;
+    }
+    if (rollupAggregate === "count") {
+      if (!rollupField || rollupFieldOptions.includes(rollupField)) {
+        return;
+      }
+      setRollupField("");
+      return;
+    }
+    if (rollupField && rollupFieldOptions.includes(rollupField)) {
+      return;
+    }
+    setRollupField(rollupFieldOptions[0] ?? "");
+  }, [fieldType, rollupAggregate, rollupField, rollupFieldOptions]);
 
   const submit = useCallback(async () => {
     setValidationError(null);
@@ -187,6 +264,19 @@ export function AddColumnPanel({
       setValidationError(lookupError);
       return;
     }
+    const rollupError = validateRollupSpec(
+      fieldType,
+      rollupRelation,
+      rollupAggregate,
+      rollupField,
+      relationColumns,
+      targetFields,
+      numericTargetFields,
+    );
+    if (rollupError) {
+      setValidationError(rollupError);
+      return;
+    }
 
     if (demo) {
       onError("Adding columns is not persisted in the browser demo.");
@@ -201,6 +291,9 @@ export function AddColumnPanel({
         relationTable,
         lookupRelation,
         lookupField,
+        rollupRelation,
+        rollupAggregate,
+        rollupField,
       );
       const fresh = await invoke<DataAppSnapshot>("add_data_columns", {
         root,
@@ -218,6 +311,9 @@ export function AddColumnPanel({
       setRelationTable("");
       setLookupRelation("");
       setLookupField("");
+      setRollupRelation("");
+      setRollupAggregate("count");
+      setRollupField("");
       onClose();
     } catch (err) {
       const message = String(err);
@@ -238,6 +334,7 @@ export function AddColumnPanel({
     lookupField,
     lookupRelation,
     name,
+    numericTargetFields,
     onAdded,
     onClose,
     onError,
@@ -245,6 +342,9 @@ export function AddColumnPanel({
     relationColumns,
     relationTable,
     relPath,
+    rollupAggregate,
+    rollupField,
+    rollupRelation,
     root,
     rowFetchLimit,
     snapshot.active_view,
@@ -255,6 +355,11 @@ export function AddColumnPanel({
 
   const disabled = busy || readOnly || submitting;
   const lookupBlocked = fieldType === "lookup" && (relationColumns.length === 0 || !lookupField);
+  const rollupBlocked =
+    fieldType === "rollup" &&
+    (relationColumns.length === 0 ||
+      (rollupAggregate !== "count" && !rollupField) ||
+      !rollupAggregate);
   const relationBlocked = fieldType === "relation" && relationTargets.length === 0;
 
   return (
@@ -368,6 +473,75 @@ export function AddColumnPanel({
             </label>
           </>
         )}
+
+        {fieldType === "rollup" && (
+          <>
+            <label className="data-table-add-column-field">
+              Relation column
+              <select
+                value={rollupRelation}
+                disabled={disabled || relationColumns.length === 0}
+                onChange={(event) => setRollupRelation(event.currentTarget.value)}
+              >
+                {relationColumns.length === 0 ? (
+                  <option value="">Add a relation column first</option>
+                ) : (
+                  relationColumns.map((column) => (
+                    <option key={column.name} value={column.name}>
+                      {column.name}
+                      {column.relation_table ? ` → ${column.relation_table}` : ""}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
+            <label className="data-table-add-column-field">
+              Aggregate
+              <select
+                value={rollupAggregate}
+                disabled={disabled}
+                onChange={(event) =>
+                  setRollupAggregate(event.currentTarget.value as RollupAggregate)
+                }
+              >
+                {rollupAggregateOptions().map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="data-table-add-column-field">
+              Related field{rollupAggregate === "count" ? " (optional)" : ""}
+              <select
+                value={rollupField}
+                disabled={
+                  disabled || (rollupAggregate !== "count" && rollupFieldOptions.length === 0)
+                }
+                onChange={(event) => setRollupField(event.currentTarget.value)}
+              >
+                {rollupAggregate === "count" ? (
+                  <>
+                    <option value="">All linked records</option>
+                    {rollupFieldOptions.map((field) => (
+                      <option key={field} value={field}>
+                        {field}
+                      </option>
+                    ))}
+                  </>
+                ) : rollupFieldOptions.length === 0 ? (
+                  <option value="">No numeric fields on related table</option>
+                ) : (
+                  rollupFieldOptions.map((field) => (
+                    <option key={field} value={field}>
+                      {field}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
+          </>
+        )}
       </div>
 
       {validationError && <p className="error-text">{validationError}</p>}
@@ -376,7 +550,7 @@ export function AddColumnPanel({
         <button
           type="button"
           className="primary-button"
-          disabled={disabled || relationBlocked || lookupBlocked}
+          disabled={disabled || relationBlocked || lookupBlocked || rollupBlocked}
           onClick={() => void submit()}
         >
           Add column
