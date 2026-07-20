@@ -37,24 +37,61 @@ cargo run -p lattice-embed-host -- serve \
   --models-dir ~/Library/Application\ Support/Lattice/Models
 ```
 
-### `llama-cpp` (optional feature)
+List backends compiled into the binary:
 
 ```sh
+cargo run -p lattice-embed-host -- backends
+# fake
+# llama-cpp   # only when built with --features llama-cpp
+```
+
+### `llama-cpp` (optional feature)
+
+Build and link [llama.cpp](https://github.com/ggml-org/llama.cpp) via
+[`llama-cpp-2`](https://crates.io/crates/llama-cpp-2) with **Metal** on macOS:
+
+```sh
+# Requires: cmake, clang/Xcode CLT (Metal shaders), C++17 toolchain.
 cargo build -p lattice-embed-host --features llama-cpp
 ```
 
-The feature gate compiles the llama.cpp backend module. **Linking a real
-llama.cpp + Metal build is deferred**: the module currently returns a clear
-`backend_unavailable` error on load so CI never needs the ~639MB Qwen3 GGUF.
+Then serve with the verified Qwen3 GGUF (after Enable / `install`):
 
-When wiring the real backend:
+```sh
+cargo run -p lattice-embed-host --features llama-cpp -- serve \
+  --socket /tmp/lattice-embed-host.sock \
+  --backend llama-cpp \
+  --models-dir ~/Library/Application\ Support/Lattice/Models/embeddings
+```
 
-1. Pin a tested [llama.cpp](https://github.com/ggml-org/llama.cpp) commit.
-2. Build with Metal (`GGML_METAL=ON`) and embedding mode (`--embedding`,
-   pooling `last`, L2-normalized output).
-3. Link from `apps/embed-host` (sys crate or `llama-cpp-2`) behind
-   `--features llama-cpp`.
-4. Keep `fake` as the default so `cargo test -p lattice-embed-host` stays offline.
+Runtime behavior when the feature is on and a GGUF is loaded:
+
+- Embedding mode with **last-token pooling**
+- Matryoshka truncate to requested dims (default **512**), then **L2 normalize**
+- Query text is wrapped with the `lattice-retrieval-v1` instruction prefix
+
+Without `--features llama-cpp`, requesting `--backend llama-cpp` fails with a
+clear `backend_unavailable` error. Default `cargo test -p lattice-embed-host`
+stays offline (fake only; no GGUF).
+
+Optional real-inference smoke (not run in CI):
+
+```sh
+export LATTICE_EMBED_LLAMA_GGUF=/path/to/Qwen3-Embedding-0.6B-Q8_0.gguf
+cargo test -p lattice-embed-host --features llama-cpp -- --ignored
+```
+
+#### Nix / local notes
+
+- Prefer a native (non-sandboxed) macOS toolchain for Metal: Xcode or CLT plus
+  Homebrew `cmake`. Pure Nix builds may lack Metal shader compilation.
+- First `--features llama-cpp` build compiles llama.cpp (several minutes).
+- Linux/Windows: the `metal` Cargo feature is a no-op on non-Apple targets;
+  CPU inference still links. Packaging beyond compile notes is out of scope for E7.
+
+`latticed` SpawnHost prefers `--backend llama-cpp` when the pinned GGUF is
+installed **and** `lattice-embed-host backends` lists `llama-cpp`. Override with
+`LATTICE_EMBED_HOST_BACKEND=fake|llama-cpp`.
 
 ## Qwen3 GGUF install path
 
@@ -89,6 +126,7 @@ search request. Offline / CI:
 | --- | --- |
 | `LATTICE_SEMANTIC_FAKE=1` | Skip download; Fake worker only |
 | `LATTICE_SEMANTIC_MODEL_SOURCE=/path/to.gguf` | Copy+verify local fixture (must match sha256) |
+| `LATTICE_EMBED_HOST_BACKEND` | Force host `--backend` when SpawnHost is used |
 
 ```sh
 # After you have downloaded the GGUF yourself and computed sha256:
@@ -106,8 +144,9 @@ Recommended layout after install:
   └── Qwen3-Embedding-0.6B-Q8_0.gguf
 ```
 
-Then `load_model` against that directory (RPC or a future CLI helper). The host
-re-verifies sha256 before load.
+Then `load_model` against that directory (RPC or Enable). The host re-verifies
+sha256 before load. After prepare, latticed reloads the pinned model on the
+host provider (and restarts with `--backend llama-cpp` when available).
 
 Upstream artifact:
 <https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF>

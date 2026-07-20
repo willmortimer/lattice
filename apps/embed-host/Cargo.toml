@@ -12,8 +12,9 @@ path = "src/main.rs"
 
 [features]
 default = []
-# Optional llama.cpp backend. Requires a local llama.cpp build; see README.
-llama-cpp = []
+# Optional llama.cpp + Metal (macOS) backend. See README for build notes.
+# Keeps default CI offline: fake backend needs no GGUF and no native link.
+llama-cpp = ["dep:llama-cpp-2"]
 
 [dependencies]
 lattice-embedding.workspace = true
@@ -32,6 +33,9 @@ tokio-util = { workspace = true, features = ["codec"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
+# Metal is the Lattice Phase-1 target (Apple Silicon). On other OSes the feature
+# is ignored by llama-cpp-sys; CPU inference still links.
+llama-cpp-2 = { version = "0.1.151", optional = true, default-features = true, features = ["metal"] }
 
 [build-dependencies]
 prost-build.workspace = true

@@ -41,6 +41,8 @@ enum Command {
         #[arg(long)]
         models_dir: PathBuf,
     },
+    /// Print backends compiled into this binary (one name per line).
+    Backends,
 }
 
 #[tokio::main]
@@ -78,6 +80,12 @@ async fn main() -> anyhow::Result<()> {
                 result.model_dir.display(),
                 result.artifact_sha256
             );
+            Ok(())
+        }
+        Command::Backends => {
+            for name in BackendKind::available() {
+                println!("{name}");
+            }
             Ok(())
         }
     }
