@@ -278,3 +278,69 @@ async fn install_rpc_via_client() {
 
     server.abort();
 }
+
+#[cfg(feature = "llama-cpp")]
+#[tokio::test]
+#[ignore = "requires LATTICE_EMBED_LLAMA_GGUF pointing at the pinned Qwen3 Q8 GGUF (~640MB)"]
+async fn llama_cpp_embeds_512d_when_gguf_present() {
+    use lattice_embedding::qwen3_embedding_0_6b_q8_manifest;
+
+    let gguf = std::env::var("LATTICE_EMBED_LLAMA_GGUF").expect(
+        "set LATTICE_EMBED_LLAMA_GGUF to a verified Qwen3-Embedding-0.6B-Q8_0.gguf path",
+    );
+    let gguf_path = PathBuf::from(&gguf);
+    assert!(
+        gguf_path.is_file(),
+        "GGUF missing at {}",
+        gguf_path.display()
+    );
+
+    let dir = tempdir().unwrap();
+    let socket = socket_path_in(dir.path());
+    let models_dir = dir.path().join("models");
+    let staging = dir.path().join("staging");
+    fs::create_dir_all(&staging).unwrap();
+
+    let manifest = qwen3_embedding_0_6b_q8_manifest();
+    let manifest_path = staging.join("manifest.json");
+    fs::write(
+        &manifest_path,
+        serde_json::to_vec_pretty(&manifest).unwrap(),
+    )
+    .unwrap();
+    let artifact_copy = staging.join(&manifest.artifact);
+    fs::copy(&gguf_path, &artifact_copy).unwrap();
+    let installed = install_model(&manifest_path, &artifact_copy, &models_dir).unwrap();
+
+    let state = HostState::new(HostConfig::new(
+        socket.clone(),
+        BackendKind::LlamaCpp,
+        models_dir,
+    ));
+    let server = tokio::spawn(run_server(state));
+    wait_for_socket(&socket).await;
+
+    let client = Arc::new(EmbedHostClient::connect(&socket).await.unwrap());
+    let session = client
+        .load_model(&installed.model_dir, Some(512))
+        .await
+        .expect("load llama GGUF");
+    assert_eq!(session.specification().dimensions, 512);
+    assert_eq!(session.specification().provider_id, "llama.cpp");
+
+    let vector = session
+        .embed_query(EmbedQueryRequest {
+            text: "capability grants for plugins".into(),
+        })
+        .await
+        .expect("embed_query via llama.cpp");
+    assert_eq!(vector.values.len(), 512);
+    let norm: f32 = vector.values.iter().map(|v| v * v).sum::<f32>().sqrt();
+    assert!(
+        (norm - 1.0).abs() < 1e-3,
+        "expected L2-normalized vector, got norm={norm}"
+    );
+
+    server.abort();
+}
+

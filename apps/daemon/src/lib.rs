@@ -30,8 +30,8 @@ pub use config::{
     DEFAULT_IDLE_SHUTDOWN_TIMEOUT,
 };
 pub use embed_host::{
-    resolve_embed_host_bin, SemanticController, SemanticProviderMode, ENV_EMBED_HOST_BIN,
-    ENV_EMBED_HOST_SOCKET, ENV_SEMANTIC_FAKE,
+    resolve_embed_host_bin, SemanticController, SemanticProviderMode, ENV_EMBED_HOST_BACKEND,
+    ENV_EMBED_HOST_BIN, ENV_EMBED_HOST_SOCKET, ENV_SEMANTIC_FAKE,
 };
 pub use error::{Error, Result};
 pub use http::{

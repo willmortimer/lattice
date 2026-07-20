@@ -2,8 +2,8 @@
 //!
 //! The host listens on a private Unix-domain socket and speaks a length-
 //! delimited Protobuf protocol. The default `fake` backend is always available
-//! for CI. The optional `llama-cpp` feature documents the path to a real Qwen3
-//! GGUF backend without requiring model downloads in tests.
+//! for CI. The optional `llama-cpp` feature links llama.cpp + Metal and loads
+//! verified Qwen3 GGUF artifacts for real 512-d embeddings.
 
 mod backend;
 mod client;

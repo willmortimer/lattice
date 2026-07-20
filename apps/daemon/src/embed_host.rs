@@ -34,6 +34,9 @@ pub const ENV_EMBED_HOST_SOCKET: &str = "LATTICE_EMBED_HOST_SOCKET";
 pub const ENV_SEMANTIC_FAKE: &str = "LATTICE_SEMANTIC_FAKE";
 /// Optional path to the `lattice-embed-host` binary to spawn.
 pub const ENV_EMBED_HOST_BIN: &str = "LATTICE_EMBED_HOST_BIN";
+/// Optional explicit host backend (`fake` or `llama-cpp`). When unset, prefers
+/// `llama-cpp` only if the pinned GGUF is ready and the binary lists that backend.
+pub const ENV_EMBED_HOST_BACKEND: &str = "LATTICE_EMBED_HOST_BACKEND";
 
 const MAX_RESTARTS: u32 = 5;
 const INITIAL_BACKOFF_MS: u64 = 200;
@@ -131,6 +134,7 @@ struct SupervisedHost {
     socket: PathBuf,
     binary: PathBuf,
     models_dir: PathBuf,
+    backend: String,
     restarts: AtomicU32,
 }
 
@@ -196,7 +200,8 @@ impl SemanticController {
                     .map_err(|err| Error::Spawn(format!("embed runtime: {err}")))?;
                 let handle = owned.handle().clone();
                 let (model_dir, dimensions) = ensure_host_model_dir(&models_dir)?;
-                let child = spawn_embed_host(&binary, &socket, &models_dir)?;
+                let backend = resolve_spawn_backend(&binary);
+                let child = spawn_embed_host(&binary, &socket, &models_dir, &backend)?;
                 wait_for_socket(&socket, Duration::from_secs(5))?;
                 let host_provider =
                     connect_host_provider(&handle, &socket, &model_dir, dimensions)?;
@@ -213,6 +218,7 @@ impl SemanticController {
                         socket: socket.clone(),
                         binary,
                         models_dir,
+                        backend,
                         restarts: AtomicU32::new(0),
                     })),
                     sessions: Mutex::new(Vec::new()),
@@ -256,8 +262,66 @@ impl SemanticController {
             .get_session_by_id(workspace_id)
             .ok_or_else(|| format!("workspace session not found for id {workspace_id}"))?;
         lattice_handlers::prepare_semantic_model_for_session(&session, &mut |_| {})?;
+        self.reload_host_after_prepare()
+            .map_err(|err| err.to_string())?;
         self.attach_session(&session);
         Ok(session.semantic_status())
+    }
+
+    /// After E5 prepare, load the verified pinned GGUF on the host provider.
+    ///
+    /// When SpawnHost was started on the fake fixture and the binary supports
+    /// llama-cpp, restart the child with `--backend llama-cpp` before reload.
+    fn reload_host_after_prepare(self: &Arc<Self>) -> Result<()> {
+        let Some(host_provider) = self.host_provider.as_ref() else {
+            return Ok(());
+        };
+        if !pinned_model_is_ready() {
+            return Ok(());
+        }
+        let model_dir = qwen3_embedding_install_dir();
+        if let Some(handle) = self.runtime_handle.as_ref() {
+            self.maybe_restart_host_for_llama()?;
+            handle
+                .block_on(host_provider.reload_model(model_dir, None))
+                .map_err(|err| Error::Spawn(format!("reload pinned GGUF on embed-host: {err}")))?;
+            info!("embed-host reloaded pinned Qwen3 GGUF after prepare");
+        }
+        Ok(())
+    }
+
+    fn maybe_restart_host_for_llama(self: &Arc<Self>) -> Result<()> {
+        let restart = {
+            let mut guard = self.host.lock().expect("host poisoned");
+            let Some(host) = guard.as_mut() else {
+                return Ok(());
+            };
+            if host.backend == "llama-cpp" {
+                return Ok(());
+            }
+            if !binary_supports_backend(&host.binary, "llama-cpp") {
+                return Ok(());
+            }
+            let _ = host.child.kill();
+            let _ = host.child.wait();
+            Some((
+                host.binary.clone(),
+                host.socket.clone(),
+                host.models_dir.clone(),
+            ))
+        };
+        let Some((binary, socket, models_dir)) = restart else {
+            return Ok(());
+        };
+        let child = spawn_embed_host(&binary, &socket, &models_dir, "llama-cpp")?;
+        wait_for_socket(&socket, Duration::from_secs(5))?;
+        let mut guard = self.host.lock().expect("host poisoned");
+        if let Some(host) = guard.as_mut() {
+            host.child = child;
+            host.backend = "llama-cpp".into();
+            host.restarts.store(0, Ordering::SeqCst);
+        }
+        Ok(())
     }
 
     /// Stop semantic indexing for a workspace (FTS remains available).
@@ -430,17 +494,18 @@ impl SemanticController {
                                 host.binary.clone(),
                                 host.socket.clone(),
                                 host.models_dir.clone(),
+                                host.backend.clone(),
                                 restarts,
                             ))
                         }
                     };
-                    let Some((binary, socket, models_dir, restarts)) = restart_plan else {
+                    let Some((binary, socket, models_dir, backend, restarts)) = restart_plan else {
                         continue;
                     };
                     thread::sleep(Duration::from_millis(backoff_ms));
                     backoff_ms = (backoff_ms.saturating_mul(2)).min(MAX_BACKOFF_MS);
 
-                    match spawn_embed_host(&binary, &socket, &models_dir) {
+                    match spawn_embed_host(&binary, &socket, &models_dir, &backend) {
                         Ok(mut child) => {
                             if wait_for_socket(&socket, Duration::from_secs(5)).is_ok() {
                                 if let Some(host) =
@@ -500,7 +565,7 @@ fn connect_host_provider(
 }
 
 /// Prefer a verified pinned install; otherwise stage a tiny fake fixture for the
-/// host fake backend (CI / offline SpawnHost before E7 llama inference).
+/// host fake backend (CI / offline SpawnHost without a prepared GGUF).
 ///
 /// Returns `(model_dir, optional load dimensions)`. `None` dimensions means the
 /// host uses the manifest default (512 for pinned Qwen3).
@@ -543,7 +608,36 @@ fn stage_fake_host_model(models_dir: &Path) -> Result<PathBuf> {
     Ok(installed.model_dir)
 }
 
-fn spawn_embed_host(binary: &Path, socket: &Path, models_dir: &Path) -> Result<Child> {
+fn resolve_spawn_backend(binary: &Path) -> String {
+    if let Ok(explicit) = std::env::var(ENV_EMBED_HOST_BACKEND) {
+        let trimmed = explicit.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+    if pinned_model_is_ready() && binary_supports_backend(binary, "llama-cpp") {
+        return "llama-cpp".into();
+    }
+    "fake".into()
+}
+
+fn binary_supports_backend(binary: &Path, backend: &str) -> bool {
+    let output = Command::new(binary).arg("backends").output();
+    match output {
+        Ok(out) if out.status.success() => {
+            let text = String::from_utf8_lossy(&out.stdout);
+            text.lines().any(|line| line.trim() == backend)
+        }
+        _ => false,
+    }
+}
+
+fn spawn_embed_host(
+    binary: &Path,
+    socket: &Path,
+    models_dir: &Path,
+    backend: &str,
+) -> Result<Child> {
     if let Some(parent) = socket.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -556,7 +650,7 @@ fn spawn_embed_host(binary: &Path, socket: &Path, models_dir: &Path) -> Result<C
         .arg("--socket")
         .arg(socket)
         .arg("--backend")
-        .arg("fake")
+        .arg(backend)
         .arg("--models-dir")
         .arg(models_dir)
         .stdin(Stdio::null())
@@ -565,7 +659,7 @@ fn spawn_embed_host(binary: &Path, socket: &Path, models_dir: &Path) -> Result<C
         .spawn()
         .map_err(|err| {
             Error::Spawn(format!(
-                "failed to spawn embed-host {}: {err}",
+                "failed to spawn embed-host {} (--backend {backend}): {err}",
                 binary.display()
             ))
         })
