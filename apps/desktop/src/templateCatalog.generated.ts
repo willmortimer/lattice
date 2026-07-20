@@ -950,6 +950,12 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "relation_table": "companies"
           },
           {
+            "name": "company_name",
+            "type": "lookup",
+            "lookup_relation": "company",
+            "lookup_field": "name"
+          },
+          {
             "name": "due_date",
             "type": "date"
           },
@@ -1188,6 +1194,17 @@ export const GENERATED_TEMPLATE_CATALOG = [
               {
                 "name": "name",
                 "type": "text"
+              },
+              {
+                "name": "contacts",
+                "type": "relation",
+                "relation_table": "contacts"
+              },
+              {
+                "name": "contact_count",
+                "type": "rollup",
+                "rollup_relation": "contacts",
+                "rollup_aggregate": "count"
               }
             ],
             "rows": [

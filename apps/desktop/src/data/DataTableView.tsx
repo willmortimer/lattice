@@ -48,6 +48,11 @@ import {
   syncRelationTargetsAfterUpsert,
 } from "./relationDisplay";
 import {
+  isDataBrowserDemo,
+  NATIVE_DESKTOP_LABEL,
+  nativeOnlyToolbarTooltip,
+} from "./browserDemoHonesty";
+import {
   loadPackageForm,
   listPackageForms,
   saveDataForm,
@@ -154,6 +159,7 @@ export function DataTableView({
   preferences,
   showRendererStats = false,
 }: DataTableViewProps) {
+  const browserDemo = isDataBrowserDemo(demoMutate);
   const [snapshot, setSnapshot] = useState(() => cloneSnapshot(initialSnapshot));
   const [activeView, setActiveView] = useState(initialSnapshot.active_view);
   const [sortField, setSortField] = useState<string | undefined>(initialSnapshot.sort_field);
@@ -900,13 +906,10 @@ export function DataTableView({
   }, [filterField, filterOperator, filterValue]);
 
   const saveView = useCallback(async () => {
+    if (browserDemo) return;
+
     const viewName = window.prompt("Save view as", activeView)?.trim();
     if (!viewName) return;
-
-    if (demoMutate) {
-      setError("Saving views is not available in the browser demo.");
-      return;
-    }
 
     setBusy(true);
     try {
@@ -939,9 +942,9 @@ export function DataTableView({
   }, [
     activeView,
     applySnapshot,
+    browserDemo,
     coverField,
     dateField,
-    demoMutate,
     filters,
     groupBy,
     layoutType,
@@ -1062,14 +1065,21 @@ export function DataTableView({
               </select>
             </label>
           ))}
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => void saveView()}
-            disabled={busy}
-          >
-            Save view
-          </button>
+          <span className="data-table-native-only-control">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => void saveView()}
+              disabled={busy || browserDemo}
+              title={browserDemo ? nativeOnlyToolbarTooltip("Saving views") : undefined}
+              aria-disabled={browserDemo || undefined}
+            >
+              Save view
+            </button>
+            {browserDemo ? (
+              <span className="data-table-native-only-label">{NATIVE_DESKTOP_LABEL}</span>
+            ) : null}
+          </span>
           <button
             type="button"
             className="secondary-button"
@@ -1137,6 +1147,7 @@ export function DataTableView({
             }}
             disabled={busy}
             aria-pressed={columnPanelOpen}
+            title={browserDemo ? nativeOnlyToolbarTooltip("Adding columns") : undefined}
           >
             Add column
           </button>

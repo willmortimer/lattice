@@ -29,6 +29,11 @@ integration branch; full BI remains Phase 6.
 3. **Wave 3** — DuckDB, Parquet datasets, Arrow IPC, Perspective, Vega-Lite,
    profiling, annotation overlays (vertical slice; not full BI). **Merged.**
 
+**Field-type docs (polish):** On `feat/data-support-polish`, packet **P2P08**
+aligns `docs/10-data-applications-and-airtable-model.md` § Typed fields with the
+shipped `FieldType` enum in `lattice-data`; formula and attachment column types
+stay documented as future roadmap only.
+
 ## Defaults (locked)
 
 | Decision | Choice |
