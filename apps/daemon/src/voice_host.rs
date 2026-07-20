@@ -287,6 +287,20 @@ impl VoiceController {
         self.degraded.load(Ordering::SeqCst)
     }
 
+    /// Kill the supervised voice-host child (integration tests only).
+    #[doc(hidden)]
+    pub fn kill_supervised_host_for_test(&self) -> bool {
+        let mut guard = self.host.lock().expect("host poisoned");
+        let Some(host) = guard.as_mut() else {
+            return false;
+        };
+        let _ = host.child.kill();
+        let _ = host.child.wait();
+        self.mark_degraded(true);
+        self.clear_client();
+        true
+    }
+
     pub fn socket_path(&self) -> &Path {
         &self.socket
     }

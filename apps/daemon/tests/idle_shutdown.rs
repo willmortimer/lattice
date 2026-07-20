@@ -149,3 +149,39 @@ async fn shutdown_releases_workspace_lease() {
         "lease file should be cleared on shutdown"
     );
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn idle_shutdown_respects_configured_timeout() {
+    let dir = TempDir::new().expect("tempdir");
+    let socket = dir.path().join("idle-bounded.sock");
+    let idle_secs = 1u64;
+    let opts = SpawnOptions::new(env!("CARGO_BIN_EXE_latticed"), &socket, "idle-bounded-token")
+        .with_instance_id("idle-bounded")
+        .with_keep_services_running(false)
+        .with_idle_shutdown_secs(idle_secs)
+        .with_ready_timeout(Duration::from_secs(10));
+
+    let mut spawned = spawn_latticed(opts).await.expect("spawn latticed");
+    let client = DaemonClient::connect(&spawned.socket_path, &spawned.auth_token)
+        .await
+        .expect("connect");
+    let _ = client.request(health_request()).await.expect("health");
+    drop(client);
+
+    let disconnect_at = std::time::Instant::now();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while tokio::time::Instant::now() < deadline {
+        if let Ok(Some(status)) = spawned.try_wait() {
+            let elapsed_ms = disconnect_at.elapsed().as_millis();
+            assert!(status.success(), "daemon should exit 0 on idle shutdown");
+            assert!(
+                elapsed_ms >= (idle_secs * 1_000) as u128,
+                "idle shutdown too fast: {elapsed_ms}ms"
+            );
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(25)).await;
+    }
+    spawned.kill();
+    panic!("daemon did not exit within idle shutdown window");
+}
