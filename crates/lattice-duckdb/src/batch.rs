@@ -1,6 +1,6 @@
 //! Arrow-ready columnar batches (schema + typed columns).
 //!
-//! P3-03 maps these into Arrow IPC without changing the public query surface.
+//! `lattice-arrow-transport` maps these into bounded Arrow IPC for desktop.
 
 /// Logical column type aligned with Arrow primitives Lattice will transport.
 #[derive(Debug, Clone, PartialEq, Eq)]

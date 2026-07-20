@@ -138,7 +138,7 @@ flowchart TD
 | P2-14 | merged | composer | Docs wave 2 |
 | P3-01 | merged | composer | Dataset package |
 | P3-02 | merged | grok | DuckDB |
-| P3-03 | pending | grok | Arrow IPC |
+| P3-03 | done | grok | Arrow IPC |
 | P3-04 | done | grok | Parquet partitions |
 | P3-05 | pending | composer | Profiling |
 | P3-06 | pending | grok | Perspective |
@@ -257,6 +257,8 @@ flowchart TD
 ### Task `P3-03`: Arrow batch transport
 
 - Bounded Arrow IPC Rust → desktop for analytical queries (ADR 0021).
+- **Status:** done in `lattice-arrow-transport` + Tauri `query_dataset_arrow`
+  (`ipc_bytes` + `schema_meta`; dataset placeholder dumps schema/sample).
 - **Depends on:** P3-02, P3-04 · **Model:** cursor-grok-4.5-high
 
 ### Task `P3-04`: Parquet partitions + manifests

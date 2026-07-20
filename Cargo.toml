@@ -15,6 +15,7 @@ members = [
     "crates/lattice-data",
     "crates/lattice-datasets",
     "crates/lattice-duckdb",
+    "crates/lattice-arrow-transport",
     "crates/lattice-theme",
     "crates/lattice-handlers",
     "crates/lattice-runtime",
@@ -46,6 +47,7 @@ lattice-voice-host = { path = "apps/voice-host-macos" }
 lattice-data = { path = "crates/lattice-data" }
 lattice-datasets = { path = "crates/lattice-datasets" }
 lattice-duckdb = { path = "crates/lattice-duckdb" }
+lattice-arrow-transport = { path = "crates/lattice-arrow-transport" }
 lattice-theme = { path = "crates/lattice-theme" }
 lattice-handlers = { path = "crates/lattice-handlers" }
 lattice-runtime = { path = "crates/lattice-runtime" }
@@ -82,8 +84,9 @@ ignore = "0.4"
 rusqlite = { version = "0.37", features = ["bundled"] }
 sha2 = "0.10"
 hex = "0.4"
-# Apache Arrow / Parquet (Apache-2.0) for analytical dataset facts under `facts/`.
-arrow = { version = "59.1", default-features = false, features = ["csv"] }
+# Apache Arrow / Parquet (Apache-2.0) for analytical dataset facts under `facts/`
+# and Arrow IPC transport to the desktop (ADR 0021).
+arrow = { version = "59.1", default-features = false, features = ["csv", "ipc"] }
 parquet = { version = "59.1", default-features = false, features = [
     "arrow",
     "snap",

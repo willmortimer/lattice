@@ -167,6 +167,7 @@ dependencies = [
  "arrow-cast 59.1.0",
  "arrow-csv",
  "arrow-data 59.1.0",
+ "arrow-ipc",
  "arrow-ord 59.1.0",
  "arrow-row 59.1.0",
  "arrow-schema 59.1.0",
@@ -3037,6 +3038,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-arrow-transport"
+version = "0.1.0"
+dependencies = [
+ "arrow 59.1.0",
+ "lattice-duckdb",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "lattice-audio"
 version = "0.1.0"
 dependencies = [
@@ -3220,14 +3233,18 @@ dependencies = [
 name = "lattice-desktop"
 version = "0.1.0"
 dependencies = [
+ "arrow 59.1.0",
  "bytes",
  "dirs",
+ "lattice-arrow-transport",
  "lattice-audio",
  "lattice-audio-macos",
  "lattice-client",
  "lattice-commands",
  "lattice-core",
  "lattice-data",
+ "lattice-datasets",
+ "lattice-duckdb",
  "lattice-handlers",
  "lattice-index",
  "lattice-profile",

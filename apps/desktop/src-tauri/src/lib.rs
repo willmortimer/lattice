@@ -1,6 +1,7 @@
 mod canvas;
 mod commands;
 mod data;
+mod dataset;
 mod link_repair;
 mod profile;
 mod resource_links;
@@ -218,6 +219,7 @@ pub fn run() {
             data::commit_tabular_import,
             data::preview_csv_import,
             data::commit_csv_import,
+            dataset::query_dataset_arrow,
             canvas::read_canvas,
             canvas::canvas_place_resource,
             canvas::canvas_move_nodes,
