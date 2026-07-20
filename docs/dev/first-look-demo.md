@@ -1,15 +1,31 @@
-# First Look demo — 2026-07-18
+# First Look demo — 2026-07-20
 
 Evidence pass against the Home.md **First Look tour — new surfaces** checklist
-on BASE commit `f90fb9535cbbd993a6d097c798ce8c710f6025c4`
-(`feat(demo): add CRM relation seeds and First Look tour checklist`).
+on BASE commit `5d652ab5b63b14dc5d26df781e81c33b659e9d9d`
+(`feat/data-support-polish` integration tip after P2P01–P06 and P2P08).
 
 | Field | Value |
 | --- | --- |
-| Date | 2026-07-18 |
-| BASE | `f90fb9535cbbd993a6d097c798ce8c710f6025c4` |
-| Surface | Vite browser demo (`pnpm --filter @lattice/desktop dev`, fixture `inBrowser`) plus code review / existing unit tests for Tauri-only steps |
-| Method | Fixture + shell code paths under `apps/desktop/src/`; contracts in `docs/39-resource-runtime-contracts.md`; link-repair / batch-move coverage in desktop + `lattice-commands` / `lattice-index` tests. A Playwright demo harness was started against `:5173` but did not finish within timeout (shell chrome wait); results below do not depend on that run. |
+| Date | 2026-07-20 |
+| BASE | `5d652ab5b63b14dc5d26df781e81c33b659e9d9d` |
+| Surface | Vite browser demo (`pnpm --filter @lattice/desktop dev`, fixture `inBrowser`) plus code review, unit tests, and native CRM Tauri smoke (P2P06) |
+| Method | Fixture + shell code paths under `apps/desktop/src/`; contracts in `docs/39-resource-runtime-contracts.md`; link-repair / batch-move coverage in desktop + `lattice-commands` / `lattice-index` tests; native Wave 2 subset via `pnpm --filter @lattice/desktop test:crm:tauri` (`apps/desktop/e2e/data/crm.smoke.tauri.spec.ts`, local only — not a CI gate). |
+
+## Data-support polish landed (browser honesty, CRM seed, native smoke)
+
+Packets P2P01–P06 and P2P08 on `feat/data-support-polish` closed browser-demo
+misleading **fail** rows and added native smoke for a Wave 2 subset. Tracker:
+[data-support polish DAG](data-support-polish-dag.md).
+
+| Packet | Outcome | Pointers |
+| --- | --- | --- |
+| P2P01 | Save view + Add column gated in browser with **Native desktop** label (disabled control, tooltip) — no error-on-click | `browserDemoHonesty.ts`; `DataTableView.tsx`; `AddColumnPanel.tsx` |
+| P2P02 | Browser **New folder** toolbar affordance when native tree context menus no-op | `DesktopShell.tsx` (`FolderPlus`) |
+| P2P03 | Browser **⌘Z** shows honest toast — no `undo_last` IPC | `browserUndoGuard.ts`; `desktopActions.ts` |
+| P2P04 | CRM seed includes `company_name` lookup + `contact_count` rollup columns with resolved values | `template.json`; `demoWorkspace.generated.ts` |
+| P2P05 | Relation picker search + scroll in record detail | `RecordDetailPanel.tsx`; `relationDisplay.ts` |
+| P2P06 | Native CRM Tauri smoke — Save view enabled, Actions → Contact intake, FormSave designer | `e2e/data/crm.smoke.tauri.spec.ts`; run `pnpm --filter @lattice/desktop test:crm:tauri` |
+| P2P08 | FieldType shipped vs roadmap in data-apps doc | [Data applications — typed fields](../10-data-applications-and-airtable-model.md) |
 
 ## Wave 2 landed (notebooks, canvas views, package forms)
 
@@ -126,12 +142,15 @@ out in **Known expected fails** and the punch-list below. Contracts:
 - [Data applications — linked records](../10-data-applications-and-airtable-model.md#linked-records) — orphan strip on `RecordDelete`, `relation_targets` + label resolution on all desktop layouts, read-only **Linked from** inbound links in record detail, cross-table relations within a package (`CRM.data` `companies` ↔ `contacts`), template seed id-or-name resolution.
 - [Resource runtime — link repair](../39-resource-runtime-contracts.md#link-repair-review) — single-path and batch move repair in one transaction each; batch multi-select uses `preview_batch_link_repair` / `apply_batch_link_repair`.
 
-The checklist table is unchanged: it records what **failed or was skipped on BASE** at `f90fb95`. Re-run the tour on a current build to refresh pass/fail; do not treat historical **fail** rows as current regressions.
+The checklist table below records pass/fail/skip on BASE `5d652ab`. Historical
+**fail** rows from the 2026-07-18 pass at `f90fb95` are superseded where polish
+landed; archaeology remains in **Known expected fails on BASE**.
 
-Still deferred after Wave 3: formula fields, junction relations, cross-package
-relation links, full interface builder, browser-demo **Save view** / native tree
-affordances, full native Tauri demo pass for folder undo and trash, query
-profiler UI, semantic models, and GeoParquet/MapLibre.
+Still deferred after polish: formula fields, junction relations, cross-package
+relation links, full interface builder, tabular/CSV import in the browser demo,
+full native Tauri pass for folder undo / move+repair / trash (beyond P2P06 smoke),
+lookup/rollup **add-column** and tabular import on native without a dedicated
+harness, query profiler UI, semantic models, and GeoParquet/MapLibre.
 
 ## Checklist
 
@@ -141,22 +160,22 @@ Home.md items 1–9. Status: **pass** / **fail** / **skip**.
 | --- | --- | --- | --- | --- |
 | 1 | Open `CRM.data`; switch Board / Gallery / Calendar / Form | **pass** | Demo seeds `saved_views` + `available_views`; view picker + layout select drive `DataBoardView` / gallery / calendar / form. Demo reload applies seeded layout fields. | `demoWorkspace.generated.ts:927–961`; `DataTableView.tsx:222–237`, `820–835`, `983–1007` |
 | 2 | Change layout field pickers (group-by, cover, date, columns) | **pass** | Pickers from `layoutFieldPickerSpecs`; hide-column via header context menu. Local state only in demo. | `DataTableView.tsx:490–507`, `837–858`, `1050–1055` |
-| 3 | **Save view** → persist under `CRM.data/views/` | **fail** (browser) / **skip** (native persist) | Browser demo blocks save with explicit error; native `save_data_view` exists but was not exercised in this pass. | `DataTableView.tsx:697–704` |
-| 4 | Open contact; inspect / edit **reports_to** | **fail** (labels) / partial UX | Grid uses `formatRelationCellValue` + `relation_targets`. Demo snapshot has **no** `relation_targets`, so cells fall back to raw ids. Record detail picker also needs targets; without them options are empty / missing-target. Seeded Relation cells exist (e.g. Grace → Ada). | `demoWorkspace.generated.ts:282–962` (no `relation_targets`); `DataTableView.tsx:508–510`, `604–610`; `relationDisplay.ts:98–107`, `110–121`; `RecordDetailPanel.tsx:150–155`, `271–281` |
-| 5 | Create folder under `Projects/` | **skip** (browser) | Folder create handler supports demo local snapshot, but tree context menus are Tauri-native and no-op in browser — no alternate New Folder control. | `nativeMenus.ts:92–93`; `treeActions.ts:204–224` |
-| 6 | **⌘Z** undo folder creation | **skip** | Undo calls `undo_last` only; no demo local undo stack. Native-only / not verified in browser. Covered by command-history undo remaps in contracts + tests elsewhere. | `desktopActions.ts:120–134` |
+| 3 | **Save view** → persist under `CRM.data/views/` | **pass** (browser honesty) / **pass** (native smoke) | Browser: disabled control + **Native desktop** label and tooltip (P2P01). Native: Save view enabled in CRM Tauri smoke (P2P06). | `browserDemoHonesty.ts`; `DataTableView.tsx:1068–1081`; `crm.smoke.tauri.spec.ts:38–44` |
+| 4 | Open contact; inspect / edit **reports_to** | **pass** | Demo seeds `relation_targets` for `companies` and `contacts`; grid/detail use label index. Seeded `company_name` lookup + `contact_count` rollup (P2P04). Relation picker filter + scroll (P2P05). | `demoWorkspace.generated.ts:1403+`, `3931+`; `relationDisplay.ts`; `RecordDetailPanel.tsx:310–318` |
+| 5 | Create folder under `Projects/` | **pass** (browser) / **skip** (native menus) | Browser: **New folder** toolbar button (`FolderPlus`) when native context menus no-op (P2P02). Native tree context menu path not re-verified this pass. | `DesktopShell.tsx:292–298`; `treeActions.ts:204–224` |
+| 6 | **⌘Z** undo folder creation | **pass** (browser honesty) / **skip** (native) | Browser: status toast “Undo is not available in the browser demo.” — no `undo_last` IPC (P2P03). Native undo not exercised in this pass. | `browserUndoGuard.ts`; `desktopActions.ts:130–134` |
 | 7 | Move `Product/Vision`; accept link repair | **skip** (browser) / expected native path | Browser remaps paths in memory with **no** repair modal. Native single-path move previews repair via `preview_link_repair`. Not verified live in Tauri this pass; repair pipeline covered by unit tests. | `useResourceController.ts:566–585` (browser); `588–598` (native); `docs/39-resource-runtime-contracts.md:66–68` |
 | 8 | ⌘-click multi-select + drag move | **pass** (selection/move UI) / native batch repair | Tree is `aria-multiselectable`; batch move (2+) previews combined link repair and applies one transaction when accepted. Browser remaps locally; native `preview_batch_link_repair` / `apply_batch_link_repair`. | `ResourceTree.tsx:396`; `useResourceController.ts` batch branch; `docs/39-resource-runtime-contracts.md` |
 | 9 | Multi-select delete + confirm | **pass** (browser local) / **skip** (native trash) | Confirm dialog + batch delete; browser filters snapshot; native `deleteResources` → Trash. Native trash/undo not verified in browser. | `treeActions.ts:83–135` |
-| 10 | `CRM.data` → **Add column** → add `text` column | **skip** (browser persist) / **skip** (native pass) | Panel renders in browser with degraded “not persisted” copy; native `add_data_columns` → `ColumnsAdd` not exercised in this pass. | `AddColumnPanel.tsx`; `DataTableView.tsx:1049–1095` |
+| 10 | `CRM.data` → **Add column** → add `text` column | **pass** (browser honesty) / **skip** (native pass) | Panel opens in browser; submit disabled with **Native desktop** label and notice (P2P01). Native `add_data_columns` not exercised beyond smoke scope. | `AddColumnPanel.tsx:378–379`, `556–564`; `browserDemoHonesty.ts` |
 | 11 | **Import CSV…** → type-review → commit | **skip** (browser) / **skip** (native pass) | Browser blocks with explicit error; native `preview_csv_import` / `commit_csv_import` path not exercised in this pass. | `desktopActions.ts:137–215`; `CsvImportReviewDialog.tsx` |
 | 12 | `Data/sample.csv` → **Create table from CSV…** | **skip** (browser) / **skip** (native pass) | Same import path as item 11 via `handlePromoteWorkspaceCsv`; native-only. | `TextViewer.tsx:173–180`; `desktopActions.ts:159–178` |
 | 13 | Paginated grid **Showing N of M** / **Load more** | **skip** (demo window) | `demoMutate` hides pagination chrome; CRM seed `has_more: false`. Native tables >500 rows use `open_data_app` windowing. | `DataTableView.tsx:1074–1091`; `types.ts:62–64` |
-| 14 | **Add column** → `lookup` or `rollup` on relation | **skip** (browser persist) / **skip** (native pass) | Column designer supports lookup/rollup; native `ColumnsAdd` not exercised in this pass. | `AddColumnPanel.tsx`; `types.ts` |
+| 14 | **Add column** → `lookup` or `rollup` on relation | **pass** (fixture) / **pass** (browser honesty) / **skip** (native add) | Template seeds `company_name` lookup + `contact_count` rollup with resolved grid values (P2P04). Browser add-column submit remains native-gated (P2P01). Native add-column not smoke-covered. | `demoWorkspace.generated.ts:519+`, `1421+`; `AddColumnPanel.tsx` |
 | 15 | Canvas **CRM ContactOps** → interface open | **pass** (fixture) | Demo canvas node uses `subpath: interfaces/ContactOps`; browser resolves via `interfaceNameFromCanvasSubpath`. | `demoWorkspace.generated.ts:306–312`; `dataViewSubpath.ts` |
-| 16 | **Actions** → Contact intake | **skip** (browser persist) / **skip** (native pass) | Demo seeds `OpenContactIntake` toolbar action; native `list_data_actions` not exercised in this pass. | `actions.ts`; `DataActionsMenu.tsx` |
+| 16 | **Actions** → Contact intake | **pass** (fixture) / **pass** (native smoke) | Demo seeds `OpenContactIntake` toolbar action; native smoke opens Contact intake form via Actions menu (P2P06). | `DataActionsMenu.tsx`; `crm.smoke.tauri.spec.ts:49–64` |
 | 17 | **Import…** Excel/JSON/JSONL → type-review | **skip** (browser) / **skip** (native pass) | Browser blocks with explicit error; native `preview_tabular_import` not exercised in this pass. | `tabularImport.ts`; `desktopActions.ts` |
-| 18 | **Forms** → create/edit package form | **skip** (browser persist) / **skip** (native pass) | FormSave designer in `PackageFormPanel`; native `save_data_form` not exercised in this pass. | `PackageFormPanel.tsx`; `forms.ts` |
+| 18 | **Forms** → create/edit package form | **pass** (browser UI) / **pass** (native smoke) | FormSave designer in `PackageFormPanel`; browser can open designer UI. Native smoke: Edit form → **Save form** enabled on ContactIntake (P2P06). | `PackageFormPanel.tsx`; `crm.smoke.tauri.spec.ts:66–79` |
 | 19 | `Events.dataset` → **Preview** / **Chart** / **Profile** | **pass** (native) / **pass** (browser honesty) | Wave 3 Perspective + Vega-Lite + SUMMARIZE; demo seeds `Data/Events.dataset`. Browser fixture shows an explicit **Visualization unavailable in browser demo** card (no silent empty viz). Chart resources (`Dashboards/*.vl.json`) use the same gate. | `DatasetResourceRenderer.tsx`; `ChartResourceRenderer.tsx` |
 | 20 | CLI `dataset import-csv` + `query-annotated` | **skip** (native pass) | Annotation overlay join via `lattice-duckdb`; see Wave 3 CLI spot-check above. | `apps/cli/src/main.rs`; `lattice-datasets` |
 
@@ -181,21 +200,26 @@ Wave 1 (items 1–4, 6) shipped on `main`. Remaining items are post–Wave 1.
 2. ~~**P0 — Refresh `relation_targets` after row mutations**~~ — done (R3).
 3. ~~**P1 — Relation-aware list / board (and gallery subtitle) display**~~ — done (R1).
 4. ~~**P1 — Cascade or scrub orphan relation ids on `RecordDelete`**~~ — done (R2).
-5. **P1 — Browser-demo tree affordances** for New Folder / delete when native menus no-op — otherwise checklist 5–6 cannot be exercised in the demo without Tauri.
+5. ~~**P1 — Browser-demo tree affordances**~~ — done (P2P02: toolbar New folder).
 6. ~~**P2 — Batch move link-repair**~~ — done (B1).
-7. **P2 — Persist Save view in demo or clear CTA** — today the button exists then errors; either hide in `demoMutate` or document “native only” on the control.
-8. **P2 — Native demo pass** for folder undo, single-path move+repair, multi-select trash+undo on `nix run .#desktop-dev` / Tauri e2e — still marked skip above.
-9. **P2 — Native Wave 2 pass** for lookup/rollup columns, **Actions**, tabular import, and FormSave on `nix run .#desktop-dev` — still marked skip above.
+7. ~~**P2 — Persist Save view in demo or clear CTA**~~ — done (P2P01: disabled Save view + **Native desktop** label).
+8. **P2 — Native demo pass** for folder undo, single-path move+repair, multi-select trash+undo — partial: P2P06 smoke covers CRM Save view / Actions / FormSave only; folder undo and link repair still **skip** above.
+9. **P2 — Native Wave 2 pass** for lookup/rollup **add-column**, tabular import, and full FormSave persist — partial: P2P06 smoke covers Actions + FormSave designer; add-column and tabular import still **skip** above.
 
 ## How to re-run
 
 ```sh
-# Browser fixture (CRM layouts, tree chrome; no native menus / undo / repair)
+# Browser fixture (CRM layouts, tree chrome; native-only controls labeled)
 pnpm --filter @lattice/desktop dev
 # open http://localhost:5173 — First Look demo loads automatically
+# Save view / Add column show "Native desktop"; ⌘Z shows honest undo toast
 # Dataset / Chart surfaces show “Visualization unavailable in browser demo”
 
-# Native (folder undo, link repair, trash, DuckDB viz)
+# Native CRM Wave 2 smoke (local only — not a CI gate)
+pnpm --filter @lattice/desktop test:crm:tauri
+# spec: apps/desktop/e2e/data/crm.smoke.tauri.spec.ts
+
+# Native full tour (folder undo, link repair, trash, DuckDB viz, tabular import)
 # see docs/dev/nix-workflows.md — desktop-dev / LATTICE_DEV_HOME First Look seed
 ```
 
@@ -208,4 +232,4 @@ before analytical datasets landed, it may lack `Data/Events.dataset` and
 or by copying seeds from `templates/workspaces/demo/files/` (then
 `pnpm compile-templates` only if you changed the template itself).
 
-Update this file’s Date + BASE when repeating the tour after Wave 1 landings.
+Update this file’s Date + BASE when repeating the tour after polish or wave landings.

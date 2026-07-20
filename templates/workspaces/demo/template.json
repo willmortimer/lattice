@@ -85,6 +85,12 @@
           "type": "relation",
           "relation_table": "companies"
         },
+        {
+          "name": "company_name",
+          "type": "lookup",
+          "lookup_relation": "company",
+          "lookup_field": "name"
+        },
         { "name": "due_date", "type": "date" },
         { "name": "status", "type": "text" },
         { "name": "notes", "type": "long_text" },
@@ -263,7 +269,20 @@
       "extraTables": [
         {
           "table": "companies",
-          "columns": [{ "name": "name", "type": "text" }],
+          "columns": [
+            { "name": "name", "type": "text" },
+            {
+              "name": "contacts",
+              "type": "relation",
+              "relation_table": "contacts"
+            },
+            {
+              "name": "contact_count",
+              "type": "rollup",
+              "rollup_relation": "contacts",
+              "rollup_aggregate": "count"
+            }
+          ],
           "rows": [
             { "name": "Analytical Engines" },
             { "name": "US Navy" },

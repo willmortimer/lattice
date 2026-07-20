@@ -41,9 +41,9 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             title: "Tasks",
             table: "tasks",
             columns: &[
-                SeedDataColumn { name: "task", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "status", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "due", field_type: "date", relation_table: None }
+                SeedDataColumn { name: "task", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "status", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "due", field_type: "date", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None }
             ],
             rows_json: &[
                 "{\"task\":\"Review inbox\",\"status\":\"todo\",\"due\":null}",
@@ -136,11 +136,11 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             title: "Submissions",
             table: "submissions",
             columns: &[
-                SeedDataColumn { name: "piece", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "venue", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "status", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "submitted_on", field_type: "date", relation_table: None },
-                SeedDataColumn { name: "response", field_type: "long_text", relation_table: None }
+                SeedDataColumn { name: "piece", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "venue", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "status", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "submitted_on", field_type: "date", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "response", field_type: "long_text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None }
             ],
             rows_json: &[
                 "{\"piece\":\"Chapter 01 excerpt\",\"venue\":\"Example Quarterly\",\"status\":\"submitted\",\"submitted_on\":\"2026-07-01\",\"response\":null}",
@@ -192,11 +192,11 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             title: "OKRs",
             table: "okrs",
             columns: &[
-                SeedDataColumn { name: "objective", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "key_result", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "owner", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "status", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "confidence", field_type: "decimal", relation_table: None }
+                SeedDataColumn { name: "objective", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "key_result", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "owner", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "status", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "confidence", field_type: "decimal", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None }
             ],
             rows_json: &[
                 "{\"objective\":\"Ship the spring release\",\"key_result\":\"All launch blockers closed by the freeze date\",\"owner\":\"you\",\"status\":\"on-track\",\"confidence\":0.8}",
@@ -252,10 +252,10 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             title: "Experiments log",
             table: "experiments",
             columns: &[
-                SeedDataColumn { name: "name", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "status", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "run_date", field_type: "date", relation_table: None },
-                SeedDataColumn { name: "notes", field_type: "long_text", relation_table: None }
+                SeedDataColumn { name: "name", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "status", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "run_date", field_type: "date", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "notes", field_type: "long_text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None }
             ],
             rows_json: &[
                 "{\"name\":\"Baseline replication\",\"status\":\"planned\",\"run_date\":null,\"notes\":\"Replicate methods from Example Paper.\"}",
@@ -352,10 +352,10 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             title: "Metrics",
             table: "metrics",
             columns: &[
-                SeedDataColumn { name: "metric", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "value", field_type: "decimal", relation_table: None },
-                SeedDataColumn { name: "recorded_on", field_type: "date", relation_table: None },
-                SeedDataColumn { name: "category", field_type: "text", relation_table: None }
+                SeedDataColumn { name: "metric", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "value", field_type: "decimal", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "recorded_on", field_type: "date", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "category", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None }
             ],
             rows_json: &[
                 "{\"metric\":\"active_users\",\"value\":128,\"recorded_on\":\"2026-07-01\",\"category\":\"Engagement\"}",
@@ -454,11 +454,11 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             title: "Issues",
             table: "issues",
             columns: &[
-                SeedDataColumn { name: "title", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "status", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "priority", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "component", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "notes", field_type: "long_text", relation_table: None }
+                SeedDataColumn { name: "title", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "status", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "priority", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "component", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "notes", field_type: "long_text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None }
             ],
             rows_json: &[
                 "{\"title\":\"Provision workspace from template\",\"status\":\"done\",\"priority\":\"medium\",\"component\":\"tooling\",\"notes\":\"Seed Issues.data and verify wiki links on Home.md.\"}",
@@ -569,13 +569,14 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             title: "CRM",
             table: "contacts",
             columns: &[
-                SeedDataColumn { name: "name", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "email", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "company", field_type: "relation", relation_table: Some("companies") },
-                SeedDataColumn { name: "due_date", field_type: "date", relation_table: None },
-                SeedDataColumn { name: "status", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "notes", field_type: "long_text", relation_table: None },
-                SeedDataColumn { name: "reports_to", field_type: "relation", relation_table: Some("contacts") }
+                SeedDataColumn { name: "name", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "email", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "company", field_type: "relation", relation_table: Some("companies"), lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "company_name", field_type: "lookup", relation_table: None, lookup_relation: Some("company"), lookup_field: Some("name"), rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "due_date", field_type: "date", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "status", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "notes", field_type: "long_text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "reports_to", field_type: "relation", relation_table: Some("contacts"), lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None }
             ],
             rows_json: &[
                 "{\"name\":\"Ada Lovelace\",\"email\":\"ada@analytical.io\",\"company\":[\"Analytical Engines\"],\"due_date\":\"2026-08-15\",\"status\":\"Active\",\"notes\":\"Champion for typed tables beside narrative docs.\"}",
@@ -603,7 +604,9 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 SeedDataExtraTable {
                 table: "companies",
                 columns: &[
-                    SeedDataColumn { name: "name", field_type: "text", relation_table: None }
+                    SeedDataColumn { name: "name", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "contacts", field_type: "relation", relation_table: Some("contacts"), lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "contact_count", field_type: "rollup", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: Some("contacts"), rollup_aggregate: Some("count"), rollup_field: None }
                 ],
                 rows_json: &[
                     "{\"name\":\"Analytical Engines\"}",
@@ -710,11 +713,11 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             title: "Delivery",
             table: "items",
             columns: &[
-                SeedDataColumn { name: "title", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "owner", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "status", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "due", field_type: "date", relation_table: None },
-                SeedDataColumn { name: "notes", field_type: "long_text", relation_table: None }
+                SeedDataColumn { name: "title", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "owner", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "status", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "due", field_type: "date", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "notes", field_type: "long_text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None }
             ],
             rows_json: &[
                 "{\"title\":\"Native capture polish\",\"owner\":\"Will\",\"status\":\"Done\",\"due\":\"2026-07-18\",\"notes\":\"AVAudioEngine path landed; exercise mic in First Look.\"}",
@@ -777,10 +780,10 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             title: "Metrics",
             table: "metrics",
             columns: &[
-                SeedDataColumn { name: "metric", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "value", field_type: "decimal", relation_table: None },
-                SeedDataColumn { name: "recorded_on", field_type: "date", relation_table: None },
-                SeedDataColumn { name: "category", field_type: "text", relation_table: None }
+                SeedDataColumn { name: "metric", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "value", field_type: "decimal", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "recorded_on", field_type: "date", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "category", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None }
             ],
             rows_json: &[
                 "{\"metric\":\"warm_first_partial_ms\",\"value\":158.3,\"recorded_on\":\"2026-07-10\",\"category\":\"Voice\"}",
@@ -838,11 +841,11 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             title: "OKRs",
             table: "okrs",
             columns: &[
-                SeedDataColumn { name: "objective", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "key_result", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "owner", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "status", field_type: "text", relation_table: None },
-                SeedDataColumn { name: "confidence", field_type: "decimal", relation_table: None }
+                SeedDataColumn { name: "objective", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "key_result", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "owner", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "status", field_type: "text", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None },
+                SeedDataColumn { name: "confidence", field_type: "decimal", relation_table: None, lookup_relation: None, lookup_field: None, rollup_relation: None, rollup_aggregate: None, rollup_field: None }
             ],
             rows_json: &[
                 "{\"objective\":\"Ship local runtime\",\"key_result\":\"Daemon + hybrid search on main\",\"owner\":\"platform\",\"status\":\"on-track\",\"confidence\":0.9}",

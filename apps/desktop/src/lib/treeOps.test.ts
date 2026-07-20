@@ -5,6 +5,7 @@ import {
   destinationPath,
   isAncestorPath,
   joinWorkspacePath,
+  newFolderParentPath,
   parentDirectory,
   resourcePathExists,
   validateMoveResource,
@@ -24,6 +25,14 @@ describe("treeOps path helpers", () => {
     expect(parentDirectory("Notes/A.md")).toBe("Notes");
     expect(parentDirectory("A.md")).toBe("");
     expect(destinationPath("Notes/A.md", "Archive")).toBe("Archive/A.md");
+  });
+
+  it("resolves the browser new-folder parent from selection and active folder", () => {
+    expect(newFolderParentPath(null)).toBe("Projects");
+    expect(newFolderParentPath(page("Projects/Delivery.data"))).toBe("Projects");
+    expect(newFolderParentPath({ path: "Projects", kind: "folder" })).toBe("Projects");
+    expect(newFolderParentPath(null, { activeFolderPath: "Inbox" })).toBe("Inbox");
+    expect(newFolderParentPath(page("Notes/A.md"), { activeFolderPath: "Projects" })).toBe("Projects");
   });
 
   it("detects ancestor relationships", () => {
