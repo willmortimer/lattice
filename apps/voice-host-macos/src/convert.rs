@@ -52,7 +52,10 @@ pub fn voice_request_from_proto(
         | Body::Search(_)
         | Body::ApplyPageUpdate(_)
         | Body::VoiceHostStatus(_)
-        | Body::UnloadVoiceModel(_) => Ok(None),
+        | Body::UnloadVoiceModel(_)
+        | Body::EnableSemanticSearch(_)
+        | Body::DisableSemanticSearch(_)
+        | Body::GetSemanticStatus(_) => Ok(None),
     }
 }
 
