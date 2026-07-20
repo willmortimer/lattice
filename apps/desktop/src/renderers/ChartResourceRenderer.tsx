@@ -3,6 +3,7 @@ import type { TopLevelSpec } from "vega-lite";
 
 import { VegaLiteChart } from "../components/VegaLiteChart";
 import "../components/vegaLiteChart.css";
+import { inBrowser } from "../demo";
 import { queryResultToValues } from "../lib/arrowToVegaData";
 import { parseChartSpecText } from "../lib/chartSpec";
 import { queryDatasetArrow } from "../lib/datasetQuery";
@@ -93,6 +94,24 @@ export function ChartResourceRenderer({
   }, [parsed, root, textSession, context.reloadToken]);
 
   if (!textSession) return null;
+
+  if (inBrowser) {
+    return (
+      <div className="placeholder">
+        <p className="placeholder-copy">Vega-Lite chart</p>
+        <p className="placeholder-sub">
+          <code>{textSession.resource.path}</code>
+        </p>
+        <div className="diagnostics-card" role="status">
+          <strong>Visualization unavailable in browser demo</strong>
+          <span>
+            Dataset-bound charts need DuckDB + Arrow IPC in the native desktop app. Open this
+            workspace with <code>nxr desktop-dev</code> or the installed Lattice.app.
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="placeholder">

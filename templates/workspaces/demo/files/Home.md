@@ -7,6 +7,14 @@ title: Home
 Kitchen-sink tour of the **First Look** sample workspace. Everything here is an
 ordinary file under a real directory — open it in any editor, or stay inside Lattice.
 
+**Native vs browser:** Perspective Preview, Vega-Lite Chart, and DuckDB Profile
+require the **native desktop app** (`nxr desktop-dev` or Lattice.app). The Vite
+browser fixture seeds the same files but labels visualization **unavailable**.
+Installing Lattice.app does **not** rewrite an existing First Look folder — create
+a new workspace from the First Look template, or copy missing seeds from
+`templates/workspaces/demo/files/` (for example `Data/Events.dataset` and
+`Dashboards/`).
+
 ## Quick start
 
 1. Search with **⌘K** — keyword search always; turn on **Settings → Search → Semantic search** for hybrid FTS + embeddings (try `latticed` or `FinalizationMode`).

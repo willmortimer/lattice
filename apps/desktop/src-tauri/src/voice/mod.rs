@@ -96,7 +96,7 @@ pub struct VoiceTranscriptCorrection {
     pub source: String,
 }
 
-#[cfg(all(target_os = "macos", feature = "voice-embedded"))]
+#[cfg(all(target_os = "macos", feature = "voice"))]
 impl From<&lattice_voice::CorrectionProvenance> for VoiceTranscriptCorrection {
     fn from(value: &lattice_voice::CorrectionProvenance) -> Self {
         use lattice_voice::{CorrectionKind, CorrectionSource};
@@ -182,6 +182,7 @@ async fn shutdown_active_session_with_app(
                     pump,
                     forwarder,
                     final_rx: _,
+                    normalization_context: _,
                 } = active;
                 pump.abort();
                 forwarder.abort();

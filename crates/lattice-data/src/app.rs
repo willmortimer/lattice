@@ -127,10 +127,6 @@ impl AppManifest {
             });
     }
 
-    pub fn field_type_for_column(&self, table: &str, column: &str) -> Option<FieldType> {
-        self.column_yaml(table, column).map(|column_meta| column_meta.field_type)
-    }
-
     pub fn column_yaml(&self, table: &str, column: &str) -> Option<&ColumnMetaYaml> {
         self.tables
             .get(table)

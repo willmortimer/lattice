@@ -157,7 +157,7 @@ Home.md items 1–9. Status: **pass** / **fail** / **skip**.
 | 16 | **Actions** → Contact intake | **skip** (browser persist) / **skip** (native pass) | Demo seeds `OpenContactIntake` toolbar action; native `list_data_actions` not exercised in this pass. | `actions.ts`; `DataActionsMenu.tsx` |
 | 17 | **Import…** Excel/JSON/JSONL → type-review | **skip** (browser) / **skip** (native pass) | Browser blocks with explicit error; native `preview_tabular_import` not exercised in this pass. | `tabularImport.ts`; `desktopActions.ts` |
 | 18 | **Forms** → create/edit package form | **skip** (browser persist) / **skip** (native pass) | FormSave designer in `PackageFormPanel`; native `save_data_form` not exercised in this pass. | `PackageFormPanel.tsx`; `forms.ts` |
-| 19 | `Events.dataset` → **Preview** / **Chart** / **Profile** | **skip** (native pass) | Wave 3 Perspective + Vega-Lite + SUMMARIZE; demo seeds `Data/Events.dataset`. Browser fixture does not load WASM viewers. | `DatasetResourceRenderer.tsx`; `Events.dataset/` |
+| 19 | `Events.dataset` → **Preview** / **Chart** / **Profile** | **pass** (native) / **pass** (browser honesty) | Wave 3 Perspective + Vega-Lite + SUMMARIZE; demo seeds `Data/Events.dataset`. Browser fixture shows an explicit **Visualization unavailable in browser demo** card (no silent empty viz). Chart resources (`Dashboards/*.vl.json`) use the same gate. | `DatasetResourceRenderer.tsx`; `ChartResourceRenderer.tsx` |
 | 20 | CLI `dataset import-csv` + `query-annotated` | **skip** (native pass) | Annotation overlay join via `lattice-duckdb`; see Wave 3 CLI spot-check above. | `apps/cli/src/main.rs`; `lattice-datasets` |
 
 ## Known expected fails on BASE (Wave 1 addressed)
@@ -193,9 +193,19 @@ Wave 1 (items 1–4, 6) shipped on `main`. Remaining items are post–Wave 1.
 # Browser fixture (CRM layouts, tree chrome; no native menus / undo / repair)
 pnpm --filter @lattice/desktop dev
 # open http://localhost:5173 — First Look demo loads automatically
+# Dataset / Chart surfaces show “Visualization unavailable in browser demo”
 
-# Native (folder undo, link repair, trash)
+# Native (folder undo, link repair, trash, DuckDB viz)
 # see docs/dev/nix-workflows.md — desktop-dev / LATTICE_DEV_HOME First Look seed
 ```
+
+### Existing First Look folders are sticky
+
+`nix run .#desktop-install` / opening Lattice.app does **not** rewrite an existing
+workspace under `~/Lattice/Workspaces/First Look`. If that folder was seeded
+before analytical datasets landed, it may lack `Data/Events.dataset` and
+`Dashboards/`. Fix by creating a **new** workspace from the First Look template,
+or by copying seeds from `templates/workspaces/demo/files/` (then
+`pnpm compile-templates` only if you changed the template itself).
 
 Update this file’s Date + BASE when repeating the tour after Wave 1 landings.

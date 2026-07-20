@@ -1,5 +1,10 @@
 # Voice + Quick Note + D5 Sprint
 
+**Status:** Closed for product ship (2026-07-20). Capture → binary PCM →
+voice-host → latticed → thin client → Quick Note + VoiceContextBuilder/ITN on
+both daemon and embedded paths. Independent final model stays **deferred**
+(`StreamingFlush` only) per `research/voice-eval/RESULTS.md`.
+
 ## Problem / end state
 
 With daemon + hybrid search on `feat/daemon-and-hybrid-search`, the next dangling product surface is voice quality and Quick Note dictation.
@@ -90,23 +95,29 @@ flowchart TD
 
 ## Tasks
 
-| ID | Outcome | Model |
-|---|---|---|
-| v0_docs_align | Roadmap/ADR align: native capture, FinalizationMode, D5 | composer-2.5 |
-| v1_native_audio | `lattice-audio` + macOS AVAudioEngine/Converter + pre-roll | grok |
-| v1_binary_pcm | Binary PCM, timestamps, bounded queue; retire WebView DSP | grok |
-| m3_editor_semantics | One-transaction final, undo, cancel/doc-switch | composer-2.5 |
-| v11_finalization_mode | Honest FinalizationMode; fix offline capability lie | composer-2.5 |
-| v11_final_model_eval | `research/voice-eval` harness (flush / TDT v2 / Unified offline) | grok |
-| v11_independent_final | Utterance buffer + selected final model path | grok |
-| v12_context_glossary | VoiceContextBuilder + SessionContext | composer-2.5 |
-| v12_itn_normalize | ITN / path / identifier normalizer + provenance | composer-2.5 |
-| d5_voice_protocol | Voice envelopes on daemon UDS | grok |
-| d5_voice_host | `apps/voice-host-macos` (embed-host analogue) | grok |
-| d5_daemon_voice | `latticed` voice_host supervisor + sessions | grok |
-| d5_desktop_thin_client | Tauri voice.rs → daemon client | grok |
-| v13_vad_continuous | VAD/EOU endpoint policy | grok |
-| v13_quick_note_dictation | Hold-to-dictate Quick Note → atomic note | composer-2.5 |
+| ID | Outcome | Status | Model |
+|---|---|---|---|
+| v0_docs_align | Roadmap/ADR align: native capture, FinalizationMode, D5 | Partial (stale milestone notes) | composer-2.5 |
+| v1_native_audio | `lattice-audio` + macOS AVAudioEngine/Converter + pre-roll | Done | grok |
+| v1_binary_pcm | Binary PCM, timestamps, bounded queue; retire WebView DSP | Done | grok |
+| m3_editor_semantics | One-transaction final, undo, cancel/doc-switch | Done | composer-2.5 |
+| v11_finalization_mode | Honest FinalizationMode; fix offline capability lie | Done | composer-2.5 |
+| v11_final_model_eval | `research/voice-eval` harness (flush / TDT v2 / Unified offline) | Done (deferred adopt) | grok |
+| v11_independent_final | Utterance buffer + selected final model path | Deferred (StreamingFlush) | grok |
+| v12_context_glossary | VoiceContextBuilder + SessionContext | Done (daemon + embedded) | composer-2.5 |
+| v12_itn_normalize | ITN / path / identifier normalizer + provenance | Done (daemon + embedded) | composer-2.5 |
+| d5_voice_protocol | Voice envelopes on daemon UDS | Done | grok |
+| d5_voice_host | `apps/voice-host-macos` (embed-host analogue) | Done | grok |
+| d5_daemon_voice | `latticed` voice_host supervisor + sessions | Done | grok |
+| d5_desktop_thin_client | Tauri voice.rs → daemon client | Done | grok |
+| v13_vad_continuous | VAD/EOU endpoint policy | Done | grok |
+| v13_quick_note_dictation | Hold-to-dictate Quick Note → atomic note | Done | composer-2.5 |
+
+## Remaining packets (priority)
+
+1. ~~Finish `v11_final_model_eval`~~ — harness + RESULTS exist; **IndependentOfflineRedecode deferred** (`research/voice-eval/RESULTS.md`: `adopt_independent_offline_redecode: false`). Re-open only with real-mic fixtures + TDT v2 measurement.
+2. ~~`v11_independent_final`~~ — stub remains; production stays **StreamingFlush** (honest capability). No adopt without eval gates.
+3. Prefer daemon voice as the default happy path (embedded as fallback only) — thin client + ITN/context parity landed; keep embedded for `--features voice-embedded` installs.
 
 ## Explicit non-goals
 
