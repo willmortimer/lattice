@@ -546,7 +546,7 @@ export function useDesktopController() {
     const actions: PaletteItem[] = [
       { id: "action:new-page", label: "New page", run: handleNewPage },
       { id: "action:new-table", label: "New table…", run: () => void handleNewTable() },
-      { id: "action:import-csv", label: "Import CSV…", run: () => void handleImportCsv() },
+      { id: "action:import-table", label: "Import table…", run: () => void handleImportCsv() },
       { id: "action:quick-note", label: "Quick note", hint: "Cmd+N", run: handleQuickNote },
       { id: "action:new-workspace", label: "New workspace…", run: () => void openNewWorkspaceDialog() },
       { id: "action:open-workspace", label: "Open workspace…", run: () => void handleOpenWorkspace() },

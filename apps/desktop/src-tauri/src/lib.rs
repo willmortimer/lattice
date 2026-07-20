@@ -214,6 +214,8 @@ pub fn run() {
             data::list_data_interfaces,
             data::load_data_interface,
             data::import_csv_table,
+            data::preview_tabular_import,
+            data::commit_tabular_import,
             data::preview_csv_import,
             data::commit_csv_import,
             canvas::read_canvas,

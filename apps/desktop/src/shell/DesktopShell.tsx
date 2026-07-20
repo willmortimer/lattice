@@ -1,6 +1,6 @@
 import { inBrowser } from "../demo";
 import { demoSearch } from "../demo";
-import { CsvImportReviewDialog } from "../data/CsvImportReviewDialog";
+import { TabularImportReviewDialog } from "../data/CsvImportReviewDialog";
 import { LinkRepairReviewModal } from "../LinkRepairReviewModal";
 import { batchWarnThresholdExceeded } from "../lib/linkRepair";
 import { NewWorkspaceDialog } from "../NewWorkspaceDialog";
@@ -273,7 +273,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
                     {hasCapability("sqlite") && (
                       <MenuItem className="ltui-menu-item" onClick={() => void handleImportCsv()}>
                         <ArrowUpRight size={14} />
-                        Import CSV
+                        Import table
                       </MenuItem>
                     )}
                   </MenuPopup>
@@ -722,7 +722,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
         </DialogRoot>
       )}
       {csvImportReview && (
-        <CsvImportReviewDialog
+        <TabularImportReviewDialog
           review={csvImportReview}
           busy={busy}
           onCancel={handleCancelCsvImport}
