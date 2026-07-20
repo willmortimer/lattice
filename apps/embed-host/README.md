@@ -65,9 +65,9 @@ Never download inside a search request. Install explicitly:
   "schemaVersion": 1,
   "provider": "llama.cpp",
   "modelId": "Qwen/Qwen3-Embedding-0.6B-GGUF",
-  "modelRevision": "<pinned-revision>",
+  "modelRevision": "370f27d7550e0def9b39c1f16d3fbaa13aa67728",
   "artifact": "Qwen3-Embedding-0.6B-Q8_0.gguf",
-  "sha256": "<verified-lowercase-hex>",
+  "sha256": "06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439",
   "license": "Apache-2.0",
   "nativeDimensions": 1024,
   "defaultDimensions": 512,
@@ -76,17 +76,34 @@ Never download inside a search request. Install explicitly:
 }
 ```
 
+Pinned download URL (639 150 592 bytes):
+
+`https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/370f27d7550e0def9b39c1f16d3fbaa13aa67728/Qwen3-Embedding-0.6B-Q8_0.gguf`
+
+Desktop / latticed **Enable** acquires this artifact (Settings confirm → progress
+`downloading` N% → sha256 verify → install under
+`…/Lattice/Models/embeddings/qwen3-embedding-0.6b/`). Never download inside a
+search request. Offline / CI:
+
+| Env | Effect |
+| --- | --- |
+| `LATTICE_SEMANTIC_FAKE=1` | Skip download; Fake worker only |
+| `LATTICE_SEMANTIC_MODEL_SOURCE=/path/to.gguf` | Copy+verify local fixture (must match sha256) |
+
 ```sh
 # After you have downloaded the GGUF yourself and computed sha256:
 lattice-embed-host install \
   --manifest ./manifest.json \
   --artifact ./Qwen3-Embedding-0.6B-Q8_0.gguf \
-  --models-dir ~/Library/Application\ Support/Lattice/Models
+  --models-dir ~/Library/Application\ Support/Lattice/Models/embeddings
+```
 
-# Recommended layout after install:
-# .../Models/qwen3-embedding-0.6b-gguf/
-#   ├── manifest.json
-#   └── Qwen3-Embedding-0.6B-Q8_0.gguf
+Recommended layout after install:
+
+```text
+…/Models/embeddings/qwen3-embedding-0.6b/
+  ├── manifest.json
+  └── Qwen3-Embedding-0.6B-Q8_0.gguf
 ```
 
 Then `load_model` against that directory (RPC or a future CLI helper). The host

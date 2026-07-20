@@ -538,9 +538,9 @@ Use a manifest:
   "schemaVersion": 1,
   "provider": "llama.cpp",
   "modelId": "Qwen/Qwen3-Embedding-0.6B-GGUF",
-  "modelRevision": "<pinned-hugging-face-revision>",
+  "modelRevision": "370f27d7550e0def9b39c1f16d3fbaa13aa67728",
   "artifact": "Qwen3-Embedding-0.6B-Q8_0.gguf",
-  "sha256": "<verified-sha256>",
+  "sha256": "06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439",
   "license": "Apache-2.0",
   "nativeDimensions": 1024,
   "defaultDimensions": 512,
@@ -548,6 +548,10 @@ Use a manifest:
   "instructionVersion": "lattice-retrieval-v1"
 }
 ```
+
+Pinned size: **639 150 592** bytes (~640 MB). Download URL:
+
+`https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/370f27d7550e0def9b39c1f16d3fbaa13aa67728/Qwen3-Embedding-0.6B-Q8_0.gguf`
 
 Recommended path:
 
@@ -909,14 +913,16 @@ selects provider mode:
 
 | Env | Effect |
 | --- | --- |
-| (none) | In-process `FakeEmbeddingProvider` (ready for user enable) |
-| `LATTICE_SEMANTIC_FAKE=1` | Explicit Fake (same as default) |
+| (none) | Enable downloads+verifies the pinned Qwen3 Q8 GGUF (then Fake worker until E6) |
+| `LATTICE_SEMANTIC_FAKE=1` | Skip download; in-process `FakeEmbeddingProvider` (CI / offline) |
+| `LATTICE_SEMANTIC_MODEL_SOURCE` | Local fixture path; copy+sha256 verify instead of HTTPS |
 | `LATTICE_EMBED_HOST_SOCKET` | Watch an existing embed-host UDS; degrade when missing |
 | `LATTICE_EMBED_HOST_BIN` | With socket: spawn/supervise `lattice-embed-host` (bounded backoff) |
 
 When the host is unavailable, sessions are marked `SemanticDegraded` and
 hybrid search falls back to FTS (`semantic_rank` none). Status states:
-`stopped | preparing | indexing | ready | degraded | failed`.
+`stopped | downloading | preparing | indexing | ready | degraded | failed`
+(with optional `progress_percent` while downloading).
 
 ### Milestone S7: Core ML research backend
 

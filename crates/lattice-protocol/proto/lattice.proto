@@ -225,11 +225,13 @@ message GetSemanticStatusResponse {
   SemanticStatus status = 1;
 }
 
-// stopped | preparing | indexing | ready | degraded | failed
+// stopped | downloading | preparing | indexing | ready | degraded | failed
 message SemanticStatus {
   string state = 1;
   optional uint64 pending_chunks = 2;
   optional string message = 3;
+  // 0–100 while state is "downloading"; unset otherwise.
+  optional uint32 progress_percent = 4;
 }
 
 message SemanticStatusChanged {
