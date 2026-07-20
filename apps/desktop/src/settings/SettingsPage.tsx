@@ -5,6 +5,7 @@ import {
   Files,
   Gauge,
   Keyboard,
+  MagnifyingGlass,
   Microphone,
   Palette,
   Pulse,
@@ -31,6 +32,7 @@ type SettingsSection =
   | "keybindings"
   | "data"
   | "capabilities"
+  | "search"
   | "voice"
   | "performance"
   | "diagnostics";
@@ -60,6 +62,7 @@ const SECTIONS = [
   { id: "keybindings" as const, label: "Keybindings", icon: Keyboard },
   { id: "data" as const, label: "Data defaults", icon: Database },
   { id: "capabilities" as const, label: "Enabled capabilities", icon: PuzzlePiece },
+  { id: "search" as const, label: "Search", icon: MagnifyingGlass },
   { id: "voice" as const, label: "Voice dictation", icon: Microphone },
   { id: "performance" as const, label: "Performance & lifecycle", icon: Gauge },
   { id: "diagnostics" as const, label: "Advanced diagnostics", icon: Pulse },
@@ -443,6 +446,13 @@ export function SettingsPage({
           </>
         )}
 
+        {section === "search" && (
+          <SemanticSearchSettings
+            semanticEnabled={settings.search.semanticEnabled}
+            onSemanticEnabledChange={(semanticEnabled) => update("search", { semanticEnabled })}
+          />
+        )}
+
         {section === "voice" && <VoiceDictationSettings />}
 
         {section === "performance" && (
@@ -571,6 +581,49 @@ export function SettingsPage({
         )}
       </section>
     </div>
+  );
+}
+
+function SemanticSearchSettings({
+  semanticEnabled,
+  onSemanticEnabledChange,
+}: {
+  semanticEnabled: boolean;
+  onSemanticEnabledChange: (semanticEnabled: boolean) => void;
+}) {
+  return (
+    <>
+      <h1>Search</h1>
+      <p className="settings-copy">
+        Keyword search is always available. Semantic search uses a local embedding model to find
+        related passages by meaning, not just exact words.
+      </p>
+      {inBrowser ? (
+        <div className="diagnostics-card">
+          <strong>Unavailable in browser demo</strong>
+          <span>Semantic search requires the native desktop build with latticed indexing services.</span>
+        </div>
+      ) : (
+        <>
+          <SettingRow
+            title="Semantic search"
+            description="Include vector similarity alongside keyword matches when searching the workspace."
+          >
+            <Toggle
+              label="Semantic search"
+              checked={semanticEnabled}
+              onChange={onSemanticEnabledChange}
+            />
+          </SettingRow>
+          <SettingRow
+            title="Index status"
+            description="Whether the local embedding model and workspace index are ready."
+          >
+            <span>Not prepared</span>
+          </SettingRow>
+        </>
+      )}
+    </>
   );
 }
 
