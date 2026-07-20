@@ -9,13 +9,16 @@
 //! daemon path (no FluidAudio symbols needed when building with `--features voice`
 //! only).
 
+#[cfg(all(target_os = "macos", feature = "voice"))]
 use std::sync::atomic::{AtomicU64, Ordering};
 
 #[cfg(all(target_os = "macos", feature = "voice"))]
 use lattice_client::LatticeClient;
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, State};
+#[cfg(all(target_os = "macos", feature = "voice"))]
+use tauri::Emitter;
+use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
 
 #[cfg(all(target_os = "macos", feature = "voice"))]
@@ -25,12 +28,16 @@ mod daemon;
 #[cfg(all(target_os = "macos", feature = "voice-embedded"))]
 mod embedded;
 
+#[cfg(all(target_os = "macos", feature = "voice"))]
 const VOICE_EVENT: &str = "voice-event";
 
+#[cfg(all(target_os = "macos", feature = "voice"))]
 static NEXT_SESSION: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Default)]
 pub struct VoiceState {
+    // Locked for voice-feature paths; unused when `voice` is off (commands early-return).
+    #[allow(dead_code)]
     inner: Mutex<VoiceInner>,
 }
 
@@ -78,6 +85,7 @@ pub struct VoiceSessionStart {
     pub session_id: String,
 }
 
+#[cfg(all(target_os = "macos", feature = "voice"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VoiceTranscriptCorrection {
@@ -88,7 +96,7 @@ pub struct VoiceTranscriptCorrection {
     pub source: String,
 }
 
-#[cfg(feature = "voice-embedded")]
+#[cfg(all(target_os = "macos", feature = "voice-embedded"))]
 impl From<&lattice_voice::CorrectionProvenance> for VoiceTranscriptCorrection {
     fn from(value: &lattice_voice::CorrectionProvenance) -> Self {
         use lattice_voice::{CorrectionKind, CorrectionSource};
@@ -112,6 +120,7 @@ impl From<&lattice_voice::CorrectionProvenance> for VoiceTranscriptCorrection {
     }
 }
 
+#[cfg(all(target_os = "macos", feature = "voice"))]
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum VoiceUiEvent {
