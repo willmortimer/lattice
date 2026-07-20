@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -313,13 +314,15 @@ impl EmbeddingProvider for EmbedHostSession {
 /// [`EmbeddingProvider`] that talks to embed-host over UDS and reconnects after
 /// host crashes / restarts.
 ///
-/// Specification is fixed from the first successful load so embedding namespaces
-/// stay stable across reconnects.
+/// Specification is stored behind an atomic pointer so [`Self::reload_model`]
+/// can swap the loaded GGUF after E5 prepare without rebuilding the provider.
+/// Outstanding `&EmbeddingSpecification` references from before a swap remain
+/// valid for the process lifetime (previous boxes are leaked on change).
 pub struct ReconnectableEmbedHostProvider {
     socket: PathBuf,
-    model_dir: PathBuf,
-    dimensions: Option<u32>,
-    specification: EmbeddingSpecification,
+    model_dir: Mutex<PathBuf>,
+    dimensions: Mutex<Option<u32>>,
+    specification: AtomicPtr<EmbeddingSpecification>,
     session: Mutex<Option<EmbedHostSession>>,
 }
 
@@ -333,21 +336,39 @@ impl ReconnectableEmbedHostProvider {
         let socket = socket.into();
         let model_dir = model_dir.into();
         let session = EmbedHostClient::connect_and_load(&socket, &model_dir, dimensions).await?;
-        let specification = session.specification().clone();
+        let specification = Box::into_raw(Box::new(session.specification().clone()));
         Ok(Self {
             socket,
-            model_dir,
-            dimensions,
-            specification,
+            model_dir: Mutex::new(model_dir),
+            dimensions: Mutex::new(dimensions),
+            specification: AtomicPtr::new(specification),
             session: Mutex::new(Some(session)),
         })
     }
 
-    /// Drop the live session and reconnect + reload the model.
+    /// Drop the live session and reconnect + reload the configured model.
     pub async fn reconnect(&self) -> Result<(), EmbedHostError> {
+        let model_dir = self.model_dir.lock().await.clone();
+        let dimensions = *self.dimensions.lock().await;
         let session =
-            EmbedHostClient::connect_and_load(&self.socket, &self.model_dir, self.dimensions)
-                .await?;
+            EmbedHostClient::connect_and_load(&self.socket, &model_dir, dimensions).await?;
+        self.store_specification(session.specification().clone());
+        *self.session.lock().await = Some(session);
+        Ok(())
+    }
+
+    /// Point at a different verified model directory and reload (post-prepare).
+    pub async fn reload_model(
+        &self,
+        model_dir: impl Into<PathBuf>,
+        dimensions: Option<u32>,
+    ) -> Result<(), EmbedHostError> {
+        let model_dir = model_dir.into();
+        *self.model_dir.lock().await = model_dir.clone();
+        *self.dimensions.lock().await = dimensions;
+        let session =
+            EmbedHostClient::connect_and_load(&self.socket, &model_dir, dimensions).await?;
+        self.store_specification(session.specification().clone());
         *self.session.lock().await = Some(session);
         Ok(())
     }
@@ -356,8 +377,17 @@ impl ReconnectableEmbedHostProvider {
         &self.socket
     }
 
-    pub fn model_dir(&self) -> &Path {
-        &self.model_dir
+    pub async fn model_dir(&self) -> PathBuf {
+        self.model_dir.lock().await.clone()
+    }
+
+    fn store_specification(&self, specification: EmbeddingSpecification) {
+        let new = Box::into_raw(Box::new(specification));
+        let old = self.specification.swap(new, Ordering::AcqRel);
+        if !old.is_null() {
+            // Keep outstanding `specification()` refs valid; reloads are rare.
+            std::mem::forget(unsafe { Box::from_raw(old) });
+        }
     }
 
     async fn client(&self) -> Result<Arc<EmbedHostClient>, EmbedHostError> {
@@ -376,10 +406,23 @@ impl ReconnectableEmbedHostProvider {
     }
 }
 
+impl Drop for ReconnectableEmbedHostProvider {
+    fn drop(&mut self) {
+        let ptr = self.specification.swap(std::ptr::null_mut(), Ordering::AcqRel);
+        if !ptr.is_null() {
+            unsafe {
+                drop(Box::from_raw(ptr));
+            }
+        }
+    }
+}
+
 #[async_trait]
 impl EmbeddingProvider for ReconnectableEmbedHostProvider {
     fn specification(&self) -> &EmbeddingSpecification {
-        &self.specification
+        let ptr = self.specification.load(Ordering::Acquire);
+        assert!(!ptr.is_null(), "embed-host specification pointer missing");
+        unsafe { &*ptr }
     }
 
     async fn embed_query(

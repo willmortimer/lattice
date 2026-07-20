@@ -29,6 +29,18 @@ impl BackendKind {
         }
     }
 
+    /// Backends compiled into this binary (one per line for CLI `backends`).
+    pub fn available() -> &'static [&'static str] {
+        #[cfg(feature = "llama-cpp")]
+        {
+            &["fake", "llama-cpp"]
+        }
+        #[cfg(not(feature = "llama-cpp"))]
+        {
+            &["fake"]
+        }
+    }
+
     pub fn parse(value: &str) -> Result<Self, EmbedHostError> {
         match value {
             "fake" => Ok(Self::Fake),
