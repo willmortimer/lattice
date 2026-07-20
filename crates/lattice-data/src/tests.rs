@@ -8,8 +8,8 @@ use crate::app::{
     app_manifest_path, database_path, default_view_path, schema_path, DATABASE_FILENAME,
 };
 use crate::{
-    write_package_form, CellValue, DataApp, FieldType, FilterOperator, FormDef, SortDirection,
-    ViewDef, ViewFilter, ViewSort,
+    write_package_action, write_package_form, ActionDef, ActionKind, ActionScope, CellValue,
+    DataApp, FieldType, FilterOperator, FormDef, SortDirection, ViewDef, ViewFilter, ViewSort,
 };
 
 #[test]
@@ -715,4 +715,138 @@ fn load_form_rejects_name_file_mismatch() {
         err.contains("does not match file stem"),
         "unexpected error: {err}"
     );
+}
+
+#[test]
+fn action_def_round_trip_list_and_load() {
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("CRM.data");
+    let app = DataApp::create(&package_path, "CRM", "contacts").unwrap();
+
+    rusqlite::Connection::open(database_path(&package_path))
+        .unwrap()
+        .execute_batch(
+            "ALTER TABLE contacts ADD COLUMN name TEXT;
+             ALTER TABLE contacts ADD COLUMN status TEXT;",
+        )
+        .unwrap();
+
+    assert!(app.list_actions().unwrap().is_empty());
+
+    let action = ActionDef::new(
+        "new_contact",
+        "New contact",
+        "contacts",
+        ActionKind::InsertRecord {
+            form: None,
+            defaults: BTreeMap::from([("status".into(), "Active".into())]),
+        },
+    );
+
+    let yaml = app.render_action_yaml(&action).unwrap();
+    assert!(yaml.contains("format: lattice-action"));
+    assert!(yaml.contains("name: new_contact"));
+    assert!(yaml.contains("type: insert_record"));
+
+    write_package_action(&package_path, &action).unwrap();
+    assert!(
+        package_path
+            .join("actions")
+            .join("new_contact.action.yaml")
+            .is_file()
+    );
+
+    let actions = app.list_actions().unwrap();
+    assert_eq!(actions, vec!["new_contact".to_string()]);
+
+    let loaded = app.load_action("new_contact").unwrap();
+    assert_eq!(loaded, action);
+}
+
+#[test]
+fn load_action_validates_insert_form_and_update_field() {
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("CRM.data");
+    let app = DataApp::create(&package_path, "CRM", "contacts").unwrap();
+
+    rusqlite::Connection::open(database_path(&package_path))
+        .unwrap()
+        .execute_batch(
+            "ALTER TABLE contacts ADD COLUMN name TEXT;
+             ALTER TABLE contacts ADD COLUMN status TEXT;",
+        )
+        .unwrap();
+
+    let mut form = FormDef::new("intake", "contacts");
+    form.fields = vec!["name".into(), "status".into()];
+    write_package_form(&package_path, &form).unwrap();
+
+    let form_action = ActionDef::new(
+        "open_intake",
+        "Contact intake",
+        "contacts",
+        ActionKind::InsertRecord {
+            form: Some("intake".into()),
+            defaults: BTreeMap::new(),
+        },
+    );
+    write_package_action(&package_path, &form_action).unwrap();
+    assert_eq!(app.load_action("open_intake").unwrap(), form_action);
+
+    let row_action = ActionDef::new(
+        "archive",
+        "Archive",
+        "contacts",
+        ActionKind::UpdateField {
+            field: "status".into(),
+            value: "Archived".into(),
+        },
+    );
+    let mut row_action = row_action;
+    row_action.scope = ActionScope::Row;
+    write_package_action(&package_path, &row_action).unwrap();
+    assert_eq!(app.load_action("archive").unwrap(), row_action);
+}
+
+#[test]
+fn load_action_rejects_unknown_defaults_and_fields() {
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("CRM.data");
+    let app = DataApp::create(&package_path, "CRM", "contacts").unwrap();
+
+    let bad_default = ActionDef::new(
+        "bad_default",
+        "Bad default",
+        "contacts",
+        ActionKind::InsertRecord {
+            form: None,
+            defaults: BTreeMap::from([("missing".into(), "x".into())]),
+        },
+    );
+    write_package_action(&package_path, &bad_default).unwrap();
+    let err = app.load_action("bad_default").unwrap_err().to_string();
+    assert!(err.contains("unknown column") && err.contains("missing"), "{err}");
+
+    let bad_field = ActionDef::new(
+        "bad_field",
+        "Bad field",
+        "contacts",
+        ActionKind::UpdateField {
+            field: "missing".into(),
+            value: "x".into(),
+        },
+    );
+    write_package_action(&package_path, &bad_field).unwrap();
+    let err = app.load_action("bad_field").unwrap_err().to_string();
+    assert!(err.contains("unknown column") && err.contains("missing"), "{err}");
+}
+
+#[test]
+fn validate_action_url_rejects_parent_segments() {
+    use crate::validate_action_url;
+
+    assert!(validate_action_url("Home.md").is_ok());
+    assert!(validate_action_url("https://example.com").is_ok());
+    assert!(validate_action_url("/absolute").is_err());
+    assert!(validate_action_url("../escape").is_err());
 }

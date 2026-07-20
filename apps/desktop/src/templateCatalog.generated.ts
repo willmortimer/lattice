@@ -93,7 +93,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
         ],
         "extraTables": [],
         "views": [],
-        "forms": []
+        "forms": [],
+        "actions": []
       }
     ]
   },
@@ -264,7 +265,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
         ],
         "extraTables": [],
         "views": [],
-        "forms": []
+        "forms": [],
+        "actions": []
       }
     ]
   },
@@ -371,7 +373,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
         ],
         "extraTables": [],
         "views": [],
-        "forms": []
+        "forms": [],
+        "actions": []
       }
     ]
   },
@@ -483,7 +486,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
         ],
         "extraTables": [],
         "views": [],
-        "forms": []
+        "forms": [],
+        "actions": []
       }
     ]
   },
@@ -693,7 +697,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "columns": []
           }
         ],
-        "forms": []
+        "forms": [],
+        "actions": []
       }
     ]
   },
@@ -810,7 +815,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
         ],
         "extraTables": [],
         "views": [],
-        "forms": []
+        "forms": [],
+        "actions": []
       }
     ]
   },
@@ -1268,6 +1274,18 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "title": "Contact intake",
             "description": "Create a contact from the package form."
           }
+        ],
+        "actions": [
+          {
+            "name": "OpenContactIntake",
+            "label": "Contact intake",
+            "table": "contacts",
+            "scope": "toolbar",
+            "action": {
+              "type": "insert_record",
+              "form": "ContactIntake"
+            }
+          }
         ]
       },
       {
@@ -1377,7 +1395,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "title": "Delivery intake",
             "description": "Add a delivery item without opening the grid."
           }
-        ]
+        ],
+        "actions": []
       },
       {
         "path": "Data/Metrics.data",
@@ -1469,7 +1488,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "columns": []
           }
         ],
-        "forms": []
+        "forms": [],
+        "actions": []
       },
       {
         "path": "OKRs.data",
@@ -1545,7 +1565,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "columns": []
           }
         ],
-        "forms": []
+        "forms": [],
+        "actions": []
       }
     ]
   },
