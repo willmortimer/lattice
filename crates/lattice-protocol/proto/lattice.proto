@@ -146,14 +146,31 @@ message OpenWorkspaceResponse {
   WorkspaceLease lease = 2;
 }
 
-// Placeholder request filled by later hybrid-search tasks.
 message SearchRequest {
   string workspace_id = 1;
   string query = 2;
+  // 0 → server default (10), clamped to an upper bound (50).
+  uint32 limit = 3;
+  // "fts" | "hybrid" | "auto"; omit for fts (legacy default).
+  optional string mode = 4;
+}
+
+message SearchHit {
+  string path = 1;
+  string title = 2;
+  optional string snippet = 3;
+  double rank = 4;
+  optional double fused_score = 5;
+  optional uint32 lexical_rank = 6;
+  optional uint32 semantic_rank = 7;
+  repeated string heading_path = 8;
+  optional string chunk_id = 9;
+  optional string sensitivity = 10;
+  optional string export_policy = 11;
 }
 
 message SearchResponse {
-  // Intentionally empty in D0; later tasks add hit payloads.
+  repeated SearchHit hits = 1;
 }
 
 // Apply a page content update through the semantic command core (D3).
@@ -232,6 +249,10 @@ message SemanticStatus {
   optional string message = 3;
   // 0–100 while state is "downloading"; unset otherwise.
   optional uint32 progress_percent = 4;
+  // Active embedding provider identity (e.g. llama.cpp | fake | unavailable).
+  optional string provider_id = 5;
+  optional string model_id = 6;
+  optional uint32 dimensions = 7;
 }
 
 message SemanticStatusChanged {

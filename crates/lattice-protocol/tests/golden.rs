@@ -6,7 +6,7 @@ use lattice_protocol::{
     HealthResponse, IndexProgress, ModelState, ModelStatus, ModelStatusChanged,
     OpenWorkspaceRequest, OpenWorkspaceResponse, PartialTranscript, PingRequest,
     PrepareModelRequest, PrepareModelResponse, PushAudioChunkRequest, PushAudioChunkResponse,
-    Request, Response, ResourceChanged, SearchRequest, SearchResponse, SessionContext,
+    Request, Response, ResourceChanged, SearchHit, SearchRequest, SearchResponse, SessionContext,
     SessionFailed, SpeechCapabilities, SpeechSessionConfig, StartVoiceSessionRequest,
     StartVoiceSessionResponse, TranscriptionSessionState, UpdateSessionContextRequest,
     UpdateSessionContextResponse, WorkspaceLease, WorkspaceLeaseChanged, PROTOCOL_VERSION,
@@ -111,6 +111,8 @@ fn search_request() -> lattice_protocol::Envelope {
             body: Some(lattice_protocol::request::Body::Search(SearchRequest {
                 workspace_id: "ws-1".into(),
                 query: "hello lattice".into(),
+                limit: 10,
+                mode: Some("hybrid".into()),
             })),
         },
     )
@@ -120,7 +122,21 @@ fn search_response() -> lattice_protocol::Envelope {
     response_envelope(
         "golden-search",
         Response {
-            body: Some(lattice_protocol::response::Body::Search(SearchResponse {})),
+            body: Some(lattice_protocol::response::Body::Search(SearchResponse {
+                hits: vec![SearchHit {
+                    path: "Notes.md".into(),
+                    title: "Notes".into(),
+                    snippet: Some("hello lattice".into()),
+                    rank: 1.5,
+                    fused_score: Some(1.5),
+                    lexical_rank: Some(1),
+                    semantic_rank: Some(2),
+                    heading_path: vec!["Intro".into()],
+                    chunk_id: Some("chunk-1".into()),
+                    sensitivity: None,
+                    export_policy: None,
+                }],
+            })),
         },
     )
 }
@@ -524,12 +540,29 @@ fn audio_gap_event() -> lattice_protocol::Envelope {
 }
 
 fn assert_golden(name: &str, envelope: &lattice_protocol::Envelope) {
-    let expected = load_hex_fixture(name);
+    let path = fixtures_dir().join(name);
     let actual = envelope.encode_to_vec();
+    if std::env::var_os("UPDATE_GOLDEN").is_some() {
+        let hex_body = hex::encode(&actual);
+        let mut formatted = String::new();
+        for (i, chunk) in hex_body.as_bytes().chunks(64).enumerate() {
+            if i > 0 {
+                formatted.push('\n');
+            }
+            formatted.push_str(std::str::from_utf8(chunk).expect("hex ascii"));
+        }
+        formatted.push('\n');
+        std::fs::write(&path, formatted).unwrap_or_else(|err| {
+            panic!("write {}: {err}", path.display());
+        });
+        return;
+    }
+    let expected = load_hex_fixture(name);
     assert_eq!(
         hex::encode(&actual),
         hex::encode(&expected),
-        "protobuf bytes for {name} drifted from golden fixture"
+        "protobuf bytes for {name} drifted from golden fixture \
+         (re-run with UPDATE_GOLDEN=1 to refresh)"
     );
     let decoded = lattice_protocol::Envelope::decode(expected.as_slice()).expect("decode golden");
     assert_eq!(&decoded, envelope);
