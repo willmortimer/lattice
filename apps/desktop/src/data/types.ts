@@ -54,6 +54,14 @@ export interface DataAppSnapshot {
   package_revision: string;
   columns: DataColumn[];
   rows: DataRow[];
+  /** 0-based start of the `rows` window. */
+  row_offset: number;
+  /** Requested max rows for this window. */
+  row_limit: number;
+  /** Total matching rows after view filters (not just this window). */
+  row_total: number;
+  /** True when `row_offset + rows.length < row_total`. */
+  has_more: boolean;
   available_views: string[];
   active_view: string;
   sort_field?: string;

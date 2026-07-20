@@ -1155,6 +1155,10 @@ export const demoDataApp: DataAppSnapshot = {
       }
     }
   ],
+  "row_offset": 0,
+  "row_limit": 20,
+  "row_total": 20,
+  "has_more": false,
   "available_views": [
     "All",
     "Board",
@@ -2788,6 +2792,10 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
         }
       }
     ],
+    "row_offset": 0,
+    "row_limit": 20,
+    "row_total": 20,
+    "has_more": false,
     "available_views": [
       "All",
       "Board",
@@ -3869,6 +3877,10 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
         }
       }
     ],
+    "row_offset": 0,
+    "row_limit": 6,
+    "row_total": 6,
+    "has_more": false,
     "available_views": [
       "All",
       "Board",
@@ -4194,6 +4206,10 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
         }
       }
     ],
+    "row_offset": 0,
+    "row_limit": 6,
+    "row_total": 6,
+    "has_more": false,
     "available_views": [
       "All",
       "Board",
@@ -4484,6 +4500,10 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
         }
       }
     ],
+    "row_offset": 0,
+    "row_limit": 4,
+    "row_total": 4,
+    "has_more": false,
     "available_views": [
       "All",
       "Board",
