@@ -1,6 +1,6 @@
 # Data Apps + Analytics Subagent DAG
 
-**Status:** Active  
+**Status:** Active — Wave 1 merged on `feat/data-apps-and-analytics`; Waves 2–3 pending  
 **Created:** 2026-07-19  
 **BASE:** `main` @ `9c5694b`  
 **Integration branch:** `feat/data-apps-and-analytics`  
@@ -127,7 +127,7 @@ flowchart TD
 | P2-04 | merged | composer | CLI schema alter |
 | P2-05 | merged | composer | CSV type-review |
 | P2-06 | merged | composer | CSV promote |
-| P2-07 | pending | composer | Docs wave 1 |
+| P2-07 | merged | composer | Docs wave 1 |
 | P2-08 | pending | grok | Lookup |
 | P2-09 | pending | grok | Rollup |
 | P2-10 | pending | grok | Canvas interfaces |
