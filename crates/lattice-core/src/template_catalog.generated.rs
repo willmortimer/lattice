@@ -52,6 +52,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             extra_tables: &[],
             views: &[],
             forms: &[],
+            actions: &[],
         }
         ],
     },
@@ -147,6 +148,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             extra_tables: &[],
             views: &[],
             forms: &[],
+            actions: &[],
         }
         ],
     },
@@ -202,6 +204,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             extra_tables: &[],
             views: &[],
             forms: &[],
+            actions: &[],
         }
         ],
     },
@@ -258,6 +261,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             extra_tables: &[],
             views: &[],
             forms: &[],
+            actions: &[],
         }
         ],
     },
@@ -396,6 +400,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             }
             ],
             forms: &[],
+            actions: &[],
         }
         ],
     },
@@ -458,6 +463,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             extra_tables: &[],
             views: &[],
             forms: &[],
+            actions: &[],
         }
         ],
     },
@@ -658,6 +664,20 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 description: Some("Create a contact from the package form."),
             }
             ],
+            actions: &[
+                SeedDataAction {
+                name: "OpenContactIntake",
+                label: "Contact intake",
+                table: "contacts",
+                scope: "toolbar",
+                action_type: "insert_record",
+                form: Some("ContactIntake"),
+                field: None,
+                value: None,
+                url: None,
+                defaults: &[],
+            }
+            ],
         },
             SeedDataPackage {
             path: "Projects/Delivery.data",
@@ -723,6 +743,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 description: Some("Add a delivery item without opening the grid."),
             }
             ],
+            actions: &[],
         },
             SeedDataPackage {
             path: "Data/Metrics.data",
@@ -782,6 +803,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             }
             ],
             forms: &[],
+            actions: &[],
         },
             SeedDataPackage {
             path: "OKRs.data",
@@ -824,6 +846,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             }
             ],
             forms: &[],
+            actions: &[],
         }
         ],
     },

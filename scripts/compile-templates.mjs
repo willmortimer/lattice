@@ -300,6 +300,14 @@ function normalizeDataPackage(entry, template, index) {
     entry.table,
     columnNames,
   );
+  const actions = normalizeDataPackageActions(
+    entry.actions,
+    template,
+    label,
+    entry.table,
+    columnNames,
+    forms,
+  );
 
   const extraTables = normalizeExtraTables(
     entry.extraTables,
@@ -318,6 +326,7 @@ function normalizeDataPackage(entry, template, index) {
     extraTables,
     views,
     forms,
+    actions,
   };
 }
 
@@ -581,6 +590,144 @@ function normalizeDataPackageForm(entry, template, label, defaultTable, allowedC
   };
 }
 
+const ACTION_TYPES = new Set(["insert_record", "update_field", "open_url"]);
+const ACTION_SCOPES = new Set(["toolbar", "row"]);
+
+function normalizeDataPackageActions(raw, template, label, defaultTable, columnNames, forms) {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) {
+    throw new Error(`${template}: ${label}.actions must be an array`);
+  }
+  const allowedColumns = new Set([...columnNames, "id"]);
+  const formNames = new Set(forms.map((form) => form.name));
+  const actionNames = new Set();
+  return raw.map((entry, index) =>
+    normalizeDataPackageAction(
+      entry,
+      template,
+      `${label}.actions[${index}]`,
+      defaultTable,
+      allowedColumns,
+      formNames,
+      actionNames,
+    ),
+  );
+}
+
+function normalizeDataPackageAction(
+  entry,
+  template,
+  label,
+  defaultTable,
+  allowedColumns,
+  formNames,
+  actionNames,
+) {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    throw new Error(`${template}: ${label} must be an object`);
+  }
+  if (typeof entry.name !== "string" || !isSqlIdentifier(entry.name)) {
+    throw new Error(`${template}: ${label}.name must be a valid SQL identifier`);
+  }
+  if (actionNames.has(entry.name)) {
+    throw new Error(`${template}: ${label} duplicate action name ${entry.name}`);
+  }
+  actionNames.add(entry.name);
+  if (typeof entry.label !== "string" || entry.label.trim() === "") {
+    throw new Error(`${template}: ${label}.label must be a non-empty string`);
+  }
+  const table =
+    entry.table === undefined
+      ? defaultTable
+      : typeof entry.table === "string" && isSqlIdentifier(entry.table)
+        ? entry.table
+        : null;
+  if (!table) {
+    throw new Error(`${template}: ${label}.table must be a valid SQL identifier`);
+  }
+  const scope =
+    entry.scope === undefined
+      ? "toolbar"
+      : typeof entry.scope === "string" && ACTION_SCOPES.has(entry.scope)
+        ? entry.scope
+        : null;
+  if (!scope) {
+    throw new Error(`${template}: ${label}.scope must be toolbar or row`);
+  }
+  if (!entry.action || typeof entry.action !== "object" || Array.isArray(entry.action)) {
+    throw new Error(`${template}: ${label}.action must be an object`);
+  }
+  const actionType =
+    typeof entry.action.type === "string" && ACTION_TYPES.has(entry.action.type)
+      ? entry.action.type
+      : null;
+  if (!actionType) {
+    throw new Error(
+      `${template}: ${label}.action.type must be one of ${[...ACTION_TYPES].join(", ")}`,
+    );
+  }
+  const action = { type: actionType };
+  if (actionType === "insert_record") {
+    if (entry.action.form !== undefined) {
+      if (typeof entry.action.form !== "string" || !formNames.has(entry.action.form)) {
+        throw new Error(`${template}: ${label}.action.form must reference a package form`);
+      }
+      action.form = entry.action.form;
+    }
+    if (entry.action.defaults !== undefined) {
+      if (!entry.action.defaults || typeof entry.action.defaults !== "object" || Array.isArray(entry.action.defaults)) {
+        throw new Error(`${template}: ${label}.action.defaults must be an object`);
+      }
+      const defaults = {};
+      for (const [field, value] of Object.entries(entry.action.defaults)) {
+        if (!isSqlIdentifier(field) || !allowedColumns.has(field)) {
+          throw new Error(`${template}: ${label}.action.defaults references unknown column ${field}`);
+        }
+        if (typeof value !== "string") {
+          throw new Error(`${template}: ${label}.action.defaults.${field} must be a string`);
+        }
+        defaults[field] = value;
+      }
+      action.defaults = defaults;
+    }
+    if (!action.form && (!action.defaults || Object.keys(action.defaults).length === 0)) {
+      throw new Error(
+        `${template}: ${label}.action insert_record requires form or non-empty defaults`,
+      );
+    }
+  } else if (actionType === "update_field") {
+    if (typeof entry.action.field !== "string" || !allowedColumns.has(entry.action.field) || entry.action.field === "id") {
+      throw new Error(`${template}: ${label}.action.field must be a writable table column`);
+    }
+    if (typeof entry.action.value !== "string") {
+      throw new Error(`${template}: ${label}.action.value must be a string`);
+    }
+    action.field = entry.action.field;
+    action.value = entry.action.value;
+  } else if (actionType === "open_url") {
+    if (typeof entry.action.url !== "string" || entry.action.url.trim() === "") {
+      throw new Error(`${template}: ${label}.action.url must be a non-empty string`);
+    }
+    const url = entry.action.url.trim();
+    if (
+      !/^https?:\/\//i.test(url) &&
+      (url.startsWith("/") || url.split("/").some((part) => part === ".."))
+    ) {
+      throw new Error(
+        `${template}: ${label}.action.url must be http(s) or a workspace-relative path`,
+      );
+    }
+    action.url = url;
+  }
+  return {
+    name: entry.name,
+    label: entry.label.trim(),
+    table,
+    scope,
+    action,
+  };
+}
+
 function assertJsonCell(value, template, label, fieldType) {
   const kind = value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
   if (fieldType === "relation") {
@@ -752,6 +899,32 @@ function rustDataForm(form) {
             }`;
 }
 
+function rustActionDefaults(defaults) {
+  if (!defaults || Object.keys(defaults).length === 0) {
+    return "&[]";
+  }
+  const pairs = Object.entries(defaults)
+    .map(([field, value]) => `(${rustString(field)}, ${rustString(value)})`)
+    .join(",\n                    ");
+  return `&[\n                    ${pairs}\n                ]`;
+}
+
+function rustDataAction(action) {
+  const actionDef = action.action;
+  return `SeedDataAction {
+                name: ${rustString(action.name)},
+                label: ${rustString(action.label)},
+                table: ${rustString(action.table)},
+                scope: ${rustString(action.scope)},
+                action_type: ${rustString(actionDef.type)},
+                form: ${rustOptionString(actionDef.form)},
+                field: ${rustOptionString(actionDef.field)},
+                value: ${rustOptionString(actionDef.value)},
+                url: ${rustOptionString(actionDef.url)},
+                defaults: ${rustActionDefaults(actionDef.defaults)},
+            }`;
+}
+
 function rustDataView(view) {
   const columns = view.columns.map((column) => rustString(column)).join(",\n                    ");
   return `SeedDataView {
@@ -783,6 +956,7 @@ function rustDataPackage(packageDef) {
   const rows = packageDef.rows.map((row) => rustString(JSON.stringify(row))).join(",\n                ");
   const views = packageDef.views.map(rustDataView).join(",\n                ");
   const forms = packageDef.forms.map(rustDataForm).join(",\n                ");
+  const actions = (packageDef.actions ?? []).map(rustDataAction).join(",\n                ");
   const extraTables = packageDef.extraTables.map(rustExtraTable).join(",\n                ");
   return `SeedDataPackage {
             path: ${rustString(packageDef.path)},
@@ -797,6 +971,7 @@ function rustDataPackage(packageDef) {
             extra_tables: &[${extraTables ? `\n                ${extraTables}\n            ` : ""}],
             views: &[${views ? `\n                ${views}\n            ` : ""}],
             forms: &[${forms ? `\n                ${forms}\n            ` : ""}],
+            actions: &[${actions ? `\n                ${actions}\n            ` : ""}],
         }`;
 }
 
@@ -1079,6 +1254,16 @@ function buildDemoFormCatalog(packageDef) {
   }));
 }
 
+function buildDemoActionCatalog(packageDef) {
+  return (packageDef.actions ?? []).map((action) => ({
+    name: action.name,
+    label: action.label,
+    table: action.table,
+    scope: action.scope,
+    action: action.action,
+  }));
+}
+
 function buildDemoViewCatalog(packageDef) {
   const views = [
     { name: "All", layout_type: "grid" },
@@ -1192,6 +1377,14 @@ function buildDemoPackageFormsByPath(template) {
   return forms;
 }
 
+function buildDemoPackageActionsByPath(template) {
+  const actions = {};
+  for (const packageDef of template.dataPackages) {
+    actions[packageDef.path] = buildDemoActionCatalog(packageDef);
+  }
+  return actions;
+}
+
 export function emitDemoWorkspace(templates) {
   const template = templates.find((entry) => entry.id === DEMO_TEMPLATE_ID);
   if (!template) {
@@ -1232,6 +1425,8 @@ export function emitDemoWorkspace(templates) {
     demoDataApps,
     demoPackageForms: buildDemoFormCatalog(crmPackage),
     demoPackageFormsByPath: buildDemoPackageFormsByPath(template),
+    demoPackageActions: buildDemoActionCatalog(crmPackage),
+    demoPackageActionsByPath: buildDemoPackageActionsByPath(template),
     demoPages: buildDemoPages(template),
     demoTextFiles: buildDemoTextFiles(template),
     demoNotebooks: buildDemoNotebooks(template),
@@ -1240,6 +1435,7 @@ export function emitDemoWorkspace(templates) {
 import type { WorkspaceSnapshot } from "./types";
 import type { DataAppSnapshot } from "./data/types";
 import type { FormSummary } from "./data/forms";
+import type { ActionSummary } from "./data/actions";
 
 export const demoSnapshot: WorkspaceSnapshot = ${JSON.stringify(module.demoSnapshot, null, 2)};
 
@@ -1252,6 +1448,10 @@ export const demoDataApps: Record<string, DataAppSnapshot> = ${JSON.stringify(mo
 export const demoPackageForms: FormSummary[] = ${JSON.stringify(module.demoPackageForms, null, 2)};
 
 export const demoPackageFormsByPath: Record<string, FormSummary[]> = ${JSON.stringify(module.demoPackageFormsByPath, null, 2)};
+
+export const demoPackageActions: ActionSummary[] = ${JSON.stringify(module.demoPackageActions, null, 2)};
+
+export const demoPackageActionsByPath: Record<string, ActionSummary[]> = ${JSON.stringify(module.demoPackageActionsByPath, null, 2)};
 
 export const demoPages: Record<string, string> = ${JSON.stringify(module.demoPages, null, 2)};
 

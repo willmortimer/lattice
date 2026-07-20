@@ -2,6 +2,7 @@
 import type { WorkspaceSnapshot } from "./types";
 import type { DataAppSnapshot } from "./data/types";
 import type { FormSummary } from "./data/forms";
+import type { ActionSummary } from "./data/actions";
 
 export const demoSnapshot: WorkspaceSnapshot = {
   "root": "/Users/you/Lattice/Workspaces/First Look",
@@ -4670,6 +4671,37 @@ export const demoPackageFormsByPath: Record<string, FormSummary[]> = {
       "description": "Add a delivery item without opening the grid."
     }
   ],
+  "Data/Metrics.data": [],
+  "OKRs.data": []
+};
+
+export const demoPackageActions: ActionSummary[] = [
+  {
+    "name": "OpenContactIntake",
+    "label": "Contact intake",
+    "table": "contacts",
+    "scope": "toolbar",
+    "action": {
+      "type": "insert_record",
+      "form": "ContactIntake"
+    }
+  }
+];
+
+export const demoPackageActionsByPath: Record<string, ActionSummary[]> = {
+  "CRM.data": [
+    {
+      "name": "OpenContactIntake",
+      "label": "Contact intake",
+      "table": "contacts",
+      "scope": "toolbar",
+      "action": {
+        "type": "insert_record",
+        "form": "ContactIntake"
+      }
+    }
+  ],
+  "Projects/Delivery.data": [],
   "Data/Metrics.data": [],
   "OKRs.data": []
 };

@@ -306,6 +306,18 @@
           "title": "Contact intake",
           "description": "Create a contact from the package form."
         }
+      ],
+      "actions": [
+        {
+          "name": "OpenContactIntake",
+          "label": "Contact intake",
+          "table": "contacts",
+          "scope": "toolbar",
+          "action": {
+            "type": "insert_record",
+            "form": "ContactIntake"
+          }
+        }
       ]
     },
     {
