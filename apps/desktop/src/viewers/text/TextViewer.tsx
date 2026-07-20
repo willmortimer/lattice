@@ -21,6 +21,7 @@ export interface TextViewerProps {
   onSaveStateChange?: (state: SaveState) => void;
   onRevisionChange?: (revision: string | null) => void;
   onOpenExternally?: (resource: Resource) => void;
+  onPromoteWorkspaceCsv?: (resource: Resource) => void;
 }
 
 function encodeText(value: string, encoding: TextSession["encoding"]): Uint8Array {
@@ -56,7 +57,7 @@ function report(state: ((state: SaveState) => void) | undefined, next: SaveState
   state?.(next);
 }
 
-export function TextViewer({ session, root, onSaveStateChange, onRevisionChange, onOpenExternally }: TextViewerProps) {
+export function TextViewer({ session, root, onSaveStateChange, onRevisionChange, onOpenExternally, onPromoteWorkspaceCsv }: TextViewerProps) {
   const [activeSession, setActiveSession] = useState(session);
   const [content, setContent] = useState(session.content);
   const [revision, setRevision] = useState(session.revision);
@@ -169,6 +170,15 @@ export function TextViewer({ session, root, onSaveStateChange, onRevisionChange,
         <div className="lattice-text-toolbar-group">
           {treeAvailable && <button type="button" className="lattice-text-button" aria-pressed={showTree} onClick={() => setShowTree((value) => !value)}>{showTree ? "Hide tree" : "Show tree"}</button>}
           {tableAvailable && <button type="button" className="lattice-text-button" aria-pressed={showTable} onClick={() => setShowTable((value) => !value)}>{showTable ? "Hide table" : "Show table"}</button>}
+          {csvEligible && onPromoteWorkspaceCsv && (
+            <button
+              type="button"
+              className="lattice-text-button"
+              onClick={() => onPromoteWorkspaceCsv(activeSession.resource)}
+            >
+              Create table from CSV…
+            </button>
+          )}
           {activeSession.editable && <button type="button" className="lattice-text-button lattice-text-button-primary" disabled={!dirty} onClick={() => void save()}>Save</button>}
           {!activeSession.editable && onOpenExternally && (
             <button type="button" className="lattice-text-button" onClick={() => onOpenExternally(activeSession.resource)}>Open externally</button>
