@@ -106,6 +106,25 @@ pub(crate) fn form_name_from_path(path: &Path) -> Option<String> {
         .map(|stem| stem.to_string())
 }
 
+/// Build a validated form definition and canonical YAML for [`FormSave`].
+pub fn save_form(
+    name: impl Into<String>,
+    table: impl Into<String>,
+    fields: Vec<String>,
+    title: Option<String>,
+    description: Option<String>,
+) -> Result<(FormDef, String)> {
+    let mut form = FormDef::new(name, table);
+    form.fields = fields;
+    form.title = title.filter(|value| !value.trim().is_empty());
+    form.description = description.filter(|value| !value.trim().is_empty());
+    for field in &form.fields {
+        validate_identifier(field)?;
+    }
+    let yaml = form.to_yaml()?;
+    Ok((form, yaml))
+}
+
 /// Write `forms/{name}.form.yaml` inside a `.data` package.
 pub fn write_package_form(package_path: &Path, form: &FormDef) -> Result<()> {
     validate_identifier(&form.name)?;

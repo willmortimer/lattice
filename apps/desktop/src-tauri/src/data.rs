@@ -3,9 +3,10 @@ use std::path::{Path, PathBuf};
 
 use lattice_commands::{ColumnSpec, Command as SemanticCommand, CommandEngine, Transaction};
 use lattice_data::{
-    cell_from_csv, parse_csv_file, parse_field_type_name, resolve_field_types, CellValue,
-    ColumnMeta, CsvTable, DataApp, FieldType, FilterOperator, Row, SortDirection, ViewDef,
-    ViewFilter, ViewSort, LAYOUT_BOARD, LAYOUT_CALENDAR, LAYOUT_GALLERY, SUPPORTED_LAYOUT_TYPES,
+    cell_from_csv, parse_csv_file, parse_field_type_name, resolve_field_types, save_form,
+    CellValue, ColumnMeta, CsvTable, DataApp, FieldType, FilterOperator, Row, SortDirection,
+    ViewDef, ViewFilter, ViewSort, LAYOUT_BOARD, LAYOUT_CALENDAR, LAYOUT_GALLERY,
+    SUPPORTED_LAYOUT_TYPES,
 };
 use serde::{Deserialize, Serialize};
 
@@ -459,6 +460,60 @@ pub fn save_data_view(
 
     let app = open_app_at(&root, &rel_path)?;
     snapshot_from_app(&app, Some(&view_name), ROW_LIMIT, 0)
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveFormRequest {
+    pub form_name: String,
+    pub table: String,
+    pub fields: Vec<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+/// Persist a package form via the command engine (`FormSave`).
+#[tauri::command]
+pub fn save_data_form(
+    root: String,
+    rel_path: String,
+    request: SaveFormRequest,
+) -> Result<FormSummary, String> {
+    let SaveFormRequest {
+        form_name,
+        table,
+        fields,
+        title,
+        description,
+    } = request;
+    let (form, content) =
+        save_form(form_name, table, fields, title, description).map_err(|err| err.to_string())?;
+
+    let (canonical_root, _) = resolve_within_root(&root, &rel_path)?;
+    let mut engine = CommandEngine::open(&canonical_root).map_err(command_error_to_string)?;
+    engine
+        .apply(Transaction::new(
+            format!("Save form {} in {rel_path}", form.name),
+            vec![SemanticCommand::FormSave {
+                path: rel_path_buf(&rel_path),
+                form_name: form.name.clone(),
+                content,
+            }],
+        ))
+        .map_err(command_error_to_string)?;
+
+    let app = open_app_at(&root, &rel_path)?;
+    app.load_form(&form.name)
+        .map(|loaded| FormSummary {
+            name: loaded.name,
+            table: loaded.table,
+            fields: loaded.fields,
+            title: loaded.title,
+            description: loaded.description,
+        })
+        .map_err(|err| err.to_string())
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1254,6 +1309,49 @@ mod tests {
             snapshot.rows[0].values.get("email"),
             Some(&CellValue::Text("ada@example.com".into()))
         );
+    }
+
+    #[test]
+    fn save_data_form_persists_and_undo_restores() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let rel_path = "CRM.data".to_string();
+
+        create_table_package(
+            root.clone(),
+            rel_path.clone(),
+            "CRM".to_string(),
+            "contacts".to_string(),
+        )
+        .unwrap();
+
+        rusqlite::Connection::open(dir.path().join("CRM.data/database.sqlite"))
+            .unwrap()
+            .execute_batch(
+                "ALTER TABLE contacts ADD COLUMN name TEXT;
+                 ALTER TABLE contacts ADD COLUMN email TEXT;",
+            )
+            .unwrap();
+
+        let saved = save_data_form(
+            root.clone(),
+            rel_path.clone(),
+            SaveFormRequest {
+                form_name: "intake".into(),
+                table: "contacts".into(),
+                fields: vec!["name".into(), "email".into()],
+                title: Some("Contact intake".into()),
+                description: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(saved.name, "intake");
+        assert_eq!(saved.fields, vec!["name".to_string(), "email".to_string()]);
+        assert!(dir.path().join("CRM.data/forms/intake.form.yaml").is_file());
+
+        let mut engine = CommandEngine::open(dir.path()).unwrap();
+        engine.undo().unwrap().unwrap();
+        assert!(!dir.path().join("CRM.data/forms/intake.form.yaml").exists());
     }
 
     #[test]

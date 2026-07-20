@@ -21,7 +21,7 @@ pub use csv::{
 };
 pub use data_app::DataApp;
 pub use error::Error;
-pub use form::{write_package_form, FormDef, FORM_FILE_SUFFIX, FORM_FORMAT, FORM_VERSION};
+pub use form::{save_form, write_package_form, FormDef, FORM_FILE_SUFFIX, FORM_FORMAT, FORM_VERSION};
 pub use types::{
     CellValue, ColumnMeta, DeletedRowSnapshot, FieldType, NewColumn, RelationStrip, Row,
     SchemaFilesSnapshot,

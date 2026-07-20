@@ -318,6 +318,14 @@ pub enum Command {
         content: String,
     },
 
+    /// Write or replace `forms/{form_name}.form.yaml` inside a `.data` package.
+    FormSave {
+        path: PathBuf,
+        #[serde(rename = "form-name")]
+        form_name: String,
+        content: String,
+    },
+
     /// Place a file node into a JSON Canvas while preserving the rest of the
     /// original JSON value, including fields unknown to Lattice.
     CanvasPlaceResource {
@@ -462,6 +470,9 @@ impl Command {
             Command::ViewSave {
                 path, view_name, ..
             } => view_file_path(path, view_name),
+            Command::FormSave {
+                path, form_name, ..
+            } => form_file_path(path, form_name),
             Command::CanvasPlaceResource { path, .. }
             | Command::CanvasMoveNodes { path, .. }
             | Command::CanvasRemoveNodes { path, .. }
@@ -501,6 +512,9 @@ impl Command {
             Command::ViewSave {
                 path, view_name, ..
             } => vec![view_file_path(path, view_name)],
+            Command::FormSave {
+                path, form_name, ..
+            } => vec![form_file_path(path, form_name)],
             Command::CanvasPlaceResource { path, .. }
             | Command::CanvasMoveNodes { path, .. }
             | Command::CanvasRemoveNodes { path, .. }
@@ -516,6 +530,13 @@ impl Command {
 /// Workspace-relative path to a view YAML inside a `.data` package.
 pub(crate) fn view_file_path(package: &std::path::Path, view_name: &str) -> PathBuf {
     package.join("views").join(format!("{view_name}.yaml"))
+}
+
+/// Workspace-relative path to a form YAML inside a `.data` package.
+pub(crate) fn form_file_path(package: &std::path::Path, form_name: &str) -> PathBuf {
+    package
+        .join("forms")
+        .join(format!("{form_name}{}", lattice_data::FORM_FILE_SUFFIX))
 }
 
 /// The final path component of `path`, or the whole path if it has none.

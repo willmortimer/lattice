@@ -9,7 +9,7 @@ use lattice_storage::{
 
 use crate::canvas::{self, CanvasEdit};
 use crate::command::{
-    file_name, path_remaps_from_commands, view_file_path, ColumnSpec, Command, CommandOutcome,
+    file_name, form_file_path, path_remaps_from_commands, view_file_path, ColumnSpec, Command, CommandOutcome,
     HistoryEntry, Transaction, TransactionReceipt, UndoReport,
 };
 use crate::history::{unix_now, unix_to_system, HistoryStore};
@@ -789,6 +789,12 @@ impl CommandEngine {
                 }
                 Ok(())
             }
+            Command::FormSave { path, .. } => {
+                if self.metadata_opt(path)?.is_none() {
+                    return Err(Error::NotFound { path: path.clone() });
+                }
+                Ok(())
+            }
             Command::CanvasPlaceResource {
                 path,
                 base_revision,
@@ -1390,6 +1396,43 @@ impl CommandEngine {
                     resulting_revision: Some(revision),
                 })
             }
+            Command::FormSave {
+                path,
+                form_name,
+                content,
+            } => {
+                let form_path = form_file_path(path, form_name);
+                let prior = self.read_form_opt(&form_path)?;
+                if let Some(parent) = self.root.join(&form_path).parent() {
+                    std::fs::create_dir_all(parent).map_err(|source| Error::io(parent, source))?;
+                }
+                let meta = self.store.metadata(&form_path).ok();
+                let revision = self
+                    .writer()
+                    .write(
+                        &form_path,
+                        content.as_bytes(),
+                        meta.as_ref().map(|m| &m.revision),
+                    )?
+                    .hash;
+                let inverse = match prior {
+                    Some(previous) => Command::FormSave {
+                        path: path.clone(),
+                        form_name: form_name.clone(),
+                        content: previous,
+                    },
+                    None => Command::ResourceDelete {
+                        path: form_path.clone(),
+                    },
+                };
+                Ok(AppliedOp {
+                    forward: command.clone(),
+                    inverse,
+                    prior_content: None,
+                    after_content: Some(content.as_bytes().to_vec()),
+                    resulting_revision: Some(revision),
+                })
+            }
             Command::CanvasPlaceResource {
                 path,
                 base_revision,
@@ -1742,6 +1785,23 @@ impl CommandEngine {
                 )?;
                 Ok(())
             }
+            Command::FormSave {
+                path,
+                form_name,
+                content,
+            } => {
+                let form_path = form_file_path(path, form_name);
+                if let Some(parent) = self.root.join(&form_path).parent() {
+                    std::fs::create_dir_all(parent).map_err(|source| Error::io(parent, source))?;
+                }
+                let meta = self.store.metadata(&form_path).ok();
+                self.writer().write(
+                    &form_path,
+                    content.as_bytes(),
+                    meta.as_ref().map(|m| &m.revision),
+                )?;
+                Ok(())
+            }
             Command::CanvasPlaceResource { .. }
             | Command::CanvasMoveNodes { .. }
             | Command::CanvasRemoveNodes { .. }
@@ -1926,6 +1986,9 @@ impl CommandEngine {
                 path, table, id, ..
             } => self.guard_row_absent(path, table, id),
             Command::ViewSave { .. } => {
+                self.guard_hash(&forward.guard_path(), resulting_revision.as_deref())
+            }
+            Command::FormSave { .. } => {
                 self.guard_hash(&forward.guard_path(), resulting_revision.as_deref())
             }
             Command::CanvasPlaceResource { .. }
@@ -2171,6 +2234,10 @@ impl CommandEngine {
             }
             Err(other) => Err(other.into()),
         }
+    }
+
+    fn read_form_opt(&self, form_path: &Path) -> Result<Option<String>> {
+        self.read_view_opt(form_path)
     }
 }
 

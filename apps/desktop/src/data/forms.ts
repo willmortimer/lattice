@@ -13,6 +13,21 @@ export interface FormSummary {
   description?: string;
 }
 
+export interface SaveFormRequest {
+  formName: string;
+  table: string;
+  fields: string[];
+  title?: string;
+  description?: string;
+}
+
+export interface FormDesignerDraft {
+  formName: string;
+  title: string;
+  description: string;
+  fields: string[];
+}
+
 /**
  * Browser-demo package forms compiled from the First Look template seed.
  * Used when `demoMutate` is active so the Forms chrome matches native seeds.
@@ -29,6 +44,76 @@ export function demoFormsForPackage(relPath: string): FormSummary[] {
 
 export function formDisplayTitle(form: FormSummary): string {
   return form.title?.trim() || form.name;
+}
+
+/** Table columns eligible for package form fields (excludes `id`). */
+export function formDesignerColumnOptions(columns: DataColumn[]): DataColumn[] {
+  return columns.filter((column) => column.name !== "id");
+}
+
+export function emptyFormDesignerDraft(): FormDesignerDraft {
+  return {
+    formName: "",
+    title: "",
+    description: "",
+    fields: [],
+  };
+}
+
+export function formDesignerDraftFromForm(form: FormSummary): FormDesignerDraft {
+  return {
+    formName: form.name,
+    title: form.title ?? "",
+    description: form.description ?? "",
+    fields: [...form.fields],
+  };
+}
+
+export function toggleFormDesignerField(fields: string[], name: string): string[] {
+  if (fields.includes(name)) {
+    return fields.filter((field) => field !== name);
+  }
+  return [...fields, name];
+}
+
+export function moveFormDesignerField(
+  fields: string[],
+  index: number,
+  direction: -1 | 1,
+): string[] {
+  const target = index + direction;
+  if (target < 0 || target >= fields.length) {
+    return fields;
+  }
+  const next = [...fields];
+  const [moved] = next.splice(index, 1);
+  if (!moved) {
+    return fields;
+  }
+  next.splice(target, 0, moved);
+  return next;
+}
+
+export function validateFormDesignerDraft(
+  draft: FormDesignerDraft,
+  columns: DataColumn[],
+): string | null {
+  const name = draft.formName.trim();
+  if (!name) {
+    return "Form name is required.";
+  }
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+    return "Form name must be a valid identifier.";
+  }
+  if (draft.fields.length === 0) {
+    return "Select at least one field.";
+  }
+  const columnNames = new Set(columns.map((column) => column.name));
+  const unknown = draft.fields.filter((field) => !columnNames.has(field));
+  if (unknown.length > 0) {
+    return `Unknown fields: ${unknown.join(", ")}`;
+  }
+  return null;
 }
 
 /** Resolve FormDef field names to table columns, preserving form order. */
@@ -74,6 +159,14 @@ export async function loadDataForm(
   name: string,
 ): Promise<FormSummary> {
   return invoke<FormSummary>("load_data_form", { root, relPath, name });
+}
+
+export async function saveDataForm(
+  root: string,
+  relPath: string,
+  request: SaveFormRequest,
+): Promise<FormSummary> {
+  return invoke<FormSummary>("save_data_form", { root, relPath, request });
 }
 
 /** List forms for native IPC or return demo fixtures in browser mode. */
