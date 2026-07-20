@@ -2,7 +2,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { invoke as coreInvoke } from "../lib/ipc";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
-import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { columnChoicesFromPreview, type CsvImportPreview, type CsvImportReviewState } from "../data/csvImport";
+import type { FieldType } from "../data/types";
 import { resolveResourceLink, type ResourceLinkTarget } from "../lib/resourceLinks";
 import { createPage } from "../lib/pages";
 import { updateWorkspaceManifest } from "../lib/workspace";
@@ -60,6 +62,7 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
     refreshResources, handleSelect, openCreatedResource, reconcilePathRemaps,
   } = options;
   const workspaceSettingsTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const [csvImportReview, setCsvImportReview] = useState<CsvImportReviewState | null>(null);
   useEffect(() => () => {
     if (workspaceSettingsTimerRef.current) window.clearTimeout(workspaceSettingsTimerRef.current);
   }, []);
@@ -146,20 +149,65 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
     if (!name) return;
     setBusy(true);
     try {
-      const [relPath, created] = await invoke<[string, DataAppSnapshot]>("import_csv_table", {
-        root: snapshot.root, csvPath: selectedFile, packageName: name,
-        title: name.replace(/\.data$/i, ""), tableName: tableNameFromLabel(name),
+      const preview = await invoke<CsvImportPreview>("preview_csv_import", { csvPath: selectedFile });
+      setCsvImportReview({
+        csvPath: selectedFile,
+        packageName: name,
+        title: name.replace(/\.data$/i, ""),
+        tableName: tableNameFromLabel(name),
+        preview,
+        columns: columnChoicesFromPreview(preview),
       });
-      await refreshResources();
-      const resource: Resource = { path: relPath, kind: "data-app" };
-      openCreatedResource(resource, { kind: "data-app", resource, snapshot: created });
       setError(null);
     } catch (error) {
       setError(String(error));
     } finally {
       setBusy(false);
     }
-  }, [openCreatedResource, refreshResources, setBusy, setError, snapshot]);
+  }, [setBusy, setError, snapshot]);
+
+  const handleCancelCsvImport = useCallback(() => {
+    setCsvImportReview(null);
+  }, []);
+
+  const handleCsvImportColumnTypeChange = useCallback((columnName: string, fieldType: FieldType) => {
+    setCsvImportReview((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        columns: current.columns.map((column) =>
+          column.name === columnName ? { ...column, field_type: fieldType } : column,
+        ),
+      };
+    });
+  }, []);
+
+  const handleConfirmCsvImport = useCallback(async () => {
+    if (!snapshot || !csvImportReview) return;
+    setBusy(true);
+    try {
+      const [relPath, created] = await invoke<[string, DataAppSnapshot]>("commit_csv_import", {
+        root: snapshot.root,
+        csvPath: csvImportReview.csvPath,
+        packageName: csvImportReview.packageName,
+        title: csvImportReview.title,
+        tableName: csvImportReview.tableName,
+        columns: csvImportReview.columns.map((column) => ({
+          name: column.name,
+          field_type: column.field_type,
+        })),
+      });
+      await refreshResources();
+      const resource: Resource = { path: relPath, kind: "data-app" };
+      openCreatedResource(resource, { kind: "data-app", resource, snapshot: created });
+      setCsvImportReview(null);
+      setError(null);
+    } catch (error) {
+      setError(String(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [csvImportReview, openCreatedResource, refreshResources, setBusy, setError, snapshot]);
 
   const handleNewTable = useCallback(async () => {
     const name = window.prompt("New table name");
@@ -295,5 +343,6 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
     createAndOpenPage, handleQuickNote, handleNewPage, handleUndo, handleImportCsv, handleNewTable,
     handleImportEditorAsset, handleOpenExternally, openLinkTarget, handleOpenWiki, handleOpenFile,
     updateWorkspaceSettings,
+    csvImportReview, handleCancelCsvImport, handleConfirmCsvImport, handleCsvImportColumnTypeChange,
   };
 }
