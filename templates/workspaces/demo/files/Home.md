@@ -9,7 +9,7 @@ ordinary file under a real directory — open it in any editor, or stay inside L
 
 ## Quick start
 
-1. Search with **⌘K** — hybrid FTS over chunks (try `latticed` or `FinalizationMode`).
+1. Search with **⌘K** — keyword search always; turn on **Settings → Search → Semantic search** for hybrid FTS + embeddings (try `latticed` or `FinalizationMode`).
 2. Scroll [[Research/Long Read]] — long-form perf and virtualization fixture.
 3. Open `Canvases/Product Strategy.canvas` — double-click file nodes to jump.
 4. Capture with **⌘N** into `Inbox/` — type or **hold-to-dictate** (see [[Inbox/Sample capture]]).
@@ -27,8 +27,8 @@ and voice features. Each step is safe in the sample workspace; undo where noted.
 
 ### Search & local runtime
 
-1. Press **⌘K** and search for `VoiceContextBuilder` or `EndpointDetected` (seeded on [[Research/Local Runtime]]).
-2. Open a hit and confirm the heading path / chunk feel honest in the result list.
+1. Optionally enable **Settings → Search → Semantic search** (downloads ~640 MB local Qwen3 GGUF on first enable; or set `LATTICE_SEMANTIC_FAKE=1` for Fake vectors in dev).
+2. Press **⌘K** and search for `VoiceContextBuilder` or `EndpointDetected` (seeded on [[Research/Local Runtime]]). With semantic on and ready, hits may show Keyword / Semantic / Both.
 3. Skim [[Research/Architecture]] for the core vs latticed diagrams.
 
 ### Voice & Quick Note
