@@ -5,6 +5,8 @@
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::EmbeddingError;
 use crate::manifest::{verify_file_sha256, ModelManifest};
@@ -30,6 +32,11 @@ pub struct AcquireResult {
     pub artifact_path: PathBuf,
     pub artifact_sha256: String,
     pub skipped_download: bool,
+}
+
+fn acquire_mutex() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
 }
 
 /// Whether env requests the Fake / offline-CI path (no network).
@@ -65,6 +72,8 @@ pub fn pinned_model_is_ready() -> bool {
 /// - Otherwise: HTTPS download of the pinned URL.
 ///
 /// Fail-closed on sha256 mismatch (partial/corrupt artifacts are removed).
+/// Concurrent callers serialize on a process-wide lock so they cannot clobber
+/// the same staging file (which produced jumpy UI progress and "artifact not found").
 pub fn acquire_pinned_embedding_model(
     progress: &mut ProgressFn<'_>,
 ) -> Result<AcquireResult, EmbeddingError> {
@@ -77,6 +86,11 @@ pub fn acquire_pinned_embedding_model(
         });
     }
 
+    let _guard = acquire_mutex()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+    // Re-check under the lock — a concurrent caller may have finished install.
     if pinned_model_is_ready() {
         let model_dir = qwen3_embedding_install_dir();
         return Ok(AcquireResult {
@@ -95,18 +109,41 @@ pub fn acquire_pinned_embedding_model(
             download_dir.display()
         ))
     })?;
-    let staging = download_dir.join(format!("{QWEN3_EMBEDDING_ARTIFACT}.partial"));
+    // Unique staging name so a cancelled/overlapping attempt cannot delete our bytes.
+    let staging = download_dir.join(format!(
+        "{QWEN3_EMBEDDING_ARTIFACT}.{}.partial",
+        staging_token()
+    ));
     let _ = fs::remove_file(&staging);
 
-    if let Some(source) = semantic_model_source_override() {
-        copy_with_progress(&source, &staging, Some(file_len(&source)?), progress)?;
+    let mut last_percent = 0u32;
+    let mut monotonic = |copied: u64, total: Option<u64>| {
+        let percent = download_progress_percent(copied, total);
+        if percent >= last_percent {
+            last_percent = percent;
+            progress(copied, total);
+        }
+    };
+
+    let download_result = if let Some(source) = semantic_model_source_override() {
+        copy_with_progress(
+            &source,
+            &staging,
+            Some(file_len(&source)?),
+            &mut monotonic,
+        )
     } else {
         download_https_with_progress(
             QWEN3_EMBEDDING_DOWNLOAD_URL,
             &staging,
             Some(QWEN3_EMBEDDING_SIZE_BYTES),
-            progress,
-        )?;
+            &mut monotonic,
+        )
+    };
+
+    if let Err(error) = download_result {
+        let _ = fs::remove_file(&staging);
+        return Err(error);
     }
 
     match verify_file_sha256(&staging, &manifest.sha256) {
@@ -117,7 +154,17 @@ pub fn acquire_pinned_embedding_model(
         }
     }
 
-    let model_dir = install_artifact_beside_manifest(&manifest, &staging, &embeddings_models_dir())?;
+    let model_dir = match install_artifact_beside_manifest(
+        &manifest,
+        &staging,
+        &embeddings_models_dir(),
+    ) {
+        Ok(dir) => dir,
+        Err(error) => {
+            let _ = fs::remove_file(&staging);
+            return Err(error);
+        }
+    };
     let _ = fs::remove_file(&staging);
     Ok(AcquireResult {
         artifact_path: model_dir.join(&manifest.artifact),
@@ -134,6 +181,11 @@ pub fn install_artifact_beside_manifest(
     models_dir: &Path,
 ) -> Result<PathBuf, EmbeddingError> {
     manifest.validate()?;
+    if !artifact_path.is_file() {
+        return Err(EmbeddingError::ArtifactNotFound {
+            path: artifact_path.display().to_string(),
+        });
+    }
     verify_file_sha256(artifact_path, &manifest.sha256)?;
 
     let slug = if manifest.model_id == crate::pinned::QWEN3_EMBEDDING_MODEL_ID {
@@ -159,12 +211,15 @@ pub fn install_artifact_beside_manifest(
             dest_manifest.display()
         ))
     })?;
-    fs::copy(artifact_path, &dest_artifact).map_err(|error| {
-        EmbeddingError::provider(format!(
-            "failed to copy artifact to {}: {error}",
-            dest_artifact.display()
-        ))
-    })?;
+    // Prefer rename (same volume) so we do not leave a half-copied dest; fall back to copy.
+    if fs::rename(artifact_path, &dest_artifact).is_err() {
+        fs::copy(artifact_path, &dest_artifact).map_err(|error| {
+            EmbeddingError::provider(format!(
+                "failed to copy artifact to {}: {error}",
+                dest_artifact.display()
+            ))
+        })?;
+    }
     verify_file_sha256(&dest_artifact, &manifest.sha256)?;
     Ok(model_dir)
 }
@@ -175,6 +230,33 @@ pub fn download_progress_percent(copied: u64, total: Option<u64>) -> u32 {
         return 0;
     };
     ((copied.min(total) as u128 * 100) / total as u128) as u32
+}
+
+/// Choose a stable progress denominator: prefer the pinned expected size when the
+/// HTTP Content-Length is missing or disagrees (HF redirects / chunked / HTML errors).
+pub fn progress_total_hint(content_length: Option<u64>, expected_size: Option<u64>) -> Option<u64> {
+    match (content_length, expected_size) {
+        (Some(header), Some(expected)) if header > 0 => {
+            let delta = header.abs_diff(expected);
+            let tolerance = (expected / 100).max(1024);
+            if delta <= tolerance {
+                Some(header)
+            } else {
+                Some(expected)
+            }
+        }
+        (_, Some(expected)) if expected > 0 => Some(expected),
+        (Some(header), _) if header > 0 => Some(header),
+        _ => None,
+    }
+}
+
+fn staging_token() -> String {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    format!("{}-{nanos}", std::process::id())
 }
 
 fn env_truthy(name: &str) -> bool {
@@ -216,15 +298,26 @@ fn download_https_with_progress(
     let response = ureq::get(url).call().map_err(|error| {
         EmbeddingError::provider(format!("download failed for {url}: {error}"))
     })?;
-    let total = response
+    let header_len = response
         .header("Content-Length")
-        .and_then(|value| value.parse::<u64>().ok())
-        .or(expected_size);
+        .and_then(|value| value.parse::<u64>().ok());
+    let total = progress_total_hint(header_len, expected_size);
     let mut reader = response.into_reader();
     let mut output = File::create(dest).map_err(|error| {
         EmbeddingError::provider(format!("failed to create {}: {error}", dest.display()))
     })?;
-    stream_copy(&mut reader, &mut output, total, progress)
+    stream_copy(&mut reader, &mut output, total, progress)?;
+    // If the body ended early vs pinned size, fail before sha (clearer than mismatch).
+    if let Some(expected) = expected_size {
+        let actual = file_len(dest)?;
+        if actual != expected {
+            let _ = fs::remove_file(dest);
+            return Err(EmbeddingError::provider(format!(
+                "download size mismatch for {url}: got {actual} bytes, expected {expected}"
+            )));
+        }
+    }
+    Ok(())
 }
 
 fn stream_copy(
@@ -252,6 +345,12 @@ fn stream_copy(
     output
         .flush()
         .map_err(|error| EmbeddingError::provider(error.to_string()))?;
+    if let Some(total) = total {
+        // Emit a final 100% tick when we hit the expected length.
+        if copied >= total {
+            progress(total, Some(total));
+        }
+    }
     Ok(())
 }
 
@@ -300,6 +399,25 @@ mod tests {
     }
 
     #[test]
+    fn progress_total_prefers_pinned_when_header_disagrees() {
+        assert_eq!(
+            progress_total_hint(Some(1024), Some(QWEN3_EMBEDDING_SIZE_BYTES)),
+            Some(QWEN3_EMBEDDING_SIZE_BYTES)
+        );
+        assert_eq!(
+            progress_total_hint(
+                Some(QWEN3_EMBEDDING_SIZE_BYTES),
+                Some(QWEN3_EMBEDDING_SIZE_BYTES)
+            ),
+            Some(QWEN3_EMBEDDING_SIZE_BYTES)
+        );
+        assert_eq!(
+            progress_total_hint(None, Some(QWEN3_EMBEDDING_SIZE_BYTES)),
+            Some(QWEN3_EMBEDDING_SIZE_BYTES)
+        );
+    }
+
+    #[test]
     fn acquire_from_local_source_verifies_and_installs() {
         let bytes = b"fixture-qwen3-bytes";
         let sha = sha256_hex(bytes);
@@ -329,22 +447,14 @@ mod tests {
     fn local_model_source_env_installs_pinned_sha_fixture() {
         let _guard = env_lock().lock().unwrap();
         let dir = tempfile::tempdir().unwrap();
-        // Build a fixture whose sha matches the pinned digest by using the
-        // real sha only when content matches — here we override SOURCE and
-        // temporarily point models home at the temp dir, then call install
-        // helpers with a matching fixture for the pinned filename.
         std::env::set_var(crate::ENV_LATTICE_HOME, dir.path());
         std::env::remove_var(ENV_SEMANTIC_FAKE);
 
         let fixture = dir.path().join("source.gguf");
-        // Content must hash to the pinned sha for acquire to succeed; instead
-        // exercise MODEL_SOURCE + verify fail-closed / progress via a patched
-        // install after copying under the expected name.
         let bytes = b"offline-fixture-for-progress";
         fs::write(&fixture, bytes).unwrap();
         std::env::set_var(ENV_SEMANTIC_MODEL_SOURCE, &fixture);
 
-        // acquire_pinned requires pinned sha — expect mismatch fail-closed.
         let err = acquire_pinned_embedding_model(&mut |_, _| {}).unwrap_err();
         assert!(matches!(
             err,
@@ -365,7 +475,6 @@ mod tests {
         fs::write(&artifact, b"not-the-expected-bytes").unwrap();
         let mut manifest = qwen3_embedding_0_6b_q8_manifest();
         manifest.artifact = "bad.bin".into();
-        // Pinned sha will not match.
         let err = install_artifact_beside_manifest(&manifest, &artifact, &dir.path().join("models"))
             .unwrap_err();
         assert!(matches!(
