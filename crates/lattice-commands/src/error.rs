@@ -125,6 +125,9 @@ pub enum Error {
 
     #[error(transparent)]
     Data(#[from] lattice_data::Error),
+
+    #[error(transparent)]
+    Dataset(#[from] lattice_datasets::Error),
 }
 
 impl Error {

@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use lattice_core::Workspace;
 use lattice_data::{DataApp, DeletedRowSnapshot, NewColumn, Row, SchemaFilesSnapshot};
+use lattice_datasets::Dataset;
 use lattice_storage::{
     BufferedWriter, NativeWorkspaceStore, RecoveryJournal, ResourceMetadata, WorkspaceStore,
 };
@@ -679,10 +680,12 @@ impl CommandEngine {
                 }
                 self.ensure_parent_directory(path)
             }
-            Command::TableCreate { path, .. } => match self.metadata_opt(path)? {
-                None => Ok(()),
-                Some(_) => Err(Error::AlreadyExists { path: path.clone() }),
-            },
+            Command::TableCreate { path, .. } | Command::DatasetCreate { path, .. } => {
+                match self.metadata_opt(path)? {
+                    None => Ok(()),
+                    Some(_) => Err(Error::AlreadyExists { path: path.clone() }),
+                }
+            }
             Command::TableAdd {
                 path,
                 table_name,
@@ -1297,6 +1300,26 @@ impl CommandEngine {
                     resulting_revision: Some(revision),
                 })
             }
+            Command::DatasetCreate {
+                path,
+                title,
+                description,
+            } => {
+                let abs = self.root.join(path);
+                let dataset = Dataset::create(
+                    &abs,
+                    title,
+                    description.as_deref(),
+                )?;
+                let revision = dataset.package_revision()?;
+                Ok(AppliedOp {
+                    forward: command.clone(),
+                    inverse: Command::ResourceDelete { path: path.clone() },
+                    prior_content: None,
+                    after_content: None,
+                    resulting_revision: Some(revision),
+                })
+            }
             Command::TableAdd {
                 path,
                 table_name,
@@ -1768,6 +1791,15 @@ impl CommandEngine {
                 DataApp::create(&abs, title, table_name)?;
                 Ok(())
             }
+            Command::DatasetCreate {
+                path,
+                title,
+                description,
+            } => {
+                let abs = self.root.join(path);
+                Dataset::create(&abs, title, description.as_deref())?;
+                Ok(())
+            }
             Command::TableAdd { .. } | Command::ColumnsAdd { .. } => {
                 unreachable!("table/columns add commands are never stored as inverse operations")
             }
@@ -1968,7 +2000,7 @@ impl CommandEngine {
             | Command::WorkspaceManifestUpdate { .. } => {
                 self.guard_hash(&forward.guard_path(), resulting_revision.as_deref())
             }
-            Command::TableCreate { path, .. } => {
+            Command::TableCreate { path, .. } | Command::DatasetCreate { path, .. } => {
                 if self.metadata_opt(path)?.is_some() {
                     Ok(())
                 } else {

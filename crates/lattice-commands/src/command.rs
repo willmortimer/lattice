@@ -314,6 +314,15 @@ pub enum Command {
         table_name: String,
     },
 
+    /// Create a `.dataset` analytical package at `path`. Precondition: `path`
+    /// is absent.
+    DatasetCreate {
+        path: PathBuf,
+        title: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        description: Option<String>,
+    },
+
     /// Add a table to an existing `.data` package. Precondition: package
     /// `database.sqlite` revision equals `base_revision` and the table is absent.
     TableAdd {
@@ -535,6 +544,7 @@ impl Command {
             Command::ResourceDelete { path } => path.clone(),
             Command::FolderCreate { path } => path.clone(),
             Command::TableCreate { path, .. }
+            | Command::DatasetCreate { path, .. }
             | Command::TableAdd { path, .. }
             | Command::TableDrop { path, .. }
             | Command::ColumnsAdd { path, .. }
@@ -577,6 +587,7 @@ impl Command {
             Command::ResourceDelete { path } => vec![path.clone()],
             Command::FolderCreate { path } => vec![path.clone()],
             Command::TableCreate { path, .. }
+            | Command::DatasetCreate { path, .. }
             | Command::TableAdd { path, .. }
             | Command::TableDrop { path, .. }
             | Command::ColumnsAdd { path, .. }
