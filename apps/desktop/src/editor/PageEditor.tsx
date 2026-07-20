@@ -307,8 +307,8 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
 
   const revisionRef = useRef(revision);
   const savingRef = useRef(false);
-  const autosaveTimer = useRef<ReturnType<typeof window.setTimeout> | null>(null);
-  const savedIndicatorTimer = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const autosaveTimer = useRef<number | null>(null);
+  const savedIndicatorTimer = useRef<number | null>(null);
 
   const onRevisionChangeRef = useRef(onRevisionChange);
   onRevisionChangeRef.current = onRevisionChange;

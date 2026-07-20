@@ -43,8 +43,8 @@ export function useAppSettings() {
   const [ready, setReady] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const profileRef = useRef(profile);
-  const desktopSaveTimer = useRef<ReturnType<typeof window.setTimeout> | null>(null);
-  const startupSaveTimer = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const desktopSaveTimer = useRef<number | null>(null);
+  const startupSaveTimer = useRef<number | null>(null);
   profileRef.current = profile;
 
   useEffect(() => {
