@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::error::Error;
-use crate::types::FieldType;
+use crate::types::{FieldType, RollupAggregate};
 use crate::Result;
 
 pub const APP_MANIFEST_FILENAME: &str = "app.yaml";
@@ -43,6 +43,21 @@ pub struct ColumnMetaYaml {
     /// Target table for [`FieldType::Relation`] (same `.data` package).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relation_table: Option<String>,
+    /// Source relation column on this table for [`FieldType::Lookup`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lookup_relation: Option<String>,
+    /// Field on the related table projected by [`FieldType::Lookup`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lookup_field: Option<String>,
+    /// Source relation column on this table for [`FieldType::Rollup`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rollup_relation: Option<String>,
+    /// Aggregate applied by [`FieldType::Rollup`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rollup_aggregate: Option<RollupAggregate>,
+    /// Related-table field aggregated by [`FieldType::Rollup`] (optional for count).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rollup_field: Option<String>,
 }
 
 impl AppManifest {
@@ -104,6 +119,11 @@ impl AppManifest {
             .or_insert(ColumnMetaYaml {
                 field_type: FieldType::Text,
                 relation_table: None,
+                lookup_relation: None,
+                lookup_field: None,
+                rollup_relation: None,
+                rollup_aggregate: None,
+                rollup_field: None,
             });
     }
 

@@ -1,6 +1,7 @@
 mod canvas;
 mod commands;
 mod data;
+mod dataset;
 mod link_repair;
 mod profile;
 mod resource_links;
@@ -196,6 +197,9 @@ pub fn run() {
             theme::start_theme_watching,
             theme::stop_theme_watching,
             data::open_data_app,
+            data::list_data_tables,
+            data::list_data_table_columns,
+            data::add_data_columns,
             data::create_table_package,
             data::insert_record,
             data::update_record,
@@ -205,7 +209,18 @@ pub fn run() {
             data::save_data_view,
             data::list_data_forms,
             data::load_data_form,
+            data::save_data_form,
+            data::list_data_actions,
+            data::load_data_action,
+            data::list_data_interfaces,
+            data::load_data_interface,
             data::import_csv_table,
+            data::preview_tabular_import,
+            data::commit_tabular_import,
+            data::preview_csv_import,
+            data::commit_csv_import,
+            dataset::query_dataset_arrow,
+            dataset::profile_dataset,
             canvas::read_canvas,
             canvas::canvas_place_resource,
             canvas::canvas_move_nodes,

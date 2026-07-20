@@ -1335,3 +1335,553 @@ fn page_create_from_template_substitutes_title_and_date() {
         .unwrap();
     assert_eq!(read(&dir, "Notes/Blank.md"), b"");
 }
+
+#[test]
+fn columns_add_undo_restores_schema_and_app_yaml() {
+    use crate::ColumnSpec;
+    use lattice_data::FieldType;
+
+    let (dir, mut engine) = engine();
+    engine
+        .apply(Transaction::new(
+            "Create CRM.data",
+            vec![Command::TableCreate {
+                path: PathBuf::from("CRM.data"),
+                title: "CRM".into(),
+                table_name: "contacts".into(),
+            }],
+        ))
+        .unwrap();
+
+    let package = dir.path().join("CRM.data");
+    let schema_before = std::fs::read_to_string(package.join("schema.sql")).unwrap();
+    let app_yaml_before = std::fs::read_to_string(package.join("app.yaml")).unwrap();
+    let base_revision = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+
+    engine
+        .apply(Transaction::new(
+            "Add name column",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("CRM.data"),
+                table: "contacts".into(),
+                columns: vec![ColumnSpec::new("name", FieldType::Text)],
+                base_revision,
+            }],
+        ))
+        .unwrap();
+
+    let app = lattice_data::DataApp::open(&package).unwrap();
+    assert!(app
+        .columns("contacts")
+        .unwrap()
+        .iter()
+        .any(|column| column.name == "name"));
+    assert!(std::fs::read_to_string(package.join("schema.sql"))
+        .unwrap()
+        .contains("ADD COLUMN name"));
+    assert!(std::fs::read_to_string(package.join("app.yaml"))
+        .unwrap()
+        .contains("name:"));
+
+    engine.undo().unwrap().unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(package.join("schema.sql")).unwrap(),
+        schema_before
+    );
+    assert_eq!(
+        std::fs::read_to_string(package.join("app.yaml")).unwrap(),
+        app_yaml_before
+    );
+    let app = lattice_data::DataApp::open(&package).unwrap();
+    assert!(!app
+        .columns("contacts")
+        .unwrap()
+        .iter()
+        .any(|column| column.name == "name"));
+}
+
+#[test]
+fn table_add_undo_removes_table_and_rows() {
+    use std::collections::BTreeMap;
+
+    use crate::ColumnSpec;
+    use lattice_data::{CellValue, FieldType};
+
+    let (dir, mut engine) = engine();
+    engine
+        .apply(Transaction::new(
+            "Create CRM.data",
+            vec![Command::TableCreate {
+                path: PathBuf::from("CRM.data"),
+                title: "CRM".into(),
+                table_name: "contacts".into(),
+            }],
+        ))
+        .unwrap();
+
+    let package = dir.path().join("CRM.data");
+    let schema_before = std::fs::read_to_string(package.join("schema.sql")).unwrap();
+    let app_yaml_before = std::fs::read_to_string(package.join("app.yaml")).unwrap();
+    let base_revision = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+
+    engine
+        .apply(Transaction::new(
+            "Add companies table",
+            vec![Command::TableAdd {
+                path: PathBuf::from("CRM.data"),
+                table_name: "companies".into(),
+                base_revision,
+            }],
+        ))
+        .unwrap();
+
+    let after_table = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Add company name",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("CRM.data"),
+                table: "companies".into(),
+                columns: vec![ColumnSpec::new("name", FieldType::Text)],
+                base_revision: after_table,
+            }],
+        ))
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Insert company",
+            vec![Command::RecordInsert {
+                path: PathBuf::from("CRM.data"),
+                table: "companies".into(),
+                values: BTreeMap::from([("name".into(), CellValue::Text("Acme".into()))]),
+                id: None,
+            }],
+        ))
+        .unwrap();
+    assert_eq!(
+        lattice_data::DataApp::open(&package)
+            .unwrap()
+            .list_rows("companies", 10, 0)
+            .unwrap()
+            .len(),
+        1
+    );
+
+    // Undo insert, then column add, then table add.
+    engine.undo().unwrap().unwrap();
+    engine.undo().unwrap().unwrap();
+    engine.undo().unwrap().unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(package.join("schema.sql")).unwrap(),
+        schema_before
+    );
+    assert_eq!(
+        std::fs::read_to_string(package.join("app.yaml")).unwrap(),
+        app_yaml_before
+    );
+    let tables = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .list_tables()
+        .unwrap();
+    assert_eq!(tables, vec!["contacts".to_string()]);
+}
+
+#[test]
+fn stale_package_revision_on_columns_add_is_refused() {
+    use crate::ColumnSpec;
+    use lattice_data::FieldType;
+
+    let (dir, mut engine) = engine();
+    engine
+        .apply(Transaction::new(
+            "Create CRM.data",
+            vec![Command::TableCreate {
+                path: PathBuf::from("CRM.data"),
+                title: "CRM".into(),
+                table_name: "contacts".into(),
+            }],
+        ))
+        .unwrap();
+
+    let result = engine.apply(Transaction::new(
+        "Stale columns add",
+        vec![Command::ColumnsAdd {
+            path: PathBuf::from("CRM.data"),
+            table: "contacts".into(),
+            columns: vec![ColumnSpec::new("name", FieldType::Text)],
+            base_revision: "sha256:deadbeef".into(),
+        }],
+    ));
+    assert!(matches!(result, Err(Error::StaleBaseRevision { .. })));
+    assert!(!std::fs::read_to_string(dir.path().join("CRM.data/schema.sql"))
+        .unwrap()
+        .contains("ADD COLUMN name"));
+}
+
+#[test]
+fn form_save_create_update_and_undo() {
+    let (dir, mut engine) = engine();
+
+    engine
+        .apply(Transaction::new(
+            "Create CRM.data",
+            vec![Command::TableCreate {
+                path: PathBuf::from("CRM.data"),
+                title: "CRM".into(),
+                table_name: "contacts".into(),
+            }],
+        ))
+        .unwrap();
+
+    let initial = "format: lattice-form\nversion: 1\nname: intake\ntable: contacts\nfields:\n- name\n";
+    engine
+        .apply(Transaction::new(
+            "Save intake form",
+            vec![Command::FormSave {
+                path: PathBuf::from("CRM.data"),
+                form_name: "intake".into(),
+                content: initial.to_string(),
+            }],
+        ))
+        .unwrap();
+
+    let form_path = dir.path().join("CRM.data/forms/intake.form.yaml");
+    assert_eq!(std::fs::read_to_string(&form_path).unwrap(), initial);
+
+    let updated = "format: lattice-form\nversion: 1\nname: intake\ntable: contacts\nfields:\n- name\n- email\n";
+    engine
+        .apply(Transaction::new(
+            "Update intake form",
+            vec![Command::FormSave {
+                path: PathBuf::from("CRM.data"),
+                form_name: "intake".into(),
+                content: updated.to_string(),
+            }],
+        ))
+        .unwrap();
+    assert_eq!(std::fs::read_to_string(&form_path).unwrap(), updated);
+
+    engine.undo().unwrap().unwrap();
+    assert_eq!(std::fs::read_to_string(&form_path).unwrap(), initial);
+
+    engine.undo().unwrap().unwrap();
+    assert!(!form_path.exists());
+}
+
+#[test]
+fn columns_add_lookup_undo_removes_lookup_column() {
+    use std::collections::BTreeMap;
+
+    use crate::ColumnSpec;
+    use lattice_data::{CellValue, FieldType};
+
+    let (dir, mut engine) = engine();
+    engine
+        .apply(Transaction::new(
+            "Create CRM.data",
+            vec![Command::TableCreate {
+                path: PathBuf::from("CRM.data"),
+                title: "CRM".into(),
+                table_name: "companies".into(),
+            }],
+        ))
+        .unwrap();
+
+    let package = dir.path().join("CRM.data");
+    let mut base_revision = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+
+    engine
+        .apply(Transaction::new(
+            "Add company name",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("CRM.data"),
+                table: "companies".into(),
+                columns: vec![ColumnSpec::new("name", FieldType::Text)],
+                base_revision,
+            }],
+        ))
+        .unwrap();
+
+    base_revision = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Add contacts table",
+            vec![Command::TableAdd {
+                path: PathBuf::from("CRM.data"),
+                table_name: "contacts".into(),
+                base_revision,
+            }],
+        ))
+        .unwrap();
+
+    base_revision = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Add contact relation",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("CRM.data"),
+                table: "contacts".into(),
+                columns: vec![
+                    ColumnSpec::new("name", FieldType::Text),
+                    ColumnSpec::relation("company", "companies"),
+                ],
+                base_revision,
+            }],
+        ))
+        .unwrap();
+
+    {
+        let app = lattice_data::DataApp::open(&package).unwrap();
+        let company_id = app
+            .insert_row(
+                "companies",
+                &BTreeMap::from([("name".into(), CellValue::Text("Acme".into()))]),
+            )
+            .unwrap();
+        app.insert_row(
+            "contacts",
+            &BTreeMap::from([
+                ("name".into(), CellValue::Text("Ada".into())),
+                (
+                    "company".into(),
+                    CellValue::Relation {
+                        record_ids: vec![company_id],
+                    },
+                ),
+            ]),
+        )
+        .unwrap();
+    }
+
+    base_revision = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Add company_name lookup",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("CRM.data"),
+                table: "contacts".into(),
+                columns: vec![ColumnSpec::lookup("company_name", "company", "name")],
+                base_revision,
+            }],
+        ))
+        .unwrap();
+
+    {
+        let app = lattice_data::DataApp::open(&package).unwrap();
+        let rows = app.list_rows("contacts", 10, 0).unwrap();
+        assert_eq!(
+            rows[0].values.get("company_name"),
+            Some(&CellValue::Lookup {
+                values: vec!["Acme".into()],
+            })
+        );
+        assert!(app
+            .columns("contacts")
+            .unwrap()
+            .iter()
+            .any(|column| column.name == "company_name"
+                && column.field_type == FieldType::Lookup));
+    }
+
+    engine.undo().unwrap().unwrap();
+
+    let app = lattice_data::DataApp::open(&package).unwrap();
+    assert!(!app
+        .columns("contacts")
+        .unwrap()
+        .iter()
+        .any(|column| column.name == "company_name"));
+    assert!(!std::fs::read_to_string(package.join("app.yaml"))
+        .unwrap()
+        .contains("company_name"));
+}
+
+#[test]
+fn columns_add_rollup_undo_removes_rollup_column() {
+    use std::collections::BTreeMap;
+
+    use crate::ColumnSpec;
+    use lattice_data::{CellValue, FieldType, RollupAggregate};
+
+    let (dir, mut engine) = engine();
+    engine
+        .apply(Transaction::new(
+            "Create Orders.data",
+            vec![Command::TableCreate {
+                path: PathBuf::from("Orders.data"),
+                title: "Orders".into(),
+                table_name: "orders".into(),
+            }],
+        ))
+        .unwrap();
+
+    let package = dir.path().join("Orders.data");
+    let mut base_revision = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+
+    engine
+        .apply(Transaction::new(
+            "Add order name",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("Orders.data"),
+                table: "orders".into(),
+                columns: vec![ColumnSpec::new("name", FieldType::Text)],
+                base_revision,
+            }],
+        ))
+        .unwrap();
+
+    base_revision = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Add line_items table",
+            vec![Command::TableAdd {
+                path: PathBuf::from("Orders.data"),
+                table_name: "line_items".into(),
+                base_revision,
+            }],
+        ))
+        .unwrap();
+
+    base_revision = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Add line_items columns",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("Orders.data"),
+                table: "line_items".into(),
+                columns: vec![ColumnSpec::new("amount", FieldType::Decimal)],
+                base_revision,
+            }],
+        ))
+        .unwrap();
+
+    base_revision = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Add order items relation",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("Orders.data"),
+                table: "orders".into(),
+                columns: vec![ColumnSpec::relation("items", "line_items")],
+                base_revision,
+            }],
+        ))
+        .unwrap();
+
+    {
+        let app = lattice_data::DataApp::open(&package).unwrap();
+        let order_id = app
+            .insert_row(
+                "orders",
+                &BTreeMap::from([("name".into(), CellValue::Text("PO-1".into()))]),
+            )
+            .unwrap();
+        let item_id = app
+            .insert_row(
+                "line_items",
+                &BTreeMap::from([("amount".into(), CellValue::Decimal(12.0))]),
+            )
+            .unwrap();
+        app.update_row(
+            "orders",
+            &order_id,
+            &BTreeMap::from([(
+                "items".into(),
+                CellValue::Relation {
+                    record_ids: vec![item_id],
+                },
+            )]),
+        )
+        .unwrap();
+    }
+
+    base_revision = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Add item_count and total_amount rollups",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("Orders.data"),
+                table: "orders".into(),
+                columns: vec![
+                    ColumnSpec::rollup("item_count", "items", RollupAggregate::Count, None::<String>),
+                    ColumnSpec::rollup(
+                        "total_amount",
+                        "items",
+                        RollupAggregate::Sum,
+                        Some("amount"),
+                    ),
+                ],
+                base_revision,
+            }],
+        ))
+        .unwrap();
+
+    {
+        let app = lattice_data::DataApp::open(&package).unwrap();
+        let rows = app.list_rows("orders", 10, 0).unwrap();
+        assert_eq!(
+            rows[0].values.get("item_count"),
+            Some(&CellValue::Rollup { value: Some(1.0) })
+        );
+        assert_eq!(
+            rows[0].values.get("total_amount"),
+            Some(&CellValue::Rollup { value: Some(12.0) })
+        );
+        assert!(app
+            .columns("orders")
+            .unwrap()
+            .iter()
+            .any(|column| column.name == "item_count"
+                && column.field_type == FieldType::Rollup));
+    }
+
+    engine.undo().unwrap().unwrap();
+
+    let app = lattice_data::DataApp::open(&package).unwrap();
+    assert!(!app
+        .columns("orders")
+        .unwrap()
+        .iter()
+        .any(|column| column.name == "item_count" || column.name == "total_amount"));
+    let manifest = std::fs::read_to_string(package.join("app.yaml")).unwrap();
+    assert!(!manifest.contains("item_count"));
+    assert!(!manifest.contains("total_amount"));
+}

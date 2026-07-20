@@ -300,6 +300,21 @@ function normalizeDataPackage(entry, template, index) {
     entry.table,
     columnNames,
   );
+  const actions = normalizeDataPackageActions(
+    entry.actions,
+    template,
+    label,
+    entry.table,
+    columnNames,
+    forms,
+  );
+  const interfaces = normalizeDataPackageInterfaces(
+    entry.interfaces,
+    template,
+    label,
+    views,
+    forms,
+  );
 
   const extraTables = normalizeExtraTables(
     entry.extraTables,
@@ -318,6 +333,8 @@ function normalizeDataPackage(entry, template, index) {
     extraTables,
     views,
     forms,
+    actions,
+    interfaces,
   };
 }
 
@@ -581,6 +598,228 @@ function normalizeDataPackageForm(entry, template, label, defaultTable, allowedC
   };
 }
 
+const ACTION_TYPES = new Set(["insert_record", "update_field", "open_url"]);
+const ACTION_SCOPES = new Set(["toolbar", "row"]);
+
+function normalizeDataPackageActions(raw, template, label, defaultTable, columnNames, forms) {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) {
+    throw new Error(`${template}: ${label}.actions must be an array`);
+  }
+  const allowedColumns = new Set([...columnNames, "id"]);
+  const formNames = new Set(forms.map((form) => form.name));
+  const actionNames = new Set();
+  return raw.map((entry, index) =>
+    normalizeDataPackageAction(
+      entry,
+      template,
+      `${label}.actions[${index}]`,
+      defaultTable,
+      allowedColumns,
+      formNames,
+      actionNames,
+    ),
+  );
+}
+
+function normalizeDataPackageInterfaces(raw, template, label, views, forms) {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) {
+    throw new Error(`${template}: ${label}.interfaces must be an array`);
+  }
+  const knownViews = new Set(["All", ...views.map((view) => view.name)]);
+  const knownForms = new Set(forms.map((form) => form.name));
+  const interfaceNames = new Set();
+  return raw.map((entry, index) =>
+    normalizeDataPackageInterface(
+      entry,
+      template,
+      `${label}.interfaces[${index}]`,
+      knownViews,
+      knownForms,
+      interfaceNames,
+    ),
+  );
+}
+
+function normalizeDataPackageAction(
+  entry,
+  template,
+  label,
+  defaultTable,
+  allowedColumns,
+  formNames,
+  actionNames,
+) {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    throw new Error(`${template}: ${label} must be an object`);
+  }
+  if (typeof entry.name !== "string" || !isSqlIdentifier(entry.name)) {
+    throw new Error(`${template}: ${label}.name must be a valid SQL identifier`);
+  }
+  if (actionNames.has(entry.name)) {
+    throw new Error(`${template}: ${label} duplicate action name ${entry.name}`);
+  }
+  actionNames.add(entry.name);
+  if (typeof entry.label !== "string" || entry.label.trim() === "") {
+    throw new Error(`${template}: ${label}.label must be a non-empty string`);
+  }
+  const table =
+    entry.table === undefined
+      ? defaultTable
+      : typeof entry.table === "string" && isSqlIdentifier(entry.table)
+        ? entry.table
+        : null;
+  if (!table) {
+    throw new Error(`${template}: ${label}.table must be a valid SQL identifier`);
+  }
+  const scope =
+    entry.scope === undefined
+      ? "toolbar"
+      : typeof entry.scope === "string" && ACTION_SCOPES.has(entry.scope)
+        ? entry.scope
+        : null;
+  if (!scope) {
+    throw new Error(`${template}: ${label}.scope must be toolbar or row`);
+  }
+  if (!entry.action || typeof entry.action !== "object" || Array.isArray(entry.action)) {
+    throw new Error(`${template}: ${label}.action must be an object`);
+  }
+  const actionType =
+    typeof entry.action.type === "string" && ACTION_TYPES.has(entry.action.type)
+      ? entry.action.type
+      : null;
+  if (!actionType) {
+    throw new Error(
+      `${template}: ${label}.action.type must be one of ${[...ACTION_TYPES].join(", ")}`,
+    );
+  }
+  const action = { type: actionType };
+  if (actionType === "insert_record") {
+    if (entry.action.form !== undefined) {
+      if (typeof entry.action.form !== "string" || !formNames.has(entry.action.form)) {
+        throw new Error(`${template}: ${label}.action.form must reference a package form`);
+      }
+      action.form = entry.action.form;
+    }
+    if (entry.action.defaults !== undefined) {
+      if (!entry.action.defaults || typeof entry.action.defaults !== "object" || Array.isArray(entry.action.defaults)) {
+        throw new Error(`${template}: ${label}.action.defaults must be an object`);
+      }
+      const defaults = {};
+      for (const [field, value] of Object.entries(entry.action.defaults)) {
+        if (!isSqlIdentifier(field) || !allowedColumns.has(field)) {
+          throw new Error(`${template}: ${label}.action.defaults references unknown column ${field}`);
+        }
+        if (typeof value !== "string") {
+          throw new Error(`${template}: ${label}.action.defaults.${field} must be a string`);
+        }
+        defaults[field] = value;
+      }
+      action.defaults = defaults;
+    }
+    if (!action.form && (!action.defaults || Object.keys(action.defaults).length === 0)) {
+      throw new Error(
+        `${template}: ${label}.action insert_record requires form or non-empty defaults`,
+      );
+    }
+  } else if (actionType === "update_field") {
+    if (typeof entry.action.field !== "string" || !allowedColumns.has(entry.action.field) || entry.action.field === "id") {
+      throw new Error(`${template}: ${label}.action.field must be a writable table column`);
+    }
+    if (typeof entry.action.value !== "string") {
+      throw new Error(`${template}: ${label}.action.value must be a string`);
+    }
+    action.field = entry.action.field;
+    action.value = entry.action.value;
+  } else if (actionType === "open_url") {
+    if (typeof entry.action.url !== "string" || entry.action.url.trim() === "") {
+      throw new Error(`${template}: ${label}.action.url must be a non-empty string`);
+    }
+    const url = entry.action.url.trim();
+    if (
+      !/^https?:\/\//i.test(url) &&
+      (url.startsWith("/") || url.split("/").some((part) => part === ".."))
+    ) {
+      throw new Error(
+        `${template}: ${label}.action.url must be http(s) or a workspace-relative path`,
+      );
+    }
+    action.url = url;
+  }
+  return {
+    name: entry.name,
+    label: entry.label.trim(),
+    table,
+    scope,
+    action,
+  };
+}
+
+function normalizeDataPackageInterface(
+  entry,
+  template,
+  label,
+  knownViews,
+  knownForms,
+  interfaceNames,
+) {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+    throw new Error(`${template}: ${label} must be an object`);
+  }
+  if (typeof entry.name !== "string" || !isSqlIdentifier(entry.name)) {
+    throw new Error(`${template}: ${label}.name must be a valid SQL identifier`);
+  }
+  if (interfaceNames.has(entry.name)) {
+    throw new Error(`${template}: ${label} duplicate interface name ${entry.name}`);
+  }
+  interfaceNames.add(entry.name);
+
+  const views = normalizeInterfaceNameList(entry.views, template, `${label}.views`, knownViews, "view");
+  const forms = normalizeInterfaceNameList(entry.forms, template, `${label}.forms`, knownForms, "form");
+  if (views.length === 0 && forms.length === 0) {
+    throw new Error(`${template}: ${label} must bind at least one view or form`);
+  }
+  if (entry.title !== undefined && (typeof entry.title !== "string" || entry.title.trim() === "")) {
+    throw new Error(`${template}: ${label}.title must be a non-empty string`);
+  }
+  if (
+    entry.description !== undefined &&
+    (typeof entry.description !== "string" || entry.description.trim() === "")
+  ) {
+    throw new Error(`${template}: ${label}.description must be a non-empty string`);
+  }
+  return {
+    name: entry.name,
+    views,
+    forms,
+    title: entry.title,
+    description: entry.description,
+  };
+}
+
+function normalizeInterfaceNameList(raw, template, label, allowed, kind) {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) {
+    throw new Error(`${template}: ${label} must be an array`);
+  }
+  const seen = new Set();
+  return raw.map((name, index) => {
+    const itemLabel = `${label}[${index}]`;
+    if (typeof name !== "string" || !isSqlIdentifier(name)) {
+      throw new Error(`${template}: ${itemLabel} must be a valid SQL identifier`);
+    }
+    if (!allowed.has(name)) {
+      throw new Error(`${template}: ${itemLabel} references unknown ${kind} ${name}`);
+    }
+    if (seen.has(name)) {
+      throw new Error(`${template}: ${itemLabel} duplicate ${kind} ${name}`);
+    }
+    seen.add(name);
+    return name;
+  });
+}
+
 function assertJsonCell(value, template, label, fieldType) {
   const kind = value === null ? "null" : Array.isArray(value) ? "array" : typeof value;
   if (fieldType === "relation") {
@@ -752,6 +991,44 @@ function rustDataForm(form) {
             }`;
 }
 
+function rustActionDefaults(defaults) {
+  if (!defaults || Object.keys(defaults).length === 0) {
+    return "&[]";
+  }
+  const pairs = Object.entries(defaults)
+    .map(([field, value]) => `(${rustString(field)}, ${rustString(value)})`)
+    .join(",\n                    ");
+  return `&[\n                    ${pairs}\n                ]`;
+}
+
+function rustDataAction(action) {
+  const actionDef = action.action;
+  return `SeedDataAction {
+                name: ${rustString(action.name)},
+                label: ${rustString(action.label)},
+                table: ${rustString(action.table)},
+                scope: ${rustString(action.scope)},
+                action_type: ${rustString(actionDef.type)},
+                form: ${rustOptionString(actionDef.form)},
+                field: ${rustOptionString(actionDef.field)},
+                value: ${rustOptionString(actionDef.value)},
+                url: ${rustOptionString(actionDef.url)},
+                defaults: ${rustActionDefaults(actionDef.defaults)},
+            }`;
+}
+
+function rustDataInterface(iface) {
+  const views = iface.views.map((view) => rustString(view)).join(",\n                    ");
+  const forms = iface.forms.map((form) => rustString(form)).join(",\n                    ");
+  return `SeedDataInterface {
+                name: ${rustString(iface.name)},
+                views: &[${views ? `\n                    ${views}\n                ` : ""}],
+                forms: &[${forms ? `\n                    ${forms}\n                ` : ""}],
+                title: ${rustOptionString(iface.title)},
+                description: ${rustOptionString(iface.description)},
+            }`;
+}
+
 function rustDataView(view) {
   const columns = view.columns.map((column) => rustString(column)).join(",\n                    ");
   return `SeedDataView {
@@ -783,6 +1060,8 @@ function rustDataPackage(packageDef) {
   const rows = packageDef.rows.map((row) => rustString(JSON.stringify(row))).join(",\n                ");
   const views = packageDef.views.map(rustDataView).join(",\n                ");
   const forms = packageDef.forms.map(rustDataForm).join(",\n                ");
+  const actions = (packageDef.actions ?? []).map(rustDataAction).join(",\n                ");
+  const interfaces = (packageDef.interfaces ?? []).map(rustDataInterface).join(",\n                ");
   const extraTables = packageDef.extraTables.map(rustExtraTable).join(",\n                ");
   return `SeedDataPackage {
             path: ${rustString(packageDef.path)},
@@ -797,6 +1076,8 @@ function rustDataPackage(packageDef) {
             extra_tables: &[${extraTables ? `\n                ${extraTables}\n            ` : ""}],
             views: &[${views ? `\n                ${views}\n            ` : ""}],
             forms: &[${forms ? `\n                ${forms}\n            ` : ""}],
+            actions: &[${actions ? `\n                ${actions}\n            ` : ""}],
+            interfaces: &[${interfaces ? `\n                ${interfaces}\n            ` : ""}],
         }`;
 }
 
@@ -1079,6 +1360,26 @@ function buildDemoFormCatalog(packageDef) {
   }));
 }
 
+function buildDemoActionCatalog(packageDef) {
+  return (packageDef.actions ?? []).map((action) => ({
+    name: action.name,
+    label: action.label,
+    table: action.table,
+    scope: action.scope,
+    action: action.action,
+  }));
+}
+
+function buildDemoInterfaceCatalog(packageDef) {
+  return (packageDef.interfaces ?? []).map((iface) => ({
+    name: iface.name,
+    views: iface.views,
+    forms: iface.forms,
+    ...(iface.title === undefined ? {} : { title: iface.title }),
+    ...(iface.description === undefined ? {} : { description: iface.description }),
+  }));
+}
+
 function buildDemoViewCatalog(packageDef) {
   const views = [
     { name: "All", layout_type: "grid" },
@@ -1154,6 +1455,10 @@ function buildDemoDataAppFromPackage(packageDef) {
     package_revision: "demo:0",
     columns,
     rows: demoRows,
+    row_offset: 0,
+    row_limit: demoRows.length,
+    row_total: demoRows.length,
+    has_more: false,
     available_views,
     active_view,
     filters: [],
@@ -1186,6 +1491,22 @@ function buildDemoPackageFormsByPath(template) {
     forms[packageDef.path] = buildDemoFormCatalog(packageDef);
   }
   return forms;
+}
+
+function buildDemoPackageActionsByPath(template) {
+  const actions = {};
+  for (const packageDef of template.dataPackages) {
+    actions[packageDef.path] = buildDemoActionCatalog(packageDef);
+  }
+  return actions;
+}
+
+function buildDemoPackageInterfacesByPath(template) {
+  const interfaces = {};
+  for (const packageDef of template.dataPackages) {
+    interfaces[packageDef.path] = buildDemoInterfaceCatalog(packageDef);
+  }
+  return interfaces;
 }
 
 export function emitDemoWorkspace(templates) {
@@ -1228,6 +1549,10 @@ export function emitDemoWorkspace(templates) {
     demoDataApps,
     demoPackageForms: buildDemoFormCatalog(crmPackage),
     demoPackageFormsByPath: buildDemoPackageFormsByPath(template),
+    demoPackageActions: buildDemoActionCatalog(crmPackage),
+    demoPackageActionsByPath: buildDemoPackageActionsByPath(template),
+    demoPackageInterfaces: buildDemoInterfaceCatalog(crmPackage),
+    demoPackageInterfacesByPath: buildDemoPackageInterfacesByPath(template),
     demoPages: buildDemoPages(template),
     demoTextFiles: buildDemoTextFiles(template),
     demoNotebooks: buildDemoNotebooks(template),
@@ -1236,6 +1561,8 @@ export function emitDemoWorkspace(templates) {
 import type { WorkspaceSnapshot } from "./types";
 import type { DataAppSnapshot } from "./data/types";
 import type { FormSummary } from "./data/forms";
+import type { ActionSummary } from "./data/actions";
+import type { InterfaceSummary } from "./data/interfaces";
 
 export const demoSnapshot: WorkspaceSnapshot = ${JSON.stringify(module.demoSnapshot, null, 2)};
 
@@ -1248,6 +1575,14 @@ export const demoDataApps: Record<string, DataAppSnapshot> = ${JSON.stringify(mo
 export const demoPackageForms: FormSummary[] = ${JSON.stringify(module.demoPackageForms, null, 2)};
 
 export const demoPackageFormsByPath: Record<string, FormSummary[]> = ${JSON.stringify(module.demoPackageFormsByPath, null, 2)};
+
+export const demoPackageActions: ActionSummary[] = ${JSON.stringify(module.demoPackageActions, null, 2)};
+
+export const demoPackageActionsByPath: Record<string, ActionSummary[]> = ${JSON.stringify(module.demoPackageActionsByPath, null, 2)};
+
+export const demoPackageInterfaces: InterfaceSummary[] = ${JSON.stringify(module.demoPackageInterfaces, null, 2)};
+
+export const demoPackageInterfacesByPath: Record<string, InterfaceSummary[]> = ${JSON.stringify(module.demoPackageInterfacesByPath, null, 2)};
 
 export const demoPages: Record<string, string> = ${JSON.stringify(module.demoPages, null, 2)};
 

@@ -2,7 +2,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { invoke as coreInvoke } from "../lib/ipc";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
-import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { buildTabularImportReviewState, defaultPackageNameFromImportPath, TABULAR_IMPORT_FILE_FILTERS, type TabularImportPreview, type TabularImportReviewState, tableNameFromPackageLabel, workspaceTabularAbsolutePath } from "../data/tabularImport";
+import type { FieldType } from "../data/types";
 import { resolveResourceLink, type ResourceLinkTarget } from "../lib/resourceLinks";
 import { createPage } from "../lib/pages";
 import { updateWorkspaceManifest } from "../lib/workspace";
@@ -13,7 +15,12 @@ import type { DataAppSnapshot } from "../data/types";
 import type { OpenResourceSession } from "../resourceSession";
 import type { Resource, WorkspaceSnapshot } from "../types";
 import { inBrowser } from "../demo";
-import { viewNameFromCanvasSubpath } from "../canvas/dataViewSubpath";
+import {
+  interfaceNameFromCanvasSubpath,
+  viewNameFromCanvasSubpath,
+  viewNameFromInterfaceBindings,
+} from "../canvas/dataViewSubpath";
+import { loadPackageInterface } from "../data/interfaces";
 
 function dirnameOf(path: string): string {
   const slash = path.lastIndexOf("/");
@@ -21,10 +28,7 @@ function dirnameOf(path: string): string {
 }
 
 function tableNameFromLabel(label: string): string {
-  let name = label.trim().replace(/\.data$/i, "").toLowerCase()
-    .replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
-  if (!name || /^\d/.test(name)) name = `t_${name || "table"}`;
-  return name;
+  return tableNameFromPackageLabel(label);
 }
 
 function dataPackagePath(label: string): string {
@@ -60,6 +64,7 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
     refreshResources, handleSelect, openCreatedResource, reconcilePathRemaps,
   } = options;
   const workspaceSettingsTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const [tabularImportReview, setTabularImportReview] = useState<TabularImportReviewState | null>(null);
   useEffect(() => () => {
     if (workspaceSettingsTimerRef.current) window.clearTimeout(workspaceSettingsTimerRef.current);
   }, []);
@@ -134,32 +139,102 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
     }
   }, [reconcilePathRemaps, refreshResources, setError, snapshot]);
 
-  const handleImportCsv = useCallback(async () => {
+  const handleImportTable = useCallback(async () => {
     if (inBrowser) {
-      setError("CSV import is not available in the browser demo.");
+      setError("Table import is not available in the browser demo.");
       return;
     }
     if (!snapshot) return;
-    const selectedFile = await open({ multiple: false, filters: [{ name: "CSV", extensions: ["csv"] }] });
+    const selectedFile = await open({ multiple: false, filters: [...TABULAR_IMPORT_FILE_FILTERS] });
     if (!selectedFile || typeof selectedFile !== "string") return;
     const name = window.prompt("Package name", "Imported")?.trim();
     if (!name) return;
     setBusy(true);
     try {
-      const [relPath, created] = await invoke<[string, DataAppSnapshot]>("import_csv_table", {
-        root: snapshot.root, csvPath: selectedFile, packageName: name,
-        title: name.replace(/\.data$/i, ""), tableName: tableNameFromLabel(name),
-      });
-      await refreshResources();
-      const resource: Resource = { path: relPath, kind: "data-app" };
-      openCreatedResource(resource, { kind: "data-app", resource, snapshot: created });
+      const preview = await invoke<TabularImportPreview>("preview_tabular_import", { sourcePath: selectedFile });
+      setTabularImportReview(buildTabularImportReviewState(selectedFile, name, preview));
       setError(null);
     } catch (error) {
       setError(String(error));
     } finally {
       setBusy(false);
     }
-  }, [openCreatedResource, refreshResources, setBusy, setError, snapshot]);
+  }, [setBusy, setError, snapshot]);
+
+  const handleImportCsv = handleImportTable;
+
+  const handlePromoteWorkspaceTable = useCallback(async (resource: Resource) => {
+    if (inBrowser) {
+      setError("Table import is not available in the browser demo.");
+      return;
+    }
+    if (!snapshot) return;
+    const defaultName = defaultPackageNameFromImportPath(resource.path);
+    const name = window.prompt("Package name", defaultName)?.trim();
+    if (!name) return;
+    const sourcePath = workspaceTabularAbsolutePath(snapshot.root, resource.path);
+    setBusy(true);
+    try {
+      const preview = await invoke<TabularImportPreview>("preview_tabular_import", { sourcePath });
+      setTabularImportReview(buildTabularImportReviewState(sourcePath, name, preview));
+      setError(null);
+    } catch (error) {
+      setError(String(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [setBusy, setError, snapshot]);
+
+  const handlePromoteWorkspaceCsv = handlePromoteWorkspaceTable;
+
+  const handleCancelTabularImport = useCallback(() => {
+    setTabularImportReview(null);
+  }, []);
+
+  const handleCancelCsvImport = handleCancelTabularImport;
+
+  const handleTabularImportColumnTypeChange = useCallback((columnName: string, fieldType: FieldType) => {
+    setTabularImportReview((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        columns: current.columns.map((column) =>
+          column.name === columnName ? { ...column, field_type: fieldType } : column,
+        ),
+      };
+    });
+  }, []);
+
+  const handleCsvImportColumnTypeChange = handleTabularImportColumnTypeChange;
+
+  const handleConfirmTabularImport = useCallback(async () => {
+    if (!snapshot || !tabularImportReview) return;
+    setBusy(true);
+    try {
+      const [relPath, created] = await invoke<[string, DataAppSnapshot]>("commit_tabular_import", {
+        root: snapshot.root,
+        sourcePath: tabularImportReview.sourcePath,
+        packageName: tabularImportReview.packageName,
+        title: tabularImportReview.title,
+        tableName: tabularImportReview.tableName,
+        columns: tabularImportReview.columns.map((column) => ({
+          name: column.name,
+          field_type: column.field_type,
+        })),
+      });
+      await refreshResources();
+      const resource: Resource = { path: relPath, kind: "data-app" };
+      openCreatedResource(resource, { kind: "data-app", resource, snapshot: created });
+      setTabularImportReview(null);
+      setError(null);
+    } catch (error) {
+      setError(String(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [tabularImportReview, openCreatedResource, refreshResources, setBusy, setError, snapshot]);
+
+  const handleConfirmCsvImport = handleConfirmTabularImport;
 
   const handleNewTable = useCallback(async () => {
     const name = window.prompt("New table name");
@@ -178,6 +253,7 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
         kind: "data-app", resource,
         snapshot: { title, default_table: tableName, package_revision: "demo:0",
           columns: [{ name: "id", field_type: "text", sqlite_type: "TEXT" }], rows: [],
+          row_offset: 0, row_limit: 0, row_total: 0, has_more: false,
           available_views: ["All"], active_view: "All", layout_type: "grid", filters: [] },
       });
       return;
@@ -258,9 +334,31 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
   const handleOpenFile = useCallback((path: string, subpath?: string) => {
     const resource = snapshot?.resources.find((entry) => entry.path === path);
     if (!resource) return;
-    const viewName = viewNameFromCanvasSubpath(subpath) ?? undefined;
-    void handleSelect(resource, viewName ? { viewName } : undefined);
-  }, [handleSelect, snapshot]);
+    const viewName = viewNameFromCanvasSubpath(subpath);
+    if (viewName) {
+      void handleSelect(resource, { viewName });
+      return;
+    }
+    const interfaceName = interfaceNameFromCanvasSubpath(subpath);
+    if (interfaceName && snapshot) {
+      void (async () => {
+        try {
+          const iface = await loadPackageInterface({
+            root: snapshot.root,
+            relPath: path,
+            name: interfaceName,
+            demo: inBrowser,
+          });
+          const openView = viewNameFromInterfaceBindings(iface);
+          void handleSelect(resource, openView ? { viewName: openView } : undefined);
+        } catch (error) {
+          setError(String(error));
+        }
+      })();
+      return;
+    }
+    void handleSelect(resource);
+  }, [handleSelect, setError, snapshot]);
 
   const updateWorkspaceSettings = useCallback((next: { capabilities: string[]; quickNoteDirectory: string }) => {
     const current = snapshotRef.current;
@@ -291,8 +389,14 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
   }, [setError, setSnapshot, setStatusToast, snapshotRef]);
 
   return {
-    createAndOpenPage, handleQuickNote, handleNewPage, handleUndo, handleImportCsv, handleNewTable,
+    createAndOpenPage, handleQuickNote, handleNewPage, handleUndo, handleImportTable, handleImportCsv,
+    handlePromoteWorkspaceTable, handlePromoteWorkspaceCsv,
+    handleNewTable,
     handleImportEditorAsset, handleOpenExternally, openLinkTarget, handleOpenWiki, handleOpenFile,
     updateWorkspaceSettings,
+    tabularImportReview, csvImportReview: tabularImportReview,
+    handleCancelTabularImport, handleCancelCsvImport,
+    handleConfirmTabularImport, handleConfirmCsvImport,
+    handleTabularImportColumnTypeChange, handleCsvImportColumnTypeChange,
   };
 }

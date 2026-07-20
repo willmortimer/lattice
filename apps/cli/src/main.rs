@@ -5,13 +5,17 @@ use std::time::SystemTime;
 
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
-use lattice_commands::{Command as Semantic, CommandEngine, Transaction};
+use lattice_commands::{ColumnSpec, Command as Semantic, CommandEngine, Transaction};
 use lattice_core::{
     ensure_lattice_home, init_with_template, initialize_active_lattice_home, resolve_template_id,
     template_catalog, template_descriptor, Diagnostic, Resource, Severity, TemplateDescriptor,
     TemplateVisibility, Workspace,
 };
-use lattice_data::{parse_csv_file, CellValue, DataApp};
+use lattice_data::{
+    parse_field_type_name, parse_tabular_file, resolve_field_types, CellValue, DataApp, FieldType,
+};
+use lattice_datasets::{parse_partition_key_specs, Dataset, EventAnnotation};
+use lattice_duckdb::{DuckDbEngine, ScalarValue};
 use lattice_index::{Backlink, SearchHit, WorkspaceIndex};
 use lattice_storage::{NativeWorkspaceStore, RecoveryJournal, WorkspaceStore};
 use lattice_theme::{
@@ -84,6 +88,25 @@ enum Command {
     Table {
         #[command(subcommand)]
         command: TableCommand,
+    },
+    /// Create and inspect `.dataset` analytical packages.
+    Dataset {
+        #[command(subcommand)]
+        command: DatasetCommand,
+    },
+    /// Run an analytical SQL query (workspace-scoped DuckDB).
+    Query {
+        /// SQL statement to execute.
+        #[arg(long)]
+        sql: String,
+        /// Query engine. Currently only `duckdb` is supported.
+        #[arg(long, default_value = "duckdb")]
+        engine: String,
+        /// Path inside the workspace to discover from. Defaults to the current directory.
+        path: Option<PathBuf>,
+        /// Emit the result batch as JSON.
+        #[arg(long)]
+        json: bool,
     },
     /// Insert, update, and delete rows in `.data` packages.
     Record {
@@ -261,6 +284,68 @@ enum RecoverCommand {
 }
 
 #[derive(Subcommand)]
+enum DatasetCommand {
+    /// Create a new `.dataset` package.
+    Create {
+        /// Workspace path of the package (e.g. Usage.dataset).
+        path: PathBuf,
+        /// Human-readable package title.
+        #[arg(long)]
+        title: String,
+        /// Optional package description.
+        #[arg(long)]
+        description: Option<String>,
+    },
+    /// Show package metadata.
+    Show {
+        /// Workspace path of the package.
+        path: PathBuf,
+        /// Emit output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Import a CSV file into a Hive-style Parquet partition under `facts/`.
+    ImportCsv {
+        /// Workspace path of the `.dataset` package.
+        path: PathBuf,
+        /// CSV file to import (may be outside the workspace).
+        #[arg(long)]
+        csv: PathBuf,
+        /// Hive partition key as `key=value` (repeatable), e.g. `--partition year=2025`.
+        #[arg(long = "partition", value_name = "KEY=VALUE")]
+        partitions: Vec<String>,
+        /// Parquet file name within the partition directory (default: part-000.parquet).
+        #[arg(long)]
+        file_name: Option<String>,
+    },
+    /// Upsert a row into `annotations.sqlite` (`event_annotations`).
+    Annotate {
+        /// Workspace path of the `.dataset` package.
+        path: PathBuf,
+        /// Stable event identity joined to Parquet `event_id`.
+        #[arg(long)]
+        event_id: String,
+        /// Optional review label.
+        #[arg(long)]
+        label: Option<String>,
+        /// Optional free-form notes.
+        #[arg(long)]
+        notes: Option<String>,
+        /// Mark the event as reviewed.
+        #[arg(long, default_value_t = false)]
+        reviewed: bool,
+    },
+    /// Left-join Parquet facts with annotation overlays (DuckDB).
+    QueryAnnotated {
+        /// Workspace path of the `.dataset` package.
+        path: PathBuf,
+        /// Emit output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
 enum TableCommand {
     /// Create a new `.data` package.
     Create {
@@ -281,11 +366,20 @@ enum TableCommand {
         #[arg(long)]
         json: bool,
     },
-    /// Import a CSV file into a new `.data` package.
+    /// Import a tabular file into a new `.data` package.
     Import {
         /// CSV file to import (may be outside the workspace).
-        #[arg(long)]
-        csv: PathBuf,
+        #[arg(long, group = "source")]
+        csv: Option<PathBuf>,
+        /// Excel workbook to import (first sheet only).
+        #[arg(long, group = "source")]
+        xlsx: Option<PathBuf>,
+        /// JSON array-of-objects file to import.
+        #[arg(long, group = "source")]
+        json: Option<PathBuf>,
+        /// JSON Lines file to import (one object per line).
+        #[arg(long, group = "source")]
+        jsonl: Option<PathBuf>,
         /// Package name (creates `{name}.data` at the workspace root).
         #[arg(long)]
         name: String,
@@ -295,6 +389,55 @@ enum TableCommand {
         /// Table name inside the package. Defaults to `records`.
         #[arg(long, default_value = "records")]
         table: String,
+        /// Override inferred column type as `column:type` (repeatable).
+        #[arg(long = "type", value_name = "COLUMN:TYPE")]
+        column_types: Vec<String>,
+    },
+    /// Add a column to an existing table.
+    AddColumn {
+        /// Workspace path of the package.
+        path: PathBuf,
+        /// Table name.
+        #[arg(long)]
+        table: String,
+        /// Column name.
+        #[arg(long)]
+        name: String,
+        /// Field type (`text`, `integer`, `boolean`, `date`, `relation`, `lookup`, `rollup`, …).
+        #[arg(long = "type")]
+        field_type: String,
+        /// Target table for `relation` columns.
+        #[arg(long)]
+        relation_table: Option<String>,
+        /// Source relation column for `lookup` columns.
+        #[arg(long)]
+        lookup_relation: Option<String>,
+        /// Related-table field projected by `lookup` columns.
+        #[arg(long)]
+        lookup_field: Option<String>,
+        /// Source relation column for `rollup` columns.
+        #[arg(long)]
+        rollup_relation: Option<String>,
+        /// Aggregate for `rollup` columns (`count`, `sum`, `min`, `max`).
+        #[arg(long)]
+        rollup_aggregate: Option<String>,
+        /// Related-table field aggregated by `rollup` columns (required for sum/min/max).
+        #[arg(long)]
+        rollup_field: Option<String>,
+        /// Base package revision (`sha256:...`). Defaults to the current revision.
+        #[arg(long)]
+        base: Option<String>,
+    },
+    /// Add a table to an existing `.data` package.
+    AddTable {
+        /// Workspace path of the package.
+        path: PathBuf,
+        /// Table name.
+        #[arg(long)]
+        table: String,
+        /// Base package revision (`sha256:...`). Defaults to the current revision.
+        #[arg(long)]
+        base: Option<String>,
     },
     /// List and inspect saved grid views.
     View {
@@ -421,10 +564,40 @@ fn run(command: Command) -> Result<ExitCode> {
             TableCommand::Show { path, json } => cmd_table_show(path, json),
             TableCommand::Import {
                 csv,
+                xlsx,
+                json,
+                jsonl,
                 name,
                 title,
                 table,
-            } => cmd_table_import(csv, name, title, table),
+                column_types,
+            } => cmd_table_import(csv, xlsx, json, jsonl, name, title, table, column_types),
+            TableCommand::AddColumn {
+                path,
+                table,
+                name,
+                field_type,
+                relation_table,
+                lookup_relation,
+                lookup_field,
+                rollup_relation,
+                rollup_aggregate,
+                rollup_field,
+                base,
+            } => cmd_table_add_column(
+                path,
+                table,
+                name,
+                field_type,
+                relation_table,
+                lookup_relation,
+                lookup_field,
+                rollup_relation,
+                rollup_aggregate,
+                rollup_field,
+                base,
+            ),
+            TableCommand::AddTable { path, table, base } => cmd_table_add_table(path, table, base),
             TableCommand::View { command } => match command {
                 TableViewCommand::List { path, json } => cmd_table_view_list(path, json),
                 TableViewCommand::Show { path, name, json } => {
@@ -432,6 +605,36 @@ fn run(command: Command) -> Result<ExitCode> {
                 }
             },
         },
+        Command::Dataset { command } => match command {
+            DatasetCommand::Create {
+                path,
+                title,
+                description,
+            } => cmd_dataset_create(path, title, description),
+            DatasetCommand::Show { path, json } => cmd_dataset_show(path, json),
+            DatasetCommand::ImportCsv {
+                path,
+                csv,
+                partitions,
+                file_name,
+            } => cmd_dataset_import_csv(path, csv, partitions, file_name),
+            DatasetCommand::Annotate {
+                path,
+                event_id,
+                label,
+                notes,
+                reviewed,
+            } => cmd_dataset_annotate(path, event_id, label, notes, reviewed),
+            DatasetCommand::QueryAnnotated { path, json } => {
+                cmd_dataset_query_annotated(path, json)
+            },
+        },
+        Command::Query {
+            sql,
+            engine,
+            path,
+            json,
+        } => cmd_query(sql, engine, path, json),
         Command::Record { command } => match command {
             RecordCommand::Insert {
                 path,
@@ -800,24 +1003,298 @@ fn cmd_table_create(path: PathBuf, title: String, table: String) -> Result<ExitC
     Ok(ExitCode::SUCCESS)
 }
 
+fn cmd_dataset_create(
+    path: PathBuf,
+    title: String,
+    description: Option<String>,
+) -> Result<ExitCode> {
+    let (ws, mut engine) = open_engine()?;
+    let rel = workspace_relative(&ws, &path)?;
+    let receipt = engine.apply(Transaction::new(
+        format!("Create dataset package {}", rel.display()),
+        vec![Semantic::DatasetCreate {
+            path: rel.clone(),
+            title,
+            description,
+        }],
+    ))?;
+    println!(
+        "created {} ({})",
+        rel.display(),
+        receipt.outcomes[0]
+            .resulting_revision
+            .as_deref()
+            .unwrap_or("?")
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+#[derive(serde::Serialize)]
+struct DatasetShowOutput {
+    path: PathBuf,
+    title: String,
+    description: Option<String>,
+    format: String,
+    version: u32,
+    package_revision: String,
+}
+
+fn cmd_dataset_show(path: PathBuf, json: bool) -> Result<ExitCode> {
+    let start = std::env::current_dir().context("failed to determine current directory")?;
+    let ws = Workspace::discover(&start)?;
+    let rel = workspace_relative(&ws, &path)?;
+    let dataset = Dataset::open(&ws.root().join(&rel))?;
+    let output = DatasetShowOutput {
+        path: rel.clone(),
+        title: dataset.title().to_string(),
+        description: dataset.description().map(str::to_string),
+        format: dataset.manifest().format.clone(),
+        version: dataset.manifest().version,
+        package_revision: dataset.package_revision()?,
+    };
+
+    if json {
+        print_json(&output)?;
+    } else {
+        println!("{}  {}", output.path.display(), output.title);
+        if let Some(description) = &output.description {
+            println!("description: {description}");
+        }
+        println!("format: {} v{}", output.format, output.version);
+        println!("revision: {}", output.package_revision);
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_dataset_import_csv(
+    path: PathBuf,
+    csv: PathBuf,
+    partitions: Vec<String>,
+    file_name: Option<String>,
+) -> Result<ExitCode> {
+    let start = std::env::current_dir().context("failed to determine current directory")?;
+    let ws = Workspace::discover(&start)?;
+    let rel = workspace_relative(&ws, &path)?;
+    let keys = parse_partition_key_specs(&partitions)?;
+    let mut dataset = Dataset::open(&ws.root().join(&rel))?;
+    let entry = dataset.import_csv(&csv, &keys, file_name.as_deref())?;
+    println!(
+        "imported {} → {} ({} rows)",
+        csv.display(),
+        entry.path,
+        entry.rows.unwrap_or(0)
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_dataset_annotate(
+    path: PathBuf,
+    event_id: String,
+    label: Option<String>,
+    notes: Option<String>,
+    reviewed: bool,
+) -> Result<ExitCode> {
+    let start = std::env::current_dir().context("failed to determine current directory")?;
+    let ws = Workspace::discover(&start)?;
+    let rel = workspace_relative(&ws, &path)?;
+    let dataset = Dataset::open(&ws.root().join(&rel))?;
+    let annotation = EventAnnotation::new(event_id.clone(), label, notes, reviewed);
+    dataset.upsert_annotation(&annotation)?;
+    println!(
+        "annotated {} event_id={event_id} reviewed={reviewed}",
+        rel.display()
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_dataset_query_annotated(path: PathBuf, json: bool) -> Result<ExitCode> {
+    let start = std::env::current_dir().context("failed to determine current directory")?;
+    let ws = Workspace::discover(&start)?;
+    let rel = workspace_relative(&ws, &path)?;
+    let package = ws.root().join(&rel);
+    let dataset = Dataset::open(&package)?;
+    dataset.ensure_annotations()?;
+
+    let facts_glob = package
+        .join("facts")
+        .join("**")
+        .join("*.parquet")
+        .to_string_lossy()
+        .replace('\\', "/");
+    let annotations = dataset.annotations_path();
+
+    let engine = DuckDbEngine::open_in_memory(ws.root())?;
+    let batch = engine.query_parquet_left_join_annotations(&facts_glob, &annotations)?;
+
+    if json {
+        let columns: Vec<_> = batch
+            .schema
+            .fields
+            .iter()
+            .map(|field| field.name.clone())
+            .collect();
+        let rows: Vec<Vec<serde_json::Value>> = batch
+            .rows()
+            .into_iter()
+            .map(|row| row.into_iter().map(scalar_to_json).collect())
+            .collect();
+        print_json(&serde_json::json!({
+            "engine": "duckdb",
+            "num_rows": batch.num_rows,
+            "columns": columns,
+            "rows": rows,
+        }))?;
+    } else {
+        let header: Vec<_> = batch
+            .schema
+            .fields
+            .iter()
+            .map(|field| field.name.as_str())
+            .collect();
+        println!("{}", header.join("\t"));
+        for row in batch.rows() {
+            let cells: Vec<_> = row.iter().map(format_scalar).collect();
+            println!("{}", cells.join("\t"));
+        }
+        println!("{} row(s)", batch.num_rows);
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_query(sql: String, engine: String, path: Option<PathBuf>, json: bool) -> Result<ExitCode> {
+    match engine.as_str() {
+        "duckdb" => {}
+        other => bail!("unsupported query engine {other:?}; supported: duckdb"),
+    }
+
+    let start =
+        path.unwrap_or(std::env::current_dir().context("failed to determine current directory")?);
+    let ws = Workspace::discover(&start)?;
+    let duck = DuckDbEngine::open_in_memory(ws.root())?;
+    let batch = duck.query(&sql)?;
+
+    if json {
+        let columns: Vec<_> = batch
+            .schema
+            .fields
+            .iter()
+            .map(|field| field.name.clone())
+            .collect();
+        let rows: Vec<Vec<serde_json::Value>> = batch
+            .rows()
+            .into_iter()
+            .map(|row| row.into_iter().map(scalar_to_json).collect())
+            .collect();
+        print_json(&serde_json::json!({
+            "engine": "duckdb",
+            "num_rows": batch.num_rows,
+            "columns": columns,
+            "rows": rows,
+        }))?;
+    } else {
+        let header: Vec<_> = batch
+            .schema
+            .fields
+            .iter()
+            .map(|field| field.name.as_str())
+            .collect();
+        println!("{}", header.join("\t"));
+        for row in batch.rows() {
+            let cells: Vec<_> = row.iter().map(format_scalar).collect();
+            println!("{}", cells.join("\t"));
+        }
+        println!("{} row(s)", batch.num_rows);
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn format_scalar(value: &ScalarValue) -> String {
+    match value {
+        ScalarValue::Null => "NULL".to_string(),
+        ScalarValue::Boolean(value) => value.to_string(),
+        ScalarValue::Int64(value) => value.to_string(),
+        ScalarValue::Float64(value) => value.to_string(),
+        ScalarValue::Utf8(value) => value.clone(),
+    }
+}
+
+fn scalar_to_json(value: ScalarValue) -> serde_json::Value {
+    match value {
+        ScalarValue::Null => serde_json::Value::Null,
+        ScalarValue::Boolean(value) => serde_json::Value::Bool(value),
+        ScalarValue::Int64(value) => serde_json::json!(value),
+        ScalarValue::Float64(value) => serde_json::json!(value),
+        ScalarValue::Utf8(value) => serde_json::Value::String(value),
+    }
+}
+
 fn package_path_from_name(name: &str) -> PathBuf {
     let trimmed = name.trim().trim_end_matches(".data");
     PathBuf::from(format!("{trimmed}.data"))
 }
 
+fn parse_column_type_override(value: &str) -> Result<(String, lattice_data::FieldType)> {
+    let (column, field_type) = value
+        .split_once(':')
+        .ok_or_else(|| anyhow::anyhow!("expected column:type, got {value:?}"))?;
+    let column = column.trim();
+    if column.is_empty() {
+        anyhow::bail!("column name is required in column:type override");
+    }
+    let field_type =
+        parse_field_type_name(field_type.trim()).map_err(|err| anyhow::anyhow!("{err}"))?;
+    Ok((column.to_string(), field_type))
+}
+
+fn resolve_table_import_source(
+    csv: Option<PathBuf>,
+    xlsx: Option<PathBuf>,
+    json: Option<PathBuf>,
+    jsonl: Option<PathBuf>,
+) -> Result<PathBuf> {
+    let mut selected = [csv, xlsx, json, jsonl]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    match selected.len() {
+        0 => bail!("one import source is required: --csv, --xlsx, --json, or --jsonl"),
+        1 => Ok(selected.remove(0)),
+        _ => bail!("only one import source may be provided"),
+    }
+}
+
 fn cmd_table_import(
-    csv: PathBuf,
+    csv: Option<PathBuf>,
+    xlsx: Option<PathBuf>,
+    json: Option<PathBuf>,
+    jsonl: Option<PathBuf>,
     name: String,
     title: Option<String>,
     table: String,
+    column_types: Vec<String>,
 ) -> Result<ExitCode> {
-    let parsed = parse_csv_file(&csv)?;
+    let source = resolve_table_import_source(csv, xlsx, json, jsonl)?;
+    let parsed = parse_tabular_file(&source)?;
+    let overrides = column_types
+        .iter()
+        .map(|value| parse_column_type_override(value))
+        .collect::<Result<std::collections::BTreeMap<_, _>>>()?;
+    for column in overrides.keys() {
+        if !parsed.headers.iter().any(|header| header == column) {
+            anyhow::bail!("unknown import column {column:?}");
+        }
+    }
+    let field_types = resolve_field_types(&parsed.headers, &parsed.field_types, &overrides);
     let (ws, mut engine) = open_engine()?;
     let rel = workspace_relative(&ws, &package_path_from_name(&name))?;
     let title = title.unwrap_or_else(|| name.trim().replace(".data", "").to_string());
+    let source_label = source
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("tabular");
 
     engine.apply(Transaction::new(
-        format!("Create table package {} from CSV", rel.display()),
+        format!("Create table package {} from {source_label}", rel.display()),
         vec![Semantic::TableCreate {
             path: rel.clone(),
             title: title.clone(),
@@ -825,16 +1302,26 @@ fn cmd_table_import(
         }],
     ))?;
 
-    let mut app = DataApp::open(&ws.root().join(&rel))?;
-    app.add_columns_from_csv(&table, &parsed)?;
+    let base_revision = DataApp::open(&ws.root().join(&rel))?.package_revision()?;
+    let columns = parsed
+        .headers
+        .iter()
+        .zip(&field_types)
+        .map(|(header, field_type)| ColumnSpec::new(header.clone(), *field_type))
+        .collect();
+    engine.apply(Transaction::new(
+        format!("Add {source_label} columns to {}.{}", rel.display(), table),
+        vec![Semantic::ColumnsAdd {
+            path: rel.clone(),
+            table: table.clone(),
+            columns,
+            base_revision,
+        }],
+    ))?;
 
     for row in &parsed.rows {
         let mut values = std::collections::BTreeMap::new();
-        for ((header, field_type), cell) in parsed
-            .headers
-            .iter()
-            .zip(&parsed.field_types)
-            .zip(row.iter())
+        for ((header, field_type), cell) in parsed.headers.iter().zip(&field_types).zip(row.iter())
         {
             values.insert(
                 header.clone(),
@@ -1023,6 +1510,169 @@ fn json_to_cell(value: serde_json::Value) -> Result<CellValue> {
 
 fn package_revision(ws: &Workspace, package: &Path) -> Result<String> {
     Ok(DataApp::open(&ws.root().join(package))?.package_revision()?)
+}
+
+fn parse_field_type(value: &str) -> Result<FieldType> {
+    match value {
+        "text" => Ok(FieldType::Text),
+        "long_text" => Ok(FieldType::LongText),
+        "integer" => Ok(FieldType::Integer),
+        "decimal" => Ok(FieldType::Decimal),
+        "boolean" => Ok(FieldType::Boolean),
+        "date" => Ok(FieldType::Date),
+        "relation" => Ok(FieldType::Relation),
+        "lookup" => Ok(FieldType::Lookup),
+        "rollup" => Ok(FieldType::Rollup),
+        other => bail!(
+            "unknown field type {other:?}; expected text, long_text, integer, decimal, boolean, date, relation, lookup, or rollup"
+        ),
+    }
+}
+
+fn column_spec(
+    name: String,
+    field_type: FieldType,
+    relation_table: Option<String>,
+    lookup_relation: Option<String>,
+    lookup_field: Option<String>,
+    rollup_relation: Option<String>,
+    rollup_aggregate: Option<String>,
+    rollup_field: Option<String>,
+) -> Result<ColumnSpec> {
+    let has_lookup = lookup_relation.is_some() || lookup_field.is_some();
+    let has_rollup =
+        rollup_relation.is_some() || rollup_aggregate.is_some() || rollup_field.is_some();
+    if field_type == FieldType::Relation {
+        let relation_table = relation_table
+            .with_context(|| format!("column {name:?} has type relation; pass --relation-table"))?;
+        if has_lookup {
+            bail!("--lookup-relation / --lookup-field are only valid when --type is lookup");
+        }
+        if has_rollup {
+            bail!("--rollup-relation / --rollup-aggregate / --rollup-field are only valid when --type is rollup");
+        }
+        return Ok(ColumnSpec::relation(name, relation_table));
+    }
+    if field_type == FieldType::Lookup {
+        let lookup_relation = lookup_relation
+            .with_context(|| format!("column {name:?} has type lookup; pass --lookup-relation"))?;
+        let lookup_field = lookup_field
+            .with_context(|| format!("column {name:?} has type lookup; pass --lookup-field"))?;
+        if relation_table.is_some() {
+            bail!("--relation-table is only valid when --type is relation");
+        }
+        if has_rollup {
+            bail!("--rollup-relation / --rollup-aggregate / --rollup-field are only valid when --type is rollup");
+        }
+        return Ok(ColumnSpec::lookup(name, lookup_relation, lookup_field));
+    }
+    if field_type == FieldType::Rollup {
+        let rollup_relation = rollup_relation
+            .with_context(|| format!("column {name:?} has type rollup; pass --rollup-relation"))?;
+        let rollup_aggregate = rollup_aggregate
+            .with_context(|| format!("column {name:?} has type rollup; pass --rollup-aggregate"))?;
+        let aggregate = rollup_aggregate
+            .parse::<lattice_data::RollupAggregate>()
+            .map_err(|err| anyhow::anyhow!(err))?;
+        if relation_table.is_some() {
+            bail!("--relation-table is only valid when --type is relation");
+        }
+        if has_lookup {
+            bail!("--lookup-relation / --lookup-field are only valid when --type is lookup");
+        }
+        return Ok(ColumnSpec::rollup(
+            name,
+            rollup_relation,
+            aggregate,
+            rollup_field,
+        ));
+    }
+    if relation_table.is_some() {
+        bail!("--relation-table is only valid when --type is relation");
+    }
+    if has_lookup {
+        bail!("--lookup-relation / --lookup-field are only valid when --type is lookup");
+    }
+    if has_rollup {
+        bail!("--rollup-relation / --rollup-aggregate / --rollup-field are only valid when --type is rollup");
+    }
+    Ok(ColumnSpec::new(name, field_type))
+}
+
+fn cmd_table_add_column(
+    path: PathBuf,
+    table: String,
+    name: String,
+    field_type: String,
+    relation_table: Option<String>,
+    lookup_relation: Option<String>,
+    lookup_field: Option<String>,
+    rollup_relation: Option<String>,
+    rollup_aggregate: Option<String>,
+    rollup_field: Option<String>,
+    base: Option<String>,
+) -> Result<ExitCode> {
+    let (ws, mut engine) = open_engine()?;
+    let rel = workspace_relative(&ws, &path)?;
+    let base_revision = match base {
+        Some(base) => base,
+        None => package_revision(&ws, &rel)?,
+    };
+    let field_type = parse_field_type(&field_type)?;
+    let column = column_spec(
+        name.clone(),
+        field_type,
+        relation_table,
+        lookup_relation,
+        lookup_field,
+        rollup_relation,
+        rollup_aggregate,
+        rollup_field,
+    )?;
+    let receipt = engine.apply(Transaction::new(
+        format!("Add column {name} to {}.{}", rel.display(), table),
+        vec![Semantic::ColumnsAdd {
+            path: rel.clone(),
+            table,
+            columns: vec![column],
+            base_revision,
+        }],
+    ))?;
+    println!(
+        "added column {name} to {} ({})",
+        rel.display(),
+        receipt.outcomes[0]
+            .resulting_revision
+            .as_deref()
+            .unwrap_or("?")
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_table_add_table(path: PathBuf, table: String, base: Option<String>) -> Result<ExitCode> {
+    let (ws, mut engine) = open_engine()?;
+    let rel = workspace_relative(&ws, &path)?;
+    let base_revision = match base {
+        Some(base) => base,
+        None => package_revision(&ws, &rel)?,
+    };
+    let receipt = engine.apply(Transaction::new(
+        format!("Add table {table} to {}", rel.display()),
+        vec![Semantic::TableAdd {
+            path: rel.clone(),
+            table_name: table.clone(),
+            base_revision,
+        }],
+    ))?;
+    println!(
+        "added table {table} to {} ({})",
+        rel.display(),
+        receipt.outcomes[0]
+            .resulting_revision
+            .as_deref()
+            .unwrap_or("?")
+    );
+    Ok(ExitCode::SUCCESS)
 }
 
 fn cmd_record_insert(
@@ -1297,7 +1947,8 @@ fn cmd_theme_list(json: bool) -> Result<ExitCode> {
 fn cmd_templates_list(json: bool) -> Result<ExitCode> {
     let templates = template_catalog();
     if json {
-        let items: Vec<TemplateListItem<'_>> = templates.iter().map(TemplateListItem::from).collect();
+        let items: Vec<TemplateListItem<'_>> =
+            templates.iter().map(TemplateListItem::from).collect();
         print_json(&items)?;
     } else {
         for template in &templates {
@@ -1314,8 +1965,9 @@ fn cmd_templates_list(json: bool) -> Result<ExitCode> {
 }
 
 fn cmd_templates_show(id: String, json: bool) -> Result<ExitCode> {
-    let template = template_descriptor(&id)
-        .with_context(|| format!("unknown template {id:?}; run `lattice templates list` for ids"))?;
+    let template = template_descriptor(&id).with_context(|| {
+        format!("unknown template {id:?}; run `lattice templates list` for ids")
+    })?;
     if json {
         print_json(&template)?;
     } else {

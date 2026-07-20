@@ -227,3 +227,239 @@ fn templates_show_resolves_aliases_and_unknown_fails() {
         .failure()
         .code(1);
 }
+
+#[test]
+fn table_add_column_and_add_table_update_schema() {
+    let dir = tempfile::tempdir().unwrap();
+    init_blank(dir.path()).success();
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("table")
+        .arg("create")
+        .arg("CRM.data")
+        .arg("--title")
+        .arg("CRM")
+        .arg("--table")
+        .arg("contacts")
+        .assert()
+        .success();
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("table")
+        .arg("add-column")
+        .arg("CRM.data")
+        .arg("--table")
+        .arg("contacts")
+        .arg("--name")
+        .arg("name")
+        .arg("--type")
+        .arg("text")
+        .assert()
+        .success()
+        .stdout(predicates_contains("added column name"));
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("table")
+        .arg("show")
+        .arg("CRM.data")
+        .arg("--json")
+        .assert()
+        .success()
+        .stdout(predicates_contains("\"name\""))
+        .stdout(predicates_contains("\"field_type\": \"text\""));
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("table")
+        .arg("add-table")
+        .arg("CRM.data")
+        .arg("--table")
+        .arg("companies")
+        .assert()
+        .success()
+        .stdout(predicates_contains("added table companies"));
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("table")
+        .arg("show")
+        .arg("CRM.data")
+        .arg("--json")
+        .assert()
+        .success()
+        .stdout(predicates_contains("\"companies\""));
+}
+
+#[test]
+fn dataset_create_and_show() {
+    let dir = tempfile::tempdir().unwrap();
+    init_blank(dir.path()).success();
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("dataset")
+        .arg("create")
+        .arg("Usage.dataset")
+        .arg("--title")
+        .arg("Usage")
+        .arg("--description")
+        .arg("Sample analytical dataset")
+        .assert()
+        .success()
+        .stdout(predicates_contains("created Usage.dataset"));
+
+    assert!(dir.path().join("Usage.dataset/dataset.yaml").is_file());
+    assert!(dir.path().join("Usage.dataset/facts").is_dir());
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("ls")
+        .assert()
+        .success()
+        .stdout(predicates_contains("Usage.dataset"));
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("dataset")
+        .arg("show")
+        .arg("Usage.dataset")
+        .arg("--json")
+        .assert()
+        .success()
+        .stdout(predicates_contains("\"title\": \"Usage\""))
+        .stdout(predicates_contains("lattice-dataset"));
+}
+
+#[test]
+fn dataset_import_csv_writes_partition() {
+    let dir = tempfile::tempdir().unwrap();
+    init_blank(dir.path()).success();
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("dataset")
+        .arg("create")
+        .arg("Usage.dataset")
+        .arg("--title")
+        .arg("Usage")
+        .assert()
+        .success();
+
+    let csv_path = dir.path().join("events.csv");
+    std::fs::write(&csv_path, "event_id,count\ne1,10\ne2,20\n").unwrap();
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("dataset")
+        .arg("import-csv")
+        .arg("Usage.dataset")
+        .arg("--csv")
+        .arg(&csv_path)
+        .arg("--partition")
+        .arg("year=2026")
+        .arg("--partition")
+        .arg("month=01")
+        .assert()
+        .success()
+        .stdout(predicates_contains("facts/year=2026/month=01/part-000.parquet"));
+
+    assert!(dir
+        .path()
+        .join("Usage.dataset/facts/year=2026/month=01/part-000.parquet")
+        .is_file());
+    let yaml = std::fs::read_to_string(dir.path().join("Usage.dataset/dataset.yaml")).unwrap();
+    assert!(yaml.contains("facts/year=2026/month=01/part-000.parquet"));
+}
+
+#[test]
+fn dataset_annotate_and_query_annotated_join() {
+    let dir = tempfile::tempdir().unwrap();
+    init_blank(dir.path()).success();
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("dataset")
+        .arg("create")
+        .arg("Usage.dataset")
+        .arg("--title")
+        .arg("Usage")
+        .assert()
+        .success();
+
+    let csv_path = dir.path().join("events.csv");
+    std::fs::write(&csv_path, "event_id,count\ne1,10\ne2,20\n").unwrap();
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("dataset")
+        .arg("import-csv")
+        .arg("Usage.dataset")
+        .arg("--csv")
+        .arg(&csv_path)
+        .arg("--partition")
+        .arg("year=2026")
+        .assert()
+        .success();
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("dataset")
+        .arg("annotate")
+        .arg("Usage.dataset")
+        .arg("--event-id")
+        .arg("e1")
+        .arg("--label")
+        .arg("keep")
+        .arg("--notes")
+        .arg("looks good")
+        .arg("--reviewed")
+        .assert()
+        .success()
+        .stdout(predicates_contains("event_id=e1"));
+
+    assert!(dir
+        .path()
+        .join("Usage.dataset/annotations.sqlite")
+        .is_file());
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("dataset")
+        .arg("query-annotated")
+        .arg("Usage.dataset")
+        .arg("--json")
+        .assert()
+        .success()
+        .stdout(predicates_contains("\"keep\""))
+        .stdout(predicates_contains("\"e1\""))
+        .stdout(predicates_contains("\"e2\""));
+}
+
+#[test]
+fn query_csv_with_duckdb_engine() {
+    let dir = tempfile::tempdir().unwrap();
+    init_blank(dir.path()).success();
+
+    fs::create_dir_all(dir.path().join("facts")).unwrap();
+    fs::write(
+        dir.path().join("facts/sample.csv"),
+        "id,name\n1,alpha\n2,beta\n",
+    )
+    .unwrap();
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("query")
+        .arg("--engine")
+        .arg("duckdb")
+        .arg("--sql")
+        .arg("SELECT count(*) AS n FROM read_csv_auto('facts/sample.csv')")
+        .assert()
+        .success()
+        .stdout(predicates_contains("n"))
+        .stdout(predicates_contains("2"))
+        .stdout(predicates_contains("1 row(s)"));
+}

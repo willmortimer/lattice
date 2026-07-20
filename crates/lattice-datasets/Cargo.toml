@@ -1,0 +1,22 @@
+[package]
+name = "lattice-datasets"
+description = "Lattice `.dataset` analytical package open/create, Parquet facts, and manifests"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+arrow.workspace = true
+hex.workspace = true
+parquet.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+walkdir.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

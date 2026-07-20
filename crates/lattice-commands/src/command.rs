@@ -2,8 +2,115 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
-use lattice_data::CellValue;
+use lattice_data::{CellValue, FieldType, RollupAggregate};
 use serde::{Deserialize, Serialize};
+
+/// Owned column specification for [`Command::ColumnsAdd`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ColumnSpec {
+    pub name: String,
+    #[serde(rename = "field-type")]
+    pub field_type: FieldType,
+    #[serde(
+        rename = "relation-table",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub relation_table: Option<String>,
+    #[serde(
+        rename = "lookup-relation",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub lookup_relation: Option<String>,
+    #[serde(
+        rename = "lookup-field",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub lookup_field: Option<String>,
+    #[serde(
+        rename = "rollup-relation",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub rollup_relation: Option<String>,
+    #[serde(
+        rename = "rollup-aggregate",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub rollup_aggregate: Option<RollupAggregate>,
+    #[serde(
+        rename = "rollup-field",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub rollup_field: Option<String>,
+}
+
+impl ColumnSpec {
+    pub fn new(name: impl Into<String>, field_type: FieldType) -> Self {
+        Self {
+            name: name.into(),
+            field_type,
+            relation_table: None,
+            lookup_relation: None,
+            lookup_field: None,
+            rollup_relation: None,
+            rollup_aggregate: None,
+            rollup_field: None,
+        }
+    }
+
+    pub fn relation(name: impl Into<String>, relation_table: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            field_type: FieldType::Relation,
+            relation_table: Some(relation_table.into()),
+            lookup_relation: None,
+            lookup_field: None,
+            rollup_relation: None,
+            rollup_aggregate: None,
+            rollup_field: None,
+        }
+    }
+
+    pub fn lookup(
+        name: impl Into<String>,
+        lookup_relation: impl Into<String>,
+        lookup_field: impl Into<String>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            field_type: FieldType::Lookup,
+            relation_table: None,
+            lookup_relation: Some(lookup_relation.into()),
+            lookup_field: Some(lookup_field.into()),
+            rollup_relation: None,
+            rollup_aggregate: None,
+            rollup_field: None,
+        }
+    }
+
+    pub fn rollup(
+        name: impl Into<String>,
+        rollup_relation: impl Into<String>,
+        aggregate: RollupAggregate,
+        rollup_field: Option<impl Into<String>>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            field_type: FieldType::Rollup,
+            relation_table: None,
+            lookup_relation: None,
+            lookup_field: None,
+            rollup_relation: Some(rollup_relation.into()),
+            rollup_aggregate: Some(aggregate),
+            rollup_field: rollup_field.map(Into::into),
+        }
+    }
+}
 
 /// A file node placement on a JSON Canvas. The canvas path and resource path
 /// are workspace-relative; the command engine validates both before writing.
@@ -207,6 +314,55 @@ pub enum Command {
         table_name: String,
     },
 
+    /// Create a `.dataset` analytical package at `path`. Precondition: `path`
+    /// is absent.
+    DatasetCreate {
+        path: PathBuf,
+        title: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        description: Option<String>,
+    },
+
+    /// Add a table to an existing `.data` package. Precondition: package
+    /// `database.sqlite` revision equals `base_revision` and the table is absent.
+    TableAdd {
+        path: PathBuf,
+        #[serde(rename = "table-name")]
+        table_name: String,
+        #[serde(rename = "base-revision")]
+        base_revision: String,
+    },
+
+    /// Drop a table from a `.data` package. Recorded as the inverse of
+    /// [`Command::TableAdd`]; not applied as a forward user command.
+    TableDrop {
+        path: PathBuf,
+        #[serde(rename = "table-name")]
+        table_name: String,
+        #[serde(rename = "base-revision")]
+        base_revision: String,
+    },
+
+    /// Add columns to a table inside a `.data` package. Precondition: package
+    /// revision equals `base_revision`. Existing column names are skipped.
+    ColumnsAdd {
+        path: PathBuf,
+        table: String,
+        columns: Vec<ColumnSpec>,
+        #[serde(rename = "base-revision")]
+        base_revision: String,
+    },
+
+    /// Drop columns from a table. Recorded as the inverse of
+    /// [`Command::ColumnsAdd`]; not applied as a forward user command.
+    ColumnsRemove {
+        path: PathBuf,
+        table: String,
+        columns: Vec<String>,
+        #[serde(rename = "base-revision")]
+        base_revision: String,
+    },
+
     /// Insert a row into a table inside a `.data` package. When `id` is set
     /// (recorded in history after the first apply), the row is restored with
     /// that id instead of generating a new one.
@@ -243,6 +399,14 @@ pub enum Command {
         path: PathBuf,
         #[serde(rename = "view-name")]
         view_name: String,
+        content: String,
+    },
+
+    /// Write or replace `forms/{form_name}.form.yaml` inside a `.data` package.
+    FormSave {
+        path: PathBuf,
+        #[serde(rename = "form-name")]
+        form_name: String,
         content: String,
     },
 
@@ -379,13 +543,21 @@ impl Command {
             Command::ResourceMove { from, to_dir } => to_dir.join(file_name(from)),
             Command::ResourceDelete { path } => path.clone(),
             Command::FolderCreate { path } => path.clone(),
-            Command::TableCreate { path, .. } => path.clone(),
+            Command::TableCreate { path, .. }
+            | Command::DatasetCreate { path, .. }
+            | Command::TableAdd { path, .. }
+            | Command::TableDrop { path, .. }
+            | Command::ColumnsAdd { path, .. }
+            | Command::ColumnsRemove { path, .. } => path.clone(),
             Command::RecordInsert { path, .. }
             | Command::RecordUpdate { path, .. }
             | Command::RecordDelete { path, .. } => path.clone(),
             Command::ViewSave {
                 path, view_name, ..
             } => view_file_path(path, view_name),
+            Command::FormSave {
+                path, form_name, ..
+            } => form_file_path(path, form_name),
             Command::CanvasPlaceResource { path, .. }
             | Command::CanvasMoveNodes { path, .. }
             | Command::CanvasRemoveNodes { path, .. }
@@ -414,13 +586,21 @@ impl Command {
             }
             Command::ResourceDelete { path } => vec![path.clone()],
             Command::FolderCreate { path } => vec![path.clone()],
-            Command::TableCreate { path, .. } => vec![path.clone()],
+            Command::TableCreate { path, .. }
+            | Command::DatasetCreate { path, .. }
+            | Command::TableAdd { path, .. }
+            | Command::TableDrop { path, .. }
+            | Command::ColumnsAdd { path, .. }
+            | Command::ColumnsRemove { path, .. } => vec![path.clone()],
             Command::RecordInsert { path, .. }
             | Command::RecordUpdate { path, .. }
             | Command::RecordDelete { path, .. } => vec![path.clone()],
             Command::ViewSave {
                 path, view_name, ..
             } => vec![view_file_path(path, view_name)],
+            Command::FormSave {
+                path, form_name, ..
+            } => vec![form_file_path(path, form_name)],
             Command::CanvasPlaceResource { path, .. }
             | Command::CanvasMoveNodes { path, .. }
             | Command::CanvasRemoveNodes { path, .. }
@@ -436,6 +616,13 @@ impl Command {
 /// Workspace-relative path to a view YAML inside a `.data` package.
 pub(crate) fn view_file_path(package: &std::path::Path, view_name: &str) -> PathBuf {
     package.join("views").join(format!("{view_name}.yaml"))
+}
+
+/// Workspace-relative path to a form YAML inside a `.data` package.
+pub(crate) fn form_file_path(package: &std::path::Path, form_name: &str) -> PathBuf {
+    package
+        .join("forms")
+        .join(format!("{form_name}{}", lattice_data::FORM_FILE_SUFFIX))
 }
 
 /// The final path component of `path`, or the whole path if it has none.

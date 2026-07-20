@@ -1,6 +1,7 @@
 import { createAbortError, ResourceRendererRegistry, type ResourceRendererDefinition } from "../resourceRendererRegistry";
 import type { OpenResourceSession } from "../resourceSession";
 import type { ResourceKind } from "../types";
+import { registerChartResourceRenderers } from "./chartResourceRendererRegistration";
 import { registerMediaResourceRenderers } from "./mediaResourceRendererRegistration";
 import { registerTextResourceRenderers } from "./textResourceRendererRegistration";
 import type { ResourceRendererContext } from "./RendererContext";
@@ -62,11 +63,17 @@ export function createDefaultResourceRendererRegistry(): ResourceRendererRegistr
       ),
     )
     .register(
+      definition("dataset-viewer", "dataset", undefined, (signal) =>
+        lazyImport(() => import("./DatasetResourceRenderer").then((module) => module.DatasetResourceRenderer), signal),
+      ),
+    )
+    .register(
       definition("notebook-viewer", "notebook", undefined, (signal) =>
         lazyImport(() => import("./NotebookResourceRenderer").then((module) => module.NotebookResourceRenderer), signal),
       ),
     );
   registerMediaResourceRenderers(registry);
+  registerChartResourceRenderers(registry);
   registerTextResourceRenderers(registry);
   return registry;
 }
