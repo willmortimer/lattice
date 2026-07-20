@@ -14,7 +14,8 @@ export type RecordFieldEditorKind =
   | "number"
   | "boolean"
   | "date"
-  | "relation";
+  | "relation"
+  | "lookup";
 
 export function fieldEditorKind(fieldType: FieldType): RecordFieldEditorKind {
   switch (fieldType) {
@@ -29,6 +30,8 @@ export function fieldEditorKind(fieldType: FieldType): RecordFieldEditorKind {
       return "date";
     case "relation":
       return "relation";
+    case "lookup":
+      return "lookup";
     case "text":
       return "text";
     default: {
@@ -52,6 +55,8 @@ export function fieldTypeLabel(fieldType: FieldType): string {
       return "Date";
     case "relation":
       return "Relation";
+    case "lookup":
+      return "Lookup";
     case "text":
       return "Text";
     default: {
@@ -101,7 +106,7 @@ export function collectDirtyValues(
 ): Record<string, CellValue> {
   const changes: Record<string, CellValue> = {};
   for (const column of columns) {
-    if (column.name === "id") continue;
+    if (column.name === "id" || column.field_type === "lookup") continue;
     const draftText = draft[column.name] ?? "";
     if (!draftFieldChanged(draftText, row.values[column.name], column.field_type)) {
       continue;
@@ -157,6 +162,7 @@ export function validateDraftField(text: string, fieldType: FieldType): string |
     case "text":
     case "long_text":
     case "boolean":
+    case "lookup":
       return null;
     default: {
       const _exhaustive: never = fieldType;
@@ -201,7 +207,7 @@ export function collectFormValues(
 ): Record<string, CellValue> {
   const values: Record<string, CellValue> = {};
   for (const column of columns) {
-    if (column.name === "id") {
+    if (column.name === "id" || column.field_type === "lookup") {
       continue;
     }
     const text = draft[column.name] ?? "";

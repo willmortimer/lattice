@@ -94,6 +94,10 @@ pub struct ColumnDto {
     pub sqlite_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub relation_table: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lookup_relation: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lookup_field: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -108,6 +112,8 @@ fn column_dto(column: ColumnMeta) -> ColumnDto {
         field_type: column.field_type.to_string(),
         sqlite_type: column.sqlite_type,
         relation_table: column.relation_table,
+        lookup_relation: column.lookup_relation,
+        lookup_field: column.lookup_field,
     }
 }
 
@@ -245,11 +251,21 @@ pub struct AddColumnDto {
     pub field_type: FieldType,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relation_table: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lookup_relation: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lookup_field: Option<String>,
 }
 
 fn column_spec_from_dto(column: AddColumnDto) -> ColumnSpec {
     if column.field_type == FieldType::Relation {
         ColumnSpec::relation(column.name, column.relation_table.unwrap_or_default())
+    } else if column.field_type == FieldType::Lookup {
+        ColumnSpec::lookup(
+            column.name,
+            column.lookup_relation.unwrap_or_default(),
+            column.lookup_field.unwrap_or_default(),
+        )
     } else {
         ColumnSpec::new(column.name, column.field_type)
     }
@@ -260,6 +276,19 @@ fn column_spec_from_dto(column: AddColumnDto) -> ColumnSpec {
 pub fn list_data_tables(root: String, rel_path: String) -> Result<Vec<String>, String> {
     let app = open_app_at(&root, &rel_path)?;
     app.list_tables().map_err(|err| err.to_string())
+}
+
+/// List column metadata for a table (for lookup field targets).
+#[tauri::command]
+pub fn list_data_table_columns(
+    root: String,
+    rel_path: String,
+    table: String,
+) -> Result<Vec<ColumnDto>, String> {
+    let app = open_app_at(&root, &rel_path)?;
+    app.columns(&table)
+        .map(|columns| columns.into_iter().map(column_dto).collect())
+        .map_err(|err| err.to_string())
 }
 
 /// Add typed columns to a table via `ColumnsAdd` and return a refreshed snapshot.
@@ -1419,11 +1448,15 @@ mod tests {
                     name: "name".into(),
                     field_type: FieldType::Text,
                     relation_table: None,
+                    lookup_relation: None,
+                    lookup_field: None,
                 },
                 AddColumnDto {
                     name: "age".into(),
                     field_type: FieldType::Integer,
                     relation_table: None,
+                    lookup_relation: None,
+                    lookup_field: None,
                 },
             ],
             base,
@@ -1473,6 +1506,8 @@ mod tests {
                 name: "name".into(),
                 field_type: FieldType::Text,
                 relation_table: None,
+                lookup_relation: None,
+                lookup_field: None,
             }],
             "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_string(),
             None,

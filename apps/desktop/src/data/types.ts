@@ -6,7 +6,8 @@ export type FieldType =
   | "decimal"
   | "boolean"
   | "date"
-  | "relation";
+  | "relation"
+  | "lookup";
 
 /** Externally tagged `CellValue` from `lattice-data`. */
 export type CellValue =
@@ -16,7 +17,8 @@ export type CellValue =
   | { Decimal: number }
   | { Boolean: boolean }
   | { Date: string }
-  | { Relation: { record_ids: string[] } };
+  | { Relation: { record_ids: string[] } }
+  | { Lookup: { values: string[] } };
 
 export interface DataColumn {
   name: string;
@@ -24,6 +26,10 @@ export interface DataColumn {
   sqlite_type: string;
   /** Target table for relation fields (same `.data` package). */
   relation_table?: string;
+  /** Source relation column for lookup fields. */
+  lookup_relation?: string;
+  /** Related-table field projected by lookup fields. */
+  lookup_field?: string;
 }
 
 export interface DataRow {
@@ -98,6 +104,10 @@ export function cellValueToDisplay(value: CellValue | undefined | null | string)
     const ids = value.Relation?.record_ids;
     return Array.isArray(ids) ? ids.join(", ") : "";
   }
+  if ("Lookup" in value) {
+    const values = value.Lookup?.values;
+    return Array.isArray(values) ? values.join(", ") : "";
+  }
   return "";
 }
 
@@ -121,6 +131,15 @@ export function displayToCellValue(text: string, fieldType: FieldType): CellValu
           record_ids: trimmed
             .split(",")
             .map((id) => id.trim())
+            .filter(Boolean),
+        },
+      };
+    case "lookup":
+      return {
+        Lookup: {
+          values: trimmed
+            .split(",")
+            .map((part) => part.trim())
             .filter(Boolean),
         },
       };

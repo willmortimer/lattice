@@ -4,9 +4,10 @@ import {
   buildAddColumnPayload,
   columnFieldTypeOptions,
   validateColumnName,
+  validateLookupSpec,
   validateRelationTarget,
 } from "./columnDesigner";
-import type { DataAppSnapshot, FieldType } from "./types";
+import type { DataAppSnapshot, DataColumn, FieldType } from "./types";
 
 interface AddColumnPanelProps {
   root: string;
@@ -38,7 +39,10 @@ export function AddColumnPanel({
   const [name, setName] = useState("");
   const [fieldType, setFieldType] = useState<FieldType>("text");
   const [relationTable, setRelationTable] = useState("");
+  const [lookupRelation, setLookupRelation] = useState("");
+  const [lookupField, setLookupField] = useState("");
   const [availableTables, setAvailableTables] = useState<string[]>([snapshot.default_table]);
+  const [targetFields, setTargetFields] = useState<string[]>([]);
   const [tablesError, setTablesError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -51,6 +55,16 @@ export function AddColumnPanel({
   const relationTargets = useMemo(
     () => availableTables.filter((table) => table !== snapshot.default_table),
     [availableTables, snapshot.default_table],
+  );
+
+  const relationColumns = useMemo(
+    () => snapshot.columns.filter((column) => column.field_type === "relation"),
+    [snapshot.columns],
+  );
+
+  const selectedLookupRelation = useMemo(
+    () => relationColumns.find((column) => column.name === lookupRelation),
+    [lookupRelation, relationColumns],
   );
 
   useEffect(() => {
@@ -88,6 +102,63 @@ export function AddColumnPanel({
     setRelationTable(relationTargets[0] ?? "");
   }, [fieldType, relationTable, relationTargets]);
 
+  useEffect(() => {
+    if (fieldType !== "lookup") {
+      return;
+    }
+    if (lookupRelation && relationColumns.some((column) => column.name === lookupRelation)) {
+      return;
+    }
+    setLookupRelation(relationColumns[0]?.name ?? "");
+  }, [fieldType, lookupRelation, relationColumns]);
+
+  useEffect(() => {
+    if (fieldType !== "lookup" || !selectedLookupRelation?.relation_table) {
+      setTargetFields([]);
+      return;
+    }
+    const targetTable = selectedLookupRelation.relation_table;
+    const fromTargets = snapshot.relation_targets?.[targetTable];
+    if (fromTargets && fromTargets.length > 0) {
+      const fields = Object.keys(fromTargets[0].values).filter((field) => field !== "id");
+      setTargetFields(fields);
+      return;
+    }
+    if (demo) {
+      setTargetFields([]);
+      return;
+    }
+    let cancelled = false;
+    void invoke<DataColumn[]>("list_data_table_columns", {
+      root,
+      relPath,
+      table: targetTable,
+    })
+      .then((columns) => {
+        if (!cancelled) {
+          setTargetFields(columns.map((column) => column.name).filter((field) => field !== "id"));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setTargetFields([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [demo, fieldType, relPath, root, selectedLookupRelation, snapshot.relation_targets]);
+
+  useEffect(() => {
+    if (fieldType !== "lookup") {
+      return;
+    }
+    if (lookupField && targetFields.includes(lookupField)) {
+      return;
+    }
+    setLookupField(targetFields[0] ?? "");
+  }, [fieldType, lookupField, targetFields]);
+
   const submit = useCallback(async () => {
     setValidationError(null);
     const nameError = validateColumnName(name, existingNames);
@@ -105,6 +176,17 @@ export function AddColumnPanel({
       setValidationError(relationError);
       return;
     }
+    const lookupError = validateLookupSpec(
+      fieldType,
+      lookupRelation,
+      lookupField,
+      relationColumns,
+      targetFields,
+    );
+    if (lookupError) {
+      setValidationError(lookupError);
+      return;
+    }
 
     if (demo) {
       onError("Adding columns is not persisted in the browser demo.");
@@ -113,7 +195,13 @@ export function AddColumnPanel({
 
     setSubmitting(true);
     try {
-      const payload = buildAddColumnPayload(name, fieldType, relationTable);
+      const payload = buildAddColumnPayload(
+        name,
+        fieldType,
+        relationTable,
+        lookupRelation,
+        lookupField,
+      );
       const fresh = await invoke<DataAppSnapshot>("add_data_columns", {
         root,
         relPath,
@@ -128,6 +216,8 @@ export function AddColumnPanel({
       setName("");
       setFieldType("text");
       setRelationTable("");
+      setLookupRelation("");
+      setLookupField("");
       onClose();
     } catch (err) {
       const message = String(err);
@@ -145,11 +235,14 @@ export function AddColumnPanel({
     demo,
     existingNames,
     fieldType,
+    lookupField,
+    lookupRelation,
     name,
     onAdded,
     onClose,
     onError,
     onStale,
+    relationColumns,
     relationTable,
     relPath,
     root,
@@ -157,9 +250,12 @@ export function AddColumnPanel({
     snapshot.active_view,
     snapshot.default_table,
     snapshot.package_revision,
+    targetFields,
   ]);
 
   const disabled = busy || readOnly || submitting;
+  const lookupBlocked = fieldType === "lookup" && (relationColumns.length === 0 || !lookupField);
+  const relationBlocked = fieldType === "relation" && relationTargets.length === 0;
 
   return (
     <section className="data-table-add-column" aria-label="Add column">
@@ -230,6 +326,48 @@ export function AddColumnPanel({
             </select>
           </label>
         )}
+
+        {fieldType === "lookup" && (
+          <>
+            <label className="data-table-add-column-field">
+              Relation column
+              <select
+                value={lookupRelation}
+                disabled={disabled || relationColumns.length === 0}
+                onChange={(event) => setLookupRelation(event.currentTarget.value)}
+              >
+                {relationColumns.length === 0 ? (
+                  <option value="">Add a relation column first</option>
+                ) : (
+                  relationColumns.map((column) => (
+                    <option key={column.name} value={column.name}>
+                      {column.name}
+                      {column.relation_table ? ` → ${column.relation_table}` : ""}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
+            <label className="data-table-add-column-field">
+              Related field
+              <select
+                value={lookupField}
+                disabled={disabled || targetFields.length === 0}
+                onChange={(event) => setLookupField(event.currentTarget.value)}
+              >
+                {targetFields.length === 0 ? (
+                  <option value="">No fields on related table</option>
+                ) : (
+                  targetFields.map((field) => (
+                    <option key={field} value={field}>
+                      {field}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
+          </>
+        )}
       </div>
 
       {validationError && <p className="error-text">{validationError}</p>}
@@ -238,7 +376,7 @@ export function AddColumnPanel({
         <button
           type="button"
           className="primary-button"
-          disabled={disabled || (fieldType === "relation" && relationTargets.length === 0)}
+          disabled={disabled || relationBlocked || lookupBlocked}
           onClick={() => void submit()}
         >
           Add column

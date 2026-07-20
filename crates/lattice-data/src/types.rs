@@ -16,12 +16,18 @@ pub enum FieldType {
     Date,
     /// Multi-record link to another table in the same `.data` package.
     Relation,
+    /// Read-only projection of a field through a relation on the same table.
+    Lookup,
 }
 
 impl FieldType {
     pub fn sqlite_type(self) -> &'static str {
         match self {
-            FieldType::Text | FieldType::LongText | FieldType::Date | FieldType::Relation => "TEXT",
+            FieldType::Text
+            | FieldType::LongText
+            | FieldType::Date
+            | FieldType::Relation
+            | FieldType::Lookup => "TEXT",
             FieldType::Integer | FieldType::Boolean => "INTEGER",
             FieldType::Decimal => "REAL",
         }
@@ -37,6 +43,11 @@ impl FieldType {
             FieldType::Text
         }
     }
+
+    /// Whether cells of this type are computed at read time and must not be written.
+    pub fn is_read_only(self) -> bool {
+        matches!(self, FieldType::Lookup)
+    }
 }
 
 impl fmt::Display for FieldType {
@@ -49,6 +60,7 @@ impl fmt::Display for FieldType {
             FieldType::Boolean => write!(f, "boolean"),
             FieldType::Date => write!(f, "date"),
             FieldType::Relation => write!(f, "relation"),
+            FieldType::Lookup => write!(f, "lookup"),
         }
     }
 }
@@ -66,12 +78,16 @@ pub enum CellValue {
     Relation {
         record_ids: Vec<String>,
     },
+    /// Resolved lookup display values (never persisted to SQLite).
+    Lookup {
+        values: Vec<String>,
+    },
 }
 
 impl CellValue {
     pub fn as_sqlite_value(&self) -> rusqlite::types::Value {
         match self {
-            CellValue::Null => rusqlite::types::Value::Null,
+            CellValue::Null | CellValue::Lookup { .. } => rusqlite::types::Value::Null,
             CellValue::Text(text) | CellValue::Date(text) => {
                 rusqlite::types::Value::Text(text.clone())
             }
@@ -87,22 +103,26 @@ impl CellValue {
     }
 
     pub fn from_sqlite(value_ref: ValueRef<'_>, field_type: FieldType) -> rusqlite::Result<Self> {
+        // Lookup columns are placeholders; resolved values are filled after the SQL read.
+        if field_type == FieldType::Lookup {
+            return Ok(CellValue::Lookup { values: Vec::new() });
+        }
         match value_ref {
             ValueRef::Null => Ok(CellValue::Null),
             ValueRef::Integer(value) => match field_type {
                 FieldType::Boolean => Ok(CellValue::Boolean(value != 0)),
                 FieldType::Date => Ok(CellValue::Date(value.to_string())),
-                FieldType::Relation => Err(rusqlite::Error::InvalidColumnType(
+                FieldType::Relation | FieldType::Lookup => Err(rusqlite::Error::InvalidColumnType(
                     0,
-                    "relation".into(),
+                    field_type.to_string(),
                     value_ref.data_type(),
                 )),
                 _ => Ok(CellValue::Integer(value)),
             },
             ValueRef::Real(value) => match field_type {
-                FieldType::Relation => Err(rusqlite::Error::InvalidColumnType(
+                FieldType::Relation | FieldType::Lookup => Err(rusqlite::Error::InvalidColumnType(
                     0,
-                    "relation".into(),
+                    field_type.to_string(),
                     value_ref.data_type(),
                 )),
                 _ => Ok(CellValue::Decimal(value)),
@@ -135,6 +155,7 @@ impl CellValue {
                             })?;
                         Ok(CellValue::Relation { record_ids })
                     }
+                    FieldType::Lookup => Ok(CellValue::Lookup { values: Vec::new() }),
                     _ => Ok(CellValue::Text(text)),
                 }
             }
@@ -143,6 +164,25 @@ impl CellValue {
                 "blob".into(),
                 rusqlite::types::Type::Blob,
             )),
+        }
+    }
+
+    /// Human-readable display for a cell (used when resolving lookups).
+    pub fn display_text(&self) -> String {
+        match self {
+            CellValue::Null => String::new(),
+            CellValue::Text(text) | CellValue::Date(text) => text.clone(),
+            CellValue::Integer(value) => value.to_string(),
+            CellValue::Decimal(value) => value.to_string(),
+            CellValue::Boolean(value) => {
+                if *value {
+                    "true".into()
+                } else {
+                    "false".into()
+                }
+            }
+            CellValue::Relation { record_ids } => record_ids.join(", "),
+            CellValue::Lookup { values } => values.join(", "),
         }
     }
 }
@@ -155,6 +195,10 @@ pub struct ColumnMeta {
     pub sqlite_type: String,
     /// Target table name for [`FieldType::Relation`] within the same package.
     pub relation_table: Option<String>,
+    /// Source relation column on this table for [`FieldType::Lookup`].
+    pub lookup_relation: Option<String>,
+    /// Field on the related table projected by [`FieldType::Lookup`].
+    pub lookup_field: Option<String>,
 }
 
 /// Prior relation cell state stripped when a target row is deleted.
@@ -198,6 +242,8 @@ pub struct NewColumn<'a> {
     pub name: &'a str,
     pub field_type: FieldType,
     pub relation_table: Option<&'a str>,
+    pub lookup_relation: Option<&'a str>,
+    pub lookup_field: Option<&'a str>,
 }
 
 impl<'a> NewColumn<'a> {
@@ -206,6 +252,8 @@ impl<'a> NewColumn<'a> {
             name,
             field_type,
             relation_table: None,
+            lookup_relation: None,
+            lookup_field: None,
         }
     }
 
@@ -214,6 +262,18 @@ impl<'a> NewColumn<'a> {
             name,
             field_type: FieldType::Relation,
             relation_table: Some(relation_table),
+            lookup_relation: None,
+            lookup_field: None,
+        }
+    }
+
+    pub fn lookup(name: &'a str, lookup_relation: &'a str, lookup_field: &'a str) -> Self {
+        Self {
+            name,
+            field_type: FieldType::Lookup,
+            relation_table: None,
+            lookup_relation: Some(lookup_relation),
+            lookup_field: Some(lookup_field),
         }
     }
 }

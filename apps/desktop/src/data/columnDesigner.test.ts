@@ -56,4 +56,13 @@ describe("buildAddColumnPayload", () => {
       relation_table: "companies",
     });
   });
+
+  it("includes lookup metadata for lookup fields", () => {
+    expect(buildAddColumnPayload("company_name", "lookup", undefined, "company", "name")).toEqual({
+      name: "company_name",
+      field_type: "lookup",
+      lookup_relation: "company",
+      lookup_field: "name",
+    });
+  });
 });

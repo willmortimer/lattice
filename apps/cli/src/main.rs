@@ -311,12 +311,18 @@ enum TableCommand {
         /// Column name.
         #[arg(long)]
         name: String,
-        /// Field type (`text`, `integer`, `boolean`, `date`, `relation`, …).
+        /// Field type (`text`, `integer`, `boolean`, `date`, `relation`, `lookup`, …).
         #[arg(long = "type")]
         field_type: String,
         /// Target table for `relation` columns.
         #[arg(long)]
         relation_table: Option<String>,
+        /// Source relation column for `lookup` columns.
+        #[arg(long)]
+        lookup_relation: Option<String>,
+        /// Related-table field projected by `lookup` columns.
+        #[arg(long)]
+        lookup_field: Option<String>,
         /// Base package revision (`sha256:...`). Defaults to the current revision.
         #[arg(long)]
         base: Option<String>,
@@ -468,8 +474,19 @@ fn run(command: Command) -> Result<ExitCode> {
                 name,
                 field_type,
                 relation_table,
+                lookup_relation,
+                lookup_field,
                 base,
-            } => cmd_table_add_column(path, table, name, field_type, relation_table, base),
+            } => cmd_table_add_column(
+                path,
+                table,
+                name,
+                field_type,
+                relation_table,
+                lookup_relation,
+                lookup_field,
+                base,
+            ),
             TableCommand::AddTable {
                 path,
                 table,
@@ -1122,8 +1139,9 @@ fn parse_field_type(value: &str) -> Result<FieldType> {
         "boolean" => Ok(FieldType::Boolean),
         "date" => Ok(FieldType::Date),
         "relation" => Ok(FieldType::Relation),
+        "lookup" => Ok(FieldType::Lookup),
         other => bail!(
-            "unknown field type {other:?}; expected text, long_text, integer, decimal, boolean, date, or relation"
+            "unknown field type {other:?}; expected text, long_text, integer, decimal, boolean, date, relation, or lookup"
         ),
     }
 }
@@ -1132,15 +1150,35 @@ fn column_spec(
     name: String,
     field_type: FieldType,
     relation_table: Option<String>,
+    lookup_relation: Option<String>,
+    lookup_field: Option<String>,
 ) -> Result<ColumnSpec> {
     if field_type == FieldType::Relation {
         let relation_table = relation_table.with_context(|| {
             format!("column {name:?} has type relation; pass --relation-table")
         })?;
+        if lookup_relation.is_some() || lookup_field.is_some() {
+            bail!("--lookup-relation / --lookup-field are only valid when --type is lookup");
+        }
         return Ok(ColumnSpec::relation(name, relation_table));
+    }
+    if field_type == FieldType::Lookup {
+        let lookup_relation = lookup_relation.with_context(|| {
+            format!("column {name:?} has type lookup; pass --lookup-relation")
+        })?;
+        let lookup_field = lookup_field.with_context(|| {
+            format!("column {name:?} has type lookup; pass --lookup-field")
+        })?;
+        if relation_table.is_some() {
+            bail!("--relation-table is only valid when --type is relation");
+        }
+        return Ok(ColumnSpec::lookup(name, lookup_relation, lookup_field));
     }
     if relation_table.is_some() {
         bail!("--relation-table is only valid when --type is relation");
+    }
+    if lookup_relation.is_some() || lookup_field.is_some() {
+        bail!("--lookup-relation / --lookup-field are only valid when --type is lookup");
     }
     Ok(ColumnSpec::new(name, field_type))
 }
@@ -1151,6 +1189,8 @@ fn cmd_table_add_column(
     name: String,
     field_type: String,
     relation_table: Option<String>,
+    lookup_relation: Option<String>,
+    lookup_field: Option<String>,
     base: Option<String>,
 ) -> Result<ExitCode> {
     let (ws, mut engine) = open_engine()?;
@@ -1160,7 +1200,13 @@ fn cmd_table_add_column(
         None => package_revision(&ws, &rel)?,
     };
     let field_type = parse_field_type(&field_type)?;
-    let column = column_spec(name.clone(), field_type, relation_table)?;
+    let column = column_spec(
+        name.clone(),
+        field_type,
+        relation_table,
+        lookup_relation,
+        lookup_field,
+    )?;
     let receipt = engine.apply(Transaction::new(
         format!("Add column {name} to {}.{}", rel.display(), table),
         vec![Semantic::ColumnsAdd {

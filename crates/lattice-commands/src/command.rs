@@ -17,6 +17,18 @@ pub struct ColumnSpec {
         skip_serializing_if = "Option::is_none"
     )]
     pub relation_table: Option<String>,
+    #[serde(
+        rename = "lookup-relation",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub lookup_relation: Option<String>,
+    #[serde(
+        rename = "lookup-field",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub lookup_field: Option<String>,
 }
 
 impl ColumnSpec {
@@ -25,6 +37,8 @@ impl ColumnSpec {
             name: name.into(),
             field_type,
             relation_table: None,
+            lookup_relation: None,
+            lookup_field: None,
         }
     }
 
@@ -33,6 +47,22 @@ impl ColumnSpec {
             name: name.into(),
             field_type: FieldType::Relation,
             relation_table: Some(relation_table.into()),
+            lookup_relation: None,
+            lookup_field: None,
+        }
+    }
+
+    pub fn lookup(
+        name: impl Into<String>,
+        lookup_relation: impl Into<String>,
+        lookup_field: impl Into<String>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            field_type: FieldType::Lookup,
+            relation_table: None,
+            lookup_relation: Some(lookup_relation.into()),
+            lookup_field: Some(lookup_field.into()),
         }
     }
 }
