@@ -25,8 +25,16 @@ ended or cancelled.
 | `LATTICE_VOICE_FAKE=1` | Spawn a fake-backend `lattice-voice-host` (tests / CI) |
 | `LATTICE_VOICE_HOST_BIN` | Path to the `lattice-voice-host` binary |
 | `LATTICE_VOICE_HOST_SOCKET` | Existing host UDS (connect only), or socket path when spawning |
+| `LATTICE_VOICE_MODEL_CACHE` | Model cache for supervised `--backend fluidaudio` hosts |
 
 Without these, voice RPCs return `voice_unavailable` (not `unimplemented`).
+
+- **Fake (default for CI / thin-client smoke):** set `LATTICE_VOICE_FAKE=1` (optionally
+  with `LATTICE_VOICE_HOST_BIN`; otherwise the daemon resolves
+  `target/debug/lattice-voice-host`).
+- **Real ASR:** build `cargo build -p lattice-voice-host --features fluidaudio`,
+  set `LATTICE_VOICE_HOST_BIN` to that binary, leave `LATTICE_VOICE_FAKE` unset,
+  and optionally set `LATTICE_VOICE_MODEL_CACHE`.
 
 Desktop thin client (`apps/desktop` voice module) connects with:
 
@@ -37,10 +45,20 @@ Desktop thin client (`apps/desktop` voice module) connects with:
 | `LATTICE_AUTH_TOKEN` | Handshake token (required when connecting to an existing socket) |
 | `LATTICE_LATTICED_BIN` | Optional path for on-demand `latticed` spawn |
 
+When the desktop spawns `latticed` and voice-host env is unset, it auto-discovers
+`lattice-voice-host` and enables `LATTICE_VOICE_FAKE=1` so thin-client smoke works
+without a Fluidaudio build.
+
 ```sh
 # Example: supervised fake host for local testing
 LATTICE_VOICE_FAKE=1 \
   LATTICE_VOICE_HOST_BIN=./target/debug/lattice-voice-host \
+  cargo run -p lattice-daemon -- --auth-token dev-token --api-port 0
+
+# Example: supervised Fluidaudio host (macOS, feature-gated binary)
+cargo build -p lattice-voice-host --features fluidaudio
+LATTICE_VOICE_HOST_BIN=./target/debug/lattice-voice-host \
+  LATTICE_VOICE_MODEL_CACHE=./research/voice-m0-fluidaudio/.cache/Models \
   cargo run -p lattice-daemon -- --auth-token dev-token --api-port 0
 ```
 
