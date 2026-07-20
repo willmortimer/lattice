@@ -408,9 +408,10 @@ export function useDesktopController() {
     reconcilePathRemaps: resourceController.reconcilePathRemaps,
   });
   const {
-    handleQuickNote, handleNewPage, handleNewTable, handleImportCsv, handleUndo,
+    handleQuickNote, handleNewPage, handleNewTable, handleImportCsv, handlePromoteWorkspaceCsv, handleUndo,
     handleOpenExternally, handleOpenFile, handleImportEditorAsset, handleOpenWiki,
     openLinkTarget, updateWorkspaceSettings, createAndOpenPage,
+    csvImportReview, handleCancelCsvImport, handleConfirmCsvImport, handleCsvImportColumnTypeChange,
   } = actions;
 
   const requestTreeRename = useCallback((resource: Resource) => {
@@ -545,7 +546,7 @@ export function useDesktopController() {
     const actions: PaletteItem[] = [
       { id: "action:new-page", label: "New page", run: handleNewPage },
       { id: "action:new-table", label: "New table…", run: () => void handleNewTable() },
-      { id: "action:import-csv", label: "Import CSV…", run: () => void handleImportCsv() },
+      { id: "action:import-table", label: "Import table…", run: () => void handleImportCsv() },
       { id: "action:quick-note", label: "Quick note", hint: "Cmd+N", run: handleQuickNote },
       { id: "action:new-workspace", label: "New workspace…", run: () => void openNewWorkspaceDialog() },
       { id: "action:open-workspace", label: "Open workspace…", run: () => void handleOpenWorkspace() },
@@ -684,6 +685,7 @@ export function useDesktopController() {
     profile, profileReady, settings, startup, snapshot, snapshotRef, selected, selectedPaths, session, error, busy, saveState,
     externalConflict, reloadToken, newWorkspaceOpen, workspacesDir, templates, statusToast, runtimeNotice,
     profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth, treeCollapsedPaths, revealPath, linkPicker,
+    csvImportReview, handleCancelCsvImport, handleConfirmCsvImport, handleCsvImportColumnTypeChange,
     linkRepairReview, handleLinkRepairAccept, handleLinkRepairDefer,
     openTabs, navigation, inspectorOpen, editingTitle, titleDraft, assetRoot, wikiTargets, pageEditorRef,
     recents, page, currentPageRevisionRef,
@@ -694,7 +696,7 @@ export function useDesktopController() {
     setLinkPicker,
     setStatusToast, applyThemeCatalog, rememberWorkspace, clearRecents, resetSettings, handleGetStarted,
     handleOpenWorkspace, openRecent, handleCreateWorkspace, openNewWorkspaceDialog, pickWorkspaceFolder,
-    handleNewPage, handleQuickNote, handleNewTable, handleImportCsv, handleUndo, handleSelect,
+    handleNewPage, handleQuickNote, handleNewTable, handleImportCsv, handlePromoteWorkspaceCsv, handleUndo, handleSelect,
     applyTreeSelection: resourceController.applyTreeSelection,
     handleOpenExternally, handleOpenFile, handleImportEditorAsset,
     navigateHistory: navigationController.navigateHistory,

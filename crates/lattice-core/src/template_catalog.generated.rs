@@ -52,6 +52,8 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             extra_tables: &[],
             views: &[],
             forms: &[],
+            actions: &[],
+            interfaces: &[],
         }
         ],
     },
@@ -147,6 +149,8 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             extra_tables: &[],
             views: &[],
             forms: &[],
+            actions: &[],
+            interfaces: &[],
         }
         ],
     },
@@ -202,6 +206,8 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             extra_tables: &[],
             views: &[],
             forms: &[],
+            actions: &[],
+            interfaces: &[],
         }
         ],
     },
@@ -258,6 +264,8 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             extra_tables: &[],
             views: &[],
             forms: &[],
+            actions: &[],
+            interfaces: &[],
         }
         ],
     },
@@ -396,6 +404,8 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             }
             ],
             forms: &[],
+            actions: &[],
+            interfaces: &[],
         }
         ],
     },
@@ -458,6 +468,8 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             extra_tables: &[],
             views: &[],
             forms: &[],
+            actions: &[],
+            interfaces: &[],
         }
         ],
     },
@@ -506,10 +518,11 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             SeedDirectory { path: "Canvases", purpose: Some("Spatial boards that link into workspace files."), default_kind: None, icon: None },
             SeedDirectory { path: "Templates", purpose: Some("Page templates with {{title}} and {{date}} placeholders."), default_kind: None, icon: None },
             SeedDirectory { path: "Data", purpose: Some("Tabular seeds and imported tables."), default_kind: None, icon: None },
+            SeedDirectory { path: "Dashboards", purpose: Some("Interactive summaries and charts."), default_kind: None, icon: None },
             SeedDirectory { path: "Resources", purpose: Some("Ordinary files — JSON, YAML, code, SQL, images."), default_kind: None, icon: None },
             SeedDirectory { path: "Archive", purpose: Some("Finished or inactive material."), default_kind: None, icon: None }
         ],
-        preview: &["Home.md", "Research/Local Runtime.md", "Research/Long Read.md", "Product/Vision.md", "CRM.data", "Projects/Delivery.data", "Data/Metrics.data", "OKRs.data", "Canvases/Product Strategy.canvas", "Inbox/Sample capture.md", "Templates/Daily Note.md", "Notebooks/CRM exploration.ipynb", "Resources/"],
+        preview: &["Home.md", "Research/Local Runtime.md", "Research/Long Read.md", "Product/Vision.md", "CRM.data", "Projects/Delivery.data", "Data/Metrics.data", "Data/Events.dataset", "Dashboards/Signups by region.vl.json", "OKRs.data", "Canvases/Product Strategy.canvas", "Inbox/Sample capture.md", "Templates/Daily Note.md", "Notebooks/CRM exploration.ipynb", "Resources/"],
         capabilities: &["pages", "canvas", "sqlite"],
         quick_note_directory: "Inbox",
         daily_note_directory: None,
@@ -535,6 +548,10 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             SeedFile { path: "Notebooks/CRM exploration.ipynb", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Notebooks/CRM exploration.ipynb")) },
             SeedFile { path: "Canvases/Product Strategy.canvas", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Canvases/Product Strategy.canvas")) },
             SeedFile { path: "Data/sample.csv", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Data/sample.csv")) },
+            SeedFile { path: "Data/Events.dataset/dataset.yaml", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Data/Events.dataset/dataset.yaml")) },
+            SeedFile { path: "Data/Events.dataset/README.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Data/Events.dataset/README.md")) },
+            SeedFile { path: "Data/Events.dataset/facts/signups.csv", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Data/Events.dataset/facts/signups.csv")) },
+            SeedFile { path: "Dashboards/Signups by region.vl.json", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Dashboards/Signups by region.vl.json")) },
             SeedFile { path: "Resources/config.json", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Resources/config.json")) },
             SeedFile { path: "Resources/schema.yaml", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Resources/schema.yaml")) },
             SeedFile { path: "Resources/hooks.json", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Resources/hooks.json")) },
@@ -658,6 +675,33 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 description: Some("Create a contact from the package form."),
             }
             ],
+            actions: &[
+                SeedDataAction {
+                name: "OpenContactIntake",
+                label: "Contact intake",
+                table: "contacts",
+                scope: "toolbar",
+                action_type: "insert_record",
+                form: Some("ContactIntake"),
+                field: None,
+                value: None,
+                url: None,
+                defaults: &[],
+            }
+            ],
+            interfaces: &[
+                SeedDataInterface {
+                name: "ContactOps",
+                views: &[
+                    "Board"
+                ],
+                forms: &[
+                    "ContactIntake"
+                ],
+                title: Some("Contact operations"),
+                description: Some("Board view plus contact intake form for CRM canvas open."),
+            }
+            ],
         },
             SeedDataPackage {
             path: "Projects/Delivery.data",
@@ -723,6 +767,8 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 description: Some("Add a delivery item without opening the grid."),
             }
             ],
+            actions: &[],
+            interfaces: &[],
         },
             SeedDataPackage {
             path: "Data/Metrics.data",
@@ -782,6 +828,8 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             }
             ],
             forms: &[],
+            actions: &[],
+            interfaces: &[],
         },
             SeedDataPackage {
             path: "OKRs.data",
@@ -824,6 +872,8 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             }
             ],
             forms: &[],
+            actions: &[],
+            interfaces: &[],
         }
         ],
     },

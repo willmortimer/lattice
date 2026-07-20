@@ -4,12 +4,19 @@ use std::path::{Path, PathBuf};
 use rusqlite::{params, Connection};
 use sha2::{Digest, Sha256};
 
+use crate::action::{action_name_from_path, action_path, ActionDef, ActionKind};
 use crate::app::{app_manifest_path, database_path, schema_path, write_default_view, AppManifest};
 use crate::csv::{cell_from_csv, CsvTable};
 use crate::error::Error;
 use crate::form::{form_name_from_path, form_path, FormDef};
-use crate::types::{CellValue, ColumnMeta, FieldType, NewColumn, RelationStrip, Row};
-use crate::view::{build_view_query, row_from_view_sql, view_path, visible_columns, ViewDef};
+use crate::interface::{interface_name_from_path, interface_path, InterfaceDef};
+use crate::types::{
+    CellValue, ColumnMeta, FieldType, NewColumn, RelationStrip, RollupAggregate, Row,
+    SchemaFilesSnapshot,
+};
+use crate::view::{
+    build_view_count_query, build_view_query, row_from_view_sql, view_path, visible_columns, ViewDef,
+};
 use crate::Result;
 
 /// A opened or newly created `.data` package backed by SQLite.
@@ -42,6 +49,13 @@ impl DataApp {
             .map_err(|source| Error::io(&schema_file, source))?;
 
         write_default_view(package_path, table_name)?;
+
+        // Empty package folders so progressive promotion can drop files without
+        // inventing directory layout on first write.
+        for folder in ["forms", "interfaces"] {
+            let dir = package_path.join(folder);
+            std::fs::create_dir_all(&dir).map_err(|source| Error::io(&dir, source))?;
+        }
 
         let readme_path = package_path.join("README.md");
         let readme = format!("# {title}\n");
@@ -118,11 +132,21 @@ impl DataApp {
                 .map(|column| column.field_type)
                 .unwrap_or_else(|| FieldType::infer_from_sqlite(&declared_type));
             let relation_table = yaml.and_then(|column| column.relation_table.clone());
+            let lookup_relation = yaml.and_then(|column| column.lookup_relation.clone());
+            let lookup_field = yaml.and_then(|column| column.lookup_field.clone());
+            let rollup_relation = yaml.and_then(|column| column.rollup_relation.clone());
+            let rollup_aggregate = yaml.and_then(|column| column.rollup_aggregate);
+            let rollup_field = yaml.and_then(|column| column.rollup_field.clone());
             columns.push(ColumnMeta {
                 name,
                 field_type,
                 sqlite_type: declared_type,
                 relation_table,
+                lookup_relation,
+                lookup_field,
+                rollup_relation,
+                rollup_aggregate,
+                rollup_field,
             });
         }
         Ok(columns)
@@ -143,8 +167,23 @@ impl DataApp {
             row_from_sql(row, &column_meta)
         })?;
 
-        rows.collect::<rusqlite::Result<Vec<Row>>>()
-            .map_err(Error::from)
+        let mut collected = rows
+            .collect::<rusqlite::Result<Vec<Row>>>()
+            .map_err(Error::from)?;
+        resolve_computed_values(self, table, &column_meta, &mut collected)?;
+        Ok(collected)
+    }
+
+    /// Total rows in a table (no view filters).
+    pub fn count_rows(&self, table: &str) -> Result<usize> {
+        validate_identifier(table)?;
+        ensure_table_exists(&self.conn, table)?;
+        let count: i64 = self
+            .conn
+            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                row.get(0)
+            })?;
+        Ok(count as usize)
     }
 
     pub fn get_row(&self, table: &str, id: &str) -> Result<Option<Row>> {
@@ -160,7 +199,9 @@ impl DataApp {
         let mut stmt = self.conn.prepare(&sql)?;
         let mut rows = stmt.query(params![id])?;
         if let Some(row) = rows.next()? {
-            Ok(Some(row_from_sql(row, &column_meta)?))
+            let mut collected = vec![row_from_sql(row, &column_meta)?];
+            resolve_computed_values(self, table, &column_meta, &mut collected)?;
+            Ok(collected.into_iter().next())
         } else {
             Ok(None)
         }
@@ -186,6 +227,7 @@ impl DataApp {
 
         let (columns, placeholders, sql_params): (Vec<_>, Vec<_>, Vec<_>) = column_meta
             .iter()
+            .filter(|meta| !meta.field_type.is_read_only())
             .map(|meta| {
                 let value = values.get(&meta.name).cloned().unwrap_or(CellValue::Null);
                 (meta.name.as_str(), "?", value.as_sqlite_value())
@@ -225,6 +267,7 @@ impl DataApp {
 
         let (columns, placeholders, sql_params): (Vec<_>, Vec<_>, Vec<_>) = column_meta
             .iter()
+            .filter(|meta| !meta.field_type.is_read_only())
             .map(|meta| {
                 let value = insert_values
                     .get(&meta.name)
@@ -280,6 +323,14 @@ impl DataApp {
         for key in values.keys() {
             if key != "id" && !known_columns.contains_key(key.as_str()) {
                 return Err(Error::table(table, format!("unknown column {key:?}")));
+            }
+            if let Some(meta) = known_columns.get(key.as_str()) {
+                if meta.field_type.is_read_only() {
+                    return Err(Error::table(
+                        table,
+                        format!("column {key:?} is read-only ({})", meta.field_type),
+                    ));
+                }
             }
         }
 
@@ -414,9 +465,127 @@ impl DataApp {
         Ok(form)
     }
 
+    /// List saved action names from `actions/*.action.yaml`.
+    pub fn list_actions(&self) -> Result<Vec<String>> {
+        let actions_dir = self.path.join("actions");
+        if !actions_dir.is_dir() {
+            return Ok(Vec::new());
+        }
+
+        let mut names = Vec::new();
+        for entry in
+            std::fs::read_dir(&actions_dir).map_err(|source| Error::io(&actions_dir, source))?
+        {
+            let entry = entry.map_err(|source| Error::io(&actions_dir, source))?;
+            let path = entry.path();
+            if let Some(name) = action_name_from_path(&path) {
+                names.push(name);
+            }
+        }
+        names.sort();
+        Ok(names)
+    }
+
+    /// Load `actions/{name}.action.yaml` and validate against package tables/forms.
+    pub fn load_action(&self, name: &str) -> Result<ActionDef> {
+        validate_identifier(name)?;
+        let path = action_path(&self.path, name);
+        let action = ActionDef::load(&path)?;
+        self.validate_action_targets(&action)?;
+        Ok(action)
+    }
+
+    /// Serialize an action definition to YAML.
+    pub fn render_action_yaml(&self, action: &ActionDef) -> Result<String> {
+        action.to_yaml()
+    }
+
+    fn validate_action_targets(&self, action: &ActionDef) -> Result<()> {
+        ensure_table_exists(&self.conn, &action.table)?;
+        let columns = self.columns(&action.table)?;
+        let column_names: std::collections::BTreeSet<_> =
+            columns.iter().map(|column| column.name.as_str()).collect();
+
+        match &action.action {
+            ActionKind::InsertRecord { form, defaults } => {
+                if let Some(form_name) = form {
+                    let form = self.load_form(form_name)?;
+                    if form.table != action.table {
+                        return Err(Error::table(
+                            action.table.clone(),
+                            format!(
+                                "action references form {form_name:?} for table {:?}, expected {:?}",
+                                form.table, action.table
+                            ),
+                        ));
+                    }
+                }
+                for field in defaults.keys() {
+                    if !column_names.contains(field.as_str()) {
+                        return Err(Error::table(
+                            action.table.clone(),
+                            format!("action default references unknown column {field:?}"),
+                        ));
+                    }
+                }
+            }
+            ActionKind::UpdateField { field, .. } => {
+                if field == "id" {
+                    return Err(Error::table(
+                        action.table.clone(),
+                        "update_field action cannot target the id column".to_string(),
+                    ));
+                }
+                if !column_names.contains(field.as_str()) {
+                    return Err(Error::table(
+                        action.table.clone(),
+                        format!("action references unknown column {field:?}"),
+                    ));
+                }
+            }
+            ActionKind::OpenUrl { .. } => {}
+        }
+        Ok(())
+    }
+
     /// Serialize a form definition to YAML.
     pub fn render_form_yaml(&self, form: &FormDef) -> Result<String> {
         form.to_yaml()
+    }
+
+    /// List saved interface names from `interfaces/*.interface.yaml`.
+    pub fn list_interfaces(&self) -> Result<Vec<String>> {
+        let interfaces_dir = self.path.join("interfaces");
+        if !interfaces_dir.is_dir() {
+            return Ok(Vec::new());
+        }
+
+        let mut names = Vec::new();
+        for entry in std::fs::read_dir(&interfaces_dir)
+            .map_err(|source| Error::io(&interfaces_dir, source))?
+        {
+            let entry = entry.map_err(|source| Error::io(&interfaces_dir, source))?;
+            let path = entry.path();
+            if let Some(name) = interface_name_from_path(&path) {
+                names.push(name);
+            }
+        }
+        names.sort();
+        Ok(names)
+    }
+
+    /// Load `interfaces/{name}.interface.yaml` and validate bound views/forms exist.
+    pub fn load_interface(&self, name: &str) -> Result<InterfaceDef> {
+        validate_identifier(name)?;
+        let path = interface_path(&self.path, name);
+        let interface = InterfaceDef::load(&path)?;
+        self.validate_interface_bindings(&interface)?;
+        Ok(interface)
+    }
+
+    /// Serialize an interface definition to YAML.
+    pub fn render_interface_yaml(&self, interface: &InterfaceDef) -> Result<String> {
+        interface.to_yaml()
     }
 
     fn validate_form_fields(&self, form: &FormDef) -> Result<()> {
@@ -430,6 +599,32 @@ impl DataApp {
                     form.table.clone(),
                     format!("form references unknown column {field:?}"),
                 ));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_interface_bindings(&self, interface: &InterfaceDef) -> Result<()> {
+        let views = self.list_views()?;
+        let view_names: std::collections::BTreeSet<_> =
+            views.iter().map(String::as_str).collect();
+        for view in &interface.views {
+            if !view_names.contains(view.as_str()) {
+                return Err(Error::InvalidPackage {
+                    path: interface_path(&self.path, &interface.name),
+                    message: format!("interface references unknown view {view:?}"),
+                });
+            }
+        }
+        let forms = self.list_forms()?;
+        let form_names: std::collections::BTreeSet<_> =
+            forms.iter().map(String::as_str).collect();
+        for form in &interface.forms {
+            if !form_names.contains(form.as_str()) {
+                return Err(Error::InvalidPackage {
+                    path: interface_path(&self.path, &interface.name),
+                    message: format!("interface references unknown form {form:?}"),
+                });
             }
         }
         Ok(())
@@ -464,10 +659,29 @@ impl DataApp {
             row_from_view_sql(row, &visible_refs)
         })?;
 
-        let collected = rows
+        let mut collected = rows
             .collect::<rusqlite::Result<Vec<Row>>>()
             .map_err(Error::from)?;
+        // Resolve lookups/rollups using full table metadata so source relation columns
+        // remain available even when the view hides them.
+        resolve_computed_values(self, table, &all_columns, &mut collected)?;
         Ok((visible_meta, collected))
+    }
+
+    /// Count rows matching a view's filters (same predicates as [`Self::list_rows_with_view`]).
+    pub fn count_rows_with_view(&self, table: &str, view: &ViewDef) -> Result<usize> {
+        validate_identifier(table)?;
+        ensure_table_exists(&self.conn, table)?;
+        // Validate view column references even though COUNT does not project them.
+        let all_columns = self.columns(table)?;
+        let _visible = visible_columns(&all_columns, view)?;
+        let query = build_view_count_query(table, view)?;
+        let count: i64 = self.conn.query_row(
+            &query.sql,
+            rusqlite::params_from_iter(query.params),
+            |row| row.get(0),
+        )?;
+        Ok(count as usize)
     }
 
     /// Add columns and update manifest/schema files. Existing column names are skipped.
@@ -480,6 +694,50 @@ impl DataApp {
             .map_err(|source| Error::io(&schema_file, source))?;
 
         let existing = self.columns(table)?;
+        for column in columns {
+            if existing.iter().any(|existing| existing.name == column.name) {
+                continue;
+            }
+            if column.field_type == FieldType::Lookup {
+                let relation_name = column.lookup_relation.ok_or_else(|| {
+                    Error::table(
+                        table,
+                        format!("lookup column {:?} requires lookup_relation", column.name),
+                    )
+                })?;
+                let field_name = column.lookup_field.ok_or_else(|| {
+                    Error::table(
+                        table,
+                        format!("lookup column {:?} requires lookup_field", column.name),
+                    )
+                })?;
+                validate_lookup_spec_for_add(self, table, &existing, columns, relation_name, field_name)?;
+            }
+            if column.field_type == FieldType::Rollup {
+                let relation_name = column.rollup_relation.ok_or_else(|| {
+                    Error::table(
+                        table,
+                        format!("rollup column {:?} requires rollup_relation", column.name),
+                    )
+                })?;
+                let aggregate = column.rollup_aggregate.ok_or_else(|| {
+                    Error::table(
+                        table,
+                        format!("rollup column {:?} requires rollup_aggregate", column.name),
+                    )
+                })?;
+                validate_rollup_spec_for_add(
+                    self,
+                    table,
+                    &existing,
+                    columns,
+                    relation_name,
+                    aggregate,
+                    column.rollup_field,
+                )?;
+            }
+        }
+
         let table_meta = self.manifest.tables.entry(table.to_string()).or_default();
         for column in columns {
             validate_identifier(column.name)?;
@@ -511,6 +769,69 @@ impl DataApp {
                 _ => None,
             };
 
+            let (lookup_relation, lookup_field) = match column.field_type {
+                FieldType::Lookup => {
+                    let relation_name = column.lookup_relation.ok_or_else(|| {
+                        Error::table(
+                            table,
+                            format!("lookup column {:?} requires lookup_relation", column.name),
+                        )
+                    })?;
+                    let field_name = column.lookup_field.ok_or_else(|| {
+                        Error::table(
+                            table,
+                            format!("lookup column {:?} requires lookup_field", column.name),
+                        )
+                    })?;
+                    (Some(relation_name.to_string()), Some(field_name.to_string()))
+                }
+                _ if column.lookup_relation.is_some() || column.lookup_field.is_some() => {
+                    return Err(Error::table(
+                        table,
+                        format!(
+                            "column {:?} only lookup fields may set lookup_relation / lookup_field",
+                            column.name
+                        ),
+                    ));
+                }
+                _ => (None, None),
+            };
+
+            let (rollup_relation, rollup_aggregate, rollup_field) = match column.field_type {
+                FieldType::Rollup => {
+                    let relation_name = column.rollup_relation.ok_or_else(|| {
+                        Error::table(
+                            table,
+                            format!("rollup column {:?} requires rollup_relation", column.name),
+                        )
+                    })?;
+                    let aggregate = column.rollup_aggregate.ok_or_else(|| {
+                        Error::table(
+                            table,
+                            format!("rollup column {:?} requires rollup_aggregate", column.name),
+                        )
+                    })?;
+                    (
+                        Some(relation_name.to_string()),
+                        Some(aggregate),
+                        column.rollup_field.map(str::to_string),
+                    )
+                }
+                _ if column.rollup_relation.is_some()
+                    || column.rollup_aggregate.is_some()
+                    || column.rollup_field.is_some() =>
+                {
+                    return Err(Error::table(
+                        table,
+                        format!(
+                            "column {:?} only rollup fields may set rollup_relation / rollup_aggregate / rollup_field",
+                            column.name
+                        ),
+                    ));
+                }
+                _ => (None, None, None),
+            };
+
             let sqlite_type = column.field_type.sqlite_type();
             let alter = format!(
                 "ALTER TABLE {table} ADD COLUMN {} {sqlite_type};\n",
@@ -526,6 +847,11 @@ impl DataApp {
                 crate::app::ColumnMetaYaml {
                     field_type: column.field_type,
                     relation_table,
+                    lookup_relation,
+                    lookup_field,
+                    rollup_relation,
+                    rollup_aggregate,
+                    rollup_field,
                 },
             );
         }
@@ -567,6 +893,57 @@ impl DataApp {
             .map(|(header, field_type)| NewColumn::new(header.as_str(), *field_type))
             .collect();
         self.add_columns(table, &columns)
+    }
+
+    /// Capture `schema.sql` and `app.yaml` for command-engine undo snapshots.
+    pub fn schema_files_snapshot(&self) -> Result<SchemaFilesSnapshot> {
+        let schema_file = schema_path(&self.path);
+        let app_file = app_manifest_path(&self.path);
+        let schema_sql = std::fs::read_to_string(&schema_file)
+            .map_err(|source| Error::io(&schema_file, source))?;
+        let app_yaml =
+            std::fs::read_to_string(&app_file).map_err(|source| Error::io(&app_file, source))?;
+        Ok(SchemaFilesSnapshot {
+            schema_sql,
+            app_yaml,
+            added_columns: Vec::new(),
+            added_table: None,
+        })
+    }
+
+    /// Restore `schema.sql` and `app.yaml` from a prior snapshot and reload the manifest.
+    pub fn restore_schema_files(&mut self, snapshot: &SchemaFilesSnapshot) -> Result<()> {
+        let schema_file = schema_path(&self.path);
+        let app_file = app_manifest_path(&self.path);
+        std::fs::write(&schema_file, &snapshot.schema_sql)
+            .map_err(|source| Error::io(&schema_file, source))?;
+        std::fs::write(&app_file, &snapshot.app_yaml)
+            .map_err(|source| Error::io(&app_file, source))?;
+        self.manifest = AppManifest::load(&app_file)?;
+        Ok(())
+    }
+
+    /// Drop a table from SQLite only. Caller restores `schema.sql` / `app.yaml`.
+    pub fn drop_table_sqlite(&mut self, table_name: &str) -> Result<()> {
+        validate_identifier(table_name)?;
+        ensure_table_exists(&self.conn, table_name)?;
+        self.conn
+            .execute_batch(&format!("DROP TABLE {table_name};"))
+            .map_err(|source| Error::table(table_name, source.to_string()))?;
+        Ok(())
+    }
+
+    /// Drop columns from SQLite only. Caller restores `schema.sql` / `app.yaml`.
+    pub fn drop_columns_sqlite(&mut self, table: &str, columns: &[String]) -> Result<()> {
+        validate_identifier(table)?;
+        ensure_table_exists(&self.conn, table)?;
+        for column in columns {
+            validate_identifier(column)?;
+            self.conn
+                .execute_batch(&format!("ALTER TABLE {table} DROP COLUMN {column};"))
+                .map_err(|source| Error::table(table, source.to_string()))?;
+        }
+        Ok(())
     }
 
     /// Insert parsed CSV rows into an existing table (caller handles transactions).
@@ -746,12 +1123,438 @@ fn validate_row_values(
         let Some(meta) = meta_by_name.get(name.as_str()) else {
             continue;
         };
+        if meta.field_type.is_read_only() {
+            // Snapshots may carry resolved lookup values; ignore on write.
+            continue;
+        }
         if meta.field_type != FieldType::Relation {
             continue;
         }
         validate_relation_cell(conn, table, meta, value)?;
     }
     Ok(())
+}
+
+fn validate_lookup_spec_for_add(
+    app: &DataApp,
+    table: &str,
+    existing: &[ColumnMeta],
+    pending: &[NewColumn<'_>],
+    lookup_relation: &str,
+    lookup_field: &str,
+) -> Result<()> {
+    validate_identifier(lookup_relation)?;
+    validate_identifier(lookup_field)?;
+
+    let relation_from_existing = existing.iter().find(|column| column.name == lookup_relation);
+    let relation_from_pending = pending.iter().find(|column| column.name == lookup_relation);
+
+    let (is_relation, target_table) = if let Some(meta) = relation_from_existing {
+        (
+            meta.field_type == FieldType::Relation,
+            meta.relation_table.as_deref(),
+        )
+    } else if let Some(pending_col) = relation_from_pending {
+        (
+            pending_col.field_type == FieldType::Relation,
+            pending_col.relation_table,
+        )
+    } else {
+        return Err(Error::table(
+            table,
+            format!("lookup_relation {lookup_relation:?} is not a column on {table}"),
+        ));
+    };
+
+    if !is_relation {
+        return Err(Error::table(
+            table,
+            format!("lookup_relation {lookup_relation:?} must be a relation column"),
+        ));
+    }
+    let target_table = target_table.ok_or_else(|| {
+        Error::table(
+            table,
+            format!("relation column {lookup_relation:?} is missing relation_table metadata"),
+        )
+    })?;
+    let target_columns = app.columns(target_table)?;
+    if !target_columns
+        .iter()
+        .any(|column| column.name == lookup_field)
+    {
+        return Err(Error::table(
+            table,
+            format!(
+                "lookup_field {lookup_field:?} is not a column on related table {target_table}"
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_rollup_spec_for_add(
+    app: &DataApp,
+    table: &str,
+    existing: &[ColumnMeta],
+    pending: &[NewColumn<'_>],
+    rollup_relation: &str,
+    aggregate: RollupAggregate,
+    rollup_field: Option<&str>,
+) -> Result<()> {
+    validate_identifier(rollup_relation)?;
+
+    let relation_from_existing = existing.iter().find(|column| column.name == rollup_relation);
+    let relation_from_pending = pending.iter().find(|column| column.name == rollup_relation);
+
+    let (is_relation, target_table) = if let Some(meta) = relation_from_existing {
+        (
+            meta.field_type == FieldType::Relation,
+            meta.relation_table.as_deref(),
+        )
+    } else if let Some(pending_col) = relation_from_pending {
+        (
+            pending_col.field_type == FieldType::Relation,
+            pending_col.relation_table,
+        )
+    } else {
+        return Err(Error::table(
+            table,
+            format!("rollup_relation {rollup_relation:?} is not a column on {table}"),
+        ));
+    };
+
+    if !is_relation {
+        return Err(Error::table(
+            table,
+            format!("rollup_relation {rollup_relation:?} must be a relation column"),
+        ));
+    }
+    let target_table = target_table.ok_or_else(|| {
+        Error::table(
+            table,
+            format!("relation column {rollup_relation:?} is missing relation_table metadata"),
+        )
+    })?;
+
+    if aggregate.requires_field() && rollup_field.is_none() {
+        return Err(Error::table(
+            table,
+            format!("rollup aggregate {aggregate} requires rollup_field"),
+        ));
+    }
+
+    if let Some(field_name) = rollup_field {
+        validate_identifier(field_name)?;
+        let target_columns = app.columns(target_table)?;
+        let target_meta = target_columns
+            .iter()
+            .find(|column| column.name == field_name)
+            .ok_or_else(|| {
+                Error::table(
+                    table,
+                    format!(
+                        "rollup_field {field_name:?} is not a column on related table {target_table}"
+                    ),
+                )
+            })?;
+        if aggregate.requires_field()
+            && !matches!(
+                target_meta.field_type,
+                FieldType::Integer | FieldType::Decimal
+            )
+        {
+            return Err(Error::table(
+                table,
+                format!(
+                    "rollup_field {field_name:?} must be integer or decimal for aggregate {aggregate}"
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn resolve_computed_values(
+    app: &DataApp,
+    table: &str,
+    column_meta: &[ColumnMeta],
+    rows: &mut [Row],
+) -> Result<()> {
+    resolve_lookup_values(app, table, column_meta, rows)?;
+    resolve_rollup_values(app, table, column_meta, rows)?;
+    Ok(())
+}
+
+/// Fill lookup cells by projecting related-record field values.
+fn resolve_lookup_values(
+    app: &DataApp,
+    table: &str,
+    column_meta: &[ColumnMeta],
+    rows: &mut [Row],
+) -> Result<()> {
+    let lookup_columns: Vec<&ColumnMeta> = column_meta
+        .iter()
+        .filter(|meta| meta.field_type == FieldType::Lookup)
+        .collect();
+    if lookup_columns.is_empty() || rows.is_empty() {
+        return Ok(());
+    }
+
+    let meta_by_name: BTreeMap<&str, &ColumnMeta> = column_meta
+        .iter()
+        .map(|meta| (meta.name.as_str(), meta))
+        .collect();
+
+    // Cache related target rows keyed by (target_table, record_id).
+    let mut related_cache: BTreeMap<(String, String), Option<Row>> = BTreeMap::new();
+
+    for row in rows.iter_mut() {
+        for lookup in &lookup_columns {
+            if !row.values.contains_key(&lookup.name) {
+                // View projection omitted this lookup column.
+                continue;
+            }
+            let relation_name = lookup.lookup_relation.as_deref().ok_or_else(|| {
+                Error::table(
+                    table,
+                    format!(
+                        "lookup column {:?} is missing lookup_relation metadata",
+                        lookup.name
+                    ),
+                )
+            })?;
+            let field_name = lookup.lookup_field.as_deref().ok_or_else(|| {
+                Error::table(
+                    table,
+                    format!(
+                        "lookup column {:?} is missing lookup_field metadata",
+                        lookup.name
+                    ),
+                )
+            })?;
+            let relation_meta = meta_by_name.get(relation_name).copied().ok_or_else(|| {
+                Error::table(
+                    table,
+                    format!(
+                        "lookup column {:?} references missing relation {relation_name:?}",
+                        lookup.name
+                    ),
+                )
+            })?;
+            if relation_meta.field_type != FieldType::Relation {
+                return Err(Error::table(
+                    table,
+                    format!(
+                        "lookup column {:?} source {relation_name:?} is not a relation",
+                        lookup.name
+                    ),
+                ));
+            }
+            let target_table = relation_meta.relation_table.as_deref().ok_or_else(|| {
+                Error::table(
+                    table,
+                    format!("relation column {relation_name:?} is missing relation_table"),
+                )
+            })?;
+
+            let record_ids = relation_record_ids_for_row(app, table, row, relation_name)?;
+            let mut values = Vec::new();
+            for record_id in record_ids {
+                let cache_key = (target_table.to_string(), record_id.clone());
+                if !related_cache.contains_key(&cache_key) {
+                    let related = load_related_row_raw(app, target_table, &record_id)?;
+                    related_cache.insert(cache_key.clone(), related);
+                }
+                if let Some(Some(related_row)) = related_cache.get(&cache_key) {
+                    if let Some(cell) = related_row.values.get(field_name) {
+                        let display = cell.display_text();
+                        if !display.is_empty() {
+                            values.push(display);
+                        }
+                    }
+                }
+            }
+            row.values
+                .insert(lookup.name.clone(), CellValue::Lookup { values });
+        }
+    }
+    Ok(())
+}
+
+/// Fill rollup cells by aggregating related-record values.
+fn resolve_rollup_values(
+    app: &DataApp,
+    table: &str,
+    column_meta: &[ColumnMeta],
+    rows: &mut [Row],
+) -> Result<()> {
+    let rollup_columns: Vec<&ColumnMeta> = column_meta
+        .iter()
+        .filter(|meta| meta.field_type == FieldType::Rollup)
+        .collect();
+    if rollup_columns.is_empty() || rows.is_empty() {
+        return Ok(());
+    }
+
+    let meta_by_name: BTreeMap<&str, &ColumnMeta> = column_meta
+        .iter()
+        .map(|meta| (meta.name.as_str(), meta))
+        .collect();
+
+    let mut related_cache: BTreeMap<(String, String), Option<Row>> = BTreeMap::new();
+
+    for row in rows.iter_mut() {
+        for rollup in &rollup_columns {
+            if !row.values.contains_key(&rollup.name) {
+                continue;
+            }
+            let relation_name = rollup.rollup_relation.as_deref().ok_or_else(|| {
+                Error::table(
+                    table,
+                    format!(
+                        "rollup column {:?} is missing rollup_relation metadata",
+                        rollup.name
+                    ),
+                )
+            })?;
+            let aggregate = rollup.rollup_aggregate.ok_or_else(|| {
+                Error::table(
+                    table,
+                    format!(
+                        "rollup column {:?} is missing rollup_aggregate metadata",
+                        rollup.name
+                    ),
+                )
+            })?;
+            let relation_meta = meta_by_name.get(relation_name).copied().ok_or_else(|| {
+                Error::table(
+                    table,
+                    format!(
+                        "rollup column {:?} references missing relation {relation_name:?}",
+                        rollup.name
+                    ),
+                )
+            })?;
+            if relation_meta.field_type != FieldType::Relation {
+                return Err(Error::table(
+                    table,
+                    format!(
+                        "rollup column {:?} source {relation_name:?} is not a relation",
+                        rollup.name
+                    ),
+                ));
+            }
+            let target_table = relation_meta.relation_table.as_deref().ok_or_else(|| {
+                Error::table(
+                    table,
+                    format!("relation column {relation_name:?} is missing relation_table"),
+                )
+            })?;
+
+            let record_ids = relation_record_ids_for_row(app, table, row, relation_name)?;
+            let field_name = rollup.rollup_field.as_deref();
+            let mut numbers = Vec::new();
+            let mut count = 0_u64;
+
+            for record_id in &record_ids {
+                let cache_key = (target_table.to_string(), record_id.clone());
+                if !related_cache.contains_key(&cache_key) {
+                    let related = load_related_row_raw(app, target_table, record_id)?;
+                    related_cache.insert(cache_key.clone(), related);
+                }
+                let Some(Some(related_row)) = related_cache.get(&cache_key) else {
+                    continue;
+                };
+                match aggregate {
+                    RollupAggregate::Count => {
+                        if let Some(field) = field_name {
+                            match related_row.values.get(field) {
+                                Some(cell) if !matches!(cell, CellValue::Null) => {
+                                    count += 1;
+                                }
+                                _ => {}
+                            }
+                        } else {
+                            count += 1;
+                        }
+                    }
+                    RollupAggregate::Sum | RollupAggregate::Min | RollupAggregate::Max => {
+                        let field = field_name.expect("validated rollup_field for sum/min/max");
+                        if let Some(cell) = related_row.values.get(field) {
+                            if let Some(number) = cell.as_rollup_number() {
+                                numbers.push(number);
+                            }
+                        }
+                    }
+                }
+            }
+
+            let value = match aggregate {
+                RollupAggregate::Count => Some(count as f64),
+                RollupAggregate::Sum => Some(numbers.iter().sum()),
+                RollupAggregate::Min => numbers.into_iter().reduce(f64::min),
+                RollupAggregate::Max => numbers.into_iter().reduce(f64::max),
+            };
+            row.values
+                .insert(rollup.name.clone(), CellValue::Rollup { value });
+        }
+    }
+    Ok(())
+}
+
+fn relation_record_ids_for_row(
+    app: &DataApp,
+    table: &str,
+    row: &Row,
+    relation_column: &str,
+) -> Result<Vec<String>> {
+    if let Some(value) = row.values.get(relation_column) {
+        return match value {
+            CellValue::Null => Ok(Vec::new()),
+            CellValue::Relation { record_ids } => Ok(record_ids.clone()),
+            _ => Err(Error::table(
+                table,
+                format!("column {relation_column:?} expected a relation value"),
+            )),
+        };
+    }
+
+    // View projections may omit the source relation column; load it directly.
+    validate_identifier(relation_column)?;
+    let sql = format!("SELECT {relation_column} FROM {table} WHERE id = ?1 LIMIT 1");
+    let mut stmt = app.conn.prepare(&sql)?;
+    let mut rows = stmt.query(params![&row.id])?;
+    let Some(sql_row) = rows.next()? else {
+        return Ok(Vec::new());
+    };
+    Ok(
+        match CellValue::from_sqlite(sql_row.get_ref(0)?, FieldType::Relation)? {
+            CellValue::Null => Vec::new(),
+            CellValue::Relation { record_ids } => record_ids,
+            _ => Vec::new(),
+        },
+    )
+}
+
+/// Load a related row without resolving nested lookups (avoids recursion).
+fn load_related_row_raw(app: &DataApp, table: &str, id: &str) -> Result<Option<Row>> {
+    validate_identifier(table)?;
+    ensure_table_exists(&app.conn, table)?;
+    ensure_id_column(&app.conn, table)?;
+
+    let column_meta = app.columns(table)?;
+    let column_names: Vec<String> = column_meta.iter().map(|c| c.name.clone()).collect();
+    let select_list = column_names.join(", ");
+    let sql = format!("SELECT {select_list} FROM {table} WHERE id = ?1 LIMIT 1");
+
+    let mut stmt = app.conn.prepare(&sql)?;
+    let mut rows = stmt.query(params![id])?;
+    if let Some(row) = rows.next()? {
+        Ok(Some(row_from_sql(row, &column_meta)?))
+    } else {
+        Ok(None)
+    }
 }
 
 fn validate_relation_cell(

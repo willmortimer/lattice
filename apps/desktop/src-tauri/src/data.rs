@@ -1,11 +1,12 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use lattice_commands::{Command as SemanticCommand, CommandEngine, Transaction};
+use lattice_commands::{ColumnSpec, Command as SemanticCommand, CommandEngine, Transaction};
 use lattice_data::{
-    parse_csv_file, CellValue, ColumnMeta, DataApp, FilterOperator, Row, SortDirection,
-    ViewDef, ViewFilter, ViewSort, LAYOUT_BOARD, LAYOUT_CALENDAR, LAYOUT_GALLERY,
-    SUPPORTED_LAYOUT_TYPES,
+    cell_from_csv, parse_csv_file, parse_field_type_name, parse_tabular_file, resolve_field_types,
+    save_form, tabular_format, tabular_format_label, CellValue, ColumnMeta, CsvTable, DataApp,
+    FieldType, FilterOperator, Row, SortDirection, TabularTable, ViewDef, ViewFilter, ViewSort,
+    LAYOUT_BOARD, LAYOUT_CALENDAR, LAYOUT_GALLERY, SUPPORTED_LAYOUT_TYPES,
 };
 use serde::{Deserialize, Serialize};
 
@@ -13,7 +14,7 @@ use crate::commands::{command_error_to_string, resolve_within_root};
 
 const ROW_LIMIT: usize = 500;
 
-/// Snapshot of a `.data` package for the grid viewer (default table, ≤500 rows).
+/// Snapshot of a `.data` package for the grid viewer (default window ≤500 rows).
 #[derive(Debug, Clone, Serialize)]
 pub struct DataAppSnapshot {
     pub title: String,
@@ -21,6 +22,14 @@ pub struct DataAppSnapshot {
     pub package_revision: String,
     pub columns: Vec<ColumnDto>,
     pub rows: Vec<Row>,
+    /// 0-based start of the `rows` window.
+    pub row_offset: usize,
+    /// Requested max rows for this window.
+    pub row_limit: usize,
+    /// Total matching rows after view filters (not just this window).
+    pub row_total: usize,
+    /// True when `row_offset + rows.len() < row_total`.
+    pub has_more: bool,
     pub available_views: Vec<String>,
     pub active_view: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -79,12 +88,34 @@ pub struct FormSummary {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InterfaceSummary {
+    pub name: String,
+    pub views: Vec<String>,
+    pub forms: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct ColumnDto {
     pub name: String,
     pub field_type: String,
     pub sqlite_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub relation_table: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lookup_relation: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lookup_field: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rollup_relation: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rollup_aggregate: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rollup_field: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -99,6 +130,11 @@ fn column_dto(column: ColumnMeta) -> ColumnDto {
         field_type: column.field_type.to_string(),
         sqlite_type: column.sqlite_type,
         relation_table: column.relation_table,
+        lookup_relation: column.lookup_relation,
+        lookup_field: column.lookup_field,
+        rollup_relation: column.rollup_relation,
+        rollup_aggregate: column.rollup_aggregate.map(|agg| agg.to_string()),
+        rollup_field: column.rollup_field,
     }
 }
 
@@ -113,15 +149,24 @@ fn filter_dto(filter: &ViewFilter) -> FilterDto {
     }
 }
 
-fn snapshot_from_app(app: &DataApp, view_name: Option<&str>) -> Result<DataAppSnapshot, String> {
+fn snapshot_from_app(
+    app: &DataApp,
+    view_name: Option<&str>,
+    limit: usize,
+    offset: usize,
+) -> Result<DataAppSnapshot, String> {
     let table = app.default_table().to_string();
     let active_view = view_name
         .map(str::to_string)
         .unwrap_or_else(|| "All".to_string());
     let view = app.load_view(&active_view).map_err(|err| err.to_string())?;
-    let (column_meta, rows) = app
-        .list_rows_with_view(&table, &view, ROW_LIMIT, 0)
+    let row_total = app
+        .count_rows_with_view(&table, &view)
         .map_err(|err| err.to_string())?;
+    let (column_meta, rows) = app
+        .list_rows_with_view(&table, &view, limit, offset)
+        .map_err(|err| err.to_string())?;
+    let has_more = offset.saturating_add(rows.len()) < row_total;
     let columns: Vec<ColumnDto> = column_meta.iter().cloned().map(column_dto).collect();
     let package_revision = app.package_revision().map_err(|err| err.to_string())?;
     let available_views = app.list_views().map_err(|err| err.to_string())?;
@@ -148,6 +193,10 @@ fn snapshot_from_app(app: &DataApp, view_name: Option<&str>) -> Result<DataAppSn
         package_revision,
         columns,
         rows,
+        row_offset: offset,
+        row_limit: limit,
+        row_total,
+        has_more,
         available_views,
         active_view,
         sort_field: view.sort.as_ref().map(|sort| sort.field.clone()),
@@ -196,14 +245,129 @@ fn rel_path_buf(rel_path: &str) -> PathBuf {
 }
 
 /// Read a `.data` package's default table for the grid viewer.
+///
+/// Optional `limit` / `offset` window the returned `rows`. Omitting them
+/// preserves the historical default (limit 500, offset 0).
 #[tauri::command]
 pub fn open_data_app(
     root: String,
     rel_path: String,
     view_name: Option<String>,
+    limit: Option<usize>,
+    offset: Option<usize>,
 ) -> Result<DataAppSnapshot, String> {
     let app = open_app_at(&root, &rel_path)?;
-    snapshot_from_app(&app, view_name.as_deref())
+    snapshot_from_app(
+        &app,
+        view_name.as_deref(),
+        limit.unwrap_or(ROW_LIMIT),
+        offset.unwrap_or(0),
+    )
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddColumnDto {
+    pub name: String,
+    pub field_type: FieldType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relation_table: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lookup_relation: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lookup_field: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rollup_relation: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rollup_aggregate: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rollup_field: Option<String>,
+}
+
+fn column_spec_from_dto(column: AddColumnDto) -> ColumnSpec {
+    if column.field_type == FieldType::Relation {
+        ColumnSpec::relation(column.name, column.relation_table.unwrap_or_default())
+    } else if column.field_type == FieldType::Lookup {
+        ColumnSpec::lookup(
+            column.name,
+            column.lookup_relation.unwrap_or_default(),
+            column.lookup_field.unwrap_or_default(),
+        )
+    } else if column.field_type == FieldType::Rollup {
+        let aggregate = column
+            .rollup_aggregate
+            .as_deref()
+            .unwrap_or("count")
+            .parse()
+            .unwrap_or(lattice_data::RollupAggregate::Count);
+        ColumnSpec::rollup(
+            column.name,
+            column.rollup_relation.unwrap_or_default(),
+            aggregate,
+            column.rollup_field,
+        )
+    } else {
+        ColumnSpec::new(column.name, column.field_type)
+    }
+}
+
+/// List table names in a `.data` package (for relation column targets).
+#[tauri::command]
+pub fn list_data_tables(root: String, rel_path: String) -> Result<Vec<String>, String> {
+    let app = open_app_at(&root, &rel_path)?;
+    app.list_tables().map_err(|err| err.to_string())
+}
+
+/// List column metadata for a table (for lookup field targets).
+#[tauri::command]
+pub fn list_data_table_columns(
+    root: String,
+    rel_path: String,
+    table: String,
+) -> Result<Vec<ColumnDto>, String> {
+    let app = open_app_at(&root, &rel_path)?;
+    app.columns(&table)
+        .map(|columns| columns.into_iter().map(column_dto).collect())
+        .map_err(|err| err.to_string())
+}
+
+/// Add typed columns to a table via `ColumnsAdd` and return a refreshed snapshot.
+#[tauri::command]
+pub fn add_data_columns(
+    root: String,
+    rel_path: String,
+    table: String,
+    columns: Vec<AddColumnDto>,
+    base_revision: String,
+    view_name: Option<String>,
+    limit: Option<usize>,
+    offset: Option<usize>,
+) -> Result<DataAppSnapshot, String> {
+    if columns.is_empty() {
+        return Err("at least one column is required".to_string());
+    }
+    let (canonical_root, _) = resolve_within_root(&root, &rel_path)?;
+    let mut engine = CommandEngine::open(&canonical_root).map_err(command_error_to_string)?;
+    let specs = columns.into_iter().map(column_spec_from_dto).collect();
+    engine
+        .apply(Transaction::new(
+            format!("Add columns to {rel_path}.{table}"),
+            vec![SemanticCommand::ColumnsAdd {
+                path: rel_path_buf(&rel_path),
+                table: table.clone(),
+                columns: specs,
+                base_revision,
+            }],
+        ))
+        .map_err(command_error_to_string)?;
+
+    let app = open_app_at(&root, &rel_path)?;
+    snapshot_from_app(
+        &app,
+        view_name.as_deref(),
+        limit.unwrap_or(ROW_LIMIT),
+        offset.unwrap_or(0),
+    )
 }
 
 /// List saved view names for a `.data` package.
@@ -253,6 +417,31 @@ pub fn load_data_form(root: String, rel_path: String, name: String) -> Result<Fo
         fields: form.fields,
         title: form.title,
         description: form.description,
+    })
+}
+
+/// List saved interface names for a `.data` package (`interfaces/*.interface.yaml`).
+#[tauri::command]
+pub fn list_data_interfaces(root: String, rel_path: String) -> Result<Vec<String>, String> {
+    let app = open_app_at(&root, &rel_path)?;
+    app.list_interfaces().map_err(|err| err.to_string())
+}
+
+/// Load one saved interface definition, validating bound views/forms exist.
+#[tauri::command]
+pub fn load_data_interface(
+    root: String,
+    rel_path: String,
+    name: String,
+) -> Result<InterfaceSummary, String> {
+    let app = open_app_at(&root, &rel_path)?;
+    let interface = app.load_interface(&name).map_err(|err| err.to_string())?;
+    Ok(InterfaceSummary {
+        name: interface.name,
+        views: interface.views,
+        forms: interface.forms,
+        title: interface.title,
+        description: interface.description,
     })
 }
 
@@ -364,7 +553,295 @@ pub fn save_data_view(
         .map_err(command_error_to_string)?;
 
     let app = open_app_at(&root, &rel_path)?;
-    snapshot_from_app(&app, Some(&view_name))
+    snapshot_from_app(&app, Some(&view_name), ROW_LIMIT, 0)
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveFormRequest {
+    pub form_name: String,
+    pub table: String,
+    pub fields: Vec<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+/// Persist a package form via the command engine (`FormSave`).
+#[tauri::command]
+pub fn save_data_form(
+    root: String,
+    rel_path: String,
+    request: SaveFormRequest,
+) -> Result<FormSummary, String> {
+    let SaveFormRequest {
+        form_name,
+        table,
+        fields,
+        title,
+        description,
+    } = request;
+    let (form, content) =
+        save_form(form_name, table, fields, title, description).map_err(|err| err.to_string())?;
+
+    let (canonical_root, _) = resolve_within_root(&root, &rel_path)?;
+    let mut engine = CommandEngine::open(&canonical_root).map_err(command_error_to_string)?;
+    engine
+        .apply(Transaction::new(
+            format!("Save form {} in {rel_path}", form.name),
+            vec![SemanticCommand::FormSave {
+                path: rel_path_buf(&rel_path),
+                form_name: form.name.clone(),
+                content,
+            }],
+        ))
+        .map_err(command_error_to_string)?;
+
+    let app = open_app_at(&root, &rel_path)?;
+    app.load_form(&form.name)
+        .map(|loaded| FormSummary {
+            name: loaded.name,
+            table: loaded.table,
+            fields: loaded.fields,
+            title: loaded.title,
+            description: loaded.description,
+        })
+        .map_err(|err| err.to_string())
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TabularColumnPreviewDto {
+    pub name: String,
+    pub field_type: String,
+    pub sample_values: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TabularImportPreviewDto {
+    pub format: String,
+    pub columns: Vec<TabularColumnPreviewDto>,
+    pub row_count: usize,
+    pub sample_rows: Vec<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TabularColumnTypeDto {
+    pub name: String,
+    pub field_type: String,
+}
+
+pub type CsvColumnPreviewDto = TabularColumnPreviewDto;
+pub type CsvImportPreviewDto = TabularImportPreviewDto;
+pub type CsvColumnTypeDto = TabularColumnTypeDto;
+
+const CSV_PREVIEW_SAMPLE_ROWS: usize = 5;
+const CSV_PREVIEW_SAMPLE_VALUES: usize = 3;
+
+/// Parse a tabular import file and return inferred column types without writing.
+#[tauri::command]
+pub fn preview_tabular_import(source_path: String) -> Result<TabularImportPreviewDto, String> {
+    let path = Path::new(&source_path);
+    let parsed = parse_tabular_file(path).map_err(|err| err.to_string())?;
+    Ok(tabular_import_preview_from_table(path, &parsed))
+}
+
+/// Parse a CSV file and return inferred column types without writing.
+#[tauri::command]
+pub fn preview_csv_import(csv_path: String) -> Result<CsvImportPreviewDto, String> {
+    preview_tabular_import(csv_path)
+}
+
+fn tabular_import_preview_from_table(path: &Path, parsed: &TabularTable) -> TabularImportPreviewDto {
+    let format = tabular_format_label(tabular_format(path)).to_string();
+    let columns = parsed
+        .headers
+        .iter()
+        .zip(&parsed.field_types)
+        .enumerate()
+        .map(|(index, (header, field_type))| {
+            let mut sample_values = Vec::new();
+            for row in &parsed.rows {
+                if sample_values.len() >= CSV_PREVIEW_SAMPLE_VALUES {
+                    break;
+                }
+                let cell = row.get(index).map(|value| value.trim()).unwrap_or("");
+                if !cell.is_empty() {
+                    sample_values.push(cell.to_string());
+                }
+            }
+            TabularColumnPreviewDto {
+                name: header.clone(),
+                field_type: field_type.to_string(),
+                sample_values,
+            }
+        })
+        .collect();
+    let sample_rows = parsed
+        .rows
+        .iter()
+        .take(CSV_PREVIEW_SAMPLE_ROWS)
+        .cloned()
+        .collect();
+    TabularImportPreviewDto {
+        format,
+        columns,
+        row_count: parsed.rows.len(),
+        sample_rows,
+    }
+}
+
+fn field_types_from_column_dtos(
+    headers: &[String],
+    inferred: &[FieldType],
+    columns: &[TabularColumnTypeDto],
+) -> Result<Vec<FieldType>, String> {
+    let overrides = columns
+        .iter()
+        .map(|column| {
+            parse_field_type_name(&column.field_type)
+                .map(|field_type| (column.name.clone(), field_type))
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|err| err.to_string())?
+        .into_iter()
+        .collect::<BTreeMap<_, _>>();
+    for name in overrides.keys() {
+        if !headers.iter().any(|header| header == name) {
+            return Err(format!("unknown import column {name:?}"));
+        }
+    }
+    Ok(resolve_field_types(headers, inferred, &overrides))
+}
+
+fn commit_tabular_import_inner(
+    root: &str,
+    parsed: &TabularTable,
+    field_types: &[FieldType],
+    package_name: &str,
+    title: &str,
+    table: &str,
+    source_label: &str,
+) -> Result<(String, DataAppSnapshot), String> {
+    let rel_path = package_rel_path(package_name);
+    validate_rel_path(&rel_path)?;
+    let canonical_root = canonical_workspace_root(root)?;
+    let mut engine = CommandEngine::open(&canonical_root).map_err(command_error_to_string)?;
+
+    engine
+        .apply(Transaction::new(
+            format!("Create table package {rel_path} from {source_label}"),
+            vec![SemanticCommand::TableCreate {
+                path: rel_path_buf(&rel_path),
+                title: title.to_string(),
+                table_name: table.to_string(),
+            }],
+        ))
+        .map_err(command_error_to_string)?;
+
+    let base_revision = open_app_at(root, &rel_path)?
+        .package_revision()
+        .map_err(|err| err.to_string())?;
+    let columns = parsed
+        .headers
+        .iter()
+        .zip(field_types)
+        .map(|(header, field_type)| lattice_commands::ColumnSpec::new(header.clone(), *field_type))
+        .collect();
+    engine
+        .apply(Transaction::new(
+            format!("Add {source_label} columns to {rel_path}.{table}"),
+            vec![SemanticCommand::ColumnsAdd {
+                path: rel_path_buf(&rel_path),
+                table: table.to_string(),
+                columns,
+                base_revision,
+            }],
+        ))
+        .map_err(command_error_to_string)?;
+
+    for row in &parsed.rows {
+        let mut values = BTreeMap::new();
+        for ((header, field_type), cell) in parsed
+            .headers
+            .iter()
+            .zip(field_types)
+            .zip(row.iter())
+        {
+            values.insert(
+                header.clone(),
+                cell_from_csv(cell, *field_type).map_err(|err| err.to_string())?,
+            );
+        }
+        engine
+            .apply(Transaction::new(
+                format!("Import row into {rel_path}.{table}"),
+                vec![SemanticCommand::RecordInsert {
+                    path: rel_path_buf(&rel_path),
+                    table: table.to_string(),
+                    values,
+                    id: None,
+                }],
+            ))
+            .map_err(command_error_to_string)?;
+    }
+
+    let app = open_app_at(root, &rel_path)?;
+    Ok((rel_path, snapshot_from_app(&app, None, ROW_LIMIT, 0)?))
+}
+
+/// Import a tabular file into a new `.data` package using explicit column types.
+#[tauri::command]
+pub fn commit_tabular_import(
+    root: String,
+    source_path: String,
+    package_name: String,
+    columns: Vec<TabularColumnTypeDto>,
+    title: Option<String>,
+    table_name: Option<String>,
+) -> Result<(String, DataAppSnapshot), String> {
+    let path = Path::new(&source_path);
+    let parsed = parse_tabular_file(path).map_err(|err| err.to_string())?;
+    let field_types = field_types_from_column_dtos(
+        &parsed.headers,
+        &parsed.field_types,
+        &columns,
+    )?;
+    let table = table_name.unwrap_or_else(|| "records".to_string());
+    let title = title.unwrap_or_else(|| package_name.trim().replace(".data", ""));
+    let source_label = tabular_format_label(tabular_format(path));
+    commit_tabular_import_inner(
+        &root,
+        &parsed,
+        &field_types,
+        &package_name,
+        &title,
+        &table,
+        source_label,
+    )
+}
+
+/// Import a CSV file into a new `.data` package using explicit column types.
+#[tauri::command]
+pub fn commit_csv_import(
+    root: String,
+    csv_path: String,
+    package_name: String,
+    columns: Vec<CsvColumnTypeDto>,
+    title: Option<String>,
+    table_name: Option<String>,
+) -> Result<(String, DataAppSnapshot), String> {
+    commit_tabular_import(
+        root,
+        csv_path,
+        package_name,
+        columns,
+        title,
+        table_name,
+    )
 }
 
 /// Import a CSV file into a new `.data` package and return its snapshot.
@@ -377,57 +854,17 @@ pub fn import_csv_table(
     table_name: Option<String>,
 ) -> Result<(String, DataAppSnapshot), String> {
     let parsed = parse_csv_file(Path::new(&csv_path)).map_err(|err| err.to_string())?;
-    let rel_path = package_rel_path(&package_name);
     let table = table_name.unwrap_or_else(|| "records".to_string());
     let title = title.unwrap_or_else(|| package_name.trim().replace(".data", ""));
-
-    validate_rel_path(&rel_path)?;
-    let canonical_root = canonical_workspace_root(&root)?;
-    let mut engine = CommandEngine::open(&canonical_root).map_err(command_error_to_string)?;
-
-    engine
-        .apply(Transaction::new(
-            format!("Create table package {rel_path} from CSV"),
-            vec![SemanticCommand::TableCreate {
-                path: rel_path_buf(&rel_path),
-                title: title.clone(),
-                table_name: table.clone(),
-            }],
-        ))
-        .map_err(command_error_to_string)?;
-
-    let mut app = open_app_at(&root, &rel_path)?;
-    app.add_columns_from_csv(&table, &parsed)
-        .map_err(|err| err.to_string())?;
-
-    for row in &parsed.rows {
-        let mut values = BTreeMap::new();
-        for ((header, field_type), cell) in parsed
-            .headers
-            .iter()
-            .zip(&parsed.field_types)
-            .zip(row.iter())
-        {
-            values.insert(
-                header.clone(),
-                lattice_data::cell_from_csv(cell, *field_type).map_err(|err| err.to_string())?,
-            );
-        }
-        engine
-            .apply(Transaction::new(
-                format!("Import row into {rel_path}.{table}"),
-                vec![SemanticCommand::RecordInsert {
-                    path: rel_path_buf(&rel_path),
-                    table: table.clone(),
-                    values,
-                    id: None,
-                }],
-            ))
-            .map_err(command_error_to_string)?;
-    }
-
-    let app = open_app_at(&root, &rel_path)?;
-    Ok((rel_path, snapshot_from_app(&app, None)?))
+    commit_tabular_import_inner(
+        &root,
+        &parsed,
+        &parsed.field_types,
+        &package_name,
+        &title,
+        &table,
+        "CSV",
+    )
 }
 
 fn package_rel_path(name: &str) -> String {
@@ -459,7 +896,7 @@ pub fn create_table_package(
         .map_err(command_error_to_string)?;
 
     let app = open_app_at(&root, &rel_path)?;
-    snapshot_from_app(&app, None)
+    snapshot_from_app(&app, None, ROW_LIMIT, 0)
 }
 
 /// Insert a row into the default table of a `.data` package.
@@ -586,6 +1023,44 @@ pub fn delete_record(
         .ok_or_else(|| "record delete did not produce a resulting revision".to_string())
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActionSummary {
+    pub name: String,
+    pub label: String,
+    pub table: String,
+    pub scope: String,
+    pub action: lattice_data::ActionKind,
+}
+
+/// List saved action names for a `.data` package (`actions/*.action.yaml`).
+#[tauri::command]
+pub fn list_data_actions(root: String, rel_path: String) -> Result<Vec<String>, String> {
+    let app = open_app_at(&root, &rel_path)?;
+    app.list_actions().map_err(|err| err.to_string())
+}
+
+/// Load one saved action definition, validating targets against the package.
+#[tauri::command]
+pub fn load_data_action(
+    root: String,
+    rel_path: String,
+    name: String,
+) -> Result<ActionSummary, String> {
+    let app = open_app_at(&root, &rel_path)?;
+    let action = app.load_action(&name).map_err(|err| err.to_string())?;
+    Ok(ActionSummary {
+        name: action.name,
+        label: action.label,
+        table: action.table,
+        scope: match action.scope {
+            lattice_data::ActionScope::Toolbar => "toolbar".to_string(),
+            lattice_data::ActionScope::Row => "row".to_string(),
+        },
+        action: action.action,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -610,13 +1085,17 @@ mod tests {
         )
         .unwrap();
 
-        let snapshot = open_data_app(root, "CRM.data".to_string(), None).unwrap();
+        let snapshot = open_data_app(root, "CRM.data".to_string(), None, None, None).unwrap();
         assert_eq!(snapshot.title, "CRM");
         assert_eq!(snapshot.default_table, "contacts");
         assert!(snapshot.package_revision.starts_with("sha256:"));
         assert_eq!(snapshot.columns.len(), 1);
         assert_eq!(snapshot.columns[0].name, "id");
         assert!(snapshot.rows.is_empty());
+        assert_eq!(snapshot.row_offset, 0);
+        assert_eq!(snapshot.row_limit, ROW_LIMIT);
+        assert_eq!(snapshot.row_total, 0);
+        assert!(!snapshot.has_more);
     }
 
     #[test]
@@ -638,7 +1117,7 @@ mod tests {
             .execute_batch("ALTER TABLE contacts ADD COLUMN name TEXT;")
             .unwrap();
 
-        let base = open_data_app(root.clone(), rel_path.clone(), None)
+        let base = open_data_app(root.clone(), rel_path.clone(), None, None, None)
             .unwrap()
             .package_revision;
         let inserted = insert_record(
@@ -651,8 +1130,10 @@ mod tests {
         assert!(!inserted.id.is_empty());
         assert_ne!(inserted.revision, base);
 
-        let after_insert = open_data_app(root.clone(), rel_path.clone(), None).unwrap();
+        let after_insert = open_data_app(root.clone(), rel_path.clone(), None, None, None).unwrap();
         assert_eq!(after_insert.rows.len(), 1);
+        assert_eq!(after_insert.row_total, 1);
+        assert!(!after_insert.has_more);
         assert_eq!(
             after_insert.rows[0].values.get("name"),
             Some(&CellValue::Text("Ada".into()))
@@ -679,8 +1160,10 @@ mod tests {
         .unwrap();
         assert!(delete_revision.starts_with("sha256:"));
 
-        let after_delete = open_data_app(root, rel_path, None).unwrap();
+        let after_delete = open_data_app(root, rel_path, None, None, None).unwrap();
         assert!(after_delete.rows.is_empty());
+        assert_eq!(after_delete.row_total, 0);
+        assert!(!after_delete.has_more);
     }
 
     #[test]
@@ -718,7 +1201,7 @@ mod tests {
         )
         .unwrap();
 
-        let snapshot = open_data_app(root, rel_path, None).unwrap();
+        let snapshot = open_data_app(root, rel_path, None, None, None).unwrap();
         let companies = snapshot
             .relation_targets
             .get("companies")
@@ -886,8 +1369,9 @@ mod tests {
         .unwrap();
         assert_eq!(form.layout_type, lattice_data::LAYOUT_FORM);
 
-        let reloaded_board = open_data_app(root.clone(), rel_path.clone(), Some("ByStatus".into()))
-            .unwrap();
+        let reloaded_board =
+            open_data_app(root.clone(), rel_path.clone(), Some("ByStatus".into()), None, None)
+                .unwrap();
         assert_eq!(reloaded_board.layout_type, LAYOUT_BOARD);
         assert_eq!(reloaded_board.group_by.as_deref(), Some("status"));
 
@@ -986,7 +1470,7 @@ mod tests {
         .unwrap();
         assert!(!inserted.id.is_empty());
 
-        let snapshot = open_data_app(root, rel_path, None).unwrap();
+        let snapshot = open_data_app(root, rel_path, None, None, None).unwrap();
         assert_eq!(snapshot.rows.len(), 1);
         assert_eq!(
             snapshot.rows[0].values.get("name"),
@@ -996,5 +1480,426 @@ mod tests {
             snapshot.rows[0].values.get("email"),
             Some(&CellValue::Text("ada@example.com".into()))
         );
+    }
+
+    #[test]
+    fn save_data_form_persists_and_undo_restores() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let rel_path = "CRM.data".to_string();
+
+        create_table_package(
+            root.clone(),
+            rel_path.clone(),
+            "CRM".to_string(),
+            "contacts".to_string(),
+        )
+        .unwrap();
+
+        rusqlite::Connection::open(dir.path().join("CRM.data/database.sqlite"))
+            .unwrap()
+            .execute_batch(
+                "ALTER TABLE contacts ADD COLUMN name TEXT;
+                 ALTER TABLE contacts ADD COLUMN email TEXT;",
+            )
+            .unwrap();
+
+        let saved = save_data_form(
+            root.clone(),
+            rel_path.clone(),
+            SaveFormRequest {
+                form_name: "intake".into(),
+                table: "contacts".into(),
+                fields: vec!["name".into(), "email".into()],
+                title: Some("Contact intake".into()),
+                description: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(saved.name, "intake");
+        assert_eq!(saved.fields, vec!["name".to_string(), "email".to_string()]);
+        assert!(dir.path().join("CRM.data/forms/intake.form.yaml").is_file());
+
+        let mut engine = CommandEngine::open(dir.path()).unwrap();
+        engine.undo().unwrap().unwrap();
+        assert!(!dir.path().join("CRM.data/forms/intake.form.yaml").exists());
+    }
+
+    #[test]
+    fn list_and_load_data_interface() {
+        use lattice_data::{
+            write_package_form, write_package_interface, write_package_view, FormDef, InterfaceDef,
+            ViewDef,
+        };
+
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let rel_path = "CRM.data".to_string();
+
+        create_table_package(
+            root.clone(),
+            rel_path.clone(),
+            "CRM".to_string(),
+            "contacts".to_string(),
+        )
+        .unwrap();
+
+        rusqlite::Connection::open(dir.path().join("CRM.data/database.sqlite"))
+            .unwrap()
+            .execute_batch(
+                "ALTER TABLE contacts ADD COLUMN name TEXT;
+                 ALTER TABLE contacts ADD COLUMN status TEXT;",
+            )
+            .unwrap();
+
+        let package = dir.path().join("CRM.data");
+        let mut board = ViewDef::new_grid("contacts");
+        board.layout.layout_type = lattice_data::LAYOUT_BOARD.to_string();
+        board.layout.group_by = Some("status".into());
+        write_package_view(&package, "Board", &board).unwrap();
+
+        let mut form = FormDef::new("intake", "contacts");
+        form.fields = vec!["name".into(), "status".into()];
+        write_package_form(&package, &form).unwrap();
+
+        let mut interface = InterfaceDef::new("ContactOps");
+        interface.views = vec!["Board".into()];
+        interface.forms = vec!["intake".into()];
+        interface.title = Some("Contact operations".into());
+        write_package_interface(&package, &interface).unwrap();
+
+        assert_eq!(
+            list_data_interfaces(root.clone(), rel_path.clone()).unwrap(),
+            vec!["ContactOps".to_string()]
+        );
+        let loaded = load_data_interface(root, rel_path, "ContactOps".into()).unwrap();
+        assert_eq!(loaded.name, "ContactOps");
+        assert_eq!(loaded.views, vec!["Board".to_string()]);
+        assert_eq!(loaded.forms, vec!["intake".to_string()]);
+        assert_eq!(loaded.title.as_deref(), Some("Contact operations"));
+    }
+
+    #[test]
+    fn add_data_columns_extends_schema_and_returns_snapshot() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let rel_path = "CRM.data".to_string();
+
+        create_table_package(
+            root.clone(),
+            rel_path.clone(),
+            "CRM".to_string(),
+            "contacts".to_string(),
+        )
+        .unwrap();
+
+        let base = open_data_app(root.clone(), rel_path.clone(), None, None, None)
+            .unwrap()
+            .package_revision;
+
+        let snapshot = add_data_columns(
+            root.clone(),
+            rel_path.clone(),
+            "contacts".to_string(),
+            vec![
+                AddColumnDto {
+                    name: "name".into(),
+                    field_type: FieldType::Text,
+                    relation_table: None,
+                    lookup_relation: None,
+                    lookup_field: None,
+                    rollup_relation: None,
+                    rollup_aggregate: None,
+                    rollup_field: None,
+                },
+                AddColumnDto {
+                    name: "age".into(),
+                    field_type: FieldType::Integer,
+                    relation_table: None,
+                    lookup_relation: None,
+                    lookup_field: None,
+                    rollup_relation: None,
+                    rollup_aggregate: None,
+                    rollup_field: None,
+                },
+            ],
+            base,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(snapshot.columns.len(), 3);
+        assert!(
+            snapshot
+                .columns
+                .iter()
+                .any(|column| column.name == "name" && column.field_type == "text")
+        );
+        assert!(
+            snapshot
+                .columns
+                .iter()
+                .any(|column| column.name == "age" && column.field_type == "integer")
+        );
+        assert!(std::fs::read_to_string(dir.path().join("CRM.data/schema.sql"))
+            .unwrap()
+            .contains("ADD COLUMN name"));
+    }
+
+    #[test]
+    fn add_data_columns_reports_stale_revision() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let rel_path = "CRM.data".to_string();
+
+        create_table_package(
+            root.clone(),
+            rel_path.clone(),
+            "CRM".to_string(),
+            "contacts".to_string(),
+        )
+        .unwrap();
+
+        let err = add_data_columns(
+            root,
+            rel_path,
+            "contacts".to_string(),
+            vec![AddColumnDto {
+                name: "name".into(),
+                field_type: FieldType::Text,
+                relation_table: None,
+                lookup_relation: None,
+                lookup_field: None,
+                rollup_relation: None,
+                rollup_aggregate: None,
+                rollup_field: None,
+            }],
+            "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+            None,
+            None,
+            None,
+        )
+        .unwrap_err();
+
+        assert!(
+            err.starts_with(crate::commands::STALE_REVISION_PREFIX),
+            "expected STALE_REVISION-prefixed error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn list_data_tables_returns_package_tables() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let rel_path = "CRM.data".to_string();
+
+        create_table_package(
+            root.clone(),
+            rel_path.clone(),
+            "CRM".to_string(),
+            "contacts".to_string(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            list_data_tables(root, rel_path).unwrap(),
+            vec!["contacts".to_string()]
+        );
+    }
+
+    #[test]
+    fn preview_csv_import_returns_inferred_columns_and_samples() {
+        let dir = init_workspace();
+        let csv_path = dir.path().join("people.csv");
+        std::fs::write(
+            &csv_path,
+            "name,active,count\nAda,true,1\nGrace,false,2\n",
+        )
+        .unwrap();
+
+        let preview = preview_csv_import(csv_path.to_string_lossy().into_owned()).unwrap();
+        assert_eq!(preview.row_count, 2);
+        assert_eq!(preview.columns.len(), 3);
+        assert_eq!(preview.columns[0].name, "name");
+        assert_eq!(preview.columns[0].field_type, "text");
+        assert_eq!(preview.columns[1].field_type, "boolean");
+        assert_eq!(preview.columns[2].field_type, "integer");
+        assert_eq!(preview.sample_rows.len(), 2);
+    }
+
+    #[test]
+    fn commit_tabular_import_honors_column_type_overrides_for_json() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let json_path = dir.path().join("amounts.json");
+        std::fs::write(
+            &json_path,
+            r#"[{"label":"Widget","amount":10},{"label":"Gadget","amount":20}]"#,
+        )
+        .unwrap();
+
+        let (_, snapshot) = commit_tabular_import(
+            root.clone(),
+            json_path.to_string_lossy().into_owned(),
+            "Sales".to_string(),
+            vec![
+                TabularColumnTypeDto {
+                    name: "label".to_string(),
+                    field_type: "text".to_string(),
+                },
+                TabularColumnTypeDto {
+                    name: "amount".to_string(),
+                    field_type: "decimal".to_string(),
+                },
+            ],
+            Some("Sales".to_string()),
+            Some("records".to_string()),
+        )
+        .unwrap();
+
+        let amount_column = snapshot
+            .columns
+            .iter()
+            .find(|column| column.name == "amount")
+            .expect("amount column");
+        assert_eq!(amount_column.field_type, "decimal");
+        assert_eq!(amount_column.sqlite_type, "REAL");
+        assert_eq!(snapshot.rows.len(), 2);
+        assert_eq!(
+            snapshot.rows[0].values.get("amount"),
+            Some(&CellValue::Decimal(10.0))
+        );
+    }
+
+    #[test]
+    fn preview_tabular_import_returns_format_for_json() {
+        let dir = init_workspace();
+        let json_path = dir.path().join("people.json");
+        std::fs::write(
+            &json_path,
+            r#"[{"name":"Ada","active":true,"count":1},{"name":"Grace","active":false,"count":2}]"#,
+        )
+        .unwrap();
+
+        let preview =
+            preview_tabular_import(json_path.to_string_lossy().into_owned()).unwrap();
+        assert_eq!(preview.format, "JSON");
+        assert_eq!(preview.row_count, 2);
+        assert_eq!(preview.columns.len(), 3);
+    }
+
+    #[test]
+    fn commit_csv_import_honors_column_type_overrides() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let csv_path = dir.path().join("amounts.csv");
+        std::fs::write(&csv_path, "label,amount\nWidget,10\nGadget,20\n").unwrap();
+
+        let (_, snapshot) = commit_csv_import(
+            root.clone(),
+            csv_path.to_string_lossy().into_owned(),
+            "Sales".to_string(),
+            vec![
+                CsvColumnTypeDto {
+                    name: "label".to_string(),
+                    field_type: "text".to_string(),
+                },
+                CsvColumnTypeDto {
+                    name: "amount".to_string(),
+                    field_type: "decimal".to_string(),
+                },
+            ],
+            Some("Sales".to_string()),
+            Some("records".to_string()),
+        )
+        .unwrap();
+
+        let amount_column = snapshot
+            .columns
+            .iter()
+            .find(|column| column.name == "amount")
+            .expect("amount column");
+        assert_eq!(amount_column.field_type, "decimal");
+        assert_eq!(amount_column.sqlite_type, "REAL");
+        assert_eq!(snapshot.rows.len(), 2);
+        assert_eq!(
+            snapshot.rows[0].values.get("amount"),
+            Some(&CellValue::Decimal(10.0))
+        );
+    }
+
+    #[test]
+    fn open_data_app_windows_rows_and_reports_total() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let rel_path = "CRM.data".to_string();
+
+        create_table_package(
+            root.clone(),
+            rel_path.clone(),
+            "CRM".to_string(),
+            "contacts".to_string(),
+        )
+        .unwrap();
+
+        rusqlite::Connection::open(dir.path().join("CRM.data/database.sqlite"))
+            .unwrap()
+            .execute_batch("ALTER TABLE contacts ADD COLUMN name TEXT;")
+            .unwrap();
+
+        for name in ["Ada", "Grace", "Alan", "Katherine", "Margaret"] {
+            insert_record(
+                root.clone(),
+                rel_path.clone(),
+                "contacts".to_string(),
+                BTreeMap::from([("name".into(), CellValue::Text(name.into()))]),
+            )
+            .unwrap();
+        }
+
+        let first = open_data_app(
+            root.clone(),
+            rel_path.clone(),
+            None,
+            Some(2),
+            Some(0),
+        )
+        .unwrap();
+        assert_eq!(first.row_offset, 0);
+        assert_eq!(first.row_limit, 2);
+        assert_eq!(first.row_total, 5);
+        assert!(first.has_more);
+        assert_eq!(first.rows.len(), 2);
+
+        let second = open_data_app(
+            root.clone(),
+            rel_path.clone(),
+            None,
+            Some(2),
+            Some(2),
+        )
+        .unwrap();
+        assert_eq!(second.row_offset, 2);
+        assert_eq!(second.row_limit, 2);
+        assert_eq!(second.row_total, 5);
+        assert!(second.has_more);
+        assert_eq!(second.rows.len(), 2);
+        assert_ne!(first.rows[0].id, second.rows[0].id);
+
+        let last = open_data_app(root.clone(), rel_path.clone(), None, Some(2), Some(4)).unwrap();
+        assert_eq!(last.row_offset, 4);
+        assert_eq!(last.row_limit, 2);
+        assert_eq!(last.row_total, 5);
+        assert!(!last.has_more);
+        assert_eq!(last.rows.len(), 1);
+
+        let default_window = open_data_app(root, rel_path, None, None, None).unwrap();
+        assert_eq!(default_window.row_offset, 0);
+        assert_eq!(default_window.row_limit, ROW_LIMIT);
+        assert_eq!(default_window.row_total, 5);
+        assert!(!default_window.has_more);
+        assert_eq!(default_window.rows.len(), 5);
     }
 }

@@ -6,7 +6,12 @@ export type FieldType =
   | "decimal"
   | "boolean"
   | "date"
-  | "relation";
+  | "relation"
+  | "lookup"
+  | "rollup";
+
+/** Mirrors `lattice_data::RollupAggregate`. */
+export type RollupAggregate = "count" | "sum" | "min" | "max";
 
 /** Externally tagged `CellValue` from `lattice-data`. */
 export type CellValue =
@@ -16,7 +21,9 @@ export type CellValue =
   | { Decimal: number }
   | { Boolean: boolean }
   | { Date: string }
-  | { Relation: { record_ids: string[] } };
+  | { Relation: { record_ids: string[] } }
+  | { Lookup: { values: string[] } }
+  | { Rollup: { value: number | null } };
 
 export interface DataColumn {
   name: string;
@@ -24,6 +31,16 @@ export interface DataColumn {
   sqlite_type: string;
   /** Target table for relation fields (same `.data` package). */
   relation_table?: string;
+  /** Source relation column for lookup fields. */
+  lookup_relation?: string;
+  /** Related-table field projected by lookup fields. */
+  lookup_field?: string;
+  /** Source relation column for rollup fields. */
+  rollup_relation?: string;
+  /** Aggregate for rollup fields. */
+  rollup_aggregate?: RollupAggregate;
+  /** Related-table field aggregated by rollup fields. */
+  rollup_field?: string;
 }
 
 export interface DataRow {
@@ -54,6 +71,14 @@ export interface DataAppSnapshot {
   package_revision: string;
   columns: DataColumn[];
   rows: DataRow[];
+  /** 0-based start of the `rows` window. */
+  row_offset: number;
+  /** Requested max rows for this window. */
+  row_limit: number;
+  /** Total matching rows after view filters (not just this window). */
+  row_total: number;
+  /** True when `row_offset + rows.length < row_total`. */
+  has_more: boolean;
   available_views: string[];
   active_view: string;
   sort_field?: string;
@@ -90,6 +115,15 @@ export function cellValueToDisplay(value: CellValue | undefined | null | string)
     const ids = value.Relation?.record_ids;
     return Array.isArray(ids) ? ids.join(", ") : "";
   }
+  if ("Lookup" in value) {
+    const values = value.Lookup?.values;
+    return Array.isArray(values) ? values.join(", ") : "";
+  }
+  if ("Rollup" in value) {
+    const rollupValue = value.Rollup?.value;
+    if (rollupValue == null) return "";
+    return String(rollupValue);
+  }
   return "";
 }
 
@@ -116,6 +150,20 @@ export function displayToCellValue(text: string, fieldType: FieldType): CellValu
             .filter(Boolean),
         },
       };
+    case "lookup":
+      return {
+        Lookup: {
+          values: trimmed
+            .split(",")
+            .map((part) => part.trim())
+            .filter(Boolean),
+        },
+      };
+    case "rollup": {
+      if (!trimmed) return { Rollup: { value: null } };
+      const parsed = Number.parseFloat(trimmed);
+      return { Rollup: { value: Number.isNaN(parsed) ? null : parsed } };
+    }
     case "text":
     case "long_text":
       return { Text: text };

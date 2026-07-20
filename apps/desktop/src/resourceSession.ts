@@ -28,6 +28,10 @@ export type OpenResourceSession =
       snapshot: DataAppSnapshot;
     }
   | {
+      kind: "dataset";
+      resource: Resource;
+    }
+  | {
       kind: "text";
       resource: Resource;
       inspection: ResourceInspection;

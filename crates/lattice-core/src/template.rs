@@ -4,8 +4,9 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use lattice_data::{
-    write_package_form, write_package_view, CellValue, DataApp, FieldType, FormDef, NewColumn,
-    ViewDef,
+    write_package_action, write_package_form, write_package_interface, write_package_view,
+    ActionDef, ActionKind, ActionScope, CellValue, DataApp, FieldType, FormDef, InterfaceDef,
+    NewColumn, ViewDef,
 };
 use lattice_storage::atomic_write_file;
 use serde::{Deserialize, Serialize};
@@ -57,6 +58,29 @@ pub(crate) struct SeedDataForm {
 }
 
 #[derive(Debug)]
+pub(crate) struct SeedDataAction {
+    pub name: &'static str,
+    pub label: &'static str,
+    pub table: &'static str,
+    pub scope: &'static str,
+    pub action_type: &'static str,
+    pub form: Option<&'static str>,
+    pub field: Option<&'static str>,
+    pub value: Option<&'static str>,
+    pub url: Option<&'static str>,
+    pub defaults: &'static [(&'static str, &'static str)],
+}
+
+#[derive(Debug)]
+pub(crate) struct SeedDataInterface {
+    pub name: &'static str,
+    pub views: &'static [&'static str],
+    pub forms: &'static [&'static str],
+    pub title: Option<&'static str>,
+    pub description: Option<&'static str>,
+}
+
+#[derive(Debug)]
 pub(crate) struct SeedDataExtraTable {
     pub table: &'static str,
     pub columns: &'static [SeedDataColumn],
@@ -73,6 +97,8 @@ pub(crate) struct SeedDataPackage {
     pub extra_tables: &'static [SeedDataExtraTable],
     pub views: &'static [SeedDataView],
     pub forms: &'static [SeedDataForm],
+    pub actions: &'static [SeedDataAction],
+    pub interfaces: &'static [SeedDataInterface],
 }
 
 #[derive(Debug)]
@@ -569,6 +595,32 @@ fn materialize_data_package(
             &known_columns,
         )?;
     }
+    for seed_action in package.actions {
+        materialize_seed_action(
+            &package_path,
+            package.path,
+            package.table,
+            seed_action,
+            &known_columns,
+        )?;
+    }
+    let known_views: std::collections::HashSet<&str> = package
+        .views
+        .iter()
+        .map(|view| view.name)
+        .chain(std::iter::once(lattice_data::DEFAULT_VIEW_NAME))
+        .collect();
+    let known_forms: std::collections::HashSet<&str> =
+        package.forms.iter().map(|form| form.name).collect();
+    for seed_interface in package.interfaces {
+        materialize_seed_interface(
+            &package_path,
+            package.path,
+            seed_interface,
+            &known_views,
+            &known_forms,
+        )?;
+    }
     Ok(())
 }
 
@@ -638,6 +690,22 @@ fn seed_column_to_new_column<'a>(
             ),
         })?;
         return Ok(NewColumn::relation(column.name, target));
+    }
+    if field_type == FieldType::Lookup {
+        return Err(Error::TemplateValidation {
+            message: format!(
+                "data package {}: lookup columns are not supported in template seeds yet ({:?})",
+                package_path, column.name
+            ),
+        });
+    }
+    if field_type == FieldType::Rollup {
+        return Err(Error::TemplateValidation {
+            message: format!(
+                "data package {}: rollup columns are not supported in template seeds yet ({:?})",
+                package_path, column.name
+            ),
+        });
     }
     Ok(NewColumn::new(column.name, field_type))
 }
@@ -800,6 +868,154 @@ fn materialize_seed_form(
     write_package_form(package_path, &form).map_err(map_data_error)
 }
 
+fn materialize_seed_action(
+    package_path: &Path,
+    package_path_label: &str,
+    package_table: &str,
+    seed: &SeedDataAction,
+    known_columns: &std::collections::HashSet<&str>,
+) -> Result<()> {
+    if seed.table != package_table {
+        return Err(Error::TemplateValidation {
+            message: format!(
+                "data package {package_path_label} action {:?} targets table {:?}, expected {package_table:?}",
+                seed.name, seed.table
+            ),
+        });
+    }
+    let scope = match seed.scope {
+        "toolbar" => ActionScope::Toolbar,
+        "row" => ActionScope::Row,
+        other => {
+            return Err(Error::TemplateValidation {
+                message: format!(
+                    "data package {package_path_label} action {:?} has invalid scope {other:?}",
+                    seed.name
+                ),
+            });
+        }
+    };
+    let action = match seed.action_type {
+        "insert_record" => {
+            if seed.form.is_none() && seed.defaults.is_empty() {
+                return Err(Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path_label} action {:?} insert_record requires form or defaults",
+                        seed.name
+                    ),
+                });
+            }
+            for (field, _) in seed.defaults {
+                if !known_columns.contains(field) {
+                    return Err(Error::TemplateValidation {
+                        message: format!(
+                            "data package {package_path_label} action {:?} references unknown column {field:?}",
+                            seed.name
+                        ),
+                    });
+                }
+            }
+            ActionKind::InsertRecord {
+                form: seed.form.map(str::to_string),
+                defaults: seed
+                    .defaults
+                    .iter()
+                    .map(|(field, value)| ((*field).to_string(), (*value).to_string()))
+                    .collect(),
+            }
+        }
+        "update_field" => {
+            let field = seed.field.ok_or_else(|| Error::TemplateValidation {
+                message: format!(
+                    "data package {package_path_label} action {:?} update_field requires field",
+                    seed.name
+                ),
+            })?;
+            if !known_columns.contains(field) || field == "id" {
+                return Err(Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path_label} action {:?} references unknown column {field:?}",
+                        seed.name
+                    ),
+                });
+            }
+            ActionKind::UpdateField {
+                field: field.to_string(),
+                value: seed.value.ok_or_else(|| Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path_label} action {:?} update_field requires value",
+                        seed.name
+                    ),
+                })?
+                .to_string(),
+            }
+        }
+        "open_url" => ActionKind::OpenUrl {
+            url: seed.url.ok_or_else(|| Error::TemplateValidation {
+                message: format!(
+                    "data package {package_path_label} action {:?} open_url requires url",
+                    seed.name
+                ),
+            })?
+            .to_string(),
+        },
+        other => {
+            return Err(Error::TemplateValidation {
+                message: format!(
+                    "data package {package_path_label} action {:?} has unsupported type {other:?}",
+                    seed.name
+                ),
+            });
+        }
+    };
+    let mut action_def = ActionDef::new(seed.name, seed.label, seed.table, action);
+    action_def.scope = scope;
+    write_package_action(package_path, &action_def).map_err(map_data_error)
+}
+
+fn materialize_seed_interface(
+    package_path: &Path,
+    package_path_label: &str,
+    seed: &SeedDataInterface,
+    known_views: &std::collections::HashSet<&str>,
+    known_forms: &std::collections::HashSet<&str>,
+) -> Result<()> {
+    if seed.views.is_empty() && seed.forms.is_empty() {
+        return Err(Error::TemplateValidation {
+            message: format!(
+                "data package {package_path_label} interface {:?} must bind at least one view or form",
+                seed.name
+            ),
+        });
+    }
+    for view in seed.views {
+        if !known_views.contains(view) {
+            return Err(Error::TemplateValidation {
+                message: format!(
+                    "data package {package_path_label} interface {:?} references unknown view {view:?}",
+                    seed.name
+                ),
+            });
+        }
+    }
+    for form in seed.forms {
+        if !known_forms.contains(form) {
+            return Err(Error::TemplateValidation {
+                message: format!(
+                    "data package {package_path_label} interface {:?} references unknown form {form:?}",
+                    seed.name
+                ),
+            });
+        }
+    }
+    let mut interface = InterfaceDef::new(seed.name);
+    interface.views = seed.views.iter().map(|view| (*view).to_string()).collect();
+    interface.forms = seed.forms.iter().map(|form| (*form).to_string()).collect();
+    interface.title = seed.title.map(str::to_string);
+    interface.description = seed.description.map(str::to_string);
+    write_package_interface(package_path, &interface).map_err(map_data_error)
+}
+
 fn row_values_from_json(
     row_json: &str,
     column_types: &BTreeMap<&str, FieldType>,
@@ -873,6 +1089,16 @@ fn cell_from_json(
                         "data package {package_path}: relation cells must be a JSON array of record ids"
                     ),
                 }),
+                FieldType::Lookup => Err(Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path}: lookup columns are read-only and cannot be seeded"
+                    ),
+                }),
+                FieldType::Rollup => Err(Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path}: rollup columns are read-only and cannot be seeded"
+                    ),
+                }),
             }
         }
         serde_json::Value::String(text) => {
@@ -900,6 +1126,16 @@ fn cell_from_json(
                 FieldType::Relation => Err(Error::TemplateValidation {
                     message: format!(
                         "data package {package_path}: relation cells must be a JSON array of record ids"
+                    ),
+                }),
+                FieldType::Lookup => Err(Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path}: lookup columns are read-only and cannot be seeded"
+                    ),
+                }),
+                FieldType::Rollup => Err(Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path}: rollup columns are read-only and cannot be seeded"
                     ),
                 }),
             }
@@ -942,6 +1178,8 @@ fn parse_field_type(value: &str) -> Option<FieldType> {
         "boolean" => Some(FieldType::Boolean),
         "date" => Some(FieldType::Date),
         "relation" => Some(FieldType::Relation),
+        "lookup" => Some(FieldType::Lookup),
+        "rollup" => Some(FieldType::Rollup),
         _ => None,
     }
 }
@@ -1538,6 +1776,8 @@ mod tests {
             extra_tables: &[],
             views: &[],
             forms: &[],
+            actions: &[],
+            interfaces: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",
@@ -1601,6 +1841,8 @@ mod tests {
             extra_tables: &[],
             views: &[],
             forms: &[],
+            actions: &[],
+            interfaces: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",
@@ -1690,6 +1932,8 @@ mod tests {
             extra_tables: &[],
             views: VIEWS,
             forms: &[],
+            actions: &[],
+            interfaces: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",
@@ -1783,6 +2027,8 @@ mod tests {
             extra_tables: &[],
             views: &[],
             forms: FORMS,
+            actions: &[],
+            interfaces: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",
@@ -1859,6 +2105,8 @@ mod tests {
             extra_tables: &[],
             views: &[],
             forms: &[],
+            actions: &[],
+            interfaces: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",
@@ -1946,6 +2194,8 @@ mod tests {
             extra_tables: EXTRA_TABLES,
             views: &[],
             forms: &[],
+            actions: &[],
+            interfaces: &[],
         }];
         static FILES: &[SeedFile] = &[SeedFile {
             path: "Home.md",

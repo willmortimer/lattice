@@ -1,5 +1,6 @@
 import { inBrowser } from "../demo";
 import { demoSearch } from "../demo";
+import { TabularImportReviewDialog } from "../data/CsvImportReviewDialog";
 import { LinkRepairReviewModal } from "../LinkRepairReviewModal";
 import { batchWarnThresholdExceeded } from "../lib/linkRepair";
 import { NewWorkspaceDialog } from "../NewWorkspaceDialog";
@@ -55,7 +56,9 @@ export function DesktopShell({ model }: DesktopShellProps) {
     profile, profileReady, settings, startup, snapshot, selected, selectedPaths, session, error, busy, saveState,
     externalConflict, reloadToken, newWorkspaceOpen, workspacesDir, templates, statusToast,
     profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth,
-    treeCollapsedPaths, revealPath, linkPicker, linkRepairReview, handleLinkRepairAccept, handleLinkRepairDefer,
+    treeCollapsedPaths, revealPath, linkPicker, csvImportReview,
+    handleCancelCsvImport, handleConfirmCsvImport, handleCsvImportColumnTypeChange,
+    linkRepairReview, handleLinkRepairAccept, handleLinkRepairDefer,
     openTabs, navigation, inspectorOpen, editingTitle, titleDraft, assetRoot,
     wikiTargets, pageEditorRef, paletteItems, hasCapability, setSettings, setStartup, setError,
     recents, page, setSaveState, setLinkPicker, handleImportEditorAsset,
@@ -63,7 +66,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
     setDismissedNoticeCodes, setEditingTitle, setTitleDraft, applyThemeCatalog,
     clearRecents, resetSettings, handleGetStarted, handleOpenWorkspace, openRecent,
     handleCreateWorkspace, openNewWorkspaceDialog, pickWorkspaceFolder, handleNewPage, handleQuickNote,
-    handleNewTable, handleImportCsv, handleSelect, applyTreeSelection, handleOpenExternally, handleOpenFile,
+    handleNewTable, handleImportCsv, handlePromoteWorkspaceCsv, handleSelect, applyTreeSelection, handleOpenExternally, handleOpenFile,
     handleKeepIncoming, handleKeepLocal, handleKeepBoth, handleTreeCollapsedPathsChange,
     handleTreeResourceContextMenu, handleTreeFolderContextMenu, handleTreeRename, handleMoveToFolder,
     treeRenameRequest,
@@ -270,7 +273,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
                     {hasCapability("sqlite") && (
                       <MenuItem className="ltui-menu-item" onClick={() => void handleImportCsv()}>
                         <ArrowUpRight size={14} />
-                        Import CSV
+                        Import table
                       </MenuItem>
                     )}
                   </MenuPopup>
@@ -548,6 +551,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
                           onKeepBoth: () => void handleKeepBoth(),
                           onOpenFile: handleOpenFile,
                           onOpenExternally: inBrowser ? undefined : (resource) => void handleOpenExternally(resource),
+                          onPromoteWorkspaceCsv: inBrowser ? undefined : (resource) => void handlePromoteWorkspaceCsv(resource),
                           onPageWidthChange: (pageWidth) => setSettings((current) => ({
                             ...current,
                             editor: { ...current.editor, pageWidth },
@@ -595,6 +599,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
                             onKeepBoth: () => void handleKeepBoth(),
                             onOpenFile: handleOpenFile,
                             onOpenExternally: inBrowser ? undefined : (resource) => void handleOpenExternally(resource),
+                            onPromoteWorkspaceCsv: inBrowser ? undefined : (resource) => void handlePromoteWorkspaceCsv(resource),
                             onPageWidthChange: (pageWidth) => setSettings((current) => ({
                               ...current,
                               editor: { ...current.editor, pageWidth },
@@ -715,6 +720,15 @@ export function DesktopShell({ model }: DesktopShellProps) {
             </DialogPopup>
           </DialogPortal>
         </DialogRoot>
+      )}
+      {csvImportReview && (
+        <TabularImportReviewDialog
+          review={csvImportReview}
+          busy={busy}
+          onCancel={handleCancelCsvImport}
+          onConfirm={() => void handleConfirmCsvImport()}
+          onColumnTypeChange={handleCsvImportColumnTypeChange}
+        />
       )}
       <NewWorkspaceDialog
         open={newWorkspaceOpen}

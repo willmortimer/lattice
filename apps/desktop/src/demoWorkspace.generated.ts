@@ -2,6 +2,8 @@
 import type { WorkspaceSnapshot } from "./types";
 import type { DataAppSnapshot } from "./data/types";
 import type { FormSummary } from "./data/forms";
+import type { ActionSummary } from "./data/actions";
+import type { InterfaceSummary } from "./data/interfaces";
 
 export const demoSnapshot: WorkspaceSnapshot = {
   "root": "/Users/you/Lattice/Workspaces/First Look",
@@ -27,6 +29,7 @@ export const demoSnapshot: WorkspaceSnapshot = {
     "Canvases": "Spatial boards that link into workspace files.",
     "Templates": "Page templates with {{title}} and {{date}} placeholders.",
     "Data": "Tabular seeds and imported tables.",
+    "Dashboards": "Interactive summaries and charts.",
     "Resources": "Ordinary files — JSON, YAML, code, SQL, images.",
     "Archive": "Finished or inactive material."
   },
@@ -53,8 +56,31 @@ export const demoSnapshot: WorkspaceSnapshot = {
       "kind": "data-app"
     },
     {
+      "path": "Dashboards",
+      "kind": "folder"
+    },
+    {
+      "path": "Dashboards/Signups by region.vl.json",
+      "kind": "file",
+      "formatId": "file:json"
+    },
+    {
       "path": "Data",
       "kind": "folder"
+    },
+    {
+      "path": "Data/Events.dataset/dataset.yaml",
+      "kind": "file",
+      "formatId": "file:yaml"
+    },
+    {
+      "path": "Data/Events.dataset/facts/signups.csv",
+      "kind": "file",
+      "formatId": "file:text"
+    },
+    {
+      "path": "Data/Events.dataset/README.md",
+      "kind": "page"
     },
     {
       "path": "Data/Metrics.data",
@@ -209,7 +235,7 @@ export const demoCanvas = {
       "y": 60,
       "width": 300,
       "height": 160,
-      "text": "First Look canvas — double-click file nodes. Data apps open grids; CRM nodes can target saved Board/Gallery views via subpath."
+      "text": "First Look canvas — double-click file nodes. Data apps open grids; CRM nodes can target saved Board/Gallery views or the ContactOps interface via subpath."
     },
     {
       "id": "vision",
@@ -290,6 +316,25 @@ export const demoCanvas = {
       "file": "CRM.data",
       "subpath": "views/Gallery.yaml",
       "x": 1120,
+      "y": 100,
+      "width": 200,
+      "height": 100
+    },
+    {
+      "id": "crm-interface-label",
+      "type": "text",
+      "x": 1340,
+      "y": 60,
+      "width": 160,
+      "height": 40,
+      "text": "CRM ContactOps"
+    },
+    {
+      "id": "crm-interface",
+      "type": "file",
+      "file": "CRM.data",
+      "subpath": "interfaces/ContactOps",
+      "x": 1340,
       "y": 100,
       "width": 200,
       "height": 100
@@ -405,6 +450,11 @@ export const demoCanvas = {
       "id": "e7",
       "fromNode": "crm-board",
       "toNode": "crm-gallery"
+    },
+    {
+      "id": "e7b",
+      "fromNode": "crm-gallery",
+      "toNode": "crm-interface"
     },
     {
       "id": "e8",
@@ -1155,6 +1205,10 @@ export const demoDataApp: DataAppSnapshot = {
       }
     }
   ],
+  "row_offset": 0,
+  "row_limit": 20,
+  "row_total": 20,
+  "has_more": false,
   "available_views": [
     "All",
     "Board",
@@ -2788,6 +2842,10 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
         }
       }
     ],
+    "row_offset": 0,
+    "row_limit": 20,
+    "row_total": 20,
+    "has_more": false,
     "available_views": [
       "All",
       "Board",
@@ -3869,6 +3927,10 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
         }
       }
     ],
+    "row_offset": 0,
+    "row_limit": 6,
+    "row_total": 6,
+    "has_more": false,
     "available_views": [
       "All",
       "Board",
@@ -4194,6 +4256,10 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
         }
       }
     ],
+    "row_offset": 0,
+    "row_limit": 6,
+    "row_total": 6,
+    "has_more": false,
     "available_views": [
       "All",
       "Board",
@@ -4484,6 +4550,10 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
         }
       }
     ],
+    "row_offset": 0,
+    "row_limit": 4,
+    "row_total": 4,
+    "has_more": false,
     "available_views": [
       "All",
       "Board",
@@ -4654,6 +4724,70 @@ export const demoPackageFormsByPath: Record<string, FormSummary[]> = {
   "OKRs.data": []
 };
 
+export const demoPackageActions: ActionSummary[] = [
+  {
+    "name": "OpenContactIntake",
+    "label": "Contact intake",
+    "table": "contacts",
+    "scope": "toolbar",
+    "action": {
+      "type": "insert_record",
+      "form": "ContactIntake"
+    }
+  }
+];
+
+export const demoPackageActionsByPath: Record<string, ActionSummary[]> = {
+  "CRM.data": [
+    {
+      "name": "OpenContactIntake",
+      "label": "Contact intake",
+      "table": "contacts",
+      "scope": "toolbar",
+      "action": {
+        "type": "insert_record",
+        "form": "ContactIntake"
+      }
+    }
+  ],
+  "Projects/Delivery.data": [],
+  "Data/Metrics.data": [],
+  "OKRs.data": []
+};
+
+export const demoPackageInterfaces: InterfaceSummary[] = [
+  {
+    "name": "ContactOps",
+    "views": [
+      "Board"
+    ],
+    "forms": [
+      "ContactIntake"
+    ],
+    "title": "Contact operations",
+    "description": "Board view plus contact intake form for CRM canvas open."
+  }
+];
+
+export const demoPackageInterfacesByPath: Record<string, InterfaceSummary[]> = {
+  "CRM.data": [
+    {
+      "name": "ContactOps",
+      "views": [
+        "Board"
+      ],
+      "forms": [
+        "ContactIntake"
+      ],
+      "title": "Contact operations",
+      "description": "Board view plus contact intake form for CRM canvas open."
+    }
+  ],
+  "Projects/Delivery.data": [],
+  "Data/Metrics.data": [],
+  "OKRs.data": []
+};
+
 export const demoPages: Record<string, string> = {
   "Home.md": "---\ntitle: Home\n---\n\n# Home\n\nKitchen-sink tour of the **First Look** sample workspace. Everything here is an\nordinary file under a real directory — open it in any editor, or stay inside Lattice.\n\n## Quick start\n\n1. Search with **⌘K** — keyword search always; turn on **Settings → Search → Semantic search** for hybrid FTS + embeddings (try `latticed` or `FinalizationMode`).\n2. Scroll [[Research/Long Read]] — long-form perf and virtualization fixture.\n3. Open `Canvases/Product Strategy.canvas` — double-click file nodes to jump.\n4. Capture with **⌘N** into `Inbox/` — type or **hold-to-dictate** (see [[Inbox/Sample capture]]).\n5. Open `CRM.data` — contacts + companies, relations, board/gallery/calendar/form.\n6. Also open `Projects/Delivery.data`, `Data/Metrics.data`, and `OKRs.data` for more table shapes.\n7. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.\n8. Open `Notebooks/CRM exploration.ipynb` — CRM tour notebook (markdown + code stubs).\n9. Create pages from `Templates/` — daily and meeting note scaffolds.\n10. Read [[Research/Local Runtime]] — daemon, search, and voice process model.\n\n## First Look tour — new surfaces\n\nWork through this checklist to exercise the latest desktop shell, data, search,\nand voice features. Each step is safe in the sample workspace; undo where noted.\n\n### Search & local runtime\n\n1. Optionally enable **Settings → Search → Semantic search** (downloads ~640 MB local Qwen3 GGUF on first enable; or set `LATTICE_SEMANTIC_FAKE=1` for Fake vectors in dev).\n2. Press **⌘K** and search for `VoiceContextBuilder` or `EndpointDetected` (seeded on [[Research/Local Runtime]]). With semantic on and ready, hits may show Keyword / Semantic / Both.\n3. Skim [[Research/Architecture]] for the core vs latticed diagrams.\n\n### Voice & Quick Note\n\n4. Open any page → hold the microphone control to dictate; release for a single final insert (provisional text is ghost-only).\n5. Press **⌘N** for Quick Note → hold-to-dictate → release → note saves once; Escape cancels without junk ASR text.\n6. Optional continuous mode: set `LATTICE_VOICE_AUTO_FINALIZE_ON_ENDPOINT=1` before launch (silence debounce endpoints); default hold-to-talk needs no VAD.\n\n### CRM layouts and saved views\n\n7. Open `CRM.data` and switch **Board**, **Gallery**, **Calendar**, and **Form** from the view picker.\n8. In each layout, change the layout field pickers (group-by, cover field, date field, visible columns).\n9. Click **Save view** to persist the layout under `CRM.data/views/` (native).\n10. Open a contact row and inspect **company** and **reports_to** — add or change links in record detail.\n\n### More data apps\n\n11. Open `Projects/Delivery.data` — board by status + calendar on `due` (no relations; simpler schema).\n12. Open `Data/Metrics.data` — decimal metrics board by category (Voice / Search / Data / Editor).\n13. Open `OKRs.data` — objectives board by confidence status.\n\n### CRM package forms\n\n14. Open `CRM.data` → **Forms** → **Contact intake**.\n15. Submit a new contact; the row appears and relation pickers stay in sync with `companies`.\n16. Open `Projects/Delivery.data` → **Forms** → **Delivery intake** and add an item.\n\n### Resource tree\n\n17. Create a folder under `Projects/` (context menu or **New folder**).\n18. Press **⌘Z** to undo the folder creation.\n19. Move [[Product/Vision]] into another folder; accept link repair when prompted.\n20. **⌘-click** two pages, drag to a folder (multi-select move).\n21. Select multiple items and delete — confirm the batch operation.\n\n### Where to look next\n\n| Surface | Try |\n| --- | --- |\n| [[Research/Local Runtime]] | Daemon, hybrid search, voice ownership |\n| [[Research/Long Read]] | Scroll perf, embeds, extended checklist |\n| [[Product/Release Notes]] | What shipped in this sample |\n| `Canvases/Product Strategy.canvas` | Spatial links + CRM view subpaths |\n\n## Product\n\n| Page | What to try |\n| --- | --- |\n| [[Product/Vision]] | Short north-star narrative |\n| [[Product/Principles]] | Invariants and constraints |\n| [[Product/Roadmap]] | Phased delivery themes |\n| [[Product/Release Notes]] | Changelog-style sample |\n\n## Research\n\n| Page | What to try |\n| --- | --- |\n| [[Research/Local Runtime]] | latticed, hybrid search, Quick Note voice |\n| [[Research/Long Read]] | Scroll perf, Mermaid, wiki links, `:::lattice-embed` |\n| [[Research/Architecture]] | System diagrams (core + daemon) |\n| [[Research/Competitor Analysis]] | Comparison table |\n| [[Research/Market Notes]] | Segments and hypotheses |\n| [[Research/Interview Synthesis]] | Quotes mapped to CRM fields |\n\n## Inbox & templates\n\n- [[Inbox/Sample capture]] — triage-ready quick note (dictation-friendly)\n- [[Templates/Daily Note]] — `{{date}}` / `{{title}}` placeholders preserved at provision\n- [[Templates/Meeting Note]] — agenda, decisions, action items\n\nWorkspace defaults point quick capture at `Inbox/` and templates at `Templates/`.\n\n## Canvas & data\n\n| Resource | Kind |\n| --- | --- |\n| `Canvases/Product Strategy.canvas` | Spatial board linking Product pages + CRM views |\n| `CRM.data` | SQLite CRM (`companies` + `contacts`, relations, forms) |\n| `Projects/Delivery.data` | Delivery board/calendar (status + due) |\n| `Data/Metrics.data` | Decimal metrics by category |\n| `OKRs.data` | Objectives / key results board |\n| `Data/sample.csv` | Flat CSV import sample |\n| `Notebooks/CRM exploration.ipynb` | CRM tour notebook (nbformat v4) |\n\n### CRM views\n\nOpen `CRM.data` and switch layouts from the view picker. The template seeds saved\nviews under `CRM.data/views/` (one YAML file per view):\n\n| View | Layout | Key field |\n| ---- | ------ | --------- |\n| Board | `board` | `status` |\n| Calendar | `calendar` | `due_date` |\n| Gallery | `gallery` | `company` (cover) |\n| Form | `form` | — |\n\nSupported layout types also include `grid` and `list`. Board groups contacts by\n`status`; calendar plots `due_date`; gallery uses `company` as a cover field.\n\nThe **company** column links each contact to a row in the seeded `companies` table.\nThe **reports_to** column is a self-relation on `contacts`. Template relation seeds\naccept **record ids** or display **names** (matched via each target table's `name`\ncolumn at provision time).\n\n### CRM package forms\n\n| Form | Table | Fields |\n| ---- | ----- | ------ |\n| ContactIntake | `contacts` | `name`, `email`, `status`, `company` |\n\nEmbed a view from a page (see [[Research/Long Read]]):\n\n```markdown\n:::lattice-embed\nresource: CRM.data/views/Board.yaml\nfallback: \"Open CRM board view\"\n:::\n```\n\n## Resources\n\n| File | Notes |\n| --- | --- |\n| `Resources/config.json` | Feature flags sample |\n| `Resources/schema.yaml` | Small YAML schema |\n| `Resources/hooks.json` | Workspace hook sketch |\n| `Resources/example.ts` | Tiny TypeScript export |\n| `Resources/types.ts` | CRM-related types |\n| `Resources/queries.sql` | Example SELECT statements |\n| `Resources/notes.txt` | Plain text |\n| `Resources/mark.svg` | Generated Lattice mark |\n\n## Map\n\n| Path | Kind |\n| --- | --- |\n| [[Product/Vision]] | page |\n| [[Product/Principles]] | page |\n| [[Product/Roadmap]] | page |\n| [[Product/Release Notes]] | page |\n| [[Research/Local Runtime]] | page (daemon / search / voice) |\n| [[Research/Long Read]] | page (long / embed) |\n| [[Research/Architecture]] | page |\n| [[Research/Competitor Analysis]] | page |\n| [[Research/Market Notes]] | page |\n| [[Research/Interview Synthesis]] | page |\n| [[Inbox/Sample capture]] | page |\n| `Templates/` | page templates |\n| `Canvases/Product Strategy.canvas` | canvas |\n| `CRM.data` | data app |\n| `Projects/Delivery.data` | data app |\n| `Data/Metrics.data` | data app |\n| `OKRs.data` | data app |\n| `Data/sample.csv` | CSV file |\n| `Notebooks/CRM exploration.ipynb` | notebook |\n| `Resources/` | code & config files |\n",
   "Inbox/Sample capture.md": "---\ntitle: Sample capture\ntags: [inbox]\n---\n\n# Sample capture\n\nQuick note seeded in `Inbox/` — triage into [[Product/]] or [[Research/]] when ready.\n\n## Raw thought\n\nUse the First Look demo daily: open [[Research/Long Read]], add a CRM row,\ncapture here with **⌘N** (type or hold-to-dictate), promote to a full page from\n[[Templates/Daily Note]].\n\nDictation tip: say identifiers like `VoiceContextBuilder` or paths like\n`Inbox/Sample capture` — finals run glossary / ITN normalize before save.\n\n- [ ] Review [[Product/Release Notes]]\n- [ ] Skim [[Research/Local Runtime]] for daemon / search / voice\n- [ ] Check `CRM.data` calendar layout for August due dates\n- [ ] Pin [[Canvases/Product Strategy.canvas]] in sidebar\n\n#inbox\n",
@@ -4668,11 +4802,15 @@ export const demoPages: Record<string, string> = {
   "Research/Market Notes.md": "---\ntitle: Market Notes\ntags: [research]\n---\n\n# Market Notes\n\nWorking assumptions for positioning — link to [[Research/Competitor Analysis]] and\n[[Research/Interview Synthesis]].\n\n## Segments\n\n| Segment | Pain | Lattice fit |\n| --- | --- | --- |\n| Individual knowledge workers | Tool sprawl | Unified files + search |\n| Small product teams | Roadmap + research scattered | Pages + canvas + tables |\n| Data-curious builders | SQL without ops burden | `.data` apps beside Markdown |\n\n## Pricing hypotheses\n\n- Free local core; paid sync/collab later (out of scope for this template)\n- Teams value export and auditability over infinite block types\n\n## Open questions\n\n- How much calendar view usage appears in CRM-style tables?\n- Do users expect `Templates/` to mirror daily-note plugins from other tools?\n\nRelated: [[Product/Principles]] and [[Research/Long Read]].\n\n#research\n",
   "Research/Interview Synthesis.md": "---\ntitle: Interview Synthesis\ntags: [research]\n---\n\n# Interview Synthesis\n\nThemes from five fictional discovery calls — seeds for [[Product/Vision]] and CRM\nstatus values in `CRM.data`.\n\n## Recurring requests\n\n1. **Keep my files** — git-friendly Markdown and JSON, not opaque databases.\n2. **Typed tables inline** — contacts and tasks beside narrative docs.\n3. **Spatial overview** — canvas for strategy, not just pretty wallpapers.\n4. **Fast search** — path + body, tolerating long pages like [[Research/Long Read]].\n\n## Representative quotes\n\n| Speaker | Quote | Implied column |\n| --- | --- | --- |\n| PM | \"Board view by status is how I run standup.\" | `status` |\n| Engineer | \"Due dates on leads, not on archived contacts.\" | `due_date` |\n| Designer | \"Gallery cover from company name is enough for now.\" | `company` |\n\n## Follow-ups\n\n- [x] Saved board view under `CRM.data/views/Board.yaml` (see [[Home#CRM views]])\n- [ ] Link interview pages from canvas nodes\n- [ ] Export subset to `Data/sample.csv` for comparison\n\n#research\n",
   "Templates/Daily Note.md": "---\ntitle: \"{{title}}\"\ndate: {{date}}\n---\n\n# {{date}}\n\n## Focus\n\n-\n\n## Log\n\n-\n\n## Open loops\n\n- [ ]\n\n## Links\n\n-\n",
-  "Templates/Meeting Note.md": "---\ntitle: \"{{title}}\"\ndate: {{date}}\nattendees: []\n---\n\n# {{title}}\n\n## Agenda\n\n1.\n\n## Notes\n\n## Decisions\n\n## Action items\n\n- [ ] Owner — task (due: )\n\n## Related\n\n-\n"
+  "Templates/Meeting Note.md": "---\ntitle: \"{{title}}\"\ndate: {{date}}\nattendees: []\n---\n\n# {{title}}\n\n## Agenda\n\n1.\n\n## Notes\n\n## Decisions\n\n## Action items\n\n- [ ] Owner — task (due: )\n\n## Related\n\n-\n",
+  "Data/Events.dataset/README.md": "# Events\n\nSample analytical dataset for the First Look demo. Facts live in `facts/`.\n"
 };
 
 export const demoTextFiles: Record<string, string> = {
   "Data/sample.csv": "name,role,status\nAda Lovelace,Analyst,Active\nGrace Hopper,Engineer,Active\n",
+  "Data/Events.dataset/dataset.yaml": "format: lattice-dataset\nversion: 1\nid: demo-events-dataset\ntitle: Events\ndescription: Sample analytical facts for Vega-Lite chart demos.\npartitions: []\n",
+  "Data/Events.dataset/facts/signups.csv": "region,signups\nNorth,42\nSouth,28\nEast,35\nWest,19\n",
+  "Dashboards/Signups by region.vl.json": "{\n  \"lattice\": {\n    \"data\": {\n      \"dataset\": \"Data/Events.dataset\",\n      \"sql\": \"SELECT * FROM read_csv_auto('Data/Events.dataset/facts/signups.csv')\"\n    }\n  },\n  \"$schema\": \"https://vega.github.io/schema/vega-lite/v6.json\",\n  \"title\": \"Signups by region\",\n  \"data\": { \"name\": \"table\" },\n  \"mark\": { \"type\": \"bar\", \"tooltip\": true },\n  \"encoding\": {\n    \"x\": { \"field\": \"region\", \"type\": \"nominal\", \"title\": \"Region\" },\n    \"y\": { \"field\": \"signups\", \"type\": \"quantitative\", \"title\": \"Signups\" },\n    \"color\": { \"field\": \"region\", \"type\": \"nominal\", \"legend\": null }\n  }\n}\n",
   "Resources/config.json": "{\n  \"name\": \"Personal\",\n  \"version\": 1,\n  \"features\": {\n    \"canvas\": true,\n    \"search\": true\n  }\n}\n",
   "Resources/schema.yaml": "title: Sample schema\nversion: 1\nfields:\n  - name: id\n    type: text\n  - name: status\n    type: text\n",
   "Resources/hooks.json": "{\n  \"workspace\": \"first-look-demo\",\n  \"hooks\": {\n    \"onQuickCapture\": {\n      \"targetDirectory\": \"Inbox\",\n      \"template\": \"Templates/Daily Note.md\"\n    },\n    \"onArchive\": {\n      \"targetDirectory\": \"Archive\"\n    }\n  },\n  \"search\": {\n    \"indexBody\": true,\n    \"boostPaths\": [\"Product/\", \"Research/\"]\n  }\n}\n",

@@ -18,6 +18,7 @@
     { "path": "Canvases", "purpose": "Spatial boards that link into workspace files." },
     { "path": "Templates", "purpose": "Page templates with {{title}} and {{date}} placeholders." },
     { "path": "Data", "purpose": "Tabular seeds and imported tables." },
+    { "path": "Dashboards", "purpose": "Interactive summaries and charts." },
     { "path": "Resources", "purpose": "Ordinary files — JSON, YAML, code, SQL, images." },
     { "path": "Archive", "purpose": "Finished or inactive material." }
   ],
@@ -29,6 +30,8 @@
     "CRM.data",
     "Projects/Delivery.data",
     "Data/Metrics.data",
+    "Data/Events.dataset",
+    "Dashboards/Signups by region.vl.json",
     "OKRs.data",
     "Canvases/Product Strategy.canvas",
     "Inbox/Sample capture.md",
@@ -54,6 +57,10 @@
     "Notebooks/CRM exploration.ipynb",
     "Canvases/Product Strategy.canvas",
     "Data/sample.csv",
+    "Data/Events.dataset/dataset.yaml",
+    "Data/Events.dataset/README.md",
+    "Data/Events.dataset/facts/signups.csv",
+    "Dashboards/Signups by region.vl.json",
     "Resources/config.json",
     "Resources/schema.yaml",
     "Resources/hooks.json",
@@ -305,6 +312,27 @@
           "fields": ["name", "email", "status", "company"],
           "title": "Contact intake",
           "description": "Create a contact from the package form."
+        }
+      ],
+      "actions": [
+        {
+          "name": "OpenContactIntake",
+          "label": "Contact intake",
+          "table": "contacts",
+          "scope": "toolbar",
+          "action": {
+            "type": "insert_record",
+            "form": "ContactIntake"
+          }
+        }
+      ],
+      "interfaces": [
+        {
+          "name": "ContactOps",
+          "views": ["Board"],
+          "forms": ["ContactIntake"],
+          "title": "Contact operations",
+          "description": "Board view plus contact intake form for CRM canvas open."
         }
       ]
     },

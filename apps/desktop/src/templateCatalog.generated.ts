@@ -93,7 +93,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
         ],
         "extraTables": [],
         "views": [],
-        "forms": []
+        "forms": [],
+        "actions": [],
+        "interfaces": []
       }
     ]
   },
@@ -264,7 +266,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
         ],
         "extraTables": [],
         "views": [],
-        "forms": []
+        "forms": [],
+        "actions": [],
+        "interfaces": []
       }
     ]
   },
@@ -371,7 +375,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
         ],
         "extraTables": [],
         "views": [],
-        "forms": []
+        "forms": [],
+        "actions": [],
+        "interfaces": []
       }
     ]
   },
@@ -483,7 +489,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
         ],
         "extraTables": [],
         "views": [],
-        "forms": []
+        "forms": [],
+        "actions": [],
+        "interfaces": []
       }
     ]
   },
@@ -693,7 +701,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "columns": []
           }
         ],
-        "forms": []
+        "forms": [],
+        "actions": [],
+        "interfaces": []
       }
     ]
   },
@@ -810,7 +820,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
         ],
         "extraTables": [],
         "views": [],
-        "forms": []
+        "forms": [],
+        "actions": [],
+        "interfaces": []
       }
     ]
   },
@@ -878,6 +890,10 @@ export const GENERATED_TEMPLATE_CATALOG = [
         "purpose": "Tabular seeds and imported tables."
       },
       {
+        "path": "Dashboards",
+        "purpose": "Interactive summaries and charts."
+      },
+      {
         "path": "Resources",
         "purpose": "Ordinary files — JSON, YAML, code, SQL, images."
       },
@@ -894,6 +910,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "CRM.data",
       "Projects/Delivery.data",
       "Data/Metrics.data",
+      "Data/Events.dataset",
+      "Dashboards/Signups by region.vl.json",
       "OKRs.data",
       "Canvases/Product Strategy.canvas",
       "Inbox/Sample capture.md",
@@ -1268,6 +1286,31 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "title": "Contact intake",
             "description": "Create a contact from the package form."
           }
+        ],
+        "actions": [
+          {
+            "name": "OpenContactIntake",
+            "label": "Contact intake",
+            "table": "contacts",
+            "scope": "toolbar",
+            "action": {
+              "type": "insert_record",
+              "form": "ContactIntake"
+            }
+          }
+        ],
+        "interfaces": [
+          {
+            "name": "ContactOps",
+            "views": [
+              "Board"
+            ],
+            "forms": [
+              "ContactIntake"
+            ],
+            "title": "Contact operations",
+            "description": "Board view plus contact intake form for CRM canvas open."
+          }
         ]
       },
       {
@@ -1377,7 +1420,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "title": "Delivery intake",
             "description": "Add a delivery item without opening the grid."
           }
-        ]
+        ],
+        "actions": [],
+        "interfaces": []
       },
       {
         "path": "Data/Metrics.data",
@@ -1469,7 +1514,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "columns": []
           }
         ],
-        "forms": []
+        "forms": [],
+        "actions": [],
+        "interfaces": []
       },
       {
         "path": "OKRs.data",
@@ -1545,7 +1592,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "columns": []
           }
         ],
-        "forms": []
+        "forms": [],
+        "actions": [],
+        "interfaces": []
       }
     ]
   },

@@ -8,8 +8,9 @@ use crate::app::{
     app_manifest_path, database_path, default_view_path, schema_path, DATABASE_FILENAME,
 };
 use crate::{
-    write_package_form, CellValue, DataApp, FieldType, FilterOperator, FormDef, SortDirection,
-    ViewDef, ViewFilter, ViewSort,
+    write_package_action, write_package_form, write_package_interface, write_package_view,
+    ActionDef, ActionKind, ActionScope, CellValue, DataApp, FieldType, FilterOperator, FormDef,
+    InterfaceDef, SortDirection, ViewDef, ViewFilter, ViewSort,
 };
 
 #[test]
@@ -348,7 +349,8 @@ fn layout_field_misuse_is_rejected() {
 
 #[test]
 fn csv_parse_and_import_columns() {
-    use crate::csv::{infer_field_type, parse_csv_file, sanitize_column_name};
+    use crate::csv::parse_csv_file;
+    use crate::tabular::{infer_field_type, sanitize_column_name};
 
     assert_eq!(sanitize_column_name("Full Name"), "full_name");
     assert_eq!(
@@ -517,6 +519,11 @@ fn relation_column_requires_relation_table_metadata() {
                 name: "parent",
                 field_type: FieldType::Relation,
                 relation_table: None,
+                lookup_relation: None,
+                lookup_field: None,
+                rollup_relation: None,
+                rollup_aggregate: None,
+                rollup_field: None,
             }],
         )
         .unwrap_err()
@@ -715,4 +722,650 @@ fn load_form_rejects_name_file_mismatch() {
         err.contains("does not match file stem"),
         "unexpected error: {err}"
     );
+}
+
+#[test]
+fn action_def_round_trip_list_and_load() {
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("CRM.data");
+    let app = DataApp::create(&package_path, "CRM", "contacts").unwrap();
+
+    rusqlite::Connection::open(database_path(&package_path))
+        .unwrap()
+        .execute_batch(
+            "ALTER TABLE contacts ADD COLUMN name TEXT;
+             ALTER TABLE contacts ADD COLUMN status TEXT;",
+        )
+        .unwrap();
+
+    assert!(app.list_actions().unwrap().is_empty());
+
+    let action = ActionDef::new(
+        "new_contact",
+        "New contact",
+        "contacts",
+        ActionKind::InsertRecord {
+            form: None,
+            defaults: BTreeMap::from([("status".into(), "Active".into())]),
+        },
+    );
+
+    let yaml = app.render_action_yaml(&action).unwrap();
+    assert!(yaml.contains("format: lattice-action"));
+    assert!(yaml.contains("name: new_contact"));
+    assert!(yaml.contains("type: insert_record"));
+
+    write_package_action(&package_path, &action).unwrap();
+    assert!(
+        package_path
+            .join("actions")
+            .join("new_contact.action.yaml")
+            .is_file()
+    );
+
+    let actions = app.list_actions().unwrap();
+    assert_eq!(actions, vec!["new_contact".to_string()]);
+
+    let loaded = app.load_action("new_contact").unwrap();
+    assert_eq!(loaded, action);
+}
+
+#[test]
+fn load_action_validates_insert_form_and_update_field() {
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("CRM.data");
+    let app = DataApp::create(&package_path, "CRM", "contacts").unwrap();
+
+    rusqlite::Connection::open(database_path(&package_path))
+        .unwrap()
+        .execute_batch(
+            "ALTER TABLE contacts ADD COLUMN name TEXT;
+             ALTER TABLE contacts ADD COLUMN status TEXT;",
+        )
+        .unwrap();
+
+    let mut form = FormDef::new("intake", "contacts");
+    form.fields = vec!["name".into(), "status".into()];
+    write_package_form(&package_path, &form).unwrap();
+
+    let form_action = ActionDef::new(
+        "open_intake",
+        "Contact intake",
+        "contacts",
+        ActionKind::InsertRecord {
+            form: Some("intake".into()),
+            defaults: BTreeMap::new(),
+        },
+    );
+    write_package_action(&package_path, &form_action).unwrap();
+    assert_eq!(app.load_action("open_intake").unwrap(), form_action);
+
+    let row_action = ActionDef::new(
+        "archive",
+        "Archive",
+        "contacts",
+        ActionKind::UpdateField {
+            field: "status".into(),
+            value: "Archived".into(),
+        },
+    );
+    let mut row_action = row_action;
+    row_action.scope = ActionScope::Row;
+    write_package_action(&package_path, &row_action).unwrap();
+    assert_eq!(app.load_action("archive").unwrap(), row_action);
+}
+
+#[test]
+fn load_action_rejects_unknown_defaults_and_fields() {
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("CRM.data");
+    let app = DataApp::create(&package_path, "CRM", "contacts").unwrap();
+
+    let bad_default = ActionDef::new(
+        "bad_default",
+        "Bad default",
+        "contacts",
+        ActionKind::InsertRecord {
+            form: None,
+            defaults: BTreeMap::from([("missing".into(), "x".into())]),
+        },
+    );
+    write_package_action(&package_path, &bad_default).unwrap();
+    let err = app.load_action("bad_default").unwrap_err().to_string();
+    assert!(err.contains("unknown column") && err.contains("missing"), "{err}");
+
+    let bad_field = ActionDef::new(
+        "bad_field",
+        "Bad field",
+        "contacts",
+        ActionKind::UpdateField {
+            field: "missing".into(),
+            value: "x".into(),
+        },
+    );
+    write_package_action(&package_path, &bad_field).unwrap();
+    let err = app.load_action("bad_field").unwrap_err().to_string();
+    assert!(err.contains("unknown column") && err.contains("missing"), "{err}");
+}
+
+#[test]
+fn validate_action_url_rejects_parent_segments() {
+    use crate::validate_action_url;
+
+    assert!(validate_action_url("Home.md").is_ok());
+    assert!(validate_action_url("https://example.com").is_ok());
+    assert!(validate_action_url("/absolute").is_err());
+    assert!(validate_action_url("../escape").is_err());
+}
+
+#[test]
+fn interface_def_round_trip_list_and_load() {
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Hiring.data");
+    let app = DataApp::create(&package_path, "Hiring", "candidates").unwrap();
+
+    rusqlite::Connection::open(database_path(&package_path))
+        .unwrap()
+        .execute_batch(
+            "ALTER TABLE candidates ADD COLUMN name TEXT;
+             ALTER TABLE candidates ADD COLUMN status TEXT;",
+        )
+        .unwrap();
+
+    let mut board = ViewDef::new_grid("candidates");
+    board.layout.layout_type = "board".into();
+    board.layout.group_by = Some("status".into());
+    write_package_view(&package_path, "Board", &board).unwrap();
+
+    let mut form = FormDef::new("intake", "candidates");
+    form.fields = vec!["name".into(), "status".into()];
+    write_package_form(&package_path, &form).unwrap();
+
+    assert!(app.list_interfaces().unwrap().is_empty());
+
+    let mut interface = InterfaceDef::new("CandidateOps");
+    interface.views = vec!["Board".into()];
+    interface.forms = vec!["intake".into()];
+    interface.title = Some("Candidate ops".into());
+    interface.description = Some("Board plus intake".into());
+
+    let yaml = app.render_interface_yaml(&interface).unwrap();
+    assert!(yaml.contains("format: lattice-interface"));
+    assert!(yaml.contains("name: CandidateOps"));
+    assert!(yaml.contains("Board"));
+    assert!(yaml.contains("intake"));
+
+    write_package_interface(&package_path, &interface).unwrap();
+    assert!(package_path
+        .join("interfaces")
+        .join("CandidateOps.interface.yaml")
+        .is_file());
+
+    let interfaces = app.list_interfaces().unwrap();
+    assert_eq!(interfaces, vec!["CandidateOps".to_string()]);
+
+    let loaded = app.load_interface("CandidateOps").unwrap();
+    assert_eq!(loaded, interface);
+    assert_eq!(loaded.primary_view(), Some("Board"));
+}
+
+#[test]
+fn load_interface_rejects_unknown_view_binding() {
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Hiring.data");
+    let app = DataApp::create(&package_path, "Hiring", "candidates").unwrap();
+
+    let mut interface = InterfaceDef::new("Broken");
+    interface.views = vec!["MissingView".into()];
+    write_package_interface(&package_path, &interface).unwrap();
+
+    let err = app.load_interface("Broken").unwrap_err().to_string();
+    assert!(
+        err.contains("unknown view") && err.contains("MissingView"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn load_interface_rejects_empty_bindings() {
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Hiring.data");
+    let _app = DataApp::create(&package_path, "Hiring", "candidates").unwrap();
+
+    let interface = InterfaceDef::new("Empty");
+    let err = write_package_interface(&package_path, &interface)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.contains("at least one view or form"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn lookup_column_resolves_related_field_values() {
+    use crate::NewColumn;
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("CRM.data");
+    let mut app = DataApp::create(&package_path, "CRM", "companies").unwrap();
+    app.add_columns(
+        "companies",
+        &[
+            NewColumn::new("name", FieldType::Text),
+            NewColumn::new("city", FieldType::Text),
+        ],
+    )
+    .unwrap();
+    app.add_table("contacts").unwrap();
+    app.add_columns(
+        "contacts",
+        &[
+            NewColumn::new("name", FieldType::Text),
+            NewColumn::relation("company", "companies"),
+            NewColumn::lookup("company_name", "company", "name"),
+            NewColumn::lookup("company_city", "company", "city"),
+        ],
+    )
+    .unwrap();
+
+    let columns = app.columns("contacts").unwrap();
+    let lookup = columns
+        .iter()
+        .find(|column| column.name == "company_name")
+        .expect("company_name lookup");
+    assert_eq!(lookup.field_type, FieldType::Lookup);
+    assert_eq!(lookup.lookup_relation.as_deref(), Some("company"));
+    assert_eq!(lookup.lookup_field.as_deref(), Some("name"));
+
+    let manifest_text = std::fs::read_to_string(app_manifest_path(&package_path)).unwrap();
+    assert!(manifest_text.contains("type: lookup"));
+    assert!(manifest_text.contains("lookup_relation: company"));
+    assert!(manifest_text.contains("lookup_field: name"));
+
+    let acme_id = app
+        .insert_row(
+            "companies",
+            &BTreeMap::from([
+                ("name".into(), CellValue::Text("Acme".into())),
+                ("city".into(), CellValue::Text("Seattle".into())),
+            ]),
+        )
+        .unwrap();
+    let beta_id = app
+        .insert_row(
+            "companies",
+            &BTreeMap::from([
+                ("name".into(), CellValue::Text("Beta".into())),
+                ("city".into(), CellValue::Text("Austin".into())),
+            ]),
+        )
+        .unwrap();
+
+    let contact_id = app
+        .insert_row(
+            "contacts",
+            &BTreeMap::from([
+                ("name".into(), CellValue::Text("Ada".into())),
+                (
+                    "company".into(),
+                    CellValue::Relation {
+                        record_ids: vec![acme_id.clone(), beta_id.clone()],
+                    },
+                ),
+            ]),
+        )
+        .unwrap();
+
+    let row = app.get_row("contacts", &contact_id).unwrap().unwrap();
+    assert_eq!(
+        row.values.get("company_name"),
+        Some(&CellValue::Lookup {
+            values: vec!["Acme".into(), "Beta".into()],
+        })
+    );
+    assert_eq!(
+        row.values.get("company_city"),
+        Some(&CellValue::Lookup {
+            values: vec!["Seattle".into(), "Austin".into()],
+        })
+    );
+
+    let listed = app.list_rows("contacts", 10, 0).unwrap();
+    assert_eq!(
+        listed[0].values.get("company_name"),
+        Some(&CellValue::Lookup {
+            values: vec!["Acme".into(), "Beta".into()],
+        })
+    );
+
+    // Lookup cells are read-only on update.
+    let write_err = app
+        .update_row(
+            "contacts",
+            &contact_id,
+            &BTreeMap::from([(
+                "company_name".into(),
+                CellValue::Lookup {
+                    values: vec!["nope".into()],
+                },
+            )]),
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(write_err.contains("read-only"));
+}
+
+#[test]
+fn lookup_follows_relation_strip_on_delete() {
+    use crate::NewColumn;
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("CRM.data");
+    let mut app = DataApp::create(&package_path, "CRM", "companies").unwrap();
+    app.add_columns("companies", &[NewColumn::new("name", FieldType::Text)])
+        .unwrap();
+    app.add_table("contacts").unwrap();
+    app.add_columns(
+        "contacts",
+        &[
+            NewColumn::new("name", FieldType::Text),
+            NewColumn::relation("company", "companies"),
+            NewColumn::lookup("company_name", "company", "name"),
+        ],
+    )
+    .unwrap();
+
+    let company_id = app
+        .insert_row(
+            "companies",
+            &BTreeMap::from([("name".into(), CellValue::Text("Acme".into()))]),
+        )
+        .unwrap();
+    let other_id = app
+        .insert_row(
+            "companies",
+            &BTreeMap::from([("name".into(), CellValue::Text("Beta".into()))]),
+        )
+        .unwrap();
+    let contact_id = app
+        .insert_row(
+            "contacts",
+            &BTreeMap::from([(
+                "company".into(),
+                CellValue::Relation {
+                    record_ids: vec![company_id.clone(), other_id.clone()],
+                },
+            )]),
+        )
+        .unwrap();
+
+    app.delete_row("companies", &company_id).unwrap();
+    let contact = app.get_row("contacts", &contact_id).unwrap().unwrap();
+    assert_eq!(
+        contact.values.get("company"),
+        Some(&CellValue::Relation {
+            record_ids: vec![other_id],
+        })
+    );
+    assert_eq!(
+        contact.values.get("company_name"),
+        Some(&CellValue::Lookup {
+            values: vec!["Beta".into()],
+        })
+    );
+}
+
+#[test]
+fn lookup_column_requires_valid_relation_and_field() {
+    use crate::NewColumn;
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("CRM.data");
+    let mut app = DataApp::create(&package_path, "CRM", "companies").unwrap();
+    app.add_columns("companies", &[NewColumn::new("name", FieldType::Text)])
+        .unwrap();
+    app.add_table("contacts").unwrap();
+    app.add_columns(
+        "contacts",
+        &[
+            NewColumn::new("name", FieldType::Text),
+            NewColumn::relation("company", "companies"),
+        ],
+    )
+    .unwrap();
+
+    let missing_relation = app
+        .add_columns(
+            "contacts",
+            &[NewColumn::lookup("company_name", "missing", "name")],
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(missing_relation.contains("lookup_relation"));
+
+    let missing_field = app
+        .add_columns(
+            "contacts",
+            &[NewColumn::lookup("company_name", "company", "missing")],
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(missing_field.contains("lookup_field"));
+}
+
+#[test]
+fn rollup_column_resolves_count_and_sum() {
+    use crate::{NewColumn, RollupAggregate};
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Orders.data");
+    let mut app = DataApp::create(&package_path, "Orders", "orders").unwrap();
+    app.add_columns("orders", &[NewColumn::new("name", FieldType::Text)])
+        .unwrap();
+    app.add_table("line_items").unwrap();
+    app.add_columns(
+        "line_items",
+        &[
+            NewColumn::new("label", FieldType::Text),
+            NewColumn::new("amount", FieldType::Decimal),
+        ],
+    )
+    .unwrap();
+    app.add_columns(
+        "orders",
+        &[
+            NewColumn::relation("items", "line_items"),
+            NewColumn::rollup("item_count", "items", RollupAggregate::Count, None),
+            NewColumn::rollup(
+                "total_amount",
+                "items",
+                RollupAggregate::Sum,
+                Some("amount"),
+            ),
+            NewColumn::rollup("min_amount", "items", RollupAggregate::Min, Some("amount")),
+            NewColumn::rollup("max_amount", "items", RollupAggregate::Max, Some("amount")),
+        ],
+    )
+    .unwrap();
+
+    let columns = app.columns("orders").unwrap();
+    let rollup = columns
+        .iter()
+        .find(|column| column.name == "total_amount")
+        .expect("total_amount rollup");
+    assert_eq!(rollup.field_type, FieldType::Rollup);
+    assert_eq!(rollup.rollup_relation.as_deref(), Some("items"));
+    assert_eq!(rollup.rollup_aggregate, Some(RollupAggregate::Sum));
+    assert_eq!(rollup.rollup_field.as_deref(), Some("amount"));
+
+    let manifest_text = std::fs::read_to_string(app_manifest_path(&package_path)).unwrap();
+    assert!(manifest_text.contains("type: rollup"));
+    assert!(manifest_text.contains("rollup_relation: items"));
+    assert!(manifest_text.contains("rollup_aggregate: sum"));
+    assert!(manifest_text.contains("rollup_field: amount"));
+
+    let order_id = app
+        .insert_row(
+            "orders",
+            &BTreeMap::from([("name".into(), CellValue::Text("PO-1".into()))]),
+        )
+        .unwrap();
+    let item_a = app
+        .insert_row(
+            "line_items",
+            &BTreeMap::from([
+                ("label".into(), CellValue::Text("Widget".into())),
+                ("amount".into(), CellValue::Decimal(10.5)),
+            ]),
+        )
+        .unwrap();
+    let item_b = app
+        .insert_row(
+            "line_items",
+            &BTreeMap::from([
+                ("label".into(), CellValue::Text("Gadget".into())),
+                ("amount".into(), CellValue::Decimal(4.5)),
+            ]),
+        )
+        .unwrap();
+
+    app.update_row(
+        "orders",
+        &order_id,
+        &BTreeMap::from([(
+            "items".into(),
+            CellValue::Relation {
+                record_ids: vec![item_a, item_b],
+            },
+        )]),
+    )
+    .unwrap();
+
+    let row = app.get_row("orders", &order_id).unwrap().unwrap();
+    assert_eq!(
+        row.values.get("item_count"),
+        Some(&CellValue::Rollup { value: Some(2.0) })
+    );
+    assert_eq!(
+        row.values.get("total_amount"),
+        Some(&CellValue::Rollup { value: Some(15.0) })
+    );
+    assert_eq!(
+        row.values.get("min_amount"),
+        Some(&CellValue::Rollup { value: Some(4.5) })
+    );
+    assert_eq!(
+        row.values.get("max_amount"),
+        Some(&CellValue::Rollup { value: Some(10.5) })
+    );
+
+    let empty_id = app
+        .insert_row(
+            "orders",
+            &BTreeMap::from([("name".into(), CellValue::Text("PO-empty".into()))]),
+        )
+        .unwrap();
+    let empty = app.get_row("orders", &empty_id).unwrap().unwrap();
+    assert_eq!(
+        empty.values.get("item_count"),
+        Some(&CellValue::Rollup { value: Some(0.0) })
+    );
+    assert_eq!(
+        empty.values.get("total_amount"),
+        Some(&CellValue::Rollup { value: Some(0.0) })
+    );
+    assert_eq!(
+        empty.values.get("min_amount"),
+        Some(&CellValue::Rollup { value: None })
+    );
+
+    let write_err = app
+        .update_row(
+            "orders",
+            &order_id,
+            &BTreeMap::from([(
+                "item_count".into(),
+                CellValue::Rollup { value: Some(99.0) },
+            )]),
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(write_err.contains("read-only"));
+}
+
+#[test]
+fn rollup_column_requires_valid_relation_and_field() {
+    use crate::{NewColumn, RollupAggregate};
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Orders.data");
+    let mut app = DataApp::create(&package_path, "Orders", "orders").unwrap();
+    app.add_columns("orders", &[NewColumn::new("name", FieldType::Text)])
+        .unwrap();
+    app.add_table("line_items").unwrap();
+    app.add_columns(
+        "line_items",
+        &[
+            NewColumn::new("label", FieldType::Text),
+            NewColumn::new("amount", FieldType::Decimal),
+        ],
+    )
+    .unwrap();
+    app.add_columns(
+        "orders",
+        &[NewColumn::relation("items", "line_items")],
+    )
+    .unwrap();
+
+    let missing_relation = app
+        .add_columns(
+            "orders",
+            &[NewColumn::rollup(
+                "item_count",
+                "missing",
+                RollupAggregate::Count,
+                None,
+            )],
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(missing_relation.contains("rollup_relation"));
+
+    let missing_field = app
+        .add_columns(
+            "orders",
+            &[NewColumn::rollup(
+                "total_amount",
+                "items",
+                RollupAggregate::Sum,
+                None,
+            )],
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(missing_field.contains("rollup_field"));
+
+    let non_numeric = app
+        .add_columns(
+            "orders",
+            &[NewColumn::rollup(
+                "label_sum",
+                "items",
+                RollupAggregate::Sum,
+                Some("label"),
+            )],
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(non_numeric.contains("integer or decimal"));
+}
+
+#[test]
+fn package_create_materializes_interfaces_folder() {
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Hiring.data");
+    DataApp::create(&package_path, "Hiring", "candidates").unwrap();
+    assert!(package_path.join("interfaces").is_dir());
+    assert!(package_path.join("forms").is_dir());
 }

@@ -1,6 +1,8 @@
 # Phase 2 Tables — Wave 1 Subagent DAG
 
-**Status:** Draft — awaiting approval before launch  
+**Status:** Superseded — Wave 1 landed on `feat/data-apps-and-analytics`; use
+[data-apps-analytics-dag.md](data-apps-analytics-dag.md) as the canonical
+tracker for Waves 1–3.  
 **Created:** 2026-07-18  
 **BASE policy:** Integration branch `phase2-tables` from `main` at skill start (see §Base branch).  
 **Subagent models:** `composer-2.5` (routine) and `cursor-grok-4.5-high` (architecture-sensitive) only.  
