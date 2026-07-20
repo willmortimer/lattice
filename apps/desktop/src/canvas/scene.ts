@@ -136,6 +136,8 @@ export class CanvasScene {
   private options: CanvasSceneOptions;
   private palette: CanvasPalette = readCanvasPalette();
   private data: CanvasData | null = null;
+  /** Fit deferred until the host has a real (non-1×1) size after layout. */
+  private pendingFit = false;
 
   private panning = false;
   private panStart = { x: 0, y: 0 };
@@ -203,6 +205,11 @@ export class CanvasScene {
       const { width, height } = entry.contentRect;
       if (width > 0 && height > 0) {
         this.app.renderer.resize(width, height);
+        // First layout after open often starts at ~1×1; re-fit once we have space.
+        if (this.pendingFit && this.data && width > 8 && height > 8) {
+          this.pendingFit = false;
+          this.fitToContent(this.data.nodes);
+        }
       }
     });
     this.resizeObserver.observe(this.host);
@@ -274,7 +281,14 @@ export class CanvasScene {
     }
 
     if (options.fit) {
-      this.fitToContent(data.nodes);
+      const screenW = this.app.screen.width || this.host.clientWidth;
+      const screenH = this.app.screen.height || this.host.clientHeight;
+      if (screenW <= 8 || screenH <= 8) {
+        this.pendingFit = true;
+      } else {
+        this.pendingFit = false;
+        this.fitToContent(data.nodes);
+      }
     } else if (camera) {
       this.world.scale.set(camera.scale);
       this.world.position.set(camera.x, camera.y);

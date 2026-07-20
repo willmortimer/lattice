@@ -31,6 +31,8 @@ describe("resourceLoad helpers", () => {
   it("recognizes native and derived text format IDs", () => {
     expect(isTextFormatId("plain-text")).toBe(true);
     expect(isTextFormatId("file:json")).toBe(true);
+    expect(isTextFormatId("file:vega-lite")).toBe(true);
+    expect(isTextFormatId("vega-lite")).toBe(true);
     expect(isTextFormatId("file:image")).toBe(false);
   });
 

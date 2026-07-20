@@ -5,16 +5,80 @@ import type { NodeViewProps } from "@tiptap/react";
 import { useCodeBlockHighlight } from "./CodeBlockHighlight";
 import { useDeferredUntilVisible } from "./visibilityDeferred";
 
-let mermaidInitialized = false;
+type MermaidApi = typeof import("mermaid").default;
 
-/** `mermaid.initialize` is process-wide and idempotent-unsafe to call
- * twice with conflicting config, so every code block view shares one
- * init rather than each calling it on its own first render. */
-async function ensureMermaidInitialized(): Promise<typeof import("mermaid").default> {
+let mermaidModule: MermaidApi | null = null;
+let mermaidThemeKey: string | null = null;
+
+function readCssToken(name: string, fallback: string): string {
+  if (typeof document === "undefined") return fallback;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
+function shellAppearance(): "dark" | "light" {
+  if (typeof document === "undefined") return "dark";
+  const scheme = getComputedStyle(document.documentElement).colorScheme;
+  if (scheme.includes("light")) return "light";
+  return "dark";
+}
+
+function mermaidConfig() {
+  const appearance = shellAppearance();
+  const text = readCssToken("--lt-text", appearance === "light" ? "#1a1a1a" : "#f2ede3");
+  const soft = readCssToken("--lt-text-soft", appearance === "light" ? "#5c5c5c" : "#c9c2b7");
+  const panel = readCssToken("--lt-panel", appearance === "light" ? "#ffffff" : "#1a1f2a");
+  const raise = readCssToken("--lt-bg-raise", appearance === "light" ? "#f4f1ea" : "#12161f");
+  const line = readCssToken("--lt-line", appearance === "light" ? "#d0cbc0" : "#2a3140");
+  const accent = readCssToken("--lt-accent", appearance === "light" ? "#0b57d0" : "#f5a623");
+  return {
+    startOnLoad: false,
+    // Match shell appearance so node fills/text stay readable on --lt-bg-raise.
+    theme: appearance === "light" ? ("default" as const) : ("dark" as const),
+    themeVariables: {
+      darkMode: appearance === "dark",
+      background: raise,
+      primaryColor: panel,
+      primaryTextColor: text,
+      primaryBorderColor: line,
+      secondaryColor: raise,
+      secondaryTextColor: soft,
+      secondaryBorderColor: line,
+      tertiaryColor: panel,
+      tertiaryTextColor: text,
+      tertiaryBorderColor: line,
+      lineColor: soft,
+      textColor: text,
+      mainBkg: panel,
+      nodeBorder: line,
+      clusterBkg: raise,
+      clusterBorder: line,
+      titleColor: text,
+      edgeLabelBackground: raise,
+      actorBkg: panel,
+      actorBorder: line,
+      actorTextColor: text,
+      signalColor: soft,
+      labelBoxBkgColor: panel,
+      labelTextColor: text,
+      loopTextColor: soft,
+      noteBkgColor: raise,
+      noteTextColor: text,
+      noteBorderColor: line,
+      activationBkgColor: accent,
+      activationBorderColor: line,
+    },
+  };
+}
+
+/** `mermaid.initialize` is process-wide; re-init when shell appearance changes. */
+async function ensureMermaidInitialized(): Promise<MermaidApi> {
   const { default: mermaid } = await import("mermaid");
-  if (!mermaidInitialized) {
-    mermaid.initialize({ startOnLoad: false, theme: "dark" });
-    mermaidInitialized = true;
+  const key = `${shellAppearance()}:${readCssToken("--lt-text", "")}:${readCssToken("--lt-panel", "")}`;
+  if (!mermaidModule || mermaidThemeKey !== key) {
+    mermaid.initialize(mermaidConfig());
+    mermaidModule = mermaid;
+    mermaidThemeKey = key;
   }
   return mermaid;
 }

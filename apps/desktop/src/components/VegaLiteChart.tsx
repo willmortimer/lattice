@@ -8,13 +8,25 @@ export interface VegaLiteChartProps {
   className?: string;
 }
 
-let vegaThemeInitialized = false;
-
-async function ensureVegaTheme(): Promise<void> {
-  if (vegaThemeInitialized) return;
-  const { default: vegaEmbed } = await import("vega-embed");
-  vegaThemeInitialized = true;
-  void vegaEmbed;
+/**
+ * Packaged Tauri CSP omits `unsafe-eval`. Vega expression compilation uses
+ * `new Function` by default; pass the CSP-safe interpreter via `ast: true`.
+ */
+async function embedChart(
+  container: HTMLElement,
+  spec: TopLevelSpec,
+): Promise<void> {
+  const [{ default: embed }, { expressionInterpreter }] = await Promise.all([
+    import("vega-embed"),
+    import("vega-interpreter"),
+  ]);
+  await embed(container, spec, {
+    actions: false,
+    renderer: "svg",
+    theme: "dark",
+    ast: true,
+    expr: expressionInterpreter,
+  });
 }
 
 /** Render a Vega-Lite spec with lazy-loaded vega-embed (chart panel only). */
@@ -32,14 +44,8 @@ export function VegaLiteChart({ spec, className }: VegaLiteChartProps) {
 
     void (async () => {
       try {
-        await ensureVegaTheme();
-        const { default: embed } = await import("vega-embed");
         if (cancelled) return;
-        await embed(container, spec, {
-          actions: false,
-          renderer: "svg",
-          theme: "dark",
-        });
+        await embedChart(container, spec);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : String(err));
