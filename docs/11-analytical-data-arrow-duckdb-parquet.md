@@ -248,6 +248,18 @@ The IPC payload stays columnar (`ipc_bytes` as `Uint8Array`). JSON is only used
 for small control metadata (`schema_meta`, flags, preview). Do not expand the
 full batch into per-cell JavaScript objects.
 
+Desktop `.dataset` resources feed those IPC bytes into **Perspective**
+(`@finos/perspective` + `@finos/perspective-viewer` + datagrid plugin,
+Apache-2.0; ~8 MB gzipped install / ~15 MB unpacked with WASM). Mutable `.data`
+apps continue to use Glide. If Perspective WASM fails to load, the surface falls
+back to the schema/sample dump.
+
+#### Manual check (P3-06)
+
+1. Open a native workspace and a `.dataset` with Parquet (or CSV-backed SQL) facts.
+2. Confirm the analytical grid renders (Perspective), not only JSON schema text.
+3. Toggle airplane / break WASM briefly if testing fallback — schema preview should appear with an error note.
+
 ### Excel and ODS
 
 Open in place, import, link-and-refresh, or convert to SQLite/Parquet depending on intent.
