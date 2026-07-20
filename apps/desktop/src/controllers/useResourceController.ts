@@ -260,6 +260,11 @@ export function useResourceController(options: ResourceControllerOptions): Resou
       return;
     }
 
+    if (resource.kind === "dataset" && workspace) {
+      if (isCurrentLoad(ticket)) setSession({ kind: "dataset", resource });
+      return;
+    }
+
     if (resource.kind === "notebook" && workspace) {
       if (inBrowser) {
         const content = demoNotebooks[resource.path]

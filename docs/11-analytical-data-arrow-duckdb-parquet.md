@@ -234,6 +234,20 @@ Plugin/capability support for chunked multidimensional scientific arrays, imager
 
 Fast cross-process, cross-language, or cache interchange. Usually not the primary long-term user dataset.
 
+Lattice Phase 3 uses **bounded Arrow IPC streams** for analytical query results
+over Tauri (`query_dataset_arrow` → `lattice-arrow-transport`):
+
+| Limit | Default | Behavior |
+| --- | --- | --- |
+| Row cap | 10_000 | Extra rows set `truncated: true` |
+| Byte cap | 8 MiB | Encoded payload shrinks row count until it fits |
+| Preview rows | 5 | Tiny JSON control sample for schema dumps only |
+| Cancellation | stub | `CancelCheck` hook; desktop cancel wiring comes later |
+
+The IPC payload stays columnar (`ipc_bytes` as `Uint8Array`). JSON is only used
+for small control metadata (`schema_meta`, flags, preview). Do not expand the
+full batch into per-cell JavaScript objects.
+
 ### Excel and ODS
 
 Open in place, import, link-and-refresh, or convert to SQLite/Parquet depending on intent.
