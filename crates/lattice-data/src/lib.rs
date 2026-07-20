@@ -21,6 +21,7 @@ pub use error::Error;
 pub use form::{write_package_form, FormDef, FORM_FILE_SUFFIX, FORM_FORMAT, FORM_VERSION};
 pub use types::{
     CellValue, ColumnMeta, DeletedRowSnapshot, FieldType, NewColumn, RelationStrip, Row,
+    SchemaFilesSnapshot,
 };
 pub use view::{
     write_package_view, FilterOperator, SortDirection, ViewDef, ViewFilter, ViewLayout, ViewSort,
