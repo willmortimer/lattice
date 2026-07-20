@@ -1,6 +1,6 @@
 # Data Apps + Analytics Subagent DAG
 
-**Status:** Active — Waves 1–2 merged on `feat/data-apps-and-analytics`; Wave 3 pending  
+**Status:** Active — Waves 1–3 merged on `feat/data-apps-and-analytics`  
 **Created:** 2026-07-19  
 **BASE:** `main` @ `9c5694b`  
 **Integration branch:** `feat/data-apps-and-analytics`  
@@ -16,7 +16,9 @@ canonical tracker for Waves 1–3.
 Phase 2 has a demo-grade vertical slice (`.data` SQLite, Glide grid, six
 layouts, relations, Lookup/Rollup, package forms and FormSave, interfaces,
 actions, tabular import, CLI CRUD) but is not yet an Airtable/Notion
-alternative. Phase 3 is spec-only.
+alternative. Phase 3 vertical slice (DuckDB, Parquet datasets, Arrow IPC,
+Perspective, Vega-Lite, profiling, annotation overlays) is **shipped** on the
+integration branch; full BI remains Phase 6.
 
 **Done when:**
 
@@ -25,7 +27,7 @@ alternative. Phase 3 is spec-only.
 2. **Wave 2** — Lookup/Rollup, canvas interfaces, buttons, Excel/JSON import,
    FormSave. **Merged.**
 3. **Wave 3** — DuckDB, Parquet datasets, Arrow IPC, Perspective, Vega-Lite,
-   profiling, annotation overlays (vertical slice; not full BI).
+   profiling, annotation overlays (vertical slice; not full BI). **Merged.**
 
 ## Defaults (locked)
 
@@ -138,13 +140,13 @@ flowchart TD
 | P2-14 | merged | composer | Docs wave 2 |
 | P3-01 | merged | composer | Dataset package |
 | P3-02 | merged | grok | DuckDB |
-| P3-03 | done | grok | Arrow IPC |
-| P3-04 | done | grok | Parquet partitions |
+| P3-03 | merged | grok | Arrow IPC |
+| P3-04 | merged | grok | Parquet partitions |
 | P3-05 | merged | composer | Profiling |
 | P3-06 | merged | grok | Perspective |
 | P3-07 | merged | composer | Vega-Lite |
 | P3-08 | merged | grok | Annotation overlay |
-| P3-09 | pending | composer | Docs wave 3 |
+| P3-09 | merged | composer | Docs wave 3 |
 
 ## Shared-file conflict map (Wave 1)
 
@@ -293,7 +295,8 @@ flowchart TD
 
 ### Task `P3-09`: Docs Wave 3
 
-- Update docs/11, docs/13, roadmap Phase 3 status notes.
+- Update docs/11, docs/13, roadmap Phase 3 status notes, and first-look analytics checklist.
+- **Status:** merged — vertical slice documented; limits and remaining BI gaps explicit.
 - **Depends on:** P3-05…P3-08 · **Model:** composer-2.5
 
 ## Explicit non-goals
