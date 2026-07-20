@@ -6,7 +6,9 @@
 //! emits download progress on `semantic-event` before starting the Fake worker.
 //! Daemon host modes use EmbedHostClient via latticed's SemanticController.
 
-use lattice_runtime::{default_runtime, SemanticStatus, SemanticStatusState};
+use lattice_runtime::{default_runtime, SemanticStatus};
+#[cfg(test)]
+use lattice_runtime::SemanticStatusState;
 use serde::Serialize;
 use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, State};
@@ -136,6 +138,7 @@ pub async fn semantic_disable(
 }
 
 /// Map a wire/state string into a Settings label (pure helper for tests).
+#[cfg(test)]
 pub fn status_label(state: &str, pending_chunks: Option<u64>, progress_percent: Option<u32>) -> String {
     let parsed = SemanticStatusState::parse(state);
     match parsed {
