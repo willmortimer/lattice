@@ -408,7 +408,7 @@ export function useDesktopController() {
     reconcilePathRemaps: resourceController.reconcilePathRemaps,
   });
   const {
-    handleQuickNote, handleNewPage, handleNewTable, handleImportCsv, handleUndo,
+    handleQuickNote, handleNewPage, handleNewTable, handleImportCsv, handlePromoteWorkspaceCsv, handleUndo,
     handleOpenExternally, handleOpenFile, handleImportEditorAsset, handleOpenWiki,
     openLinkTarget, updateWorkspaceSettings, createAndOpenPage,
     csvImportReview, handleCancelCsvImport, handleConfirmCsvImport, handleCsvImportColumnTypeChange,
@@ -696,7 +696,7 @@ export function useDesktopController() {
     setLinkPicker,
     setStatusToast, applyThemeCatalog, rememberWorkspace, clearRecents, resetSettings, handleGetStarted,
     handleOpenWorkspace, openRecent, handleCreateWorkspace, openNewWorkspaceDialog, pickWorkspaceFolder,
-    handleNewPage, handleQuickNote, handleNewTable, handleImportCsv, handleUndo, handleSelect,
+    handleNewPage, handleQuickNote, handleNewTable, handleImportCsv, handlePromoteWorkspaceCsv, handleUndo, handleSelect,
     applyTreeSelection: resourceController.applyTreeSelection,
     handleOpenExternally, handleOpenFile, handleImportEditorAsset,
     navigateHistory: navigationController.navigateHistory,
