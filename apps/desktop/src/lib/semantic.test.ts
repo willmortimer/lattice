@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   SEMANTIC_MODEL_CONFIRM,
+  semanticProviderLabel,
   semanticStatusLabel,
   type SemanticStatusState,
 } from "./semantic";
@@ -30,5 +31,28 @@ describe("semanticStatusLabel", () => {
     expect(SEMANTIC_MODEL_CONFIRM).toContain("~640 MB");
     expect(SEMANTIC_MODEL_CONFIRM).toContain("Apache-2.0");
     expect(SEMANTIC_MODEL_CONFIRM).toContain("never uploaded");
+  });
+});
+
+describe("semanticProviderLabel", () => {
+  it("formats provider · model · dimensions", () => {
+    expect(
+      semanticProviderLabel({
+        providerId: "llama.cpp",
+        modelId: "Qwen3-Embedding-0.6B",
+        dimensions: 512,
+      }),
+    ).toBe("llama.cpp · Qwen3-Embedding-0.6B · 512-d");
+  });
+
+  it("returns null when no identity fields", () => {
+    expect(semanticProviderLabel({})).toBeNull();
+    expect(
+      semanticProviderLabel({
+        providerId: null,
+        modelId: null,
+        dimensions: null,
+      }),
+    ).toBeNull();
   });
 });

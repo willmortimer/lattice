@@ -16,6 +16,9 @@ export type SemanticStatus = {
   pendingChunks: number | null;
   message: string | null;
   progressPercent?: number | null;
+  providerId?: string | null;
+  modelId?: string | null;
+  dimensions?: number | null;
 };
 
 export type SemanticUiEvent = {
@@ -24,6 +27,9 @@ export type SemanticUiEvent = {
   pendingChunks: number | null;
   message: string | null;
   progressPercent?: number | null;
+  providerId?: string | null;
+  modelId?: string | null;
+  dimensions?: number | null;
 };
 
 /** Confirm-dialog copy for first-time model download (~640 MB Apache-2.0 GGUF). */
@@ -96,4 +102,17 @@ export function semanticStatusLabel(
       return _exhaustive;
     }
   }
+}
+
+/** Compact provider line for Settings (e.g. "llama.cpp · Qwen3-Embedding-0.6B · 512-d"). */
+export function semanticProviderLabel(status: {
+  providerId?: string | null;
+  modelId?: string | null;
+  dimensions?: number | null;
+}): string | null {
+  const parts: string[] = [];
+  if (status.providerId) parts.push(status.providerId);
+  if (status.modelId) parts.push(status.modelId);
+  if (status.dimensions != null) parts.push(`${status.dimensions}-d`);
+  return parts.length > 0 ? parts.join(" · ") : null;
 }

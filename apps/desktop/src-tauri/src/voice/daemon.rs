@@ -2,9 +2,12 @@
 //!
 //! Native capture stays in the Tauri process; packed PCM is streamed via
 //! `PushAudioChunk`. Model ownership lives in latticed (ADR 0043).
+//!
+//! Connect/spawn is shared via [`crate::daemon_session`]. Voice may auto-enable
+//! `LATTICE_VOICE_FAKE` when discovering voice-host; the first spawner owns the
+//! child and sets `LATTICE_AUTH_TOKEN` so semantic can attach.
 
-use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -19,6 +22,8 @@ use lattice_protocol::{
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{oneshot, Mutex};
 
+use crate::daemon_session::{self, SpawnHostEnv, SpawnedDaemon};
+
 use super::capture::{ensure_capture, pump_capture_frames, stop_capture_and_rearm};
 use super::{
     VoiceInner, VoiceSessionContextHints, VoiceUiEvent, VOICE_EVENT,
@@ -26,12 +31,7 @@ use super::{
 
 /// Force daemon-only voice (no in-process FluidAudio fallback).
 pub const ENV_VOICE_DAEMON: &str = "LATTICE_VOICE_DAEMON";
-/// Unix socket path for an existing or to-be-spawned `latticed`.
-pub const ENV_SOCKET: &str = "LATTICE_SOCKET";
-/// Handshake / API auth token (`latticed --auth-token` / `LATTICE_AUTH_TOKEN`).
-pub const ENV_AUTH_TOKEN: &str = "LATTICE_AUTH_TOKEN";
-/// Optional path to the `latticed` binary for on-demand spawn.
-pub const ENV_LATTICED_BIN: &str = "LATTICE_LATTICED_BIN";
+pub use crate::daemon_session::{ENV_AUTH_TOKEN, ENV_SOCKET};
 
 const PREPARE_MODEL_ID: &str = "parakeet-unified-320ms";
 const FAKE_PREPARE_MODEL_ID: &str = "null-0.1";
@@ -39,6 +39,7 @@ const FAKE_PREPARE_MODEL_ID: &str = "null-0.1";
 pub(super) struct DaemonBackend {
     pub client: Arc<DaemonClient>,
     /// Keeps a desktop-spawned daemon alive for the app lifetime.
+    /// First spawner (voice or semantic) owns the child; the other attaches via socket.
     pub _child: Option<SpawnedDaemon>,
     pub prepared: bool,
     /// Whether the connected daemon is expected to run a fake voice-host.
@@ -58,19 +59,12 @@ pub(super) struct DaemonFinal {
     pub replaces_revision: u64,
 }
 
-pub(super) struct SpawnedDaemon {
-    child: Child,
-}
-
-impl Drop for SpawnedDaemon {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-    }
-}
-
 pub(super) fn daemon_required() -> bool {
     env_truthy(ENV_VOICE_DAEMON)
+}
+
+pub(super) fn socket_path() -> PathBuf {
+    daemon_session::socket_path()
 }
 
 fn env_truthy(name: &str) -> bool {
@@ -80,56 +74,6 @@ fn env_truthy(name: &str) -> bool {
     )
 }
 
-fn default_socket_path() -> PathBuf {
-    dirs::data_dir()
-        .unwrap_or_else(std::env::temp_dir)
-        .join("Lattice")
-        .join("run")
-        .join("latticed.sock")
-}
-
-pub(super) fn socket_path() -> PathBuf {
-    std::env::var_os(ENV_SOCKET)
-        .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(default_socket_path)
-}
-
-fn resolve_latticed_bin() -> Option<PathBuf> {
-    if let Ok(path) = std::env::var(ENV_LATTICED_BIN) {
-        let path = PathBuf::from(path);
-        if path.is_file() {
-            return Some(path);
-        }
-    }
-    if let Ok(path) = which_bin("latticed") {
-        return Some(path);
-    }
-    let candidates = [
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/debug/latticed"),
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/release/latticed"),
-        PathBuf::from("target/debug/latticed"),
-        PathBuf::from("target/release/latticed"),
-    ];
-    candidates.into_iter().find(|p| p.is_file())
-}
-
-fn which_bin(name: &str) -> std::io::Result<PathBuf> {
-    let path = std::env::var_os("PATH").ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::NotFound, "PATH not set")
-    })?;
-    for dir in std::env::split_paths(&path) {
-        let candidate = dir.join(name);
-        if candidate.is_file() {
-            return Ok(candidate);
-        }
-    }
-    Err(std::io::Error::new(
-        std::io::ErrorKind::NotFound,
-        format!("{name} not found on PATH"),
-    ))
-}
-
 fn resolve_voice_host_bin() -> Option<PathBuf> {
     if let Ok(path) = std::env::var("LATTICE_VOICE_HOST_BIN") {
         let path = PathBuf::from(path);
@@ -137,7 +81,7 @@ fn resolve_voice_host_bin() -> Option<PathBuf> {
             return Some(path);
         }
     }
-    if let Ok(path) = which_bin("lattice-voice-host") {
+    if let Ok(path) = daemon_session::which_bin("lattice-voice-host") {
         return Some(path);
     }
     let candidates = [
@@ -157,75 +101,13 @@ fn prepare_model_id(fake_host: bool) -> &'static str {
     }
 }
 
-/// Connect to an existing latticed, or spawn one (mirrors `lattice_daemon::spawn_latticed`).
-pub(super) async fn connect_or_spawn()
--> Result<(Arc<DaemonClient>, Option<SpawnedDaemon>, bool), String> {
-    let socket = socket_path();
-    let env_token = std::env::var(ENV_AUTH_TOKEN).ok().filter(|t| !t.is_empty());
-    let ambient_fake = env_truthy("LATTICE_VOICE_FAKE");
-
-    if socket.exists() {
-        let token = env_token.ok_or_else(|| {
-            format!(
-                "latticed socket exists at {} but {ENV_AUTH_TOKEN} is unset; \
-                 pass the daemon auth token or unset the stale socket",
-                socket.display()
-            )
-        })?;
-        let client = DaemonClient::connect(&socket, &token)
-            .await
-            .map_err(|err| format!("connect to latticed at {}: {err}", socket.display()))?;
-        return Ok((Arc::new(client), None, ambient_fake));
-    }
-
-    let binary = resolve_latticed_bin().ok_or_else(|| {
-        format!(
-            "latticed not running at {} and no binary found \
-             (set {ENV_LATTICED_BIN} or build `latticed`)",
-            socket.display()
-        )
-    })?;
-    let token = env_token.unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
-    let (child, spawned_fake) = spawn_latticed(&binary, &socket, &token)?;
-    wait_for_socket(&socket, Duration::from_secs(8))?;
-    let client = DaemonClient::connect(&socket, &token)
-        .await
-        .map_err(|err| {
-            format!(
-                "spawned latticed at {} but handshake failed: {err} \
-                 (ensure voice-host is available: build lattice-voice-host, or set \
-                 LATTICE_VOICE_FAKE=1 LATTICE_VOICE_HOST_BIN=…)",
-                socket.display()
-            )
-        })?;
-    Ok((
-        Arc::new(client),
-        Some(SpawnedDaemon { child }),
-        ambient_fake || spawned_fake,
-    ))
-}
-
-fn spawn_latticed(
-    binary: &Path,
-    socket: &Path,
-    auth_token: &str,
-) -> Result<(Child, bool), String> {
-    if let Some(parent) = socket.parent() {
-        std::fs::create_dir_all(parent).map_err(|err| err.to_string())?;
-    }
-    if socket.exists() {
-        let _ = std::fs::remove_file(socket);
-    }
-    // Mirrors apps/daemon/src/spawn.rs: private UDS, no HTTP API, keep-running for voice.
-    let mut command = Command::new(binary);
-    command
-        .arg("--socket")
-        .arg(socket)
-        .arg("--auth-token")
-        .arg(auth_token)
-        .arg("--api-port")
-        .arg("0")
-        .arg("--keep-services-running");
+/// Voice-host spawn env: may discover voice-host and auto-enable Fake.
+///
+/// Returns `(host_env, auto_fake)` where `auto_fake` is true when this call
+/// will inject `LATTICE_VOICE_FAKE=1` for a discovered host binary.
+fn voice_spawn_host_env() -> (SpawnHostEnv, bool) {
+    let mut extra_env = Vec::new();
+    let mut auto_fake = false;
 
     // Wire voice-host supervision when the parent did not already configure it.
     // Prefer an explicit fluidaudio host (`LATTICE_VOICE_HOST_BIN` without FAKE);
@@ -236,41 +118,47 @@ fn spawn_latticed(
     let host_socket_set = std::env::var_os("LATTICE_VOICE_HOST_SOCKET")
         .filter(|v| !v.is_empty())
         .is_some();
-    let mut auto_fake = false;
     if !host_bin_set && !host_socket_set {
         if let Some(host) = resolve_voice_host_bin() {
-            command.env("LATTICE_VOICE_HOST_BIN", &host);
+            extra_env.push((
+                "LATTICE_VOICE_HOST_BIN".to_string(),
+                host.to_string_lossy().into(),
+            ));
             // Safe default for auto-discovered host binaries (often built without
             // `--features fluidaudio`). Leave LATTICE_VOICE_FAKE alone when the
             // parent already set it (including empty / `0` for fluidaudio).
             if std::env::var_os("LATTICE_VOICE_FAKE").is_none() {
-                command.env("LATTICE_VOICE_FAKE", "1");
+                extra_env.push(("LATTICE_VOICE_FAKE".to_string(), "1".into()));
                 auto_fake = true;
             }
         }
     }
 
-    let child = command
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|err| format!("failed to spawn {}: {err}", binary.display()))?;
-    Ok((child, auto_fake))
+    (
+        SpawnHostEnv {
+            extra_env,
+            handshake_hint: Some(
+                "ensure voice-host is available: build lattice-voice-host, or set \
+                 LATTICE_VOICE_FAKE=1 LATTICE_VOICE_HOST_BIN=…",
+            ),
+        },
+        auto_fake,
+    )
 }
 
-fn wait_for_socket(socket: &Path, timeout: Duration) -> Result<(), String> {
-    let deadline = std::time::Instant::now() + timeout;
-    while std::time::Instant::now() < deadline {
-        if socket.exists() {
-            return Ok(());
-        }
-        std::thread::sleep(Duration::from_millis(25));
-    }
-    Err(format!(
-        "timed out waiting for latticed socket {}",
-        socket.display()
-    ))
+/// Connect to an existing latticed, or spawn one with voice-host env.
+///
+/// The third tuple element is whether the daemon is expected to run a fake
+/// voice-host (`LATTICE_VOICE_FAKE` already set, or auto-enabled on spawn).
+pub(super) async fn connect_or_spawn()
+-> Result<(Arc<DaemonClient>, Option<SpawnedDaemon>, bool), String> {
+    let ambient_fake = env_truthy("LATTICE_VOICE_FAKE");
+    let (host_env, auto_fake) = voice_spawn_host_env();
+    // auto_fake only applies when we actually spawn; connecting to an existing
+    // socket ignores spawn env. Detect spawn vs connect via child Option.
+    let (client, child) = daemon_session::connect_or_spawn(host_env).await?;
+    let fake_host = ambient_fake || (child.is_some() && auto_fake);
+    Ok((client, child, fake_host))
 }
 
 pub(super) async fn prepare(
