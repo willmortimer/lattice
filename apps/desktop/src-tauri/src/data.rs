@@ -3,9 +3,10 @@ use std::path::{Path, PathBuf};
 
 use lattice_commands::{ColumnSpec, Command as SemanticCommand, CommandEngine, Transaction};
 use lattice_data::{
-    cell_from_csv, parse_csv_file, parse_field_type_name, resolve_field_types, CellValue,
-    ColumnMeta, CsvTable, DataApp, FieldType, FilterOperator, Row, SortDirection, ViewDef,
-    ViewFilter, ViewSort, LAYOUT_BOARD, LAYOUT_CALENDAR, LAYOUT_GALLERY, SUPPORTED_LAYOUT_TYPES,
+    cell_from_csv, parse_csv_file, parse_field_type_name, parse_tabular_file, resolve_field_types,
+    tabular_format, tabular_format_label, CellValue, ColumnMeta, DataApp, FieldType, FilterOperator,
+    Row, SortDirection, TabularTable, ViewDef, ViewFilter, ViewSort, LAYOUT_BOARD, LAYOUT_CALENDAR,
+    LAYOUT_GALLERY, SUPPORTED_LAYOUT_TYPES,
 };
 use serde::{Deserialize, Serialize};
 
@@ -463,7 +464,7 @@ pub fn save_data_view(
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CsvColumnPreviewDto {
+pub struct TabularColumnPreviewDto {
     pub name: String,
     pub field_type: String,
     pub sample_values: Vec<String>,
@@ -471,30 +472,43 @@ pub struct CsvColumnPreviewDto {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CsvImportPreviewDto {
-    pub columns: Vec<CsvColumnPreviewDto>,
+pub struct TabularImportPreviewDto {
+    pub format: String,
+    pub columns: Vec<TabularColumnPreviewDto>,
     pub row_count: usize,
     pub sample_rows: Vec<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CsvColumnTypeDto {
+pub struct TabularColumnTypeDto {
     pub name: String,
     pub field_type: String,
 }
 
+pub type CsvColumnPreviewDto = TabularColumnPreviewDto;
+pub type CsvImportPreviewDto = TabularImportPreviewDto;
+pub type CsvColumnTypeDto = TabularColumnTypeDto;
+
 const CSV_PREVIEW_SAMPLE_ROWS: usize = 5;
 const CSV_PREVIEW_SAMPLE_VALUES: usize = 3;
+
+/// Parse a tabular import file and return inferred column types without writing.
+#[tauri::command]
+pub fn preview_tabular_import(source_path: String) -> Result<TabularImportPreviewDto, String> {
+    let path = Path::new(&source_path);
+    let parsed = parse_tabular_file(path).map_err(|err| err.to_string())?;
+    Ok(tabular_import_preview_from_table(path, &parsed))
+}
 
 /// Parse a CSV file and return inferred column types without writing.
 #[tauri::command]
 pub fn preview_csv_import(csv_path: String) -> Result<CsvImportPreviewDto, String> {
-    let parsed = parse_csv_file(Path::new(&csv_path)).map_err(|err| err.to_string())?;
-    Ok(csv_import_preview_from_table(&parsed))
+    preview_tabular_import(csv_path)
 }
 
-fn csv_import_preview_from_table(parsed: &CsvTable) -> CsvImportPreviewDto {
+fn tabular_import_preview_from_table(path: &Path, parsed: &TabularTable) -> TabularImportPreviewDto {
+    let format = tabular_format_label(tabular_format(path)).to_string();
     let columns = parsed
         .headers
         .iter()
@@ -511,7 +525,7 @@ fn csv_import_preview_from_table(parsed: &CsvTable) -> CsvImportPreviewDto {
                     sample_values.push(cell.to_string());
                 }
             }
-            CsvColumnPreviewDto {
+            TabularColumnPreviewDto {
                 name: header.clone(),
                 field_type: field_type.to_string(),
                 sample_values,
@@ -524,7 +538,8 @@ fn csv_import_preview_from_table(parsed: &CsvTable) -> CsvImportPreviewDto {
         .take(CSV_PREVIEW_SAMPLE_ROWS)
         .cloned()
         .collect();
-    CsvImportPreviewDto {
+    TabularImportPreviewDto {
+        format,
         columns,
         row_count: parsed.rows.len(),
         sample_rows,
@@ -534,7 +549,7 @@ fn csv_import_preview_from_table(parsed: &CsvTable) -> CsvImportPreviewDto {
 fn field_types_from_column_dtos(
     headers: &[String],
     inferred: &[FieldType],
-    columns: &[CsvColumnTypeDto],
+    columns: &[TabularColumnTypeDto],
 ) -> Result<Vec<FieldType>, String> {
     let overrides = columns
         .iter()
@@ -548,19 +563,20 @@ fn field_types_from_column_dtos(
         .collect::<BTreeMap<_, _>>();
     for name in overrides.keys() {
         if !headers.iter().any(|header| header == name) {
-            return Err(format!("unknown CSV column {name:?}"));
+            return Err(format!("unknown import column {name:?}"));
         }
     }
     Ok(resolve_field_types(headers, inferred, &overrides))
 }
 
-fn commit_csv_import_inner(
+fn commit_tabular_import_inner(
     root: &str,
-    parsed: &CsvTable,
+    parsed: &TabularTable,
     field_types: &[FieldType],
     package_name: &str,
     title: &str,
     table: &str,
+    source_label: &str,
 ) -> Result<(String, DataAppSnapshot), String> {
     let rel_path = package_rel_path(package_name);
     validate_rel_path(&rel_path)?;
@@ -569,7 +585,7 @@ fn commit_csv_import_inner(
 
     engine
         .apply(Transaction::new(
-            format!("Create table package {rel_path} from CSV"),
+            format!("Create table package {rel_path} from {source_label}"),
             vec![SemanticCommand::TableCreate {
                 path: rel_path_buf(&rel_path),
                 title: title.to_string(),
@@ -589,7 +605,7 @@ fn commit_csv_import_inner(
         .collect();
     engine
         .apply(Transaction::new(
-            format!("Add CSV columns to {rel_path}.{table}"),
+            format!("Add {source_label} columns to {rel_path}.{table}"),
             vec![SemanticCommand::ColumnsAdd {
                 path: rel_path_buf(&rel_path),
                 table: table.to_string(),
@@ -629,6 +645,37 @@ fn commit_csv_import_inner(
     Ok((rel_path, snapshot_from_app(&app, None, ROW_LIMIT, 0)?))
 }
 
+/// Import a tabular file into a new `.data` package using explicit column types.
+#[tauri::command]
+pub fn commit_tabular_import(
+    root: String,
+    source_path: String,
+    package_name: String,
+    columns: Vec<TabularColumnTypeDto>,
+    title: Option<String>,
+    table_name: Option<String>,
+) -> Result<(String, DataAppSnapshot), String> {
+    let path = Path::new(&source_path);
+    let parsed = parse_tabular_file(path).map_err(|err| err.to_string())?;
+    let field_types = field_types_from_column_dtos(
+        &parsed.headers,
+        &parsed.field_types,
+        &columns,
+    )?;
+    let table = table_name.unwrap_or_else(|| "records".to_string());
+    let title = title.unwrap_or_else(|| package_name.trim().replace(".data", ""));
+    let source_label = tabular_format_label(tabular_format(path));
+    commit_tabular_import_inner(
+        &root,
+        &parsed,
+        &field_types,
+        &package_name,
+        &title,
+        &table,
+        source_label,
+    )
+}
+
 /// Import a CSV file into a new `.data` package using explicit column types.
 #[tauri::command]
 pub fn commit_csv_import(
@@ -639,21 +686,13 @@ pub fn commit_csv_import(
     title: Option<String>,
     table_name: Option<String>,
 ) -> Result<(String, DataAppSnapshot), String> {
-    let parsed = parse_csv_file(Path::new(&csv_path)).map_err(|err| err.to_string())?;
-    let field_types = field_types_from_column_dtos(
-        &parsed.headers,
-        &parsed.field_types,
-        &columns,
-    )?;
-    let table = table_name.unwrap_or_else(|| "records".to_string());
-    let title = title.unwrap_or_else(|| package_name.trim().replace(".data", ""));
-    commit_csv_import_inner(
-        &root,
-        &parsed,
-        &field_types,
-        &package_name,
-        &title,
-        &table,
+    commit_tabular_import(
+        root,
+        csv_path,
+        package_name,
+        columns,
+        title,
+        table_name,
     )
 }
 
@@ -669,13 +708,14 @@ pub fn import_csv_table(
     let parsed = parse_csv_file(Path::new(&csv_path)).map_err(|err| err.to_string())?;
     let table = table_name.unwrap_or_else(|| "records".to_string());
     let title = title.unwrap_or_else(|| package_name.trim().replace(".data", ""));
-    commit_csv_import_inner(
+    commit_tabular_import_inner(
         &root,
         &parsed,
         &parsed.field_types,
         &package_name,
         &title,
         &table,
+        "CSV",
     )
 }
 
@@ -1389,6 +1429,67 @@ mod tests {
         assert_eq!(preview.columns[1].field_type, "boolean");
         assert_eq!(preview.columns[2].field_type, "integer");
         assert_eq!(preview.sample_rows.len(), 2);
+    }
+
+    #[test]
+    fn commit_tabular_import_honors_column_type_overrides_for_json() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let json_path = dir.path().join("amounts.json");
+        std::fs::write(
+            &json_path,
+            r#"[{"label":"Widget","amount":10},{"label":"Gadget","amount":20}]"#,
+        )
+        .unwrap();
+
+        let (_, snapshot) = commit_tabular_import(
+            root.clone(),
+            json_path.to_string_lossy().into_owned(),
+            "Sales".to_string(),
+            vec![
+                TabularColumnTypeDto {
+                    name: "label".to_string(),
+                    field_type: "text".to_string(),
+                },
+                TabularColumnTypeDto {
+                    name: "amount".to_string(),
+                    field_type: "decimal".to_string(),
+                },
+            ],
+            Some("Sales".to_string()),
+            Some("records".to_string()),
+        )
+        .unwrap();
+
+        let amount_column = snapshot
+            .columns
+            .iter()
+            .find(|column| column.name == "amount")
+            .expect("amount column");
+        assert_eq!(amount_column.field_type, "decimal");
+        assert_eq!(amount_column.sqlite_type, "REAL");
+        assert_eq!(snapshot.rows.len(), 2);
+        assert_eq!(
+            snapshot.rows[0].values.get("amount"),
+            Some(&CellValue::Decimal(10.0))
+        );
+    }
+
+    #[test]
+    fn preview_tabular_import_returns_format_for_json() {
+        let dir = init_workspace();
+        let json_path = dir.path().join("people.json");
+        std::fs::write(
+            &json_path,
+            r#"[{"name":"Ada","active":true,"count":1},{"name":"Grace","active":false,"count":2}]"#,
+        )
+        .unwrap();
+
+        let preview =
+            preview_tabular_import(json_path.to_string_lossy().into_owned()).unwrap();
+        assert_eq!(preview.format, "JSON");
+        assert_eq!(preview.row_count, 2);
+        assert_eq!(preview.columns.len(), 3);
     }
 
     #[test]
