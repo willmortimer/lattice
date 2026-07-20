@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 
 use lattice_commands::{Command as SemanticCommand, CommandEngine, Transaction};
 use lattice_data::{
-    parse_csv_file, CellValue, ColumnMeta, DataApp, FilterOperator, Row, SortDirection,
-    ViewDef, ViewFilter, ViewSort, LAYOUT_BOARD, LAYOUT_CALENDAR, LAYOUT_GALLERY,
-    SUPPORTED_LAYOUT_TYPES,
+    cell_from_csv, parse_csv_file, parse_field_type_name, resolve_field_types, CellValue,
+    ColumnMeta, CsvTable, DataApp, FieldType, FilterOperator, Row, SortDirection, ViewDef,
+    ViewFilter, ViewSort, LAYOUT_BOARD, LAYOUT_CALENDAR, LAYOUT_GALLERY, SUPPORTED_LAYOUT_TYPES,
 };
 use serde::{Deserialize, Serialize};
 
@@ -398,22 +398,110 @@ pub fn save_data_view(
     snapshot_from_app(&app, Some(&view_name), ROW_LIMIT, 0)
 }
 
-/// Import a CSV file into a new `.data` package and return its snapshot.
-#[tauri::command]
-pub fn import_csv_table(
-    root: String,
-    csv_path: String,
-    package_name: String,
-    title: Option<String>,
-    table_name: Option<String>,
-) -> Result<(String, DataAppSnapshot), String> {
-    let parsed = parse_csv_file(Path::new(&csv_path)).map_err(|err| err.to_string())?;
-    let rel_path = package_rel_path(&package_name);
-    let table = table_name.unwrap_or_else(|| "records".to_string());
-    let title = title.unwrap_or_else(|| package_name.trim().replace(".data", ""));
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CsvColumnPreviewDto {
+    pub name: String,
+    pub field_type: String,
+    pub sample_values: Vec<String>,
+}
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CsvImportPreviewDto {
+    pub columns: Vec<CsvColumnPreviewDto>,
+    pub row_count: usize,
+    pub sample_rows: Vec<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CsvColumnTypeDto {
+    pub name: String,
+    pub field_type: String,
+}
+
+const CSV_PREVIEW_SAMPLE_ROWS: usize = 5;
+const CSV_PREVIEW_SAMPLE_VALUES: usize = 3;
+
+/// Parse a CSV file and return inferred column types without writing.
+#[tauri::command]
+pub fn preview_csv_import(csv_path: String) -> Result<CsvImportPreviewDto, String> {
+    let parsed = parse_csv_file(Path::new(&csv_path)).map_err(|err| err.to_string())?;
+    Ok(csv_import_preview_from_table(&parsed))
+}
+
+fn csv_import_preview_from_table(parsed: &CsvTable) -> CsvImportPreviewDto {
+    let columns = parsed
+        .headers
+        .iter()
+        .zip(&parsed.field_types)
+        .enumerate()
+        .map(|(index, (header, field_type))| {
+            let mut sample_values = Vec::new();
+            for row in &parsed.rows {
+                if sample_values.len() >= CSV_PREVIEW_SAMPLE_VALUES {
+                    break;
+                }
+                let cell = row.get(index).map(|value| value.trim()).unwrap_or("");
+                if !cell.is_empty() {
+                    sample_values.push(cell.to_string());
+                }
+            }
+            CsvColumnPreviewDto {
+                name: header.clone(),
+                field_type: field_type.to_string(),
+                sample_values,
+            }
+        })
+        .collect();
+    let sample_rows = parsed
+        .rows
+        .iter()
+        .take(CSV_PREVIEW_SAMPLE_ROWS)
+        .cloned()
+        .collect();
+    CsvImportPreviewDto {
+        columns,
+        row_count: parsed.rows.len(),
+        sample_rows,
+    }
+}
+
+fn field_types_from_column_dtos(
+    headers: &[String],
+    inferred: &[FieldType],
+    columns: &[CsvColumnTypeDto],
+) -> Result<Vec<FieldType>, String> {
+    let overrides = columns
+        .iter()
+        .map(|column| {
+            parse_field_type_name(&column.field_type)
+                .map(|field_type| (column.name.clone(), field_type))
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|err| err.to_string())?
+        .into_iter()
+        .collect::<BTreeMap<_, _>>();
+    for name in overrides.keys() {
+        if !headers.iter().any(|header| header == name) {
+            return Err(format!("unknown CSV column {name:?}"));
+        }
+    }
+    Ok(resolve_field_types(headers, inferred, &overrides))
+}
+
+fn commit_csv_import_inner(
+    root: &str,
+    parsed: &CsvTable,
+    field_types: &[FieldType],
+    package_name: &str,
+    title: &str,
+    table: &str,
+) -> Result<(String, DataAppSnapshot), String> {
+    let rel_path = package_rel_path(package_name);
     validate_rel_path(&rel_path)?;
-    let canonical_root = canonical_workspace_root(&root)?;
+    let canonical_root = canonical_workspace_root(root)?;
     let mut engine = CommandEngine::open(&canonical_root).map_err(command_error_to_string)?;
 
     engine
@@ -421,19 +509,19 @@ pub fn import_csv_table(
             format!("Create table package {rel_path} from CSV"),
             vec![SemanticCommand::TableCreate {
                 path: rel_path_buf(&rel_path),
-                title: title.clone(),
-                table_name: table.clone(),
+                title: title.to_string(),
+                table_name: table.to_string(),
             }],
         ))
         .map_err(command_error_to_string)?;
 
-    let base_revision = open_app_at(&root, &rel_path)?
+    let base_revision = open_app_at(root, &rel_path)?
         .package_revision()
         .map_err(|err| err.to_string())?;
     let columns = parsed
         .headers
         .iter()
-        .zip(&parsed.field_types)
+        .zip(field_types)
         .map(|(header, field_type)| lattice_commands::ColumnSpec::new(header.clone(), *field_type))
         .collect();
     engine
@@ -441,7 +529,7 @@ pub fn import_csv_table(
             format!("Add CSV columns to {rel_path}.{table}"),
             vec![SemanticCommand::ColumnsAdd {
                 path: rel_path_buf(&rel_path),
-                table: table.clone(),
+                table: table.to_string(),
                 columns,
                 base_revision,
             }],
@@ -453,12 +541,12 @@ pub fn import_csv_table(
         for ((header, field_type), cell) in parsed
             .headers
             .iter()
-            .zip(&parsed.field_types)
+            .zip(field_types)
             .zip(row.iter())
         {
             values.insert(
                 header.clone(),
-                lattice_data::cell_from_csv(cell, *field_type).map_err(|err| err.to_string())?,
+                cell_from_csv(cell, *field_type).map_err(|err| err.to_string())?,
             );
         }
         engine
@@ -466,7 +554,7 @@ pub fn import_csv_table(
                 format!("Import row into {rel_path}.{table}"),
                 vec![SemanticCommand::RecordInsert {
                     path: rel_path_buf(&rel_path),
-                    table: table.clone(),
+                    table: table.to_string(),
                     values,
                     id: None,
                 }],
@@ -474,8 +562,58 @@ pub fn import_csv_table(
             .map_err(command_error_to_string)?;
     }
 
-    let app = open_app_at(&root, &rel_path)?;
+    let app = open_app_at(root, &rel_path)?;
     Ok((rel_path, snapshot_from_app(&app, None, ROW_LIMIT, 0)?))
+}
+
+/// Import a CSV file into a new `.data` package using explicit column types.
+#[tauri::command]
+pub fn commit_csv_import(
+    root: String,
+    csv_path: String,
+    package_name: String,
+    columns: Vec<CsvColumnTypeDto>,
+    title: Option<String>,
+    table_name: Option<String>,
+) -> Result<(String, DataAppSnapshot), String> {
+    let parsed = parse_csv_file(Path::new(&csv_path)).map_err(|err| err.to_string())?;
+    let field_types = field_types_from_column_dtos(
+        &parsed.headers,
+        &parsed.field_types,
+        &columns,
+    )?;
+    let table = table_name.unwrap_or_else(|| "records".to_string());
+    let title = title.unwrap_or_else(|| package_name.trim().replace(".data", ""));
+    commit_csv_import_inner(
+        &root,
+        &parsed,
+        &field_types,
+        &package_name,
+        &title,
+        &table,
+    )
+}
+
+/// Import a CSV file into a new `.data` package and return its snapshot.
+#[tauri::command]
+pub fn import_csv_table(
+    root: String,
+    csv_path: String,
+    package_name: String,
+    title: Option<String>,
+    table_name: Option<String>,
+) -> Result<(String, DataAppSnapshot), String> {
+    let parsed = parse_csv_file(Path::new(&csv_path)).map_err(|err| err.to_string())?;
+    let table = table_name.unwrap_or_else(|| "records".to_string());
+    let title = title.unwrap_or_else(|| package_name.trim().replace(".data", ""));
+    commit_csv_import_inner(
+        &root,
+        &parsed,
+        &parsed.field_types,
+        &package_name,
+        &title,
+        &table,
+    )
 }
 
 fn package_rel_path(name: &str) -> String {
@@ -1052,6 +1190,66 @@ mod tests {
         assert_eq!(
             snapshot.rows[0].values.get("email"),
             Some(&CellValue::Text("ada@example.com".into()))
+        );
+    }
+
+    #[test]
+    fn preview_csv_import_returns_inferred_columns_and_samples() {
+        let dir = init_workspace();
+        let csv_path = dir.path().join("people.csv");
+        std::fs::write(
+            &csv_path,
+            "name,active,count\nAda,true,1\nGrace,false,2\n",
+        )
+        .unwrap();
+
+        let preview = preview_csv_import(csv_path.to_string_lossy().into_owned()).unwrap();
+        assert_eq!(preview.row_count, 2);
+        assert_eq!(preview.columns.len(), 3);
+        assert_eq!(preview.columns[0].name, "name");
+        assert_eq!(preview.columns[0].field_type, "text");
+        assert_eq!(preview.columns[1].field_type, "boolean");
+        assert_eq!(preview.columns[2].field_type, "integer");
+        assert_eq!(preview.sample_rows.len(), 2);
+    }
+
+    #[test]
+    fn commit_csv_import_honors_column_type_overrides() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let csv_path = dir.path().join("amounts.csv");
+        std::fs::write(&csv_path, "label,amount\nWidget,10\nGadget,20\n").unwrap();
+
+        let (_, snapshot) = commit_csv_import(
+            root.clone(),
+            csv_path.to_string_lossy().into_owned(),
+            "Sales".to_string(),
+            vec![
+                CsvColumnTypeDto {
+                    name: "label".to_string(),
+                    field_type: "text".to_string(),
+                },
+                CsvColumnTypeDto {
+                    name: "amount".to_string(),
+                    field_type: "decimal".to_string(),
+                },
+            ],
+            Some("Sales".to_string()),
+            Some("records".to_string()),
+        )
+        .unwrap();
+
+        let amount_column = snapshot
+            .columns
+            .iter()
+            .find(|column| column.name == "amount")
+            .expect("amount column");
+        assert_eq!(amount_column.field_type, "decimal");
+        assert_eq!(amount_column.sqlite_type, "REAL");
+        assert_eq!(snapshot.rows.len(), 2);
+        assert_eq!(
+            snapshot.rows[0].values.get("amount"),
+            Some(&CellValue::Decimal(10.0))
         );
     }
 

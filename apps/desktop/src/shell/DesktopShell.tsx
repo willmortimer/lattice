@@ -1,5 +1,6 @@
 import { inBrowser } from "../demo";
 import { demoSearch } from "../demo";
+import { CsvImportReviewDialog } from "../data/CsvImportReviewDialog";
 import { LinkRepairReviewModal } from "../LinkRepairReviewModal";
 import { batchWarnThresholdExceeded } from "../lib/linkRepair";
 import { NewWorkspaceDialog } from "../NewWorkspaceDialog";
@@ -55,7 +56,9 @@ export function DesktopShell({ model }: DesktopShellProps) {
     profile, profileReady, settings, startup, snapshot, selected, selectedPaths, session, error, busy, saveState,
     externalConflict, reloadToken, newWorkspaceOpen, workspacesDir, templates, statusToast,
     profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth,
-    treeCollapsedPaths, revealPath, linkPicker, linkRepairReview, handleLinkRepairAccept, handleLinkRepairDefer,
+    treeCollapsedPaths, revealPath, linkPicker, csvImportReview,
+    handleCancelCsvImport, handleConfirmCsvImport, handleCsvImportColumnTypeChange,
+    linkRepairReview, handleLinkRepairAccept, handleLinkRepairDefer,
     openTabs, navigation, inspectorOpen, editingTitle, titleDraft, assetRoot,
     wikiTargets, pageEditorRef, paletteItems, hasCapability, setSettings, setStartup, setError,
     recents, page, setSaveState, setLinkPicker, handleImportEditorAsset,
@@ -715,6 +718,15 @@ export function DesktopShell({ model }: DesktopShellProps) {
             </DialogPopup>
           </DialogPortal>
         </DialogRoot>
+      )}
+      {csvImportReview && (
+        <CsvImportReviewDialog
+          review={csvImportReview}
+          busy={busy}
+          onCancel={handleCancelCsvImport}
+          onConfirm={() => void handleConfirmCsvImport()}
+          onColumnTypeChange={handleCsvImportColumnTypeChange}
+        />
       )}
       <NewWorkspaceDialog
         open={newWorkspaceOpen}
