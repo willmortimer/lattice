@@ -890,6 +890,10 @@ export const GENERATED_TEMPLATE_CATALOG = [
         "purpose": "Tabular seeds and imported tables."
       },
       {
+        "path": "Dashboards",
+        "purpose": "Interactive summaries and charts."
+      },
+      {
         "path": "Resources",
         "purpose": "Ordinary files — JSON, YAML, code, SQL, images."
       },
@@ -906,6 +910,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "CRM.data",
       "Projects/Delivery.data",
       "Data/Metrics.data",
+      "Data/Events.dataset",
+      "Dashboards/Signups by region.vl.json",
       "OKRs.data",
       "Canvases/Product Strategy.canvas",
       "Inbox/Sample capture.md",

@@ -1,0 +1,6 @@
+format: lattice-dataset
+version: 1
+id: demo-events-dataset
+title: Events
+description: Sample analytical facts for Vega-Lite chart demos.
+partitions: []

@@ -223,7 +223,9 @@ export function deriveResourceFormatId(resource: Resource): string {
   if (extension === "pdf") return "file:pdf";
   if (["txt", "md", "markdown", "log", "csv", "tsv"].includes(extension)) return "file:text";
   if (CODE_EXTENSIONS.has(extension)) return "file:code";
-  if (extension === "json") return "file:json";
+  if (extension === "json") {
+    return resource.path.toLowerCase().endsWith(".vl.json") ? "file:vega-lite" : "file:json";
+  }
   if (["yaml", "yml"].includes(extension)) return "file:yaml";
   return "file:unknown";
 }
