@@ -1,5 +1,19 @@
 # Visualization, BI, and Presentation
 
+## Phase 3 vertical slice (shipped)
+
+Wave 3 lands two analytical viewers on `.dataset/` resources, not a Tableau/Power
+BI replacement:
+
+| Surface | Stack | Scope |
+| --- | --- | --- |
+| **Preview** tab | Perspective (`@finos/perspective` + datagrid plugin) | Arrow IPC grid, grouping/pivoting within Perspective; WASM fallback to schema dump |
+| **Chart** tab | Vega-Lite (`vega-lite`, `vega`, `vega-embed`) | Saved `.vl.json` resources and auto bar chart from Preview data; bounded Arrow batches |
+
+Mutable `.data` apps keep **Glide** for the operational grid. Cross-filtering,
+semantic models, drill hierarchies, presentation bookmarks, and dashboard
+composition below remain aspirational.
+
 ## Goals
 
 Lattice should learn from Tableau and Power BI without cloning their proprietary semantic languages or centralized service model.
@@ -7,6 +21,10 @@ Lattice should learn from Tableau and Power BI without cloning their proprietary
 Airtable supports operational workflows. BI systems support modeling, interrogation, storytelling, and presentation. Lattice should connect both to documents, notebooks, remote data, and open canvases.
 
 ## Semantic model
+
+**Not shipped in Wave 3.** `semantic-model.yaml` in `.dataset/` layout is
+documented for future use; measures, relationships, and live/import modes land
+in Phase 6.
 
 A semantic model is a readable resource defining:
 
@@ -111,6 +129,11 @@ Preferred canonical saved-chart format because it is declarative, readable, port
 Revenue by Month.vl.json
 ```
 
+**Shipped:** desktop **Chart** tab and standalone `.vl.json` resources bind to
+dataset queries through bounded Arrow IPC. Demo workspace includes
+`Dashboards/Signups by region.vl.json`. No visual shelf editor, cross-filter
+publish/subscribe, or dashboard layout composer yet.
+
 ### Vega
 
 Lower-level declarative grammar and Canvas/SVG rendering.
@@ -122,6 +145,11 @@ High-performance interactive dashboards, large-series charts, financial charts, 
 ### Perspective
 
 Analytical grids, grouping, pivoting, streaming, and Arrow-native dashboards.
+
+**Shipped:** `.dataset` **Preview** tab loads Perspective from `query_dataset_arrow`
+IPC bytes. If WASM init fails, the surface falls back to schema/sample JSON with
+an error note. Full Perspective dashboards and streaming refresh policies are not
+wired.
 
 ### Plotly
 
