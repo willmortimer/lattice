@@ -74,6 +74,14 @@ pub fn which_bin(name: &str) -> std::io::Result<PathBuf> {
     ))
 }
 
+/// Sibling of the running executable (e.g. `Lattice.app/Contents/MacOS/latticed`).
+pub fn current_exe_sibling(name: &str) -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?;
+    let candidate = dir.join(name);
+    candidate.is_file().then_some(candidate)
+}
+
 pub fn resolve_latticed_bin() -> Option<PathBuf> {
     if let Ok(path) = std::env::var(ENV_LATTICED_BIN) {
         let path = PathBuf::from(path);
@@ -82,6 +90,10 @@ pub fn resolve_latticed_bin() -> Option<PathBuf> {
         }
     }
     if let Ok(path) = which_bin("latticed") {
+        return Some(path);
+    }
+    // Finder-launched .app: helpers live beside lattice-desktop in Contents/MacOS.
+    if let Some(path) = current_exe_sibling("latticed") {
         return Some(path);
     }
     let candidates = [

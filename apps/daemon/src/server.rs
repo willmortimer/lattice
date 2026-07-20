@@ -402,7 +402,7 @@ async fn handle_request(
             query,
             limit,
             mode,
-        })) => handle_search(state, workspace_id, query, limit, mode),
+        })) => handle_search(state, workspace_id, query, limit, mode).await,
         Some(request::Body::ApplyPageUpdate(ApplyPageUpdateRequest {
             workspace_id,
             path,
@@ -469,24 +469,87 @@ fn handle_enable_semantic(
         message: "semantic controller is not configured".into(),
         details: None,
     })?;
-    let status = semantic
-        .enable_workspace(&workspace_id)
-        .map_err(|message| WireError {
-            code: "semantic_enable_failed".into(),
-            message,
+    let session = state
+        .runtime
+        .get_session_by_id(&workspace_id)
+        .ok_or_else(|| WireError {
+            code: "workspace_not_found".into(),
+            message: format!("workspace session not found for id {workspace_id}"),
             details: None,
         })?;
+
+    // Return immediately so the UI can show live downloading → preparing →
+    // indexing → ready transitions via SemanticStatusChanged + GetSemanticStatus.
+    let early = SemanticStatus::downloading(0);
+    session.set_semantic_prepare_status(Some(early.clone()));
     state.publish_event(
-        workspace_id,
+        workspace_id.clone(),
         event::Body::SemanticStatus(lattice_protocol::SemanticStatusChanged {
-            status: Some(semantic_status_to_wire(&status, Some(semantic))),
+            status: Some(semantic_status_to_wire(&early, Some(semantic))),
         }),
     );
+
+    let state_bg = state.clone();
+    let semantic_bg = Arc::clone(semantic);
+    let workspace_bg = workspace_id.clone();
+    std::thread::Builder::new()
+        .name("latticed-semantic-enable".into())
+        .spawn(move || {
+            let mut last_wire: Option<String> = None;
+            let status = match semantic_bg.enable_workspace_with_progress(
+                &workspace_bg,
+                &mut |progress| {
+                    let wire = semantic_status_to_wire(progress, Some(semantic_bg.as_ref()));
+                    let fingerprint = format!(
+                        "{}:{}:{:?}",
+                        wire.state,
+                        wire.progress_percent.unwrap_or_default(),
+                        wire.message
+                    );
+                    if last_wire.as_ref() == Some(&fingerprint) {
+                        return;
+                    }
+                    last_wire = Some(fingerprint);
+                    state_bg.publish_event(
+                        workspace_bg.clone(),
+                        event::Body::SemanticStatus(lattice_protocol::SemanticStatusChanged {
+                            status: Some(wire),
+                        }),
+                    );
+                },
+            ) {
+                Ok(status) => status,
+                Err(message) => {
+                    let failed = SemanticStatus {
+                        state: lattice_runtime::SemanticStatusState::Failed,
+                        pending_chunks: None,
+                        message: Some(message),
+                        progress_percent: None,
+                    };
+                    if let Some(session) = state_bg.runtime.get_session_by_id(&workspace_bg) {
+                        session.set_semantic_prepare_status(Some(failed.clone()));
+                    }
+                    failed
+                }
+            };
+            state_bg.publish_event(
+                workspace_bg,
+                event::Body::SemanticStatus(lattice_protocol::SemanticStatusChanged {
+                    status: Some(semantic_status_to_wire(&status, Some(semantic_bg.as_ref()))),
+                }),
+            );
+        })
+        .map_err(|err| WireError {
+            code: "semantic_enable_failed".into(),
+            message: format!("failed to spawn semantic enable job: {err}"),
+            details: None,
+        })?;
+
     Ok((
         Response {
             body: Some(response::Body::EnableSemanticSearch(
                 EnableSemanticSearchResponse {
-                    status: Some(semantic_status_to_wire(&status, Some(semantic))),
+                    status: Some(semantic_status_to_wire(&early, Some(semantic))),
                 },
             )),
         },
@@ -595,7 +658,7 @@ fn handle_open_workspace(
     ))
 }
 
-fn handle_search(
+async fn handle_search(
     state: &DaemonState,
     workspace_id: String,
     query: String,
@@ -612,12 +675,13 @@ fn handle_search(
             details: None,
         })?;
     let limit = clamp_search_limit(limit);
-    let hits = lattice_handlers::search_workspace_ui_with_session(
+    let hits = lattice_handlers::search_workspace_ui_with_session_async(
         &session,
         &query,
         limit,
         mode.as_deref(),
     )
+    .await
     .map_err(|message| WireError {
         code: "search_failed".into(),
         message,

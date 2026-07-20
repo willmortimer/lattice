@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use lattice_handlers::{get_backlinks_with_session, read_page, search_workspace_with_session};
-use lattice_index::{ExportPolicy, HybridSearchHit, Sensitivity};
+use lattice_index::{parse_page, ExportPolicy, HybridSearchHit, Sensitivity};
 use lattice_runtime::{hybrid_search_with_session_semantic, LatticeRuntime, WorkspaceSession};
 use serde::{Deserialize, Serialize};
 
@@ -160,22 +160,32 @@ pub fn api_search(runtime: &LatticeRuntime, params: SearchParams) -> Result<Sear
         "fts" => {
             let raw = search_workspace_with_session(&session, &params.query, limit)
                 .map_err(ApiError::Internal)?;
-            raw.into_iter()
-                .map(|hit| SearchHitDto {
-                    path: path_string(&hit.path),
+            let mut hits = Vec::new();
+            for hit in raw {
+                let path = path_string(&hit.path);
+                let (sensitivity, export_policy) =
+                    policy_for_session_path(&session, &path).map_err(ApiError::Internal)?;
+                if sensitivity == Sensitivity::Secret {
+                    continue;
+                }
+                let (excerpt, redacted) =
+                    redact_excerpt_for_export(hit.snippet.as_deref().unwrap_or(""), sensitivity, export_policy);
+                hits.push(SearchHitDto {
+                    path,
                     title: hit.title,
-                    excerpt: hit.snippet,
+                    excerpt,
                     score: hit.rank,
                     chunk_id: None,
                     heading_path: Vec::new(),
                     source_start_byte: None,
                     source_end_byte: None,
-                    sensitivity: Sensitivity::Workspace.as_str().to_string(),
-                    export_policy: ExportPolicy::Ask.as_str().to_string(),
+                    sensitivity: sensitivity.as_str().to_string(),
+                    export_policy: export_policy.as_str().to_string(),
                     provenance: None,
-                    export_redacted: false,
-                })
-                .collect()
+                    export_redacted: redacted,
+                });
+            }
+            hits
         }
         "hybrid" => {
             let raw = hybrid_search_with_session_semantic(&session, &params.query, limit)
@@ -232,10 +242,43 @@ fn redact_excerpt_for_export(
         Sensitivity::Secret => (None, true),
         Sensitivity::Private => (None, true),
         Sensitivity::Workspace => match policy {
-            ExportPolicy::Allow => (Some(excerpt.to_string()), false),
+            ExportPolicy::Allow => {
+                if excerpt.is_empty() {
+                    (None, false)
+                } else {
+                    (Some(excerpt.to_string()), false)
+                }
+            }
             ExportPolicy::Ask | ExportPolicy::Deny => (None, true),
         },
     }
+}
+
+fn policy_for_session_path(
+    session: &WorkspaceSession,
+    path: &str,
+) -> Result<(Sensitivity, ExportPolicy), String> {
+    session
+        .ensure_index_warm()
+        .map_err(|err| err.to_string())?;
+    session
+        .index()
+        .export_policy_for_path(Path::new(path))
+        .map_err(|err| err.to_string())
+}
+
+fn policy_from_page_content(path: &str, content: &str) -> (Sensitivity, ExportPolicy) {
+    let page = parse_page(Path::new(path), content);
+    (
+        page.sensitivity
+            .as_deref()
+            .map(Sensitivity::parse)
+            .unwrap_or(Sensitivity::Workspace),
+        page.export_policy
+            .as_deref()
+            .map(ExportPolicy::parse)
+            .unwrap_or(ExportPolicy::Ask),
+    )
 }
 
 fn resource_path_from_uri(uri: &str) -> String {
@@ -272,6 +315,10 @@ pub struct ReadResponse {
     pub end_byte: u64,
     pub truncated: bool,
     pub total_bytes: u64,
+    pub sensitivity: String,
+    pub export_policy: String,
+    /// True when content was withheld because of sensitivity or export_policy.
+    pub export_redacted: bool,
 }
 
 pub fn api_read(runtime: &LatticeRuntime, params: ReadParams) -> Result<ReadResponse, ApiError> {
@@ -291,6 +338,46 @@ pub fn api_read(runtime: &LatticeRuntime, params: ReadParams) -> Result<ReadResp
             ApiError::BadRequest(err)
         }
     })?;
+
+    let (sensitivity, export_policy) = match policy_for_session_path(&session, &params.path) {
+        Ok(policy) => policy,
+        Err(_) => policy_from_page_content(&params.path, &page.content),
+    };
+    // Prefer on-disk frontmatter when present (authoritative for export).
+    let from_content = policy_from_page_content(&params.path, &page.content);
+    let sensitivity = if page.content.starts_with("---") {
+        from_content.0
+    } else {
+        sensitivity
+    };
+    let export_policy = if page.content.starts_with("---") {
+        from_content.1
+    } else {
+        export_policy
+    };
+
+    if sensitivity == Sensitivity::Secret {
+        return Err(ApiError::Forbidden(
+            "resource is secret and cannot be exported via the context API".into(),
+        ));
+    }
+    if sensitivity == Sensitivity::Private
+        || matches!(export_policy, ExportPolicy::Deny | ExportPolicy::Ask)
+    {
+        return Ok(ReadResponse {
+            workspace_id: session.workspace_id().to_string(),
+            path: params.path,
+            revision: page.revision,
+            content: String::new(),
+            start_byte: 0,
+            end_byte: 0,
+            truncated: false,
+            total_bytes: page.content.len() as u64,
+            sensitivity: sensitivity.as_str().to_string(),
+            export_policy: export_policy.as_str().to_string(),
+            export_redacted: true,
+        });
+    }
 
     let bytes = page.content.as_bytes();
     let total = bytes.len() as u64;
@@ -321,6 +408,9 @@ pub fn api_read(runtime: &LatticeRuntime, params: ReadParams) -> Result<ReadResp
         end_byte: end,
         truncated,
         total_bytes: total,
+        sensitivity: sensitivity.as_str().to_string(),
+        export_policy: export_policy.as_str().to_string(),
+        export_redacted: false,
     })
 }
 
@@ -345,6 +435,9 @@ pub struct RelatedHitDto {
     pub label: Option<String>,
     pub title: Option<String>,
     pub excerpt: Option<String>,
+    pub sensitivity: String,
+    pub export_policy: String,
+    pub export_redacted: bool,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -373,13 +466,25 @@ pub fn api_related(
 
     let backlinks = get_backlinks_with_session(&session, &params.path).map_err(ApiError::Internal)?;
     for link in backlinks.into_iter().take(limit) {
+        let path = path_string(&link.source_path);
+        let (sensitivity, export_policy) =
+            policy_for_session_path(&session, &path).unwrap_or((
+                Sensitivity::Workspace,
+                ExportPolicy::Ask,
+            ));
+        if sensitivity == Sensitivity::Secret {
+            continue;
+        }
         hits.push(RelatedHitDto {
-            path: path_string(&link.source_path),
+            path,
             kind: format!("backlink-{}", link.kind.as_str()),
             score: 1.0,
             label: link.label,
             title: None,
             excerpt: None,
+            sensitivity: sensitivity.as_str().to_string(),
+            export_policy: export_policy.as_str().to_string(),
+            export_redacted: false,
         });
     }
 
@@ -397,13 +502,26 @@ pub fn api_related(
                 if path == params.path || hits.iter().any(|h| h.path == path) {
                     continue;
                 }
+                let (sensitivity, export_policy) =
+                    policy_for_session_path(&session, &path).map_err(ApiError::Internal)?;
+                if sensitivity == Sensitivity::Secret {
+                    continue;
+                }
+                let (excerpt, redacted) = redact_excerpt_for_export(
+                    hit.snippet.as_deref().unwrap_or(""),
+                    sensitivity,
+                    export_policy,
+                );
                 hits.push(RelatedHitDto {
                     path,
                     kind: "fts".into(),
                     score: hit.rank,
                     label: None,
                     title: Some(hit.title),
-                    excerpt: hit.snippet,
+                    excerpt,
+                    sensitivity: sensitivity.as_str().to_string(),
+                    export_policy: export_policy.as_str().to_string(),
+                    export_redacted: redacted,
                 });
                 if hits.len() >= limit {
                     break;
@@ -616,12 +734,12 @@ mod tests {
         Workspace::init(dir.path(), "API Fixture").unwrap();
         std::fs::write(
             dir.path().join("Notes.md"),
-            "# Notes\n\nSearchable unique-phrase-xyz for context.\n",
+            "---\nexport_policy: allow\n---\n\n# Notes\n\nSearchable unique-phrase-xyz for context.\n",
         )
         .unwrap();
         std::fs::write(
             dir.path().join("Related.md"),
-            "# Related\n\nSee [[Notes]] for details.\n",
+            "---\nexport_policy: allow\n---\n\n# Related\n\nSee [[Notes]] for details.\n",
         )
         .unwrap();
         (dir, LatticeRuntime::new())
@@ -645,8 +763,7 @@ mod tests {
         .unwrap();
         assert!(!search.hits.is_empty());
         assert_eq!(search.mode, "hybrid");
-        // Default index export_policy is ask — excerpts redacted for hybrid.
-        assert!(search.hits.iter().any(|h| h.export_redacted));
+        assert!(search.hits.iter().any(|h| !h.export_redacted));
 
         let read = api_read(
             &runtime,
@@ -655,14 +772,90 @@ mod tests {
                 root: None,
                 path: "Notes.md".into(),
                 start_byte: Some(0),
-                end_byte: Some(40),
+                end_byte: Some(80),
                 max_bytes: None,
             },
         )
         .unwrap();
         assert!(read.content.contains("Notes"));
-        assert!(read.end_byte <= 40);
+        assert!(!read.export_redacted);
         assert_eq!(read.workspace_id, search.workspace_id);
+    }
+
+    #[test]
+    fn fts_and_read_respect_export_policy() {
+        let dir = TempDir::new().unwrap();
+        Workspace::init(dir.path(), "Policy Fixture").unwrap();
+        std::fs::write(
+            dir.path().join("Secret.md"),
+            "---\nsensitivity: secret\n---\n\n# Secret\n\nclassified-token-abc\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("Ask.md"),
+            "---\nexport_policy: ask\n---\n\n# Ask\n\nask-token-xyz\n",
+        )
+        .unwrap();
+        let runtime = LatticeRuntime::new();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        let fts = api_search(
+            &runtime,
+            SearchParams {
+                workspace_id: None,
+                root: Some(root.clone()),
+                query: "classified-token-abc".into(),
+                limit: Some(5),
+                mode: Some("fts".into()),
+            },
+        )
+        .unwrap();
+        assert!(
+            fts.hits.iter().all(|h| h.path != "Secret.md"),
+            "secret resources must not appear in FTS export results"
+        );
+
+        let ask = api_search(
+            &runtime,
+            SearchParams {
+                workspace_id: None,
+                root: Some(root.clone()),
+                query: "ask-token-xyz".into(),
+                limit: Some(5),
+                mode: Some("fts".into()),
+            },
+        )
+        .unwrap();
+        assert!(ask.hits.iter().any(|h| h.path == "Ask.md" && h.export_redacted));
+
+        let session = runtime.open_workspace_session(dir.path()).unwrap();
+        let read = api_read(
+            &runtime,
+            ReadParams {
+                workspace_id: Some(session.workspace_id().to_string()),
+                root: None,
+                path: "Ask.md".into(),
+                start_byte: None,
+                end_byte: None,
+                max_bytes: None,
+            },
+        )
+        .unwrap();
+        assert!(read.export_redacted);
+        assert!(read.content.is_empty());
+
+        let secret = api_read(
+            &runtime,
+            ReadParams {
+                workspace_id: Some(session.workspace_id().to_string()),
+                root: None,
+                path: "Secret.md".into(),
+                start_byte: None,
+                end_byte: None,
+                max_bytes: None,
+            },
+        );
+        assert!(matches!(secret, Err(ApiError::Forbidden(_))));
     }
 
     #[test]

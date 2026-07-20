@@ -138,6 +138,9 @@ fn resolve_embed_host_bin() -> Option<PathBuf> {
     if let Ok(path) = daemon_session::which_bin("lattice-embed-host") {
         return Some(path);
     }
+    if let Some(path) = daemon_session::current_exe_sibling("lattice-embed-host") {
+        return Some(path);
+    }
     let candidates = [
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/debug/lattice-embed-host"),
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/release/lattice-embed-host"),

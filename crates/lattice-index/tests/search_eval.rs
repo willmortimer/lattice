@@ -143,7 +143,11 @@ fn research_search_eval_fts_vs_hybrid_fake() {
     assert!(stats.embedded > 0, "expected Fake embeddings for corpus");
 
     let queries = load_queries(&fixtures);
-    assert!(!queries.queries.is_empty());
+    assert!(
+        queries.queries.len() >= 40,
+        "expected expanded labeled set (≥40 queries), got {}",
+        queries.queries.len()
+    );
 
     let mut fts_recalls = Vec::new();
     let mut fts_mrrs = Vec::new();
@@ -193,13 +197,13 @@ fn research_search_eval_fts_vs_hybrid_fake() {
         "summary: FTS Recall@10={fts_recall:.3} MRR={fts_mrr:.3} | Hybrid Recall@10={hybrid_recall:.3} MRR={hybrid_mrr:.3}"
     );
 
-    // Smoke: labeled queries should retrieve via FTS and/or hybrid pipeline.
+    // Smoke + soft gate: labeled positives should retrieve via FTS on this corpus.
     assert!(
         fts_recall > 0.0 || hybrid_recall > 0.0,
         "expected non-zero Recall@10 from FTS or hybrid on fixture corpus (fts={fts_recall}, hybrid={hybrid_recall})"
     );
     assert!(
-        fts_recall > 0.0,
-        "expected non-zero FTS Recall@10 on exact/phrase fixture queries (got {fts_recall})"
+        fts_recall >= 0.5,
+        "expected FTS Recall@10 ≥ 0.5 on expanded fixture queries (got {fts_recall})"
     );
 }

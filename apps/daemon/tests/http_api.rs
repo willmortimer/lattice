@@ -26,12 +26,12 @@ fn fixture() -> (TempDir, Arc<LatticeRuntime>, String) {
     Workspace::init(dir.path(), "HTTP API").expect("init");
     std::fs::write(
         dir.path().join("Notes.md"),
-        "# Notes\n\nUnique http-api-phrase for search.\n",
+        "---\nexport_policy: allow\n---\n\n# Notes\n\nUnique http-api-phrase for search.\n",
     )
     .expect("write");
     std::fs::write(
         dir.path().join("Link.md"),
-        "# Link\n\nSee [[Notes]] here.\n",
+        "---\nexport_policy: allow\n---\n\n# Link\n\nSee [[Notes]] here.\n",
     )
     .expect("write");
     let root = dir.path().to_string_lossy().into_owned();

@@ -19,9 +19,10 @@ use std::time::Duration;
 
 use lattice_embed_host::{install_model, ReconnectableEmbedHostProvider};
 use lattice_embedding::{
-    pinned_model_is_ready, qwen3_embedding_install_dir, sha256_hex, DistanceMetric,
-    EmbeddingProvider, EmbeddingSpecification, FakeEmbeddingProvider, ModelManifest,
-    PoolingStrategy, MANIFEST_SCHEMA_VERSION,
+    pinned_model_is_ready, qwen3_embedding_0_6b_q8_manifest, qwen3_embedding_install_dir,
+    semantic_fake_enabled, sha256_hex, DistanceMetric, EmbeddingProvider, EmbeddingSpecification,
+    FakeEmbeddingProvider, ModelManifest, PoolingStrategy, MANIFEST_SCHEMA_VERSION,
+    QWEN3_EMBEDDING_MODEL_ID, QWEN3_EMBEDDING_MODEL_REVISION, QWEN3_EMBEDDING_SHA256,
 };
 use lattice_runtime::{
     IndexProgressPhase, LatticeRuntime, RuntimeEvent, RuntimeIndexProgress, SemanticStatus,
@@ -312,14 +313,28 @@ impl SemanticController {
     /// Enable semantic indexing for an open workspace (user-driven).
     ///
     /// Acquires the pinned embedding model (unless Fake / already installed),
-    /// then attaches the session worker. Progress is published on the session
-    /// prepare status for GetSemanticStatus polling.
+    /// then attaches the session worker. Progress is published via `on_progress`
+    /// and mirrored on the session prepare status for GetSemanticStatus polling.
     ///
     /// When the embed host is missing, returns a Failed status (FTS still works).
+    /// After Qwen prepare on a host provider, fails closed unless the active
+    /// backend is the pinned llama.cpp model (never silently keep Fake vectors).
     pub fn enable_workspace(
         self: &Arc<Self>,
         workspace_id: &str,
     ) -> std::result::Result<SemanticStatus, String> {
+        self.enable_workspace_with_progress(workspace_id, &mut |_| {})
+    }
+
+    /// Like [`Self::enable_workspace`], with a progress hook for live UI events.
+    pub fn enable_workspace_with_progress<F>(
+        self: &Arc<Self>,
+        workspace_id: &str,
+        on_progress: &mut F,
+    ) -> std::result::Result<SemanticStatus, String>
+    where
+        F: FnMut(&SemanticStatus),
+    {
         let session = self
             .runtime
             .get_session_by_id(workspace_id)
@@ -327,19 +342,38 @@ impl SemanticController {
         if self.provider.is_none() {
             let status = unavailable_status();
             session.set_semantic_prepare_status(Some(status.clone()));
+            on_progress(&status);
             return Ok(status);
         }
-        lattice_handlers::prepare_semantic_model_for_session(&session, &mut |_| {})?;
+        lattice_handlers::prepare_semantic_model_for_session(&session, on_progress)?;
         self.reload_host_after_prepare()
             .map_err(|err| err.to_string())?;
+        if !semantic_fake_enabled() && self.host_provider.is_some() && pinned_model_is_ready() {
+            if let Some(provider) = self.provider.as_ref() {
+                if let Err(message) = assert_production_llama_provider(provider.as_ref()) {
+                    let failed = SemanticStatus {
+                        state: SemanticStatusState::Failed,
+                        pending_chunks: None,
+                        message: Some(message.clone()),
+                        progress_percent: None,
+                    };
+                    session.set_semantic_prepare_status(Some(failed.clone()));
+                    on_progress(&failed);
+                    return Ok(failed);
+                }
+            }
+        }
         self.attach_session(&session);
-        Ok(session.semantic_status())
+        let status = session.semantic_status();
+        on_progress(&status);
+        Ok(status)
     }
 
     /// After E5 prepare, load the verified pinned GGUF on the host provider.
     ///
     /// When SpawnHost was started on the fake fixture and the binary supports
     /// llama-cpp, restart the child with `--backend llama-cpp` before reload.
+    /// Fails closed when the binary cannot run llama-cpp after Qwen is on disk.
     fn reload_host_after_prepare(self: &Arc<Self>) -> Result<()> {
         let Some(host_provider) = self.host_provider.as_ref() else {
             return Ok(());
@@ -367,7 +401,11 @@ impl SemanticController {
                 return Ok(());
             }
             if !binary_supports_backend(&host.binary, "llama-cpp") {
-                return Ok(());
+                return Err(Error::Spawn(
+                    "lattice-embed-host was built without llama-cpp; refusing to load Qwen into a fake host. \
+                     Rebuild with `--features llama-cpp` (FTS search still works)."
+                        .into(),
+                ));
             }
             let _ = host.child.kill();
             let _ = host.child.wait();
@@ -805,6 +843,47 @@ fn unavailable_status() -> SemanticStatus {
         message: Some(UNAVAILABLE_MESSAGE.into()),
         progress_percent: None,
     }
+}
+
+/// After Qwen download/prepare, production must run the pinned llama.cpp model.
+fn assert_production_llama_provider(provider: &dyn EmbeddingProvider) -> std::result::Result<(), String> {
+    let spec = provider.specification();
+    let pinned = qwen3_embedding_0_6b_q8_manifest();
+    let hash = spec
+        .artifact_sha256
+        .strip_prefix("sha256:")
+        .unwrap_or(spec.artifact_sha256.as_str());
+    if spec.provider_id != "llama.cpp" {
+        return Err(format!(
+            "semantic provider is '{}' after model prepare; expected llama.cpp \
+             (refusing fake embeddings; FTS remains available)",
+            spec.provider_id
+        ));
+    }
+    if spec.model_id != QWEN3_EMBEDDING_MODEL_ID {
+        return Err(format!(
+            "unexpected embedding model_id '{}' (expected {QWEN3_EMBEDDING_MODEL_ID})",
+            spec.model_id
+        ));
+    }
+    if spec.model_revision != QWEN3_EMBEDDING_MODEL_REVISION {
+        return Err(format!(
+            "unexpected embedding model_revision '{}' (expected {QWEN3_EMBEDDING_MODEL_REVISION})",
+            spec.model_revision
+        ));
+    }
+    if spec.dimensions != pinned.default_dimensions {
+        return Err(format!(
+            "unexpected embedding dimensions {} (expected {})",
+            spec.dimensions, pinned.default_dimensions
+        ));
+    }
+    if hash != QWEN3_EMBEDDING_SHA256 {
+        return Err(format!(
+            "unexpected embedding artifact hash (expected pinned Qwen3 Q8 sha256)"
+        ));
+    }
+    Ok(())
 }
 
 fn current_exe_sibling(name: &str) -> Option<PathBuf> {

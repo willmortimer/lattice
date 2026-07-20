@@ -181,6 +181,39 @@ impl WorkspaceIndex {
         Ok(())
     }
 
+    /// Return indexed sensitivity / export policy for a workspace-relative path.
+    ///
+    /// Defaults to workspace + ask when the resource has no indexed chunks yet
+    /// (fail-closed for external export APIs).
+    pub fn export_policy_for_path(
+        &self,
+        path: &Path,
+    ) -> Result<(crate::provenance::Sensitivity, crate::provenance::ExportPolicy)> {
+        let rel = normalize_workspace_path(path)?;
+        let conn = self.conn.lock().unwrap();
+        let row: Option<(String, String)> = conn
+            .query_row(
+                "SELECT c.sensitivity, c.export_policy
+                 FROM search_chunks c
+                 JOIN resources r ON r.id = c.resource_id
+                 WHERE r.path = ?1
+                 LIMIT 1",
+                params![path_key(&rel)],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        Ok(match row {
+            Some((sensitivity, export_policy)) => (
+                crate::provenance::Sensitivity::parse(&sensitivity),
+                crate::provenance::ExportPolicy::parse(&export_policy),
+            ),
+            None => (
+                crate::provenance::Sensitivity::Workspace,
+                crate::provenance::ExportPolicy::Ask,
+            ),
+        })
+    }
+
     /// Full-text search over title, headings, and bounded body text.
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchHit>> {
         let conn = self.conn.lock().unwrap();
