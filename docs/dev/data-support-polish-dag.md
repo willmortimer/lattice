@@ -12,3 +12,11 @@ See Cursor plan `data_support_polish` for full handoff packets. Waves:
 2. B — P2P02 (after P01)  
 3. C — P2P06 (after P03+P04+P05)  
 4. D — P2P07 (after P01+P04+P06+P08)
+
+## Polish status
+
+- **P2P08** (field-type docs alignment): done — `docs/10` § Typed fields lists
+  only shipped `FieldType` values (`text`, `long_text`, `integer`, `decimal`,
+  `boolean`, `date`, `relation`, `lookup`, `rollup`); formula and attachment
+  **columns** are Phase 2+ roadmap; workspace `attachmentsDirectory` clarified
+  as unrelated.
