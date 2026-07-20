@@ -309,6 +309,8 @@ def cmd_run(args: argparse.Namespace) -> int:
                 check=False,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
             )
         except OSError as exc:
             print(f"ERROR: failed to exec provider runner: {exc}", file=sys.stderr)

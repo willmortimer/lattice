@@ -62,12 +62,12 @@ run_swift() {
 }
 
 cd "$M0_DIR"
-echo "INFO: building voice-m0-fluidaudio (mode=$MODE)…" >&2
+echo "INFO: building voice-m0-fluidaudio (mode=${MODE})..." >&2
 if ! run_swift build -c release; then
   echo "ERROR: Swift build failed (SDK mismatch or missing FluidAudio deps)." >&2
   echo "HINT: see research/voice-m0-fluidaudio/README.md for clean-env swift." >&2
   exit 3
 fi
 
-echo "INFO: running voice-m0-fluidaudio --mode $MODE…" >&2
+echo "INFO: running voice-m0-fluidaudio --mode ${MODE}..." >&2
 run_swift run -c release voice-m0-fluidaudio --mode "$MODE"
