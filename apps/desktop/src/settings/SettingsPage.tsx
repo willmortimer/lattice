@@ -24,6 +24,7 @@ import {
   enableSemanticSearch,
   getSemanticStatus,
   listenSemanticEvents,
+  SEMANTIC_MODEL_CONFIRM,
   semanticStatusLabel,
   type SemanticStatus,
 } from "../lib/semantic";
@@ -646,6 +647,7 @@ function SemanticSearchSettings({
           state: event.state,
           pendingChunks: event.pendingChunks,
           message: event.message,
+          progressPercent: event.progressPercent ?? null,
         });
       }
     }).then((fn) => {
@@ -656,10 +658,17 @@ function SemanticSearchSettings({
     };
   }, []);
 
-  // Poll while preparing/indexing so pending counts stay fresh.
+  // Poll while downloading/preparing/indexing so progress stays fresh.
   useEffect(() => {
     if (inBrowser || !workspaceRoot || !semanticEnabled) return;
-    if (!status || (status.state !== "preparing" && status.state !== "indexing")) return;
+    if (
+      !status ||
+      (status.state !== "downloading" &&
+        status.state !== "preparing" &&
+        status.state !== "indexing")
+    ) {
+      return;
+    }
     const id = window.setInterval(() => {
       void getSemanticStatus(workspaceRoot)
         .then(setStatus)
@@ -671,6 +680,10 @@ function SemanticSearchSettings({
   }, [workspaceRoot, semanticEnabled, status?.state]);
 
   async function handleToggle(next: boolean) {
+    if (next) {
+      const accepted = window.confirm(SEMANTIC_MODEL_CONFIRM);
+      if (!accepted) return;
+    }
     onSemanticEnabledChange(next);
     if (inBrowser || !workspaceRoot) return;
     setBusy(true);
@@ -689,7 +702,7 @@ function SemanticSearchSettings({
   }
 
   const statusText = status
-    ? semanticStatusLabel(status.state, status.pendingChunks)
+    ? semanticStatusLabel(status.state, status.pendingChunks, status.progressPercent)
     : semanticEnabled
       ? "Preparing…"
       : "Not prepared";
