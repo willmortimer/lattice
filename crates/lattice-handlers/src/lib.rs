@@ -27,6 +27,7 @@ pub use search::{
     disable_semantic_search_with_session, embed_workspace_pending_chunks,
     embed_workspace_pending_chunks_with_runtime, embed_workspace_pending_chunks_with_session,
     enable_semantic_search, enable_semantic_search_with_runtime, enable_semantic_search_with_session,
+    enable_semantic_search_with_session_and_progress, prepare_semantic_model_for_session,
     get_backlinks, get_backlinks_with_runtime, get_backlinks_with_session, hybrid_search_workspace,
     hybrid_search_workspace_with_provider, hybrid_search_workspace_with_runtime,
     hybrid_search_workspace_with_runtime_and_provider, hybrid_search_workspace_with_session,

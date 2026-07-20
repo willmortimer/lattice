@@ -36,6 +36,8 @@ pub enum SemanticAvailability {
 #[serde(rename_all = "camelCase")]
 pub enum SemanticStatusState {
     Stopped,
+    /// Explicit model download / verify (E5); never used during search.
+    Downloading,
     Preparing,
     Indexing,
     Ready,
@@ -47,6 +49,7 @@ impl SemanticStatusState {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Stopped => "stopped",
+            Self::Downloading => "downloading",
             Self::Preparing => "preparing",
             Self::Indexing => "indexing",
             Self::Ready => "ready",
@@ -58,6 +61,7 @@ impl SemanticStatusState {
     pub fn parse(value: &str) -> Option<Self> {
         match value {
             "stopped" => Some(Self::Stopped),
+            "downloading" => Some(Self::Downloading),
             "preparing" => Some(Self::Preparing),
             "indexing" => Some(Self::Indexing),
             "ready" => Some(Self::Ready),
@@ -75,6 +79,9 @@ pub struct SemanticStatus {
     pub state: SemanticStatusState,
     pub pending_chunks: Option<u64>,
     pub message: Option<String>,
+    /// 0–100 while [`SemanticStatusState::Downloading`]; otherwise unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress_percent: Option<u32>,
 }
 
 impl SemanticStatus {
@@ -83,6 +90,17 @@ impl SemanticStatus {
             state: SemanticStatusState::Stopped,
             pending_chunks: None,
             message: None,
+            progress_percent: None,
+        }
+    }
+
+    pub fn downloading(percent: u32) -> Self {
+        let percent = percent.min(100);
+        Self {
+            state: SemanticStatusState::Downloading,
+            pending_chunks: None,
+            message: Some(format!("Downloading {percent}%")),
+            progress_percent: Some(percent),
         }
     }
 
@@ -291,6 +309,7 @@ pub fn map_worker_status(
             state: SemanticStatusState::Degraded,
             pending_chunks,
             message: last_error.or_else(|| Some("embed host unavailable".into())),
+            progress_percent: None,
         };
     }
     match phase {
@@ -298,11 +317,13 @@ pub fn map_worker_status(
             state: SemanticStatusState::Preparing,
             pending_chunks,
             message: None,
+            progress_percent: None,
         },
         MappedWorkerPhase::Indexing => SemanticStatus {
             state: SemanticStatusState::Indexing,
             pending_chunks,
             message: None,
+            progress_percent: None,
         },
         MappedWorkerPhase::Idle => SemanticStatus {
             state: if pending_chunks.unwrap_or(0) > 0 {
@@ -312,11 +333,13 @@ pub fn map_worker_status(
             },
             pending_chunks,
             message: None,
+            progress_percent: None,
         },
         MappedWorkerPhase::Failed => SemanticStatus {
             state: SemanticStatusState::Failed,
             pending_chunks,
             message: last_error,
+            progress_percent: None,
         },
     }
 }
@@ -875,6 +898,10 @@ mod tests {
         );
         assert_eq!(failed.state, SemanticStatusState::Failed);
         assert_eq!(failed.message.as_deref(), Some("boom"));
+        let downloading = SemanticStatus::downloading(42);
+        assert_eq!(downloading.state, SemanticStatusState::Downloading);
+        assert_eq!(downloading.progress_percent, Some(42));
+        assert_eq!(downloading.message.as_deref(), Some("Downloading 42%"));
     }
 
     #[test]

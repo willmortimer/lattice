@@ -4,6 +4,7 @@ import { invoke } from "./ipc";
 
 export type SemanticStatusState =
   | "stopped"
+  | "downloading"
   | "preparing"
   | "indexing"
   | "ready"
@@ -14,6 +15,7 @@ export type SemanticStatus = {
   state: SemanticStatusState | string;
   pendingChunks: number | null;
   message: string | null;
+  progressPercent?: number | null;
 };
 
 export type SemanticUiEvent = {
@@ -21,7 +23,12 @@ export type SemanticUiEvent = {
   state: string;
   pendingChunks: number | null;
   message: string | null;
+  progressPercent?: number | null;
 };
+
+/** Confirm-dialog copy for first-time model download (~640 MB Apache-2.0 GGUF). */
+export const SEMANTIC_MODEL_CONFIRM =
+  "Semantic search downloads Qwen3-Embedding-0.6B (Q8, ~640 MB, Apache-2.0). The model stays on this Mac and is never uploaded. Continue?";
 
 export async function getSemanticStatus(root: string): Promise<SemanticStatus> {
   return invoke<SemanticStatus>("semantic_status", { root });
@@ -46,6 +53,7 @@ export async function listenSemanticEvents(
 export function isSemanticStatusState(value: string): value is SemanticStatusState {
   switch (value) {
     case "stopped":
+    case "downloading":
     case "preparing":
     case "indexing":
     case "ready":
@@ -61,6 +69,7 @@ export function isSemanticStatusState(value: string): value is SemanticStatusSta
 export function semanticStatusLabel(
   state: SemanticStatusState | string,
   pendingChunks: number | null | undefined,
+  progressPercent?: number | null,
 ): string {
   if (!isSemanticStatusState(state)) {
     return `Unknown (${state})`;
@@ -68,6 +77,8 @@ export function semanticStatusLabel(
   switch (state) {
     case "stopped":
       return "Not prepared";
+    case "downloading":
+      return progressPercent != null ? `Downloading ${progressPercent}%` : "Downloading…";
     case "preparing":
       return "Preparing…";
     case "indexing":
