@@ -43,6 +43,12 @@ pub struct ColumnMetaYaml {
     /// Target table for [`FieldType::Relation`] (same `.data` package).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relation_table: Option<String>,
+    /// Source relation column on this table for [`FieldType::Lookup`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lookup_relation: Option<String>,
+    /// Field on the related table projected by [`FieldType::Lookup`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lookup_field: Option<String>,
 }
 
 impl AppManifest {
@@ -104,6 +110,8 @@ impl AppManifest {
             .or_insert(ColumnMetaYaml {
                 field_type: FieldType::Text,
                 relation_table: None,
+                lookup_relation: None,
+                lookup_field: None,
             });
     }
 

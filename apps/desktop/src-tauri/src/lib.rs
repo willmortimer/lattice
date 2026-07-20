@@ -197,6 +197,7 @@ pub fn run() {
             theme::stop_theme_watching,
             data::open_data_app,
             data::list_data_tables,
+            data::list_data_table_columns,
             data::add_data_columns,
             data::create_table_package,
             data::insert_record,

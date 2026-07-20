@@ -24,4 +24,9 @@ describe("cellValueToDisplay", () => {
     expect(cellValueToDisplay({ Integer: 7 })).toBe("7");
     expect(cellValueToDisplay({ Boolean: true })).toBe("true");
   });
+
+  it("formats lookup display values", () => {
+    expect(cellValueToDisplay({ Lookup: { values: ["Acme", "Beta"] } })).toBe("Acme, Beta");
+    expect(cellValueToDisplay({ Lookup: { values: [] } })).toBe("");
+  });
 });

@@ -1528,3 +1528,143 @@ fn stale_package_revision_on_columns_add_is_refused() {
         .unwrap()
         .contains("ADD COLUMN name"));
 }
+
+#[test]
+fn columns_add_lookup_undo_removes_lookup_column() {
+    use std::collections::BTreeMap;
+
+    use crate::ColumnSpec;
+    use lattice_data::{CellValue, FieldType};
+
+    let (dir, mut engine) = engine();
+    engine
+        .apply(Transaction::new(
+            "Create CRM.data",
+            vec![Command::TableCreate {
+                path: PathBuf::from("CRM.data"),
+                title: "CRM".into(),
+                table_name: "companies".into(),
+            }],
+        ))
+        .unwrap();
+
+    let package = dir.path().join("CRM.data");
+    let mut base_revision = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+
+    engine
+        .apply(Transaction::new(
+            "Add company name",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("CRM.data"),
+                table: "companies".into(),
+                columns: vec![ColumnSpec::new("name", FieldType::Text)],
+                base_revision,
+            }],
+        ))
+        .unwrap();
+
+    base_revision = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Add contacts table",
+            vec![Command::TableAdd {
+                path: PathBuf::from("CRM.data"),
+                table_name: "contacts".into(),
+                base_revision,
+            }],
+        ))
+        .unwrap();
+
+    base_revision = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Add contact relation",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("CRM.data"),
+                table: "contacts".into(),
+                columns: vec![
+                    ColumnSpec::new("name", FieldType::Text),
+                    ColumnSpec::relation("company", "companies"),
+                ],
+                base_revision,
+            }],
+        ))
+        .unwrap();
+
+    {
+        let app = lattice_data::DataApp::open(&package).unwrap();
+        let company_id = app
+            .insert_row(
+                "companies",
+                &BTreeMap::from([("name".into(), CellValue::Text("Acme".into()))]),
+            )
+            .unwrap();
+        app.insert_row(
+            "contacts",
+            &BTreeMap::from([
+                ("name".into(), CellValue::Text("Ada".into())),
+                (
+                    "company".into(),
+                    CellValue::Relation {
+                        record_ids: vec![company_id],
+                    },
+                ),
+            ]),
+        )
+        .unwrap();
+    }
+
+    base_revision = lattice_data::DataApp::open(&package)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Add company_name lookup",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("CRM.data"),
+                table: "contacts".into(),
+                columns: vec![ColumnSpec::lookup("company_name", "company", "name")],
+                base_revision,
+            }],
+        ))
+        .unwrap();
+
+    {
+        let app = lattice_data::DataApp::open(&package).unwrap();
+        let rows = app.list_rows("contacts", 10, 0).unwrap();
+        assert_eq!(
+            rows[0].values.get("company_name"),
+            Some(&CellValue::Lookup {
+                values: vec!["Acme".into()],
+            })
+        );
+        assert!(app
+            .columns("contacts")
+            .unwrap()
+            .iter()
+            .any(|column| column.name == "company_name"
+                && column.field_type == FieldType::Lookup));
+    }
+
+    engine.undo().unwrap().unwrap();
+
+    let app = lattice_data::DataApp::open(&package).unwrap();
+    assert!(!app
+        .columns("contacts")
+        .unwrap()
+        .iter()
+        .any(|column| column.name == "company_name"));
+    assert!(!std::fs::read_to_string(package.join("app.yaml"))
+        .unwrap()
+        .contains("company_name"));
+}
