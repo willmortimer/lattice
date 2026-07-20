@@ -257,7 +257,7 @@ fn session_context_from_proto(context: ProtoSessionContext) -> SessionContext {
     SessionContext {
         document_id: context.document_id,
         glossary_terms: context.glossary_terms,
-        known_paths: Vec::new(),
+        known_paths: context.known_paths,
         command_mode: context.command_mode,
     }
 }

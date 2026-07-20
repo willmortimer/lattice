@@ -184,6 +184,7 @@ impl VoiceHostClient {
                         context: Some(SessionContext {
                             document_id: None,
                             glossary_terms: Vec::new(),
+                            known_paths: Vec::new(),
                             command_mode: false,
                         }),
                         endpoint: None,

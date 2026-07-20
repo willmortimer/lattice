@@ -259,6 +259,8 @@ message SessionContext {
   optional string document_id = 1;
   repeated string glossary_terms = 2;
   bool command_mode = 3;
+  // Workspace-relative paths for ITN / path normalization on finals.
+  repeated string known_paths = 4;
 }
 
 message EndpointOptions {
