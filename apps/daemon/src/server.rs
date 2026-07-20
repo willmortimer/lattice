@@ -553,6 +553,7 @@ fn semantic_status_to_wire(status: &SemanticStatus) -> WireSemanticStatus {
         state: status.state.as_str().to_string(),
         pending_chunks: status.pending_chunks,
         message: status.message.clone(),
+        progress_percent: status.progress_percent,
     }
 }
 

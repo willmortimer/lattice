@@ -221,6 +221,10 @@ impl SemanticController {
     }
 
     /// Enable semantic indexing for an open workspace (user-driven).
+    ///
+    /// Acquires the pinned embedding model (unless Fake / already installed),
+    /// then attaches the session worker. Progress is published on the session
+    /// prepare status for GetSemanticStatus polling.
     pub fn enable_workspace(
         self: &Arc<Self>,
         workspace_id: &str,
@@ -229,6 +233,7 @@ impl SemanticController {
             .runtime
             .get_session_by_id(workspace_id)
             .ok_or_else(|| format!("workspace session not found for id {workspace_id}"))?;
+        lattice_handlers::prepare_semantic_model_for_session(&session, &mut |_| {})?;
         self.attach_session(&session);
         Ok(session.semantic_status())
     }
@@ -523,13 +528,14 @@ mod tests {
 
     #[test]
     fn enable_disable_updates_status_without_env_gate() {
+        std::env::set_var(ENV_SEMANTIC_FAKE, "1");
         let dir = tempfile::tempdir().unwrap();
         Workspace::init(dir.path(), "Daemon Enable").unwrap();
         std::fs::write(dir.path().join("Notes.md"), "# Notes\n\nhello semantic\n").unwrap();
 
         let runtime = Arc::new(LatticeRuntime::new());
         let controller =
-            SemanticController::start(Arc::clone(&runtime), SemanticProviderMode::from_env_or_fake())
+            SemanticController::start(Arc::clone(&runtime), SemanticProviderMode::FakeInProcess)
                 .unwrap();
         let session = runtime.open_workspace_session(dir.path()).unwrap();
         let workspace_id = session.workspace_id().to_string();
@@ -563,5 +569,6 @@ mod tests {
 
         controller.shutdown();
         runtime.close_session(dir.path()).unwrap();
+        std::env::remove_var(ENV_SEMANTIC_FAKE);
     }
 }

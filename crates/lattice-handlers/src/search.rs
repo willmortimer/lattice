@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use lattice_embedding::{
+    acquire_pinned_embedding_model, download_progress_percent, semantic_fake_enabled,
     DistanceMetric, EmbeddingProvider, EmbeddingSpecification, FakeEmbeddingProvider,
     PoolingStrategy,
 };
@@ -11,7 +12,7 @@ use lattice_index::{
 };
 use lattice_runtime::{
     default_runtime, hybrid_search_with_session_semantic, LatticeRuntime, SemanticAvailability,
-    SemanticStatus, SemanticWorkerConfig, WorkspaceSession,
+    SemanticStatus, SemanticStatusState, SemanticWorkerConfig, WorkspaceSession,
 };
 use serde::Serialize;
 
@@ -401,7 +402,13 @@ fn fake_embedding_provider() -> Arc<dyn EmbeddingProvider> {
     }))
 }
 
-/// Start (or restart) Fake semantic indexing for the workspace session.
+/// Start (or restart) semantic indexing for the workspace session.
+///
+/// When [`ENV_SEMANTIC_FAKE`] is set (CI / offline), skips model download and
+/// uses the in-process Fake provider. Otherwise acquires the pinned Qwen3 GGUF
+/// (local fixture via `LATTICE_SEMANTIC_MODEL_SOURCE`, or HTTPS) with progress
+/// on the session prepare status, then starts the Fake worker until E6 wires
+/// EmbedHostClient.
 pub fn enable_semantic_search(root: String) -> Result<SemanticStatus, String> {
     enable_semantic_search_with_runtime(&default_runtime(), root)
 }
@@ -420,13 +427,76 @@ pub fn enable_semantic_search_with_session(
     runtime: &LatticeRuntime,
     session: &Arc<WorkspaceSession>,
 ) -> Result<SemanticStatus, String> {
+    enable_semantic_search_with_session_and_progress(runtime, session, |_| {})
+}
+
+/// Download / verify / install the pinned embedding model (or Fake-skip).
+///
+/// Progress is written to the session prepare status and forwarded to
+/// `on_progress`. Safe to call from desktop handlers and latticed.
+pub fn prepare_semantic_model_for_session(
+    session: &WorkspaceSession,
+    on_progress: &mut impl FnMut(&SemanticStatus),
+) -> Result<(), String> {
+    if semantic_fake_enabled() {
+        session.set_semantic_prepare_status(None);
+        return Ok(());
+    }
+
+    let mut last_percent = None;
+    let acquire = acquire_pinned_embedding_model(&mut |copied, total| {
+        let percent = download_progress_percent(copied, total);
+        if last_percent == Some(percent) {
+            return;
+        }
+        last_percent = Some(percent);
+        let status = SemanticStatus::downloading(percent);
+        session.set_semantic_prepare_status(Some(status.clone()));
+        on_progress(&status);
+    });
+    match acquire {
+        Ok(_result) => {
+            session.set_semantic_prepare_status(Some(SemanticStatus {
+                state: SemanticStatusState::Preparing,
+                pending_chunks: None,
+                message: Some("Model verified".into()),
+                progress_percent: Some(100),
+            }));
+            let preparing = session.semantic_status();
+            on_progress(&preparing);
+            session.set_semantic_prepare_status(None);
+            Ok(())
+        }
+        Err(error) => {
+            let failed = SemanticStatus {
+                state: SemanticStatusState::Failed,
+                pending_chunks: None,
+                message: Some(error.to_string()),
+                progress_percent: None,
+            };
+            session.set_semantic_prepare_status(Some(failed.clone()));
+            on_progress(&failed);
+            Err(error.to_string())
+        }
+    }
+}
+
+/// Like [`enable_semantic_search_with_session`], with a progress hook for UI events.
+pub fn enable_semantic_search_with_session_and_progress(
+    runtime: &LatticeRuntime,
+    session: &Arc<WorkspaceSession>,
+    mut on_progress: impl FnMut(&SemanticStatus),
+) -> Result<SemanticStatus, String> {
+    prepare_semantic_model_for_session(session, &mut on_progress)?;
     session
         .start_semantic_indexing(
             Arc::clone(runtime.events()),
             SemanticWorkerConfig::new(fake_embedding_provider()),
         )
         .map_err(map_runtime_err)?;
-    Ok(session.semantic_status())
+    let status = session.semantic_status();
+    on_progress(&status);
+    Ok(status)
 }
 
 /// Stop semantic indexing for the workspace session (FTS remains available).
@@ -475,6 +545,7 @@ mod tests {
     use lattice_core::Workspace;
     use lattice_embedding::{
         DistanceMetric, EmbeddingSpecification, FakeEmbeddingProvider, PoolingStrategy,
+        ENV_SEMANTIC_FAKE,
     };
     use lattice_runtime::SemanticStatusState;
 
@@ -723,6 +794,7 @@ mod tests {
 
     #[test]
     fn enable_disable_semantic_search_updates_status() {
+        std::env::set_var(ENV_SEMANTIC_FAKE, "1");
         let dir = init_workspace();
         std::fs::write(
             dir.path().join("Notes.md"),
@@ -757,5 +829,6 @@ mod tests {
             semantic_search_status(root).unwrap().state,
             SemanticStatusState::Stopped
         );
+        std::env::remove_var(ENV_SEMANTIC_FAKE);
     }
 }
