@@ -8,8 +8,11 @@ mod revisions;
 mod search;
 mod terminal;
 mod theme;
+mod tray;
 mod voice;
 mod watcher;
+
+use tauri::Manager;
 
 #[cfg(debug_assertions)]
 const OPEN_INSPECTOR_MENU_ID: &str = "developer.open-inspector";
@@ -86,8 +89,6 @@ pub fn run() {
         .on_menu_event(|_app, _event| {
             #[cfg(debug_assertions)]
             {
-                use tauri::Manager;
-
                 let Some(window) = _app.get_webview_window("main") else {
                     return;
                 };
@@ -101,6 +102,28 @@ pub fn run() {
                     }
                     _ => {}
                 }
+            }
+        })
+        .setup(|app| {
+            tray::install_tray(app.handle())?;
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if window.label() != "main" {
+                return;
+            }
+            let tauri::WindowEvent::CloseRequested { api, .. } = event else {
+                return;
+            };
+            if tray::should_hide_main_on_close(tray::keep_app_in_menu_bar(), tray::is_quitting()) {
+                let _ = window.hide();
+                api.prevent_close();
+                return;
+            }
+            // Preference off (or explicit Quit): exit the process so the hidden
+            // quick-note window cannot leave a tray-less orphan.
+            if !tray::is_quitting() {
+                tray::request_quit(window.app_handle());
             }
         })
         .invoke_handler(tauri::generate_handler![

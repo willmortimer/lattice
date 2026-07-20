@@ -5,6 +5,7 @@
   "windows": ["main", "quick-note", "*"],
   "permissions": [
     "core:default",
+    "core:tray:default",
     "core:window:allow-set-background-color",
     "core:window:allow-start-dragging",
     "core:window:allow-show",

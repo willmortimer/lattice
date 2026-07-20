@@ -498,6 +498,27 @@ export function SettingsPage({
                 <option value="aggressive">Aggressive</option>
               </select>
             </SettingRow>
+            <h2 className="settings-subsection">Background services</h2>
+            <SettingRow
+              title="Keep app in menu bar"
+              description="When enabled, closing the main window hides Lattice instead of quitting. Restore from the tray menu or Quit there to exit. This is not a login item."
+            >
+              <Toggle
+                label="Keep app in menu bar"
+                checked={settings.services.keepAppInMenuBar}
+                onChange={(keepAppInMenuBar) => update("services", { keepAppInMenuBar })}
+              />
+            </SettingRow>
+            <SettingRow
+              title="Keep services running"
+              description="Leave latticed running after the last desktop client disconnects so voice and search stay warm."
+            >
+              <Toggle
+                label="Keep services running"
+                checked={settings.services.keepServicesRunning}
+                onChange={(keepServicesRunning) => update("services", { keepServicesRunning })}
+              />
+            </SettingRow>
             <h2 className="settings-subsection">Revision history retention</h2>
             <HistoryRetentionSettings
               workspaceRoot={workspace.root || null}

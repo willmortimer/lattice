@@ -9,6 +9,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use lattice_core::{WorkspaceEvent, WorkspaceWatcher};
+#[cfg(test)]
+use lattice_core::ResourceKind;
 use lattice_index::WorkspaceIndex;
 use lattice_runtime::apply_workspace_event_to_index;
 use serde::Serialize;

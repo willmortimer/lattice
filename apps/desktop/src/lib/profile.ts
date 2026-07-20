@@ -81,6 +81,7 @@ export interface DesktopSettings {
   };
   services: {
     keepServicesRunning: boolean;
+    keepAppInMenuBar: boolean;
   };
 }
 
@@ -156,6 +157,7 @@ export function defaultDesktopSettings(): DesktopSettings {
     },
     services: {
       keepServicesRunning: false,
+      keepAppInMenuBar: false,
     },
   };
 }
@@ -255,6 +257,10 @@ function normalizeProfile(profile: ProfileSnapshot): ProfileSnapshot {
           ...desktopDefaults.editor,
           ...profile.settings.desktop?.editor,
           pageWidth: normalizePageWidth(profile.settings.desktop?.editor?.pageWidth),
+        },
+        services: {
+          ...desktopDefaults.services,
+          ...profile.settings.desktop?.services,
         },
       },
       workspaces: {

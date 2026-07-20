@@ -88,7 +88,9 @@ Raw audio retention remains off by default
 ## Native helper
 
 Prefer main app menu-bar/background mode unless measured otherwise
-([macos-integration.md](./macos-integration.md)).
+([macos-integration.md](./macos-integration.md)). Enable via desktop setting
+`services.keepAppInMenuBar` (tray residency while the process is already
+running — not a login-item helper).
 
 ## Security implications
 
