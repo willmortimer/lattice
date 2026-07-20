@@ -95,9 +95,9 @@ Run them from the repo root (they use relative paths).
 | `desktop-perf` | Playwright browser perf harness against the Vite demo (see [perf-harness.md](./perf-harness.md)) |
 | `desktop-perf-tauri` | Native WebView perf via `tauri-plugin-playwright` (see [perf-harness.md](./perf-harness.md)) |
 | `desktop` | Native window **without Vite** — reuses `apps/desktop/dist` if present, else builds once |
-| `desktop-build` | release binary, unbundled (`tauri build --no-bundle`) |
+| `desktop-build` | release binary, unbundled (`tauri build --no-bundle`; macOS adds `--features voice-embedded`) |
 | `desktop-ui-build` | Vite production build for `@lattice/desktop` only |
-| `desktop-install` | macOS: `tauri build --bundles app`, Apple Development codesign, install to `/Applications/Lattice.app` |
+| `desktop-install` | macOS: `tauri build --bundles app --features voice-embedded`, codesign, bundle Swift voice/audio dylibs, install to `/Applications/Lattice.app` |
 | `ok` | no-op success (join node for nxr task DAGs) |
 
 ### Notable tasks (orchestration)
@@ -133,6 +133,10 @@ Optional: `LATTICE_INSTALL_DIR` (default `/Applications`).
 nxr desktop-install
 # or: nix run .#desktop-install
 ```
+
+macOS installs enable `--features voice-embedded` (same as `nxr desktop-dev`) and
+copy `libLatticeVoiceBridge.dylib` / `libLatticeAudioBridge.dylib` into the
+`.app` so Settings → Voice works. Re-run install after pulling voice changes.
 
 ### Three different “web” surfaces
 

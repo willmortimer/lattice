@@ -71,7 +71,7 @@
             desktop = "Native Tauri window without Vite (reuses apps/desktop/dist)";
             desktop-build = "Release binary, unbundled (tauri build --no-bundle)";
             desktop-ui-build = "Build the desktop Vite frontend only";
-            desktop-install = "macOS: signed .app → /Applications (Apple Development)";
+            desktop-install = "macOS: signed .app with voice → /Applications (Apple Development)";
             ok = "No-op success (nxr task DAG join)";
           };
 
@@ -140,7 +140,13 @@
             '';
             desktop-build = ''
               pnpm install
-              exec pnpm --filter @lattice/desktop tauri build --no-bundle "$@"
+              # Match desktop-dev on macOS so release binaries include voice capture.
+              # Linux CI stays featureless (no Swift FluidAudio bridges).
+              if [ "$(uname -s)" = "Darwin" ]; then
+                exec pnpm --filter @lattice/desktop exec tauri build --no-bundle --features voice-embedded "$@"
+              else
+                exec pnpm --filter @lattice/desktop tauri build --no-bundle "$@"
+              fi
             '';
             desktop-ui-build = ''
               pnpm install --frozen-lockfile
@@ -166,7 +172,9 @@
               fi
 
               pnpm install
-              pnpm --filter @lattice/desktop exec tauri build --bundles app
+              # Same voice path as `nxr desktop-dev` / `pnpm tauri:dev` — without this,
+              # Settings → Voice reports Unavailable (Cargo default features are empty).
+              pnpm --filter @lattice/desktop exec tauri build --bundles app --features voice-embedded
 
               # Cargo workspace target dir is repo-root `target/`, not src-tauri/target.
               app_src="target/release/bundle/macos/Lattice.app"
@@ -180,6 +188,18 @@
                   exit 1
                 fi
               fi
+
+              # Swift bridges use @loader_path; copy dylibs next to the Mach-O in the bundle.
+              macos_dir="$app_src/Contents/MacOS"
+              for dylib in libLatticeVoiceBridge.dylib libLatticeAudioBridge.dylib; do
+                src="target/release/$dylib"
+                if [ -f "$src" ]; then
+                  cp -f "$src" "$macos_dir/$dylib"
+                  echo "desktop-install: bundled $dylib"
+                else
+                  echo "desktop-install: warning: missing $src (voice may fail at runtime)" >&2
+                fi
+              done
 
               # Ensure the identity we expect is on the bundle (Tauri may already have signed).
               if ! codesign --force --deep --sign "$APPLE_SIGNING_IDENTITY" "$app_src"; then
