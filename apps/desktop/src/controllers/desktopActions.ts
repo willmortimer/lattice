@@ -3,7 +3,7 @@ import { invoke as coreInvoke } from "../lib/ipc";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
-import { columnChoicesFromPreview, type CsvImportPreview, type CsvImportReviewState } from "../data/csvImport";
+import { buildCsvImportReviewState, defaultPackageNameFromCsvPath, type CsvImportPreview, type CsvImportReviewState, tableNameFromPackageLabel, workspaceCsvAbsolutePath } from "../data/csvImport";
 import type { FieldType } from "../data/types";
 import { resolveResourceLink, type ResourceLinkTarget } from "../lib/resourceLinks";
 import { createPage } from "../lib/pages";
@@ -23,10 +23,7 @@ function dirnameOf(path: string): string {
 }
 
 function tableNameFromLabel(label: string): string {
-  let name = label.trim().replace(/\.data$/i, "").toLowerCase()
-    .replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
-  if (!name || /^\d/.test(name)) name = `t_${name || "table"}`;
-  return name;
+  return tableNameFromPackageLabel(label);
 }
 
 function dataPackagePath(label: string): string {
@@ -150,14 +147,29 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
     setBusy(true);
     try {
       const preview = await invoke<CsvImportPreview>("preview_csv_import", { csvPath: selectedFile });
-      setCsvImportReview({
-        csvPath: selectedFile,
-        packageName: name,
-        title: name.replace(/\.data$/i, ""),
-        tableName: tableNameFromLabel(name),
-        preview,
-        columns: columnChoicesFromPreview(preview),
-      });
+      setCsvImportReview(buildCsvImportReviewState(selectedFile, name, preview));
+      setError(null);
+    } catch (error) {
+      setError(String(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [setBusy, setError, snapshot]);
+
+  const handlePromoteWorkspaceCsv = useCallback(async (resource: Resource) => {
+    if (inBrowser) {
+      setError("CSV import is not available in the browser demo.");
+      return;
+    }
+    if (!snapshot) return;
+    const defaultName = defaultPackageNameFromCsvPath(resource.path);
+    const name = window.prompt("Package name", defaultName)?.trim();
+    if (!name) return;
+    const csvPath = workspaceCsvAbsolutePath(snapshot.root, resource.path);
+    setBusy(true);
+    try {
+      const preview = await invoke<CsvImportPreview>("preview_csv_import", { csvPath });
+      setCsvImportReview(buildCsvImportReviewState(csvPath, name, preview));
       setError(null);
     } catch (error) {
       setError(String(error));
@@ -340,7 +352,8 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
   }, [setError, setSnapshot, setStatusToast, snapshotRef]);
 
   return {
-    createAndOpenPage, handleQuickNote, handleNewPage, handleUndo, handleImportCsv, handleNewTable,
+    createAndOpenPage, handleQuickNote, handleNewPage, handleUndo, handleImportCsv, handlePromoteWorkspaceCsv,
+    handleNewTable,
     handleImportEditorAsset, handleOpenExternally, openLinkTarget, handleOpenWiki, handleOpenFile,
     updateWorkspaceSettings,
     csvImportReview, handleCancelCsvImport, handleConfirmCsvImport, handleCsvImportColumnTypeChange,

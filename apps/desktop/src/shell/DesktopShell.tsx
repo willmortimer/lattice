@@ -66,7 +66,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
     setDismissedNoticeCodes, setEditingTitle, setTitleDraft, applyThemeCatalog,
     clearRecents, resetSettings, handleGetStarted, handleOpenWorkspace, openRecent,
     handleCreateWorkspace, openNewWorkspaceDialog, pickWorkspaceFolder, handleNewPage, handleQuickNote,
-    handleNewTable, handleImportCsv, handleSelect, applyTreeSelection, handleOpenExternally, handleOpenFile,
+    handleNewTable, handleImportCsv, handlePromoteWorkspaceCsv, handleSelect, applyTreeSelection, handleOpenExternally, handleOpenFile,
     handleKeepIncoming, handleKeepLocal, handleKeepBoth, handleTreeCollapsedPathsChange,
     handleTreeResourceContextMenu, handleTreeFolderContextMenu, handleTreeRename, handleMoveToFolder,
     treeRenameRequest,
@@ -551,6 +551,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
                           onKeepBoth: () => void handleKeepBoth(),
                           onOpenFile: handleOpenFile,
                           onOpenExternally: inBrowser ? undefined : (resource) => void handleOpenExternally(resource),
+                          onPromoteWorkspaceCsv: inBrowser ? undefined : (resource) => void handlePromoteWorkspaceCsv(resource),
                           onPageWidthChange: (pageWidth) => setSettings((current) => ({
                             ...current,
                             editor: { ...current.editor, pageWidth },
@@ -598,6 +599,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
                             onKeepBoth: () => void handleKeepBoth(),
                             onOpenFile: handleOpenFile,
                             onOpenExternally: inBrowser ? undefined : (resource) => void handleOpenExternally(resource),
+                            onPromoteWorkspaceCsv: inBrowser ? undefined : (resource) => void handlePromoteWorkspaceCsv(resource),
                             onPageWidthChange: (pageWidth) => setSettings((current) => ({
                               ...current,
                               editor: { ...current.editor, pageWidth },
