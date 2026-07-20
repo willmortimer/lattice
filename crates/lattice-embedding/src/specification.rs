@@ -36,9 +36,12 @@ pub struct EmbeddingSpecification {
 
 impl EmbeddingSpecification {
     /// Stable namespace identity for index storage.
+    ///
+    /// The key includes `normalized`. Changing normalization (or any other
+    /// field hashed here) produces a new namespace key and requires re-embed.
     pub fn namespace_key(&self, chunker_version: &str) -> String {
         let material = format!(
-            "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
+            "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
             self.provider_id,
             self.model_id,
             self.model_revision,
@@ -47,9 +50,41 @@ impl EmbeddingSpecification {
             self.native_dimensions,
             serde_json::to_string(&self.distance).unwrap_or_default(),
             serde_json::to_string(&self.pooling).unwrap_or_default(),
+            self.normalized,
             self.instruction_version,
             chunker_version,
         );
         format!("sha256:{}", crate::manifest::sha256_hex(material.as_bytes()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_spec(normalized: bool) -> EmbeddingSpecification {
+        EmbeddingSpecification {
+            provider_id: "fake".into(),
+            model_id: "fake-model".into(),
+            model_revision: "rev-1".into(),
+            artifact_sha256: "sha256:artifact".into(),
+            dimensions: 8,
+            native_dimensions: 8,
+            distance: DistanceMetric::Cosine,
+            pooling: PoolingStrategy::Last,
+            normalized,
+            instruction_version: "test-v1".into(),
+        }
+    }
+
+    #[test]
+    fn namespace_key_includes_normalized() {
+        let normalized = sample_spec(true).namespace_key("lattice-chunker-v2");
+        let unnormalized = sample_spec(false).namespace_key("lattice-chunker-v2");
+        assert_ne!(normalized, unnormalized);
+        assert_eq!(
+            sample_spec(true).namespace_key("lattice-chunker-v2"),
+            normalized
+        );
     }
 }

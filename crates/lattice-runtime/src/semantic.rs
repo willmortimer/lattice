@@ -367,7 +367,8 @@ impl From<WorkerPhase> for MappedWorkerPhase {
 /// Start a semantic embedding worker for `session`.
 ///
 /// The worker registers an embedding namespace from `config.provider`, then
-/// loops on kick signals calling [`WorkspaceIndex::embed_pending_chunks`].
+/// loops on kick signals calling [`WorkspaceIndex::embed_pending_chunks_async`]
+/// when a runtime handle is available (otherwise the sync embed wrapper).
 pub fn start_session_semantic_worker(
     session: Arc<WorkspaceSession>,
     events: SharedEventBus,
@@ -437,6 +438,7 @@ pub fn start_session_semantic_worker(
                     provider_thread.as_ref(),
                     namespace_id,
                     batch_size,
+                    runtime_handle,
                 );
             }
 
@@ -467,16 +469,27 @@ fn run_worker_loop(
     provider: &dyn EmbeddingProvider,
     namespace_id: i64,
     batch_size: usize,
+    runtime_handle: Option<tokio::runtime::Handle>,
 ) {
     while shared.wait_for_work() {
         let Some(session) = weak_session.upgrade() else {
             break;
         };
         shared.set_phase(WorkerPhase::Indexing);
-        match session
-            .index()
-            .embed_pending_chunks(namespace_id, provider, batch_size)
-        {
+        // Prefer the session runtime when available so host-backed providers
+        // await on the socket-owning runtime instead of an ad-hoc current-thread
+        // runtime inside the sync embed wrapper.
+        let embed_result = match runtime_handle.as_ref() {
+            Some(handle) => handle.block_on(session.index().embed_pending_chunks_async(
+                namespace_id,
+                provider,
+                batch_size,
+            )),
+            None => session
+                .index()
+                .embed_pending_chunks(namespace_id, provider, batch_size),
+        };
+        match embed_result {
             Ok(stats) => {
                 publish_batch(events, workspace_id, &stats);
                 // More pending work may remain if the batch was full.
@@ -544,6 +557,36 @@ pub fn hybrid_search_with_session_semantic(
             )?)
         }
         _ => Ok(session.index().hybrid_search(query, limit, None, None)?),
+    }
+}
+
+/// Async hybrid search using the session's semantic worker when ready.
+///
+/// Handlers may keep calling [`hybrid_search_with_session_semantic`]; this
+/// awaits [`WorkspaceIndex::hybrid_search_async`] when a caller already has a
+/// runtime.
+pub async fn hybrid_search_with_session_semantic_async(
+    session: &WorkspaceSession,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<HybridSearchHit>> {
+    session.ensure_index_warm()?;
+    match session.semantic_worker_snapshot() {
+        Some((provider, namespace_id, avail))
+            if matches!(
+                avail,
+                SemanticAvailability::Ready | SemanticAvailability::Paused
+            ) =>
+        {
+            Ok(session
+                .index()
+                .hybrid_search_async(query, limit, Some(provider.as_ref()), Some(namespace_id))
+                .await?)
+        }
+        _ => Ok(session
+            .index()
+            .hybrid_search_async(query, limit, None, None)
+            .await?),
     }
 }
 

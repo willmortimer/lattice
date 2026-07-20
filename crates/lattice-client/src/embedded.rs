@@ -145,12 +145,37 @@ impl EmbeddedClient {
                 req.workspace_id
             ))
         })?;
-        // Exercise the warm index; D0 SearchResponse has no hit payload yet.
-        let _hits = session
-            .search(&req.query, 10)
-            .map_err(|err| ClientError::UnexpectedResponse(err.to_string()))?;
+        let limit = if req.limit == 0 {
+            10
+        } else {
+            (req.limit as usize).clamp(1, 50)
+        };
+        let hits = lattice_handlers::search_workspace_ui_with_session(
+            &session,
+            &req.query,
+            limit,
+            req.mode.as_deref(),
+        )
+        .map_err(|message| ClientError::UnexpectedResponse(message))?;
         Ok(Response {
-            body: Some(response::Body::Search(SearchResponse {})),
+            body: Some(response::Body::Search(SearchResponse {
+                hits: hits
+                    .into_iter()
+                    .map(|hit| lattice_protocol::SearchHit {
+                        path: hit.path,
+                        title: hit.title,
+                        snippet: hit.snippet,
+                        rank: hit.rank,
+                        fused_score: hit.fused_score,
+                        lexical_rank: hit.lexical_rank,
+                        semantic_rank: hit.semantic_rank,
+                        heading_path: hit.heading_path.unwrap_or_default(),
+                        chunk_id: hit.chunk_id,
+                        sensitivity: hit.sensitivity,
+                        export_policy: hit.export_policy,
+                    })
+                    .collect(),
+            })),
         })
     }
 
@@ -389,14 +414,18 @@ mod tests {
                 body: Some(request::Body::Search(SearchRequest {
                     workspace_id: workspace_id.clone(),
                     query: "Embedded".into(),
+                    limit: 0,
+                    mode: None,
                 })),
             })
             .await
             .expect("search");
-        assert!(matches!(
-            search.body,
-            Some(response::Body::Search(SearchResponse {}))
-        ));
+        match search.body {
+            Some(response::Body::Search(resp)) => {
+                assert!(!resp.hits.is_empty(), "embedded search should return hits");
+            }
+            other => panic!("unexpected search body: {other:?}"),
+        }
 
         let _ = client
             .request(Request {
@@ -405,6 +434,8 @@ mod tests {
                 body: Some(request::Body::Search(SearchRequest {
                     workspace_id,
                     query: "Embedded".into(),
+                    limit: 0,
+                    mode: None,
                 })),
             })
             .await
