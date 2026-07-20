@@ -14,7 +14,9 @@ mod server;
 mod spec;
 
 pub use backend::BackendKind;
-pub use client::{socket_path_in, EmbedHostClient, EmbedHostSession};
+pub use client::{
+    socket_path_in, EmbedHostClient, EmbedHostSession, ReconnectableEmbedHostProvider,
+};
 pub use error::EmbedHostError;
 pub use framing::{
     decode_frame, encode_frame, try_decode_frame, FrameDecoder, MAX_FRAME_LENGTH,

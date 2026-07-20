@@ -121,6 +121,78 @@ async fn fake_backend_embeds_over_uds() {
 }
 
 #[tokio::test]
+async fn reconnectable_provider_survives_host_restart() {
+    let dir = tempdir().unwrap();
+    let socket = socket_path_in(dir.path());
+    let models_dir = dir.path().join("models");
+    let (manifest_path, artifact_path, _) = write_fixture_model(dir.path());
+    let installed = install_model(&manifest_path, &artifact_path, &models_dir).unwrap();
+
+    let bin = env!("CARGO_BIN_EXE_lattice-embed-host");
+    let mut child = Command::new(bin)
+        .arg("serve")
+        .arg("--socket")
+        .arg(&socket)
+        .arg("--backend")
+        .arg("fake")
+        .arg("--models-dir")
+        .arg(&models_dir)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .expect("spawn embed-host");
+
+    wait_for_socket(&socket).await;
+
+    let provider = Arc::new(
+        lattice_embed_host::ReconnectableEmbedHostProvider::connect(
+            &socket,
+            &installed.model_dir,
+            Some(8),
+        )
+        .await
+        .unwrap(),
+    );
+    let before = provider
+        .embed_query(EmbedQueryRequest {
+            text: "before restart".into(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(before.values.len(), 8);
+
+    child.kill().await.expect("kill host");
+    let _ = child.wait().await;
+    sleep(Duration::from_millis(50)).await;
+
+    let mut child = Command::new(bin)
+        .arg("serve")
+        .arg("--socket")
+        .arg(&socket)
+        .arg("--backend")
+        .arg("fake")
+        .arg("--models-dir")
+        .arg(&models_dir)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true)
+        .spawn()
+        .expect("respawn embed-host");
+    wait_for_socket(&socket).await;
+
+    let after = provider
+        .embed_query(EmbedQueryRequest {
+            text: "after restart".into(),
+        })
+        .await
+        .unwrap();
+    assert_eq!(after.values.len(), 8);
+
+    child.kill().await.ok();
+}
+
+#[tokio::test]
 async fn client_tolerates_host_crash() {
     let dir = tempdir().unwrap();
     let socket = socket_path_in(dir.path());
