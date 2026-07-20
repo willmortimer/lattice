@@ -720,11 +720,47 @@ impl CommandEngine {
                         if !app.list_tables()?.iter().any(|name| name == target) {
                             return Err(Error::NotFound { path: path.clone() });
                         }
+                        if column.lookup_relation.is_some() || column.lookup_field.is_some() {
+                            return Err(Error::InvalidResourceTarget {
+                                path: path.clone(),
+                                reason: format!(
+                                    "column {:?} only lookup fields may set lookup-relation / lookup-field",
+                                    column.name
+                                ),
+                            });
+                        }
+                    } else if column.field_type == lattice_data::FieldType::Lookup {
+                        if column.relation_table.is_some() {
+                            return Err(Error::InvalidResourceTarget {
+                                path: path.clone(),
+                                reason: format!(
+                                    "column {:?} only relation fields may set relation-table",
+                                    column.name
+                                ),
+                            });
+                        }
+                        if column.lookup_relation.is_none() || column.lookup_field.is_none() {
+                            return Err(Error::InvalidResourceTarget {
+                                path: path.clone(),
+                                reason: format!(
+                                    "lookup column {:?} requires lookup-relation and lookup-field",
+                                    column.name
+                                ),
+                            });
+                        }
                     } else if column.relation_table.is_some() {
                         return Err(Error::InvalidResourceTarget {
                             path: path.clone(),
                             reason: format!(
                                 "column {:?} only relation fields may set relation-table",
+                                column.name
+                            ),
+                        });
+                    } else if column.lookup_relation.is_some() || column.lookup_field.is_some() {
+                        return Err(Error::InvalidResourceTarget {
+                            path: path.clone(),
+                            reason: format!(
+                                "column {:?} only lookup fields may set lookup-relation / lookup-field",
                                 column.name
                             ),
                         });
@@ -2256,6 +2292,8 @@ fn column_specs_as_new_columns(columns: &[ColumnSpec]) -> Vec<NewColumn<'_>> {
             name: column.name.as_str(),
             field_type: column.field_type,
             relation_table: column.relation_table.as_deref(),
+            lookup_relation: column.lookup_relation.as_deref(),
+            lookup_field: column.lookup_field.as_deref(),
         })
         .collect()
 }

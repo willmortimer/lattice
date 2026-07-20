@@ -517,6 +517,8 @@ fn relation_column_requires_relation_table_metadata() {
                 name: "parent",
                 field_type: FieldType::Relation,
                 relation_table: None,
+                lookup_relation: None,
+                lookup_field: None,
             }],
         )
         .unwrap_err()
@@ -849,4 +851,216 @@ fn validate_action_url_rejects_parent_segments() {
     assert!(validate_action_url("https://example.com").is_ok());
     assert!(validate_action_url("/absolute").is_err());
     assert!(validate_action_url("../escape").is_err());
+}
+
+#[test]
+fn lookup_column_resolves_related_field_values() {
+    use crate::NewColumn;
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("CRM.data");
+    let mut app = DataApp::create(&package_path, "CRM", "companies").unwrap();
+    app.add_columns(
+        "companies",
+        &[
+            NewColumn::new("name", FieldType::Text),
+            NewColumn::new("city", FieldType::Text),
+        ],
+    )
+    .unwrap();
+    app.add_table("contacts").unwrap();
+    app.add_columns(
+        "contacts",
+        &[
+            NewColumn::new("name", FieldType::Text),
+            NewColumn::relation("company", "companies"),
+            NewColumn::lookup("company_name", "company", "name"),
+            NewColumn::lookup("company_city", "company", "city"),
+        ],
+    )
+    .unwrap();
+
+    let columns = app.columns("contacts").unwrap();
+    let lookup = columns
+        .iter()
+        .find(|column| column.name == "company_name")
+        .expect("company_name lookup");
+    assert_eq!(lookup.field_type, FieldType::Lookup);
+    assert_eq!(lookup.lookup_relation.as_deref(), Some("company"));
+    assert_eq!(lookup.lookup_field.as_deref(), Some("name"));
+
+    let manifest_text = std::fs::read_to_string(app_manifest_path(&package_path)).unwrap();
+    assert!(manifest_text.contains("type: lookup"));
+    assert!(manifest_text.contains("lookup_relation: company"));
+    assert!(manifest_text.contains("lookup_field: name"));
+
+    let acme_id = app
+        .insert_row(
+            "companies",
+            &BTreeMap::from([
+                ("name".into(), CellValue::Text("Acme".into())),
+                ("city".into(), CellValue::Text("Seattle".into())),
+            ]),
+        )
+        .unwrap();
+    let beta_id = app
+        .insert_row(
+            "companies",
+            &BTreeMap::from([
+                ("name".into(), CellValue::Text("Beta".into())),
+                ("city".into(), CellValue::Text("Austin".into())),
+            ]),
+        )
+        .unwrap();
+
+    let contact_id = app
+        .insert_row(
+            "contacts",
+            &BTreeMap::from([
+                ("name".into(), CellValue::Text("Ada".into())),
+                (
+                    "company".into(),
+                    CellValue::Relation {
+                        record_ids: vec![acme_id.clone(), beta_id.clone()],
+                    },
+                ),
+            ]),
+        )
+        .unwrap();
+
+    let row = app.get_row("contacts", &contact_id).unwrap().unwrap();
+    assert_eq!(
+        row.values.get("company_name"),
+        Some(&CellValue::Lookup {
+            values: vec!["Acme".into(), "Beta".into()],
+        })
+    );
+    assert_eq!(
+        row.values.get("company_city"),
+        Some(&CellValue::Lookup {
+            values: vec!["Seattle".into(), "Austin".into()],
+        })
+    );
+
+    let listed = app.list_rows("contacts", 10, 0).unwrap();
+    assert_eq!(
+        listed[0].values.get("company_name"),
+        Some(&CellValue::Lookup {
+            values: vec!["Acme".into(), "Beta".into()],
+        })
+    );
+
+    // Lookup cells are read-only on update.
+    let write_err = app
+        .update_row(
+            "contacts",
+            &contact_id,
+            &BTreeMap::from([(
+                "company_name".into(),
+                CellValue::Lookup {
+                    values: vec!["nope".into()],
+                },
+            )]),
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(write_err.contains("read-only"));
+}
+
+#[test]
+fn lookup_follows_relation_strip_on_delete() {
+    use crate::NewColumn;
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("CRM.data");
+    let mut app = DataApp::create(&package_path, "CRM", "companies").unwrap();
+    app.add_columns("companies", &[NewColumn::new("name", FieldType::Text)])
+        .unwrap();
+    app.add_table("contacts").unwrap();
+    app.add_columns(
+        "contacts",
+        &[
+            NewColumn::new("name", FieldType::Text),
+            NewColumn::relation("company", "companies"),
+            NewColumn::lookup("company_name", "company", "name"),
+        ],
+    )
+    .unwrap();
+
+    let company_id = app
+        .insert_row(
+            "companies",
+            &BTreeMap::from([("name".into(), CellValue::Text("Acme".into()))]),
+        )
+        .unwrap();
+    let other_id = app
+        .insert_row(
+            "companies",
+            &BTreeMap::from([("name".into(), CellValue::Text("Beta".into()))]),
+        )
+        .unwrap();
+    let contact_id = app
+        .insert_row(
+            "contacts",
+            &BTreeMap::from([(
+                "company".into(),
+                CellValue::Relation {
+                    record_ids: vec![company_id.clone(), other_id.clone()],
+                },
+            )]),
+        )
+        .unwrap();
+
+    app.delete_row("companies", &company_id).unwrap();
+    let contact = app.get_row("contacts", &contact_id).unwrap().unwrap();
+    assert_eq!(
+        contact.values.get("company"),
+        Some(&CellValue::Relation {
+            record_ids: vec![other_id],
+        })
+    );
+    assert_eq!(
+        contact.values.get("company_name"),
+        Some(&CellValue::Lookup {
+            values: vec!["Beta".into()],
+        })
+    );
+}
+
+#[test]
+fn lookup_column_requires_valid_relation_and_field() {
+    use crate::NewColumn;
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("CRM.data");
+    let mut app = DataApp::create(&package_path, "CRM", "companies").unwrap();
+    app.add_columns("companies", &[NewColumn::new("name", FieldType::Text)])
+        .unwrap();
+    app.add_table("contacts").unwrap();
+    app.add_columns(
+        "contacts",
+        &[
+            NewColumn::new("name", FieldType::Text),
+            NewColumn::relation("company", "companies"),
+        ],
+    )
+    .unwrap();
+
+    let missing_relation = app
+        .add_columns(
+            "contacts",
+            &[NewColumn::lookup("company_name", "missing", "name")],
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(missing_relation.contains("lookup_relation"));
+
+    let missing_field = app
+        .add_columns(
+            "contacts",
+            &[NewColumn::lookup("company_name", "company", "missing")],
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(missing_field.contains("lookup_field"));
 }

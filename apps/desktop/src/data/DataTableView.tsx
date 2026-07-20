@@ -99,7 +99,7 @@ function isStaleRevisionError(message: string): boolean {
 }
 
 function editableColumns(columns: DataColumn[]): DataColumn[] {
-  return columns.filter((column) => column.name !== "id");
+  return columns.filter((column) => column.name !== "id" && column.field_type !== "lookup");
 }
 
 function cycleSortDirection(
@@ -807,7 +807,11 @@ export function DataTableView({
             )
           : cellValueToDisplay(row.values[column.name]);
       const readOnly =
-        column.name === "id" || busy || stale || column.field_type === "relation";
+        column.name === "id" ||
+        busy ||
+        stale ||
+        column.field_type === "relation" ||
+        column.field_type === "lookup";
       const zebraTheme =
         preferences.zebraRows && rowIndex % 2 === 1
           ? { bgCell: token("--lt-bg-raise", "#11161f") }
