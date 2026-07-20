@@ -14,9 +14,10 @@ use lattice_core::{
 use lattice_data::{
     parse_field_type_name, parse_tabular_file, resolve_field_types, CellValue, DataApp, FieldType,
 };
+use lattice_datasets::Dataset;
+use lattice_duckdb::{DuckDbEngine, ScalarValue};
 use lattice_index::{Backlink, SearchHit, WorkspaceIndex};
 use lattice_storage::{NativeWorkspaceStore, RecoveryJournal, WorkspaceStore};
-use lattice_datasets::Dataset;
 use lattice_theme::{
     check_theme_file, discover_themes, load_appearance, save_appearance, AppearanceMode,
 };
@@ -92,6 +93,20 @@ enum Command {
     Dataset {
         #[command(subcommand)]
         command: DatasetCommand,
+    },
+    /// Run an analytical SQL query (workspace-scoped DuckDB).
+    Query {
+        /// SQL statement to execute.
+        #[arg(long)]
+        sql: String,
+        /// Query engine. Currently only `duckdb` is supported.
+        #[arg(long, default_value = "duckdb")]
+        engine: String,
+        /// Path inside the workspace to discover from. Defaults to the current directory.
+        path: Option<PathBuf>,
+        /// Emit the result batch as JSON.
+        #[arg(long)]
+        json: bool,
     },
     /// Insert, update, and delete rows in `.data` packages.
     Record {
@@ -543,11 +558,7 @@ fn run(command: Command) -> Result<ExitCode> {
                 rollup_field,
                 base,
             ),
-            TableCommand::AddTable {
-                path,
-                table,
-                base,
-            } => cmd_table_add_table(path, table, base),
+            TableCommand::AddTable { path, table, base } => cmd_table_add_table(path, table, base),
             TableCommand::View { command } => match command {
                 TableViewCommand::List { path, json } => cmd_table_view_list(path, json),
                 TableViewCommand::Show { path, name, json } => {
@@ -563,6 +574,12 @@ fn run(command: Command) -> Result<ExitCode> {
             } => cmd_dataset_create(path, title, description),
             DatasetCommand::Show { path, json } => cmd_dataset_show(path, json),
         },
+        Command::Query {
+            sql,
+            engine,
+            path,
+            json,
+        } => cmd_query(sql, engine, path, json),
         Command::Record { command } => match command {
             RecordCommand::Insert {
                 path,
@@ -994,6 +1011,73 @@ fn cmd_dataset_show(path: PathBuf, json: bool) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
+fn cmd_query(sql: String, engine: String, path: Option<PathBuf>, json: bool) -> Result<ExitCode> {
+    match engine.as_str() {
+        "duckdb" => {}
+        other => bail!("unsupported query engine {other:?}; supported: duckdb"),
+    }
+
+    let start =
+        path.unwrap_or(std::env::current_dir().context("failed to determine current directory")?);
+    let ws = Workspace::discover(&start)?;
+    let duck = DuckDbEngine::open_in_memory(ws.root())?;
+    let batch = duck.query(&sql)?;
+
+    if json {
+        let columns: Vec<_> = batch
+            .schema
+            .fields
+            .iter()
+            .map(|field| field.name.clone())
+            .collect();
+        let rows: Vec<Vec<serde_json::Value>> = batch
+            .rows()
+            .into_iter()
+            .map(|row| row.into_iter().map(scalar_to_json).collect())
+            .collect();
+        print_json(&serde_json::json!({
+            "engine": "duckdb",
+            "num_rows": batch.num_rows,
+            "columns": columns,
+            "rows": rows,
+        }))?;
+    } else {
+        let header: Vec<_> = batch
+            .schema
+            .fields
+            .iter()
+            .map(|field| field.name.as_str())
+            .collect();
+        println!("{}", header.join("\t"));
+        for row in batch.rows() {
+            let cells: Vec<_> = row.iter().map(format_scalar).collect();
+            println!("{}", cells.join("\t"));
+        }
+        println!("{} row(s)", batch.num_rows);
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn format_scalar(value: &ScalarValue) -> String {
+    match value {
+        ScalarValue::Null => "NULL".to_string(),
+        ScalarValue::Boolean(value) => value.to_string(),
+        ScalarValue::Int64(value) => value.to_string(),
+        ScalarValue::Float64(value) => value.to_string(),
+        ScalarValue::Utf8(value) => value.clone(),
+    }
+}
+
+fn scalar_to_json(value: ScalarValue) -> serde_json::Value {
+    match value {
+        ScalarValue::Null => serde_json::Value::Null,
+        ScalarValue::Boolean(value) => serde_json::Value::Bool(value),
+        ScalarValue::Int64(value) => serde_json::json!(value),
+        ScalarValue::Float64(value) => serde_json::json!(value),
+        ScalarValue::Utf8(value) => serde_json::Value::String(value),
+    }
+}
+
 fn package_path_from_name(name: &str) -> PathBuf {
     let trimmed = name.trim().trim_end_matches(".data");
     PathBuf::from(format!("{trimmed}.data"))
@@ -1007,8 +1091,8 @@ fn parse_column_type_override(value: &str) -> Result<(String, lattice_data::Fiel
     if column.is_empty() {
         anyhow::bail!("column name is required in column:type override");
     }
-    let field_type = parse_field_type_name(field_type.trim())
-        .map_err(|err| anyhow::anyhow!("{err}"))?;
+    let field_type =
+        parse_field_type_name(field_type.trim()).map_err(|err| anyhow::anyhow!("{err}"))?;
     Ok((column.to_string(), field_type))
 }
 
@@ -1087,11 +1171,7 @@ fn cmd_table_import(
 
     for row in &parsed.rows {
         let mut values = std::collections::BTreeMap::new();
-        for ((header, field_type), cell) in parsed
-            .headers
-            .iter()
-            .zip(&field_types)
-            .zip(row.iter())
+        for ((header, field_type), cell) in parsed.headers.iter().zip(&field_types).zip(row.iter())
         {
             values.insert(
                 header.clone(),
@@ -1313,9 +1393,8 @@ fn column_spec(
     let has_rollup =
         rollup_relation.is_some() || rollup_aggregate.is_some() || rollup_field.is_some();
     if field_type == FieldType::Relation {
-        let relation_table = relation_table.with_context(|| {
-            format!("column {name:?} has type relation; pass --relation-table")
-        })?;
+        let relation_table = relation_table
+            .with_context(|| format!("column {name:?} has type relation; pass --relation-table"))?;
         if has_lookup {
             bail!("--lookup-relation / --lookup-field are only valid when --type is lookup");
         }
@@ -1325,12 +1404,10 @@ fn column_spec(
         return Ok(ColumnSpec::relation(name, relation_table));
     }
     if field_type == FieldType::Lookup {
-        let lookup_relation = lookup_relation.with_context(|| {
-            format!("column {name:?} has type lookup; pass --lookup-relation")
-        })?;
-        let lookup_field = lookup_field.with_context(|| {
-            format!("column {name:?} has type lookup; pass --lookup-field")
-        })?;
+        let lookup_relation = lookup_relation
+            .with_context(|| format!("column {name:?} has type lookup; pass --lookup-relation"))?;
+        let lookup_field = lookup_field
+            .with_context(|| format!("column {name:?} has type lookup; pass --lookup-field"))?;
         if relation_table.is_some() {
             bail!("--relation-table is only valid when --type is relation");
         }
@@ -1340,12 +1417,10 @@ fn column_spec(
         return Ok(ColumnSpec::lookup(name, lookup_relation, lookup_field));
     }
     if field_type == FieldType::Rollup {
-        let rollup_relation = rollup_relation.with_context(|| {
-            format!("column {name:?} has type rollup; pass --rollup-relation")
-        })?;
-        let rollup_aggregate = rollup_aggregate.with_context(|| {
-            format!("column {name:?} has type rollup; pass --rollup-aggregate")
-        })?;
+        let rollup_relation = rollup_relation
+            .with_context(|| format!("column {name:?} has type rollup; pass --rollup-relation"))?;
+        let rollup_aggregate = rollup_aggregate
+            .with_context(|| format!("column {name:?} has type rollup; pass --rollup-aggregate"))?;
         let aggregate = rollup_aggregate
             .parse::<lattice_data::RollupAggregate>()
             .map_err(|err| anyhow::anyhow!(err))?;
@@ -1722,7 +1797,8 @@ fn cmd_theme_list(json: bool) -> Result<ExitCode> {
 fn cmd_templates_list(json: bool) -> Result<ExitCode> {
     let templates = template_catalog();
     if json {
-        let items: Vec<TemplateListItem<'_>> = templates.iter().map(TemplateListItem::from).collect();
+        let items: Vec<TemplateListItem<'_>> =
+            templates.iter().map(TemplateListItem::from).collect();
         print_json(&items)?;
     } else {
         for template in &templates {
@@ -1739,8 +1815,9 @@ fn cmd_templates_list(json: bool) -> Result<ExitCode> {
 }
 
 fn cmd_templates_show(id: String, json: bool) -> Result<ExitCode> {
-    let template = template_descriptor(&id)
-        .with_context(|| format!("unknown template {id:?}; run `lattice templates list` for ids"))?;
+    let template = template_descriptor(&id).with_context(|| {
+        format!("unknown template {id:?}; run `lattice templates list` for ids")
+    })?;
     if json {
         print_json(&template)?;
     } else {

@@ -14,6 +14,7 @@ members = [
     "crates/lattice-embedding",
     "crates/lattice-data",
     "crates/lattice-datasets",
+    "crates/lattice-duckdb",
     "crates/lattice-theme",
     "crates/lattice-handlers",
     "crates/lattice-runtime",
@@ -44,6 +45,7 @@ lattice-embed-host = { path = "apps/embed-host" }
 lattice-voice-host = { path = "apps/voice-host-macos" }
 lattice-data = { path = "crates/lattice-data" }
 lattice-datasets = { path = "crates/lattice-datasets" }
+lattice-duckdb = { path = "crates/lattice-duckdb" }
 lattice-theme = { path = "crates/lattice-theme" }
 lattice-handlers = { path = "crates/lattice-handlers" }
 lattice-runtime = { path = "crates/lattice-runtime" }
