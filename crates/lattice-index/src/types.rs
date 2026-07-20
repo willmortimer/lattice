@@ -77,6 +77,7 @@ pub struct HybridSearchHit {
     pub semantic_rank: Option<u32>,
     pub fused_score: f32,
     pub provenance: crate::provenance::SearchProvenance,
+    pub sensitivity: crate::provenance::Sensitivity,
     pub export_policy: crate::provenance::ExportPolicy,
 }
 

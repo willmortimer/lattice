@@ -18,7 +18,9 @@ hex.workspace = true
 thiserror.workspace = true
 walkdir.workspace = true
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+futures-executor = "0.3"
 
 [dev-dependencies]
+lattice-embed-host.workspace = true
 tempfile = "3"
-tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "net", "process", "rt", "rt-multi-thread", "time"] }

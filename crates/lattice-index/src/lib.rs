@@ -29,8 +29,8 @@ pub use extract::{
     StructuredExtraction, StructuredFormat, StructuredPath,
 };
 pub use hybrid::{
-    diversify_by_resource, reciprocal_rank_fuse, FusionAccum, DEFAULT_MAX_CHUNKS_PER_RESOURCE,
-    RRF_K,
+    diversify_by_resource, reciprocal_rank_fuse, resource_uri_from_path, FusionAccum,
+    DEFAULT_MAX_CHUNKS_PER_RESOURCE, RRF_K,
 };
 pub use index::{
     upsert_page, Backlink, BacklinkKind, ChunkSearchHit, EmbedPendingStats, HybridSearchHit,
@@ -40,8 +40,10 @@ pub use lattice_core::{
     build_link_repair_plan, LinkOccurrence, LinkRepairCandidate, LinkRepairPlan, LinkRepairSource,
     LinkRepairStatus,
 };
-pub use provenance::{ExportPolicy, SearchProvenance};
-pub use semantic::embedding_input_hash;
+pub use provenance::{ExportPolicy, SearchProvenance, Sensitivity};
+pub use semantic::{
+    embedding_input_hash, format_document_embedding_input, DOC_EMBEDDING_INPUT_VERSION,
+};
 pub use vector::{
     remove_vector, search_vectors, upsert_vector, SqliteExactScanVectorIndex, VectorCandidate,
     VectorIndex, VectorIndexError,

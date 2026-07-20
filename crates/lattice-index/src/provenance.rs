@@ -1,5 +1,33 @@
 use serde::{Deserialize, Serialize};
 
+/// Resource sensitivity attached to indexed chunks and search hits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum Sensitivity {
+    #[default]
+    Workspace,
+    Private,
+    Secret,
+}
+
+impl Sensitivity {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Workspace => "workspace",
+            Self::Private => "private",
+            Self::Secret => "secret",
+        }
+    }
+
+    pub fn parse(value: &str) -> Self {
+        match value {
+            "private" => Self::Private,
+            "secret" => Self::Secret,
+            _ => Self::Workspace,
+        }
+    }
+}
+
 /// External-export policy attached to a search hit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
