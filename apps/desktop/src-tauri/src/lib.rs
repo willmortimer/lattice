@@ -1,5 +1,6 @@
 mod canvas;
 mod commands;
+mod daemon_session;
 mod data;
 mod dataset;
 mod link_repair;

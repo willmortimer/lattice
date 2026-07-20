@@ -24,11 +24,7 @@ voice = [
     "dep:lattice-voice",
     "dep:lattice-audio",
     "dep:lattice-audio-macos",
-    "dep:lattice-client",
-    "dep:lattice-protocol",
     "dep:bytes",
-    "dep:dirs",
-    "dep:uuid",
     "lattice-audio-macos/link-bridge",
 ]
 # Transitional in-process FluidAudio fallback when latticed/voice-host is down.
@@ -66,20 +62,20 @@ lattice-arrow-transport.workspace = true
 lattice-handlers.workspace = true
 lattice-runtime.workspace = true
 lattice-terminal.workspace = true
+lattice-client.workspace = true
+lattice-protocol.workspace = true
 arrow.workspace = true
 notify.workspace = true
 notify-debouncer-full.workspace = true
 tokio.workspace = true
+dirs.workspace = true
+uuid.workspace = true
 # Optional: enabled by the `voice` / `voice-embedded` features.
 lattice-voice = { workspace = true, optional = true }
 lattice-voice-macos = { workspace = true, optional = true }
 lattice-audio = { workspace = true, optional = true }
 lattice-audio-macos = { workspace = true, optional = true }
-lattice-client = { workspace = true, optional = true }
-lattice-protocol = { workspace = true, optional = true }
 bytes = { workspace = true, optional = true }
-dirs = { workspace = true, optional = true }
-uuid = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = "3"

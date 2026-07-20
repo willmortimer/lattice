@@ -25,6 +25,7 @@ import {
   getSemanticStatus,
   listenSemanticEvents,
   SEMANTIC_MODEL_CONFIRM,
+  semanticProviderLabel,
   semanticStatusLabel,
   type SemanticStatus,
 } from "../lib/semantic";
@@ -674,6 +675,9 @@ function SemanticSearchSettings({
             pendingChunks: event.pendingChunks,
             message: event.message,
             progressPercent,
+            providerId: event.providerId ?? prev?.providerId ?? null,
+            modelId: event.modelId ?? prev?.modelId ?? null,
+            dimensions: event.dimensions ?? prev?.dimensions ?? null,
           };
         });
       }
@@ -735,6 +739,7 @@ function SemanticSearchSettings({
     : semanticEnabled
       ? "Preparing…"
       : "Not prepared";
+  const providerText = status ? semanticProviderLabel(status) : null;
 
   return (
     <>
@@ -764,7 +769,21 @@ function SemanticSearchSettings({
             title="Index status"
             description="Whether the local embedding model and workspace index are ready."
           >
-            <span>{busy ? "Updating…" : statusText}</span>
+            <span>
+              {busy ? (
+                "Updating…"
+              ) : (
+                <>
+                  {statusText}
+                  {providerText ? (
+                    <>
+                      <br />
+                      <span className="settings-copy">Provider: {providerText}</span>
+                    </>
+                  ) : null}
+                </>
+              )}
+            </span>
           </SettingRow>
           {error ? (
             <div className="diagnostics-card" role="alert">
