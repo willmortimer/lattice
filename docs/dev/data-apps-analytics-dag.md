@@ -137,7 +137,7 @@ flowchart TD
 | P2-13 | merged | composer | FormSave |
 | P2-14 | merged | composer | Docs wave 2 |
 | P3-01 | merged | composer | Dataset package |
-| P3-02 | pending | grok | DuckDB |
+| P3-02 | merged | grok | DuckDB |
 | P3-03 | pending | grok | Arrow IPC |
 | P3-04 | done | grok | Parquet partitions |
 | P3-05 | pending | composer | Profiling |
