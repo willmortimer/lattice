@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  NATIVE_DESKTOP_LABEL,
+  nativeOnlyDemoNotice,
+  nativeOnlyToolbarTooltip,
+} from "./browserDemoHonesty";
+import {
   buildAddColumnPayload,
   columnFieldTypeOptions,
   rollupAggregateOptions,
@@ -279,7 +284,6 @@ export function AddColumnPanel({
     }
 
     if (demo) {
-      onError("Adding columns is not persisted in the browser demo.");
       return;
     }
 
@@ -372,9 +376,7 @@ export function AddColumnPanel({
       </div>
 
       {demo && (
-        <p className="data-table-add-column-demo">
-          Column changes are not persisted in the browser demo.
-        </p>
+        <p className="data-table-add-column-demo">{nativeOnlyDemoNotice("Column changes")}</p>
       )}
 
       {tablesError && <p className="error-text">{tablesError}</p>}
@@ -547,14 +549,21 @@ export function AddColumnPanel({
       {validationError && <p className="error-text">{validationError}</p>}
 
       <div className="data-table-add-column-actions">
-        <button
-          type="button"
-          className="primary-button"
-          disabled={disabled || relationBlocked || lookupBlocked || rollupBlocked}
-          onClick={() => void submit()}
-        >
-          Add column
-        </button>
+        <span className="data-table-native-only-control">
+          <button
+            type="button"
+            className="primary-button"
+            disabled={disabled || demo || relationBlocked || lookupBlocked || rollupBlocked}
+            title={demo ? nativeOnlyToolbarTooltip("Adding columns") : undefined}
+            aria-disabled={demo || undefined}
+            onClick={() => void submit()}
+          >
+            Add column
+          </button>
+          {demo ? (
+            <span className="data-table-native-only-label">{NATIVE_DESKTOP_LABEL}</span>
+          ) : null}
+        </span>
       </div>
     </section>
   );
