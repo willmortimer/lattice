@@ -124,7 +124,7 @@ flowchart TD
 | P2-01 | merged | grok | Schema commands |
 | P2-03 | merged | grok | Paginated open → `2a32d0c` |
 | P2-02 | pending | composer | Column designer |
-| P2-04 | pending | composer | CLI schema alter |
+| P2-04 | merged | composer | CLI schema alter |
 | P2-05 | pending | composer | CSV type-review |
 | P2-06 | pending | composer | CSV promote |
 | P2-07 | pending | composer | Docs wave 1 |
