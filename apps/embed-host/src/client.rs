@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -123,6 +124,16 @@ impl EmbedHostClient {
                 "unexpected load response: {other:?}"
             ))),
         }
+    }
+
+    /// Connect to a host socket and load a model in one step.
+    pub async fn connect_and_load(
+        socket_path: impl AsRef<Path>,
+        model_dir: impl AsRef<Path>,
+        dimensions: Option<u32>,
+    ) -> Result<EmbedHostSession, EmbedHostError> {
+        let client = Arc::new(Self::connect(socket_path).await?);
+        client.load_model(model_dir, dimensions).await
     }
 
     /// Unload the current model.
@@ -297,6 +308,157 @@ impl EmbeddingProvider for EmbedHostSession {
             .embed_documents_rpc(requests)
             .await
             .map_err(map_to_embedding_error)
+    }
+}
+
+/// [`EmbeddingProvider`] that talks to embed-host over UDS and reconnects after
+/// host crashes / restarts.
+///
+/// Specification is stored behind an atomic pointer so [`Self::reload_model`]
+/// can swap the loaded GGUF after E5 prepare without rebuilding the provider.
+/// Outstanding `&EmbeddingSpecification` references from before a swap remain
+/// valid for the process lifetime (previous boxes are leaked on change).
+pub struct ReconnectableEmbedHostProvider {
+    socket: PathBuf,
+    model_dir: Mutex<PathBuf>,
+    dimensions: Mutex<Option<u32>>,
+    specification: AtomicPtr<EmbeddingSpecification>,
+    session: Mutex<Option<EmbedHostSession>>,
+}
+
+impl ReconnectableEmbedHostProvider {
+    /// Connect, load the model, and return a reconnecting provider.
+    pub async fn connect(
+        socket: impl Into<PathBuf>,
+        model_dir: impl Into<PathBuf>,
+        dimensions: Option<u32>,
+    ) -> Result<Self, EmbedHostError> {
+        let socket = socket.into();
+        let model_dir = model_dir.into();
+        let session = EmbedHostClient::connect_and_load(&socket, &model_dir, dimensions).await?;
+        let specification = Box::into_raw(Box::new(session.specification().clone()));
+        Ok(Self {
+            socket,
+            model_dir: Mutex::new(model_dir),
+            dimensions: Mutex::new(dimensions),
+            specification: AtomicPtr::new(specification),
+            session: Mutex::new(Some(session)),
+        })
+    }
+
+    /// Drop the live session and reconnect + reload the configured model.
+    pub async fn reconnect(&self) -> Result<(), EmbedHostError> {
+        let model_dir = self.model_dir.lock().await.clone();
+        let dimensions = *self.dimensions.lock().await;
+        let session =
+            EmbedHostClient::connect_and_load(&self.socket, &model_dir, dimensions).await?;
+        self.store_specification(session.specification().clone());
+        *self.session.lock().await = Some(session);
+        Ok(())
+    }
+
+    /// Point at a different verified model directory and reload (post-prepare).
+    pub async fn reload_model(
+        &self,
+        model_dir: impl Into<PathBuf>,
+        dimensions: Option<u32>,
+    ) -> Result<(), EmbedHostError> {
+        let model_dir = model_dir.into();
+        *self.model_dir.lock().await = model_dir.clone();
+        *self.dimensions.lock().await = dimensions;
+        let session =
+            EmbedHostClient::connect_and_load(&self.socket, &model_dir, dimensions).await?;
+        self.store_specification(session.specification().clone());
+        *self.session.lock().await = Some(session);
+        Ok(())
+    }
+
+    pub fn socket(&self) -> &Path {
+        &self.socket
+    }
+
+    pub async fn model_dir(&self) -> PathBuf {
+        self.model_dir.lock().await.clone()
+    }
+
+    fn store_specification(&self, specification: EmbeddingSpecification) {
+        let new = Box::into_raw(Box::new(specification));
+        let old = self.specification.swap(new, Ordering::AcqRel);
+        if !old.is_null() {
+            // Keep outstanding `specification()` refs valid; reloads are rare.
+            std::mem::forget(unsafe { Box::from_raw(old) });
+        }
+    }
+
+    async fn client(&self) -> Result<Arc<EmbedHostClient>, EmbedHostError> {
+        {
+            let guard = self.session.lock().await;
+            if let Some(session) = guard.as_ref() {
+                return Ok(Arc::clone(&session.client));
+            }
+        }
+        self.reconnect().await?;
+        let guard = self.session.lock().await;
+        guard
+            .as_ref()
+            .map(|session| Arc::clone(&session.client))
+            .ok_or_else(|| EmbedHostError::protocol("embed-host session missing after reconnect"))
+    }
+}
+
+impl Drop for ReconnectableEmbedHostProvider {
+    fn drop(&mut self) {
+        let ptr = self.specification.swap(std::ptr::null_mut(), Ordering::AcqRel);
+        if !ptr.is_null() {
+            unsafe {
+                drop(Box::from_raw(ptr));
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl EmbeddingProvider for ReconnectableEmbedHostProvider {
+    fn specification(&self) -> &EmbeddingSpecification {
+        let ptr = self.specification.load(Ordering::Acquire);
+        assert!(!ptr.is_null(), "embed-host specification pointer missing");
+        unsafe { &*ptr }
+    }
+
+    async fn embed_query(
+        &self,
+        request: EmbedQueryRequest,
+    ) -> Result<EmbeddingVector, lattice_embedding::EmbeddingError> {
+        let client = self.client().await.map_err(map_to_embedding_error)?;
+        match client.embed_query_rpc(request.clone()).await {
+            Ok(vector) => Ok(vector),
+            Err(_) => {
+                self.reconnect().await.map_err(map_to_embedding_error)?;
+                let client = self.client().await.map_err(map_to_embedding_error)?;
+                client
+                    .embed_query_rpc(request)
+                    .await
+                    .map_err(map_to_embedding_error)
+            }
+        }
+    }
+
+    async fn embed_documents(
+        &self,
+        requests: Vec<EmbedDocumentRequest>,
+    ) -> Result<Vec<EmbeddingVector>, lattice_embedding::EmbeddingError> {
+        let client = self.client().await.map_err(map_to_embedding_error)?;
+        match client.embed_documents_rpc(requests.clone()).await {
+            Ok(vectors) => Ok(vectors),
+            Err(_) => {
+                self.reconnect().await.map_err(map_to_embedding_error)?;
+                let client = self.client().await.map_err(map_to_embedding_error)?;
+                client
+                    .embed_documents_rpc(requests)
+                    .await
+                    .map_err(map_to_embedding_error)
+            }
+        }
     }
 }
 

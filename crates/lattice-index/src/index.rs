@@ -461,6 +461,22 @@ impl WorkspaceIndex {
         chunk_embedding_states_for_namespace(&conn, namespace_id)
     }
 
+    /// Count chunks that still need embedding for `namespace_id` (stale / missing / failed).
+    pub fn count_pending_embeddings(&self, namespace_id: i64) -> Result<usize> {
+        let conn = self.conn.lock().unwrap();
+        let namespace = embedding_namespace_by_id(&conn, namespace_id)?
+            .ok_or(Error::NamespaceNotFound(namespace_id))?;
+        let chunks = list_chunks_for_embedding(&conn)?;
+        let mut pending = 0usize;
+        for chunk in chunks {
+            let hash = embedding_input_hash(&chunk.content_hash, &namespace.namespace_key);
+            if is_chunk_embedding_stale(&conn, &chunk.chunk_id, namespace.id, &hash)? {
+                pending += 1;
+            }
+        }
+        Ok(pending)
+    }
+
     /// Return whether a chunk needs re-embedding for the supplied input hash.
     pub fn is_chunk_embedding_stale(
         &self,

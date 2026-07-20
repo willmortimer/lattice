@@ -22,7 +22,8 @@ use axum::{
 };
 use lattice_handlers::{
     apply_page_update, create_page, create_workspace, ensure_home, get_backlinks, list_resources,
-    list_templates, open_workspace, read_page, rebuild_index, search_workspace, STALE_REVISION_PREFIX,
+    list_templates, open_workspace, read_page, rebuild_index, search_workspace_ui,
+    STALE_REVISION_PREFIX,
 };
 use serde::{Deserialize, Serialize};
 use tower_http::cors::{Any, CorsLayer};
@@ -116,6 +117,9 @@ struct SearchWorkspaceRequest {
     query: String,
     #[serde(default = "default_search_limit")]
     limit: usize,
+    /// Optional `fts` | `hybrid` | `auto`. Omitted → fts (historical behavior).
+    #[serde(default)]
+    mode: Option<String>,
 }
 
 fn default_search_limit() -> usize {
@@ -301,7 +305,12 @@ async fn route_search_workspace(
         Ok(root) => root,
         Err(response) => return response,
     };
-    handler_result(search_workspace(root, body.query, body.limit))
+    handler_result(search_workspace_ui(
+        root,
+        body.query,
+        body.limit,
+        body.mode.as_deref(),
+    ))
 }
 
 async fn route_rebuild_index(
