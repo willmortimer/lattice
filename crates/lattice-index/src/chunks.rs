@@ -4,7 +4,11 @@ use lattice_core::ResourceFormatProfile;
 use sha2::{Digest, Sha256};
 
 /// Stable chunker identity included in every derived chunk id.
-pub const CHUNKER_VERSION: &str = "lattice-chunker-v1";
+///
+/// Bumped to v2 when structural IDs switched from byte-offset discriminators to
+/// heading-path + kind + local occurrence (so edits near the top no longer
+/// shift later chunk identities).
+pub const CHUNKER_VERSION: &str = "lattice-chunker-v2";
 
 /// Approximate lower bound for merged chunks (~250 tokens at ~4 chars/token).
 const MIN_CHUNK_CHARS: usize = 1_000;
@@ -56,6 +60,8 @@ pub fn chunk_resource(
 
     let resource_key = crate::paths::path_key(resource_path);
     let mut heading_stack: Vec<(u8, String)> = Vec::new();
+    let mut occurrence_counts: std::collections::HashMap<(String, String), u32> =
+        std::collections::HashMap::new();
     let mut merged = Vec::new();
     let mut current: Option<MergedBlock> = None;
 
@@ -65,7 +71,7 @@ pub fn chunk_resource(
             .iter()
             .map(|(_, text)| text.clone())
             .collect::<Vec<_>>();
-        let block_id = structural_block_id(&heading_path, &block);
+        let block_id = structural_block_id(&heading_path, &block, &mut occurrence_counts);
         let piece = BlockPiece {
             block,
             heading_path,
@@ -180,7 +186,8 @@ impl MergedBlock {
             self.text.push_str(&piece.block.text);
         }
         self.end_byte = piece.block.end_byte;
-        self.block_id = None;
+        // Keep the first piece's structural identity; byte ranges update as
+        // provenance only and must not redefine the merged chunk id.
     }
 
     fn char_len(&self) -> usize {
@@ -220,7 +227,11 @@ fn update_heading_stack(stack: &mut Vec<(u8, String)>, block: &SourceBlock) {
     }
 }
 
-fn structural_block_id(heading_path: &[String], block: &SourceBlock) -> Option<String> {
+fn structural_block_id(
+    heading_path: &[String],
+    block: &SourceBlock,
+    occurrence_counts: &mut std::collections::HashMap<(String, String), u32>,
+) -> Option<String> {
     let path = if heading_path.is_empty() {
         "root".to_string()
     } else {
@@ -233,7 +244,11 @@ fn structural_block_id(heading_path: &[String], block: &SourceBlock) -> Option<S
         BlockKind::Table => "table",
         BlockKind::List => "list",
     };
-    Some(format!("{path}|{kind}@{}", block.start_byte))
+    let key = (path.clone(), kind.to_string());
+    let occurrence = occurrence_counts.entry(key).or_insert(0);
+    let id = format!("{path}|{kind}#{occurrence}");
+    *occurrence += 1;
+    Some(id)
 }
 
 fn split_markdown_blocks(text: &str) -> Vec<SourceBlock> {
@@ -737,5 +752,74 @@ mod tests {
         assert!(chunks
             .iter()
             .all(|chunk| estimate_tokens(&chunk.text) <= 1_100));
+    }
+
+    #[test]
+    fn inserting_prefix_paragraph_preserves_later_chunk_ids() {
+        let original = "# Intro\n\nHello under intro.\n\n# Other\n\nBody under other.\n";
+        let with_prefix =
+            "Prefix at top.\n\n# Intro\n\nHello under intro.\n\n# Other\n\nBody under other.\n";
+        let before = chunk_resource(
+            WORKSPACE_ID,
+            Path::new("Notes/Demo.md"),
+            original,
+            0,
+            ResourceFormatProfile::Markdown,
+            "Demo",
+            &[],
+        );
+        let after = chunk_resource(
+            WORKSPACE_ID,
+            Path::new("Notes/Demo.md"),
+            with_prefix,
+            0,
+            ResourceFormatProfile::Markdown,
+            "Demo",
+            &[],
+        );
+
+        let before_by_text: std::collections::HashMap<&str, &SearchChunkDraft> = before
+            .iter()
+            .map(|chunk| (chunk.text.as_str(), chunk))
+            .collect();
+        for chunk in &after {
+            if chunk.text.contains("Prefix at top") {
+                continue;
+            }
+            let prior = before_by_text
+                .get(chunk.text.as_str())
+                .unwrap_or_else(|| panic!("missing prior chunk for {}", chunk.text));
+            assert_eq!(
+                prior.chunk_id, chunk.chunk_id,
+                "chunk id shifted for text {:?}",
+                chunk.text
+            );
+            assert_ne!(
+                prior.source_start_byte, chunk.source_start_byte,
+                "byte range should shift after a top insert"
+            );
+        }
+    }
+
+    #[test]
+    fn merged_blocks_keep_first_structural_identity() {
+        let text = "First short.\n\nSecond short.\n";
+        let chunks = chunk_resource(
+            WORKSPACE_ID,
+            Path::new("merge.txt"),
+            text,
+            0,
+            ResourceFormatProfile::PlainText,
+            "Merge",
+            &[],
+        );
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(
+            chunks[0].block_id.as_deref(),
+            Some("root|paragraph#0"),
+            "merged chunk should retain the first block's structural id"
+        );
+        assert!(chunks[0].text.contains("First short."));
+        assert!(chunks[0].text.contains("Second short."));
     }
 }

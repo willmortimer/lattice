@@ -2,9 +2,14 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::provenance::{ExportPolicy, SearchProvenance};
+use crate::provenance::{ExportPolicy, SearchProvenance, Sensitivity};
 use crate::semantic::{ChunkHydrationRow, SemanticHit};
 use crate::types::{ChunkSearchHit, HybridSearchHit};
+
+/// Durable resource URI for a workspace-relative path (forward-slash form).
+pub fn resource_uri_from_path(path: &str) -> String {
+    format!("lattice://resource/{}", path.replace('\\', "/"))
+}
 
 /// Reciprocal-rank fusion constant (Cormack et al.).
 pub const RRF_K: u32 = 60;
@@ -91,9 +96,14 @@ pub(crate) fn hydrate_fused_hits(
         let Some(row) = rows.get(&chunk_id) else {
             continue;
         };
+        let sensitivity = Sensitivity::parse(&row.sensitivity);
+        // Highest sensitivity tier is never returned in search results.
+        if sensitivity == Sensitivity::Secret {
+            continue;
+        }
         let excerpt = excerpt_from_text(&row.text, 240);
         hits.push(HybridSearchHit {
-            resource_uri: row.path.clone(),
+            resource_uri: resource_uri_from_path(&row.path),
             resource_id: row.resource_id.to_string(),
             chunk_id,
             title: row.title.clone(),
@@ -112,6 +122,7 @@ pub(crate) fn hydrate_fused_hits(
                 model_revision: provenance_base.model_revision.clone(),
                 instruction_version: provenance_base.instruction_version.clone(),
             },
+            sensitivity,
             export_policy: ExportPolicy::parse(&row.export_policy),
         });
         if hits.len() >= limit * 4 {
@@ -203,6 +214,7 @@ mod tests {
                 model_revision: None,
                 instruction_version: None,
             },
+            sensitivity: Sensitivity::Workspace,
             export_policy: ExportPolicy::Ask,
         };
         let hits = vec![

@@ -197,6 +197,10 @@ impl WorkspaceIndex {
     ///
     /// When `provider` is `None`, returns an FTS-only ranking shaped as
     /// [`HybridSearchHit`] so lexical search remains available without a model.
+    /// Hybrid lexical + semantic search (sync wrapper).
+    ///
+    /// Prefer [`Self::hybrid_search_async`] from async callers so query embedding
+    /// can await the provider without [`block_on_embed`].
     pub fn hybrid_search(
         &self,
         query: &str,
@@ -204,22 +208,30 @@ impl WorkspaceIndex {
         provider: Option<&dyn EmbeddingProvider>,
         namespace_id: Option<i64>,
     ) -> Result<Vec<HybridSearchHit>> {
+        // FTS-only must not enter a Tokio runtime (axum current-thread tests).
+        if provider.is_none() {
+            return self.hybrid_search_fts_only(query, limit);
+        }
+        block_on_embed(self.hybrid_search_async(query, limit, provider, namespace_id))
+    }
+
+    /// Hybrid lexical + semantic search, awaiting the provider for query embed.
+    ///
+    /// FTS runs concurrently: spawn FTS, await query embed, semantic scan, join
+    /// FTS, then RRF fuse.
+    pub async fn hybrid_search_async(
+        &self,
+        query: &str,
+        limit: usize,
+        provider: Option<&dyn EmbeddingProvider>,
+        namespace_id: Option<i64>,
+    ) -> Result<Vec<HybridSearchHit>> {
+        let Some(provider) = provider else {
+            return self.hybrid_search_fts_only(query, limit);
+        };
+
         let candidate_limit = limit.max(10).saturating_mul(5).min(200);
         let db_path = self.db_path();
-
-        let Some(provider) = provider else {
-            let conn = self.conn.lock().unwrap();
-            let lexical = search_chunk_hits(&conn, query, candidate_limit)?;
-            let chunk_ids = lexical
-                .iter()
-                .map(|hit| hit.chunk_id.clone())
-                .collect::<Vec<_>>();
-            let rows = load_chunk_rows(&conn, &chunk_ids)?
-                .into_iter()
-                .map(|row| (row.chunk_id.clone(), row))
-                .collect();
-            return Ok(fts_only_hits(&lexical, rows, limit));
-        };
 
         let namespace_id = namespace_id.ok_or_else(|| {
             Error::Embedding(lattice_embedding::EmbeddingError::provider(
@@ -232,35 +244,28 @@ impl WorkspaceIndex {
                 .ok_or(Error::NamespaceNotFound(namespace_id))?
         };
 
-        let query_vector = block_on_embed(async {
-            provider
-                .embed_query(EmbedQueryRequest {
-                    text: query.to_string(),
-                })
-                .await
-        })?;
-
+        // Start FTS immediately; do not block lexical retrieval on query embedding.
         let query_owned = query.to_string();
-        let namespace_for_sem = namespace.clone();
-        let query_values = query_vector.values.clone();
-        let (lexical_result, semantic_result) = std::thread::scope(|scope| {
-            let lexical_handle = scope.spawn(|| {
-                let conn = Connection::open(&db_path)?;
-                conn.pragma_update(None, "foreign_keys", "ON")?;
-                search_chunk_hits(&conn, &query_owned, candidate_limit)
-            });
-            let semantic_handle = scope.spawn(|| {
-                let conn = Connection::open(&db_path)?;
-                conn.pragma_update(None, "foreign_keys", "ON")?;
-                search_semantic(&conn, &namespace_for_sem, &query_values, candidate_limit)
-            });
-            (
-                lexical_handle.join().expect("lexical search thread"),
-                semantic_handle.join().expect("semantic search thread"),
-            )
+        let db_path_fts = db_path.clone();
+        let lexical_handle = std::thread::spawn(move || {
+            let conn = Connection::open(&db_path_fts)?;
+            conn.pragma_update(None, "foreign_keys", "ON")?;
+            search_chunk_hits(&conn, &query_owned, candidate_limit)
         });
-        let lexical = lexical_result?;
-        let semantic = semantic_result?;
+
+        let query_vector = provider
+            .embed_query(EmbedQueryRequest {
+                text: query.to_string(),
+            })
+            .await?;
+
+        let semantic = {
+            let conn = Connection::open(&db_path)?;
+            conn.pragma_update(None, "foreign_keys", "ON")?;
+            search_semantic(&conn, &namespace, &query_vector.values, candidate_limit)?
+        };
+
+        let lexical = lexical_handle.join().expect("lexical search thread")?;
 
         let fused =
             reciprocal_rank_fuse(&lexical_rank_list(&lexical), &semantic_rank_list(&semantic));
@@ -285,8 +290,36 @@ impl WorkspaceIndex {
             .collect())
     }
 
-    /// Embed pending/stale chunks for `namespace_id` using `provider` and upsert vectors.
+    fn hybrid_search_fts_only(&self, query: &str, limit: usize) -> Result<Vec<HybridSearchHit>> {
+        let candidate_limit = limit.max(10).saturating_mul(5).min(200);
+        let conn = self.conn.lock().unwrap();
+        let lexical = search_chunk_hits(&conn, query, candidate_limit)?;
+        let chunk_ids = lexical
+            .iter()
+            .map(|hit| hit.chunk_id.clone())
+            .collect::<Vec<_>>();
+        let rows = load_chunk_rows(&conn, &chunk_ids)?
+            .into_iter()
+            .map(|row| (row.chunk_id.clone(), row))
+            .collect();
+        Ok(fts_only_hits(&lexical, rows, limit))
+    }
+
+    /// Embed pending/stale chunks (sync wrapper).
+    ///
+    /// Prefer [`Self::embed_pending_chunks_async`] from async callers so document
+    /// embedding can await the provider without [`block_on_embed`].
     pub fn embed_pending_chunks(
+        &self,
+        namespace_id: i64,
+        provider: &dyn EmbeddingProvider,
+        batch_size: usize,
+    ) -> Result<EmbedPendingStats> {
+        block_on_embed(self.embed_pending_chunks_async(namespace_id, provider, batch_size))
+    }
+
+    /// Embed pending/stale chunks for `namespace_id`, awaiting the provider.
+    pub async fn embed_pending_chunks_async(
         &self,
         namespace_id: i64,
         provider: &dyn EmbeddingProvider,
@@ -312,9 +345,10 @@ impl WorkspaceIndex {
             let chunks = list_chunks_for_embedding(&conn)?;
             let mut out = Vec::new();
             for chunk in chunks {
-                let hash = embedding_input_hash(&chunk.content_hash, &namespace.namespace_key);
+                let formatted = chunk.formatted_embedding_input();
+                let hash = embedding_input_hash(&formatted, &namespace.namespace_key);
                 if is_chunk_embedding_stale(&conn, &chunk.chunk_id, namespace.id, &hash)? {
-                    out.push((chunk, hash));
+                    out.push((chunk, hash, formatted));
                 }
             }
             out
@@ -330,16 +364,16 @@ impl WorkspaceIndex {
         for batch in pending.chunks(batch_size) {
             let requests = batch
                 .iter()
-                .map(|(chunk, _)| EmbedDocumentRequest {
+                .map(|(chunk, _, formatted)| EmbedDocumentRequest {
                     chunk_id: chunk.chunk_id.clone(),
-                    text: chunk.text.clone(),
+                    text: formatted.clone(),
                 })
                 .collect::<Vec<_>>();
-            let vectors = match block_on_embed(async { provider.embed_documents(requests).await }) {
+            let vectors = match provider.embed_documents(requests).await {
                 Ok(vectors) => vectors,
                 Err(err) => {
                     let conn = self.conn.lock().unwrap();
-                    for (chunk, hash) in batch {
+                    for (chunk, hash, _) in batch {
                         embedding::upsert_chunk_embedding_state(
                             &conn,
                             &chunk.chunk_id,
@@ -366,7 +400,7 @@ impl WorkspaceIndex {
 
             let conn = self.conn.lock().unwrap();
             let now = current_time_ms();
-            for ((chunk, hash), vector) in batch.iter().zip(vectors.into_iter()) {
+            for ((chunk, hash, _), vector) in batch.iter().zip(vectors.into_iter()) {
                 match upsert_vector(&conn, &namespace, &chunk.chunk_id, &vector.values) {
                     Ok(()) => {
                         embedding::upsert_chunk_embedding_state(
@@ -469,7 +503,8 @@ impl WorkspaceIndex {
         let chunks = list_chunks_for_embedding(&conn)?;
         let mut pending = 0usize;
         for chunk in chunks {
-            let hash = embedding_input_hash(&chunk.content_hash, &namespace.namespace_key);
+            let formatted = chunk.formatted_embedding_input();
+            let hash = embedding_input_hash(&formatted, &namespace.namespace_key);
             if is_chunk_embedding_stale(&conn, &chunk.chunk_id, namespace.id, &hash)? {
                 pending += 1;
             }
@@ -633,6 +668,8 @@ impl WorkspaceIndex {
             text_truncated,
             chunk_text,
             chunk_text_base_byte,
+            sensitivity,
+            export_policy,
         } = record;
         let conn = self.conn.lock().unwrap();
         let tx = conn.unchecked_transaction()?;
@@ -752,6 +789,8 @@ impl WorkspaceIndex {
             &tags,
             &chunk_text,
             chunk_text_base_byte,
+            &sensitivity,
+            &export_policy,
         )?;
         tx.commit()?;
         Ok(())
@@ -818,11 +857,15 @@ fn persist_search_chunks(
     tags: &[String],
     chunk_text: &str,
     chunk_text_base_byte: usize,
+    sensitivity: &str,
+    export_policy: &str,
 ) -> Result<()> {
-    tx.execute(
-        "DELETE FROM search_chunks WHERE resource_id = ?1",
-        params![resource_id],
-    )?;
+    let old_chunk_ids: std::collections::HashSet<String> = {
+        let mut stmt = tx.prepare("SELECT chunk_id FROM search_chunks WHERE resource_id = ?1")?;
+        let rows = stmt.query_map(params![resource_id], |row| row.get(0))?;
+        rows.collect::<std::result::Result<std::collections::HashSet<_>, _>>()?
+    };
+
     let drafts = chunks::chunk_resource(
         workspace_id,
         resource_path,
@@ -832,6 +875,25 @@ fn persist_search_chunks(
         title,
         tags,
     );
+    let new_chunk_ids: std::collections::HashSet<String> =
+        drafts.iter().map(|draft| draft.chunk_id.clone()).collect();
+
+    // chunk_vectors / chunk_embedding_state have no FK cascade from search_chunks.
+    for chunk_id in old_chunk_ids.difference(&new_chunk_ids) {
+        tx.execute(
+            "DELETE FROM chunk_vectors WHERE chunk_id = ?1",
+            params![chunk_id],
+        )?;
+        tx.execute(
+            "DELETE FROM chunk_embedding_state WHERE chunk_id = ?1",
+            params![chunk_id],
+        )?;
+    }
+
+    tx.execute(
+        "DELETE FROM search_chunks WHERE resource_id = ?1",
+        params![resource_id],
+    )?;
     if drafts.is_empty() {
         return Ok(());
     }
@@ -844,8 +906,9 @@ fn persist_search_chunks(
             "INSERT INTO search_chunks
                 (chunk_id, resource_id, block_id, ordinal, heading_path_json,
                  source_start_byte, source_end_byte, text, content_hash, chunker_version,
-                 title, heading_path, tags, created_at_ms, updated_at_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                 title, heading_path, tags, sensitivity, export_policy,
+                 created_at_ms, updated_at_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
             params![
                 draft.chunk_id,
                 resource_id,
@@ -860,6 +923,8 @@ fn persist_search_chunks(
                 title,
                 heading_path,
                 tag_text,
+                sensitivity,
+                export_policy,
                 now_ms,
                 now_ms,
             ],
@@ -875,16 +940,30 @@ fn current_time_ms() -> i64 {
         .unwrap_or(0)
 }
 
+/// Drive an embedding future from sync call sites.
+///
+/// Sync wrappers ([`WorkspaceIndex::embed_pending_chunks`],
+/// [`WorkspaceIndex::hybrid_search`]) use this helper. Async callers should
+/// prefer [`WorkspaceIndex::embed_pending_chunks_async`] /
+/// [`WorkspaceIndex::hybrid_search_async`] and await the provider directly.
 fn block_on_embed<F, T>(future: F) -> Result<T>
 where
-    F: std::future::Future<Output = std::result::Result<T, lattice_embedding::EmbeddingError>>,
+    F: std::future::Future<Output = Result<T>>,
 {
-    // Prefer the caller's runtime when one is already entered (e.g. embed-host
-    // session IO bound to a long-lived runtime owned by the semantic worker).
-    // Use `Handle::block_on` rather than `block_in_place` so this works from a
-    // plain std thread that has called `Handle::enter()`.
     if let Ok(handle) = tokio::runtime::Handle::try_current() {
-        return handle.block_on(future).map_err(Error::from);
+        match handle.runtime_flavor() {
+            tokio::runtime::RuntimeFlavor::MultiThread => {
+                // Host-backed workers and multi-thread daemon/HTTP.
+                return tokio::task::block_in_place(|| handle.block_on(future));
+            }
+            _ => {
+                // current_thread ambient runtime (e.g. some axum tests): nesting
+                // Tokio block_on/block_in_place panics. Drive with a non-Tokio
+                // executor — Fine for Fake providers; host IO always uses
+                // multi-thread + Handle::enter on the semantic worker.
+                return futures_executor::block_on(future);
+            }
+        }
     }
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -893,7 +972,6 @@ where
             Error::Embedding(lattice_embedding::EmbeddingError::provider(err.to_string()))
         })?
         .block_on(future)
-        .map_err(Error::from)
 }
 
 /// Thin compatibility hook for page writes.
@@ -1217,12 +1295,15 @@ mod tests {
 
         let hits = index.hybrid_search("welcome", 10, None, None).unwrap();
         assert!(!hits.is_empty());
-        assert!(hits.iter().any(|hit| hit.resource_uri == "Notes/Home.md"));
-        assert!(hits.iter().all(|hit| hit.lexical_rank.is_some()));
-        assert!(hits.iter().all(|hit| hit.semantic_rank.is_none()));
         assert!(hits
             .iter()
-            .all(|hit| hit.export_policy == crate::provenance::ExportPolicy::Ask));
+            .any(|hit| hit.resource_uri == "lattice://resource/Notes/Home.md"));
+        assert!(hits.iter().all(|hit| hit.lexical_rank.is_some()));
+        assert!(hits.iter().all(|hit| hit.semantic_rank.is_none()));
+        assert!(hits.iter().all(|hit| {
+            hit.sensitivity == crate::provenance::Sensitivity::Workspace
+                && hit.export_policy == crate::provenance::ExportPolicy::Ask
+        }));
     }
 
     #[test]
@@ -1261,13 +1342,77 @@ mod tests {
             .unwrap();
         assert!(!hits.is_empty());
         assert!(hits.iter().any(|hit| {
-            hit.resource_uri == "Notes/Home.md"
+            hit.resource_uri == "lattice://resource/Notes/Home.md"
                 && (hit.lexical_rank.is_some() || hit.semantic_rank.is_some())
         }));
         assert!(hits.iter().any(|hit| hit.fused_score > 0.0));
         assert!(hits
             .iter()
             .any(|hit| hit.provenance.model_id.as_deref() == Some("fake-model")));
+    }
+
+    #[test]
+    fn hybrid_search_excludes_secret_sensitivity_chunks() {
+        let dir = TempDir::new().unwrap();
+        sample_workspace(dir.path());
+        fs::write(
+            dir.path().join("Notes/Secret.md"),
+            "---\nsensitivity: secret\n---\n\n# Secret\n\nWelcome classified material.\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("Notes/Private.md"),
+            "---\nsensitivity: private\nexport_policy: allow\n---\n\n# Private\n\nWelcome private note.\n",
+        )
+        .unwrap();
+        let index = WorkspaceIndex::open(dir.path()).unwrap();
+        index.rebuild(dir.path()).unwrap();
+
+        let hits = index.hybrid_search("welcome", 20, None, None).unwrap();
+        assert!(hits
+            .iter()
+            .all(|hit| hit.sensitivity != crate::provenance::Sensitivity::Secret));
+        assert!(!hits
+            .iter()
+            .any(|hit| hit.resource_uri.contains("Notes/Secret.md")));
+        assert!(hits.iter().any(|hit| {
+            hit.resource_uri == "lattice://resource/Notes/Private.md"
+                && hit.sensitivity == crate::provenance::Sensitivity::Private
+                && hit.export_policy == crate::provenance::ExportPolicy::Allow
+        }));
+    }
+
+    #[tokio::test]
+    async fn embed_pending_chunks_async_works_with_fake_provider() {
+        use lattice_embedding::{DistanceMetric, FakeEmbeddingProvider, PoolingStrategy};
+
+        let dir = TempDir::new().unwrap();
+        sample_workspace(dir.path());
+        let index = WorkspaceIndex::open(dir.path()).unwrap();
+        index.rebuild(dir.path()).unwrap();
+
+        let spec = EmbeddingSpecification {
+            provider_id: "fake".into(),
+            model_id: "fake-model".into(),
+            model_revision: "rev-1".into(),
+            artifact_sha256: "sha256:artifact".into(),
+            dimensions: 8,
+            native_dimensions: 8,
+            distance: DistanceMetric::Cosine,
+            pooling: PoolingStrategy::Last,
+            normalized: true,
+            instruction_version: "test-v1".into(),
+        };
+        let namespace = index
+            .register_embedding_namespace(&spec, CHUNKER_VERSION)
+            .unwrap();
+        let provider = FakeEmbeddingProvider::new(spec);
+        let stats = index
+            .embed_pending_chunks_async(namespace.id, &provider, 4)
+            .await
+            .unwrap();
+        assert!(stats.embedded > 0);
+        assert_eq!(stats.failed, 0);
     }
 
     #[test]
@@ -1304,5 +1449,115 @@ mod tests {
         assert!(first.embedded > 0);
         assert_eq!(second.embedded, 0);
         assert!(second.skipped > 0);
+    }
+
+    #[test]
+    fn persist_search_chunks_removes_orphan_vectors_and_state() {
+        use lattice_embedding::{DistanceMetric, FakeEmbeddingProvider, PoolingStrategy};
+
+        let dir = TempDir::new().unwrap();
+        Workspace::init(dir.path(), "Test").unwrap();
+        fs::create_dir_all(dir.path().join("Notes")).unwrap();
+        fs::write(
+            dir.path().join("Notes/Sections.md"),
+            "# Keep\n\nKeep this body.\n\n# Drop\n\nDrop this body later.\n",
+        )
+        .unwrap();
+
+        let index = WorkspaceIndex::open(dir.path()).unwrap();
+        index.rebuild(dir.path()).unwrap();
+
+        let spec = EmbeddingSpecification {
+            provider_id: "fake".into(),
+            model_id: "fake-model".into(),
+            model_revision: "rev-1".into(),
+            artifact_sha256: "sha256:artifact".into(),
+            dimensions: 8,
+            native_dimensions: 8,
+            distance: DistanceMetric::Cosine,
+            pooling: PoolingStrategy::Last,
+            normalized: true,
+            instruction_version: "test-v1".into(),
+        };
+        let namespace = index
+            .register_embedding_namespace(&spec, CHUNKER_VERSION)
+            .unwrap();
+        let provider = FakeEmbeddingProvider::new(spec);
+        let stats = index
+            .embed_pending_chunks(namespace.id, &provider, 8)
+            .unwrap();
+        assert!(stats.embedded >= 2);
+
+        let before_ids: std::collections::HashSet<String> = {
+            let conn = index.conn.lock().unwrap();
+            let mut stmt = conn
+                .prepare(
+                    "SELECT c.chunk_id FROM search_chunks c
+                     JOIN resources r ON r.id = c.resource_id
+                     WHERE r.path = 'Notes/Sections.md'",
+                )
+                .unwrap();
+            stmt.query_map([], |row| row.get(0))
+                .unwrap()
+                .collect::<std::result::Result<std::collections::HashSet<_>, _>>()
+                .unwrap()
+        };
+        assert!(before_ids.len() >= 2);
+
+        fs::write(
+            dir.path().join("Notes/Sections.md"),
+            "# Keep\n\nKeep this body.\n",
+        )
+        .unwrap();
+        index.rebuild(dir.path()).unwrap();
+
+        let after_ids: std::collections::HashSet<String> = {
+            let conn = index.conn.lock().unwrap();
+            let mut stmt = conn
+                .prepare(
+                    "SELECT c.chunk_id FROM search_chunks c
+                     JOIN resources r ON r.id = c.resource_id
+                     WHERE r.path = 'Notes/Sections.md'",
+                )
+                .unwrap();
+            stmt.query_map([], |row| row.get(0))
+                .unwrap()
+                .collect::<std::result::Result<std::collections::HashSet<_>, _>>()
+                .unwrap()
+        };
+        assert!(!after_ids.is_empty());
+        let removed: Vec<_> = before_ids.difference(&after_ids).cloned().collect();
+        assert!(!removed.is_empty(), "expected at least one removed chunk id");
+
+        let conn = index.conn.lock().unwrap();
+        for chunk_id in &removed {
+            let vectors: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM chunk_vectors WHERE chunk_id = ?1",
+                    params![chunk_id],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            let states: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM chunk_embedding_state WHERE chunk_id = ?1",
+                    params![chunk_id],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(vectors, 0, "orphan vector left for {chunk_id}");
+            assert_eq!(states, 0, "orphan embedding state left for {chunk_id}");
+        }
+
+        for chunk_id in &after_ids {
+            let vectors: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM chunk_vectors WHERE chunk_id = ?1",
+                    params![chunk_id],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(vectors, 1, "kept chunk should retain its vector");
+        }
     }
 }

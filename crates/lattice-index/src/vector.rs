@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use lattice_embedding::EmbeddingSpecification;
+use lattice_embedding::{DistanceMetric, EmbeddingSpecification};
 use rusqlite::{params, Connection};
 use thiserror::Error;
 
@@ -21,6 +21,15 @@ pub enum VectorIndexError {
 
     #[error("empty vector")]
     EmptyVector,
+
+    #[error(
+        "unsupported distance metric for V1 exact-scan index: distance={distance:?}, normalized={normalized} \
+         (supported: Cosine with normalized=true, or Dot)"
+    )]
+    UnsupportedDistance {
+        distance: DistanceMetric,
+        normalized: bool,
+    },
 
     #[error("index database error: {0}")]
     Sqlite(#[from] rusqlite::Error),
@@ -106,6 +115,7 @@ pub fn upsert_vector(
     chunk_id: &str,
     vector: &[f32],
 ) -> Result<(), VectorIndexError> {
+    ensure_supported_distance(&namespace.specification)?;
     validate_dims(&namespace.specification, vector)?;
     let mut values = vector.to_vec();
     if namespace.specification.normalized {
@@ -136,7 +146,13 @@ pub fn remove_vector(
     Ok(())
 }
 
-/// Exact-scan cosine/dot ranking over stored BLOBs joined to live chunks.
+/// Exact-scan ranking over stored BLOBs joined to live chunks.
+///
+/// V1 supports:
+/// - `Cosine` with `normalized=true` (scored via dot product of L2-normalized vectors)
+/// - `Dot` (dot product; optional store-time L2 normalize when `normalized=true`)
+///
+/// `L2` and unnormalized `Cosine` return [`VectorIndexError::UnsupportedDistance`].
 pub fn search_vectors(
     conn: &Connection,
     namespace: &EmbeddingNamespace,
@@ -146,6 +162,7 @@ pub fn search_vectors(
     if limit == 0 {
         return Ok(Vec::new());
     }
+    ensure_supported_distance(&namespace.specification)?;
     validate_dims(&namespace.specification, query)?;
     let mut query_vec = query.to_vec();
     if namespace.specification.normalized {
@@ -187,6 +204,17 @@ pub fn search_vectors(
     });
     candidates.truncate(limit);
     Ok(candidates)
+}
+
+/// V1 exact-scan only implements cosine-via-normalized-dot and raw/normalized dot.
+fn ensure_supported_distance(spec: &EmbeddingSpecification) -> Result<(), VectorIndexError> {
+    match (spec.distance, spec.normalized) {
+        (DistanceMetric::Cosine, true) | (DistanceMetric::Dot, _) => Ok(()),
+        (distance, normalized) => Err(VectorIndexError::UnsupportedDistance {
+            distance,
+            normalized,
+        }),
+    }
 }
 
 fn validate_dims(spec: &EmbeddingSpecification, vector: &[f32]) -> Result<(), VectorIndexError> {
@@ -294,5 +322,77 @@ mod tests {
         let hits = search_vectors(&conn, &namespace, &target, 2).unwrap();
         assert_eq!(hits[0].chunk_id, "chunk-a");
         assert!(hits[0].score > hits[1].score);
+    }
+
+    #[test]
+    fn rejects_l2_and_unnormalized_cosine() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_schema(&conn).unwrap();
+
+        let mut l2 = sample_namespace(&conn, 4);
+        l2.specification.distance = DistanceMetric::L2;
+        l2.specification.normalized = true;
+        let err = upsert_vector(&conn, &l2, "chunk-a", &[1.0, 0.0, 0.0, 0.0]).unwrap_err();
+        assert!(matches!(
+            err,
+            VectorIndexError::UnsupportedDistance {
+                distance: DistanceMetric::L2,
+                ..
+            }
+        ));
+
+        let mut cosine_raw = sample_namespace(&conn, 4);
+        cosine_raw.specification.distance = DistanceMetric::Cosine;
+        cosine_raw.specification.normalized = false;
+        let err =
+            search_vectors(&conn, &cosine_raw, &[1.0, 0.0, 0.0, 0.0], 1).unwrap_err();
+        assert!(matches!(
+            err,
+            VectorIndexError::UnsupportedDistance {
+                distance: DistanceMetric::Cosine,
+                normalized: false,
+            }
+        ));
+    }
+
+    #[test]
+    fn accepts_dot_product_without_normalization() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_schema(&conn).unwrap();
+        let mut namespace = sample_namespace(&conn, 4);
+        namespace.specification.distance = DistanceMetric::Dot;
+        namespace.specification.normalized = false;
+        insert_chunk(&conn, "chunk-a", "alpha");
+        upsert_vector(&conn, &namespace, "chunk-a", &[2.0, 0.0, 0.0, 0.0]).unwrap();
+        let hits = search_vectors(&conn, &namespace, &[2.0, 0.0, 0.0, 0.0], 1).unwrap();
+        assert_eq!(hits[0].chunk_id, "chunk-a");
+        assert!((hits[0].score - 4.0).abs() < 1e-5);
+    }
+
+    /// Exact BLOB-scan scale probe (P2). Ignored in CI; run with:
+    /// `cargo test -p lattice-index exact_scan_scale -- --ignored --nocapture`
+    #[test]
+    #[ignore = "scale probe; run manually when measuring vector scan budgets"]
+    fn exact_scan_scale_probe() {
+        use std::time::Instant;
+
+        for n in [10_000usize, 50_000, 100_000] {
+            let conn = Connection::open_in_memory().unwrap();
+            init_schema(&conn).unwrap();
+            let namespace = sample_namespace(&conn, 8);
+            let query = vec![0.125f32; 8];
+            for i in 0..n {
+                let chunk_id = format!("chunk-{i}");
+                insert_chunk(&conn, &chunk_id, "scale");
+                let mut values = query.clone();
+                values[0] += (i % 17) as f32 * 0.001;
+                upsert_vector(&conn, &namespace, &chunk_id, &values).unwrap();
+            }
+            let started = Instant::now();
+            let hits = search_vectors(&conn, &namespace, &query, 10).unwrap();
+            let elapsed = started.elapsed();
+            assert_eq!(hits.len(), 10);
+            eprintln!("exact_scan n={n} elapsed={elapsed:?}");
+        }
     }
 }

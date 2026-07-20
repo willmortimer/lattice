@@ -42,6 +42,8 @@ pub struct PageIndexData {
     pub headings: Vec<Heading>,
     pub links: Vec<ExtractedLink>,
     pub tags: Vec<String>,
+    pub sensitivity: Option<String>,
+    pub export_policy: Option<String>,
 }
 
 /// The structured formats for which the index records bounded key paths.
@@ -70,6 +72,8 @@ pub struct StructuredExtraction {
 struct Frontmatter {
     title: Option<String>,
     tags: Option<FrontmatterTags>,
+    sensitivity: Option<String>,
+    export_policy: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -111,6 +115,8 @@ pub fn split_frontmatter(content: &str) -> (Option<&str>, &str) {
 pub fn parse_page(path: &Path, content: &str) -> PageIndexData {
     let (yaml, body) = split_frontmatter(content);
     let mut tags = Vec::new();
+    let mut sensitivity = None;
+    let mut export_policy = None;
     let mut title = path
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
@@ -124,6 +130,8 @@ pub fn parse_page(path: &Path, content: &str) -> PageIndexData {
             if let Some(t) = fm.tags {
                 tags.extend(t.into_vec());
             }
+            sensitivity = fm.sensitivity;
+            export_policy = fm.export_policy;
         }
     }
 
@@ -142,6 +150,8 @@ pub fn parse_page(path: &Path, content: &str) -> PageIndexData {
         headings,
         links,
         tags,
+        sensitivity,
+        export_policy,
     }
 }
 

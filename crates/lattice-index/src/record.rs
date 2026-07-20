@@ -11,6 +11,7 @@ use crate::error::Result;
 use crate::extract::{
     extract_structured_paths, parse_page, ExtractedLink, StructuredFormat, StructuredPath,
 };
+use crate::provenance::{ExportPolicy, Sensitivity};
 use crate::types::{ParserStatus, ResourceMetadata};
 
 /// Maximum canonical text prefix retained by the derived index.
@@ -27,6 +28,8 @@ pub(crate) struct IndexedRecord {
     pub text_truncated: bool,
     pub chunk_text: String,
     pub chunk_text_base_byte: usize,
+    pub sensitivity: String,
+    pub export_policy: String,
 }
 
 pub(crate) fn record_from_resource(
@@ -70,6 +73,8 @@ pub(crate) fn record_from_resource(
             text_truncated: false,
             chunk_text: String::new(),
             chunk_text_base_byte: 0,
+            sensitivity: Sensitivity::Workspace.as_str().to_string(),
+            export_policy: ExportPolicy::Ask.as_str().to_string(),
         })
     }
 }
@@ -114,6 +119,8 @@ pub(crate) fn record_from_text(
             text_truncated: truncated,
             chunk_text: String::new(),
             chunk_text_base_byte: 0,
+            sensitivity: Sensitivity::Workspace.as_str().to_string(),
+            export_policy: ExportPolicy::Ask.as_str().to_string(),
         };
     };
 
@@ -125,6 +132,8 @@ pub(crate) fn record_from_text(
     let mut structured_paths = Vec::new();
     let mut chunk_text = text.to_string();
     let mut chunk_text_base_byte = 0;
+    let mut sensitivity = Sensitivity::Workspace.as_str().to_string();
+    let mut export_policy = ExportPolicy::Ask.as_str().to_string();
     let mut status = if truncated {
         ParserStatus::Truncated
     } else {
@@ -145,6 +154,12 @@ pub(crate) fn record_from_text(
         tags = page.tags;
         chunk_text = page.body;
         chunk_text_base_byte = page.body_start_byte;
+        if let Some(value) = page.sensitivity {
+            sensitivity = Sensitivity::parse(&value).as_str().to_string();
+        }
+        if let Some(value) = page.export_policy {
+            export_policy = ExportPolicy::parse(&value).as_str().to_string();
+        }
     }
 
     if !truncated
@@ -180,6 +195,8 @@ pub(crate) fn record_from_text(
         text_truncated: truncated,
         chunk_text,
         chunk_text_base_byte,
+        sensitivity,
+        export_policy,
     }
 }
 
