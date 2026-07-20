@@ -4,6 +4,7 @@ import type { DataColumn, DataRow } from "./types";
 import {
   buildRelationLabelIndex,
   extractRelationIds,
+  filterRelationTargets,
   findInboundRelationLinks,
   formatCellForColumnName,
   formatColumnCellDisplay,
@@ -112,6 +113,15 @@ describe("relationDisplay helpers", () => {
         values: { id: { Text: "rec_only" } },
       }),
     ).toBe("rec_only");
+  });
+
+  it("filters relation targets by label or id substring", () => {
+    expect(filterRelationTargets(companyRows, "")).toEqual(companyRows);
+    expect(filterRelationTargets(companyRows, "  ")).toEqual(companyRows);
+    expect(filterRelationTargets(companyRows, "navy")).toEqual([companyRows[1]]);
+    expect(filterRelationTargets(companyRows, "CO_2")).toEqual([companyRows[1]]);
+    expect(filterRelationTargets(companyRows, "analytical")).toEqual([companyRows[0]]);
+    expect(filterRelationTargets(companyRows, "missing")).toEqual([]);
   });
 
   it("formats linked titles when target rows are available", () => {

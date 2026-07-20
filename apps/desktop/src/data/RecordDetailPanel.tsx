@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "r
 import type { CellValue, DataColumn, DataRow } from "./types";
 import {
   buildRelationLabelIndex,
+  filterRelationTargets,
   findInboundRelationLinks,
   formatRelationDisplay,
   parseRelationDraft,
@@ -269,6 +270,7 @@ function RelationFieldPicker({
   readOnly,
   onChange,
 }: RelationFieldPickerProps) {
+  const [query, setQuery] = useState("");
   const selectedIds = useMemo(() => parseRelationDraft(draftValue), [draftValue]);
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const summary = useMemo(
@@ -278,6 +280,17 @@ function RelationFieldPicker({
   const missingSelected = selectedIds.filter(
     (recordId) => !options.some((option) => option.id === recordId),
   );
+  const filteredOptions = useMemo(
+    () => filterRelationTargets(options, query),
+    [options, query],
+  );
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredMissingSelected = useMemo(() => {
+    if (!normalizedQuery) {
+      return missingSelected;
+    }
+    return missingSelected.filter((recordId) => recordId.toLowerCase().includes(normalizedQuery));
+  }, [missingSelected, normalizedQuery]);
 
   if (!column.relation_table) {
     return (
@@ -293,46 +306,67 @@ function RelationFieldPicker({
       {options.length === 0 && missingSelected.length === 0 ? (
         <p className="record-detail-relation-empty">No rows in {column.relation_table}.</p>
       ) : (
-        <div className="record-detail-relation-options" role="group" aria-label={column.name}>
-          {options.map((option) => {
-            const label = relationRecordLabel(option);
-            const checked = selectedSet.has(option.id);
-            return (
-              <label key={option.id} className="record-detail-relation-option">
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={readOnly}
-                  onChange={(event) =>
-                    onChange(
-                      toggleRelationDraftId(
-                        draftValue,
-                        option.id,
-                        event.currentTarget.checked,
-                      ),
-                    )
-                  }
-                />
-                <span className="record-detail-relation-option-label">{label || option.id}</span>
-                <span className="record-detail-relation-option-id">{option.id}</span>
-              </label>
-            );
-          })}
-          {missingSelected.map((recordId) => (
-            <label key={recordId} className="record-detail-relation-option">
-              <input
-                type="checkbox"
-                checked
-                disabled={readOnly}
-                onChange={(event) =>
-                  onChange(toggleRelationDraftId(draftValue, recordId, event.currentTarget.checked))
-                }
-              />
-              <span className="record-detail-relation-option-label">{recordId}</span>
-              <span className="record-detail-relation-option-id">missing target row</span>
-            </label>
-          ))}
-        </div>
+        <>
+          <input
+            className="record-detail-input record-detail-relation-search"
+            type="search"
+            value={query}
+            placeholder="Filter targets…"
+            disabled={readOnly && options.length === 0}
+            aria-label={`Filter ${column.name} targets`}
+            onChange={(event) => setQuery(event.currentTarget.value)}
+          />
+          <div className="record-detail-relation-options" role="group" aria-label={column.name}>
+            {filteredOptions.length === 0 && filteredMissingSelected.length === 0 ? (
+              <p className="record-detail-relation-empty">No matching targets.</p>
+            ) : (
+              <>
+                {filteredOptions.map((option) => {
+                  const label = relationRecordLabel(option);
+                  const checked = selectedSet.has(option.id);
+                  return (
+                    <label key={option.id} className="record-detail-relation-option">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={readOnly}
+                        onChange={(event) =>
+                          onChange(
+                            toggleRelationDraftId(
+                              draftValue,
+                              option.id,
+                              event.currentTarget.checked,
+                            ),
+                          )
+                        }
+                      />
+                      <span className="record-detail-relation-option-label">
+                        {label || option.id}
+                      </span>
+                      <span className="record-detail-relation-option-id">{option.id}</span>
+                    </label>
+                  );
+                })}
+                {filteredMissingSelected.map((recordId) => (
+                  <label key={recordId} className="record-detail-relation-option">
+                    <input
+                      type="checkbox"
+                      checked
+                      disabled={readOnly}
+                      onChange={(event) =>
+                        onChange(
+                          toggleRelationDraftId(draftValue, recordId, event.currentTarget.checked),
+                        )
+                      }
+                    />
+                    <span className="record-detail-relation-option-label">{recordId}</span>
+                    <span className="record-detail-relation-option-id">missing target row</span>
+                  </label>
+                ))}
+              </>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
