@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   createNativeKernelSession,
   mapExecuteResultToKernelRunPayload,
+  mapExecuteResultToNotebookOutputs,
   type NativeExecuteResult,
 } from "./nativeKernelSession";
 
@@ -31,7 +32,7 @@ describe("mapExecuteResultToKernelRunPayload", () => {
       ],
     };
 
-    expect(mapExecuteResultToKernelRunPayload(result)).toEqual({
+    expect(mapExecuteResultToKernelRunPayload(result, 1)).toEqual({
       stdout: "hello\n",
       stderr: "warn\n",
       resultRepr: "42",
@@ -40,6 +41,7 @@ describe("mapExecuteResultToKernelRunPayload", () => {
         evalue: "boom",
         traceback: ["Traceback...", "ValueError: boom"],
       },
+      outputs: mapExecuteResultToNotebookOutputs(result, 1),
     });
   });
 
@@ -55,11 +57,12 @@ describe("mapExecuteResultToKernelRunPayload", () => {
       ],
     };
 
-    expect(mapExecuteResultToKernelRunPayload(result)).toEqual({
+    expect(mapExecuteResultToKernelRunPayload(result, 1)).toEqual({
       stdout: "ab",
       stderr: "",
       resultRepr: "exec",
       error: null,
+      outputs: mapExecuteResultToNotebookOutputs(result, 1),
     });
   });
 
@@ -70,12 +73,55 @@ describe("mapExecuteResultToKernelRunPayload", () => {
       outputs: [{ type: "display_data", data: { "text/plain": "shown" } }],
     };
 
-    expect(mapExecuteResultToKernelRunPayload(result)).toEqual({
+    expect(mapExecuteResultToKernelRunPayload(result, 1)).toEqual({
       stdout: "",
       stderr: "",
       resultRepr: "shown",
       error: null,
+      outputs: mapExecuteResultToNotebookOutputs(result, 1),
     });
+  });
+
+  it("preserves multi-MIME execute_result and display_data outputs", () => {
+    const result: NativeExecuteResult = {
+      requestId: "r4",
+      status: "ok",
+      outputs: [
+        {
+          type: "display_data",
+          data: {
+            "text/html": "<table><tr><td>1</td></tr></table>",
+            "text/plain": "table",
+          },
+        },
+        {
+          type: "execute_result",
+          data: {
+            "text/plain": "42",
+            "image/png": "abc",
+          },
+        },
+      ],
+    };
+
+    expect(mapExecuteResultToNotebookOutputs(result, 3)).toEqual([
+      {
+        kind: "display-data",
+        executionCount: null,
+        data: {
+          html: "<table><tr><td>1</td></tr></table>",
+          textPlain: "table",
+        },
+      },
+      {
+        kind: "execute-result",
+        executionCount: 3,
+        data: {
+          textPlain: "42",
+          imageDataUrl: "data:image/png;base64,abc",
+        },
+      },
+    ]);
   });
 });
 
@@ -118,6 +164,14 @@ describe("createNativeKernelSession", () => {
       stderr: "",
       resultRepr: "1",
       error: null,
+      outputs: [
+        { kind: "stream", name: "stdout", text: "1\n" },
+        {
+          kind: "execute-result",
+          executionCount: 0,
+          data: { textPlain: "1" },
+        },
+      ],
     });
     expect(invoke).toHaveBeenCalledWith("kernel_start", {
       request: { root: "/ws" },

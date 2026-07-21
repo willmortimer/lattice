@@ -86,6 +86,56 @@ describe("mergeNotebookOutputs", () => {
     });
   });
 
+  it("round-trips rich display outputs into nbformat shapes", () => {
+    expect(notebookOutputToNbformat({
+      kind: "display-data",
+      executionCount: null,
+      data: {
+        textPlain: "42",
+        html: "<table><tr><td>1</td></tr></table>",
+        imageDataUrl: "data:image/png;base64,abc",
+        vegaLite: { mark: "bar" },
+      },
+    })).toEqual({
+      output_type: "display_data",
+      metadata: {},
+      data: {
+        "text/plain": ["42"],
+        "text/html": ["<table><tr><td>1</td></tr></table>"],
+        "image/png": "abc",
+        "application/vnd.vegalite.v5+json": { mark: "bar" },
+      },
+    });
+  });
+
+  it("uses rich native outputs when provided on the payload", () => {
+    expect(buildOutputsFromRun({
+      stdout: "",
+      stderr: "",
+      resultRepr: null,
+      error: null,
+      outputs: [
+        {
+          kind: "display-data",
+          executionCount: null,
+          data: {
+            imageDataUrl: "data:image/png;base64,abc",
+            textPlain: "shown",
+          },
+        },
+      ],
+    }, 2)).toEqual([
+      {
+        kind: "display-data",
+        executionCount: null,
+        data: {
+          imageDataUrl: "data:image/png;base64,abc",
+          textPlain: "shown",
+        },
+      },
+    ]);
+  });
+
   it("merges a cell run into notebook JSON without clobbering other cells", () => {
     const outputs = buildOutputsFromRun({
       stdout: "hello\n",

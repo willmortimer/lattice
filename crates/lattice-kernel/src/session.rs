@@ -190,6 +190,9 @@ impl KernelSession {
                     BridgeResponse::ExecuteResult { data, .. } => {
                         outputs.push(KernelOutput::ExecuteResult { data });
                     }
+                    BridgeResponse::DisplayData { data, .. } => {
+                        outputs.push(KernelOutput::DisplayData { data });
+                    }
                     BridgeResponse::Error {
                         ename,
                         evalue,

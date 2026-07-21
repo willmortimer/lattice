@@ -93,6 +93,50 @@ describe("parseNotebook", () => {
     ]);
   });
 
+  it("parses rich MIME outputs from persisted notebooks", () => {
+    const result = parseNotebook(JSON.stringify({
+      nbformat: 4,
+      nbformat_minor: 5,
+      metadata: {},
+      cells: [
+        {
+          cell_type: "code",
+          execution_count: 1,
+          metadata: {},
+          outputs: [
+            {
+              output_type: "display_data",
+              metadata: {},
+              data: {
+                "text/html": "<table><tr><td>1</td></tr></table>",
+                "application/vnd.vegalite.v4+json": {
+                  mark: "bar",
+                  data: { values: [{ x: 1 }] },
+                },
+              },
+            },
+          ],
+          source: "display(df)",
+        },
+      ],
+    }));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.notebook.cells[0]?.outputs).toEqual([
+      {
+        kind: "display-data",
+        executionCount: null,
+        data: {
+          html: "<table><tr><td>1</td></tr></table>",
+          vegaLite: {
+            mark: "bar",
+            data: { values: [{ x: 1 }] },
+          },
+        },
+      },
+    ]);
+  });
+
   it("parses stderr streams and error outputs", () => {
     const result = parseNotebook(JSON.stringify({
       nbformat: 4,

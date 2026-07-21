@@ -1,4 +1,5 @@
-import type { NotebookOutput } from "./parseNotebook";
+import type { NotebookDisplayData, NotebookOutput } from "./parseNotebook";
+import { displayDataToMime } from "./notebookMime";
 import { MAX_NOTEBOOK_OUTPUT_CHARS } from "./pyodideConfig";
 import type { PyodideRunPayload } from "./pyodideProtocol";
 
@@ -26,13 +27,15 @@ export function splitNbformatLines(text: string): string[] {
   return lines;
 }
 
-function displayDataToMime(data: { textPlain?: string; imageDataUrl?: string }): Record<string, unknown> {
-  const mime: Record<string, unknown> = {};
-  if (data.textPlain) mime["text/plain"] = splitNbformatLines(data.textPlain);
-  if (data.imageDataUrl?.startsWith("data:image/png;base64,")) {
-    mime["image/png"] = data.imageDataUrl.slice("data:image/png;base64,".length);
+function capDisplayData(data: NotebookDisplayData, maxChars: number): NotebookDisplayData {
+  const capped = { ...data };
+  for (const key of ["textPlain", "markdown", "html", "svg"] as const) {
+    const value = capped[key];
+    if (typeof value === "string") {
+      capped[key] = capOutputText(value, maxChars);
+    }
   }
-  return mime;
+  return capped;
 }
 
 /** Serialize a viewer output back to nbformat v4 `outputs[]` entries. */
@@ -49,13 +52,13 @@ export function notebookOutputToNbformat(output: NotebookOutput): Record<string,
         output_type: "execute_result",
         execution_count: output.executionCount,
         metadata: {},
-        data: displayDataToMime(output.data),
+        data: displayDataToMime(output.data, splitNbformatLines),
       };
     case "display-data":
       return {
         output_type: "display_data",
         metadata: {},
-        data: displayDataToMime(output.data),
+        data: displayDataToMime(output.data, splitNbformatLines),
       };
     case "error":
       return {
@@ -73,10 +76,35 @@ export function notebookOutputToNbformat(output: NotebookOutput): Record<string,
 
 /** Build capped notebook outputs from a Pyodide run payload. */
 export function buildOutputsFromRun(
-  payload: PyodideRunPayload,
+  payload: PyodideRunPayload & { outputs?: NotebookOutput[] },
   executionCount: number,
   maxChars: number = MAX_NOTEBOOK_OUTPUT_CHARS,
 ): NotebookOutput[] {
+  if (payload.outputs) {
+    return payload.outputs.map((output) => {
+      if (output.kind === "execute-result") {
+        return {
+          ...output,
+          executionCount,
+          data: capDisplayData(output.data, maxChars),
+        };
+      }
+      if (output.kind === "display-data") {
+        return { ...output, data: capDisplayData(output.data, maxChars) };
+      }
+      if (output.kind === "stream") {
+        return { ...output, text: capOutputText(output.text, maxChars) };
+      }
+      if (output.kind === "error") {
+        return {
+          ...output,
+          evalue: capOutputText(output.evalue, maxChars),
+          traceback: output.traceback.map((line) => capOutputText(line, maxChars)),
+        };
+      }
+      return output;
+    });
+  }
   const outputs: NotebookOutput[] = [];
   if (payload.stdout) {
     outputs.push({ kind: "stream", name: "stdout", text: capOutputText(payload.stdout, maxChars) });

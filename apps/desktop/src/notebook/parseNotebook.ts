@@ -6,10 +6,8 @@ export interface NotebookStreamOutput {
   text: string;
 }
 
-export interface NotebookDisplayData {
-  textPlain?: string;
-  imageDataUrl?: string;
-}
+export type { NotebookDisplayData } from "./notebookMime";
+import type { NotebookDisplayData } from "./notebookMime";
 
 export interface NotebookDataOutput {
   kind: "execute-result" | "display-data";
@@ -48,14 +46,7 @@ export type NotebookParseResult =
   | { ok: true; notebook: ParsedNotebook }
   | { ok: false; error: string };
 
-const IMAGE_MIME_PREFIXES: ReadonlyArray<readonly [string, string]> = [
-  ["image/png", "data:image/png;base64,"],
-  ["image/jpeg", "data:image/jpeg;base64,"],
-  ["image/jpg", "data:image/jpeg;base64,"],
-  ["image/gif", "data:image/gif;base64,"],
-  ["image/svg+xml", "data:image/svg+xml;base64,"],
-  ["image/webp", "data:image/webp;base64,"],
-];
+import { mimeBundleToDisplayData } from "./notebookMime";
 
 function joinMultiline(value: unknown): string {
   if (typeof value === "string") return value;
@@ -67,19 +58,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
-}
-
-function extractDisplayData(data: Record<string, unknown>): NotebookDisplayData {
-  const textPlain = joinMultiline(data["text/plain"]);
-  const result: NotebookDisplayData = textPlain ? { textPlain } : {};
-  for (const [mime, prefix] of IMAGE_MIME_PREFIXES) {
-    const encoded = data[mime];
-    if (typeof encoded === "string" && encoded.length > 0) {
-      result.imageDataUrl = `${prefix}${encoded}`;
-      break;
-    }
-  }
-  return result;
 }
 
 function parseOutput(raw: unknown): NotebookOutput | null {
@@ -98,7 +76,7 @@ function parseOutput(raw: unknown): NotebookOutput | null {
     return {
       kind: outputType === "execute_result" ? "execute-result" : "display-data",
       executionCount,
-      data: extractDisplayData(data),
+      data: mimeBundleToDisplayData(data),
     };
   }
   if (outputType === "error") {

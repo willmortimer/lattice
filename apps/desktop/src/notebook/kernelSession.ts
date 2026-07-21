@@ -1,7 +1,11 @@
 import type { PyodideMountFile, PyodideRunPayload } from "./pyodideProtocol";
+import type { NotebookOutput } from "./parseNotebook";
 
 /** Execute result shape shared with `mergeNotebookOutputs.buildOutputsFromRun`. */
-export type KernelRunPayload = PyodideRunPayload;
+export type KernelRunPayload = PyodideRunPayload & {
+  /** Rich notebook outputs when the backend preserves MIME bundles (native kernel). */
+  outputs?: NotebookOutput[];
+};
 
 export type KernelMountFile = PyodideMountFile;
 

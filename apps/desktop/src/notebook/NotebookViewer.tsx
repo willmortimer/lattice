@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { TopLevelSpec } from "vega-lite";
 import { demoNotebooks, inBrowser } from "../demo";
+import { VegaLiteChart } from "../components/VegaLiteChart";
 import { applyResourceUpdate } from "../lib/resourceRuntime";
 import { PagePreview } from "../editor/PagePreview";
 import { TextCodeMirror } from "../viewers/text/TextCodeMirror";
@@ -9,7 +11,8 @@ import {
   buildOutputsFromRun,
 } from "./mergeNotebookOutputs";
 import { createNativeKernelSession } from "./nativeKernelSession";
-import type { NotebookCell, NotebookOutput } from "./parseNotebook";
+import { sanitizeNotebookHtml, sanitizeNotebookSvg } from "./notebookMime";
+import type { NotebookCell, NotebookDisplayData, NotebookOutput } from "./parseNotebook";
 import { parseNotebook } from "./parseNotebook";
 import { createPyodideKernelSession } from "./pyodideKernelSession";
 import { PyodideCancelledError, PyodideLoadError } from "./pyodideRuntime";
@@ -84,6 +87,53 @@ function cellLabel(cell: NotebookCell): string {
   }
 }
 
+function NotebookDisplayOutput({ data }: { data: NotebookDisplayData }) {
+  const sanitizedHtml = data.html ? sanitizeNotebookHtml(data.html) : null;
+  const sanitizedSvg = data.svg ? sanitizeNotebookSvg(data.svg) : null;
+  const vegaSpec = data.vegaLite as TopLevelSpec | undefined;
+
+  return (
+    <div className="lattice-notebook-output-block">
+      {data.markdown && (
+        <div className="lattice-notebook-output-markdown">
+          <PagePreview draftBody={data.markdown} parseError={null} />
+        </div>
+      )}
+      {sanitizedHtml && (
+        <div
+          className="lattice-notebook-output-html"
+          // Notebook HTML is sanitized before render; trusted kernel output only.
+          dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
+        />
+      )}
+      {data.textPlain && (
+        <pre className="lattice-notebook-output" aria-label="text output">
+          {data.textPlain}
+        </pre>
+      )}
+      {sanitizedSvg && (
+        <div
+          className="lattice-notebook-output-svg"
+          aria-label="svg output"
+          dangerouslySetInnerHTML={{ __html: sanitizedSvg }}
+        />
+      )}
+      {data.imageDataUrl && (
+        <img
+          className="lattice-notebook-output-image"
+          src={data.imageDataUrl}
+          alt="Notebook output"
+        />
+      )}
+      {vegaSpec && (
+        <div className="lattice-notebook-output-chart" aria-label="chart output">
+          <VegaLiteChart spec={vegaSpec} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function NotebookOutputView({ output }: { output: NotebookOutput }) {
   switch (output.kind) {
     case "stream":
@@ -97,22 +147,7 @@ function NotebookOutputView({ output }: { output: NotebookOutput }) {
       );
     case "execute-result":
     case "display-data":
-      return (
-        <div className="lattice-notebook-output-block">
-          {output.data.textPlain && (
-            <pre className="lattice-notebook-output" aria-label="text output">
-              {output.data.textPlain}
-            </pre>
-          )}
-          {output.data.imageDataUrl && (
-            <img
-              className="lattice-notebook-output-image"
-              src={output.data.imageDataUrl}
-              alt="Notebook output"
-            />
-          )}
-        </div>
-      );
+      return <NotebookDisplayOutput data={output.data} />;
     case "error":
       return (
         <pre className="lattice-notebook-output lattice-notebook-output-error" aria-label="error output">
