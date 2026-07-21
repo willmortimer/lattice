@@ -9,7 +9,7 @@ mod error;
 mod limits;
 mod schema_meta;
 
-pub use cancel::{CancelCheck, NeverCancel};
+pub use cancel::{AtomicCancel, CancelCheck, NeverCancel};
 pub use encode::{
     decode_ipc_stream, encode_duckdb_batch, encode_duckdb_batch_with_cancel, EncodedBatch,
     EncodeOptions, DEFAULT_SAMPLE_ROWS,

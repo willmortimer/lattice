@@ -4,6 +4,7 @@ mod commands;
 mod daemon_session;
 mod data;
 mod dataset;
+mod dataset_sessions;
 mod link_repair;
 mod profile;
 mod resource_links;
@@ -164,6 +165,7 @@ pub fn run() {
             dataset::query_dataset_arrow,
             dataset::profile_dataset,
             dataset::explain_dataset,
+            dataset::cancel_dataset_query,
             canvas::read_canvas,
             canvas::canvas_place_resource,
             canvas::canvas_move_nodes,
