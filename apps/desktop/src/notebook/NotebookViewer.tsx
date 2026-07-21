@@ -384,7 +384,7 @@ export function NotebookViewer({
             mountPath: file.mountPath,
             data: file.bytes,
           }));
-          setBridgeNotice(null);
+          setBridgeNotice(bridge.notice ?? null);
         } else {
           setBridgeNotice(bridge.message);
         }

@@ -19,7 +19,7 @@ import { fetchWasmBytes } from "./wasmFetch";
 export type PerspectiveClient = {
   table: (
     data: ArrayBuffer | string | Record<string, unknown>[] | Record<string, unknown[]>,
-    options?: { name?: string },
+    options?: { name?: string; format?: string },
   ) => Promise<PerspectiveTable> | PerspectiveTable;
 };
 

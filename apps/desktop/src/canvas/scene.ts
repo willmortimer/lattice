@@ -1,3 +1,6 @@
+// Tauri CSP omits script unsafe-eval (Vega uses a CSP-safe interpreter). Pixi's
+// default shader path needs this polyfill before any other pixi.js import.
+import "pixi.js/unsafe-eval";
 import { Application, Container, FederatedPointerEvent, Graphics, Rectangle, Text } from "pixi.js";
 import type { CanvasNodeMove, CanvasNodeSize } from "./adapter";
 import type { CanvasData, CanvasEdge, CanvasNode } from "./types";

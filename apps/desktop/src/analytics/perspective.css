@@ -113,6 +113,62 @@
   height: 100%;
   display: flex;
   flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.perspective-dataset-debug {
+  flex: 0 0 auto;
+  margin: 0 0 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius-sm);
+  background: var(--lt-bg-raise);
+  color: var(--lt-muted);
+  font: 0.75rem/1.4 var(--lt-font-mono);
+}
+
+.perspective-dataset-debug summary {
+  cursor: pointer;
+  font: 600 0.78rem var(--lt-font-ui);
+  color: var(--lt-text-soft);
+}
+
+.perspective-dataset-debug pre {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.perspective-dataset-sample {
+  margin-top: 8px;
+  overflow: auto;
+}
+
+.perspective-dataset-sample-label {
+  margin: 0 0 6px;
+  font: 0.75rem var(--lt-font-ui);
+  color: var(--lt-muted);
+}
+
+.perspective-dataset-sample table {
+  width: 100%;
+  border-collapse: collapse;
+  font: 0.75rem/1.35 var(--lt-font-mono);
+}
+
+.perspective-dataset-sample th,
+.perspective-dataset-sample td {
+  border: 1px solid var(--lt-line);
+  padding: 4px 8px;
+  text-align: left;
+  color: var(--lt-text);
+}
+
+.perspective-dataset-sample th {
+  background: var(--lt-panel);
+  color: var(--lt-muted);
+  font-weight: 600;
 }
 
 .perspective-dataset-viewer-status {
