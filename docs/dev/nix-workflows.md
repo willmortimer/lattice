@@ -90,8 +90,19 @@ nix run .#site-deploy
 ```
 
 `site-deploy` uses the same wrapper on `PATH`, so `nix run .#site-deploy` works
-without entering the ops shell once you are authenticated. Use the ops shell
-for interactive `wrangler` commands (login, whoami, pages project list, etc.).
+without entering the ops shell once you are authenticated. Prefer an API token
+via sops ([secrets/README.md](../../secrets/README.md)):
+
+```sh
+# direnv decrypts secrets/cloudflare.env into the environment
+nix run .#site-deploy
+
+# one-shot without direnv
+sops exec-env secrets/cloudflare.env -- nix run .#site-deploy
+```
+
+Use the ops shell for interactive `wrangler` commands (login, whoami, pages
+project list, etc.) when you are not using a token.
 
 > We intentionally avoid `nixpkgs#wrangler`: it rebuilds the Cloudflare
 > workers-sdk monorepo (multi‑GiB) and has been failing on Darwin (`EBADF`

@@ -1,0 +1,9 @@
+# SOPS creation rules for Lattice secrets.
+# Private age key stays on the machine: ~/.config/sops/age/keys.txt
+# Recipient below is the public key derived from that identity.
+
+creation_rules:
+  - path_regex: secrets/[^/]+\.(env|yaml|yml)$
+    # Encrypt secret-looking keys; leave non-secret IDs readable in the file.
+    encrypted_regex: "^(CLOUDFLARE_API_TOKEN|.*_(PASSWORD|SECRET|TOKEN|KEY|PRIVATE))$"
+    age: age1z3d6d9tpxm99patx9t6nkhsl47mxzx76yvvph66sr62zd757zyzqrmzldp

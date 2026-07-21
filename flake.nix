@@ -107,8 +107,15 @@
               pnpm install
               pnpm --filter @lattice/site build
               # Cloudflare Pages project is "lattice"; public host is lattice-dop.pages.dev.
+              # Prefer CLOUDFLARE_API_TOKEN from sops (see secrets/README.md). Falls back
+              # to interactive `wrangler login` credentials in ~/.wrangler if unset.
+              if [ -z "''${CLOUDFLARE_API_TOKEN:-}" ]; then
+                echo "site-deploy: CLOUDFLARE_API_TOKEN unset — using wrangler OAuth store if present." >&2
+                echo "  sops path: sops exec-env secrets/cloudflare.env -- nix run .#site-deploy" >&2
+              fi
               exec wrangler pages deploy site/dist \
                 --project-name=lattice \
+                --commit-dirty=true \
                 "$@"
             '';
             docs-sync = ''
@@ -275,6 +282,12 @@
             pnpm
           ];
 
+          # sops + age for decrypting secrets/ when deploying from the ops shell.
+          secretsToolchain = with pkgs; [
+            sops
+            age
+          ];
+
           wrangler = pkgs.writeShellApplication {
             name = "wrangler";
             runtimeInputs = [ pkgs.nodejs_22 ];
@@ -283,7 +296,7 @@
             '';
           };
 
-          siteToolchain = siteNodeToolchain ++ [ wrangler ];
+          siteToolchain = siteNodeToolchain ++ [ wrangler ] ++ secretsToolchain;
 
           siteScriptNames = [
             "site-dev"
@@ -481,9 +494,10 @@
             ];
             shellHook = ''
               echo "lattice ops shell — wrangler (npx wrangler@4), node $(node --version), pnpm $(pnpm --version)"
-              echo "auth: wrangler login   # once; tokens live in your home dir"
-              echo "whoami: wrangler whoami"
-              echo "deploy: lattice-site-deploy | nix run .#site-deploy"
+              echo "secrets: sops/age available — see secrets/README.md"
+              echo "auth: sops secrets/cloudflare.env   # or: wrangler login"
+              echo "deploy: nix run .#site-deploy"
+              echo "        sops exec-env secrets/cloudflare.env -- nix run .#site-deploy"
               echo "live: https://lattice-dop.pages.dev/"
             '';
           };
