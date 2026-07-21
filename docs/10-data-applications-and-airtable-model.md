@@ -245,11 +245,17 @@ tables:
 // contact_tags(source_id, target_id); the relation TEXT column stays NULL
 ```
 
-- `relation_table` names a target table in the same `.data` package. Cross-table
-  relations within one package are supported (for example `contacts.company` →
-  `companies` in First Look `CRM.data`). Lookup and Rollup build on these
-  same-package relations (see [Shipped in Wave 2](#shipped-in-wave-2-airtable-depth)).
-  Cross-package links remain later work (P2X01).
+- `relation_table` names a target table. Same-package targets use a bare table
+  name (`companies`). Cross-package targets use a workspace-relative `.data`
+  path plus `#` plus table (`Directory.data#companies`,
+  `team/Directory.data#orgs`). Cross-package relations are **read-only**:
+  `open_data_app` merges foreign rows into `relation_targets` for labels/pickers,
+  but RecordInsert/Update that set the cell are rejected with a clear error.
+  Lookup and rollup across packages are not supported. Junction storage is
+  same-package only.
+  Cross-table relations within one package are supported (for example
+  `contacts.company` → `companies` in First Look `CRM.data`). Lookup and Rollup
+  build on these same-package relations (see [Shipped in Wave 2](#shipped-in-wave-2-airtable-depth)).
 - Cells hold zero or more linked record ids; insert/update validates each id
   exists in the target table. Junction-backed columns materialize the same
   `CellValue::Relation` shape on read; writes sync the junction then refresh.
@@ -264,9 +270,11 @@ tables:
 
 `open_data_app` includes a `relation_targets` map: for each distinct
 `relation_table` referenced by the active table's columns, the snapshot carries
-target rows (id + values) used to resolve display labels. The shell builds a
-label index from name-like fields (`name`, `title`, `label`) and falls back to
-the first text value or raw id.
+target rows (id + values) used to resolve display labels. Keys match the column
+`relation_table` string exactly (bare table name or `Package.data#table`).
+Cross-package entries are loaded by opening the foreign package read-only under
+the workspace root. The shell builds a label index from name-like fields
+(`name`, `title`, `label`) and falls back to the first text value or raw id.
 
 - **Grid** — relation cells use the label index when present.
 - **List, board, gallery, calendar** — title, subtitle, cover, and date fields
@@ -313,8 +321,9 @@ unresolved references fail template validation. This keeps hand-authored seeds
 readable (for example `"company": ["Analytical Engines"]`) while storing canonical
 ids in SQLite.
 
-Cross-package relation UX remains later work (P2X01). Migrating all relations off
-JSON TEXT onto junctions is out of scope for the demo opt-in.
+Cross-package relation targets are read-only (P2X01): labels load from the
+foreign package; writes that set the cell are rejected. Migrating all relations
+off JSON TEXT onto junctions is out of scope for the demo opt-in.
 
 Linked-record UX should make relational modeling approachable:
 

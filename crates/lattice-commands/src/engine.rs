@@ -726,8 +726,61 @@ impl CommandEngine {
                                 ),
                             });
                         };
-                        if !app.list_tables()?.iter().any(|name| name == target) {
-                            return Err(Error::NotFound { path: path.clone() });
+                        let parsed = lattice_data::parse_relation_target(target).map_err(
+                            |message| Error::InvalidResourceTarget {
+                                path: path.clone(),
+                                reason: format!("relation column {:?}: {message}", column.name),
+                            },
+                        )?;
+                        match parsed {
+                            lattice_data::RelationTarget::Local { table: target_table } => {
+                                if !app.list_tables()?.iter().any(|name| name == target_table) {
+                                    return Err(Error::NotFound { path: path.clone() });
+                                }
+                            }
+                            lattice_data::RelationTarget::CrossPackage {
+                                package_rel,
+                                table: target_table,
+                            } => {
+                                if column.junction_table.is_some() {
+                                    return Err(Error::InvalidResourceTarget {
+                                        path: path.clone(),
+                                        reason: format!(
+                                            "relation column {:?}: cross-package relations cannot use junction-table",
+                                            column.name
+                                        ),
+                                    });
+                                }
+                                let package_path = PathBuf::from(package_rel);
+                                if package_path == *path {
+                                    return Err(Error::InvalidResourceTarget {
+                                        path: path.clone(),
+                                        reason: format!(
+                                            "relation column {:?}: use bare table name for same-package targets, not {target:?}",
+                                            column.name
+                                        ),
+                                    });
+                                }
+                                let foreign = self.open_data_app(&package_path).map_err(|_| {
+                                    Error::InvalidResourceTarget {
+                                        path: path.clone(),
+                                        reason: format!(
+                                            "relation column {:?}: target package {package_rel:?} not found under the workspace root",
+                                            column.name
+                                        ),
+                                    }
+                                })?;
+                                if !foreign.list_tables()?.iter().any(|name| name == target_table)
+                                {
+                                    return Err(Error::InvalidResourceTarget {
+                                        path: path.clone(),
+                                        reason: format!(
+                                            "relation column {:?}: table {target_table:?} not found in package {package_rel:?}",
+                                            column.name
+                                        ),
+                                    });
+                                }
+                            }
                         }
                         if has_lookup_meta {
                             return Err(Error::InvalidResourceTarget {
