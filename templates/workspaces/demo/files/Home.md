@@ -26,7 +26,7 @@ a new workspace from the First Look template, or copy missing seeds from
 7. Open `Data/Events.dataset` — DuckDB Parquet facts → Perspective **Preview**, Vega-Lite **Chart**, DuckDB **Profile**.
 8. Open `Dashboards/Signups by region.vl.json` — bound Vega-Lite chart over the same Hive Parquet.
 9. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.
-10. Open `Notebooks/CRM exploration.ipynb` — CRM tour notebook (markdown + code stubs).
+10. Open `Notebooks/Orders analytics.ipynb` — Pyodide loads mounted Orders CSV (`sources/orders.csv`); DuckDB SQL stays native.
 11. Create pages from `Templates/` — daily and meeting note scaffolds.
 12. Read [[Research/Local Runtime]] — daemon, search, and voice process model.
 
@@ -131,6 +131,7 @@ Workspace defaults point quick capture at `Inbox/` and templates at `Templates/`
 | `Data/Events.dataset` | Analytical package — Hive Parquet facts + `annotations.sqlite` |
 | `Dashboards/Signups by region.vl.json` | Vega-Lite chart bound to Events via DuckDB |
 | `Data/sample.csv` | Flat CSV import sample |
+| `Notebooks/Orders analytics.ipynb` | Pyodide Orders CSV tour (mounted workspace bridge) |
 | `Notebooks/CRM exploration.ipynb` | CRM tour notebook (nbformat v4) |
 
 ### CRM views
@@ -205,5 +206,6 @@ fallback: "Open CRM board view"
 | `Data/Events.dataset` | dataset (Parquet + annotations) |
 | `Dashboards/Signups by region.vl.json` | Vega-Lite chart |
 | `Data/sample.csv` | CSV file |
+| `Notebooks/Orders analytics.ipynb` | notebook |
 | `Notebooks/CRM exploration.ipynb` | notebook |
 | `Resources/` | code & config files |
