@@ -51,6 +51,32 @@
   box-shadow: 0 1px 2px rgb(0 0 0 / 6%);
 }
 
+.dataset-surface-busy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.dataset-cancel-button {
+  padding: 4px 12px;
+  border: 1px solid var(--lt-line);
+  border-radius: calc(var(--lt-radius-sm) - 2px);
+  background: var(--lt-surface);
+  color: var(--lt-text);
+  font: 12px var(--lt-font-sans);
+  cursor: pointer;
+}
+
+.dataset-cancel-button:hover {
+  background: var(--lt-line);
+}
+
+.dataset-cancel-button:focus-visible {
+  outline: 2px solid var(--lt-focus, var(--lt-accent));
+  outline-offset: 2px;
+}
+
 .dataset-chart-panel {
   width: min(960px, 100%);
   text-align: left;

@@ -7,7 +7,8 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import { invoke } from "@tauri-apps/api/core";
-import { loadDatasetArrowDump } from "./datasetQuery";
+import { DatasetRequestAbortedError } from "./datasetCancel";
+import { loadDatasetArrowDump, queryDatasetArrow } from "./datasetQuery";
 
 describe("loadDatasetArrowDump", () => {
   beforeEach(() => {
@@ -51,5 +52,70 @@ describe("loadDatasetArrowDump", () => {
     expect(result.dump.rowCount).toBe(2);
     expect(result.summary).toContain("2 rows");
     expect(dumpArrowTransport(populated).sampleRows).toHaveLength(2);
+  });
+
+  it("passes a shared sessionId and cancels on AbortSignal", async () => {
+    let resolveQuery: ((value: unknown) => void) | undefined;
+    vi.mocked(invoke).mockImplementation((cmd: string) => {
+      if (cmd === "cancel_dataset_query") return Promise.resolve(true);
+      return new Promise((resolve) => {
+        resolveQuery = resolve;
+      });
+    });
+
+    const controller = new AbortController();
+    const pending = loadDatasetArrowDump("/workspace", "Usage.dataset", {}, controller.signal);
+
+    await vi.waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith(
+        "query_dataset_arrow",
+        expect.objectContaining({
+          request: expect.objectContaining({ sessionId: expect.any(String) }),
+        }),
+      );
+    });
+
+    const sessionId = vi.mocked(invoke).mock.calls[0]?.[1] as {
+      request: { sessionId: string };
+    };
+    controller.abort();
+
+    await expect(pending).rejects.toBeInstanceOf(DatasetRequestAbortedError);
+    expect(invoke).toHaveBeenCalledWith("cancel_dataset_query", {
+      sessionId: sessionId.request.sessionId,
+    });
+    resolveQuery?.({
+      schemaMeta: { fields: [] },
+      ipcBytes: [],
+      rowCount: 0,
+      truncated: false,
+      cancelled: true,
+      byteLength: 0,
+      sampleRows: [],
+      sql: "",
+    });
+  });
+});
+
+describe("queryDatasetArrow", () => {
+  beforeEach(() => {
+    vi.mocked(invoke).mockReset();
+  });
+
+  it("treats cancelled responses as abort, not hard errors", async () => {
+    vi.mocked(invoke).mockResolvedValueOnce({
+      schemaMeta: { fields: [] },
+      ipcBytes: [],
+      rowCount: 0,
+      truncated: false,
+      cancelled: true,
+      byteLength: 0,
+      sampleRows: [],
+      sql: "SELECT 1",
+    });
+
+    await expect(queryDatasetArrow("/workspace", "Usage.dataset")).rejects.toBeInstanceOf(
+      DatasetRequestAbortedError,
+    );
   });
 });

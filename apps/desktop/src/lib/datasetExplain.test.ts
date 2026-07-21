@@ -5,6 +5,7 @@ vi.mock("@tauri-apps/api/core", () => ({
 }));
 
 import { invoke } from "@tauri-apps/api/core";
+import { DatasetRequestAbortedError } from "./datasetCancel";
 import { explainDataset } from "./datasetExplain";
 
 describe("explainDataset", () => {
@@ -30,5 +31,21 @@ describe("explainDataset", () => {
     });
     expect(result.plan).toContain("Dummy_Scan");
     expect(result.sql).toBe("SELECT 1");
+  });
+
+  it("rejects with AbortError when the signal aborts mid-flight", async () => {
+    vi.mocked(invoke).mockImplementation(
+      () =>
+        new Promise(() => {
+          /* never resolves */
+        }),
+    );
+
+    const controller = new AbortController();
+    const pending = explainDataset("/workspace", "Usage.dataset", {}, controller.signal);
+    controller.abort();
+
+    await expect(pending).rejects.toBeInstanceOf(DatasetRequestAbortedError);
+    expect(invoke).not.toHaveBeenCalledWith("cancel_dataset_query", expect.anything());
   });
 });
