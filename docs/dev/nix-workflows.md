@@ -50,6 +50,48 @@ Session-local nxr completion is enabled via `nxr.shellIntegration` (no global
 dotfile writes). After `direnv allow`, `nxr` should tab-complete in zsh/bash
 inside the shell.
 
+## Ops shell (Cloudflare / site publish)
+
+Separate from the heavy default shell. Activate only when publishing:
+
+```sh
+nix develop .#ops
+```
+
+Provides: node 22, pnpm, **wrangler** (from nixpkgs), plus `lattice-site-build`,
+`lattice-site-deploy`, and `lattice-docs-sync`.
+
+direnv keeps loading `.#default` via `use flake`. Do **not** change `.envrc`
+for day-to-day work — open an ops shell in a second terminal when you need
+Cloudflare.
+
+### How `wrangler login` works with Nix
+
+Nix puts a fixed `wrangler` binary on `PATH` from the store. OAuth tokens are
+**not** stored in the Nix store:
+
+1. Run `wrangler login` inside `nix develop .#ops` (needs a browser; interactive).
+2. Wrangler writes credentials under your home directory
+   (`~/Library/Preferences/.wrangler/` on macOS).
+3. Later `wrangler whoami` / `nix run .#site-deploy` reuse that login until it
+   expires.
+4. For CI or non-interactive shells, set `CLOUDFLARE_API_TOKEN` instead (see
+   [environment.md](./environment.md)).
+
+```sh
+nix develop .#ops
+wrangler login
+wrangler whoami
+# build + deploy to https://lattice-dop.pages.dev/
+lattice-site-deploy
+# or from any shell after login:
+nix run .#site-deploy
+```
+
+`site-deploy` pins wrangler via nixpkgs, so deploy works without entering the
+ops shell once you are authenticated. Use the ops shell for interactive
+`wrangler` commands (login, whoami, pages project list, etc.).
+
 ## Runners
 
 Prefer **nxr** for day-to-day work. Every leaf is still a normal flake app, so
@@ -87,6 +129,7 @@ Run them from the repo root (they use relative paths).
 | `check` | everything CI runs: fmt check, clippy, tests, `pnpm install --frozen-lockfile`, desktop + site builds |
 | `site-dev` | Astro **marketing/docs** site (usually <http://localhost:4321>) |
 | `site-build` | static site build (syncs docs content first via `prebuild`) |
+| `site-deploy` | build + `wrangler pages deploy` to Cloudflare Pages (`lattice-dop`) |
 | `docs-sync` | regenerate `site/src/content/docs/` from `docs/` |
 | `compile-theme` | compile `themes/*.theme.yaml` → desktop/site CSS (+ Pixi) tokens |
 | `compile-templates` | validate template packages → embedded Rust and browser catalogs |
