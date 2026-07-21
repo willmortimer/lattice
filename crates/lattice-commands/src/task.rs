@@ -6,8 +6,9 @@
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::thread;
+use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Mutex};
+use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use lattice_env::{EnvError, EnvKind, EnvProvider};
@@ -65,6 +66,36 @@ pub enum TaskError {
 
 pub type TaskResult<T> = std::result::Result<T, TaskError>;
 
+/// Declared task input or output path (string or `{ path, kind? }` in YAML).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum TaskIoRef {
+    /// Bare workspace-relative (or package-relative) path.
+    Path(String),
+    /// Explicit binding with optional coarse kind label.
+    Object {
+        path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        kind: Option<String>,
+    },
+}
+
+impl TaskIoRef {
+    pub fn path(&self) -> &str {
+        match self {
+            Self::Path(path) => path,
+            Self::Object { path, .. } => path,
+        }
+    }
+
+    pub fn kind(&self) -> Option<&str> {
+        match self {
+            Self::Path(_) => None,
+            Self::Object { kind, .. } => kind.as_deref(),
+        }
+    }
+}
+
 /// Parsed `task.yaml` for a `.task/` package.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TaskManifest {
@@ -74,6 +105,12 @@ pub struct TaskManifest {
     pub entrypoint: TaskEntrypoint,
     #[serde(default)]
     pub limits: TaskLimits,
+    /// Declared inputs (informational in v1; not enforced by the runner).
+    #[serde(default)]
+    pub inputs: Vec<TaskIoRef>,
+    /// Declared outputs (informational in v1; surfaced on [`crate::ExecutionResult`]).
+    #[serde(default)]
+    pub outputs: Vec<TaskIoRef>,
 }
 
 /// Runtime block: currently Python via `uv` only.
@@ -176,6 +213,123 @@ pub struct TaskRunOutput {
     pub stderr: String,
 }
 
+/// A spawned `uv` task process that can be polled, waited, or process-group killed.
+pub struct SpawnedTask {
+    child: Child,
+    stdout: Arc<Mutex<Vec<u8>>>,
+    stderr: Arc<Mutex<Vec<u8>>>,
+    stdout_thread: Option<JoinHandle<()>>,
+    stderr_thread: Option<JoinHandle<()>>,
+    timeout: Duration,
+    timeout_seconds: u64,
+    started: Instant,
+    /// Declared outputs from the manifest (copied onto execution results by hosts).
+    pub declared_outputs: Vec<TaskIoRef>,
+}
+
+impl SpawnedTask {
+    /// OS process id of the task root (process-group leader on Unix).
+    pub fn pid(&self) -> u32 {
+        self.child.id()
+    }
+
+    /// Snapshot stdout captured so far (lossy UTF-8).
+    pub fn stdout_snapshot(&self) -> String {
+        let guard = self.stdout.lock().unwrap_or_else(|e| e.into_inner());
+        String::from_utf8_lossy(&guard).into_owned()
+    }
+
+    /// Snapshot stderr captured so far (lossy UTF-8).
+    pub fn stderr_snapshot(&self) -> String {
+        let guard = self.stderr.lock().unwrap_or_else(|e| e.into_inner());
+        String::from_utf8_lossy(&guard).into_owned()
+    }
+
+    /// Kill the process group (Unix) or the child (other platforms).
+    pub fn kill(&mut self) -> std::io::Result<()> {
+        kill_child_tree(&mut self.child)
+    }
+
+    /// Non-blocking poll: `None` while still running within the timeout.
+    pub fn try_finish(&mut self) -> Option<TaskResult<TaskRunOutput>> {
+        if self.started.elapsed() >= self.timeout {
+            let _ = self.kill();
+            let _ = self.child.wait();
+            self.join_pipes();
+            return Some(Err(TaskError::TimedOut {
+                timeout_seconds: self.timeout_seconds,
+                stdout: self.stdout_snapshot(),
+                stderr: self.stderr_snapshot(),
+            }));
+        }
+        match self.child.try_wait() {
+            Ok(Some(status)) => {
+                self.join_pipes();
+                Some(Ok(TaskRunOutput {
+                    exit_code: exit_code_from_status(status),
+                    stdout: self.stdout_snapshot(),
+                    stderr: self.stderr_snapshot(),
+                }))
+            }
+            Ok(None) => None,
+            Err(_) => {
+                let _ = self.kill();
+                let _ = self.child.wait();
+                self.join_pipes();
+                Some(Err(TaskError::Io {
+                    path: PathBuf::from("."),
+                    source: std::io::Error::new(std::io::ErrorKind::Other, "task wait failed"),
+                }))
+            }
+        }
+    }
+
+    /// Block until exit or timeout (CLI / sync callers).
+    pub fn wait(mut self) -> TaskResult<TaskRunOutput> {
+        loop {
+            if let Some(result) = self.try_finish() {
+                return result;
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+    }
+
+    /// After kill, wait for the child and drain pipes (cancel path).
+    pub fn wait_after_kill(mut self) -> TaskRunOutput {
+        let _ = self.child.wait();
+        self.join_pipes();
+        TaskRunOutput {
+            exit_code: 130,
+            stdout: self.stdout_snapshot(),
+            stderr: self.stderr_snapshot(),
+        }
+    }
+
+    fn join_pipes(&mut self) {
+        if let Some(handle) = self.stdout_thread.take() {
+            let _ = handle.join();
+        }
+        if let Some(handle) = self.stderr_thread.take() {
+            let _ = handle.join();
+        }
+    }
+}
+
+fn exit_code_from_status(status: std::process::ExitStatus) -> i32 {
+    status.code().unwrap_or_else(|| {
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::ExitStatusExt;
+            // Convention: signal death as 128+signal when code() is None.
+            status.signal().map(|s| 128 + s).unwrap_or(1)
+        }
+        #[cfg(not(unix))]
+        {
+            1
+        }
+    })
+}
+
 /// Runs Lattice task packages with an injectable [`EnvProvider`].
 #[derive(Debug, Clone, Default)]
 pub struct TaskRunner {
@@ -193,8 +347,8 @@ impl TaskRunner {
         Self { env }
     }
 
-    /// Resolve `path` (task package dir or `task.yaml`) and run it.
-    pub fn run(&self, path: &Path) -> TaskResult<TaskRunOutput> {
+    /// Resolve `path` (task package dir or `task.yaml`) and spawn it without blocking.
+    pub fn spawn(&self, path: &Path) -> TaskResult<SpawnedTask> {
         let (package_dir, manifest_path) = resolve_task_paths(path)?;
         let manifest = TaskManifest::load(&manifest_path)?;
         let project_dir = resolve_project_dir(&package_dir, &manifest.runtime.project)?;
@@ -226,7 +380,7 @@ impl TaskRunner {
         #[cfg(unix)]
         {
             use std::os::unix::process::CommandExt;
-            // Own process group so timeout can kill the whole tree.
+            // Own process group so timeout / cancel can kill the whole tree.
             cmd.process_group(0);
         }
 
@@ -244,56 +398,56 @@ impl TaskRunner {
             source: std::io::Error::new(std::io::ErrorKind::Other, "missing stderr pipe"),
         })?;
 
-        let stdout_handle = thread::spawn(move || {
-            let mut buf = Vec::new();
-            let _ = stdout_pipe.read_to_end(&mut buf);
-            buf
+        let stdout = Arc::new(Mutex::new(Vec::new()));
+        let stderr = Arc::new(Mutex::new(Vec::new()));
+        let stdout_buf = Arc::clone(&stdout);
+        let stderr_buf = Arc::clone(&stderr);
+
+        let stdout_thread = thread::spawn(move || {
+            let mut chunk = [0u8; 4096];
+            loop {
+                match stdout_pipe.read(&mut chunk) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        if let Ok(mut guard) = stdout_buf.lock() {
+                            guard.extend_from_slice(&chunk[..n]);
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
         });
-        let stderr_handle = thread::spawn(move || {
-            let mut buf = Vec::new();
-            let _ = stderr_pipe.read_to_end(&mut buf);
-            buf
+        let stderr_thread = thread::spawn(move || {
+            let mut chunk = [0u8; 4096];
+            loop {
+                match stderr_pipe.read(&mut chunk) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        if let Ok(mut guard) = stderr_buf.lock() {
+                            guard.extend_from_slice(&chunk[..n]);
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
         });
 
-        let timeout = Duration::from_secs(manifest.limits.timeout_seconds);
-        match wait_child_with_timeout(&mut child, timeout) {
-            Ok(status) => {
-                let stdout =
-                    String::from_utf8_lossy(&stdout_handle.join().unwrap_or_default()).into_owned();
-                let stderr =
-                    String::from_utf8_lossy(&stderr_handle.join().unwrap_or_default()).into_owned();
-                let exit_code = status.code().unwrap_or_else(|| {
-                    #[cfg(unix)]
-                    {
-                        use std::os::unix::process::ExitStatusExt;
-                        // Convention: signal death as 128+signal when code() is None.
-                        status.signal().map(|s| 128 + s).unwrap_or(1)
-                    }
-                    #[cfg(not(unix))]
-                    {
-                        1
-                    }
-                });
-                Ok(TaskRunOutput {
-                    exit_code,
-                    stdout,
-                    stderr,
-                })
-            }
-            Err(()) => {
-                let _ = kill_child_tree(&mut child);
-                let _ = child.wait();
-                let stdout =
-                    String::from_utf8_lossy(&stdout_handle.join().unwrap_or_default()).into_owned();
-                let stderr =
-                    String::from_utf8_lossy(&stderr_handle.join().unwrap_or_default()).into_owned();
-                Err(TaskError::TimedOut {
-                    timeout_seconds: manifest.limits.timeout_seconds,
-                    stdout,
-                    stderr,
-                })
-            }
-        }
+        Ok(SpawnedTask {
+            child,
+            stdout,
+            stderr,
+            stdout_thread: Some(stdout_thread),
+            stderr_thread: Some(stderr_thread),
+            timeout: Duration::from_secs(manifest.limits.timeout_seconds),
+            timeout_seconds: manifest.limits.timeout_seconds,
+            started: Instant::now(),
+            declared_outputs: manifest.outputs,
+        })
+    }
+
+    /// Resolve `path` (task package dir or `task.yaml`) and run it to completion.
+    pub fn run(&self, path: &Path) -> TaskResult<TaskRunOutput> {
+        self.spawn(path)?.wait()
     }
 }
 
@@ -305,7 +459,7 @@ fn map_env_error(err: EnvError) -> TaskError {
 }
 
 /// Accept a `.task/` directory or a path to `task.yaml`.
-fn resolve_task_paths(path: &Path) -> TaskResult<(PathBuf, PathBuf)> {
+pub fn resolve_task_paths(path: &Path) -> TaskResult<(PathBuf, PathBuf)> {
     let meta = std::fs::metadata(path).map_err(|source| TaskError::Io {
         path: path.to_path_buf(),
         source,
@@ -364,26 +518,8 @@ fn resolve_project_dir(package_dir: &Path, project: &str) -> TaskResult<PathBuf>
     Ok(project_dir)
 }
 
-fn wait_child_with_timeout(
-    child: &mut std::process::Child,
-    timeout: Duration,
-) -> Result<std::process::ExitStatus, ()> {
-    let deadline = Instant::now() + timeout;
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => return Ok(status),
-            Ok(None) => {
-                if Instant::now() >= deadline {
-                    return Err(());
-                }
-                thread::sleep(Duration::from_millis(25));
-            }
-            Err(_) => return Err(()),
-        }
-    }
-}
-
-fn kill_child_tree(child: &mut std::process::Child) -> std::io::Result<()> {
+/// Kill the child process group (Unix) or the child process (other platforms).
+pub fn kill_child_tree(child: &mut Child) -> std::io::Result<()> {
     #[cfg(unix)]
     {
         // Negative PID: signal the process group started with process_group(0).
@@ -487,6 +623,42 @@ entrypoint:
         let m = TaskManifest::load(&path).unwrap();
         assert_eq!(m.limits.timeout_seconds, DEFAULT_TIMEOUT_SECONDS);
         assert_eq!(m.runtime.project, ".");
+        assert!(m.inputs.is_empty());
+        assert!(m.outputs.is_empty());
+    }
+
+    #[test]
+    fn parses_optional_inputs_and_outputs() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("task.yaml");
+        fs::write(
+            &path,
+            r#"format: lattice-task
+version: 1
+runtime:
+  type: python
+  provider: uv
+entrypoint:
+  command: [python, main.py]
+inputs:
+  - ../Data/events.csv
+  - path: Notes/Source.md
+    kind: page
+outputs:
+  - path: Notes/Result.md
+    kind: page
+"#,
+        )
+        .unwrap();
+        let m = TaskManifest::load(&path).unwrap();
+        assert_eq!(m.inputs.len(), 2);
+        assert_eq!(m.inputs[0].path(), "../Data/events.csv");
+        assert_eq!(m.inputs[0].kind(), None);
+        assert_eq!(m.inputs[1].path(), "Notes/Source.md");
+        assert_eq!(m.inputs[1].kind(), Some("page"));
+        assert_eq!(m.outputs.len(), 1);
+        assert_eq!(m.outputs[0].path(), "Notes/Result.md");
+        assert_eq!(m.outputs[0].kind(), Some("page"));
     }
 
     #[test]

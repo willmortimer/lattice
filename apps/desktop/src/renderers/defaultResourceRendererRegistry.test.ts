@@ -27,6 +27,9 @@ describe("createDefaultResourceRendererRegistry", () => {
     expect(registry.resolve({ kind: "dataset", path: "Data/Usage.dataset" }).definition.id).toBe(
       "dataset-viewer",
     );
+    expect(registry.resolve({ kind: "task", path: "Tasks/Hello.task" }).definition.id).toBe(
+      "task-viewer",
+    );
     expect(
       registry.resolve({ kind: "notebook", path: "Notebooks/CRM exploration.ipynb" }, ["pages", "canvas"]).mode,
     ).toBe("native");

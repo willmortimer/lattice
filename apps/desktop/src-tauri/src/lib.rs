@@ -12,6 +12,7 @@ mod revisions;
 mod search;
 mod semantic;
 mod kernel;
+mod task;
 mod terminal;
 mod theme;
 mod tray;
@@ -29,6 +30,7 @@ pub fn run() {
         .manage(watcher::WatcherState::default())
         .manage(terminal::TerminalState::default())
         .manage(kernel::KernelState::default())
+        .manage(task::TaskState::default())
         .manage(theme::ThemeWatchState::default())
         .manage(resource_links::ResourceCatalogState::default())
         .manage(voice::VoiceState::default())
@@ -139,6 +141,10 @@ pub fn run() {
             kernel::kernel_execute,
             kernel::kernel_interrupt,
             kernel::kernel_shutdown,
+            task::task_load_manifest,
+            task::task_run,
+            task::task_cancel,
+            task::task_execution_status,
             theme::list_themes,
             theme::get_resolved_theme,
             theme::set_theme,
