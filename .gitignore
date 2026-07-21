@@ -41,7 +41,8 @@ result
 .mcp.json
 .mcp.jsonc
 
-# Local env & secrets
+# Local env (plaintext only). Encrypted sops files under secrets/ are tracked
+# on purpose — ciphertext is safe in a public repo; age private keys are not.
 .env
 .env.*
 !.env.example
@@ -49,6 +50,9 @@ result
 secrets/*.decrypted
 secrets/*.plain
 secrets/*.clear
+# Never commit the age private key even if copied into the tree by mistake
+**/age/keys.txt
+**/*.agekey
 
 # Lattice workspace operational state (test workspaces)
 .lattice/

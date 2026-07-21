@@ -29,26 +29,28 @@ dev shell (`use flake`) and, when present, a gitignored `.env` via
 
 ## Local macOS signing (`desktop-install`)
 
-Used by `nxr desktop-install` / `nix run .#desktop-install`. Apple Development
-is enough for **your** Mac; Developer ID + notarization still require a paid
-account for other machines.
+Used by `nxr desktop-install` / `nix run .#desktop-install`. Prefer
+[`secrets/apple.env`](../../secrets/apple.env) via sops (direnv decrypts). Apple
+Development identities work for **your** Mac; a paid Apple Developer Program
+membership is required for Developer ID Application signing and notarization
+(distribution / other machines).
 
 | Variable | Where to set | Where to get it | What it does | Secret? | Status |
 | --- | --- | --- | --- | --- | --- |
-| `APPLE_SIGNING_IDENTITY` | `.env` (direnv) / shell / keychain | `security find-identity -v -p codesigning` | Codesign identity for the `.app` bundle | Privileged | **Required** for `desktop-install` |
-| `APPLE_TEAM_ID` | `.env` / shell | Certificate OU / developer.apple.com membership | Team ID; optional for local Apple Development, required later for notarization | Privileged | Recommended |
+| `APPLE_SIGNING_IDENTITY` | **sops** `secrets/apple.env` or `.env` | `security find-identity -v -p codesigning` | Codesign identity for the `.app` bundle | Privileged | **Required** for `desktop-install` |
+| `APPLE_TEAM_ID` | same sops file (plaintext field) | Membership details / certificate OU | Team ID for notarization and some signing flows | Privileged | Recommended |
 
-## Future — updater signing & notarization (not used by desktop-install)
+## Notarization & updater signing
 
-These become relevant when shipping auto-updates or distributing beyond your
-Mac. None are read by `desktop-install` today.
+`APPLE_ID` / `APPLE_PASSWORD` live in sops now so release/DMG notarization can
+use them when that path is wired. They are not read by `desktop-install` today.
 
 | Variable | Where to set | Where to get it | What it does | Secret? | Status |
 | --- | --- | --- | --- | --- | --- |
+| `APPLE_ID` | **sops** `secrets/apple.env` | Apple ID email | macOS notarization | Privileged (encrypted) | Ready in sops |
+| `APPLE_PASSWORD` | **sops** `secrets/apple.env` | App-specific password from [appleid.apple.com](https://appleid.apple.com) | macOS notarization | **Yes** | Ready in sops |
 | `TAURI_SIGNING_PRIVATE_KEY` | CI secret / local keychain | `pnpm tauri signer generate` | Signs updater artifacts | **Yes** | Not used yet |
 | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | CI secret | chosen when generating the key | Unlocks the signing key | **Yes** | Not used yet |
-| `APPLE_ID` | CI secret | your Apple developer account email | macOS notarization | Privileged | Not used yet |
-| `APPLE_PASSWORD` | CI secret | app-specific password from appleid.apple.com | macOS notarization | **Yes** | Not used yet |
 
 ## Site publish (Cloudflare Pages)
 
@@ -60,9 +62,9 @@ and [nix-workflows.md](./nix-workflows.md).
 | `CLOUDFLARE_API_TOKEN` | **sops** `secrets/cloudflare.env` (direnv decrypts) or CI secret | [Cloudflare API tokens](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/) — Account → Cloudflare Pages → Edit | Non-interactive auth for `nix run .#site-deploy` / wrangler | **Yes** | Preferred |
 | `CLOUDFLARE_ACCOUNT_ID` | same sops file (plaintext field) or CI | Cloudflare dashboard → account overview | Disambiguates account | No | Set in `secrets/cloudflare.env` |
 
-Do **not** put the API token in `.env`. `.env` remains for non-secret local
-overrides (e.g. Apple signing). Encrypted values are edited with
-`sops secrets/cloudflare.env`.
+Do **not** put the API token or Apple passwords in `.env`. Encrypted
+`secrets/*.env` files are **tracked** in this public repo (ciphertext only);
+edit them with `sops secrets/<name>.env`.
 
 ```sh
 # after rotating the token into sops + direnv reload:
