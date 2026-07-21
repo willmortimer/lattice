@@ -17,8 +17,10 @@ use tokio::sync::oneshot;
 use tracing::{info, warn};
 
 use crate::api::{
-    api_build_context, api_read, api_related, api_search, ApiError, BuildContextParams, ReadParams,
-    RelatedParams, SearchParams,
+    api_build_context, api_create_proposal, api_get_proposal, api_list_proposals, api_propose_page,
+    api_read, api_related, api_search, ApiError, BuildContextParams, CreateProposalParams,
+    GetProposalParams, ListProposalsParams, ProposePageParams, ReadParams, RelatedParams,
+    SearchParams,
 };
 use crate::config::DaemonConfig;
 use crate::server::DaemonState;
@@ -158,6 +160,62 @@ async fn route_build_context(
     }
 }
 
+async fn route_create_proposal(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<CreateProposalParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_create_proposal(&state.daemon.runtime, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_list_proposals(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<ListProposalsParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_list_proposals(&state.daemon.runtime, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_get_proposal(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<GetProposalParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_get_proposal(&state.daemon.runtime, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_propose_page(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<ProposePageParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_propose_page(&state.daemon.runtime, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
 /// Build the localhost API router (no CORS — not a browser demo surface).
 pub fn router(daemon: DaemonState) -> Router {
     Router::new()
@@ -166,6 +224,10 @@ pub fn router(daemon: DaemonState) -> Router {
         .route("/v1/read", post(route_read))
         .route("/v1/related", post(route_related))
         .route("/v1/build_context", post(route_build_context))
+        .route("/v1/proposals/create", post(route_create_proposal))
+        .route("/v1/proposals/list", post(route_list_proposals))
+        .route("/v1/proposals/get", post(route_get_proposal))
+        .route("/v1/proposals/propose_page", post(route_propose_page))
         .with_state(HttpState { daemon })
 }
 
