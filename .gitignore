@@ -49,6 +49,9 @@ result
 # Lattice workspace operational state (test workspaces)
 .lattice/
 
+# Internal planning notes (local only; not published or synced to site)
+docs/internal/
+
 # Logs
 *.log
 
