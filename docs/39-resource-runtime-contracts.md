@@ -89,6 +89,17 @@ only in how many paths are previewed, merged, and recorded per transaction):
   **500** (`LINK_REPAIR_BATCH_CANDIDATE_HARD_CAP`). Truncation sets `truncated` and
   leaves uncapped links unrepaired until a follow-up.
 
+### General transaction proposals
+
+Tasks, workflows, and external agents may return a `TransactionProposal`
+(command bundle + summary + affected paths + warnings) instead of writing
+directly (ADR 0018). The desktop stores pending proposals under
+`.lattice/proposals/{id}.json` — a sibling of `.lattice/link-repair/`, not a
+migration of it. The sidebar inbox lists pending summaries; review accepts a
+subset of command indices as one `CommandEngine` transaction (undoable), or
+reject/dismiss removes the pending file. MCP write tools are still out of
+scope; proposals are the preferred write path for untrusted producers.
+
 ### Revision history presentation
 
 Lattice-initiated moves that accept link repair record

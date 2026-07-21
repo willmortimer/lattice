@@ -42,6 +42,8 @@ export interface ProposalSource {
   resource?: string;
 }
 
+export type ProposalStatus = "pending" | "accepted" | "rejected";
+
 export interface TransactionProposal {
   id: string;
   source: ProposalSource;
@@ -52,4 +54,18 @@ export interface TransactionProposal {
   warnings: string[];
   /** ISO-8601 */
   createdAt: string;
+  /** Defaults to pending when omitted (older payloads). */
+  status?: ProposalStatus;
+}
+
+export interface TransactionProposalSummary {
+  id: string;
+  source: ProposalSource;
+  summary: string;
+  commandCount: number;
+  affectedPaths: string[];
+  warnings: string[];
+  /** ISO-8601 */
+  createdAt: string;
+  status: ProposalStatus;
 }
