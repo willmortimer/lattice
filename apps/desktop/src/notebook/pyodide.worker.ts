@@ -1,13 +1,24 @@
 import { MAX_NOTEBOOK_OUTPUT_CHARS, PYODIDE_INDEX_URL } from "./pyodideConfig";
-import type { PyodideRunPayload, PyodideWorkerRequest, PyodideWorkerResponse } from "./pyodideProtocol";
+import type {
+  PyodideMountFile,
+  PyodideRunPayload,
+  PyodideWorkerRequest,
+  PyodideWorkerResponse,
+} from "./pyodideProtocol";
 
 type PyodideInterface = {
   setStdout: (options: { batched: (text: string) => void }) => void;
   setStderr: (options: { batched: (text: string) => void }) => void;
   runPythonAsync: (code: string) => Promise<unknown>;
+  loadPackage: (packages: string | string[], options?: { messageCallback?: (msg: string) => void }) => Promise<void>;
+  FS: {
+    mkdirTree: (path: string) => void;
+    writeFile: (path: string, data: Uint8Array | string) => void;
+  };
 };
 
 let pyodidePromise: Promise<PyodideInterface> | null = null;
+const loadedPackages = new Set<string>();
 
 function cap(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text;
@@ -35,6 +46,29 @@ function ensurePyodide(): Promise<PyodideInterface> {
 
 function appendBatch(buffer: { value: string }, text: string): void {
   buffer.value += text.endsWith("\n") ? text : `${text}\n`;
+}
+
+function parentDir(path: string): string {
+  const index = path.lastIndexOf("/");
+  return index <= 0 ? "/" : path.slice(0, index);
+}
+
+/** Copy host-provided bytes into the Pyodide virtual filesystem (read-only bridge). */
+function mountWorkspaceFiles(pyodide: PyodideInterface, files: PyodideMountFile[]): void {
+  for (const file of files) {
+    const dir = parentDir(file.mountPath);
+    if (dir !== "/") {
+      pyodide.FS.mkdirTree(dir);
+    }
+    pyodide.FS.writeFile(file.mountPath, file.data);
+  }
+}
+
+async function ensurePackages(pyodide: PyodideInterface, packages: string[]): Promise<void> {
+  const missing = packages.filter((name) => !loadedPackages.has(name));
+  if (missing.length === 0) return;
+  await pyodide.loadPackage(missing);
+  for (const name of missing) loadedPackages.add(name);
 }
 
 async function runCell(
@@ -113,6 +147,12 @@ self.onmessage = async (event: MessageEvent<PyodideWorkerRequest>) => {
 
     if (request.type === "run") {
       const pyodide = await ensurePyodide();
+      if (request.packages && request.packages.length > 0) {
+        await ensurePackages(pyodide, request.packages);
+      }
+      if (request.mountFiles && request.mountFiles.length > 0) {
+        mountWorkspaceFiles(pyodide, request.mountFiles);
+      }
       const payload = await runCell(
         pyodide,
         request.code,

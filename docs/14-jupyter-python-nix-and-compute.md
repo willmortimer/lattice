@@ -64,6 +64,14 @@ leave the notebook readable and show a degraded banner. Cell outputs are
 merged into the `.ipynb` JSON and persisted through `ResourceUpdate` (undoable)
 or, in the browser demo, in-memory `demoNotebooks` mutation.
 
+**Workspace CSV bridge (read-only):** before each cell Run on native desktop,
+the shell may copy selected workspace files (default:
+`Data/Orders.dataset/sources/orders.csv`) into the Pyodide FS under
+`/home/pyodide/workspace/…` via `read_binary_file`. This is not a live mount
+and does not expose DuckDB or Parquet to Pyodide — DuckDB stays on the native
+CLI / dataset viewers. The browser demo shows an honest unavailable banner
+instead of faking workspace access.
+
 ### Native Python through `uv`
 
 Default serious Python execution:

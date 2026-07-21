@@ -28,9 +28,10 @@ a new workspace from the First Look template, or copy missing seeds from
 9. Open `Data/Orders.dataset` — multi-month retail facts (~3 000 rows) for richer charts.
 10. Open the Orders dashboards — stacked region/category, daily revenue, and channel comparison (`.vl.json` under `Dashboards/`).
 11. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.
-12. Open `Notebooks/CRM exploration.ipynb` — CRM tour notebook (markdown + code stubs).
-13. Create pages from `Templates/` — daily and meeting note scaffolds.
-14. Read [[Research/Local Runtime]] — daemon, search, and voice process model.
+12. Open `Notebooks/Orders analytics.ipynb` — Pyodide loads mounted Orders CSV (`sources/orders.csv`); DuckDB SQL stays native.
+13. Open `Notebooks/CRM exploration.ipynb` — CRM tour notebook (markdown + code stubs).
+14. Create pages from `Templates/` — daily and meeting note scaffolds.
+15. Read [[Research/Local Runtime]] — daemon, search, and voice process model.
 
 ## First Look tour — new surfaces
 
@@ -144,6 +145,7 @@ Workspace defaults point quick capture at `Inbox/` and templates at `Templates/`
 | `Dashboards/Revenue by day.vl.json` | Daily revenue time series (Orders) |
 | `Dashboards/Revenue by channel.vl.json` | Layered channel comparison (Orders) |
 | `Data/sample.csv` | Flat CSV import sample |
+| `Notebooks/Orders analytics.ipynb` | Pyodide Orders CSV tour (mounted workspace bridge) |
 | `Notebooks/CRM exploration.ipynb` | CRM tour notebook (nbformat v4) |
 
 ### CRM views
@@ -222,5 +224,6 @@ fallback: "Open CRM board view"
 | `Dashboards/Revenue by day.vl.json` | Vega-Lite chart (Orders) |
 | `Dashboards/Revenue by channel.vl.json` | Vega-Lite chart (Orders) |
 | `Data/sample.csv` | CSV file |
+| `Notebooks/Orders analytics.ipynb` | notebook |
 | `Notebooks/CRM exploration.ipynb` | notebook |
 | `Resources/` | code & config files |

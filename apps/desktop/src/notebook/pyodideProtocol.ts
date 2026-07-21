@@ -1,6 +1,20 @@
+export type PyodideMountFile = {
+  /** Absolute path inside the Pyodide FS (e.g. `/home/pyodide/workspace/...`). */
+  mountPath: string;
+  /** File bytes to write (copied into the worker). */
+  data: Uint8Array;
+};
+
 export type PyodideWorkerRequest =
   | { type: "ensure"; id: number }
-  | { type: "run"; id: number; code: string; maxOutputChars?: number };
+  | {
+      type: "run";
+      id: number;
+      code: string;
+      maxOutputChars?: number;
+      mountFiles?: PyodideMountFile[];
+      packages?: string[];
+    };
 
 export type PyodideRunPayload = {
   stdout: string;
