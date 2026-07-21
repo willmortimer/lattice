@@ -45,6 +45,10 @@ result
 .env
 .env.*
 !.env.example
+# Accidental plaintext dumps from sops / manual decrypt
+secrets/*.decrypted
+secrets/*.plain
+secrets/*.clear
 
 # Lattice workspace operational state (test workspaces)
 .lattice/

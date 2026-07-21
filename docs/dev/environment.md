@@ -52,18 +52,31 @@ Mac. None are read by `desktop-install` today.
 
 ## Site publish (Cloudflare Pages)
 
-Live site: <https://lattice-dop.pages.dev/>. Prefer interactive login from the
-ops shell (`nix develop .#ops` → `wrangler login`); tokens land in your home
-directory, not the Nix store. See [nix-workflows.md](./nix-workflows.md).
+Live site: <https://lattice-dop.pages.dev/>. See [secrets/README.md](../../secrets/README.md)
+and [nix-workflows.md](./nix-workflows.md).
 
 | Variable | Where to set | Where to get it | What it does | Secret? | Status |
 | --- | --- | --- | --- | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | shell / CI secret (optional) | [Cloudflare API tokens](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/) with Pages edit | Non-interactive auth for `wrangler` / `nix run .#site-deploy` when OAuth login is unavailable | **Yes** | Works with wrangler |
-| `CLOUDFLARE_ACCOUNT_ID` | shell / CI (optional) | Cloudflare dashboard → account overview | Disambiguates account when the token can see more than one | No | Optional |
+| `CLOUDFLARE_API_TOKEN` | **sops** `secrets/cloudflare.env` (direnv decrypts) or CI secret | [Cloudflare API tokens](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/) — Account → Cloudflare Pages → Edit | Non-interactive auth for `nix run .#site-deploy` / wrangler | **Yes** | Preferred |
+| `CLOUDFLARE_ACCOUNT_ID` | same sops file (plaintext field) or CI | Cloudflare dashboard → account overview | Disambiguates account | No | Set in `secrets/cloudflare.env` |
+
+Do **not** put the API token in `.env`. `.env` remains for non-secret local
+overrides (e.g. Apple signing). Encrypted values are edited with
+`sops secrets/cloudflare.env`.
+
+```sh
+# after rotating the token into sops + direnv reload:
+nix run .#site-deploy
+
+# one-shot:
+sops exec-env secrets/cloudflare.env -- nix run .#site-deploy
+```
 
 ## Rules
 
-- Never commit real values; `.env` and `.env.*` are gitignored
-  (`.env.example` is the only tracked one).
-- Secrets belong in CI secret stores or the macOS keychain, not in files.
+- Never commit real plaintext secrets; `.env` is gitignored (`.env.example` is
+  the only tracked dotenv template).
+- API tokens and passwords belong in `secrets/*.env` (sops + age) or CI secret
+  stores — not in `.env`, chats, or screenshots.
+- Age private keys stay in `~/.config/sops/age/keys.txt` on the machine.
 - Add a row here in the same PR that introduces a new variable.
