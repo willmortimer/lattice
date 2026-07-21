@@ -12,6 +12,7 @@
     "dev": "astro dev",
     "prebuild": "node ../scripts/compile-theme.mjs && node scripts/sync-docs.mjs",
     "build": "astro build",
+    "test": "node --test scripts/*.test.mjs",
     "preview": "astro preview",
     "astro": "astro"
   },

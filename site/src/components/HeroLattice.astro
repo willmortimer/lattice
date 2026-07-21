@@ -1,28 +1,44 @@
 ---
 /**
- * The hero is the brand algorithm expanded into a small 3D lattice.
- * Geometry is derived from the same 30° axonometric projection used by
- * generate-mark.mjs; only scale, subdivision, and signal routes differ.
+ * The canonical brand unit cell, awake inside a larger 3D lattice.
+ * Projection and active geometry are shared with generate-mark.mjs.
  */
-const tilt = Math.PI / 6;
-const ax = Math.cos(tilt);
-const ay = Math.sin(tilt);
+import {
+  CENTER,
+  FAR,
+  GRID,
+  NEAR,
+  OUTLINE,
+  VERTICES,
+  project,
+  translatePoint,
+  translateSegments,
+} from '../lib/lattice-geometry.mjs';
+
 const count = 4;
 const scale = 68;
 const cx = 330;
 const cy = 230;
 
-const project = (x, y, z) => ({
-  x: cx + (x - z) * ax * scale,
-  y: cy + ((x + z) * ay - y) * scale,
-  depth: x + y + z,
-  key: `${x}:${y}:${z}`,
+const scenePoint = (coords: [number, number, number]) => {
+  const [px, py] = project(coords);
+  return {
+    x: cx + px * scale,
+    y: cy + py * scale,
+    depth: coords[0] + coords[1] + coords[2],
+    key: coords.join(':'),
+  };
+};
+
+const segment = ([from, to]: [[number, number, number], [number, number, number]]) => ({
+  from: scenePoint(from),
+  to: scenePoint(to),
 });
 
 const points = [];
 for (let x = 0; x < count; x++) {
   for (let y = 0; y < count; y++) {
-    for (let z = 0; z < count; z++) points.push(project(x, y, z));
+    for (let z = 0; z < count; z++) points.push(scenePoint([x, y, z]));
   }
 }
 
@@ -30,26 +46,31 @@ const edges = [];
 for (let x = 0; x < count; x++) {
   for (let y = 0; y < count; y++) {
     for (let z = 0; z < count; z++) {
-      const from = project(x, y, z);
-      if (x + 1 < count) edges.push({ from, to: project(x + 1, y, z) });
-      if (y + 1 < count) edges.push({ from, to: project(x, y + 1, z) });
-      if (z + 1 < count) edges.push({ from, to: project(x, y, z + 1) });
+      const from = scenePoint([x, y, z]);
+      if (x + 1 < count) edges.push({ from, to: scenePoint([x + 1, y, z]) });
+      if (y + 1 < count) edges.push({ from, to: scenePoint([x, y + 1, z]) });
+      if (z + 1 < count) edges.push({ from, to: scenePoint([x, y, z + 1]) });
     }
   }
 }
 
-const routeCoords = [
-  [0, 1, 0],
-  [1, 1, 0],
-  [1, 2, 0],
-  [1, 2, 1],
-  [2, 2, 1],
-  [2, 2, 2],
-  [3, 2, 2],
-  [3, 3, 2],
+// Translate the exact mark graph into the central cell of the larger lattice.
+const cellOrigin: [number, number, number] = [1, 1, 1];
+const farSegments = translateSegments(FAR, cellOrigin).map(segment);
+const gridSegments = translateSegments(GRID, cellOrigin).map(segment);
+const outlineSegments = translateSegments(OUTLINE, cellOrigin).map(segment);
+const nearSegments = translateSegments(NEAR, cellOrigin).map(segment);
+const activeNodes = [...VERTICES, CENTER]
+  .map((point) => translatePoint(point, cellOrigin))
+  .map(scenePoint);
+const centerKey = translatePoint(CENTER, cellOrigin).join(':');
+
+const activeSegments = [
+  ...farSegments.map((value, index) => ({ ...value, kind: 'far', order: index })),
+  ...gridSegments.map((value, index) => ({ ...value, kind: 'grid', order: index + 3 })),
+  ...outlineSegments.map((value, index) => ({ ...value, kind: 'outline', order: index + 6 })),
+  ...nearSegments.map((value, index) => ({ ...value, kind: 'near', order: index + 12 })),
 ];
-const route = routeCoords.map(([x, y, z]) => project(x, y, z));
-const routeSegments = route.slice(1).map((to, i) => ({ from: route[i], to }));
 ---
 
 <svg
@@ -57,21 +78,25 @@ const routeSegments = route.slice(1).map((to, i) => ({ from: route[i], to }));
   viewBox="0 0 660 470"
   fill="none"
   role="img"
-  aria-label="An axonometric lattice carrying a signal through addressable nodes"
+  aria-labelledby="hero-lattice-title hero-lattice-description"
 >
+  <title id="hero-lattice-title">The Lattice unit cell carrying a signal</title>
+  <desc id="hero-lattice-description">
+    The seven-node Lattice mark glows inside an axonometric grid of addressable resources.
+  </desc>
   <defs>
-    <radialGradient id="axonGlow">
+    <radialGradient id="heroAxonGlow">
       <stop offset="0" stop-color="var(--l-amber-bright)" stop-opacity=".8" />
       <stop offset="1" stop-color="var(--l-amber)" stop-opacity="0" />
     </radialGradient>
-    <linearGradient id="depthFade" x1="0" y1="0" x2="1" y2="1">
+    <linearGradient id="heroDepthFade" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="var(--l-line)" />
       <stop offset=".55" stop-color="var(--l-line-strong)" />
       <stop offset="1" stop-color="var(--l-muted)" stop-opacity=".65" />
     </linearGradient>
   </defs>
 
-  <g class="axon-structure" stroke="url(#depthFade)" stroke-linecap="round">
+  <g class="axon-structure" stroke="url(#heroDepthFade)" stroke-linecap="round">
     {
       edges.map(({ from, to }) => (
         <line
@@ -85,30 +110,35 @@ const routeSegments = route.slice(1).map((to, i) => ({ from: route[i], to }));
     }
   </g>
 
-  <g class="axon-route" stroke="var(--l-amber)" stroke-linecap="round">
+  <g class="axon-nodes" fill="var(--l-faint)">
+    {points.map((point) => <circle cx={point.x} cy={point.y} r="1.65" />)}
+  </g>
+
+  <g class="axon-cell" stroke="var(--l-amber)" stroke-linecap="round" stroke-linejoin="round">
     {
-      routeSegments.map(({ from, to }, index) => (
+      activeSegments.map(({ from, to, kind, order }) => (
         <line
+          class={`cell-segment cell-segment-${kind}`}
           x1={from.x}
           y1={from.y}
           x2={to.x}
           y2={to.y}
-          style={`--delay:${index * 0.22}s`}
+          pathLength="1"
+          style={`--order:${order}`}
         />
       ))
     }
   </g>
 
-  <g class="axon-nodes" fill="var(--l-faint)">
-    {points.map((point) => <circle cx={point.x} cy={point.y} r="1.65" />)}
-  </g>
-
   <g class="axon-signal">
     {
-      route.map((point, index) => (
-        <g style={`--delay:${index * 0.22 + 0.4}s`}>
-          <circle class="signal-halo" cx={point.x} cy={point.y} r="18" fill="url(#axonGlow)" />
-          <circle cx={point.x} cy={point.y} r={index === route.length - 1 ? 4.8 : 3.1} />
+      activeNodes.map((point, index) => (
+        <g
+          class:list={['signal-node', { 'signal-anchor': point.key === centerKey }]}
+          style={`--order:${index + 7}`}
+        >
+          <circle class="signal-halo" cx={point.x} cy={point.y} r="20" fill="url(#heroAxonGlow)" />
+          <circle class="signal-core" cx={point.x} cy={point.y} r={point.key === centerKey ? 5 : 3.3} />
         </g>
       ))
     }
@@ -130,24 +160,54 @@ const routeSegments = route.slice(1).map((to, i) => ({ from: route[i], to }));
   .axon-structure line {
     stroke-width: 1;
   }
-  .axon-route line {
+  .cell-segment {
+    --edge-opacity: .9;
+    --edge-rest-opacity: .58;
     stroke-width: 2;
-    stroke-dasharray: 120;
-    stroke-dashoffset: 120;
-    animation: axon-draw 1.15s cubic-bezier(.22, 1, .36, 1) forwards;
-    animation-delay: var(--delay);
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+    opacity: var(--edge-opacity);
+    animation: axon-trace 7.2s cubic-bezier(.22, 1, .36, 1) infinite;
+    animation-delay: calc(var(--order) * 90ms);
+    animation-fill-mode: backwards;
   }
-  .axon-signal g {
+  .cell-segment-far {
+    --edge-opacity: .28;
+    --edge-rest-opacity: .18;
+    stroke-width: 1.4;
+  }
+  .cell-segment-grid {
+    --edge-opacity: .45;
+    --edge-rest-opacity: .3;
+    stroke-width: 1.5;
+  }
+  .cell-segment-near {
+    --edge-opacity: .98;
+    --edge-rest-opacity: .66;
+    stroke-width: 2.2;
+  }
+  .signal-node {
     color: var(--l-amber-bright);
     fill: currentColor;
-    opacity: 0;
-    animation: axon-node .7s cubic-bezier(.34, 1.56, .64, 1) forwards;
-    animation-delay: var(--delay);
   }
-  .signal-halo {
+  .signal-core {
+    opacity: 1;
     transform-box: fill-box;
     transform-origin: center;
-    animation: axon-breathe 3.2s ease-in-out infinite;
+    animation: axon-node 7.2s cubic-bezier(.34, 1.56, .64, 1) infinite;
+    animation-delay: calc(var(--order) * 90ms);
+    animation-fill-mode: backwards;
+  }
+  .signal-halo {
+    opacity: .16;
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: axon-wake 7.2s ease-out infinite;
+    animation-delay: calc(var(--order) * 90ms);
+    animation-fill-mode: backwards;
+  }
+  .signal-anchor .signal-halo {
+    animation-name: axon-anchor;
   }
   .axon-labels {
     fill: var(--l-faint);
@@ -156,14 +216,33 @@ const routeSegments = route.slice(1).map((to, i) => ({ from: route[i], to }));
     letter-spacing: .1em;
     text-transform: uppercase;
   }
-  @keyframes axon-draw {
-    to { stroke-dashoffset: 0; }
+  @keyframes axon-trace {
+    0%, 4% { stroke-dashoffset: 1; opacity: 0; }
+    16%, 86% { stroke-dashoffset: 0; opacity: var(--edge-opacity); }
+    100% { stroke-dashoffset: 0; opacity: var(--edge-rest-opacity); }
   }
   @keyframes axon-node {
-    from { opacity: 0; transform: scale(.55); transform-origin: center; }
-    to { opacity: 1; transform: scale(1); }
+    0%, 7% { opacity: .2; transform: scale(.72); }
+    15%, 88% { opacity: 1; transform: scale(1); }
+    100% { opacity: .55; transform: scale(.9); }
   }
-  @keyframes axon-breathe {
-    50% { opacity: .35; transform: scale(.72); }
+  @keyframes axon-wake {
+    0%, 7% { opacity: 0; transform: scale(.55); }
+    17% { opacity: .85; transform: scale(1.1); }
+    30%, 100% { opacity: .08; transform: scale(.72); }
+  }
+  @keyframes axon-anchor {
+    0%, 8% { opacity: .12; transform: scale(.75); }
+    18% { opacity: .9; transform: scale(1.18); }
+    38%, 68% { opacity: .22; transform: scale(.88); }
+    54% { opacity: .4; transform: scale(1); }
+    100% { opacity: .12; transform: scale(.78); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cell-segment,
+    .signal-core,
+    .signal-halo {
+      animation: none;
+    }
   }
 </style>
