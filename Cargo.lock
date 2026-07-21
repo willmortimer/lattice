@@ -3346,6 +3346,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-env"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "lattice-handlers"
 version = "0.1.0"
 dependencies = [
