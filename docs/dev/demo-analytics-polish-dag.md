@@ -14,3 +14,15 @@ Waves:
 4. Ship — validate + PR → `main`
 
 See Cursor plan `demo_analytics_polish` for full handoff packets.
+
+## Local verification (not CI)
+
+After P3A01 + P3A02 land on the integration branch, native analytics confidence:
+
+```sh
+pnpm --filter @lattice/desktop test:analytics:tauri
+```
+
+Spec: `apps/desktop/e2e/data/analytics.smoke.tauri.spec.ts` (Orders Preview /
+Revenue by day Vega / Product Strategy canvas Fit). Same
+`LATTICE_DEV_RESET_DEMO` First Look seed pattern as `test:crm:tauri`.
