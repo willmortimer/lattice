@@ -244,6 +244,71 @@ pub fn profile_dataset(
     }
 }
 
+/// Request body for [`explain_dataset`].
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExplainDatasetRequest {
+    /// Optional DuckDB SQL to explain. Defaults to `read_parquet` over `facts/**/*.parquet`.
+    #[serde(default)]
+    pub sql: Option<String>,
+}
+
+/// Response from [`explain_dataset`].
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExplainDatasetResponse {
+    /// SQL that was explained (after defaulting).
+    pub sql: String,
+    /// DuckDB text query plan.
+    pub plan: String,
+}
+
+/// Run DuckDB `EXPLAIN` against a `.dataset` package relation and return the text plan.
+#[tauri::command]
+pub fn explain_dataset(
+    root: String,
+    rel_path: String,
+    request: Option<ExplainDatasetRequest>,
+) -> Result<ExplainDatasetResponse, String> {
+    validate_rel_path(&rel_path)?;
+    let (canonical_root, package_abs) = resolve_within_root(&root, &rel_path)?;
+    let _dataset = Dataset::open(&package_abs).map_err(|err| err.to_string())?;
+
+    let request = request.unwrap_or(ExplainDatasetRequest { sql: None });
+    let explicit_sql = request.sql.filter(|sql| !sql.trim().is_empty());
+    let sql = match explicit_sql {
+        Some(sql) => sql,
+        None => match default_facts_sql(&package_abs) {
+            Some(sql) => sql,
+            None => {
+                return Ok(ExplainDatasetResponse {
+                    sql: String::new(),
+                    plan: String::new(),
+                });
+            }
+        },
+    };
+
+    let engine = DuckDbEngine::open_in_memory(&canonical_root).map_err(|err| err.to_string())?;
+    match engine.explain(&sql) {
+        Ok(plan) => Ok(ExplainDatasetResponse { sql, plan }),
+        Err(err) => {
+            let message = err.to_string();
+            if message.contains("No files found")
+                || message.contains("cannot open file")
+                || message.contains("IO Error")
+            {
+                Ok(ExplainDatasetResponse {
+                    sql,
+                    plan: String::new(),
+                })
+            } else {
+                Err(message)
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -357,5 +422,42 @@ mod tests {
         let profile = profile_dataset(root, "Empty.dataset".into(), None).unwrap();
         assert_eq!(profile.row_count, 0);
         assert!(profile.columns.is_empty());
+    }
+
+    #[test]
+    fn explain_dataset_returns_plan_for_csv_backed_sql() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let package = dir.path().join("Usage.dataset");
+        Dataset::create(&package, "Usage", None).unwrap();
+
+        let csv_path = package.join("facts/sample.csv");
+        std::fs::create_dir_all(csv_path.parent().unwrap()).unwrap();
+        std::fs::write(&csv_path, "id,name\n1,Ada\n2,Grace\n").unwrap();
+
+        let sql = format!(
+            "SELECT * FROM read_csv_auto({})",
+            sql_string_literal(&csv_path.to_string_lossy().replace('\\', "/"))
+        );
+        let response = explain_dataset(
+            root,
+            "Usage.dataset".into(),
+            Some(ExplainDatasetRequest { sql: Some(sql.clone()) }),
+        )
+        .unwrap();
+
+        assert_eq!(response.sql, sql);
+        assert!(!response.plan.trim().is_empty());
+    }
+
+    #[test]
+    fn explain_dataset_empty_facts_returns_empty_plan() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        Dataset::create(&dir.path().join("Empty.dataset"), "Empty", None).unwrap();
+
+        let response = explain_dataset(root, "Empty.dataset".into(), None).unwrap();
+        assert!(response.sql.is_empty());
+        assert!(response.plan.is_empty());
     }
 }

@@ -240,3 +240,33 @@ e2,South,5\n",
         .unwrap();
     assert_eq!(batch.num_rows, 2);
 }
+
+#[test]
+fn explain_returns_nonempty_plan_for_csv_sql() {
+    let (_dir, root) = fixture_workspace();
+    let engine = DuckDbEngine::open_in_memory(&root).unwrap();
+    let sql = format!(
+        "SELECT * FROM read_csv_auto('{}')",
+        root.join("facts/sample.csv").display()
+    );
+
+    let plan = engine.explain(&sql).unwrap();
+    assert!(!plan.trim().is_empty(), "expected non-empty EXPLAIN plan");
+    // DuckDB text plans typically mention a scan/read of the relation.
+    let lower = plan.to_ascii_lowercase();
+    assert!(
+        lower.contains("scan")
+            || lower.contains("read")
+            || lower.contains("csv")
+            || lower.contains("projection"),
+        "unexpected plan text: {plan}"
+    );
+}
+
+#[test]
+fn explain_rejects_empty_sql() {
+    let (_dir, root) = fixture_workspace();
+    let engine = DuckDbEngine::open_in_memory(&root).unwrap();
+    let err = engine.explain("   ").unwrap_err().to_string();
+    assert!(err.contains("empty"), "{err}");
+}

@@ -101,6 +101,30 @@ impl DuckDbEngine {
         })
     }
 
+    /// Return DuckDB's text query plan for `sql` via `EXPLAIN`.
+    ///
+    /// Applies the same workspace path rewriting as [`Self::query`]. Plan text is
+    /// collected from result rows (one line per row when DuckDB returns a single
+    /// explain column).
+    pub fn explain(&self, sql: &str) -> Result<String> {
+        let trimmed = sql.trim();
+        if trimmed.is_empty() {
+            return Err(Error::message("explain SQL must not be empty"));
+        }
+
+        let explain_sql = if trimmed
+            .get(..7)
+            .is_some_and(|prefix| prefix.eq_ignore_ascii_case("EXPLAIN"))
+        {
+            trimmed.to_string()
+        } else {
+            format!("EXPLAIN {trimmed}")
+        };
+
+        let batch = self.query(&explain_sql)?;
+        Ok(plan_text_from_batch(&batch))
+    }
+
     /// Query a CSV file under the workspace via `read_csv_auto`.
     pub fn query_csv(&self, path: impl AsRef<Path>) -> Result<RecordBatch> {
         let resolved = self.resolve_path(path)?;
@@ -242,6 +266,30 @@ fn apply_workspace_allowlist(conn: &Connection, workspace_root: &Path) -> Result
     let _ = conn.execute(&format!("SET file_search_path = {root_sql}"), params![]);
     conn.execute("SET enable_external_access = false", params![])?;
     Ok(())
+}
+
+fn plan_text_from_batch(batch: &RecordBatch) -> String {
+    let mut lines = Vec::with_capacity(batch.num_rows);
+    for row in 0..batch.num_rows {
+        let mut cells = Vec::with_capacity(batch.columns.len());
+        for column in &batch.columns {
+            match &column[row] {
+                ScalarValue::Null => {}
+                ScalarValue::Boolean(value) => cells.push(value.to_string()),
+                ScalarValue::Int64(value) => cells.push(value.to_string()),
+                ScalarValue::Float64(value) => cells.push(value.to_string()),
+                ScalarValue::Utf8(value) => {
+                    if !value.is_empty() {
+                        cells.push(value.clone());
+                    }
+                }
+            }
+        }
+        if !cells.is_empty() {
+            lines.push(cells.join("\t"));
+        }
+    }
+    lines.join("\n")
 }
 
 fn scalar_from_row(row: &Row<'_>, index: usize) -> Result<ScalarValue> {
