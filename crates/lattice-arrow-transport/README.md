@@ -12,7 +12,7 @@ large results never become JSON object piles.
 | --- | --- | --- |
 | `max_rows` | 10_000 | Rows kept in the encoded batch; extras set `truncated` |
 | `max_bytes` | 8 MiB | Encoded IPC payload cap; row count is reduced until it fits |
-| Cancellation | stub | `CancelCheck::is_cancelled` is polled; default never cancels |
+| Cancellation | cooperative | `CancelCheck::is_cancelled` polled during encode; desktop sessions interrupt DuckDB |
 
 JSON remains appropriate for small control metadata (`schema_meta`, flags).
 The payload itself stays columnar IPC (`ipc_bytes`).

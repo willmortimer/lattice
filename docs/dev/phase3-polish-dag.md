@@ -27,7 +27,7 @@ See Cursor plan `phase3_polish_dag` for full handoff packets.
 | ID | Title | Status |
 | --- | --- | --- |
 | P3P01 | DuckDB EXPLAIN + Tauri | pending |
-| P3P02 | Cancel backend | pending |
+| P3P02 | Cancel backend | done |
 | P3P03 | Plan tab UI | pending |
 | P3P04 | Cancel frontend | pending |
 | P3P05 | Places GeoParquet seed | pending |

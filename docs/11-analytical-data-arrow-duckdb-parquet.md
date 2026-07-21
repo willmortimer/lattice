@@ -19,8 +19,9 @@ connectors, and geospatial viewers remain Phase 6+).
 
 **Limits (bounded transfer):** default row cap 10_000 (`truncated: true` beyond),
 encoded IPC byte cap 8 MiB (row count shrinks until the payload fits), preview
-sample 5 rows for schema dumps only. Cancellation is a stub hook; desktop cancel
-wiring is deferred.
+sample 5 rows for schema dumps only. Cancellation is cooperative: pass optional
+`sessionId` on `query_dataset_arrow` / `profile_dataset`, then call
+`cancel_dataset_query` to flip the token and interrupt DuckDB.
 
 **Offline Parquet:** `lattice-duckdb` builds DuckDB with the `parquet` feature
 (bundled `libduckdb-sys`) so `read_parquet` works without network extension
@@ -287,7 +288,7 @@ over Tauri (`query_dataset_arrow` → `lattice-arrow-transport`):
 | Row cap | 10_000 | Extra rows set `truncated: true` |
 | Byte cap | 8 MiB | Encoded payload shrinks row count until it fits |
 | Preview rows | 5 | Tiny JSON control sample for schema dumps only |
-| Cancellation | stub | `CancelCheck` hook; desktop cancel wiring comes later |
+| Cancellation | cooperative | `CancelCheck` / `AtomicCancel`; desktop `cancel_dataset_query` |
 
 The IPC payload stays columnar (`ipc_bytes` as `Uint8Array`). JSON is only used
 for small control metadata (`schema_meta`, flags, preview). Do not expand the

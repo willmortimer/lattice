@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use duckdb::{params, types::ValueRef, Connection, Row};
+use duckdb::{params, types::ValueRef, Connection, InterruptHandle, Row};
 use rusqlite::Connection as SqliteConnection;
 
 use crate::batch::{DataType, Field, RecordBatch, ScalarValue, Schema};
@@ -49,6 +50,11 @@ impl DuckDbEngine {
 
     pub fn workspace_root(&self) -> &Path {
         &self.workspace_root
+    }
+
+    /// Handle that can interrupt a query running on this connection from another thread.
+    pub fn interrupt_handle(&self) -> Arc<InterruptHandle> {
+        self.conn.interrupt_handle()
     }
 
     /// Resolve a path and reject anything outside the workspace allowlist.
