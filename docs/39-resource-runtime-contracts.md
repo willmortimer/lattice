@@ -8,7 +8,7 @@ implementations and conformance fixtures must honor. It complements
 ## Coarse kinds and format profiles
 
 `ResourceKind` stays coarse for shell surfaces (`page`, `canvas`, `data-app`,
-`notebook`, `file`, `folder`). `.ipynb` files classify as `notebook`, not
+`notebook`, `task`, `file`, `folder`). `.ipynb` files classify as `notebook`, not
 `file`. Ordinary unrecognized files are always `file`; a derived
 `ResourceFormatProfile` and
 `FormatCapabilities` describe how Lattice may inspect, read, validate, and
@@ -233,6 +233,40 @@ Remote kernels, scheduled notebook runs, and rich widgets remain deferred
 |---|---|---|
 | Pyodide worker | `NotebookViewer` / `pyodideRuntime` | `AbortController` on cancel; worker terminated when superseded |
 | Native kernel child (v1) | Tauri session map / bridge process | `dispose` / kill-on-drop; interrupt before shutdown when possible |
+
+## Task packages (desktop surface)
+
+`*.task/` directories classify as `ResourceKind::Task`. Opening one loads
+`task.yaml` into an `OpenResourceSession` with `kind: "task"` and the
+lazy `task-viewer` renderer (not the blank/unknown fallback).
+
+**Open**
+
+- Native: `task_load_manifest` validates format/version/provider and returns a
+  camelCase manifest DTO (runtime, entrypoint, limits, optional
+  `inputs` / `outputs`).
+- Browser demo: session opens with a stub manifest and an honest banner that
+  native `uv` execution is unavailable.
+
+**Run / cancel**
+
+- `task_run` spawns `TaskRunner` on a background thread and returns an
+  `executionId` immediately (IPC must not block on `run()`).
+- Status is the shared H0 `ExecutionResult` shape
+  (`lattice_commands::contracts` / desktop `executionContracts.ts`) —
+  executions are **not** undo-journal entries; `proposalId` may be omitted in
+  v1.
+- Progress updates emit `task-execution-updated`; clients may also poll
+  `task_execution_status`.
+- `task_cancel` process-group kills the live child (same Unix group kill as
+  the CLI timeout path).
+
+Declared `outputs` are copied onto the terminal `ExecutionResult.outputs` for
+open-via-path; proposed-transaction materialization remains out of scope.
+
+| Asset | Owner | Cleanup |
+|---|---|---|
+| Task child process group | Tauri `TaskState` map | `task_cancel` or timeout; entry retained for status poll |
 
 ## Canvas data-view navigation (Phase C1)
 

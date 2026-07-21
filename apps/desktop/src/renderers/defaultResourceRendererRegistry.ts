@@ -71,6 +71,11 @@ export function createDefaultResourceRendererRegistry(): ResourceRendererRegistr
       definition("notebook-viewer", "notebook", undefined, (signal) =>
         lazyImport(() => import("./NotebookResourceRenderer").then((module) => module.NotebookResourceRenderer), signal),
       ),
+    )
+    .register(
+      definition("task-viewer", "task", undefined, (signal) =>
+        lazyImport(() => import("./TaskResourceRenderer").then((module) => module.TaskResourceRenderer), signal),
+      ),
     );
   registerMediaResourceRenderers(registry);
   registerChartResourceRenderers(registry);
