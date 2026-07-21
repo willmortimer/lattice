@@ -1,0 +1,79 @@
+# One Dark — terminal-inspired adaptation of Atom's MIT-licensed palette.
+# Neutral charcoal surfaces carry a single clear blue signal, with the syntax
+# colors retained as a balanced ANSI family.
+
+name: One Dark
+id: one-dark
+appearance: dark
+
+palette:
+  bg: "#282c34"
+  bg_raise: "#21252b"
+  surface: "#2f343f"
+  overlay: "#3e4451"
+  text: "#abb2bf"
+  text_soft: "#9da5b4"
+  muted: "#7f848e"
+  faint: "#5c6370"
+  blue: "#61afef"
+  blue_bright: "#8bc7f5"
+  blue_deep: "#3b86c4"
+  red: "#e06c75"
+  green: "#98c379"
+  yellow: "#d19a66"
+  magenta: "#c678dd"
+  cyan: "#56b6c2"
+  black: "#1e2127"
+  white: "#abb2bf"
+  bright_white: "#ffffff"
+  ink: "#17191e"
+  on_accent: "#10202d"
+
+roles:
+  bg: $bg
+  bg_raise: $bg_raise
+  panel: $surface
+  slate: $muted
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $blue
+  accent_bright: $blue_bright
+  accent_deep: $blue_deep
+  danger: $red
+  shadow: $ink
+
+terminal:
+  black: $black
+  red: $red
+  green: $green
+  yellow: $yellow
+  blue: $blue
+  magenta: $magenta
+  cyan: $cyan
+  white: $white
+  bright_black: $faint
+  bright_red: $red
+  bright_green: $green
+  bright_yellow: $yellow
+  bright_blue: $blue
+  bright_magenta: $magenta
+  bright_cyan: $cyan
+  bright_white: $bright_white
+  cursor: $text
+  cursor_text: $bg
+  selection: $overlay
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 8px
+  radius_sm: 5px
+  radius_lg: 13px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px

@@ -1,0 +1,75 @@
+# Rosé Pine Moon — terminal-inspired adaptation of the MIT-licensed palette.
+# The muted lunar violet ground and restrained iris signal map naturally onto
+# Lattice roles; the terminal block keeps the palette's distinctive family.
+
+name: Rosé Pine Moon
+id: rose-pine-moon
+appearance: dark
+
+palette:
+  base: "#232136"
+  surface: "#2a273f"
+  overlay: "#393552"
+  highlight: "#44415a"
+  muted: "#6e6a86"
+  subtle: "#908caa"
+  text: "#e0def4"
+  love: "#eb6f92"
+  gold: "#f6c177"
+  rose: "#ea9a97"
+  pine: "#3e8fb0"
+  foam: "#9ccfd8"
+  iris: "#c4a7e7"
+  iris_bright: "#dbc6f4"
+  iris_deep: "#907aa9"
+  ink: "#191724"
+  on_accent: "#211b2d"
+
+roles:
+  bg: $base
+  bg_raise: $surface
+  panel: $overlay
+  slate: $subtle
+  text: $text
+  text_soft: $subtle
+  muted: $muted
+  faint: $muted
+  accent: $iris
+  accent_bright: $iris_bright
+  accent_deep: $iris_deep
+  danger: $love
+  shadow: $ink
+
+terminal:
+  black: $overlay
+  red: $love
+  green: $pine
+  yellow: $gold
+  blue: $foam
+  magenta: $iris
+  cyan: $rose
+  white: $text
+  bright_black: $muted
+  bright_red: $love
+  bright_green: $pine
+  bright_yellow: $gold
+  bright_blue: $foam
+  bright_magenta: $iris
+  bright_cyan: $rose
+  bright_white: $text
+  cursor: $text
+  cursor_text: $base
+  selection: $highlight
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 10px
+  radius_sm: 7px
+  radius_lg: 15px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px
