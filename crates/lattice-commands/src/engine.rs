@@ -10,8 +10,8 @@ use lattice_storage::{
 
 use crate::canvas::{self, CanvasEdit};
 use crate::command::{
-    file_name, form_file_path, path_remaps_from_commands, view_file_path, ColumnSpec, Command, CommandOutcome,
-    HistoryEntry, Transaction, TransactionReceipt, UndoReport,
+    file_name, form_file_path, path_remaps_from_commands, view_file_path, ColumnSpec, Command,
+    CommandOutcome, HistoryEntry, Transaction, TransactionReceipt, UndoReport,
 };
 use crate::history::{unix_now, unix_to_system, HistoryStore};
 use crate::revisions::{
@@ -1306,11 +1306,7 @@ impl CommandEngine {
                 description,
             } => {
                 let abs = self.root.join(path);
-                let dataset = Dataset::create(
-                    &abs,
-                    title,
-                    description.as_deref(),
-                )?;
+                let dataset = Dataset::create(&abs, title, description.as_deref())?;
                 let revision = dataset.package_revision()?;
                 Ok(AppliedOp {
                     forward: command.clone(),
