@@ -46,3 +46,10 @@ Jan–Mar 2026):
 cargo run -p lattice-datasets --example seed_demo_orders
 pnpm compile-templates
 ```
+
+Regenerate the geospatial `Places.dataset` lon/lat point Parquet (~20 WGS84 rows):
+
+```sh
+cargo run -p lattice-datasets --example seed_demo_places
+pnpm compile-templates
+```

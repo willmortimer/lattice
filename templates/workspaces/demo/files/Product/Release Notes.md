@@ -13,7 +13,8 @@ Sample changelog page for the First Look workspace — not a live feed.
 - `annotations.sqlite` review overlay (`event_annotations`) for annotate / query-annotated demos
 - `Dashboards/Signups by region.vl.json` — Vega-Lite bound with `read_parquet(...)`
 - Desktop viewer tabs: Perspective **Preview**, Vega-Lite **Chart**, DuckDB **Profile**
-- [[Home]] tour steps 17–21 cover the analytics path (native / Tauri; not the browser fixture)
+- `Data/Places.dataset` — ~20 WGS84 lon/lat points (`facts/places.parquet`) for MapLibre
+- [[Home]] tour steps 17–21 cover the analytics path; Places is step 26 (native / Tauri; not the browser fixture)
 
 ## 2026.07 — Daemon, search, voice
 
