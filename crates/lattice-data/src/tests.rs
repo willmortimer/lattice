@@ -10,7 +10,7 @@ use crate::app::{
 use crate::{
     write_package_action, write_package_form, write_package_interface, write_package_view,
     ActionDef, ActionKind, ActionScope, CellValue, DataApp, FieldType, FilterOperator, FormDef,
-    InterfaceDef, SortDirection, ViewDef, ViewFilter, ViewSort,
+    InterfaceDef, NewColumn, SortDirection, ViewDef, ViewFilter, ViewSort,
 };
 
 #[test]
@@ -1636,3 +1636,153 @@ fn package_create_materializes_interfaces_folder() {
     assert!(package_path.join("interfaces").is_dir());
     assert!(package_path.join("forms").is_dir());
 }
+
+#[test]
+fn cross_package_relation_rejects_writes_and_keeps_same_package() {
+    let dir = tempdir().unwrap();
+
+    let mut directory =
+        DataApp::create(&dir.path().join("Directory.data"), "Directory", "companies").unwrap();
+    directory
+        .add_columns(
+            "companies",
+            &[NewColumn::new("name", FieldType::Text)],
+        )
+        .unwrap();
+    let company_id = directory
+        .insert_row(
+            "companies",
+            &BTreeMap::from([("name".into(), CellValue::Text("Acme".into()))]),
+        )
+        .unwrap();
+
+    let mut crm = DataApp::create(&dir.path().join("CRM.data"), "CRM", "contacts").unwrap();
+    crm.add_columns(
+        "contacts",
+        &[
+            NewColumn::new("name", FieldType::Text),
+            NewColumn::relation("org", "Directory.data#companies"),
+        ],
+    )
+    .unwrap();
+
+    let org_col = crm
+        .columns("contacts")
+        .unwrap()
+        .into_iter()
+        .find(|column| column.name == "org")
+        .expect("org column");
+    assert_eq!(
+        org_col.relation_table.as_deref(),
+        Some("Directory.data#companies")
+    );
+
+    // Insert without touching the cross-package column is allowed.
+    let contact_id = crm
+        .insert_row(
+            "contacts",
+            &BTreeMap::from([("name".into(), CellValue::Text("Ada".into()))]),
+        )
+        .unwrap();
+
+    let write_err = crm
+        .update_row(
+            "contacts",
+            &contact_id,
+            &BTreeMap::from([(
+                "org".into(),
+                CellValue::Relation {
+                    record_ids: vec![company_id.clone()],
+                },
+            )]),
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(
+        write_err.contains("read-only") && write_err.contains("Directory.data#companies"),
+        "expected actionable cross-package write error, got: {write_err}"
+    );
+
+    let insert_err = crm
+        .insert_row(
+            "contacts",
+            &BTreeMap::from([
+                ("name".into(), CellValue::Text("Grace".into())),
+                (
+                    "org".into(),
+                    CellValue::Relation {
+                        record_ids: vec![company_id],
+                    },
+                ),
+            ]),
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(insert_err.contains("read-only"));
+
+    // Same-package relations remain writable.
+    crm.add_table("tags").unwrap();
+    crm.add_columns("tags", &[NewColumn::new("name", FieldType::Text)])
+        .unwrap();
+    crm.add_columns(
+        "contacts",
+        &[NewColumn::relation("tags", "tags")],
+    )
+    .unwrap();
+    let tag_id = crm
+        .insert_row(
+            "tags",
+            &BTreeMap::from([("name".into(), CellValue::Text("vip".into()))]),
+        )
+        .unwrap();
+    crm.update_row(
+        "contacts",
+        &contact_id,
+        &BTreeMap::from([(
+            "tags".into(),
+            CellValue::Relation {
+                record_ids: vec![tag_id.clone()],
+            },
+        )]),
+    )
+    .unwrap();
+    let row = crm.get_row("contacts", &contact_id).unwrap().unwrap();
+    assert_eq!(
+        row.values.get("tags"),
+        Some(&CellValue::Relation {
+            record_ids: vec![tag_id],
+        })
+    );
+}
+
+#[test]
+fn cross_package_relation_rejects_junction_and_lookup() {
+    let dir = tempdir().unwrap();
+    DataApp::create(&dir.path().join("Directory.data"), "Directory", "companies").unwrap();
+    let mut crm = DataApp::create(&dir.path().join("CRM.data"), "CRM", "contacts").unwrap();
+
+    let junction_err = crm
+        .add_columns(
+            "contacts",
+            &[NewColumn::relation("org", "Directory.data#companies")
+                .with_junction_table("contact_orgs")],
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(junction_err.contains("junction_table"));
+
+    crm.add_columns(
+        "contacts",
+        &[NewColumn::relation("org", "Directory.data#companies")],
+    )
+    .unwrap();
+    let lookup_err = crm
+        .add_columns(
+            "contacts",
+            &[NewColumn::lookup("org_name", "org", "name")],
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(lookup_err.contains("across packages"));
+}
+

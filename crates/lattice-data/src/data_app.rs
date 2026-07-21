@@ -11,6 +11,7 @@ use crate::error::Error;
 use crate::form::{form_name_from_path, form_path, FormDef};
 use crate::formula::{evaluate_formula, formula_field_refs, validate_formula_syntax};
 use crate::interface::{interface_name_from_path, interface_path, InterfaceDef};
+use crate::relation_target::{parse_relation_target, RelationTarget};
 use crate::types::{
     CellValue, ColumnMeta, FieldType, NewColumn, RelationStrip, RollupAggregate, Row,
     SchemaFilesSnapshot,
@@ -822,8 +823,28 @@ impl DataApp {
                             format!("relation column {:?} requires relation_table", column.name),
                         )
                     })?;
-                    validate_identifier(target)?;
-                    ensure_table_exists(&self.conn, target)?;
+                    let parsed = parse_relation_target(target).map_err(|message| {
+                        Error::table(
+                            table,
+                            format!("relation column {:?}: {message}", column.name),
+                        )
+                    })?;
+                    match parsed {
+                        RelationTarget::Local { table: target_table } => {
+                            ensure_table_exists(&self.conn, target_table)?;
+                        }
+                        RelationTarget::CrossPackage { .. } => {
+                            if column.junction_table.is_some() {
+                                return Err(Error::table(
+                                    table,
+                                    format!(
+                                        "relation column {:?}: cross-package relations cannot use junction_table",
+                                        column.name
+                                    ),
+                                ));
+                            }
+                        }
+                    }
                     Some(target.to_string())
                 }
                 _ if column.relation_table.is_some() => {
@@ -1494,6 +1515,17 @@ fn validate_lookup_spec_for_add(
             format!("relation column {lookup_relation:?} is missing relation_table metadata"),
         )
     })?;
+    if parse_relation_target(target_table)
+        .map(|target| target.is_cross_package())
+        .unwrap_or(false)
+    {
+        return Err(Error::table(
+            table,
+            format!(
+                "lookup across packages is not supported (relation {lookup_relation:?} targets {target_table:?})"
+            ),
+        ));
+    }
     let target_columns = app.columns(target_table)?;
     if !target_columns
         .iter()
@@ -1552,6 +1584,17 @@ fn validate_rollup_spec_for_add(
             format!("relation column {rollup_relation:?} is missing relation_table metadata"),
         )
     })?;
+    if parse_relation_target(target_table)
+        .map(|target| target.is_cross_package())
+        .unwrap_or(false)
+    {
+        return Err(Error::table(
+            table,
+            format!(
+                "rollup across packages is not supported (relation {rollup_relation:?} targets {target_table:?})"
+            ),
+        ));
+    }
 
     if aggregate.requires_field() && rollup_field.is_none() {
         return Err(Error::table(
@@ -1984,8 +2027,34 @@ fn validate_relation_cell(
             ),
         )
     })?;
-    validate_identifier(target)?;
-    ensure_table_exists(conn, target)?;
+    let parsed = parse_relation_target(target).map_err(|message| {
+        Error::table(
+            table,
+            format!("relation column {:?}: {message}", meta.name),
+        )
+    })?;
+
+    if parsed.is_cross_package() {
+        return match value {
+            CellValue::Null => Ok(()),
+            _ => Err(Error::table(
+                table,
+                format!(
+                    "cross-package relation column {:?} targets {target:?} and is read-only; \
+                     Lattice does not write linked ids across packages yet",
+                    meta.name
+                ),
+            )),
+        };
+    }
+
+    let RelationTarget::Local {
+        table: target_table,
+    } = parsed
+    else {
+        unreachable!("cross-package handled above");
+    };
+    ensure_table_exists(conn, target_table)?;
 
     match value {
         CellValue::Null => Ok(()),
@@ -1998,7 +2067,7 @@ fn validate_relation_cell(
                     ));
                 }
                 let exists: i64 = conn.query_row(
-                    &format!("SELECT COUNT(*) FROM {target} WHERE id = ?1"),
+                    &format!("SELECT COUNT(*) FROM {target_table} WHERE id = ?1"),
                     params![record_id],
                     |row| row.get(0),
                 )?;
@@ -2006,7 +2075,7 @@ fn validate_relation_cell(
                     return Err(Error::table(
                         table,
                         format!(
-                            "relation column {:?}: record id {record_id:?} not found in table {target}",
+                            "relation column {:?}: record id {record_id:?} not found in table {target_table}",
                             meta.name
                         ),
                     ));

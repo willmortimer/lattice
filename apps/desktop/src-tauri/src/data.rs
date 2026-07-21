@@ -157,6 +157,7 @@ fn filter_dto(filter: &ViewFilter) -> FilterDto {
 
 fn snapshot_from_app(
     app: &DataApp,
+    workspace_root: &Path,
     view_name: Option<&str>,
     limit: usize,
     offset: usize,
@@ -181,16 +182,14 @@ fn snapshot_from_app(
         if column.field_type != lattice_data::FieldType::Relation {
             continue;
         }
-        let Some(target_table) = column.relation_table.as_deref() else {
+        let Some(target_spec) = column.relation_table.as_deref() else {
             continue;
         };
-        if relation_targets.contains_key(target_table) {
+        if relation_targets.contains_key(target_spec) {
             continue;
         }
-        let target_rows = app
-            .list_rows(target_table, ROW_LIMIT, 0)
-            .map_err(|err| err.to_string())?;
-        relation_targets.insert(target_table.to_string(), target_rows);
+        let target_rows = load_relation_target_rows(app, workspace_root, target_spec)?;
+        relation_targets.insert(target_spec.to_string(), target_rows);
     }
 
     Ok(DataAppSnapshot {
@@ -217,6 +216,34 @@ fn snapshot_from_app(
         date_field: view.layout.date_field.clone(),
         relation_targets,
     })
+}
+
+/// Load picker/label rows for a `relation_table` spec (local or cross-package).
+fn load_relation_target_rows(
+    app: &DataApp,
+    workspace_root: &Path,
+    target_spec: &str,
+) -> Result<Vec<Row>, String> {
+    let parsed = lattice_data::parse_relation_target(target_spec).map_err(|err| err.to_string())?;
+    match parsed {
+        lattice_data::RelationTarget::Local { table } => app
+            .list_rows(table, ROW_LIMIT, 0)
+            .map_err(|err| err.to_string()),
+        lattice_data::RelationTarget::CrossPackage {
+            package_rel,
+            table,
+        } => {
+            let foreign_path = workspace_root.join(package_rel);
+            let foreign = DataApp::open(&foreign_path).map_err(|err| {
+                format!(
+                    "failed to open cross-package relation target {target_spec:?}: {err}"
+                )
+            })?;
+            foreign
+                .list_rows(table, ROW_LIMIT, 0)
+                .map_err(|err| err.to_string())
+        }
+    }
 }
 
 fn open_app_at(root: &str, rel_path: &str) -> Result<DataApp, String> {
@@ -263,8 +290,10 @@ pub fn open_data_app(
     offset: Option<usize>,
 ) -> Result<DataAppSnapshot, String> {
     let app = open_app_at(&root, &rel_path)?;
+    let workspace_root = canonical_workspace_root(&root)?;
     snapshot_from_app(
         &app,
+        &workspace_root,
         view_name.as_deref(),
         limit.unwrap_or(ROW_LIMIT),
         offset.unwrap_or(0),
@@ -376,8 +405,10 @@ pub fn add_data_columns(
         .map_err(command_error_to_string)?;
 
     let app = open_app_at(&root, &rel_path)?;
+    let workspace_root = canonical_workspace_root(&root)?;
     snapshot_from_app(
         &app,
+        &workspace_root,
         view_name.as_deref(),
         limit.unwrap_or(ROW_LIMIT),
         offset.unwrap_or(0),
@@ -567,7 +598,8 @@ pub fn save_data_view(
         .map_err(command_error_to_string)?;
 
     let app = open_app_at(&root, &rel_path)?;
-    snapshot_from_app(&app, Some(&view_name), ROW_LIMIT, 0)
+    let workspace_root = canonical_workspace_root(&root)?;
+    snapshot_from_app(&app, &workspace_root, Some(&view_name), ROW_LIMIT, 0)
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -803,7 +835,10 @@ fn commit_tabular_import_inner(
     }
 
     let app = open_app_at(root, &rel_path)?;
-    Ok((rel_path, snapshot_from_app(&app, None, ROW_LIMIT, 0)?))
+    Ok((
+        rel_path,
+        snapshot_from_app(&app, &canonical_root, None, ROW_LIMIT, 0)?,
+    ))
 }
 
 /// Import a tabular file into a new `.data` package using explicit column types.
@@ -909,7 +944,7 @@ pub fn create_table_package(
         .map_err(command_error_to_string)?;
 
     let app = open_app_at(&root, &rel_path)?;
-    snapshot_from_app(&app, None, ROW_LIMIT, 0)
+    snapshot_from_app(&app, &canonical_root, None, ROW_LIMIT, 0)
 }
 
 /// Insert a row into the default table of a `.data` package.
@@ -1231,6 +1266,73 @@ mod tests {
             .expect("company relation column");
         assert_eq!(company_column.field_type, "relation");
         assert_eq!(company_column.relation_table.as_deref(), Some("companies"));
+    }
+
+    #[test]
+    fn open_data_app_merges_cross_package_relation_targets() {
+        use lattice_data::{DataApp, FieldType, NewColumn};
+
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        create_table_package(
+            root.clone(),
+            "Directory.data".to_string(),
+            "Directory".to_string(),
+            "companies".to_string(),
+        )
+        .unwrap();
+        create_table_package(
+            root.clone(),
+            "CRM.data".to_string(),
+            "CRM".to_string(),
+            "contacts".to_string(),
+        )
+        .unwrap();
+
+        let mut directory = DataApp::open(&dir.path().join("Directory.data")).unwrap();
+        directory
+            .add_columns(
+                "companies",
+                &[NewColumn::new("name", FieldType::Text)],
+            )
+            .unwrap();
+        directory
+            .insert_row(
+                "companies",
+                &BTreeMap::from([("name".into(), CellValue::Text("Acme".into()))]),
+            )
+            .unwrap();
+
+        let mut crm = DataApp::open(&dir.path().join("CRM.data")).unwrap();
+        crm.add_columns(
+            "contacts",
+            &[
+                NewColumn::new("name", FieldType::Text),
+                NewColumn::relation("org", "Directory.data#companies"),
+            ],
+        )
+        .unwrap();
+
+        let snapshot = open_data_app(root, "CRM.data".to_string(), None, None, None).unwrap();
+        let orgs = snapshot
+            .relation_targets
+            .get("Directory.data#companies")
+            .expect("cross-package relation targets");
+        assert_eq!(orgs.len(), 1);
+        assert_eq!(
+            orgs[0].values.get("name"),
+            Some(&CellValue::Text("Acme".into()))
+        );
+        let org_column = snapshot
+            .columns
+            .iter()
+            .find(|column| column.name == "org")
+            .expect("org column");
+        assert_eq!(
+            org_column.relation_table.as_deref(),
+            Some("Directory.data#companies")
+        );
     }
 
     #[test]
