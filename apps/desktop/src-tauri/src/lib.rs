@@ -6,6 +6,7 @@ mod data;
 mod dataset;
 mod dataset_sessions;
 mod link_repair;
+mod proposals;
 mod profile;
 mod resource_links;
 mod revisions;
@@ -103,6 +104,12 @@ pub fn run() {
             link_repair::apply_link_repair,
             link_repair::apply_batch_link_repair,
             link_repair::apply_link_repair_proposal,
+            proposals::create_proposal_cmd,
+            proposals::get_proposal,
+            proposals::list_proposals,
+            proposals::dismiss_proposal_cmd,
+            proposals::apply_proposal_cmd,
+            proposals::create_demo_proposal,
             commands::list_history,
             commands::undo_last,
             revisions::list_resource_revisions,
