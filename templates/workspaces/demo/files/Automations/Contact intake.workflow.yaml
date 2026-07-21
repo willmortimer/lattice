@@ -1,0 +1,48 @@
+format: lattice-workflow
+version: 1
+name: Contact intake
+enabled: true
+trigger:
+  type: form.submitted
+  package: CRM.data
+  form: ContactIntake
+steps:
+  - id: run-hello
+    action: task.run
+    with:
+      task: Tasks/ContactIntakeHello.task
+  - id: create-proposal
+    action: proposal.create
+    with:
+      summary: Create Proposals/Contact intake follow-up.md from Contact intake workflow
+      commands:
+        - type: page-create
+          path: Proposals/Contact intake follow-up.md
+          content: |
+            ---
+            title: Contact intake follow-up
+            ---
+
+            # Contact intake follow-up
+
+            Created by `Automations/Contact intake.workflow.yaml` after
+            `Tasks/ContactIntakeHello.task` ran on a **Contact intake** form submit.
+
+            ## Rehearsable path
+
+            1. Submit **CRM.data → Forms → Contact intake** (native desktop).
+            2. Open the **Proposals** inbox and approve this page-create proposal.
+            3. Open this page — or embed it from [[Home]] after approve.
+
+            ```markdown
+            :::lattice-embed
+            resource: Proposals/Contact intake follow-up.md
+            fallback: "Approve the Contact intake proposal first"
+            :::
+            ```
+      warnings:
+        - Demo proposal — safe to reject if you only wanted to exercise the run.
+  - id: notify
+    action: notification
+    with:
+      message: Contact intake workflow finished

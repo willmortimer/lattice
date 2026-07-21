@@ -852,7 +852,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
     "order": 60,
     "name": "First Look",
     "category": "Sample",
-    "description": "Kitchen-sink sample: CRM + Delivery + Metrics + OKRs data apps, Events.dataset + Orders.dataset + Places.dataset (DuckDB Parquet + Vega-Lite + MapLibre lon/lat), canvas, notebooks, hybrid search try-queries, voice/Quick Note tips, daemon runtime diagram, templates, and assorted files.",
+    "description": "Kitchen-sink sample: CRM + Delivery + Metrics + OKRs data apps, Events.dataset + Orders.dataset + Places.dataset (DuckDB Parquet + Vega-Lite + MapLibre lon/lat), Contact intake workflow → proposal, tasks + derived rebuild, canvas, notebooks, hybrid search try-queries, voice/Quick Note tips, daemon runtime diagram, templates, and assorted files.",
     "visibility": "sample",
     "recommended": false,
     "recommendedTitle": "First Look",
@@ -898,6 +898,22 @@ export const GENERATED_TEMPLATE_CATALOG = [
         "purpose": "Sandboxed HTML packages with named BindingSpec bindings."
       },
       {
+        "path": "Automations",
+        "purpose": "Workflow YAML triggered by forms, resource changes, or Run."
+      },
+      {
+        "path": "Tasks",
+        "purpose": "Executable uv task packages (task.yaml + Python)."
+      },
+      {
+        "path": "Derived",
+        "purpose": "Derived resources with lineage, stale detection, and rebuild."
+      },
+      {
+        "path": "Proposals",
+        "purpose": "Pages created after approving workflow or SDK proposals."
+      },
+      {
         "path": "Resources",
         "purpose": "Ordinary files — JSON, YAML, code, SQL, images."
       },
@@ -922,6 +938,10 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "Dashboards/Revenue by day.vl.json",
       "Dashboards/Revenue by channel.vl.json",
       "Artifacts/ContactPulse.artifact",
+      "Automations/Contact intake.workflow.yaml",
+      "Tasks/ContactIntakeHello.task",
+      "Derived/ContactBrief.derived.yaml",
+      "Proposals/README.md",
       "OKRs.data",
       "Canvases/Product Strategy.canvas",
       "Inbox/Sample capture.md",
