@@ -2,13 +2,16 @@
 
 ## Phase 3 vertical slice (shipped)
 
-Wave 3 lands two analytical viewers on `.dataset/` resources, not a Tableau/Power
-BI replacement:
+Wave 3 lands analytical viewers on `.dataset/` resources; Phase 3 polish adds
+**Plan** and **Map**. This is not a Tableau/Power BI replacement:
 
 | Surface | Stack | Scope |
 | --- | --- | --- |
 | **Preview** tab | Perspective (`@finos/perspective` + datagrid plugin) | Arrow IPC grid, grouping/pivoting within Perspective; WASM fallback to schema dump |
 | **Chart** tab | Vega-Lite (`vega-lite`, `vega`, `vega-embed`) | Saved `.vl.json` resources and auto bar chart from Preview data; bounded Arrow batches |
+| **Profile** tab | DuckDB `SUMMARIZE` | Relation-level stats text |
+| **Plan** tab | DuckDB `EXPLAIN` (`explain_dataset`) | Text query plan; frontend AbortSignal only (no backend cancel session) |
+| **Map** tab | MapLibre GL | Lon/lat (or longitude/latitude) point markers; offline solid `--lt-*` style; no remote basemap tiles |
 
 Mutable `.data` apps keep **Glide** for the operational grid. Cross-filtering,
 semantic models, drill hierarchies, presentation bookmarks, and dashboard
@@ -158,6 +161,11 @@ First-class Jupyter and Python interactive figure representation.
 ### deck.gl and MapLibre
 
 Large-scale geospatial visualization and map rendering.
+
+**Shipped (MapLibre MVP):** dataset **Map** tab plots lon/lat columns from a
+bounded Arrow query (demo: `Data/Places.dataset`). Style is offline-first solid
+`--lt-*` fill — no remote tile basemap. deck.gl, DuckDB spatial, and full
+GeoParquet geometry remain later.
 
 ### Graphviz and Mermaid
 

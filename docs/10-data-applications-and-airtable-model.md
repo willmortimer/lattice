@@ -77,9 +77,10 @@ Users should not need to design a normalized schema before starting.
 
 The following paths are implemented today. Wave 2 depth (Lookup/Rollup,
 interfaces, actions, tabular import beyond CSV, FormSave) is documented in the
-next section. Formula fields, DuckDB/Arrow analytics, MCP dataset writes, and a
-full interface builder remain later work (see
-[data-apps analytics DAG](dev/data-apps-analytics-dag.md)).
+next section. DuckDB/Arrow analytics (Phase 3), MCP dataset writes, a full
+interface builder, SQL-layer formulas, and writable cross-package relations
+remain later work (see [data-apps analytics DAG](dev/data-apps-analytics-dag.md)
+and [Phase 3 polish DAG](dev/phase3-polish-dag.md)).
 
 **Schema via semantic commands.** Adding tables and columns flows through
 `TableAdd` and `ColumnsAdd` in the command engine (ADR 0007). Each command
@@ -89,9 +90,10 @@ commands — they do not call `lattice-data` schema helpers directly.
 
 **Column designer.** The data-app toolbar exposes **Add column**: name, field
 type (`text`, `long_text`, `integer`, `decimal`, `boolean`, `date`, `relation`,
-`lookup`, or `rollup`), with relation-specific options (`relation_table`;
+`lookup`, `rollup`, or `formula`), with relation-specific options (`relation_table`;
 `lookup_relation` + `lookup_field`; `rollup_relation`, `rollup_aggregate`, and
-optional `rollup_field`). Submit calls `add_data_columns` → `ColumnsAdd` and
+optional `rollup_field`) and formula expression (`formula`, e.g.
+`{price} * {quantity}`). Submit calls `add_data_columns` → `ColumnsAdd` and
 refreshes the open snapshot. The browser demo shows the panel but does not
 persist schema changes.
 
@@ -187,6 +189,8 @@ Source of truth: `crates/lattice-data/src/types.rs` (mirrored in
 - `lookup` — read-only projection through a relation (resolved at read time).
 - `rollup` — read-only aggregate over linked records (`count`, `sum`, `min`,
   `max`; resolved at read time).
+- `formula` — read-only friendly expression over same-row fields (resolved at
+  read time; see [Formula fields](#formula-fields)).
 
 Storage remains ordinary SQLite column types; presentation and semantic metadata
 live in `app.yaml`.
@@ -200,8 +204,11 @@ These are product targets, **not** current `FieldType` variants:
 - **Attachment column** type (see [Workspace attachments vs attachment columns](#workspace-attachments-vs-attachment-columns)).
 - User; geolocation; JSON.
 - Page/resource and artifact/app references.
-- **Formula** fields (see [Formula fields](#formula-fields)).
 - Generated/AI fields (see [Generated fields](#generated-fields)).
+- **SQL formula layer** and persisted/generated formula columns (friendly
+  read-time formulas are shipped; see [Formula fields](#formula-fields)).
+- Writable cross-package relations (read-only `Package.data#table` targets are
+  shipped; see [Linked records](#linked-records)).
 
 ### Workspace attachments vs attachment columns
 
@@ -543,15 +550,20 @@ This permits Airtable-style operational apps while retaining normal documents an
 same-package relations; see [Shipped in Wave 2](#shipped-in-wave-2-airtable-depth).
 They resolve at open/read time today rather than as persisted generated columns.
 
-**Formula fields** remain future work. The target model supports two levels:
+**Formula fields (shipped Phase 3 polish)** are read-only `FieldType::Formula`
+columns with a friendly expression in `app.yaml` (`formula: "{price} * {quantity}"`).
+Values resolve at open/read time from same-row scalar fields; they are not
+persisted to SQLite and are excluded from tabular import. Column designer and
+CLI `add-column --type formula` accept the expression. There is **no** SQL
+formula layer, generated-column persistence, or cross-row engine yet.
 
-### Friendly expression layer
+### Friendly expression layer (shipped)
 
 ```text
 {price} * {quantity}
 ```
 
-### SQL layer
+### SQL layer (later)
 
 ```sql
 SELECT SUM(amount_cents)
@@ -559,7 +571,7 @@ FROM line_items
 WHERE invoice_id = invoices.id
 ```
 
-Future formulas, and richer rollup compilation, may use SQL views, generated
+Future richer formulas and rollup compilation may use SQL views, generated
 columns, cached fields, or runtime queries. Generated SQL should remain
 inspectable. Do not create a proprietary DAX-like language.
 

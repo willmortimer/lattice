@@ -1,15 +1,17 @@
 # First Look demo — 2026-07-20
 
-Evidence pass against the Home.md **First Look tour — new surfaces** checklist
-on BASE commit `5d652ab5b63b14dc5d26df781e81c33b659e9d9d`
-(`feat/data-support-polish` integration tip after P2P01–P06 and P2P08).
+Evidence pass against the Home.md **First Look tour — new surfaces** checklist.
+Historical rows below retain the 2026-07-20 data-support polish BASE; tip for
+this closeout is the Phase 3 polish integration tip after P3P01–P06 / P2F01 /
+P2J01 / P2X01 / P2S01–P02 (all packets merged before P3P07 docs).
 
 | Field | Value |
 | --- | --- |
-| Date | 2026-07-20 |
-| BASE | `5d652ab5b63b14dc5d26df781e81c33b659e9d9d` |
-| Surface | Vite browser demo (`pnpm --filter @lattice/desktop dev`, fixture `inBrowser`) plus code review, unit tests, and native CRM Tauri smoke (P2P06) |
-| Method | Fixture + shell code paths under `apps/desktop/src/`; contracts in `docs/39-resource-runtime-contracts.md`; link-repair / batch-move coverage in desktop + `lattice-commands` / `lattice-index` tests; native Wave 2 subset via `pnpm --filter @lattice/desktop test:crm:tauri` (`apps/desktop/e2e/data/crm.smoke.tauri.spec.ts`, local only — not a CI gate). |
+| Date | 2026-07-20 (closeout refresh) |
+| BASE (historical polish pass) | `5d652ab5b63b14dc5d26df781e81c33b659e9d9d` (`feat/data-support-polish`) |
+| Tip (Phase 3 polish) | `2ed333c4bff568ee06f10a7b62fdd9640d09cf11` (`feat/phase3-polish` after cancel frontend merge) |
+| Surface | Vite browser demo (`pnpm --filter @lattice/desktop dev`, fixture `inBrowser`) plus code review, unit tests, and native Tauri smokes (CRM P2P06, tree P2S01, schema P2S02) — local only, not CI gates |
+| Method | Fixture + shell code paths under `apps/desktop/src/`; contracts in `docs/39-resource-runtime-contracts.md`; link-repair / batch-move coverage in desktop + `lattice-commands` / `lattice-index` tests; native smokes via `pnpm --filter @lattice/desktop test:crm:tauri` / `test:tree:tauri` / `test:schema:tauri`. |
 
 ## Data-support polish landed (browser honesty, CRM seed, native smoke)
 
@@ -50,16 +52,19 @@ Tracker: [data-apps analytics DAG](data-apps-analytics-dag.md) (Wave 3 merged).
 
 Contracts:
 
-- [Analytical data — Phase 3 vertical slice](../11-analytical-data-arrow-duckdb-parquet.md#phase-3-vertical-slice-shipped) — limits, offline Parquet, annotation bridge.
-- [Visualization — Phase 3 viewers](../13-visualization-bi-and-presentation.md#phase-3-vertical-slice-shipped) — Perspective + Vega-Lite; BI gaps explicit.
-- [Roadmap — Phase 3](../29-roadmap.md#phase-3-analytical-data) — shipped vs open items.
+- [Analytical data — Phase 3 vertical slice](../11-analytical-data-arrow-duckdb-parquet.md#phase-3-vertical-slice-shipped) — limits, offline Parquet, annotation bridge, Plan/Cancel/Map.
+- [Visualization — Phase 3 viewers](../13-visualization-bi-and-presentation.md#phase-3-vertical-slice-shipped) — Perspective + Vega-Lite + Plan + Map; BI gaps explicit.
+- [Roadmap — Phase 3](../29-roadmap.md#phase-3-analytical-data) — shipped vs residual gaps.
 
 **Native demo steps** (Tauri / `nix run .#desktop-dev`; not the browser fixture):
 
 1. Open `Data/Events.dataset` → **Preview** → confirm Perspective grid over Hive Parquet (not only schema JSON).
 2. Switch to **Chart** → confirm Vega-Lite render (or open `Dashboards/Signups by region.vl.json`).
 3. Switch to **Profile** → confirm DuckDB `SUMMARIZE` summary text.
-4. Confirm `facts/year=2026/month=07/signups.parquet` and `annotations.sqlite` on disk; optional CLI below.
+4. Switch to **Plan** → confirm DuckDB `EXPLAIN` text (Cancel aborts the wait only; no backend cancel session).
+5. Open `Data/Places.dataset` → **Map** → confirm lon/lat markers on the offline solid map (no tile basemap).
+6. On a long Preview/Profile query, confirm **Cancel** interrupts via `cancel_dataset_query`.
+7. Confirm `facts/…` Parquet and `annotations.sqlite` on disk for Events; optional CLI below.
 
 CLI spot-check:
 
@@ -72,8 +77,26 @@ Re-seed the template Parquet + annotations from repo root:
 
 ```sh
 cargo run -p lattice-datasets --example seed_demo_events
+cargo run -p lattice-datasets --example seed_demo_places
 pnpm compile-templates
 ```
+
+## Phase 3 polish landed (Plan, Cancel, Map, Formula, junction, cross-package RO)
+
+Packets on `feat/phase3-polish` (P3P01–P06, P2F01, P2J01, P2X01, P2S01–P02)
+closed the remaining Phase 3 MVP gaps after Wave 3. Tracker:
+[phase3 polish DAG](phase3-polish-dag.md) (Complete after P3P07).
+
+| Packet | Outcome | Pointers |
+| --- | --- | --- |
+| P3P01 / P3P03 | DuckDB `EXPLAIN` + dataset **Plan** tab | `explain_dataset`; `DatasetResourceRenderer` Plan panel |
+| P3P02 / P3P04 | Cooperative cancel backend + AbortSignal Cancel UI | `cancel_dataset_query`; Preview/Chart/Profile/Map |
+| P3P05 / P3P06 | `Data/Places.dataset` lon/lat seed + MapLibre **Map** tab | offline `--lt-*` style; no remote tiles / DuckDB spatial |
+| P2F01 | Read-time friendly `FieldType::Formula` | no SQL formula layer |
+| P2J01 | Opt-in `junction_table` M2M (`contacts.tags` → `contact_tags`) | JSON TEXT `Relation` UX unchanged |
+| P2X01 | Read-only cross-package `Package.data#table` relation targets | writes rejected; Lookup/Rollup stay same-package |
+| P2S01 / P2S02 | Native tree/undo and schema/import Tauri smokes | `test:tree:tauri`, `test:schema:tauri` (local only — not CI gates) |
+
 ## Wave 2 landed (Lookup/Rollup, interfaces, actions, tabular import, FormSave)
 
 Wave 2 packets P2-08–P2-14 on `feat/data-apps-and-analytics` added read-time
@@ -146,11 +169,13 @@ The checklist table below records pass/fail/skip on BASE `5d652ab`. Historical
 **fail** rows from the 2026-07-18 pass at `f90fb95` are superseded where polish
 landed; archaeology remains in **Known expected fails on BASE**.
 
-Still deferred after polish: cross-package relation links, full interface builder,
-tabular/CSV import in the browser demo, full native Tauri pass for folder undo /
-move+repair / trash (beyond P2P06 smoke), lookup/rollup **add-column** and tabular
-import on native without a dedicated harness, query profiler UI, semantic models,
-and MapLibre polish beyond the Places seed.
+Still deferred after polish: writable cross-package relations, SQL formula
+layer / full engines, full interface builder, tabular/CSV import in the browser
+demo, lookup/rollup **add-column** on native without a dedicated harness,
+query **progress** reporting (EXPLAIN Plan and Cancel are shipped), full
+GeoParquet geometry / DuckDB spatial / remote tile basemaps (Places lon/lat +
+offline MapLibre Map tab are shipped), semantic models, and CI-gated Tauri
+smokes (tree/schema/CRM harnesses remain local-only).
 
 ## Search & voice First Look honesty
 
@@ -188,8 +213,9 @@ Home.md items 1–9. Status: **pass** / **fail** / **skip**.
 | 16 | **Actions** → Contact intake | **pass** (fixture) / **pass** (native smoke) | Demo seeds `OpenContactIntake` toolbar action; native smoke opens Contact intake form via Actions menu (P2P06). | `DataActionsMenu.tsx`; `crm.smoke.tauri.spec.ts:49–64` |
 | 17 | **Import…** Excel/JSON/JSONL → type-review | **skip** (browser) / **skip** (native pass) | Browser blocks with explicit error; native `preview_tabular_import` not exercised in this pass. | `tabularImport.ts`; `desktopActions.ts` |
 | 18 | **Forms** → create/edit package form | **pass** (browser UI) / **pass** (native smoke) | FormSave designer in `PackageFormPanel`; browser can open designer UI. Native smoke: Edit form → **Save form** enabled on ContactIntake (P2P06). | `PackageFormPanel.tsx`; `crm.smoke.tauri.spec.ts:66–79` |
-| 19 | `Events.dataset` → **Preview** / **Chart** / **Profile** | **pass** (native) / **pass** (browser honesty) | Wave 3 Perspective + Vega-Lite + SUMMARIZE; demo seeds `Data/Events.dataset`. Browser fixture shows an explicit **Visualization unavailable in browser demo** card (no silent empty viz). Chart resources (`Dashboards/*.vl.json`) use the same gate. | `DatasetResourceRenderer.tsx`; `ChartResourceRenderer.tsx` |
+| 19 | `Events.dataset` → **Preview** / **Chart** / **Profile** / **Plan** | **pass** (native) / **pass** (browser honesty) | Wave 3 + polish: Perspective, Vega-Lite, SUMMARIZE, EXPLAIN Plan; Cancel on query/profile. Browser fixture shows **Visualization unavailable in browser demo**. | `DatasetResourceRenderer.tsx`; `ChartResourceRenderer.tsx` |
 | 20 | CLI `dataset import-csv` + `query-annotated` | **skip** (native pass) | Annotation overlay join via `lattice-duckdb`; see Wave 3 CLI spot-check above. | `apps/cli/src/main.rs`; `lattice-datasets` |
+| 21 | `Places.dataset` → **Map** lon/lat markers | **pass** (native) / **pass** (browser honesty) | P3P05/P06; offline solid `--lt-*` MapLibre style (no tile basemap). | `MapLibreDatasetViewer.tsx`; `Data/Places.dataset` |
 
 ## Known expected fails on BASE (Wave 1 addressed)
 
@@ -217,6 +243,7 @@ Wave 1 (items 1–4, 6) shipped on `main`. Remaining items are post–Wave 1.
 7. ~~**P2 — Persist Save view in demo or clear CTA**~~ — done (P2P01: disabled Save view + **Native desktop** label).
 8. ~~**P2 — Native demo pass** for folder undo, single-path move+repair, multi-select trash+undo~~ — done (P2S01: `pnpm --filter @lattice/desktop test:tree:tauri`).
 9. ~~**P2 — Native Wave 2 pass** for **add-column** (text) + tabular import + FormSave designer~~ — done for text add-column + sample.csv promote (P2S02: `test:schema:tauri`); FormSave designer covered by P2P06. Lookup/rollup **add-column** and file-picker Import… remain manual.
+10. ~~**P2 — Phase 3 polish MVP** (Plan/Cancel/Map, formula, junction, cross-package RO)~~ — done on `feat/phase3-polish` (see polish section above). Residual: progress UI, writable cross-package, SQL formulas, tile basemaps / DuckDB spatial, CI-gated smokes.
 
 ## How to re-run
 
@@ -247,9 +274,11 @@ pnpm --filter @lattice/desktop test:schema:tauri
 
 `nix run .#desktop-install` / opening Lattice.app does **not** rewrite an existing
 workspace under `~/Lattice/Workspaces/First Look`. If that folder was seeded
-before analytical datasets landed, it may lack `Data/Events.dataset` and
-`Dashboards/`. Fix by creating a **new** workspace from the First Look template,
-or by copying seeds from `templates/workspaces/demo/files/` (then
-`pnpm compile-templates` only if you changed the template itself).
+before analytical datasets or Phase 3 polish landed, it may lack
+`Data/Events.dataset`, `Data/Places.dataset`, and/or `Dashboards/`. Fix by
+creating a **new** workspace from the First Look template, or by copying seeds
+from `templates/workspaces/demo/files/` (then `pnpm compile-templates` only if
+you changed the template itself).
 
-Update this file’s Date + BASE when repeating the tour after polish or wave landings.
+Update this file’s Date + Tip SHA when repeating the tour after polish or wave
+landings.
