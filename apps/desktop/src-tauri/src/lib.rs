@@ -10,6 +10,7 @@ mod derived;
 mod link_repair;
 mod proposals;
 mod profile;
+mod relationship;
 mod resource_links;
 mod revisions;
 mod search;
@@ -143,6 +144,7 @@ pub fn run() {
             search::search_workspace,
             search::get_backlinks,
             search::rebuild_index,
+            relationship::list_relationship_edges_cmd,
             watcher::start_watching,
             watcher::stop_watching,
             terminal::terminal_spawn,

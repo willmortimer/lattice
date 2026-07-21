@@ -34,6 +34,7 @@ mod error;
 mod history;
 mod link_repair;
 mod proposal;
+mod relationship;
 mod revisions;
 mod task;
 mod template;
@@ -76,6 +77,7 @@ pub use proposal::{
     list_proposal_summaries, load_proposal, new_proposal_id, proposal_now_iso, proposals_dir,
     save_proposal, PROPOSALS_DIR,
 };
+pub use relationship::{list_relationship_edges, RelationshipEdge, RelationshipKind};
 pub use revisions::{
     ConflictEnvelope, HistoryCleanupCandidate, HistoryCleanupReport, HistoryRetentionPolicy,
     ResourceRevisionDetail, ResourceRevisionSummary, RevisionDiff, RevisionPayload,
