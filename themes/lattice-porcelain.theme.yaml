@@ -1,0 +1,49 @@
+# Lattice Porcelain — cool white ceramic surfaces with a vermilion signal.
+
+name: Lattice Porcelain
+id: lattice-porcelain
+appearance: light
+
+palette:
+  ground: "#f4f7f8"
+  ground_raise: "#e9eff1"
+  panel: "#ffffff"
+  slate: "#61747b"
+  text: "#182326"
+  text_soft: "#405157"
+  muted: "#687b81"
+  faint: "#91a0a5"
+  accent: "#d1432f"
+  accent_bright: "#ad2f20"
+  accent_deep: "#842319"
+  danger: "#b42335"
+  ink_shadow: "#101719"
+  on_accent: "#fff8f5"
+
+roles:
+  bg: $ground
+  bg_raise: $ground_raise
+  panel: $panel
+  slate: $slate
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $accent
+  accent_bright: $accent_bright
+  accent_deep: $accent_deep
+  danger: $danger
+  shadow: $ink_shadow
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 8px
+  radius_sm: 5px
+  radius_lg: 13px
+  grid: 32px
+  titlebar: 38px
+  max_width: 1140px

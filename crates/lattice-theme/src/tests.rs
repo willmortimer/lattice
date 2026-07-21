@@ -28,10 +28,21 @@ fn builtins_parse_and_flatten() {
 }
 
 #[test]
-fn terminal_standards_flatten_ansi_palette() {
-    // Adopted terminal themes must carry their real ANSI palette through
+fn terminal_palettes_flatten_ansi_palette() {
+    // Terminal-derived themes must carry their explicit ANSI palette through
     // flatten as --lt-term-* vars.
-    for id in ["catppuccin-mocha", "nord", "github-dark", "dracula", "solarized-dark"] {
+    for id in [
+        "catppuccin-mocha",
+        "nord",
+        "github-dark",
+        "dracula",
+        "solarized-dark",
+        "tokyo-night",
+        "gruvbox-dark",
+        "one-dark",
+        "rose-pine-moon",
+        "kanagawa-wave",
+    ] {
         let doc = load_builtin(id).unwrap();
         let vars = flatten_theme(&doc, &builtin_path(id)).unwrap();
         for key in crate::document::TERMINAL_ANSI_KEYS {

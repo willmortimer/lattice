@@ -1,0 +1,49 @@
+# Lattice Solar Flare — blue-black astronomical ground with a focused solar signal.
+
+name: Lattice Solar Flare
+id: lattice-solar-flare
+appearance: dark
+
+palette:
+  ground: "#080b14"
+  ground_raise: "#0d1220"
+  panel: "#141b2c"
+  slate: "#7d8ca8"
+  text: "#edf1f8"
+  text_soft: "#c0c9d9"
+  muted: "#8793a9"
+  faint: "#59667e"
+  accent: "#f6c445"
+  accent_bright: "#ffe08a"
+  accent_deep: "#c68d14"
+  danger: "#ff756f"
+  ink_shadow: "#03050a"
+  on_accent: "#211600"
+
+roles:
+  bg: $ground
+  bg_raise: $ground_raise
+  panel: $panel
+  slate: $slate
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $accent
+  accent_bright: $accent_bright
+  accent_deep: $accent_deep
+  danger: $danger
+  shadow: $ink_shadow
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 7px
+  radius_sm: 4px
+  radius_lg: 12px
+  grid: 30px
+  titlebar: 38px
+  max_width: 1140px
