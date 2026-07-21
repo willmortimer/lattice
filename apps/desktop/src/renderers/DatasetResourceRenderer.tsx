@@ -369,6 +369,9 @@ export function DatasetResourceRenderer({
           ) : showPerspective && result ? (
             <PerspectiveDatasetViewer
               ipcBytes={result.ipcBytes}
+              schema={result.schemaMeta.fields}
+              sampleRows={result.sampleRows ?? []}
+              rowCount={result.rowCount}
               loadKey={loadKey}
               onError={(message) => {
                 setViewerFailed(true);

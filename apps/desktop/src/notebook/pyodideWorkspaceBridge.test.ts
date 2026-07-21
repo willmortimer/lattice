@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
 import {
   DEFAULT_BRIDGED_WORKSPACE_PATHS,
   normalizeWorkspaceRelPath,
@@ -7,6 +8,10 @@ import {
   PYODIDE_WORKSPACE_ROOT,
   pyodideMountPath,
 } from "./pyodideWorkspaceBridge";
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn(),
+}));
 
 describe("pyodideWorkspaceBridge", () => {
   it("maps workspace-relative paths under the Pyodide workspace root", () => {
@@ -59,5 +64,22 @@ describe("pyodideWorkspaceBridge", () => {
     if (result.ok) return;
     expect(result.reason).toBe("no-root");
     expect(result.message).toMatch(/open a workspace/i);
+  });
+
+  it("falls back to the compiled First Look template when disk read fails", async () => {
+    vi.mocked(invoke).mockRejectedValueOnce(
+      new Error('cannot resolve "Data/Orders.dataset/sources/orders.csv"'),
+    );
+
+    const result = await prepareWorkspaceBridge({
+      root: "/tmp/sticky-first-look",
+      inBrowser: false,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.files).toHaveLength(1);
+    expect(result.files[0]?.source).toBe("demo-template");
+    expect(result.files[0]?.bytes.byteLength).toBeGreaterThan(0);
+    expect(result.notice).toMatch(/template copy/i);
   });
 });

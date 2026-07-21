@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
+import { demoTextFiles } from "../demoWorkspace.generated";
+
 /** Virtual workspace root inside the Pyodide filesystem. */
 export const PYODIDE_WORKSPACE_ROOT = "/home/pyodide/workspace";
 
@@ -17,6 +19,8 @@ export type BridgedWorkspaceFile = {
   /** Absolute path under {@link PYODIDE_WORKSPACE_ROOT}. */
   mountPath: string;
   bytes: Uint8Array;
+  /** Where the bytes came from — disk vs sticky-workspace template fallback. */
+  source: "workspace" | "demo-template";
 };
 
 export type WorkspaceBridgeUnavailableReason =
@@ -25,7 +29,7 @@ export type WorkspaceBridgeUnavailableReason =
   | "read-failed";
 
 export type WorkspaceBridgeResult =
-  | { ok: true; files: BridgedWorkspaceFile[] }
+  | { ok: true; files: BridgedWorkspaceFile[]; notice?: string }
   | {
       ok: false;
       reason: WorkspaceBridgeUnavailableReason;
@@ -79,6 +83,31 @@ async function readWorkspaceBytes(root: string, relPath: string): Promise<Uint8A
   return toUint8Array(response);
 }
 
+function demoTemplateBytes(relPath: string): Uint8Array | null {
+  const text = demoTextFiles[relPath];
+  if (typeof text !== "string") return null;
+  return new TextEncoder().encode(text);
+}
+
+/**
+ * Read a bridged path from the open workspace, falling back to the compiled
+ * First Look template when a sticky on-disk folder is missing seed files.
+ */
+async function readBridgedBytes(
+  root: string,
+  path: string,
+): Promise<{ bytes: Uint8Array; source: "workspace" | "demo-template" }> {
+  try {
+    return { bytes: await readWorkspaceBytes(root, path), source: "workspace" };
+  } catch (error) {
+    const fallback = demoTemplateBytes(path);
+    if (fallback) {
+      return { bytes: fallback, source: "demo-template" };
+    }
+    throw error;
+  }
+}
+
 /**
  * Read selected workspace files for a one-shot copy into the Pyodide FS.
  * Browser demo / missing root return an honest unavailable result (no silent fake mount).
@@ -111,7 +140,7 @@ export async function prepareWorkspaceBridge(options: {
   try {
     for (const rawPath of paths) {
       const path = normalizeWorkspaceRelPath(rawPath);
-      const bytes = await readWorkspaceBytes(root, path);
+      const { bytes, source } = await readBridgedBytes(root, path);
       if (bytes.byteLength > MAX_BRIDGED_FILE_BYTES) {
         return {
           ok: false,
@@ -119,15 +148,22 @@ export async function prepareWorkspaceBridge(options: {
           message: `Bridged file exceeds ${MAX_BRIDGED_FILE_BYTES} bytes: ${path}`,
         };
       }
-      files.push({ path, mountPath: pyodideMountPath(path), bytes });
+      files.push({ path, mountPath: pyodideMountPath(path), bytes, source });
     }
   } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
     return {
       ok: false,
       reason: "read-failed",
-      message: error instanceof Error ? error.message : String(error),
+      message: `${detail} — create a fresh First Look workspace (or copy missing seeds from templates/workspaces/demo/files/). Installing Lattice.app does not rewrite an existing First Look folder.`,
     };
   }
 
-  return { ok: true, files };
+  const templatePaths = files.filter((file) => file.source === "demo-template").map((file) => file.path);
+  const notice =
+    templatePaths.length > 0
+      ? `Mounted First Look template copy for missing disk file(s): ${templatePaths.join(", ")}. Create a fresh First Look workspace to persist these seeds on disk.`
+      : undefined;
+
+  return { ok: true, files, notice };
 }
