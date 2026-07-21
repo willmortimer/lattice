@@ -12,6 +12,7 @@ export type ResourceKind =
   | "app"
   | "workflow"
   | "task"
+  | "derived"
   | "folder"
   | "file";
 

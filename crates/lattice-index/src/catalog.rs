@@ -30,6 +30,7 @@ pub(crate) fn kind_db(kind: ResourceKind) -> &'static str {
         ResourceKind::App => "app",
         ResourceKind::Workflow => "workflow",
         ResourceKind::Task => "task",
+        ResourceKind::Derived => "derived",
         ResourceKind::Folder => "folder",
         ResourceKind::File => "file",
     }
@@ -46,6 +47,7 @@ pub(crate) fn kind_from_db(value: &str) -> ResourceKind {
         "app" => ResourceKind::App,
         "workflow" => ResourceKind::Workflow,
         "task" => ResourceKind::Task,
+        "derived" => ResourceKind::Derived,
         "folder" => ResourceKind::Folder,
         "file" => ResourceKind::File,
         _ => ResourceKind::Page,

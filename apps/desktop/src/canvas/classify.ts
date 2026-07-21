@@ -14,6 +14,9 @@ export function classifyPath(path: string): ResourceKind {
   if (name.endsWith(".workflow.yaml") || name.endsWith(".workflow.yml")) {
     return "workflow";
   }
+  if (name.endsWith(".derived.yaml") || name.endsWith(".derived.yml")) {
+    return "derived";
+  }
 
   const dotIndex = name.lastIndexOf(".");
   const ext = dotIndex >= 0 ? name.slice(dotIndex + 1) : "";

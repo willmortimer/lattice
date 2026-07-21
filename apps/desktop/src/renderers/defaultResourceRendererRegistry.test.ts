@@ -33,6 +33,9 @@ describe("createDefaultResourceRendererRegistry", () => {
     expect(registry.resolve({ kind: "workflow", path: "Simple.workflow.yaml" }).definition.id).toBe(
       "workflow-viewer",
     );
+    expect(registry.resolve({ kind: "derived", path: "Reports/Summary.derived.yaml" }).definition.id).toBe(
+      "derived-viewer",
+    );
     expect(registry.resolve({ kind: "artifact", path: "Artifacts/Pulse.artifact" }).definition.id).toBe(
       "artifact-sandbox",
     );

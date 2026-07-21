@@ -6,6 +6,7 @@ mod daemon_session;
 mod data;
 mod dataset;
 mod dataset_sessions;
+mod derived;
 mod link_repair;
 mod proposals;
 mod profile;
@@ -35,6 +36,7 @@ pub fn run() {
         .manage(kernel::KernelState::default())
         .manage(task::TaskState::default())
         .manage(workflow::WorkflowState::default())
+        .manage(derived::DerivedStateMap::default())
         .manage(theme::ThemeWatchState::default())
         .manage(resource_links::ResourceCatalogState::default())
         .manage(voice::VoiceState::default())
@@ -164,6 +166,9 @@ pub fn run() {
             workflow::workflow_execution_status,
             workflow::workflow_set_enabled,
             workflow::workflow_list_runs,
+            derived::derived_load_manifest,
+            derived::derived_load_status,
+            derived::derived_rebuild,
             theme::list_themes,
             theme::get_resolved_theme,
             theme::set_theme,
