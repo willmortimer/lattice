@@ -29,8 +29,11 @@ impl PythonLauncher {
     }
 
     /// Build a [`Command`] that runs `bridge_script` with the right deps story.
-    pub fn command_for(&self, bridge_script: &Path) -> Command {
-        match self {
+    ///
+    /// Injects the shipped `packages/lattice-py` SDK onto `PYTHONPATH` and sets
+    /// `LATTICE_WORKSPACE` so notebook cells can `import lattice`.
+    pub fn command_for(&self, bridge_script: &Path, workspace_root: &Path) -> Command {
+        let mut cmd = match self {
             Self::Uv { uv } => {
                 let mut cmd = Command::new(uv);
                 cmd.arg("run")
@@ -48,8 +51,31 @@ impl PythonLauncher {
                 cmd.arg(bridge_script);
                 cmd
             }
+        };
+        inject_lattice_python_sdk(&mut cmd, workspace_root);
+        cmd
+    }
+}
+
+/// Directory containing the injectable `lattice` Python package (parent of `lattice/`).
+pub fn shipped_lattice_py_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../packages/lattice-py")
+}
+
+/// Prepend the shipped SDK to `PYTHONPATH` and set `LATTICE_WORKSPACE`.
+pub fn inject_lattice_python_sdk(cmd: &mut Command, workspace_root: &Path) {
+    let mut entries = vec![shipped_lattice_py_dir()];
+    if let Some(existing) = std::env::var_os("PYTHONPATH") {
+        for entry in std::env::split_paths(&existing) {
+            if !entry.as_os_str().is_empty() {
+                entries.push(entry);
+            }
         }
     }
+    if let Ok(joined) = std::env::join_paths(&entries) {
+        cmd.env("PYTHONPATH", joined);
+    }
+    cmd.env("LATTICE_WORKSPACE", workspace_root);
 }
 
 fn find_on_path(name: &str) -> Option<PathBuf> {
@@ -105,11 +131,12 @@ mod tests {
     }
 
     #[test]
-    fn uv_command_includes_with_deps() {
+    fn uv_command_includes_with_deps_and_sdk_env() {
         let launcher = PythonLauncher::Uv {
             uv: PathBuf::from("/usr/bin/uv"),
         };
-        let cmd = launcher.command_for(Path::new("/tmp/bridge.py"));
+        let workspace = Path::new("/tmp/ws");
+        let cmd = launcher.command_for(Path::new("/tmp/bridge.py"), workspace);
         let args: Vec<String> = cmd
             .get_args()
             .map(|a| a.to_string_lossy().into_owned())
@@ -117,5 +144,32 @@ mod tests {
         assert!(args.windows(2).any(|w| w == ["--with", "ipykernel"]));
         assert!(args.windows(2).any(|w| w == ["--with", "jupyter_client"]));
         assert_eq!(args.last().map(String::as_str), Some("/tmp/bridge.py"));
+
+        let envs: Vec<(String, String)> = cmd
+            .get_envs()
+            .filter_map(|(k, v)| Some((k.to_str()?.to_string(), v?.to_str()?.to_string())))
+            .collect();
+        let pythonpath = envs
+            .iter()
+            .find(|(k, _)| k == "PYTHONPATH")
+            .map(|(_, v)| v.as_str())
+            .expect("PYTHONPATH");
+        assert!(pythonpath.contains("lattice-py"), "PYTHONPATH={pythonpath}");
+        let lattice_ws = envs
+            .iter()
+            .find(|(k, _)| k == "LATTICE_WORKSPACE")
+            .map(|(_, v)| v.as_str())
+            .expect("LATTICE_WORKSPACE");
+        assert_eq!(lattice_ws, "/tmp/ws");
+    }
+
+    #[test]
+    fn shipped_sdk_dir_contains_lattice_package() {
+        let dir = shipped_lattice_py_dir();
+        assert!(
+            dir.join("lattice").join("__init__.py").is_file(),
+            "missing SDK at {}",
+            dir.display()
+        );
     }
 }

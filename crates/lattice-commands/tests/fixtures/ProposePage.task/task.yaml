@@ -1,0 +1,13 @@
+format: lattice-task
+version: 1
+runtime:
+  type: python
+  provider: uv
+  project: .
+entrypoint:
+  command: [python, main.py]
+limits:
+  timeout_seconds: 60
+outputs:
+  - path: Notes/FromSdk.task.md
+    kind: page

@@ -169,6 +169,34 @@ page = lattice.page("Research/Overview.md")
 result = lattice.sql("SELECT * FROM companies LIMIT 100")
 ```
 
+### Phase A5 (shipped): injectable `lattice` Python package
+
+Native/`uv` notebooks and `*.task/` runs inject
+[`packages/lattice-py/`](../packages/lattice-py/) onto `PYTHONPATH` and set
+`LATTICE_WORKSPACE` to the workspace root (task runner + native kernel
+discover). With that injection:
+
+```python
+import lattice
+
+root = lattice.workspace_root()
+orders = lattice.dataset("Data/Orders.dataset")  # or lattice.workspace.dataset(...)
+proposal = lattice.propose_page(
+    "Notes/Summary.md",
+    "# Summary\n",
+    summary="Create summary page",
+)
+```
+
+`propose*` writes reviewable JSON under `.lattice/proposals/` matching Rust
+`TransactionProposal` serde (camelCase; `page-create` commands). It does **not**
+apply commands through the CommandEngine — accept/reject stays in the shell.
+`dataset(...).read_table()` prefers Parquet via pyarrow, else CSV via pandas,
+and raises a clear `ImportError` when those optional deps are missing.
+
+Pyodide notebooks are out of scope for this package; use the workspace CSV
+bridge there instead.
+
 Dataframe actions:
 
 ```text

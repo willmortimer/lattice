@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use lattice_core::Workspace;
 use lattice_env::{EnvError, EnvKind, EnvProvider};
 use serde::{Deserialize, Serialize};
 
@@ -353,11 +354,10 @@ impl TaskRunner {
         // Absolute paths keep `uv --directory` valid when combined with
         // `current_dir(package)` — a relative `--directory` would be resolved
         // again from the package cwd and miss the project.
-        let package_dir =
-            std::fs::canonicalize(&package_dir).map_err(|source| TaskError::Io {
-                path: package_dir.clone(),
-                source,
-            })?;
+        let package_dir = std::fs::canonicalize(&package_dir).map_err(|source| TaskError::Io {
+            path: package_dir.clone(),
+            source,
+        })?;
         let manifest = TaskManifest::load(&package_dir.join(TASK_MANIFEST_FILENAME))?;
         let project_dir = resolve_project_dir(&package_dir, &manifest.runtime.project)?;
 
@@ -384,6 +384,9 @@ impl TaskRunner {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+
+        // Injectable workspace SDK (`packages/lattice-py`) for propose*/dataset.
+        inject_lattice_python_sdk(&mut cmd, &package_dir);
 
         #[cfg(unix)]
         {
@@ -464,6 +467,33 @@ fn map_env_error(err: EnvError) -> TaskError {
         EnvError::MissingTool { tool } => TaskError::MissingTool { tool },
         other => TaskError::Env(other),
     }
+}
+
+/// Directory containing the injectable `lattice` Python package (parent of `lattice/`).
+pub fn shipped_lattice_py_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../packages/lattice-py")
+}
+
+/// Prepend the shipped SDK to `PYTHONPATH` and set `LATTICE_WORKSPACE` when known.
+fn inject_lattice_python_sdk(cmd: &mut Command, package_dir: &Path) {
+    let sdk_dir = shipped_lattice_py_dir();
+    let mut python_path = vec![sdk_dir];
+    if let Some(existing) = std::env::var_os("PYTHONPATH") {
+        for entry in std::env::split_paths(&existing) {
+            if !entry.as_os_str().is_empty() {
+                python_path.push(entry);
+            }
+        }
+    }
+    if let Ok(joined) = std::env::join_paths(&python_path) {
+        cmd.env("PYTHONPATH", joined);
+    }
+
+    let workspace_root = Workspace::discover(package_dir)
+        .ok()
+        .map(|ws| ws.root().to_path_buf())
+        .unwrap_or_else(|| package_dir.to_path_buf());
+    cmd.env("LATTICE_WORKSPACE", workspace_root);
 }
 
 /// Accept a `.task/` directory or a path to `task.yaml`.
@@ -807,5 +837,72 @@ exec sleep 30
         let out = runner.run(rel).expect("relative Hello.task should run");
         assert_eq!(out.exit_code, 0, "stderr={}", out.stderr);
         assert!(out.stdout.contains("ok"), "stdout={:?}", out.stdout);
+    }
+
+    #[test]
+    fn shipped_sdk_dir_contains_lattice_package() {
+        let dir = shipped_lattice_py_dir();
+        assert!(
+            dir.join("lattice").join("__init__.py").is_file(),
+            "missing SDK at {}",
+            dir.display()
+        );
+    }
+
+    /// Integration: ProposePage.task imports lattice and writes a proposal JSON.
+    #[test]
+    fn propose_page_fixture_writes_proposal_when_uv_available() {
+        let host_path = match std::env::var_os("PATH") {
+            Some(p) => p,
+            None => return,
+        };
+        if EnvProvider::with_path(host_path.clone())
+            .find_tool("uv")
+            .is_none()
+        {
+            return;
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        Workspace::init(dir.path(), "SDK Task Workspace").unwrap();
+        let fixture_src =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/ProposePage.task");
+        let pkg = dir.path().join("ProposePage.task");
+        copy_dir_recursive(&fixture_src, &pkg).expect("copy fixture");
+
+        let runner = TaskRunner::with_env(EnvProvider::with_path(host_path));
+        let out = runner.run(&pkg).expect("ProposePage.task should run");
+        assert_eq!(out.exit_code, 0, "stderr={}", out.stderr);
+        assert!(out.stdout.contains("ok"), "stdout={:?}", out.stdout);
+
+        let proposals = dir.path().join(".lattice").join("proposals");
+        assert!(proposals.is_dir(), "expected proposals dir");
+        let mut files: Vec<_> = fs::read_dir(&proposals)
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "json"))
+            .collect();
+        assert_eq!(files.len(), 1, "expected one proposal json");
+        let payload = fs::read_to_string(files.pop().unwrap().path()).unwrap();
+        assert!(
+            payload.contains("\"type\": \"page-create\"")
+                || payload.contains("\"type\":\"page-create\"")
+        );
+        assert!(payload.contains("Notes/FromSdk.task.md"));
+    }
+
+    fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
+        fs::create_dir_all(dst)?;
+        for entry in fs::read_dir(src)? {
+            let entry = entry?;
+            let ty = entry.file_type()?;
+            let to = dst.join(entry.file_name());
+            if ty.is_dir() {
+                copy_dir_recursive(&entry.path(), &to)?;
+            } else {
+                fs::copy(entry.path(), to)?;
+            }
+        }
+        Ok(())
     }
 }
