@@ -38,3 +38,11 @@ Regenerate the demo `Events.dataset` Parquet partition + annotation overlay:
 cargo run -p lattice-datasets --example seed_demo_events
 pnpm compile-templates
 ```
+
+Regenerate the synthetic retail `Orders.dataset` Hive Parquet facts (~3 000 rows,
+Jan–Mar 2026):
+
+```sh
+cargo run -p lattice-datasets --example seed_demo_orders
+pnpm compile-templates
+```
