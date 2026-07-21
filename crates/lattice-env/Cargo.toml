@@ -1,6 +1,6 @@
 [package]
 name = "lattice-env"
-description = "Shared environment resolution (system, uv-project, nix stub) for kernels and tasks"
+description = "Shared environment resolution (system, uv-project, nix) for kernels and tasks"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,6 +8,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
