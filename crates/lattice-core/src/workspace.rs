@@ -174,6 +174,8 @@ mod tests {
         std::fs::write(root.join("Board.canvas"), "{}").unwrap();
         std::fs::write(root.join("Analysis.ipynb"), "{}").unwrap();
         std::fs::write(root.join("Refresh.workflow.yaml"), "").unwrap();
+        std::fs::create_dir_all(root.join("Reports")).unwrap();
+        std::fs::write(root.join("Reports/Summary.derived.yaml"), "").unwrap();
         std::fs::write(root.join("photo.png"), []).unwrap();
         std::fs::create_dir_all(root.join("CRM.data")).unwrap();
         std::fs::write(root.join("CRM.data/app.yaml"), "").unwrap();
@@ -195,6 +197,10 @@ mod tests {
         assert_eq!(
             kind_of("Refresh.workflow.yaml"),
             Some(ResourceKind::Workflow)
+        );
+        assert_eq!(
+            kind_of("Reports/Summary.derived.yaml"),
+            Some(ResourceKind::Derived)
         );
         assert_eq!(kind_of("photo.png"), Some(ResourceKind::File));
         assert_eq!(kind_of("CRM.data"), Some(ResourceKind::DataApp));

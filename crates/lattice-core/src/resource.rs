@@ -30,6 +30,8 @@ pub enum ResourceKind {
     Workflow,
     /// Executable task package (`.task/`).
     Task,
+    /// Generated output with declared inputs and builder (`.derived.yaml`).
+    Derived,
     /// An ordinary directory (scaffolding / navigation). Empty folders from
     /// templates appear as this so the sidebar tree can show them before
     /// they contain pages.
@@ -82,6 +84,9 @@ impl ResourceKind {
         }
         if name.ends_with(".workflow.yaml") || name.ends_with(".workflow.yml") {
             return ResourceKind::Workflow;
+        }
+        if name.ends_with(".derived.yaml") || name.ends_with(".derived.yml") {
+            return ResourceKind::Derived;
         }
         match path.extension().and_then(|e| e.to_str()) {
             Some("md") | Some("markdown") => ResourceKind::Page,

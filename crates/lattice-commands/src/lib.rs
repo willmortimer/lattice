@@ -28,6 +28,7 @@ mod artifact;
 mod canvas;
 mod command;
 mod contracts;
+mod derived;
 mod engine;
 mod error;
 mod history;
@@ -40,9 +41,9 @@ mod trash;
 mod workflow;
 
 pub use artifact::{
-    is_safe_relative_path, resolve_manifest_path, ArtifactError, ArtifactFallback, ArtifactManifest,
-    ArtifactPermissions, ArtifactResult, ARTIFACT_FORMAT, ARTIFACT_MANIFEST_FILENAME,
-    SUPPORTED_VERSION as ARTIFACT_SUPPORTED_VERSION,
+    is_safe_relative_path, resolve_manifest_path, ArtifactError, ArtifactFallback,
+    ArtifactManifest, ArtifactPermissions, ArtifactResult, ARTIFACT_FORMAT,
+    ARTIFACT_MANIFEST_FILENAME, SUPPORTED_VERSION as ARTIFACT_SUPPORTED_VERSION,
 };
 pub use command::{
     path_remaps_from_commands, CanvasAddEdge, CanvasAddTextNode, CanvasMoveNodes, CanvasNodeMove,
@@ -53,6 +54,12 @@ pub use command::{
 pub use contracts::{
     BindingSpec, ExecutionResult, ExecutionStatus, ProposalSource, ProposalSourceType,
     ProposalStatus, ResourceOutput, TransactionProposal, TransactionProposalSummary,
+};
+pub use derived::{
+    derived_dir, hash_input_pattern, hash_inputs, lineage_path, load_derived_status, load_lineage,
+    rebuild_derived, save_lineage, DerivedBuilder, DerivedError, DerivedInputHash, DerivedLineage,
+    DerivedManifest, DerivedRefresh, DerivedResult, DerivedState, DerivedStatus, DERIVED_DIR,
+    DERIVED_FORMAT, SUPPORTED_VERSION as DERIVED_SUPPORTED_VERSION,
 };
 pub use engine::CommandEngine;
 pub use error::Error;
@@ -65,9 +72,9 @@ pub use link_repair::{
     LINK_REPAIR_DIR,
 };
 pub use proposal::{
-    apply_proposal, build_proposal_transaction, create_proposal, dismiss_proposal, load_proposal,
-    list_proposal_summaries, new_proposal_id, proposal_now_iso, proposals_dir, save_proposal,
-    PROPOSALS_DIR,
+    apply_proposal, build_proposal_transaction, create_proposal, dismiss_proposal,
+    list_proposal_summaries, load_proposal, new_proposal_id, proposal_now_iso, proposals_dir,
+    save_proposal, PROPOSALS_DIR,
 };
 pub use revisions::{
     ConflictEnvelope, HistoryCleanupCandidate, HistoryCleanupReport, HistoryRetentionPolicy,
@@ -88,8 +95,8 @@ pub use workflow::{
     resolve_workspace_path, run_workflow, save_workflow_run, set_workflow_enabled,
     workflow_runs_dir, workflows_dir, NotificationParams, ProposalCreateParams, TaskRunParams,
     WorkflowError, WorkflowManifest, WorkflowRunRecord, WorkflowStep, WorkflowStepResult,
-    WorkflowTrigger, SUPPORTED_VERSION as WORKFLOW_SUPPORTED_VERSION, WORKFLOW_FORMAT,
-    WORKFLOW_RUNS_DIR, WORKFLOWS_DIR,
+    WorkflowTrigger, SUPPORTED_VERSION as WORKFLOW_SUPPORTED_VERSION, WORKFLOWS_DIR,
+    WORKFLOW_FORMAT, WORKFLOW_RUNS_DIR,
 };
 
 /// Maximum byte size of one semantic resource edit.
