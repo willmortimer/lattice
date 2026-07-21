@@ -2,7 +2,10 @@ import { inBrowser } from "../demo";
 import { demoSearch } from "../demo";
 import { TabularImportReviewDialog } from "../data/CsvImportReviewDialog";
 import { LinkRepairReviewModal } from "../LinkRepairReviewModal";
+import { ProposalInboxPanel } from "../ProposalInboxPanel";
+import { ProposalReviewModal } from "../ProposalReviewModal";
 import { batchWarnThresholdExceeded } from "../lib/linkRepair";
+import { hasTauri } from "../lib/ipc";
 import { NewWorkspaceDialog } from "../NewWorkspaceDialog";
 import { CommandPalette } from "../CommandPalette";
 import { ResourceTree } from "../ResourceTree";
@@ -62,6 +65,8 @@ export function DesktopShell({ model }: DesktopShellProps) {
     treeCollapsedPaths, revealPath, linkPicker, csvImportReview,
     handleCancelCsvImport, handleConfirmCsvImport, handleCsvImportColumnTypeChange,
     linkRepairReview, handleLinkRepairAccept, handleLinkRepairDefer,
+    proposalSummaries, proposalReview, refreshProposalInbox, openProposalReview,
+    handleProposalAccept, handleProposalReject, handleProposalCancel, handleCreateDemoProposal,
     openTabs, navigation, inspectorOpen, editingTitle, titleDraft, assetRoot,
     wikiTargets, pageEditorRef, paletteItems, hasCapability, setSettings, setStartup, setError,
     recents, page, setSaveState, setLinkPicker, handleImportEditorAsset,
@@ -315,6 +320,15 @@ export function DesktopShell({ model }: DesktopShellProps) {
               onActiveFolderChange={setBrowserActiveFolderPath}
             />
           </nav>
+          {hasTauri && (
+            <ProposalInboxPanel
+              proposals={proposalSummaries}
+              busy={busy}
+              onRefresh={refreshProposalInbox}
+              onOpen={(proposalId) => void openProposalReview(proposalId)}
+              onCreateDemo={() => void handleCreateDemoProposal()}
+            />
+          )}
           <div className="sidebar-footer">
             <Button variant="ghost" size="sm" onClick={() => void openNewWorkspaceDialog()}>
               New workspace…
@@ -704,6 +718,15 @@ export function DesktopShell({ model }: DesktopShellProps) {
           }
           onAccept={(acceptedCandidateIds) => void handleLinkRepairAccept(acceptedCandidateIds)}
           onDefer={() => void handleLinkRepairDefer()}
+        />
+      )}
+      {proposalReview && (
+        <ProposalReviewModal
+          proposal={proposalReview}
+          busy={busy}
+          onAccept={(selectedCommandIndices) => void handleProposalAccept(selectedCommandIndices)}
+          onReject={() => void handleProposalReject()}
+          onCancel={handleProposalCancel}
         />
       )}
       {linkPicker && (

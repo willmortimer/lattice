@@ -16,6 +16,15 @@ import {
   deferLinkRepairProposal,
   getLinkRepairProposal,
 } from "../lib/linkRepair";
+import {
+  applyProposal,
+  createDemoProposal,
+  dismissProposal,
+  getProposal,
+  listProposals,
+  type TransactionProposal,
+  type TransactionProposalSummary,
+} from "../lib/proposals";
 import { installNativeContextMenus, isEditableTarget } from "../lib/nativeMenus";
 import { QUICK_NOTE_SHORTCUT, showQuickNote } from "../quickNoteWindow";
 import { applyResolvedTheme, loadThemeCatalog, setAppearanceMode, setFixedTheme, startThemeWatch, type ThemeCatalogPayload, type ThemeSummaryPayload } from "../theme";
@@ -71,6 +80,11 @@ export function useDesktopController() {
   const [linkRepairReview, setLinkRepairReview] = useState<LinkRepairReviewRequest | null>(null);
   const linkRepairResolverRef = useRef<
     ((result: "accepted" | "deferred" | "cancelled") => void) | null
+  >(null);
+  const [proposalSummaries, setProposalSummaries] = useState<TransactionProposalSummary[]>([]);
+  const [proposalReview, setProposalReview] = useState<TransactionProposal | null>(null);
+  const proposalResolverRef = useRef<
+    ((result: "accepted" | "rejected" | "cancelled") => void) | null
   >(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -287,6 +301,102 @@ export function useDesktopController() {
       setError(String(err));
     }
   }, [onLinkRepairReview]);
+
+  const refreshProposalInbox = useCallback(async () => {
+    const root = snapshotRef.current?.root;
+    if (!root || !hasTauri) {
+      setProposalSummaries([]);
+      return;
+    }
+    try {
+      setProposalSummaries(await listProposals(root));
+    } catch (err) {
+      setError(String(err));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!snapshot?.root || !hasTauri) {
+      setProposalSummaries([]);
+      return;
+    }
+    void refreshProposalInbox();
+  }, [snapshot?.root, refreshProposalInbox]);
+
+  const finishProposalReview = useCallback((result: "accepted" | "rejected" | "cancelled") => {
+    proposalResolverRef.current?.(result);
+    proposalResolverRef.current = null;
+    setProposalReview(null);
+  }, []);
+
+  const openProposalReview = useCallback(async (proposalId: string) => {
+    const root = snapshotRef.current?.root;
+    if (!root) return;
+    try {
+      const proposal = await getProposal(root, proposalId);
+      await new Promise<"accepted" | "rejected" | "cancelled">((resolve) => {
+        proposalResolverRef.current = resolve;
+        setProposalReview(proposal);
+      });
+    } catch (err) {
+      setError(String(err));
+    }
+  }, []);
+
+  const handleProposalAccept = useCallback(async (selectedCommandIndices: number[]) => {
+    const review = proposalReview;
+    const root = snapshotRef.current?.root;
+    if (!review || !root) return;
+    setBusy(true);
+    try {
+      await applyProposal(root, review.id, selectedCommandIndices);
+      finishProposalReview("accepted");
+      await refreshResources();
+      await refreshProposalInbox();
+      setStatusToast("Proposal applied");
+    } catch (err) {
+      setError(String(err));
+      finishProposalReview("cancelled");
+    } finally {
+      setBusy(false);
+    }
+  }, [finishProposalReview, proposalReview, refreshProposalInbox, refreshResources]);
+
+  const handleProposalReject = useCallback(async () => {
+    const review = proposalReview;
+    const root = snapshotRef.current?.root;
+    if (!review || !root) return;
+    setBusy(true);
+    try {
+      await dismissProposal(root, review.id);
+      finishProposalReview("rejected");
+      await refreshProposalInbox();
+    } catch (err) {
+      setError(String(err));
+      finishProposalReview("cancelled");
+    } finally {
+      setBusy(false);
+    }
+  }, [finishProposalReview, proposalReview, refreshProposalInbox]);
+
+  const handleProposalCancel = useCallback(() => {
+    finishProposalReview("cancelled");
+  }, [finishProposalReview]);
+
+  const handleCreateDemoProposal = useCallback(async () => {
+    const root = snapshotRef.current?.root;
+    if (!root || !hasTauri) return;
+    setBusy(true);
+    try {
+      await createDemoProposal(root);
+      await refreshProposalInbox();
+      setStatusToast("Demo proposal created");
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  }, [refreshProposalInbox]);
 
   const resourceController = useResourceController({
     snapshot,
@@ -772,6 +882,8 @@ export function useDesktopController() {
     profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth, treeCollapsedPaths, revealPath, linkPicker,
     csvImportReview, handleCancelCsvImport, handleConfirmCsvImport, handleCsvImportColumnTypeChange,
     linkRepairReview, handleLinkRepairAccept, handleLinkRepairDefer,
+    proposalSummaries, proposalReview, refreshProposalInbox, openProposalReview,
+    handleProposalAccept, handleProposalReject, handleProposalCancel, handleCreateDemoProposal,
     openTabs, navigation, inspectorOpen, editingTitle, titleDraft, assetRoot, wikiTargets, pageEditorRef,
     recents, page, currentPageRevisionRef,
     paletteItems, hasCapability, setSettings, setStartup, setError,

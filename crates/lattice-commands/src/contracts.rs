@@ -7,8 +7,6 @@
 //! - **Proposals** ([`TransactionProposal`]): reviewable bundles of commands
 //!   produced by tasks, MCP, or external agents before they are applied.
 
-use std::path::PathBuf;
-
 use serde::{Deserialize, Serialize};
 
 use crate::Command;
@@ -74,6 +72,20 @@ pub struct ProposalSource {
     pub resource: Option<String>,
 }
 
+/// Lifecycle state of a persisted [`TransactionProposal`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ProposalStatus {
+    #[default]
+    Pending,
+    Accepted,
+    Rejected,
+}
+
+fn is_pending(status: &ProposalStatus) -> bool {
+    matches!(status, ProposalStatus::Pending)
+}
+
 /// A reviewable bundle of semantic commands before application.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -87,11 +99,46 @@ pub struct TransactionProposal {
     pub warnings: Vec<String>,
     /// ISO-8601 timestamp when the proposal was created.
     pub created_at: String,
+    /// Review lifecycle; omitted in older payloads defaults to pending.
+    #[serde(default, skip_serializing_if = "is_pending")]
+    pub status: ProposalStatus,
+}
+
+/// Inbox row for a persisted proposal (no command payloads).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransactionProposalSummary {
+    pub id: String,
+    pub source: ProposalSource,
+    pub summary: String,
+    pub command_count: usize,
+    pub affected_paths: Vec<String>,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+    pub created_at: String,
+    pub status: ProposalStatus,
+}
+
+impl TransactionProposal {
+    /// Compact list row derived from a full proposal.
+    pub fn summary(&self) -> TransactionProposalSummary {
+        TransactionProposalSummary {
+            id: self.id.clone(),
+            source: self.source.clone(),
+            summary: self.summary.clone(),
+            command_count: self.commands.len(),
+            affected_paths: self.affected_paths.clone(),
+            warnings: self.warnings.clone(),
+            created_at: self.created_at.clone(),
+            status: self.status,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     #[test]
     fn execution_result_json_round_trip() {
@@ -136,14 +183,32 @@ mod tests {
             affected_paths: vec!["Notes/Welcome.md".into()],
             warnings: vec!["dry-run only".into()],
             created_at: "2026-07-21T16:30:00Z".into(),
+            status: ProposalStatus::Pending,
         };
 
         let json = serde_json::to_string(&proposal).unwrap();
         assert!(json.contains("\"affectedPaths\""));
         assert!(json.contains("\"type\":\"page-create\""));
+        // Pending status is omitted (additive default).
+        assert!(!json.contains("\"status\""));
         assert_eq!(
             serde_json::from_str::<TransactionProposal>(&json).unwrap(),
             proposal
         );
+    }
+
+    #[test]
+    fn transaction_proposal_status_defaults_when_absent() {
+        let json = r#"{
+            "id":"prop-2",
+            "source":{"type":"external"},
+            "summary":"Legacy",
+            "commands":[],
+            "affectedPaths":[],
+            "createdAt":"2026-07-21T16:30:00Z"
+        }"#;
+        let proposal: TransactionProposal = serde_json::from_str(json).unwrap();
+        assert_eq!(proposal.status, ProposalStatus::Pending);
+        assert_eq!(proposal.summary().command_count, 0);
     }
 }

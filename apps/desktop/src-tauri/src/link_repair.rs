@@ -239,7 +239,7 @@ fn batch_link_repair_transaction_summary(move_count: usize, repair_count: usize)
     format!("Move {move_count} resources with {repair_count} link repair(s)")
 }
 
-fn apply_transaction(root: &str, tx: Transaction) -> Result<(), String> {
+pub(crate) fn apply_transaction(root: &str, tx: Transaction) -> Result<(), String> {
     let mut engine = CommandEngine::open(Path::new(root)).map_err(command_error_to_string)?;
     engine.apply(tx).map_err(command_error_to_string)?;
     Ok(())
