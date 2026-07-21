@@ -33,6 +33,13 @@ describe("createDefaultResourceRendererRegistry", () => {
     expect(registry.resolve({ kind: "workflow", path: "Simple.workflow.yaml" }).definition.id).toBe(
       "workflow-viewer",
     );
+    expect(registry.resolve({ kind: "artifact", path: "Artifacts/Pulse.artifact" }).definition.id).toBe(
+      "artifact-sandbox",
+    );
+    expect(
+      registry.resolve({ kind: "artifact", path: "Artifacts/Pulse.artifact" }, [], undefined, "embed")
+        .definition.id,
+    ).toBe("artifact-sandbox");
     expect(
       registry.resolve({ kind: "notebook", path: "Notebooks/CRM exploration.ipynb" }, ["pages", "canvas"]).mode,
     ).toBe("native");

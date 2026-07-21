@@ -340,6 +340,33 @@ partial page cards on a canvas) are **not** specified yet. Do not overload
 page file nodes open the full page, and low-zoom LOD uses thumbnails /
 summaries per [canvas and composition](./08-canvas-and-composition.md).
 
+## Artifacts and live embeds (Phase E1)
+
+`.artifact/` packages declare `format: lattice-artifact` in `artifact.yaml`
+with an HTML `entrypoint`, named `BindingSpec` bindings, deny-by-default
+`permissions.network: []`, and an optional `fallback`.
+
+Desktop:
+
+- Session kind `artifact` loads the validated manifest via
+  `artifact_load_manifest`.
+- `ArtifactResourceRenderer` mounts a sandboxed iframe
+  (`sandbox="allow-scripts"`, no ambient Tauri) and mirrors `--lt-*` theme
+  tokens through a narrow postMessage bridge (`lattice.artifact.*`).
+- Named bindings resolve read-only through `artifact_resolve_binding`
+  (`sqlite-query` → `DataApp::query_sql_scalar`; resource / saved-view return
+  path metadata; other BindingSpec variants are unsupported in v1).
+- Off-screen iframes suspend via IntersectionObserver.
+
+`RendererSurface` includes `main | embed | inspect | canvas | interface`.
+Artifacts register on `main` and `embed`. Interactive
+`:::lattice-embed` (`mode: interactive`) mounts the shared artifact sandbox
+inline; `mode: card` (default) keeps the existing card preview for pages and
+other kinds.
+
+First Look seed: `Artifacts/ContactPulse.artifact` binds `contactCount` to
+`CRM.data`.
+
 ## Conformance fixtures
 
 Mixed-format fixtures live under `test/fixtures/resource-runtime/`. The Rust

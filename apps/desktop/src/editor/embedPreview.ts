@@ -8,7 +8,15 @@ import { splitFrontmatter } from "./markdown";
 
 export const DEFAULT_EMBED_EXCERPT_LINES = 8;
 
-export type EmbedPreviewKind = "page" | "image" | "pdf" | "data-app" | "unknown";
+export type EmbedPreviewKind =
+  | "page"
+  | "image"
+  | "pdf"
+  | "data-app"
+  | "artifact"
+  | "interface"
+  | "task"
+  | "unknown";
 
 export interface EmbedPreviewContext {
   root: string | null;
@@ -20,6 +28,7 @@ export interface EmbedPreviewAttrs {
   view?: string | null;
   height?: string | null;
   lines?: string | null;
+  mode?: string | null;
 }
 
 export interface DataAppEmbedTarget {
@@ -129,6 +138,9 @@ export function inferEmbedKind(
   resolvedPath: string,
 ): EmbedPreviewKind {
   const normalized = resolvedPath.replace(/\\/g, "/").toLowerCase();
+  if (normalized.includes(".artifact")) return "artifact";
+  if (normalized.includes(".task")) return "task";
+  if (normalized.includes(".interface.yaml") || /\/interfaces\//.test(normalized)) return "interface";
   if (normalized.includes(".data")) return "data-app";
 
   if (inspection) {
@@ -218,6 +230,10 @@ export async function loadEmbedPreview(
       return { kind, resolvedPath, label };
     case "data-app":
       return loadDataAppPreview(attrs, context.root, resolvedPath, signal, runtime);
+    case "artifact":
+    case "interface":
+    case "task":
+      return { kind, resolvedPath, label };
     default:
       return { kind, resolvedPath, label };
   }

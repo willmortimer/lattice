@@ -1,6 +1,7 @@
 import type { DataAppSnapshot } from "./data/types";
 import type { InterfaceSummary } from "./data/interfaces";
 import type { PageIO } from "./editor/pageIO";
+import type { ArtifactManifestDto } from "./lib/artifactRun";
 import type { ResourceEncoding, ResourceInspection } from "./lib/resourceRuntime";
 import type { TaskManifestDto } from "./lib/taskRun";
 import type { WorkflowManifestDto } from "./lib/workflowRun";
@@ -67,6 +68,11 @@ export type OpenResourceSession =
       kind: "workflow";
       resource: Resource;
       manifest: WorkflowManifestDto;
+    }
+  | {
+      kind: "artifact";
+      resource: Resource;
+      manifest: ArtifactManifestDto;
     }
   | {
       kind: "unknown";

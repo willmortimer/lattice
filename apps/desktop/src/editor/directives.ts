@@ -4,6 +4,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 export const LATTICE_EMBED_KNOWN_KEYS = [
   "resource",
   "view",
+  "mode",
   "height",
   "lines",
   "fallback",
@@ -11,15 +12,30 @@ export const LATTICE_EMBED_KNOWN_KEYS = [
 
 export type LatticeEmbedKnownKey = (typeof LATTICE_EMBED_KNOWN_KEYS)[number];
 
+/** Embed presentation mode (docs/07). Default `card`. */
+export type LatticeEmbedMode = "card" | "preview" | "interactive";
+
+export const LATTICE_EMBED_MODES: readonly LatticeEmbedMode[] = ["card", "preview", "interactive"];
+
 export interface LatticeEmbedAttrs {
   resource: string;
   view: string | null;
+  mode: LatticeEmbedMode | null;
   height: string | null;
   lines: string | null;
   fallback: string | null;
   extraFields: Record<string, string>;
   /** Unknown keys in source order for stable serialization. */
   extraFieldKeys: string[];
+}
+
+/** Parse `mode` attr; unknown values fall back to card. */
+export function parseEmbedMode(value: string | null | undefined): LatticeEmbedMode {
+  const trimmed = value?.trim().toLowerCase();
+  if (trimmed === "preview" || trimmed === "interactive" || trimmed === "card") {
+    return trimmed;
+  }
+  return "card";
 }
 
 /** Parse the YAML-like body between directive fences into string fields. */
@@ -58,9 +74,11 @@ export function latticeEmbedAttrsFromFields(fields: Record<string, string>): Lat
     }
   }
 
+  const modeRaw = fields.mode?.trim() || null;
   return {
     resource: fields.resource ?? "",
     view: fields.view ?? null,
+    mode: modeRaw ? parseEmbedMode(modeRaw) : null,
     height: fields.height ?? null,
     lines: fields.lines ?? null,
     fallback: fields.fallback ?? null,

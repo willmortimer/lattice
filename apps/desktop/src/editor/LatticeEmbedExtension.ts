@@ -12,6 +12,7 @@ export const LatticeEmbed = Node.create({
     return {
       resource: { default: "" },
       view: { default: null },
+      mode: { default: null },
       height: { default: null },
       lines: { default: null },
       fallback: { default: null },
