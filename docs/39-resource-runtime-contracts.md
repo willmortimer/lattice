@@ -367,6 +367,31 @@ other kinds.
 First Look seed: `Artifacts/ContactPulse.artifact` binds `contactCount` to
 `CRM.data`.
 
+## Relationship / lineage graph (Inspect)
+
+`RelationshipEdge` (`from`, `to`, `kind`) is the shared contract in
+[`docs/internal/shared-contracts.md`](./internal/shared-contracts.md). Kinds:
+
+`link` · `embed` · `relation` · `binding` · `input` · `output` · `workflow` ·
+`canvas` · `semantic`
+
+| Surface | Contract |
+|---|---|
+| Core | `lattice_commands::list_relationship_edges(root, focus_path?, kinds?)` |
+| IPC | `list_relationship_edges_cmd` → camelCase JSON edges |
+| Desktop | Inspect → **graph**: 1-hop neighborhood around the focused resource |
+| Modes | Knowledge (`link`/`embed`), Data (`relation`/`binding`), Execution (`input`/`output`/`workflow`), All |
+| Honesty | `semantic` is reserved and returns empty until a similarity provider ships |
+
+Extractors are additive file/manifest scanners (wiki links and
+`:::lattice-embed`, `.data` relation columns, artifact/interface
+`BindingSpec` paths, derived inputs/outputs, workflow step/trigger refs,
+canvas file-node edges). They do not invent edges for unimplemented kinds.
+
+Demo seeds such as `Derived/ContactBrief.derived.yaml` and
+`Automations/Contact intake.workflow.yaml` become discoverable as
+execution-mode neighborhoods when those resources are focused.
+
 ## Conformance fixtures
 
 Mixed-format fixtures live under `test/fixtures/resource-runtime/`. The Rust

@@ -5279,6 +5279,96 @@ html[data-motion="always"] *::after {
   background: var(--lt-hover);
 }
 
+.inspector-graph {
+  display: grid;
+  gap: 10px;
+}
+
+.inspector-graph-focus {
+  margin: 0;
+  color: var(--lt-faint);
+  font-size: 10.5px;
+}
+
+.inspector-graph-focus code {
+  color: var(--lt-text-soft);
+  font-family: var(--lt-font-mono);
+  font-size: 10.5px;
+}
+
+.inspector-graph-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.inspector-graph-modes button {
+  padding: 4px 8px;
+  border: 1px solid var(--lt-line);
+  border-radius: 5px;
+  color: var(--lt-text-soft);
+  background: var(--lt-bg);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.inspector-graph-modes button:hover,
+.inspector-graph-modes .inspector-section-active {
+  border-color: var(--lt-accent-deep);
+  color: var(--lt-text);
+  background: var(--lt-accent-wash);
+}
+
+.inspector-graph-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.inspector-graph-edge {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid var(--lt-line);
+  border-radius: 5px;
+  color: inherit;
+  background: var(--lt-bg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.inspector-graph-edge:hover {
+  background: var(--lt-hover);
+}
+
+.inspector-graph-kind {
+  color: var(--lt-accent);
+  font-family: var(--lt-font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.inspector-graph-dir {
+  color: var(--lt-faint);
+  font-family: var(--lt-font-mono);
+  font-size: 11px;
+}
+
+.inspector-graph-neighbor {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--lt-text-soft);
+  font-family: var(--lt-font-mono);
+  font-size: 10.5px;
+}
+
 .history-list {
   display: grid;
   gap: 4px;
