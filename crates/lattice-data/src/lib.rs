@@ -5,6 +5,7 @@
 
 mod action;
 mod app;
+mod binding;
 mod tabular;
 mod csv;
 mod data_app;
@@ -40,8 +41,10 @@ pub use formula::{evaluate_formula, formula_field_refs, validate_formula_syntax,
 pub use error::Error;
 pub use relation_target::{parse_relation_target, RelationTarget};
 pub use form::{save_form, write_package_form, FormDef, FORM_FILE_SUFFIX, FORM_FORMAT, FORM_VERSION};
+pub use binding::BindingSpec;
 pub use interface::{
-    write_package_interface, InterfaceDef, INTERFACE_FILE_SUFFIX, INTERFACE_FORMAT,
+    write_package_interface, InterfaceComponent, InterfaceComponentType, InterfaceDef,
+    InterfaceLayout, InterfaceParameter, INTERFACE_FILE_SUFFIX, INTERFACE_FORMAT,
     INTERFACE_VERSION,
 };
 pub use types::{

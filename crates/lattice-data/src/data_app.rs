@@ -636,6 +636,64 @@ impl DataApp {
         Ok(interface)
     }
 
+    /// Run a bounded read-only `SELECT`/`WITH` and return the first cell as JSON.
+    ///
+    /// Used by interface metric cards (`sqlite-query` bindings). Mutating SQL is refused.
+    pub fn query_sql_scalar(
+        &self,
+        sql: &str,
+        limit: usize,
+    ) -> Result<(Option<String>, Option<serde_json::Value>)> {
+        let trimmed = sql.trim();
+        if trimmed.is_empty() {
+            return Err(Error::InvalidPackage {
+                path: self.path.clone(),
+                message: "sql must not be empty".to_string(),
+            });
+        }
+        let lowered = trimmed.to_ascii_lowercase();
+        if !(lowered.starts_with("select") || lowered.starts_with("with")) {
+            return Err(Error::InvalidPackage {
+                path: self.path.clone(),
+                message: "only SELECT / WITH queries are allowed".to_string(),
+            });
+        }
+        let forbidden = [
+            " insert ", " update ", " delete ", " drop ", " alter ", " attach ", " pragma ",
+        ];
+        let padded = format!(" {lowered} ");
+        if forbidden.iter().any(|token| padded.contains(token)) {
+            return Err(Error::InvalidPackage {
+                path: self.path.clone(),
+                message: "mutating or privileged SQL is not allowed".to_string(),
+            });
+        }
+        let limit = limit.clamp(1, 100);
+        let mut stmt = self.conn.prepare(trimmed)?;
+        let column = stmt.column_name(0).ok().map(str::to_string);
+        let mut rows = stmt.query([])?;
+        let mut seen = 0usize;
+        while let Some(row) = rows.next()? {
+            seen += 1;
+            if seen > limit {
+                break;
+            }
+            let value: rusqlite::types::Value = row.get(0)?;
+            let json = match value {
+                rusqlite::types::Value::Null => serde_json::Value::Null,
+                rusqlite::types::Value::Integer(v) => serde_json::json!(v),
+                rusqlite::types::Value::Real(v) => serde_json::json!(v),
+                rusqlite::types::Value::Text(v) => serde_json::json!(v),
+                rusqlite::types::Value::Blob(_) => serde_json::json!("<blob>"),
+            };
+            return Ok((
+                column,
+                if json.is_null() { None } else { Some(json) },
+            ));
+        }
+        Ok((column, None))
+    }
+
     /// Serialize an interface definition to YAML.
     pub fn render_interface_yaml(&self, interface: &InterfaceDef) -> Result<String> {
         interface.to_yaml()
@@ -678,6 +736,33 @@ impl DataApp {
                     path: interface_path(&self.path, &interface.name),
                     message: format!("interface references unknown form {form:?}"),
                 });
+            }
+        }
+        for component in &interface.components {
+            if let Some(form) = component.form.as_deref() {
+                if !form_names.contains(form) {
+                    return Err(Error::InvalidPackage {
+                        path: interface_path(&self.path, &interface.name),
+                        message: format!(
+                            "interface component {:?} references unknown form {form:?}",
+                            component.id
+                        ),
+                    });
+                }
+            }
+            if let Some(crate::binding::BindingSpec::SavedView { resource, view }) =
+                &component.binding
+            {
+                // Same-package bindings use "" or "."; cross-package views resolve at render time.
+                if (resource.is_empty() || resource == ".") && !view_names.contains(view.as_str()) {
+                    return Err(Error::InvalidPackage {
+                        path: interface_path(&self.path, &interface.name),
+                        message: format!(
+                            "interface component {:?} references unknown view {view:?}",
+                            component.id
+                        ),
+                    });
+                }
             }
         }
         Ok(())

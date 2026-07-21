@@ -176,6 +176,8 @@ pub fn run() {
             data::load_data_action,
             data::list_data_interfaces,
             data::load_data_interface,
+            data::save_data_interface,
+            data::query_data_sql_scalar,
             data::import_csv_table,
             data::preview_tabular_import,
             data::commit_tabular_import,

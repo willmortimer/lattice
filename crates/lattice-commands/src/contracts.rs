@@ -11,6 +11,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::Command;
 
+// Re-export the shared binding contract so IPC consumers can depend on
+// `lattice_commands::BindingSpec` alongside ExecutionResult / proposals.
+pub use lattice_data::BindingSpec;
+
 /// A workspace resource produced or updated by an execution.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -210,5 +214,19 @@ mod tests {
         let proposal: TransactionProposal = serde_json::from_str(json).unwrap();
         assert_eq!(proposal.status, ProposalStatus::Pending);
         assert_eq!(proposal.summary().command_count, 0);
+    }
+
+    #[test]
+    fn binding_spec_json_round_trip_via_commands() {
+        let binding = BindingSpec::SavedView {
+            resource: "CRM.data".into(),
+            view: "Board".into(),
+        };
+        let json = serde_json::to_string(&binding).unwrap();
+        assert!(json.contains("\"type\":\"saved-view\""));
+        assert_eq!(
+            serde_json::from_str::<BindingSpec>(&json).unwrap(),
+            binding
+        );
     }
 }

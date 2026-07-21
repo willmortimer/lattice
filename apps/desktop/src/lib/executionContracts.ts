@@ -7,7 +7,21 @@
  *   and materialized outputs.
  * - **Proposals** (`TransactionProposal`): reviewable command bundles produced
  *   by tasks, MCP, or external agents before application.
+ * - **Bindings** (`BindingSpec`): how interface/embed components load data.
  */
+
+export type {
+  BindingSpec,
+  InterfaceComponent,
+  InterfaceComponentType,
+  InterfaceDef,
+  InterfaceLayout,
+  InterfaceParameter,
+} from "./bindingSpec";
+export {
+  interfaceHasDashboardComponents,
+  isBindingSpec,
+} from "./bindingSpec";
 
 export interface ResourceOutput {
   path: string;

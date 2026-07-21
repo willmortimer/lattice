@@ -84,6 +84,9 @@ pub(crate) struct SeedDataInterface {
     pub forms: &'static [&'static str],
     pub title: Option<&'static str>,
     pub description: Option<&'static str>,
+    pub layout_columns: Option<u32>,
+    /// JSON array of interface components (optional dashboard layout).
+    pub components_json: Option<&'static str>,
 }
 
 #[derive(Debug)]
@@ -1133,10 +1136,21 @@ fn materialize_seed_interface(
     known_views: &std::collections::HashSet<&str>,
     known_forms: &std::collections::HashSet<&str>,
 ) -> Result<()> {
-    if seed.views.is_empty() && seed.forms.is_empty() {
+    let components: Vec<lattice_data::InterfaceComponent> = match seed.components_json {
+        Some(json) if !json.trim().is_empty() => serde_json::from_str(json).map_err(|error| {
+            Error::TemplateValidation {
+                message: format!(
+                    "data package {package_path_label} interface {:?} has invalid components JSON: {error}",
+                    seed.name
+                ),
+            }
+        })?,
+        _ => Vec::new(),
+    };
+    if seed.views.is_empty() && seed.forms.is_empty() && components.is_empty() {
         return Err(Error::TemplateValidation {
             message: format!(
-                "data package {package_path_label} interface {:?} must bind at least one view or form",
+                "data package {package_path_label} interface {:?} must bind at least one view, form, or component",
                 seed.name
             ),
         });
@@ -1166,6 +1180,10 @@ fn materialize_seed_interface(
     interface.forms = seed.forms.iter().map(|form| (*form).to_string()).collect();
     interface.title = seed.title.map(str::to_string);
     interface.description = seed.description.map(str::to_string);
+    if let Some(columns) = seed.layout_columns {
+        interface.layout = Some(lattice_data::InterfaceLayout { columns });
+    }
+    interface.components = components;
     write_package_interface(package_path, &interface).map_err(map_data_error)
 }
 

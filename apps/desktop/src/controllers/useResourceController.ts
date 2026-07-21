@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { demoCanvas, demoDataApp, demoDataApps, demoNotebooks, demoPages, demoTextFiles, inBrowser } from "../demo";
+import type { InterfaceSummary } from "../data/interfaces";
 import type { DataAppSnapshot } from "../data/types";
 import { createDemoPageIO, createNativePageIO } from "../editor/pageIO";
 import { readNativeCanvas } from "../canvas/adapter";
@@ -54,7 +55,12 @@ export interface ResourceController {
   pageRef: MutableRefObject<Extract<OpenResourceSession, { kind: "page" }> | null>;
   currentPageRevisionRef: MutableRefObject<string | null>;
   reloadToken: number;
-  handleSelect: (resource: Resource, options?: { recordHistory?: boolean; syncTreeSelection?: boolean; viewName?: string }) => Promise<void>;
+  handleSelect: (resource: Resource, options?: {
+    recordHistory?: boolean;
+    syncTreeSelection?: boolean;
+    viewName?: string;
+    interfaceDef?: InterfaceSummary;
+  }) => Promise<void>;
   applyTreeSelection: (detail: {
     paths: ReadonlySet<string>;
     primary: Resource | null;
@@ -181,7 +187,12 @@ export function useResourceController(options: ResourceControllerOptions): Resou
 
   const handleSelect = useCallback(async (
     resource: Resource,
-    selectionOptions: { recordHistory?: boolean; syncTreeSelection?: boolean; viewName?: string } = {},
+    selectionOptions: {
+      recordHistory?: boolean;
+      syncTreeSelection?: boolean;
+      viewName?: string;
+      interfaceDef?: InterfaceSummary;
+    } = {},
   ) => {
     const workspace = snapshotRef.current ?? snapshot;
     if (resource.kind === "folder") return;
@@ -234,6 +245,7 @@ export function useResourceController(options: ResourceControllerOptions): Resou
         return;
       }
       const viewName = selectionOptions.viewName ?? null;
+      const interfaceDef = selectionOptions.interfaceDef;
       if (inBrowser) {
         if (isCurrentLoad(ticket)) {
           const base = demoDataApps[resource.path] ?? demoDataApp;
@@ -241,7 +253,11 @@ export function useResourceController(options: ResourceControllerOptions): Resou
             viewName && base.available_views.includes(viewName)
               ? { ...base, active_view: viewName }
               : base;
-          setSession({ kind: "data-app", resource, snapshot });
+          if (interfaceDef) {
+            setSession({ kind: "interface", resource, snapshot, interfaceDef });
+          } else {
+            setSession({ kind: "data-app", resource, snapshot });
+          }
         }
         return;
       }
@@ -252,7 +268,13 @@ export function useResourceController(options: ResourceControllerOptions): Resou
           relPath: resource.path,
           viewName,
         });
-        if (isCurrentLoad(ticket)) setSession({ kind: "data-app", resource, snapshot: opened });
+        if (isCurrentLoad(ticket)) {
+          if (interfaceDef) {
+            setSession({ kind: "interface", resource, snapshot: opened, interfaceDef });
+          } else {
+            setSession({ kind: "data-app", resource, snapshot: opened });
+          }
+        }
       } catch (error) {
         if (isCurrentLoad(ticket)) onError(String(error));
       } finally {

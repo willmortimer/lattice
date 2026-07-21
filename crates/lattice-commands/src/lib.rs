@@ -44,8 +44,8 @@ pub use command::{
     Transaction, TransactionReceipt, UndoReport,
 };
 pub use contracts::{
-    ExecutionResult, ExecutionStatus, ProposalSource, ProposalSourceType, ProposalStatus,
-    ResourceOutput, TransactionProposal, TransactionProposalSummary,
+    BindingSpec, ExecutionResult, ExecutionStatus, ProposalSource, ProposalSourceType,
+    ProposalStatus, ResourceOutput, TransactionProposal, TransactionProposalSummary,
 };
 pub use engine::CommandEngine;
 pub use error::Error;
