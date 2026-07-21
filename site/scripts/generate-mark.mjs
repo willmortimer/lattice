@@ -166,12 +166,13 @@ function appIconSvg() {
 // tile background. NSImage template mode tints this to match the menu bar.
 function trayTemplateSvg() {
   const viewSize = 64;
-  const scale = 22;
-  const stroke = 2.4;
+  // Larger mark + heavier strokes so the status item reads at menu-bar size.
+  const scale = 27;
+  const stroke = 3.2;
   const { pt, path } = layout(viewSize, scale);
   const [cx, cy] = pt(CENTER);
   const dots = VERTICES.map(pt)
-    .map(([x, y]) => `<circle cx="${x}" cy="${y}" r="${r2(scale * 0.11)}"/>`)
+    .map(([x, y]) => `<circle cx="${x}" cy="${y}" r="${r2(scale * 0.12)}"/>`)
     .join("");
   return `<svg width="${viewSize}" height="${viewSize}" viewBox="0 0 ${viewSize} ${viewSize}" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lattice">
   <!-- Template mark: black + alpha only. Do not add a rounded tile. -->
@@ -182,7 +183,7 @@ function trayTemplateSvg() {
     <path d="${path(NEAR)}" stroke-width="${stroke}" opacity="1"/>
   </g>
   <g fill="#000">${dots}</g>
-  <circle cx="${cx}" cy="${cy}" r="${r2(scale * 0.16)}" fill="#000"/>
+  <circle cx="${cx}" cy="${cy}" r="${r2(scale * 0.17)}" fill="#000"/>
 </svg>
 `;
 }
@@ -244,8 +245,8 @@ function strokeCoverage(dist, halfWidth) {
 }
 
 function rasterizeTrayTemplate(size) {
-  const scale = size * (22 / 64);
-  const stroke = size * (2.4 / 64);
+  const scale = size * (27 / 64);
+  const stroke = size * (3.2 / 64);
   const { pt } = layout(size, scale);
   const segs = (pairs) => pairs.map(([a, b]) => [pt(a), pt(b)]);
   const layers = [
@@ -256,8 +257,8 @@ function rasterizeTrayTemplate(size) {
   ];
   const dots = [...VERTICES.map(pt), pt(CENTER)];
   const nodeR = [
-    ...VERTICES.map(() => scale * 0.11),
-    scale * 0.16,
+    ...VERTICES.map(() => scale * 0.12),
+    scale * 0.17,
   ];
 
   const rgba = Buffer.alloc(size * size * 4);

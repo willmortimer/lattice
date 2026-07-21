@@ -84,10 +84,12 @@ Desktop setting `services.keepAppInMenuBar` (Settings → Performance & lifecycl
 controls main-window close behavior:
 
 - **On:** closing the main window **hides** it; the process stays resident with a
-  tray menu (Show Lattice, Quick Note, Quit). The dock icon remains (not
-  `LSUIElement` accessory-only mode). The menu-bar status item uses a
-  monochrome template mark (`tray-template.png`), not the full-color app icon.
-  Global Quick Note shortcuts keep working while the main window is hidden.
+  tray menu (Show Lattice, Quick Note, New Page, Search, Settings, Open
+  Workspace, Quit). The dock icon remains (not `LSUIElement` accessory-only
+  mode). The menu-bar status item uses a monochrome template mark
+  (`tray-template.png`), not the full-color app icon. Global Quick Note
+  shortcuts keep working while the main window is hidden. The native **Lattice**
+  menu (far left) includes Settings… (⌘,) alongside About / Hide / Quit.
 - **Off:** closing the main window quits the app.
 - **Not a login item:** this preference does not install a Launch Agent or
   helper that starts Lattice at login. Use the tray Quit item for a full exit.

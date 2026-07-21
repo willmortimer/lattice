@@ -1,11 +1,11 @@
 <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lattice">
   <!-- Template mark: black + alpha only. Do not add a rounded tile. -->
   <g stroke="#000" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M32 32L51.05 43M32 32L32 10M32 32L12.95 43" stroke-width="1.68" opacity="0.35"/>
-    <path d="M41.53 15.5L22.47 26.5M22.47 15.5L41.53 26.5M51.05 32L32 43M41.53 48.5L41.53 26.5M22.47 48.5L22.47 26.5M12.95 32L32 43" stroke-width="1.8" opacity="0.5"/>
-    <path d="M32 10L51.05 21M51.05 21L51.05 43M51.05 43L32 54M32 54L12.95 43M12.95 43L12.95 21M12.95 21L32 10" stroke-width="2.4" opacity="0.95"/>
-    <path d="M32 32L51.05 21M32 32L12.95 21M32 32L32 54" stroke-width="2.4" opacity="1"/>
+    <path d="M32 32L55.38 45.5M32 32L32 5M32 32L8.62 45.5" stroke-width="2.24" opacity="0.35"/>
+    <path d="M43.69 11.75L20.31 25.25M20.31 11.75L43.69 25.25M55.38 32L32 45.5M43.69 52.25L43.69 25.25M20.31 52.25L20.31 25.25M8.62 32L32 45.5" stroke-width="2.4" opacity="0.5"/>
+    <path d="M32 5L55.38 18.5M55.38 18.5L55.38 45.5M55.38 45.5L32 59M32 59L8.62 45.5M8.62 45.5L8.62 18.5M8.62 18.5L32 5" stroke-width="3.2" opacity="0.95"/>
+    <path d="M32 32L55.38 18.5M32 32L8.62 18.5M32 32L32 59" stroke-width="3.2" opacity="1"/>
   </g>
-  <g fill="#000"><circle cx="32" cy="10" r="2.42"/><circle cx="51.05" cy="21" r="2.42"/><circle cx="51.05" cy="43" r="2.42"/><circle cx="32" cy="54" r="2.42"/><circle cx="12.95" cy="43" r="2.42"/><circle cx="12.95" cy="21" r="2.42"/></g>
-  <circle cx="32" cy="32" r="3.52" fill="#000"/>
+  <g fill="#000"><circle cx="32" cy="5" r="3.24"/><circle cx="55.38" cy="18.5" r="3.24"/><circle cx="55.38" cy="45.5" r="3.24"/><circle cx="32" cy="59" r="3.24"/><circle cx="8.62" cy="45.5" r="3.24"/><circle cx="8.62" cy="18.5" r="3.24"/></g>
+  <circle cx="32" cy="32" r="4.59" fill="#000"/>
 </svg>

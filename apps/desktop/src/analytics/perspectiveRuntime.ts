@@ -52,12 +52,16 @@ export function resetPerspectiveRuntimeForTests(): void {
 
 /**
  * Initialize Perspective WASM + worker once. Subsequent calls reuse the same
- * promise/result. Failures are sticky until {@link resetPerspectiveRuntimeForTests}.
+ * promise/result. Transient fetch failures (CSP / empty body) are not sticky
+ * so a rebuilt app can recover without a full process restart.
  */
 export async function ensurePerspectiveRuntime(): Promise<PerspectiveRuntime> {
   if (state.status === "ready") return state.runtime;
-  if (state.status === "failed") throw state.error;
   if (state.status === "loading") return state.promise;
+  // Drop sticky failure so the next open retries WASM fetch after CSP fixes.
+  if (state.status === "failed") {
+    state = { status: "idle" };
+  }
 
   const promise = bootstrapPerspective()
     .then((runtime) => {
