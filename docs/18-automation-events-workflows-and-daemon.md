@@ -178,7 +178,8 @@ Each task declares inputs, outputs, capabilities, environment, limits, and execu
 
 ## Derived resources
 
-A derived resource declares inputs and builder:
+A derived resource declares inputs and builder
+([ADR 0022](decisions/0022-derived-resources-have-lineage.md)):
 
 ```yaml
 format: lattice-derived-resource
@@ -194,7 +195,14 @@ refresh:
   mode: on-demand
 ```
 
-Lattice tracks current/stale/building/failed state.
+Naming: `*.derived.yaml` (or `.yml`) is classified as
+`ResourceKind::Derived`. Relative paths resolve from the manifest directory.
+
+Lattice tracks `current` / `stale` / `building` / `failed` by hashing listed
+input files (v1 also expands simple `*` / `**` globs) and comparing against
+lineage recorded under `.lattice/derived/`. Rebuild runs the declared
+`builder.task` through the existing task runner and refreshes lineage on
+success.
 
 ## Failure handling
 

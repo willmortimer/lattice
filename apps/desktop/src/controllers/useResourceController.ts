@@ -9,6 +9,7 @@ import { previewBatchLinkRepair, previewLinkRepair, type BatchLinkRepairPlan, ty
 import { applyPathRemaps, type PathRemap } from "../lib/pathRemap";
 import { moveResource, moveResources } from "../lib/resourceMutations";
 import { loadArtifactManifest } from "../lib/artifactRun";
+import { loadDerivedManifest, loadDerivedStatus } from "../lib/derivedRun";
 import { loadTaskManifest } from "../lib/taskRun";
 import { loadWorkflow } from "../lib/workflowRun";
 import { destinationPath } from "../lib/treeOps";
@@ -386,6 +387,45 @@ export function useResourceController(options: ResourceControllerOptions): Resou
         const manifest = await loadWorkflow(workspace.root, resource.path);
         if (isCurrentLoad(ticket)) {
           setSession({ kind: "workflow", resource, manifest });
+        }
+      } catch (error) {
+        if (isCurrentLoad(ticket)) {
+          setSession(null);
+          onError(String(error));
+        }
+      } finally {
+        if (isCurrentLoad(ticket)) onBusy(false);
+      }
+      return;
+    }
+
+    if (resource.kind === "derived" && workspace) {
+      if (inBrowser) {
+        if (isCurrentLoad(ticket)) {
+          setSession({
+            kind: "derived",
+            resource,
+            manifest: {
+              format: "lattice-derived-resource",
+              version: 1,
+              output: "./dist/index.html",
+              inputs: ["./input.txt"],
+              builderTask: "./Build.task/task.yaml",
+              refreshMode: "on-demand",
+            },
+            status: null,
+          });
+        }
+        return;
+      }
+      onBusy(true);
+      try {
+        const [manifest, status] = await Promise.all([
+          loadDerivedManifest(workspace.root, resource.path),
+          loadDerivedStatus(workspace.root, resource.path),
+        ]);
+        if (isCurrentLoad(ticket)) {
+          setSession({ kind: "derived", resource, manifest, status });
         }
       } catch (error) {
         if (isCurrentLoad(ticket)) {

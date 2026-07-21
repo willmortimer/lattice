@@ -86,6 +86,15 @@ const MARKS: Record<ResourceKind, JSX.Element> = {
       <path d="m7.5 10 1.8 1.8L13 8.2" />
     </>
   ),
+  // Inputs feeding a generated output node.
+  derived: (
+    <>
+      <circle cx="4.5" cy="6" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="4.5" cy="14" r="1.5" fill="currentColor" stroke="none" />
+      <path d="M6.2 6.8 13 10l-6.8 3.2" />
+      <circle cx="15" cy="10" r="2.2" />
+    </>
+  ),
   // Folder: an open frame on the grid.
   folder: (
     <>
@@ -131,6 +140,7 @@ export const KIND_LABELS: Record<ResourceKind, string> = {
   app: "App",
   workflow: "Workflow",
   task: "Task",
+  derived: "Derived",
   folder: "Folder",
   file: "File",
 };
