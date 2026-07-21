@@ -6,8 +6,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use lattice_core::{
-    apply_span_replacements, merge_batch_link_repair_plans, BatchLinkRepairPlan, LinkRepairCandidate,
-    LinkRepairPlan, LinkRepairProposalSummary, LinkRepairSource, OPERATIONAL_DIR,
+    apply_span_replacements, merge_batch_link_repair_plans, BatchLinkRepairPlan,
+    LinkRepairCandidate, LinkRepairPlan, LinkRepairProposalSummary, LinkRepairSource,
+    OPERATIONAL_DIR,
 };
 use lattice_storage::{NativeWorkspaceStore, WorkspaceStore};
 
@@ -87,10 +88,7 @@ pub fn build_link_repair_page_updates_from_candidates(
     candidates: &[LinkRepairCandidate],
     accepted_candidate_ids: &[String],
 ) -> Result<Vec<Command>> {
-    let accepted: BTreeSet<&str> = accepted_candidate_ids
-        .iter()
-        .map(String::as_str)
-        .collect();
+    let accepted: BTreeSet<&str> = accepted_candidate_ids.iter().map(String::as_str).collect();
     let mut by_source: BTreeMap<PathBuf, Vec<&LinkRepairCandidate>> = BTreeMap::new();
     for candidate in candidates {
         if !accepted.contains(candidate.id.as_str()) {
@@ -125,10 +123,7 @@ pub fn build_link_repair_page_updates_from_candidates(
                 reason: "link repair span is out of bounds or not on a char boundary".into(),
             }
         })?;
-        let meta = store
-            .metadata(&source_path)
-            .map_err(Error::from)?
-            .revision;
+        let meta = store.metadata(&source_path).map_err(Error::from)?.revision;
         commands.push(Command::PageUpdate {
             path: source_path,
             content: updated,
@@ -336,12 +331,8 @@ mod tests {
                 },
             ],
         };
-        let updates = build_link_repair_page_updates(
-            &store,
-            &plan,
-            &["p1-0".into(), "p1-1".into()],
-        )
-        .unwrap();
+        let updates =
+            build_link_repair_page_updates(&store, &plan, &["p1-0".into(), "p1-1".into()]).unwrap();
         assert_eq!(updates.len(), 1);
         let Command::PageUpdate { content, .. } = &updates[0] else {
             panic!("expected page update");
