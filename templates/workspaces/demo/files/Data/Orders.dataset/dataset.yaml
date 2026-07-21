@@ -1,0 +1,24 @@
+format: lattice-dataset
+version: 1
+id: demo-orders-dataset
+title: Orders
+description: Synthetic retail orders for multi-series / time-chart demos (Hive Parquet facts).
+partitions:
+- path: facts/year=2026/month=01/orders.parquet
+  keys:
+    month: '01'
+    year: '2026'
+  rows: 1031
+  bytes: 28220
+- path: facts/year=2026/month=02/orders.parquet
+  keys:
+    month: '02'
+    year: '2026'
+  rows: 928
+  bytes: 25467
+- path: facts/year=2026/month=03/orders.parquet
+  keys:
+    month: '03'
+    year: '2026'
+  rows: 1041
+  bytes: 28522
