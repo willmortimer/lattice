@@ -6,7 +6,8 @@ use rusqlite::Connection as SqliteConnection;
 use crate::batch::{DataType, Field, RecordBatch, ScalarValue, Schema};
 use crate::error::Error;
 use crate::path::{
-    resolve_glob_under_root, resolve_under_root, resolve_under_root_for_create, sql_string_literal,
+    path_to_sql, resolve_glob_under_root, resolve_under_root, resolve_under_root_for_create,
+    rewrite_read_paths_under_root, sql_string_literal,
 };
 use crate::Result;
 
@@ -59,8 +60,11 @@ impl DuckDbEngine {
     ///
     /// File reads succeed only for paths under the workspace allowlist configured
     /// at open time (`allowed_directories` + `enable_external_access=false`).
+    /// Relative `read_parquet` / `read_csv_auto` path literals are rewritten to
+    /// absolute paths under the workspace root before execution.
     pub fn query(&self, sql: &str) -> Result<RecordBatch> {
-        let mut statement = self.conn.prepare(sql)?;
+        let sql = rewrite_read_paths_under_root(sql, &self.workspace_root)?;
+        let mut statement = self.conn.prepare(&sql)?;
         let mut rows = statement.query([])?;
 
         let (column_count, fields) = {
@@ -234,12 +238,10 @@ fn apply_workspace_allowlist(conn: &Connection, workspace_root: &Path) -> Result
         &format!("SET allowed_directories = [{root_sql}]"),
         params![],
     )?;
+    // Prefer workspace-relative path resolution when callers forget absolutization.
+    let _ = conn.execute(&format!("SET file_search_path = {root_sql}"), params![]);
     conn.execute("SET enable_external_access = false", params![])?;
     Ok(())
-}
-
-fn path_to_sql(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
 }
 
 fn scalar_from_row(row: &Row<'_>, index: usize) -> Result<ScalarValue> {

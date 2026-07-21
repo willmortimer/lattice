@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { NodeViewContent, NodeViewWrapper } from "@tiptap/react";
 import type { NodeViewProps } from "@tiptap/react";
 
+import { LT } from "../theme-tokens";
 import { useCodeBlockHighlight } from "./CodeBlockHighlight";
 import { useDeferredUntilVisible } from "./visibilityDeferred";
 
@@ -10,12 +11,6 @@ type MermaidApi = typeof import("mermaid").default;
 let mermaidModule: MermaidApi | null = null;
 let mermaidThemeKey: string | null = null;
 
-function readCssToken(name: string, fallback: string): string {
-  if (typeof document === "undefined") return fallback;
-  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return value || fallback;
-}
-
 function shellAppearance(): "dark" | "light" {
   if (typeof document === "undefined") return "dark";
   const scheme = getComputedStyle(document.documentElement).colorScheme;
@@ -23,18 +18,24 @@ function shellAppearance(): "dark" | "light" {
   return "dark";
 }
 
+/**
+ * Mermaid themeVariables must be plain hex/rgb. Feeding CSS `color-mix()` /
+ * `oklch()` tokens (e.g. `--lt-line`) makes Mermaid fall back to black fills
+ * and strokes — see Architecture.md diagrams in dark shell.
+ */
 function mermaidConfig() {
   const appearance = shellAppearance();
-  const text = readCssToken("--lt-text", appearance === "light" ? "#1a1a1a" : "#f2ede3");
-  const soft = readCssToken("--lt-text-soft", appearance === "light" ? "#5c5c5c" : "#c9c2b7");
-  const panel = readCssToken("--lt-panel", appearance === "light" ? "#ffffff" : "#1a1f2a");
-  const raise = readCssToken("--lt-bg-raise", appearance === "light" ? "#f4f1ea" : "#12161f");
-  const line = readCssToken("--lt-line", appearance === "light" ? "#d0cbc0" : "#2a3140");
-  const accent = readCssToken("--lt-accent", appearance === "light" ? "#0b57d0" : "#f5a623");
+  const text = appearance === "light" ? "#1a1a1a" : LT.text;
+  const soft = appearance === "light" ? "#5c5c5c" : LT.textSoft;
+  const panel = appearance === "light" ? "#ffffff" : LT.panel;
+  const raise = appearance === "light" ? "#f4f1ea" : LT.bgRaise;
+  const line = appearance === "light" ? "#b0a99a" : LT.slate;
+  const accent = appearance === "light" ? "#0b57d0" : LT.accent;
   return {
     startOnLoad: false,
-    // Match shell appearance so node fills/text stay readable on --lt-bg-raise.
-    theme: appearance === "light" ? ("default" as const) : ("dark" as const),
+    // `base` + explicit variables — avoid Mermaid's built-in `dark` palette
+    // which paints near-black nodes on our already-dark `--lt-bg-raise`.
+    theme: "base" as const,
     themeVariables: {
       darkMode: appearance === "dark",
       background: raise,
@@ -74,7 +75,7 @@ function mermaidConfig() {
 /** `mermaid.initialize` is process-wide; re-init when shell appearance changes. */
 async function ensureMermaidInitialized(): Promise<MermaidApi> {
   const { default: mermaid } = await import("mermaid");
-  const key = `${shellAppearance()}:${readCssToken("--lt-text", "")}:${readCssToken("--lt-panel", "")}`;
+  const key = shellAppearance();
   if (!mermaidModule || mermaidThemeKey !== key) {
     mermaid.initialize(mermaidConfig());
     mermaidModule = mermaid;

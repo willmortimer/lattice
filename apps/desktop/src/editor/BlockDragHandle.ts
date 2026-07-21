@@ -2,16 +2,39 @@ import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
+import {
+  isBlockDragArmed,
+  reorderBlockTransaction,
+  resolveBlockDragFromPos,
+  topLevelBlockPos,
+} from "./blockReorder";
+
 const key = new PluginKey("latticeBlockDragHandle");
 export const BLOCK_DRAG_MIME = "application/x-lattice-block-pos";
+
+/**
+ * Module-level drag source. WKWebView often omits custom MIME types from
+ * `dataTransfer.types` during `dragover`, so drop arming cannot rely on them.
+ */
+let activeDragFromPos: number | null = null;
+
+/** Read the armed drag source (tests / drop fallback). */
+export function getActiveBlockDragFromPos(): number | null {
+  return activeDragFromPos;
+}
+
+/** Arm or clear the module-level drag source (dragstart / tests). */
+export function setActiveBlockDragFromPos(pos: number | null): void {
+  activeDragFromPos = pos;
+}
 
 /**
  * Pointer drag handles for top-level blocks. Keyboard Alt+↑/↓ move commands
  * from StarterKit remain available; this only adds a mouse affordance.
  *
  * HTML5 drag from inside `contenteditable` only works when the handle is
- * marked `contentEditable=false` and mousedown does not hand focus back to
- * ProseMirror (which cancels the drag in WebKit/Chromium).
+ * marked `contentEditable=false`. Avoid `mousedown` `preventDefault` — that
+ * cancels `dragstart` in WebKit (Tauri macOS).
  */
 export const BlockDragHandle = Extension.create({
   name: "blockDragHandle",
@@ -32,29 +55,32 @@ export const BlockDragHandle = Extension.create({
                     const handle = document.createElement("button");
                     handle.type = "button";
                     handle.className = "block-drag-handle";
-                    handle.title = "Drag to reorder block";
+                    handle.title = "Drag to reorder block (or Alt+↑/↓)";
                     handle.setAttribute("aria-label", "Drag to reorder block");
                     handle.contentEditable = "false";
                     handle.draggable = true;
                     handle.dataset.blockPos = String(offset);
-                    handle.addEventListener("mousedown", (event) => {
-                      // Keep ProseMirror from taking selection/focus before dragstart.
-                      event.preventDefault();
-                    });
                     handle.addEventListener("dragstart", (event) => {
                       event.stopPropagation();
-                      const pos = handle.dataset.blockPos ?? String(offset);
-                      event.dataTransfer?.setData(BLOCK_DRAG_MIME, pos);
-                      event.dataTransfer?.setData("text/plain", pos);
+                      const pos = Number(handle.dataset.blockPos ?? offset);
+                      activeDragFromPos = Number.isFinite(pos) ? pos : offset;
+                      event.dataTransfer?.setData(BLOCK_DRAG_MIME, String(activeDragFromPos));
+                      event.dataTransfer?.setData("text/plain", String(activeDragFromPos));
                       if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
                       handle.classList.add("block-drag-handle-active");
                     });
                     handle.addEventListener("dragend", () => {
+                      activeDragFromPos = null;
                       handle.classList.remove("block-drag-handle-active");
                     });
                     return handle;
                   },
-                  { side: -1, key: `block-drag-${offset}` },
+                  {
+                    side: -1,
+                    key: `block-drag-${offset}`,
+                    stopEvent: () => true,
+                    ignoreSelection: true,
+                  },
                 ),
               );
             });
@@ -62,36 +88,26 @@ export const BlockDragHandle = Extension.create({
           },
           handleDOMEvents: {
             dragover(_view, event) {
-              if (!event.dataTransfer?.types.includes(BLOCK_DRAG_MIME)) {
-                return false;
-              }
+              // Arm via module-level pos — do not require MIME in types.
+              if (!isBlockDragArmed(activeDragFromPos)) return false;
               event.preventDefault();
               if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
               return true;
             },
             drop(view, event) {
-              const raw = event.dataTransfer?.getData(BLOCK_DRAG_MIME);
-              if (!raw) return false;
+              const fromPos = resolveBlockDragFromPos(
+                event.dataTransfer?.getData(BLOCK_DRAG_MIME),
+                event.dataTransfer?.getData("text/plain"),
+                activeDragFromPos,
+              );
+              activeDragFromPos = null;
+              if (fromPos === null) return false;
               event.preventDefault();
-              const fromPos = Number(raw);
               const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
               if (!coords) return true;
-              const $to = view.state.doc.resolve(coords.pos);
-              let toPos = 0;
-              for (let depth = $to.depth; depth > 0; depth -= 1) {
-                if ($to.node(depth - 1).type.name === "doc") {
-                  toPos = $to.before(depth);
-                  break;
-                }
-              }
-              const node = view.state.doc.nodeAt(fromPos);
-              if (!node) return true;
-              if (toPos === fromPos || toPos === fromPos + node.nodeSize) return true;
-
-              let tr = view.state.tr.delete(fromPos, fromPos + node.nodeSize);
-              const mappedTo = tr.mapping.map(toPos, -1);
-              tr = tr.insert(mappedTo, node);
-              view.dispatch(tr.scrollIntoView());
+              const toPos = topLevelBlockPos(view.state.doc, coords.pos);
+              const tr = reorderBlockTransaction(view.state, fromPos, toPos);
+              if (tr) view.dispatch(tr);
               return true;
             },
           },

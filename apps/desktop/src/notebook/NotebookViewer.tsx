@@ -13,7 +13,12 @@ import {
   PyodideCancelledError,
   PyodideLoadError,
   runPythonCell,
+  type PyodideMountFile,
 } from "./pyodideRuntime";
+import {
+  packagesForNotebookCode,
+  prepareWorkspaceBridge,
+} from "./pyodideWorkspaceBridge";
 import "./notebookViewer.css";
 
 export interface NotebookViewerProps {
@@ -212,6 +217,7 @@ export function NotebookViewer({
   const [notebookContent, setNotebookContent] = useState(content);
   const [notebookRevision, setNotebookRevision] = useState(revision);
   const [status, setStatus] = useState<RunStatus>({ kind: "idle" });
+  const [bridgeNotice, setBridgeNotice] = useState<string | null>(null);
   const runController = useRef<AbortController | null>(null);
   const contentRef = useRef(notebookContent);
   const revisionRef = useRef(notebookRevision);
@@ -284,6 +290,18 @@ export function NotebookViewer({
     runController.current = controller;
     setStatus({ kind: "loading" });
 
+    const bridge = await prepareWorkspaceBridge({ root, inBrowser });
+    let mountFiles: PyodideMountFile[] = [];
+    if (bridge.ok) {
+      mountFiles = bridge.files.map((file) => ({
+        mountPath: file.mountPath,
+        data: file.bytes,
+      }));
+      setBridgeNotice(null);
+    } else {
+      setBridgeNotice(bridge.message);
+    }
+
     try {
       for (const cellIndex of indices) {
         if (controller.signal.aborted) return;
@@ -295,7 +313,11 @@ export function NotebookViewer({
         const executionCount = executionCounterRef.current;
 
         try {
-          const payload = await runPythonCell(source, controller.signal);
+          const payload = await runPythonCell(source, {
+            signal: controller.signal,
+            mountFiles,
+            packages: packagesForNotebookCode(source),
+          });
           const outputs = buildOutputsFromRun(payload, executionCount);
           await applyAndPersist(cellIndex, executionCount, outputs);
         } catch (error) {
@@ -376,6 +398,11 @@ export function NotebookViewer({
           </button>
         </div>
       </header>
+      {bridgeNotice && (
+        <p className="lattice-notebook-banner lattice-notebook-banner-warn" role="status" aria-live="polite">
+          {bridgeNotice}
+        </p>
+      )}
       {message && (
         <p
           className={

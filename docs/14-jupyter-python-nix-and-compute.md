@@ -16,17 +16,34 @@ A notebook can be:
 
 The canonical file remains standard `.ipynb`.
 
-## Phase 1 desktop scope (current sprint)
+## Phase N3 (shipped): Pyodide notebooks
 
-Phase 1 N3 ships **notebook open**, a read-only-to-interactive viewer, and
+Phase N3 ships **notebook open**, a read-only-to-interactive viewer, and
 **Pyodide Run** for code cells. Outputs merge into the canonical `.ipynb` and
 persist through semantic `ResourceUpdate` (undoable on native).
 
-**Deferred after this sprint:** native Jupyter / ipykernel sessions, `uv` task
-execution, Nix-backed reproducible environments, remote kernels, scheduled
-notebook runs, and rich widget MIME bundles. Do not assume those surfaces are
-available in the desktop build yet; specifications below describe the target
-architecture.
+Pyodide remains the **default and fallback** runtime: zero-setup, works in the
+browser demo, and degrades honestly when the CDN worker fails. Native compute
+is opt-in beside it, not a replacement.
+
+## Phase-4 local compute (in progress)
+
+Phase-4 local compute adds **native** execution without claiming the full
+Jupyter product surface:
+
+| Surface | Status |
+|---|---|
+| Native out-of-process `ipykernel` sessions (stdio JSON-lines bridge) | In DAG — see [jupyter-phase4-local-compute-dag](dev/jupyter-phase4-local-compute-dag.md) |
+| `uv`-backed `*.task/` / `task.yaml` execution | In DAG |
+| Optional Nix `EnvProvider` (`system` \| `uv-project` \| `nix`) | In DAG; Nix never required |
+| Remote Jupyter kernels / server attach | **Deferred** |
+| Scheduled notebook runs / `notebook.executed` jobs | **Deferred** |
+| Rich widget MIME bundles / ipywidgets `comm` | **Deferred** |
+
+Contracts for `KernelSession`, the native bridge, and `EnvProvider` live in
+[resource runtime contracts](./39-resource-runtime-contracts.md). Do not assume
+native Run, `uv` tasks, or Nix resolution are available until the DAG marks
+those packets merged.
 
 ## Kernel architecture
 
@@ -63,6 +80,14 @@ desktop bundle does not ship the runtime; first Run downloads roughly
 leave the notebook readable and show a degraded banner. Cell outputs are
 merged into the `.ipynb` JSON and persisted through `ResourceUpdate` (undoable)
 or, in the browser demo, in-memory `demoNotebooks` mutation.
+
+**Workspace CSV bridge (read-only):** before each cell Run on native desktop,
+the shell may copy selected workspace files (default:
+`Data/Orders.dataset/sources/orders.csv`) into the Pyodide FS under
+`/home/pyodide/workspace/…` via `read_binary_file`. This is not a live mount
+and does not expose DuckDB or Parquet to Pyodide — DuckDB stays on the native
+CLI / dataset viewers. The browser demo shows an honest unavailable banner
+instead of faking workspace access.
 
 ### Native Python through `uv`
 
