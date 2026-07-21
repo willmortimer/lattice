@@ -9,6 +9,10 @@ import { inBrowser } from "../demo";
 import { KindMark } from "../KindMark";
 import type { ArrowQueryResult, ArrowTransportDump } from "../lib/arrowIpc";
 import { queryResultToValues } from "../lib/arrowToVegaData";
+import {
+  explainDataset,
+  type ExplainDatasetResponse,
+} from "../lib/datasetExplain";
 import { loadDatasetArrowDump } from "../lib/datasetQuery";
 import {
   formatDistinct,
@@ -22,10 +26,34 @@ import type { OpenResourceSession } from "../resourceSession";
 import type { ResourceRendererProps } from "../resourceRendererRegistry";
 import type { ResourceRendererContext } from "./RendererContext";
 
-type DatasetPanel = "preview" | "chart" | "profile";
+type DatasetPanel = "preview" | "chart" | "profile" | "plan";
+
+const DATASET_PANELS = [
+  ["preview", "Preview"],
+  ["chart", "Chart"],
+  ["profile", "Profile"],
+  ["plan", "Plan"],
+] as const satisfies ReadonlyArray<readonly [DatasetPanel, string]>;
+
+function panelBusyLabel(panel: DatasetPanel): string {
+  switch (panel) {
+    case "profile":
+      return "Profiling relation…";
+    case "plan":
+      return "Explaining query…";
+    case "preview":
+    case "chart":
+      return "Running bounded query…";
+    default: {
+      const _exhaustive: never = panel;
+      return _exhaustive;
+    }
+  }
+}
 
 /**
- * Dataset surface: Preview (Perspective), Chart (Vega-Lite), Profile (DuckDB SUMMARIZE).
+ * Dataset surface: Preview (Perspective), Chart (Vega-Lite), Profile (DuckDB SUMMARIZE),
+ * Plan (DuckDB EXPLAIN).
  */
 export function DatasetResourceRenderer({
   context,
@@ -40,6 +68,7 @@ export function DatasetResourceRenderer({
   const [summary, setSummary] = useState<string | null>(null);
   const [profile, setProfile] = useState<RelationProfile | null>(null);
   const [profileSummary, setProfileSummary] = useState<string | null>(null);
+  const [explain, setExplain] = useState<ExplainDatasetResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [viewerFailed, setViewerFailed] = useState(false);
@@ -52,6 +81,7 @@ export function DatasetResourceRenderer({
       setSummary(null);
       setProfile(null);
       setProfileSummary(null);
+      setExplain(null);
       setError(null);
       setViewerFailed(false);
       setViewerError(null);
@@ -68,6 +98,12 @@ export function DatasetResourceRenderer({
           if (cancelled) return;
           setProfile(nextProfile);
           setProfileSummary(formatProfileSummary(nextProfile));
+          return;
+        }
+        if (panel === "plan") {
+          const nextExplain = await explainDataset(root, path);
+          if (cancelled) return;
+          setExplain(nextExplain);
           return;
         }
         setViewerFailed(false);
@@ -88,6 +124,7 @@ export function DatasetResourceRenderer({
         setSummary(null);
         setProfile(null);
         setProfileSummary(null);
+        setExplain(null);
         setError(err instanceof Error ? err.message : String(err));
       } finally {
         if (!cancelled) setBusy(false);
@@ -126,8 +163,8 @@ export function DatasetResourceRenderer({
           <div className="diagnostics-card" role="status">
             <strong>Visualization unavailable in browser demo</strong>
             <span>
-              Perspective Preview, Vega-Lite Chart, and DuckDB Profile need the native desktop app
-              (DuckDB + Arrow IPC). Open this workspace with{" "}
+              Perspective Preview, Vega-Lite Chart, DuckDB Profile, and EXPLAIN Plan need the native
+              desktop app (DuckDB + Arrow IPC). Open this workspace with{" "}
               <code>nxr desktop-dev</code> or the installed Lattice.app.
             </span>
           </div>
@@ -153,17 +190,13 @@ export function DatasetResourceRenderer({
         </div>
         {panel === "profile"
           ? profileSummary && <p className="dataset-surface-meta">{profileSummary}</p>
-          : summary && <p className="dataset-surface-meta">{summary}</p>}
+          : panel === "plan"
+            ? null
+            : summary && <p className="dataset-surface-meta">{summary}</p>}
       </header>
 
       <div className="dataset-panel-tabs" role="tablist" aria-label="Dataset panels">
-        {(
-          [
-            ["preview", "Preview"],
-            ["chart", "Chart"],
-            ["profile", "Profile"],
-          ] as const
-        ).map(([id, label]) => (
+        {DATASET_PANELS.map(([id, label]) => (
           <button
             key={id}
             type="button"
@@ -190,9 +223,7 @@ export function DatasetResourceRenderer({
             </div>
           ) : busy ? (
             <div className="dataset-surface-fallback">
-              <p className="placeholder-sub">
-                {panel === "profile" ? "Profiling relation…" : "Running bounded query…"}
-              </p>
+              <p className="placeholder-sub">{panelBusyLabel(panel)}</p>
             </div>
           ) : error ? (
             <div className="dataset-surface-fallback">
@@ -200,6 +231,19 @@ export function DatasetResourceRenderer({
                 {error}
               </p>
             </div>
+          ) : panel === "plan" ? (
+            explain ? (
+              <div className="dataset-plan-panel">
+                <section className="dataset-plan-section">
+                  <h3 className="dataset-plan-heading">SQL</h3>
+                  <pre className="dataset-plan-pre">{explain.sql}</pre>
+                </section>
+                <section className="dataset-plan-section">
+                  <h3 className="dataset-plan-heading">Plan</h3>
+                  <pre className="dataset-plan-pre">{explain.plan}</pre>
+                </section>
+              </div>
+            ) : null
           ) : panel === "profile" ? (
             profile ? (
               profile.columns.length > 0 ? (
