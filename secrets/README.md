@@ -1,7 +1,11 @@
 # Secrets (sops + age)
 
-Encrypted secrets for Lattice live under `secrets/` and are decrypted locally
-with [sops](https://github.com/getsops/sops) + [age](https://age-encryption.org).
+Encrypted secrets for Lattice live under `secrets/` and are **committed** to
+this public repository. That is intentional: sops ciphertext is safe to
+publish; only the age **private** key decrypts it.
+
+Do **not** gitignore `secrets/*.env`. Gitignore plaintext dumps and the age
+private key only (see root `.gitignore`).
 
 ## Layout
 
@@ -9,6 +13,7 @@ with [sops](https://github.com/getsops/sops) + [age](https://age-encryption.org)
 | --- | --- |
 | [`.sops.yaml`](../.sops.yaml) | Encryption rules + age recipient |
 | [`secrets/cloudflare.env`](./cloudflare.env) | Cloudflare Pages deploy token (encrypted) |
+| [`secrets/apple.env`](./apple.env) | Apple ID / app-specific password / team + signing identity |
 | `~/.config/sops/age/keys.txt` | **Private** age key (never commit) |
 | [`.env`](../.env) | Optional non-secret local overrides only |
 
@@ -55,10 +60,34 @@ re-encrypts on write.
 
 ```sh
 direnv reload
-# or: cd . && cd -
 ```
 
-## Deploy with the token (no interactive wrangler login)
+## Apple Developer (signing / notarization)
+
+Paid Apple Developer Program membership is required for Developer ID signing and
+notarization (distribution beyond your Mac). Local `desktop-install` can still
+use an Apple Development identity from Keychain.
+
+```sh
+sops secrets/apple.env
+```
+
+Fill:
+
+| Key | Notes |
+| --- | --- |
+| `APPLE_ID` | Apple ID email for notarization |
+| `APPLE_PASSWORD` | **App-specific** password from [appleid.apple.com](https://appleid.apple.com) — not your login password |
+| `APPLE_TEAM_ID` | Membership → Membership details (readable in the file) |
+| `APPLE_SIGNING_IDENTITY` | `security find-identity -v -p codesigning` (often `Developer ID Application: …`) |
+
+Then `direnv reload`. `nxr desktop-install` / `nix run .#desktop-install` read
+`APPLE_SIGNING_IDENTITY` and `APPLE_TEAM_ID` from the environment.
+
+Notarization (`APPLE_ID` / `APPLE_PASSWORD`) is for the release/DMG path when
+that is wired; keep the values in sops now so they are ready.
+
+## Deploy Cloudflare with the token
 
 With direnv loaded (decrypts into the environment):
 
@@ -72,12 +101,10 @@ One-shot without relying on direnv:
 sops exec-env secrets/cloudflare.env -- nix run .#site-deploy
 ```
 
-Wrangler reads `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` from the
-environment. Account ID is not secret; the API token is.
-
 ## What not to do
 
-- Do not put API tokens in `.env` (gitignored, but easy to paste into chats).
+- Do not put API tokens or Apple passwords in `.env`.
+- Do not gitignore encrypted `secrets/*.env` — ciphertext belongs in git.
 - Do not commit `secrets/*.decrypted`, `*.plain`, or age private keys.
 - Do not reuse a token after it appears in logs, screenshots, or agent context —
   rotate it.
