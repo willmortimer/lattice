@@ -227,3 +227,104 @@ async fn health_is_open() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+async fn proposal_create_list_get_round_trip() {
+    let (_dir, runtime, root) = fixture();
+    let state = daemon_state_for_tests("secret-token", runtime);
+    let app = api_router(state);
+
+    let create = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/proposals/propose_page")
+                .header("content-type", "application/json")
+                .header("authorization", "Bearer secret-token")
+                .body(Body::from(
+                    serde_json::json!({
+                        "root": root,
+                        "path": "Proposals/HTTP.md",
+                        "content": "# HTTP proposal\n"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create.status(), StatusCode::OK);
+    let create_json = body_json(create).await;
+    let proposal_id = create_json["proposal"]["id"].as_str().unwrap().to_string();
+    let workspace_id = create_json["workspaceId"].as_str().unwrap().to_string();
+    assert_eq!(create_json["proposal"]["source"]["type"].as_str().unwrap(), "mcp");
+
+    let list = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/proposals/list")
+                .header("content-type", "application/json")
+                .header("authorization", "Bearer secret-token")
+                .body(Body::from(
+                    serde_json::json!({ "workspaceId": workspace_id }).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(list.status(), StatusCode::OK);
+    let list_json = body_json(list).await;
+    assert_eq!(list_json["proposals"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        list_json["proposals"][0]["id"].as_str().unwrap(),
+        proposal_id
+    );
+
+    let get = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/proposals/get")
+                .header("content-type", "application/json")
+                .header("authorization", "Bearer secret-token")
+                .body(Body::from(
+                    serde_json::json!({
+                        "workspaceId": workspace_id,
+                        "proposalId": proposal_id
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(get.status(), StatusCode::OK);
+    let get_json = body_json(get).await;
+    assert_eq!(
+        get_json["proposal"]["commands"][0]["type"].as_str().unwrap(),
+        "page-create"
+    );
+}
+
+#[tokio::test]
+async fn proposal_routes_require_auth() {
+    let (_dir, runtime, root) = fixture();
+    let state = daemon_state_for_tests("secret-token", runtime);
+    let app = api_router(state);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v1/proposals/list")
+                .header("content-type", "application/json")
+                .body(Body::from(serde_json::json!({ "root": root }).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}

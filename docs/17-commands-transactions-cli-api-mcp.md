@@ -74,8 +74,9 @@ Scripts, apps, workflows, and agents should prefer returning a proposal rather t
 The desktop persists general transaction proposals under
 `<workspace>/.lattice/proposals/` (sibling to link-repair). Review accepts a
 command subset into one `CommandEngine` transaction; reject/dismiss removes the
-pending file. MCP remains read-only for writes in the current phase — agents
-still return proposals for human review rather than calling mutation tools.
+pending file. MCP and the localhost HTTP API can create and inspect proposals
+(`create_proposal`, `list_proposals`, `get_proposal`, `propose_page`) with
+`source.type: mcp`; they do not apply proposals. Apply remains desktop-only.
 
 The review UI shows:
 

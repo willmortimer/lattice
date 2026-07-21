@@ -3196,6 +3196,7 @@ dependencies = [
  "dirs",
  "http-body-util",
  "lattice-client",
+ "lattice-commands",
  "lattice-core",
  "lattice-embed-host",
  "lattice-embedding",
