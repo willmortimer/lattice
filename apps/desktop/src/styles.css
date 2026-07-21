@@ -1130,6 +1130,8 @@ html[data-page-width="full"] {
 
 .canvas-viewer canvas {
   display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .canvas-surface {
@@ -1897,7 +1899,31 @@ html[data-page-width="full"] {
   color: var(--lt-text);
 }
 
-/* Mermaid sometimes emits fills/strokes that ignore themeVariables; keep labels readable. */
+/* Mermaid sometimes emits fills/strokes that ignore themeVariables; force contrast. */
+.mermaid-preview svg .node rect,
+.mermaid-preview svg .node polygon,
+.mermaid-preview svg .node circle,
+.mermaid-preview svg .basic.label-container,
+.mermaid-preview svg .label-container,
+.mermaid-preview svg .cluster rect {
+  fill: var(--lt-panel) !important;
+  stroke: var(--lt-slate) !important;
+}
+
+.mermaid-preview svg .edgePath .path,
+.mermaid-preview svg .flowchart-link,
+.mermaid-preview svg path.path {
+  stroke: var(--lt-text-soft) !important;
+  fill: none !important;
+  stroke-width: 1.5px !important;
+}
+
+.mermaid-preview svg marker path,
+.mermaid-preview svg .arrowheadPath {
+  fill: var(--lt-text-soft) !important;
+  stroke: var(--lt-text-soft) !important;
+}
+
 .mermaid-preview svg text,
 .mermaid-preview svg tspan,
 .mermaid-preview svg .nodeLabel,

@@ -1,8 +1,9 @@
 //! Menu-bar / tray residency for the main desktop process.
 //!
 //! When `services.keepAppInMenuBar` is enabled, closing the main window hides
-//! it instead of exiting. The tray provides Show Lattice, Quick Note, and Quit.
-//! This is an in-process preference — not a login item or LSUIElement accessory.
+//! it instead of exiting. The tray provides Show Lattice, Quick Note, Settings,
+//! and other actions (see [`crate::app_menu::build_tray_menu`]). This is an
+//! in-process preference — not a login item or LSUIElement accessory.
 //!
 //! On macOS the tray uses a monochrome template mark (`tray-template.png`), not
 //! the full-color Dock/app icon, so it matches system menu-bar styling.
@@ -14,15 +15,13 @@ use lattice_profile::{DesktopSettings, DESKTOP_SETTINGS_SPEC};
 use serde::Serialize;
 use tauri::{
     image::Image,
-    menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
     AppHandle, Emitter, Manager,
 };
 
+use crate::app_menu;
+
 const TRAY_ID: &str = "lattice.main-tray";
-const SHOW_ID: &str = "tray.show";
-const QUICK_NOTE_ID: &str = "tray.quick-note";
-const QUIT_ID: &str = "tray.quit";
 
 static QUITTING: AtomicBool = AtomicBool::new(false);
 
@@ -84,20 +83,13 @@ fn tray_template_icon() -> tauri::Result<Image<'static>> {
 }
 
 pub fn install_tray(app: &AppHandle) -> tauri::Result<()> {
-    let show = MenuItem::with_id(app, SHOW_ID, "Show Lattice", true, None::<&str>)?;
-    let quick_note = MenuItem::with_id(app, QUICK_NOTE_ID, "Quick Note", true, None::<&str>)?;
-    let separator = PredefinedMenuItem::separator(app)?;
-    let quit = MenuItem::with_id(app, QUIT_ID, "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &quick_note, &separator, &quit])?;
+    let menu = app_menu::build_tray_menu(app)?;
 
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
         .tooltip("Lattice")
-        .on_menu_event(|app, event| match event.id().as_ref() {
-            SHOW_ID => show_main_window(app),
-            QUICK_NOTE_ID => show_quick_note(app),
-            QUIT_ID => request_quit(app),
-            _ => {}
+        .on_menu_event(|app, event| {
+            app_menu::handle_action(app, event.id().as_ref());
         });
 
     #[cfg(target_os = "macos")]
