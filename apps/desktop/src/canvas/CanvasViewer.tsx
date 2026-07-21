@@ -79,7 +79,6 @@ export function CanvasViewer({
   const onErrorRef = useRef(onError);
   const sceneRef = useRef<CanvasScene | null>(null);
   const fitNextLoadRef = useRef(true);
-  const dataRef = useRef<CanvasData | null>(parsed.data);
   const connectModeRef = useRef(false);
   const connectFromIdRef = useRef<string | null>(null);
   onOpenFileRef.current = onOpenFile;
@@ -89,6 +88,7 @@ export function CanvasViewer({
 
   const parsed = useMemo(() => parse(json), [json]);
   const [data, setData] = useState<CanvasData | null>(parsed.data);
+  const dataRef = useRef<CanvasData | null>(parsed.data);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [outlineOpen, setOutlineOpen] = useState(readOutlineOpen);
