@@ -2,6 +2,13 @@ import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 
+import {
+  isBlockDragArmed,
+  reorderBlockTransaction,
+  resolveBlockDragFromPos,
+  topLevelBlockPos,
+} from "./blockReorder";
+
 const key = new PluginKey("latticeBlockDragHandle");
 export const BLOCK_DRAG_MIME = "application/x-lattice-block-pos";
 
@@ -10,6 +17,16 @@ export const BLOCK_DRAG_MIME = "application/x-lattice-block-pos";
  * `dataTransfer.types` during `dragover`, so drop arming cannot rely on them.
  */
 let activeDragFromPos: number | null = null;
+
+/** Read the armed drag source (tests / drop fallback). */
+export function getActiveBlockDragFromPos(): number | null {
+  return activeDragFromPos;
+}
+
+/** Arm or clear the module-level drag source (dragstart / tests). */
+export function setActiveBlockDragFromPos(pos: number | null): void {
+  activeDragFromPos = pos;
+}
 
 /**
  * Pointer drag handles for top-level blocks. Keyboard Alt+↑/↓ move commands
@@ -71,38 +88,26 @@ export const BlockDragHandle = Extension.create({
           },
           handleDOMEvents: {
             dragover(_view, event) {
-              if (activeDragFromPos === null) return false;
+              // Arm via module-level pos — do not require MIME in types.
+              if (!isBlockDragArmed(activeDragFromPos)) return false;
               event.preventDefault();
               if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
               return true;
             },
             drop(view, event) {
-              const fromMime = event.dataTransfer?.getData(BLOCK_DRAG_MIME);
-              const fromPlain = event.dataTransfer?.getData("text/plain");
-              const raw = fromMime || fromPlain || (activeDragFromPos !== null ? String(activeDragFromPos) : "");
+              const fromPos = resolveBlockDragFromPos(
+                event.dataTransfer?.getData(BLOCK_DRAG_MIME),
+                event.dataTransfer?.getData("text/plain"),
+                activeDragFromPos,
+              );
               activeDragFromPos = null;
-              if (!raw) return false;
+              if (fromPos === null) return false;
               event.preventDefault();
-              const fromPos = Number(raw);
-              if (!Number.isFinite(fromPos)) return true;
               const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
               if (!coords) return true;
-              const $to = view.state.doc.resolve(coords.pos);
-              let toPos = 0;
-              for (let depth = $to.depth; depth > 0; depth -= 1) {
-                if ($to.node(depth - 1).type.name === "doc") {
-                  toPos = $to.before(depth);
-                  break;
-                }
-              }
-              const node = view.state.doc.nodeAt(fromPos);
-              if (!node) return true;
-              if (toPos === fromPos || toPos === fromPos + node.nodeSize) return true;
-
-              let tr = view.state.tr.delete(fromPos, fromPos + node.nodeSize);
-              const mappedTo = tr.mapping.map(toPos, -1);
-              tr = tr.insert(mappedTo, node);
-              view.dispatch(tr.scrollIntoView());
+              const toPos = topLevelBlockPos(view.state.doc, coords.pos);
+              const tr = reorderBlockTransaction(view.state, fromPos, toPos);
+              if (tr) view.dispatch(tr);
               return true;
             },
           },
