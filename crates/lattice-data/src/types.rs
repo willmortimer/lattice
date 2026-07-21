@@ -325,7 +325,10 @@ pub struct ColumnMeta {
     pub name: String,
     pub field_type: FieldType,
     pub sqlite_type: String,
-    /// Target table name for [`FieldType::Relation`] within the same package.
+    /// Relation target for [`FieldType::Relation`].
+    ///
+    /// Same-package: bare table name (`companies`). Cross-package (read-only):
+    /// workspace-relative `.data` path + `#` + table (`Directory.data#companies`).
     pub relation_table: Option<String>,
     /// Optional junction table for M2M relation storage (see `app.yaml` `junction_table`).
     pub junction_table: Option<String>,

@@ -1885,3 +1885,216 @@ fn columns_add_rollup_undo_removes_rollup_column() {
     assert!(!manifest.contains("item_count"));
     assert!(!manifest.contains("total_amount"));
 }
+
+#[test]
+fn cross_package_relation_columns_add_and_write_reject() {
+    use std::collections::BTreeMap;
+
+    use lattice_data::CellValue;
+
+    use crate::ColumnSpec;
+
+    let (dir, mut engine) = engine();
+
+    engine
+        .apply(Transaction::new(
+            "Create Directory.data",
+            vec![Command::TableCreate {
+                path: PathBuf::from("Directory.data"),
+                title: "Directory".into(),
+                table_name: "companies".into(),
+            }],
+        ))
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Create CRM.data",
+            vec![Command::TableCreate {
+                path: PathBuf::from("CRM.data"),
+                title: "CRM".into(),
+                table_name: "contacts".into(),
+            }],
+        ))
+        .unwrap();
+
+    let directory = dir.path().join("Directory.data");
+    let dir_base = lattice_data::DataApp::open(&directory)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Add company name",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("Directory.data"),
+                table: "companies".into(),
+                columns: vec![ColumnSpec::new("name", lattice_data::FieldType::Text)],
+                base_revision: dir_base,
+            }],
+        ))
+        .unwrap();
+    let company_insert = engine
+        .apply(Transaction::new(
+            "Insert company",
+            vec![Command::RecordInsert {
+                path: PathBuf::from("Directory.data"),
+                table: "companies".into(),
+                values: BTreeMap::from([("name".into(), CellValue::Text("Acme".into()))]),
+                id: None,
+            }],
+        ))
+        .unwrap();
+    let _ = company_insert;
+
+    let company_id = lattice_data::DataApp::open(&directory)
+        .unwrap()
+        .list_rows("companies", 10, 0)
+        .unwrap()[0]
+        .id
+        .clone();
+
+    let crm = dir.path().join("CRM.data");
+    let crm_base = lattice_data::DataApp::open(&crm)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Add cross-package org relation",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("CRM.data"),
+                table: "contacts".into(),
+                columns: vec![
+                    ColumnSpec::new("name", lattice_data::FieldType::Text),
+                    ColumnSpec::relation("org", "Directory.data#companies"),
+                ],
+                base_revision: crm_base,
+            }],
+        ))
+        .unwrap();
+
+    {
+        let app = lattice_data::DataApp::open(&crm).unwrap();
+        let org = app
+            .columns("contacts")
+            .unwrap()
+            .into_iter()
+            .find(|column| column.name == "org")
+            .expect("org");
+        assert_eq!(
+            org.relation_table.as_deref(),
+            Some("Directory.data#companies")
+        );
+    }
+
+    let insert = engine
+        .apply(Transaction::new(
+            "Insert contact without org",
+            vec![Command::RecordInsert {
+                path: PathBuf::from("CRM.data"),
+                table: "contacts".into(),
+                values: BTreeMap::from([("name".into(), CellValue::Text("Ada".into()))]),
+                id: None,
+            }],
+        ))
+        .unwrap();
+    let contact_id = lattice_data::DataApp::open(&crm)
+        .unwrap()
+        .list_rows("contacts", 10, 0)
+        .unwrap()[0]
+        .id
+        .clone();
+    let update_base = insert.outcomes[0].resulting_revision.clone().unwrap();
+
+    let write_err = engine
+        .apply(Transaction::new(
+            "Try write cross-package relation",
+            vec![Command::RecordUpdate {
+                path: PathBuf::from("CRM.data"),
+                table: "contacts".into(),
+                id: contact_id,
+                values: BTreeMap::from([(
+                    "org".into(),
+                    CellValue::Relation {
+                        record_ids: vec![company_id],
+                    },
+                )]),
+                base_revision: update_base,
+            }],
+        ))
+        .unwrap_err()
+        .to_string();
+    assert!(
+        write_err.contains("read-only") && write_err.contains("Directory.data#companies"),
+        "expected cross-package write rejection, got: {write_err}"
+    );
+
+    // Missing foreign package is rejected at ColumnsAdd.
+    let crm_base = lattice_data::DataApp::open(&crm)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    let missing = engine
+        .apply(Transaction::new(
+            "Add missing package relation",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("CRM.data"),
+                table: "contacts".into(),
+                columns: vec![ColumnSpec::relation("ghost", "Missing.data#companies")],
+                base_revision: crm_base,
+            }],
+        ))
+        .unwrap_err()
+        .to_string();
+    assert!(
+        missing.contains("Missing.data") || missing.contains("not found"),
+        "expected missing package error, got: {missing}"
+    );
+
+    // Same-package relations still work through the engine.
+    let crm_base = lattice_data::DataApp::open(&crm)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Add tags table",
+            vec![Command::TableAdd {
+                path: PathBuf::from("CRM.data"),
+                table_name: "tags".into(),
+                base_revision: crm_base,
+            }],
+        ))
+        .unwrap();
+    let crm_base = lattice_data::DataApp::open(&crm)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Add tags columns and relation",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("CRM.data"),
+                table: "tags".into(),
+                columns: vec![ColumnSpec::new("name", lattice_data::FieldType::Text)],
+                base_revision: crm_base,
+            }],
+        ))
+        .unwrap();
+    let crm_base = lattice_data::DataApp::open(&crm)
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Add same-package tags relation",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("CRM.data"),
+                table: "contacts".into(),
+                columns: vec![ColumnSpec::relation("tags", "tags")],
+                base_revision: crm_base,
+            }],
+        ))
+        .unwrap();
+}
+
