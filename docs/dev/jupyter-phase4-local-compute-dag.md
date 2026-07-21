@@ -1,18 +1,19 @@
 # Jupyter Phase-4 Local Compute DAG
 
-**Status:** Active — J0 in progress  
+**Status:** Complete  
 **Created:** 2026-07-20  
+**Closed:** 2026-07-20  
 **BASE:** `feat/demo-analytics-polish`  
 **Integration branch:** `feat/demo-analytics-polish`  
 **Model:** `cursor-grok-4.5-high` (`best-of-n-runner` worktrees)
 
-Stack local native compute onto the demo-analytics polish tip: `KernelSession`,
+Stacked local native compute onto the demo-analytics polish tip: `KernelSession`,
 out-of-process `ipykernel`, `uv` tasks, optional Nix. Remote kernels, scheduled
-runs, and rich widgets stay out of this DAG.
+runs, and rich widgets stayed out of this DAG.
 
 ## Problem / end state
 
-Phase N3 already ships `.ipynb` open + Pyodide Run + `ResourceUpdate` persist.
+Phase N3 already shipped `.ipynb` open + Pyodide Run + `ResourceUpdate` persist.
 Native Jupyter / `uv` / Nix were docs-only ([Jupyter and compute](../14-jupyter-python-nix-and-compute.md),
 [ADR 0009](../decisions/0009-dual-python-and-jupyter-runtime.md)).
 
@@ -26,6 +27,8 @@ Native Jupyter / `uv` / Nix were docs-only ([Jupyter and compute](../14-jupyter-
 4. Optional Nix env provider resolves flake/`nix-shell` PATH; missing Nix
    degrades honestly.
 5. Docs/contracts updated; remote kernels, schedules, and widgets deferred.
+
+All five criteria are met on `feat/demo-analytics-polish`.
 
 ## Defaults (locked)
 
@@ -78,19 +81,27 @@ flowchart TD
 
 | ID | Status | Model | Notes |
 |---|---|---|---|
-| J0 | in progress | cursor-grok-4.5-high | Contracts + this DAG tracker |
-| J1 | pending | cursor-grok-4.5-high | `KernelSession` TS + Pyodide adapter |
-| J2 | pending | cursor-grok-4.5-high | Native ipykernel Rust bridge + Tauri |
-| J4 | pending | cursor-grok-4.5-high | Shared `EnvProvider` Rust |
-| J3 | pending | cursor-grok-4.5-high | NotebookViewer native/Pyodide wiring |
-| J5 | pending | cursor-grok-4.5-high | `uv` `task.yaml` runner |
-| J6 | pending | cursor-grok-4.5-high | Optional Nix `EnvProvider` |
-| J7 | pending | cursor-grok-4.5-high | Docs/seeds closeout |
+| J0 | completed | cursor-grok-4.5-high | Locked session/env/task contracts in `docs/14` + `docs/39`; added this tracker |
+| J1 | completed | cursor-grok-4.5-high | `KernelSession` TS + `createPyodideKernelSession` |
+| J2 | completed | cursor-grok-4.5-high | Native ipykernel stdio bridge + Tauri session map |
+| J4 | completed | cursor-grok-4.5-high | Shared `EnvProvider` (`system` \| `uv-project`) |
+| J3 | completed | cursor-grok-4.5-high | NotebookViewer native/Pyodide selector; browser Pyodide-only |
+| J5 | completed | cursor-grok-4.5-high | `uv` `task.yaml` runner with timeout/cwd/logs |
+| J6 | completed | cursor-grok-4.5-high | Optional Nix `EnvProvider`; typed unavailable when missing |
+| J7 | completed | cursor-grok-4.5-high | Docs/seeds closeout; DAG marked Complete |
 
-Mark nodes `merged` only after parent review + merge into
-`feat/demo-analytics-polish`.
+## Still deferred (out of this DAG)
 
-## Architecture (target)
+These remain product backlog — do not treat them as shipped by Phase-4 local:
+
+- Remote Jupyter server attach / remote kernels
+- Scheduled notebook runs / `notebook.executed` workflow jobs
+- ipywidgets / `comm` channels and rich widget MIME
+- Lattice Python resource SDK
+- Proposed-transaction outputs from `*.task/` runs
+- `latticed` kernel supervision (v1 stays Tauri-supervised)
+
+## Architecture (shipped)
 
 ```mermaid
 flowchart LR
@@ -116,12 +127,12 @@ flowchart LR
 
 ### J0 — Contracts and DAG doc
 
-Lock session/env/task shapes in `docs/14` + `docs/39`; add this tracker. Docs
+Locked session/env/task shapes in `docs/14` + `docs/39`; added this tracker. Docs
 only; no runtime code.
 
 ### J1 — Frontend `KernelSession` + Pyodide adapter
 
-Introduce `ensure` / `execute` / `interrupt` / `dispose`; wrap existing
+Introduced `ensure` / `execute` / `interrupt` / `dispose`; wrapped existing
 Pyodide as `createPyodideKernelSession`. No Tauri yet. Depends on J0.
 
 ### J2 — Native ipykernel supervisor
@@ -132,27 +143,27 @@ kill-on-drop session map. No viewer wiring; no Nix. Depends on J0.
 
 ### J3 — Viewer runtime selector
 
-Wire native session over Tauri; prefer native when available else Pyodide;
+Wired native session over Tauri; prefer native when available else Pyodide;
 browser stays Pyodide-only. Depends on J1 + J2.
 
 ### J4 — Shared `EnvProvider`
 
-Resolve `{ python, path_env, provenance }` for `system` \| `uv-project` \|
+Resolved `{ python, path_env, provenance }` for `system` \| `uv-project` \|
 nix stub. Depends on J0.
 
 ### J5 — `uv` task execution
 
-Parse `task.yaml` (`provider: uv`); `uv run` with timeout/cwd; capture
+Parsed `task.yaml` (`provider: uv`); `uv run` with timeout/cwd; capture
 stdout/stderr/exit. No proposed-tx outputs. Depends on J4 + J2.
 
 ### J6 — Optional Nix env provider
 
-Implement `nix` provider; typed unavailable when missing; never silent
+Implemented `nix` provider; typed unavailable when missing; never silent
 system fallback when nix was requested. Depends on J4.
 
 ### J7 — Docs, seeds, contract closeout
 
-Align `docs/14`, `docs/39`, `docs/06`, demo notes; refresh DAG statuses.
+Aligned `docs/14`, `docs/39`, `docs/06`, demo notes; refreshed DAG statuses.
 Depends on J3 + J5 + J6.
 
 ## Explicit non-goals
