@@ -179,9 +179,9 @@ Home.md items 1–9. Status: **pass** / **fail** / **skip**.
 | 7 | Move `Product/Vision`; accept link repair | **skip** (browser) / **harness** (native P2S01) | Browser remaps paths in memory with **no** repair modal. Native drag-to-folder + `LinkRepairReviewModal` covered by tree Tauri smoke (accept when present). | `useResourceController.ts`; `tree.smoke.tauri.spec.ts`; `docs/39-resource-runtime-contracts.md` |
 | 8 | ⌘-click multi-select + drag move | **pass** (selection/move UI) / native batch repair | Tree is `aria-multiselectable`; batch move (2+) previews combined link repair and applies one transaction when accepted. Browser remaps locally; native `preview_batch_link_repair` / `apply_batch_link_repair`. | `ResourceTree.tsx:396`; `useResourceController.ts` batch branch; `docs/39-resource-runtime-contracts.md` |
 | 9 | Multi-select delete + confirm | **pass** (browser local) / **harness** (native P2S01) | Confirm dialog + batch delete; browser filters snapshot; native `deleteResources` → Trash. Tree smoke uses Delete/Backspace + confirm + undo. | `treeActions.ts`; `useDesktopController.ts`; `tree.smoke.tauri.spec.ts` |
-| 10 | `CRM.data` → **Add column** → add `text` column | **pass** (browser honesty) / **skip** (native pass) | Panel opens in browser; submit disabled with **Native desktop** label and notice (P2P01). Native `add_data_columns` not exercised beyond smoke scope. | `AddColumnPanel.tsx:378–379`, `556–564`; `browserDemoHonesty.ts` |
-| 11 | **Import CSV…** → type-review → commit | **skip** (browser) / **skip** (native pass) | Browser blocks with explicit error; native `preview_csv_import` / `commit_csv_import` path not exercised in this pass. | `desktopActions.ts:137–215`; `CsvImportReviewDialog.tsx` |
-| 12 | `Data/sample.csv` → **Create table from CSV…** | **skip** (browser) / **skip** (native pass) | Same import path as item 11 via `handlePromoteWorkspaceCsv`; native-only. | `TextViewer.tsx:173–180`; `desktopActions.ts:159–178` |
+| 10 | `CRM.data` → **Add column** → add `text` column | **pass** (browser honesty) / **harness** (native P2S02) | Panel opens in browser; submit disabled with **Native desktop** label and notice (P2P01). Native: Add column → `text` `smoke_notes` covered by schema Tauri smoke. | `AddColumnPanel.tsx`; `browserDemoHonesty.ts`; `schema.smoke.tauri.spec.ts` |
+| 11 | **Import CSV…** → type-review → commit | **skip** (browser) / **harness** (native P2S02 via promote) | Browser blocks with explicit error; native file-picker Import… not in harness — same type-review/commit path covered via item 12 promote. | `desktopActions.ts`; `CsvImportReviewDialog.tsx`; `schema.smoke.tauri.spec.ts` |
+| 12 | `Data/sample.csv` → **Create table from CSV…** | **skip** (browser) / **harness** (native P2S02) | Same import path as item 11 via `handlePromoteWorkspaceCsv`; native schema smoke promotes sample.csv through Review CSV import → Import. | `TextViewer.tsx:173–180`; `desktopActions.ts`; `schema.smoke.tauri.spec.ts` |
 | 13 | Paginated grid **Showing N of M** / **Load more** | **skip** (demo window) | `demoMutate` hides pagination chrome; CRM seed `has_more: false`. Native tables >500 rows use `open_data_app` windowing. | `DataTableView.tsx:1074–1091`; `types.ts:62–64` |
 | 14 | **Add column** → `lookup` or `rollup` on relation | **pass** (fixture) / **pass** (browser honesty) / **skip** (native add) | Template seeds `company_name` lookup + `contact_count` rollup with resolved grid values (P2P04). Browser add-column submit remains native-gated (P2P01). Native add-column not smoke-covered. | `demoWorkspace.generated.ts:519+`, `1421+`; `AddColumnPanel.tsx` |
 | 15 | Canvas **CRM ContactOps** → interface open | **pass** (fixture) | Demo canvas node uses `subpath: interfaces/ContactOps`; browser resolves via `interfaceNameFromCanvasSubpath`. | `demoWorkspace.generated.ts:306–312`; `dataViewSubpath.ts` |
@@ -216,7 +216,7 @@ Wave 1 (items 1–4, 6) shipped on `main`. Remaining items are post–Wave 1.
 6. ~~**P2 — Batch move link-repair**~~ — done (B1).
 7. ~~**P2 — Persist Save view in demo or clear CTA**~~ — done (P2P01: disabled Save view + **Native desktop** label).
 8. ~~**P2 — Native demo pass** for folder undo, single-path move+repair, multi-select trash+undo~~ — done (P2S01: `pnpm --filter @lattice/desktop test:tree:tauri`).
-9. **P2 — Native Wave 2 pass** for lookup/rollup **add-column**, tabular import, and full FormSave persist — partial: P2P06 smoke covers Actions + FormSave designer; add-column and tabular import still **skip** above.
+9. ~~**P2 — Native Wave 2 pass** for **add-column** (text) + tabular import + FormSave designer~~ — done for text add-column + sample.csv promote (P2S02: `test:schema:tauri`); FormSave designer covered by P2P06. Lookup/rollup **add-column** and file-picker Import… remain manual.
 
 ## How to re-run
 
@@ -234,6 +234,10 @@ pnpm --filter @lattice/desktop test:crm:tauri
 # Native tree/undo/move/trash smoke (local only — not a CI gate; P2S01)
 pnpm --filter @lattice/desktop test:tree:tauri
 # spec: apps/desktop/e2e/data/tree.smoke.tauri.spec.ts
+
+# Native schema / sample.csv promote smoke (local only — not a CI gate; P2S02)
+pnpm --filter @lattice/desktop test:schema:tauri
+# spec: apps/desktop/e2e/data/schema.smoke.tauri.spec.ts
 
 # Native full tour (DuckDB viz, tabular import, etc.)
 # see docs/dev/nix-workflows.md — desktop-dev / LATTICE_DEV_HOME First Look seed
