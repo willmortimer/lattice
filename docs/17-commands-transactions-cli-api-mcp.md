@@ -71,6 +71,12 @@ Transactions include:
 
 Scripts, apps, workflows, and agents should prefer returning a proposal rather than writing directly.
 
+The desktop persists general transaction proposals under
+`<workspace>/.lattice/proposals/` (sibling to link-repair). Review accepts a
+command subset into one `CommandEngine` transaction; reject/dismiss removes the
+pending file. MCP remains read-only for writes in the current phase — agents
+still return proposals for human review rather than calling mutation tools.
+
 The review UI shows:
 
 - Files changed.

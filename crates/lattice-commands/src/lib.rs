@@ -31,6 +31,7 @@ mod engine;
 mod error;
 mod history;
 mod link_repair;
+mod proposal;
 mod revisions;
 mod task;
 mod template;
@@ -43,8 +44,8 @@ pub use command::{
     Transaction, TransactionReceipt, UndoReport,
 };
 pub use contracts::{
-    ExecutionResult, ExecutionStatus, ProposalSource, ProposalSourceType, ResourceOutput,
-    TransactionProposal,
+    ExecutionResult, ExecutionStatus, ProposalSource, ProposalSourceType, ProposalStatus,
+    ResourceOutput, TransactionProposal, TransactionProposalSummary,
 };
 pub use engine::CommandEngine;
 pub use error::Error;
@@ -55,6 +56,11 @@ pub use link_repair::{
     list_link_repair_proposals, load_link_repair_proposal,
     maybe_save_external_link_repair_proposal, new_link_repair_plan_id, save_link_repair_proposal,
     LINK_REPAIR_DIR,
+};
+pub use proposal::{
+    apply_proposal, build_proposal_transaction, create_proposal, dismiss_proposal, load_proposal,
+    list_proposal_summaries, new_proposal_id, proposal_now_iso, proposals_dir, save_proposal,
+    PROPOSALS_DIR,
 };
 pub use revisions::{
     ConflictEnvelope, HistoryCleanupCandidate, HistoryCleanupReport, HistoryRetentionPolicy,
