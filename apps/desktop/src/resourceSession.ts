@@ -1,6 +1,7 @@
 import type { DataAppSnapshot } from "./data/types";
 import type { PageIO } from "./editor/pageIO";
 import type { ResourceEncoding, ResourceInspection } from "./lib/resourceRuntime";
+import type { TaskManifestDto } from "./lib/taskRun";
 import type { Resource } from "./types";
 
 /** The resource currently open in the main surface.
@@ -48,6 +49,11 @@ export type OpenResourceSession =
       resource: Resource;
       content: string;
       revision: string;
+    }
+  | {
+      kind: "task";
+      resource: Resource;
+      manifest: TaskManifestDto;
     }
   | {
       kind: "unknown";

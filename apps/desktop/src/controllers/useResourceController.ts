@@ -7,6 +7,7 @@ import { readNativeCanvas } from "../canvas/adapter";
 import { previewBatchLinkRepair, previewLinkRepair, type BatchLinkRepairPlan, type LinkRepairPlan, type LinkRepairPathChange } from "../lib/linkRepair";
 import { applyPathRemaps, type PathRemap } from "../lib/pathRemap";
 import { moveResource, moveResources } from "../lib/resourceMutations";
+import { loadTaskManifest } from "../lib/taskRun";
 import { destinationPath } from "../lib/treeOps";
 import type { OpenResourceSession } from "../resourceSession";
 import { deriveResourceFormatId } from "../resourceRendererRegistry";
@@ -289,6 +290,42 @@ export function useResourceController(options: ResourceControllerOptions): Resou
             content: loaded.window.content,
             revision: loaded.inspection.revision,
           });
+        }
+      } catch (error) {
+        if (isCurrentLoad(ticket)) {
+          setSession(null);
+          onError(String(error));
+        }
+      } finally {
+        if (isCurrentLoad(ticket)) onBusy(false);
+      }
+      return;
+    }
+
+    if (resource.kind === "task" && workspace) {
+      if (inBrowser) {
+        if (isCurrentLoad(ticket)) {
+          setSession({
+            kind: "task",
+            resource,
+            manifest: {
+              format: "lattice-task",
+              version: 1,
+              runtime: { type: "python", provider: "uv", project: "." },
+              entrypoint: { command: ["python", "main.py"] },
+              limits: { timeoutSeconds: 300 },
+              inputs: [],
+              outputs: [],
+            },
+          });
+        }
+        return;
+      }
+      onBusy(true);
+      try {
+        const manifest = await loadTaskManifest(workspace.root, resource.path);
+        if (isCurrentLoad(ticket)) {
+          setSession({ kind: "task", resource, manifest });
         }
       } catch (error) {
         if (isCurrentLoad(ticket)) {

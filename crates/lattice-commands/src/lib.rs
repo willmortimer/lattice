@@ -68,8 +68,9 @@ pub use revisions::{
     RevisionService, RevisionSource,
 };
 pub use task::{
-    run_task, TaskEntrypoint, TaskError, TaskLimits, TaskManifest, TaskRunOutput, TaskRunner,
-    TaskRuntime, DEFAULT_TIMEOUT_SECONDS, TASK_FORMAT, TASK_MANIFEST_FILENAME, UV_PROVIDER,
+    kill_child_tree, resolve_task_paths, run_task, SpawnedTask, TaskEntrypoint, TaskError,
+    TaskIoRef, TaskLimits, TaskManifest, TaskRunOutput, TaskRunner, TaskRuntime,
+    DEFAULT_TIMEOUT_SECONDS, TASK_FORMAT, TASK_MANIFEST_FILENAME, UV_PROVIDER,
 };
 pub use template::{
     instantiate_template, resolve_page_create_content, title_from_page_path, utc_iso_date,
