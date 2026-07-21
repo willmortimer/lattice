@@ -1,0 +1,16 @@
+[package]
+name = "lattice-kernel"
+description = "Out-of-process ipykernel supervisor via stdio JSON-lines bridge (ADR 0009)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

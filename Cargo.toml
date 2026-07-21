@@ -21,6 +21,7 @@ members = [
     "crates/lattice-runtime",
     "crates/lattice-terminal",
     "crates/lattice-env",
+    "crates/lattice-kernel",
     "crates/lattice-voice",
     "crates/lattice-voice-macos",
     "crates/lattice-audio",
@@ -54,6 +55,7 @@ lattice-handlers = { path = "crates/lattice-handlers" }
 lattice-runtime = { path = "crates/lattice-runtime" }
 lattice-terminal = { path = "crates/lattice-terminal" }
 lattice-env = { path = "crates/lattice-env" }
+lattice-kernel = { path = "crates/lattice-kernel" }
 lattice-voice = { path = "crates/lattice-voice" }
 lattice-voice-macos = { path = "crates/lattice-voice-macos" }
 lattice-audio = { path = "crates/lattice-audio" }
