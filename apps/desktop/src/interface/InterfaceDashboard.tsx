@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import type { DataAppSnapshot } from "../data/types";
 import type { InterfaceComponent, InterfaceDef } from "../lib/bindingSpec";
@@ -9,6 +9,7 @@ import {
   reorderComponents,
   resizeComponentSpan,
 } from "./layout";
+import { initialParameterValues } from "./parameterSubstitution";
 import { savePackageInterface } from "./saveInterface";
 import "./interfaceDashboard.css";
 
@@ -37,9 +38,32 @@ export function InterfaceDashboard({
 }: InterfaceDashboardProps) {
   const columns = layoutColumns(def.layout);
   const components = def.components ?? [];
+  const parameterDefs = def.parameters;
   const [dragId, setDragId] = useState<string | null>(null);
   const [persistError, setPersistError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [paramValues, setParamValues] = useState(() =>
+    initialParameterValues(parameterDefs),
+  );
+
+  const parametersKey = useMemo(
+    () =>
+      JSON.stringify(
+        Object.entries(parameterDefs ?? {}).map(([name, param]) => [
+          name,
+          param.type,
+          param.default ?? null,
+        ]),
+      ),
+    [parameterDefs],
+  );
+
+  useEffect(() => {
+    setParamValues(initialParameterValues(parameterDefs));
+    // parametersKey fingerprints declared defaults so a new object identity
+    // with the same content does not wipe in-progress filter edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by parametersKey
+  }, [def.name, parametersKey]);
 
   const host = useMemo(
     () => ({
@@ -47,10 +71,11 @@ export function InterfaceDashboard({
       packagePath,
       demo,
       snapshot,
+      paramValues,
       onOpenSavedView,
       onOpenResource,
     }),
-    [demo, onOpenResource, onOpenSavedView, packagePath, root, snapshot],
+    [demo, onOpenResource, onOpenSavedView, packagePath, paramValues, root, snapshot],
   );
 
   const persist = useCallback(
@@ -90,6 +115,8 @@ export function InterfaceDashboard({
     [columns, components, def, persist, readOnly],
   );
 
+  const paramEntries = Object.entries(parameterDefs ?? {});
+
   return (
     <section className="lt-interface-dashboard" aria-label={def.title ?? def.name}>
       <header className="lt-interface-dashboard__header">
@@ -103,6 +130,30 @@ export function InterfaceDashboard({
           {saving ? "Saving…" : `${components.length} components · ${columns}-col grid`}
         </p>
       </header>
+      {paramEntries.length > 0 ? (
+        <form
+          className="lt-interface-dashboard__filters"
+          aria-label="Interface filters"
+          onSubmit={(event) => event.preventDefault()}
+        >
+          {paramEntries.map(([name, param]) => (
+            <label key={name} className="lt-interface-dashboard__filter">
+              <span className="lt-interface-dashboard__filter-label">{name}</span>
+              <input
+                type="text"
+                name={name}
+                value={paramValues[name] ?? ""}
+                placeholder={param.default == null ? undefined : String(param.default)}
+                aria-label={`Filter ${name}`}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  setParamValues((prev) => ({ ...prev, [name]: nextValue }));
+                }}
+              />
+            </label>
+          ))}
+        </form>
+      ) : null}
       {persistError ? (
         <p className="lt-interface-dashboard__error" role="alert">
           {persistError}

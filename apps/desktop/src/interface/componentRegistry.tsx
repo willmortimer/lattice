@@ -12,6 +12,7 @@ import { isDatasetRequestAborted } from "../lib/datasetCancel";
 import { queryDatasetArrow } from "../lib/datasetQuery";
 import { buildAutoBarChartSpec } from "../lib/vegaLiteChart";
 import { MetricCard } from "./MetricCard";
+import { applyParametersToBinding } from "./parameterSubstitution";
 import { primaryDuckdbResource, resolveBindingResource } from "./resolveBinding";
 import { queryDataSqlScalar } from "./saveInterface";
 
@@ -26,6 +27,8 @@ export interface InterfaceComponentHost {
   demo?: boolean;
   /** Optional snapshot for same-package data-view / form embedding. */
   snapshot?: DataAppSnapshot | null;
+  /** Live filter-bar values; substituted into query binding SQL as `{{name}}`. */
+  paramValues?: Record<string, string>;
   onOpenSavedView?: (viewName: string) => void;
   onOpenResource?: (path: string) => void;
 }
@@ -34,6 +37,8 @@ export interface RenderInterfaceComponentProps {
   component: InterfaceComponent;
   host: InterfaceComponentHost;
 }
+
+const EMPTY_PARAM_VALUES: Record<string, string> = {};
 
 function firstScalar(rows: Array<Record<string, unknown>>): string | number | null {
   const row = rows[0];
@@ -50,6 +55,7 @@ function MetricComponent({ component, host }: RenderInterfaceComponentProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const binding = component.binding;
+  const paramValues = host.paramValues ?? EMPTY_PARAM_VALUES;
 
   useEffect(() => {
     if (!binding) {
@@ -62,36 +68,37 @@ function MetricComponent({ component, host }: RenderInterfaceComponentProps) {
       return;
     }
 
+    const resolved = applyParametersToBinding(binding, paramValues);
     const controller = new AbortController();
     setBusy(true);
     setError(null);
 
     const run = async () => {
-      if (binding.type === "sqlite-query") {
-        const relPath = resolveBindingResource(host.packagePath, binding.resource);
+      if (resolved.type === "sqlite-query") {
+        const relPath = resolveBindingResource(host.packagePath, resolved.resource);
         const result = await queryDataSqlScalar({
           root: host.root!,
           relPath,
-          sql: binding.sql,
-          limit: binding.limit,
+          sql: resolved.sql,
+          limit: resolved.limit,
         });
         if (controller.signal.aborted) return;
         setValue(result.value);
         return;
       }
-      if (binding.type === "duckdb-query") {
-        const dataset = primaryDuckdbResource(binding);
+      if (resolved.type === "duckdb-query") {
+        const dataset = primaryDuckdbResource(resolved);
         const result = await queryDatasetArrow(
           host.root!,
           dataset,
-          { sql: binding.sql, maxRows: binding.limit },
+          { sql: resolved.sql, maxRows: resolved.limit },
           controller.signal,
         );
         if (controller.signal.aborted) return;
-        setValue(firstScalar(queryResultToValues(result, binding.limit)));
+        setValue(firstScalar(queryResultToValues(result, resolved.limit)));
         return;
       }
-      setError(`Unsupported metric binding type: ${binding.type}`);
+      setError(`Unsupported metric binding type: ${resolved.type}`);
     };
 
     void run()
@@ -105,7 +112,7 @@ function MetricComponent({ component, host }: RenderInterfaceComponentProps) {
       });
 
     return () => controller.abort();
-  }, [binding, host.demo, host.packagePath, host.root]);
+  }, [binding, host.demo, host.packagePath, host.root, paramValues]);
 
   return (
     <MetricCard
@@ -123,6 +130,7 @@ function ChartComponent({ component, host }: RenderInterfaceComponentProps) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const binding = component.binding;
+  const paramValues = host.paramValues ?? EMPTY_PARAM_VALUES;
 
   useEffect(() => {
     if (!binding || binding.type !== "duckdb-query") {
@@ -133,19 +141,24 @@ function ChartComponent({ component, host }: RenderInterfaceComponentProps) {
       setError("Open a native workspace to load chart data.");
       return;
     }
+    const resolved = applyParametersToBinding(binding, paramValues);
+    if (resolved.type !== "duckdb-query") {
+      setError("Chart components require a duckdb-query binding");
+      return;
+    }
     const controller = new AbortController();
     setBusy(true);
     setError(null);
-    const dataset = primaryDuckdbResource(binding);
+    const dataset = primaryDuckdbResource(resolved);
     void queryDatasetArrow(
       host.root,
       dataset,
-      { sql: binding.sql, maxRows: binding.limit },
+      { sql: resolved.sql, maxRows: resolved.limit },
       controller.signal,
     )
       .then((result) => {
         if (controller.signal.aborted) return;
-        const values = queryResultToValues(result, binding.limit);
+        const values = queryResultToValues(result, resolved.limit);
         if (values.length === 0) {
           setError("Chart query returned no rows");
           setSpec(null);
@@ -168,7 +181,7 @@ function ChartComponent({ component, host }: RenderInterfaceComponentProps) {
         if (!controller.signal.aborted) setBusy(false);
       });
     return () => controller.abort();
-  }, [binding, host.demo, host.root]);
+  }, [binding, host.demo, host.root, paramValues]);
 
   return (
     <div className="lt-interface-pane">
@@ -190,13 +203,15 @@ function MapComponent({ component, host }: RenderInterfaceComponentProps) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const binding = component.binding;
+  const paramValues = host.paramValues ?? EMPTY_PARAM_VALUES;
 
   useEffect(() => {
+    const resolved = binding ? applyParametersToBinding(binding, paramValues) : undefined;
     const datasetPath =
-      binding?.type === "resource"
-        ? resolveBindingResource(host.packagePath, binding.resource)
-        : binding?.type === "duckdb-query"
-          ? primaryDuckdbResource(binding)
+      resolved?.type === "resource"
+        ? resolveBindingResource(host.packagePath, resolved.resource)
+        : resolved?.type === "duckdb-query"
+          ? primaryDuckdbResource(resolved)
           : null;
     if (!datasetPath) {
       setError("Map components require a resource or duckdb-query binding");
@@ -209,16 +224,13 @@ function MapComponent({ component, host }: RenderInterfaceComponentProps) {
     const controller = new AbortController();
     setBusy(true);
     setError(null);
-    const sql =
-      binding?.type === "duckdb-query"
-        ? binding.sql
-        : undefined;
+    const sql = resolved?.type === "duckdb-query" ? resolved.sql : undefined;
     void queryDatasetArrow(
       host.root,
       datasetPath,
       {
         sql,
-        maxRows: binding?.type === "duckdb-query" ? binding.limit : 500,
+        maxRows: resolved?.type === "duckdb-query" ? resolved.limit : 500,
       },
       controller.signal,
     )
@@ -236,7 +248,7 @@ function MapComponent({ component, host }: RenderInterfaceComponentProps) {
         if (!controller.signal.aborted) setBusy(false);
       });
     return () => controller.abort();
-  }, [binding, host.demo, host.packagePath, host.root]);
+  }, [binding, host.demo, host.packagePath, host.root, paramValues]);
 
   return (
     <div className="lt-interface-pane lt-interface-pane--map">

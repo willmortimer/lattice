@@ -756,6 +756,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 title: Some("Contact operations"),
                 description: Some("Board view plus contact intake form for CRM canvas open."),
                 layout_columns: None,
+                parameters_json: None,
                 components_json: None,
             },
                 SeedDataInterface {
@@ -769,7 +770,8 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                 title: Some("Ops dashboard"),
                 description: Some("Multi-component CRM interface (metric, chart, map, data-view, form)."),
                 layout_columns: Some(12),
-                components_json: Some("[{\"id\":\"contact_count\",\"type\":\"metric\",\"span\":3,\"title\":\"Contacts\",\"binding\":{\"type\":\"sqlite-query\",\"resource\":\".\",\"sql\":\"SELECT COUNT(*) AS value FROM contacts\",\"limit\":1}},{\"id\":\"revenue_chart\",\"type\":\"chart\",\"span\":6,\"title\":\"Revenue by region\",\"binding\":{\"type\":\"duckdb-query\",\"resources\":[\"Data/Orders.dataset\"],\"sql\":\"SELECT region, sum(revenue) AS revenue FROM read_parquet('Data/Orders.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true) GROUP BY region ORDER BY region\",\"limit\":100},\"chart\":\"Dashboards/Revenue by region and category.vl.json\"},{\"id\":\"places_map\",\"type\":\"map\",\"span\":6,\"title\":\"Places\",\"binding\":{\"type\":\"resource\",\"resource\":\"Data/Places.dataset\"}},{\"id\":\"board\",\"type\":\"data-view\",\"span\":6,\"title\":\"Board\",\"binding\":{\"type\":\"saved-view\",\"resource\":\".\",\"view\":\"Board\"}},{\"id\":\"intake\",\"type\":\"form\",\"span\":6,\"binding\":{\"type\":\"resource\",\"resource\":\".\"},\"form\":\"ContactIntake\"}]"),
+                parameters_json: Some("{\"region\":{\"type\":\"string\",\"default\":\"all\"}}"),
+                components_json: Some("[{\"id\":\"contact_count\",\"type\":\"metric\",\"span\":3,\"title\":\"Contacts\",\"binding\":{\"type\":\"sqlite-query\",\"resource\":\".\",\"sql\":\"SELECT COUNT(*) AS value FROM contacts\",\"limit\":1}},{\"id\":\"revenue_chart\",\"type\":\"chart\",\"span\":6,\"title\":\"Revenue by region\",\"binding\":{\"type\":\"duckdb-query\",\"resources\":[\"Data/Orders.dataset\"],\"sql\":\"SELECT region, sum(revenue) AS revenue FROM read_parquet('Data/Orders.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true) WHERE ('{{region}}' = 'all' OR region = '{{region}}') GROUP BY region ORDER BY region\",\"limit\":100},\"chart\":\"Dashboards/Revenue by region and category.vl.json\"},{\"id\":\"places_map\",\"type\":\"map\",\"span\":6,\"title\":\"Places\",\"binding\":{\"type\":\"duckdb-query\",\"resources\":[\"Data/Places.dataset\"],\"sql\":\"SELECT * FROM read_parquet('Data/Places.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true) WHERE ('{{region}}' = 'all' OR '{{region}}' IS NOT NULL)\",\"limit\":500}},{\"id\":\"board\",\"type\":\"data-view\",\"span\":6,\"title\":\"Board\",\"binding\":{\"type\":\"saved-view\",\"resource\":\".\",\"view\":\"Board\"}},{\"id\":\"intake\",\"type\":\"form\",\"span\":6,\"binding\":{\"type\":\"resource\",\"resource\":\".\"},\"form\":\"ContactIntake\"}]"),
             }
             ],
         },

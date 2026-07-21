@@ -836,7 +836,7 @@ function normalizeDataPackageInterface(
 
   const views = normalizeInterfaceNameList(entry.views, template, `${label}.views`, knownViews, "view");
   const forms = normalizeInterfaceNameList(entry.forms, template, `${label}.forms`, knownForms, "form");
-  const components = normalizeInterfaceComponents(entry.components, template, `${label}.components`);
+  let components = normalizeInterfaceComponents(entry.components, template, `${label}.components`);
   if (views.length === 0 && forms.length === 0 && components.length === 0) {
     throw new Error(`${template}: ${label} must bind at least one view, form, or component`);
   }
@@ -849,6 +849,7 @@ function normalizeDataPackageInterface(
   ) {
     throw new Error(`${template}: ${label}.description must be a non-empty string`);
   }
+  const parameters = normalizeInterfaceParameters(entry.parameters, template, `${label}.parameters`);
   let layoutColumns;
   if (entry.layout !== undefined) {
     if (!entry.layout || typeof entry.layout !== "object" || Array.isArray(entry.layout)) {
@@ -869,9 +870,45 @@ function normalizeDataPackageInterface(
     forms,
     title: entry.title,
     description: entry.description,
+    parameters,
     layoutColumns,
     components,
   };
+}
+
+function normalizeInterfaceParameters(raw, template, label) {
+  if (raw === undefined) return undefined;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error(`${template}: ${label} must be an object`);
+  }
+  const parameters = {};
+  for (const [name, entry] of Object.entries(raw)) {
+    if (!isSqlIdentifier(name)) {
+      throw new Error(`${template}: ${label} key ${name} must be a valid identifier`);
+    }
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error(`${template}: ${label}.${name} must be an object`);
+    }
+    if (typeof entry.type !== "string" || entry.type.trim() === "") {
+      throw new Error(`${template}: ${label}.${name}.type must be a non-empty string`);
+    }
+    const param = { type: entry.type };
+    if (entry.default !== undefined) {
+      if (
+        entry.default !== null &&
+        typeof entry.default !== "string" &&
+        typeof entry.default !== "number" &&
+        typeof entry.default !== "boolean"
+      ) {
+        throw new Error(
+          `${template}: ${label}.${name}.default must be a string, number, boolean, or null`,
+        );
+      }
+      param.default = entry.default;
+    }
+    parameters[name] = param;
+  }
+  return Object.keys(parameters).length > 0 ? parameters : undefined;
 }
 
 const INTERFACE_COMPONENT_TYPES = new Set(["metric", "chart", "map", "form", "data-view"]);
@@ -1152,6 +1189,10 @@ function rustDataAction(action) {
 function rustDataInterface(iface) {
   const views = iface.views.map((view) => rustString(view)).join(",\n                    ");
   const forms = iface.forms.map((form) => rustString(form)).join(",\n                    ");
+  const parametersJson =
+    iface.parameters && Object.keys(iface.parameters).length > 0
+      ? rustOptionString(JSON.stringify(iface.parameters))
+      : "None";
   const componentsJson =
     iface.components && iface.components.length > 0
       ? rustOptionString(JSON.stringify(iface.components))
@@ -1165,6 +1206,7 @@ function rustDataInterface(iface) {
                 title: ${rustOptionString(iface.title)},
                 description: ${rustOptionString(iface.description)},
                 layout_columns: ${layoutColumns},
+                parameters_json: ${parametersJson},
                 components_json: ${componentsJson},
             }`;
 }
@@ -1652,6 +1694,7 @@ function buildDemoInterfaceCatalog(packageDef) {
     forms: iface.forms,
     ...(iface.title === undefined ? {} : { title: iface.title }),
     ...(iface.description === undefined ? {} : { description: iface.description }),
+    ...(iface.parameters === undefined ? {} : { parameters: iface.parameters }),
     ...(iface.layoutColumns === undefined ? {} : { layout: { columns: iface.layoutColumns } }),
     ...(iface.components && iface.components.length > 0 ? { components: iface.components } : {}),
   }));
