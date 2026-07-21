@@ -25,10 +25,12 @@ a new workspace from the First Look template, or copy missing seeds from
 6. Also open `Projects/Delivery.data`, `Data/Metrics.data`, and `OKRs.data` for more table shapes.
 7. Open `Data/Events.dataset` — DuckDB Parquet facts → Perspective **Preview**, Vega-Lite **Chart**, DuckDB **Profile**.
 8. Open `Dashboards/Signups by region.vl.json` — bound Vega-Lite chart over the same Hive Parquet.
-9. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.
-10. Open `Notebooks/CRM exploration.ipynb` — CRM tour notebook (markdown + code stubs).
-11. Create pages from `Templates/` — daily and meeting note scaffolds.
-12. Read [[Research/Local Runtime]] — daemon, search, and voice process model.
+9. Open `Data/Orders.dataset` — multi-month retail facts (~3 000 rows) for richer charts.
+10. Open the Orders dashboards — stacked region/category, daily revenue, and channel comparison (`.vl.json` under `Dashboards/`).
+11. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.
+12. Open `Notebooks/CRM exploration.ipynb` — CRM tour notebook (markdown + code stubs).
+13. Create pages from `Templates/` — daily and meeting note scaffolds.
+14. Read [[Research/Local Runtime]] — daemon, search, and voice process model.
 
 ## First Look tour — new surfaces
 
@@ -74,13 +76,20 @@ and voice features. Each step is safe in the sample workspace; undo where noted.
 20. Open `Dashboards/Signups by region.vl.json` — chart resource bound with `read_parquet(...)`.
 21. Optional CLI: `lattice dataset query-annotated Data/Events.dataset --json` (review overlay in `annotations.sqlite`).
 
+### Orders dataset & multi-series charts
+
+22. Open `Data/Orders.dataset` → **Preview** — ~3 000 synthetic retail rows across `facts/year=2026/month=0{1,2,3}/`.
+23. Open `Dashboards/Revenue by region and category.vl.json` — stacked bars (region × category).
+24. Open `Dashboards/Revenue by day.vl.json` — daily revenue time series (Jan–Mar 2026).
+25. Open `Dashboards/Revenue by channel.vl.json` — layered channel comparison (revenue bars + order counts).
+
 ### Resource tree
 
-22. Create a folder under `Projects/` (context menu or **New folder**).
-23. Press **⌘Z** to undo the folder creation.
-24. Move [[Product/Vision]] into another folder; accept link repair when prompted.
-25. **⌘-click** two pages, drag to a folder (multi-select move).
-26. Select multiple items and delete — confirm the batch operation.
+26. Create a folder under `Projects/` (context menu or **New folder**).
+27. Press **⌘Z** to undo the folder creation.
+28. Move [[Product/Vision]] into another folder; accept link repair when prompted.
+29. **⌘-click** two pages, drag to a folder (multi-select move).
+30. Select multiple items and delete — confirm the batch operation.
 
 ### Where to look next
 
@@ -130,6 +139,10 @@ Workspace defaults point quick capture at `Inbox/` and templates at `Templates/`
 | `OKRs.data` | Objectives / key results board |
 | `Data/Events.dataset` | Analytical package — Hive Parquet facts + `annotations.sqlite` |
 | `Dashboards/Signups by region.vl.json` | Vega-Lite chart bound to Events via DuckDB |
+| `Data/Orders.dataset` | Retail orders — multi-month Hive Parquet for multi-series charts |
+| `Dashboards/Revenue by region and category.vl.json` | Stacked bars (Orders region × category) |
+| `Dashboards/Revenue by day.vl.json` | Daily revenue time series (Orders) |
+| `Dashboards/Revenue by channel.vl.json` | Layered channel comparison (Orders) |
 | `Data/sample.csv` | Flat CSV import sample |
 | `Notebooks/CRM exploration.ipynb` | CRM tour notebook (nbformat v4) |
 
@@ -204,6 +217,10 @@ fallback: "Open CRM board view"
 | `OKRs.data` | data app |
 | `Data/Events.dataset` | dataset (Parquet + annotations) |
 | `Dashboards/Signups by region.vl.json` | Vega-Lite chart |
+| `Data/Orders.dataset` | dataset (multi-month Parquet) |
+| `Dashboards/Revenue by region and category.vl.json` | Vega-Lite chart (Orders) |
+| `Dashboards/Revenue by day.vl.json` | Vega-Lite chart (Orders) |
+| `Dashboards/Revenue by channel.vl.json` | Vega-Lite chart (Orders) |
 | `Data/sample.csv` | CSV file |
 | `Notebooks/CRM exploration.ipynb` | notebook |
 | `Resources/` | code & config files |
