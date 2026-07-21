@@ -308,4 +308,29 @@ mod tests {
         assert!(path.ends_with(".lattice/proposals"));
         assert!(!path.ends_with("link-repair"));
     }
+
+    #[test]
+    fn deserializes_python_sdk_sample_proposal_json() {
+        let sample = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../packages/lattice-py/testdata/sample_proposal.json");
+        let payload = fs::read_to_string(&sample)
+            .unwrap_or_else(|err| panic!("missing SDK sample at {}: {err}", sample.display()));
+        let proposal: TransactionProposal = serde_json::from_str(&payload).unwrap();
+        assert_eq!(proposal.id, "00000000-0000-4000-8000-000000000001");
+        assert_eq!(proposal.source.source_type, ProposalSourceType::Task);
+        assert_eq!(
+            proposal.source.resource.as_deref(),
+            Some("Tasks/ProposePage.task")
+        );
+        assert_eq!(proposal.commands.len(), 1);
+        match &proposal.commands[0] {
+            Command::PageCreate { path, content } => {
+                assert_eq!(path, &PathBuf::from("Notes/SdkSample.md"));
+                assert!(content.contains("Python SDK"));
+            }
+            other => panic!("expected PageCreate, got {other:?}"),
+        }
+        assert_eq!(proposal.affected_paths, vec!["Notes/SdkSample.md"]);
+        assert_eq!(proposal.status, ProposalStatus::Pending);
+    }
 }

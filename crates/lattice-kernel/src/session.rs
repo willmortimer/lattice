@@ -80,7 +80,7 @@ impl KernelSession {
             Some(launcher) => launcher,
             None => PythonLauncher::discover()?,
         };
-        let mut cmd = launcher.command_for(&bridge);
+        let mut cmd = launcher.command_for(&bridge, &opts.workspace_root);
         cmd.current_dir(&cwd)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

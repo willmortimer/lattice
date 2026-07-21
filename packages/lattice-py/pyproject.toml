@@ -1,0 +1,21 @@
+[project]
+name = "lattice"
+version = "0.1.0"
+description = "Injectable Lattice workspace SDK for native/uv notebooks and tasks"
+requires-python = ">=3.11"
+license = { text = "AGPL-3.0-or-later" }
+dependencies = []
+
+[project.optional-dependencies]
+data = ["pyarrow", "pandas"]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["lattice"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
