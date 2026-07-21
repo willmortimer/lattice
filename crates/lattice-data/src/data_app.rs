@@ -106,12 +106,26 @@ impl DataApp {
     }
 
     pub fn list_tables(&self) -> Result<Vec<String>> {
+        let junction_tables = self.junction_table_names();
         let mut stmt = self.conn.prepare(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
         )?;
         let rows = stmt.query_map([], |row| row.get(0))?;
-        rows.collect::<rusqlite::Result<Vec<String>>>()
-            .map_err(Error::from)
+        let tables = rows.collect::<rusqlite::Result<Vec<String>>>()?;
+        Ok(tables
+            .into_iter()
+            .filter(|name| !junction_tables.contains(name.as_str()))
+            .collect())
+    }
+
+    /// Junction table names referenced by relation column metadata.
+    fn junction_table_names(&self) -> std::collections::BTreeSet<String> {
+        self.manifest
+            .tables
+            .values()
+            .flat_map(|table| table.columns.values())
+            .filter_map(|column| column.junction_table.clone())
+            .collect()
     }
 
     pub fn columns(&self, table: &str) -> Result<Vec<ColumnMeta>> {
@@ -133,6 +147,7 @@ impl DataApp {
                 .map(|column| column.field_type)
                 .unwrap_or_else(|| FieldType::infer_from_sqlite(&declared_type));
             let relation_table = yaml.and_then(|column| column.relation_table.clone());
+            let junction_table = yaml.and_then(|column| column.junction_table.clone());
             let lookup_relation = yaml.and_then(|column| column.lookup_relation.clone());
             let lookup_field = yaml.and_then(|column| column.lookup_field.clone());
             let rollup_relation = yaml.and_then(|column| column.rollup_relation.clone());
@@ -144,6 +159,7 @@ impl DataApp {
                 field_type,
                 sqlite_type: declared_type,
                 relation_table,
+                junction_table,
                 lookup_relation,
                 lookup_field,
                 rollup_relation,
@@ -233,7 +249,11 @@ impl DataApp {
             .filter(|meta| !meta.field_type.is_read_only())
             .map(|meta| {
                 let value = values.get(&meta.name).cloned().unwrap_or(CellValue::Null);
-                (meta.name.as_str(), "?", value.as_sqlite_value())
+                (
+                    meta.name.as_str(),
+                    "?",
+                    sqlite_value_for_persisted_cell(meta, &value),
+                )
             })
             .fold(
                 (Vec::new(), Vec::new(), Vec::new()),
@@ -253,6 +273,7 @@ impl DataApp {
 
         self.conn
             .execute(&sql, rusqlite::params_from_iter(sql_params))?;
+        sync_row_junctions(self, &column_meta, &row.id, &values, true)?;
         Ok(())
     }
 
@@ -276,7 +297,11 @@ impl DataApp {
                     .get(&meta.name)
                     .cloned()
                     .unwrap_or(CellValue::Null);
-                (meta.name.as_str(), "?", value.as_sqlite_value())
+                (
+                    meta.name.as_str(),
+                    "?",
+                    sqlite_value_for_persisted_cell(meta, &value),
+                )
             })
             .fold(
                 (Vec::new(), Vec::new(), Vec::new()),
@@ -296,6 +321,7 @@ impl DataApp {
 
         self.conn
             .execute(&sql, rusqlite::params_from_iter(sql_params))?;
+        sync_row_junctions(self, &column_meta, &id, &insert_values, true)?;
         Ok(id)
     }
 
@@ -342,8 +368,15 @@ impl DataApp {
         let assignments: Vec<String> = values.keys().map(|name| format!("{name} = ?")).collect();
         let sql = format!("UPDATE {table} SET {} WHERE id = ?", assignments.join(", "));
 
-        let mut sql_params: Vec<rusqlite::types::Value> =
-            values.values().map(CellValue::as_sqlite_value).collect();
+        let mut sql_params: Vec<rusqlite::types::Value> = values
+            .iter()
+            .map(|(name, value)| {
+                let meta = known_columns
+                    .get(name.as_str())
+                    .expect("validated known column");
+                sqlite_value_for_persisted_cell(meta, value)
+            })
+            .collect();
         sql_params.push(rusqlite::types::Value::Text(id.to_string()));
 
         let updated = self
@@ -352,6 +385,7 @@ impl DataApp {
         if updated == 0 {
             return Err(Error::table(table, format!("row not found for id {id:?}")));
         }
+        sync_row_junctions(self, &column_meta, id, values, false)?;
         Ok(())
     }
 
@@ -368,6 +402,7 @@ impl DataApp {
 
         let tx = self.conn.unchecked_transaction()?;
         let strips = strip_incoming_relation_ids(self, table, id)?;
+        clear_outbound_junction_links(self, table, id)?;
         let updated = self
             .conn
             .execute(&format!("DELETE FROM {table} WHERE id = ?1"), params![id])?;
@@ -383,6 +418,20 @@ impl DataApp {
         for strip in strips {
             validate_identifier(&strip.table)?;
             validate_identifier(&strip.column)?;
+            let columns = self.columns(&strip.table)?;
+            let meta = columns
+                .iter()
+                .find(|column| column.name == strip.column)
+                .ok_or_else(|| {
+                    Error::table(
+                        &strip.table,
+                        format!("unknown relation column {:?}", strip.column),
+                    )
+                })?;
+            if let Some(junction) = meta.junction_table.as_deref() {
+                sync_junction_links(&self.conn, junction, &strip.row_id, &strip.prior_record_ids)?;
+                continue;
+            }
             let encoded = serde_json::to_string(&strip.prior_record_ids).map_err(|source| {
                 Error::table(
                     &strip.table,
@@ -750,6 +799,14 @@ impl DataApp {
             }
         }
 
+        let existing_junction_tables: std::collections::BTreeSet<String> = self
+            .manifest
+            .tables
+            .values()
+            .flat_map(|table_meta| table_meta.columns.values())
+            .filter_map(|column| column.junction_table.clone())
+            .collect();
+
         let table_meta = self.manifest.tables.entry(table.to_string()).or_default();
         for column in columns {
             validate_identifier(column.name)?;
@@ -774,6 +831,54 @@ impl DataApp {
                         table,
                         format!(
                             "column {:?} only relation fields may set relation_table",
+                            column.name
+                        ),
+                    ));
+                }
+                _ => None,
+            };
+
+            let junction_table = match column.field_type {
+                FieldType::Relation => {
+                    if let Some(junction) = column.junction_table {
+                        validate_identifier(junction)?;
+                        if ensure_table_exists(&self.conn, junction).is_ok() {
+                            return Err(Error::table(
+                                table,
+                                format!(
+                                    "junction_table {junction:?} already exists as a package table"
+                                ),
+                            ));
+                        }
+                        if existing_junction_tables.contains(junction) {
+                            return Err(Error::table(
+                                table,
+                                format!(
+                                    "junction_table {junction:?} is already used by another relation column"
+                                ),
+                            ));
+                        }
+                        if columns.iter().any(|pending| {
+                            pending.name != column.name
+                                && pending.junction_table == Some(junction)
+                        }) {
+                            return Err(Error::table(
+                                table,
+                                format!(
+                                    "junction_table {junction:?} is used by more than one column in this add"
+                                ),
+                            ));
+                        }
+                        Some(junction.to_string())
+                    } else {
+                        None
+                    }
+                }
+                _ if column.junction_table.is_some() => {
+                    return Err(Error::table(
+                        table,
+                        format!(
+                            "column {:?} only relation fields may set junction_table",
                             column.name
                         ),
                     ));
@@ -876,11 +981,20 @@ impl DataApp {
                 .map_err(|source| Error::table(table, source.to_string()))?;
             schema_sql.push_str(&alter);
 
+            if let Some(junction) = junction_table.as_deref() {
+                let create_junction = junction_table_schema(junction);
+                self.conn
+                    .execute_batch(&create_junction)
+                    .map_err(|source| Error::table(table, source.to_string()))?;
+                schema_sql.push_str(&create_junction);
+            }
+
             table_meta.columns.insert(
                 column.name.to_string(),
                 crate::app::ColumnMetaYaml {
                     field_type: column.field_type,
                     relation_table,
+                    junction_table,
                     lookup_relation,
                     lookup_field,
                     rollup_relation,
@@ -1032,6 +1146,138 @@ fn default_table_schema(table_name: &str) -> String {
     format!("CREATE TABLE {table_name} (\n  id TEXT PRIMARY KEY NOT NULL\n);\n")
 }
 
+fn junction_table_schema(junction_table: &str) -> String {
+    format!(
+        "CREATE TABLE {junction_table} (\n  source_id TEXT NOT NULL,\n  target_id TEXT NOT NULL,\n  PRIMARY KEY (source_id, target_id)\n);\n"
+    )
+}
+
+fn sqlite_value_for_persisted_cell(
+    meta: &ColumnMeta,
+    value: &CellValue,
+) -> rusqlite::types::Value {
+    // Junction-backed relations keep a NULL TEXT placeholder; links live in the junction table.
+    if meta.field_type == FieldType::Relation && meta.junction_table.is_some() {
+        return rusqlite::types::Value::Null;
+    }
+    value.as_sqlite_value()
+}
+
+fn load_junction_target_ids(
+    conn: &Connection,
+    junction_table: &str,
+    source_id: &str,
+) -> Result<Vec<String>> {
+    validate_identifier(junction_table)?;
+    let mut stmt = conn.prepare(&format!(
+        "SELECT target_id FROM {junction_table} WHERE source_id = ?1 ORDER BY target_id"
+    ))?;
+    let rows = stmt.query_map(params![source_id], |row| row.get(0))?;
+    rows.collect::<rusqlite::Result<Vec<String>>>()
+        .map_err(Error::from)
+}
+
+fn sync_junction_links(
+    conn: &Connection,
+    junction_table: &str,
+    source_id: &str,
+    target_ids: &[String],
+) -> Result<()> {
+    validate_identifier(junction_table)?;
+    conn.execute(
+        &format!("DELETE FROM {junction_table} WHERE source_id = ?1"),
+        params![source_id],
+    )?;
+    for target_id in target_ids {
+        conn.execute(
+            &format!("INSERT INTO {junction_table} (source_id, target_id) VALUES (?1, ?2)"),
+            params![source_id, target_id],
+        )?;
+    }
+    Ok(())
+}
+
+fn sync_row_junctions(
+    app: &DataApp,
+    column_meta: &[ColumnMeta],
+    row_id: &str,
+    values: &BTreeMap<String, CellValue>,
+    sync_unspecified: bool,
+) -> Result<()> {
+    for meta in column_meta {
+        let Some(junction) = meta.junction_table.as_deref() else {
+            continue;
+        };
+        if meta.field_type != FieldType::Relation {
+            continue;
+        }
+        if !sync_unspecified && !values.contains_key(&meta.name) {
+            continue;
+        }
+        let record_ids = match values.get(&meta.name).unwrap_or(&CellValue::Null) {
+            CellValue::Null => Vec::new(),
+            CellValue::Relation { record_ids } => record_ids.clone(),
+            _ => {
+                return Err(Error::table(
+                    meta.name.clone(),
+                    format!("column {:?} expects a relation value", meta.name),
+                ));
+            }
+        };
+        sync_junction_links(&app.conn, junction, row_id, &record_ids)?;
+    }
+    Ok(())
+}
+
+fn clear_outbound_junction_links(app: &DataApp, table: &str, row_id: &str) -> Result<()> {
+    let columns = app.columns(table)?;
+    for meta in columns {
+        let Some(junction) = meta.junction_table.as_deref() else {
+            continue;
+        };
+        validate_identifier(junction)?;
+        app.conn.execute(
+            &format!("DELETE FROM {junction} WHERE source_id = ?1"),
+            params![row_id],
+        )?;
+    }
+    Ok(())
+}
+
+fn hydrate_junction_relations(
+    app: &DataApp,
+    column_meta: &[ColumnMeta],
+    rows: &mut [Row],
+) -> Result<()> {
+    let junction_columns: Vec<&ColumnMeta> = column_meta
+        .iter()
+        .filter(|meta| {
+            meta.field_type == FieldType::Relation && meta.junction_table.is_some()
+        })
+        .collect();
+    if junction_columns.is_empty() || rows.is_empty() {
+        return Ok(());
+    }
+
+    for row in rows.iter_mut() {
+        for meta in &junction_columns {
+            if !row.values.contains_key(&meta.name) {
+                continue;
+            }
+            let junction = meta
+                .junction_table
+                .as_deref()
+                .expect("filtered junction columns");
+            let record_ids = load_junction_target_ids(&app.conn, junction, &row.id)?;
+            row.values.insert(
+                meta.name.clone(),
+                CellValue::Relation { record_ids },
+            );
+        }
+    }
+    Ok(())
+}
+
 fn validate_identifier(name: &str) -> Result<()> {
     let valid = !name.is_empty()
         && name
@@ -1088,6 +1334,41 @@ fn strip_incoming_relation_ids(
                 continue;
             }
             validate_identifier(&meta.name)?;
+
+            if let Some(junction) = meta.junction_table.as_deref() {
+                validate_identifier(junction)?;
+                let mut stmt = app.conn.prepare(&format!(
+                    "SELECT DISTINCT source_id FROM {junction} WHERE target_id = ?1"
+                ))?;
+                let source_ids = stmt
+                    .query_map(params![deleted_id], |row| row.get::<_, String>(0))?
+                    .collect::<rusqlite::Result<Vec<String>>>()?;
+                drop(stmt);
+
+                for source_id in source_ids {
+                    if table == target_table && source_id == deleted_id {
+                        continue;
+                    }
+                    let prior_record_ids =
+                        load_junction_target_ids(&app.conn, junction, &source_id)?;
+                    if !prior_record_ids.iter().any(|id| id == deleted_id) {
+                        continue;
+                    }
+                    strips.push(RelationStrip {
+                        table: table.clone(),
+                        row_id: source_id.clone(),
+                        column: meta.name.clone(),
+                        prior_record_ids,
+                    });
+                    app.conn.execute(
+                        &format!(
+                            "DELETE FROM {junction} WHERE source_id = ?1 AND target_id = ?2"
+                        ),
+                        params![source_id, deleted_id],
+                    )?;
+                }
+                continue;
+            }
 
             let sql = format!("SELECT id, {} FROM {table}", meta.name);
             let mut stmt = app.conn.prepare(&sql)?;
@@ -1365,6 +1646,7 @@ fn resolve_computed_values(
     column_meta: &[ColumnMeta],
     rows: &mut [Row],
 ) -> Result<()> {
+    hydrate_junction_relations(app, column_meta, rows)?;
     resolve_lookup_values(app, table, column_meta, rows)?;
     resolve_rollup_values(app, table, column_meta, rows)?;
     resolve_formula_values(table, column_meta, rows)?;
@@ -1646,6 +1928,12 @@ fn relation_record_ids_for_row(
 
     // View projections may omit the source relation column; load it directly.
     validate_identifier(relation_column)?;
+    let columns = app.columns(table)?;
+    if let Some(meta) = columns.iter().find(|column| column.name == relation_column) {
+        if let Some(junction) = meta.junction_table.as_deref() {
+            return load_junction_target_ids(&app.conn, junction, &row.id);
+        }
+    }
     let sql = format!("SELECT {relation_column} FROM {table} WHERE id = ?1 LIMIT 1");
     let mut stmt = app.conn.prepare(&sql)?;
     let mut rows = stmt.query(params![&row.id])?;

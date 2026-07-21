@@ -18,6 +18,12 @@ pub struct ColumnSpec {
     )]
     pub relation_table: Option<String>,
     #[serde(
+        rename = "junction-table",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub junction_table: Option<String>,
+    #[serde(
         rename = "lookup-relation",
         default,
         skip_serializing_if = "Option::is_none"
@@ -57,6 +63,7 @@ impl ColumnSpec {
             name: name.into(),
             field_type,
             relation_table: None,
+            junction_table: None,
             lookup_relation: None,
             lookup_field: None,
             rollup_relation: None,
@@ -71,6 +78,7 @@ impl ColumnSpec {
             name: name.into(),
             field_type: FieldType::Relation,
             relation_table: Some(relation_table.into()),
+            junction_table: None,
             lookup_relation: None,
             lookup_field: None,
             rollup_relation: None,
@@ -89,6 +97,7 @@ impl ColumnSpec {
             name: name.into(),
             field_type: FieldType::Lookup,
             relation_table: None,
+            junction_table: None,
             lookup_relation: Some(lookup_relation.into()),
             lookup_field: Some(lookup_field.into()),
             rollup_relation: None,
@@ -108,6 +117,7 @@ impl ColumnSpec {
             name: name.into(),
             field_type: FieldType::Rollup,
             relation_table: None,
+            junction_table: None,
             lookup_relation: None,
             lookup_field: None,
             rollup_relation: Some(rollup_relation.into()),
@@ -122,6 +132,7 @@ impl ColumnSpec {
             name: name.into(),
             field_type: FieldType::Formula,
             relation_table: None,
+            junction_table: None,
             lookup_relation: None,
             lookup_field: None,
             rollup_relation: None,

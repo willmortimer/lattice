@@ -118,6 +118,12 @@
           "name": "reports_to",
           "type": "relation",
           "relation_table": "contacts"
+        },
+        {
+          "name": "tags",
+          "type": "relation",
+          "relation_table": "tags",
+          "junction_table": "contact_tags"
         }
       ],
       "rows": [
@@ -127,7 +133,8 @@
           "company": ["Analytical Engines"],
           "due_date": "2026-08-15",
           "status": "Active",
-          "notes": "Champion for typed tables beside narrative docs."
+          "notes": "Champion for typed tables beside narrative docs.",
+          "tags": ["Champion", "Enterprise"]
         },
         {
           "name": "Grace Hopper",
@@ -136,7 +143,8 @@
           "due_date": "2026-07-25",
           "status": "Active",
           "notes": "Asked for honest SQL export from CRM views.",
-          "reports_to": ["Ada Lovelace"]
+          "reports_to": ["Ada Lovelace"],
+          "tags": ["Champion"]
         },
         {
           "name": "Alan Turing",
@@ -153,7 +161,8 @@
           "due_date": "2026-08-02",
           "status": "Active",
           "notes": "Needs calendar layout on due dates for standup.",
-          "reports_to": ["Dorothy Vaughan"]
+          "reports_to": ["Dorothy Vaughan"],
+          "tags": ["Partner", "Enterprise"]
         },
         {
           "name": "Dorothy Vaughan",
@@ -321,6 +330,15 @@
             { "name": "Example Corp" },
             { "name": "Microsoft Research" },
             { "name": "Google" }
+          ]
+        },
+        {
+          "table": "tags",
+          "columns": [{ "name": "name", "type": "text" }],
+          "rows": [
+            { "name": "Champion" },
+            { "name": "Enterprise" },
+            { "name": "Partner" }
           ]
         }
       ],

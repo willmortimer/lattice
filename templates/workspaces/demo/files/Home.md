@@ -171,8 +171,10 @@ Supported layout types also include `grid` and `list`. Board groups contacts by
 `status`; calendar plots `due_date`; gallery uses `company` as a cover field.
 
 The **company** column links each contact to a row in the seeded `companies` table.
-The **reports_to** column is a self-relation on `contacts`. Template relation seeds
-accept **record ids** or display **names** (matched via each target table's `name`
+The **reports_to** column is a self-relation on `contacts`. The **tags** column is a
+junction-backed M2M to the seeded `tags` table (`contact_tags` as source of truth;
+grid/IPC still use `Relation { record_ids }`). Template relation seeds accept
+**record ids** or display **names** (matched via each target table's `name`
 column at provision time).
 
 ### CRM package forms

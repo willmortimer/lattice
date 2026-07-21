@@ -756,6 +756,14 @@ impl CommandEngine {
                                 ),
                             });
                         }
+                    } else if column.junction_table.is_some() {
+                        return Err(Error::InvalidResourceTarget {
+                            path: path.clone(),
+                            reason: format!(
+                                "column {:?} only relation fields may set junction-table",
+                                column.name
+                            ),
+                        });
                     } else if column.field_type == lattice_data::FieldType::Lookup {
                         if column.relation_table.is_some() {
                             return Err(Error::InvalidResourceTarget {
@@ -2465,6 +2473,7 @@ fn column_specs_as_new_columns(columns: &[ColumnSpec]) -> Vec<NewColumn<'_>> {
             name: column.name.as_str(),
             field_type: column.field_type,
             relation_table: column.relation_table.as_deref(),
+            junction_table: column.junction_table.as_deref(),
             lookup_relation: column.lookup_relation.as_deref(),
             lookup_field: column.lookup_field.as_deref(),
             rollup_relation: column.rollup_relation.as_deref(),

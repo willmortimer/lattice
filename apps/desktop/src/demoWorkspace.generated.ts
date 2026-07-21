@@ -609,6 +609,13 @@ export const demoDataApp: DataAppSnapshot = {
       "field_type": "relation",
       "sqlite_type": "TEXT",
       "relation_table": "contacts"
+    },
+    {
+      "name": "tags",
+      "field_type": "relation",
+      "sqlite_type": "TEXT",
+      "relation_table": "tags",
+      "junction_table": "contact_tags"
     }
   ],
   "rows": [
@@ -653,6 +660,14 @@ export const demoDataApp: DataAppSnapshot = {
               "0198-demo-grace-hopper"
             ]
           }
+        },
+        "tags": {
+          "Relation": {
+            "record_ids": [
+              "0198-demo-tags-champion",
+              "0198-demo-tags-enterprise"
+            ]
+          }
         }
       }
     },
@@ -693,6 +708,13 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "reports_to": {
           "Null": null
+        },
+        "tags": {
+          "Relation": {
+            "record_ids": [
+              "0198-demo-tags-champion"
+            ]
+          }
         }
       }
     },
@@ -732,6 +754,9 @@ export const demoDataApp: DataAppSnapshot = {
           }
         },
         "reports_to": {
+          "Null": null
+        },
+        "tags": {
           "Null": null
         }
       }
@@ -775,6 +800,14 @@ export const demoDataApp: DataAppSnapshot = {
           "Relation": {
             "record_ids": [
               "0198-demo-mary-jackson"
+            ]
+          }
+        },
+        "tags": {
+          "Relation": {
+            "record_ids": [
+              "0198-demo-tags-partner",
+              "0198-demo-tags-enterprise"
             ]
           }
         }
@@ -821,6 +854,9 @@ export const demoDataApp: DataAppSnapshot = {
               "0198-demo-katherine-johnson"
             ]
           }
+        },
+        "tags": {
+          "Null": null
         }
       }
     },
@@ -860,6 +896,9 @@ export const demoDataApp: DataAppSnapshot = {
           }
         },
         "reports_to": {
+          "Null": null
+        },
+        "tags": {
           "Null": null
         }
       }
@@ -901,6 +940,9 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "reports_to": {
           "Null": null
+        },
+        "tags": {
+          "Null": null
         }
       }
     },
@@ -940,6 +982,9 @@ export const demoDataApp: DataAppSnapshot = {
           }
         },
         "reports_to": {
+          "Null": null
+        },
+        "tags": {
           "Null": null
         }
       }
@@ -981,6 +1026,9 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "reports_to": {
           "Null": null
+        },
+        "tags": {
+          "Null": null
         }
       }
     },
@@ -1020,6 +1068,9 @@ export const demoDataApp: DataAppSnapshot = {
           }
         },
         "reports_to": {
+          "Null": null
+        },
+        "tags": {
           "Null": null
         }
       }
@@ -1061,6 +1112,9 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "reports_to": {
           "Null": null
+        },
+        "tags": {
+          "Null": null
         }
       }
     },
@@ -1100,6 +1154,9 @@ export const demoDataApp: DataAppSnapshot = {
           }
         },
         "reports_to": {
+          "Null": null
+        },
+        "tags": {
           "Null": null
         }
       }
@@ -1141,6 +1198,9 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "reports_to": {
           "Null": null
+        },
+        "tags": {
+          "Null": null
         }
       }
     },
@@ -1180,6 +1240,9 @@ export const demoDataApp: DataAppSnapshot = {
           }
         },
         "reports_to": {
+          "Null": null
+        },
+        "tags": {
           "Null": null
         }
       }
@@ -1225,6 +1288,9 @@ export const demoDataApp: DataAppSnapshot = {
               "0198-demo-shafi-goldwasser"
             ]
           }
+        },
+        "tags": {
+          "Null": null
         }
       }
     },
@@ -1264,6 +1330,9 @@ export const demoDataApp: DataAppSnapshot = {
           }
         },
         "reports_to": {
+          "Null": null
+        },
+        "tags": {
           "Null": null
         }
       }
@@ -1305,6 +1374,9 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "reports_to": {
           "Null": null
+        },
+        "tags": {
+          "Null": null
         }
       }
     },
@@ -1344,6 +1416,9 @@ export const demoDataApp: DataAppSnapshot = {
           }
         },
         "reports_to": {
+          "Null": null
+        },
+        "tags": {
           "Null": null
         }
       }
@@ -1385,6 +1460,9 @@ export const demoDataApp: DataAppSnapshot = {
         },
         "reports_to": {
           "Null": null
+        },
+        "tags": {
+          "Null": null
         }
       }
     },
@@ -1424,6 +1502,9 @@ export const demoDataApp: DataAppSnapshot = {
           }
         },
         "reports_to": {
+          "Null": null
+        },
+        "tags": {
           "Null": null
         }
       }
@@ -1864,6 +1945,41 @@ export const demoDataApp: DataAppSnapshot = {
         }
       }
     ],
+    "tags": [
+      {
+        "id": "0198-demo-tags-champion",
+        "values": {
+          "id": {
+            "Text": "0198-demo-tags-champion"
+          },
+          "name": {
+            "Text": "Champion"
+          }
+        }
+      },
+      {
+        "id": "0198-demo-tags-enterprise",
+        "values": {
+          "id": {
+            "Text": "0198-demo-tags-enterprise"
+          },
+          "name": {
+            "Text": "Enterprise"
+          }
+        }
+      },
+      {
+        "id": "0198-demo-tags-partner",
+        "values": {
+          "id": {
+            "Text": "0198-demo-tags-partner"
+          },
+          "name": {
+            "Text": "Partner"
+          }
+        }
+      }
+    ],
     "contacts": [
       {
         "id": "0198-demo-ada-lovelace",
@@ -1906,6 +2022,14 @@ export const demoDataApp: DataAppSnapshot = {
                 "0198-demo-grace-hopper"
               ]
             }
+          },
+          "tags": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-tags-champion",
+                "0198-demo-tags-enterprise"
+              ]
+            }
           }
         }
       },
@@ -1946,6 +2070,13 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "reports_to": {
             "Null": null
+          },
+          "tags": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-tags-champion"
+              ]
+            }
           }
         }
       },
@@ -1985,6 +2116,9 @@ export const demoDataApp: DataAppSnapshot = {
             }
           },
           "reports_to": {
+            "Null": null
+          },
+          "tags": {
             "Null": null
           }
         }
@@ -2028,6 +2162,14 @@ export const demoDataApp: DataAppSnapshot = {
             "Relation": {
               "record_ids": [
                 "0198-demo-mary-jackson"
+              ]
+            }
+          },
+          "tags": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-tags-partner",
+                "0198-demo-tags-enterprise"
               ]
             }
           }
@@ -2074,6 +2216,9 @@ export const demoDataApp: DataAppSnapshot = {
                 "0198-demo-katherine-johnson"
               ]
             }
+          },
+          "tags": {
+            "Null": null
           }
         }
       },
@@ -2113,6 +2258,9 @@ export const demoDataApp: DataAppSnapshot = {
             }
           },
           "reports_to": {
+            "Null": null
+          },
+          "tags": {
             "Null": null
           }
         }
@@ -2154,6 +2302,9 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "reports_to": {
             "Null": null
+          },
+          "tags": {
+            "Null": null
           }
         }
       },
@@ -2193,6 +2344,9 @@ export const demoDataApp: DataAppSnapshot = {
             }
           },
           "reports_to": {
+            "Null": null
+          },
+          "tags": {
             "Null": null
           }
         }
@@ -2234,6 +2388,9 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "reports_to": {
             "Null": null
+          },
+          "tags": {
+            "Null": null
           }
         }
       },
@@ -2273,6 +2430,9 @@ export const demoDataApp: DataAppSnapshot = {
             }
           },
           "reports_to": {
+            "Null": null
+          },
+          "tags": {
             "Null": null
           }
         }
@@ -2314,6 +2474,9 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "reports_to": {
             "Null": null
+          },
+          "tags": {
+            "Null": null
           }
         }
       },
@@ -2353,6 +2516,9 @@ export const demoDataApp: DataAppSnapshot = {
             }
           },
           "reports_to": {
+            "Null": null
+          },
+          "tags": {
             "Null": null
           }
         }
@@ -2394,6 +2560,9 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "reports_to": {
             "Null": null
+          },
+          "tags": {
+            "Null": null
           }
         }
       },
@@ -2433,6 +2602,9 @@ export const demoDataApp: DataAppSnapshot = {
             }
           },
           "reports_to": {
+            "Null": null
+          },
+          "tags": {
             "Null": null
           }
         }
@@ -2478,6 +2650,9 @@ export const demoDataApp: DataAppSnapshot = {
                 "0198-demo-shafi-goldwasser"
               ]
             }
+          },
+          "tags": {
+            "Null": null
           }
         }
       },
@@ -2517,6 +2692,9 @@ export const demoDataApp: DataAppSnapshot = {
             }
           },
           "reports_to": {
+            "Null": null
+          },
+          "tags": {
             "Null": null
           }
         }
@@ -2558,6 +2736,9 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "reports_to": {
             "Null": null
+          },
+          "tags": {
+            "Null": null
           }
         }
       },
@@ -2597,6 +2778,9 @@ export const demoDataApp: DataAppSnapshot = {
             }
           },
           "reports_to": {
+            "Null": null
+          },
+          "tags": {
             "Null": null
           }
         }
@@ -2638,6 +2822,9 @@ export const demoDataApp: DataAppSnapshot = {
           },
           "reports_to": {
             "Null": null
+          },
+          "tags": {
+            "Null": null
           }
         }
       },
@@ -2677,6 +2864,9 @@ export const demoDataApp: DataAppSnapshot = {
             }
           },
           "reports_to": {
+            "Null": null
+          },
+          "tags": {
             "Null": null
           }
         }
@@ -2740,6 +2930,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
         "field_type": "relation",
         "sqlite_type": "TEXT",
         "relation_table": "contacts"
+      },
+      {
+        "name": "tags",
+        "field_type": "relation",
+        "sqlite_type": "TEXT",
+        "relation_table": "tags",
+        "junction_table": "contact_tags"
       }
     ],
     "rows": [
@@ -2784,6 +2981,14 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
                 "0198-demo-grace-hopper"
               ]
             }
+          },
+          "tags": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-tags-champion",
+                "0198-demo-tags-enterprise"
+              ]
+            }
           }
         }
       },
@@ -2824,6 +3029,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
           },
           "reports_to": {
             "Null": null
+          },
+          "tags": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-tags-champion"
+              ]
+            }
           }
         }
       },
@@ -2863,6 +3075,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             }
           },
           "reports_to": {
+            "Null": null
+          },
+          "tags": {
             "Null": null
           }
         }
@@ -2906,6 +3121,14 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             "Relation": {
               "record_ids": [
                 "0198-demo-mary-jackson"
+              ]
+            }
+          },
+          "tags": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-tags-partner",
+                "0198-demo-tags-enterprise"
               ]
             }
           }
@@ -2952,6 +3175,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
                 "0198-demo-katherine-johnson"
               ]
             }
+          },
+          "tags": {
+            "Null": null
           }
         }
       },
@@ -2991,6 +3217,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             }
           },
           "reports_to": {
+            "Null": null
+          },
+          "tags": {
             "Null": null
           }
         }
@@ -3032,6 +3261,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
           },
           "reports_to": {
             "Null": null
+          },
+          "tags": {
+            "Null": null
           }
         }
       },
@@ -3071,6 +3303,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             }
           },
           "reports_to": {
+            "Null": null
+          },
+          "tags": {
             "Null": null
           }
         }
@@ -3112,6 +3347,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
           },
           "reports_to": {
             "Null": null
+          },
+          "tags": {
+            "Null": null
           }
         }
       },
@@ -3151,6 +3389,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             }
           },
           "reports_to": {
+            "Null": null
+          },
+          "tags": {
             "Null": null
           }
         }
@@ -3192,6 +3433,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
           },
           "reports_to": {
             "Null": null
+          },
+          "tags": {
+            "Null": null
           }
         }
       },
@@ -3231,6 +3475,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             }
           },
           "reports_to": {
+            "Null": null
+          },
+          "tags": {
             "Null": null
           }
         }
@@ -3272,6 +3519,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
           },
           "reports_to": {
             "Null": null
+          },
+          "tags": {
+            "Null": null
           }
         }
       },
@@ -3311,6 +3561,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             }
           },
           "reports_to": {
+            "Null": null
+          },
+          "tags": {
             "Null": null
           }
         }
@@ -3356,6 +3609,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
                 "0198-demo-shafi-goldwasser"
               ]
             }
+          },
+          "tags": {
+            "Null": null
           }
         }
       },
@@ -3395,6 +3651,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             }
           },
           "reports_to": {
+            "Null": null
+          },
+          "tags": {
             "Null": null
           }
         }
@@ -3436,6 +3695,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
           },
           "reports_to": {
             "Null": null
+          },
+          "tags": {
+            "Null": null
           }
         }
       },
@@ -3475,6 +3737,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             }
           },
           "reports_to": {
+            "Null": null
+          },
+          "tags": {
             "Null": null
           }
         }
@@ -3516,6 +3781,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
           },
           "reports_to": {
             "Null": null
+          },
+          "tags": {
+            "Null": null
           }
         }
       },
@@ -3555,6 +3823,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             }
           },
           "reports_to": {
+            "Null": null
+          },
+          "tags": {
             "Null": null
           }
         }
@@ -3995,6 +4266,41 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
           }
         }
       ],
+      "tags": [
+        {
+          "id": "0198-demo-tags-champion",
+          "values": {
+            "id": {
+              "Text": "0198-demo-tags-champion"
+            },
+            "name": {
+              "Text": "Champion"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-tags-enterprise",
+          "values": {
+            "id": {
+              "Text": "0198-demo-tags-enterprise"
+            },
+            "name": {
+              "Text": "Enterprise"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-tags-partner",
+          "values": {
+            "id": {
+              "Text": "0198-demo-tags-partner"
+            },
+            "name": {
+              "Text": "Partner"
+            }
+          }
+        }
+      ],
       "contacts": [
         {
           "id": "0198-demo-ada-lovelace",
@@ -4037,6 +4343,14 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
                   "0198-demo-grace-hopper"
                 ]
               }
+            },
+            "tags": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-tags-champion",
+                  "0198-demo-tags-enterprise"
+                ]
+              }
             }
           }
         },
@@ -4077,6 +4391,13 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "reports_to": {
               "Null": null
+            },
+            "tags": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-tags-champion"
+                ]
+              }
             }
           }
         },
@@ -4116,6 +4437,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               }
             },
             "reports_to": {
+              "Null": null
+            },
+            "tags": {
               "Null": null
             }
           }
@@ -4159,6 +4483,14 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               "Relation": {
                 "record_ids": [
                   "0198-demo-mary-jackson"
+                ]
+              }
+            },
+            "tags": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-tags-partner",
+                  "0198-demo-tags-enterprise"
                 ]
               }
             }
@@ -4205,6 +4537,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
                   "0198-demo-katherine-johnson"
                 ]
               }
+            },
+            "tags": {
+              "Null": null
             }
           }
         },
@@ -4244,6 +4579,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               }
             },
             "reports_to": {
+              "Null": null
+            },
+            "tags": {
               "Null": null
             }
           }
@@ -4285,6 +4623,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "reports_to": {
               "Null": null
+            },
+            "tags": {
+              "Null": null
             }
           }
         },
@@ -4324,6 +4665,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               }
             },
             "reports_to": {
+              "Null": null
+            },
+            "tags": {
               "Null": null
             }
           }
@@ -4365,6 +4709,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "reports_to": {
               "Null": null
+            },
+            "tags": {
+              "Null": null
             }
           }
         },
@@ -4404,6 +4751,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               }
             },
             "reports_to": {
+              "Null": null
+            },
+            "tags": {
               "Null": null
             }
           }
@@ -4445,6 +4795,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "reports_to": {
               "Null": null
+            },
+            "tags": {
+              "Null": null
             }
           }
         },
@@ -4484,6 +4837,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               }
             },
             "reports_to": {
+              "Null": null
+            },
+            "tags": {
               "Null": null
             }
           }
@@ -4525,6 +4881,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "reports_to": {
               "Null": null
+            },
+            "tags": {
+              "Null": null
             }
           }
         },
@@ -4564,6 +4923,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               }
             },
             "reports_to": {
+              "Null": null
+            },
+            "tags": {
               "Null": null
             }
           }
@@ -4609,6 +4971,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
                   "0198-demo-shafi-goldwasser"
                 ]
               }
+            },
+            "tags": {
+              "Null": null
             }
           }
         },
@@ -4648,6 +5013,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               }
             },
             "reports_to": {
+              "Null": null
+            },
+            "tags": {
               "Null": null
             }
           }
@@ -4689,6 +5057,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "reports_to": {
               "Null": null
+            },
+            "tags": {
+              "Null": null
             }
           }
         },
@@ -4728,6 +5099,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               }
             },
             "reports_to": {
+              "Null": null
+            },
+            "tags": {
               "Null": null
             }
           }
@@ -4769,6 +5143,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
             },
             "reports_to": {
               "Null": null
+            },
+            "tags": {
+              "Null": null
             }
           }
         },
@@ -4808,6 +5185,9 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
               }
             },
             "reports_to": {
+              "Null": null
+            },
+            "tags": {
               "Null": null
             }
           }
@@ -5854,7 +6234,7 @@ export const demoPackageInterfacesByPath: Record<string, InterfaceSummary[]> = {
 };
 
 export const demoPages: Record<string, string> = {
-  "Home.md": "---\ntitle: Home\n---\n\n# Home\n\nKitchen-sink tour of the **First Look** sample workspace. Everything here is an\nordinary file under a real directory — open it in any editor, or stay inside Lattice.\n\n**Native vs browser:** Perspective Preview, Vega-Lite Chart, and DuckDB Profile\nrequire the **native desktop app** (`nxr desktop-dev` or Lattice.app). The Vite\nbrowser fixture seeds the same files but labels visualization **unavailable**.\nInstalling Lattice.app does **not** rewrite an existing First Look folder — create\na new workspace from the First Look template, or copy missing seeds from\n`templates/workspaces/demo/files/` (for example `Data/Events.dataset` and\n`Dashboards/`).\n\n## Quick start\n\n1. Search with **⌘K** — keyword FTS is always on; semantic search is **off by default**. Enable it in **Settings → Search** for hybrid FTS + embeddings (try `latticed` or `FinalizationMode`).\n2. Scroll [[Research/Long Read]] — long-form perf and virtualization fixture.\n3. Open `Canvases/Product Strategy.canvas` — double-click file nodes to jump.\n4. Capture with **⌘N** into `Inbox/` — type or **hold-to-dictate**; finals get glossary / ITN normalize (see [[Inbox/Sample capture]]).\n5. Open `CRM.data` — contacts + companies, relations, board/gallery/calendar/form.\n6. Also open `Projects/Delivery.data`, `Data/Metrics.data`, and `OKRs.data` for more table shapes.\n7. Open `Data/Events.dataset` — DuckDB Parquet facts → Perspective **Preview**, Vega-Lite **Chart**, DuckDB **Profile**.\n8. Open `Dashboards/Signups by region.vl.json` — bound Vega-Lite chart over the same Hive Parquet.\n9. Open `Data/Orders.dataset` — multi-month retail facts (~3 000 rows) for richer charts.\n10. Open the Orders dashboards — stacked region/category, daily revenue, and channel comparison (`.vl.json` under `Dashboards/`).\n11. Open `Data/Places.dataset` — ~20 WGS84 lon/lat points (`name`, `lon`, `lat`) for MapLibre.\n12. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.\n13. Open `Notebooks/Orders analytics.ipynb` — Pyodide loads mounted Orders CSV (`sources/orders.csv`); DuckDB SQL stays native.\n14. Open `Notebooks/CRM exploration.ipynb` — CRM tour notebook (markdown + code stubs).\n15. Create pages from `Templates/` — daily and meeting note scaffolds.\n16. Read [[Research/Local Runtime]] — daemon, search, and voice process model.\n\n## First Look tour — new surfaces\n\nWork through this checklist to exercise the latest desktop shell, data, search,\nand voice features. Each step is safe in the sample workspace; undo where noted.\n\n### Search & local runtime\n\n1. Press **⌘K** — keyword FTS works immediately (no download). Semantic search stays **off** until you enable **Settings → Search → Semantic search** (downloads ~640 MB local Qwen3 GGUF on first enable; or set `LATTICE_SEMANTIC_FAKE=1` for Fake vectors in dev).\n2. Search for `VoiceContextBuilder` or `EndpointDetected` (seeded on [[Research/Local Runtime]]). With semantic on and ready, hybrid hits may show Keyword / Semantic / Both; otherwise expect keyword-only.\n3. Skim [[Research/Architecture]] for the core vs latticed diagrams.\n\n### Voice & Quick Note\n\n4. Open any page → hold the microphone control to dictate; release for a single final insert (provisional text is ghost-only; finals run glossary / ITN normalize).\n5. Press **⌘N** for Quick Note → hold-to-dictate → release → note saves once; Escape cancels without junk ASR text. Try glossary tokens from [[Research/Local Runtime]] (`FinalizationMode`, `CRM.data`).\n6. Optional continuous mode: set `LATTICE_VOICE_AUTO_FINALIZE_ON_ENDPOINT=1` before launch (silence debounce endpoints); default hold-to-talk needs no VAD.\n\n### CRM layouts and saved views\n\n7. Open `CRM.data` and switch **Board**, **Gallery**, **Calendar**, and **Form** from the view picker.\n8. In each layout, change the layout field pickers (group-by, cover field, date field, visible columns).\n9. Click **Save view** to persist the layout under `CRM.data/views/` (native).\n10. Open a contact row and inspect **company** and **reports_to** — add or change links in record detail.\n\n### More data apps\n\n11. Open `Projects/Delivery.data` — board by status + calendar on `due` (no relations; simpler schema).\n12. Open `Data/Metrics.data` — decimal metrics board by category (Voice / Search / Data / Editor).\n13. Open `OKRs.data` — objectives board by confidence status.\n\n### CRM package forms\n\n14. Open `CRM.data` → **Forms** → **Contact intake**.\n15. Submit a new contact; the row appears and relation pickers stay in sync with `companies`.\n16. Open `Projects/Delivery.data` → **Forms** → **Delivery intake** and add an item.\n\n### Analytical datasets (DuckDB / Vega-Lite)\n\n17. Open `Data/Events.dataset` → **Preview** — Perspective grid over Hive Parquet (`facts/year=2026/month=07/`).\n18. Switch to **Chart** — auto Vega-Lite from the same Arrow IPC query.\n19. Switch to **Profile** — DuckDB `SUMMARIZE` column stats.\n20. Open `Dashboards/Signups by region.vl.json` — chart resource bound with `read_parquet(...)`.\n21. Optional CLI: `lattice dataset query-annotated Data/Events.dataset --json` (review overlay in `annotations.sqlite`).\n\n### Orders dataset & multi-series charts\n\n22. Open `Data/Orders.dataset` → **Preview** — ~3 000 synthetic retail rows across `facts/year=2026/month=0{1,2,3}/`.\n23. Open `Dashboards/Revenue by region and category.vl.json` — stacked bars (region × category).\n24. Open `Dashboards/Revenue by day.vl.json` — daily revenue time series (Jan–Mar 2026).\n25. Open `Dashboards/Revenue by channel.vl.json` — layered channel comparison (revenue bars + order counts).\n\n### Places dataset (MapLibre lon/lat)\n\n26. Open `Data/Places.dataset` → **Preview** — ~20 named points with plain `lon` / `lat` doubles (WGS84) under `facts/places.parquet`.\n27. Confirm columns `place_id`, `name`, `lon`, `lat` — MapLibre Map tab arrives in a follow-on (no map UI in this seed).\n\n### Resource tree\n\n28. Create a folder under `Projects/` (context menu or **New folder**).\n29. Press **⌘Z** to undo the folder creation.\n30. Move [[Product/Vision]] into another folder; accept link repair when prompted.\n31. **⌘-click** two pages, drag to a folder (multi-select move).\n32. Select multiple items and delete — confirm the batch operation.\n\n### Where to look next\n\n| Surface | Try |\n| --- | --- |\n| [[Research/Local Runtime]] | Daemon, FTS + optional semantic, voice ownership |\n| [[Research/Long Read]] | Scroll perf, embeds, extended checklist |\n| [[Product/Release Notes]] | What shipped in this sample |\n| `Canvases/Product Strategy.canvas` | Spatial links + CRM view subpaths |\n\n## Product\n\n| Page | What to try |\n| --- | --- |\n| [[Product/Vision]] | Short north-star narrative |\n| [[Product/Principles]] | Invariants and constraints |\n| [[Product/Roadmap]] | Phased delivery themes |\n| [[Product/Release Notes]] | Changelog-style sample |\n\n## Research\n\n| Page | What to try |\n| --- | --- |\n| [[Research/Local Runtime]] | latticed, FTS + optional semantic, Quick Note voice |\n| [[Research/Long Read]] | Scroll perf, Mermaid, wiki links, `:::lattice-embed` |\n| [[Research/Architecture]] | System diagrams (core + daemon) |\n| [[Research/Competitor Analysis]] | Comparison table |\n| [[Research/Market Notes]] | Segments and hypotheses |\n| [[Research/Interview Synthesis]] | Quotes mapped to CRM fields |\n\n## Inbox & templates\n\n- [[Inbox/Sample capture]] — triage-ready quick note (dictation-friendly)\n- [[Templates/Daily Note]] — `{{date}}` / `{{title}}` placeholders preserved at provision\n- [[Templates/Meeting Note]] — agenda, decisions, action items\n\nWorkspace defaults point quick capture at `Inbox/` and templates at `Templates/`.\n\n## Canvas, data apps & analytics\n\n| Resource | Kind |\n| --- | --- |\n| `Canvases/Product Strategy.canvas` | Spatial board linking Product pages + CRM views |\n| `CRM.data` | SQLite CRM (`companies` + `contacts`, relations, forms) |\n| `Projects/Delivery.data` | Delivery board/calendar (status + due) |\n| `Data/Metrics.data` | Decimal metrics by category |\n| `OKRs.data` | Objectives / key results board |\n| `Data/Events.dataset` | Analytical package — Hive Parquet facts + `annotations.sqlite` |\n| `Dashboards/Signups by region.vl.json` | Vega-Lite chart bound to Events via DuckDB |\n| `Data/Orders.dataset` | Retail orders — multi-month Hive Parquet for multi-series charts |\n| `Dashboards/Revenue by region and category.vl.json` | Stacked bars (Orders region × category) |\n| `Dashboards/Revenue by day.vl.json` | Daily revenue time series (Orders) |\n| `Dashboards/Revenue by channel.vl.json` | Layered channel comparison (Orders) |\n| `Data/Places.dataset` | Named WGS84 points (`lon`/`lat`) for MapLibre |\n| `Data/sample.csv` | Flat CSV import sample |\n| `Notebooks/Orders analytics.ipynb` | Pyodide Orders CSV tour (mounted workspace bridge) |\n| `Notebooks/CRM exploration.ipynb` | CRM tour notebook (nbformat v4) |\n\n### CRM views\n\nOpen `CRM.data` and switch layouts from the view picker. The template seeds saved\nviews under `CRM.data/views/` (one YAML file per view):\n\n| View | Layout | Key field |\n| ---- | ------ | --------- |\n| Board | `board` | `status` |\n| Calendar | `calendar` | `due_date` |\n| Gallery | `gallery` | `company` (cover) |\n| Form | `form` | — |\n\nSupported layout types also include `grid` and `list`. Board groups contacts by\n`status`; calendar plots `due_date`; gallery uses `company` as a cover field.\n\nThe **company** column links each contact to a row in the seeded `companies` table.\nThe **reports_to** column is a self-relation on `contacts`. Template relation seeds\naccept **record ids** or display **names** (matched via each target table's `name`\ncolumn at provision time).\n\n### CRM package forms\n\n| Form | Table | Fields |\n| ---- | ----- | ------ |\n| ContactIntake | `contacts` | `name`, `email`, `status`, `company` |\n\nEmbed a view from a page (see [[Research/Long Read]]):\n\n```markdown\n:::lattice-embed\nresource: CRM.data/views/Board.yaml\nfallback: \"Open CRM board view\"\n:::\n```\n\n## Resources\n\n| File | Notes |\n| --- | --- |\n| `Resources/config.json` | Feature flags sample |\n| `Resources/schema.yaml` | Small YAML schema |\n| `Resources/hooks.json` | Workspace hook sketch |\n| `Resources/example.ts` | Tiny TypeScript export |\n| `Resources/types.ts` | CRM-related types |\n| `Resources/queries.sql` | Example SELECT statements |\n| `Resources/notes.txt` | Plain text |\n| `Resources/mark.svg` | Generated Lattice mark |\n\n## Map\n\n| Path | Kind |\n| --- | --- |\n| [[Product/Vision]] | page |\n| [[Product/Principles]] | page |\n| [[Product/Roadmap]] | page |\n| [[Product/Release Notes]] | page |\n| [[Research/Local Runtime]] | page (daemon / search / voice) |\n| [[Research/Long Read]] | page (long / embed) |\n| [[Research/Architecture]] | page |\n| [[Research/Competitor Analysis]] | page |\n| [[Research/Market Notes]] | page |\n| [[Research/Interview Synthesis]] | page |\n| [[Inbox/Sample capture]] | page |\n| `Templates/` | page templates |\n| `Canvases/Product Strategy.canvas` | canvas |\n| `CRM.data` | data app |\n| `Projects/Delivery.data` | data app |\n| `Data/Metrics.data` | data app |\n| `OKRs.data` | data app |\n| `Data/Events.dataset` | dataset (Parquet + annotations) |\n| `Dashboards/Signups by region.vl.json` | Vega-Lite chart |\n| `Data/Orders.dataset` | dataset (multi-month Parquet) |\n| `Dashboards/Revenue by region and category.vl.json` | Vega-Lite chart (Orders) |\n| `Dashboards/Revenue by day.vl.json` | Vega-Lite chart (Orders) |\n| `Dashboards/Revenue by channel.vl.json` | Vega-Lite chart (Orders) |\n| `Data/Places.dataset` | dataset (WGS84 lon/lat points) |\n| `Data/sample.csv` | CSV file |\n| `Notebooks/Orders analytics.ipynb` | notebook |\n| `Notebooks/CRM exploration.ipynb` | notebook |\n| `Resources/` | code & config files |\n",
+  "Home.md": "---\ntitle: Home\n---\n\n# Home\n\nKitchen-sink tour of the **First Look** sample workspace. Everything here is an\nordinary file under a real directory — open it in any editor, or stay inside Lattice.\n\n**Native vs browser:** Perspective Preview, Vega-Lite Chart, and DuckDB Profile\nrequire the **native desktop app** (`nxr desktop-dev` or Lattice.app). The Vite\nbrowser fixture seeds the same files but labels visualization **unavailable**.\nInstalling Lattice.app does **not** rewrite an existing First Look folder — create\na new workspace from the First Look template, or copy missing seeds from\n`templates/workspaces/demo/files/` (for example `Data/Events.dataset` and\n`Dashboards/`).\n\n## Quick start\n\n1. Search with **⌘K** — keyword FTS is always on; semantic search is **off by default**. Enable it in **Settings → Search** for hybrid FTS + embeddings (try `latticed` or `FinalizationMode`).\n2. Scroll [[Research/Long Read]] — long-form perf and virtualization fixture.\n3. Open `Canvases/Product Strategy.canvas` — double-click file nodes to jump.\n4. Capture with **⌘N** into `Inbox/` — type or **hold-to-dictate**; finals get glossary / ITN normalize (see [[Inbox/Sample capture]]).\n5. Open `CRM.data` — contacts + companies, relations, board/gallery/calendar/form.\n6. Also open `Projects/Delivery.data`, `Data/Metrics.data`, and `OKRs.data` for more table shapes.\n7. Open `Data/Events.dataset` — DuckDB Parquet facts → Perspective **Preview**, Vega-Lite **Chart**, DuckDB **Profile**.\n8. Open `Dashboards/Signups by region.vl.json` — bound Vega-Lite chart over the same Hive Parquet.\n9. Open `Data/Orders.dataset` — multi-month retail facts (~3 000 rows) for richer charts.\n10. Open the Orders dashboards — stacked region/category, daily revenue, and channel comparison (`.vl.json` under `Dashboards/`).\n11. Open `Data/Places.dataset` — ~20 WGS84 lon/lat points (`name`, `lon`, `lat`) for MapLibre.\n12. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.\n13. Open `Notebooks/Orders analytics.ipynb` — Pyodide loads mounted Orders CSV (`sources/orders.csv`); DuckDB SQL stays native.\n14. Open `Notebooks/CRM exploration.ipynb` — CRM tour notebook (markdown + code stubs).\n15. Create pages from `Templates/` — daily and meeting note scaffolds.\n16. Read [[Research/Local Runtime]] — daemon, search, and voice process model.\n\n## First Look tour — new surfaces\n\nWork through this checklist to exercise the latest desktop shell, data, search,\nand voice features. Each step is safe in the sample workspace; undo where noted.\n\n### Search & local runtime\n\n1. Press **⌘K** — keyword FTS works immediately (no download). Semantic search stays **off** until you enable **Settings → Search → Semantic search** (downloads ~640 MB local Qwen3 GGUF on first enable; or set `LATTICE_SEMANTIC_FAKE=1` for Fake vectors in dev).\n2. Search for `VoiceContextBuilder` or `EndpointDetected` (seeded on [[Research/Local Runtime]]). With semantic on and ready, hybrid hits may show Keyword / Semantic / Both; otherwise expect keyword-only.\n3. Skim [[Research/Architecture]] for the core vs latticed diagrams.\n\n### Voice & Quick Note\n\n4. Open any page → hold the microphone control to dictate; release for a single final insert (provisional text is ghost-only; finals run glossary / ITN normalize).\n5. Press **⌘N** for Quick Note → hold-to-dictate → release → note saves once; Escape cancels without junk ASR text. Try glossary tokens from [[Research/Local Runtime]] (`FinalizationMode`, `CRM.data`).\n6. Optional continuous mode: set `LATTICE_VOICE_AUTO_FINALIZE_ON_ENDPOINT=1` before launch (silence debounce endpoints); default hold-to-talk needs no VAD.\n\n### CRM layouts and saved views\n\n7. Open `CRM.data` and switch **Board**, **Gallery**, **Calendar**, and **Form** from the view picker.\n8. In each layout, change the layout field pickers (group-by, cover field, date field, visible columns).\n9. Click **Save view** to persist the layout under `CRM.data/views/` (native).\n10. Open a contact row and inspect **company** and **reports_to** — add or change links in record detail.\n\n### More data apps\n\n11. Open `Projects/Delivery.data` — board by status + calendar on `due` (no relations; simpler schema).\n12. Open `Data/Metrics.data` — decimal metrics board by category (Voice / Search / Data / Editor).\n13. Open `OKRs.data` — objectives board by confidence status.\n\n### CRM package forms\n\n14. Open `CRM.data` → **Forms** → **Contact intake**.\n15. Submit a new contact; the row appears and relation pickers stay in sync with `companies`.\n16. Open `Projects/Delivery.data` → **Forms** → **Delivery intake** and add an item.\n\n### Analytical datasets (DuckDB / Vega-Lite)\n\n17. Open `Data/Events.dataset` → **Preview** — Perspective grid over Hive Parquet (`facts/year=2026/month=07/`).\n18. Switch to **Chart** — auto Vega-Lite from the same Arrow IPC query.\n19. Switch to **Profile** — DuckDB `SUMMARIZE` column stats.\n20. Open `Dashboards/Signups by region.vl.json` — chart resource bound with `read_parquet(...)`.\n21. Optional CLI: `lattice dataset query-annotated Data/Events.dataset --json` (review overlay in `annotations.sqlite`).\n\n### Orders dataset & multi-series charts\n\n22. Open `Data/Orders.dataset` → **Preview** — ~3 000 synthetic retail rows across `facts/year=2026/month=0{1,2,3}/`.\n23. Open `Dashboards/Revenue by region and category.vl.json` — stacked bars (region × category).\n24. Open `Dashboards/Revenue by day.vl.json` — daily revenue time series (Jan–Mar 2026).\n25. Open `Dashboards/Revenue by channel.vl.json` — layered channel comparison (revenue bars + order counts).\n\n### Places dataset (MapLibre lon/lat)\n\n26. Open `Data/Places.dataset` → **Preview** — ~20 named points with plain `lon` / `lat` doubles (WGS84) under `facts/places.parquet`.\n27. Confirm columns `place_id`, `name`, `lon`, `lat` — MapLibre Map tab arrives in a follow-on (no map UI in this seed).\n\n### Resource tree\n\n28. Create a folder under `Projects/` (context menu or **New folder**).\n29. Press **⌘Z** to undo the folder creation.\n30. Move [[Product/Vision]] into another folder; accept link repair when prompted.\n31. **⌘-click** two pages, drag to a folder (multi-select move).\n32. Select multiple items and delete — confirm the batch operation.\n\n### Where to look next\n\n| Surface | Try |\n| --- | --- |\n| [[Research/Local Runtime]] | Daemon, FTS + optional semantic, voice ownership |\n| [[Research/Long Read]] | Scroll perf, embeds, extended checklist |\n| [[Product/Release Notes]] | What shipped in this sample |\n| `Canvases/Product Strategy.canvas` | Spatial links + CRM view subpaths |\n\n## Product\n\n| Page | What to try |\n| --- | --- |\n| [[Product/Vision]] | Short north-star narrative |\n| [[Product/Principles]] | Invariants and constraints |\n| [[Product/Roadmap]] | Phased delivery themes |\n| [[Product/Release Notes]] | Changelog-style sample |\n\n## Research\n\n| Page | What to try |\n| --- | --- |\n| [[Research/Local Runtime]] | latticed, FTS + optional semantic, Quick Note voice |\n| [[Research/Long Read]] | Scroll perf, Mermaid, wiki links, `:::lattice-embed` |\n| [[Research/Architecture]] | System diagrams (core + daemon) |\n| [[Research/Competitor Analysis]] | Comparison table |\n| [[Research/Market Notes]] | Segments and hypotheses |\n| [[Research/Interview Synthesis]] | Quotes mapped to CRM fields |\n\n## Inbox & templates\n\n- [[Inbox/Sample capture]] — triage-ready quick note (dictation-friendly)\n- [[Templates/Daily Note]] — `{{date}}` / `{{title}}` placeholders preserved at provision\n- [[Templates/Meeting Note]] — agenda, decisions, action items\n\nWorkspace defaults point quick capture at `Inbox/` and templates at `Templates/`.\n\n## Canvas, data apps & analytics\n\n| Resource | Kind |\n| --- | --- |\n| `Canvases/Product Strategy.canvas` | Spatial board linking Product pages + CRM views |\n| `CRM.data` | SQLite CRM (`companies` + `contacts`, relations, forms) |\n| `Projects/Delivery.data` | Delivery board/calendar (status + due) |\n| `Data/Metrics.data` | Decimal metrics by category |\n| `OKRs.data` | Objectives / key results board |\n| `Data/Events.dataset` | Analytical package — Hive Parquet facts + `annotations.sqlite` |\n| `Dashboards/Signups by region.vl.json` | Vega-Lite chart bound to Events via DuckDB |\n| `Data/Orders.dataset` | Retail orders — multi-month Hive Parquet for multi-series charts |\n| `Dashboards/Revenue by region and category.vl.json` | Stacked bars (Orders region × category) |\n| `Dashboards/Revenue by day.vl.json` | Daily revenue time series (Orders) |\n| `Dashboards/Revenue by channel.vl.json` | Layered channel comparison (Orders) |\n| `Data/Places.dataset` | Named WGS84 points (`lon`/`lat`) for MapLibre |\n| `Data/sample.csv` | Flat CSV import sample |\n| `Notebooks/Orders analytics.ipynb` | Pyodide Orders CSV tour (mounted workspace bridge) |\n| `Notebooks/CRM exploration.ipynb` | CRM tour notebook (nbformat v4) |\n\n### CRM views\n\nOpen `CRM.data` and switch layouts from the view picker. The template seeds saved\nviews under `CRM.data/views/` (one YAML file per view):\n\n| View | Layout | Key field |\n| ---- | ------ | --------- |\n| Board | `board` | `status` |\n| Calendar | `calendar` | `due_date` |\n| Gallery | `gallery` | `company` (cover) |\n| Form | `form` | — |\n\nSupported layout types also include `grid` and `list`. Board groups contacts by\n`status`; calendar plots `due_date`; gallery uses `company` as a cover field.\n\nThe **company** column links each contact to a row in the seeded `companies` table.\nThe **reports_to** column is a self-relation on `contacts`. The **tags** column is a\njunction-backed M2M to the seeded `tags` table (`contact_tags` as source of truth;\ngrid/IPC still use `Relation { record_ids }`). Template relation seeds accept\n**record ids** or display **names** (matched via each target table's `name`\ncolumn at provision time).\n\n### CRM package forms\n\n| Form | Table | Fields |\n| ---- | ----- | ------ |\n| ContactIntake | `contacts` | `name`, `email`, `status`, `company` |\n\nEmbed a view from a page (see [[Research/Long Read]]):\n\n```markdown\n:::lattice-embed\nresource: CRM.data/views/Board.yaml\nfallback: \"Open CRM board view\"\n:::\n```\n\n## Resources\n\n| File | Notes |\n| --- | --- |\n| `Resources/config.json` | Feature flags sample |\n| `Resources/schema.yaml` | Small YAML schema |\n| `Resources/hooks.json` | Workspace hook sketch |\n| `Resources/example.ts` | Tiny TypeScript export |\n| `Resources/types.ts` | CRM-related types |\n| `Resources/queries.sql` | Example SELECT statements |\n| `Resources/notes.txt` | Plain text |\n| `Resources/mark.svg` | Generated Lattice mark |\n\n## Map\n\n| Path | Kind |\n| --- | --- |\n| [[Product/Vision]] | page |\n| [[Product/Principles]] | page |\n| [[Product/Roadmap]] | page |\n| [[Product/Release Notes]] | page |\n| [[Research/Local Runtime]] | page (daemon / search / voice) |\n| [[Research/Long Read]] | page (long / embed) |\n| [[Research/Architecture]] | page |\n| [[Research/Competitor Analysis]] | page |\n| [[Research/Market Notes]] | page |\n| [[Research/Interview Synthesis]] | page |\n| [[Inbox/Sample capture]] | page |\n| `Templates/` | page templates |\n| `Canvases/Product Strategy.canvas` | canvas |\n| `CRM.data` | data app |\n| `Projects/Delivery.data` | data app |\n| `Data/Metrics.data` | data app |\n| `OKRs.data` | data app |\n| `Data/Events.dataset` | dataset (Parquet + annotations) |\n| `Dashboards/Signups by region.vl.json` | Vega-Lite chart |\n| `Data/Orders.dataset` | dataset (multi-month Parquet) |\n| `Dashboards/Revenue by region and category.vl.json` | Vega-Lite chart (Orders) |\n| `Dashboards/Revenue by day.vl.json` | Vega-Lite chart (Orders) |\n| `Dashboards/Revenue by channel.vl.json` | Vega-Lite chart (Orders) |\n| `Data/Places.dataset` | dataset (WGS84 lon/lat points) |\n| `Data/sample.csv` | CSV file |\n| `Notebooks/Orders analytics.ipynb` | notebook |\n| `Notebooks/CRM exploration.ipynb` | notebook |\n| `Resources/` | code & config files |\n",
   "Inbox/Sample capture.md": "---\ntitle: Sample capture\ntags: [inbox]\n---\n\n# Sample capture\n\nQuick note seeded in `Inbox/` — triage into [[Product/]] or [[Research/]] when ready.\n\n## Raw thought\n\nUse the First Look demo daily: open [[Research/Long Read]], add a CRM row,\ncapture here with **⌘N** (type or hold-to-dictate), promote to a full page from\n[[Templates/Daily Note]].\n\nDictation tip: say identifiers like `VoiceContextBuilder` or paths like\n`Inbox/Sample capture` — finals run glossary / ITN normalize before save.\n\n- [ ] Review [[Product/Release Notes]]\n- [ ] Skim [[Research/Local Runtime]] for daemon / search / voice\n- [ ] Check `CRM.data` calendar layout for August due dates\n- [ ] Pin [[Canvases/Product Strategy.canvas]] in sidebar\n\n#inbox\n",
   "Product/Vision.md": "---\ntitle: Vision\n---\n\n# Vision\n\nA fast local workspace that treats documents, data, notebooks, and canvases as ordinary files.\n\nSee also [[Product/Principles]], [[Product/Roadmap]], [[Product/Release Notes]], and\n[[Research/Competitor Analysis]]. For volume testing, open [[Research/Long Read]].\n",
   "Product/Principles.md": "---\ntitle: Principles\ntags: [product]\n---\n\n# Principles\n\nGuiding constraints for Lattice — referenced from [[Product/Vision]] and [[Product/Roadmap]].\n\n## Local-first\n\nThe workspace is a directory on disk. Canonical content stays inspectable outside\nLattice. Offline is the normal state.\n\n## Commands, not side doors\n\nEvery mutation flows through the semantic command core. The React shell coordinates;\nit does not become a privileged writer.\n\n## Progressive disclosure\n\nPrimary creation vocabulary: **Page**, **Canvas**, **Table**, **Notebook**, **File**.\nAdvanced source, history, and conflicts belong under per-resource Inspect surfaces.\n\n## Honest reconciliation\n\nExternal edits are legitimate. Lattice watches the tree and reconciles without\nsilent data loss.\n\n## Performance as product\n\nLarge pages like [[Research/Long Read]], wide tables in `CRM.data`, and canvas\npanning should meet documented budgets before new abstractions land.\n\nSee [[Home]] for a tour of this sample workspace.\n",
