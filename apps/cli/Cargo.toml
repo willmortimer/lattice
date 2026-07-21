@@ -19,6 +19,7 @@ lattice-datasets.workspace = true
 lattice-duckdb.workspace = true
 lattice-index.workspace = true
 lattice-theme.workspace = true
+lattice-publish.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 serde.workspace = true

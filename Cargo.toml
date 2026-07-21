@@ -17,6 +17,7 @@ members = [
     "crates/lattice-duckdb",
     "crates/lattice-arrow-transport",
     "crates/lattice-theme",
+    "crates/lattice-publish",
     "crates/lattice-handlers",
     "crates/lattice-runtime",
     "crates/lattice-terminal",
@@ -51,6 +52,7 @@ lattice-datasets = { path = "crates/lattice-datasets" }
 lattice-duckdb = { path = "crates/lattice-duckdb" }
 lattice-arrow-transport = { path = "crates/lattice-arrow-transport" }
 lattice-theme = { path = "crates/lattice-theme" }
+lattice-publish = { path = "crates/lattice-publish" }
 lattice-handlers = { path = "crates/lattice-handlers" }
 lattice-runtime = { path = "crates/lattice-runtime" }
 lattice-terminal = { path = "crates/lattice-terminal" }

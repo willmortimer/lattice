@@ -17,7 +17,8 @@ use crate::types::{
     SchemaFilesSnapshot,
 };
 use crate::view::{
-    build_view_count_query, build_view_query, row_from_view_sql, view_path, visible_columns, ViewDef,
+    build_view_count_query, build_view_query, row_from_view_sql, view_path, visible_columns,
+    ViewDef,
 };
 use crate::Result;
 
@@ -198,11 +199,11 @@ impl DataApp {
     pub fn count_rows(&self, table: &str) -> Result<usize> {
         validate_identifier(table)?;
         ensure_table_exists(&self.conn, table)?;
-        let count: i64 = self
-            .conn
-            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
-                row.get(0)
-            })?;
+        let count: i64 =
+            self.conn
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })?;
         Ok(count as usize)
     }
 
@@ -636,14 +637,8 @@ impl DataApp {
         Ok(interface)
     }
 
-    /// Run a bounded read-only `SELECT`/`WITH` and return the first cell as JSON.
-    ///
-    /// Used by interface metric cards (`sqlite-query` bindings). Mutating SQL is refused.
-    pub fn query_sql_scalar(
-        &self,
-        sql: &str,
-        limit: usize,
-    ) -> Result<(Option<String>, Option<serde_json::Value>)> {
+    /// Shared guards for read-only binding SQL (`SELECT` / `WITH` only).
+    fn validate_read_only_sql<'a>(&self, sql: &'a str) -> Result<&'a str> {
         let trimmed = sql.trim();
         if trimmed.is_empty() {
             return Err(Error::InvalidPackage {
@@ -668,6 +663,18 @@ impl DataApp {
                 message: "mutating or privileged SQL is not allowed".to_string(),
             });
         }
+        Ok(trimmed)
+    }
+
+    /// Run a bounded read-only `SELECT`/`WITH` and return the first cell as JSON.
+    ///
+    /// Used by interface metric cards (`sqlite-query` bindings). Mutating SQL is refused.
+    pub fn query_sql_scalar(
+        &self,
+        sql: &str,
+        limit: usize,
+    ) -> Result<(Option<String>, Option<serde_json::Value>)> {
+        let trimmed = self.validate_read_only_sql(sql)?;
         let limit = limit.clamp(1, 100);
         let mut stmt = self.conn.prepare(trimmed)?;
         let column = stmt.column_name(0).ok().map(str::to_string);
@@ -679,19 +686,46 @@ impl DataApp {
                 break;
             }
             let value: rusqlite::types::Value = row.get(0)?;
-            let json = match value {
-                rusqlite::types::Value::Null => serde_json::Value::Null,
-                rusqlite::types::Value::Integer(v) => serde_json::json!(v),
-                rusqlite::types::Value::Real(v) => serde_json::json!(v),
-                rusqlite::types::Value::Text(v) => serde_json::json!(v),
-                rusqlite::types::Value::Blob(_) => serde_json::json!("<blob>"),
-            };
-            return Ok((
-                column,
-                if json.is_null() { None } else { Some(json) },
-            ));
+            let json = sqlite_value_to_json(value);
+            return Ok((column, if json.is_null() { None } else { Some(json) }));
         }
         Ok((column, None))
+    }
+
+    /// Run a bounded read-only `SELECT`/`WITH` and return columns plus row values as JSON.
+    ///
+    /// Used by static publishing to freeze `sqlite-query` binding results into a snapshot.
+    pub fn query_sql_table(
+        &self,
+        sql: &str,
+        limit: usize,
+    ) -> Result<(Vec<String>, Vec<Vec<serde_json::Value>>)> {
+        let trimmed = self.validate_read_only_sql(sql)?;
+        let limit = limit.clamp(1, 10_000);
+        let mut stmt = self.conn.prepare(trimmed)?;
+        let column_count = stmt.column_count();
+        let mut columns = Vec::with_capacity(column_count);
+        for index in 0..column_count {
+            columns.push(
+                stmt.column_name(index)
+                    .map(str::to_string)
+                    .unwrap_or_else(|_| format!("col_{index}")),
+            );
+        }
+        let mut rows = stmt.query([])?;
+        let mut collected = Vec::new();
+        while let Some(row) = rows.next()? {
+            if collected.len() >= limit {
+                break;
+            }
+            let mut values = Vec::with_capacity(column_count);
+            for index in 0..column_count {
+                let value: rusqlite::types::Value = row.get(index)?;
+                values.push(sqlite_value_to_json(value));
+            }
+            collected.push(values);
+        }
+        Ok((columns, collected))
     }
 
     /// Serialize an interface definition to YAML.
@@ -717,8 +751,7 @@ impl DataApp {
 
     fn validate_interface_bindings(&self, interface: &InterfaceDef) -> Result<()> {
         let views = self.list_views()?;
-        let view_names: std::collections::BTreeSet<_> =
-            views.iter().map(String::as_str).collect();
+        let view_names: std::collections::BTreeSet<_> = views.iter().map(String::as_str).collect();
         for view in &interface.views {
             if !view_names.contains(view.as_str()) {
                 return Err(Error::InvalidPackage {
@@ -728,8 +761,7 @@ impl DataApp {
             }
         }
         let forms = self.list_forms()?;
-        let form_names: std::collections::BTreeSet<_> =
-            forms.iter().map(String::as_str).collect();
+        let form_names: std::collections::BTreeSet<_> = forms.iter().map(String::as_str).collect();
         for form in &interface.forms {
             if !form_names.contains(form.as_str()) {
                 return Err(Error::InvalidPackage {
@@ -849,7 +881,14 @@ impl DataApp {
                         format!("lookup column {:?} requires lookup_field", column.name),
                     )
                 })?;
-                validate_lookup_spec_for_add(self, table, &existing, columns, relation_name, field_name)?;
+                validate_lookup_spec_for_add(
+                    self,
+                    table,
+                    &existing,
+                    columns,
+                    relation_name,
+                    field_name,
+                )?;
             }
             if column.field_type == FieldType::Rollup {
                 let relation_name = column.rollup_relation.ok_or_else(|| {
@@ -915,7 +954,9 @@ impl DataApp {
                         )
                     })?;
                     match parsed {
-                        RelationTarget::Local { table: target_table } => {
+                        RelationTarget::Local {
+                            table: target_table,
+                        } => {
                             ensure_table_exists(&self.conn, target_table)?;
                         }
                         RelationTarget::CrossPackage { .. } => {
@@ -965,8 +1006,7 @@ impl DataApp {
                             ));
                         }
                         if columns.iter().any(|pending| {
-                            pending.name != column.name
-                                && pending.junction_table == Some(junction)
+                            pending.name != column.name && pending.junction_table == Some(junction)
                         }) {
                             return Err(Error::table(
                                 table,
@@ -1006,7 +1046,10 @@ impl DataApp {
                             format!("lookup column {:?} requires lookup_field", column.name),
                         )
                     })?;
-                    (Some(relation_name.to_string()), Some(field_name.to_string()))
+                    (
+                        Some(relation_name.to_string()),
+                        Some(field_name.to_string()),
+                    )
                 }
                 _ if column.lookup_relation.is_some() || column.lookup_field.is_some() => {
                     return Err(Error::table(
@@ -1232,6 +1275,16 @@ impl DataApp {
     }
 }
 
+fn sqlite_value_to_json(value: rusqlite::types::Value) -> serde_json::Value {
+    match value {
+        rusqlite::types::Value::Null => serde_json::Value::Null,
+        rusqlite::types::Value::Integer(v) => serde_json::json!(v),
+        rusqlite::types::Value::Real(v) => serde_json::json!(v),
+        rusqlite::types::Value::Text(v) => serde_json::json!(v),
+        rusqlite::types::Value::Blob(_) => serde_json::json!("<blob>"),
+    }
+}
+
 fn validate_package_layout(package_path: &Path) -> Result<()> {
     for (label, path) in [
         ("app.yaml", app_manifest_path(package_path)),
@@ -1258,10 +1311,7 @@ fn junction_table_schema(junction_table: &str) -> String {
     )
 }
 
-fn sqlite_value_for_persisted_cell(
-    meta: &ColumnMeta,
-    value: &CellValue,
-) -> rusqlite::types::Value {
+fn sqlite_value_for_persisted_cell(meta: &ColumnMeta, value: &CellValue) -> rusqlite::types::Value {
     // Junction-backed relations keep a NULL TEXT placeholder; links live in the junction table.
     if meta.field_type == FieldType::Relation && meta.junction_table.is_some() {
         return rusqlite::types::Value::Null;
@@ -1357,9 +1407,7 @@ fn hydrate_junction_relations(
 ) -> Result<()> {
     let junction_columns: Vec<&ColumnMeta> = column_meta
         .iter()
-        .filter(|meta| {
-            meta.field_type == FieldType::Relation && meta.junction_table.is_some()
-        })
+        .filter(|meta| meta.field_type == FieldType::Relation && meta.junction_table.is_some())
         .collect();
     if junction_columns.is_empty() || rows.is_empty() {
         return Ok(());
@@ -1375,10 +1423,8 @@ fn hydrate_junction_relations(
                 .as_deref()
                 .expect("filtered junction columns");
             let record_ids = load_junction_target_ids(&app.conn, junction, &row.id)?;
-            row.values.insert(
-                meta.name.clone(),
-                CellValue::Relation { record_ids },
-            );
+            row.values
+                .insert(meta.name.clone(), CellValue::Relation { record_ids });
         }
     }
     Ok(())
@@ -1467,9 +1513,7 @@ fn strip_incoming_relation_ids(
                         prior_record_ids,
                     });
                     app.conn.execute(
-                        &format!(
-                            "DELETE FROM {junction} WHERE source_id = ?1 AND target_id = ?2"
-                        ),
+                        &format!("DELETE FROM {junction} WHERE source_id = ?1 AND target_id = ?2"),
                         params![source_id, deleted_id],
                     )?;
                 }
@@ -1568,7 +1612,9 @@ fn validate_lookup_spec_for_add(
     validate_identifier(lookup_relation)?;
     validate_identifier(lookup_field)?;
 
-    let relation_from_existing = existing.iter().find(|column| column.name == lookup_relation);
+    let relation_from_existing = existing
+        .iter()
+        .find(|column| column.name == lookup_relation);
     let relation_from_pending = pending.iter().find(|column| column.name == lookup_relation);
 
     let (is_relation, target_table) = if let Some(meta) = relation_from_existing {
@@ -1637,7 +1683,9 @@ fn validate_rollup_spec_for_add(
 ) -> Result<()> {
     validate_identifier(rollup_relation)?;
 
-    let relation_from_existing = existing.iter().find(|column| column.name == rollup_relation);
+    let relation_from_existing = existing
+        .iter()
+        .find(|column| column.name == rollup_relation);
     let relation_from_pending = pending.iter().find(|column| column.name == rollup_relation);
 
     let (is_relation, target_table) = if let Some(meta) = relation_from_existing {
@@ -1760,9 +1808,7 @@ fn validate_formula_spec_for_add(
         }
         return Err(Error::table(
             table,
-            format!(
-                "formula column {formula_name:?} references missing column {ref_name:?}"
-            ),
+            format!("formula column {formula_name:?} references missing column {ref_name:?}"),
         ));
     }
     Ok(())
@@ -1999,11 +2045,7 @@ fn resolve_rollup_values(
 }
 
 /// Fill formula cells by evaluating expressions against the current row.
-fn resolve_formula_values(
-    table: &str,
-    column_meta: &[ColumnMeta],
-    rows: &mut [Row],
-) -> Result<()> {
+fn resolve_formula_values(table: &str, column_meta: &[ColumnMeta], rows: &mut [Row]) -> Result<()> {
     let formula_columns: Vec<&ColumnMeta> = column_meta
         .iter()
         .filter(|meta| meta.field_type == FieldType::Formula)
@@ -2028,10 +2070,8 @@ fn resolve_formula_values(
             })?;
             let value = evaluate_formula(expression, &row.values)
                 .map_err(|err| Error::table(table, err.to_string()))?;
-            row.values.insert(
-                formula_col.name.clone(),
-                CellValue::Formula { value },
-            );
+            row.values
+                .insert(formula_col.name.clone(), CellValue::Formula { value });
         }
     }
     Ok(())
@@ -2113,10 +2153,7 @@ fn validate_relation_cell(
         )
     })?;
     let parsed = parse_relation_target(target).map_err(|message| {
-        Error::table(
-            table,
-            format!("relation column {:?}: {message}", meta.name),
-        )
+        Error::table(table, format!("relation column {:?}: {message}", meta.name))
     })?;
 
     if parsed.is_cross_package() {
