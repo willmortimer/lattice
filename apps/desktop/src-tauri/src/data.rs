@@ -116,6 +116,8 @@ pub struct ColumnDto {
     pub rollup_aggregate: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rollup_field: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub formula: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -135,6 +137,7 @@ fn column_dto(column: ColumnMeta) -> ColumnDto {
         rollup_relation: column.rollup_relation,
         rollup_aggregate: column.rollup_aggregate.map(|agg| agg.to_string()),
         rollup_field: column.rollup_field,
+        formula: column.formula,
     }
 }
 
@@ -282,6 +285,8 @@ pub struct AddColumnDto {
     pub rollup_aggregate: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rollup_field: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub formula: Option<String>,
 }
 
 fn column_spec_from_dto(column: AddColumnDto) -> ColumnSpec {
@@ -306,6 +311,8 @@ fn column_spec_from_dto(column: AddColumnDto) -> ColumnSpec {
             aggregate,
             column.rollup_field,
         )
+    } else if column.field_type == FieldType::Formula {
+        ColumnSpec::formula(column.name, column.formula.unwrap_or_default())
     } else {
         ColumnSpec::new(column.name, column.field_type)
     }
@@ -1610,6 +1617,7 @@ mod tests {
                     rollup_relation: None,
                     rollup_aggregate: None,
                     rollup_field: None,
+                    formula: None,
                 },
                 AddColumnDto {
                     name: "age".into(),
@@ -1620,6 +1628,7 @@ mod tests {
                     rollup_relation: None,
                     rollup_aggregate: None,
                     rollup_field: None,
+                    formula: None,
                 },
             ],
             base,
@@ -1674,6 +1683,7 @@ mod tests {
                 rollup_relation: None,
                 rollup_aggregate: None,
                 rollup_field: None,
+                formula: None,
             }],
             "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_string(),
             None,

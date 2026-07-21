@@ -21,6 +21,8 @@ pub enum FieldType {
     Lookup,
     /// Read-only aggregate over linked records through a relation on the same table.
     Rollup,
+    /// Read-only expression evaluated at read time from other columns on the same row.
+    Formula,
 }
 
 /// Aggregate function for [`FieldType::Rollup`].
@@ -82,7 +84,8 @@ impl FieldType {
             | FieldType::Date
             | FieldType::Relation
             | FieldType::Lookup
-            | FieldType::Rollup => "TEXT",
+            | FieldType::Rollup
+            | FieldType::Formula => "TEXT",
             FieldType::Integer | FieldType::Boolean => "INTEGER",
             FieldType::Decimal => "REAL",
         }
@@ -101,7 +104,10 @@ impl FieldType {
 
     /// Whether cells of this type are computed at read time and must not be written.
     pub fn is_read_only(self) -> bool {
-        matches!(self, FieldType::Lookup | FieldType::Rollup)
+        matches!(
+            self,
+            FieldType::Lookup | FieldType::Rollup | FieldType::Formula
+        )
     }
 }
 
@@ -117,8 +123,16 @@ impl fmt::Display for FieldType {
             FieldType::Relation => write!(f, "relation"),
             FieldType::Lookup => write!(f, "lookup"),
             FieldType::Rollup => write!(f, "rollup"),
+            FieldType::Formula => write!(f, "formula"),
         }
     }
+}
+
+/// Resolved formula result (never persisted to SQLite).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum FormulaValue {
+    Number(f64),
+    Text(String),
 }
 
 /// One typed cell value for row CRUD.
@@ -147,14 +161,19 @@ pub enum CellValue {
     Rollup {
         value: Option<f64>,
     },
+    /// Resolved formula value (never persisted to SQLite).
+    Formula {
+        value: Option<FormulaValue>,
+    },
 }
 
 impl CellValue {
     pub fn as_sqlite_value(&self) -> rusqlite::types::Value {
         match self {
-            CellValue::Null | CellValue::Lookup { .. } | CellValue::Rollup { .. } => {
-                rusqlite::types::Value::Null
-            }
+            CellValue::Null
+            | CellValue::Lookup { .. }
+            | CellValue::Rollup { .. }
+            | CellValue::Formula { .. } => rusqlite::types::Value::Null,
             CellValue::Text(text) | CellValue::Date(text) => {
                 rusqlite::types::Value::Text(text.clone())
             }
@@ -170,35 +189,40 @@ impl CellValue {
     }
 
     pub fn from_sqlite(value_ref: ValueRef<'_>, field_type: FieldType) -> rusqlite::Result<Self> {
-        // Lookup/rollup columns are placeholders; resolved values are filled after the SQL read.
+        // Lookup/rollup/formula columns are placeholders; resolved values are filled after the SQL read.
         if field_type == FieldType::Lookup {
             return Ok(CellValue::Lookup { values: Vec::new() });
         }
         if field_type == FieldType::Rollup {
             return Ok(CellValue::Rollup { value: None });
         }
+        if field_type == FieldType::Formula {
+            return Ok(CellValue::Formula { value: None });
+        }
         match value_ref {
             ValueRef::Null => Ok(CellValue::Null),
             ValueRef::Integer(value) => match field_type {
                 FieldType::Boolean => Ok(CellValue::Boolean(value != 0)),
                 FieldType::Date => Ok(CellValue::Date(value.to_string())),
-                FieldType::Relation | FieldType::Lookup | FieldType::Rollup => {
-                    Err(rusqlite::Error::InvalidColumnType(
-                        0,
-                        field_type.to_string(),
-                        value_ref.data_type(),
-                    ))
-                }
+                FieldType::Relation
+                | FieldType::Lookup
+                | FieldType::Rollup
+                | FieldType::Formula => Err(rusqlite::Error::InvalidColumnType(
+                    0,
+                    field_type.to_string(),
+                    value_ref.data_type(),
+                )),
                 _ => Ok(CellValue::Integer(value)),
             },
             ValueRef::Real(value) => match field_type {
-                FieldType::Relation | FieldType::Lookup | FieldType::Rollup => {
-                    Err(rusqlite::Error::InvalidColumnType(
-                        0,
-                        field_type.to_string(),
-                        value_ref.data_type(),
-                    ))
-                }
+                FieldType::Relation
+                | FieldType::Lookup
+                | FieldType::Rollup
+                | FieldType::Formula => Err(rusqlite::Error::InvalidColumnType(
+                    0,
+                    field_type.to_string(),
+                    value_ref.data_type(),
+                )),
                 _ => Ok(CellValue::Decimal(value)),
             },
             ValueRef::Text(bytes) => {
@@ -231,6 +255,7 @@ impl CellValue {
                     }
                     FieldType::Lookup => Ok(CellValue::Lookup { values: Vec::new() }),
                     FieldType::Rollup => Ok(CellValue::Rollup { value: None }),
+                    FieldType::Formula => Ok(CellValue::Formula { value: None }),
                     _ => Ok(CellValue::Text(text)),
                 }
             }
@@ -267,6 +292,19 @@ impl CellValue {
                     n.to_string()
                 }
             }
+            CellValue::Formula { value: None } => String::new(),
+            CellValue::Formula {
+                value: Some(FormulaValue::Number(n)),
+            } => {
+                if n.fract() == 0.0 && *n >= i64::MIN as f64 && *n <= i64::MAX as f64 {
+                    (*n as i64).to_string()
+                } else {
+                    n.to_string()
+                }
+            }
+            CellValue::Formula {
+                value: Some(FormulaValue::Text(text)),
+            } => text.clone(),
         }
     }
 
@@ -299,6 +337,8 @@ pub struct ColumnMeta {
     pub rollup_aggregate: Option<RollupAggregate>,
     /// Related-table field aggregated by [`FieldType::Rollup`] (optional for count).
     pub rollup_field: Option<String>,
+    /// Expression for [`FieldType::Formula`] (e.g. `{price} * {quantity}`).
+    pub formula: Option<String>,
 }
 
 /// Prior relation cell state stripped when a target row is deleted.
@@ -347,6 +387,7 @@ pub struct NewColumn<'a> {
     pub rollup_relation: Option<&'a str>,
     pub rollup_aggregate: Option<RollupAggregate>,
     pub rollup_field: Option<&'a str>,
+    pub formula: Option<&'a str>,
 }
 
 impl<'a> NewColumn<'a> {
@@ -360,6 +401,7 @@ impl<'a> NewColumn<'a> {
             rollup_relation: None,
             rollup_aggregate: None,
             rollup_field: None,
+            formula: None,
         }
     }
 
@@ -373,6 +415,7 @@ impl<'a> NewColumn<'a> {
             rollup_relation: None,
             rollup_aggregate: None,
             rollup_field: None,
+            formula: None,
         }
     }
 
@@ -386,6 +429,7 @@ impl<'a> NewColumn<'a> {
             rollup_relation: None,
             rollup_aggregate: None,
             rollup_field: None,
+            formula: None,
         }
     }
 
@@ -404,6 +448,21 @@ impl<'a> NewColumn<'a> {
             rollup_relation: Some(rollup_relation),
             rollup_aggregate: Some(aggregate),
             rollup_field,
+            formula: None,
+        }
+    }
+
+    pub fn formula(name: &'a str, expression: &'a str) -> Self {
+        Self {
+            name,
+            field_type: FieldType::Formula,
+            relation_table: None,
+            lookup_relation: None,
+            lookup_field: None,
+            rollup_relation: None,
+            rollup_aggregate: None,
+            rollup_field: None,
+            formula: Some(expression),
         }
     }
 }

@@ -102,4 +102,24 @@ describe("buildAddColumnPayload", () => {
       rollup_field: "amount",
     });
   });
+
+  it("includes formula expression for formula fields", () => {
+    expect(
+      buildAddColumnPayload(
+        "total",
+        "formula",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        "{price} * {quantity}",
+      ),
+    ).toEqual({
+      name: "total",
+      field_type: "formula",
+      formula: "{price} * {quantity}",
+    });
+  });
 });

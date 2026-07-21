@@ -10,6 +10,7 @@ mod csv;
 mod data_app;
 mod error;
 mod form;
+mod formula;
 mod interface;
 mod json_import;
 mod types;
@@ -34,6 +35,7 @@ pub use tabular::{
 };
 pub use xlsx::parse_xlsx_file;
 pub use data_app::DataApp;
+pub use formula::{evaluate_formula, formula_field_refs, validate_formula_syntax, FormulaError};
 pub use error::Error;
 pub use form::{save_form, write_package_form, FormDef, FORM_FILE_SUFFIX, FORM_FORMAT, FORM_VERSION};
 pub use interface::{
@@ -41,8 +43,8 @@ pub use interface::{
     INTERFACE_VERSION,
 };
 pub use types::{
-    CellValue, ColumnMeta, DeletedRowSnapshot, FieldType, NewColumn, RelationStrip, RollupAggregate,
-    Row, SchemaFilesSnapshot,
+    CellValue, ColumnMeta, DeletedRowSnapshot, FieldType, FormulaValue, NewColumn, RelationStrip,
+    RollupAggregate, Row, SchemaFilesSnapshot,
 };
 pub use view::{
     write_package_view, FilterOperator, SortDirection, ViewDef, ViewFilter, ViewLayout, ViewSort,

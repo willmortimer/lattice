@@ -58,6 +58,9 @@ pub struct ColumnMetaYaml {
     /// Related-table field aggregated by [`FieldType::Rollup`] (optional for count).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rollup_field: Option<String>,
+    /// Expression for [`FieldType::Formula`] (e.g. `{price} * {quantity}`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub formula: Option<String>,
 }
 
 impl AppManifest {
@@ -124,6 +127,7 @@ impl AppManifest {
                 rollup_relation: None,
                 rollup_aggregate: None,
                 rollup_field: None,
+                formula: None,
             });
     }
 

@@ -106,7 +106,10 @@ function isStaleRevisionError(message: string): boolean {
 function editableColumns(columns: DataColumn[]): DataColumn[] {
   return columns.filter(
     (column) =>
-      column.name !== "id" && column.field_type !== "lookup" && column.field_type !== "rollup",
+      column.name !== "id" &&
+      column.field_type !== "lookup" &&
+      column.field_type !== "rollup" &&
+      column.field_type !== "formula",
   );
 }
 
@@ -821,7 +824,8 @@ export function DataTableView({
         stale ||
         column.field_type === "relation" ||
         column.field_type === "lookup" ||
-        column.field_type === "rollup";
+        column.field_type === "rollup" ||
+        column.field_type === "formula";
       const zebraTheme =
         preferences.zebraRows && rowIndex % 2 === 1
           ? { bgCell: token("--lt-bg-raise", "#11161f") }

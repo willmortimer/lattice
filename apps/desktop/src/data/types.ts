@@ -8,10 +8,14 @@ export type FieldType =
   | "date"
   | "relation"
   | "lookup"
-  | "rollup";
+  | "rollup"
+  | "formula";
 
 /** Mirrors `lattice_data::RollupAggregate`. */
 export type RollupAggregate = "count" | "sum" | "min" | "max";
+
+/** Mirrors `lattice_data::FormulaValue`. */
+export type FormulaValue = { Number: number } | { Text: string };
 
 /** Externally tagged `CellValue` from `lattice-data`. */
 export type CellValue =
@@ -23,7 +27,8 @@ export type CellValue =
   | { Date: string }
   | { Relation: { record_ids: string[] } }
   | { Lookup: { values: string[] } }
-  | { Rollup: { value: number | null } };
+  | { Rollup: { value: number | null } }
+  | { Formula: { value: FormulaValue | null } };
 
 export interface DataColumn {
   name: string;
@@ -41,6 +46,8 @@ export interface DataColumn {
   rollup_aggregate?: RollupAggregate;
   /** Related-table field aggregated by rollup fields. */
   rollup_field?: string;
+  /** Expression for formula fields (e.g. `{price} * {quantity}`). */
+  formula?: string;
 }
 
 export interface DataRow {
@@ -124,6 +131,13 @@ export function cellValueToDisplay(value: CellValue | undefined | null | string)
     if (rollupValue == null) return "";
     return String(rollupValue);
   }
+  if ("Formula" in value) {
+    const formulaValue = value.Formula?.value;
+    if (formulaValue == null) return "";
+    if ("Number" in formulaValue) return String(formulaValue.Number);
+    if ("Text" in formulaValue) return formulaValue.Text ?? "";
+    return "";
+  }
   return "";
 }
 
@@ -163,6 +177,14 @@ export function displayToCellValue(text: string, fieldType: FieldType): CellValu
       if (!trimmed) return { Rollup: { value: null } };
       const parsed = Number.parseFloat(trimmed);
       return { Rollup: { value: Number.isNaN(parsed) ? null : parsed } };
+    }
+    case "formula": {
+      if (!trimmed) return { Formula: { value: null } };
+      const parsed = Number.parseFloat(trimmed);
+      if (!Number.isNaN(parsed) && String(parsed) === trimmed) {
+        return { Formula: { value: { Number: parsed } } };
+      }
+      return { Formula: { value: { Text: text } } };
     }
     case "text":
     case "long_text":
