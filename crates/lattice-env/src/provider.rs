@@ -13,7 +13,7 @@ pub enum EnvKind {
     System,
     /// Directory with `pyproject.toml` and/or `uv.lock`; resolved via `uv`.
     UvProject { project_dir: PathBuf },
-    /// Optional Nix flake / `shell.nix` root (stub until J6).
+    /// Optional Nix flake / `shell.nix` root via `nix print-dev-env`.
     Nix { root: PathBuf },
 }
 
@@ -61,7 +61,7 @@ impl EnvProvider {
         match request {
             EnvKind::System => self.resolve_system(),
             EnvKind::UvProject { project_dir } => self.resolve_uv_project(&project_dir),
-            EnvKind::Nix { root } => resolve_nix_stub(&root),
+            EnvKind::Nix { root } => self.resolve_nix(&root),
         }
     }
 
@@ -159,6 +159,86 @@ impl EnvProvider {
             provenance: format!("uv-project:{}", project_dir.display()),
         })
     }
+
+    fn resolve_nix(&self, root: &Path) -> Result<ResolvedEnv> {
+        let root = root
+            .canonicalize()
+            .map_err(|source| EnvError::Io(source))?;
+
+        let search = self.search_path();
+        let nix = find_on_path("nix", &search).ok_or_else(|| EnvError::MissingTool {
+            tool: "nix".into(),
+        })?;
+
+        let has_flake = root.join("flake.nix").is_file();
+        let has_shell = root.join("shell.nix").is_file();
+        if !has_flake && !has_shell {
+            return Err(EnvError::Unavailable {
+                reason: format!(
+                    "nix EnvProvider requires flake.nix or shell.nix under {}",
+                    root.display()
+                ),
+            });
+        }
+
+        // Prefer flake when both exist; never fall back to system Python.
+        let output = if has_flake {
+            let root_str = root.to_str().ok_or_else(|| EnvError::Unavailable {
+                reason: format!(
+                    "nix root is not valid UTF-8: {}",
+                    root.display()
+                ),
+            })?;
+            let installable = format!("path:{root_str}#");
+            Command::new(&nix)
+                .args(["print-dev-env", "--json", &installable])
+                .env("PATH", &search)
+                .current_dir(&root)
+                .output()?
+        } else {
+            let shell_nix = root.join("shell.nix");
+            let shell_str = shell_nix.to_str().ok_or_else(|| EnvError::Unavailable {
+                reason: format!(
+                    "shell.nix path is not valid UTF-8: {}",
+                    shell_nix.display()
+                ),
+            })?;
+            Command::new(&nix)
+                .args(["print-dev-env", "--json", "-f", shell_str])
+                .env("PATH", &search)
+                .current_dir(&root)
+                .output()?
+        };
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            let detail = if stderr.is_empty() {
+                format!("exit status {}", output.status)
+            } else {
+                stderr
+            };
+            return Err(EnvError::ToolFailed {
+                tool: "nix".into(),
+                detail,
+            });
+        }
+
+        let nix_path = path_from_print_dev_env_json(&output.stdout)?;
+        let python = find_on_path("python3", &nix_path)
+            .or_else(|| find_on_path("python", &nix_path))
+            .ok_or_else(|| EnvError::Unavailable {
+                reason: format!(
+                    "nix print-dev-env PATH has no python3/python (root={})",
+                    root.display()
+                ),
+            })?;
+
+        Ok(ResolvedEnv {
+            python,
+            path_env: Some(nix_path),
+            provenance: format!("nix:{}", root.display()),
+        })
+    }
 }
 
 /// Resolve using the default [`EnvProvider`] (ambient `PATH`).
@@ -166,14 +246,23 @@ pub fn resolve(request: EnvKind) -> Result<ResolvedEnv> {
     EnvProvider::new().resolve(request)
 }
 
-fn resolve_nix_stub(root: &Path) -> Result<ResolvedEnv> {
-    // J6 implements real flake / shell.nix resolution. Never fall back to system.
-    Err(EnvError::Unavailable {
-        reason: format!(
-            "nix EnvProvider is not implemented yet (planned in J6); requested root={}",
-            root.display()
-        ),
-    })
+/// Extract exported `PATH` from `nix print-dev-env --json` stdout.
+fn path_from_print_dev_env_json(stdout: &[u8]) -> Result<OsString> {
+    let value: serde_json::Value =
+        serde_json::from_slice(stdout).map_err(|err| EnvError::ToolFailed {
+            tool: "nix".into(),
+            detail: format!("print-dev-env --json parse error: {err}"),
+        })?;
+
+    let path = value
+        .pointer("/variables/PATH/value")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| EnvError::ToolFailed {
+            tool: "nix".into(),
+            detail: "print-dev-env JSON missing variables.PATH.value".into(),
+        })?;
+
+    Ok(OsString::from(path))
 }
 
 fn prepend_path(bin_dir: &Path, existing: &OsStr) -> OsString {
@@ -197,6 +286,31 @@ mod tests {
 
     fn path_with(dirs: &[&Path]) -> OsString {
         std::env::join_paths(dirs.iter().copied()).unwrap()
+    }
+
+    /// Fake `nix` that emits print-dev-env JSON whose PATH points at `nix_bin`.
+    fn write_fake_nix(bin_dir: &Path, nix_bin: &Path, fail: bool) {
+        let script = if fail {
+            r#"#!/bin/sh
+echo "fake nix: forced failure" >&2
+exit 1
+"#
+            .to_string()
+        } else {
+            // Use printf (shell builtin on most systems) so a PATH that only
+            // contains this fake `nix` still works in unit tests.
+            let payload = serde_json::json!({
+                "variables": {
+                    "PATH": {
+                        "type": "exported",
+                        "value": nix_bin.to_string_lossy(),
+                    }
+                }
+            });
+            let escaped = payload.to_string().replace('\\', "\\\\").replace('"', "\\\"");
+            format!("#!/bin/sh\necho \"{escaped}\"\n")
+        };
+        write_executable(&bin_dir.join("nix"), script.as_bytes());
     }
 
     #[test]
@@ -290,9 +404,10 @@ mod tests {
     }
 
     #[test]
-    fn nix_stub_is_unavailable_without_system_fallback() {
+    fn nix_missing_tool_without_system_fallback() {
         let root = tempfile::tempdir().unwrap();
-        // Even with python on PATH, Nix must not resolve to system.
+        fs::write(root.path().join("flake.nix"), b"{}\n").unwrap();
+        // System python on PATH must not satisfy a Nix request when nix is absent.
         let bin = tempfile::tempdir().unwrap();
         write_executable(&bin.path().join("python3"), b"#!/bin/sh\n");
         let provider = EnvProvider::with_path(path_with(&[bin.path()]));
@@ -302,21 +417,151 @@ mod tests {
             })
             .unwrap_err();
         match err {
+            EnvError::MissingTool { tool } => assert_eq!(tool, "nix"),
+            other => panic!("expected MissingTool, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn nix_unavailable_without_flake_or_shell() {
+        let root = tempfile::tempdir().unwrap();
+        let bin = tempfile::tempdir().unwrap();
+        write_fake_nix(bin.path(), bin.path(), false);
+        write_executable(&bin.path().join("python3"), b"#!/bin/sh\n");
+        let provider = EnvProvider::with_path(path_with(&[bin.path()]));
+        let err = provider
+            .resolve(EnvKind::Nix {
+                root: root.path().to_path_buf(),
+            })
+            .unwrap_err();
+        match err {
             EnvError::Unavailable { reason } => {
-                assert!(reason.contains("J6"), "reason={reason}");
-                assert!(reason.contains("not implemented"), "reason={reason}");
+                assert!(reason.contains("flake.nix"), "reason={reason}");
+                assert!(reason.contains("shell.nix"), "reason={reason}");
             }
             other => panic!("expected Unavailable, got {other:?}"),
         }
     }
 
     #[test]
-    fn nix_stub_via_free_function() {
+    fn nix_resolves_python_from_print_dev_env_path() {
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("flake.nix"), b"{}\n").unwrap();
+
+        let nix_bin = tempfile::tempdir().unwrap();
+        let python3 = nix_bin.path().join("python3");
+        write_executable(&python3, b"#!/bin/sh\n");
+
+        let path_bin = tempfile::tempdir().unwrap();
+        write_fake_nix(path_bin.path(), nix_bin.path(), false);
+        // Ambient system python must be ignored; only nix PATH counts.
+        write_executable(&path_bin.path().join("python3"), b"#!/bin/sh\necho system\n");
+
+        let provider = EnvProvider::with_path(path_with(&[path_bin.path()]));
+        let resolved = provider
+            .resolve(EnvKind::Nix {
+                root: root.path().to_path_buf(),
+            })
+            .expect("fake nix should resolve");
+        assert_eq!(resolved.python, python3);
+        assert_eq!(
+            resolved.path_env.as_ref().map(|p| p.as_os_str()),
+            Some(nix_bin.path().as_os_str())
+        );
+        assert!(
+            resolved.provenance.starts_with("nix:"),
+            "provenance={}",
+            resolved.provenance
+        );
+    }
+
+    #[test]
+    fn nix_shell_nix_resolves_via_print_dev_env() {
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("shell.nix"), b"{ pkgs ? import <nixpkgs> {} }: pkgs.mkShell {}\n")
+            .unwrap();
+
+        let nix_bin = tempfile::tempdir().unwrap();
+        let python = nix_bin.path().join("python");
+        write_executable(&python, b"#!/bin/sh\n");
+
+        let path_bin = tempfile::tempdir().unwrap();
+        write_fake_nix(path_bin.path(), nix_bin.path(), false);
+
+        let provider = EnvProvider::with_path(path_with(&[path_bin.path()]));
+        let resolved = provider
+            .resolve(EnvKind::Nix {
+                root: root.path().to_path_buf(),
+            })
+            .expect("shell.nix path should resolve");
+        assert_eq!(resolved.python, python);
+        assert!(resolved.provenance.contains("nix:"));
+    }
+
+    #[test]
+    fn nix_tool_failed_on_nonzero_exit() {
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("flake.nix"), b"{}\n").unwrap();
+        let path_bin = tempfile::tempdir().unwrap();
+        write_fake_nix(path_bin.path(), path_bin.path(), true);
+        write_executable(&path_bin.path().join("python3"), b"#!/bin/sh\n");
+
+        let provider = EnvProvider::with_path(path_with(&[path_bin.path()]));
+        let err = provider
+            .resolve(EnvKind::Nix {
+                root: root.path().to_path_buf(),
+            })
+            .unwrap_err();
+        match err {
+            EnvError::ToolFailed { tool, detail } => {
+                assert_eq!(tool, "nix");
+                assert!(detail.contains("forced failure"), "detail={detail}");
+            }
+            other => panic!("expected ToolFailed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn nix_unavailable_when_dev_env_path_has_no_python() {
+        let root = tempfile::tempdir().unwrap();
+        fs::write(root.path().join("flake.nix"), b"{}\n").unwrap();
+
+        let empty_nix_path = tempfile::tempdir().unwrap();
+        let path_bin = tempfile::tempdir().unwrap();
+        write_fake_nix(path_bin.path(), empty_nix_path.path(), false);
+        // System python present but must not be used.
+        write_executable(&path_bin.path().join("python3"), b"#!/bin/sh\n");
+
+        let provider = EnvProvider::with_path(path_with(&[path_bin.path()]));
+        let err = provider
+            .resolve(EnvKind::Nix {
+                root: root.path().to_path_buf(),
+            })
+            .unwrap_err();
+        match err {
+            EnvError::Unavailable { reason } => {
+                assert!(reason.contains("python3/python"), "reason={reason}");
+            }
+            other => panic!("expected Unavailable, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn nix_via_free_function_missing_nix_files() {
+        // Ambient PATH may contain nix; empty root still fails on missing files
+        // (or MissingTool if nix is absent). Either way: no system Python.
+        let root = tempfile::tempdir().unwrap();
         let err = resolve(EnvKind::Nix {
-            root: PathBuf::from("/tmp/fake-nix-root"),
+            root: root.path().to_path_buf(),
         })
         .unwrap_err();
-        assert!(matches!(err, EnvError::Unavailable { .. }));
+        assert!(
+            matches!(
+                err,
+                EnvError::Unavailable { .. } | EnvError::MissingTool { .. }
+            ),
+            "got {err:?}"
+        );
     }
 
     /// Integration: real `uv` on the host PATH (skipped when absent).
