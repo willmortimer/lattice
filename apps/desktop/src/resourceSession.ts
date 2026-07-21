@@ -2,6 +2,7 @@ import type { DataAppSnapshot } from "./data/types";
 import type { InterfaceSummary } from "./data/interfaces";
 import type { PageIO } from "./editor/pageIO";
 import type { ArtifactManifestDto } from "./lib/artifactRun";
+import type { DerivedManifestDto, DerivedStatusDto } from "./lib/derivedRun";
 import type { ResourceEncoding, ResourceInspection } from "./lib/resourceRuntime";
 import type { TaskManifestDto } from "./lib/taskRun";
 import type { WorkflowManifestDto } from "./lib/workflowRun";
@@ -68,6 +69,12 @@ export type OpenResourceSession =
       kind: "workflow";
       resource: Resource;
       manifest: WorkflowManifestDto;
+    }
+  | {
+      kind: "derived";
+      resource: Resource;
+      manifest: DerivedManifestDto;
+      status: DerivedStatusDto | null;
     }
   | {
       kind: "artifact";

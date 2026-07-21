@@ -82,6 +82,11 @@ export function createDefaultResourceRendererRegistry(): ResourceRendererRegistr
         lazyImport(() => import("./WorkflowResourceRenderer").then((module) => module.WorkflowResourceRenderer), signal),
       ),
     )
+    .register(
+      definition("derived-viewer", "derived", undefined, (signal) =>
+        lazyImport(() => import("./DerivedResourceRenderer").then((module) => module.DerivedResourceRenderer), signal),
+      ),
+    )
     .register({
       id: "artifact-sandbox",
       kind: "artifact",

@@ -1,0 +1,10 @@
+format: lattice-derived-resource
+version: 1
+output: ./dist/index.html
+inputs:
+  - ./input.txt
+  - ./src/**
+builder:
+  task: ./Build Summary.task/task.yaml
+refresh:
+  mode: on-demand
