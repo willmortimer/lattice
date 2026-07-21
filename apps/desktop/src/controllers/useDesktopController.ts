@@ -655,6 +655,72 @@ export function useDesktopController() {
   handleNewPageRef.current = handleNewPage;
   const handleUndoRef = useRef(handleUndo);
   handleUndoRef.current = handleUndo;
+  const handleOpenWorkspaceRef = useRef(handleOpenWorkspace);
+  handleOpenWorkspaceRef.current = handleOpenWorkspace;
+  const openNewWorkspaceDialogRef = useRef(openNewWorkspaceDialog);
+  openNewWorkspaceDialogRef.current = openNewWorkspaceDialog;
+  const handleNewTableRef = useRef(handleNewTable);
+  handleNewTableRef.current = handleNewTable;
+  const setActivityAreaRef = useRef(navigationController.setActivityArea);
+  setActivityAreaRef.current = navigationController.setActivityArea;
+
+  useEffect(() => {
+    if (!hasTauri) return;
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    void listen<{ action: string }>("lattice-menu-action", (event) => {
+      const action = event.payload.action;
+      switch (action) {
+        case "app.settings":
+          setActivityAreaRef.current("settings");
+          break;
+        case "app.search":
+          setPaletteOpen(false);
+          setSearchPaneOpen(true);
+          break;
+        case "app.command-palette":
+          setSearchPaneOpen(false);
+          setPaletteOpen(true);
+          break;
+        case "app.quick-note":
+          handleQuickNoteRef.current();
+          break;
+        case "app.new-page":
+          handleNewPageRef.current();
+          break;
+        case "app.new-table":
+          void handleNewTableRef.current();
+          break;
+        case "app.new-workspace":
+          void openNewWorkspaceDialogRef.current();
+          break;
+        case "app.open-workspace":
+          void handleOpenWorkspaceRef.current();
+          break;
+        case "app.undo":
+          void handleUndoRef.current();
+          break;
+        case "app.home":
+          setActivityAreaRef.current("home");
+          break;
+        case "app.files":
+          setActivityAreaRef.current("files");
+          break;
+        default:
+          break;
+      }
+    }).then((fn) => {
+      if (cancelled) {
+        fn();
+        return;
+      }
+      unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -675,7 +741,7 @@ export function useDesktopController() {
         handleNewPageRef.current();
       } else if (matchesKeybinding(event, settings.keybindings.settings)) {
         event.preventDefault();
-        navigationController.setActivityArea("settings");
+        setActivityAreaRef.current("settings");
       } else if (!isEditableTarget(event.target) && matchesKeybinding(event, "Mod+Z")) {
         event.preventDefault();
         void handleUndoRef.current();

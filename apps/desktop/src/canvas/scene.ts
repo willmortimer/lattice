@@ -138,6 +138,10 @@ export class CanvasScene {
   private data: CanvasData | null = null;
   /** Fit deferred until the host has a real (non-1×1) size after layout. */
   private pendingFit = false;
+  /** setData before init finished — apply once the renderer exists. */
+  private queuedData: { data: CanvasData; fit: boolean } | null = null;
+  /** First successful paint should frame content even if a race cleared fit flags. */
+  private needsInitialFit = true;
 
   private panning = false;
   private panStart = { x: 0, y: 0 };
@@ -164,7 +168,14 @@ export class CanvasScene {
         resolution: window.devicePixelRatio || 1,
       })
       .then(async () => {
-        await document.fonts.ready.catch(() => {});
+        // Packaged WKWebView can leave `document.fonts.ready` pending forever
+        // (variable fonts / missing faces). Cap the wait so the scene still boots.
+        await Promise.race([
+          document.fonts.ready.catch(() => undefined),
+          new Promise<void>((resolve) => {
+            window.setTimeout(resolve, 400);
+          }),
+        ]);
         if (this.destroyed) {
           // destroy() ran while init was in flight; finish the teardown here,
           // now that the renderer actually exists.
@@ -173,6 +184,11 @@ export class CanvasScene {
         }
         this.initialized = true;
         this.setup();
+        if (this.queuedData) {
+          const queued = this.queuedData;
+          this.queuedData = null;
+          this.rebuild(queued.data, { fit: queued.fit });
+        }
       });
   }
 
@@ -208,6 +224,7 @@ export class CanvasScene {
         // First layout after open often starts at ~1×1; re-fit once we have space.
         if (this.pendingFit && this.data && width > 8 && height > 8) {
           this.pendingFit = false;
+          this.needsInitialFit = false;
           this.fitToContent(this.data.nodes);
         }
       }
@@ -221,7 +238,21 @@ export class CanvasScene {
   }
 
   setData(data: CanvasData, options: { fit?: boolean } = {}) {
-    this.rebuild(data, { fit: options.fit !== false });
+    const fit = options.fit !== false || this.needsInitialFit;
+    if (!this.initialized || this.destroyed) {
+      this.queuedData = { data, fit };
+      return;
+    }
+    this.rebuild(data, { fit });
+  }
+
+  /** Frame all nodes in the viewport (toolbar Fit / recovery after zero-size layout). */
+  fitView() {
+    if (this.data?.nodes.length) {
+      this.pendingFit = false;
+      this.needsInitialFit = false;
+      this.fitToContent(this.data.nodes);
+    }
   }
 
   /** Convert a browser client point into canvas world coordinates (pan/zoom aware). */
@@ -287,6 +318,7 @@ export class CanvasScene {
         this.pendingFit = true;
       } else {
         this.pendingFit = false;
+        this.needsInitialFit = false;
         this.fitToContent(data.nodes);
       }
     } else if (camera) {

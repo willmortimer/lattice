@@ -1,3 +1,4 @@
+mod app_menu;
 mod canvas;
 mod commands;
 mod daemon_session;
@@ -16,13 +17,6 @@ mod voice;
 mod watcher;
 
 use tauri::Manager;
-
-#[cfg(debug_assertions)]
-const OPEN_INSPECTOR_MENU_ID: &str = "developer.open-inspector";
-#[cfg(debug_assertions)]
-const RELOAD_WINDOW_MENU_ID: &str = "developer.reload-window";
-#[cfg(debug_assertions)]
-const RESET_UI_STATE_MENU_ID: &str = "developer.reset-ui-state";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -51,62 +45,9 @@ pub fn run() {
     };
 
     builder
-        .menu(|app| {
-            use tauri::menu::Menu;
-
-            let menu = Menu::default(app)?;
-            #[cfg(debug_assertions)]
-            {
-                use tauri::menu::{MenuItem, Submenu};
-
-                let open_inspector = MenuItem::with_id(
-                    app,
-                    OPEN_INSPECTOR_MENU_ID,
-                    "Open Web Inspector",
-                    true,
-                    Some("CmdOrCtrl+Alt+I"),
-                )?;
-                let reload = MenuItem::with_id(
-                    app,
-                    RELOAD_WINDOW_MENU_ID,
-                    "Reload Window",
-                    true,
-                    Some("CmdOrCtrl+R"),
-                )?;
-                let reset_ui_state = MenuItem::with_id(
-                    app,
-                    RESET_UI_STATE_MENU_ID,
-                    "Reset Local UI State and Reload",
-                    true,
-                    None::<&str>,
-                )?;
-                let developer = Submenu::with_items(
-                    app,
-                    "Developer",
-                    true,
-                    &[&open_inspector, &reload, &reset_ui_state],
-                )?;
-                menu.append(&developer)?;
-            }
-            Ok(menu)
-        })
-        .on_menu_event(|_app, _event| {
-            #[cfg(debug_assertions)]
-            {
-                let Some(window) = _app.get_webview_window("main") else {
-                    return;
-                };
-                match _event.id().as_ref() {
-                    OPEN_INSPECTOR_MENU_ID => window.open_devtools(),
-                    RELOAD_WINDOW_MENU_ID => {
-                        let _ = window.reload();
-                    }
-                    RESET_UI_STATE_MENU_ID => {
-                        let _ = window.eval("localStorage.clear(); window.location.reload();");
-                    }
-                    _ => {}
-                }
-            }
+        .menu(|app| app_menu::build_app_menu(app))
+        .on_menu_event(|app, event| {
+            app_menu::handle_action(app, event.id().as_ref());
         })
         .setup(|app| {
             tray::install_tray(app.handle())?;

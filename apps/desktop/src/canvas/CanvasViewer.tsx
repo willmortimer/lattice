@@ -88,6 +88,7 @@ export function CanvasViewer({
 
   const parsed = useMemo(() => parse(json), [json]);
   const [data, setData] = useState<CanvasData | null>(parsed.data);
+  const dataRef = useRef<CanvasData | null>(parsed.data);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [outlineOpen, setOutlineOpen] = useState(readOutlineOpen);
@@ -100,6 +101,7 @@ export function CanvasViewer({
 
   connectModeRef.current = connectMode;
   connectFromIdRef.current = connectFromId;
+  dataRef.current = data;
 
   useEffect(() => {
     revisionRef.current = baseRevision;
@@ -327,6 +329,16 @@ export function CanvasViewer({
       },
     });
     sceneRef.current = scene;
+    // Scene remounts without a `data` identity change leave Pixi empty unless we
+    // re-apply the latest snapshot when the new scene becomes ready.
+    void scene.ready.then(() => {
+      if (sceneRef.current !== scene) return;
+      const snapshot = dataRef.current;
+      if (!snapshot) return;
+      const fit = fitNextLoadRef.current;
+      fitNextLoadRef.current = false;
+      scene.setData(snapshot, { fit });
+    });
     return () => {
       sceneRef.current = null;
       scene.destroy();
@@ -561,6 +573,9 @@ export function CanvasViewer({
           </button>
           <button type="button" onClick={() => sceneRef.current?.removeSelected()}>
             {selectedEdgeId ? "Delete edge" : "Remove"}
+          </button>
+          <button type="button" onClick={() => sceneRef.current?.fitView()}>
+            Fit
           </button>
           <button
             type="button"

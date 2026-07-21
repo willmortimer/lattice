@@ -929,32 +929,38 @@ html[data-page-width="full"] {
   outline: none;
   min-height: 40vh;
   position: relative;
+  /* Room for block drag handles sitting in the left gutter; keep overflow
+     visible so absolute handles are not clipped by the content box. */
+  padding-left: 28px;
+  overflow: visible;
 }
 
 .page-editor-content .block-drag-handle {
   position: absolute;
-  left: -22px;
-  width: 16px;
-  height: 18px;
+  left: -24px;
+  width: 18px;
+  height: 20px;
   margin-top: 2px;
   padding: 0;
   border: 0;
   border-radius: 3px;
   background:
-    radial-gradient(circle, var(--lt-faint) 1.2px, transparent 1.4px) 3px 3px / 6px 6px,
-    radial-gradient(circle, var(--lt-faint) 1.2px, transparent 1.4px) 3px 9px / 6px 6px;
+    radial-gradient(circle, var(--lt-muted) 1.2px, transparent 1.4px) 4px 4px / 6px 6px,
+    radial-gradient(circle, var(--lt-muted) 1.2px, transparent 1.4px) 4px 10px / 6px 6px;
   background-color: transparent;
   cursor: grab;
-  opacity: 0;
-  transition: opacity 120ms ease;
+  opacity: 0.55;
+  transition: opacity 120ms ease, background-color 120ms ease;
   user-select: none;
   -webkit-user-drag: element;
 }
 
 .page-editor-content .ProseMirror:hover .block-drag-handle,
+.page-editor-content .block-drag-handle:hover,
 .page-editor-content .block-drag-handle:focus-visible,
 .page-editor-content .block-drag-handle-active {
   opacity: 1;
+  background-color: color-mix(in srgb, var(--lt-line) 70%, transparent);
 }
 
 .page-editor-content .block-drag-handle:active,
@@ -1126,6 +1132,8 @@ html[data-page-width="full"] {
 
 .canvas-viewer canvas {
   display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .canvas-surface {
@@ -1893,7 +1901,31 @@ html[data-page-width="full"] {
   color: var(--lt-text);
 }
 
-/* Mermaid sometimes emits fills/strokes that ignore themeVariables; keep labels readable. */
+/* Mermaid sometimes emits fills/strokes that ignore themeVariables; force contrast. */
+.mermaid-preview svg .node rect,
+.mermaid-preview svg .node polygon,
+.mermaid-preview svg .node circle,
+.mermaid-preview svg .basic.label-container,
+.mermaid-preview svg .label-container,
+.mermaid-preview svg .cluster rect {
+  fill: var(--lt-panel) !important;
+  stroke: var(--lt-slate) !important;
+}
+
+.mermaid-preview svg .edgePath .path,
+.mermaid-preview svg .flowchart-link,
+.mermaid-preview svg path.path {
+  stroke: var(--lt-text-soft) !important;
+  fill: none !important;
+  stroke-width: 1.5px !important;
+}
+
+.mermaid-preview svg marker path,
+.mermaid-preview svg .arrowheadPath {
+  fill: var(--lt-text-soft) !important;
+  stroke: var(--lt-text-soft) !important;
+}
+
 .mermaid-preview svg text,
 .mermaid-preview svg tspan,
 .mermaid-preview svg .nodeLabel,

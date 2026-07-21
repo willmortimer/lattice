@@ -56,9 +56,14 @@ export function PerspectiveDatasetViewer({
         ) as PerspectiveViewerElement;
         viewer.className = "perspective-dataset-viewer-el";
         viewer.setAttribute("theme", "Pro Dark");
+        // Explicit plugin — without it WKWebView sometimes paints an empty chrome.
+        viewer.setAttribute("plugin", "Datagrid");
         host.append(viewer);
 
         const buffer = ipcBytesToArrayBuffer(ipcBytesRef.current);
+        if (buffer.byteLength === 0) {
+          throw new Error("Dataset query returned empty Arrow IPC (no rows to display).");
+        }
         const tableOrPromise = runtime.worker.table(buffer);
         const table = await Promise.resolve(tableOrPromise);
         if (cancelled) {
@@ -67,6 +72,15 @@ export function PerspectiveDatasetViewer({
         }
         tableRef.current = table;
         await viewer.load(table);
+        // Restore a readable default view when Perspective opens with blank settings.
+        try {
+          await (viewer as PerspectiveViewerElement & { restore?: (config: object) => Promise<void> }).restore?.({
+            plugin: "Datagrid",
+            settings: false,
+          });
+        } catch {
+          /* older perspective builds omit restore */
+        }
         if (cancelled) return;
         setStatus("ready");
         onReadyRef.current?.();

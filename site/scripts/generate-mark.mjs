@@ -18,68 +18,15 @@ import { deflateSync } from "node:zlib";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-
-// --- Projection ------------------------------------------------------------
-// Axonometric projection of lattice space onto the plane. TILT = 30° is the
-// isometric case, where the near corner (1,1,1) of the unit cell projects
-// exactly onto the silhouette's center — the brightest node of the mark is
-// literally the point closest to the viewer.
-const TILT = (30 * Math.PI) / 180;
-const AX = Math.cos(TILT);
-const AY = Math.sin(TILT);
-
-const project = ([x, y, z]) => [(x - z) * AX, (x + z) * AY - y];
-
-// --- Unit-cell geometry ------------------------------------------------------
-// Silhouette: the six outer edges of the projected cube.
-const OUTLINE = [
-  [[0, 1, 0], [1, 1, 0]],
-  [[1, 1, 0], [1, 0, 0]],
-  [[1, 0, 0], [1, 0, 1]],
-  [[1, 0, 1], [0, 0, 1]],
-  [[0, 0, 1], [0, 1, 1]],
-  [[0, 1, 1], [0, 1, 0]],
-];
-
-// The "Y": three visible edges meeting at the near corner (1,1,1).
-const NEAR = [
-  [[1, 1, 1], [1, 1, 0]],
-  [[1, 1, 1], [0, 1, 1]],
-  [[1, 1, 1], [1, 0, 1]],
-];
-
-// Hidden edges meeting at the far corner (0,0,0) — drawn faint, so the cell
-// reads as a transparent 3D lattice rather than a solid.
-const FAR = [
-  [[0, 0, 0], [1, 0, 0]],
-  [[0, 0, 0], [0, 1, 0]],
-  [[0, 0, 0], [0, 0, 1]],
-];
-
-// Lattice subdivision of the three visible faces at t = 1/2.
-const t = 0.5;
-const GRID = [
-  // top face (y = 1)
-  [[t, 1, 0], [t, 1, 1]],
-  [[0, 1, t], [1, 1, t]],
-  // right face (x = 1)
-  [[1, t, 0], [1, t, 1]],
-  [[1, 0, t], [1, 1, t]],
-  // left face (z = 1)
-  [[t, 0, 1], [t, 1, 1]],
-  [[0, t, 1], [1, t, 1]],
-];
-
-// Nodes: the six silhouette vertices, plus the near corner as the bright center.
-const VERTICES = [
-  [0, 1, 0],
-  [1, 1, 0],
-  [1, 0, 0],
-  [1, 0, 1],
-  [0, 0, 1],
-  [0, 1, 1],
-];
-const CENTER = [1, 1, 1];
+import {
+  CENTER,
+  FAR,
+  GRID,
+  NEAR,
+  OUTLINE,
+  VERTICES,
+  project,
+} from "../src/lib/lattice-geometry.mjs";
 
 // --- SVG emission ------------------------------------------------------------
 const r2 = (n) => Math.round(n * 100) / 100;
@@ -166,12 +113,13 @@ function appIconSvg() {
 // tile background. NSImage template mode tints this to match the menu bar.
 function trayTemplateSvg() {
   const viewSize = 64;
-  const scale = 22;
-  const stroke = 2.4;
+  // Larger mark + heavier strokes so the status item reads at menu-bar size.
+  const scale = 27;
+  const stroke = 3.2;
   const { pt, path } = layout(viewSize, scale);
   const [cx, cy] = pt(CENTER);
   const dots = VERTICES.map(pt)
-    .map(([x, y]) => `<circle cx="${x}" cy="${y}" r="${r2(scale * 0.11)}"/>`)
+    .map(([x, y]) => `<circle cx="${x}" cy="${y}" r="${r2(scale * 0.12)}"/>`)
     .join("");
   return `<svg width="${viewSize}" height="${viewSize}" viewBox="0 0 ${viewSize} ${viewSize}" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Lattice">
   <!-- Template mark: black + alpha only. Do not add a rounded tile. -->
@@ -182,7 +130,7 @@ function trayTemplateSvg() {
     <path d="${path(NEAR)}" stroke-width="${stroke}" opacity="1"/>
   </g>
   <g fill="#000">${dots}</g>
-  <circle cx="${cx}" cy="${cy}" r="${r2(scale * 0.16)}" fill="#000"/>
+  <circle cx="${cx}" cy="${cy}" r="${r2(scale * 0.17)}" fill="#000"/>
 </svg>
 `;
 }
@@ -244,8 +192,8 @@ function strokeCoverage(dist, halfWidth) {
 }
 
 function rasterizeTrayTemplate(size) {
-  const scale = size * (22 / 64);
-  const stroke = size * (2.4 / 64);
+  const scale = size * (27 / 64);
+  const stroke = size * (3.2 / 64);
   const { pt } = layout(size, scale);
   const segs = (pairs) => pairs.map(([a, b]) => [pt(a), pt(b)]);
   const layers = [
@@ -256,8 +204,8 @@ function rasterizeTrayTemplate(size) {
   ];
   const dots = [...VERTICES.map(pt), pt(CENTER)];
   const nodeR = [
-    ...VERTICES.map(() => scale * 0.11),
-    scale * 0.16,
+    ...VERTICES.map(() => scale * 0.12),
+    scale * 0.17,
   ];
 
   const rgba = Buffer.alloc(size * size * 4);
