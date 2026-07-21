@@ -1,7 +1,12 @@
-import type { PyodideRunPayload, PyodideWorkerRequest, PyodideWorkerResponse } from "./pyodideProtocol";
+import type {
+  PyodideMountFile,
+  PyodideRunPayload,
+  PyodideWorkerRequest,
+  PyodideWorkerResponse,
+} from "./pyodideProtocol";
 import { MAX_NOTEBOOK_OUTPUT_CHARS } from "./pyodideConfig";
 
-export type { PyodideRunPayload };
+export type { PyodideMountFile, PyodideRunPayload };
 
 export class PyodideLoadError extends Error {
   constructor(message: string) {
@@ -78,9 +83,24 @@ function disposeWorker(): void {
   worker = null;
 }
 
+export type RunPythonCellOptions = {
+  signal?: AbortSignal;
+  maxOutputChars?: number;
+  /** Files to write into the Pyodide FS before executing the cell. */
+  mountFiles?: PyodideMountFile[];
+  /** Pyodide built-in packages to `loadPackage` before the cell (cached). */
+  packages?: string[];
+};
+
 type WorkerRequestBody =
   | { type: "ensure" }
-  | { type: "run"; code: string; maxOutputChars?: number };
+  | {
+      type: "run";
+      code: string;
+      maxOutputChars?: number;
+      mountFiles?: PyodideMountFile[];
+      packages?: string[];
+    };
 
 function request<T>(message: WorkerRequestBody, signal?: AbortSignal): Promise<T> {
   if (signal?.aborted) return Promise.reject(new PyodideCancelledError());
@@ -118,6 +138,7 @@ function request<T>(message: WorkerRequestBody, signal?: AbortSignal): Promise<T
       onAbort();
       return;
     }
+    // Structured clone carries Uint8Array file mounts; cancel still terminates the worker.
     runtime.postMessage(envelope);
   });
 }
@@ -130,10 +151,23 @@ export function ensurePyodide(signal?: AbortSignal): Promise<void> {
 /** Execute one Python cell; cancel via AbortSignal by terminating the worker. */
 export function runPythonCell(
   code: string,
-  signal?: AbortSignal,
+  signalOrOptions?: AbortSignal | RunPythonCellOptions,
   maxOutputChars = MAX_NOTEBOOK_OUTPUT_CHARS,
 ): Promise<PyodideRunPayload> {
-  return request<PyodideRunPayload>({ type: "run", code, maxOutputChars }, signal);
+  const options: RunPythonCellOptions =
+    signalOrOptions instanceof AbortSignal || signalOrOptions === undefined
+      ? { signal: signalOrOptions, maxOutputChars }
+      : { maxOutputChars, ...signalOrOptions };
+  return request<PyodideRunPayload>(
+    {
+      type: "run",
+      code,
+      maxOutputChars: options.maxOutputChars ?? MAX_NOTEBOOK_OUTPUT_CHARS,
+      mountFiles: options.mountFiles,
+      packages: options.packages,
+    },
+    options.signal,
+  );
 }
 
 /** Drop a warm worker (tests / teardown). */

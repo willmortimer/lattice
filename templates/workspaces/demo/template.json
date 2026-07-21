@@ -41,6 +41,7 @@
     "Inbox/Sample capture.md",
     "Templates/Daily Note.md",
     "Notebooks/CRM exploration.ipynb",
+    "Notebooks/Orders analytics.ipynb",
     "Resources/"
   ],
   "files": [
@@ -59,6 +60,7 @@
     "Templates/Daily Note.md",
     "Templates/Meeting Note.md",
     "Notebooks/CRM exploration.ipynb",
+    "Notebooks/Orders analytics.ipynb",
     "Canvases/Product Strategy.canvas",
     "Data/sample.csv",
     "Data/Events.dataset/dataset.yaml",

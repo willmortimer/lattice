@@ -921,6 +921,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "Inbox/Sample capture.md",
       "Templates/Daily Note.md",
       "Notebooks/CRM exploration.ipynb",
+      "Notebooks/Orders analytics.ipynb",
       "Resources/"
     ],
     "capabilities": [
