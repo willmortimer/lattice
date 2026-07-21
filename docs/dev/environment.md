@@ -50,8 +50,16 @@ Mac. None are read by `desktop-install` today.
 | `APPLE_ID` | CI secret | your Apple developer account email | macOS notarization | Privileged | Not used yet |
 | `APPLE_PASSWORD` | CI secret | app-specific password from appleid.apple.com | macOS notarization | **Yes** | Not used yet |
 
-Site deployment tokens (host-dependent — e.g. Cloudflare/Netlify) will be
-added here when a deploy target is chosen.
+## Site publish (Cloudflare Pages)
+
+Live site: <https://lattice-dop.pages.dev/>. Prefer interactive login from the
+ops shell (`nix develop .#ops` → `wrangler login`); tokens land in your home
+directory, not the Nix store. See [nix-workflows.md](./nix-workflows.md).
+
+| Variable | Where to set | Where to get it | What it does | Secret? | Status |
+| --- | --- | --- | --- | --- | --- |
+| `CLOUDFLARE_API_TOKEN` | shell / CI secret (optional) | [Cloudflare API tokens](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/) with Pages edit | Non-interactive auth for `wrangler` / `nix run .#site-deploy` when OAuth login is unavailable | **Yes** | Works with wrangler |
+| `CLOUDFLARE_ACCOUNT_ID` | shell / CI (optional) | Cloudflare dashboard → account overview | Disambiguates account when the token can see more than one | No | Optional |
 
 ## Rules
 

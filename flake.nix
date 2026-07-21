@@ -61,6 +61,7 @@
             check = "CI gate: fmt, clippy, tests, desktop + site builds";
             site-dev = "Start the Astro marketing/docs site";
             site-build = "Build the static marketing/docs site";
+            site-deploy = "Build the site and deploy to Cloudflare Pages (lattice-dop)";
             docs-sync = "Regenerate site docs content from docs/";
             compile-theme = "Compile themes/*.theme.yaml into CSS/TS tokens";
             compile-templates = "Validate templates and regenerate embedded catalogs";
@@ -101,6 +102,17 @@
             site-build = ''
               pnpm install
               exec pnpm --filter @lattice/site build "$@"
+            '';
+            site-deploy = ''
+              pnpm install
+              pnpm --filter @lattice/site build
+              # Project name matches https://lattice-dop.pages.dev/
+              # Wrangler is pinned via nixpkgs so `nix run .#site-deploy` works
+              # without entering the ops shell.
+              exec ${lib.getExe pkgs.wrangler} pages deploy site/dist \
+                --project-name=lattice-dop \
+                --config site/wrangler.toml \
+                "$@"
             '';
             docs-sync = ''
               exec pnpm --filter @lattice/site sync-docs "$@"
@@ -257,11 +269,30 @@
             '';
           };
 
+          # Site scripts only need Node; wrangler is pinned via getExe in
+          # site-deploy and also exposed on PATH in the ops shell for login.
+          siteNodeToolchain = with pkgs; [
+            nodejs_22
+            pnpm
+          ];
+
+          siteToolchain = siteNodeToolchain ++ [ pkgs.wrangler ];
+
+          siteScriptNames = [
+            "site-dev"
+            "site-build"
+            "site-deploy"
+            "docs-sync"
+          ];
+
+          runtimeInputsFor =
+            name: if builtins.elem name siteScriptNames then siteNodeToolchain else toolchain;
+
           latticeScripts = lib.mapAttrs (
             name: script:
             pkgs.writeShellApplication {
               name = "lattice-${name}";
-              runtimeInputs = toolchain;
+              runtimeInputs = runtimeInputsFor name;
               text = script;
             }
           ) scripts;
@@ -271,12 +302,16 @@
 
           nxr.shellIntegration = {
             enable = true;
-            devShells = [ "default" ];
+            # `default` = day-to-day Rust/desktop; `ops` = site publish / Cloudflare.
+            devShells = [
+              "default"
+              "ops"
+            ];
           };
 
           nxr.apps = lib.mapAttrs (name: script: {
             description = descriptions.${name};
-            runtimeInputs = toolchain;
+            runtimeInputs = runtimeInputsFor name;
             inherit script;
           }) scripts;
 
@@ -350,6 +385,12 @@
               app = "site-build";
               category = "site";
             };
+            site-deploy = {
+              description = "Deploy marketing/docs site to Cloudflare Pages";
+              app = "site-deploy";
+              category = "site";
+              aliases = [ "deploy-site" ];
+            };
             desktop-dev = {
               description = "Tauri + Vite HMR";
               app = "desktop-dev";
@@ -393,12 +434,37 @@
             };
           };
 
+          # Day-to-day app development (Rust, desktop, site local preview).
+          # direnv `use flake` loads this shell.
           devShells.default = pkgs.mkShell {
             packages = toolchain ++ lib.attrValues latticeScripts;
             shellHook = ''
               echo "lattice dev shell — rust $(rustc --version | cut -d' ' -f2), node $(node --version), pnpm $(pnpm --version)"
               echo "runner: nxr list | nxr <app> | nxr task <name> [-j N] | nxr graph <name>"
               echo "legacy: lattice-{test,lint,fmt,check,site-*,compile-*,desktop*} (also: nix run .#<app>)"
+              echo "ops / Cloudflare: nix develop .#ops"
+            '';
+          };
+
+          # Lightweight publish shell: wrangler + node/pnpm for site build/deploy.
+          # Activate with `nix develop .#ops` (does not replace direnv default).
+          # Auth: `wrangler login` stores OAuth tokens under your home directory
+          # (~/Library/Preferences/.wrangler on macOS), not in the Nix store —
+          # so login survives shell exits. CI can use CLOUDFLARE_API_TOKEN instead.
+          # Prefer this shell for interactive wrangler; `nix run .#site-deploy` also
+          # pins wrangler via nixpkgs once you are authenticated.
+          devShells.ops = pkgs.mkShell {
+            packages = siteToolchain ++ [
+              latticeScripts.site-build
+              latticeScripts.site-deploy
+              latticeScripts.docs-sync
+            ];
+            shellHook = ''
+              echo "lattice ops shell — wrangler $(wrangler --version 2>/dev/null | head -1), node $(node --version), pnpm $(pnpm --version)"
+              echo "auth: wrangler login   # once; tokens live in your home dir"
+              echo "whoami: wrangler whoami"
+              echo "deploy: lattice-site-deploy | nix run .#site-deploy"
+              echo "live: https://lattice-dop.pages.dev/"
             '';
           };
         };
