@@ -1,11 +1,10 @@
 use arrow::array::{Array, Float64Array, Int64Array, StringArray};
 use lattice_duckdb::{DataType, Field, RecordBatch, ScalarValue, Schema};
 
-use crate::cancel::CancelCheck;
+use crate::cancel::{AtomicCancel, CancelCheck};
 use crate::encode::{
     decode_ipc_stream, encode_duckdb_batch, encode_duckdb_batch_with_cancel, EncodeOptions,
 };
-use crate::Error;
 
 fn sample_batch(rows: usize) -> RecordBatch {
     let mut ids = Vec::with_capacity(rows);
@@ -127,12 +126,54 @@ impl CancelCheck for AlwaysCancel {
     }
 }
 
+struct CancelAfterChecks {
+    remaining: std::sync::atomic::AtomicUsize,
+}
+
+impl CancelCheck for CancelAfterChecks {
+    fn is_cancelled(&self) -> bool {
+        let previous = self
+            .remaining
+            .fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        // Cancel once the budget is exhausted (after `previous` hits 1 → 0).
+        previous <= 1
+    }
+}
+
 #[test]
-fn cancel_check_returns_cancelled_error() {
+fn cancel_check_returns_cancelled_batch() {
     let batch = sample_batch(4);
-    let err = encode_duckdb_batch_with_cancel(&batch, &EncodeOptions::default(), &AlwaysCancel)
-        .unwrap_err();
-    assert!(matches!(err, Error::Cancelled));
+    let encoded =
+        encode_duckdb_batch_with_cancel(&batch, &EncodeOptions::default(), &AlwaysCancel).unwrap();
+    assert!(encoded.cancelled);
+    assert_eq!(encoded.row_count, 0);
+    assert!(encoded.ipc_bytes.is_empty());
+}
+
+#[test]
+fn cancel_mid_encode_via_atomic_cancel() {
+    let batch = sample_batch(200);
+    // Force the byte-budget shrink loop so CancelCheck is polled more than once.
+    let options = EncodeOptions {
+        max_rows: 200,
+        max_bytes: 800,
+        sample_rows: 5,
+    };
+    let cancel = CancelAfterChecks {
+        remaining: std::sync::atomic::AtomicUsize::new(2),
+    };
+    let encoded = encode_duckdb_batch_with_cancel(&batch, &options, &cancel).unwrap();
+    assert!(encoded.cancelled);
+    assert_eq!(encoded.row_count, 0);
+    assert!(encoded.ipc_bytes.is_empty());
+}
+
+#[test]
+fn atomic_cancel_token_flips() {
+    let token = AtomicCancel::new();
+    assert!(!token.is_cancelled());
+    token.cancel();
+    assert!(CancelCheck::is_cancelled(&token));
 }
 
 #[test]
