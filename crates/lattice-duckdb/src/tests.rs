@@ -69,7 +69,8 @@ fn allowlist_blocks_csv_outside_workspace() {
     assert!(
         err.to_lowercase().contains("permission")
             || err.to_lowercase().contains("cannot access")
-            || err.to_lowercase().contains("external"),
+            || err.to_lowercase().contains("external")
+            || err.to_lowercase().contains("outside workspace"),
         "unexpected error: {err}"
     );
 }
