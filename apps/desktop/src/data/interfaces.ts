@@ -40,6 +40,9 @@ export const DEMO_OPS_DASHBOARD: InterfaceSummary = {
   forms: ["ContactIntake"],
   title: "Ops dashboard",
   description: "Multi-component CRM interface (metric, chart, map, data-view, form).",
+  parameters: {
+    region: { type: "string", default: "all" },
+  },
   layout: { columns: 12 },
   components: [
     {
@@ -63,7 +66,7 @@ export const DEMO_OPS_DASHBOARD: InterfaceSummary = {
       binding: {
         type: "duckdb-query",
         resources: ["Data/Orders.dataset"],
-        sql: "SELECT region, sum(revenue) AS revenue FROM read_parquet('Data/Orders.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true) GROUP BY region ORDER BY region",
+        sql: "SELECT region, sum(revenue) AS revenue FROM read_parquet('Data/Orders.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true) WHERE ('{{region}}' = 'all' OR region = '{{region}}') GROUP BY region ORDER BY region",
         limit: 100,
       },
     },
@@ -72,7 +75,12 @@ export const DEMO_OPS_DASHBOARD: InterfaceSummary = {
       type: "map",
       span: 6,
       title: "Places",
-      binding: { type: "resource", resource: "Data/Places.dataset" },
+      binding: {
+        type: "duckdb-query",
+        resources: ["Data/Places.dataset"],
+        sql: "SELECT * FROM read_parquet('Data/Places.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true) WHERE ('{{region}}' = 'all' OR '{{region}}' IS NOT NULL)",
+        limit: 500,
+      },
     },
     {
       id: "board",

@@ -544,10 +544,18 @@ Bindings use shared `BindingSpec` (`resource` | `saved-view` | `sqlite-query` |
 IPC JSON uses camelCase field names (`cellId`). See
 [resource runtime contracts](./39-resource-runtime-contracts.md).
 
+**Cross-filters (desktop):** when `parameters` is present, the interface
+dashboard renders a filter bar. Live values substitute `{{name}}` tokens in
+`sqlite-query` / `duckdb-query` binding SQL (quotes escaped; authors must wrap
+string params in SQL quotes). Metric, chart, and map tiles re-query together on
+change. Sentinel defaults such as `all` are a template concern
+(`WHERE ('{{region}}' = 'all' OR region = '{{region}}')`). Chart-brush
+selection pub/sub is out of scope.
+
 Demo CRM ships `interfaces/ContactOps.interface.yaml` (Board + ContactIntake,
 legacy navigation) and `interfaces/OpsDashboard.interface.yaml` (metric + chart
-+ map + data-view + form). Light drag-reorder and span resize persist YAML via
-`save_data_interface`.
++ map + data-view + form, with a `region` parameter). Light drag-reorder and
+span resize persist YAML via `save_data_interface`.
 
 Airtable-like operational surfaces over shared data can also include:
 

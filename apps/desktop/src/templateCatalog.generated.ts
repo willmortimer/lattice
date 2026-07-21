@@ -1407,6 +1407,12 @@ export const GENERATED_TEMPLATE_CATALOG = [
             ],
             "title": "Ops dashboard",
             "description": "Multi-component CRM interface (metric, chart, map, data-view, form).",
+            "parameters": {
+              "region": {
+                "type": "string",
+                "default": "all"
+              }
+            },
             "layoutColumns": 12,
             "components": [
               {
@@ -1431,7 +1437,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
                   "resources": [
                     "Data/Orders.dataset"
                   ],
-                  "sql": "SELECT region, sum(revenue) AS revenue FROM read_parquet('Data/Orders.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true) GROUP BY region ORDER BY region",
+                  "sql": "SELECT region, sum(revenue) AS revenue FROM read_parquet('Data/Orders.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true) WHERE ('{{region}}' = 'all' OR region = '{{region}}') GROUP BY region ORDER BY region",
                   "limit": 100
                 },
                 "chart": "Dashboards/Revenue by region and category.vl.json"
@@ -1442,8 +1448,12 @@ export const GENERATED_TEMPLATE_CATALOG = [
                 "span": 6,
                 "title": "Places",
                 "binding": {
-                  "type": "resource",
-                  "resource": "Data/Places.dataset"
+                  "type": "duckdb-query",
+                  "resources": [
+                    "Data/Places.dataset"
+                  ],
+                  "sql": "SELECT * FROM read_parquet('Data/Places.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true) WHERE ('{{region}}' = 'all' OR '{{region}}' IS NOT NULL)",
+                  "limit": 500
                 }
               },
               {
