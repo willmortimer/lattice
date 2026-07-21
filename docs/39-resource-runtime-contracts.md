@@ -150,7 +150,7 @@ Blob URLs, workers, and GPU scenes must not leak across resource switches.
 Tests cover the object-URL lease, renderer-load cancellation, and load-gate
 supersession; integration smoke for PDF worker teardown remains manual.
 
-## Notebook resources (Phase N3)
+## Notebook resources (Phase N3 + Phase-4 local)
 
 `.ipynb` files open as `ResourceKind::Notebook` with profile `Json` and
 `can_update`. The desktop shell registers renderer `notebook-viewer`
@@ -166,7 +166,7 @@ supersession; integration smoke for PDF worker teardown remains manual.
 - Parse failures surface a degraded error panel; the file remains inspectable
   outside Lattice.
 
-**Pyodide Run**
+**Pyodide Run (Phase N3 — shipped default / fallback)**
 
 - Per-cell **Run** and toolbar **Run all** execute Python in a module Web
   Worker. Pyodide loads lazily from jsDelivr on first Run (not bundled into
@@ -185,12 +185,54 @@ supersession; integration smoke for PDF worker teardown remains manual.
 - Browser demo: mutates the in-memory `demoNotebooks` map; no command-history
   undo stack.
 
-Native Jupyter / ipykernel execution remains deferred
-([Jupyter and compute](./14-jupyter-python-nix-and-compute.md)).
+**KernelSession surface (Phase-4 local — contract)**
+
+Frontend notebook execution goes through a `KernelSession` abstraction (not
+direct `runPythonCell` forever). Backends implement:
+
+| Method | Contract |
+|---|---|
+| `ensure` | Lazily start / reconnect the session; idempotent |
+| `execute` | Run one cell; return Jupyter-shaped outputs already mergeable by `mergeNotebookOutputs` |
+| `interrupt` | Cancel in-flight execution when the backend supports it |
+| `dispose` | Tear down the session; safe to call more than once |
+
+Pyodide is one backend (`createPyodideKernelSession`). Native desktop may
+prefer a native session when tooling is available and fall back to Pyodide;
+the browser fixture stays Pyodide-only with an honest badge.
+
+**Native kernel bridge (Phase-4 local — contract)**
+
+- Out-of-process `ipykernel` via a **stdio JSON-lines** (or length-prefixed
+  JSON) bridge driven by `jupyter_client` + `ipykernel`.
+- **No ZMQ in the trusted Rust process.** No in-process CPython in the
+  desktop binary ([ADR 0009](decisions/0009-dual-python-and-jupyter-runtime.md)).
+- v1 session map is **Tauri-supervised** (start / execute / interrupt /
+  shutdown; kill-on-drop). `latticed` kernel supervision is deferred.
+- Workspace cwd is capability-gated; missing `uv` / `python`+ipykernel
+  degrades honestly (Pyodide remains usable).
+
+**EnvProvider (Phase-4 local — contract)**
+
+Shared environment resolution for kernels and `*.task/` runs:
+
+| Provider | Meaning |
+|---|---|
+| `system` | Interpreter / PATH from the host environment |
+| `uv-project` | Directory with `pyproject.toml` / `uv.lock`; resolve via `uv` |
+| `nix` | Optional flake / `shell.nix` when `nix` is on PATH; never required |
+
+Resolution returns `{ python, path_env, provenance }` (or a typed unavailable
+error). Requesting `nix` must not silently fall back to system Python.
+
+Remote kernels, scheduled notebook runs, and rich widgets remain deferred
+([Jupyter and compute](./14-jupyter-python-nix-and-compute.md);
+[Phase-4 DAG](dev/jupyter-phase4-local-compute-dag.md)).
 
 | Asset | Owner | Cleanup |
 |---|---|---|
 | Pyodide worker | `NotebookViewer` / `pyodideRuntime` | `AbortController` on cancel; worker terminated when superseded |
+| Native kernel child (v1) | Tauri session map / bridge process | `dispose` / kill-on-drop; interrupt before shutdown when possible |
 
 ## Canvas data-view navigation (Phase C1)
 
