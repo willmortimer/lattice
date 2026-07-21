@@ -41,7 +41,7 @@ The root manifest should remain small. Most metadata belongs beside the resource
 | Canvas | JSON Canvas | Lattice canvas profile sidecar |
 | Data application | SQLite package | SQL schema, migrations, YAML views/forms/interfaces |
 | Analytical dataset | Parquet directory | DuckDB catalog, SQLite annotations, semantic model |
-| Notebook | Jupyter `.ipynb` | Lattice environment/profile sidecar; Phase 1 execution is Pyodide-only (see below) |
+| Notebook | Jupyter `.ipynb` | Lattice environment/profile sidecar; Pyodide default plus native ipykernel when available (see below) |
 | Ink | Lattice Ink package | Arrow strokes, SVG preview, platform cache |
 | Diagram | Mermaid, Graphviz DOT, SVG | rendered preview |
 | Chart | Vega-Lite/Vega | SVG/PNG/HTML preview |
@@ -54,14 +54,18 @@ The root manifest should remain small. Most metadata belongs beside the resource
 | Geospatial | GeoJSON, GeoParquet | map view manifests |
 | Scientific arrays | Zarr | notebook and visualization profiles |
 
-## Notebook execution (Phase 1)
+## Notebook execution (Phase N3 + Phase-4 local)
 
 Desktop classifies `.ipynb` as `ResourceKind::Notebook` (not a generic
 `file`). The shell opens notebooks through the `notebook-viewer` renderer.
-**Run** executes code cells in a Pyodide worker; merged outputs persist in the
-canonical JSON through `ResourceUpdate` with command-history undo on native.
-Kernel sidecars, native `uv` / ipykernel execution, and Jupyter server attach
-remain future work ([Jupyter and compute](./14-jupyter-python-nix-and-compute.md)).
+**Run** goes through a `KernelSession`: Pyodide is the default/fallback
+worker; native desktop may opt into an out-of-process `ipykernel` session when
+`uv`/`python`+ipykernel are available. Merged outputs persist in the canonical
+JSON through `ResourceUpdate` with command-history undo on native.
+`uv`-backed `*.task/` packages and optional Nix `EnvProvider` are available for
+local compute. Remote Jupyter server attach, scheduled notebook runs, and rich
+widgets remain deferred
+([Jupyter and compute](./14-jupyter-python-nix-and-compute.md)).
 
 ## Format requirements
 

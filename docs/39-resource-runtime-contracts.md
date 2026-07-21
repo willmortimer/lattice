@@ -185,10 +185,10 @@ supersession; integration smoke for PDF worker teardown remains manual.
 - Browser demo: mutates the in-memory `demoNotebooks` map; no command-history
   undo stack.
 
-**KernelSession surface (Phase-4 local — contract)**
+**KernelSession surface (Phase-4 local — shipped)**
 
-Frontend notebook execution goes through a `KernelSession` abstraction (not
-direct `runPythonCell` forever). Backends implement:
+Frontend notebook execution goes through a `KernelSession` abstraction.
+Backends implement:
 
 | Method | Contract |
 |---|---|
@@ -197,11 +197,11 @@ direct `runPythonCell` forever). Backends implement:
 | `interrupt` | Cancel in-flight execution when the backend supports it |
 | `dispose` | Tear down the session; safe to call more than once |
 
-Pyodide is one backend (`createPyodideKernelSession`). Native desktop may
-prefer a native session when tooling is available and fall back to Pyodide;
-the browser fixture stays Pyodide-only with an honest badge.
+Pyodide is one backend (`createPyodideKernelSession`). Native desktop prefers
+a native session when tooling is available and falls back to Pyodide; the
+browser fixture stays Pyodide-only with an honest badge.
 
-**Native kernel bridge (Phase-4 local — contract)**
+**Native kernel bridge (Phase-4 local — shipped)**
 
 - Out-of-process `ipykernel` via a **stdio JSON-lines** (or length-prefixed
   JSON) bridge driven by `jupyter_client` + `ipykernel`.
@@ -212,7 +212,7 @@ the browser fixture stays Pyodide-only with an honest badge.
 - Workspace cwd is capability-gated; missing `uv` / `python`+ipykernel
   degrades honestly (Pyodide remains usable).
 
-**EnvProvider (Phase-4 local — contract)**
+**EnvProvider (Phase-4 local — shipped)**
 
 Shared environment resolution for kernels and `*.task/` runs:
 
@@ -227,7 +227,7 @@ error). Requesting `nix` must not silently fall back to system Python.
 
 Remote kernels, scheduled notebook runs, and rich widgets remain deferred
 ([Jupyter and compute](./14-jupyter-python-nix-and-compute.md);
-[Phase-4 DAG](dev/jupyter-phase4-local-compute-dag.md)).
+[Phase-4 DAG](dev/jupyter-phase4-local-compute-dag.md) — Complete).
 
 | Asset | Owner | Cleanup |
 |---|---|---|

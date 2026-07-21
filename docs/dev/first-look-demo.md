@@ -34,9 +34,9 @@ open/viewer, Pyodide Run with `ResourceUpdate` undo, canvas `subpath` → data
 `viewName` navigation, and package `forms/*.form.yaml` list/load/submit. Contracts:
 
 - [Data applications — package forms](../10-data-applications-and-airtable-model.md#package-form-definitions-mvp) — `list_forms` / `load_form`, `ContactIntake` seed, distinct from `layout.type: form`.
-- [Resource runtime — notebooks](../39-resource-runtime-contracts.md#notebook-resources-phase-n3) — `notebook-viewer`, Pyodide Run, persist + undo.
+- [Resource runtime — notebooks](../39-resource-runtime-contracts.md#notebook-resources-phase-n3--phase-4-local) — `notebook-viewer`, Pyodide + native `KernelSession`, persist + undo.
 - [Resource runtime — canvas data views](../39-resource-runtime-contracts.md#canvas-data-view-navigation-phase-c1) — `viewNameFromCanvasSubpath` on double-click.
-- [Jupyter — Phase 1 scope](../14-jupyter-python-nix-and-compute.md#phase-1-desktop-scope-current-sprint) — Pyodide-only this sprint; native Jupyter deferred.
+- [Jupyter — Phase N3 + Phase-4 local](../14-jupyter-python-nix-and-compute.md#phase-4-local-compute-shipped) — Pyodide default; native ipykernel / `uv` / Nix available; remote / schedule / widgets deferred.
 
 Re-run the [[Home]] tour on a current build for notebook Run, canvas CRM nodes,
 and **Forms → Contact intake**.
