@@ -71,6 +71,39 @@
   font: 0.85rem var(--lt-font-ui);
 }
 
+.dataset-plan-panel {
+  height: 100%;
+  overflow: auto;
+  padding: 16px 18px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dataset-plan-section {
+  min-width: 0;
+}
+
+.dataset-plan-heading {
+  margin: 0 0 8px;
+  font: 600 0.8rem var(--lt-font-ui);
+  color: var(--lt-muted);
+}
+
+.dataset-plan-pre {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--lt-line);
+  border-radius: 8px;
+  background: var(--lt-bg-raise);
+  color: var(--lt-text-soft);
+  font: 0.75rem/1.45 var(--lt-font-mono);
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .perspective-dataset-viewer {
   position: relative;
   height: 100%;
