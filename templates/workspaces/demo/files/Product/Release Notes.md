@@ -15,14 +15,14 @@ Sample changelog page for the First Look workspace — not a live feed.
 - Desktop viewer tabs: Perspective **Preview**, Vega-Lite **Chart**, DuckDB **Profile**
 - [[Home]] tour steps 17–21 cover the analytics path (native / Tauri; not the browser fixture)
 
-## 2026.07 — Daemon, hybrid search, voice
+## 2026.07 — Daemon, search, voice
 
 - **latticed** — local UDS daemon with workspace sessions, one-writer lease, watcher + incremental FTS, keep-running idle shutdown
-- **Hybrid search** — structural chunks + FTS5; optional embed-host; RRF fusion with provenance
+- **Search** — keyword FTS5 over structural chunks is always on; semantic / hybrid RRF fusion is **off by default** — enable in **Settings → Search** (optional embed-host when warm)
 - **Voice D5** — `lattice-voice-host`, daemon voice proxy, Tauri thin client (native mic stays in-process; PCM over daemon)
 - **Native capture** — AVAudioEngine + AVAudioConverter, binary PCM, pre-roll, bounded queue (no WebView `number[]` PCM)
-- **Finalization** — honest `FinalizationMode`; glossary / ITN normalize on finals; Lattice energy VAD + optional continuous auto-finalize
-- **Quick Note dictation** — **⌘N** hold-to-dictate, provisional overlay, atomic save; silence-only discard
+- **Finalization** — honest `FinalizationMode` (StreamingFlush; independent offline redecode deferred); glossary / ITN normalize on finals; Lattice energy VAD + optional continuous auto-finalize
+- **Quick Note dictation** — **⌘N** hold-to-dictate, provisional overlay, atomic save; silence-only discard; glossary tips on [[Research/Local Runtime]]
 - Multiple `.data` fixtures: `CRM.data`, `Projects/Delivery.data`, `Data/Metrics.data`, `OKRs.data`
 - [[Research/Local Runtime]] — tour page for the process model and try-queries
 

@@ -17,10 +17,10 @@ a new workspace from the First Look template, or copy missing seeds from
 
 ## Quick start
 
-1. Search with **⌘K** — keyword search always; turn on **Settings → Search → Semantic search** for hybrid FTS + embeddings (try `latticed` or `FinalizationMode`).
+1. Search with **⌘K** — keyword FTS is always on; semantic search is **off by default**. Enable it in **Settings → Search** for hybrid FTS + embeddings (try `latticed` or `FinalizationMode`).
 2. Scroll [[Research/Long Read]] — long-form perf and virtualization fixture.
 3. Open `Canvases/Product Strategy.canvas` — double-click file nodes to jump.
-4. Capture with **⌘N** into `Inbox/` — type or **hold-to-dictate** (see [[Inbox/Sample capture]]).
+4. Capture with **⌘N** into `Inbox/` — type or **hold-to-dictate**; finals get glossary / ITN normalize (see [[Inbox/Sample capture]]).
 5. Open `CRM.data` — contacts + companies, relations, board/gallery/calendar/form.
 6. Also open `Projects/Delivery.data`, `Data/Metrics.data`, and `OKRs.data` for more table shapes.
 7. Open `Data/Events.dataset` — DuckDB Parquet facts → Perspective **Preview**, Vega-Lite **Chart**, DuckDB **Profile**.
@@ -37,14 +37,14 @@ and voice features. Each step is safe in the sample workspace; undo where noted.
 
 ### Search & local runtime
 
-1. Optionally enable **Settings → Search → Semantic search** (downloads ~640 MB local Qwen3 GGUF on first enable; or set `LATTICE_SEMANTIC_FAKE=1` for Fake vectors in dev).
-2. Press **⌘K** and search for `VoiceContextBuilder` or `EndpointDetected` (seeded on [[Research/Local Runtime]]). With semantic on and ready, hits may show Keyword / Semantic / Both.
+1. Press **⌘K** — keyword FTS works immediately (no download). Semantic search stays **off** until you enable **Settings → Search → Semantic search** (downloads ~640 MB local Qwen3 GGUF on first enable; or set `LATTICE_SEMANTIC_FAKE=1` for Fake vectors in dev).
+2. Search for `VoiceContextBuilder` or `EndpointDetected` (seeded on [[Research/Local Runtime]]). With semantic on and ready, hybrid hits may show Keyword / Semantic / Both; otherwise expect keyword-only.
 3. Skim [[Research/Architecture]] for the core vs latticed diagrams.
 
 ### Voice & Quick Note
 
-4. Open any page → hold the microphone control to dictate; release for a single final insert (provisional text is ghost-only).
-5. Press **⌘N** for Quick Note → hold-to-dictate → release → note saves once; Escape cancels without junk ASR text.
+4. Open any page → hold the microphone control to dictate; release for a single final insert (provisional text is ghost-only; finals run glossary / ITN normalize).
+5. Press **⌘N** for Quick Note → hold-to-dictate → release → note saves once; Escape cancels without junk ASR text. Try glossary tokens from [[Research/Local Runtime]] (`FinalizationMode`, `CRM.data`).
 6. Optional continuous mode: set `LATTICE_VOICE_AUTO_FINALIZE_ON_ENDPOINT=1` before launch (silence debounce endpoints); default hold-to-talk needs no VAD.
 
 ### CRM layouts and saved views
@@ -86,7 +86,7 @@ and voice features. Each step is safe in the sample workspace; undo where noted.
 
 | Surface | Try |
 | --- | --- |
-| [[Research/Local Runtime]] | Daemon, hybrid search, voice ownership |
+| [[Research/Local Runtime]] | Daemon, FTS + optional semantic, voice ownership |
 | [[Research/Long Read]] | Scroll perf, embeds, extended checklist |
 | [[Product/Release Notes]] | What shipped in this sample |
 | `Canvases/Product Strategy.canvas` | Spatial links + CRM view subpaths |
@@ -104,7 +104,7 @@ and voice features. Each step is safe in the sample workspace; undo where noted.
 
 | Page | What to try |
 | --- | --- |
-| [[Research/Local Runtime]] | latticed, hybrid search, Quick Note voice |
+| [[Research/Local Runtime]] | latticed, FTS + optional semantic, Quick Note voice |
 | [[Research/Long Read]] | Scroll perf, Mermaid, wiki links, `:::lattice-embed` |
 | [[Research/Architecture]] | System diagrams (core + daemon) |
 | [[Research/Competitor Analysis]] | Comparison table |

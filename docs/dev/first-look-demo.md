@@ -152,6 +152,18 @@ full native Tauri pass for folder undo / move+repair / trash (beyond P2P06 smoke
 lookup/rollup **add-column** and tabular import on native without a dedicated
 harness, query profiler UI, semantic models, and GeoParquet/MapLibre.
 
+## Search & voice First Look honesty
+
+Home.md quick-start and tour steps for search/voice (not re-scored in the CRM
+checklist below):
+
+- **⌘K** keyword FTS is always on; semantic search is **off by default** — enable
+  in **Settings → Search** for hybrid FTS + embeddings (no claim that hybrid is
+  warm out of the box).
+- Voice tips match shipped D5: hold-to-dictate, **⌘N** Quick Note, glossary /
+  ITN on finals; continuous auto-finalize remains opt-in via env. Independent
+  offline redecode stays deferred.
+
 ## Checklist
 
 Home.md items 1–9. Status: **pass** / **fail** / **skip**.
