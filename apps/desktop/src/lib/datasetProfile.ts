@@ -1,4 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
+import {
+  DatasetRequestAbortedError,
+  guardedDatasetRequest,
+  isDatasetRequestAborted,
+  newDatasetSessionId,
+} from "./datasetCancel";
 
 export interface ColumnProfile {
   name: string;
@@ -23,18 +29,47 @@ export interface RelationProfile {
 
 export interface ProfileDatasetRequest {
   sql?: string;
+  /** Optional cancel session id; generated when an AbortSignal is provided. */
+  sessionId?: string;
+}
+
+function isProfileCancelledMessage(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes("profile cancelled") || message.includes("interrupted");
 }
 
 export async function profileDataset(
   root: string,
   relPath: string,
   request: ProfileDatasetRequest = {},
+  signal?: AbortSignal,
 ): Promise<RelationProfile> {
-  return invoke<RelationProfile>("profile_dataset", {
-    root,
-    relPath,
-    request,
-  });
+  const sessionId = signal
+    ? (request.sessionId ?? newDatasetSessionId())
+    : request.sessionId;
+
+  try {
+    return await guardedDatasetRequest(
+      () =>
+        invoke<RelationProfile>("profile_dataset", {
+          root,
+          relPath,
+          request: {
+            ...request,
+            ...(sessionId ? { sessionId } : {}),
+          },
+        }),
+      signal,
+      sessionId,
+    );
+  } catch (error: unknown) {
+    if (isDatasetRequestAborted(error)) throw error;
+    if (signal?.aborted || isProfileCancelledMessage(error)) {
+      throw new DatasetRequestAbortedError();
+    }
+    throw error;
+  }
 }
 
 export function formatPercent(value: number | undefined): string {

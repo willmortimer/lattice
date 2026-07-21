@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { TopLevelSpec } from "vega-lite";
 
 import { PerspectiveDatasetViewer } from "../analytics/PerspectiveDatasetViewer";
@@ -9,6 +9,7 @@ import { inBrowser } from "../demo";
 import { KindMark } from "../KindMark";
 import type { ArrowQueryResult, ArrowTransportDump } from "../lib/arrowIpc";
 import { queryResultToValues } from "../lib/arrowToVegaData";
+import { isDatasetRequestAborted } from "../lib/datasetCancel";
 import {
   explainDataset,
   type ExplainDatasetResponse,
@@ -81,6 +82,7 @@ export function DatasetResourceRenderer({
   const [busy, setBusy] = useState(false);
   const [viewerFailed, setViewerFailed] = useState(false);
   const [viewerError, setViewerError] = useState<string | null>(null);
+  const loadAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!isDataset || !root) {
@@ -93,24 +95,27 @@ export function DatasetResourceRenderer({
       setError(null);
       setViewerFailed(false);
       setViewerError(null);
+      setBusy(false);
+      loadAbortRef.current = null;
       return;
     }
-    let cancelled = false;
+    const controller = new AbortController();
+    loadAbortRef.current = controller;
     setBusy(true);
     setError(null);
 
     const load = async () => {
       try {
         if (panel === "profile") {
-          const nextProfile = await profileDataset(root, path);
-          if (cancelled) return;
+          const nextProfile = await profileDataset(root, path, {}, controller.signal);
+          if (controller.signal.aborted) return;
           setProfile(nextProfile);
           setProfileSummary(formatProfileSummary(nextProfile));
           return;
         }
         if (panel === "plan") {
-          const nextExplain = await explainDataset(root, path);
-          if (cancelled) return;
+          const nextExplain = await explainDataset(root, path, {}, controller.signal);
+          if (controller.signal.aborted) return;
           setExplain(nextExplain);
           return;
         }
@@ -120,13 +125,13 @@ export function DatasetResourceRenderer({
           result: nextResult,
           dump: nextDump,
           summary: nextSummary,
-        } = await loadDatasetArrowDump(root, path);
-        if (cancelled) return;
+        } = await loadDatasetArrowDump(root, path, {}, controller.signal);
+        if (controller.signal.aborted) return;
         setResult(nextResult);
         setDump(nextDump);
         setSummary(nextSummary);
       } catch (err: unknown) {
-        if (cancelled) return;
+        if (controller.signal.aborted || isDatasetRequestAborted(err)) return;
         setResult(null);
         setDump(null);
         setSummary(null);
@@ -135,13 +140,19 @@ export function DatasetResourceRenderer({
         setExplain(null);
         setError(err instanceof Error ? err.message : String(err));
       } finally {
-        if (!cancelled) setBusy(false);
+        if (loadAbortRef.current === controller) {
+          loadAbortRef.current = null;
+          setBusy(false);
+        }
       }
     };
 
     void load();
     return () => {
-      cancelled = true;
+      controller.abort();
+      if (loadAbortRef.current === controller) {
+        loadAbortRef.current = null;
+      }
     };
   }, [isDataset, root, path, context.reloadToken, panel]);
 
@@ -229,7 +240,7 @@ export function DatasetResourceRenderer({
               panel === id ? "dataset-panel-tab dataset-panel-tab-active" : "dataset-panel-tab"
             }
             onClick={() => setPanel(id)}
-            disabled={!root || busy}
+            disabled={!root}
           >
             {label}
           </button>
@@ -245,8 +256,15 @@ export function DatasetResourceRenderer({
               </p>
             </div>
           ) : busy ? (
-            <div className="dataset-surface-fallback">
+            <div className="dataset-surface-fallback dataset-surface-busy">
               <p className="placeholder-sub">{panelBusyLabel(panel)}</p>
+              <button
+                type="button"
+                className="dataset-cancel-button"
+                onClick={() => loadAbortRef.current?.abort()}
+              >
+                Cancel
+              </button>
             </div>
           ) : error ? (
             <div className="dataset-surface-fallback">
