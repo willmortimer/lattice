@@ -1,0 +1,49 @@
+# Lattice Tidepool — deep petrol structure with a sparse living-coral signal.
+
+name: Lattice Tidepool
+id: lattice-tidepool
+appearance: dark
+
+palette:
+  ground: "#061315"
+  ground_raise: "#0a1c1f"
+  panel: "#10272b"
+  slate: "#7c9fa2"
+  text: "#e7f2f1"
+  text_soft: "#b9cfce"
+  muted: "#7f9c9d"
+  faint: "#526f72"
+  accent: "#ff826f"
+  accent_bright: "#ffb2a5"
+  accent_deep: "#cb5846"
+  danger: "#ff6f91"
+  ink_shadow: "#02090a"
+  on_accent: "#2a0d08"
+
+roles:
+  bg: $ground
+  bg_raise: $ground_raise
+  panel: $panel
+  slate: $slate
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $accent
+  accent_bright: $accent_bright
+  accent_deep: $accent_deep
+  danger: $danger
+  shadow: $ink_shadow
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 11px
+  radius_sm: 7px
+  radius_lg: 17px
+  grid: 36px
+  titlebar: 38px
+  max_width: 1140px

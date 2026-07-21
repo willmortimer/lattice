@@ -74,6 +74,26 @@ const BUILTINS: &[(&str, &str)] = &[
         "lattice-meadow",
         include_str!("../../../themes/lattice-meadow.theme.yaml"),
     ),
+    (
+        "lattice-porcelain",
+        include_str!("../../../themes/lattice-porcelain.theme.yaml"),
+    ),
+    (
+        "lattice-matcha",
+        include_str!("../../../themes/lattice-matcha.theme.yaml"),
+    ),
+    (
+        "lattice-solar-flare",
+        include_str!("../../../themes/lattice-solar-flare.theme.yaml"),
+    ),
+    (
+        "lattice-tidepool",
+        include_str!("../../../themes/lattice-tidepool.theme.yaml"),
+    ),
+    (
+        "lattice-limestone",
+        include_str!("../../../themes/lattice-limestone.theme.yaml"),
+    ),
     // Platform looks
     (
         "cupertino",
@@ -83,7 +103,7 @@ const BUILTINS: &[(&str, &str)] = &[
         "lattice-oled",
         include_str!("../../../themes/lattice-oled.theme.yaml"),
     ),
-    // Adopted terminal standards (carry a `terminal:` ANSI palette)
+    // Terminal-derived palettes (carry a `terminal:` ANSI palette)
     (
         "catppuccin-mocha",
         include_str!("../../../themes/catppuccin-mocha.theme.yaml"),
@@ -100,6 +120,26 @@ const BUILTINS: &[(&str, &str)] = &[
     (
         "solarized-dark",
         include_str!("../../../themes/solarized-dark.theme.yaml"),
+    ),
+    (
+        "tokyo-night",
+        include_str!("../../../themes/tokyo-night.theme.yaml"),
+    ),
+    (
+        "gruvbox-dark",
+        include_str!("../../../themes/gruvbox-dark.theme.yaml"),
+    ),
+    (
+        "one-dark",
+        include_str!("../../../themes/one-dark.theme.yaml"),
+    ),
+    (
+        "rose-pine-moon",
+        include_str!("../../../themes/rose-pine-moon.theme.yaml"),
+    ),
+    (
+        "kanagawa-wave",
+        include_str!("../../../themes/kanagawa-wave.theme.yaml"),
     ),
 ];
 
@@ -122,6 +162,11 @@ pub const BUILTIN_IDS: &[&str] = &[
     "lattice-sandstone",
     "lattice-orchid",
     "lattice-meadow",
+    "lattice-porcelain",
+    "lattice-matcha",
+    "lattice-solar-flare",
+    "lattice-tidepool",
+    "lattice-limestone",
     "cupertino",
     "lattice-oled",
     "catppuccin-mocha",
@@ -129,6 +174,11 @@ pub const BUILTIN_IDS: &[&str] = &[
     "github-dark",
     "dracula",
     "solarized-dark",
+    "tokyo-night",
+    "gruvbox-dark",
+    "one-dark",
+    "rose-pine-moon",
+    "kanagawa-wave",
 ];
 
 /// Load a built-in theme by id.
