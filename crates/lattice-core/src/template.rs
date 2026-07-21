@@ -36,6 +36,7 @@ pub(crate) struct SeedDataColumn {
     pub name: &'static str,
     pub field_type: &'static str,
     pub relation_table: Option<&'static str>,
+    pub junction_table: Option<&'static str>,
     pub lookup_relation: Option<&'static str>,
     pub lookup_field: Option<&'static str>,
     pub rollup_relation: Option<&'static str>,
@@ -695,7 +696,11 @@ fn seed_column_to_new_column<'a>(
                 package_path, column.name
             ),
         })?;
-        return Ok(NewColumn::relation(column.name, target));
+        let mut new_column = NewColumn::relation(column.name, target);
+        if let Some(junction) = column.junction_table {
+            new_column = new_column.with_junction_table(junction);
+        }
+        return Ok(new_column);
     }
     if field_type == FieldType::Lookup {
         let lookup_relation = column.lookup_relation.ok_or_else(|| Error::TemplateValidation {
@@ -1915,6 +1920,7 @@ mod tests {
                 name: "name",
                 field_type: "text",
                 relation_table: None,
+                junction_table: None,
                 lookup_relation: None,
                 lookup_field: None,
                 rollup_relation: None,
@@ -1925,6 +1931,7 @@ mod tests {
                 name: "email",
                 field_type: "text",
                 relation_table: None,
+                junction_table: None,
                 lookup_relation: None,
                 lookup_field: None,
                 rollup_relation: None,
@@ -2000,6 +2007,7 @@ mod tests {
             name: "name",
             field_type: "not_a_real_type",
             relation_table: None,
+            junction_table: None,
             lookup_relation: None,
             lookup_field: None,
             rollup_relation: None,
@@ -2066,6 +2074,7 @@ mod tests {
                 name: "name",
                 field_type: "text",
                 relation_table: None,
+                junction_table: None,
                 lookup_relation: None,
                 lookup_field: None,
                 rollup_relation: None,
@@ -2076,6 +2085,7 @@ mod tests {
                 name: "status",
                 field_type: "text",
                 relation_table: None,
+                junction_table: None,
                 lookup_relation: None,
                 lookup_field: None,
                 rollup_relation: None,
@@ -2086,6 +2096,7 @@ mod tests {
                 name: "company",
                 field_type: "text",
                 relation_table: None,
+                junction_table: None,
                 lookup_relation: None,
                 lookup_field: None,
                 rollup_relation: None,
@@ -2182,6 +2193,7 @@ mod tests {
                 name: "name",
                 field_type: "text",
                 relation_table: None,
+                junction_table: None,
                 lookup_relation: None,
                 lookup_field: None,
                 rollup_relation: None,
@@ -2192,6 +2204,7 @@ mod tests {
                 name: "email",
                 field_type: "text",
                 relation_table: None,
+                junction_table: None,
                 lookup_relation: None,
                 lookup_field: None,
                 rollup_relation: None,
@@ -2202,6 +2215,7 @@ mod tests {
                 name: "status",
                 field_type: "text",
                 relation_table: None,
+                junction_table: None,
                 lookup_relation: None,
                 lookup_field: None,
                 rollup_relation: None,
@@ -2212,6 +2226,7 @@ mod tests {
                 name: "company",
                 field_type: "text",
                 relation_table: None,
+                junction_table: None,
                 lookup_relation: None,
                 lookup_field: None,
                 rollup_relation: None,
@@ -2294,6 +2309,7 @@ mod tests {
                 name: "name",
                 field_type: "text",
                 relation_table: None,
+                junction_table: None,
                 lookup_relation: None,
                 lookup_field: None,
                 rollup_relation: None,
@@ -2304,6 +2320,7 @@ mod tests {
                 name: "reports_to",
                 field_type: "relation",
                 relation_table: Some("contacts"),
+                junction_table: None,
                 lookup_relation: None,
                 lookup_field: None,
                 rollup_relation: None,
@@ -2383,6 +2400,7 @@ mod tests {
             name: "name",
             field_type: "text",
             relation_table: None,
+            junction_table: None,
             lookup_relation: None,
             lookup_field: None,
             rollup_relation: None,
@@ -2400,6 +2418,7 @@ mod tests {
                 name: "name",
                 field_type: "text",
                 relation_table: None,
+                junction_table: None,
                 lookup_relation: None,
                 lookup_field: None,
                 rollup_relation: None,
@@ -2410,6 +2429,7 @@ mod tests {
                 name: "company",
                 field_type: "relation",
                 relation_table: Some("companies"),
+                junction_table: None,
                 lookup_relation: None,
                 lookup_field: None,
                 rollup_relation: None,
