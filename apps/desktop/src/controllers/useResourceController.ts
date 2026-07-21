@@ -9,6 +9,7 @@ import { previewBatchLinkRepair, previewLinkRepair, type BatchLinkRepairPlan, ty
 import { applyPathRemaps, type PathRemap } from "../lib/pathRemap";
 import { moveResource, moveResources } from "../lib/resourceMutations";
 import { loadTaskManifest } from "../lib/taskRun";
+import { loadWorkflow } from "../lib/workflowRun";
 import { destinationPath } from "../lib/treeOps";
 import type { OpenResourceSession } from "../resourceSession";
 import { deriveResourceFormatId } from "../resourceRendererRegistry";
@@ -348,6 +349,42 @@ export function useResourceController(options: ResourceControllerOptions): Resou
         const manifest = await loadTaskManifest(workspace.root, resource.path);
         if (isCurrentLoad(ticket)) {
           setSession({ kind: "task", resource, manifest });
+        }
+      } catch (error) {
+        if (isCurrentLoad(ticket)) {
+          setSession(null);
+          onError(String(error));
+        }
+      } finally {
+        if (isCurrentLoad(ticket)) onBusy(false);
+      }
+      return;
+    }
+
+    if (resource.kind === "workflow" && workspace) {
+      if (inBrowser) {
+        if (isCurrentLoad(ticket)) {
+          setSession({
+            kind: "workflow",
+            resource,
+            manifest: {
+              format: "lattice-workflow",
+              version: 1,
+              name: resource.path,
+              enabled: true,
+              trigger: { type: "manual" },
+              steps: [],
+              rawYaml: "# Browser demo — open in native app to run workflows\n",
+            },
+          });
+        }
+        return;
+      }
+      onBusy(true);
+      try {
+        const manifest = await loadWorkflow(workspace.root, resource.path);
+        if (isCurrentLoad(ticket)) {
+          setSession({ kind: "workflow", resource, manifest });
         }
       } catch (error) {
         if (isCurrentLoad(ticket)) {

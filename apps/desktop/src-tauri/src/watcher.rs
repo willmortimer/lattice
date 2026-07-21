@@ -122,6 +122,18 @@ fn start(app: AppHandle, state: &WatcherState, root: PathBuf) {
             if let Some(index) = &index {
                 apply_to_index(index, &event, &root);
             }
+            match &event {
+                WorkspaceEvent::Created { path, .. }
+                | WorkspaceEvent::Modified { path, .. }
+                | WorkspaceEvent::Deleted { path } => {
+                    crate::workflow::on_resource_changed(&app, &root, &path_string(path));
+                }
+                WorkspaceEvent::Renamed { from, to, .. } => {
+                    crate::workflow::on_resource_changed(&app, &root, &path_string(from));
+                    crate::workflow::on_resource_changed(&app, &root, &path_string(to));
+                }
+                WorkspaceEvent::RootDeleted => {}
+            }
             let payload = WorkspaceChangePayload::from_event(&event);
             if let Err(err) = app.emit(WORKSPACE_CHANGED_EVENT, payload) {
                 eprintln!("lattice: failed to emit workspace-changed: {err}");

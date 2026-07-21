@@ -1,0 +1,28 @@
+format: lattice-workflow
+version: 1
+name: Simple proposal workflow
+enabled: true
+trigger:
+  type: manual
+steps:
+  - id: run-hello
+    action: task.run
+    with:
+      task: Hello.task
+  - id: create-proposal
+    action: proposal.create
+    with:
+      summary: Create Notes/FromWorkflow.md from Simple.workflow
+      commands:
+        - type: page-create
+          path: Notes/FromWorkflow.md
+          content: |
+            # From workflow
+
+            Created by Simple.workflow.yaml after Hello.task.
+      warnings:
+        - Fixture proposal — safe to reject.
+  - id: notify
+    action: notification
+    with:
+      message: Simple workflow finished

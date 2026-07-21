@@ -27,6 +27,7 @@ export interface ResourceRendererContext {
     onKeepLocal: () => void;
     onKeepBoth: () => void;
     onOpenFile: (path: string, subpath?: string) => void;
+    onOpenProposal?: (proposalId: string) => void;
     onOpenExternally?: (resource: Resource) => void;
     onPromoteWorkspaceCsv?: (resource: Resource) => void;
     onPageWidthChange?: (width: PageWidth) => void;

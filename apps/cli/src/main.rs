@@ -6,7 +6,8 @@ use std::time::SystemTime;
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use lattice_commands::{
-    ColumnSpec, Command as Semantic, CommandEngine, TaskError, TaskRunner, Transaction,
+    ColumnSpec, Command as Semantic, CommandEngine, ExecutionStatus, TaskError, TaskRunner,
+    Transaction,
 };
 use lattice_core::{
     ensure_lattice_home, init_with_template, initialize_active_lattice_home, resolve_template_id,
@@ -181,6 +182,11 @@ enum Command {
         #[command(subcommand)]
         command: TaskCommand,
     },
+    /// Run a `*.workflow.yaml` automation resource.
+    Workflow {
+        #[command(subcommand)]
+        command: WorkflowCommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -215,6 +221,18 @@ enum TaskCommand {
     Run {
         /// Path to a `.task/` package directory or its `task.yaml`.
         path: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum WorkflowCommand {
+    /// Parse and execute a `*.workflow.yaml` (task.run / proposal.create / notification).
+    Run {
+        /// Path to a workflow YAML file.
+        path: PathBuf,
+        /// Workspace root (defaults to current directory).
+        #[arg(long)]
+        root: Option<PathBuf>,
     },
 }
 
@@ -703,6 +721,9 @@ fn run(command: Command) -> Result<ExitCode> {
         },
         Command::Task { command } => match command {
             TaskCommand::Run { path } => cmd_task_run(path),
+        },
+        Command::Workflow { command } => match command {
+            WorkflowCommand::Run { path, root } => cmd_workflow_run(path, root),
         },
     }
 }
@@ -2067,6 +2088,52 @@ fn cmd_task_run(path: PathBuf) -> Result<ExitCode> {
             }
             eprintln!("error: task timed out after {timeout_seconds}s");
             Ok(ExitCode::FAILURE)
+        }
+        Err(err) => {
+            eprintln!("error: {err}");
+            Ok(ExitCode::FAILURE)
+        }
+    }
+}
+
+fn cmd_workflow_run(path: PathBuf, root: Option<PathBuf>) -> Result<ExitCode> {
+    let workspace_root = match root {
+        Some(value) => value,
+        None => cwd_or(None)?,
+    };
+    let workflow_path = if path.is_absolute() {
+        path
+    } else {
+        workspace_root.join(&path)
+    };
+    match lattice_commands::load_and_run_workflow(
+        &workspace_root,
+        &workflow_path,
+        Some("manual"),
+        None,
+    ) {
+        Ok(record) => {
+            if !record.execution.stdout.is_empty() {
+                print!("{}", record.execution.stdout);
+                if !record.execution.stdout.ends_with('\n') {
+                    println!();
+                }
+            }
+            if !record.execution.stderr.is_empty() {
+                eprint!("{}", record.execution.stderr);
+                if !record.execution.stderr.ends_with('\n') {
+                    eprintln!();
+                }
+            }
+            if let Some(proposal_id) = &record.execution.proposal_id {
+                eprintln!("proposal: {proposal_id}");
+            }
+            Ok(match record.execution.status {
+                ExecutionStatus::Succeeded => ExitCode::SUCCESS,
+                ExecutionStatus::Cancelled | ExecutionStatus::Failed | ExecutionStatus::Running => {
+                    ExitCode::FAILURE
+                }
+            })
         }
         Err(err) => {
             eprintln!("error: {err}");

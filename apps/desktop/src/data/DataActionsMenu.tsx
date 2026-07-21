@@ -108,6 +108,7 @@ export function DataActionsMenu({
             relPath,
             table: action.table,
             values,
+            formName: null,
           });
           const fresh = await invoke<DataAppSnapshot>("open_data_app", {
             root,

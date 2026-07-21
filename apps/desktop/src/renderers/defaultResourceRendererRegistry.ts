@@ -76,6 +76,11 @@ export function createDefaultResourceRendererRegistry(): ResourceRendererRegistr
       definition("task-viewer", "task", undefined, (signal) =>
         lazyImport(() => import("./TaskResourceRenderer").then((module) => module.TaskResourceRenderer), signal),
       ),
+    )
+    .register(
+      definition("workflow-viewer", "workflow", undefined, (signal) =>
+        lazyImport(() => import("./WorkflowResourceRenderer").then((module) => module.WorkflowResourceRenderer), signal),
+      ),
     );
   registerMediaResourceRenderers(registry);
   registerChartResourceRenderers(registry);

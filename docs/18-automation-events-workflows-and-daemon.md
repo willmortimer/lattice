@@ -63,6 +63,51 @@ React to external changes after stable-write detection.
 
 ## Workflow format
 
+Bounded v1 runtime (`lattice-commands` + desktop) supports:
+
+```yaml
+format: lattice-workflow
+version: 1
+name: Simple proposal workflow
+enabled: true
+trigger:
+  type: manual
+  # type: resource.changed
+  # paths: [Notes/**, Data/*.csv]
+  # type: form.submitted
+  # package: Data/CRM.data
+  # form: ContactIntake
+steps:
+  - id: run-hello
+    action: task.run
+    with:
+      task: Hello.task
+  - id: create-proposal
+    action: proposal.create
+    with:
+      summary: Create a reviewable page
+      commands:
+        - type: page-create
+          path: Notes/FromWorkflow.md
+          content: "# From workflow\n"
+  - id: notify
+    action: notification
+    with:
+      message: Done
+```
+
+v1 triggers: `manual`, `resource.changed` (path globs; debounced in the desktop
+watcher), `form.submitted` (form path or package + form id; wired from
+`insert_record` when a package form submits). `enabled: false` skips automatic
+triggers; manual Run still executes.
+
+v1 steps: `task.run` (delegates to TaskRunner), `proposal.create` (source type
+`workflow`), optional `notification` (log only). Unknown actions/triggers are
+rejected at parse time. Run history is stored under `.lattice/workflows/runs/`.
+Cron, durable daemon jobs, and a visual editor remain out of scope.
+
+Earlier illustrative format (broader than v1):
+
 ```yaml
 format: lattice-workflow
 version: 1
