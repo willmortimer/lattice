@@ -13,6 +13,7 @@ mod form;
 mod formula;
 mod interface;
 mod json_import;
+mod relation_target;
 mod types;
 mod view;
 mod xlsx;
@@ -37,6 +38,7 @@ pub use xlsx::parse_xlsx_file;
 pub use data_app::DataApp;
 pub use formula::{evaluate_formula, formula_field_refs, validate_formula_syntax, FormulaError};
 pub use error::Error;
+pub use relation_target::{parse_relation_target, RelationTarget};
 pub use form::{save_form, write_package_form, FormDef, FORM_FILE_SUFFIX, FORM_FORMAT, FORM_VERSION};
 pub use interface::{
     write_package_interface, InterfaceDef, INTERFACE_FILE_SUFFIX, INTERFACE_FORMAT,
