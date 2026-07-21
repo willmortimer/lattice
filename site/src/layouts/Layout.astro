@@ -11,9 +11,11 @@ interface Props {
 }
 
 const {
-  title = 'Lattice — the open information studio',
-  description = 'Lattice is a fast, local-first, open-native workspace for documents, data applications, analytical datasets, notebooks, canvases, ink, dashboards, and inspectable automations — all stored as plain files in a real directory.',
+  title = 'Lattice — local-first notes, data, and tools',
+  description = 'Lattice is a free, local-first desktop workspace for notes, canvases, tables, datasets, notebooks, and local automation. Your work stays in ordinary files and remains useful offline.',
 } = Astro.props;
+
+const path = Astro.url.pathname;
 ---
 
 <!doctype html>
@@ -60,11 +62,9 @@ const {
           Lattice
         </a>
         <nav class="nav">
-          <a class="nav-hide" href="/#directory">Real directory</a>
-          <a class="nav-hide" href="/#command">One command</a>
-          <a class="nav-hide" href="/#status">Current build</a>
-          <a class="nav-hide" href="/#themes">Themes</a>
-          <a href="/docs/">Docs</a>
+          <a class="nav-hide" href="/features/" aria-current={path.startsWith('/features') ? 'page' : undefined}>Features</a>
+          <a class="nav-hide" href="/features/#cloud">Cloud</a>
+          <a href="/docs/" aria-current={path.startsWith('/docs') ? 'page' : undefined}>Docs</a>
           <a class="nav-cta" href="https://github.com/willmortimer/lattice">GitHub</a>
         </nav>
       </div>
@@ -89,36 +89,38 @@ const {
               Lattice
             </a>
             <p>
-              A fast, local-first, open-native workspace. Your work stays in a real directory of
-              open files — no lock-in, no bundled brain.
+              A free, local-first workspace for notes, data, and tools. Fast on your computer,
+              understandable on disk, and ready for optional cloud sync later.
             </p>
           </div>
           <div class="footer-cols">
             <div class="footer-col">
               <h5>Product</h5>
-              <a href="/#directory">Real directory</a>
-              <a href="/#command">One command core</a>
-              <a href="/#data">Large data</a>
-              <a href="/#themes">Desktop themes</a>
-              <a href="/#roadmap">Roadmap</a>
+              <a href="/features/">Features</a>
+              <a href="/features/#notes">Notes & capture</a>
+              <a href="/features/#data">Tables & analytics</a>
+              <a href="/features/#automation">Compute & automation</a>
+              <a href="/features/#cloud">Lattice Cloud</a>
             </div>
             <div class="footer-col">
               <h5>Documentation</h5>
               <a href="/docs/">Overview</a>
               <a href="/docs/getting-started/">Getting started</a>
-              <a href="/docs/concepts/">Core concepts</a>
-              <a href="/docs/architecture/">Architecture</a>
+              <a href="/docs/pages-and-capture/">Pages & capture</a>
+              <a href="/docs/tables-and-data-apps/">Tables & data apps</a>
+              <a href="/docs/notebooks-tasks-workflows/">Notebooks & tasks</a>
             </div>
             <div class="footer-col">
               <h5>Project</h5>
               <a href="https://github.com/willmortimer/lattice">GitHub</a>
               <a href="/docs/roadmap/">Roadmap</a>
+              <a href="/docs/cloud-and-sync/">Cloud & sync</a>
               <a href="https://github.com/willmortimer/lattice/blob/main/LICENSE">Licensing</a>
             </div>
           </div>
         </div>
         <div class="footer-legal">
-          <span>Lattice — open-native workspace. Phase 1 is in active development.</span>
+          <span>Free local app · optional paid cloud services are in development.</span>
           <span class="mono">Markdown · SQLite · Parquet · JSON Canvas · ipynb</span>
         </div>
       </div>

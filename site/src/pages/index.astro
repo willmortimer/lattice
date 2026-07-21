@@ -2,99 +2,72 @@
 import Layout from '../layouts/Layout.astro';
 import HeroLattice from '../components/HeroLattice.astro';
 import DirectoryTree from '../components/DirectoryTree.astro';
-import CommandCore from '../components/CommandCore.astro';
-import DataChart from '../components/DataChart.astro';
-import OpenNativeStack from '../components/OpenNativeStack.astro';
+import WorkspaceConstellation from '../components/WorkspaceConstellation.astro';
+import CloudHorizon from '../components/CloudHorizon.astro';
 
-const promises = [
+const surfaces = [
   {
-    title: 'The workspace is a real directory',
-    body: 'Canonical content lives in Finder, Explorer, a terminal, Git, and any editor. Not a database you can only reach through one app.',
-    icon: 'folder',
+    label: 'Write',
+    title: 'Pages that stay Markdown',
+    body: 'Capture quickly, write with a focused editor, connect ideas with links and backlinks, and embed the rest of your workspace without giving up a readable file.',
+    href: '/features/#notes',
   },
   {
-    title: 'Offline is the normal state',
-    body: 'Open, edit, search, query, draw, and run approved local tasks with no server in the loop. Connectivity is an option, never a requirement.',
-    icon: 'offline',
+    label: 'Arrange',
+    title: 'A canvas for spatial thinking',
+    body: 'Place pages, files, notes, and data views on an open JSON Canvas. Move from a visual map back into the source resource in one step.',
+    href: '/features/#canvas',
   },
   {
-    title: 'Every GUI action is a command',
-    body: 'Desktop UI, CLI, local API, MCP, scripts, and agents share one semantic mutation core — with transactions, review, and history.',
-    icon: 'command',
+    label: 'Organize',
+    title: 'Tables that grow with the work',
+    body: 'Use a fast typed grid, then add views, forms, relations, formulas, lookups, rollups, and interfaces when a simple list becomes an application.',
+    href: '/features/#data',
   },
   {
-    title: 'No lock-in, only open formats',
-    body: 'Markdown, SQLite, Parquet, JSON Canvas, and ipynb. Rich composition references independent resources instead of trapping them.',
-    icon: 'open',
-  },
-  {
-    title: 'Large data is first-class',
-    body: 'SQLite for mutable application data, Parquet and DuckDB for analytics, Arrow to move tabular data fast — right on your machine.',
-    icon: 'data',
-  },
-  {
-    title: 'AI-legible, no bundled brain',
-    body: 'Legible and editable by any external agent through files, commands, CLI, API, and MCP — with no proprietary model or hidden memory graph.',
-    icon: 'ai',
+    label: 'Compute',
+    title: 'Data, notebooks, and local tasks',
+    body: 'Explore Parquet with DuckDB, chart and map results, run Jupyter notebooks, and turn repeatable local code into inspectable tasks and workflows.',
+    href: '/features/#automation',
   },
 ];
 
-const shipped = [
-  'Native Tauri workspace shell with open-directory workflows',
-  'Markdown page editor with links, backlinks, embeds, autosave, and conflict handling',
-  'Resource tree, search, command palette, tabs, inspector, and quick capture',
-  'Basic JSON Canvas viewing and SQLite-backed data applications',
-  'Semantic command history, undo, external-edit reconciliation, and a headless CLI',
-];
-
-const phases = [
-  { n: 'Phase 0', title: 'Specifications & headless core', body: 'Manifests, command + transaction model, permissions, Rust storage, CLI.', done: true },
-  { n: 'Phase 1', title: 'Fast local notebook', body: 'Tauri shell, editor, links, backlinks, basic canvas, external-edit reconciliation.', current: true },
-  { n: 'Phase 2', title: 'Data applications', body: 'SQLite, typed fields and relations, grid, board/list/gallery/calendar/form views.' },
-  { n: 'Phase 3', title: 'Analytical data', body: 'Native DuckDB, Parquet datasets, Arrow transport, charts and dashboards.' },
-  { n: 'Phase 4', title: 'Programmable workspace', body: 'Local HTTP API, MCP server, proposed transactions, Python, Jupyter, artifacts.' },
-  { n: 'Phase 5', title: 'Automation & daemon', body: 'Typed events, workflow YAML, scheduler, latticed, durable jobs and lineage.' },
-  { n: 'Phase 6', title: 'Remote data & BI', body: 'ADBC connectors, live/extract/composite modes, semantic models, cross-filtering.' },
-  { n: 'Phase 7', title: 'Lattice Apps & publishing', body: 'Full app packages, UI kit, static and connected publishing, docs adapters.' },
-  { n: 'Phase 8', title: 'Plugins & capability packs', body: 'WASI component runtime, WIT interfaces, sandboxed UI, registry, packs.' },
-  { n: 'Phase 9', title: 'Sync & collaboration', body: 'Operation outbox, Rust sync server, text/canvas collaboration, team permissions.' },
-  { n: 'Phase 10', title: 'Mobile & native ink', body: 'iPad reader/editor, PencilKit overlay, Lattice Ink, handwriting search.' },
-];
-
-const themes = [
-  { name: 'Slate', id: 'slate', ground: '#0a0d13', panel: '#131a29', accent: '#f5a623' },
-  { name: 'Carbon', id: 'carbon', ground: '#090a0c', panel: '#171a1e', accent: '#ff7a45' },
-  { name: 'Fjord', id: 'fjord', ground: '#071217', panel: '#10252d', accent: '#42d6bd' },
-  { name: 'Ultraviolet', id: 'ultraviolet', ground: '#0d0916', panel: '#1d1730', accent: '#b08cff' },
-  { name: 'Blueprint', id: 'blueprint', ground: '#07182b', panel: '#102b49', accent: '#ffc857' },
-  { name: 'Vellum', id: 'vellum', ground: '#f3ecdc', panel: '#fbf7ed', accent: '#9f3f35', light: true },
+const available = [
+  'Markdown pages & quick capture',
+  'Links, backlinks & hybrid search',
+  'Editable JSON Canvas',
+  'SQLite data apps & saved views',
+  'DuckDB, Parquet, charts & maps',
+  'Native and Pyodide notebooks',
+  'Tasks, workflows & proposals',
+  'Sandboxed artifacts & interfaces',
 ];
 ---
 
-<Layout>
-  <!-- ===================== HERO ===================== -->
-  <section class="hero">
+<Layout
+  title="Lattice — notes, data, and tools that stay yours"
+  description="A free, local-first desktop workspace for notes, canvases, tables, datasets, notebooks, and automation. No account required; your work stays in ordinary files."
+>
+  <section class="hero home-hero">
     <div class="wrap">
       <div class="hero-grid">
         <div class="hero-copy">
-          <p class="eyebrow">Local-first desktop workspace · active development</p>
+          <p class="eyebrow">Free · local-first · open source</p>
           <h1>
-            One workspace for<br />everything, kept as<br /><span class="accent">plain files.</span>
+            Notes that can grow into <span class="accent">anything.</span>
           </h1>
           <p class="lede">
-            Lattice is a fast, local-first desktop workspace for pages, canvases, tables, and
-            ordinary files. Canonical content stays in a real directory while one Rust command
-            core keeps app edits consistent, inspectable, and reversible.
+            Lattice is a fast desktop workspace for writing, thinking, organizing data, and
+            running local tools. It works offline and keeps every workspace in a folder you own.
           </p>
           <div class="hero-actions">
-            <a class="btn btn-primary" href="/docs/">Get oriented</a>
-            <a class="btn btn-ghost" href="https://github.com/willmortimer/lattice">View the source</a>
+            <a class="btn btn-primary" href="/docs/getting-started/">Get started</a>
+            <a class="btn btn-ghost" href="/features/">Explore features</a>
           </div>
-          <div class="hero-meta">
-            <span class="path">lattice.yaml</span>
-            <span class="path">CRM.data/</span>
-            <span class="path">Usage.dataset/</span>
-            <span class="path">Strategy.canvas</span>
+          <div class="hero-meta" aria-label="Product promises">
+            <span>No account required</span><span aria-hidden="true">·</span>
+            <span>Local by default</span><span aria-hidden="true">·</span>
+            <span>Your files stay readable</span>
           </div>
         </div>
         <div class="hero-figure">
@@ -104,264 +77,129 @@ const themes = [
     </div>
   </section>
 
-  <!-- ===================== CURRENT PRODUCT ===================== -->
-  <section class="section product-status" id="status">
+  <section class="proof-strip" aria-label="Available features">
     <div class="wrap">
-      <div class="status-layout reveal">
-        <div>
-          <p class="eyebrow">What exists today</p>
-          <h2>A working local notebook shell, not a finished everything-app.</h2>
-          <p>
-            Phase 0 is complete and Phase 1 is underway. The current build focuses on the native
-            filesystem, semantic mutation path, fast page workflows, honest external edits, and
-            the shell needed to grow into richer data and compute surfaces.
-          </p>
-        </div>
-        <ul class="status-list">
-          {shipped.map((item) => <li>{item}</li>)}
-        </ul>
+      <p><strong>Available in the local app</strong></p>
+      <div class="proof-list">
+        {available.map((item) => <span>{item}</span>)}
       </div>
     </div>
   </section>
 
-  <!-- ===================== PROMISES ===================== -->
-  <section class="section" id="promises">
+  <section class="section" id="workspace">
     <div class="wrap">
       <div class="section-head reveal">
-        <p class="eyebrow">Core promises</p>
-        <h2>The best ideas from many tools, without inheriting their limits.</h2>
+        <p class="eyebrow">One calm workspace</p>
+        <h2>Start with a note. Add structure only when it helps.</h2>
         <p>
-          Lattice combines normal files, spatial canvas, polished editing, a relational data model,
-          real compute, and dashboards — composed through open formats and one semantic runtime.
+          Lattice keeps the everyday vocabulary small—Page, Canvas, Table, Notebook, and File—
+          while giving each kind of work a serious native surface.
         </p>
       </div>
-      <div class="card-grid reveal">
-        {
-          promises.map((p) => (
-            <article class="card">
-              <svg class="card-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                {p.icon === 'folder' && (
-                  <path d="M3 6 h6 l2 2 h10 v10 a1 1 0 0 1 -1 1 H4 a1 1 0 0 1 -1 -1 Z" stroke="currentColor" stroke-width="1.5" />
-                )}
-                {p.icon === 'offline' && (
-                  <g stroke="currentColor" stroke-width="1.5">
-                    <path d="M4 13 a8 8 0 0 1 16 0" />
-                    <path d="M8 16 a5 5 0 0 1 8 0" />
-                    <circle cx="12" cy="19" r="1.2" fill="currentColor" stroke="none" />
-                  </g>
-                )}
-                {p.icon === 'command' && (
-                  <g stroke="currentColor" stroke-width="1.5">
-                    <rect x="4" y="4" width="16" height="16" rx="3" />
-                    <path d="M8 10 l3 2 l-3 2 M13 14 h4" />
-                  </g>
-                )}
-                {p.icon === 'open' && (
-                  <g stroke="currentColor" stroke-width="1.5">
-                    <path d="M7 8 a5 5 0 0 1 0 8 M17 16 a5 5 0 0 1 0 -8" />
-                    <path d="M9 12 h6" />
-                  </g>
-                )}
-                {p.icon === 'data' && (
-                  <g stroke="currentColor" stroke-width="1.5">
-                    <ellipse cx="12" cy="6" rx="7" ry="3" />
-                    <path d="M5 6 v12 a7 3 0 0 0 14 0 V6 M5 12 a7 3 0 0 0 14 0" />
-                  </g>
-                )}
-                {p.icon === 'ai' && (
-                  <g stroke="currentColor" stroke-width="1.5">
-                    <rect x="5" y="7" width="14" height="11" rx="2.5" />
-                    <path d="M12 4 v3 M9 12 h.01 M15 12 h.01 M9 15 h6" />
-                  </g>
-                )}
-              </svg>
-              <h3>{p.title}</h3>
-              <p>{p.body}</p>
-            </article>
-          ))
-        }
-      </div>
-    </div>
-  </section>
-
-  <!-- ===================== DIRECTORY ===================== -->
-  <section class="section" id="directory">
-    <div class="wrap">
-      <div class="feature">
-        <div class="feature-body reveal">
-          <p class="eyebrow">A real directory</p>
-          <h3>Your workspace is files you already understand.</h3>
-          <p>
-            Canonical content is visible in Finder, Explorer, terminals, Git, editors, and backup
-            tools. Different information keeps an appropriate native format — Markdown is never
-            forced to impersonate a database, canvas, notebook, or app.
-          </p>
-          <ul class="feature-list">
-            <li>Names and paths communicate purpose, with a readable manifest and README.</li>
-            <li>Rich resources ship portable previews and honest fallbacks.</li>
-            <li>Deleting the hidden <span class="path">.lattice/</span> never destroys your work.</li>
-          </ul>
-        </div>
-        <div class="figure reveal">
-          <DirectoryTree />
-          <p class="figure-caption">An illustrative Lattice workspace on disk</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===================== COMMAND CORE ===================== -->
-  <section class="section" id="command">
-    <div class="wrap">
-      <div class="feature reverse">
-        <div class="feature-body reveal">
-          <p class="eyebrow">One command core</p>
-          <h3>Every surface speaks the same semantic language.</h3>
-          <p>
-            Desktop UI, CLI, local API, MCP, scripts, workflows, plugins, and agents all flow
-            through one command-and-transaction core. That core is the only thing that writes your
-            files — so changes are consistent, reviewable, and reversible.
-          </p>
-          <ul class="feature-list">
-            <li>Proposed transactions can be reviewed before they touch disk.</li>
-            <li>Automation, permissions, logs, and lineage stay visible and versionable.</li>
-            <li>External edits are reconciled as honest revisions, not silent overwrites.</li>
-          </ul>
-        </div>
-        <div class="figure reveal">
-          <CommandCore />
-          <p class="figure-caption">GUI · CLI · API · MCP · agents → core → files</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===================== DATA ===================== -->
-  <section class="section" id="data">
-    <div class="wrap">
-      <div class="feature">
-        <div class="feature-body reveal">
-          <p class="eyebrow">Large data is first-class</p>
-          <h3>Analysis far beyond SaaS table limits — locally.</h3>
-          <p>
-            SQLite serves mutable application data; Parquet and DuckDB serve analytical workloads;
-            Arrow moves tabular data efficiently between them. Datasets that would hit a hosted
-            row ceiling stay fast on your own machine.
-          </p>
-          <ul class="feature-list">
-            <li>Partitioned Parquet datasets with a queryable semantic model.</li>
-            <li>DuckDB queries and Vega-Lite charts over local and remote sources.</li>
-            <li>Annotation overlays keep analysis attached without mutating source data.</li>
-          </ul>
-        </div>
-        <div class="figure reveal">
-          <DataChart />
-          <p class="figure-caption">Illustrative — not a benchmark</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===================== COMPOSITION ===================== -->
-  <section class="section" id="thesis">
-    <div class="wrap">
-      <div class="feature reverse">
-        <div class="feature-body reveal">
-          <p class="eyebrow">Open-native composition</p>
-          <h3>One workspace vocabulary, without flattening every resource into a block.</h3>
-          <p>
-            Page, Canvas, Table, Notebook, and File are understandable entry points. Each keeps an
-            appropriate open format and specialized renderer, while shared commands, links,
-            inspection, history, and permissions make the workspace feel coherent.
-          </p>
-          <ul class="feature-list">
-            <li>React coordinates the shell; specialized renderers own performance-critical loops.</li>
-            <li>Rust owns canonical resource state, validation, storage, search, and commands.</li>
-            <li>Capabilities appear contextually instead of crowding the primary interface.</li>
-          </ul>
-        </div>
-        <div class="figure reveal">
-          <OpenNativeStack />
-          <p class="figure-caption">Different formats · shared command and inspection surfaces</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===================== THEMES ===================== -->
-  <section class="section" id="themes">
-    <div class="wrap">
-      <div class="section-head reveal">
-        <p class="eyebrow">Desktop themes</p>
-        <h2>Semantic color systems, not component-by-component skins.</h2>
-        <p>
-          Built-in YAML themes resolve into the same compact set of surface, text, line, signal,
-          danger, type, and geometry roles. The gallery previews the Tauri app themes; the site
-          itself stays on Lattice Slate.
-        </p>
-      </div>
-      <div class="theme-gallery reveal">
-        {themes.map((theme) => (
-          <article
-            class={`theme-preview ${theme.light ? 'theme-preview-light' : ''}`}
-            style={`--theme-ground:${theme.ground};--theme-panel:${theme.panel};--theme-accent:${theme.accent}`}
-          >
-            <div class="theme-mini-shell">
-              <span class="theme-mini-rail"></span>
-              <span class="theme-mini-sidebar"></span>
-              <span class="theme-mini-page">
-                <i></i><i></i><i></i><b></b>
-              </span>
-            </div>
-            <strong>Lattice {theme.name}</strong>
-            <code>lattice-{theme.id}</code>
-          </article>
+      <div class="surface-grid reveal">
+        {surfaces.map((surface) => (
+          <a class="surface-card" href={surface.href}>
+            <span class="surface-label">{surface.label}</span>
+            <h3>{surface.title}</h3>
+            <p>{surface.body}</p>
+            <span class="surface-link">See how it works <span aria-hidden="true">→</span></span>
+          </a>
         ))}
       </div>
     </div>
   </section>
 
-  <!-- ===================== ROADMAP ===================== -->
-  <section class="section" id="roadmap">
+  <section class="section" id="compose">
     <div class="wrap">
-      <div class="section-head reveal">
-        <p class="eyebrow">Roadmap</p>
-        <h2>Architecture commitments, staged delivery.</h2>
-        <p>
-          Long-term capabilities are documented now so early choices never foreclose them. Eleven
-          phases move from a headless core to native ink on mobile.
-        </p>
-      </div>
-      <div class="roadmap-scroll reveal">
-        <div class="roadmap">
-          {
-            phases.map((p) => (
-              <div class={`phase ${p.done ? 'done' : ''} ${p.current ? 'current' : ''}`}>
-                <span class="dot" />
-                <p class="pnum">{p.n}</p>
-                <h4>{p.title}</h4>
-                <p>{p.body}</p>
-              </div>
-            ))
-          }
+      <div class="feature reverse">
+        <div class="feature-body reveal">
+          <p class="eyebrow">Connected, not flattened</p>
+          <h3>Every resource keeps its strengths.</h3>
+          <p>
+            Pages remain great documents. Tables use a real database. Analytical data stays
+            columnar. Notebooks remain Jupyter-compatible. Links, embeds, search, history, and
+            one command system make them feel like parts of the same place.
+          </p>
+          <ul class="feature-list">
+            <li>Embed live resources in pages and place them on canvas.</li>
+            <li>Run tasks and workflows with visible inputs, outputs, and logs.</li>
+            <li>Review proposed changes before automation writes to your workspace.</li>
+          </ul>
+          <p class="feature-cta"><a href="/features/">Tour every workspace surface →</a></p>
+        </div>
+        <div class="figure reveal">
+          <WorkspaceConstellation />
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ===================== CTA ===================== -->
+  <section class="section" id="directory">
+    <div class="wrap">
+      <div class="feature">
+        <div class="feature-body reveal">
+          <p class="eyebrow">A real directory</p>
+          <h3>The app is optional. Your work is not.</h3>
+          <p>
+            A Lattice workspace is an ordinary folder. Open it in Finder, Git, VS Code, a backup
+            tool, or another format-aware app. There is no export ceremony between you and your
+            own information.
+          </p>
+          <ul class="feature-list">
+            <li>Markdown for pages, JSON Canvas for spatial work, and ipynb for notebooks.</li>
+            <li>SQLite for mutable tables; Parquet and DuckDB for analytical data.</li>
+            <li>External edits are detected and reconciled instead of silently overwritten.</li>
+          </ul>
+          <p class="feature-cta"><a href="/docs/concepts/">Understand the workspace model →</a></p>
+        </div>
+        <div class="figure reveal">
+          <DirectoryTree />
+          <p class="figure-caption">One workspace, visible on disk</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section cloud-section" id="cloud">
+    <div class="wrap">
+      <div class="feature reverse">
+        <div class="feature-body reveal">
+          <p class="eyebrow">Local first. Cloud when you want it.</p>
+          <h3>The local app is free. Managed sync will be optional.</h3>
+          <p>
+            Lattice is useful without an account or network connection. Lattice Cloud is being
+            designed as a paid convenience layer for encrypted sync, sharing, backups, teams,
+            hosted execution, and publishing—not as the place your files become trapped.
+          </p>
+          <div class="availability-note">
+            <span class="status-dot status-dot-local"></span>
+            <strong>Local workspace:</strong> available now
+          </div>
+          <div class="availability-note">
+            <span class="status-dot status-dot-cloud"></span>
+            <strong>Managed cloud:</strong> in development
+          </div>
+          <p class="feature-cta"><a href="/features/#cloud">See the local and cloud plan →</a></p>
+        </div>
+        <div class="figure reveal">
+          <CloudHorizon />
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="section" id="cta">
     <div class="wrap">
       <div class="cta-band reveal">
-        <p class="eyebrow" style="justify-content:center;">Open source · early native build</p>
-        <h2>Use the public guide, or inspect the implementation.</h2>
+        <p class="eyebrow centered-eyebrow">Make a workspace yours</p>
+        <h2>Write locally. Build outward when you’re ready.</h2>
         <p>
-          The public docs now stay concise and product-facing. The repository retains the full
-          architecture corpus, decision records, formats, performance contracts, and roadmap.
+          Begin with the desktop workflow, explore the First Look workspace, or inspect the entire
+          open-source implementation.
         </p>
         <div class="cta-actions">
-          <a class="btn btn-primary" href="/docs/">Read the guide</a>
-          <a class="btn btn-ghost" href="https://github.com/willmortimer/lattice/tree/main/docs">Architecture on GitHub</a>
+          <a class="btn btn-primary" href="/docs/getting-started/">Read the quick start</a>
+          <a class="btn btn-ghost" href="https://github.com/willmortimer/lattice">View on GitHub</a>
         </div>
       </div>
     </div>

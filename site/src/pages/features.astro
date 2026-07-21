@@ -1,0 +1,258 @@
+---
+import Layout from '../layouts/Layout.astro';
+import WorkspaceConstellation from '../components/WorkspaceConstellation.astro';
+import DirectoryTree from '../components/DirectoryTree.astro';
+import DataChart from '../components/DataChart.astro';
+import CommandCore from '../components/CommandCore.astro';
+import OpenNativeStack from '../components/OpenNativeStack.astro';
+import CloudHorizon from '../components/CloudHorizon.astro';
+
+const availableGroups = [
+  {
+    title: 'Notes & knowledge',
+    items: ['Markdown editor', 'Quick Note', 'Local voice dictation on macOS', 'Wiki links & backlinks', 'Keyword + optional semantic search', 'Images, Mermaid & resource embeds'],
+  },
+  {
+    title: 'Structure & data',
+    items: ['Editable JSON Canvas', 'SQLite-backed tables', 'Grid, list, board, gallery & calendar', 'Forms & record detail', 'Relations, formulas, lookups & rollups', 'CSV and tabular import'],
+  },
+  {
+    title: 'Analysis & compute',
+    items: ['Parquet datasets', 'DuckDB queries', 'Perspective data exploration', 'Vega-Lite charts', 'MapLibre maps', 'Native + Pyodide notebooks'],
+  },
+  {
+    title: 'Programmability',
+    items: ['Local task runner', 'Bounded workflows', 'Transaction proposals', 'Sandboxed HTML artifacts', 'Multi-component interfaces', 'CLI, local API & MCP foundations'],
+  },
+];
+---
+
+<Layout
+  title="Features — Lattice"
+  description="Explore Lattice pages, canvas, typed tables, analytical datasets, notebooks, local automation, open formats, and the planned optional cloud layer."
+>
+  <section class="subhero">
+    <div class="wrap">
+      <div class="hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">Features</p>
+          <h1>One calm workspace. Many kinds of work.</h1>
+          <p class="lede">
+            Lattice combines the immediacy of a note app with serious structured data, local
+            compute, and automation—without turning every thought into the same kind of block.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="/docs/getting-started/">Start with the app</a>
+            <a class="btn btn-ghost" href="#availability">See what’s available</a>
+          </div>
+        </div>
+        <div class="hero-figure">
+          <WorkspaceConstellation />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <nav class="feature-jump" aria-label="Feature sections">
+    <div class="wrap">
+      <a href="#notes">Notes</a>
+      <a href="#canvas">Canvas</a>
+      <a href="#data">Tables & data</a>
+      <a href="#automation">Compute & automation</a>
+      <a href="#open">Open formats</a>
+      <a href="#cloud">Cloud</a>
+    </div>
+  </nav>
+
+  <section class="section" id="notes">
+    <div class="wrap">
+      <div class="feature">
+        <div class="feature-body reveal">
+          <p class="eyebrow">Pages & capture</p>
+          <h3>Fast enough for a thought. Structured enough for a body of work.</h3>
+          <p>
+            Write in a focused Markdown editor with headings, lists, code, diagrams, images, and
+            durable wiki links. Quick Note opens from anywhere; local dictation can turn speech
+            into final text without sending audio to a cloud service.
+          </p>
+          <ul class="feature-list">
+            <li>Autosave with revision guards and visible external-edit conflicts.</li>
+            <li>Backlinks, tags, command search, and optional on-device semantic retrieval.</li>
+            <li>Card and interactive embeds for pages, data, files, tasks, and artifacts.</li>
+          </ul>
+          <p class="feature-cta"><a href="/docs/pages-and-capture/">Learn pages and capture →</a></p>
+        </div>
+        <div class="figure reveal">
+          <div class="editor-visual" aria-label="Illustrative Lattice page">
+            <div class="editor-tabs"><span class="is-active">Field notes.md</span><span>Sources</span><span>Inspect</span></div>
+            <div class="editor-page">
+              <span class="editor-kicker">Research / Field notes</span>
+              <h4>Patterns worth keeping</h4>
+              <p>A local note can stay simple, then connect to <b>[[Customer themes]]</b> and the table below.</p>
+              <div class="editor-callout"><i></i><span>Captured locally · indexed · linked</span></div>
+              <div class="editor-lines"><i></i><i></i><i></i></div>
+              <div class="editor-embed"><span>CRM.data / Interview themes</span><b>12 records</b></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="canvas">
+    <div class="wrap">
+      <div class="feature reverse">
+        <div class="feature-body reveal">
+          <p class="eyebrow">Canvas & composition</p>
+          <h3>See the shape of the work without losing its source.</h3>
+          <p>
+            Canvas is a spatial layer over real resources, not a second place to copy them. Add
+            sticky notes, connect ideas, place workspace files, and open the original resource from
+            the board.
+          </p>
+          <ul class="feature-list">
+            <li>Pan, zoom, select, resize, connect, and move nodes smoothly.</li>
+            <li>Keyboard-accessible outline gives every canvas a linear reading order.</li>
+            <li>JSON Canvas keeps placement portable outside Lattice.</li>
+          </ul>
+          <p class="feature-cta"><a href="/docs/canvas/">Learn canvas →</a></p>
+        </div>
+        <div class="figure reveal">
+          <OpenNativeStack />
+          <p class="figure-caption">Pages, files, data, and code compose without becoming one format</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="data">
+    <div class="wrap">
+      <div class="feature">
+        <div class="feature-body reveal">
+          <p class="eyebrow">Tables & analytical data</p>
+          <h3>From a simple list to a real local application.</h3>
+          <p>
+            A Lattice Table is SQLite-backed from the start. Enter records in a fast grid, then add
+            alternate views, forms, relations, formulas, lookups, and rollups. When scale or
+            analysis calls for it, Parquet datasets open through DuckDB and Arrow.
+          </p>
+          <ul class="feature-list">
+            <li>Grid, list, board, gallery, calendar, form, and interface surfaces.</li>
+            <li>Perspective exploration, Vega-Lite charts, profiles, plans, and maps.</li>
+            <li>Bounded, cancellable queries instead of loading an entire dataset into the UI.</li>
+          </ul>
+          <p class="feature-cta"><a href="/docs/tables-and-data-apps/">Tables guide</a> · <a href="/docs/datasets-and-charts/">Datasets guide →</a></p>
+        </div>
+        <div class="figure reveal">
+          <DataChart />
+          <p class="figure-caption">The same local data can feed grids, charts, maps, and interfaces</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="automation">
+    <div class="wrap">
+      <div class="feature reverse">
+        <div class="feature-body reveal">
+          <p class="eyebrow">Notebooks, tasks & workflows</p>
+          <h3>Make the workspace executable—and keep the execution inspectable.</h3>
+          <p>
+            Run Jupyter notebooks with a native Python kernel or Pyodide, package repeatable code
+            as local tasks, connect steps in bounded workflows, and review transaction proposals
+            before generated changes reach canonical files.
+          </p>
+          <ul class="feature-list">
+            <li>Run or interrupt individual notebook cells and persist outputs to ipynb.</li>
+            <li>Task manifests declare runtime, entrypoint, inputs, outputs, and limits.</li>
+            <li>Workflow runs expose step logs, status, recent executions, and proposals.</li>
+          </ul>
+          <p class="feature-cta"><a href="/docs/notebooks-tasks-workflows/">Run local compute →</a></p>
+        </div>
+        <div class="figure reveal">
+          <CommandCore />
+          <p class="figure-caption">People, tools, and agents meet at the same governed command core</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="open">
+    <div class="wrap">
+      <div class="feature">
+        <div class="feature-body reveal">
+          <p class="eyebrow">Local-first & open-native</p>
+          <h3>Your workspace remains useful without Lattice.</h3>
+          <p>
+            Canonical resources live in a normal directory. Lattice adds editing, search, history,
+            previews, and orchestration around those resources; it does not hide them in an account
+            or proprietary cloud database.
+          </p>
+          <ul class="feature-list">
+            <li>Works offline; network services are optional capabilities.</li>
+            <li>Finder, Git, backup software, editors, and scripts can use the same files.</li>
+            <li>CLI, local API, and MCP foundations make the workspace legible to other tools.</li>
+          </ul>
+          <p class="feature-cta"><a href="/docs/open-formats/">See formats and interoperability →</a></p>
+        </div>
+        <div class="figure reveal">
+          <DirectoryTree />
+          <p class="figure-caption">Canonical work in ordinary files; rebuildable operational state stays separate</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section cloud-section" id="cloud">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <p class="eyebrow">Lattice Cloud</p>
+        <h2>Pay for the service, not access to your own work.</h2>
+        <p>
+          The local app and open formats are the foundation. The planned paid cloud layer adds
+          managed operations that are genuinely useful across devices and teams.
+        </p>
+      </div>
+      <div class="cloud-grid reveal">
+        <article class="plan-card plan-card-local">
+          <span class="plan-status">Available locally</span>
+          <h3>Free local app</h3>
+          <p>No account required. Your computer remains the primary runtime and your directory remains canonical.</p>
+          <ul><li>Local editing and search</li><li>Canvas, tables, analytics, notebooks</li><li>Tasks, workflows, CLI, API, and MCP</li><li>Local backups and self-managed storage</li></ul>
+        </article>
+        <article class="plan-card">
+          <span class="plan-status plan-status-coming">In development</span>
+          <h3>Optional managed cloud</h3>
+          <p>A future paid service for people who want Lattice to operate the connected layer.</p>
+          <ul><li>Encrypted personal sync</li><li>Sharing, comments, and presence</li><li>Managed backups and retention</li><li>Team controls, hosted jobs, and publishing</li></ul>
+        </article>
+      </div>
+      <div class="figure cloud-figure reveal"><CloudHorizon /></div>
+      <p class="cloud-footnote reveal">Cloud capabilities are product direction, not currently available service. Local formats, export, CLI, and self-hosting are not intended to become plan-gated.</p>
+    </div>
+  </section>
+
+  <section class="section" id="availability">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <p class="eyebrow">Available surfaces</p>
+        <h2>A broad local workspace, already taking shape.</h2>
+        <p>These surfaces are available in the local app today; future cloud capabilities are labeled separately.</p>
+      </div>
+      <div class="availability-grid reveal">
+        {availableGroups.map((group) => (
+          <article class="availability-card">
+            <h3>{group.title}</h3>
+            <ul>{group.items.map((item) => <li>{item}</li>)}</ul>
+          </article>
+        ))}
+      </div>
+      <div class="direction-band reveal">
+        <strong>Coming next:</strong>
+        richer cross-resource dashboards, deeper lineage and automation, publishing, plugin packs,
+        and the optional sync/collaboration service.
+        <a href="/docs/roadmap/">Read the product direction →</a>
+      </div>
+    </div>
+  </section>
+</Layout>

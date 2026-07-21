@@ -1,0 +1,58 @@
+<svg class="cloud-horizon" viewBox="0 0 660 370" role="img" aria-labelledby="cloud-title cloud-desc">
+  <title id="cloud-title">Local workspace with optional cloud sync</title>
+  <desc id="cloud-desc">A local file workspace remains canonical while an optional managed cloud connects devices and collaborators.</desc>
+  <defs>
+    <radialGradient id="localGlow">
+      <stop offset="0" stop-color="var(--l-amber)" stop-opacity=".28" />
+      <stop offset="1" stop-color="var(--l-amber)" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="cloudRoute" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="var(--l-amber)" />
+      <stop offset="1" stop-color="var(--l-muted)" />
+    </linearGradient>
+  </defs>
+
+  <g class="local-system">
+    <circle cx="176" cy="184" r="124" fill="url(#localGlow)" />
+    <path d="M176 85L262 134V234L176 283L90 234V134Z" />
+    <path d="M176 184L262 134M176 184L90 134M176 184V283" />
+    <circle cx="176" cy="85" r="4" /><circle cx="262" cy="134" r="4" />
+    <circle cx="262" cy="234" r="4" /><circle cx="176" cy="283" r="4" />
+    <circle cx="90" cy="234" r="4" /><circle cx="90" cy="134" r="4" />
+    <circle class="local-anchor" cx="176" cy="184" r="7" />
+    <text x="176" y="326" text-anchor="middle">Local workspace · always yours</text>
+  </g>
+
+  <path class="sync-route" pathLength="1" d="M285 184C345 112 388 111 441 151" />
+  <circle class="sync-packet" r="5">
+    <animateMotion dur="3.8s" repeatCount="indefinite" path="M285 184C345 112 388 111 441 151" />
+  </circle>
+
+  <g class="cloud-system">
+    <path d="M449 250H558C590 250 607 230 607 205C607 180 589 161 565 158C559 122 531 101 497 101C463 101 437 123 431 154C405 158 389 178 389 202C389 229 411 250 449 250Z" />
+    <circle cx="455" cy="195" r="5" /><circle cx="500" cy="150" r="5" /><circle cx="549" cy="197" r="5" />
+    <path d="M455 195L500 150L549 197M455 195H549" />
+    <text x="500" y="285" text-anchor="middle">Lattice Cloud · in development</text>
+    <text class="cloud-small" x="500" y="306" text-anchor="middle">sync · sharing · backups · teams</text>
+  </g>
+</svg>
+
+<style>
+  .cloud-horizon { display: block; width: 100%; height: auto; }
+  .local-system { stroke: var(--l-amber); stroke-width: 1.8; fill: none; stroke-linecap: round; }
+  .local-system circle:not(:first-child) { fill: var(--l-amber-bright); stroke: none; }
+  .local-system .local-anchor { fill: var(--l-amber); filter: drop-shadow(0 0 10px var(--l-amber-glow)); animation: local-breathe 3.4s ease-in-out infinite; }
+  .local-system text, .cloud-system text { fill: var(--l-text-soft); stroke: none; font-family: var(--l-font-mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; }
+  .sync-route { fill: none; stroke: url(#cloudRoute); stroke-width: 1.5; stroke-dasharray: 5 8; animation: route-march 1.2s linear infinite; }
+  .sync-packet { fill: var(--l-amber-bright); filter: drop-shadow(0 0 8px var(--l-amber)); }
+  .cloud-system { fill: color-mix(in oklch, var(--l-panel) 82%, transparent); stroke: var(--l-line-strong); stroke-width: 1.5; }
+  .cloud-system circle { fill: var(--l-muted); stroke: none; }
+  .cloud-system path + circle ~ path { fill: none; }
+  .cloud-system .cloud-small { fill: var(--l-faint); font-size: 9px; letter-spacing: .08em; }
+  @keyframes route-march { to { stroke-dashoffset: -13; } }
+  @keyframes local-breathe { 50% { opacity: .65; transform: scale(.82); transform-origin: center; } }
+  @media (prefers-reduced-motion: reduce) {
+    .sync-route, .local-anchor, .sync-packet animateMotion { animation: none; }
+    .sync-packet { display: none; }
+  }
+</style>
