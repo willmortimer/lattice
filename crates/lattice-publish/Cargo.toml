@@ -1,0 +1,20 @@
+[package]
+name = "lattice-publish"
+description = "Static HTML export for Lattice pages, interfaces, and artifacts"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+lattice-commands.workspace = true
+lattice-core.workspace = true
+lattice-data.workspace = true
+lattice-theme.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+walkdir.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

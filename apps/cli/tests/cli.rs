@@ -494,3 +494,31 @@ fn task_run_hello_fixture_when_uv_available() {
         .success()
         .stdout(predicates_contains("ok"));
 }
+
+#[test]
+fn publish_export_page_writes_html() {
+    let dir = tempfile::tempdir().unwrap();
+    init_blank(dir.path()).success();
+    fs::write(
+        dir.path().join("Hello.md"),
+        "# Hello\n\nExported page body.\n",
+    )
+    .unwrap();
+    let out = dir.path().join("dist");
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("publish")
+        .arg("export")
+        .arg("--page")
+        .arg("Hello.md")
+        .arg("--out")
+        .arg(&out)
+        .assert()
+        .success()
+        .stdout(predicates_contains("exported page"));
+
+    let html = fs::read_to_string(out.join("index.html")).unwrap();
+    assert!(html.contains("<h1>Hello</h1>"));
+    assert!(html.contains("--lt-bg"));
+}

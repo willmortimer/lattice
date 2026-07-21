@@ -20,6 +20,7 @@ use lattice_data::{
 use lattice_datasets::{parse_partition_key_specs, Dataset, EventAnnotation};
 use lattice_duckdb::{DuckDbEngine, ScalarValue};
 use lattice_index::{Backlink, SearchHit, WorkspaceIndex};
+use lattice_publish::{export as publish_export, ExportTarget};
 use lattice_storage::{NativeWorkspaceStore, RecoveryJournal, WorkspaceStore};
 use lattice_theme::{
     check_theme_file, discover_themes, load_appearance, save_appearance, AppearanceMode,
@@ -172,6 +173,11 @@ enum Command {
         #[command(subcommand)]
         command: ThemeCommand,
     },
+    /// Static HTML export for pages, interfaces, and artifacts.
+    Publish {
+        #[command(subcommand)]
+        command: PublishCommand,
+    },
     /// List built-in workspace templates.
     Templates {
         #[command(subcommand)]
@@ -263,6 +269,27 @@ enum ThemeCommand {
         /// Light theme id when mode is `auto`.
         #[arg(long)]
         light: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum PublishCommand {
+    /// Export a page, interface, or artifact as offline HTML (+ snapshot data).
+    Export {
+        /// Output directory for the export.
+        #[arg(long)]
+        out: PathBuf,
+        /// Markdown page path (workspace-relative or absolute).
+        #[arg(long, group = "target")]
+        page: Option<PathBuf>,
+        /// Path to an `*.interface.yaml` file.
+        #[arg(long, group = "target")]
+        interface: Option<PathBuf>,
+        /// Path to a `*.artifact/` package (or its `artifact.yaml`).
+        #[arg(long, group = "target")]
+        artifact: Option<PathBuf>,
+        /// Path inside the workspace to discover from. Defaults to the current directory.
+        path: Option<PathBuf>,
     },
 }
 
@@ -714,6 +741,15 @@ fn run(command: Command) -> Result<ExitCode> {
             ThemeCommand::Check { path } => cmd_theme_check(path),
             ThemeCommand::Set { id } => cmd_theme_set(id),
             ThemeCommand::Mode { mode, dark, light } => cmd_theme_mode(mode, dark, light),
+        },
+        Command::Publish { command } => match command {
+            PublishCommand::Export {
+                out,
+                page,
+                interface,
+                artifact,
+                path,
+            } => cmd_publish_export(out, page, interface, artifact, path),
         },
         Command::Templates { command } => match command {
             TemplatesCommand::List { json } => cmd_templates_list(json),
@@ -1645,8 +1681,8 @@ fn column_spec(
         ));
     }
     if field_type == FieldType::Formula {
-        let formula = formula
-            .with_context(|| format!("column {name:?} has type formula; pass --formula"))?;
+        let formula =
+            formula.with_context(|| format!("column {name:?} has type formula; pass --formula"))?;
         if relation_table.is_some() {
             bail!("--relation-table is only valid when --type is relation");
         }
@@ -1980,6 +2016,30 @@ fn cmd_backlinks(target: PathBuf, path: Option<PathBuf>, json: bool) -> Result<E
             print_backlink(link);
         }
     }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_publish_export(
+    out: PathBuf,
+    page: Option<PathBuf>,
+    interface: Option<PathBuf>,
+    artifact: Option<PathBuf>,
+    path: Option<PathBuf>,
+) -> Result<ExitCode> {
+    let start = cwd_or(path)?;
+    let ws = Workspace::discover(&start)?;
+    let target = match (page, interface, artifact) {
+        (Some(page), None, None) => ExportTarget::Page(page),
+        (None, Some(interface), None) => ExportTarget::Interface(interface),
+        (None, None, Some(artifact)) => ExportTarget::Artifact(artifact),
+        _ => bail!("specify exactly one of --page, --interface, or --artifact"),
+    };
+    let report = publish_export(ws.root(), &out, target)?;
+    println!(
+        "exported {} -> {}",
+        report.kind,
+        report.primary_html.display()
+    );
     Ok(ExitCode::SUCCESS)
 }
 

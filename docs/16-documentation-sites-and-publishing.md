@@ -182,3 +182,30 @@ Long-term:
 ## Security
 
 Executable notebooks, artifacts, and generated code do not run during publishing without an approved task environment and capabilities.
+
+## Static resource export (CLI)
+
+Phase-1 offline HTML export for individual resources lives in `lattice-publish`
+and the CLI:
+
+```sh
+lattice publish export --page Home.md --out dist/home
+lattice publish export --interface CRM.data/interfaces/OpsDashboard.interface.yaml --out dist/ops
+lattice publish export --artifact Artifacts/ContactPulse.artifact --out dist/pulse
+```
+
+Behavior:
+
+- **Page** — Markdown → standalone HTML with inlined `--lt-*` theme tokens
+  (built-in `lattice-slate` by default). No live Lattice process is required to
+  open the result in a browser.
+- **Interface** — Loads `*.interface.yaml`, freezes binding query results (SQLite
+  when available; otherwise empty placeholder tables) into `snapshot.json`, and
+  writes a read-only HTML dashboard shell.
+- **Artifact** — Copies the `.artifact/` package into `--out`, writes
+  `snapshot.json`, and injects a small script so named bindings resolve from the
+  frozen snapshot without a host iframe.
+
+Exports never scrape the live DOM. Cross-filters and live DuckDB dashboards are
+out of scope for this snapshot path; DuckDB bindings export empty placeholders.
+Cloudflare / Starlight docs-site pipelines remain separate (see above).
