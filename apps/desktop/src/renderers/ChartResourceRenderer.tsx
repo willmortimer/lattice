@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { TopLevelSpec } from "vega-lite";
 
 import { VegaLiteChart } from "../components/VegaLiteChart";
@@ -6,6 +6,7 @@ import "../components/vegaLiteChart.css";
 import { inBrowser } from "../demo";
 import { queryResultToValues } from "../lib/arrowToVegaData";
 import { parseChartSpecText } from "../lib/chartSpec";
+import { isDatasetRequestAborted } from "../lib/datasetCancel";
 import { queryDatasetArrow } from "../lib/datasetQuery";
 import { bindValuesToChartSpec } from "../lib/vegaLiteChart";
 import type { OpenResourceSession } from "../resourceSession";
@@ -24,6 +25,7 @@ export function ChartResourceRenderer({
   const [meta, setMeta] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const loadAbortRef = useRef<AbortController | null>(null);
 
   const parsed = useMemo(() => {
     if (!textSession) return null;
@@ -39,6 +41,8 @@ export function ChartResourceRenderer({
       setSpec(null);
       setMeta(null);
       setError(parsed && "error" in parsed ? parsed.error : null);
+      setBusy(false);
+      loadAbortRef.current = null;
       return;
     }
 
@@ -47,6 +51,8 @@ export function ChartResourceRenderer({
       setSpec(baseSpec);
       setMeta("Inline Vega-Lite spec");
       setError(null);
+      setBusy(false);
+      loadAbortRef.current = null;
       return;
     }
 
@@ -54,18 +60,26 @@ export function ChartResourceRenderer({
       setSpec(null);
       setMeta(null);
       setError("Open a native workspace to load dataset-bound chart data.");
+      setBusy(false);
+      loadAbortRef.current = null;
       return;
     }
 
-    let cancelled = false;
+    const controller = new AbortController();
+    loadAbortRef.current = controller;
     setBusy(true);
     setError(null);
-    void queryDatasetArrow(root, binding.dataset, {
-      sql: binding.sql,
-      maxRows: binding.maxRows,
-    })
+    void queryDatasetArrow(
+      root,
+      binding.dataset,
+      {
+        sql: binding.sql,
+        maxRows: binding.maxRows,
+      },
+      controller.signal,
+    )
       .then((result) => {
-        if (cancelled) return;
+        if (controller.signal.aborted) return;
         const values = queryResultToValues(result, binding.maxRows);
         if (values.length === 0) {
           setSpec(null);
@@ -79,17 +93,23 @@ export function ChartResourceRenderer({
         );
       })
       .catch((err: unknown) => {
-        if (cancelled) return;
+        if (controller.signal.aborted || isDatasetRequestAborted(err)) return;
         setSpec(null);
         setMeta(null);
         setError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
-        if (!cancelled) setBusy(false);
+        if (loadAbortRef.current === controller) {
+          loadAbortRef.current = null;
+          setBusy(false);
+        }
       });
 
     return () => {
-      cancelled = true;
+      controller.abort();
+      if (loadAbortRef.current === controller) {
+        loadAbortRef.current = null;
+      }
     };
   }, [parsed, root, textSession, context.reloadToken]);
 
@@ -119,7 +139,18 @@ export function ChartResourceRenderer({
       <p className="placeholder-sub">
         <code>{textSession.resource.path}</code>
       </p>
-      {busy ? <p className="placeholder-sub">Loading dataset query…</p> : null}
+      {busy ? (
+        <div className="dataset-surface-busy">
+          <p className="placeholder-sub">Loading dataset query…</p>
+          <button
+            type="button"
+            className="dataset-cancel-button"
+            onClick={() => loadAbortRef.current?.abort()}
+          >
+            Cancel
+          </button>
+        </div>
+      ) : null}
       {error ? (
         <p className="placeholder-sub" role="alert">
           {error}
