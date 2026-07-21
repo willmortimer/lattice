@@ -522,7 +522,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             SeedDirectory { path: "Resources", purpose: Some("Ordinary files — JSON, YAML, code, SQL, images."), default_kind: None, icon: None },
             SeedDirectory { path: "Archive", purpose: Some("Finished or inactive material."), default_kind: None, icon: None }
         ],
-        preview: &["Home.md", "Research/Local Runtime.md", "Research/Long Read.md", "Product/Vision.md", "CRM.data", "Projects/Delivery.data", "Data/Metrics.data", "Data/Events.dataset", "Data/Orders.dataset", "Dashboards/Signups by region.vl.json", "OKRs.data", "Canvases/Product Strategy.canvas", "Inbox/Sample capture.md", "Templates/Daily Note.md", "Notebooks/CRM exploration.ipynb", "Resources/"],
+        preview: &["Home.md", "Research/Local Runtime.md", "Research/Long Read.md", "Product/Vision.md", "CRM.data", "Projects/Delivery.data", "Data/Metrics.data", "Data/Events.dataset", "Data/Orders.dataset", "Dashboards/Signups by region.vl.json", "OKRs.data", "Canvases/Product Strategy.canvas", "Inbox/Sample capture.md", "Templates/Daily Note.md", "Notebooks/CRM exploration.ipynb", "Notebooks/Orders analytics.ipynb", "Resources/"],
         capabilities: &["pages", "canvas", "sqlite"],
         quick_note_directory: "Inbox",
         daily_note_directory: None,
@@ -546,6 +546,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             SeedFile { path: "Templates/Daily Note.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Templates/Daily Note.md")) },
             SeedFile { path: "Templates/Meeting Note.md", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Templates/Meeting Note.md")) },
             SeedFile { path: "Notebooks/CRM exploration.ipynb", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Notebooks/CRM exploration.ipynb")) },
+            SeedFile { path: "Notebooks/Orders analytics.ipynb", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Notebooks/Orders analytics.ipynb")) },
             SeedFile { path: "Canvases/Product Strategy.canvas", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Canvases/Product Strategy.canvas")) },
             SeedFile { path: "Data/sample.csv", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Data/sample.csv")) },
             SeedFile { path: "Data/Events.dataset/dataset.yaml", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Data/Events.dataset/dataset.yaml")) },

@@ -9,6 +9,10 @@ const crmNotebook = readFileSync(
   join(repoRoot, "templates/workspaces/demo/files/Notebooks/CRM exploration.ipynb"),
   "utf8",
 );
+const ordersNotebook = readFileSync(
+  join(repoRoot, "templates/workspaces/demo/files/Notebooks/Orders analytics.ipynb"),
+  "utf8",
+);
 
 describe("parseNotebook", () => {
   it("parses the First Look CRM exploration notebook", () => {
@@ -22,6 +26,21 @@ describe("parseNotebook", () => {
     const codeCell = result.notebook.cells.find((cell) => cell.cellType === "code");
     expect(codeCell?.source).toContain("pandas");
     expect(codeCell?.outputs).toEqual([]);
+  });
+
+  it("parses the Orders analytics notebook with a mounted CSV path", () => {
+    const result = parseNotebook(ordersNotebook);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.notebook.cells[0]?.source).toContain("# Orders analytics");
+    expect(result.notebook.cells[0]?.source).toContain("DuckDB");
+    const loadCell = result.notebook.cells.find(
+      (cell) => cell.cellType === "code" && cell.source.includes("read_csv"),
+    );
+    expect(loadCell?.source).toContain(
+      "/home/pyodide/workspace/Data/Orders.dataset/sources/orders.csv",
+    );
+    expect(loadCell?.source).not.toMatch(/duckdb/i);
   });
 
   it("joins multiline source arrays and preserves execution metadata", () => {
