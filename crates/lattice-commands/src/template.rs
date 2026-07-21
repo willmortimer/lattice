@@ -27,10 +27,7 @@ pub fn title_from_page_path(path: &Path) -> String {
 
 /// UTC calendar date `YYYY-MM-DD` for `now`.
 pub fn utc_iso_date(now: SystemTime) -> String {
-    let secs = now
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64;
+    let secs = now.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
     let days = secs.div_euclid(86_400);
     let (year, month, day) = civil_from_days(days);
     format!("{year:04}-{month:02}-{day:02}")

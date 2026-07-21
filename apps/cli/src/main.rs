@@ -5,7 +5,9 @@ use std::time::SystemTime;
 
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
-use lattice_commands::{ColumnSpec, Command as Semantic, CommandEngine, Transaction};
+use lattice_commands::{
+    ColumnSpec, Command as Semantic, CommandEngine, TaskError, TaskRunner, Transaction,
+};
 use lattice_core::{
     ensure_lattice_home, init_with_template, initialize_active_lattice_home, resolve_template_id,
     template_catalog, template_descriptor, Diagnostic, Resource, Severity, TemplateDescriptor,
@@ -174,6 +176,11 @@ enum Command {
         #[command(subcommand)]
         command: TemplatesCommand,
     },
+    /// Run a `*.task/` package (`task.yaml` via `uv`).
+    Task {
+        #[command(subcommand)]
+        command: TaskCommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -199,6 +206,15 @@ enum TemplatesCommand {
         /// Emit the template as JSON.
         #[arg(long)]
         json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum TaskCommand {
+    /// Parse `task.yaml` and execute via `uv run` (captures stdout/stderr/exit).
+    Run {
+        /// Path to a `.task/` package directory or its `task.yaml`.
+        path: PathBuf,
     },
 }
 
@@ -632,7 +648,7 @@ fn run(command: Command) -> Result<ExitCode> {
             } => cmd_dataset_annotate(path, event_id, label, notes, reviewed),
             DatasetCommand::QueryAnnotated { path, json } => {
                 cmd_dataset_query_annotated(path, json)
-            },
+            }
         },
         Command::Query {
             sql,
@@ -684,6 +700,9 @@ fn run(command: Command) -> Result<ExitCode> {
         Command::Templates { command } => match command {
             TemplatesCommand::List { json } => cmd_templates_list(json),
             TemplatesCommand::Show { id, json } => cmd_templates_show(id, json),
+        },
+        Command::Task { command } => match command {
+            TaskCommand::Run { path } => cmd_task_run(path),
         },
     }
 }
@@ -2010,6 +2029,60 @@ fn cmd_templates_show(id: String, json: bool) -> Result<ExitCode> {
         print_template_descriptor(&template);
     }
     Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_task_run(path: PathBuf) -> Result<ExitCode> {
+    match TaskRunner::new().run(&path) {
+        Ok(out) => {
+            if !out.stdout.is_empty() {
+                print!("{}", out.stdout);
+                if !out.stdout.ends_with('\n') {
+                    println!();
+                }
+            }
+            if !out.stderr.is_empty() {
+                eprint!("{}", out.stderr);
+                if !out.stderr.ends_with('\n') {
+                    eprintln!();
+                }
+            }
+            Ok(exit_code_from_i32(out.exit_code))
+        }
+        Err(TaskError::TimedOut {
+            timeout_seconds,
+            stdout,
+            stderr,
+        }) => {
+            if !stdout.is_empty() {
+                print!("{stdout}");
+                if !stdout.ends_with('\n') {
+                    println!();
+                }
+            }
+            if !stderr.is_empty() {
+                eprint!("{stderr}");
+                if !stderr.ends_with('\n') {
+                    eprintln!();
+                }
+            }
+            eprintln!("error: task timed out after {timeout_seconds}s");
+            Ok(ExitCode::FAILURE)
+        }
+        Err(err) => {
+            eprintln!("error: {err}");
+            Ok(ExitCode::FAILURE)
+        }
+    }
+}
+
+fn exit_code_from_i32(code: i32) -> ExitCode {
+    if code == 0 {
+        ExitCode::SUCCESS
+    } else if (1..=255).contains(&code) {
+        ExitCode::from(code as u8)
+    } else {
+        ExitCode::FAILURE
+    }
 }
 
 #[derive(serde::Serialize)]
