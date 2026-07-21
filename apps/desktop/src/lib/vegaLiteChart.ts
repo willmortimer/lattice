@@ -35,7 +35,9 @@ export function buildAutoBarChartSpec(schema: ArrowFieldMeta[], values: VegaRow[
   return {
     $schema: "https://vega.github.io/schema/vega-lite/v6.json",
     description: "Auto-generated bar chart from dataset query results",
-    width: "container",
+    // Numeric width avoids zero-geometry embeds when the host is still laying out
+    // (`width: "container"` often paints an empty grey box in WKWebView).
+    width: 640,
     height: 280,
     data: { values },
     mark: { type: "bar", tooltip: true },

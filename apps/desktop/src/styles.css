@@ -929,32 +929,36 @@ html[data-page-width="full"] {
   outline: none;
   min-height: 40vh;
   position: relative;
+  /* Room for block drag handles sitting in the left gutter. */
+  padding-left: 28px;
 }
 
 .page-editor-content .block-drag-handle {
   position: absolute;
-  left: -22px;
-  width: 16px;
-  height: 18px;
+  left: -24px;
+  width: 18px;
+  height: 20px;
   margin-top: 2px;
   padding: 0;
   border: 0;
   border-radius: 3px;
   background:
-    radial-gradient(circle, var(--lt-faint) 1.2px, transparent 1.4px) 3px 3px / 6px 6px,
-    radial-gradient(circle, var(--lt-faint) 1.2px, transparent 1.4px) 3px 9px / 6px 6px;
+    radial-gradient(circle, var(--lt-muted) 1.2px, transparent 1.4px) 4px 4px / 6px 6px,
+    radial-gradient(circle, var(--lt-muted) 1.2px, transparent 1.4px) 4px 10px / 6px 6px;
   background-color: transparent;
   cursor: grab;
-  opacity: 0;
-  transition: opacity 120ms ease;
+  opacity: 0.55;
+  transition: opacity 120ms ease, background-color 120ms ease;
   user-select: none;
   -webkit-user-drag: element;
 }
 
 .page-editor-content .ProseMirror:hover .block-drag-handle,
+.page-editor-content .block-drag-handle:hover,
 .page-editor-content .block-drag-handle:focus-visible,
 .page-editor-content .block-drag-handle-active {
   opacity: 1;
+  background-color: color-mix(in srgb, var(--lt-line) 70%, transparent);
 }
 
 .page-editor-content .block-drag-handle:active,

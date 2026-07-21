@@ -18,4 +18,11 @@ describe("packaged media CSP", () => {
     expect(config.app.security.csp["script-src"]).toContain("'wasm-unsafe-eval'");
     expect(config.app.security.csp["script-src"]).not.toContain("'unsafe-eval'");
   });
+
+  it("allows same-origin WASM fetches for Perspective (connect-src 'self')", () => {
+    const config = JSON.parse(configText) as {
+      app: { security: { csp: Record<string, string> } };
+    };
+    expect(config.app.security.csp["connect-src"]).toContain("'self'");
+  });
 });

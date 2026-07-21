@@ -13,7 +13,8 @@ pub use batch::{DataType, Field, RecordBatch, ScalarValue, Schema};
 pub use engine::{DuckDbEngine, ANNOTATIONS_TEMP_TABLE};
 pub use error::Error;
 pub use path::{
-    resolve_glob_under_root, resolve_under_root, resolve_under_root_for_create, sql_string_literal,
+    path_to_sql, resolve_glob_under_root, resolve_under_root, resolve_under_root_for_create,
+    rewrite_read_paths_under_root, sql_string_literal,
 };
 pub use profile::{ColumnProfile, RelationProfile};
 

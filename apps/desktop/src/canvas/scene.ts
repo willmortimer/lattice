@@ -224,6 +224,14 @@ export class CanvasScene {
     this.rebuild(data, { fit: options.fit !== false });
   }
 
+  /** Frame all nodes in the viewport (toolbar Fit / recovery after zero-size layout). */
+  fitView() {
+    if (this.data?.nodes.length) {
+      this.pendingFit = false;
+      this.fitToContent(this.data.nodes);
+    }
+  }
+
   /** Convert a browser client point into canvas world coordinates (pan/zoom aware). */
   clientToWorld(clientX: number, clientY: number): { x: number; y: number } {
     const rect = this.app.canvas.getBoundingClientRect();

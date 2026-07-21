@@ -14,6 +14,8 @@ import "@finos/perspective-viewer/dist/css/pro-dark.css";
 import SERVER_WASM from "@finos/perspective/dist/wasm/perspective-server.wasm?url";
 import CLIENT_WASM from "@finos/perspective-viewer/dist/wasm/perspective-viewer.wasm?url";
 
+import { fetchWasmBytes } from "./wasmFetch";
+
 export type PerspectiveClient = {
   table: (
     data: ArrayBuffer | string | Record<string, unknown>[] | Record<string, unknown[]>,
@@ -72,11 +74,15 @@ export async function ensurePerspectiveRuntime(): Promise<PerspectiveRuntime> {
   return promise;
 }
 
+/** Fetch a `.wasm` URL and reject HTML/empty responses before `WebAssembly.compile`. */
+export { fetchWasmBytes } from "./wasmFetch";
+
 async function bootstrapPerspective(): Promise<PerspectiveRuntime> {
-  await Promise.all([
-    init_server(fetch(SERVER_WASM)),
-    init_client(fetch(CLIENT_WASM)),
+  const [serverWasm, clientWasm] = await Promise.all([
+    fetchWasmBytes(SERVER_WASM),
+    fetchWasmBytes(CLIENT_WASM),
   ]);
+  await Promise.all([init_server(serverWasm), init_client(clientWasm)]);
 
   const worker = (await createPerspectiveWorker()) as PerspectiveClient;
   return { worker };
