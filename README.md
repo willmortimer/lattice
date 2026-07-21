@@ -34,10 +34,13 @@ lattice/
 
 ## Status
 
-Active Phase 0–1 scaffold: headless core + CLI, desktop shell (pages, search,
-data tables, theming), and the marketing/docs site. The specification in
-`docs/` is intentionally broader than the current code — see
-[roadmap](docs/29-roadmap.md).
+Local desktop substrate is shipping: headless core + CLI, Tauri shell,
+pages/canvas/search/voice, SQLite data apps (views, forms, interfaces),
+DuckDB `.dataset` analytics (Perspective, Vega-Lite, Profile, Plan, MapLibre
+maps), notebooks (native `ipykernel` + Pyodide), tasks/workflows/proposals/
+artifacts, and the `latticed` daemon — plus the marketing/docs site. The
+specification in `docs/` is intentionally broader than what is polished today —
+see [roadmap](docs/29-roadmap.md) for residual gaps and later phases.
 
 ## Development
 

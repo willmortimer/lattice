@@ -7,14 +7,22 @@ tags: [product]
 
 Sample changelog page for the First Look workspace — not a live feed.
 
-## 2026.07 — Analytical First Look (DuckDB / Vega-Lite)
+## 2026.07 — Analytical First Look (DuckDB / Vega-Lite / Map)
 
 - `Data/Events.dataset` — Hive Parquet under `facts/year=2026/month=07/`, source CSV in `sources/`
 - `annotations.sqlite` review overlay (`event_annotations`) for annotate / query-annotated demos
 - `Dashboards/Signups by region.vl.json` — Vega-Lite bound with `read_parquet(...)`
-- Desktop viewer tabs: Perspective **Preview**, Vega-Lite **Chart**, DuckDB **Profile**
-- `Data/Places.dataset` — ~20 WGS84 lon/lat points (`facts/places.parquet`) for MapLibre
-- [[Home]] tour steps 17–21 cover the analytics path; Places is step 26 (native / Tauri; not the browser fixture)
+- Desktop viewer tabs: Perspective **Preview**, Vega-Lite **Chart**, DuckDB **Profile**, **Plan**, MapLibre **Map**
+- `Data/Places.dataset` — ~20 WGS84 lon/lat points (`facts/places.parquet`) with offline MapLibre markers
+- [[Home]] tour steps 24–34 cover the analytics path (native / Tauri; not the browser fixture)
+
+## 2026.07 — Notebooks, automation & artifacts
+
+- Native `ipykernel` sessions on desktop (Pyodide fallback; browser fixture Pyodide-only)
+- Notebook viewer + **Run** with undoable `ResourceUpdate`
+- `Automations/Contact intake.workflow.yaml` — form-submitted workflow → proposal inbox
+- `Tasks/ContactIntakeHello.task`, `Tasks/ProposePage.task`, and `Derived/ContactBrief.derived.yaml` rebuild path
+- `Artifacts/ContactPulse.artifact` — sandboxed HTML embeds
 
 ## 2026.07 — Daemon, search, voice
 
@@ -36,7 +44,6 @@ Sample changelog page for the First Look workspace — not a live feed.
 - Extra files under `Resources/` for code and config samples
 - [[Home]] tour checklist for layouts, Save view, folder undo, link repair, multi-select, and relations
 - `Notebooks/CRM exploration.ipynb` — CRM tour notebook seed
-- Notebook viewer + Pyodide **Run** with undoable `ResourceUpdate`
 - `Canvases/Product Strategy.canvas` — CRM view subpaths (`views/Board`, `views/Gallery.yaml`)
 
 ## 2026.06 — Kitchen sink baseline
@@ -49,9 +56,9 @@ Sample changelog page for the First Look workspace — not a live feed.
 
 Tracked on [[Product/Roadmap]]:
 
-1. Phase 4 programmable workspace — local HTTP API, MCP, proposed-tx review
-2. Query profiler UI / GeoParquet (Phase 3 polish)
-3. Native Jupyter / ipykernel (Pyodide-only for notebooks today)
+1. Cross-resource dashboards, bindings, cross-filtering, and publishing (Phase 6–7)
+2. Query profiler UI / GeoParquet / remote tile basemaps (Phase 3 polish)
+3. Durable scheduled jobs and richer automation history (Phase 5)
 4. Login-item / always-on Quick Note (out of scope; keep-running covers warm daemon)
 
 #product

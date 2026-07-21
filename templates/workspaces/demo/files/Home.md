@@ -31,7 +31,8 @@ changes when `LATTICE_DEV_RESET_DEMO=1` (default for `desktop-dev` / `tauri:dev`
 10. Open the Orders dashboards — stacked region/category, daily revenue, and channel comparison (`.vl.json` under `Dashboards/`).
 11. Open `Data/Places.dataset` — ~20 WGS84 lon/lat points (`name`, `lon`, `lat`) for MapLibre.
 12. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.
-13. Open `Notebooks/Orders analytics.ipynb` — Pyodide loads mounted Orders CSV (`sources/orders.csv`); DuckDB SQL stays native.
+13. Open `Notebooks/Orders analytics.ipynb` — native `ipykernel` when available,
+    else Pyodide; mounted Orders CSV (`sources/orders.csv`); DuckDB SQL stays native.
 14. Open `Notebooks/CRM exploration.ipynb` — CRM tour notebook (markdown + code stubs).
 15. Create pages from `Templates/` — daily and meeting note scaffolds.
 16. Read [[Research/Local Runtime]] — daemon, search, and voice process model.
@@ -108,7 +109,7 @@ unavailable banner.
 ### Places dataset (MapLibre lon/lat)
 
 33. Open `Data/Places.dataset` → **Preview** — ~20 named points with plain `lon` / `lat` doubles (WGS84) under `facts/places.parquet`.
-34. Confirm columns `place_id`, `name`, `lon`, `lat` — MapLibre Map tab arrives in a follow-on (no map UI in this seed).
+34. Switch to **Map** — offline MapLibre markers (`place_id`, `name`, `lon`, `lat`; solid `--lt-*` style, no remote tile basemap).
 
 ### Resource tree
 
@@ -177,7 +178,7 @@ Workspace defaults point quick capture at `Inbox/` and templates at `Templates/`
 | `Tasks/ProposePage.task` | Optional SDK propose_page demo |
 | `Derived/ContactBrief.derived.yaml` | Stale → rebuild derived HTML |
 | `Data/sample.csv` | Flat CSV import sample |
-| `Notebooks/Orders analytics.ipynb` | Pyodide Orders CSV tour (mounted workspace bridge) |
+| `Notebooks/Orders analytics.ipynb` | Orders CSV tour (native ipykernel or Pyodide) |
 | `Notebooks/CRM exploration.ipynb` | CRM tour notebook (nbformat v4) |
 
 ### CRM views
