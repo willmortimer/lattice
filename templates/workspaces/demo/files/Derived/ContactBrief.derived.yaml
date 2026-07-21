@@ -1,0 +1,9 @@
+format: lattice-derived-resource
+version: 1
+output: ./dist/index.html
+inputs:
+  - ./input.txt
+builder:
+  task: ./Build ContactBrief.task/task.yaml
+refresh:
+  mode: on-demand

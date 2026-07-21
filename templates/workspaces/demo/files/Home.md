@@ -7,13 +7,15 @@ title: Home
 Kitchen-sink tour of the **First Look** sample workspace. Everything here is an
 ordinary file under a real directory — open it in any editor, or stay inside Lattice.
 
-**Native vs browser:** Perspective Preview, Vega-Lite Chart, and DuckDB Profile
-require the **native desktop app** (`nxr desktop-dev` or Lattice.app). The Vite
-browser fixture seeds the same files but labels visualization **unavailable**.
+**Native vs browser:** Perspective Preview, Vega-Lite Chart, DuckDB Profile,
+workflows, tasks, derived rebuild, and the Proposals inbox require the **native
+desktop app** (`nxr desktop-dev` or Lattice.app). The Vite browser fixture seeds
+the same files but labels visualization / automation **unavailable**.
 Installing Lattice.app does **not** rewrite an existing First Look folder — create
 a new workspace from the First Look template, or copy missing seeds from
-`templates/workspaces/demo/files/` (for example `Data/Events.dataset` and
-`Dashboards/`).
+`templates/workspaces/demo/files/` (for example `Data/Events.dataset`,
+`Automations/`, and `Dashboards/`). Sticky `target/dev-home` picks up template
+changes when `LATTICE_DEV_RESET_DEMO=1` (default for `desktop-dev` / `tauri:dev`).
 
 ## Quick start
 
@@ -70,33 +72,51 @@ and voice features. Each step is safe in the sample workspace; undo where noted.
 15. Submit a new contact; the row appears and relation pickers stay in sync with `companies`.
 16. Open `Projects/Delivery.data` → **Forms** → **Delivery intake** and add an item.
 
+### Automation path (form → workflow → proposal → approve)
+
+Native desktop only — browser opens the workflow/task surfaces with an honest
+unavailable banner.
+
+17. Confirm `Automations/Contact intake.workflow.yaml` is enabled (`form.submitted`
+    on `CRM.data` / `ContactIntake`).
+18. Submit **CRM.data → Forms → Contact intake** again (or **Run** on the workflow).
+19. Open the **Proposals** inbox — approve the page-create for
+    `Proposals/Contact intake follow-up.md`.
+20. Open the new page (and optionally embed it from this Home after approve).
+21. Optional SDK story: open `Tasks/ProposePage.task` → **Run** (needs injected
+    `lattice` / `uv`) → approve `Proposals/FromSdk.task.md`.
+22. Optional MCP story (daemon): `create_proposal` / `propose_page` tools — same
+    Proposals inbox path as friday demo steps 16–18.
+23. Optional derived: open `Derived/ContactBrief.derived.yaml` (stale) → **Rebuild**
+    → edit `Derived/input.txt` → confirm stale again → Rebuild.
+
 ### Analytical datasets (DuckDB / Vega-Lite)
 
-17. Open `Data/Events.dataset` → **Preview** — Perspective grid over Hive Parquet (`facts/year=2026/month=07/`).
-18. Switch to **Chart** — auto Vega-Lite from the same Arrow IPC query.
-19. Switch to **Profile** — DuckDB `SUMMARIZE` column stats.
-20. Open `Dashboards/Signups by region.vl.json` — chart resource bound with `read_parquet(...)`.
-21. Optional CLI: `lattice dataset query-annotated Data/Events.dataset --json` (review overlay in `annotations.sqlite`).
+24. Open `Data/Events.dataset` → **Preview** — Perspective grid over Hive Parquet (`facts/year=2026/month=07/`).
+25. Switch to **Chart** — auto Vega-Lite from the same Arrow IPC query.
+26. Switch to **Profile** — DuckDB `SUMMARIZE` column stats.
+27. Open `Dashboards/Signups by region.vl.json` — chart resource bound with `read_parquet(...)`.
+28. Optional CLI: `lattice dataset query-annotated Data/Events.dataset --json` (review overlay in `annotations.sqlite`).
 
 ### Orders dataset & multi-series charts
 
-22. Open `Data/Orders.dataset` → **Preview** — ~3 000 synthetic retail rows across `facts/year=2026/month=0{1,2,3}/`.
-23. Open `Dashboards/Revenue by region and category.vl.json` — stacked bars (region × category).
-24. Open `Dashboards/Revenue by day.vl.json` — daily revenue time series (Jan–Mar 2026).
-25. Open `Dashboards/Revenue by channel.vl.json` — layered channel comparison (revenue bars + order counts).
+29. Open `Data/Orders.dataset` → **Preview** — ~3 000 synthetic retail rows across `facts/year=2026/month=0{1,2,3}/`.
+30. Open `Dashboards/Revenue by region and category.vl.json` — stacked bars (region × category).
+31. Open `Dashboards/Revenue by day.vl.json` — daily revenue time series (Jan–Mar 2026).
+32. Open `Dashboards/Revenue by channel.vl.json` — layered channel comparison (revenue bars + order counts).
 
 ### Places dataset (MapLibre lon/lat)
 
-26. Open `Data/Places.dataset` → **Preview** — ~20 named points with plain `lon` / `lat` doubles (WGS84) under `facts/places.parquet`.
-27. Confirm columns `place_id`, `name`, `lon`, `lat` — MapLibre Map tab arrives in a follow-on (no map UI in this seed).
+33. Open `Data/Places.dataset` → **Preview** — ~20 named points with plain `lon` / `lat` doubles (WGS84) under `facts/places.parquet`.
+34. Confirm columns `place_id`, `name`, `lon`, `lat` — MapLibre Map tab arrives in a follow-on (no map UI in this seed).
 
 ### Resource tree
 
-28. Create a folder under `Projects/` (context menu or **New folder**).
-29. Press **⌘Z** to undo the folder creation.
-30. Move [[Product/Vision]] into another folder; accept link repair when prompted.
-31. **⌘-click** two pages, drag to a folder (multi-select move).
-32. Select multiple items and delete — confirm the batch operation.
+35. Create a folder under `Projects/` (context menu or **New folder**).
+36. Press **⌘Z** to undo the folder creation.
+37. Move [[Product/Vision]] into another folder; accept link repair when prompted.
+38. **⌘-click** two pages, drag to a folder (multi-select move).
+39. Select multiple items and delete — confirm the batch operation.
 
 ### Where to look next
 
@@ -151,6 +171,11 @@ Workspace defaults point quick capture at `Inbox/` and templates at `Templates/`
 | `Dashboards/Revenue by day.vl.json` | Daily revenue time series (Orders) |
 | `Dashboards/Revenue by channel.vl.json` | Layered channel comparison (Orders) |
 | `Data/Places.dataset` | Named WGS84 points (`lon`/`lat`) for MapLibre |
+| `Artifacts/ContactPulse.artifact` | Sandboxed HTML artifact (embedded above) |
+| `Automations/Contact intake.workflow.yaml` | Form-submitted workflow → proposal |
+| `Tasks/ContactIntakeHello.task` | `uv` task for the intake workflow |
+| `Tasks/ProposePage.task` | Optional SDK propose_page demo |
+| `Derived/ContactBrief.derived.yaml` | Stale → rebuild derived HTML |
 | `Data/sample.csv` | Flat CSV import sample |
 | `Notebooks/Orders analytics.ipynb` | Pyodide Orders CSV tour (mounted workspace bridge) |
 | `Notebooks/CRM exploration.ipynb` | CRM tour notebook (nbformat v4) |
@@ -194,7 +219,6 @@ fallback: "Open CRM board view"
 
 Open the sandboxed Contact pulse artifact (card vs interactive):
 
-```markdown
 :::lattice-embed
 resource: Artifacts/ContactPulse.artifact
 mode: card
@@ -205,7 +229,25 @@ resource: Artifacts/ContactPulse.artifact
 mode: interactive
 height: 320
 :::
+
+After approving the Contact intake workflow proposal, embed the follow-up page:
+
+```markdown
+:::lattice-embed
+resource: Proposals/Contact intake follow-up.md
+fallback: "Approve the Contact intake proposal first"
+:::
 ```
+
+### Automations, tasks & derived
+
+| Resource | Kind |
+| --- | --- |
+| `Automations/Contact intake.workflow.yaml` | Workflow — `form.submitted` → task.run → proposal.create |
+| `Tasks/ContactIntakeHello.task` | Reliable `uv` task used by the intake workflow |
+| `Tasks/ProposePage.task` | Optional SDK `lattice.propose_page` demo |
+| `Derived/ContactBrief.derived.yaml` | Derived — stale → Rebuild → `dist/index.html` |
+| [[Proposals/README]] | Where approved page-create proposals land |
 
 ## Resources
 
@@ -249,6 +291,11 @@ height: 320
 | `Dashboards/Revenue by channel.vl.json` | Vega-Lite chart (Orders) |
 | `Data/Places.dataset` | dataset (WGS84 lon/lat points) |
 | `Artifacts/ContactPulse.artifact` | sandboxed HTML artifact |
+| `Automations/Contact intake.workflow.yaml` | workflow |
+| `Tasks/ContactIntakeHello.task` | task |
+| `Tasks/ProposePage.task` | task (SDK optional) |
+| `Derived/ContactBrief.derived.yaml` | derived |
+| [[Proposals/README]] | page |
 | `Data/sample.csv` | CSV file |
 | `Notebooks/Orders analytics.ipynb` | notebook |
 | `Notebooks/CRM exploration.ipynb` | notebook |

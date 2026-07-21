@@ -1,0 +1,2 @@
+Contact brief seed input for the First Look derived-resource demo.
+Edit this file, then open ContactBrief.derived.yaml and Rebuild to see stale → current.

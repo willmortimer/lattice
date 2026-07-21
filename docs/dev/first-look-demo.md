@@ -7,9 +7,10 @@ P2J01 / P2X01 / P2S01–P02 (all packets merged before P3P07 docs).
 
 | Field | Value |
 | --- | --- |
-| Date | 2026-07-20 (closeout refresh) |
+| Date | 2026-07-21 (C4 First Look automation polish) |
 | BASE (historical polish pass) | `5d652ab5b63b14dc5d26df781e81c33b659e9d9d` (`feat/data-support-polish`) |
 | Tip (Phase 3 polish) | `2ed333c4bff568ee06f10a7b62fdd9640d09cf11` (`feat/phase3-polish` after cancel frontend merge) |
+| Tip (C4 automation seeds) | see `feat/c4-first-look-demo-polish` after merge |
 | Surface | Vite browser demo (`pnpm --filter @lattice/desktop dev`, fixture `inBrowser`) plus code review, unit tests, and native Tauri smokes (CRM P2P06, tree P2S01, schema P2S02) — local only, not CI gates |
 | Method | Fixture + shell code paths under `apps/desktop/src/`; contracts in `docs/39-resource-runtime-contracts.md`; link-repair / batch-move coverage in desktop + `lattice-commands` / `lattice-index` tests; native smokes via `pnpm --filter @lattice/desktop test:crm:tauri` / `test:tree:tauri` / `test:schema:tauri`. |
 
@@ -245,6 +246,31 @@ Wave 1 (items 1–4, 6) shipped on `main`. Remaining items are post–Wave 1.
 9. ~~**P2 — Native Wave 2 pass** for **add-column** (text) + tabular import + FormSave designer~~ — done for text add-column + sample.csv promote (P2S02: `test:schema:tauri`); FormSave designer covered by P2P06. Lookup/rollup **add-column** and file-picker Import… remain manual.
 10. ~~**P2 — Phase 3 polish MVP** (Plan/Cancel/Map, formula, junction, cross-package RO)~~ — done on `feat/phase3-polish` (see polish section above). Residual: progress UI, writable cross-package, SQL formulas, tile basemaps / DuckDB spatial, CI-gated smokes.
 
+## Automation path (form → workflow → proposal → approve)
+
+Native desktop only (`nxr desktop-dev` / Lattice.app). Browser fixture seeds the
+same files but cannot run workflows, tasks, or proposals.
+
+| # | Step | Notes |
+| --- | --- | --- |
+| A1 | Open `Automations/Contact intake.workflow.yaml` | Confirm enabled; trigger `form.submitted` on `CRM.data` / `ContactIntake` |
+| A2 | Submit **CRM.data → Forms → Contact intake** (or **Run** on the workflow) | Runs `Tasks/ContactIntakeHello.task`, then `proposal.create` |
+| A3 | Open **Proposals** inbox → approve | Creates `Proposals/Contact intake follow-up.md` |
+| A4 | Open the follow-up page; optional embed from [[Home]] | Live `:::lattice-embed` for ContactPulse remains on Home |
+| A5 | Optional: `Tasks/ProposePage.task` → **Run** | SDK `lattice.propose_page` → `Proposals/FromSdk.task.md` |
+| A6 | Optional MCP: `create_proposal` / `propose_page` | Same inbox path; useful for friday demo steps 16–18 |
+| A7 | Optional: `Derived/ContactBrief.derived.yaml` → **Rebuild** | Edit `Derived/input.txt` to see stale → rebuild |
+
+Manual smoke (no automated e2e yet): walk A1–A4 on a fresh First Look seed.
+
+### Sticky `target/dev-home`
+
+`nix run .#desktop-dev` / `pnpm tauri:dev` default `LATTICE_DEV_RESET_DEMO=1` so
+First Look under `target/dev-home` is wiped and re-seeded from the current `demo`
+template each launch. Use `tauri:dev:keep` to preserve edits. Installed
+`~/Lattice/Workspaces/First Look` folders stay sticky — create a new workspace
+from the template (or copy seeds) after template changes.
+
 ## How to re-run
 
 ```sh
@@ -274,11 +300,13 @@ pnpm --filter @lattice/desktop test:schema:tauri
 
 `nix run .#desktop-install` / opening Lattice.app does **not** rewrite an existing
 workspace under `~/Lattice/Workspaces/First Look`. If that folder was seeded
-before analytical datasets or Phase 3 polish landed, it may lack
-`Data/Events.dataset`, `Data/Places.dataset`, and/or `Dashboards/`. Fix by
-creating a **new** workspace from the First Look template, or by copying seeds
-from `templates/workspaces/demo/files/` (then `pnpm compile-templates` only if
-you changed the template itself).
+before analytical datasets, Phase 3 polish, or the Contact intake automation
+path landed, it may lack `Data/Events.dataset`, `Data/Places.dataset`,
+`Dashboards/`, `Automations/`, `Tasks/`, or `Derived/`. Fix by creating a **new**
+workspace from the First Look template, or by copying seeds from
+`templates/workspaces/demo/files/` (then `pnpm compile-templates` only if you
+changed the template itself). For local Tauri/dev-home, rely on
+`LATTICE_DEV_RESET_DEMO=1` (see **Sticky `target/dev-home`** above).
 
 Update this file’s Date + Tip SHA when repeating the tour after polish or wave
 landings.
