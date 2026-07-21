@@ -27,7 +27,7 @@ describe("treeOps path helpers", () => {
     expect(destinationPath("Notes/A.md", "Archive")).toBe("Archive/A.md");
   });
 
-  it("resolves the browser new-folder parent from selection and active folder", () => {
+  it("resolves the New folder parent from selection and active folder", () => {
     expect(newFolderParentPath(null)).toBe("Projects");
     expect(newFolderParentPath(page("Projects/Delivery.data"))).toBe("Projects");
     expect(newFolderParentPath({ path: "Projects", kind: "folder" })).toBe("Projects");

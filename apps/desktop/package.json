@@ -25,7 +25,8 @@
     "test:perf": "playwright test --project=browser",
     "test:perf:tauri": "node ./e2e/run-tauri-perf.mjs",
     "test:crm:tauri": "node ./e2e/run-tauri-crm-smoke.mjs",
-    "test:analytics:tauri": "node ./e2e/run-tauri-analytics-smoke.mjs"
+    "test:analytics:tauri": "node ./e2e/run-tauri-analytics-smoke.mjs",
+    "test:tree:tauri": "node ./e2e/run-tauri-tree-smoke.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.4",

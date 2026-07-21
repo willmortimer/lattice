@@ -289,14 +289,12 @@ export function DesktopShell({ model }: DesktopShellProps) {
                 </MenuPositioner>
               </MenuPortal>
             </MenuRoot>
-            {inBrowser && (
-              <IconButton
-                label={`New folder in ${browserNewFolderParent || "workspace root"}`}
-                onClick={() => void handleNewFolderInFolder(browserNewFolderParent)}
-              >
-                <FolderPlus size={15} />
-              </IconButton>
-            )}
+            <IconButton
+              label={`New folder in ${browserNewFolderParent || "workspace root"}`}
+              onClick={() => void handleNewFolderInFolder(browserNewFolderParent)}
+            >
+              <FolderPlus size={15} />
+            </IconButton>
           </div>
           <nav className="resource-list">
             <ResourceTree
@@ -313,8 +311,8 @@ export function DesktopShell({ model }: DesktopShellProps) {
               onMoveToFolder={(fromPaths, toDir) => void handleMoveToFolder(fromPaths, toDir)}
               renameRequest={treeRenameRequest}
               revealPath={revealPath}
-              activeFolderPath={inBrowser ? browserActiveFolderPath : null}
-              onActiveFolderChange={inBrowser ? setBrowserActiveFolderPath : undefined}
+              activeFolderPath={browserActiveFolderPath}
+              onActiveFolderChange={setBrowserActiveFolderPath}
             />
           </nav>
           <div className="sidebar-footer">

@@ -20,7 +20,7 @@ misleading **fail** rows and added native smoke for a Wave 2 subset. Tracker:
 | Packet | Outcome | Pointers |
 | --- | --- | --- |
 | P2P01 | Save view + Add column gated in browser with **Native desktop** label (disabled control, tooltip) — no error-on-click | `browserDemoHonesty.ts`; `DataTableView.tsx`; `AddColumnPanel.tsx` |
-| P2P02 | Browser **New folder** toolbar affordance when native tree context menus no-op | `DesktopShell.tsx` (`FolderPlus`) |
+| P2P02 | Browser **New folder** toolbar affordance when native tree context menus no-op | `DesktopShell.tsx` (`FolderPlus`) — also shown natively for First Look / e2e (P2S01) |
 | P2P03 | Browser **⌘Z** shows honest toast — no `undo_last` IPC | `browserUndoGuard.ts`; `desktopActions.ts` |
 | P2P04 | CRM seed includes `company_name` lookup + `contact_count` rollup columns with resolved values | `template.json`; `demoWorkspace.generated.ts` |
 | P2P05 | Relation picker search + scroll in record detail | `RecordDetailPanel.tsx`; `relationDisplay.ts` |
@@ -174,11 +174,11 @@ Home.md items 1–9. Status: **pass** / **fail** / **skip**.
 | 2 | Change layout field pickers (group-by, cover, date, columns) | **pass** | Pickers from `layoutFieldPickerSpecs`; hide-column via header context menu. Local state only in demo. | `DataTableView.tsx:490–507`, `837–858`, `1050–1055` |
 | 3 | **Save view** → persist under `CRM.data/views/` | **pass** (browser honesty) / **pass** (native smoke) | Browser: disabled control + **Native desktop** label and tooltip (P2P01). Native: Save view enabled in CRM Tauri smoke (P2P06). | `browserDemoHonesty.ts`; `DataTableView.tsx:1068–1081`; `crm.smoke.tauri.spec.ts:38–44` |
 | 4 | Open contact; inspect / edit **reports_to** | **pass** | Demo seeds `relation_targets` for `companies` and `contacts`; grid/detail use label index. Seeded `company_name` lookup + `contact_count` rollup (P2P04). Relation picker filter + scroll (P2P05). | `demoWorkspace.generated.ts:1403+`, `3931+`; `relationDisplay.ts`; `RecordDetailPanel.tsx:310–318` |
-| 5 | Create folder under `Projects/` | **pass** (browser) / **skip** (native menus) | Browser: **New folder** toolbar button (`FolderPlus`) when native context menus no-op (P2P02). Native tree context menu path not re-verified this pass. | `DesktopShell.tsx:292–298`; `treeActions.ts:204–224` |
-| 6 | **⌘Z** undo folder creation | **pass** (browser honesty) / **skip** (native) | Browser: status toast “Undo is not available in the browser demo.” — no `undo_last` IPC (P2P03). Native undo not exercised in this pass. | `browserUndoGuard.ts`; `desktopActions.ts:130–134` |
-| 7 | Move `Product/Vision`; accept link repair | **skip** (browser) / expected native path | Browser remaps paths in memory with **no** repair modal. Native single-path move previews repair via `preview_link_repair`. Not verified live in Tauri this pass; repair pipeline covered by unit tests. | `useResourceController.ts:566–585` (browser); `588–598` (native); `docs/39-resource-runtime-contracts.md:66–68` |
+| 5 | Create folder under `Projects/` | **pass** (browser) / **harness** (native P2S01) | **New folder** toolbar (`FolderPlus`) on browser and native; active folder click sets parent. Native smoke: `tree.smoke.tauri.spec.ts`. | `DesktopShell.tsx`; `treeActions.ts`; `e2e/data/tree.smoke.tauri.spec.ts` |
+| 6 | **⌘Z** undo folder creation | **pass** (browser honesty) / **harness** (native P2S01) | Browser: status toast “Undo is not available in the browser demo.” Native: Mod+Z → `undo_last` covered by tree Tauri smoke. | `browserUndoGuard.ts`; `desktopActions.ts`; `tree.smoke.tauri.spec.ts` |
+| 7 | Move `Product/Vision`; accept link repair | **skip** (browser) / **harness** (native P2S01) | Browser remaps paths in memory with **no** repair modal. Native drag-to-folder + `LinkRepairReviewModal` covered by tree Tauri smoke (accept when present). | `useResourceController.ts`; `tree.smoke.tauri.spec.ts`; `docs/39-resource-runtime-contracts.md` |
 | 8 | ⌘-click multi-select + drag move | **pass** (selection/move UI) / native batch repair | Tree is `aria-multiselectable`; batch move (2+) previews combined link repair and applies one transaction when accepted. Browser remaps locally; native `preview_batch_link_repair` / `apply_batch_link_repair`. | `ResourceTree.tsx:396`; `useResourceController.ts` batch branch; `docs/39-resource-runtime-contracts.md` |
-| 9 | Multi-select delete + confirm | **pass** (browser local) / **skip** (native trash) | Confirm dialog + batch delete; browser filters snapshot; native `deleteResources` → Trash. Native trash/undo not verified in browser. | `treeActions.ts:83–135` |
+| 9 | Multi-select delete + confirm | **pass** (browser local) / **harness** (native P2S01) | Confirm dialog + batch delete; browser filters snapshot; native `deleteResources` → Trash. Tree smoke uses Delete/Backspace + confirm + undo. | `treeActions.ts`; `useDesktopController.ts`; `tree.smoke.tauri.spec.ts` |
 | 10 | `CRM.data` → **Add column** → add `text` column | **pass** (browser honesty) / **skip** (native pass) | Panel opens in browser; submit disabled with **Native desktop** label and notice (P2P01). Native `add_data_columns` not exercised beyond smoke scope. | `AddColumnPanel.tsx:378–379`, `556–564`; `browserDemoHonesty.ts` |
 | 11 | **Import CSV…** → type-review → commit | **skip** (browser) / **skip** (native pass) | Browser blocks with explicit error; native `preview_csv_import` / `commit_csv_import` path not exercised in this pass. | `desktopActions.ts:137–215`; `CsvImportReviewDialog.tsx` |
 | 12 | `Data/sample.csv` → **Create table from CSV…** | **skip** (browser) / **skip** (native pass) | Same import path as item 11 via `handlePromoteWorkspaceCsv`; native-only. | `TextViewer.tsx:173–180`; `desktopActions.ts:159–178` |
@@ -215,7 +215,7 @@ Wave 1 (items 1–4, 6) shipped on `main`. Remaining items are post–Wave 1.
 5. ~~**P1 — Browser-demo tree affordances**~~ — done (P2P02: toolbar New folder).
 6. ~~**P2 — Batch move link-repair**~~ — done (B1).
 7. ~~**P2 — Persist Save view in demo or clear CTA**~~ — done (P2P01: disabled Save view + **Native desktop** label).
-8. **P2 — Native demo pass** for folder undo, single-path move+repair, multi-select trash+undo — partial: P2P06 smoke covers CRM Save view / Actions / FormSave only; folder undo and link repair still **skip** above.
+8. ~~**P2 — Native demo pass** for folder undo, single-path move+repair, multi-select trash+undo~~ — done (P2S01: `pnpm --filter @lattice/desktop test:tree:tauri`).
 9. **P2 — Native Wave 2 pass** for lookup/rollup **add-column**, tabular import, and full FormSave persist — partial: P2P06 smoke covers Actions + FormSave designer; add-column and tabular import still **skip** above.
 
 ## How to re-run
@@ -231,7 +231,11 @@ pnpm --filter @lattice/desktop dev
 pnpm --filter @lattice/desktop test:crm:tauri
 # spec: apps/desktop/e2e/data/crm.smoke.tauri.spec.ts
 
-# Native full tour (folder undo, link repair, trash, DuckDB viz, tabular import)
+# Native tree/undo/move/trash smoke (local only — not a CI gate; P2S01)
+pnpm --filter @lattice/desktop test:tree:tauri
+# spec: apps/desktop/e2e/data/tree.smoke.tauri.spec.ts
+
+# Native full tour (DuckDB viz, tabular import, etc.)
 # see docs/dev/nix-workflows.md — desktop-dev / LATTICE_DEV_HOME First Look seed
 ```
 

@@ -447,6 +447,7 @@ export function useDesktopController() {
     handleTreeRename,
     handleMoveToFolder,
     handleNewFolderInFolder,
+    handleDeleteResources,
   } = treeActions;
 
   function beginSidebarResize(event: React.PointerEvent<HTMLDivElement>) {
@@ -655,6 +656,10 @@ export function useDesktopController() {
   handleNewPageRef.current = handleNewPage;
   const handleUndoRef = useRef(handleUndo);
   handleUndoRef.current = handleUndo;
+  const handleDeleteResourcesRef = useRef(handleDeleteResources);
+  handleDeleteResourcesRef.current = handleDeleteResources;
+  const selectedPathsRef = useRef(selectedPaths);
+  selectedPathsRef.current = selectedPaths;
   const handleOpenWorkspaceRef = useRef(handleOpenWorkspace);
   handleOpenWorkspaceRef.current = handleOpenWorkspace;
   const openNewWorkspaceDialogRef = useRef(openNewWorkspaceDialog);
@@ -745,6 +750,16 @@ export function useDesktopController() {
       } else if (!isEditableTarget(event.target) && matchesKeybinding(event, "Mod+Z")) {
         event.preventDefault();
         void handleUndoRef.current();
+      } else if (
+        !isEditableTarget(event.target) &&
+        (event.key === "Delete" || event.key === "Backspace") &&
+        selectedPathsRef.current.size > 0 &&
+        event.target instanceof Node &&
+        Boolean(document.querySelector(".resource-list")?.contains(event.target))
+      ) {
+        // Tree multi-select trash (native OS context menus are not e2e-reachable).
+        event.preventDefault();
+        void handleDeleteResourcesRef.current([...selectedPathsRef.current]);
       }
     }
     window.addEventListener("keydown", onKeyDown);

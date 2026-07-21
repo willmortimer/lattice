@@ -18,7 +18,7 @@ export function parentDirectory(path: string): string {
   return slash >= 0 ? path.slice(0, slash) : "";
 }
 
-/** Parent folder for browser "New folder" when native tree context menus are unavailable. */
+/** Parent folder for the sidebar "New folder" toolbar control. */
 export function newFolderParentPath(
   selected: Resource | null,
   options?: { activeFolderPath?: string | null; fallback?: string },
