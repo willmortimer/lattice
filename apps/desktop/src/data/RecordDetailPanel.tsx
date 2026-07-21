@@ -128,7 +128,8 @@ export function RecordDetailPanel({
             readOnly ||
             column.name === "id" ||
             column.field_type === "lookup" ||
-            column.field_type === "rollup";
+            column.field_type === "rollup" ||
+            column.field_type === "formula";
 
           return (
             <label key={column.name} className="record-detail-field">
@@ -136,7 +137,10 @@ export function RecordDetailPanel({
                 {column.name}
                 <span className="record-detail-field-type">{fieldTypeLabel(column.field_type)}</span>
               </span>
-              {column.name === "id" || editorKind === "lookup" || editorKind === "rollup" ? (
+              {column.name === "id" ||
+              editorKind === "lookup" ||
+              editorKind === "rollup" ||
+              editorKind === "formula" ? (
                 <input
                   className="record-detail-input record-detail-input-readonly"
                   type="text"

@@ -9,6 +9,7 @@ use crate::app::{app_manifest_path, database_path, schema_path, write_default_vi
 use crate::csv::{cell_from_csv, CsvTable};
 use crate::error::Error;
 use crate::form::{form_name_from_path, form_path, FormDef};
+use crate::formula::{evaluate_formula, formula_field_refs, validate_formula_syntax};
 use crate::interface::{interface_name_from_path, interface_path, InterfaceDef};
 use crate::types::{
     CellValue, ColumnMeta, FieldType, NewColumn, RelationStrip, RollupAggregate, Row,
@@ -137,6 +138,7 @@ impl DataApp {
             let rollup_relation = yaml.and_then(|column| column.rollup_relation.clone());
             let rollup_aggregate = yaml.and_then(|column| column.rollup_aggregate);
             let rollup_field = yaml.and_then(|column| column.rollup_field.clone());
+            let formula = yaml.and_then(|column| column.formula.clone());
             columns.push(ColumnMeta {
                 name,
                 field_type,
@@ -147,6 +149,7 @@ impl DataApp {
                 rollup_relation,
                 rollup_aggregate,
                 rollup_field,
+                formula,
             });
         }
         Ok(columns)
@@ -736,6 +739,15 @@ impl DataApp {
                     column.rollup_field,
                 )?;
             }
+            if column.field_type == FieldType::Formula {
+                let expression = column.formula.ok_or_else(|| {
+                    Error::table(
+                        table,
+                        format!("formula column {:?} requires formula", column.name),
+                    )
+                })?;
+                validate_formula_spec_for_add(table, &existing, columns, column.name, expression)?;
+            }
         }
 
         let table_meta = self.manifest.tables.entry(table.to_string()).or_default();
@@ -832,6 +844,28 @@ impl DataApp {
                 _ => (None, None, None),
             };
 
+            let formula = match column.field_type {
+                FieldType::Formula => {
+                    let expression = column.formula.ok_or_else(|| {
+                        Error::table(
+                            table,
+                            format!("formula column {:?} requires formula", column.name),
+                        )
+                    })?;
+                    Some(expression.to_string())
+                }
+                _ if column.formula.is_some() => {
+                    return Err(Error::table(
+                        table,
+                        format!(
+                            "column {:?} only formula fields may set formula",
+                            column.name
+                        ),
+                    ));
+                }
+                _ => None,
+            };
+
             let sqlite_type = column.field_type.sqlite_type();
             let alter = format!(
                 "ALTER TABLE {table} ADD COLUMN {} {sqlite_type};\n",
@@ -852,6 +886,7 @@ impl DataApp {
                     rollup_relation,
                     rollup_aggregate,
                     rollup_field,
+                    formula,
                 },
             );
         }
@@ -1275,6 +1310,55 @@ fn validate_rollup_spec_for_add(
     Ok(())
 }
 
+fn validate_formula_spec_for_add(
+    table: &str,
+    existing: &[ColumnMeta],
+    pending: &[NewColumn<'_>],
+    formula_name: &str,
+    expression: &str,
+) -> Result<()> {
+    validate_formula_syntax(expression).map_err(|err| Error::table(table, err.to_string()))?;
+    let refs =
+        formula_field_refs(expression).map_err(|err| Error::table(table, err.to_string()))?;
+    for ref_name in refs {
+        if ref_name == formula_name {
+            return Err(Error::table(
+                table,
+                format!("formula column {formula_name:?} cannot reference itself"),
+            ));
+        }
+        if let Some(meta) = existing.iter().find(|column| column.name == ref_name) {
+            if meta.field_type == FieldType::Formula {
+                return Err(Error::table(
+                    table,
+                    format!(
+                        "formula column {formula_name:?} cannot reference formula column {ref_name:?}"
+                    ),
+                ));
+            }
+            continue;
+        }
+        if let Some(pending_col) = pending.iter().find(|column| column.name == ref_name) {
+            if pending_col.field_type == FieldType::Formula {
+                return Err(Error::table(
+                    table,
+                    format!(
+                        "formula column {formula_name:?} cannot reference formula column {ref_name:?}"
+                    ),
+                ));
+            }
+            continue;
+        }
+        return Err(Error::table(
+            table,
+            format!(
+                "formula column {formula_name:?} references missing column {ref_name:?}"
+            ),
+        ));
+    }
+    Ok(())
+}
+
 fn resolve_computed_values(
     app: &DataApp,
     table: &str,
@@ -1283,6 +1367,7 @@ fn resolve_computed_values(
 ) -> Result<()> {
     resolve_lookup_values(app, table, column_meta, rows)?;
     resolve_rollup_values(app, table, column_meta, rows)?;
+    resolve_formula_values(table, column_meta, rows)?;
     Ok(())
 }
 
@@ -1498,6 +1583,45 @@ fn resolve_rollup_values(
             };
             row.values
                 .insert(rollup.name.clone(), CellValue::Rollup { value });
+        }
+    }
+    Ok(())
+}
+
+/// Fill formula cells by evaluating expressions against the current row.
+fn resolve_formula_values(
+    table: &str,
+    column_meta: &[ColumnMeta],
+    rows: &mut [Row],
+) -> Result<()> {
+    let formula_columns: Vec<&ColumnMeta> = column_meta
+        .iter()
+        .filter(|meta| meta.field_type == FieldType::Formula)
+        .collect();
+    if formula_columns.is_empty() || rows.is_empty() {
+        return Ok(());
+    }
+
+    for row in rows.iter_mut() {
+        for formula_col in &formula_columns {
+            if !row.values.contains_key(&formula_col.name) {
+                continue;
+            }
+            let expression = formula_col.formula.as_deref().ok_or_else(|| {
+                Error::table(
+                    table,
+                    format!(
+                        "formula column {:?} is missing formula metadata",
+                        formula_col.name
+                    ),
+                )
+            })?;
+            let value = evaluate_formula(expression, &row.values)
+                .map_err(|err| Error::table(table, err.to_string()))?;
+            row.values.insert(
+                formula_col.name.clone(),
+                CellValue::Formula { value },
+            );
         }
     }
     Ok(())
