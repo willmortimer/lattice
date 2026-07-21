@@ -206,3 +206,36 @@ fn resolve_glob_stays_under_workspace() {
     assert!(resolved.starts_with(root.canonicalize().unwrap()));
     assert!(resolved.to_string_lossy().contains("**"));
 }
+
+#[test]
+fn query_relative_parquet_glob_under_workspace() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("workspace");
+    let facts = root.join("Data/Events.dataset/facts/year=2026/month=07");
+    fs::create_dir_all(&facts).unwrap();
+    let csv = facts.join("signups.csv");
+    fs::write(
+        &csv,
+        "event_id,region,signups\n\
+e1,North,10\n\
+e2,South,5\n",
+    )
+    .unwrap();
+    let engine = DuckDbEngine::open_in_memory(&root).unwrap();
+    engine
+        .query(&format!(
+            "COPY (SELECT * FROM read_csv_auto('{}')) TO '{}' (FORMAT PARQUET)",
+            csv.display(),
+            facts.join("signups.parquet").display()
+        ))
+        .unwrap();
+
+    // First Look dashboard SQL uses a workspace-relative glob; rewrite must
+    // absolutize it so DuckDB allowlist accepts the path regardless of CWD.
+    let batch = engine
+        .query(
+            "SELECT region, sum(signups) AS signups FROM read_parquet('Data/Events.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true) GROUP BY region ORDER BY region",
+        )
+        .unwrap();
+    assert_eq!(batch.num_rows, 2);
+}

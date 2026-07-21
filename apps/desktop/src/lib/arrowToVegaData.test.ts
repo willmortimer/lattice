@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { sampleRowsToValues } from "./arrowToVegaData";
+import { sampleRowsToValues, coerceVegaCell } from "./arrowToVegaData";
 
 describe("arrowToVegaData", () => {
   it("maps preview rows to named Vega records", () => {
@@ -19,5 +19,10 @@ describe("arrowToVegaData", () => {
       { id: 1, name: "Ada" },
       { id: 2, name: "Grace" },
     ]);
+  });
+
+  it("coerces bigint cells to numbers for Vega encodings", () => {
+    expect(coerceVegaCell(42n)).toBe(42);
+    expect(coerceVegaCell("ok")).toBe("ok");
   });
 });

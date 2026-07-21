@@ -120,6 +120,89 @@ pub fn sql_string_literal(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
 
+/// Convert a filesystem path to a DuckDB-friendly forward-slash string.
+pub fn path_to_sql(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+/// Absolutize the first string-literal argument of `read_parquet` / `read_csv_auto`
+/// calls so paths pass DuckDB `allowed_directories` regardless of process CWD.
+///
+/// Demo chart SQL uses workspace-relative globs like
+/// `Data/Events.dataset/facts/**/*.parquet`. With `enable_external_access=false`,
+/// those resolve against CWD (often the app bundle) and fail the allowlist.
+pub fn rewrite_read_paths_under_root(sql: &str, root: &Path) -> Result<String> {
+    const FNS: &[&str] = &["read_parquet", "read_csv_auto"];
+    let lower = sql.to_ascii_lowercase();
+    let bytes = sql.as_bytes();
+    let mut out = String::with_capacity(sql.len() + 64);
+    let mut i = 0usize;
+
+    while i < sql.len() {
+        let mut matched: Option<&str> = None;
+        for &name in FNS {
+            if lower[i..].starts_with(name) {
+                let boundary_ok = i == 0 || {
+                    let prev = bytes[i - 1];
+                    !(prev.is_ascii_alphanumeric() || prev == b'_')
+                };
+                if boundary_ok {
+                    matched = Some(name);
+                    break;
+                }
+            }
+        }
+
+        let Some(name) = matched else {
+            let ch = sql[i..].chars().next().expect("index in bounds");
+            out.push(ch);
+            i += ch.len_utf8();
+            continue;
+        };
+
+        out.push_str(&sql[i..i + name.len()]);
+        i += name.len();
+
+        while i < sql.len() && bytes[i].is_ascii_whitespace() {
+            out.push(char::from(bytes[i]));
+            i += 1;
+        }
+        if i >= sql.len() || bytes[i] != b'(' {
+            continue;
+        }
+        out.push('(');
+        i += 1;
+        while i < sql.len() && bytes[i].is_ascii_whitespace() {
+            out.push(char::from(bytes[i]));
+            i += 1;
+        }
+        if i >= sql.len() || bytes[i] != b'\'' {
+            continue;
+        }
+
+        i += 1; // opening quote
+        let lit_start = i;
+        while i < sql.len() {
+            if bytes[i] == b'\'' {
+                if i + 1 < sql.len() && bytes[i + 1] == b'\'' {
+                    i += 2;
+                    continue;
+                }
+                break;
+            }
+            i += 1;
+        }
+        let raw = sql[lit_start..i].replace("''", "'");
+        if i < sql.len() && bytes[i] == b'\'' {
+            i += 1; // closing quote
+        }
+        let absolute = resolve_glob_under_root(root, Path::new(&raw))?;
+        out.push_str(&sql_string_literal(&path_to_sql(&absolute)));
+    }
+
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -152,5 +235,25 @@ mod tests {
     #[test]
     fn sql_string_literal_escapes_quotes() {
         assert_eq!(sql_string_literal("a'b"), "'a''b'");
+    }
+
+    #[test]
+    fn rewrite_read_paths_absolutizes_relative_parquet_glob() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("workspace");
+        let facts = root.join("Data/Events.dataset/facts");
+        fs::create_dir_all(&facts).unwrap();
+        fs::write(facts.join("signups.parquet"), b"parquet").unwrap();
+
+        let sql = "SELECT region FROM read_parquet('Data/Events.dataset/facts/**/*.parquet', hive_partitioning = true)";
+        let rewritten = rewrite_read_paths_under_root(sql, &root).unwrap();
+        let expected_prefix = path_to_sql(&root.canonicalize().unwrap());
+        assert!(
+            rewritten.contains(&format!(
+                "read_parquet('{expected_prefix}/Data/Events.dataset/facts/**/*.parquet'"
+            )),
+            "rewritten={rewritten}"
+        );
+        assert!(!rewritten.contains("read_parquet('Data/"), "relative path should be gone: {rewritten}");
     }
 }

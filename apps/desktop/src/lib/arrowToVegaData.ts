@@ -26,7 +26,7 @@ export function sampleRowsToValues(
   return sampleRows.map((row) => {
     const record: VegaRow = {};
     for (let index = 0; index < schema.length; index += 1) {
-      record[schema[index]?.name ?? `column_${index}`] = row[index] ?? null;
+      record[schema[index]?.name ?? `column_${index}`] = coerceVegaCell(row[index] ?? null);
     }
     return record;
   });
@@ -56,10 +56,19 @@ function tableToValues(table: Table, maxRows?: number): VegaRow[] {
   for (let rowIndex = 0; rowIndex < limit; rowIndex += 1) {
     const record: VegaRow = {};
     for (const column of columns) {
-      record[column.name] = column.vector?.get(rowIndex) ?? null;
+      record[column.name] = coerceVegaCell(column.vector?.get(rowIndex) ?? null);
     }
     rows.push(record);
   }
 
   return rows;
+}
+
+/** Vega encodings expect JSON numbers; Arrow Int64 often arrives as bigint. */
+export function coerceVegaCell(value: unknown): unknown {
+  if (typeof value === "bigint") {
+    const asNumber = Number(value);
+    return Number.isSafeInteger(asNumber) ? asNumber : value.toString();
+  }
+  return value;
 }

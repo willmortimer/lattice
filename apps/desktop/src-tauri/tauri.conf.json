@@ -45,7 +45,7 @@
       "csp": {
         "default-src": "'self'",
         "base-uri": "'none'",
-        "connect-src": "ipc: http://ipc.localhost https://cdn.jsdelivr.net",
+        "connect-src": "'self' ipc: http://ipc.localhost http://tauri.localhost https://tauri.localhost https://cdn.jsdelivr.net",
         "font-src": "'self' data:",
         "form-action": "'none'",
         "frame-src": "'none'",

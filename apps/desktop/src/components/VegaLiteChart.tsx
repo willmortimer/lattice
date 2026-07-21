@@ -29,6 +29,28 @@ async function embedChart(
   });
 }
 
+function waitForLayoutWidth(el: HTMLElement, minWidth = 8): Promise<number> {
+  if (el.clientWidth >= minWidth) return Promise.resolve(el.clientWidth);
+  return new Promise((resolve) => {
+    const observer = new ResizeObserver(() => {
+      if (el.clientWidth >= minWidth) {
+        observer.disconnect();
+        resolve(el.clientWidth);
+      }
+    });
+    observer.observe(el);
+  });
+}
+
+/** Specs that use `width: "container"` need a real host width before embed. */
+function withMeasuredWidth(spec: TopLevelSpec, width: number): TopLevelSpec {
+  const record = spec as TopLevelSpec & { width?: unknown; height?: unknown };
+  if (record.width === "container" || record.width === undefined) {
+    return { ...spec, width: Math.max(280, Math.floor(width)) };
+  }
+  return spec;
+}
+
 /** Render a Vega-Lite spec with lazy-loaded vega-embed (chart panel only). */
 export function VegaLiteChart({ spec, className }: VegaLiteChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -44,8 +66,9 @@ export function VegaLiteChart({ spec, className }: VegaLiteChartProps) {
 
     void (async () => {
       try {
+        const width = await waitForLayoutWidth(container);
         if (cancelled) return;
-        await embedChart(container, spec);
+        await embedChart(container, withMeasuredWidth(spec, width));
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : String(err));
