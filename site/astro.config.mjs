@@ -20,8 +20,8 @@ export default defineConfig({
     starlight({
       title: 'Lattice',
       description:
-        'Documentation for Lattice — a fast, local-first, open-native workspace built from real files.',
-      tagline: 'The open information studio.',
+        'Learn how to use Lattice, the free local-first workspace for notes, data, and tools.',
+      tagline: 'Notes, data, and tools that stay yours.',
       logo: {
         src: './src/assets/lattice-mark.svg',
         alt: 'Lattice',
