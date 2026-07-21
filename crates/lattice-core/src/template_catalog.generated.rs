@@ -522,7 +522,7 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             SeedDirectory { path: "Resources", purpose: Some("Ordinary files — JSON, YAML, code, SQL, images."), default_kind: None, icon: None },
             SeedDirectory { path: "Archive", purpose: Some("Finished or inactive material."), default_kind: None, icon: None }
         ],
-        preview: &["Home.md", "Research/Local Runtime.md", "Research/Long Read.md", "Product/Vision.md", "CRM.data", "Projects/Delivery.data", "Data/Metrics.data", "Data/Events.dataset", "Data/Orders.dataset", "Dashboards/Signups by region.vl.json", "OKRs.data", "Canvases/Product Strategy.canvas", "Inbox/Sample capture.md", "Templates/Daily Note.md", "Notebooks/CRM exploration.ipynb", "Resources/"],
+        preview: &["Home.md", "Research/Local Runtime.md", "Research/Long Read.md", "Product/Vision.md", "CRM.data", "Projects/Delivery.data", "Data/Metrics.data", "Data/Events.dataset", "Data/Orders.dataset", "Dashboards/Signups by region.vl.json", "Dashboards/Revenue by region and category.vl.json", "Dashboards/Revenue by day.vl.json", "Dashboards/Revenue by channel.vl.json", "OKRs.data", "Canvases/Product Strategy.canvas", "Inbox/Sample capture.md", "Templates/Daily Note.md", "Notebooks/CRM exploration.ipynb", "Resources/"],
         capabilities: &["pages", "canvas", "sqlite"],
         quick_note_directory: "Inbox",
         daily_note_directory: None,
@@ -560,6 +560,9 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
             SeedFile { path: "Data/Orders.dataset/facts/year=2026/month=02/orders.parquet", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Data/Orders.dataset/facts/year=2026/month=02/orders.parquet")) },
             SeedFile { path: "Data/Orders.dataset/facts/year=2026/month=03/orders.parquet", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Data/Orders.dataset/facts/year=2026/month=03/orders.parquet")) },
             SeedFile { path: "Dashboards/Signups by region.vl.json", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Dashboards/Signups by region.vl.json")) },
+            SeedFile { path: "Dashboards/Revenue by region and category.vl.json", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Dashboards/Revenue by region and category.vl.json")) },
+            SeedFile { path: "Dashboards/Revenue by day.vl.json", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Dashboards/Revenue by day.vl.json")) },
+            SeedFile { path: "Dashboards/Revenue by channel.vl.json", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Dashboards/Revenue by channel.vl.json")) },
             SeedFile { path: "Resources/config.json", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Resources/config.json")) },
             SeedFile { path: "Resources/schema.yaml", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Resources/schema.yaml")) },
             SeedFile { path: "Resources/hooks.json", bytes: include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/workspaces/demo/files/Resources/hooks.json")) },

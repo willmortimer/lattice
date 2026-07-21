@@ -13,6 +13,12 @@ third-party or production dump.
 Columns: `order_id`, `ordered_at`, `region`, `category`, `channel`, `revenue`,
 `units`. Date range spans January–March 2026 for multi-month time charts.
 
+Bound Vega-Lite dashboards (workspace-relative `read_parquet`):
+
+- `Dashboards/Revenue by region and category.vl.json`
+- `Dashboards/Revenue by day.vl.json`
+- `Dashboards/Revenue by channel.vl.json`
+
 Re-seed from the repo root:
 
 ```sh

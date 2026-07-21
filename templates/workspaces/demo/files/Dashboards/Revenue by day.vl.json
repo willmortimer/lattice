@@ -1,0 +1,16 @@
+{
+  "lattice": {
+    "data": {
+      "dataset": "Data/Orders.dataset",
+      "sql": "SELECT CAST(ordered_at AS DATE) AS day, sum(revenue) AS revenue FROM read_parquet('Data/Orders.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true) GROUP BY 1 ORDER BY 1"
+    }
+  },
+  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+  "title": "Revenue by day",
+  "data": { "name": "table" },
+  "mark": { "type": "line", "point": true, "tooltip": true },
+  "encoding": {
+    "x": { "field": "day", "type": "temporal", "title": "Day" },
+    "y": { "field": "revenue", "type": "quantitative", "title": "Revenue" }
+  }
+}

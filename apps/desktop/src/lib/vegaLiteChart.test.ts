@@ -1,8 +1,34 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { sampleRowsToValues } from "./arrowToVegaData";
 import { parseChartSpecDocument, parseChartSpecText } from "./chartSpec";
 import { buildAutoBarChartSpec, bindValuesToChartSpec } from "./vegaLiteChart";
+
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../../..");
+const demoDashboards = join(repoRoot, "templates/workspaces/demo/files/Dashboards");
+const ordersParquetSql =
+  "read_parquet('Data/Orders.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true)";
+
+const ordersCharts = [
+  {
+    file: "Revenue by region and category.vl.json",
+    title: "Revenue by region and category",
+    mark: "bar",
+  },
+  {
+    file: "Revenue by day.vl.json",
+    title: "Revenue by day",
+    mark: "line",
+  },
+  {
+    file: "Revenue by channel.vl.json",
+    title: "Revenue by channel",
+    layered: true,
+  },
+] as const;
 
 describe("chartSpec", () => {
   it("extracts lattice dataset bindings from a chart document", () => {
@@ -41,6 +67,29 @@ describe("chartSpec", () => {
     );
     expect(parsed.binding?.dataset).toBe("Usage.dataset");
     expect(parsed.spec).toMatchObject({ mark: "point" });
+  });
+
+  it("parses First Look Orders dashboard bindings", () => {
+    for (const chart of ordersCharts) {
+      const text = readFileSync(join(demoDashboards, chart.file), "utf8");
+      const parsed = parseChartSpecText(text);
+      expect(parsed.binding?.dataset).toBe("Data/Orders.dataset");
+      expect(parsed.binding?.sql).toContain(ordersParquetSql);
+      expect(parsed.spec).not.toHaveProperty("lattice");
+      expect(parsed.spec).toMatchObject({
+        $schema: "https://vega.github.io/schema/vega-lite/v6.json",
+        title: chart.title,
+        data: { name: "table" },
+      });
+      if ("layered" in chart && chart.layered) {
+        expect(parsed.spec).toHaveProperty("layer");
+        expect(Array.isArray((parsed.spec as { layer?: unknown }).layer)).toBe(true);
+      } else if ("mark" in chart) {
+        expect(parsed.spec).toMatchObject({
+          mark: expect.objectContaining({ type: chart.mark }),
+        });
+      }
+    }
   });
 });
 
