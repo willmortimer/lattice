@@ -254,17 +254,46 @@ test("template compiler accepts declarative dataPackage interfaces", () => {
               forms: ["ContactIntake"],
               title: "Contact operations",
             },
+            {
+              name: "OpsDashboard",
+              views: ["Board"],
+              forms: ["ContactIntake"],
+              title: "Ops dashboard",
+              parameters: {
+                region: { type: "string", default: "all" },
+              },
+              layout: { columns: 12 },
+              components: [
+                {
+                  id: "revenue_chart",
+                  type: "chart",
+                  span: 6,
+                  title: "Revenue",
+                  binding: {
+                    type: "duckdb-query",
+                    resources: ["Data/Orders.dataset"],
+                    sql: "SELECT region FROM t WHERE region = '{{region}}'",
+                    limit: 10,
+                  },
+                },
+              ],
+            },
           ],
         },
       ],
     }),
   );
   const interfaces = templates[0].dataPackages[0].interfaces;
-  assert.equal(interfaces.length, 1);
+  assert.equal(interfaces.length, 2);
   assert.equal(interfaces[0].name, "ContactOps");
   assert.deepEqual(interfaces[0].views, ["Board"]);
   assert.deepEqual(interfaces[0].forms, ["ContactIntake"]);
   assert.equal(interfaces[0].title, "Contact operations");
+  assert.deepEqual(interfaces[1].parameters, {
+    region: { type: "string", default: "all" },
+  });
+  assert.equal(interfaces[1].components.length, 1);
+  assert.match(interfaces[1].components[0].binding.sql, /\{\{region\}\}/);
 });
 
 test("demo template emits kitchen-sink browser fixture", () => {
