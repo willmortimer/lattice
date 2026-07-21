@@ -30,6 +30,9 @@ describe("createDefaultResourceRendererRegistry", () => {
     expect(registry.resolve({ kind: "task", path: "Tasks/Hello.task" }).definition.id).toBe(
       "task-viewer",
     );
+    expect(registry.resolve({ kind: "workflow", path: "Simple.workflow.yaml" }).definition.id).toBe(
+      "workflow-viewer",
+    );
     expect(
       registry.resolve({ kind: "notebook", path: "Notebooks/CRM exploration.ipynb" }, ["pages", "canvas"]).mode,
     ).toBe("native");

@@ -19,6 +19,7 @@ mod theme;
 mod tray;
 mod voice;
 mod watcher;
+mod workflow;
 
 use tauri::Manager;
 
@@ -32,6 +33,7 @@ pub fn run() {
         .manage(terminal::TerminalState::default())
         .manage(kernel::KernelState::default())
         .manage(task::TaskState::default())
+        .manage(workflow::WorkflowState::default())
         .manage(theme::ThemeWatchState::default())
         .manage(resource_links::ResourceCatalogState::default())
         .manage(voice::VoiceState::default())
@@ -152,6 +154,12 @@ pub fn run() {
             task::task_run,
             task::task_cancel,
             task::task_execution_status,
+            workflow::workflow_load,
+            workflow::workflow_run,
+            workflow::workflow_cancel,
+            workflow::workflow_execution_status,
+            workflow::workflow_set_enabled,
+            workflow::workflow_list_runs,
             theme::list_themes,
             theme::get_resolved_theme,
             theme::set_theme,

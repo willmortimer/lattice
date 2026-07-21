@@ -3,6 +3,7 @@ import type { InterfaceSummary } from "./data/interfaces";
 import type { PageIO } from "./editor/pageIO";
 import type { ResourceEncoding, ResourceInspection } from "./lib/resourceRuntime";
 import type { TaskManifestDto } from "./lib/taskRun";
+import type { WorkflowManifestDto } from "./lib/workflowRun";
 import type { Resource } from "./types";
 
 /** The resource currently open in the main surface.
@@ -61,6 +62,11 @@ export type OpenResourceSession =
       kind: "task";
       resource: Resource;
       manifest: TaskManifestDto;
+    }
+  | {
+      kind: "workflow";
+      resource: Resource;
+      manifest: WorkflowManifestDto;
     }
   | {
       kind: "unknown";

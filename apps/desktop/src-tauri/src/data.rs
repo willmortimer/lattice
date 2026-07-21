@@ -1024,8 +1024,27 @@ pub fn create_table_package(
 }
 
 /// Insert a row into the default table of a `.data` package.
+///
+/// When `form_name` is set (package form submit), enabled `form.submitted`
+/// workflows are triggered after a successful insert — same process, no
+/// second event bus.
 #[tauri::command]
 pub fn insert_record(
+    root: String,
+    rel_path: String,
+    table: String,
+    values: BTreeMap<String, CellValue>,
+    form_name: Option<String>,
+    app: tauri::AppHandle,
+) -> Result<RecordMutation, String> {
+    let result = insert_record_inner(root.clone(), rel_path.clone(), table, values)?;
+    if let Some(form) = form_name.filter(|name| !name.trim().is_empty()) {
+        crate::workflow::on_form_submitted(&app, Path::new(&root), &rel_path, &form);
+    }
+    Ok(result)
+}
+
+fn insert_record_inner(
     root: String,
     rel_path: String,
     table: String,
@@ -1244,7 +1263,7 @@ mod tests {
         let base = open_data_app(root.clone(), rel_path.clone(), None, None, None)
             .unwrap()
             .package_revision;
-        let inserted = insert_record(
+        let inserted = insert_record_inner(
             root.clone(),
             rel_path.clone(),
             "contacts".to_string(),
@@ -1430,7 +1449,7 @@ mod tests {
             .execute_batch("ALTER TABLE contacts ADD COLUMN name TEXT;")
             .unwrap();
 
-        let inserted = insert_record(
+        let inserted = insert_record_inner(
             root.clone(),
             rel_path.clone(),
             "contacts".to_string(),
@@ -1649,7 +1668,7 @@ mod tests {
         assert_eq!(loaded.fields, vec!["name".to_string(), "email".to_string()]);
         assert_eq!(loaded.title.as_deref(), Some("Contact intake"));
 
-        let inserted = insert_record(
+        let inserted = insert_record_inner(
             root.clone(),
             rel_path.clone(),
             loaded.table,
@@ -2047,7 +2066,7 @@ mod tests {
             .unwrap();
 
         for name in ["Ada", "Grace", "Alan", "Katherine", "Margaret"] {
-            insert_record(
+            insert_record_inner(
                 root.clone(),
                 rel_path.clone(),
                 "contacts".to_string(),

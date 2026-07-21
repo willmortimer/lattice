@@ -433,6 +433,7 @@ export function DataTableView({
         relPath,
         table: snapshotRef.current.default_table,
         values: {},
+        formName: null,
       });
       const fresh = await invoke<DataAppSnapshot>("open_data_app", {
         root,
@@ -479,6 +480,7 @@ export function DataTableView({
           relPath,
           table: snapshotRef.current.default_table,
           values,
+          formName: null,
         });
         const fresh = await invoke<DataAppSnapshot>("open_data_app", {
           root,
@@ -523,6 +525,7 @@ export function DataTableView({
           relPath,
           table: form.table,
           values,
+          formName: form.name,
         });
         const fresh = await invoke<DataAppSnapshot>("open_data_app", {
           root,

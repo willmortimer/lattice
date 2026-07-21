@@ -36,6 +36,7 @@ mod revisions;
 mod task;
 mod template;
 mod trash;
+mod workflow;
 
 pub use command::{
     path_remaps_from_commands, CanvasAddEdge, CanvasAddTextNode, CanvasMoveNodes, CanvasNodeMove,
@@ -76,6 +77,14 @@ pub use template::{
     instantiate_template, resolve_page_create_content, title_from_page_path, utc_iso_date,
 };
 pub use trash::TrashPolicy;
+pub use workflow::{
+    discover_workflows, list_workflow_runs, load_and_run_workflow, path_matches_glob,
+    resolve_workspace_path, run_workflow, save_workflow_run, set_workflow_enabled,
+    workflow_runs_dir, workflows_dir, NotificationParams, ProposalCreateParams, TaskRunParams,
+    WorkflowError, WorkflowManifest, WorkflowRunRecord, WorkflowStep, WorkflowStepResult,
+    WorkflowTrigger, SUPPORTED_VERSION as WORKFLOW_SUPPORTED_VERSION, WORKFLOW_FORMAT,
+    WORKFLOW_RUNS_DIR, WORKFLOWS_DIR,
+};
 
 /// Maximum byte size of one semantic resource edit.
 pub const MAX_RESOURCE_EDIT_BYTES: usize = lattice_core::DEFAULT_RESOURCE_EDIT_BYTES as usize;

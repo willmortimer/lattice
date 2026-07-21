@@ -581,6 +581,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
                           onKeepLocal: () => void handleKeepLocal(),
                           onKeepBoth: () => void handleKeepBoth(),
                           onOpenFile: handleOpenFile,
+                          onOpenProposal: (proposalId) => void openProposalReview(proposalId),
                           onOpenExternally: inBrowser ? undefined : (resource) => void handleOpenExternally(resource),
                           onPromoteWorkspaceCsv: inBrowser ? undefined : (resource) => void handlePromoteWorkspaceCsv(resource),
                           onPageWidthChange: (pageWidth) => setSettings((current) => ({
@@ -629,6 +630,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
                             onKeepLocal: () => void handleKeepLocal(),
                             onKeepBoth: () => void handleKeepBoth(),
                             onOpenFile: handleOpenFile,
+                            onOpenProposal: (proposalId) => void openProposalReview(proposalId),
                             onOpenExternally: inBrowser ? undefined : (resource) => void handleOpenExternally(resource),
                             onPromoteWorkspaceCsv: inBrowser ? undefined : (resource) => void handlePromoteWorkspaceCsv(resource),
                             onPageWidthChange: (pageWidth) => setSettings((current) => ({
