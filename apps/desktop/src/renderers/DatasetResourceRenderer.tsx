@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import type { TopLevelSpec } from "vega-lite";
 
 import { PerspectiveDatasetViewer } from "../analytics/PerspectiveDatasetViewer";
@@ -21,18 +21,25 @@ import {
   profileDataset,
   type RelationProfile,
 } from "../lib/datasetProfile";
+import { detectLonLatColumns } from "../lib/geoColumns";
 import { buildAutoBarChartSpec } from "../lib/vegaLiteChart";
 import type { OpenResourceSession } from "../resourceSession";
 import type { ResourceRendererProps } from "../resourceRendererRegistry";
 import type { ResourceRendererContext } from "./RendererContext";
 
-type DatasetPanel = "preview" | "chart" | "profile" | "plan";
+const MapLibreDatasetViewer = lazy(async () => {
+  const mod = await import("../analytics/MapLibreDatasetViewer");
+  return { default: mod.MapLibreDatasetViewer };
+});
+
+type DatasetPanel = "preview" | "chart" | "profile" | "plan" | "map";
 
 const DATASET_PANELS = [
   ["preview", "Preview"],
   ["chart", "Chart"],
   ["profile", "Profile"],
   ["plan", "Plan"],
+  ["map", "Map"],
 ] as const satisfies ReadonlyArray<readonly [DatasetPanel, string]>;
 
 function panelBusyLabel(panel: DatasetPanel): string {
@@ -43,6 +50,7 @@ function panelBusyLabel(panel: DatasetPanel): string {
       return "Explaining query…";
     case "preview":
     case "chart":
+    case "map":
       return "Running bounded query…";
     default: {
       const _exhaustive: never = panel;
@@ -53,7 +61,7 @@ function panelBusyLabel(panel: DatasetPanel): string {
 
 /**
  * Dataset surface: Preview (Perspective), Chart (Vega-Lite), Profile (DuckDB SUMMARIZE),
- * Plan (DuckDB EXPLAIN).
+ * Plan (DuckDB EXPLAIN), Map (MapLibre lon/lat).
  */
 export function DatasetResourceRenderer({
   context,
@@ -143,6 +151,21 @@ export function DatasetResourceRenderer({
     return buildAutoBarChartSpec(dump.schema, values);
   }, [dump, result]);
 
+  const mapRows = useMemo(() => {
+    if (!result) return [];
+    return queryResultToValues(result);
+  }, [result]);
+
+  const mapColumnNames = useMemo(
+    () => (dump ? dump.schema.map((field) => field.name) : []),
+    [dump],
+  );
+
+  const mapColumns = useMemo(
+    () => detectLonLatColumns(mapColumnNames),
+    [mapColumnNames],
+  );
+
   if (!isDataset) return null;
 
   if (inBrowser) {
@@ -163,8 +186,8 @@ export function DatasetResourceRenderer({
           <div className="diagnostics-card" role="status">
             <strong>Visualization unavailable in browser demo</strong>
             <span>
-              Perspective Preview, Vega-Lite Chart, DuckDB Profile, and EXPLAIN Plan need the native
-              desktop app (DuckDB + Arrow IPC). Open this workspace with{" "}
+              Perspective Preview, Vega-Lite Chart, DuckDB Profile, EXPLAIN Plan, and MapLibre Map
+              need the native desktop app (DuckDB + Arrow IPC). Open this workspace with{" "}
               <code>nxr desktop-dev</code> or the installed Lattice.app.
             </span>
           </div>
@@ -292,6 +315,39 @@ export function DatasetResourceRenderer({
                 No chartable rows yet. Import facts into this dataset package.
               </p>
             )
+          ) : panel === "map" ? (
+            dump && result ? (
+              <div className="dataset-map-panel">
+                <p className="dataset-map-meta">
+                  {mapColumns
+                    ? `Points from ${mapColumns.lon}/${mapColumns.lat} · ${mapRows.length} row${mapRows.length === 1 ? "" : "s"}`
+                    : "No geo columns"}
+                  {summary ? (
+                    <>
+                      {" "}
+                      · <code>{summary}</code>
+                    </>
+                  ) : null}
+                </p>
+                <Suspense
+                  fallback={
+                    <p className="placeholder-sub" aria-live="polite">
+                      Loading map…
+                    </p>
+                  }
+                >
+                  <MapLibreDatasetViewer
+                    rows={mapRows}
+                    columnNames={mapColumnNames}
+                    loadKey={loadKey}
+                    onError={(message) => {
+                      setViewerFailed(true);
+                      setViewerError(message);
+                    }}
+                  />
+                </Suspense>
+              </div>
+            ) : null
           ) : showPerspective && result ? (
             <PerspectiveDatasetViewer
               ipcBytes={result.ipcBytes}

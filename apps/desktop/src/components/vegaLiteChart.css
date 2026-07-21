@@ -65,3 +65,24 @@
 .dataset-chart-meta code {
   font: 12px var(--lt-font-mono);
 }
+
+.dataset-map-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: 8px;
+  text-align: left;
+}
+
+.dataset-map-meta {
+  margin: 0;
+  padding: 0 2px;
+  color: var(--lt-muted);
+  font: 0.78rem var(--lt-font-ui);
+}
+
+.dataset-map-meta code {
+  font: 0.75rem var(--lt-font-mono);
+  color: var(--lt-text-soft);
+}
