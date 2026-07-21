@@ -1,0 +1,49 @@
+# Lattice Limestone — mineral off-white layers with an ultramarine signal.
+
+name: Lattice Limestone
+id: lattice-limestone
+appearance: light
+
+palette:
+  ground: "#f3f1ec"
+  ground_raise: "#e9e6df"
+  panel: "#fcfbf8"
+  slate: "#716f6a"
+  text: "#242421"
+  text_soft: "#4d4c47"
+  muted: "#75736d"
+  faint: "#9b9890"
+  accent: "#315bb5"
+  accent_bright: "#24458e"
+  accent_deep: "#19336f"
+  danger: "#b52f36"
+  ink_shadow: "#121210"
+  on_accent: "#f7f9ff"
+
+roles:
+  bg: $ground
+  bg_raise: $ground_raise
+  panel: $panel
+  slate: $slate
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $accent
+  accent_bright: $accent_bright
+  accent_deep: $accent_deep
+  danger: $danger
+  shadow: $ink_shadow
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 6px
+  radius_sm: 4px
+  radius_lg: 10px
+  grid: 30px
+  titlebar: 38px
+  max_width: 1140px

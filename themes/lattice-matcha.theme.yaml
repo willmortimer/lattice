@@ -1,0 +1,49 @@
+# Lattice Matcha — pale tea-paper structure with a restrained toasted-gold signal.
+
+name: Lattice Matcha
+id: lattice-matcha
+appearance: light
+
+palette:
+  ground: "#f2f3e8"
+  ground_raise: "#e8eadb"
+  panel: "#fbfcf5"
+  slate: "#6d7459"
+  text: "#24291d"
+  text_soft: "#4b523d"
+  muted: "#737b62"
+  faint: "#989e87"
+  accent: "#a76f16"
+  accent_bright: "#85550d"
+  accent_deep: "#624008"
+  danger: "#b34032"
+  ink_shadow: "#11140d"
+  on_accent: "#fff8e8"
+
+roles:
+  bg: $ground
+  bg_raise: $ground_raise
+  panel: $panel
+  slate: $slate
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $accent
+  accent_bright: $accent_bright
+  accent_deep: $accent_deep
+  danger: $danger
+  shadow: $ink_shadow
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 10px
+  radius_sm: 7px
+  radius_lg: 15px
+  grid: 36px
+  titlebar: 38px
+  max_width: 1140px

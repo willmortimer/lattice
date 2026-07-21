@@ -1,0 +1,82 @@
+# Kanagawa Wave — terminal-inspired adaptation of the MIT-licensed palette.
+# Sumi-e ink grounds and desaturated blue carry the shell while the complete
+# ANSI family preserves the theme's warm/cool balance.
+
+name: Kanagawa Wave
+id: kanagawa-wave
+appearance: dark
+
+palette:
+  sumi0: "#16161d"
+  sumi1: "#1f1f28"
+  sumi2: "#2a2a37"
+  sumi3: "#363646"
+  sumi4: "#54546d"
+  text: "#dcd7ba"
+  text_soft: "#c8c093"
+  muted: "#9a957d"
+  faint: "#727169"
+  blue: "#7e9cd8"
+  blue_bright: "#7fb4ca"
+  blue_deep: "#2d4f67"
+  red: "#c34043"
+  green: "#76946a"
+  yellow: "#c0a36e"
+  magenta: "#957fb8"
+  cyan: "#6a9589"
+  black: "#090618"
+  bright_red: "#e82424"
+  bright_green: "#98bb6c"
+  bright_yellow: "#e6c384"
+  bright_magenta: "#938aa9"
+  bright_cyan: "#7aa89f"
+  on_accent: "#101522"
+
+roles:
+  bg: $sumi1
+  bg_raise: $sumi0
+  panel: $sumi2
+  slate: $muted
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $blue
+  accent_bright: $blue_bright
+  accent_deep: $blue_deep
+  danger: $red
+  shadow: $black
+
+terminal:
+  black: $black
+  red: $red
+  green: $green
+  yellow: $yellow
+  blue: $blue
+  magenta: $magenta
+  cyan: $cyan
+  white: $text_soft
+  bright_black: $faint
+  bright_red: $bright_red
+  bright_green: $bright_green
+  bright_yellow: $bright_yellow
+  bright_blue: $blue_bright
+  bright_magenta: $bright_magenta
+  bright_cyan: $bright_cyan
+  bright_white: $text
+  cursor: $text_soft
+  cursor_text: $sumi1
+  selection: $blue_deep
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 9px
+  radius_sm: 6px
+  radius_lg: 14px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px

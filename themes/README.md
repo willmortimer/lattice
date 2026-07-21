@@ -8,14 +8,17 @@ Lattice themes are YAML documents. Built-ins live here; user themes go in
 Built-ins fall into three groups:
 
 - **Lattice originals** — `lattice-slate` (default dark), `lattice-paper`
-  (default light), plus carbon, fjord, ultraviolet, blueprint, vellum,
-  ember, moss, midnight, copper, rosewood, graphite (dark) and glacier,
-  sandstone, orchid, meadow (light).
+  (default light), plus carbon, fjord, ultraviolet, blueprint, ember, moss,
+  midnight, copper, rosewood, graphite, solar flare, and tidepool (dark), and
+  vellum, glacier, sandstone, orchid, meadow, porcelain, matcha, and limestone
+  (light).
 - **Platform looks** — `cupertino` (macOS idiom: SF stacks, system blue),
   `lattice-oled` (true `#000000` ground for AMOLED/OLED panels).
-- **Adopted terminal standards** — `catppuccin-mocha`, `nord`,
-  `github-dark`, `dracula`, `solarized-dark`. These carry a `terminal:`
-  block with their canonical ANSI palettes (see below).
+- **Terminal-derived palettes** — `catppuccin-mocha`, `nord`,
+  `github-dark`, `dracula`, `solarized-dark`, `tokyo-night`, `gruvbox-dark`,
+  `one-dark`, `rose-pine-moon`, and `kanagawa-wave`. These carry a `terminal:`
+  block with an ANSI palette adapted from the corresponding terminal theme
+  (see below).
 
 ## Compile (site + static desktop tokens)
 
@@ -62,8 +65,8 @@ Themes must not inject arbitrary CSS.
 
 ## Terminal palettes (`terminal:`)
 
-Themes adopted from terminal-theme standards keep their real 16-color ANSI
-palettes instead of the role-derived approximation:
+Themes derived from terminal palettes keep an explicit 16-color ANSI family
+instead of the role-derived approximation:
 
 ```yaml
 terminal:

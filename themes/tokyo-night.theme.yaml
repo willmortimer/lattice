@@ -1,0 +1,78 @@
+# Tokyo Night — terminal-inspired adaptation of the MIT-licensed palette.
+# Lattice roles retain the quiet indigo ground and cool blue signal while the
+# terminal block preserves the familiar 16-color family.
+
+name: Tokyo Night
+id: tokyo-night
+appearance: dark
+
+palette:
+  storm: "#1a1b26"
+  night: "#16161e"
+  surface: "#24283b"
+  overlay: "#414868"
+  text: "#c0caf5"
+  text_soft: "#a9b1d6"
+  muted: "#787c99"
+  faint: "#565f89"
+  blue: "#7aa2f7"
+  blue_bright: "#7dcfff"
+  blue_deep: "#3d59a1"
+  red: "#f7768e"
+  green: "#9ece6a"
+  yellow: "#e0af68"
+  magenta: "#bb9af7"
+  cyan: "#7dcfff"
+  white: "#a9b1d6"
+  black: "#15161e"
+  ink: "#0f0f14"
+  on_accent: "#10131c"
+
+roles:
+  bg: $storm
+  bg_raise: $night
+  panel: $surface
+  slate: $faint
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $blue
+  accent_bright: $blue_bright
+  accent_deep: $blue_deep
+  danger: $red
+  shadow: $ink
+
+terminal:
+  black: $black
+  red: $red
+  green: $green
+  yellow: $yellow
+  blue: $blue
+  magenta: $magenta
+  cyan: $cyan
+  white: $white
+  bright_black: $overlay
+  bright_red: $red
+  bright_green: $green
+  bright_yellow: $yellow
+  bright_blue: $blue
+  bright_magenta: $magenta
+  bright_cyan: $cyan
+  bright_white: $text
+  cursor: $text
+  cursor_text: $storm
+  selection: "#33467c"
+
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+
+shape:
+  radius: 9px
+  radius_sm: 6px
+  radius_lg: 14px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px
