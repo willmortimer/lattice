@@ -44,8 +44,9 @@ entrypoint: ./index.html
 bindings:
   companies:
     type: sqlite-query
-    database: ../../Research/Companies.data/database.sqlite
-    query: SELECT * FROM companies
+    resource: ../../Research/Companies.data
+    sql: SELECT * FROM companies LIMIT 100
+    limit: 100
 permissions:
   network: []
   workspace_write: []
@@ -53,7 +54,16 @@ fallback:
   file: ./README.md
 ```
 
-Artifacts run in isolated WebViews or sandboxed frames with narrow bindings.
+Artifacts run in isolated sandboxed iframes (`sandbox="allow-scripts"`, no
+`allow-same-origin`, no ambient Tauri). The host injects `--lt-*` theme tokens
+via postMessage, resolves only named read-only `BindingSpec` bindings declared
+in the manifest, and can open linked resources. Off-screen artifacts suspend
+via IntersectionObserver. Network is deny-by-default (`permissions.network`
+must be empty in v1).
+
+Desktop session kind `artifact` mounts `ArtifactResourceRenderer` on the
+`main` and `embed` renderer surfaces. Use `:::lattice-embed` with
+`mode: interactive` to mount the same sandbox inline on a page.
 
 ## Lattice App package
 

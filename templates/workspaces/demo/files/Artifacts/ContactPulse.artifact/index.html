@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Contact pulse</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: var(--lt-font-ui, system-ui, sans-serif);
+        background: var(--lt-bg, #f4f6fa);
+        color: var(--lt-text, #121822);
+      }
+      body {
+        margin: 0;
+        padding: 1.25rem;
+        background: var(--lt-bg, #f4f6fa);
+        color: var(--lt-text, #121822);
+      }
+      h1 {
+        margin: 0 0 0.5rem;
+        font: 600 1.25rem/1.3 var(--lt-font-display, Georgia, serif);
+      }
+      .card {
+        border: 1px solid var(--lt-border, #c5ccd8);
+        border-radius: var(--lt-radius, 9px);
+        background: var(--lt-panel, #fff);
+        padding: 1rem 1.1rem;
+        max-width: 22rem;
+      }
+      .label {
+        color: var(--lt-muted, #6b778c);
+        font-size: 0.8rem;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+      }
+      .value {
+        margin-top: 0.35rem;
+        font-size: 2rem;
+        font-weight: 600;
+        color: var(--lt-accent, #c47a0a);
+      }
+      .status {
+        margin-top: 0.75rem;
+        color: var(--lt-text-soft, #3a4558);
+        font-size: 0.9rem;
+      }
+      button {
+        margin-top: 1rem;
+        border: 1px solid var(--lt-border, #c5ccd8);
+        border-radius: var(--lt-radius-sm, 6px);
+        background: var(--lt-bg-raise, #eef1f7);
+        color: var(--lt-text, #121822);
+        padding: 0.4rem 0.75rem;
+        cursor: pointer;
+        font: inherit;
+      }
+      button:focus-visible {
+        outline: 2px solid var(--lt-accent, #c47a0a);
+        outline-offset: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1 id="title">Contact pulse</h1>
+    <div class="card">
+      <div class="label">Contacts</div>
+      <div class="value" id="count">…</div>
+      <p class="status" id="status">Requesting binding…</p>
+      <button type="button" id="open-crm">Open CRM.data</button>
+    </div>
+    <script>
+      (function () {
+        var pending = Object.create(null);
+        var reqId = 0;
+
+        function post(message) {
+          parent.postMessage(message, "*");
+        }
+
+        function requestBinding(name) {
+          var id = "req-" + String(++reqId);
+          return new Promise(function (resolve, reject) {
+            pending[id] = { resolve: resolve, reject: reject };
+            post({ type: "lattice.artifact.requestBinding", id: id, name: name });
+          });
+        }
+
+        window.addEventListener("message", function (event) {
+          var data = event.data;
+          if (!data || typeof data !== "object") return;
+          if (data.type === "lattice.artifact.theme" && data.vars) {
+            var root = document.documentElement;
+            Object.keys(data.vars).forEach(function (key) {
+              root.style.setProperty(key, data.vars[key]);
+            });
+            if (data.background) {
+              document.body.style.background = data.background;
+            }
+            return;
+          }
+          if (data.type === "lattice.artifact.init") {
+            if (data.title) {
+              document.getElementById("title").textContent = data.title;
+              document.title = data.title;
+            }
+            post({ type: "lattice.artifact.notify", title: data.title || "Contact pulse", height: 280 });
+            return;
+          }
+          if (data.type === "lattice.artifact.bindingResult") {
+            var waiter = pending[data.id];
+            if (!waiter) return;
+            delete pending[data.id];
+            if (data.ok) waiter.resolve(data.data);
+            else waiter.reject(new Error(data.error || "Binding failed"));
+          }
+        });
+
+        document.getElementById("open-crm").addEventListener("click", function () {
+          post({ type: "lattice.artifact.openResource", path: "CRM.data" });
+        });
+
+        requestBinding("contactCount")
+          .then(function (result) {
+            var value =
+              result && result.kind === "scalar"
+                ? result.value
+                : result && result.value != null
+                  ? result.value
+                  : "—";
+            document.getElementById("count").textContent = String(value);
+            document.getElementById("status").textContent = "Bound via contactCount";
+          })
+          .catch(function (err) {
+            document.getElementById("count").textContent = "—";
+            document.getElementById("status").textContent = String(err && err.message ? err.message : err);
+          });
+      })();
+    </script>
+  </body>
+</html>

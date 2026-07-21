@@ -46,6 +46,21 @@ fallback: "[Open active services](../Data/Services.data/views/Active.view.yaml)"
 :::
 ````
 
+`:::lattice-embed` fields:
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `resource` | yes | Workspace- or page-relative path |
+| `view` | no | Saved view name for `.data` packages |
+| `mode` | no | `card` (default), `preview`, or `interactive` |
+| `height` | no | CSS length or bare pixel count |
+| `lines` | no | Page excerpt line count or `start-end` range |
+| `fallback` | no | Readable fallback when the live surface cannot run |
+
+Supported embed kinds (inferred from path / inspection): page, image, PDF, data-app, artifact, interface, task.
+
+`mode: interactive` mounts a live embed surface where feasible (sandboxed artifact iframe today). Card mode remains the default for pages and other kinds.
+
 ## Block identity
 
 Stable block IDs enable:

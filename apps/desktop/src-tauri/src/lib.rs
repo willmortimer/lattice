@@ -1,4 +1,5 @@
 mod app_menu;
+mod artifact;
 mod canvas;
 mod commands;
 mod daemon_session;
@@ -154,6 +155,9 @@ pub fn run() {
             task::task_run,
             task::task_cancel,
             task::task_execution_status,
+            artifact::artifact_load_manifest,
+            artifact::artifact_read_entrypoint,
+            artifact::artifact_resolve_binding,
             workflow::workflow_load,
             workflow::workflow_run,
             workflow::workflow_cancel,

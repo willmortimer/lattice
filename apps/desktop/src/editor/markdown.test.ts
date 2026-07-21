@@ -183,6 +183,27 @@ describe(":::lattice-embed directives", () => {
     });
   });
 
+  it("round-trips mode: interactive", () => {
+    const raw =
+      ":::lattice-embed\n" +
+      "resource: Artifacts/ContactPulse.artifact\n" +
+      "mode: interactive\n" +
+      "height: 320\n" +
+      ":::\n";
+    const firstParse = parseMarkdownToJSON(raw);
+    const serialized = serializeJSONToMarkdown(firstParse);
+    expect(serialized).toContain("mode: interactive\n");
+    expect(parseMarkdownToJSON(serialized)).toEqual(firstParse);
+    expect(firstParse.content?.[0]).toMatchObject({
+      type: "latticeEmbed",
+      attrs: {
+        resource: "Artifacts/ContactPulse.artifact",
+        mode: "interactive",
+        height: "320",
+      },
+    });
+  });
+
   it("serializes lattice-embed fields in documented order", () => {
     const json = parseMarkdownToJSON(EMBED_SAMPLE);
     const markdown = serializeJSONToMarkdown(json);

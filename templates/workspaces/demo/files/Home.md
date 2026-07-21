@@ -192,6 +192,21 @@ fallback: "Open CRM board view"
 :::
 ```
 
+Open the sandboxed Contact pulse artifact (card vs interactive):
+
+```markdown
+:::lattice-embed
+resource: Artifacts/ContactPulse.artifact
+mode: card
+:::
+
+:::lattice-embed
+resource: Artifacts/ContactPulse.artifact
+mode: interactive
+height: 320
+:::
+```
+
 ## Resources
 
 | File | Notes |
@@ -233,6 +248,7 @@ fallback: "Open CRM board view"
 | `Dashboards/Revenue by day.vl.json` | Vega-Lite chart (Orders) |
 | `Dashboards/Revenue by channel.vl.json` | Vega-Lite chart (Orders) |
 | `Data/Places.dataset` | dataset (WGS84 lon/lat points) |
+| `Artifacts/ContactPulse.artifact` | sandboxed HTML artifact |
 | `Data/sample.csv` | CSV file |
 | `Notebooks/Orders analytics.ipynb` | notebook |
 | `Notebooks/CRM exploration.ipynb` | notebook |

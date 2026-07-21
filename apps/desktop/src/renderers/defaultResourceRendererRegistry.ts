@@ -81,7 +81,18 @@ export function createDefaultResourceRendererRegistry(): ResourceRendererRegistr
       definition("workflow-viewer", "workflow", undefined, (signal) =>
         lazyImport(() => import("./WorkflowResourceRenderer").then((module) => module.WorkflowResourceRenderer), signal),
       ),
-    );
+    )
+    .register({
+      id: "artifact-sandbox",
+      kind: "artifact",
+      surfaces: ["main", "embed"],
+      lifecycle: { inactive: "suspend", cache: "module" },
+      load: (signal) =>
+        lazyImport(
+          () => import("./ArtifactResourceRenderer").then((module) => module.ArtifactResourceRenderer),
+          signal,
+        ),
+    });
   registerMediaResourceRenderers(registry);
   registerChartResourceRenderers(registry);
   registerTextResourceRenderers(registry);

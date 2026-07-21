@@ -91,7 +91,9 @@ entrypoint: ./index.html
 bindings:
   data:
     type: duckdb-query
-    query: SELECT * FROM read_parquet('../../Data/**/*.parquet')
+    resources: [../../Data/Orders.dataset]
+    sql: SELECT * FROM read_parquet('../../Data/Orders.dataset/facts/**/*.parquet') LIMIT 100
+    limit: 100
 permissions:
   network: []
   workspace_write: []

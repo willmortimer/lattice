@@ -1,0 +1,15 @@
+format: lattice-artifact
+version: 1
+title: Contact pulse
+entrypoint: ./index.html
+bindings:
+  contactCount:
+    type: sqlite-query
+    resource: CRM.data
+    sql: SELECT COUNT(*) AS value FROM contacts
+    limit: 1
+permissions:
+  network: []
+  workspace_write: []
+fallback:
+  file: ./README.md

@@ -37,12 +37,26 @@ describe("ResourceRendererRegistry", () => {
       surfaces: ["inspect"],
       load: component,
     });
+    target.register({
+      id: "artifact-embed",
+      kind: "artifact",
+      surfaces: ["main", "embed", "canvas", "interface"],
+      load: component,
+    });
 
     const image: Resource = { path: "photo.png", kind: "file" };
     expect(target.resolve(image, [], "native").definition.id).toBe("image-main");
     expect(target.resolve(image, [], "native", "inspect").definition.id).toBe("image-inspect");
     expect(target.resolve(image).definition.id).toBe("file-fallback");
     expect(deriveResourceFormatId(image)).toBe("file:image");
+    expect(
+      target.resolve({ path: "Pulse.artifact", kind: "artifact" }, [], undefined, "embed").definition
+        .id,
+    ).toBe("artifact-embed");
+    expect(
+      target.resolve({ path: "Pulse.artifact", kind: "artifact" }, [], undefined, "canvas").definition
+        .id,
+    ).toBe("artifact-embed");
   });
 
   it("rejects duplicate targets deterministically", () => {

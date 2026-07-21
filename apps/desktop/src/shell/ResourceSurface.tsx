@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { loadResourceRenderer, type ResourceRendererComponent, type ResourceRendererRegistry } from "../resourceRendererRegistry";
+import {
+  loadResourceRenderer,
+  type RendererSurface,
+  type ResourceRendererComponent,
+  type ResourceRendererRegistry,
+} from "../resourceRendererRegistry";
 import type { OpenResourceSession } from "../resourceSession";
 import { createDefaultResourceRendererRegistry } from "../renderers/defaultResourceRendererRegistry";
 import type { ResourceRendererContext } from "../renderers/RendererContext";
@@ -9,14 +14,22 @@ export interface ResourceSurfaceProps {
   capabilities: readonly string[];
   context: Omit<ResourceRendererContext, "session" | "missingCapabilities">;
   registry?: ResourceRendererRegistry<ResourceRendererContext, OpenResourceSession>;
+  /** Registry surface; defaults to main. Interactive lattice-embed uses `embed`. */
+  surface?: RendererSurface;
 }
 
-export function ResourceSurface({ session, capabilities, context, registry }: ResourceSurfaceProps) {
+export function ResourceSurface({
+  session,
+  capabilities,
+  context,
+  registry,
+  surface = "main",
+}: ResourceSurfaceProps) {
   const defaultRegistry = useMemo(createDefaultResourceRendererRegistry, []);
   const activeRegistry = registry ?? defaultRegistry;
   const resolution = useMemo(
-    () => activeRegistry.resolve(session.resource, capabilities),
-    [activeRegistry, capabilities, session.resource],
+    () => activeRegistry.resolve(session.resource, capabilities, undefined, surface),
+    [activeRegistry, capabilities, session.resource, surface],
   );
   const [component, setComponent] = useState<ResourceRendererComponent<ResourceRendererContext, OpenResourceSession> | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);

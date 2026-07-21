@@ -68,6 +68,9 @@ describe("inferEmbedKind", () => {
     expect(inferEmbedKind(null, "Assets/diagram.png")).toBe("image");
     expect(inferEmbedKind(null, "Docs/report.pdf")).toBe("pdf");
     expect(inferEmbedKind(null, "../Data/Services.data/views/Active.view.yaml")).toBe("data-app");
+    expect(inferEmbedKind(null, "Artifacts/ContactPulse.artifact")).toBe("artifact");
+    expect(inferEmbedKind(null, "Tasks/Hello.task")).toBe("task");
+    expect(inferEmbedKind(null, "CRM.data/interfaces/OpsDashboard.interface.yaml")).toBe("interface");
   });
 });
 

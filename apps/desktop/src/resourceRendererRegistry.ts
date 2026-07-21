@@ -1,7 +1,7 @@
 import type { ComponentType } from "react";
 import type { Resource, ResourceKind } from "./types";
 
-export type RendererSurface = "main" | "embed" | "inspect";
+export type RendererSurface = "main" | "embed" | "inspect" | "canvas" | "interface";
 export type RendererKey = ResourceKind | "*";
 export type RendererTarget = ResourceKind | "*";
 

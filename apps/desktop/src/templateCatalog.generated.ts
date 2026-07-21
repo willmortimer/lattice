@@ -894,6 +894,10 @@ export const GENERATED_TEMPLATE_CATALOG = [
         "purpose": "Interactive summaries and charts."
       },
       {
+        "path": "Artifacts",
+        "purpose": "Sandboxed HTML packages with named BindingSpec bindings."
+      },
+      {
         "path": "Resources",
         "purpose": "Ordinary files — JSON, YAML, code, SQL, images."
       },
@@ -917,6 +921,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "Dashboards/Revenue by region and category.vl.json",
       "Dashboards/Revenue by day.vl.json",
       "Dashboards/Revenue by channel.vl.json",
+      "Artifacts/ContactPulse.artifact",
       "OKRs.data",
       "Canvases/Product Strategy.canvas",
       "Inbox/Sample capture.md",

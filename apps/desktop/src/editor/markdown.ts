@@ -394,6 +394,7 @@ const serializerNodes: MarkdownSerializer["nodes"] = {
       serializeLatticeEmbed({
         resource: node.attrs.resource as string,
         view: (node.attrs.view as string | null) ?? null,
+        mode: (node.attrs.mode as LatticeEmbedAttrs["mode"]) ?? null,
         height: (node.attrs.height as string | null) ?? null,
         lines: (node.attrs.lines as string | null) ?? null,
         fallback: (node.attrs.fallback as string | null) ?? null,

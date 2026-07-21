@@ -24,6 +24,7 @@
 //! one transaction must touch disjoint paths. Block-level commands and
 //! intra-transaction sequential dependencies come later (docs/17).
 
+mod artifact;
 mod canvas;
 mod command;
 mod contracts;
@@ -38,6 +39,11 @@ mod template;
 mod trash;
 mod workflow;
 
+pub use artifact::{
+    is_safe_relative_path, resolve_manifest_path, ArtifactError, ArtifactFallback, ArtifactManifest,
+    ArtifactPermissions, ArtifactResult, ARTIFACT_FORMAT, ARTIFACT_MANIFEST_FILENAME,
+    SUPPORTED_VERSION as ARTIFACT_SUPPORTED_VERSION,
+};
 pub use command::{
     path_remaps_from_commands, CanvasAddEdge, CanvasAddTextNode, CanvasMoveNodes, CanvasNodeMove,
     CanvasNodeResize, CanvasPlaceResource, CanvasRemoveEdges, CanvasRemoveNodes, CanvasResizeNodes,

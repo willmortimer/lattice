@@ -8,6 +8,7 @@ import { readNativeCanvas } from "../canvas/adapter";
 import { previewBatchLinkRepair, previewLinkRepair, type BatchLinkRepairPlan, type LinkRepairPlan, type LinkRepairPathChange } from "../lib/linkRepair";
 import { applyPathRemaps, type PathRemap } from "../lib/pathRemap";
 import { moveResource, moveResources } from "../lib/resourceMutations";
+import { loadArtifactManifest } from "../lib/artifactRun";
 import { loadTaskManifest } from "../lib/taskRun";
 import { loadWorkflow } from "../lib/workflowRun";
 import { destinationPath } from "../lib/treeOps";
@@ -385,6 +386,43 @@ export function useResourceController(options: ResourceControllerOptions): Resou
         const manifest = await loadWorkflow(workspace.root, resource.path);
         if (isCurrentLoad(ticket)) {
           setSession({ kind: "workflow", resource, manifest });
+        }
+      } catch (error) {
+        if (isCurrentLoad(ticket)) {
+          setSession(null);
+          onError(String(error));
+        }
+      } finally {
+        if (isCurrentLoad(ticket)) onBusy(false);
+      }
+      return;
+    }
+
+    if (resource.kind === "artifact" && workspace) {
+      if (inBrowser) {
+        if (isCurrentLoad(ticket)) {
+          setSession({
+            kind: "artifact",
+            resource,
+            manifest: {
+              format: "lattice-artifact",
+              version: 1,
+              title: "Browser demo artifact",
+              entrypoint: "./index.html",
+              bindings: {},
+              permissions: { network: [], workspaceWrite: [] },
+              fallback: { text: "Open in the native app to run sandboxed artifacts." },
+              packagePath: resource.path,
+            },
+          });
+        }
+        return;
+      }
+      onBusy(true);
+      try {
+        const manifest = await loadArtifactManifest(workspace.root, resource.path);
+        if (isCurrentLoad(ticket)) {
+          setSession({ kind: "artifact", resource, manifest });
         }
       } catch (error) {
         if (isCurrentLoad(ticket)) {
