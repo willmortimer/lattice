@@ -85,6 +85,8 @@ pub(crate) struct SeedDataInterface {
     pub title: Option<&'static str>,
     pub description: Option<&'static str>,
     pub layout_columns: Option<u32>,
+    /// JSON object of interface parameters (optional dashboard filters).
+    pub parameters_json: Option<&'static str>,
     /// JSON array of interface components (optional dashboard layout).
     pub components_json: Option<&'static str>,
 }
@@ -1182,6 +1184,18 @@ fn materialize_seed_interface(
     interface.description = seed.description.map(str::to_string);
     if let Some(columns) = seed.layout_columns {
         interface.layout = Some(lattice_data::InterfaceLayout { columns });
+    }
+    if let Some(json) = seed.parameters_json {
+        if !json.trim().is_empty() {
+            interface.parameters = serde_json::from_str(json).map_err(|error| {
+                Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path_label} interface {:?} has invalid parameters JSON: {error}",
+                        seed.name
+                    ),
+                }
+            })?;
+        }
     }
     interface.components = components;
     write_package_interface(package_path, &interface).map_err(map_data_error)
