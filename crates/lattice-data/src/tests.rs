@@ -524,6 +524,7 @@ fn relation_column_requires_relation_table_metadata() {
                 rollup_relation: None,
                 rollup_aggregate: None,
                 rollup_field: None,
+                formula: None,
             }],
         )
         .unwrap_err()
@@ -1359,6 +1360,103 @@ fn rollup_column_requires_valid_relation_and_field() {
         .unwrap_err()
         .to_string();
     assert!(non_numeric.contains("integer or decimal"));
+}
+
+#[test]
+fn formula_column_resolves_at_read_time() {
+    use crate::{FormulaValue, NewColumn};
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("LineItems.data");
+    let mut app = DataApp::create(&package_path, "Line items", "items").unwrap();
+    app.add_columns(
+        "items",
+        &[
+            NewColumn::new("price", FieldType::Decimal),
+            NewColumn::new("quantity", FieldType::Integer),
+            NewColumn::formula("total", "{price} * {quantity}"),
+        ],
+    )
+    .unwrap();
+
+    let columns = app.columns("items").unwrap();
+    let formula = columns
+        .iter()
+        .find(|column| column.name == "total")
+        .expect("total formula");
+    assert_eq!(formula.field_type, FieldType::Formula);
+    assert_eq!(formula.formula.as_deref(), Some("{price} * {quantity}"));
+    assert!(formula.field_type.is_read_only());
+
+    let manifest_text = std::fs::read_to_string(app_manifest_path(&package_path)).unwrap();
+    assert!(manifest_text.contains("type: formula"));
+    assert!(manifest_text.contains("formula: \"{price} * {quantity}\"") || manifest_text.contains("formula: '{price} * {quantity}'") || manifest_text.contains("{price} * {quantity}"));
+
+    let row_id = app
+        .insert_row(
+            "items",
+            &BTreeMap::from([
+                ("price".into(), CellValue::Decimal(12.5)),
+                ("quantity".into(), CellValue::Integer(2)),
+            ]),
+        )
+        .unwrap();
+    let rows = app.list_rows("items", 10, 0).unwrap();
+    let row = rows.iter().find(|row| row.id == row_id).expect("inserted row");
+    assert_eq!(
+        row.values.get("total"),
+        Some(&CellValue::Formula {
+            value: Some(FormulaValue::Number(25.0))
+        })
+    );
+
+    // Null operand yields null formula result.
+    app.update_row(
+        "items",
+        &row_id,
+        &BTreeMap::from([("quantity".into(), CellValue::Null)]),
+    )
+    .unwrap();
+    let rows = app.list_rows("items", 10, 0).unwrap();
+    let row = rows.iter().find(|row| row.id == row_id).expect("updated row");
+    assert_eq!(
+        row.values.get("total"),
+        Some(&CellValue::Formula { value: None })
+    );
+
+    // Formula cells are read-only on update.
+    let rejected = app
+        .update_row(
+            "items",
+            &row_id,
+            &BTreeMap::from([(
+                "total".into(),
+                CellValue::Formula {
+                    value: Some(FormulaValue::Number(99.0)),
+                },
+            )]),
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(rejected.contains("read-only") || rejected.contains("formula"));
+
+    let missing_ref = app
+        .add_columns(
+            "items",
+            &[NewColumn::formula("broken", "{price} * {missing}")],
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(missing_ref.contains("missing"));
+
+    let formula_ref = app
+        .add_columns(
+            "items",
+            &[NewColumn::formula("nested", "{total} + 1")],
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(formula_ref.contains("cannot reference formula"));
 }
 
 #[test]

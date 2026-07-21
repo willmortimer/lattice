@@ -16,7 +16,8 @@ export type RecordFieldEditorKind =
   | "date"
   | "relation"
   | "lookup"
-  | "rollup";
+  | "rollup"
+  | "formula";
 
 export function fieldEditorKind(fieldType: FieldType): RecordFieldEditorKind {
   switch (fieldType) {
@@ -35,6 +36,8 @@ export function fieldEditorKind(fieldType: FieldType): RecordFieldEditorKind {
       return "lookup";
     case "rollup":
       return "rollup";
+    case "formula":
+      return "formula";
     case "text":
       return "text";
     default: {
@@ -62,6 +65,8 @@ export function fieldTypeLabel(fieldType: FieldType): string {
       return "Lookup";
     case "rollup":
       return "Rollup";
+    case "formula":
+      return "Formula";
     case "text":
       return "Text";
     default: {
@@ -111,7 +116,12 @@ export function collectDirtyValues(
 ): Record<string, CellValue> {
   const changes: Record<string, CellValue> = {};
   for (const column of columns) {
-    if (column.name === "id" || column.field_type === "lookup" || column.field_type === "rollup") {
+    if (
+      column.name === "id" ||
+      column.field_type === "lookup" ||
+      column.field_type === "rollup" ||
+      column.field_type === "formula"
+    ) {
       continue;
     }
     const draftText = draft[column.name] ?? "";
@@ -171,6 +181,7 @@ export function validateDraftField(text: string, fieldType: FieldType): string |
     case "boolean":
     case "lookup":
     case "rollup":
+    case "formula":
       return null;
     default: {
       const _exhaustive: never = fieldType;
@@ -215,7 +226,12 @@ export function collectFormValues(
 ): Record<string, CellValue> {
   const values: Record<string, CellValue> = {};
   for (const column of columns) {
-    if (column.name === "id" || column.field_type === "lookup" || column.field_type === "rollup") {
+    if (
+      column.name === "id" ||
+      column.field_type === "lookup" ||
+      column.field_type === "rollup" ||
+      column.field_type === "formula"
+    ) {
       continue;
     }
     const text = draft[column.name] ?? "";

@@ -35,4 +35,12 @@ describe("cellValueToDisplay", () => {
     expect(cellValueToDisplay({ Rollup: { value: 15.5 } })).toBe("15.5");
     expect(cellValueToDisplay({ Rollup: { value: null } })).toBe("");
   });
+
+  it("formats formula display values", () => {
+    expect(cellValueToDisplay({ Formula: { value: { Number: 25 } } })).toBe("25");
+    expect(cellValueToDisplay({ Formula: { value: { Text: "Ada Lovelace" } } })).toBe(
+      "Ada Lovelace",
+    );
+    expect(cellValueToDisplay({ Formula: { value: null } })).toBe("");
+  });
 });

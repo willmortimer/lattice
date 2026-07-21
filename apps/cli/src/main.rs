@@ -403,7 +403,7 @@ enum TableCommand {
         /// Column name.
         #[arg(long)]
         name: String,
-        /// Field type (`text`, `integer`, `boolean`, `date`, `relation`, `lookup`, `rollup`, …).
+        /// Field type (`text`, `integer`, `boolean`, `date`, `relation`, `lookup`, `rollup`, `formula`, …).
         #[arg(long = "type")]
         field_type: String,
         /// Target table for `relation` columns.
@@ -424,6 +424,9 @@ enum TableCommand {
         /// Related-table field aggregated by `rollup` columns (required for sum/min/max).
         #[arg(long)]
         rollup_field: Option<String>,
+        /// Expression for `formula` columns (e.g. `{price} * {quantity}`).
+        #[arg(long)]
+        formula: Option<String>,
         /// Base package revision (`sha256:...`). Defaults to the current revision.
         #[arg(long)]
         base: Option<String>,
@@ -583,6 +586,7 @@ fn run(command: Command) -> Result<ExitCode> {
                 rollup_relation,
                 rollup_aggregate,
                 rollup_field,
+                formula,
                 base,
             } => cmd_table_add_column(
                 path,
@@ -595,6 +599,7 @@ fn run(command: Command) -> Result<ExitCode> {
                 rollup_relation,
                 rollup_aggregate,
                 rollup_field,
+                formula,
                 base,
             ),
             TableCommand::AddTable { path, table, base } => cmd_table_add_table(path, table, base),
@@ -1523,8 +1528,9 @@ fn parse_field_type(value: &str) -> Result<FieldType> {
         "relation" => Ok(FieldType::Relation),
         "lookup" => Ok(FieldType::Lookup),
         "rollup" => Ok(FieldType::Rollup),
+        "formula" => Ok(FieldType::Formula),
         other => bail!(
-            "unknown field type {other:?}; expected text, long_text, integer, decimal, boolean, date, relation, lookup, or rollup"
+            "unknown field type {other:?}; expected text, long_text, integer, decimal, boolean, date, relation, lookup, rollup, or formula"
         ),
     }
 }
@@ -1538,10 +1544,12 @@ fn column_spec(
     rollup_relation: Option<String>,
     rollup_aggregate: Option<String>,
     rollup_field: Option<String>,
+    formula: Option<String>,
 ) -> Result<ColumnSpec> {
     let has_lookup = lookup_relation.is_some() || lookup_field.is_some();
     let has_rollup =
         rollup_relation.is_some() || rollup_aggregate.is_some() || rollup_field.is_some();
+    let has_formula = formula.is_some();
     if field_type == FieldType::Relation {
         let relation_table = relation_table
             .with_context(|| format!("column {name:?} has type relation; pass --relation-table"))?;
@@ -1550,6 +1558,9 @@ fn column_spec(
         }
         if has_rollup {
             bail!("--rollup-relation / --rollup-aggregate / --rollup-field are only valid when --type is rollup");
+        }
+        if has_formula {
+            bail!("--formula is only valid when --type is formula");
         }
         return Ok(ColumnSpec::relation(name, relation_table));
     }
@@ -1563,6 +1574,9 @@ fn column_spec(
         }
         if has_rollup {
             bail!("--rollup-relation / --rollup-aggregate / --rollup-field are only valid when --type is rollup");
+        }
+        if has_formula {
+            bail!("--formula is only valid when --type is formula");
         }
         return Ok(ColumnSpec::lookup(name, lookup_relation, lookup_field));
     }
@@ -1580,12 +1594,29 @@ fn column_spec(
         if has_lookup {
             bail!("--lookup-relation / --lookup-field are only valid when --type is lookup");
         }
+        if has_formula {
+            bail!("--formula is only valid when --type is formula");
+        }
         return Ok(ColumnSpec::rollup(
             name,
             rollup_relation,
             aggregate,
             rollup_field,
         ));
+    }
+    if field_type == FieldType::Formula {
+        let formula = formula
+            .with_context(|| format!("column {name:?} has type formula; pass --formula"))?;
+        if relation_table.is_some() {
+            bail!("--relation-table is only valid when --type is relation");
+        }
+        if has_lookup {
+            bail!("--lookup-relation / --lookup-field are only valid when --type is lookup");
+        }
+        if has_rollup {
+            bail!("--rollup-relation / --rollup-aggregate / --rollup-field are only valid when --type is rollup");
+        }
+        return Ok(ColumnSpec::formula(name, formula));
     }
     if relation_table.is_some() {
         bail!("--relation-table is only valid when --type is relation");
@@ -1595,6 +1626,9 @@ fn column_spec(
     }
     if has_rollup {
         bail!("--rollup-relation / --rollup-aggregate / --rollup-field are only valid when --type is rollup");
+    }
+    if has_formula {
+        bail!("--formula is only valid when --type is formula");
     }
     Ok(ColumnSpec::new(name, field_type))
 }
@@ -1610,6 +1644,7 @@ fn cmd_table_add_column(
     rollup_relation: Option<String>,
     rollup_aggregate: Option<String>,
     rollup_field: Option<String>,
+    formula: Option<String>,
     base: Option<String>,
 ) -> Result<ExitCode> {
     let (ws, mut engine) = open_engine()?;
@@ -1628,6 +1663,7 @@ fn cmd_table_add_column(
         rollup_relation,
         rollup_aggregate,
         rollup_field,
+        formula,
     )?;
     let receipt = engine.apply(Transaction::new(
         format!("Add column {name} to {}.{}", rel.display(), table),

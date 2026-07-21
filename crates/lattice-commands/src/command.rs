@@ -47,6 +47,8 @@ pub struct ColumnSpec {
         skip_serializing_if = "Option::is_none"
     )]
     pub rollup_field: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub formula: Option<String>,
 }
 
 impl ColumnSpec {
@@ -60,6 +62,7 @@ impl ColumnSpec {
             rollup_relation: None,
             rollup_aggregate: None,
             rollup_field: None,
+            formula: None,
         }
     }
 
@@ -73,6 +76,7 @@ impl ColumnSpec {
             rollup_relation: None,
             rollup_aggregate: None,
             rollup_field: None,
+            formula: None,
         }
     }
 
@@ -90,6 +94,7 @@ impl ColumnSpec {
             rollup_relation: None,
             rollup_aggregate: None,
             rollup_field: None,
+            formula: None,
         }
     }
 
@@ -108,6 +113,21 @@ impl ColumnSpec {
             rollup_relation: Some(rollup_relation.into()),
             rollup_aggregate: Some(aggregate),
             rollup_field: rollup_field.map(Into::into),
+            formula: None,
+        }
+    }
+
+    pub fn formula(name: impl Into<String>, expression: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            field_type: FieldType::Formula,
+            relation_table: None,
+            lookup_relation: None,
+            lookup_field: None,
+            rollup_relation: None,
+            rollup_aggregate: None,
+            rollup_field: None,
+            formula: Some(expression.into()),
         }
     }
 }
