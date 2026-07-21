@@ -49,20 +49,28 @@ Success: credible local Airtable/Notion database alternative.
 
 ## Phase 3: analytical data
 
-**Vertical slice shipped** (Wave 3 on `feat/data-apps-and-analytics`):
+**Vertical slice shipped** (Wave 3 on `feat/data-apps-and-analytics`, plus
+Phase 3 polish on `feat/phase3-polish`):
 
 - Native DuckDB (`lattice-duckdb`, `lattice query --engine duckdb`).
 - `.dataset/` packages with Hive Parquet partitions and `dataset import-csv`.
 - Bounded Arrow IPC transport (ADR 0021).
 - Perspective **Preview** tab for analytical grids.
 - DuckDB `SUMMARIZE` **Profile** tab.
+- DuckDB **Plan** tab (`EXPLAIN` via `explain_dataset`).
+- Cooperative **Cancel** for Preview / Chart / Profile / Map queries
+  (`sessionId` + `cancel_dataset_query`); Plan aborts the frontend wait only
+  (no backend cancel session on EXPLAIN).
 - SQLite annotation overlays + CLI `dataset annotate` / `query-annotated`.
 - Vega-Lite **Chart** tab and `.vl.json` chart resources.
+- Lon/lat point maps: First Look `Data/Places.dataset` + MapLibre **Map** tab
+  (offline solid `--lt-*` style; no remote basemap tiles).
 
-**Still open** (deferred past the vertical slice):
+**Still open** (residual gaps past the MVP):
 
-- Query profiler UI (plan inspection, progress, desktop cancel wiring).
-- GeoParquet / MapLibre basic support.
+- Query progress reporting and richer profiler chrome beyond EXPLAIN text.
+- Full GeoParquet geometry / CRS, DuckDB spatial extensions, deck.gl, and
+  remote tile basemaps (Places is plain `lon`/`lat` doubles today).
 - Semantic models, live connectors, and full BI dashboards (Phase 6).
 
 Success: smooth analysis of data far beyond SaaS table limits for local

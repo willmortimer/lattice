@@ -1,6 +1,6 @@
 # Phase 3 Polish + Data MVP DAG
 
-**Status:** Active  
+**Status:** Complete  
 **Created:** 2026-07-20  
 **BASE:** `origin/main`  
 **Integration branch:** `feat/phase3-polish`  
@@ -37,7 +37,7 @@ See Cursor plan `phase3_polish_dag` for full handoff packets.
 | P2J01 | Junction M2M demo | done |
 | P2X01 | Cross-package read-only | done |
 | P2S02 | Native schema/import smoke | done |
-| P3P07 | Docs + roadmap closeout | pending |
+| P3P07 | Docs + roadmap closeout | done |
 
 P3P06 note: `maplibre-gl` ^5.24 (BSD-3-Clause; ~3–4 MB min+gzip JS) — lazy Map tab;
 offline-first solid `--lt-*` style (no remote basemap tiles).

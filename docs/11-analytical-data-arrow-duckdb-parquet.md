@@ -3,9 +3,10 @@
 ## Phase 3 vertical slice (shipped)
 
 Wave 3 on `feat/data-apps-and-analytics` delivers a local analytical path from
-`.dataset/` packages through DuckDB to bounded Arrow IPC and desktop viewers. It
-is a vertical slice, not full BI (semantic models, cross-filter dashboards, remote
-connectors, and geospatial viewers remain Phase 6+).
+`.dataset/` packages through DuckDB to bounded Arrow IPC and desktop viewers.
+Phase 3 polish adds EXPLAIN **Plan**, cooperative query **Cancel**, and lon/lat
+**Map** (Places seed). It is a vertical slice, not full BI (semantic models,
+cross-filter dashboards, remote connectors, and full geospatial remain Phase 6+).
 
 | Capability | Crate / surface | Notes |
 | --- | --- | --- |
@@ -15,13 +16,18 @@ connectors, and geospatial viewers remain Phase 6+).
 | Preview grid | Perspective (`DatasetResourceRenderer` **Preview** tab) | Arrow IPC in; Glide stays on mutable `.data` |
 | Charts | Vega-Lite (`.vl.json`, **Chart** tab) | Query → Arrow → `vega-embed`; demo `Signups by region.vl.json` |
 | Profiling | DuckDB `SUMMARIZE` (**Profile** tab) | Relation-level stats over dataset SQL |
+| Plan | DuckDB `EXPLAIN` (**Plan** tab, `explain_dataset`) | Text plan; frontend AbortSignal only — no backend cancel session |
+| Cancel | `sessionId` + `cancel_dataset_query` | Cooperative interrupt for Preview / Chart / Profile / Map |
+| Map (lon/lat) | MapLibre **Map** tab + `Data/Places.dataset` | Plain `lon`/`lat` doubles; offline solid `--lt-*` style (no tile basemap) |
 | Annotation overlays | `annotations.sqlite` + DuckDB join bridge | CLI `dataset annotate` / `dataset query-annotated` |
 
 **Limits (bounded transfer):** default row cap 10_000 (`truncated: true` beyond),
 encoded IPC byte cap 8 MiB (row count shrinks until the payload fits), preview
 sample 5 rows for schema dumps only. Cancellation is cooperative: pass optional
 `sessionId` on `query_dataset_arrow` / `profile_dataset`, then call
-`cancel_dataset_query` to flip the token and interrupt DuckDB.
+`cancel_dataset_query` to flip the token and interrupt DuckDB. Desktop Cancel
+wires AbortSignal through those paths; Plan (`explain_dataset`) does not
+register a cancel session.
 
 **Offline Parquet:** `lattice-duckdb` builds DuckDB with the `parquet` feature
 (bundled `libduckdb-sys`) so `read_parquet` works without network extension
@@ -184,15 +190,19 @@ DuckDB is an execution engine and optional catalog. It does not replace SQLite f
 
 ## Query behavior
 
-Required query features:
+Shipped for dataset queries today:
 
-- Cancellation.
+- **Cancellation** — cooperative `sessionId` / `cancel_dataset_query` for
+  Preview, Chart, Profile, and Map; Plan cancels the frontend wait only.
+- **Result row/byte ceilings** — ADR 0021 caps (see vertical slice table).
+- **Query-plan inspection** — DuckDB `EXPLAIN` text in the **Plan** tab.
+
+Still required for a full analytical workbench (not claimed shipped):
+
 - Timeout.
 - Memory limits.
 - Spill-to-disk.
 - Streaming batches.
-- Result row/byte ceilings.
-- Query-plan inspection.
 - Progress reporting.
 - Parameterization.
 - Read-only default for external sources.
@@ -270,7 +280,14 @@ Place on canvas
 
 ### GeoParquet and GeoJSON
 
-First-class geospatial data with MapLibre, deck.gl, and DuckDB spatial extensions.
+**Shipped MVP (Phase 3 polish):** First Look `Data/Places.dataset` stores point
+facts as plain `lon` / `lat` doubles in Parquet (WGS84). The dataset **Map** tab
+renders markers with MapLibre using an offline solid `--lt-*` style — no remote
+basemap tiles, no DuckDB spatial extension, and no full GeoParquet geometry /
+CRS metadata.
+
+**Later:** first-class GeoParquet/GeoJSON geometry, deck.gl, DuckDB spatial
+extensions, and tile basemaps.
 
 ### Zarr
 
@@ -288,7 +305,7 @@ over Tauri (`query_dataset_arrow` → `lattice-arrow-transport`):
 | Row cap | 10_000 | Extra rows set `truncated: true` |
 | Byte cap | 8 MiB | Encoded payload shrinks row count until it fits |
 | Preview rows | 5 | Tiny JSON control sample for schema dumps only |
-| Cancellation | cooperative | `CancelCheck` / `AtomicCancel`; desktop `cancel_dataset_query` |
+| Cancellation | cooperative | `CancelCheck` / `AtomicCancel`; desktop `cancel_dataset_query` for query/profile (not Plan EXPLAIN) |
 
 The IPC payload stays columnar (`ipc_bytes` as `Uint8Array`). JSON is only used
 for small control metadata (`schema_meta`, flags, preview). Do not expand the
