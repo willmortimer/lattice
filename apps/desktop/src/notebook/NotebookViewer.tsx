@@ -3,18 +3,15 @@ import { demoNotebooks, inBrowser } from "../demo";
 import { applyResourceUpdate } from "../lib/resourceRuntime";
 import { PagePreview } from "../editor/PagePreview";
 import { TextCodeMirror } from "../viewers/text/TextCodeMirror";
+import type { KernelMountFile, KernelSession } from "./kernelSession";
 import {
   applyCellRunToNotebookJson,
   buildOutputsFromRun,
 } from "./mergeNotebookOutputs";
 import type { NotebookCell, NotebookOutput } from "./parseNotebook";
 import { parseNotebook } from "./parseNotebook";
-import {
-  PyodideCancelledError,
-  PyodideLoadError,
-  runPythonCell,
-  type PyodideMountFile,
-} from "./pyodideRuntime";
+import { createPyodideKernelSession } from "./pyodideKernelSession";
+import { PyodideCancelledError, PyodideLoadError } from "./pyodideRuntime";
 import {
   packagesForNotebookCode,
   prepareWorkspaceBridge,
@@ -219,10 +216,15 @@ export function NotebookViewer({
   const [status, setStatus] = useState<RunStatus>({ kind: "idle" });
   const [bridgeNotice, setBridgeNotice] = useState<string | null>(null);
   const runController = useRef<AbortController | null>(null);
+  const kernelRef = useRef<KernelSession | null>(null);
   const contentRef = useRef(notebookContent);
   const revisionRef = useRef(notebookRevision);
   const executionCounterRef = useRef(0);
   const busyRef = useRef(false);
+
+  if (kernelRef.current === null) {
+    kernelRef.current = createPyodideKernelSession();
+  }
 
   useEffect(() => {
     setNotebookContent(content);
@@ -231,7 +233,14 @@ export function NotebookViewer({
     revisionRef.current = revision;
   }, [content, revision, path]);
 
-  useEffect(() => () => runController.current?.abort(), []);
+  useEffect(
+    () => () => {
+      runController.current?.abort();
+      kernelRef.current?.dispose();
+      kernelRef.current = null;
+    },
+    [],
+  );
 
   const parsed = useMemo(() => parseNotebook(notebookContent), [notebookContent]);
   const language = useMemo(
@@ -290,8 +299,14 @@ export function NotebookViewer({
     runController.current = controller;
     setStatus({ kind: "loading" });
 
+    const kernel = kernelRef.current;
+    if (!kernel) {
+      busyRef.current = false;
+      return;
+    }
+
     const bridge = await prepareWorkspaceBridge({ root, inBrowser });
-    let mountFiles: PyodideMountFile[] = [];
+    let mountFiles: KernelMountFile[] = [];
     if (bridge.ok) {
       mountFiles = bridge.files.map((file) => ({
         mountPath: file.mountPath,
@@ -303,6 +318,9 @@ export function NotebookViewer({
     }
 
     try {
+      await kernel.ensure(controller.signal);
+      if (controller.signal.aborted) return;
+
       for (const cellIndex of indices) {
         if (controller.signal.aborted) return;
         const source = codeSourceAt(contentRef.current, cellIndex);
@@ -313,7 +331,7 @@ export function NotebookViewer({
         const executionCount = executionCounterRef.current;
 
         try {
-          const payload = await runPythonCell(source, {
+          const payload = await kernel.execute(source, {
             signal: controller.signal,
             mountFiles,
             packages: packagesForNotebookCode(source),
@@ -340,6 +358,22 @@ export function NotebookViewer({
         }
       }
       if (!controller.signal.aborted) setStatus({ kind: "idle" });
+    } catch (error) {
+      if (error instanceof PyodideCancelledError || controller.signal.aborted) {
+        setStatus({ kind: "idle" });
+        return;
+      }
+      if (error instanceof PyodideLoadError) {
+        setStatus({
+          kind: "degraded",
+          message: `Pyodide unavailable — notebook remains readable. ${error.message}`,
+        });
+        return;
+      }
+      setStatus({
+        kind: "error",
+        message: error instanceof Error ? error.message : String(error),
+      });
     } finally {
       busyRef.current = false;
     }
@@ -347,6 +381,7 @@ export function NotebookViewer({
 
   const handleCancel = () => {
     runController.current?.abort();
+    kernelRef.current?.interrupt();
     busyRef.current = false;
     setStatus({ kind: "idle" });
   };
