@@ -2,12 +2,16 @@
 
 use std::path::Path;
 
-use lattice_arrow_transport::{encode_duckdb_batch, EncodedBatch, EncodeOptions, DEFAULT_MAX_ROWS};
+use lattice_arrow_transport::{
+    encode_duckdb_batch, encode_duckdb_batch_with_cancel, EncodedBatch, EncodeOptions,
+    NeverCancel, SchemaMeta, DEFAULT_MAX_ROWS,
+};
 use lattice_datasets::Dataset;
 use lattice_duckdb::{sql_string_literal, DuckDbEngine, RelationProfile};
 use serde::{Deserialize, Serialize};
 
 use crate::commands::resolve_within_root;
+use crate::dataset_sessions::{cancel_session, DatasetQuerySession};
 
 /// Default preview SQL when the caller omits an explicit query: union all Parquet facts.
 fn default_facts_sql(package_abs: &Path) -> Option<String> {
@@ -53,6 +57,41 @@ fn wrap_with_limit(sql: &str, max_rows: usize) -> String {
     format!("SELECT * FROM ({sql}) AS _lattice_q LIMIT {fetch}")
 }
 
+fn cancelled_arrow_response(sql: String) -> QueryDatasetArrowResponse {
+    QueryDatasetArrowResponse {
+        schema_meta: SchemaMeta { fields: Vec::new() },
+        ipc_bytes: Vec::new(),
+        row_count: 0,
+        truncated: false,
+        cancelled: true,
+        byte_length: 0,
+        sample_rows: Vec::new(),
+        sql,
+    }
+}
+
+fn map_query_error(err: lattice_duckdb::Error, sql: &str) -> Result<QueryDatasetArrowResponse, String> {
+    if err.is_cancelled() {
+        return Ok(cancelled_arrow_response(sql.to_string()));
+    }
+    let message = err.to_string();
+    // Empty facts trees are common for new packages; surface an empty batch.
+    if message.contains("No files found")
+        || message.contains("cannot open file")
+        || message.contains("IO Error")
+    {
+        let encoded = encode_duckdb_batch(
+            &lattice_duckdb::RecordBatch::empty(),
+            &EncodeOptions::default(),
+        )
+        .map_err(|encode_err| encode_err.to_string())?;
+        let mut response = QueryDatasetArrowResponse::from(encoded);
+        response.sql = sql.to_string();
+        return Ok(response);
+    }
+    Err(message)
+}
+
 /// Request body for [`query_dataset_arrow`].
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -66,6 +105,9 @@ pub struct QueryDatasetArrowRequest {
     /// Encoded IPC byte cap (default 8 MiB).
     #[serde(default)]
     pub max_bytes: Option<usize>,
+    /// Optional cancel session id (frontend-generated). Pair with [`cancel_dataset_query`].
+    #[serde(default)]
+    pub session_id: Option<String>,
 }
 
 /// Arrow IPC query response. `ipc_bytes` is raw Arrow IPC stream (`Vec<u8>` →
@@ -132,8 +174,19 @@ pub fn query_dataset_arrow(
         sql: None,
         max_rows: None,
         max_bytes: None,
+        session_id: None,
     });
     let max_rows = request.max_rows.unwrap_or(DEFAULT_MAX_ROWS).max(1);
+    let session = request
+        .session_id
+        .as_ref()
+        .filter(|id| !id.trim().is_empty())
+        .map(DatasetQuerySession::begin);
+
+    if session.as_ref().is_some_and(|s| s.is_cancelled()) {
+        return Ok(cancelled_arrow_response(String::new()));
+    }
+
     let explicit_sql = request.sql.filter(|sql| !sql.trim().is_empty());
     let base_sql = match explicit_sql {
         Some(sql) => sql,
@@ -159,21 +212,21 @@ pub fn query_dataset_arrow(
     let sql = wrap_with_limit(&base_sql, max_rows);
 
     let engine = DuckDbEngine::open_in_memory(&canonical_root).map_err(|err| err.to_string())?;
+    if let Some(session) = session.as_ref() {
+        session.bind_interrupt(engine.interrupt_handle());
+        if session.is_cancelled() {
+            return Ok(cancelled_arrow_response(sql));
+        }
+    }
+
     let batch = match engine.query(&sql) {
         Ok(batch) => batch,
-        Err(err) => {
-            // Empty facts trees are common for new packages; surface an empty batch.
-            let message = err.to_string();
-            if message.contains("No files found")
-                || message.contains("cannot open file")
-                || message.contains("IO Error")
-            {
-                lattice_duckdb::RecordBatch::empty()
-            } else {
-                return Err(message);
-            }
-        }
+        Err(err) => return map_query_error(err, &sql),
     };
+
+    if session.as_ref().is_some_and(|s| s.is_cancelled()) {
+        return Ok(cancelled_arrow_response(sql));
+    }
 
     let mut options = EncodeOptions::default();
     options.max_rows = max_rows;
@@ -181,7 +234,19 @@ pub fn query_dataset_arrow(
         options.max_bytes = max_bytes.max(1);
     }
 
-    let encoded = encode_duckdb_batch(&batch, &options).map_err(|err| err.to_string())?;
+    let encoded = match session.as_ref() {
+        Some(session) => {
+            let encoded =
+                encode_duckdb_batch_with_cancel(&batch, &options, &session.cancel_token())
+                    .map_err(|err| err.to_string())?;
+            if encoded.cancelled || session.is_cancelled() {
+                return Ok(cancelled_arrow_response(sql));
+            }
+            encoded
+        }
+        None => encode_duckdb_batch_with_cancel(&batch, &options, &NeverCancel)
+            .map_err(|err| err.to_string())?,
+    };
     let mut response = QueryDatasetArrowResponse::from(encoded);
     response.sql = sql;
     Ok(response)
@@ -194,6 +259,9 @@ pub struct ProfileDatasetRequest {
     /// Optional DuckDB SQL defining the relation. Defaults to `read_parquet` over `facts/**/*.parquet`.
     #[serde(default)]
     pub sql: Option<String>,
+    /// Optional cancel session id (frontend-generated). Pair with [`cancel_dataset_query`].
+    #[serde(default)]
+    pub session_id: Option<String>,
 }
 
 /// Run DuckDB `SUMMARIZE` profiling against a `.dataset` package relation.
@@ -207,7 +275,20 @@ pub fn profile_dataset(
     let (canonical_root, package_abs) = resolve_within_root(&root, &rel_path)?;
     let _dataset = Dataset::open(&package_abs).map_err(|err| err.to_string())?;
 
-    let request = request.unwrap_or(ProfileDatasetRequest { sql: None });
+    let request = request.unwrap_or(ProfileDatasetRequest {
+        sql: None,
+        session_id: None,
+    });
+    let session = request
+        .session_id
+        .as_ref()
+        .filter(|id| !id.trim().is_empty())
+        .map(DatasetQuerySession::begin);
+
+    if session.as_ref().is_some_and(|s| s.is_cancelled()) {
+        return Err("profile cancelled".into());
+    }
+
     let explicit_sql = request.sql.filter(|sql| !sql.trim().is_empty());
     let relation_sql = match explicit_sql {
         Some(sql) => sql,
@@ -224,9 +305,24 @@ pub fn profile_dataset(
     };
 
     let engine = DuckDbEngine::open_in_memory(&canonical_root).map_err(|err| err.to_string())?;
+    if let Some(session) = session.as_ref() {
+        session.bind_interrupt(engine.interrupt_handle());
+        if session.is_cancelled() {
+            return Err("profile cancelled".into());
+        }
+    }
+
     match engine.profile_relation(&relation_sql) {
-        Ok(profile) => Ok(profile),
+        Ok(profile) => {
+            if session.as_ref().is_some_and(|s| s.is_cancelled()) {
+                return Err("profile cancelled".into());
+            }
+            Ok(profile)
+        }
         Err(err) => {
+            if err.is_cancelled() {
+                return Err("profile cancelled".into());
+            }
             let message = err.to_string();
             if message.contains("No files found")
                 || message.contains("cannot open file")
@@ -309,6 +405,18 @@ pub fn explain_dataset(
     }
 }
 
+/// Cancel an in-flight [`query_dataset_arrow`] / [`profile_dataset`] session.
+///
+/// Flips the cooperative cancel token and interrupts the shared DuckDB connection
+/// when one is bound. Idempotent when the session is unknown or already finished.
+#[tauri::command]
+pub fn cancel_dataset_query(session_id: String) -> Result<bool, String> {
+    if session_id.trim().is_empty() {
+        return Err("sessionId must not be empty".into());
+    }
+    Ok(cancel_session(&session_id))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -316,6 +424,7 @@ mod tests {
     use lattice_arrow_transport::decode_ipc_stream;
     use lattice_core::Workspace;
     use lattice_datasets::Dataset;
+    use std::time::{Duration, Instant};
 
     fn init_workspace() -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
@@ -345,6 +454,7 @@ mod tests {
                 sql: Some(sql),
                 max_rows: Some(10),
                 max_bytes: None,
+                session_id: None,
             }),
         )
         .unwrap();
@@ -399,7 +509,10 @@ mod tests {
         let profile = profile_dataset(
             root,
             "Usage.dataset".into(),
-            Some(ProfileDatasetRequest { sql: Some(sql) }),
+            Some(ProfileDatasetRequest {
+                sql: Some(sql),
+                session_id: None,
+            }),
         )
         .unwrap();
 
@@ -442,7 +555,9 @@ mod tests {
         let response = explain_dataset(
             root,
             "Usage.dataset".into(),
-            Some(ExplainDatasetRequest { sql: Some(sql.clone()) }),
+            Some(ExplainDatasetRequest {
+                sql: Some(sql.clone()),
+            }),
         )
         .unwrap();
 
@@ -459,5 +574,31 @@ mod tests {
         let response = explain_dataset(root, "Empty.dataset".into(), None).unwrap();
         assert!(response.sql.is_empty());
         assert!(response.plan.is_empty());
+    }
+
+    #[test]
+    fn cancel_dataset_query_marks_registry_session() {
+        let session = DatasetQuerySession::begin("desktop-cancel-cmd");
+        assert!(cancel_dataset_query("desktop-cancel-cmd".into()).unwrap());
+        assert!(session.is_cancelled());
+        drop(session);
+        assert!(!cancel_dataset_query("desktop-cancel-cmd".into()).unwrap());
+    }
+
+    #[test]
+    fn cancelled_arrow_response_sets_flag() {
+        let response = cancelled_arrow_response("SELECT 1".into());
+        assert!(response.cancelled);
+        assert_eq!(response.row_count, 0);
+        assert!(response.ipc_bytes.is_empty());
+        assert_eq!(response.sql, "SELECT 1");
+    }
+
+    #[test]
+    fn cancel_dataset_query_empty_id_errors() {
+        let started = Instant::now();
+        let err = cancel_dataset_query("  ".into()).unwrap_err();
+        assert!(err.contains("sessionId"));
+        assert!(started.elapsed() < Duration::from_secs(1));
     }
 }
