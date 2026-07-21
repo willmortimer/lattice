@@ -86,14 +86,19 @@ X-Lattice-Token: <token>
 | `POST` | `/v1/read` | Bounded page/resource read by path |
 | `POST` | `/v1/related` | Backlinks + FTS related stub |
 | `POST` | `/v1/build_context` | Bounded excerpts; `export_policy=ask/deny` omitted or flagged |
+| `POST` | `/v1/proposals/create` | Create a reviewable transaction proposal (no apply) |
+| `POST` | `/v1/proposals/list` | List pending proposals in the workspace inbox |
+| `POST` | `/v1/proposals/get` | Load one proposal by id |
+| `POST` | `/v1/proposals/propose_page` | Typed helper to propose a page create |
 
 Bodies accept `workspaceId` (open session) or `root` (opens a read session).
 Payloads are capped (`maxBytes` / hit limits). Hybrid hits with
 `export_policy` of `ask` or `deny` redact excerpts; `build_context` never
 exfiltrates `ask` text freely (`needsConsent: true`).
 
-This surface is **read-oriented**. Mutations continue through the semantic
-command / Unix protocol path — the API is not a second write authority.
+Reads are export-governed. Proposal routes create reviewable bundles under
+`<workspace>/.lattice/proposals/` with `source.type: mcp`. Applying proposals
+remains desktop-only — HTTP/MCP do not expose `apply_proposal`.
 
 ### Example
 
@@ -108,14 +113,18 @@ curl -s -X POST http://127.0.0.1:18787/v1/search \
 
 ## MCP stdio
 
-Minimal JSON-RPC MCP adapter exposing the same four tools:
+Minimal JSON-RPC MCP adapter exposing read tools and proposal tools:
 
 ```sh
 LATTICE_AUTH_TOKEN=dev-token cargo run -p lattice-daemon -- mcp
 ```
 
-Tools: `search`, `read`, `related`, `build_context`. Prefer the HTTP contract
-for automated tests; use MCP when wiring Claude Desktop / other stdio clients.
+Read tools: `search`, `read`, `related`, `build_context`.
+
+Proposal tools: `create_proposal`, `list_proposals`, `get_proposal`,
+`propose_page`. These persist reviewable bundles only — they do not apply
+mutations. Prefer the HTTP contract for automated tests; use MCP when wiring
+Claude Desktop / other stdio clients.
 
 Example Claude Desktop snippet:
 

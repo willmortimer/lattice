@@ -1,12 +1,15 @@
 //! Governed local context API shared by HTTP and MCP.
 //!
-//! Read-only surface: search, bounded read, related, and build_context.
-//! Mutations stay on the semantic command path — this module is not a second
-//! write authority.
+//! Read surface: search, bounded read, related, and build_context.
+//! Write surface: proposal create/list/get only — no apply on MCP/HTTP.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use lattice_commands::{
+    create_proposal, list_proposal_summaries, load_proposal, Command, ProposalSource,
+    ProposalSourceType, TransactionProposal, TransactionProposalSummary,
+};
 use lattice_handlers::{get_backlinks_with_session, read_page, search_workspace_with_session};
 use lattice_index::{parse_page, ExportPolicy, HybridSearchHit, Sensitivity};
 use lattice_runtime::{hybrid_search_with_session_semantic, LatticeRuntime, WorkspaceSession};
@@ -710,6 +713,195 @@ fn path_string(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
 
+fn command_error_to_api(err: lattice_commands::Error) -> ApiError {
+    match &err {
+        lattice_commands::Error::NotFound { path } => {
+            ApiError::NotFound(format!("no such resource at {}", path.display()))
+        }
+        lattice_commands::Error::AlreadyExists { .. }
+        | lattice_commands::Error::InvalidResourceTarget { .. }
+        | lattice_commands::Error::NotADirectory { .. }
+        | lattice_commands::Error::InvalidCanvas { .. } => ApiError::BadRequest(err.to_string()),
+        _ => ApiError::Internal(err.to_string()),
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceRefParams {
+    #[serde(default)]
+    pub workspace_id: Option<String>,
+    #[serde(default)]
+    pub root: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateProposalParams {
+    #[serde(flatten)]
+    pub workspace: WorkspaceRefParams,
+    pub summary: String,
+    pub commands: Vec<Command>,
+    #[serde(default)]
+    pub affected_paths: Vec<String>,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+    #[serde(default)]
+    pub source_resource: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProposalResponse {
+    pub workspace_id: String,
+    pub proposal: TransactionProposal,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetProposalParams {
+    #[serde(flatten)]
+    pub workspace: WorkspaceRefParams,
+    pub proposal_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListProposalsParams {
+    #[serde(flatten)]
+    pub workspace: WorkspaceRefParams,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ListProposalsResponse {
+    pub workspace_id: String,
+    pub proposals: Vec<TransactionProposalSummary>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProposePageParams {
+    #[serde(flatten)]
+    pub workspace: WorkspaceRefParams,
+    pub path: String,
+    #[serde(default)]
+    pub content: Option<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+}
+
+pub fn api_create_proposal(
+    runtime: &LatticeRuntime,
+    params: CreateProposalParams,
+) -> Result<ProposalResponse, ApiError> {
+    if params.summary.trim().is_empty() {
+        return Err(ApiError::BadRequest("summary must not be empty".into()));
+    }
+    if params.commands.is_empty() {
+        return Err(ApiError::BadRequest("commands must not be empty".into()));
+    }
+    let session = resolve_session(
+        runtime,
+        params.workspace.workspace_id.as_deref(),
+        params.workspace.root.as_deref(),
+    )?;
+    let proposal = create_proposal(
+        session.root(),
+        TransactionProposal {
+            id: String::new(),
+            source: ProposalSource {
+                source_type: ProposalSourceType::Mcp,
+                resource: params.source_resource,
+            },
+            summary: params.summary,
+            commands: params.commands,
+            affected_paths: params.affected_paths,
+            warnings: params.warnings,
+            created_at: String::new(),
+            status: Default::default(),
+        },
+    )
+    .map_err(command_error_to_api)?;
+    Ok(ProposalResponse {
+        workspace_id: session.workspace_id().to_string(),
+        proposal,
+    })
+}
+
+pub fn api_get_proposal(
+    runtime: &LatticeRuntime,
+    params: GetProposalParams,
+) -> Result<ProposalResponse, ApiError> {
+    if params.proposal_id.trim().is_empty() {
+        return Err(ApiError::BadRequest("proposalId must not be empty".into()));
+    }
+    let session = resolve_session(
+        runtime,
+        params.workspace.workspace_id.as_deref(),
+        params.workspace.root.as_deref(),
+    )?;
+    let proposal = load_proposal(session.root(), &params.proposal_id).map_err(command_error_to_api)?;
+    Ok(ProposalResponse {
+        workspace_id: session.workspace_id().to_string(),
+        proposal,
+    })
+}
+
+pub fn api_list_proposals(
+    runtime: &LatticeRuntime,
+    params: ListProposalsParams,
+) -> Result<ListProposalsResponse, ApiError> {
+    let session = resolve_session(
+        runtime,
+        params.workspace.workspace_id.as_deref(),
+        params.workspace.root.as_deref(),
+    )?;
+    let proposals =
+        list_proposal_summaries(session.root()).map_err(command_error_to_api)?;
+    Ok(ListProposalsResponse {
+        workspace_id: session.workspace_id().to_string(),
+        proposals,
+    })
+}
+
+pub fn api_propose_page(
+    runtime: &LatticeRuntime,
+    params: ProposePageParams,
+) -> Result<ProposalResponse, ApiError> {
+    let path = params.path.trim();
+    if path.is_empty() {
+        return Err(ApiError::BadRequest("path must not be empty".into()));
+    }
+    let title = params.title.filter(|value| !value.trim().is_empty());
+    let content = params.content.unwrap_or_else(|| {
+        let heading = title.as_deref().unwrap_or_else(|| {
+            Path::new(path)
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .unwrap_or(path)
+        });
+        format!("# {heading}\n")
+    });
+    let summary = title
+        .map(|value| format!("Create page {path} ({value})"))
+        .unwrap_or_else(|| format!("Create page {path}"));
+    api_create_proposal(
+        runtime,
+        CreateProposalParams {
+            workspace: params.workspace,
+            summary,
+            commands: vec![Command::PageCreate {
+                path: PathBuf::from(path),
+                content,
+            }],
+            affected_paths: vec![path.to_string()],
+            warnings: Vec::new(),
+            source_resource: None,
+        },
+    )
+}
+
 trait BacklinkKindStr {
     fn as_str(&self) -> &'static str;
 }
@@ -921,5 +1113,53 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(err.status_code(), 404);
+    }
+
+    #[test]
+    fn proposal_create_list_get_round_trip() {
+        let (dir, runtime) = fixture();
+        let root = dir.path().to_string_lossy().into_owned();
+        let created = api_propose_page(
+            &runtime,
+            ProposePageParams {
+                workspace: WorkspaceRefParams {
+                    workspace_id: None,
+                    root: Some(root.clone()),
+                },
+                path: "Proposals/MCP.md".into(),
+                content: Some("# MCP proposal\n".into()),
+                title: Some("MCP".into()),
+            },
+        )
+        .unwrap();
+        assert_eq!(created.proposal.source.source_type, ProposalSourceType::Mcp);
+        assert_eq!(created.proposal.commands.len(), 1);
+        assert!(!dir.path().join("Proposals/MCP.md").exists());
+
+        let listed = api_list_proposals(
+            &runtime,
+            ListProposalsParams {
+                workspace: WorkspaceRefParams {
+                    workspace_id: Some(created.workspace_id.clone()),
+                    root: None,
+                },
+            },
+        )
+        .unwrap();
+        assert_eq!(listed.proposals.len(), 1);
+        assert_eq!(listed.proposals[0].id, created.proposal.id);
+
+        let loaded = api_get_proposal(
+            &runtime,
+            GetProposalParams {
+                workspace: WorkspaceRefParams {
+                    workspace_id: Some(created.workspace_id),
+                    root: None,
+                },
+                proposal_id: created.proposal.id,
+            },
+        )
+        .unwrap();
+        assert_eq!(loaded.proposal.summary, created.proposal.summary);
     }
 }
