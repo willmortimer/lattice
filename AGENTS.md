@@ -3,7 +3,7 @@
 ## Read this first
 
 Lattice is a fast, local-first, open-native workspace. The specification in
-`docs/` is intentionally broader than the current Phase 0–1 implementation.
+`docs/` is intentionally broader than the current shipped implementation.
 Before making architectural or product-surface changes, read:
 
 - `docs/01-product-vision.md`

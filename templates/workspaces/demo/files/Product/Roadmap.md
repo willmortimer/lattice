@@ -4,10 +4,17 @@ title: Roadmap
 
 # Roadmap
 
-1. Daily-driver editing, hybrid search, and voice — [[Research/Local Runtime]], [[Research/Long Read]]
-2. Rich data-app surface — expand `CRM.data` (Phase 2 tables Wave 1 next)
-3. Capture from anywhere — `Inbox/` + **⌘N** dictation + [[Templates/Daily Note]]
+**Shipped in First Look** — see [[Product/Release Notes]]: pages, canvas, hybrid
+search, voice, CRM + data apps, DuckDB datasets (Preview / Chart / Profile /
+Plan / Map), workflows / tasks / proposals / artifacts, and notebooks (native
+`ipykernel` + Pyodide on desktop).
 
-Aligned with [[Product/Principles]]. Shipped items noted in [[Product/Release Notes]].
+**Next themes**
+
+1. Compose interfaces, live embeds, lineage, and derived outputs across resources
+2. Cross-filter dashboards, semantic models, and publishing (Phase 6–7)
+3. Deeper automation history, durable jobs, and connector refresh (Phase 5)
+
+Aligned with [[Product/Principles]].
 
 Back to [[Home]].
