@@ -5,7 +5,8 @@ import { defineConfig, devices } from "@playwright/test";
  * - `browser` — Vite demo in Chromium (plain Playwright; CI-friendly perf)
  * - `tauri` — real Lattice WebView via `tauri-plugin-playwright`
  *   (start with `pnpm test:perf:tauri`, `pnpm test:crm:tauri`,
- *   `pnpm test:tree:tauri`, or `pnpm tauri:dev:e2e` + `--project=tauri`)
+ *   `pnpm test:tree:tauri`, `pnpm test:schema:tauri`, or
+ *   `pnpm tauri:dev:e2e` + `--project=tauri`)
  */
 export default defineConfig({
   testDir: "./e2e",

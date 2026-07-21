@@ -34,6 +34,29 @@ export const treeSmoke = {
     `[aria-label=${JSON.stringify(`Page: ${path}`)}]`,
 } as const;
 
+/**
+ * Stable selectors for First Look schema / tabular-import Tauri smoke (P2S02).
+ * Prefer promote of `Data/sample.csv` over the native file-picker Import path.
+ */
+export const schemaSmoke = {
+  crmTreeLabel: "Data app: CRM.data",
+  sampleCsvLabel: "File: Data/sample.csv",
+  addColumnPanel: '[aria-label="Add column"]',
+  addColumnNameInput: '[aria-label="Add column"] input[placeholder="column_name"]',
+  addColumnTypeSelect: '[aria-label="Add column"] select',
+  addColumnSubmit: '[aria-label="Add column"] button.primary-button',
+  /** Fresh text column name not present on the CRM template. */
+  smokeColumnName: "smoke_notes",
+  createTableFromCsv: "Create table from CSV…",
+  importReviewPanel: ".csv-import-review-panel",
+  importReviewTitle: "#tabular-import-review-title",
+  importReviewTitleText: "Review CSV import",
+  /** Package name accepted via `window.prompt` during promote. */
+  smokeImportPackage: "SmokeImport",
+  smokeImportTreeLabel: "Data app: SmokeImport.data",
+  smokeImportTitle: "SmokeImport",
+} as const;
+
 /** Page surface shared by browser Playwright and tauri-plugin-playwright adapters. */
 export type PerfPage = Page | TauriPage | BrowserPageAdapter;
 
