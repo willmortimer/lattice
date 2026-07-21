@@ -349,8 +349,16 @@ impl TaskRunner {
 
     /// Resolve `path` (task package dir or `task.yaml`) and spawn it without blocking.
     pub fn spawn(&self, path: &Path) -> TaskResult<SpawnedTask> {
-        let (package_dir, manifest_path) = resolve_task_paths(path)?;
-        let manifest = TaskManifest::load(&manifest_path)?;
+        let (package_dir, _) = resolve_task_paths(path)?;
+        // Absolute paths keep `uv --directory` valid when combined with
+        // `current_dir(package)` — a relative `--directory` would be resolved
+        // again from the package cwd and miss the project.
+        let package_dir =
+            std::fs::canonicalize(&package_dir).map_err(|source| TaskError::Io {
+                path: package_dir.clone(),
+                source,
+            })?;
+        let manifest = TaskManifest::load(&package_dir.join(TASK_MANIFEST_FILENAME))?;
         let project_dir = resolve_project_dir(&package_dir, &manifest.runtime.project)?;
 
         // Validates uv project markers and that `uv` is discoverable.
@@ -774,5 +782,30 @@ exec sleep 30
             out.stdout,
             out.stderr
         );
+    }
+
+    /// Relative package paths must still work (CLI passes them as typed).
+    #[test]
+    fn runs_fixture_via_relative_path_when_uv_available() {
+        let host_path = match std::env::var_os("PATH") {
+            Some(p) => p,
+            None => return,
+        };
+        if EnvProvider::with_path(host_path.clone())
+            .find_tool("uv")
+            .is_none()
+        {
+            return;
+        }
+
+        let rel = Path::new("tests/fixtures/Hello.task");
+        assert!(
+            rel.join("task.yaml").is_file(),
+            "test cwd should be lattice-commands crate root"
+        );
+        let runner = TaskRunner::with_env(EnvProvider::with_path(host_path));
+        let out = runner.run(rel).expect("relative Hello.task should run");
+        assert_eq!(out.exit_code, 0, "stderr={}", out.stderr);
+        assert!(out.stdout.contains("ok"), "stdout={:?}", out.stdout);
     }
 }
