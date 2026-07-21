@@ -43,6 +43,12 @@ pub struct ColumnMetaYaml {
     /// Target table for [`FieldType::Relation`] (same `.data` package).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relation_table: Option<String>,
+    /// Optional SQLite junction table for M2M relation storage (demo opt-in).
+    ///
+    /// When set, linked ids live in `{junction}.(source_id, target_id)` instead of
+    /// JSON TEXT on the relation column. The TEXT column remains as a NULL placeholder.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub junction_table: Option<String>,
     /// Source relation column on this table for [`FieldType::Lookup`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lookup_relation: Option<String>,
@@ -122,6 +128,7 @@ impl AppManifest {
             .or_insert(ColumnMetaYaml {
                 field_type: FieldType::Text,
                 relation_table: None,
+                junction_table: None,
                 lookup_relation: None,
                 lookup_field: None,
                 rollup_relation: None,

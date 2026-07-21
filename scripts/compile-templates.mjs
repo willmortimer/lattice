@@ -230,6 +230,7 @@ function normalizeSeedColumn(column, template, columnLabel) {
   }
 
   let relationTable;
+  let junctionTable;
   if (column.type === "relation") {
     if (typeof column.relation_table !== "string" || !isSqlIdentifier(column.relation_table)) {
       throw new Error(
@@ -237,9 +238,21 @@ function normalizeSeedColumn(column, template, columnLabel) {
       );
     }
     relationTable = column.relation_table;
+    if (column.junction_table !== undefined) {
+      if (typeof column.junction_table !== "string" || !isSqlIdentifier(column.junction_table)) {
+        throw new Error(
+          `${template}: ${columnLabel}.junction_table must be a valid SQL identifier for relation columns`,
+        );
+      }
+      junctionTable = column.junction_table;
+    }
   } else if (column.relation_table !== undefined) {
     throw new Error(
       `${template}: ${columnLabel}.relation_table is only supported for relation columns`,
+    );
+  } else if (column.junction_table !== undefined) {
+    throw new Error(
+      `${template}: ${columnLabel}.junction_table is only supported for relation columns`,
     );
   }
 
@@ -305,6 +318,7 @@ function normalizeSeedColumn(column, template, columnLabel) {
     name: column.name,
     type: column.type,
     ...(relationTable === undefined ? {} : { relation_table: relationTable }),
+    ...(junctionTable === undefined ? {} : { junction_table: junctionTable }),
     ...(lookupRelation === undefined ? {} : { lookup_relation: lookupRelation }),
     ...(lookupField === undefined ? {} : { lookup_field: lookupField }),
     ...(rollupRelation === undefined ? {} : { rollup_relation: rollupRelation }),
@@ -1028,7 +1042,7 @@ function rustDirectory(directory) {
 }
 
 function rustDataColumn(column) {
-  return `SeedDataColumn { name: ${rustString(column.name)}, field_type: ${rustString(column.type)}, relation_table: ${rustOptionString(column.relation_table)}, lookup_relation: ${rustOptionString(column.lookup_relation)}, lookup_field: ${rustOptionString(column.lookup_field)}, rollup_relation: ${rustOptionString(column.rollup_relation)}, rollup_aggregate: ${rustOptionString(column.rollup_aggregate)}, rollup_field: ${rustOptionString(column.rollup_field)} }`;
+  return `SeedDataColumn { name: ${rustString(column.name)}, field_type: ${rustString(column.type)}, relation_table: ${rustOptionString(column.relation_table)}, junction_table: ${rustOptionString(column.junction_table)}, lookup_relation: ${rustOptionString(column.lookup_relation)}, lookup_field: ${rustOptionString(column.lookup_field)}, rollup_relation: ${rustOptionString(column.rollup_relation)}, rollup_aggregate: ${rustOptionString(column.rollup_aggregate)}, rollup_field: ${rustOptionString(column.rollup_field)} }`;
 }
 
 function rustDataForm(form) {
@@ -1427,6 +1441,7 @@ function demoColumnMetadata(column) {
     field_type: column.type,
     sqlite_type: SQLITE_TYPES[column.type],
     ...(column.relation_table === undefined ? {} : { relation_table: column.relation_table }),
+    ...(column.junction_table === undefined ? {} : { junction_table: column.junction_table }),
     ...(column.lookup_relation === undefined ? {} : { lookup_relation: column.lookup_relation }),
     ...(column.lookup_field === undefined ? {} : { lookup_field: column.lookup_field }),
     ...(column.rollup_relation === undefined ? {} : { rollup_relation: column.rollup_relation }),

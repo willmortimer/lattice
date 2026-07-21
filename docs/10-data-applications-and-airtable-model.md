@@ -214,7 +214,9 @@ exist yet and remains Phase 2+ roadmap work.
 
 ### MVP cell shape (Phase 1)
 
-Relation fields are typed in `app.yaml` and stored as JSON TEXT in SQLite—no junction tables in this MVP:
+Relation fields are typed in `app.yaml`. By default they are stored as JSON TEXT in
+SQLite. An opt-in `junction_table` stores links in a dedicated M2M table instead
+(First Look demo: `contacts.tags` → `contact_tags`):
 
 ```yaml
 # app.yaml (excerpt)
@@ -224,31 +226,39 @@ tables:
       company:
         type: relation
         relation_table: companies
+      tags:
+        type: relation
+        relation_table: tags
+        junction_table: contact_tags
 ```
 
 ```json
-// CellValue over IPC / command payloads (externally tagged)
+// CellValue over IPC / command payloads (externally tagged) — same for both storages
 { "Relation": { "record_ids": ["0195f0a2-…", "0195f0a3-…"] } }
 ```
 
 ```text
-// SQLite TEXT encoding for the same cell
+// Default SQLite TEXT encoding
 ["0195f0a2-…","0195f0a3-…"]
+
+// Junction storage (source of truth when junction_table is set)
+// contact_tags(source_id, target_id); the relation TEXT column stays NULL
 ```
 
 - `relation_table` names a target table in the same `.data` package. Cross-table
   relations within one package are supported (for example `contacts.company` →
   `companies` in First Look `CRM.data`). Lookup and Rollup build on these
   same-package relations (see [Shipped in Wave 2](#shipped-in-wave-2-airtable-depth)).
-  Cross-package links and junction tables remain later work.
+  Cross-package links remain later work (P2X01).
 - Cells hold zero or more linked record ids; insert/update validates each id
-  exists in the target table.
+  exists in the target table. Junction-backed columns materialize the same
+  `CellValue::Relation` shape on read; writes sync the junction then refresh.
 - On `RecordDelete` / `delete_row`, Lattice strips the deleted id from every
   relation column in the package whose `relation_table` points at the deleted
-  row's table (self-relations and cross-table inbound links), in the same SQLite
-  transaction as the DELETE. Command undo restores the deleted row **and** the
-  prior inbound relation cells captured in history (`DeletedRowSnapshot` /
-  `RelationStrip`).
+  row's table (JSON TEXT cells and junction rows), and clears outbound junction
+  rows for the deleted source, in the same SQLite transaction as the DELETE.
+  Command undo restores the deleted row **and** the prior inbound relation cells
+  captured in history (`DeletedRowSnapshot` / `RelationStrip`).
 
 ### Relation labels and `relation_targets`
 
@@ -303,7 +313,8 @@ unresolved references fail template validation. This keeps hand-authored seeds
 readable (for example `"company": ["Analytical Engines"]`) while storing canonical
 ids in SQLite.
 
-Junction tables and cross-package relation UX remain later work.
+Cross-package relation UX remains later work (P2X01). Migrating all relations off
+JSON TEXT onto junctions is out of scope for the demo opt-in.
 
 Linked-record UX should make relational modeling approachable:
 
@@ -316,7 +327,8 @@ Linked-record UX should make relational modeling approachable:
 - Traverse relationships in interfaces.
 - Generate relationship diagrams.
 
-Underneath, use foreign keys and junction tables for richer models over time; the MVP stores multi-record links as JSON TEXT as above.
+Underneath, richer models can prefer junction tables; most relations still use
+JSON TEXT, with an opt-in `junction_table` for selected M2M pairs (see above).
 
 ## Views
 

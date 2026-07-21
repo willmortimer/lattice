@@ -107,6 +107,8 @@ pub struct ColumnDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub relation_table: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub junction_table: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub lookup_relation: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lookup_field: Option<String>,
@@ -132,6 +134,7 @@ fn column_dto(column: ColumnMeta) -> ColumnDto {
         field_type: column.field_type.to_string(),
         sqlite_type: column.sqlite_type,
         relation_table: column.relation_table,
+        junction_table: column.junction_table,
         lookup_relation: column.lookup_relation,
         lookup_field: column.lookup_field,
         rollup_relation: column.rollup_relation,
@@ -276,6 +279,8 @@ pub struct AddColumnDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relation_table: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub junction_table: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lookup_relation: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lookup_field: Option<String>,
@@ -291,7 +296,9 @@ pub struct AddColumnDto {
 
 fn column_spec_from_dto(column: AddColumnDto) -> ColumnSpec {
     if column.field_type == FieldType::Relation {
-        ColumnSpec::relation(column.name, column.relation_table.unwrap_or_default())
+        let mut spec = ColumnSpec::relation(column.name, column.relation_table.unwrap_or_default());
+        spec.junction_table = column.junction_table;
+        spec
     } else if column.field_type == FieldType::Lookup {
         ColumnSpec::lookup(
             column.name,
@@ -1612,6 +1619,7 @@ mod tests {
                     name: "name".into(),
                     field_type: FieldType::Text,
                     relation_table: None,
+                    junction_table: None,
                     lookup_relation: None,
                     lookup_field: None,
                     rollup_relation: None,
@@ -1623,6 +1631,7 @@ mod tests {
                     name: "age".into(),
                     field_type: FieldType::Integer,
                     relation_table: None,
+                    junction_table: None,
                     lookup_relation: None,
                     lookup_field: None,
                     rollup_relation: None,
@@ -1678,6 +1687,7 @@ mod tests {
                 name: "name".into(),
                 field_type: FieldType::Text,
                 relation_table: None,
+                junction_table: None,
                 lookup_relation: None,
                 lookup_field: None,
                 rollup_relation: None,

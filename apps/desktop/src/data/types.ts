@@ -36,6 +36,8 @@ export interface DataColumn {
   sqlite_type: string;
   /** Target table for relation fields (same `.data` package). */
   relation_table?: string;
+  /** Optional junction table for M2M relation storage (demo opt-in). */
+  junction_table?: string;
   /** Source relation column for lookup fields. */
   lookup_relation?: string;
   /** Related-table field projected by lookup fields. */
