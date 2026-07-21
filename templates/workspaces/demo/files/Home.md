@@ -27,11 +27,12 @@ a new workspace from the First Look template, or copy missing seeds from
 8. Open `Dashboards/Signups by region.vl.json` — bound Vega-Lite chart over the same Hive Parquet.
 9. Open `Data/Orders.dataset` — multi-month retail facts (~3 000 rows) for richer charts.
 10. Open the Orders dashboards — stacked region/category, daily revenue, and channel comparison (`.vl.json` under `Dashboards/`).
-11. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.
-12. Open `Notebooks/Orders analytics.ipynb` — Pyodide loads mounted Orders CSV (`sources/orders.csv`); DuckDB SQL stays native.
-13. Open `Notebooks/CRM exploration.ipynb` — CRM tour notebook (markdown + code stubs).
-14. Create pages from `Templates/` — daily and meeting note scaffolds.
-15. Read [[Research/Local Runtime]] — daemon, search, and voice process model.
+11. Open `Data/Places.dataset` — ~20 WGS84 lon/lat points (`name`, `lon`, `lat`) for MapLibre.
+12. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.
+13. Open `Notebooks/Orders analytics.ipynb` — Pyodide loads mounted Orders CSV (`sources/orders.csv`); DuckDB SQL stays native.
+14. Open `Notebooks/CRM exploration.ipynb` — CRM tour notebook (markdown + code stubs).
+15. Create pages from `Templates/` — daily and meeting note scaffolds.
+16. Read [[Research/Local Runtime]] — daemon, search, and voice process model.
 
 ## First Look tour — new surfaces
 
@@ -84,13 +85,18 @@ and voice features. Each step is safe in the sample workspace; undo where noted.
 24. Open `Dashboards/Revenue by day.vl.json` — daily revenue time series (Jan–Mar 2026).
 25. Open `Dashboards/Revenue by channel.vl.json` — layered channel comparison (revenue bars + order counts).
 
+### Places dataset (MapLibre lon/lat)
+
+26. Open `Data/Places.dataset` → **Preview** — ~20 named points with plain `lon` / `lat` doubles (WGS84) under `facts/places.parquet`.
+27. Confirm columns `place_id`, `name`, `lon`, `lat` — MapLibre Map tab arrives in a follow-on (no map UI in this seed).
+
 ### Resource tree
 
-26. Create a folder under `Projects/` (context menu or **New folder**).
-27. Press **⌘Z** to undo the folder creation.
-28. Move [[Product/Vision]] into another folder; accept link repair when prompted.
-29. **⌘-click** two pages, drag to a folder (multi-select move).
-30. Select multiple items and delete — confirm the batch operation.
+28. Create a folder under `Projects/` (context menu or **New folder**).
+29. Press **⌘Z** to undo the folder creation.
+30. Move [[Product/Vision]] into another folder; accept link repair when prompted.
+31. **⌘-click** two pages, drag to a folder (multi-select move).
+32. Select multiple items and delete — confirm the batch operation.
 
 ### Where to look next
 
@@ -144,6 +150,7 @@ Workspace defaults point quick capture at `Inbox/` and templates at `Templates/`
 | `Dashboards/Revenue by region and category.vl.json` | Stacked bars (Orders region × category) |
 | `Dashboards/Revenue by day.vl.json` | Daily revenue time series (Orders) |
 | `Dashboards/Revenue by channel.vl.json` | Layered channel comparison (Orders) |
+| `Data/Places.dataset` | Named WGS84 points (`lon`/`lat`) for MapLibre |
 | `Data/sample.csv` | Flat CSV import sample |
 | `Notebooks/Orders analytics.ipynb` | Pyodide Orders CSV tour (mounted workspace bridge) |
 | `Notebooks/CRM exploration.ipynb` | CRM tour notebook (nbformat v4) |
@@ -223,6 +230,7 @@ fallback: "Open CRM board view"
 | `Dashboards/Revenue by region and category.vl.json` | Vega-Lite chart (Orders) |
 | `Dashboards/Revenue by day.vl.json` | Vega-Lite chart (Orders) |
 | `Dashboards/Revenue by channel.vl.json` | Vega-Lite chart (Orders) |
+| `Data/Places.dataset` | dataset (WGS84 lon/lat points) |
 | `Data/sample.csv` | CSV file |
 | `Notebooks/Orders analytics.ipynb` | notebook |
 | `Notebooks/CRM exploration.ipynb` | notebook |
