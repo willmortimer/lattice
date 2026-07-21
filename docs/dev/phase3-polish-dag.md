@@ -30,7 +30,7 @@ See Cursor plan `phase3_polish_dag` for full handoff packets.
 | P3P02 | Cancel backend | pending |
 | P3P03 | Plan tab UI | pending |
 | P3P04 | Cancel frontend | pending |
-| P3P05 | Places GeoParquet seed | pending |
+| P3P05 | Places GeoParquet seed | done |
 | P3P06 | MapLibre Map tab | pending |
 | P2S01 | Native tree/undo smoke | done |
 | P2F01 | Formula MVP | done |
