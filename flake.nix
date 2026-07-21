@@ -106,12 +106,9 @@
             site-deploy = ''
               pnpm install
               pnpm --filter @lattice/site build
-              # Project name matches https://lattice-dop.pages.dev/
-              # Wrangler is pinned via nixpkgs so `nix run .#site-deploy` works
-              # without entering the ops shell.
-              exec ${lib.getExe pkgs.wrangler} pages deploy site/dist \
-                --project-name=lattice-dop \
-                --config site/wrangler.toml \
+              # Cloudflare Pages project is "lattice"; public host is lattice-dop.pages.dev.
+              exec wrangler pages deploy site/dist \
+                --project-name=lattice \
                 "$@"
             '';
             docs-sync = ''
@@ -269,14 +266,24 @@
             '';
           };
 
-          # Site scripts only need Node; wrangler is pinned via getExe in
-          # site-deploy and also exposed on PATH in the ops shell for login.
+          # Site scripts only need Node. Wrangler comes from a thin npx wrapper —
+          # nixpkgs#wrangler builds the workers-sdk monorepo (~GiB) and currently
+          # fails on Darwin (EBADF during tsup). Published npm CLI is enough for
+          # Pages deploy + `wrangler login`.
           siteNodeToolchain = with pkgs; [
             nodejs_22
             pnpm
           ];
 
-          siteToolchain = siteNodeToolchain ++ [ pkgs.wrangler ];
+          wrangler = pkgs.writeShellApplication {
+            name = "wrangler";
+            runtimeInputs = [ pkgs.nodejs_22 ];
+            text = ''
+              exec npx --yes wrangler@4 "$@"
+            '';
+          };
+
+          siteToolchain = siteNodeToolchain ++ [ wrangler ];
 
           siteScriptNames = [
             "site-dev"
@@ -286,7 +293,13 @@
           ];
 
           runtimeInputsFor =
-            name: if builtins.elem name siteScriptNames then siteNodeToolchain else toolchain;
+            name:
+            if name == "site-deploy" then
+              siteToolchain
+            else if builtins.elem name siteScriptNames then
+              siteNodeToolchain
+            else
+              toolchain;
 
           latticeScripts = lib.mapAttrs (
             name: script:
@@ -296,9 +309,13 @@
               text = script;
             }
           ) scripts;
+
+          # Keep wrangler out of the default direnv shell; only ops + site-deploy pull it.
+          defaultLatticeScripts = builtins.removeAttrs latticeScripts [ "site-deploy" ];
         in
         {
           packages.nxr = nxr.packages.${system}.nxr;
+          packages.wrangler = wrangler;
 
           nxr.shellIntegration = {
             enable = true;
@@ -436,8 +453,9 @@
 
           # Day-to-day app development (Rust, desktop, site local preview).
           # direnv `use flake` loads this shell.
+          # site-deploy / wrangler stay in .#ops so default reload stays light.
           devShells.default = pkgs.mkShell {
-            packages = toolchain ++ lib.attrValues latticeScripts;
+            packages = toolchain ++ lib.attrValues defaultLatticeScripts;
             shellHook = ''
               echo "lattice dev shell — rust $(rustc --version | cut -d' ' -f2), node $(node --version), pnpm $(pnpm --version)"
               echo "runner: nxr list | nxr <app> | nxr task <name> [-j N] | nxr graph <name>"
@@ -446,13 +464,15 @@
             '';
           };
 
-          # Lightweight publish shell: wrangler + node/pnpm for site build/deploy.
-          # Activate with `nix develop .#ops` (does not replace direnv default).
+          # Lightweight publish shell: node/pnpm + wrangler (npx wrapper) for
+          # site build/deploy. Activate with `nix develop .#ops` (does not
+          # replace direnv default).
           # Auth: `wrangler login` stores OAuth tokens under your home directory
           # (~/Library/Preferences/.wrangler on macOS), not in the Nix store —
           # so login survives shell exits. CI can use CLOUDFLARE_API_TOKEN instead.
-          # Prefer this shell for interactive wrangler; `nix run .#site-deploy` also
-          # pins wrangler via nixpkgs once you are authenticated.
+          # Prefer this shell for interactive wrangler; `nix run .#site-deploy`
+          # works the same once authenticated. First `wrangler` call needs npm
+          # network access to fetch the CLI into the npx cache.
           devShells.ops = pkgs.mkShell {
             packages = siteToolchain ++ [
               latticeScripts.site-build
@@ -460,7 +480,7 @@
               latticeScripts.docs-sync
             ];
             shellHook = ''
-              echo "lattice ops shell — wrangler $(wrangler --version 2>/dev/null | head -1), node $(node --version), pnpm $(pnpm --version)"
+              echo "lattice ops shell — wrangler (npx wrangler@4), node $(node --version), pnpm $(pnpm --version)"
               echo "auth: wrangler login   # once; tokens live in your home dir"
               echo "whoami: wrangler whoami"
               echo "deploy: lattice-site-deploy | nix run .#site-deploy"

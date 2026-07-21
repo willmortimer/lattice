@@ -58,8 +58,9 @@ Separate from the heavy default shell. Activate only when publishing:
 nix develop .#ops
 ```
 
-Provides: node 22, pnpm, **wrangler** (from nixpkgs), plus `lattice-site-build`,
-`lattice-site-deploy`, and `lattice-docs-sync`.
+Provides: node 22, pnpm, **wrangler** (thin `npx wrangler@4` wrapper — not
+nixpkgs’ workers-sdk build), plus `lattice-site-build`, `lattice-site-deploy`,
+and `lattice-docs-sync`.
 
 direnv keeps loading `.#default` via `use flake`. Do **not** change `.envrc`
 for day-to-day work — open an ops shell in a second terminal when you need
@@ -67,8 +68,8 @@ Cloudflare.
 
 ### How `wrangler login` works with Nix
 
-Nix puts a fixed `wrangler` binary on `PATH` from the store. OAuth tokens are
-**not** stored in the Nix store:
+The ops shell puts a small `wrangler` shim on `PATH` that runs
+`npx --yes wrangler@4`. OAuth tokens are **not** stored in the Nix store:
 
 1. Run `wrangler login` inside `nix develop .#ops` (needs a browser; interactive).
 2. Wrangler writes credentials under your home directory
@@ -88,9 +89,14 @@ lattice-site-deploy
 nix run .#site-deploy
 ```
 
-`site-deploy` pins wrangler via nixpkgs, so deploy works without entering the
-ops shell once you are authenticated. Use the ops shell for interactive
-`wrangler` commands (login, whoami, pages project list, etc.).
+`site-deploy` uses the same wrapper on `PATH`, so `nix run .#site-deploy` works
+without entering the ops shell once you are authenticated. Use the ops shell
+for interactive `wrangler` commands (login, whoami, pages project list, etc.).
+
+> We intentionally avoid `nixpkgs#wrangler`: it rebuilds the Cloudflare
+> workers-sdk monorepo (multi‑GiB) and has been failing on Darwin (`EBADF`
+> during tsup). The npm-published CLI is enough for Pages. First `wrangler`
+> invocation needs network to populate the npx cache; after that it is local.
 
 ## Runners
 

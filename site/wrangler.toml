@@ -1,5 +1,5 @@
 # Cloudflare Pages project for the Astro marketing + docs site.
-# Live: https://lattice-dop.pages.dev/
+# Live: https://lattice-dop.pages.dev/  (Pages project name: lattice)
 #
 # Auth (pick one):
 #   - Interactive: `nix develop .#ops` then `wrangler login`
@@ -9,6 +9,6 @@
 #   nix run .#site-deploy
 #   # or, inside ops shell: lattice-site-deploy
 
-name = "lattice-dop"
+name = "lattice"
 compatibility_date = "2026-07-21"
 pages_build_output_dir = "dist"
