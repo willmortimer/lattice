@@ -270,3 +270,35 @@ fn explain_rejects_empty_sql() {
     let err = engine.explain("   ").unwrap_err().to_string();
     assert!(err.contains("empty"), "{err}");
 }
+
+#[test]
+fn interrupt_handle_cancels_long_query() {
+    use std::sync::mpsc;
+    use std::time::{Duration, Instant};
+
+    let (_dir, root) = fixture_workspace();
+    let engine = DuckDbEngine::open_in_memory(&root).unwrap();
+    let interrupt = engine.interrupt_handle();
+
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let result = engine.query(
+            "SELECT count(*) AS n FROM range(10000000) t1, range(1000000) t2",
+        );
+        let _ = tx.send(result);
+    });
+
+    std::thread::sleep(Duration::from_millis(50));
+    interrupt.interrupt();
+
+    let started = Instant::now();
+    let result = rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("interrupted query should finish within timeout");
+    assert!(started.elapsed() < Duration::from_secs(5));
+    let err = result.expect_err("query should fail after interrupt");
+    assert!(
+        err.is_cancelled(),
+        "expected cancelled/interrupt error, got: {err}"
+    );
+}

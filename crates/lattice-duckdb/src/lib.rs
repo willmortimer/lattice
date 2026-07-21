@@ -18,6 +18,9 @@ pub use path::{
 };
 pub use profile::{ColumnProfile, RelationProfile};
 
+/// Re-export DuckDB's interrupt handle so desktop can cancel in-flight queries.
+pub use duckdb::InterruptHandle;
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[cfg(test)]
