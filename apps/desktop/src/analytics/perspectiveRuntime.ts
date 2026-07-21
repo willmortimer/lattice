@@ -31,6 +31,9 @@ export type PerspectiveTable = {
 export type PerspectiveViewerElement = HTMLElement & {
   load: (table: PerspectiveTable | Promise<PerspectiveTable>) => Promise<void>;
   delete?: () => Promise<void>;
+  /** Perspective resize hook — needed after absolute fill / first layout. */
+  notifyResize?: (force?: boolean) => void | Promise<void>;
+  restore?: (config: object) => Promise<void>;
 };
 
 export type PerspectiveRuntime = {

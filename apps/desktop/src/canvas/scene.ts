@@ -166,6 +166,9 @@ export class CanvasScene {
         antialias: true,
         autoDensity: true,
         resolution: window.devicePixelRatio || 1,
+        // Prefer WebGL — WKWebView can exhaust contexts after MapLibre; WebGPU
+        // fallbacks have been flaky for this shell.
+        preference: "webgl",
       })
       .then(async () => {
         // Packaged WKWebView can leave `document.fonts.ready` pending forever
@@ -230,11 +233,32 @@ export class CanvasScene {
       }
     });
     this.resizeObserver.observe(this.host);
+    // RO can miss the first layout in WKWebView; retry fit after paint.
+    this.scheduleFitRetry();
 
     this.disconnectThemeObserver = observeThemeChange(() => {
       this.palette = readCanvasPalette();
       if (this.data) this.rebuild(this.data, { fit: false });
     });
+  }
+
+  /** If pendingFit is stuck, re-measure the host after layout settles. */
+  private scheduleFitRetry() {
+    const attempt = () => {
+      if (this.destroyed || !this.pendingFit || !this.data) return;
+      const { width, height } = this.host.getBoundingClientRect();
+      if (width > 8 && height > 8) {
+        this.app.renderer.resize(width, height);
+        this.pendingFit = false;
+        this.needsInitialFit = false;
+        this.fitToContent(this.data.nodes);
+      }
+    };
+    requestAnimationFrame(() => {
+      requestAnimationFrame(attempt);
+    });
+    window.setTimeout(attempt, 50);
+    window.setTimeout(attempt, 250);
   }
 
   setData(data: CanvasData, options: { fit?: boolean } = {}) {
@@ -316,6 +340,7 @@ export class CanvasScene {
       const screenH = this.app.screen.height || this.host.clientHeight;
       if (screenW <= 8 || screenH <= 8) {
         this.pendingFit = true;
+        this.scheduleFitRetry();
       } else {
         this.pendingFit = false;
         this.needsInitialFit = false;

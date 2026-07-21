@@ -1130,10 +1130,14 @@ html[data-page-width="full"] {
   overflow: hidden;
 }
 
+/*
+ * Do not force CSS width/height on the Pixi canvas. Pixi owns the drawing
+ * buffer via renderer.resize(); stretching a 1×1 buffer with CSS paints a
+ * blank/blurred scene that looks like an empty canvas pane.
+ */
 .canvas-viewer canvas {
   display: block;
-  width: 100%;
-  height: 100%;
+  touch-action: none;
 }
 
 .canvas-surface {
@@ -4777,6 +4781,12 @@ html[data-motion="always"] *::after {
 }
 
 .content-pane > .canvas-pane {
+  flex: 1;
+  min-height: 0;
+}
+
+.content-pane > .canvas-pane > .canvas-surface {
+  flex: 1;
   min-height: 0;
 }
 

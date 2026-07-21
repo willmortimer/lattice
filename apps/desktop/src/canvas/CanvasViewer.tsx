@@ -331,14 +331,22 @@ export function CanvasViewer({
     sceneRef.current = scene;
     // Scene remounts without a `data` identity change leave Pixi empty unless we
     // re-apply the latest snapshot when the new scene becomes ready.
-    void scene.ready.then(() => {
-      if (sceneRef.current !== scene) return;
-      const snapshot = dataRef.current;
-      if (!snapshot) return;
-      const fit = fitNextLoadRef.current;
-      fitNextLoadRef.current = false;
-      scene.setData(snapshot, { fit });
-    });
+    void scene.ready
+      .then(() => {
+        if (sceneRef.current !== scene) return;
+        const snapshot = dataRef.current;
+        if (!snapshot) return;
+        const fit = fitNextLoadRef.current;
+        fitNextLoadRef.current = false;
+        scene.setData(snapshot, { fit });
+      })
+      .catch((error: unknown) => {
+        reportError(
+          error instanceof Error
+            ? `Canvas renderer failed: ${error.message}`
+            : `Canvas renderer failed: ${String(error)}`,
+        );
+      });
     return () => {
       sceneRef.current = null;
       scene.destroy();
@@ -351,9 +359,17 @@ export function CanvasViewer({
     if (!scene) return;
     const fit = fitNextLoadRef.current;
     fitNextLoadRef.current = false;
-    void scene.ready.then(() => {
-      if (sceneRef.current === scene) scene.setData(data, { fit });
-    });
+    void scene.ready
+      .then(() => {
+        if (sceneRef.current === scene) scene.setData(data, { fit });
+      })
+      .catch((error: unknown) => {
+        reportError(
+          error instanceof Error
+            ? `Canvas renderer failed: ${error.message}`
+            : `Canvas renderer failed: ${String(error)}`,
+        );
+      });
   }, [data]);
 
   if (parsed.error) {

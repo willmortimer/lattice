@@ -74,13 +74,21 @@ export function PerspectiveDatasetViewer({
         await viewer.load(table);
         // Restore a readable default view when Perspective opens with blank settings.
         try {
-          await (viewer as PerspectiveViewerElement & { restore?: (config: object) => Promise<void> }).restore?.({
+          await viewer.restore?.({
             plugin: "Datagrid",
             settings: false,
           });
         } catch {
           /* older perspective builds omit restore */
         }
+        // Custom-element box can be 0×0 until layout; nudge Datagrid to paint.
+        const notify = () => {
+          void Promise.resolve(viewer.notifyResize?.(true)).catch(() => {
+            /* optional API */
+          });
+        };
+        notify();
+        requestAnimationFrame(notify);
         if (cancelled) return;
         setStatus("ready");
         onReadyRef.current?.();
@@ -92,8 +100,17 @@ export function PerspectiveDatasetViewer({
       }
     })();
 
+    const resizeObserver = new ResizeObserver(() => {
+      const viewer = host.querySelector("perspective-viewer") as PerspectiveViewerElement | null;
+      void Promise.resolve(viewer?.notifyResize?.(true)).catch(() => {
+        /* optional API */
+      });
+    });
+    resizeObserver.observe(host);
+
     return () => {
       cancelled = true;
+      resizeObserver.disconnect();
       const table = tableRef.current;
       tableRef.current = null;
       if (table) {
