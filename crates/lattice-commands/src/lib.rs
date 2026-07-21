@@ -26,6 +26,7 @@
 
 mod canvas;
 mod command;
+mod contracts;
 mod engine;
 mod error;
 mod history;
@@ -40,6 +41,10 @@ pub use command::{
     CanvasNodeResize, CanvasPlaceResource, CanvasRemoveEdges, CanvasRemoveNodes, CanvasResizeNodes,
     CanvasUpdateTextNode, ColumnSpec, Command, CommandOutcome, HistoryEntry, PathRemap,
     Transaction, TransactionReceipt, UndoReport,
+};
+pub use contracts::{
+    ExecutionResult, ExecutionStatus, ProposalSource, ProposalSourceType, ResourceOutput,
+    TransactionProposal,
 };
 pub use engine::CommandEngine;
 pub use error::Error;
