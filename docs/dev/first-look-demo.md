@@ -146,11 +146,11 @@ The checklist table below records pass/fail/skip on BASE `5d652ab`. Historical
 **fail** rows from the 2026-07-18 pass at `f90fb95` are superseded where polish
 landed; archaeology remains in **Known expected fails on BASE**.
 
-Still deferred after polish: formula fields, junction relations, cross-package
-relation links, full interface builder, tabular/CSV import in the browser demo,
-full native Tauri pass for folder undo / move+repair / trash (beyond P2P06 smoke),
-lookup/rollup **add-column** and tabular import on native without a dedicated
-harness, query profiler UI, semantic models, and GeoParquet/MapLibre.
+Still deferred after polish: cross-package relation links, full interface builder,
+tabular/CSV import in the browser demo, full native Tauri pass for folder undo /
+move+repair / trash (beyond P2P06 smoke), lookup/rollup **add-column** and tabular
+import on native without a dedicated harness, query profiler UI, semantic models,
+and MapLibre polish beyond the Places seed.
 
 ## Search & voice First Look honesty
 

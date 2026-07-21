@@ -327,6 +327,8 @@ pub struct ColumnMeta {
     pub sqlite_type: String,
     /// Target table name for [`FieldType::Relation`] within the same package.
     pub relation_table: Option<String>,
+    /// Optional junction table for M2M relation storage (see `app.yaml` `junction_table`).
+    pub junction_table: Option<String>,
     /// Source relation column on this table for [`FieldType::Lookup`].
     pub lookup_relation: Option<String>,
     /// Field on the related table projected by [`FieldType::Lookup`].
@@ -382,6 +384,7 @@ pub struct NewColumn<'a> {
     pub name: &'a str,
     pub field_type: FieldType,
     pub relation_table: Option<&'a str>,
+    pub junction_table: Option<&'a str>,
     pub lookup_relation: Option<&'a str>,
     pub lookup_field: Option<&'a str>,
     pub rollup_relation: Option<&'a str>,
@@ -396,6 +399,7 @@ impl<'a> NewColumn<'a> {
             name,
             field_type,
             relation_table: None,
+            junction_table: None,
             lookup_relation: None,
             lookup_field: None,
             rollup_relation: None,
@@ -410,6 +414,7 @@ impl<'a> NewColumn<'a> {
             name,
             field_type: FieldType::Relation,
             relation_table: Some(relation_table),
+            junction_table: None,
             lookup_relation: None,
             lookup_field: None,
             rollup_relation: None,
@@ -419,11 +424,18 @@ impl<'a> NewColumn<'a> {
         }
     }
 
+    /// Opt into junction-table storage for this relation column.
+    pub fn with_junction_table(mut self, junction_table: &'a str) -> Self {
+        self.junction_table = Some(junction_table);
+        self
+    }
+
     pub fn lookup(name: &'a str, lookup_relation: &'a str, lookup_field: &'a str) -> Self {
         Self {
             name,
             field_type: FieldType::Lookup,
             relation_table: None,
+            junction_table: None,
             lookup_relation: Some(lookup_relation),
             lookup_field: Some(lookup_field),
             rollup_relation: None,
@@ -443,6 +455,7 @@ impl<'a> NewColumn<'a> {
             name,
             field_type: FieldType::Rollup,
             relation_table: None,
+            junction_table: None,
             lookup_relation: None,
             lookup_field: None,
             rollup_relation: Some(rollup_relation),
@@ -457,6 +470,7 @@ impl<'a> NewColumn<'a> {
             name,
             field_type: FieldType::Formula,
             relation_table: None,
+            junction_table: None,
             lookup_relation: None,
             lookup_field: None,
             rollup_relation: None,

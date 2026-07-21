@@ -506,6 +506,174 @@ fn relation_column_validates_target_record_ids() {
 }
 
 #[test]
+fn junction_relation_round_trips_insert_update_delete() {
+    use crate::NewColumn;
+    use crate::app::database_path;
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("CRM.data");
+    let mut app = DataApp::create(&package_path, "CRM", "contacts").unwrap();
+    app.add_table("tags").unwrap();
+    app.add_columns("tags", &[NewColumn::new("name", FieldType::Text)])
+        .unwrap();
+    app.add_columns(
+        "contacts",
+        &[
+            NewColumn::new("name", FieldType::Text),
+            NewColumn::relation("tags", "tags").with_junction_table("contact_tags"),
+        ],
+    )
+    .unwrap();
+
+    let columns = app.columns("contacts").unwrap();
+    let tags_col = columns
+        .iter()
+        .find(|column| column.name == "tags")
+        .expect("tags column");
+    assert_eq!(tags_col.junction_table.as_deref(), Some("contact_tags"));
+    assert!(!app
+        .list_tables()
+        .unwrap()
+        .iter()
+        .any(|name| name == "contact_tags"));
+
+    let champ = app
+        .insert_row(
+            "tags",
+            &BTreeMap::from([("name".into(), CellValue::Text("Champion".into()))]),
+        )
+        .unwrap();
+    let enterprise = app
+        .insert_row(
+            "tags",
+            &BTreeMap::from([("name".into(), CellValue::Text("Enterprise".into()))]),
+        )
+        .unwrap();
+
+    let contact_id = app
+        .insert_row(
+            "contacts",
+            &BTreeMap::from([
+                ("name".into(), CellValue::Text("Ada".into())),
+                (
+                    "tags".into(),
+                    CellValue::Relation {
+                        record_ids: vec![champ.clone(), enterprise.clone()],
+                    },
+                ),
+            ]),
+        )
+        .unwrap();
+
+    let row = app.get_row("contacts", &contact_id).unwrap().unwrap();
+    assert_eq!(
+        row.values.get("tags"),
+        Some(&CellValue::Relation {
+            record_ids: vec![champ.clone(), enterprise.clone()],
+        })
+    );
+
+    // TEXT placeholder stays NULL; links live in the junction table.
+    let raw_text: Option<String> = rusqlite::Connection::open(database_path(&package_path))
+        .unwrap()
+        .query_row(
+            "SELECT tags FROM contacts WHERE id = ?1",
+            rusqlite::params![contact_id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(raw_text.is_none());
+
+    let junction_count: i64 = rusqlite::Connection::open(database_path(&package_path))
+        .unwrap()
+        .query_row(
+            "SELECT COUNT(*) FROM contact_tags WHERE source_id = ?1",
+            rusqlite::params![contact_id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(junction_count, 2);
+
+    app.update_row(
+        "contacts",
+        &contact_id,
+        &BTreeMap::from([(
+            "tags".into(),
+            CellValue::Relation {
+                record_ids: vec![champ.clone()],
+            },
+        )]),
+    )
+    .unwrap();
+    let updated = app.get_row("contacts", &contact_id).unwrap().unwrap();
+    assert_eq!(
+        updated.values.get("tags"),
+        Some(&CellValue::Relation {
+            record_ids: vec![champ.clone()],
+        })
+    );
+
+    let strips = app.delete_row("tags", &champ).unwrap();
+    assert_eq!(strips.len(), 1);
+    assert_eq!(strips[0].column, "tags");
+    assert_eq!(strips[0].prior_record_ids, vec![champ.clone()]);
+
+    let after_delete = app.get_row("contacts", &contact_id).unwrap().unwrap();
+    assert_eq!(
+        after_delete.values.get("tags"),
+        Some(&CellValue::Relation {
+            record_ids: vec![],
+        })
+    );
+
+    app.restore_relation_strips(&strips).unwrap();
+    let restored = app.get_row("contacts", &contact_id).unwrap().unwrap();
+    assert_eq!(
+        restored.values.get("tags"),
+        Some(&CellValue::Relation {
+            record_ids: vec![champ.clone()],
+        })
+    );
+
+    // JSON TEXT relations remain the default path.
+    app.add_columns(
+        "contacts",
+        &[NewColumn::relation("reports_to", "contacts")],
+    )
+    .unwrap();
+    let boss = app
+        .insert_row(
+            "contacts",
+            &BTreeMap::from([("name".into(), CellValue::Text("Boss".into()))]),
+        )
+        .unwrap();
+    let report = app
+        .insert_row(
+            "contacts",
+            &BTreeMap::from([
+                ("name".into(), CellValue::Text("Report".into())),
+                (
+                    "reports_to".into(),
+                    CellValue::Relation {
+                        record_ids: vec![boss.clone()],
+                    },
+                ),
+            ]),
+        )
+        .unwrap();
+    let raw_reports: String = rusqlite::Connection::open(database_path(&package_path))
+        .unwrap()
+        .query_row(
+            "SELECT reports_to FROM contacts WHERE id = ?1",
+            rusqlite::params![report],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let decoded: Vec<String> = serde_json::from_str(&raw_reports).unwrap();
+    assert_eq!(decoded, vec![boss]);
+}
+
+#[test]
 fn relation_column_requires_relation_table_metadata() {
     use crate::NewColumn;
 
@@ -519,6 +687,7 @@ fn relation_column_requires_relation_table_metadata() {
                 name: "parent",
                 field_type: FieldType::Relation,
                 relation_table: None,
+                junction_table: None,
                 lookup_relation: None,
                 lookup_field: None,
                 rollup_relation: None,

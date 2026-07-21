@@ -977,6 +977,12 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "name": "reports_to",
             "type": "relation",
             "relation_table": "contacts"
+          },
+          {
+            "name": "tags",
+            "type": "relation",
+            "relation_table": "tags",
+            "junction_table": "contact_tags"
           }
         ],
         "rows": [
@@ -988,7 +994,11 @@ export const GENERATED_TEMPLATE_CATALOG = [
             ],
             "due_date": "2026-08-15",
             "status": "Active",
-            "notes": "Champion for typed tables beside narrative docs."
+            "notes": "Champion for typed tables beside narrative docs.",
+            "tags": [
+              "Champion",
+              "Enterprise"
+            ]
           },
           {
             "name": "Grace Hopper",
@@ -1001,6 +1011,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "notes": "Asked for honest SQL export from CRM views.",
             "reports_to": [
               "Ada Lovelace"
+            ],
+            "tags": [
+              "Champion"
             ]
           },
           {
@@ -1024,6 +1037,10 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "notes": "Needs calendar layout on due dates for standup.",
             "reports_to": [
               "Dorothy Vaughan"
+            ],
+            "tags": [
+              "Partner",
+              "Enterprise"
             ]
           },
           {
@@ -1264,6 +1281,26 @@ export const GENERATED_TEMPLATE_CATALOG = [
               },
               {
                 "name": "Google"
+              }
+            ]
+          },
+          {
+            "table": "tags",
+            "columns": [
+              {
+                "name": "name",
+                "type": "text"
+              }
+            ],
+            "rows": [
+              {
+                "name": "Champion"
+              },
+              {
+                "name": "Enterprise"
+              },
+              {
+                "name": "Partner"
               }
             ]
           }

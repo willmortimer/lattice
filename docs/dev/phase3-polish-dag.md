@@ -34,7 +34,7 @@ See Cursor plan `phase3_polish_dag` for full handoff packets.
 | P3P06 | MapLibre Map tab | pending |
 | P2S01 | Native tree/undo smoke | done |
 | P2F01 | Formula MVP | done |
-| P2J01 | Junction M2M demo | pending |
+| P2J01 | Junction M2M demo | done |
 | P2X01 | Cross-package read-only | pending |
 | P2S02 | Native schema/import smoke | pending |
 | P3P07 | Docs + roadmap closeout | pending |
