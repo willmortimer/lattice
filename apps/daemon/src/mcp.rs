@@ -1,9 +1,8 @@
 //! Minimal MCP JSON-RPC stdio adapter over the governed context API.
 //!
-//! Exposes the same four tools as the localhost HTTP surface (`search`, `read`,
-//! `related`, `build_context`). This is intentionally thin — no second write
-//! path. Wire Claude Desktop / other MCP clients to `latticed mcp` with the
-//! daemon auth token in the environment (`LATTICE_AUTH_TOKEN`).
+//! Exposes read tools (`search`, `read`, `related`, `build_context`) and
+//! proposal tools (`create_proposal`, `list_proposals`, `get_proposal`,
+//! `propose_page`). Writes create reviewable proposals only — no apply.
 
 use std::io::{self, BufRead, Write};
 use std::sync::Arc;
@@ -13,8 +12,10 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::api::{
-    api_build_context, api_read, api_related, api_search, ApiError, BuildContextParams, ReadParams,
-    RelatedParams, SearchParams,
+    api_build_context, api_create_proposal, api_get_proposal, api_list_proposals, api_propose_page,
+    api_read, api_related, api_search, ApiError, BuildContextParams, CreateProposalParams,
+    GetProposalParams, ListProposalsParams, ProposePageParams, ReadParams, RelatedParams,
+    SearchParams,
 };
 
 const PROTOCOL_VERSION: &str = "2024-11-05";
@@ -173,6 +174,62 @@ fn tool_descriptors() -> Value {
                 },
                 "required": ["query"]
             }
+        },
+        {
+            "name": "create_proposal",
+            "description": "Create a reviewable transaction proposal from semantic commands. Does not apply mutations.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "workspaceId": { "type": "string" },
+                    "root": { "type": "string" },
+                    "summary": { "type": "string" },
+                    "commands": { "type": "array", "items": { "type": "object" } },
+                    "affectedPaths": { "type": "array", "items": { "type": "string" } },
+                    "warnings": { "type": "array", "items": { "type": "string" } },
+                    "sourceResource": { "type": "string" }
+                },
+                "required": ["summary", "commands"]
+            }
+        },
+        {
+            "name": "list_proposals",
+            "description": "List pending transaction proposals in the workspace inbox.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "workspaceId": { "type": "string" },
+                    "root": { "type": "string" }
+                }
+            }
+        },
+        {
+            "name": "get_proposal",
+            "description": "Load one pending transaction proposal by id.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "workspaceId": { "type": "string" },
+                    "root": { "type": "string" },
+                    "proposalId": { "type": "string" }
+                },
+                "required": ["proposalId"]
+            }
+        },
+        {
+            "name": "propose_page",
+            "description": "Typed helper to propose creating a page. Does not write the page directly.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "workspaceId": { "type": "string" },
+                    "root": { "type": "string" },
+                    "path": { "type": "string" },
+                    "content": { "type": "string" },
+                    "title": { "type": "string" }
+                },
+                "required": ["path"]
+            }
         }
     ])
 }
@@ -189,6 +246,10 @@ fn handle_tools_call(runtime: &LatticeRuntime, id: Value, params: &Value) -> Val
         "read" => call_read(runtime, arguments),
         "related" => call_related(runtime, arguments),
         "build_context" => call_build_context(runtime, arguments),
+        "create_proposal" => call_create_proposal(runtime, arguments),
+        "list_proposals" => call_list_proposals(runtime, arguments),
+        "get_proposal" => call_get_proposal(runtime, arguments),
+        "propose_page" => call_propose_page(runtime, arguments),
         other => {
             return error(id, -32602, format!("unknown tool: {other}"));
         }
@@ -241,6 +302,34 @@ fn call_build_context(runtime: &LatticeRuntime, args: Value) -> Result<Value, Ap
     serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
 }
 
+fn call_create_proposal(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
+    let params: CreateProposalParams =
+        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    let response = api_create_proposal(runtime, params)?;
+    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
+}
+
+fn call_list_proposals(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
+    let params: ListProposalsParams =
+        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    let response = api_list_proposals(runtime, params)?;
+    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
+}
+
+fn call_get_proposal(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
+    let params: GetProposalParams =
+        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    let response = api_get_proposal(runtime, params)?;
+    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
+}
+
+fn call_propose_page(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
+    let params: ProposePageParams =
+        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    let response = api_propose_page(runtime, params)?;
+    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
+}
+
 fn ok(id: Value, result: Value) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "result": result })
 }
@@ -256,12 +345,24 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn tools_list_includes_four_tools() {
+    fn tools_list_includes_eight_tools() {
         let tools = tool_descriptors();
         let arr = tools.as_array().unwrap();
-        assert_eq!(arr.len(), 4);
+        assert_eq!(arr.len(), 8);
         let names: Vec<&str> = arr.iter().filter_map(|t| t["name"].as_str()).collect();
-        assert_eq!(names, ["search", "read", "related", "build_context"]);
+        assert_eq!(
+            names,
+            [
+                "search",
+                "read",
+                "related",
+                "build_context",
+                "create_proposal",
+                "list_proposals",
+                "get_proposal",
+                "propose_page"
+            ]
+        );
     }
 
     #[test]
@@ -288,5 +389,71 @@ mod tests {
         assert!(resp["result"]["isError"].as_bool() == Some(false));
         let text = resp["result"]["content"][0]["text"].as_str().unwrap();
         assert!(text.contains("searchable-mcp-token") || text.contains("Page.md"));
+    }
+
+    #[test]
+    fn tools_call_propose_page_round_trip() {
+        let dir = TempDir::new().unwrap();
+        Workspace::init(dir.path(), "MCP").unwrap();
+        let runtime = LatticeRuntime::new();
+        let root = dir.path().to_string_lossy().into_owned();
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(json!(2)),
+            method: "tools/call".into(),
+            params: json!({
+                "name": "propose_page",
+                "arguments": {
+                    "root": root,
+                    "path": "Pages/MCP.md",
+                    "content": "# MCP page\n"
+                }
+            }),
+        };
+        let resp = dispatch(&runtime, &req).unwrap();
+        assert!(resp["result"]["isError"].as_bool() == Some(false));
+        assert!(!dir.path().join("Pages/MCP.md").exists());
+        let proposal_id = resp["result"]["structuredContent"]["proposal"]["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+
+        let list_req = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(json!(3)),
+            method: "tools/call".into(),
+            params: json!({
+                "name": "list_proposals",
+                "arguments": { "root": root }
+            }),
+        };
+        let list_resp = dispatch(&runtime, &list_req).unwrap();
+        assert!(list_resp["result"]["isError"].as_bool() == Some(false));
+        let proposals = list_resp["result"]["structuredContent"]["proposals"]
+            .as_array()
+            .unwrap();
+        assert_eq!(proposals.len(), 1);
+        assert_eq!(proposals[0]["id"].as_str().unwrap(), proposal_id);
+
+        let get_req = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(json!(4)),
+            method: "tools/call".into(),
+            params: json!({
+                "name": "get_proposal",
+                "arguments": {
+                    "root": root,
+                    "proposalId": proposal_id
+                }
+            }),
+        };
+        let get_resp = dispatch(&runtime, &get_req).unwrap();
+        assert!(get_resp["result"]["isError"].as_bool() == Some(false));
+        assert_eq!(
+            get_resp["result"]["structuredContent"]["proposal"]["source"]["type"]
+                .as_str()
+                .unwrap(),
+            "mcp"
+        );
     }
 }

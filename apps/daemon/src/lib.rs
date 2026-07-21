@@ -5,7 +5,7 @@
 //! [`lattice_client::handshake`].
 //!
 //! Also exposes an authenticated localhost HTTP API (`127.0.0.1` only) and an
-//! optional MCP stdio adapter for governed search/read/context tools.
+//! optional MCP stdio adapter for governed search/read/context and proposal tools.
 
 mod api;
 mod config;
@@ -21,9 +21,11 @@ mod spawn;
 mod voice_host;
 
 pub use api::{
-    api_build_context, api_read, api_related, api_search, ApiError, BuildContextParams,
-    BuildContextResponse, ReadParams, ReadResponse, RelatedParams, RelatedResponse, SearchParams,
-    SearchResponse, MAX_CONTEXT_BYTES, MAX_HIT_LIMIT, MAX_READ_BYTES,
+    api_build_context, api_create_proposal, api_get_proposal, api_list_proposals, api_propose_page,
+    api_read, api_related, api_search, ApiError, BuildContextParams, BuildContextResponse,
+    CreateProposalParams, GetProposalParams, ListProposalsParams, ListProposalsResponse,
+    ProposalResponse, ProposePageParams, ReadParams, ReadResponse, RelatedParams, RelatedResponse,
+    SearchParams, SearchResponse, MAX_CONTEXT_BYTES, MAX_HIT_LIMIT, MAX_READ_BYTES,
 };
 pub use config::{
     default_run_dir, default_socket_path, DaemonConfig, DEFAULT_API_PORT,
