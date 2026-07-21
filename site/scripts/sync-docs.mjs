@@ -9,15 +9,15 @@
  */
 
 import {
-  cpSync,
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -33,14 +33,36 @@ if (!existsSync(source) || !statSync(source).isDirectory()) {
 
 const navigation = JSON.parse(readFileSync(navigationPath, 'utf8'));
 
-rmSync(output, { recursive: true, force: true });
 mkdirSync(output, { recursive: true });
-cpSync(source, output, {
-  recursive: true,
-  filter(path) {
-    return !path.endsWith('navigation.json') && !path.endsWith('README.md');
-  },
-});
+
+function filesUnder(root) {
+  return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(root, entry.name);
+    return entry.isDirectory() ? filesUnder(path) : [path];
+  });
+}
+
+const sourceFiles = filesUnder(source).filter(
+  (path) => !path.endsWith('navigation.json') && !path.endsWith('README.md'),
+);
+const expected = new Set();
+
+for (const path of sourceFiles) {
+  const destination = resolve(output, relative(source, path));
+  expected.add(destination);
+  const content = readFileSync(path);
+  if (!existsSync(destination) || !content.equals(readFileSync(destination))) {
+    mkdirSync(dirname(destination), { recursive: true });
+    writeFileSync(destination, content);
+  }
+}
+
+// Remove pages that were deleted or renamed without replacing every generated
+// file. Stable paths let Astro's content layer update entries instead of seeing
+// a remove-and-add pair for the same document ID.
+for (const path of filesUnder(output)) {
+  if (!expected.has(path)) rmSync(path);
+}
 
 function routeFor(file) {
   if (file === 'index.md') return '/docs/';
