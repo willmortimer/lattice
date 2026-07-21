@@ -55,19 +55,35 @@ pub struct EncodedBatch {
     pub sample_rows: Vec<Vec<serde_json::Value>>,
 }
 
+fn cancelled_batch(schema_meta: SchemaMeta) -> EncodedBatch {
+    EncodedBatch {
+        schema_meta,
+        ipc_bytes: Vec::new(),
+        row_count: 0,
+        truncated: false,
+        cancelled: true,
+        byte_length: 0,
+        sample_rows: Vec::new(),
+    }
+}
+
 /// Encode a `lattice-duckdb` [`RecordBatch`] as a bounded Arrow IPC stream.
 pub fn encode_duckdb_batch(batch: &RecordBatch, options: &EncodeOptions) -> Result<EncodedBatch> {
     encode_duckdb_batch_with_cancel(batch, options, &NeverCancel)
 }
 
 /// Encode with an explicit cancellation check (stub-friendly for UI cancel hooks).
+///
+/// When [`CancelCheck`] fires, returns `Ok` with `cancelled: true` and an empty
+/// payload so callers can surface the response flag without treating cancel as a
+/// hard transport failure.
 pub fn encode_duckdb_batch_with_cancel(
     batch: &RecordBatch,
     options: &EncodeOptions,
     cancel: &dyn CancelCheck,
 ) -> Result<EncodedBatch> {
     if cancel.is_cancelled() {
-        return Err(Error::Cancelled);
+        return Ok(cancelled_batch(SchemaMeta { fields: Vec::new() }));
     }
 
     let max_rows = options.max_rows.max(1);
@@ -78,7 +94,7 @@ pub fn encode_duckdb_batch_with_cancel(
 
     loop {
         if cancel.is_cancelled() {
-            return Err(Error::Cancelled);
+            return Ok(cancelled_batch(schema_meta));
         }
 
         let arrow_batch = to_arrow_batch(&working)?;
