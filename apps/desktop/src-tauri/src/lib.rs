@@ -10,6 +10,7 @@ mod resource_links;
 mod revisions;
 mod search;
 mod semantic;
+mod kernel;
 mod terminal;
 mod theme;
 mod tray;
@@ -26,6 +27,7 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(watcher::WatcherState::default())
         .manage(terminal::TerminalState::default())
+        .manage(kernel::KernelState::default())
         .manage(theme::ThemeWatchState::default())
         .manage(resource_links::ResourceCatalogState::default())
         .manage(voice::VoiceState::default())
@@ -132,6 +134,10 @@ pub fn run() {
             terminal::terminal_write,
             terminal::terminal_resize,
             terminal::terminal_kill,
+            kernel::kernel_start,
+            kernel::kernel_execute,
+            kernel::kernel_interrupt,
+            kernel::kernel_shutdown,
             theme::list_themes,
             theme::get_resolved_theme,
             theme::set_theme,
