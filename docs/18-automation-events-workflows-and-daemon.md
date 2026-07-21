@@ -204,6 +204,12 @@ lineage recorded under `.lattice/derived/`. Rebuild runs the declared
 `builder.task` through the existing task runner and refreshes lineage on
 success.
 
+Declared inputs, builder task, and output also surface as `input` /
+`output` edges in the Inspect relationship graph (see
+[resource runtime contracts](./39-resource-runtime-contracts.md#relationship--lineage-graph-inspect)).
+Workflow trigger and step resource refs surface as `workflow` edges in the
+same panel.
+
 ## Failure handling
 
 - Durable job record.
