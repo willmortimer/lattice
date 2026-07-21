@@ -26,24 +26,26 @@ Pyodide remains the **default and fallback** runtime: zero-setup, works in the
 browser demo, and degrades honestly when the CDN worker fails. Native compute
 is opt-in beside it, not a replacement.
 
-## Phase-4 local compute (in progress)
+## Phase-4 local compute (shipped)
 
-Phase-4 local compute adds **native** execution without claiming the full
-Jupyter product surface:
+Phase-4 local compute adds **native** execution beside Pyodide without claiming
+the full Jupyter product surface. Tracker:
+[jupyter-phase4-local-compute-dag](dev/jupyter-phase4-local-compute-dag.md)
+(Complete).
 
 | Surface | Status |
 |---|---|
-| Native out-of-process `ipykernel` sessions (stdio JSON-lines bridge) | In DAG — see [jupyter-phase4-local-compute-dag](dev/jupyter-phase4-local-compute-dag.md) |
-| `uv`-backed `*.task/` / `task.yaml` execution | In DAG |
-| Optional Nix `EnvProvider` (`system` \| `uv-project` \| `nix`) | In DAG; Nix never required |
+| Frontend `KernelSession` (`ensure` / `execute` / `interrupt` / `dispose`) | **Available** — Pyodide adapter + native desktop adapter |
+| Native out-of-process `ipykernel` sessions (stdio JSON-lines bridge; Tauri session map) | **Available** — opt-in when `uv`/`python`+ipykernel present; else Pyodide |
+| `uv`-backed `*.task/` / `task.yaml` execution (timeout, cwd, captured logs/exit) | **Available** — no proposed-transaction outputs yet |
+| Optional Nix `EnvProvider` (`system` \| `uv-project` \| `nix`) | **Available** — Nix never required; typed unavailable when missing |
 | Remote Jupyter kernels / server attach | **Deferred** |
 | Scheduled notebook runs / `notebook.executed` jobs | **Deferred** |
 | Rich widget MIME bundles / ipywidgets `comm` | **Deferred** |
 
-Contracts for `KernelSession`, the native bridge, and `EnvProvider` live in
-[resource runtime contracts](./39-resource-runtime-contracts.md). Do not assume
-native Run, `uv` tasks, or Nix resolution are available until the DAG marks
-those packets merged.
+Contracts and ownership for `KernelSession`, the native bridge, and
+`EnvProvider` live in
+[resource runtime contracts](./39-resource-runtime-contracts.md).
 
 ## Kernel architecture
 

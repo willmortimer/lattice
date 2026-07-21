@@ -3152,7 +3152,9 @@ dependencies = [
  "lattice-core",
  "lattice-data",
  "lattice-datasets",
+ "lattice-env",
  "lattice-storage",
+ "libc",
  "rusqlite",
  "serde",
  "serde_json",
@@ -3267,6 +3269,7 @@ dependencies = [
  "lattice-duckdb",
  "lattice-handlers",
  "lattice-index",
+ "lattice-kernel",
  "lattice-profile",
  "lattice-protocol",
  "lattice-runtime",
@@ -3346,6 +3349,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-env"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "lattice-handlers"
 version = "0.1.0"
 dependencies = [
@@ -3378,6 +3390,17 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "walkdir",
+]
+
+[[package]]
+name = "lattice-kernel"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "uuid",
 ]
 
 [[package]]
