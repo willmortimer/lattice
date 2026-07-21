@@ -3119,6 +3119,7 @@ dependencies = [
  "lattice-datasets",
  "lattice-duckdb",
  "lattice-index",
+ "lattice-publish",
  "lattice-storage",
  "lattice-theme",
  "predicates",
@@ -3431,6 +3432,21 @@ dependencies = [
  "protoc-bin-vendored",
  "thiserror 2.0.18",
  "tokio-util",
+]
+
+[[package]]
+name = "lattice-publish"
+version = "0.1.0"
+dependencies = [
+ "lattice-commands",
+ "lattice-core",
+ "lattice-data",
+ "lattice-theme",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "walkdir",
 ]
 
 [[package]]
