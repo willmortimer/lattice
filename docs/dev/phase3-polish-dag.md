@@ -33,7 +33,7 @@ See Cursor plan `phase3_polish_dag` for full handoff packets.
 | P3P05 | Places GeoParquet seed | pending |
 | P3P06 | MapLibre Map tab | pending |
 | P2S01 | Native tree/undo smoke | done |
-| P2F01 | Formula MVP | pending |
+| P2F01 | Formula MVP | done |
 | P2J01 | Junction M2M demo | pending |
 | P2X01 | Cross-package read-only | pending |
 | P2S02 | Native schema/import smoke | pending |
