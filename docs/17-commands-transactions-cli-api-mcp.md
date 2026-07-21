@@ -151,6 +151,7 @@ get_page
 get_outline
 get_blocks
 get_backlinks
+list_relationship_edges
 get_dataset_schema
 query_dataset
 get_canvas_outline
