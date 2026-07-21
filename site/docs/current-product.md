@@ -1,29 +1,37 @@
 ---
-title: Current product
-description: What the active Lattice build implements today.
+title: Current availability
+description: A concise, honest boundary between implemented local surfaces, active product work, and future cloud services.
 ---
 
-The current build is a native local notebook foundation, not yet the complete
-long-term information studio.
+## Available in the local app
 
-## Implemented
+- Native Tauri desktop shell, workspace profiles, templates, and headless CLI.
+- Markdown pages, links, backlinks, embeds, Quick Note, local voice integration,
+  autosave, revision guards, and external-edit conflict handling.
+- Resource tree, tabs, command palette, keyword search, optional on-device
+  semantic search, Inspect, history, undo, and proposal review.
+- Editable JSON Canvas with resource placement, notes, edges, resize, and outline.
+- SQLite data apps with grid/list/board/gallery/calendar/form views, saved views,
+  forms, relations, formulas, lookups, rollups, and multi-component interfaces.
+- Parquet datasets with DuckDB, Arrow, Perspective, Vega-Lite, profiles, query
+  plans, cancellation, annotations, and MapLibre maps.
+- Jupyter notebooks with native and Pyodide execution paths.
+- First-class local tasks, bounded workflow execution, transaction proposals,
+  sandboxed artifacts, and live resource embeds.
+- Long-lived daemon foundations for sessions, watching, search, voice, local API,
+  and read/context-oriented MCP tools.
 
-- Tauri desktop shell and headless `lattice` CLI.
-- Real-directory workspace creation, opening, scanning, and recent sessions.
-- Markdown editing with links, backlinks, images, code blocks, Mermaid,
-  autosave, and external-edit conflict handling.
-- Search, command palette, resource tree, tabs, session restore, Quick Capture,
-  and a contextual inspector.
-- Basic JSON Canvas viewing.
-- SQLite-backed table packages and CSV import.
-- Semantic commands, durable history, undo, revision guards, and filesystem
-  reconciliation.
-- Built-in semantic themes, including Slate, Paper, Carbon, Fjord,
-  Ultraviolet, Blueprint, and Vellum.
+Some surfaces are new and still receiving interaction, accessibility,
+performance, packaging, and documentation polish.
 
-## In progress
+## Active product direction
 
-Phase 1 continues with editor refinement, resource creation, navigation,
-inspect surfaces, canvas capabilities, and performance hardening. More complete
-data applications, analytics, notebooks, automation, sync, and mobile work
-belong to later roadmap phases.
+- Deeper cross-resource interfaces, live embeds, lineage, and derived outputs.
+- Richer workflow triggers, durable jobs, proposal paths, and automation history.
+- Publishing, application packages, plugin/capability packs, and import quality.
+- Signed public installers and release engineering.
+
+## Not available as a managed service yet
+
+Lattice Cloud—personal sync, collaboration, managed backups, teams, hosted
+execution, and publishing—is future work. See [Cloud and sync](/docs/cloud-and-sync/).

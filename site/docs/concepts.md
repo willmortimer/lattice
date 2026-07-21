@@ -1,28 +1,38 @@
 ---
 title: Core concepts
-description: The principles that make Lattice open-native and local-first.
+description: The small set of ideas that explain how Lattice behaves.
 ---
 
-## A workspace is a directory
+## Workspace
 
-Canonical content remains inspectable outside Lattice. Hidden state may improve
-indexing, previews, recovery, and history, but deleting `.lattice/` must never
-destroy the work itself.
+A workspace is a real directory with a readable `lattice.yaml` manifest.
+Canonical resources remain inspectable outside the app.
 
-## Offline is normal
+## Resource
 
-Core editing, search, data, canvas, and command workflows do not require a
-server. Connectivity is an optional capability.
+Page, Canvas, Table, Dataset, Notebook, Task, Workflow, Artifact, and File are
+distinct resources. Each keeps a format and renderer appropriate to its work.
 
-## Every mutation is semantic
+## View
 
-The desktop UI is not a privileged writer. GUI actions, the CLI, and future
-automation surfaces use the same Rust command and transaction core.
+A view presents another resource. A board, chart, map, form, or interface does
+not silently copy or own the underlying data.
 
-## Different resources keep appropriate formats
+## Command and revision
 
-Markdown should not impersonate a database, canvas, notebook, or binary file.
-Lattice composes independent resources through links, views, commands, and
-inspection instead of flattening everything into one storage model.
+Changes made through Lattice are validated semantic commands. Changes made by
+another program are legitimate external revisions. Lattice distinguishes them
+rather than inventing history it did not observe.
 
-Read the canonical [principles and invariants](https://github.com/willmortimer/lattice/blob/main/docs/02-principles-and-invariants.md).
+## Inspect
+
+Inspect is the contextual place for properties, source, links, history, schema,
+permissions, logs, and diagnostics. Advanced behavior stays attached to the
+resource instead of living in a separate expert application.
+
+## Local-first
+
+Ordinary work commits locally and does not wait for a network. Optional sync is
+replication over the workspace, not the canonical format.
+
+Read the complete [principles and invariants](https://github.com/willmortimer/lattice/blob/main/docs/02-principles-and-invariants.md).

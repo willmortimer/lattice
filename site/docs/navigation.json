@@ -3,23 +3,37 @@
     "label": "Start here",
     "items": [
       { "label": "Overview", "file": "overview.md" },
+      { "label": "Install and run", "file": "installation.md" },
       { "label": "Getting started", "file": "getting-started.md" },
-      { "label": "Current product", "file": "current-product.md" }
+      { "label": "Current availability", "file": "current-product.md" }
+    ]
+  },
+  {
+    "label": "Use Lattice",
+    "items": [
+      { "label": "Pages and capture", "file": "pages-and-capture.md" },
+      { "label": "Canvas", "file": "canvas.md" },
+      { "label": "Tables and data apps", "file": "tables-and-data-apps.md" },
+      { "label": "Datasets and charts", "file": "datasets-and-charts.md" },
+      { "label": "Notebooks, tasks, workflows", "file": "notebooks-tasks-workflows.md" },
+      { "label": "Search, history, conflicts", "file": "search-history-conflicts.md" },
+      { "label": "CLI guide", "file": "cli.md" }
     ]
   },
   {
     "label": "Understand Lattice",
     "items": [
       { "label": "Core concepts", "file": "concepts.md" },
-      { "label": "Open formats", "file": "formats.md" },
-      { "label": "Architecture", "file": "architecture.md" },
-      { "label": "Roadmap", "file": "roadmap.md" }
+      { "label": "Open formats", "file": "open-formats.md" },
+      { "label": "Cloud and sync", "file": "cloud-and-sync.md" },
+      { "label": "Product direction", "file": "roadmap.md" }
     ]
   },
   {
     "label": "Project",
     "collapsed": true,
     "items": [
+      { "label": "Architecture overview", "file": "architecture.md" },
       { "label": "Contributing", "file": "contributing.md" }
     ]
   }
