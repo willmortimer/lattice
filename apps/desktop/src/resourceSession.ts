@@ -1,4 +1,5 @@
 import type { DataAppSnapshot } from "./data/types";
+import type { InterfaceSummary } from "./data/interfaces";
 import type { PageIO } from "./editor/pageIO";
 import type { ResourceEncoding, ResourceInspection } from "./lib/resourceRuntime";
 import type { TaskManifestDto } from "./lib/taskRun";
@@ -27,6 +28,12 @@ export type OpenResourceSession =
       kind: "data-app";
       resource: Resource;
       snapshot: DataAppSnapshot;
+    }
+  | {
+      kind: "interface";
+      resource: Resource;
+      snapshot: DataAppSnapshot;
+      interfaceDef: InterfaceSummary;
     }
   | {
       kind: "dataset";

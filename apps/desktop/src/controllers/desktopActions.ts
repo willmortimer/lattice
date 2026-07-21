@@ -24,7 +24,8 @@ import {
   viewNameFromCanvasSubpath,
   viewNameFromInterfaceBindings,
 } from "../canvas/dataViewSubpath";
-import { loadPackageInterface } from "../data/interfaces";
+import { loadPackageInterface, type InterfaceSummary } from "../data/interfaces";
+import { interfaceHasDashboardComponents } from "../lib/bindingSpec";
 
 function dirnameOf(path: string): string {
   const slash = path.lastIndexOf("/");
@@ -56,7 +57,11 @@ export interface DesktopActionsOptions {
   setRevealPath: (path: string | null) => void;
   setLinkPicker: (picker: { query: string; candidates: ResourceLinkTarget[] } | null) => void;
   refreshResources: () => Promise<void>;
-  handleSelect: (resource: Resource, options?: { recordHistory?: boolean; viewName?: string }) => Promise<void>;
+  handleSelect: (resource: Resource, options?: {
+    recordHistory?: boolean;
+    viewName?: string;
+    interfaceDef?: InterfaceSummary;
+  }) => Promise<void>;
   openCreatedResource: (resource: Resource, session: OpenResourceSession) => void;
   reconcilePathRemaps?: (remaps: { from: string; to: string }[]) => Promise<void>;
 }
@@ -358,6 +363,10 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
             name: interfaceName,
             demo: inBrowser,
           });
+          if (interfaceHasDashboardComponents(iface)) {
+            void handleSelect(resource, { interfaceDef: iface });
+            return;
+          }
           const openView = viewNameFromInterfaceBindings(iface);
           void handleSelect(resource, openView ? { viewName: openView } : undefined);
         } catch (error) {

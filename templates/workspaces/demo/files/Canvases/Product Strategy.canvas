@@ -112,6 +112,25 @@
       "height": 100
     },
     {
+      "id": "crm-ops-dashboard-label",
+      "type": "text",
+      "x": 1560,
+      "y": 60,
+      "width": 180,
+      "height": 40,
+      "text": "CRM OpsDashboard"
+    },
+    {
+      "id": "crm-ops-dashboard",
+      "type": "file",
+      "file": "CRM.data",
+      "subpath": "interfaces/OpsDashboard",
+      "x": 1560,
+      "y": 100,
+      "width": 200,
+      "height": 100
+    },
+    {
       "id": "crm-notebook-label",
       "type": "text",
       "x": 900,

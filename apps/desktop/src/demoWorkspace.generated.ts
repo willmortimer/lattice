@@ -417,6 +417,25 @@ export const demoCanvas = {
       "height": 100
     },
     {
+      "id": "crm-ops-dashboard-label",
+      "type": "text",
+      "x": 1560,
+      "y": 60,
+      "width": 180,
+      "height": 40,
+      "text": "CRM OpsDashboard"
+    },
+    {
+      "id": "crm-ops-dashboard",
+      "type": "file",
+      "file": "CRM.data",
+      "subpath": "interfaces/OpsDashboard",
+      "x": 1560,
+      "y": 100,
+      "width": 200,
+      "height": 100
+    },
+    {
       "id": "crm-notebook-label",
       "type": "text",
       "x": 900,
@@ -6211,6 +6230,80 @@ export const demoPackageInterfaces: InterfaceSummary[] = [
     ],
     "title": "Contact operations",
     "description": "Board view plus contact intake form for CRM canvas open."
+  },
+  {
+    "name": "OpsDashboard",
+    "views": [
+      "Board"
+    ],
+    "forms": [
+      "ContactIntake"
+    ],
+    "title": "Ops dashboard",
+    "description": "Multi-component CRM interface (metric, chart, map, data-view, form).",
+    "layout": {
+      "columns": 12
+    },
+    "components": [
+      {
+        "id": "contact_count",
+        "type": "metric",
+        "span": 3,
+        "title": "Contacts",
+        "binding": {
+          "type": "sqlite-query",
+          "resource": ".",
+          "sql": "SELECT COUNT(*) AS value FROM contacts",
+          "limit": 1
+        }
+      },
+      {
+        "id": "revenue_chart",
+        "type": "chart",
+        "span": 6,
+        "title": "Revenue by region",
+        "binding": {
+          "type": "duckdb-query",
+          "resources": [
+            "Data/Orders.dataset"
+          ],
+          "sql": "SELECT region, sum(revenue) AS revenue FROM read_parquet('Data/Orders.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true) GROUP BY region ORDER BY region",
+          "limit": 100
+        },
+        "chart": "Dashboards/Revenue by region and category.vl.json"
+      },
+      {
+        "id": "places_map",
+        "type": "map",
+        "span": 6,
+        "title": "Places",
+        "binding": {
+          "type": "resource",
+          "resource": "Data/Places.dataset"
+        }
+      },
+      {
+        "id": "board",
+        "type": "data-view",
+        "span": 6,
+        "title": "Board",
+        "binding": {
+          "type": "saved-view",
+          "resource": ".",
+          "view": "Board"
+        }
+      },
+      {
+        "id": "intake",
+        "type": "form",
+        "span": 6,
+        "binding": {
+          "type": "resource",
+          "resource": "."
+        },
+        "form": "ContactIntake"
+      }
+    ]
   }
 ];
 
@@ -6226,6 +6319,80 @@ export const demoPackageInterfacesByPath: Record<string, InterfaceSummary[]> = {
       ],
       "title": "Contact operations",
       "description": "Board view plus contact intake form for CRM canvas open."
+    },
+    {
+      "name": "OpsDashboard",
+      "views": [
+        "Board"
+      ],
+      "forms": [
+        "ContactIntake"
+      ],
+      "title": "Ops dashboard",
+      "description": "Multi-component CRM interface (metric, chart, map, data-view, form).",
+      "layout": {
+        "columns": 12
+      },
+      "components": [
+        {
+          "id": "contact_count",
+          "type": "metric",
+          "span": 3,
+          "title": "Contacts",
+          "binding": {
+            "type": "sqlite-query",
+            "resource": ".",
+            "sql": "SELECT COUNT(*) AS value FROM contacts",
+            "limit": 1
+          }
+        },
+        {
+          "id": "revenue_chart",
+          "type": "chart",
+          "span": 6,
+          "title": "Revenue by region",
+          "binding": {
+            "type": "duckdb-query",
+            "resources": [
+              "Data/Orders.dataset"
+            ],
+            "sql": "SELECT region, sum(revenue) AS revenue FROM read_parquet('Data/Orders.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true) GROUP BY region ORDER BY region",
+            "limit": 100
+          },
+          "chart": "Dashboards/Revenue by region and category.vl.json"
+        },
+        {
+          "id": "places_map",
+          "type": "map",
+          "span": 6,
+          "title": "Places",
+          "binding": {
+            "type": "resource",
+            "resource": "Data/Places.dataset"
+          }
+        },
+        {
+          "id": "board",
+          "type": "data-view",
+          "span": 6,
+          "title": "Board",
+          "binding": {
+            "type": "saved-view",
+            "resource": ".",
+            "view": "Board"
+          }
+        },
+        {
+          "id": "intake",
+          "type": "form",
+          "span": 6,
+          "binding": {
+            "type": "resource",
+            "resource": "."
+          },
+          "form": "ContactIntake"
+        }
+      ]
     }
   ],
   "Projects/Delivery.data": [],

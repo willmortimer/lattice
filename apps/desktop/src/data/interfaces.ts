@@ -4,14 +4,24 @@ import {
   demoPackageInterfaces,
   demoPackageInterfacesByPath,
 } from "../demoWorkspace.generated";
+import type {
+  InterfaceComponent,
+  InterfaceDef,
+  InterfaceLayout,
+  InterfaceParameter,
+} from "../lib/bindingSpec";
+import { interfaceHasDashboardComponents } from "../lib/bindingSpec";
 
 /** Mirrors Tauri `InterfaceSummary` from `list_data_interfaces` / `load_data_interface`. */
-export interface InterfaceSummary {
+export interface InterfaceSummary extends InterfaceDef {
   name: string;
   views: string[];
   forms: string[];
   title?: string;
   description?: string;
+  parameters?: Record<string, InterfaceParameter>;
+  layout?: InterfaceLayout;
+  components?: InterfaceComponent[];
 }
 
 /**
@@ -22,6 +32,64 @@ export const DEMO_PACKAGE_INTERFACES: InterfaceSummary[] = demoPackageInterfaces
 /** Interfaces keyed by `.data` package path for multi-app browser demos. */
 export const DEMO_PACKAGE_INTERFACES_BY_PATH: Record<string, InterfaceSummary[]> =
   demoPackageInterfacesByPath ?? {};
+
+/** Multi-component demo fixture (≥3 component types) for browser / tests. */
+export const DEMO_OPS_DASHBOARD: InterfaceSummary = {
+  name: "OpsDashboard",
+  views: ["Board"],
+  forms: ["ContactIntake"],
+  title: "Ops dashboard",
+  description: "Multi-component CRM interface (metric, chart, map, data-view, form).",
+  layout: { columns: 12 },
+  components: [
+    {
+      id: "contact_count",
+      type: "metric",
+      span: 3,
+      title: "Contacts",
+      binding: {
+        type: "sqlite-query",
+        resource: ".",
+        sql: "SELECT COUNT(*) AS value FROM contacts",
+        limit: 1,
+      },
+    },
+    {
+      id: "revenue_chart",
+      type: "chart",
+      span: 6,
+      title: "Revenue by region",
+      chart: "Dashboards/Revenue by region and category.vl.json",
+      binding: {
+        type: "duckdb-query",
+        resources: ["Data/Orders.dataset"],
+        sql: "SELECT region, sum(revenue) AS revenue FROM read_parquet('Data/Orders.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true) GROUP BY region ORDER BY region",
+        limit: 100,
+      },
+    },
+    {
+      id: "places_map",
+      type: "map",
+      span: 6,
+      title: "Places",
+      binding: { type: "resource", resource: "Data/Places.dataset" },
+    },
+    {
+      id: "board",
+      type: "data-view",
+      span: 6,
+      title: "Board",
+      binding: { type: "saved-view", resource: ".", view: "Board" },
+    },
+    {
+      id: "intake",
+      type: "form",
+      span: 6,
+      form: "ContactIntake",
+      binding: { type: "resource", resource: "." },
+    },
+  ],
+};
 
 export function demoInterfacesForPackage(relPath: string): InterfaceSummary[] {
   return DEMO_PACKAGE_INTERFACES_BY_PATH[relPath] ?? DEMO_PACKAGE_INTERFACES;
@@ -73,3 +141,5 @@ export async function loadPackageInterface(options: {
   }
   return loadDataInterface(options.root, options.relPath, options.name);
 }
+
+export { interfaceHasDashboardComponents };

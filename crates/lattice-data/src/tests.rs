@@ -1107,8 +1107,132 @@ fn load_interface_rejects_empty_bindings() {
         .unwrap_err()
         .to_string();
     assert!(
-        err.contains("at least one view or form"),
+        err.contains("at least one view, form, or component"),
         "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn interface_multi_component_yaml_round_trip() {
+    use crate::{BindingSpec, InterfaceComponent, InterfaceComponentType, InterfaceLayout};
+
+    let yaml = r#"
+format: lattice-interface
+version: 1
+name: OpsDashboard
+views: [Board]
+forms: [intake]
+title: Ops dashboard
+layout:
+  columns: 12
+parameters:
+  region:
+    type: string
+    default: all
+components:
+  - id: contact_count
+    type: metric
+    span: 3
+    title: Contacts
+    binding:
+      type: sqlite-query
+      resource: .
+      sql: SELECT COUNT(*) AS value FROM contacts
+      limit: 1
+  - id: revenue_chart
+    type: chart
+    span: 6
+    title: Revenue
+    chart: Dashboards/Revenue by region and category.vl.json
+    binding:
+      type: duckdb-query
+      resources: [Data/Orders.dataset]
+      sql: SELECT region, sum(revenue) AS revenue FROM read_parquet('Data/Orders.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true) GROUP BY region
+      limit: 100
+  - id: places_map
+    type: map
+    span: 6
+    title: Places
+    binding:
+      type: resource
+      resource: Data/Places.dataset
+  - id: board
+    type: data-view
+    span: 6
+    title: Board
+    binding:
+      type: saved-view
+      resource: .
+      view: Board
+  - id: intake
+    type: form
+    span: 6
+    form: intake
+    binding:
+      type: resource
+      resource: .
+"#;
+
+    let parsed: InterfaceDef = serde_yaml::from_str(yaml).unwrap();
+    assert_eq!(parsed.name, "OpsDashboard");
+    assert!(parsed.has_dashboard_components());
+    assert_eq!(parsed.layout_columns(), 12);
+    assert_eq!(parsed.components.len(), 5);
+    assert_eq!(
+        parsed.components[0].component_type,
+        InterfaceComponentType::Metric
+    );
+    assert_eq!(
+        parsed.components[1].component_type,
+        InterfaceComponentType::Chart
+    );
+    assert_eq!(
+        parsed.components[2].component_type,
+        InterfaceComponentType::Map
+    );
+    assert!(matches!(
+        &parsed.components[0].binding,
+        Some(BindingSpec::SqliteQuery { limit: 1, .. })
+    ));
+    assert!(matches!(
+        &parsed.components[1].binding,
+        Some(BindingSpec::DuckdbQuery { .. })
+    ));
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("CRM.data");
+    let app = DataApp::create(&package_path, "CRM", "contacts").unwrap();
+    rusqlite::Connection::open(package_path.join("database.sqlite"))
+        .unwrap()
+        .execute_batch("ALTER TABLE contacts ADD COLUMN name TEXT;")
+        .unwrap();
+
+    let mut board = ViewDef::new_grid("contacts");
+    board.layout.layout_type = "board".into();
+    write_package_view(&package_path, "Board", &board).unwrap();
+    let mut form = FormDef::new("intake", "contacts");
+    form.fields = vec!["name".into()];
+    write_package_form(&package_path, &form).unwrap();
+
+    let mut interface = parsed;
+    interface.layout = Some(InterfaceLayout { columns: 12 });
+    write_package_interface(&package_path, &interface).unwrap();
+    let loaded = app.load_interface("OpsDashboard").unwrap();
+    assert_eq!(loaded.components.len(), 5);
+    assert_eq!(
+        loaded.components[3],
+        InterfaceComponent {
+            id: "board".into(),
+            component_type: InterfaceComponentType::DataView,
+            span: 6,
+            title: Some("Board".into()),
+            binding: Some(BindingSpec::SavedView {
+                resource: ".".into(),
+                view: "Board".into(),
+            }),
+            form: None,
+            chart: None,
+        }
     );
 }
 

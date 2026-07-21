@@ -299,13 +299,17 @@ canvas property) for package interfaces:
 - `interfaces/{name}` — bare interface stem.
 - `interfaces/{name}.interface.yaml` — interface file.
 
-Opening an interface loads `interfaces/{name}.interface.yaml`, then opens the
-package on the interface's primary bound view (first entry in `views`).
+Opening an interface loads `interfaces/{name}.interface.yaml`. When the
+definition has no `components`, the package opens on the interface's primary
+bound view (first entry in `views`). When `components` is non-empty, the
+desktop opens an `interface` session and renders the multi-component dashboard
+(`BindingSpec`-backed metric / chart / map / form / data-view tiles).
 Unrecognized subpaths open the package default view.
 
 First Look fixture: `Canvases/Product Strategy.canvas` CRM nodes use
-`subpath: views/Board`, `subpath: views/Gallery.yaml`, and
-`subpath: interfaces/ContactOps` on `CRM.data`.
+`subpath: views/Board`, `subpath: views/Gallery.yaml`,
+`subpath: interfaces/ContactOps`, and `subpath: interfaces/OpsDashboard` on
+`CRM.data`.
 
 This is navigation via JSON Canvas `subpath`, distinct from in-table
 `layout.type: form` and from future `lattice-canvas-profile` sidecars that

@@ -520,14 +520,34 @@ description: Board view plus contact intake form.
 ```
 
 - `name` must match the file stem.
-- At least one of `views` / `forms` must be non-empty; names must exist in the
-  package on load.
+- At least one of `views` / `forms` / `components` must be non-empty; names must
+  exist in the package on load (for same-package view/form bindings).
 - Canvas open uses JSON Canvas `subpath: interfaces/{name}` (same `subpath`
-  field as views — not a separate node property). The desktop resolves the
-  interface and opens the primary bound view (first `views` entry).
+  field as views — not a separate node property). When `components` is empty or
+  absent, the desktop resolves the interface and opens the primary bound view
+  (first `views` entry). When `components` is present, the desktop renders a
+  multi-component dashboard instead.
 
-Demo CRM ships `interfaces/ContactOps.interface.yaml` (Board + ContactIntake).
-A full interface builder / drag layout editor remains future work.
+### Multi-component dashboards (BindingSpec)
+
+Optional additive fields on the same `InterfaceDef`:
+
+- `parameters` — named filter inputs (v1: string defaults)
+- `layout.columns` — CSS grid column count (default 12)
+- `components[]` — dashboard tiles with `id`, `type`, `span`, and optional
+  `binding` / `form` / `chart`
+
+Component types (v1): `metric`, `chart`, `map`, `form`, `data-view`.
+
+Bindings use shared `BindingSpec` (`resource` | `saved-view` | `sqlite-query` |
+`duckdb-query` | `notebook-output` | `task-output`) with kebab-case `type` tags.
+IPC JSON uses camelCase field names (`cellId`). See
+[resource runtime contracts](./39-resource-runtime-contracts.md).
+
+Demo CRM ships `interfaces/ContactOps.interface.yaml` (Board + ContactIntake,
+legacy navigation) and `interfaces/OpsDashboard.interface.yaml` (metric + chart
++ map + data-view + form). Light drag-reorder and span resize persist YAML via
+`save_data_interface`.
 
 Airtable-like operational surfaces over shared data can also include:
 

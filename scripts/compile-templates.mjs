@@ -836,8 +836,9 @@ function normalizeDataPackageInterface(
 
   const views = normalizeInterfaceNameList(entry.views, template, `${label}.views`, knownViews, "view");
   const forms = normalizeInterfaceNameList(entry.forms, template, `${label}.forms`, knownForms, "form");
-  if (views.length === 0 && forms.length === 0) {
-    throw new Error(`${template}: ${label} must bind at least one view or form`);
+  const components = normalizeInterfaceComponents(entry.components, template, `${label}.components`);
+  if (views.length === 0 && forms.length === 0 && components.length === 0) {
+    throw new Error(`${template}: ${label} must bind at least one view, form, or component`);
   }
   if (entry.title !== undefined && (typeof entry.title !== "string" || entry.title.trim() === "")) {
     throw new Error(`${template}: ${label}.title must be a non-empty string`);
@@ -848,13 +849,79 @@ function normalizeDataPackageInterface(
   ) {
     throw new Error(`${template}: ${label}.description must be a non-empty string`);
   }
+  let layoutColumns;
+  if (entry.layout !== undefined) {
+    if (!entry.layout || typeof entry.layout !== "object" || Array.isArray(entry.layout)) {
+      throw new Error(`${template}: ${label}.layout must be an object`);
+    }
+    if (
+      typeof entry.layout.columns !== "number" ||
+      !Number.isInteger(entry.layout.columns) ||
+      entry.layout.columns < 1
+    ) {
+      throw new Error(`${template}: ${label}.layout.columns must be a positive integer`);
+    }
+    layoutColumns = entry.layout.columns;
+  }
   return {
     name: entry.name,
     views,
     forms,
     title: entry.title,
     description: entry.description,
+    layoutColumns,
+    components,
   };
+}
+
+const INTERFACE_COMPONENT_TYPES = new Set(["metric", "chart", "map", "form", "data-view"]);
+
+function normalizeInterfaceComponents(raw, template, label) {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) {
+    throw new Error(`${template}: ${label} must be an array`);
+  }
+  const seen = new Set();
+  return raw.map((entry, index) => {
+    const itemLabel = `${label}[${index}]`;
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error(`${template}: ${itemLabel} must be an object`);
+    }
+    if (typeof entry.id !== "string" || !isSqlIdentifier(entry.id)) {
+      throw new Error(`${template}: ${itemLabel}.id must be a valid SQL identifier`);
+    }
+    if (seen.has(entry.id)) {
+      throw new Error(`${template}: ${itemLabel} duplicate component id ${entry.id}`);
+    }
+    seen.add(entry.id);
+    if (typeof entry.type !== "string" || !INTERFACE_COMPONENT_TYPES.has(entry.type)) {
+      throw new Error(
+        `${template}: ${itemLabel}.type must be one of ${[...INTERFACE_COMPONENT_TYPES].join(", ")}`,
+      );
+    }
+    const span =
+      entry.span === undefined
+        ? 6
+        : typeof entry.span === "number" && Number.isInteger(entry.span) && entry.span >= 1
+          ? entry.span
+          : null;
+    if (span === null) {
+      throw new Error(`${template}: ${itemLabel}.span must be a positive integer`);
+    }
+    if (entry.binding !== undefined && (!entry.binding || typeof entry.binding !== "object")) {
+      throw new Error(`${template}: ${itemLabel}.binding must be an object`);
+    }
+    const component = {
+      id: entry.id,
+      type: entry.type,
+      span,
+    };
+    if (entry.title !== undefined) component.title = entry.title;
+    if (entry.binding !== undefined) component.binding = entry.binding;
+    if (entry.form !== undefined) component.form = entry.form;
+    if (entry.chart !== undefined) component.chart = entry.chart;
+    return component;
+  });
 }
 
 function normalizeInterfaceNameList(raw, template, label, allowed, kind) {
@@ -1085,12 +1152,20 @@ function rustDataAction(action) {
 function rustDataInterface(iface) {
   const views = iface.views.map((view) => rustString(view)).join(",\n                    ");
   const forms = iface.forms.map((form) => rustString(form)).join(",\n                    ");
+  const componentsJson =
+    iface.components && iface.components.length > 0
+      ? rustOptionString(JSON.stringify(iface.components))
+      : "None";
+  const layoutColumns =
+    iface.layoutColumns === undefined ? "None" : `Some(${iface.layoutColumns})`;
   return `SeedDataInterface {
                 name: ${rustString(iface.name)},
                 views: &[${views ? `\n                    ${views}\n                ` : ""}],
                 forms: &[${forms ? `\n                    ${forms}\n                ` : ""}],
                 title: ${rustOptionString(iface.title)},
                 description: ${rustOptionString(iface.description)},
+                layout_columns: ${layoutColumns},
+                components_json: ${componentsJson},
             }`;
 }
 
@@ -1577,6 +1652,8 @@ function buildDemoInterfaceCatalog(packageDef) {
     forms: iface.forms,
     ...(iface.title === undefined ? {} : { title: iface.title }),
     ...(iface.description === undefined ? {} : { description: iface.description }),
+    ...(iface.layoutColumns === undefined ? {} : { layout: { columns: iface.layoutColumns } }),
+    ...(iface.components && iface.components.length > 0 ? { components: iface.components } : {}),
   }));
 }
 

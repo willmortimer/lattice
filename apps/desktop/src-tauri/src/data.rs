@@ -97,6 +97,12 @@ pub struct InterfaceSummary {
     pub title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub parameters: std::collections::BTreeMap<String, lattice_data::InterfaceParameter>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub layout: Option<lattice_data::InterfaceLayout>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub components: Vec<lattice_data::InterfaceComponent>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -481,13 +487,83 @@ pub fn load_data_interface(
 ) -> Result<InterfaceSummary, String> {
     let app = open_app_at(&root, &rel_path)?;
     let interface = app.load_interface(&name).map_err(|err| err.to_string())?;
-    Ok(InterfaceSummary {
+    Ok(interface_summary(interface))
+}
+
+fn interface_summary(interface: lattice_data::InterfaceDef) -> InterfaceSummary {
+    InterfaceSummary {
         name: interface.name,
         views: interface.views,
         forms: interface.forms,
         title: interface.title,
         description: interface.description,
-    })
+        parameters: interface.parameters,
+        layout: interface.layout,
+        components: interface.components,
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveInterfaceRequest {
+    pub name: String,
+    #[serde(default)]
+    pub views: Vec<String>,
+    #[serde(default)]
+    pub forms: Vec<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub parameters: std::collections::BTreeMap<String, lattice_data::InterfaceParameter>,
+    #[serde(default)]
+    pub layout: Option<lattice_data::InterfaceLayout>,
+    #[serde(default)]
+    pub components: Vec<lattice_data::InterfaceComponent>,
+}
+
+/// Persist `interfaces/{name}.interface.yaml` (layout/reorder saves).
+#[tauri::command]
+pub fn save_data_interface(
+    root: String,
+    rel_path: String,
+    request: SaveInterfaceRequest,
+) -> Result<InterfaceSummary, String> {
+    let (_, package_path) = resolve_within_root(&root, &rel_path)?;
+    let mut interface = lattice_data::InterfaceDef::new(request.name);
+    interface.views = request.views;
+    interface.forms = request.forms;
+    interface.title = request.title;
+    interface.description = request.description;
+    interface.parameters = request.parameters;
+    interface.layout = request.layout;
+    interface.components = request.components;
+    lattice_data::write_package_interface(&package_path, &interface).map_err(|err| err.to_string())?;
+    Ok(interface_summary(interface))
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SqlScalarResult {
+    pub value: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub column: Option<String>,
+}
+
+/// Bounded read-only SQLite scalar query for interface metric cards.
+#[tauri::command]
+pub fn query_data_sql_scalar(
+    root: String,
+    rel_path: String,
+    sql: String,
+    limit: Option<usize>,
+) -> Result<SqlScalarResult, String> {
+    let app = open_app_at(&root, &rel_path)?;
+    let (column, value) = app
+        .query_sql_scalar(&sql, limit.unwrap_or(1))
+        .map_err(|err| err.to_string())?;
+    Ok(SqlScalarResult { value, column })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

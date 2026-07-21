@@ -671,7 +671,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
                 root={assetRoot}
                 resource={selected}
                 pageContent={session?.kind === "page" ? session.content : null}
-                dataSnapshot={session?.kind === "data-app" ? session.snapshot : null}
+                dataSnapshot={session?.kind === "data-app" || session?.kind === "interface" ? session.snapshot : null}
                 error={error}
                 onClose={() => setInspectorOpen(false)}
                 onOpenFile={handleOpenFile}
