@@ -364,7 +364,9 @@ fn dataset_import_csv_writes_partition() {
         .arg("month=01")
         .assert()
         .success()
-        .stdout(predicates_contains("facts/year=2026/month=01/part-000.parquet"));
+        .stdout(predicates_contains(
+            "facts/year=2026/month=01/part-000.parquet",
+        ));
 
     assert!(dir
         .path()
@@ -462,4 +464,33 @@ fn query_csv_with_duckdb_engine() {
         .stdout(predicates_contains("n"))
         .stdout(predicates_contains("2"))
         .stdout(predicates_contains("1 row(s)"));
+}
+
+#[test]
+fn task_run_hello_fixture_when_uv_available() {
+    if std::process::Command::new("uv")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+        == false
+    {
+        return;
+    }
+
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../crates/lattice-commands/tests/fixtures/Hello.task");
+    assert!(
+        fixture.join("task.yaml").is_file(),
+        "missing fixture {}",
+        fixture.display()
+    );
+
+    lattice()
+        .arg("task")
+        .arg("run")
+        .arg(&fixture)
+        .assert()
+        .success()
+        .stdout(predicates_contains("ok"));
 }

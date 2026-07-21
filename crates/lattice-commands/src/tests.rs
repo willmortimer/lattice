@@ -1326,12 +1326,7 @@ fn page_create_from_template_substitutes_title_and_date() {
 
     // Blank create (no template) still writes the provided content as-is.
     engine
-        .create_page(
-            PathBuf::from("Notes/Blank.md"),
-            String::new(),
-            None,
-            None,
-        )
+        .create_page(PathBuf::from("Notes/Blank.md"), String::new(), None, None)
         .unwrap();
     assert_eq!(read(&dir, "Notes/Blank.md"), b"");
 }
@@ -1524,9 +1519,11 @@ fn stale_package_revision_on_columns_add_is_refused() {
         }],
     ));
     assert!(matches!(result, Err(Error::StaleBaseRevision { .. })));
-    assert!(!std::fs::read_to_string(dir.path().join("CRM.data/schema.sql"))
-        .unwrap()
-        .contains("ADD COLUMN name"));
+    assert!(
+        !std::fs::read_to_string(dir.path().join("CRM.data/schema.sql"))
+            .unwrap()
+            .contains("ADD COLUMN name")
+    );
 }
 
 #[test]
@@ -1544,7 +1541,8 @@ fn form_save_create_update_and_undo() {
         ))
         .unwrap();
 
-    let initial = "format: lattice-form\nversion: 1\nname: intake\ntable: contacts\nfields:\n- name\n";
+    let initial =
+        "format: lattice-form\nversion: 1\nname: intake\ntable: contacts\nfields:\n- name\n";
     engine
         .apply(Transaction::new(
             "Save intake form",
@@ -1702,8 +1700,7 @@ fn columns_add_lookup_undo_removes_lookup_column() {
             .columns("contacts")
             .unwrap()
             .iter()
-            .any(|column| column.name == "company_name"
-                && column.field_type == FieldType::Lookup));
+            .any(|column| column.name == "company_name" && column.field_type == FieldType::Lookup));
     }
 
     engine.undo().unwrap().unwrap();
@@ -1841,7 +1838,12 @@ fn columns_add_rollup_undo_removes_rollup_column() {
                 path: PathBuf::from("Orders.data"),
                 table: "orders".into(),
                 columns: vec![
-                    ColumnSpec::rollup("item_count", "items", RollupAggregate::Count, None::<String>),
+                    ColumnSpec::rollup(
+                        "item_count",
+                        "items",
+                        RollupAggregate::Count,
+                        None::<String>,
+                    ),
                     ColumnSpec::rollup(
                         "total_amount",
                         "items",
@@ -1869,8 +1871,7 @@ fn columns_add_rollup_undo_removes_rollup_column() {
             .columns("orders")
             .unwrap()
             .iter()
-            .any(|column| column.name == "item_count"
-                && column.field_type == FieldType::Rollup));
+            .any(|column| column.name == "item_count" && column.field_type == FieldType::Rollup));
     }
 
     engine.undo().unwrap().unwrap();

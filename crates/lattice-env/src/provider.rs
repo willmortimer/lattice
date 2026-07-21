@@ -50,10 +50,20 @@ impl EnvProvider {
         }
     }
 
+    /// Absolute path to `name` on this provider's search `PATH`, if present.
+    pub fn find_tool(&self, name: &str) -> Option<PathBuf> {
+        find_on_path(name, &self.search_path())
+    }
+
+    /// `PATH` value used for tool discovery and recommended for child processes.
+    pub fn path_for_spawn(&self) -> OsString {
+        self.search_path()
+    }
+
     fn search_path(&self) -> OsString {
-        self.path_override.clone().unwrap_or_else(|| {
-            std::env::var_os("PATH").unwrap_or_else(|| OsString::from(""))
-        })
+        self.path_override
+            .clone()
+            .unwrap_or_else(|| std::env::var_os("PATH").unwrap_or_else(|| OsString::from("")))
     }
 
     /// Resolve `request` to a Python interpreter and optional PATH overlay.
@@ -93,15 +103,12 @@ impl EnvProvider {
         let has_pyproject = project_dir.join("pyproject.toml").is_file();
         let has_lock = project_dir.join("uv.lock").is_file();
         if !has_pyproject && !has_lock {
-            return Err(EnvError::NotAUvProject {
-                path: project_dir,
-            });
+            return Err(EnvError::NotAUvProject { path: project_dir });
         }
 
         let search = self.search_path();
-        let uv = find_on_path("uv", &search).ok_or_else(|| EnvError::MissingTool {
-            tool: "uv".into(),
-        })?;
+        let uv = find_on_path("uv", &search)
+            .ok_or_else(|| EnvError::MissingTool { tool: "uv".into() })?;
 
         let output = Command::new(&uv)
             .args([
@@ -354,7 +361,11 @@ exit 1
     #[test]
     fn uv_project_missing_uv_tool() {
         let project = tempfile::tempdir().unwrap();
-        fs::write(project.path().join("pyproject.toml"), b"[project]\nname=\"t\"\n").unwrap();
+        fs::write(
+            project.path().join("pyproject.toml"),
+            b"[project]\nname=\"t\"\n",
+        )
+        .unwrap();
         let empty = tempfile::tempdir().unwrap();
         let provider = EnvProvider::with_path(path_with(&[empty.path()]));
         let err = provider
