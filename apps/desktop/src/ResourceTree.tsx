@@ -66,7 +66,16 @@ function acceptsResourceDrop(
   fromPaths: readonly string[],
   toDir: string,
 ): boolean {
-  if (!hasLatticeResourceDrag(event.dataTransfer)) return false;
+  if (fromPaths.length === 0) return false;
+  // In-app dragstart always sets fromPaths via dragPathsRef. Synthetic DnD
+  // (Tauri e2e dragAndDrop) often leaves DataTransfer.types empty even after
+  // setData — still accept when we own the drag paths.
+  if (
+    event.dataTransfer.types.length > 0 &&
+    !hasLatticeResourceDrag(event.dataTransfer)
+  ) {
+    return false;
+  }
   return validateMoveResources(fromPaths, toDir, resources).ok;
 }
 
@@ -383,6 +392,7 @@ export function ResourceTree({
           toggle(row.path);
           onActiveFolderChange?.(row.path);
         }}
+        aria-label={`${KIND_LABELS.folder}: ${row.path}`}
         aria-expanded={!isCollapsed}
         aria-current={isActiveFolder ? "location" : undefined}
         onContextMenu={(event) => {
