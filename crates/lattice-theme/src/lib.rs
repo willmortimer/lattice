@@ -18,6 +18,7 @@ pub use appearance::{
     load_appearance, load_appearance_with_diagnostics, save_appearance, AppearanceMode,
     AppearanceSettings, ThemePair, APPEARANCE_FILENAME,
 };
+pub use builtin::load_builtin;
 pub use discover::{
     check_theme_file, discover_themes, load_theme_by_id, theme_dirs, ThemeDiagnostic, ThemeSource,
     ThemeSummary,
