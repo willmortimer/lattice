@@ -890,7 +890,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
       )}
       {mode === "edit" && (
       <p className="page-editor-hint">
-        Type / for blocks · [[ to link a page · paste or drop files · ⌘S saves immediately
+        Type / for blocks · [[ to link a page · paste or drop files · Alt+↑/↓ moves a block · ⌘S saves immediately
       </p>
       )}
       {mode === "edit" && selectionToolbar && (

@@ -929,8 +929,10 @@ html[data-page-width="full"] {
   outline: none;
   min-height: 40vh;
   position: relative;
-  /* Room for block drag handles sitting in the left gutter. */
+  /* Room for block drag handles sitting in the left gutter; keep overflow
+     visible so absolute handles are not clipped by the content box. */
   padding-left: 28px;
+  overflow: visible;
 }
 
 .page-editor-content .block-drag-handle {
