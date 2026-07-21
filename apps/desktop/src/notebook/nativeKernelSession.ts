@@ -1,5 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
+import { capOutputText } from "./mergeNotebookOutputs";
+import { mimeBundleToDisplayData } from "./notebookMime";
 import type { KernelExecuteOptions, KernelRunPayload, KernelSession } from "./kernelSession";
+import type { NotebookOutput } from "./parseNotebook";
+import { MAX_NOTEBOOK_OUTPUT_CHARS } from "./pyodideConfig";
 
 export type NativeKernelSessionOptions = {
   /** Workspace root passed to `kernel_start` (capability + cwd gate). */
@@ -35,11 +39,70 @@ function mimeTextPlain(data: Record<string, string>): string | null {
 }
 
 /**
+ * Map native kernel outputs into notebook viewer outputs, preserving full MIME bundles.
+ */
+export function mapExecuteResultToNotebookOutputs(
+  result: NativeExecuteResult,
+  executionCount: number,
+  maxChars: number = MAX_NOTEBOOK_OUTPUT_CHARS,
+): NotebookOutput[] {
+  const outputs: NotebookOutput[] = [];
+
+  for (const output of result.outputs) {
+    switch (output.type) {
+      case "stream": {
+        const name = output.name === "stderr" ? "stderr" : "stdout";
+        outputs.push({
+          kind: "stream",
+          name,
+          text: capOutputText(output.text, maxChars),
+        });
+        break;
+      }
+      case "execute_result": {
+        outputs.push({
+          kind: "execute-result",
+          executionCount,
+          data: mimeBundleToDisplayData(output.data),
+        });
+        break;
+      }
+      case "display_data": {
+        outputs.push({
+          kind: "display-data",
+          executionCount: null,
+          data: mimeBundleToDisplayData(output.data),
+        });
+        break;
+      }
+      case "error": {
+        outputs.push({
+          kind: "error",
+          ename: output.ename,
+          evalue: capOutputText(output.evalue, maxChars),
+          traceback: output.traceback.map((line) => capOutputText(line, maxChars)),
+        });
+        break;
+      }
+      default: {
+        const unreachable: never = output;
+        void unreachable;
+        break;
+      }
+    }
+  }
+
+  return outputs;
+}
+
+/**
  * Map a native `ExecuteResult` into the payload shape consumed by
  * `buildOutputsFromRun` / notebook merge.
  */
 export function mapExecuteResultToKernelRunPayload(
   result: NativeExecuteResult,
+  executionCount: number,
+  maxChars: number = MAX_NOTEBOOK_OUTPUT_CHARS,
 ): KernelRunPayload {
   let stdout = "";
   let stderr = "";
@@ -86,7 +149,13 @@ export function mapExecuteResultToKernelRunPayload(
     }
   }
 
-  return { stdout, stderr, resultRepr, error };
+  return {
+    stdout,
+    stderr,
+    resultRepr,
+    error,
+    outputs: mapExecuteResultToNotebookOutputs(result, executionCount, maxChars),
+  };
 }
 
 function abortError(): DOMException {
@@ -178,7 +247,11 @@ export function createNativeKernelSession(
         request: { sessionId, code },
       });
       throwIfAborted(executeOptions?.signal);
-      return mapExecuteResultToKernelRunPayload(result);
+      return mapExecuteResultToKernelRunPayload(
+        result,
+        0,
+        executeOptions?.maxOutputChars,
+      );
     },
 
     interrupt() {

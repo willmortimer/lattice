@@ -7,7 +7,7 @@ embeds CPython.
 
 Protocol (see crate README):
   requests:  execute | interrupt | shutdown
-  responses: ready | stream | execute_result | error | done | bridge_error
+  responses: ready | stream | execute_result | display_data | error | done | bridge_error
 
 `interrupt` is handled on the stdin loop without waiting for an in-flight
 `execute` to finish, so the kernel can be signalled while Rust is collecting
@@ -35,15 +35,24 @@ def _bridge_error(req_id: str | None, message: str) -> None:
     _emit(payload)
 
 
-def _plain_text(data: dict[str, Any] | None) -> dict[str, str]:
+def _mime_bundle(data: dict[str, Any] | None) -> dict[str, str]:
     if not isinstance(data, dict):
         return {"text/plain": ""}
-    plain = data.get("text/plain")
-    if plain is None:
-        return {"text/plain": ""}
-    if isinstance(plain, list):
-        plain = "".join(str(part) for part in plain)
-    return {"text/plain": str(plain)}
+    out: dict[str, str] = {}
+    for key, value in data.items():
+        if not isinstance(key, str):
+            continue
+        if isinstance(value, list):
+            out[key] = "".join(str(part) for part in value)
+        elif isinstance(value, dict):
+            out[key] = json.dumps(value, ensure_ascii=False)
+        elif value is None:
+            continue
+        else:
+            out[key] = str(value)
+    if "text/plain" not in out:
+        out.setdefault("text/plain", "")
+    return out
 
 
 def main() -> int:
@@ -111,7 +120,15 @@ def main() -> int:
                         {
                             "type": "execute_result",
                             "id": req_id,
-                            "data": _plain_text(content.get("data")),
+                            "data": _mime_bundle(content.get("data")),
+                        }
+                    )
+                elif msg_type == "display_data":
+                    emit(
+                        {
+                            "type": "display_data",
+                            "id": req_id,
+                            "data": _mime_bundle(content.get("data")),
                         }
                     )
                 elif msg_type == "error":

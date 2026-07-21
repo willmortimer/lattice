@@ -116,6 +116,27 @@
   border-top: 1px dashed var(--lt-color-border-subtle);
 }
 
+.lattice-notebook-output-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lt-space-2);
+}
+
+.lattice-notebook-output-markdown .page-preview,
+.lattice-notebook-output-html,
+.lattice-notebook-output-svg,
+.lattice-notebook-output-chart {
+  padding: var(--lt-space-2) var(--lt-space-3);
+  border-radius: var(--lt-radius-sm);
+  background: var(--lt-color-surface-sunken);
+}
+
+.lattice-notebook-output-html table,
+.lattice-notebook-output-svg {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .lattice-notebook-output {
   margin: 0;
   padding: var(--lt-space-2) var(--lt-space-3);

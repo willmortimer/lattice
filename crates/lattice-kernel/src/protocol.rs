@@ -43,6 +43,10 @@ pub enum BridgeResponse {
         id: String,
         data: HashMap<String, String>,
     },
+    DisplayData {
+        id: String,
+        data: HashMap<String, String>,
+    },
     Error {
         id: String,
         ename: String,
@@ -66,6 +70,7 @@ impl BridgeResponse {
             Self::Ready => None,
             Self::Stream { id, .. }
             | Self::ExecuteResult { id, .. }
+            | Self::DisplayData { id, .. }
             | Self::Error { id, .. }
             | Self::Done { id, .. } => Some(id.as_str()),
             Self::BridgeError { id, .. } => id.as_deref(),
@@ -87,6 +92,9 @@ pub enum KernelOutput {
         text: String,
     },
     ExecuteResult {
+        data: HashMap<String, String>,
+    },
+    DisplayData {
         data: HashMap<String, String>,
     },
     Error {
@@ -148,6 +156,29 @@ mod tests {
                 assert_eq!(ename, "ValueError");
                 assert_eq!(evalue, "x");
                 assert_eq!(traceback, vec!["t"]);
+            }
+            other => panic!("unexpected: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn response_round_trips_display_data_and_rich_execute_result() {
+        let display = r#"{"type":"display_data","id":"r1","data":{"text/html":"<b>hi</b>","text/plain":"hi"}}"#;
+        let parsed = BridgeResponse::from_line(display).expect("display_data");
+        match parsed {
+            BridgeResponse::DisplayData { data, .. } => {
+                assert_eq!(data.get("text/html"), Some(&"<b>hi</b>".to_string()));
+                assert_eq!(data.get("text/plain"), Some(&"hi".to_string()));
+            }
+            other => panic!("unexpected: {other:?}"),
+        }
+
+        let result = r#"{"type":"execute_result","id":"r1","data":{"text/plain":"42","image/png":"abc"}}"#;
+        let parsed = BridgeResponse::from_line(result).expect("execute_result");
+        match parsed {
+            BridgeResponse::ExecuteResult { data, .. } => {
+                assert_eq!(data.get("text/plain"), Some(&"42".to_string()));
+                assert_eq!(data.get("image/png"), Some(&"abc".to_string()));
             }
             other => panic!("unexpected: {other:?}"),
         }
