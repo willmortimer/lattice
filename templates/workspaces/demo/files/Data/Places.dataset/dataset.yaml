@@ -1,0 +1,9 @@
+format: lattice-dataset
+version: 1
+id: demo-places-dataset
+title: Places
+description: Sample WGS84 lon/lat point facts for MapLibre demos (plain Parquet columns).
+partitions:
+- path: facts/places.parquet
+  rows: 20
+  bytes: 2062
