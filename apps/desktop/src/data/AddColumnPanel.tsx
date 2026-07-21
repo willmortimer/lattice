@@ -10,6 +10,7 @@ import {
   columnFieldTypeOptions,
   rollupAggregateOptions,
   validateColumnName,
+  validateFormulaSpec,
   validateLookupSpec,
   validateRelationTarget,
   validateRollupSpec,
@@ -51,6 +52,7 @@ export function AddColumnPanel({
   const [rollupRelation, setRollupRelation] = useState("");
   const [rollupAggregate, setRollupAggregate] = useState<RollupAggregate>("count");
   const [rollupField, setRollupField] = useState("");
+  const [formula, setFormula] = useState("");
   const [availableTables, setAvailableTables] = useState<string[]>([snapshot.default_table]);
   const [targetFields, setTargetFields] = useState<string[]>([]);
   const [targetFieldTypes, setTargetFieldTypes] = useState<Record<string, FieldType>>({});
@@ -282,6 +284,11 @@ export function AddColumnPanel({
       setValidationError(rollupError);
       return;
     }
+    const formulaError = validateFormulaSpec(fieldType, formula, existingNames);
+    if (formulaError) {
+      setValidationError(formulaError);
+      return;
+    }
 
     if (demo) {
       return;
@@ -298,6 +305,7 @@ export function AddColumnPanel({
         rollupRelation,
         rollupAggregate,
         rollupField,
+        formula,
       );
       const fresh = await invoke<DataAppSnapshot>("add_data_columns", {
         root,
@@ -318,6 +326,7 @@ export function AddColumnPanel({
       setRollupRelation("");
       setRollupAggregate("count");
       setRollupField("");
+      setFormula("");
       onClose();
     } catch (err) {
       const message = String(err);
@@ -355,6 +364,7 @@ export function AddColumnPanel({
     snapshot.default_table,
     snapshot.package_revision,
     targetFields,
+    formula,
   ]);
 
   const disabled = busy || readOnly || submitting;
@@ -364,6 +374,7 @@ export function AddColumnPanel({
     (relationColumns.length === 0 ||
       (rollupAggregate !== "count" && !rollupField) ||
       !rollupAggregate);
+  const formulaBlocked = fieldType === "formula" && !formula.trim();
   const relationBlocked = fieldType === "relation" && relationTargets.length === 0;
 
   return (
@@ -544,6 +555,20 @@ export function AddColumnPanel({
             </label>
           </>
         )}
+
+        {fieldType === "formula" && (
+          <label className="data-table-add-column-field">
+            Expression
+            <input
+              type="text"
+              value={formula}
+              disabled={disabled}
+              placeholder="{price} * {quantity}"
+              spellCheck={false}
+              onChange={(event) => setFormula(event.currentTarget.value)}
+            />
+          </label>
+        )}
       </div>
 
       {validationError && <p className="error-text">{validationError}</p>}
@@ -553,7 +578,9 @@ export function AddColumnPanel({
           <button
             type="button"
             className="primary-button"
-            disabled={disabled || demo || relationBlocked || lookupBlocked || rollupBlocked}
+            disabled={
+              disabled || demo || relationBlocked || lookupBlocked || rollupBlocked || formulaBlocked
+            }
             title={demo ? nativeOnlyToolbarTooltip("Adding columns") : undefined}
             aria-disabled={demo || undefined}
             onClick={() => void submit()}

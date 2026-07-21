@@ -12,6 +12,7 @@ export const COLUMN_FIELD_TYPES: FieldType[] = [
   "relation",
   "lookup",
   "rollup",
+  "formula",
 ];
 
 export const ROLLUP_AGGREGATES: RollupAggregate[] = ["count", "sum", "min", "max"];
@@ -134,6 +135,28 @@ export function validateRollupSpec(
   return null;
 }
 
+export function validateFormulaSpec(
+  fieldType: FieldType,
+  formula: string | undefined,
+  existingNames: string[],
+): string | null {
+  if (fieldType !== "formula") {
+    return null;
+  }
+  const expression = formula?.trim();
+  if (!expression) {
+    return "Enter a formula expression (e.g. {price} * {quantity}).";
+  }
+  const refs = expression.matchAll(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g);
+  for (const match of refs) {
+    const ref = match[1];
+    if (!existingNames.includes(ref)) {
+      return `Formula references missing column "${ref}".`;
+    }
+  }
+  return null;
+}
+
 export interface AddColumnPayload {
   name: string;
   field_type: FieldType;
@@ -143,6 +166,7 @@ export interface AddColumnPayload {
   rollup_relation?: string;
   rollup_aggregate?: RollupAggregate;
   rollup_field?: string;
+  formula?: string;
 }
 
 export function buildAddColumnPayload(
@@ -154,6 +178,7 @@ export function buildAddColumnPayload(
   rollupRelation?: string,
   rollupAggregate?: RollupAggregate,
   rollupField?: string,
+  formula?: string,
 ): AddColumnPayload {
   const trimmed = name.trim();
   if (fieldType === "relation") {
@@ -179,6 +204,13 @@ export function buildAddColumnPayload(
       rollup_relation: rollupRelation?.trim(),
       rollup_aggregate: rollupAggregate,
       ...(field ? { rollup_field: field } : {}),
+    };
+  }
+  if (fieldType === "formula") {
+    return {
+      name: trimmed,
+      field_type: fieldType,
+      formula: formula?.trim(),
     };
   }
   return {

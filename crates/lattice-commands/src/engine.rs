@@ -715,6 +715,7 @@ impl CommandEngine {
                     let has_rollup_meta = column.rollup_relation.is_some()
                         || column.rollup_aggregate.is_some()
                         || column.rollup_field.is_some();
+                    let has_formula_meta = column.formula.is_some();
                     if column.field_type == lattice_data::FieldType::Relation {
                         let Some(target) = column.relation_table.as_deref() else {
                             return Err(Error::InvalidResourceTarget {
@@ -742,6 +743,15 @@ impl CommandEngine {
                                 path: path.clone(),
                                 reason: format!(
                                     "column {:?} only rollup fields may set rollup-relation / rollup-aggregate / rollup-field",
+                                    column.name
+                                ),
+                            });
+                        }
+                        if has_formula_meta {
+                            return Err(Error::InvalidResourceTarget {
+                                path: path.clone(),
+                                reason: format!(
+                                    "column {:?} only formula fields may set formula",
                                     column.name
                                 ),
                             });
@@ -774,6 +784,15 @@ impl CommandEngine {
                                 ),
                             });
                         }
+                        if has_formula_meta {
+                            return Err(Error::InvalidResourceTarget {
+                                path: path.clone(),
+                                reason: format!(
+                                    "column {:?} only formula fields may set formula",
+                                    column.name
+                                ),
+                            });
+                        }
                     } else if column.field_type == lattice_data::FieldType::Rollup {
                         if column.relation_table.is_some() {
                             return Err(Error::InvalidResourceTarget {
@@ -802,6 +821,61 @@ impl CommandEngine {
                                 ),
                             });
                         }
+                        if has_formula_meta {
+                            return Err(Error::InvalidResourceTarget {
+                                path: path.clone(),
+                                reason: format!(
+                                    "column {:?} only formula fields may set formula",
+                                    column.name
+                                ),
+                            });
+                        }
+                    } else if column.field_type == lattice_data::FieldType::Formula {
+                        if column.relation_table.is_some() {
+                            return Err(Error::InvalidResourceTarget {
+                                path: path.clone(),
+                                reason: format!(
+                                    "column {:?} only relation fields may set relation-table",
+                                    column.name
+                                ),
+                            });
+                        }
+                        if has_lookup_meta {
+                            return Err(Error::InvalidResourceTarget {
+                                path: path.clone(),
+                                reason: format!(
+                                    "column {:?} only lookup fields may set lookup-relation / lookup-field",
+                                    column.name
+                                ),
+                            });
+                        }
+                        if has_rollup_meta {
+                            return Err(Error::InvalidResourceTarget {
+                                path: path.clone(),
+                                reason: format!(
+                                    "column {:?} only rollup fields may set rollup-relation / rollup-aggregate / rollup-field",
+                                    column.name
+                                ),
+                            });
+                        }
+                        let Some(expression) = column.formula.as_deref() else {
+                            return Err(Error::InvalidResourceTarget {
+                                path: path.clone(),
+                                reason: format!(
+                                    "formula column {:?} requires formula",
+                                    column.name
+                                ),
+                            });
+                        };
+                        if expression.trim().is_empty() {
+                            return Err(Error::InvalidResourceTarget {
+                                path: path.clone(),
+                                reason: format!(
+                                    "formula column {:?} requires a non-empty formula",
+                                    column.name
+                                ),
+                            });
+                        }
                     } else if column.relation_table.is_some() {
                         return Err(Error::InvalidResourceTarget {
                             path: path.clone(),
@@ -823,6 +897,14 @@ impl CommandEngine {
                             path: path.clone(),
                             reason: format!(
                                 "column {:?} only rollup fields may set rollup-relation / rollup-aggregate / rollup-field",
+                                column.name
+                            ),
+                        });
+                    } else if has_formula_meta {
+                        return Err(Error::InvalidResourceTarget {
+                            path: path.clone(),
+                            reason: format!(
+                                "column {:?} only formula fields may set formula",
                                 column.name
                             ),
                         });
@@ -2388,6 +2470,7 @@ fn column_specs_as_new_columns(columns: &[ColumnSpec]) -> Vec<NewColumn<'_>> {
             rollup_relation: column.rollup_relation.as_deref(),
             rollup_aggregate: column.rollup_aggregate,
             rollup_field: column.rollup_field.as_deref(),
+            formula: column.formula.as_deref(),
         })
         .collect()
 }
