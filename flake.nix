@@ -65,6 +65,7 @@
             docs-sync = "Regenerate site docs content from docs/";
             compile-theme = "Compile themes/*.theme.yaml into CSS/TS tokens";
             compile-templates = "Validate templates and regenerate embedded catalogs";
+            prepare-first-look = "Seed First Look demo datasets and regenerate template catalogs";
             desktop-dev = "Native Tauri window + Vite HMR (re-seeds First Look in target/dev-home)";
             desktop-web = "Browser-only React demo UI (no Tauri / filesystem)";
             desktop-perf = "Playwright browser perf harness against the Vite demo";
@@ -128,6 +129,9 @@
             '';
             compile-templates = ''
               exec pnpm compile-templates "$@"
+            '';
+            prepare-first-look = ''
+              exec bash scripts/prepare-first-look.sh "$@"
             '';
             desktop-dev = ''
               pnpm install
@@ -391,6 +395,12 @@
               description = "Compile workspace templates";
               app = "compile-templates";
               category = "codegen";
+            };
+            prepare-first-look = {
+              description = "Seed First Look demo datasets and regenerate catalogs";
+              app = "prepare-first-look";
+              category = "dev";
+              aliases = [ "prep-demo" ];
             };
             codegen = {
               description = "Compile theme tokens and workspace templates";
