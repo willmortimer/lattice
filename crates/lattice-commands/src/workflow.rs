@@ -1,8 +1,9 @@
 //! Parse and execute `*.workflow.yaml` automation resources (bounded v1).
 //!
-//! v1 supports manual / resource.changed / form.submitted triggers and
+//! v1 supports manual / resource.changed / form.submitted / schedule triggers and
 //! `task.run`, `proposal.create`, and log-only `notification` steps.
-//! Cron, durable daemon jobs, and a visual editor are out of scope.
+//! Schedule firing (daemon loop), durable jobs, and a visual editor are out of
+//! scope — `schedule` is parse/validate only until a later depth task.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -105,6 +106,25 @@ pub enum WorkflowTrigger {
         #[serde(default, skip_serializing_if = "Option::is_none", rename = "form_id")]
         form_id: Option<String>,
     },
+    /// Time-based trigger (parsed/validated only; no firing loop yet).
+    ///
+    /// Require at least one of `interval_seconds` or `cron`. Unknown fields fail closed.
+    Schedule(ScheduleTrigger),
+}
+
+/// Fields for `type: schedule`. Unknown keys are rejected at parse time.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ScheduleTrigger {
+    /// Fixed period in whole seconds (must be > 0 when set).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub interval_seconds: Option<u64>,
+    /// Cron expression (non-empty when set; 5- or 6-field forms accepted).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cron: Option<String>,
+    /// Optional IANA timezone name (non-empty when set).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timezone: Option<String>,
 }
 
 /// One ordered workflow step.
@@ -230,6 +250,9 @@ impl WorkflowManifest {
                     ));
                 }
             }
+            WorkflowTrigger::Schedule(schedule) => {
+                validate_schedule_trigger(schedule, path)?;
+            }
         }
         let mut seen = std::collections::BTreeSet::new();
         for step in &self.steps {
@@ -338,6 +361,54 @@ fn deserialize_with<T: for<'de> Deserialize<'de>>(
         path: path.to_path_buf(),
         message: format!("step `{step_id}` has invalid `with` block: {source}"),
     })
+}
+
+/// Fail-closed checks for `type: schedule` (schema only; no firing).
+fn validate_schedule_trigger(schedule: &ScheduleTrigger, path: &Path) -> WorkflowResult<()> {
+    let invalid = |message: String| WorkflowError::Invalid {
+        path: path.to_path_buf(),
+        message,
+    };
+    let cron_trimmed = schedule
+        .cron
+        .as_ref()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty());
+    let has_interval = schedule.interval_seconds.is_some();
+    let has_cron = cron_trimmed.is_some();
+    if !has_interval && !has_cron {
+        return Err(invalid(
+            "schedule trigger requires `interval_seconds` and/or non-empty `cron`".into(),
+        ));
+    }
+    if let Some(seconds) = schedule.interval_seconds {
+        if seconds == 0 {
+            return Err(invalid(
+                "schedule trigger `interval_seconds` must be greater than 0".into(),
+            ));
+        }
+    }
+    if schedule.cron.is_some() && cron_trimmed.is_none() {
+        return Err(invalid(
+            "schedule trigger `cron` must be a non-empty expression".into(),
+        ));
+    }
+    if let Some(expression) = cron_trimmed {
+        let fields = expression.split_whitespace().count();
+        if fields != 5 && fields != 6 {
+            return Err(invalid(format!(
+                "schedule trigger `cron` must have 5 or 6 fields, found {fields}"
+            )));
+        }
+    }
+    if let Some(tz) = &schedule.timezone {
+        if tz.trim().is_empty() {
+            return Err(invalid(
+                "schedule trigger `timezone` must be non-empty when set".into(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn normalize_rel(path: &str) -> String {
@@ -550,6 +621,7 @@ fn trigger_label(trigger: &WorkflowTrigger) -> &'static str {
         WorkflowTrigger::Manual => "manual",
         WorkflowTrigger::ResourceChanged { .. } => "resource.changed",
         WorkflowTrigger::FormSubmitted { .. } => "form.submitted",
+        WorkflowTrigger::Schedule(_) => "schedule",
     }
 }
 
@@ -944,5 +1016,137 @@ steps: []
         };
         assert!(manifest.matches_form_submitted("Data/CRM.data", "ContactIntake", None));
         assert!(!manifest.matches_form_submitted("Data/Other.data", "ContactIntake", None));
+    }
+
+    #[test]
+    fn parses_schedule_interval_trigger() {
+        let yaml = r#"
+format: lattice-workflow
+version: 1
+name: Hourly
+trigger:
+  type: schedule
+  interval_seconds: 3600
+steps: []
+"#;
+        let manifest = WorkflowManifest::parse(Path::new("Hourly.workflow.yaml"), yaml).expect("parse");
+        assert_eq!(
+            manifest.trigger,
+            WorkflowTrigger::Schedule(ScheduleTrigger {
+                interval_seconds: Some(3600),
+                cron: None,
+                timezone: None,
+            })
+        );
+        assert!(!manifest.matches_resource_change("Notes/A.md"));
+        assert!(!manifest.matches_form_submitted("CRM.data", "Intake", None));
+    }
+
+    #[test]
+    fn parses_schedule_cron_trigger() {
+        let yaml = r#"
+format: lattice-workflow
+version: 1
+name: Nightly
+trigger:
+  type: schedule
+  cron: "0 2 * * *"
+  timezone: America/Los_Angeles
+steps: []
+"#;
+        let manifest = WorkflowManifest::parse(Path::new("Nightly.workflow.yaml"), yaml).expect("parse");
+        match &manifest.trigger {
+            WorkflowTrigger::Schedule(schedule) => {
+                assert!(schedule.interval_seconds.is_none());
+                assert_eq!(schedule.cron.as_deref(), Some("0 2 * * *"));
+                assert_eq!(schedule.timezone.as_deref(), Some("America/Los_Angeles"));
+            }
+            other => panic!("expected schedule trigger, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_scheduled_fixture_round_trip() {
+        let path = fixture("Scheduled.workflow.yaml");
+        let manifest = WorkflowManifest::load(&path).expect("load");
+        assert!(matches!(
+            &manifest.trigger,
+            WorkflowTrigger::Schedule(ScheduleTrigger {
+                interval_seconds: Some(3600),
+                cron: None,
+                timezone: None,
+            })
+        ));
+        let rewritten = serde_yaml::to_string(&manifest).expect("serialize");
+        let again = WorkflowManifest::parse(&path, &rewritten).expect("reparse");
+        assert_eq!(again, manifest);
+    }
+
+    #[test]
+    fn rejects_schedule_without_interval_or_cron() {
+        let yaml = r#"
+format: lattice-workflow
+version: 1
+name: EmptySchedule
+trigger:
+  type: schedule
+steps: []
+"#;
+        let err = WorkflowManifest::parse(Path::new("bad.workflow.yaml"), yaml).unwrap_err();
+        assert!(
+            err.to_string().contains("interval_seconds") && err.to_string().contains("cron"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn rejects_schedule_zero_interval() {
+        let yaml = r#"
+format: lattice-workflow
+version: 1
+name: Zero
+trigger:
+  type: schedule
+  interval_seconds: 0
+steps: []
+"#;
+        let err = WorkflowManifest::parse(Path::new("bad.workflow.yaml"), yaml).unwrap_err();
+        assert!(err.to_string().contains("interval_seconds"), "{err}");
+    }
+
+    #[test]
+    fn rejects_schedule_unknown_fields() {
+        let yaml = r#"
+format: lattice-workflow
+version: 1
+name: Extra
+trigger:
+  type: schedule
+  interval_seconds: 60
+  every: hour
+steps: []
+"#;
+        let err = WorkflowManifest::parse(Path::new("bad.workflow.yaml"), yaml).unwrap_err();
+        assert!(
+            err.to_string().contains("failed to parse")
+                || err.to_string().contains("unknown")
+                || err.to_string().contains("did not match"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn rejects_schedule_invalid_cron_field_count() {
+        let yaml = r#"
+format: lattice-workflow
+version: 1
+name: BadCron
+trigger:
+  type: schedule
+  cron: "0 * *"
+steps: []
+"#;
+        let err = WorkflowManifest::parse(Path::new("bad.workflow.yaml"), yaml).unwrap_err();
+        assert!(err.to_string().contains("cron"), "{err}");
     }
 }
