@@ -36,6 +36,30 @@ pub struct ViewDef {
     pub sort: Option<ViewSort>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub filter: Vec<ViewFilter>,
+    /// View-scoped cell conditional formatting (grid). First match per field wins.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conditional_format: Vec<ConditionalFormatRule>,
+}
+
+/// Style applied when a conditional format rule matches.
+///
+/// Token names are Lattice semantic roles without the `--lt-` prefix
+/// (for example `accent-wash`, `danger`, `text`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct ConditionalFormatStyle {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bg: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+}
+
+/// One cell conditional-format rule: match `field` via `operator`/`value`, then apply `style`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ConditionalFormatRule {
+    pub field: String,
+    pub operator: FilterOperator,
+    pub value: String,
+    pub style: ConditionalFormatStyle,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -111,6 +135,7 @@ impl ViewDef {
             },
             sort: None,
             filter: Vec::new(),
+            conditional_format: Vec::new(),
         }
     }
 
@@ -129,6 +154,11 @@ impl ViewDef {
             path: PathBuf::from("<view>"),
             source,
         })
+    }
+
+    /// Validate format, layout fields, and conditional-format rules.
+    pub fn validate(&self) -> Result<()> {
+        self.check(Path::new("<view>"))
     }
 
     fn check(&self, path: &Path) -> Result<()> {
@@ -178,7 +208,54 @@ impl ViewDef {
                 ));
             }
         }
+        for rule in &self.conditional_format {
+            validate_identifier(&rule.field)?;
+            validate_style_token(path, rule.style.bg.as_deref(), "conditional_format.style.bg")?;
+            validate_style_token(path, rule.style.text.as_deref(), "conditional_format.style.text")?;
+            if rule.style.bg.is_none() && rule.style.text.is_none() {
+                return Err(invalid(
+                    "conditional_format rule requires at least one of style.bg or style.text"
+                        .to_string(),
+                ));
+            }
+        }
         Ok(())
+    }
+}
+
+impl ConditionalFormatRule {
+    /// Whether `display` (cell display string) matches this rule.
+    pub fn matches_display(&self, display: &str) -> bool {
+        match self.operator {
+            FilterOperator::Equals => display.eq_ignore_ascii_case(&self.value),
+            FilterOperator::Contains => display
+                .to_ascii_lowercase()
+                .contains(&self.value.to_ascii_lowercase()),
+        }
+    }
+}
+
+fn validate_style_token(path: &Path, token: Option<&str>, label: &str) -> Result<()> {
+    let Some(token) = token else {
+        return Ok(());
+    };
+    let valid = !token.is_empty()
+        && token
+            .chars()
+            .enumerate()
+            .all(|(index, ch)| match (index, ch) {
+                (0, ch) => ch.is_ascii_lowercase(),
+                (_, ch) => ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-',
+            });
+    if valid {
+        Ok(())
+    } else {
+        Err(Error::InvalidPackage {
+            path: path.to_path_buf(),
+            message: format!(
+                "{label} must be a non-empty semantic token name (a-z, digits, hyphens); got {token:?}"
+            ),
+        })
     }
 }
 

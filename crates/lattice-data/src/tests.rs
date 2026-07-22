@@ -203,6 +203,70 @@ fn view_round_trip_and_list_rows_with_view() {
 }
 
 #[test]
+fn conditional_format_rules_round_trip_in_view_yaml() {
+    use crate::{ConditionalFormatRule, ConditionalFormatStyle};
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Formatted.data");
+    let app = DataApp::create(&package_path, "Formatted", "records").unwrap();
+
+    let mut view = ViewDef::new_grid("records");
+    view.layout.columns = vec!["id".into(), "status".into()];
+    view.conditional_format = vec![ConditionalFormatRule {
+        field: "status".into(),
+        operator: FilterOperator::Equals,
+        value: "Active".into(),
+        style: ConditionalFormatStyle {
+            bg: Some("accent-wash".into()),
+            text: Some("accent".into()),
+        },
+    }];
+
+    let yaml = app.render_view_yaml(&view).unwrap();
+    assert!(yaml.contains("conditional_format:"));
+    assert!(yaml.contains("bg: accent-wash"));
+    assert!(yaml.contains("text: accent"));
+
+    let views_dir = package_path.join("views");
+    std::fs::create_dir_all(&views_dir).unwrap();
+    std::fs::write(views_dir.join("Highlighted.yaml"), &yaml).unwrap();
+
+    let loaded = app.load_view("Highlighted").unwrap();
+    assert_eq!(loaded, view);
+    assert!(loaded.conditional_format[0].matches_display("Active"));
+    assert!(loaded.conditional_format[0].matches_display("active"));
+    assert!(!loaded.conditional_format[0].matches_display("Done"));
+
+    write_package_view(&package_path, "Highlighted", &loaded).unwrap();
+    let reloaded = app.load_view("Highlighted").unwrap();
+    assert_eq!(reloaded, view);
+}
+
+#[test]
+fn conditional_format_rejects_empty_style() {
+    use crate::{ConditionalFormatRule, ConditionalFormatStyle};
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("BadCf.data");
+    DataApp::create(&package_path, "BadCf", "records").unwrap();
+
+    let mut view = ViewDef::new_grid("records");
+    view.conditional_format = vec![ConditionalFormatRule {
+        field: "status".into(),
+        operator: FilterOperator::Equals,
+        value: "Active".into(),
+        style: ConditionalFormatStyle::default(),
+    }];
+    let err = write_package_view(&package_path, "Bad", &view)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.contains("style.bg") || err.contains("style.text"),
+        "expected empty-style rejection, got: {err}"
+    );
+}
+
+#[test]
 fn list_and_board_views_load_with_layout_metadata() {
     use crate::view::{LAYOUT_BOARD, LAYOUT_LIST};
 
