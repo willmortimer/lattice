@@ -74,6 +74,9 @@ Related (not a perf budget / not CI):
   `pnpm --filter @lattice/desktop test:analytics:tauri`
   (Orders Preview / Vega chart / canvas Fit; First Look via
   `LATTICE_DEV_RESET_DEMO`)
+- Proposal inbox Tauri smoke: `e2e/data/proposal.smoke.tauri.spec.ts` —
+  `pnpm --filter @lattice/desktop test:proposal:tauri`
+  (demo `create_demo_proposal` seed → approve → ⌘Z undo)
 
 Annotations record wall time, Navigation Timing, and (browser only) Chromium JS
 heap via CDP.

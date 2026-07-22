@@ -27,7 +27,8 @@
     "test:crm:tauri": "node ./e2e/run-tauri-crm-smoke.mjs",
     "test:analytics:tauri": "node ./e2e/run-tauri-analytics-smoke.mjs",
     "test:tree:tauri": "node ./e2e/run-tauri-tree-smoke.mjs",
-    "test:schema:tauri": "node ./e2e/run-tauri-schema-smoke.mjs"
+    "test:schema:tauri": "node ./e2e/run-tauri-schema-smoke.mjs",
+    "test:proposal:tauri": "node ./e2e/run-tauri-proposal-smoke.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.4",
