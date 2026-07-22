@@ -38,6 +38,20 @@ export const treeSmoke = {
  * Stable selectors for First Look schema / tabular-import Tauri smoke (P2S02).
  * Prefer promote of `Data/sample.csv` over the native file-picker Import path.
  */
+/**
+ * Stable selectors for First Look proposal inbox / review Tauri smoke (D2).
+ * Demo seed uses `create_demo_proposal` → `Proposals/Welcome.md`.
+ */
+export const proposalSmoke = {
+  inbox: '[aria-label="Pending proposals"]',
+  createDemoButton: "Create demo proposal",
+  demoSummary: "Demo: create Proposals/Welcome.md",
+  reviewTitle: "#proposal-review-title",
+  reviewPanel: ".proposal-review-panel",
+  acceptButton: "Accept",
+  welcomePagePath: "Proposals/Welcome.md",
+} as const;
+
 export const schemaSmoke = {
   crmTreeLabel: "Data app: CRM.data",
   sampleCsvLabel: "File: Data/sample.csv",
@@ -283,6 +297,53 @@ export async function trashSelectionWithConfirm(page: PerfPage): Promise<void> {
     el.focus();
   })()`);
   await tauri.keyboard.press("Backspace");
+}
+
+/**
+ * Seed a demo page-create proposal via the sidebar inbox control (wraps
+ * `create_demo_proposal` IPC).
+ */
+export async function seedDemoProposal(page: PerfPage): Promise<void> {
+  const tauri = asTauriPage(page);
+  const inbox = page.locator(proposalSmoke.inbox);
+  if (tauri) {
+    await inbox.waitFor(30_000);
+    await tauri.getByRole("button", { name: proposalSmoke.createDemoButton }).click();
+    return;
+  }
+  await inbox.waitFor({ state: "visible", timeout: 30_000 });
+  await page.getByRole("button", { name: proposalSmoke.createDemoButton }).click();
+}
+
+/** Open the first inbox row matching `summary` (exact strong text). */
+export async function openProposalInboxItem(page: PerfPage, summary: string): Promise<void> {
+  const tauri = asTauriPage(page);
+  const item = page.locator(".proposal-inbox-item").filter({ hasText: summary });
+  if (tauri) {
+    await item.waitFor(30_000);
+    await item.click();
+    return;
+  }
+  await item.waitFor({ state: "visible", timeout: 30_000 });
+  await item.click();
+}
+
+/** Accept all selected commands in the review modal. */
+export async function acceptProposalReview(page: PerfPage): Promise<void> {
+  const tauri = asTauriPage(page);
+  const panel = page.locator(proposalSmoke.reviewPanel);
+  if (tauri) {
+    await panel.waitFor(30_000);
+    await tauri.getByRole("button", { name: proposalSmoke.acceptButton }).click();
+    await tauri.waitForFunction(
+      `!document.querySelector(${JSON.stringify(proposalSmoke.reviewPanel)})`,
+      30_000,
+    );
+    return;
+  }
+  await panel.waitFor({ state: "visible", timeout: 30_000 });
+  await page.getByRole("button", { name: proposalSmoke.acceptButton }).click();
+  await panel.waitFor({ state: "detached", timeout: 30_000 });
 }
 
 export async function treeLabelMounted(page: PerfPage, label: string): Promise<boolean> {

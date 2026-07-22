@@ -292,6 +292,10 @@ pnpm --filter @lattice/desktop test:tree:tauri
 pnpm --filter @lattice/desktop test:schema:tauri
 # spec: apps/desktop/e2e/data/schema.smoke.tauri.spec.ts
 
+# Native proposal inbox accept / undo smoke (local only — not a CI gate; D2)
+pnpm --filter @lattice/desktop test:proposal:tauri
+# spec: apps/desktop/e2e/data/proposal.smoke.tauri.spec.ts
+
 # Native full tour (DuckDB viz, tabular import, etc.)
 # see docs/dev/nix-workflows.md — desktop-dev / LATTICE_DEV_HOME First Look seed
 ```
