@@ -1,0 +1,12 @@
+format: lattice-workflow
+version: 1
+name: Hourly scheduled reminder
+enabled: true
+trigger:
+  type: schedule
+  interval_seconds: 3600
+steps:
+  - id: note
+    action: notification
+    with:
+      message: Scheduled workflow tick (schema fixture; not fired by a daemon yet)
