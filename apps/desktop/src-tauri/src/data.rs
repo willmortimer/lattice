@@ -4,9 +4,10 @@ use std::path::{Path, PathBuf};
 use lattice_commands::{ColumnSpec, Command as SemanticCommand, CommandEngine, Transaction};
 use lattice_data::{
     cell_from_csv, parse_csv_file, parse_field_type_name, parse_tabular_file, resolve_field_types,
-    save_form, tabular_format, tabular_format_label, CellValue, ColumnMeta, DataApp, FieldType,
-    FilterOperator, Row, SortDirection, TabularTable, ViewDef, ViewFilter, ViewSort, LAYOUT_BOARD,
-    LAYOUT_CALENDAR, LAYOUT_GALLERY, SUPPORTED_LAYOUT_TYPES,
+    save_form, tabular_format, tabular_format_label, CellValue, ColumnMeta, ConditionalFormatRule,
+    ConditionalFormatStyle, DataApp, FieldType, FilterOperator, Row, SortDirection, TabularTable,
+    ViewDef, ViewFilter, ViewSort, LAYOUT_BOARD, LAYOUT_CALENDAR, LAYOUT_GALLERY,
+    SUPPORTED_LAYOUT_TYPES,
 };
 use serde::{Deserialize, Serialize};
 
@@ -44,6 +45,9 @@ pub struct DataAppSnapshot {
     pub cover_field: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub date_field: Option<String>,
+    /// View-scoped conditional format rules (grid cell styles).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conditional_format: Vec<ConditionalFormatDto>,
     /// Rows from tables referenced by relation columns (for picker labels).
     #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     pub relation_targets: BTreeMap<String, Vec<Row>>,
@@ -54,6 +58,22 @@ pub struct FilterDto {
     pub field: String,
     pub operator: String,
     pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConditionalFormatStyleDto {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bg: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConditionalFormatDto {
+    pub field: String,
+    pub operator: String,
+    pub value: String,
+    pub style: ConditionalFormatStyleDto,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -161,6 +181,37 @@ fn filter_dto(filter: &ViewFilter) -> FilterDto {
     }
 }
 
+fn conditional_format_dto(rule: &ConditionalFormatRule) -> ConditionalFormatDto {
+    ConditionalFormatDto {
+        field: rule.field.clone(),
+        operator: match rule.operator {
+            FilterOperator::Equals => "equals".to_string(),
+            FilterOperator::Contains => "contains".to_string(),
+        },
+        value: rule.value.clone(),
+        style: ConditionalFormatStyleDto {
+            bg: rule.style.bg.clone(),
+            text: rule.style.text.clone(),
+        },
+    }
+}
+
+fn conditional_format_from_dto(rule: ConditionalFormatDto) -> ConditionalFormatRule {
+    let operator = match rule.operator.as_str() {
+        "contains" => FilterOperator::Contains,
+        _ => FilterOperator::Equals,
+    };
+    ConditionalFormatRule {
+        field: rule.field,
+        operator,
+        value: rule.value,
+        style: ConditionalFormatStyle {
+            bg: rule.style.bg,
+            text: rule.style.text,
+        },
+    }
+}
+
 fn snapshot_from_app(
     app: &DataApp,
     workspace_root: &Path,
@@ -220,6 +271,11 @@ fn snapshot_from_app(
         group_by: view.layout.group_by.clone(),
         cover_field: view.layout.cover_field.clone(),
         date_field: view.layout.date_field.clone(),
+        conditional_format: view
+            .conditional_format
+            .iter()
+            .map(conditional_format_dto)
+            .collect(),
         relation_targets,
     })
 }
@@ -587,6 +643,9 @@ pub struct SaveViewRequest {
     /// Calendar layout only: column used to place records on the calendar.
     #[serde(default)]
     pub date_field: Option<String>,
+    /// View-scoped conditional format rules (preserved on save).
+    #[serde(default)]
+    pub conditional_format: Vec<ConditionalFormatDto>,
 }
 
 fn default_layout_type() -> String {
@@ -611,6 +670,7 @@ pub fn save_data_view(
         group_by,
         cover_field,
         date_field,
+        conditional_format,
     } = request;
     if !SUPPORTED_LAYOUT_TYPES.contains(&layout_type.as_str()) {
         return Err(format!(
@@ -658,7 +718,12 @@ pub fn save_data_view(
             }
         })
         .collect();
+    view.conditional_format = conditional_format
+        .into_iter()
+        .map(conditional_format_from_dto)
+        .collect();
 
+    view.validate().map_err(|err| err.to_string())?;
     let content = view.to_yaml().map_err(|err| err.to_string())?;
 
     let mut engine = CommandEngine::open(&canonical_root).map_err(command_error_to_string)?;
@@ -1511,6 +1576,7 @@ mod tests {
                 group_by: Some("status".into()),
                 cover_field: Some("photo".into()),
                 date_field: Some("due_date".into()),
+                conditional_format: Vec::new(),
             },
         )
         .unwrap();
@@ -1533,6 +1599,7 @@ mod tests {
                 group_by: Some("status".into()),
                 cover_field: Some("photo".into()),
                 date_field: None,
+                conditional_format: Vec::new(),
             },
         )
         .unwrap();
@@ -1554,6 +1621,7 @@ mod tests {
                 group_by: None,
                 cover_field: None,
                 date_field: Some("due_date".into()),
+                conditional_format: Vec::new(),
             },
         )
         .unwrap();
@@ -1574,6 +1642,7 @@ mod tests {
                 group_by: None,
                 cover_field: None,
                 date_field: None,
+                conditional_format: Vec::new(),
             },
         )
         .unwrap();
@@ -1620,6 +1689,7 @@ mod tests {
                 group_by: None,
                 cover_field: None,
                 date_field: None,
+                conditional_format: Vec::new(),
             },
         )
         .unwrap_err();
@@ -1627,6 +1697,63 @@ mod tests {
             err.contains("unsupported view layout type"),
             "expected unsupported layout error, got: {err}"
         );
+    }
+
+    #[test]
+    fn save_data_view_round_trips_conditional_format() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let rel_path = "CRM.data".to_string();
+
+        create_table_package(
+            root.clone(),
+            rel_path.clone(),
+            "CRM".to_string(),
+            "contacts".to_string(),
+        )
+        .unwrap();
+
+        rusqlite::Connection::open(dir.path().join("CRM.data/database.sqlite"))
+            .unwrap()
+            .execute_batch("ALTER TABLE contacts ADD COLUMN status TEXT;")
+            .unwrap();
+
+        let saved = save_data_view(
+            root.clone(),
+            rel_path.clone(),
+            SaveViewRequest {
+                view_name: "Highlighted".into(),
+                table: "contacts".into(),
+                columns: vec!["id".into(), "status".into()],
+                sort_field: None,
+                sort_direction: None,
+                filters: Vec::new(),
+                layout_type: lattice_data::LAYOUT_GRID.to_string(),
+                group_by: None,
+                cover_field: None,
+                date_field: None,
+                conditional_format: vec![ConditionalFormatDto {
+                    field: "status".into(),
+                    operator: "equals".into(),
+                    value: "Active".into(),
+                    style: ConditionalFormatStyleDto {
+                        bg: Some("accent-wash".into()),
+                        text: Some("accent".into()),
+                    },
+                }],
+            },
+        )
+        .unwrap();
+        assert_eq!(saved.conditional_format.len(), 1);
+        assert_eq!(saved.conditional_format[0].field, "status");
+        assert_eq!(
+            saved.conditional_format[0].style.bg.as_deref(),
+            Some("accent-wash")
+        );
+
+        let reopened = open_data_app(root, rel_path, Some("Highlighted".into()), None, None)
+            .unwrap();
+        assert_eq!(reopened.conditional_format, saved.conditional_format);
     }
 
     #[test]
