@@ -57,10 +57,11 @@ inside the shell.
 | **default** | `direnv` / `nix develop` | Day-to-day Rust, desktop, notebooks, local `desktop-install` |
 | **ops** | `nix develop .#ops` | Cloudflare / site publish only (node, pnpm, wrangler, sops) |
 
-**Do not** put `desktop-install` or Apple notarization tooling in `ops`. That
-path needs the full Rust/Tauri toolchain plus Xcode `codesign` — the opposite
-of a light publish shell. Apple values in `secrets/apple.env` decrypt via
-direnv into the **default** shell; use them from there (`nxr desktop-install`).
+**Do not** put `desktop-install`, `desktop-release`, or Apple notarization tooling
+in `ops`. Those paths need the full Rust/Tauri toolchain plus Xcode
+`codesign` / `notarytool` — the opposite of a light publish shell. Apple values
+in `secrets/apple.env` decrypt via direnv into the **default** shell; use them
+from there (`nxr desktop-install`, `nxr desktop-release`).
 
 `ops` exists so every direnv reload does not pull wrangler/`npx` into the
 default environment (and so we avoid nixpkgs’ broken multi‑GiB wrangler
@@ -166,7 +167,8 @@ nxr list                 # apps + tasks
 nxr graph codegen        # mermaid/text/dot via --format
 nxr task validate -j 4   # parallel ready-set scheduling
 nxr task check           # monolithic CI gate (alias: nxr task ci)
-nxr desktop-install      # macOS local signed install (needs .env)
+nxr desktop-install      # macOS local signed install (needs .env / sops)
+nxr desktop-release      # macOS Developer ID + notarytool + DMG (needs sops)
 ```
 
 ## Apps
@@ -198,6 +200,7 @@ Run them from the repo root (they use relative paths).
 | `desktop-build` | release binary, unbundled (`tauri build --no-bundle`; macOS adds `--features voice-embedded`) |
 | `desktop-ui-build` | Vite production build for `@lattice/desktop` only |
 | `desktop-install` | macOS: `tauri build --bundles app --features voice-embedded`, codesign, bundle Swift voice/audio dylibs, install to `/Applications/Lattice.app` |
+| `desktop-release` | macOS: same `.app` build + sidecars as install, **Developer ID** codesign, `notarytool` submit, staple, `hdiutil` DMG under `target/release/bundle/dmg/` |
 | `ok` | no-op success (join node for nxr task DAGs) |
 
 ### Notable tasks (orchestration)
@@ -210,6 +213,7 @@ Tasks coordinate apps; they do not replace them. Useful graphs:
 | `validate` | `lint` ∥ `test` ∥ `desktop-ui-build` ∥ `site-build` |
 | `check` (alias `ci`) | monolithic `apps.check` (what CI should keep calling) |
 | `desktop-install` (alias `install`) | local signed macOS install |
+| `desktop-release` (alias `release`) | Developer ID notarize + DMG |
 
 CI should run exactly one **blocking** thing: `nix run .#check` (or
 `nxr task check`). Browser perf runs separately as a non-blocking GitHub
@@ -237,6 +241,39 @@ nxr desktop-install
 macOS installs enable `--features voice-embedded` (same as `nxr desktop-dev`) and
 copy `libLatticeVoiceBridge.dylib` / `libLatticeAudioBridge.dylib` into the
 `.app` so Settings → Voice works. Re-run install after pulling voice changes.
+
+### macOS release DMG (notarized)
+
+`desktop-release` produces a stapled, Gatekeeper-friendly DMG for distribution.
+It mirrors the `desktop-install` sidecar bundling, then:
+
+1. Validates required Apple env **before** the long Tauri/Cargo build
+2. Codesigns with **Developer ID Application** + hardened runtime
+3. Submits via `xcrun notarytool` (`APPLE_ID` / `APPLE_PASSWORD` / `APPLE_TEAM_ID`)
+4. Staples the notarization ticket onto `Lattice.app`
+5. Builds `target/release/bundle/dmg/Lattice-<version>.dmg` with `hdiutil`
+
+Requires paid Apple Developer Program + a **Developer ID Application** identity
+in Keychain (Apple Development identities are rejected). Prefer sops:
+
+```sh
+# env check only (no build):
+LATTICE_RELEASE_VALIDATE_ONLY=1 nix run .#desktop-release
+
+# full release packet:
+sops exec-env secrets/apple.env -- nix run .#desktop-release
+# or after direnv decrypt: nxr desktop-release
+```
+
+Optional: `LATTICE_RELEASE_DIR` to redirect the DMG output directory.
+
+Notarytool needs network access to Apple; the signing private key may prompt
+Keychain on first use. There is a manual stub workflow at
+[`.github/workflows/desktop-release.yml`](../../.github/workflows/desktop-release.yml)
+(`workflow_dispatch` / `v*` tags) that **skips cleanly** when Apple CI secrets
+are unset so open-source PR CI is unaffected.
+
+See [environment.md](./environment.md) and [secrets/README.md](../../secrets/README.md).
 
 ### Three different “web” surfaces
 
@@ -324,7 +361,9 @@ See [environment.md](./environment.md) for `LATTICE_DEV_HOME` and `LATTICE_HOME`
 | Task can't find `site/scripts/...` or workspace packages | Run tasks from the repo root. |
 | `tauri build` (bundled) / `desktop-install` fails | Needs real Xcode or CLT for **codesign**; the script sets `DEVELOPER_DIR` only after the Cargo build. |
 | `libduckdb-sys` fails with `uint8_t` / `intmax_t` / `_CTYPE_*` under `desktop-install` | Do not export Xcode’s `DEVELOPER_DIR` for the Cargo step — it mixes Xcode SDK headers with Nix libcxx. Keep the flake’s Nix apple-sdk for compile; Xcode only for codesign. Wipe the broken cache with `cargo clean -p libduckdb-sys` if a failed release build left junk under `target/release/build/`. |
-| `APPLE_SIGNING_IDENTITY: unbound variable` | Load `.env` via direnv (`dotenv_if_exists`) or export the var before `desktop-install`. |
+| `APPLE_SIGNING_IDENTITY: unbound variable` | Load `.env` via direnv (`dotenv_if_exists`) or export the var before `desktop-install` / `desktop-release`. |
+| `desktop-release` rejects Apple Development identity | Use `Developer ID Application: …` from a paid membership (`security find-identity -v -p codesigning`). Local machine installs stay on `desktop-install`. |
+| `notarytool` / stapler fails under `desktop-release` | Confirm `APPLE_ID` + app-specific `APPLE_PASSWORD` + `APPLE_TEAM_ID`; ensure Xcode CLT provides `notarytool`; unlock Keychain if the signing key is inaccessible to the nix-run process. |
 | Browser on :5173 shows “Engineering Workspace” | That is the **demo fixture** (`demoWorkspace.generated.ts` from the `demo` template), not your disk. Use the Tauri window to open a real folder. |
 | Want Astro but ran `desktop-dev` | Use `nxr site-dev` instead. |
 

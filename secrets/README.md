@@ -79,15 +79,25 @@ Fill:
 | `APPLE_ID` | Your **Apple ID email** (account login). One per person/account — not per app. Used for notarization. |
 | `APPLE_PASSWORD` | **App-specific password** for that same Apple ID (from [appleid.apple.com](https://appleid.apple.com) → Sign-In → App-Specific Passwords). Not your iCloud login password. Generate one labeled e.g. `lattice-notarize`. |
 | `APPLE_TEAM_ID` | **10-character team id** for your developer membership (e.g. `BKM26M422Q`). Shared by everyone on the team; not an email. Membership details on developer.apple.com, or the `(XXXXXXXXXX)` suffix on a codesign identity. |
-| `APPLE_SIGNING_IDENTITY` | Full Keychain identity **string**. Quote it — spaces break dotenv/direnv: `APPLE_SIGNING_IDENTITY="Apple Development: you@example.com (TEAMID)"` |
+| `APPLE_SIGNING_IDENTITY` | Full Keychain identity **string**. Quote it — spaces break dotenv/direnv. Local install: `APPLE_SIGNING_IDENTITY="Apple Development: you@example.com (TEAMID)"`. Distribution / `desktop-release`: `APPLE_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)"`. |
 
 **Apple ID ≠ Team ID.** Email identifies *you*; team id identifies the *paid/free developer team* that owns certificates.
 
-Then `direnv reload`. `nxr desktop-install` / `nix run .#desktop-install` read
-`APPLE_SIGNING_IDENTITY` and `APPLE_TEAM_ID` from the environment.
+Then `direnv reload`.
 
-Notarization (`APPLE_ID` / `APPLE_PASSWORD`) is for the release/DMG path when
-that is wired; keep the values in sops now so they are ready.
+- Local install: `nxr desktop-install` / `nix run .#desktop-install` reads `APPLE_SIGNING_IDENTITY` (and optional `APPLE_TEAM_ID`).
+- Release DMG: `nxr desktop-release` / `nix run .#desktop-release` also requires `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID`, and rejects Apple Development identities.
+
+```sh
+# check env only:
+LATTICE_RELEASE_VALIDATE_ONLY=1 nix run .#desktop-release
+
+# full notarized DMG:
+sops exec-env secrets/apple.env -- nix run .#desktop-release
+```
+
+See [docs/dev/nix-workflows.md](../docs/dev/nix-workflows.md) and
+[docs/dev/environment.md](../docs/dev/environment.md).
 
 ## Deploy Cloudflare with the token
 

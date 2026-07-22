@@ -81,6 +81,7 @@ nxr desktop-web           # browser-only demo UI
 nxr desktop               # native without Vite (reuses dist)
 nxr desktop-build         # tauri release build, unbundled
 nxr desktop-install       # macOS: sign + install to /Applications
+nxr desktop-release       # macOS: Developer ID + notarytool + DMG
 ```
 
 `desktop-dev` starts **both** the native app and Vite on :5173. Opening :5173

@@ -1,0 +1,54 @@
+# Optional macOS notarized DMG packaging stub.
+# Manual / tag-only so day-to-day PR CI never runs this job.
+# When Apple secrets are unset, the job exits 0 (skip) so open-source forks
+# and repos without release credentials stay green.
+#
+# Local path (authoritative): 
+#   sops exec-env secrets/apple.env -- nix run .#desktop-release
+# Docs: docs/dev/nix-workflows.md, docs/dev/environment.md
+
+name: Desktop release (notarize + DMG)
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    name: Notarize and package DMG
+    runs-on: macos-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Gate on Apple secrets
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          missing=0
+          for name in APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID APPLE_SIGNING_IDENTITY; do
+            if [ -z "${!name}" ]; then
+              echo "Missing GitHub secret: $name"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Apple release secrets are not configured — skipping (exit 0)."
+            echo "Local release: sops exec-env secrets/apple.env -- nix run .#desktop-release"
+            exit 0
+          fi
+          echo "Apple secrets are present."
+          echo "CI certificate import + nix run .#desktop-release is not wired yet."
+          echo "Use the local path until Keychain/.p12 import lands:"
+          echo "  sops exec-env secrets/apple.env -- nix run .#desktop-release"
+          echo "  LATTICE_RELEASE_VALIDATE_ONLY=1 nix run .#desktop-release"
+          exit 0
