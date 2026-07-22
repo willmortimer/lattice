@@ -97,6 +97,12 @@ pub struct WorkflowTriggerView {
     pub package: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub form_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interval_seconds: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cron: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timezone: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -147,6 +153,9 @@ fn trigger_view(trigger: &WorkflowTrigger) -> WorkflowTriggerView {
             form: None,
             package: None,
             form_id: None,
+            interval_seconds: None,
+            cron: None,
+            timezone: None,
         },
         WorkflowTrigger::ResourceChanged { paths } => WorkflowTriggerView {
             trigger_type: "resource.changed".into(),
@@ -154,6 +163,9 @@ fn trigger_view(trigger: &WorkflowTrigger) -> WorkflowTriggerView {
             form: None,
             package: None,
             form_id: None,
+            interval_seconds: None,
+            cron: None,
+            timezone: None,
         },
         WorkflowTrigger::FormSubmitted {
             form,
@@ -165,6 +177,19 @@ fn trigger_view(trigger: &WorkflowTrigger) -> WorkflowTriggerView {
             form: form.clone(),
             package: package.clone(),
             form_id: form_id.clone(),
+            interval_seconds: None,
+            cron: None,
+            timezone: None,
+        },
+        WorkflowTrigger::Schedule(schedule) => WorkflowTriggerView {
+            trigger_type: "schedule".into(),
+            paths: None,
+            form: None,
+            package: None,
+            form_id: None,
+            interval_seconds: schedule.interval_seconds,
+            cron: schedule.cron.clone(),
+            timezone: schedule.timezone.clone(),
         },
     }
 }
@@ -535,6 +560,9 @@ mod tests {
                 form: None,
                 package: None,
                 form_id: None,
+                interval_seconds: None,
+                cron: None,
+                timezone: None,
             },
             steps: vec![],
             raw_yaml: "format: lattice-workflow\n".into(),

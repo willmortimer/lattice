@@ -77,6 +77,10 @@ trigger:
   # type: form.submitted
   # package: Data/CRM.data
   # form: ContactIntake
+  # type: schedule
+  # interval_seconds: 3600
+  # cron: "0 2 * * *"
+  # timezone: America/Los_Angeles
 steps:
   - id: run-hello
     action: task.run
@@ -98,13 +102,15 @@ steps:
 
 v1 triggers: `manual`, `resource.changed` (path globs; debounced in the desktop
 watcher), `form.submitted` (form path or package + form id; wired from
-`insert_record` when a package form submits). `enabled: false` skips automatic
-triggers; manual Run still executes.
+`insert_record` when a package form submits), and `schedule`
+(`interval_seconds` and/or `cron`, optional `timezone`; parse/validate only —
+no firing loop yet). `enabled: false` skips automatic triggers; manual Run still
+executes.
 
 v1 steps: `task.run` (delegates to TaskRunner), `proposal.create` (source type
 `workflow`), optional `notification` (log only). Unknown actions/triggers are
 rejected at parse time. Run history is stored under `.lattice/workflows/runs/`.
-Cron, durable daemon jobs, and a visual editor remain out of scope.
+Schedule firing, durable daemon jobs, and a visual editor remain out of scope.
 
 Earlier illustrative format (broader than v1):
 

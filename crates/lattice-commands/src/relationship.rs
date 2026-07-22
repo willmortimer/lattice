@@ -432,6 +432,7 @@ fn extract_workflow_edges(
                 }
             }
             WorkflowTrigger::Manual => {}
+            WorkflowTrigger::Schedule(_) => {}
         }
         for step in &manifest.steps {
             match step.action.as_str() {

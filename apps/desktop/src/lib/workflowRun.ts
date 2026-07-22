@@ -17,6 +17,9 @@ export interface WorkflowTriggerDto {
   form?: string;
   package?: string;
   formId?: string;
+  intervalSeconds?: number;
+  cron?: string;
+  timezone?: string;
 }
 
 /** Validated workflow manifest DTO from `workflow_load`. */
