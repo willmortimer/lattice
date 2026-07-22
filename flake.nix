@@ -73,6 +73,7 @@
             desktop-build = "Release binary, unbundled (tauri build --no-bundle)";
             desktop-ui-build = "Build the desktop Vite frontend only";
             desktop-install = "macOS: signed .app with voice → /Applications (Apple Development)";
+            desktop-release = "macOS: Developer ID sign + notarytool + staple + DMG";
             ok = "No-op success (nxr task DAG join)";
           };
 
@@ -270,6 +271,200 @@
               codesign -dv --verbose=2 "$dest" || true
               echo "desktop-install: done. Open with: open \"$dest\""
             '';
+            # Distribution packet: Developer ID Application + notarytool + stapler + DMG.
+            # Requires paid Apple Developer Program + Keychain identity. Validate env
+            # before the long Tauri/Cargo build (set LATTICE_RELEASE_VALIDATE_ONLY=1 to
+            # stop after checks). Secrets: sops secrets/apple.env — never commit plaintext.
+            desktop-release = ''
+              if [ "$(uname -s)" != "Darwin" ]; then
+                echo "desktop-release: macOS only" >&2
+                exit 1
+              fi
+
+              missing=0
+              require_env() {
+                local name="$1"
+                if [ -z "''${!name:-}" ]; then
+                  echo "desktop-release: missing required env: $name" >&2
+                  missing=1
+                fi
+              }
+              require_env APPLE_SIGNING_IDENTITY
+              require_env APPLE_ID
+              require_env APPLE_PASSWORD
+              require_env APPLE_TEAM_ID
+              if [ "$missing" -ne 0 ]; then
+                echo "desktop-release: load Apple secrets first, e.g.:" >&2
+                echo "  sops exec-env secrets/apple.env -- nix run .#desktop-release" >&2
+                echo "  # or: sops secrets/apple.env && direnv reload" >&2
+                echo "See docs/dev/environment.md and docs/dev/nix-workflows.md." >&2
+                exit 1
+              fi
+
+              case "$APPLE_SIGNING_IDENTITY" in
+                *"Developer ID Application"*) ;;
+                *"Apple Development"*)
+                  echo "desktop-release: APPLE_SIGNING_IDENTITY looks like Apple Development." >&2
+                  echo "  Notarization needs a Developer ID Application certificate from a" >&2
+                  echo "  paid Apple Developer Program membership (security find-identity -v -p codesigning)." >&2
+                  exit 1
+                  ;;
+                *)
+                  echo "desktop-release: warning: identity is not 'Developer ID Application: …'" >&2
+                  echo "  continuing with: $APPLE_SIGNING_IDENTITY" >&2
+                  ;;
+              esac
+
+              if [ "''${LATTICE_RELEASE_VALIDATE_ONLY:-}" = "1" ] || [ "''${LATTICE_RELEASE_VALIDATE_ONLY:-}" = "true" ]; then
+                echo "desktop-release: env OK (LATTICE_RELEASE_VALIDATE_ONLY). Skipping build."
+                exit 0
+              fi
+
+              if ! command -v xcrun >/dev/null 2>&1; then
+                echo "desktop-release: xcrun not found (need Xcode or CLT for notarytool/stapler)" >&2
+                exit 1
+              fi
+              if ! xcrun --find notarytool >/dev/null 2>&1; then
+                echo "desktop-release: notarytool missing — install full Xcode Command Line Tools" >&2
+                exit 1
+              fi
+
+              pnpm install
+              # Keep the Nix apple-sdk DEVELOPER_DIR/SDKROOT for the Cargo build.
+              # Same voice + sidecar path as desktop-install.
+              pnpm --filter @lattice/desktop exec tauri build --bundles app --features voice-embedded
+
+              echo "desktop-release: building latticed / lattice-embed-host / lattice-voice-host"
+              cargo build --release -p lattice-daemon --bin latticed
+              cargo build --release -p lattice-embed-host --bin lattice-embed-host --features llama-cpp
+              cargo build --release -p lattice-voice-host --bin lattice-voice-host --features fluidaudio || \
+                cargo build --release -p lattice-voice-host --bin lattice-voice-host
+
+              echo "desktop-release: verifying production sidecars"
+              for bin in latticed lattice-embed-host lattice-voice-host; do
+                if [ ! -f "target/release/$bin" ]; then
+                  echo "desktop-release: missing target/release/$bin after build" >&2
+                  exit 1
+                fi
+              done
+              backends="$(target/release/lattice-embed-host backends || true)"
+              echo "desktop-release: lattice-embed-host backends:"$'\n'"$backends"
+              if ! printf '%s\n' "$backends" | grep -qx 'llama-cpp'; then
+                echo "desktop-release: lattice-embed-host must list llama-cpp (build with --features llama-cpp)" >&2
+                exit 1
+              fi
+
+              if [ -d /Applications/Xcode.app/Contents/Developer ]; then
+                export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+              elif [ -d /Library/Developer/CommandLineTools ]; then
+                export DEVELOPER_DIR=/Library/Developer/CommandLineTools
+              fi
+
+              app_src="target/release/bundle/macos/Lattice.app"
+              if [ ! -d "$app_src" ]; then
+                alt_src="apps/desktop/src-tauri/target/release/bundle/macos/Lattice.app"
+                if [ -d "$alt_src" ]; then
+                  app_src="$alt_src"
+                else
+                  echo "desktop-release: missing bundle at $app_src (also checked $alt_src)" >&2
+                  exit 1
+                fi
+              fi
+
+              macos_dir="$app_src/Contents/MacOS"
+              for dylib in libLatticeVoiceBridge.dylib libLatticeAudioBridge.dylib; do
+                src="target/release/$dylib"
+                if [ -f "$src" ]; then
+                  cp -f "$src" "$macos_dir/$dylib"
+                  echo "desktop-release: bundled $dylib"
+                else
+                  echo "desktop-release: warning: missing $src (voice may fail at runtime)" >&2
+                fi
+              done
+
+              for bin in latticed lattice-embed-host lattice-voice-host; do
+                src="target/release/$bin"
+                if [ ! -f "$src" ]; then
+                  echo "desktop-release: missing $src (required production sidecar)" >&2
+                  exit 1
+                fi
+                cp -f "$src" "$macos_dir/$bin"
+                chmod +x "$macos_dir/$bin"
+                echo "desktop-release: bundled $bin"
+              done
+
+              # Hardened runtime + timestamp required for notarization. Sign nested
+              # Mach-O first, then the .app (inside-out; avoid relying on --deep alone).
+              echo "desktop-release: codesign (Developer ID, hardened runtime)"
+              sign_bin() {
+                local path="$1"
+                if ! codesign --force --options runtime --timestamp \
+                  --sign "$APPLE_SIGNING_IDENTITY" "$path"; then
+                  echo "desktop-release: codesign failed: $path" >&2
+                  echo "  identity: $APPLE_SIGNING_IDENTITY" >&2
+                  exit 1
+                fi
+              }
+              for path in "$macos_dir"/*; do
+                if [ -f "$path" ] || [ -L "$path" ]; then
+                  sign_bin "$path"
+                fi
+              done
+              if [ -d "$app_src/Contents/Frameworks" ]; then
+                find "$app_src/Contents/Frameworks" -type f \( -perm -111 -o -name '*.dylib' -o -name '*.so' \) -print0 |
+                  while IFS= read -r -d '''' path; do
+                    sign_bin "$path"
+                  done
+              fi
+              sign_bin "$app_src"
+              codesign --verify --deep --strict --verbose=2 "$app_src"
+
+              version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_src/Contents/Info.plist" 2>/dev/null || echo "0.0.0")"
+              out_dir="''${LATTICE_RELEASE_DIR:-target/release/bundle/dmg}"
+              mkdir -p "$out_dir"
+              zip_path="$out_dir/Lattice-$version-notarize.zip"
+              dmg_path="$out_dir/Lattice-$version.dmg"
+
+              echo "desktop-release: packing for notarytool → $zip_path"
+              rm -f "$zip_path"
+              ditto -c -k --keepParent "$app_src" "$zip_path"
+
+              echo "desktop-release: submitting to Apple notary service (this can take several minutes)"
+              if ! xcrun notarytool submit "$zip_path" \
+                --apple-id "$APPLE_ID" \
+                --password "$APPLE_PASSWORD" \
+                --team-id "$APPLE_TEAM_ID" \
+                --wait; then
+                echo "desktop-release: notarytool submit failed." >&2
+                echo "  Check APPLE_ID / APPLE_PASSWORD (app-specific) / APPLE_TEAM_ID and Keychain access." >&2
+                echo "  Inspect: xcrun notarytool history (same Apple env as this run)." >&2
+                exit 1
+              fi
+
+              echo "desktop-release: stapling ticket onto Lattice.app"
+              if ! xcrun stapler staple "$app_src"; then
+                echo "desktop-release: stapler failed for $app_src" >&2
+                exit 1
+              fi
+              xcrun stapler validate "$app_src"
+
+              echo "desktop-release: building DMG → $dmg_path"
+              rm -f "$dmg_path"
+              hdiutil create \
+                -volname "Lattice" \
+                -srcfolder "$app_src" \
+                -ov \
+                -format UDZO \
+                "$dmg_path"
+
+              # Optional second staple on the DMG is unnecessary when the app ticket
+              # is already attached; Gatekeeper reads the stapled app inside.
+              rm -f "$zip_path"
+              echo "desktop-release: done."
+              echo "  app: $app_src"
+              echo "  dmg: $dmg_path"
+              echo "  verify: spctl -a -vv --type execute \"$app_src\""
+            '';
             ok = ''
               true
             '';
@@ -453,6 +648,12 @@
               app = "desktop-install";
               category = "desktop";
               aliases = [ "install" ];
+            };
+            desktop-release = {
+              description = "Developer ID notarize + DMG (macOS)";
+              app = "desktop-release";
+              category = "desktop";
+              aliases = [ "release" ];
             };
             desktop-perf = {
               description = "Browser perf harness";
