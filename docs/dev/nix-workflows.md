@@ -190,6 +190,7 @@ Run them from the repo root (they use relative paths).
 | `docs-sync` | regenerate `site/src/content/docs/` from `docs/` |
 | `compile-theme` | compile `themes/*.theme.yaml` → desktop/site CSS (+ Pixi) tokens |
 | `compile-templates` | validate template packages → embedded Rust and browser catalogs |
+| `prepare-first-look` | seed First Look `Events` + `Places` datasets, regenerate catalogs, verify key paths |
 | `desktop-dev` | Native window **+ Vite HMR** on :5173 (frontend hot-reload); seeds **First Look** in `target/dev-home` |
 | `desktop-web` | Browser-only React UI on :5173 (demo workspace; no Tauri) |
 | `desktop-perf` | Playwright browser perf harness against the Vite demo (see [perf-harness.md](./perf-harness.md)) |
@@ -207,6 +208,7 @@ Tasks coordinate apps; they do not replace them. Useful graphs:
 | Task | What it runs |
 | --- | --- |
 | `codegen` (alias `compile`) | `compile-theme` ∥ `compile-templates` |
+| `prepare-first-look` (alias `prep-demo`) | seed First Look datasets + `compile-templates` + path sanity check |
 | `validate` | `lint` ∥ `test` ∥ `desktop-ui-build` ∥ `site-build` |
 | `check` (alias `ci`) | monolithic `apps.check` (what CI should keep calling) |
 | `desktop-install` (alias `install`) | local signed macOS install |

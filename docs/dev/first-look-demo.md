@@ -77,10 +77,19 @@ lattice dataset query-annotated Data/Events.dataset --json
 Re-seed the template Parquet + annotations from repo root:
 
 ```sh
-cargo run -p lattice-datasets --example seed_demo_events
-cargo run -p lattice-datasets --example seed_demo_places
-pnpm compile-templates
+nxr prepare-first-look
+# or: cargo run -p lattice-datasets --example seed_demo_events
+#     cargo run -p lattice-datasets --example seed_demo_places
+#     pnpm compile-templates
 ```
+
+## Friday demo staging
+
+For packaging rehearsal, cold-open sanity, voice/Quick Note, proposals accept/undo,
+and workspace backup/tagging, use the internal checklist at
+`docs/internal/friday-demo.md` (gitignored locally; copy or open from your
+checkout). Public summary: run `nxr prepare-first-look` before `nxr
+desktop-install`, then walk the [[Home]] tour on a fresh First Look workspace.
 
 ## Phase 3 polish landed (Plan, Cancel, Map, Formula, junction, cross-package RO)
 
