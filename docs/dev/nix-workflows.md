@@ -50,9 +50,26 @@ Session-local nxr completion is enabled via `nxr.shellIntegration` (no global
 dotfile writes). After `direnv allow`, `nxr` should tab-complete in zsh/bash
 inside the shell.
 
+## Dev shells
+
+| Shell | Activate | For |
+| --- | --- | --- |
+| **default** | `direnv` / `nix develop` | Day-to-day Rust, desktop, notebooks, local `desktop-install` |
+| **ops** | `nix develop .#ops` | Cloudflare / site publish only (node, pnpm, wrangler, sops) |
+
+**Do not** put `desktop-install` or Apple notarization tooling in `ops`. That
+path needs the full Rust/Tauri toolchain plus Xcode `codesign` — the opposite
+of a light publish shell. Apple values in `secrets/apple.env` decrypt via
+direnv into the **default** shell; use them from there (`nxr desktop-install`).
+
+`ops` exists so every direnv reload does not pull wrangler/`npx` into the
+default environment (and so we avoid nixpkgs’ broken multi‑GiB wrangler
+derivation on Darwin).
+
 ## Ops shell (Cloudflare / site publish)
 
-Separate from the heavy default shell. Activate only when publishing:
+Separate from the heavy default shell. Activate only when debugging wrangler
+interactively:
 
 ```sh
 nix develop .#ops
@@ -64,7 +81,13 @@ and `lattice-docs-sync`.
 
 direnv keeps loading `.#default` via `use flake`. Do **not** change `.envrc`
 for day-to-day work — open an ops shell in a second terminal when you need
-Cloudflare.
+Cloudflare CLI (`whoami`, `login`, project list).
+
+For a normal deploy you do **not** need ops if the API token is loaded:
+
+```sh
+nix run .#site-deploy
+```
 
 ### How `wrangler login` works with Nix
 
@@ -85,13 +108,15 @@ wrangler login
 wrangler whoami
 # build + deploy to https://lattice-dop.pages.dev/
 lattice-site-deploy
-# or from any shell after login:
+# or from any shell after login / with sops token:
 nix run .#site-deploy
 ```
 
-`site-deploy` uses the same wrapper on `PATH`, so `nix run .#site-deploy` works
-without entering the ops shell once you are authenticated. Prefer an API token
-via sops ([secrets/README.md](../../secrets/README.md)):
+`site-deploy` builds the site, then `cd site` and runs `wrangler pages deploy`
+so [`site/wrangler.toml`](../../site/wrangler.toml) (`pages_build_output_dir =
+dist`) applies.
+
+Prefer an API token via sops ([secrets/README.md](../../secrets/README.md)):
 
 ```sh
 # direnv decrypts secrets/cloudflare.env into the environment
@@ -101,13 +126,23 @@ nix run .#site-deploy
 sops exec-env secrets/cloudflare.env -- nix run .#site-deploy
 ```
 
-Use the ops shell for interactive `wrangler` commands (login, whoami, pages
-project list, etc.) when you are not using a token.
+### Tag-only CI deploy
 
-> We intentionally avoid `nixpkgs#wrangler`: it rebuilds the Cloudflare
-> workers-sdk monorepo (multi‑GiB) and has been failing on Darwin (`EBADF`
-> during tsup). The npm-published CLI is enough for Pages. First `wrangler`
-> invocation needs network to populate the npx cache; after that it is local.
+Pushing to `main` does **not** deploy the site (avoids burning Actions minutes
+on high-frequency pushes). Creating a version tag does:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Workflow: [`.github/workflows/site-deploy.yml`](../../.github/workflows/site-deploy.yml).
+Requires GitHub Actions secrets `CLOUDFLARE_API_TOKEN` and optional
+`CLOUDFLARE_ACCOUNT_ID` (same values as sops; CI does not use the age key).
+`workflow_dispatch` is also enabled for a manual one-off from the Actions UI.
+
+Desktop notarized releases can share the same tag trigger later; they are not
+wired yet.
 
 ## Runners
 
