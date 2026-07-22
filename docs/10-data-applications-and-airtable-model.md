@@ -386,6 +386,13 @@ Desktop **Save view** persists the selected layout type and layout-specific fiel
 (`group_by`, `cover_field`, `date_field`) through `save_data_view`; reloading the
 view restores the same layout. Hand-authored YAML remains supported.
 
+Optional view-scoped **conditional formatting** colors matching grid cells.
+Rules live under `conditional_format` (field, operator, value → style tokens).
+Style tokens are Lattice semantic roles without the `--lt-` prefix (for example
+`accent-wash`, `accent`, `danger`). The desktop grid resolves them to `--lt-*`
+CSS variables; first match per field wins. No formula engine and no interface
+visibility rules in this slice.
+
 Layout fields are exclusive to their layout type and are rejected otherwise:
 
 - `layout.group_by` — board only.
@@ -405,6 +412,13 @@ filter:
   - field: archived
     operator: equals
     value: false
+conditional_format:
+  - field: status
+    operator: equals
+    value: Active
+    style:
+      bg: accent-wash
+      text: accent
 ```
 
 List views omit `group_by`:
