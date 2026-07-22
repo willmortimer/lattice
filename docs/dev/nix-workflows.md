@@ -144,6 +144,11 @@ Requires GitHub Actions secrets `CLOUDFLARE_API_TOKEN` and optional
 Desktop notarized releases can share the same tag trigger later; they are not
 wired yet.
 
+> We intentionally avoid `nixpkgs#wrangler`: it rebuilds the Cloudflare
+> workers-sdk monorepo (multi‑GiB) and has been failing on Darwin (`EBADF`
+> during tsup). The npm-published CLI is enough for Pages. First `wrangler`
+> invocation needs network to populate the npx cache; after that it is local.
+
 ## Runners
 
 Prefer **nxr** for day-to-day work. Every leaf is still a normal flake app, so
