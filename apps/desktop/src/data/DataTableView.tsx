@@ -33,6 +33,7 @@ import {
   type ViewFilter,
   type ViewLayoutType,
 } from "./types";
+import { themeOverrideForCell } from "./conditionalFormat";
 import {
   layoutFieldPickerSpecs,
   layoutFieldPickerValue,
@@ -833,13 +834,25 @@ export function DataTableView({
         preferences.zebraRows && rowIndex % 2 === 1
           ? { bgCell: token("--lt-bg-raise", "#11161f") }
           : undefined;
+      const cfTheme = themeOverrideForCell(
+        column.name,
+        display,
+        snapshot.conditional_format,
+      );
+      const themeOverride =
+        zebraTheme || cfTheme
+          ? {
+              ...zebraTheme,
+              ...cfTheme,
+            }
+          : undefined;
       if (column.field_type === "boolean") {
         return {
           kind: GridCellKind.Boolean,
           data: display === "true",
           allowOverlay: false,
           readonly: readOnly,
-          themeOverride: zebraTheme,
+          themeOverride,
         };
       }
       if (column.field_type === "integer" || column.field_type === "decimal") {
@@ -849,7 +862,7 @@ export function DataTableView({
           displayData: display,
           allowOverlay: !readOnly,
           readonly: readOnly,
-          themeOverride: zebraTheme,
+          themeOverride,
         };
       }
       return {
@@ -858,10 +871,18 @@ export function DataTableView({
         displayData: display,
         allowOverlay: !readOnly,
         readonly: readOnly,
-        themeOverride: zebraTheme,
+        themeOverride,
       };
     },
-    [busy, displayRows, preferences.zebraRows, relationLabelIndex, stale, visibleColumns],
+    [
+      busy,
+      displayRows,
+      preferences.zebraRows,
+      relationLabelIndex,
+      snapshot.conditional_format,
+      stale,
+      visibleColumns,
+    ],
   );
 
   const handleCellEdited = useCallback(
@@ -936,6 +957,7 @@ export function DataTableView({
           sortField: sortField ?? null,
           sortDirection: sortDirection ?? null,
           filters,
+          conditionalFormat: snapshotRef.current.conditional_format ?? [],
           ...layoutFields,
         },
       });
