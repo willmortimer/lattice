@@ -113,7 +113,9 @@
                 echo "site-deploy: CLOUDFLARE_API_TOKEN unset — using wrangler OAuth store if present." >&2
                 echo "  sops path: sops exec-env secrets/cloudflare.env -- nix run .#site-deploy" >&2
               fi
-              exec wrangler pages deploy site/dist \
+              # Run from site/ so wrangler.toml (pages_build_output_dir = dist) applies.
+              cd site
+              exec wrangler pages deploy \
                 --project-name=lattice \
                 --commit-dirty=true \
                 "$@"
@@ -477,15 +479,13 @@
             '';
           };
 
-          # Lightweight publish shell: node/pnpm + wrangler (npx wrapper) for
-          # site build/deploy. Activate with `nix develop .#ops` (does not
-          # replace direnv default).
-          # Auth: `wrangler login` stores OAuth tokens under your home directory
-          # (~/Library/Preferences/.wrangler on macOS), not in the Nix store —
-          # so login survives shell exits. CI can use CLOUDFLARE_API_TOKEN instead.
-          # Prefer this shell for interactive wrangler; `nix run .#site-deploy`
-          # works the same once authenticated. First `wrangler` call needs npm
-          # network access to fetch the CLI into the npx cache.
+          # Lightweight Cloudflare/site shell only — not desktop-install / Apple
+          # notarization (those need the default Rust+Xcode toolchain).
+          # Activate with `nix develop .#ops` (does not replace direnv default).
+          # Auth: `wrangler login` stores OAuth under ~/.wrangler, or use
+          # CLOUDFLARE_API_TOKEN from sops. Prefer `nix run .#site-deploy` for
+          # normal deploys; use this shell for interactive wrangler.
+          # Tag-only CI: .github/workflows/site-deploy.yml
           devShells.ops = pkgs.mkShell {
             packages = siteToolchain ++ [
               latticeScripts.site-build
@@ -493,11 +493,13 @@
               latticeScripts.docs-sync
             ];
             shellHook = ''
-              echo "lattice ops shell — wrangler (npx wrangler@4), node $(node --version), pnpm $(pnpm --version)"
-              echo "secrets: sops/age available — see secrets/README.md"
+              echo "lattice ops shell — Cloudflare / site only (not desktop-install)"
+              echo "wrangler (npx wrangler@4), node $(node --version), pnpm $(pnpm --version)"
+              echo "secrets: sops/age — see secrets/README.md"
               echo "auth: sops secrets/cloudflare.env   # or: wrangler login"
               echo "deploy: nix run .#site-deploy"
               echo "        sops exec-env secrets/cloudflare.env -- nix run .#site-deploy"
+              echo "CI: tag v* → .github/workflows/site-deploy.yml"
               echo "live: https://lattice-dop.pages.dev/"
             '';
           };

@@ -74,6 +74,10 @@ nix run .#site-deploy
 sops exec-env secrets/cloudflare.env -- nix run .#site-deploy
 ```
 
+Tag-only CI (no deploy on every `main` push): push a `v*` tag, or run the
+**Site deploy** workflow manually. Set GitHub Actions secrets
+`CLOUDFLARE_API_TOKEN` and optional `CLOUDFLARE_ACCOUNT_ID`.
+
 ## Rules
 
 - Never commit real plaintext secrets; `.env` is gitignored (`.env.example` is

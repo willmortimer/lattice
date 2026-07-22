@@ -3,11 +3,13 @@
 #
 # Auth (pick one):
 #   - Interactive: `nix develop .#ops` then `wrangler login`
-#   - Non-interactive / CI: export CLOUDFLARE_API_TOKEN
+#   - Non-interactive / CI: CLOUDFLARE_API_TOKEN (+ optional CLOUDFLARE_ACCOUNT_ID)
 #
-# Deploy from repo root:
+# Deploy from repo root (script cds here so this file applies):
 #   nix run .#site-deploy
 #   # or, inside ops shell: lattice-site-deploy
+#
+# Tag-only CI: .github/workflows/site-deploy.yml on v* tags.
 
 name = "lattice"
 compatibility_date = "2026-07-21"
