@@ -191,6 +191,8 @@ Source of truth: `crates/lattice-data/src/types.rs` (mirrored in
   `max`; resolved at read time).
 - `formula` — read-only friendly expression over same-row fields (resolved at
   read time; see [Formula fields](#formula-fields)).
+- `enum` — single-select from an explicit options list in column metadata.
+- `multi_enum` — multi-select from the same options list (stored as JSON TEXT).
 
 Storage remains ordinary SQLite column types; presentation and semantic metadata
 live in `app.yaml`.
@@ -200,7 +202,6 @@ live in `app.yaml`.
 These are product targets, **not** current `FieldType` variants:
 
 - Rich text; URL, email, phone; currency, percentage.
-- Enum and multi-enum.
 - **Attachment column** type (see [Workspace attachments vs attachment columns](#workspace-attachments-vs-attachment-columns)).
 - User; geolocation; JSON.
 - Page/resource and artifact/app references.
