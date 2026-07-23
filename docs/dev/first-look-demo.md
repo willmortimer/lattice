@@ -272,6 +272,28 @@ same files but cannot run workflows, tasks, or proposals.
 
 Manual smoke (no automated e2e yet): walk A1–A4 on a fresh First Look seed.
 
+## Agent-generate path (inspect → propose → approve)
+
+Native desktop or `latticed` MCP — browser fixture seeds the files but cannot run
+tasks or show the Proposals inbox. Sample MCP JSON-RPC:
+[first-look-agent-mcp.md](./first-look-agent-mcp.md).
+
+| # | Step | Notes |
+| --- | --- | --- |
+| G1 | Profile `Data/Orders.dataset` and `Data/Events.dataset` | Desktop **Profile** tab, MCP `get_dataset_schema` + `profile_dataset`, or task CSV/Parquet inspect |
+| G2 | Propose interface or workflow YAML | MCP `propose_interface` / `propose_workflow`, or **Run** `Tasks/AgentFirstLook.task` (`lattice.propose_interface`) |
+| G3 | Open **Proposals** inbox → approve | Creates `CRM.data/interfaces/AgentDigest.interface.yaml` (task/MCP seed) — no apply from MCP |
+| G4 | Open `CRM.data` → **Interfaces** → **Agent digest** | Two metric tiles: Events signups total + Orders revenue total |
+| G5 | Optional MCP transcript | Walk `docs/dev/first-look-agent-mcp.md` with daemon attached to the same workspace |
+
+Task walkthrough (no daemon):
+
+1. Open `Tasks/AgentFirstLook.task` → **Run** — prints JSON inspect summary and writes a pending proposal.
+2. Approve in the inbox.
+3. Open **Interfaces → Agent digest** on `CRM.data`.
+
+Workspace doc: `Research/Agent first look.md` in the First Look template.
+
 ### Sticky `target/dev-home`
 
 `nix run .#desktop-dev` / `pnpm tauri:dev` default `LATTICE_DEV_RESET_DEMO=1` so
