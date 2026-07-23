@@ -13,3 +13,8 @@ The First Look automation path:
 2. `Automations/Contact intake.workflow.yaml` runs `Tasks/ContactIntakeHello.task`,
    then creates a page-create proposal for `Proposals/Contact intake follow-up.md`.
 3. Approve in the inbox — this folder gains the follow-up page.
+
+**Agent-generate path (AG2):** run `Tasks/AgentFirstLook.task` (or MCP
+`get_dataset_schema` / `profile_dataset` → `propose_interface`) to propose
+`CRM.data/interfaces/AgentDigest.interface.yaml`. Approve in the inbox, then open
+**CRM.data → Interfaces → Agent digest**. See [[Research/Agent first look]].
