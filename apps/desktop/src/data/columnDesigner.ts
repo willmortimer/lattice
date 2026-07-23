@@ -15,6 +15,7 @@ export const COLUMN_FIELD_TYPES: FieldType[] = [
   "formula",
   "enum",
   "multi_enum",
+  "attachment",
 ];
 
 export const ROLLUP_AGGREGATES: RollupAggregate[] = ["count", "sum", "min", "max"];

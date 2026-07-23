@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
 
 import type { CellValue, DataColumn, DataRow } from "./types";
+import { AttachmentFieldEditor } from "./AttachmentFieldEditor";
 import {
   buildRelationLabelIndex,
   filterRelationTargets,
@@ -27,6 +28,9 @@ interface RecordDetailPanelProps {
   activeTable: string;
   rows: DataRow[];
   relationTargets?: Record<string, DataRow[]>;
+  root?: string;
+  packageRelPath?: string;
+  nativeFileOps?: boolean;
   readOnly: boolean;
   saving: boolean;
   onClose: () => void;
@@ -40,6 +44,9 @@ export function RecordDetailPanel({
   activeTable,
   rows,
   relationTargets,
+  root,
+  packageRelPath,
+  nativeFileOps = true,
   readOnly,
   saving,
   onClose,
@@ -219,6 +226,16 @@ export function RecordDetailPanel({
                     );
                   })}
                 </div>
+              ) : editorKind === "attachment" ? (
+                <AttachmentFieldEditor
+                  value={value}
+                  onChange={(next) => updateField(column.name, next)}
+                  root={root}
+                  packageRelPath={packageRelPath}
+                  nativeFileOps={nativeFileOps}
+                  readOnly={fieldReadOnly}
+                  label={column.name}
+                />
               ) : (
                 <input
                   className="record-detail-input"

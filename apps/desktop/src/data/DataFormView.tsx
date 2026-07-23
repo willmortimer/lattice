@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { CellValue, DataColumn, DataRow } from "./types";
 import { cellValueToDisplay } from "./types";
+import { AttachmentFieldEditor } from "./AttachmentFieldEditor";
 import {
   collectFormValues,
   draftFieldErrors,
@@ -20,6 +21,9 @@ interface DataFormViewProps {
   /** Explicit view column order from `layout.columns` when available. */
   columnOrder?: string[];
   rows: DataRow[];
+  root?: string;
+  packageRelPath?: string;
+  nativeFileOps?: boolean;
   readOnly: boolean;
   busy: boolean;
   onSubmit: (values: Record<string, CellValue>) => Promise<{ id: string }>;
@@ -30,6 +34,9 @@ export function DataFormView({
   columns,
   columnOrder = [],
   rows,
+  root,
+  packageRelPath,
+  nativeFileOps = true,
   readOnly,
   busy,
   onSubmit,
@@ -197,6 +204,16 @@ export function DataFormView({
                       );
                     })}
                   </div>
+                ) : editorKind === "attachment" ? (
+                  <AttachmentFieldEditor
+                    value={value}
+                    onChange={(next) => updateField(column.name, next)}
+                    root={root}
+                    packageRelPath={packageRelPath}
+                    nativeFileOps={nativeFileOps}
+                    readOnly={readOnly || busy}
+                    label={column.name}
+                  />
                 ) : (
                   <input
                     className="record-detail-input"

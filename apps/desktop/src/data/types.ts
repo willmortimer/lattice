@@ -15,7 +15,8 @@ export type FieldType =
   | "rollup"
   | "formula"
   | "enum"
-  | "multi_enum";
+  | "multi_enum"
+  | "attachment";
 
 /** Mirrors `lattice_data::RollupAggregate`. */
 export type RollupAggregate = "count" | "sum" | "min" | "max";
@@ -35,7 +36,8 @@ export type CellValue =
   | { Lookup: { values: string[] } }
   | { Rollup: { value: number | null } }
   | { Formula: { value: FormulaValue | null } }
-  | { MultiEnum: { values: string[] } };
+  | { MultiEnum: { values: string[] } }
+  | { Attachment: { paths: string[] } };
 
 export interface DataColumn {
   name: string;
@@ -162,6 +164,16 @@ export function cellValueToDisplay(value: CellValue | undefined | null | string)
     const values = value.MultiEnum?.values;
     return Array.isArray(values) ? values.join(", ") : "";
   }
+  if ("Attachment" in value) {
+    const paths = value.Attachment?.paths;
+    if (!Array.isArray(paths)) return "";
+    return paths
+      .map((path) => {
+        const parts = path.split(/[/\\]/);
+        return parts[parts.length - 1] || path;
+      })
+      .join(", ");
+  }
   return "";
 }
 
@@ -221,6 +233,26 @@ export function displayToCellValue(text: string, fieldType: FieldType): CellValu
             .filter(Boolean),
         },
       };
+    case "attachment": {
+      if (trimmed.startsWith("[")) {
+        try {
+          const parsed: unknown = JSON.parse(trimmed);
+          if (Array.isArray(parsed) && parsed.every((entry) => typeof entry === "string")) {
+            return { Attachment: { paths: parsed } };
+          }
+        } catch {
+          // Fall through to comma-separated parsing.
+        }
+      }
+      return {
+        Attachment: {
+          paths: trimmed
+            .split(",")
+            .map((part) => part.trim())
+            .filter(Boolean),
+        },
+      };
+    }
     case "text":
     case "long_text":
       return { Text: text };

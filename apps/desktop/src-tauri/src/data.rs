@@ -1295,6 +1295,33 @@ pub fn delete_record(
         .ok_or_else(|| "record delete did not produce a resulting revision".to_string())
 }
 
+/// Copy a local file into a `.data` package `attachments/` directory.
+///
+/// Returns the package-relative path (`attachments/<filename>`).
+#[tauri::command]
+pub fn add_data_attachment(
+    root: String,
+    rel_path: String,
+    source_path: String,
+) -> Result<String, String> {
+    let app = open_app_at(&root, &rel_path)?;
+    let source = PathBuf::from(&source_path);
+    app.add_attachment_file(&source)
+        .map_err(|err| err.to_string())
+}
+
+/// Delete a package-relative attachment file under `attachments/` when present.
+#[tauri::command]
+pub fn remove_data_attachment(
+    root: String,
+    rel_path: String,
+    attachment_path: String,
+) -> Result<(), String> {
+    let app = open_app_at(&root, &rel_path)?;
+    app.remove_attachment_file(&attachment_path)
+        .map_err(|err| err.to_string())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActionSummary {
