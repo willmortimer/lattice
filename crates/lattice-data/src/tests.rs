@@ -203,6 +203,88 @@ fn view_round_trip_and_list_rows_with_view() {
 }
 
 #[test]
+fn grid_layout_summaries_round_trip_and_compute() {
+    use crate::view::compute_layout_summary;
+    use crate::{CellValue, RollupAggregate, Row, ViewLayoutSummary};
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Summarized.data");
+    let app = DataApp::create(&package_path, "Summarized", "records").unwrap();
+
+    rusqlite::Connection::open(database_path(&package_path))
+        .unwrap()
+        .execute_batch(
+            "ALTER TABLE records ADD COLUMN status TEXT;
+             ALTER TABLE records ADD COLUMN amount REAL;",
+        )
+        .unwrap();
+
+    let mut view = ViewDef::new_grid("records");
+    view.layout.group_by = Some("status".into());
+    view.layout.summaries = vec![
+        ViewLayoutSummary {
+            field: "amount".into(),
+            aggregate: RollupAggregate::Sum,
+        },
+        ViewLayoutSummary {
+            field: "status".into(),
+            aggregate: RollupAggregate::Count,
+        },
+    ];
+
+    let yaml = app.render_view_yaml(&view).unwrap();
+    assert!(yaml.contains("summaries:"));
+    assert!(yaml.contains("aggregate: sum"));
+
+    write_package_view(&package_path, "Grouped", &view).unwrap();
+    let loaded = app.load_view("Grouped").unwrap();
+    assert_eq!(loaded, view);
+
+    let rows = vec![
+        Row {
+            id: "1".into(),
+            values: [
+                ("status".into(), CellValue::Text("Active".into())),
+                ("amount".into(), CellValue::Decimal(10.0)),
+            ]
+            .into_iter()
+            .collect(),
+        },
+        Row {
+            id: "2".into(),
+            values: [
+                ("status".into(), CellValue::Text("Active".into())),
+                ("amount".into(), CellValue::Decimal(5.0)),
+            ]
+            .into_iter()
+            .collect(),
+        },
+        Row {
+            id: "3".into(),
+            values: [
+                ("status".into(), CellValue::Text("Done".into())),
+                ("amount".into(), CellValue::Decimal(3.0)),
+            ]
+            .into_iter()
+            .collect(),
+        },
+    ];
+
+    assert_eq!(
+        compute_layout_summary(&rows, "amount", FieldType::Decimal, RollupAggregate::Sum),
+        Some(18.0)
+    );
+    assert_eq!(
+        compute_layout_summary(&rows, "status", FieldType::Text, RollupAggregate::Count),
+        Some(3.0)
+    );
+    assert_eq!(
+        compute_layout_summary(&rows[..2], "amount", FieldType::Decimal, RollupAggregate::Sum),
+        Some(15.0)
+    );
+}
+
+#[test]
 fn conditional_format_rules_round_trip_in_view_yaml() {
     use crate::{ConditionalFormatRule, ConditionalFormatStyle};
 
@@ -310,8 +392,23 @@ fn list_and_board_views_load_with_layout_metadata() {
     assert_eq!(loaded_board.layout.layout_type, LAYOUT_BOARD);
     assert_eq!(loaded_board.layout.group_by.as_deref(), Some("status"));
 
+    let mut grid_view = ViewDef::new_grid("records");
+    grid_view.layout.group_by = Some("status".into());
+    grid_view.layout.summaries = vec![crate::ViewLayoutSummary {
+        field: "name".into(),
+        aggregate: crate::RollupAggregate::Count,
+    }];
+    std::fs::write(
+        views_dir.join("GroupedGrid.yaml"),
+        app.render_view_yaml(&grid_view).unwrap(),
+    )
+    .unwrap();
+    let loaded_grid = app.load_view("GroupedGrid").unwrap();
+    assert_eq!(loaded_grid.layout.group_by.as_deref(), Some("status"));
+    assert_eq!(loaded_grid.layout.summaries.len(), 1);
+
     let invalid_group_by = format!(
-        "format: lattice-view\nversion: 1\nsource:\n  database: ../database.sqlite\n  table: records\nlayout:\n  type: grid\n  group_by: status\n"
+        "format: lattice-view\nversion: 1\nsource:\n  database: ../database.sqlite\n  table: records\nlayout:\n  type: gallery\n  group_by: status\n"
     );
     std::fs::write(views_dir.join("Invalid.yaml"), invalid_group_by).unwrap();
     let err = app.load_view("Invalid").unwrap_err().to_string();
@@ -404,6 +501,11 @@ fn layout_field_misuse_is_rejected() {
     std::fs::write(views_dir.join("GroupByOnGallery.yaml"), group_by_on_gallery).unwrap();
     let err = app.load_view("GroupByOnGallery").unwrap_err().to_string();
     assert!(err.contains("group_by"));
+
+    let summaries_on_board = "format: lattice-view\nversion: 1\nsource:\n  database: ../database.sqlite\n  table: records\nlayout:\n  type: board\n  summaries:\n    - field: amount\n      aggregate: sum\n";
+    std::fs::write(views_dir.join("SummariesOnBoard.yaml"), summaries_on_board).unwrap();
+    let err = app.load_view("SummariesOnBoard").unwrap_err().to_string();
+    assert!(err.contains("summaries"));
 
     let unsupported = "format: lattice-view\nversion: 1\nsource:\n  database: ../database.sqlite\n  table: records\nlayout:\n  type: dashboard\n";
     std::fs::write(views_dir.join("Unsupported.yaml"), unsupported).unwrap();
