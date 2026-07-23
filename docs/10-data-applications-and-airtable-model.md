@@ -375,7 +375,7 @@ types: `grid`, `list`, `board`, `gallery`, `calendar`, and `form`. Phase 2
 desktop rendering implements `grid` (default), `list`, `board`, `gallery`,
 `calendar`, and `form`.
 
-- **Grid** — editable spreadsheet surface (default for saved views and the built-in `All` view).
+- **Grid** — editable spreadsheet surface (default for saved views and the built-in `All` view). Optional `layout.group_by` inserts group headers (and per-group footers when `layout.summaries` is set). `layout.summaries` adds per-field footer aggregates (`count` / `sum` / `min` / `max`, reusing rollup aggregate names) as a grand footer, and as per-group footers when grouping.
 - **List** — scrollable rows using the first non-`id` column as the title and the next as a subtitle; row click opens record detail.
 - **Board** — kanban lanes grouped by `layout.group_by` when set, otherwise a column named `status`, otherwise the first text/boolean column. Row cards reuse the list title/subtitle fields and open record detail on click.
 - **Gallery** — card grid using `layout.cover_field` when set, otherwise the first image-like text column (for example `photo` or `cover`), otherwise the primary title text in the cover area. Card click opens record detail.
@@ -383,8 +383,8 @@ desktop rendering implements `grid` (default), `list`, `board`, `gallery`,
 - **Form** — create-focused field form using `layout.columns` for field order when set, otherwise all non-`id` columns. Submit inserts a row through the same `insert_record` command path as the grid. After create, the form clears and offers **Open record** for edit in record detail; a compact recent-records list links to existing rows. Public publish and workflow triggers are out of scope.
 
 Desktop **Save view** persists the selected layout type and layout-specific fields
-(`group_by`, `cover_field`, `date_field`) through `save_data_view`; reloading the
-view restores the same layout. Hand-authored YAML remains supported.
+(`group_by`, `summaries`, `cover_field`, `date_field`) through `save_data_view`;
+reloading the view restores the same layout. Hand-authored YAML remains supported.
 
 Optional view-scoped **conditional formatting** colors matching grid cells.
 Rules live under `conditional_format` (field, operator, value → style tokens).
@@ -395,7 +395,8 @@ visibility rules in this slice.
 
 Layout fields are exclusive to their layout type and are rejected otherwise:
 
-- `layout.group_by` — board only.
+- `layout.group_by` — board (kanban lanes) or grid (row groups).
+- `layout.summaries` — grid only (`[{ field, aggregate }]`).
 - `layout.cover_field` — gallery only.
 - `layout.date_field` — calendar only.
 
@@ -419,6 +420,19 @@ conditional_format:
     style:
       bg: accent-wash
       text: accent
+```
+
+Grid views may group rows and declare footer aggregates:
+
+```yaml
+layout:
+  type: grid
+  group_by: status
+  summaries:
+    - field: amount
+      aggregate: sum
+    - field: status
+      aggregate: count
 ```
 
 List views omit `group_by`:

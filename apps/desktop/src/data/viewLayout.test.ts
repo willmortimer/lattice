@@ -196,8 +196,13 @@ describe("viewLayout helpers", () => {
         groupBy: "status",
         coverField: "photo",
         dateField: "due_date",
+        summaries: [{ field: "count", aggregate: "sum" }],
       }),
-    ).toEqual({ layoutType: "grid" });
+    ).toEqual({
+      layoutType: "grid",
+      groupBy: "status",
+      summaries: [{ field: "count", aggregate: "sum" }],
+    });
     expect(
       layoutFieldsForSave("board", {
         groupBy: "status",
@@ -231,6 +236,12 @@ describe("viewLayout helpers", () => {
     ];
     expect(seedLayoutFieldsForType("board", withPhoto, {})).toEqual({
       groupBy: "status",
+    });
+    expect(seedLayoutFieldsForType("grid", withPhoto, {})).toEqual({
+      groupBy: undefined,
+    });
+    expect(seedLayoutFieldsForType("grid", withPhoto, { groupBy: "active" })).toEqual({
+      groupBy: "active",
     });
     expect(seedLayoutFieldsForType("gallery", withPhoto, {})).toEqual({
       coverField: "photo",
@@ -275,7 +286,9 @@ describe("viewLayout helpers", () => {
       "photo",
     ]);
 
-    expect(layoutFieldPickerSpecs("grid", withPhoto, {})).toEqual([]);
+    expect(layoutFieldPickerSpecs("grid", withPhoto, {}).map((picker) => picker.kind)).toEqual([
+      "groupBy",
+    ]);
     expect(layoutFieldPickerSpecs("board", withPhoto, {}).map((picker) => picker.kind)).toEqual([
       "groupBy",
     ]);
