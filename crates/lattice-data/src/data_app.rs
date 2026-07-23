@@ -156,6 +156,7 @@ impl DataApp {
             let rollup_aggregate = yaml.and_then(|column| column.rollup_aggregate);
             let rollup_field = yaml.and_then(|column| column.rollup_field.clone());
             let formula = yaml.and_then(|column| column.formula.clone());
+            let options = yaml.and_then(|column| column.options.clone());
             columns.push(ColumnMeta {
                 name,
                 field_type,
@@ -168,6 +169,7 @@ impl DataApp {
                 rollup_aggregate,
                 rollup_field,
                 formula,
+                options,
             });
         }
         Ok(columns)
@@ -922,6 +924,18 @@ impl DataApp {
                 })?;
                 validate_formula_spec_for_add(table, &existing, columns, column.name, expression)?;
             }
+            if matches!(column.field_type, FieldType::Enum | FieldType::MultiEnum) {
+                let options = column.options.ok_or_else(|| {
+                    Error::table(
+                        table,
+                        format!(
+                            "{} column {:?} requires options",
+                            column.field_type, column.name
+                        ),
+                    )
+                })?;
+                validate_enum_options_for_add(table, column.name, options)?;
+            }
         }
 
         let existing_junction_tables: std::collections::BTreeSet<String> = self
@@ -1120,6 +1134,32 @@ impl DataApp {
                 _ => None,
             };
 
+            let options = match column.field_type {
+                FieldType::Enum | FieldType::MultiEnum => {
+                    let opts = column.options.ok_or_else(|| {
+                        Error::table(
+                            table,
+                            format!(
+                                "{} column {:?} requires options",
+                                column.field_type, column.name
+                            ),
+                        )
+                    })?;
+                    validate_enum_options_for_add(table, column.name, opts)?;
+                    Some(opts.to_vec())
+                }
+                _ if column.options.is_some() => {
+                    return Err(Error::table(
+                        table,
+                        format!(
+                            "column {:?} only enum / multi_enum fields may set options",
+                            column.name
+                        ),
+                    ));
+                }
+                _ => None,
+            };
+
             let sqlite_type = column.field_type.sqlite_type();
             let alter = format!(
                 "ALTER TABLE {table} ADD COLUMN {} {sqlite_type};\n",
@@ -1150,6 +1190,7 @@ impl DataApp {
                     rollup_aggregate,
                     rollup_field,
                     formula,
+                    options,
                 },
             );
         }
@@ -1593,12 +1634,95 @@ fn validate_row_values(
             // Snapshots may carry resolved lookup values; ignore on write.
             continue;
         }
-        if meta.field_type != FieldType::Relation {
-            continue;
+        match meta.field_type {
+            FieldType::Relation => validate_relation_cell(conn, table, meta, value)?,
+            FieldType::Enum | FieldType::MultiEnum => validate_enum_cell(table, meta, value)?,
+            _ => {}
         }
-        validate_relation_cell(conn, table, meta, value)?;
     }
     Ok(())
+}
+
+fn validate_enum_options_for_add(table: &str, column_name: &str, options: &[String]) -> Result<()> {
+    if options.is_empty() {
+        return Err(Error::table(
+            table,
+            format!("column {column_name:?} requires at least one option"),
+        ));
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    for option in options {
+        let trimmed = option.trim();
+        if trimmed.is_empty() {
+            return Err(Error::table(
+                table,
+                format!("column {column_name:?} options must be non-empty strings"),
+            ));
+        }
+        if trimmed != option {
+            return Err(Error::table(
+                table,
+                format!(
+                    "column {column_name:?} option {option:?} must not have leading/trailing whitespace"
+                ),
+            ));
+        }
+        if !seen.insert(option.as_str()) {
+            return Err(Error::table(
+                table,
+                format!("column {column_name:?} has duplicate option {option:?}"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_enum_cell(table: &str, meta: &ColumnMeta, value: &CellValue) -> Result<()> {
+    let options = meta.options.as_deref().unwrap_or(&[]);
+    match meta.field_type {
+        FieldType::Enum => match value {
+            CellValue::Null => Ok(()),
+            CellValue::Text(selected) => {
+                if options.is_empty() || options.iter().any(|option| option == selected) {
+                    Ok(())
+                } else {
+                    Err(Error::table(
+                        table,
+                        format!(
+                            "column {:?} value {selected:?} is not in options {:?}",
+                            meta.name, options
+                        ),
+                    ))
+                }
+            }
+            _ => Err(Error::table(
+                table,
+                format!("column {:?} expects a text enum value", meta.name),
+            )),
+        },
+        FieldType::MultiEnum => match value {
+            CellValue::Null => Ok(()),
+            CellValue::MultiEnum { values } => {
+                for selected in values {
+                    if !options.is_empty() && !options.iter().any(|option| option == selected) {
+                        return Err(Error::table(
+                            table,
+                            format!(
+                                "column {:?} value {selected:?} is not in options {:?}",
+                                meta.name, options
+                            ),
+                        ));
+                    }
+                }
+                Ok(())
+            }
+            _ => Err(Error::table(
+                table,
+                format!("column {:?} expects a multi_enum value", meta.name),
+            )),
+        },
+        _ => Ok(()),
+    }
 }
 
 fn validate_lookup_spec_for_add(

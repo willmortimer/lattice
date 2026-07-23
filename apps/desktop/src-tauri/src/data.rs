@@ -157,6 +157,8 @@ pub struct ColumnDto {
     pub rollup_field: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub formula: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub options: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -178,6 +180,7 @@ fn column_dto(column: ColumnMeta) -> ColumnDto {
         rollup_aggregate: column.rollup_aggregate.map(|agg| agg.to_string()),
         rollup_field: column.rollup_field,
         formula: column.formula,
+        options: column.options,
     }
 }
 
@@ -418,6 +421,8 @@ pub struct AddColumnDto {
     pub rollup_field: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub formula: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub options: Option<Vec<String>>,
 }
 
 fn column_spec_from_dto(column: AddColumnDto) -> ColumnSpec {
@@ -446,6 +451,10 @@ fn column_spec_from_dto(column: AddColumnDto) -> ColumnSpec {
         )
     } else if column.field_type == FieldType::Formula {
         ColumnSpec::formula(column.name, column.formula.unwrap_or_default())
+    } else if column.field_type == FieldType::Enum {
+        ColumnSpec::enumeration(column.name, column.options.unwrap_or_default())
+    } else if column.field_type == FieldType::MultiEnum {
+        ColumnSpec::multi_enumeration(column.name, column.options.unwrap_or_default())
     } else {
         ColumnSpec::new(column.name, column.field_type)
     }
@@ -2074,6 +2083,7 @@ mod tests {
                     rollup_aggregate: None,
                     rollup_field: None,
                     formula: None,
+                    options: None,
                 },
                 AddColumnDto {
                     name: "age".into(),
@@ -2086,6 +2096,7 @@ mod tests {
                     rollup_aggregate: None,
                     rollup_field: None,
                     formula: None,
+                    options: None,
                 },
             ],
             base,
@@ -2142,6 +2153,7 @@ mod tests {
                 rollup_aggregate: None,
                 rollup_field: None,
                 formula: None,
+                options: None,
             }],
             "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_string(),
             None,

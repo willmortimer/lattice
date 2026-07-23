@@ -55,6 +55,8 @@ pub struct ColumnSpec {
     pub rollup_field: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub formula: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub options: Option<Vec<String>>,
 }
 
 impl ColumnSpec {
@@ -70,6 +72,7 @@ impl ColumnSpec {
             rollup_aggregate: None,
             rollup_field: None,
             formula: None,
+            options: None,
         }
     }
 
@@ -85,6 +88,7 @@ impl ColumnSpec {
             rollup_aggregate: None,
             rollup_field: None,
             formula: None,
+            options: None,
         }
     }
 
@@ -104,6 +108,7 @@ impl ColumnSpec {
             rollup_aggregate: None,
             rollup_field: None,
             formula: None,
+            options: None,
         }
     }
 
@@ -124,6 +129,7 @@ impl ColumnSpec {
             rollup_aggregate: Some(aggregate),
             rollup_field: rollup_field.map(Into::into),
             formula: None,
+            options: None,
         }
     }
 
@@ -139,6 +145,39 @@ impl ColumnSpec {
             rollup_aggregate: None,
             rollup_field: None,
             formula: Some(expression.into()),
+            options: None,
+        }
+    }
+
+    pub fn enumeration(name: impl Into<String>, options: impl Into<Vec<String>>) -> Self {
+        Self {
+            name: name.into(),
+            field_type: FieldType::Enum,
+            relation_table: None,
+            junction_table: None,
+            lookup_relation: None,
+            lookup_field: None,
+            rollup_relation: None,
+            rollup_aggregate: None,
+            rollup_field: None,
+            formula: None,
+            options: Some(options.into()),
+        }
+    }
+
+    pub fn multi_enumeration(name: impl Into<String>, options: impl Into<Vec<String>>) -> Self {
+        Self {
+            name: name.into(),
+            field_type: FieldType::MultiEnum,
+            relation_table: None,
+            junction_table: None,
+            lookup_relation: None,
+            lookup_field: None,
+            rollup_relation: None,
+            rollup_aggregate: None,
+            rollup_field: None,
+            formula: None,
+            options: Some(options.into()),
         }
     }
 }

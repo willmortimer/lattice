@@ -758,6 +758,14 @@ fn seed_column_to_new_column<'a>(
             ),
         });
     }
+    if matches!(field_type, FieldType::Enum | FieldType::MultiEnum) {
+        return Err(Error::TemplateValidation {
+            message: format!(
+                "data package {}: enum / multi_enum columns are not supported in template seeds yet",
+                package_path
+            ),
+        });
+    }
     Ok(NewColumn::new(column.name, field_type))
 }
 
@@ -1266,12 +1274,12 @@ fn cell_from_json(
                             "data package {package_path}: number {number} is not a valid boolean"
                         ),
                     }),
-                FieldType::Text | FieldType::LongText | FieldType::Date => {
+                FieldType::Text | FieldType::LongText | FieldType::Date | FieldType::Enum => {
                     Ok(CellValue::Text(number.to_string()))
                 }
-                FieldType::Relation => Err(Error::TemplateValidation {
+                FieldType::Relation | FieldType::MultiEnum => Err(Error::TemplateValidation {
                     message: format!(
-                        "data package {package_path}: relation cells must be a JSON array of record ids"
+                        "data package {package_path}: relation/multi_enum cells must be a JSON array"
                     ),
                 }),
                 FieldType::Lookup => Err(Error::TemplateValidation {
@@ -1293,7 +1301,7 @@ fn cell_from_json(
         }
         serde_json::Value::String(text) => {
             match field_type {
-                FieldType::Text | FieldType::LongText => Ok(CellValue::Text(text.clone())),
+                FieldType::Text | FieldType::LongText | FieldType::Enum => Ok(CellValue::Text(text.clone())),
                 FieldType::Date => Ok(CellValue::Date(text.clone())),
                 FieldType::Boolean => Ok(CellValue::Boolean(matches!(
                     text.to_ascii_lowercase().as_str(),
@@ -1333,6 +1341,11 @@ fn cell_from_json(
                         "data package {package_path}: formula columns are read-only and cannot be seeded"
                     ),
                 }),
+                FieldType::MultiEnum => Err(Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path}: multi_enum cells must be a JSON array of strings"
+                    ),
+                }),
             }
         }
         serde_json::Value::Array(items) => match field_type {
@@ -1349,6 +1362,20 @@ fn cell_from_json(
                     record_ids.push(text.to_string());
                 }
                 Ok(CellValue::Relation { record_ids })
+            }
+            FieldType::MultiEnum => {
+                let mut values = Vec::with_capacity(items.len());
+                for item in items {
+                    let Some(text) = item.as_str() else {
+                        return Err(Error::TemplateValidation {
+                            message: format!(
+                                "data package {package_path}: multi_enum values must be strings"
+                            ),
+                        });
+                    };
+                    values.push(text.to_string());
+                }
+                Ok(CellValue::MultiEnum { values })
             }
             _ => Err(Error::TemplateValidation {
                 message: format!(
@@ -1376,6 +1403,8 @@ fn parse_field_type(value: &str) -> Option<FieldType> {
         "lookup" => Some(FieldType::Lookup),
         "rollup" => Some(FieldType::Rollup),
         "formula" => Some(FieldType::Formula),
+        "enum" => Some(FieldType::Enum),
+        "multi_enum" => Some(FieldType::MultiEnum),
         _ => None,
     }
 }

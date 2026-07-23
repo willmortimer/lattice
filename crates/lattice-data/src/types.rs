@@ -23,6 +23,10 @@ pub enum FieldType {
     Rollup,
     /// Read-only expression evaluated at read time from other columns on the same row.
     Formula,
+    /// Single-select from a fixed list of string options (stored as TEXT).
+    Enum,
+    /// Multi-select from a fixed list of string options (stored as JSON TEXT array).
+    MultiEnum,
 }
 
 /// Aggregate function for [`FieldType::Rollup`].
@@ -85,7 +89,9 @@ impl FieldType {
             | FieldType::Relation
             | FieldType::Lookup
             | FieldType::Rollup
-            | FieldType::Formula => "TEXT",
+            | FieldType::Formula
+            | FieldType::Enum
+            | FieldType::MultiEnum => "TEXT",
             FieldType::Integer | FieldType::Boolean => "INTEGER",
             FieldType::Decimal => "REAL",
         }
@@ -124,6 +130,8 @@ impl fmt::Display for FieldType {
             FieldType::Lookup => write!(f, "lookup"),
             FieldType::Rollup => write!(f, "rollup"),
             FieldType::Formula => write!(f, "formula"),
+            FieldType::Enum => write!(f, "enum"),
+            FieldType::MultiEnum => write!(f, "multi_enum"),
         }
     }
 }
@@ -165,6 +173,10 @@ pub enum CellValue {
     Formula {
         value: Option<FormulaValue>,
     },
+    /// Selected values for [`FieldType::MultiEnum`]; SQLite stores a JSON array of strings.
+    MultiEnum {
+        values: Vec<String>,
+    },
 }
 
 impl CellValue {
@@ -183,6 +195,11 @@ impl CellValue {
             CellValue::Relation { record_ids } => {
                 let encoded = serde_json::to_string(record_ids)
                     .expect("relation record_ids serialize to JSON");
+                rusqlite::types::Value::Text(encoded)
+            }
+            CellValue::MultiEnum { values } => {
+                let encoded =
+                    serde_json::to_string(values).expect("multi_enum values serialize to JSON");
                 rusqlite::types::Value::Text(encoded)
             }
         }
@@ -207,7 +224,9 @@ impl CellValue {
                 FieldType::Relation
                 | FieldType::Lookup
                 | FieldType::Rollup
-                | FieldType::Formula => Err(rusqlite::Error::InvalidColumnType(
+                | FieldType::Formula
+                | FieldType::Enum
+                | FieldType::MultiEnum => Err(rusqlite::Error::InvalidColumnType(
                     0,
                     field_type.to_string(),
                     value_ref.data_type(),
@@ -218,7 +237,9 @@ impl CellValue {
                 FieldType::Relation
                 | FieldType::Lookup
                 | FieldType::Rollup
-                | FieldType::Formula => Err(rusqlite::Error::InvalidColumnType(
+                | FieldType::Formula
+                | FieldType::Enum
+                | FieldType::MultiEnum => Err(rusqlite::Error::InvalidColumnType(
                     0,
                     field_type.to_string(),
                     value_ref.data_type(),
@@ -253,10 +274,23 @@ impl CellValue {
                             })?;
                         Ok(CellValue::Relation { record_ids })
                     }
+                    FieldType::MultiEnum => {
+                        let values: Vec<String> = serde_json::from_str(&text).map_err(|_| {
+                            rusqlite::Error::InvalidColumnType(
+                                0,
+                                text,
+                                rusqlite::types::Type::Text,
+                            )
+                        })?;
+                        Ok(CellValue::MultiEnum { values })
+                    }
                     FieldType::Lookup => Ok(CellValue::Lookup { values: Vec::new() }),
                     FieldType::Rollup => Ok(CellValue::Rollup { value: None }),
                     FieldType::Formula => Ok(CellValue::Formula { value: None }),
-                    _ => Ok(CellValue::Text(text)),
+                    FieldType::Enum
+                    | FieldType::Text
+                    | FieldType::LongText
+                    | FieldType::Integer => Ok(CellValue::Text(text)),
                 }
             }
             ValueRef::Blob(_) => Err(rusqlite::Error::InvalidColumnType(
@@ -282,6 +316,7 @@ impl CellValue {
                 }
             }
             CellValue::Relation { record_ids } => record_ids.join(", "),
+            CellValue::MultiEnum { values } => values.join(", "),
             CellValue::Lookup { values } => values.join(", "),
             CellValue::Rollup { value: None } => String::new(),
             CellValue::Rollup { value: Some(n) } => {
@@ -344,6 +379,8 @@ pub struct ColumnMeta {
     pub rollup_field: Option<String>,
     /// Expression for [`FieldType::Formula`] (e.g. `{price} * {quantity}`).
     pub formula: Option<String>,
+    /// Allowed values for [`FieldType::Enum`] / [`FieldType::MultiEnum`].
+    pub options: Option<Vec<String>>,
 }
 
 /// Prior relation cell state stripped when a target row is deleted.
@@ -394,6 +431,7 @@ pub struct NewColumn<'a> {
     pub rollup_aggregate: Option<RollupAggregate>,
     pub rollup_field: Option<&'a str>,
     pub formula: Option<&'a str>,
+    pub options: Option<&'a [String]>,
 }
 
 impl<'a> NewColumn<'a> {
@@ -409,6 +447,7 @@ impl<'a> NewColumn<'a> {
             rollup_aggregate: None,
             rollup_field: None,
             formula: None,
+            options: None,
         }
     }
 
@@ -424,6 +463,7 @@ impl<'a> NewColumn<'a> {
             rollup_aggregate: None,
             rollup_field: None,
             formula: None,
+            options: None,
         }
     }
 
@@ -445,6 +485,7 @@ impl<'a> NewColumn<'a> {
             rollup_aggregate: None,
             rollup_field: None,
             formula: None,
+            options: None,
         }
     }
 
@@ -465,6 +506,7 @@ impl<'a> NewColumn<'a> {
             rollup_aggregate: Some(aggregate),
             rollup_field,
             formula: None,
+            options: None,
         }
     }
 
@@ -480,6 +522,39 @@ impl<'a> NewColumn<'a> {
             rollup_aggregate: None,
             rollup_field: None,
             formula: Some(expression),
+            options: None,
+        }
+    }
+
+    pub fn enumeration(name: &'a str, options: &'a [String]) -> Self {
+        Self {
+            name,
+            field_type: FieldType::Enum,
+            relation_table: None,
+            junction_table: None,
+            lookup_relation: None,
+            lookup_field: None,
+            rollup_relation: None,
+            rollup_aggregate: None,
+            rollup_field: None,
+            formula: None,
+            options: Some(options),
+        }
+    }
+
+    pub fn multi_enumeration(name: &'a str, options: &'a [String]) -> Self {
+        Self {
+            name,
+            field_type: FieldType::MultiEnum,
+            relation_table: None,
+            junction_table: None,
+            lookup_relation: None,
+            lookup_field: None,
+            rollup_relation: None,
+            rollup_aggregate: None,
+            rollup_field: None,
+            formula: None,
+            options: Some(options),
         }
     }
 }

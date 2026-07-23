@@ -45,10 +45,14 @@ describe("recordDetail helpers", () => {
     expect(fieldEditorKind("lookup")).toBe("lookup");
     expect(fieldEditorKind("rollup")).toBe("rollup");
     expect(fieldEditorKind("formula")).toBe("formula");
+    expect(fieldEditorKind("enum")).toBe("enum");
+    expect(fieldEditorKind("multi_enum")).toBe("multi_enum");
     expect(fieldTypeLabel("decimal")).toBe("Decimal");
     expect(fieldTypeLabel("lookup")).toBe("Lookup");
     expect(fieldTypeLabel("rollup")).toBe("Rollup");
     expect(fieldTypeLabel("formula")).toBe("Formula");
+    expect(fieldTypeLabel("enum")).toBe("Enum");
+    expect(fieldTypeLabel("multi_enum")).toBe("Multi enum");
   });
 
   it("builds draft strings from row values", () => {

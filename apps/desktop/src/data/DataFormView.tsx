@@ -8,6 +8,8 @@ import {
   emptyDraftValues,
   fieldEditorKind,
   fieldTypeLabel,
+  parseMultiEnumDraft,
+  toggleMultiEnumDraftValue,
 } from "./recordDetail";
 import { resolveFormColumns, resolveListPrimaryColumn } from "./viewLayout";
 
@@ -151,6 +153,50 @@ export function DataFormView({
                     rows={4}
                     onChange={(event) => updateField(column.name, event.currentTarget.value)}
                   />
+                ) : editorKind === "enum" ? (
+                  <select
+                    className="record-detail-input"
+                    value={value}
+                    disabled={readOnly || busy}
+                    onChange={(event) => updateField(column.name, event.currentTarget.value)}
+                  >
+                    <option value="">—</option>
+                    {(column.options ?? []).map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                ) : editorKind === "multi_enum" ? (
+                  <div
+                    className="record-detail-relation-options"
+                    role="group"
+                    aria-label={column.name}
+                  >
+                    {(column.options ?? []).map((option) => {
+                      const selected = parseMultiEnumDraft(value).includes(option);
+                      return (
+                        <label key={option} className="record-detail-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            disabled={readOnly || busy}
+                            onChange={(event) =>
+                              updateField(
+                                column.name,
+                                toggleMultiEnumDraftValue(
+                                  value,
+                                  option,
+                                  event.currentTarget.checked,
+                                ),
+                              )
+                            }
+                          />
+                          <span>{option}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
                 ) : (
                   <input
                     className="record-detail-input"

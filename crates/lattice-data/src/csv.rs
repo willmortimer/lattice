@@ -55,9 +55,11 @@ pub fn parse_field_type_name(value: &str) -> Result<FieldType> {
         "lookup" => Ok(FieldType::Lookup),
         "rollup" => Ok(FieldType::Rollup),
         "formula" => Ok(FieldType::Formula),
+        "enum" => Ok(FieldType::Enum),
+        "multi_enum" => Ok(FieldType::MultiEnum),
         other => Err(Error::table(
             "csv",
-            format!("unsupported field type {other:?}; expected text, long_text, integer, decimal, boolean, date, relation, lookup, rollup, or formula"),
+            format!("unsupported field type {other:?}; expected text, long_text, integer, decimal, boolean, date, relation, lookup, rollup, formula, enum, or multi_enum"),
         )),
     }
 }
@@ -99,7 +101,9 @@ pub fn cell_from_csv(text: &str, field_type: FieldType) -> Result<CellValue> {
             .map(CellValue::Decimal)
             .map_err(|_| Error::table("csv", format!("invalid decimal value {trimmed:?}"))),
         FieldType::Date => Ok(CellValue::Date(trimmed.to_string())),
-        FieldType::Text | FieldType::LongText => Ok(CellValue::Text(trimmed.to_string())),
+        FieldType::Text | FieldType::LongText | FieldType::Enum => {
+            Ok(CellValue::Text(trimmed.to_string()))
+        }
         FieldType::Relation => {
             let record_ids: Vec<String> = serde_json::from_str(trimmed).map_err(|_| {
                 Error::table(
@@ -108,6 +112,23 @@ pub fn cell_from_csv(text: &str, field_type: FieldType) -> Result<CellValue> {
                 )
             })?;
             Ok(CellValue::Relation { record_ids })
+        }
+        FieldType::MultiEnum => {
+            let values: Vec<String> = if trimmed.starts_with('[') {
+                serde_json::from_str(trimmed).map_err(|_| {
+                    Error::table(
+                        "csv",
+                        format!("invalid multi_enum JSON array {trimmed:?}"),
+                    )
+                })?
+            } else {
+                trimmed
+                    .split(',')
+                    .map(|part| part.trim().to_string())
+                    .filter(|part| !part.is_empty())
+                    .collect()
+            };
+            Ok(CellValue::MultiEnum { values })
         }
         FieldType::Lookup => Err(Error::table(
             "csv",

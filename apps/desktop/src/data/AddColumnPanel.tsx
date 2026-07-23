@@ -10,6 +10,7 @@ import {
   columnFieldTypeOptions,
   rollupAggregateOptions,
   validateColumnName,
+  validateEnumOptions,
   validateFormulaSpec,
   validateLookupSpec,
   validateRelationTarget,
@@ -53,6 +54,7 @@ export function AddColumnPanel({
   const [rollupAggregate, setRollupAggregate] = useState<RollupAggregate>("count");
   const [rollupField, setRollupField] = useState("");
   const [formula, setFormula] = useState("");
+  const [optionsText, setOptionsText] = useState("");
   const [availableTables, setAvailableTables] = useState<string[]>([snapshot.default_table]);
   const [targetFields, setTargetFields] = useState<string[]>([]);
   const [targetFieldTypes, setTargetFieldTypes] = useState<Record<string, FieldType>>({});
@@ -289,6 +291,11 @@ export function AddColumnPanel({
       setValidationError(formulaError);
       return;
     }
+    const enumError = validateEnumOptions(fieldType, optionsText);
+    if (enumError) {
+      setValidationError(enumError);
+      return;
+    }
 
     if (demo) {
       return;
@@ -306,6 +313,7 @@ export function AddColumnPanel({
         rollupAggregate,
         rollupField,
         formula,
+        optionsText,
       );
       const fresh = await invoke<DataAppSnapshot>("add_data_columns", {
         root,
@@ -327,6 +335,7 @@ export function AddColumnPanel({
       setRollupAggregate("count");
       setRollupField("");
       setFormula("");
+      setOptionsText("");
       onClose();
     } catch (err) {
       const message = String(err);
@@ -365,6 +374,7 @@ export function AddColumnPanel({
     snapshot.package_revision,
     targetFields,
     formula,
+    optionsText,
   ]);
 
   const disabled = busy || readOnly || submitting;
@@ -375,6 +385,8 @@ export function AddColumnPanel({
       (rollupAggregate !== "count" && !rollupField) ||
       !rollupAggregate);
   const formulaBlocked = fieldType === "formula" && !formula.trim();
+  const enumBlocked =
+    (fieldType === "enum" || fieldType === "multi_enum") && !optionsText.trim();
   const relationBlocked = fieldType === "relation" && relationTargets.length === 0;
 
   return (
@@ -569,6 +581,22 @@ export function AddColumnPanel({
             />
           </label>
         )}
+        {(fieldType === "enum" || fieldType === "multi_enum") && (
+          <label className="data-table-add-column-field">
+            Options
+            <textarea
+              className="data-table-add-column-options"
+              value={optionsText}
+              disabled={disabled}
+              rows={3}
+              placeholder="Open, In progress, Done"
+              onChange={(event) => setOptionsText(event.currentTarget.value)}
+            />
+            <span className="data-table-add-column-hint">
+              Comma or newline separated. Required for enum fields.
+            </span>
+          </label>
+        )}
       </div>
 
       {validationError && <p className="error-text">{validationError}</p>}
@@ -579,7 +607,13 @@ export function AddColumnPanel({
             type="button"
             className="primary-button"
             disabled={
-              disabled || demo || relationBlocked || lookupBlocked || rollupBlocked || formulaBlocked
+              disabled ||
+              demo ||
+              relationBlocked ||
+              lookupBlocked ||
+              rollupBlocked ||
+              formulaBlocked ||
+              enumBlocked
             }
             title={demo ? nativeOnlyToolbarTooltip("Adding columns") : undefined}
             aria-disabled={demo || undefined}
