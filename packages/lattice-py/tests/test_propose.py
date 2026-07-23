@@ -46,6 +46,23 @@ def test_propose_page_writes_camelcase_transaction_proposal(workspace: Path) -> 
     assert loaded == payload
 
 
+def test_propose_resource_encodes_base64_content(workspace: Path) -> None:
+    payload = lattice.propose_resource("Notes/raw.txt", "hello\n", summary="Create raw")
+    assert payload["commands"][0]["type"] == "resource-create"
+    assert payload["commands"][0]["path"] == "Notes/raw.txt"
+    assert payload["commands"][0]["content"] == "aGVsbG8K"
+    assert (workspace / ".lattice" / "proposals" / f"{payload['id']}.json").is_file()
+
+
+def test_propose_workflow_warns_on_suffix(workspace: Path) -> None:
+    payload = lattice.propose_workflow(
+        "Automations/Demo.yaml",
+        "format: lattice-workflow\nversion: 1\nname: Demo\ntrigger:\n  type: manual\n",
+    )
+    assert payload["warnings"]
+    assert "workflow.yaml" in payload["warnings"][0]
+
+
 def test_propose_accepts_external_source(workspace: Path) -> None:
     payload = lattice.propose(
         commands=[{"type": "page-create", "path": "A.md", "content": "x"}],

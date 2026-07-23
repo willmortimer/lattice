@@ -7,8 +7,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use lattice_commands::{
-    create_proposal, list_proposal_summaries, load_proposal, Command, ProposalSource,
-    ProposalSourceType, TransactionProposal, TransactionProposalSummary,
+    create_proposal, list_proposal_summaries, load_proposal, propose_artifact, propose_interface,
+    propose_resource, propose_workflow, Command, ProposalSource, ProposalSourceType,
+    TransactionProposal, TransactionProposalSummary,
 };
 use lattice_handlers::{get_backlinks_with_session, read_page, search_workspace_with_session};
 use lattice_index::{parse_page, ExportPolicy, HybridSearchHit, Sensitivity};
@@ -899,6 +900,138 @@ pub fn api_propose_page(
             warnings: Vec::new(),
             source_resource: None,
         },
+    )
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProposeResourceParams {
+    #[serde(flatten)]
+    pub workspace: WorkspaceRefParams,
+    pub path: String,
+    pub content: String,
+    #[serde(default)]
+    pub summary: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProposeYamlParams {
+    #[serde(flatten)]
+    pub workspace: WorkspaceRefParams,
+    pub path: String,
+    pub content: String,
+    #[serde(default)]
+    pub summary: Option<String>,
+}
+
+fn api_from_propose_bundle(
+    runtime: &LatticeRuntime,
+    workspace: WorkspaceRefParams,
+    mut bundle: lattice_commands::ProposeBundle,
+    summary_override: Option<String>,
+) -> Result<ProposalResponse, ApiError> {
+    if let Some(summary) = summary_override.filter(|value| !value.trim().is_empty()) {
+        bundle.summary = summary;
+    }
+    api_create_proposal(
+        runtime,
+        CreateProposalParams {
+            workspace,
+            summary: bundle.summary,
+            commands: bundle.commands,
+            affected_paths: bundle.affected_paths,
+            warnings: bundle.warnings,
+            source_resource: None,
+        },
+    )
+}
+
+pub fn api_propose_resource(
+    runtime: &LatticeRuntime,
+    params: ProposeResourceParams,
+) -> Result<ProposalResponse, ApiError> {
+    let bundle = propose_resource(&params.path, &params.content).map_err(command_error_to_api)?;
+    api_from_propose_bundle(runtime, params.workspace, bundle, params.summary)
+}
+
+pub fn api_propose_workflow(
+    runtime: &LatticeRuntime,
+    params: ProposeYamlParams,
+) -> Result<ProposalResponse, ApiError> {
+    let bundle = propose_workflow(&params.path, &params.content).map_err(command_error_to_api)?;
+    api_from_propose_bundle(runtime, params.workspace, bundle, params.summary)
+}
+
+pub fn api_propose_interface(
+    runtime: &LatticeRuntime,
+    params: ProposeYamlParams,
+) -> Result<ProposalResponse, ApiError> {
+    let bundle = propose_interface(&params.path, &params.content).map_err(command_error_to_api)?;
+    api_from_propose_bundle(runtime, params.workspace, bundle, params.summary)
+}
+
+pub fn api_propose_artifact(
+    runtime: &LatticeRuntime,
+    params: ProposeYamlParams,
+) -> Result<ProposalResponse, ApiError> {
+    let bundle = propose_artifact(&params.path, &params.content).map_err(command_error_to_api)?;
+    api_from_propose_bundle(runtime, params.workspace, bundle, params.summary)
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatasetInspectParams {
+    #[serde(flatten)]
+    pub workspace: WorkspaceRefParams,
+    pub path: String,
+    #[serde(default)]
+    pub sql: Option<String>,
+    /// Optional sample-row cap for `profile_dataset` only.
+    #[serde(default)]
+    pub max_sample_rows: Option<u64>,
+}
+
+pub fn api_get_dataset_schema(
+    runtime: &LatticeRuntime,
+    params: DatasetInspectParams,
+) -> Result<crate::dataset_api::DatasetSchemaResponse, ApiError> {
+    let path = params.path.trim();
+    if path.is_empty() {
+        return Err(ApiError::BadRequest("path must not be empty".into()));
+    }
+    let session = resolve_session(
+        runtime,
+        params.workspace.workspace_id.as_deref(),
+        params.workspace.root.as_deref(),
+    )?;
+    crate::dataset_api::get_dataset_schema(
+        session.root(),
+        session.workspace_id(),
+        path,
+        params.sql.as_deref(),
+    )
+}
+
+pub fn api_profile_dataset(
+    runtime: &LatticeRuntime,
+    params: DatasetInspectParams,
+) -> Result<crate::dataset_api::DatasetProfileResponse, ApiError> {
+    let path = params.path.trim();
+    if path.is_empty() {
+        return Err(ApiError::BadRequest("path must not be empty".into()));
+    }
+    let session = resolve_session(
+        runtime,
+        params.workspace.workspace_id.as_deref(),
+        params.workspace.root.as_deref(),
+    )?;
+    crate::dataset_api::profile_dataset(
+        session.root(),
+        session.workspace_id(),
+        path,
+        params.sql.as_deref(),
+        params.max_sample_rows,
     )
 }
 

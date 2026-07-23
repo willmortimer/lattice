@@ -86,10 +86,16 @@ X-Lattice-Token: <token>
 | `POST` | `/v1/read` | Bounded page/resource read by path |
 | `POST` | `/v1/related` | Backlinks + FTS related stub |
 | `POST` | `/v1/build_context` | Bounded excerpts; `export_policy=ask/deny` omitted or flagged |
+| `POST` | `/v1/datasets/schema` | Bounded `.dataset` column schema (`LIMIT 0`) |
+| `POST` | `/v1/datasets/profile` | Bounded DuckDB `SUMMARIZE` profile |
 | `POST` | `/v1/proposals/create` | Create a reviewable transaction proposal (no apply) |
 | `POST` | `/v1/proposals/list` | List pending proposals in the workspace inbox |
 | `POST` | `/v1/proposals/get` | Load one proposal by id |
 | `POST` | `/v1/proposals/propose_page` | Typed helper to propose a page create |
+| `POST` | `/v1/proposals/propose_resource` | Propose a text `resource-create` |
+| `POST` | `/v1/proposals/propose_workflow` | Validate workflow YAML → proposal |
+| `POST` | `/v1/proposals/propose_interface` | Validate interface YAML → proposal |
+| `POST` | `/v1/proposals/propose_artifact` | Validate `artifact.yaml` → proposal |
 
 Bodies accept `workspaceId` (open session) or `root` (opens a read session).
 Payloads are capped (`maxBytes` / hit limits). Hybrid hits with
@@ -119,10 +125,12 @@ Minimal JSON-RPC MCP adapter exposing read tools and proposal tools:
 LATTICE_AUTH_TOKEN=dev-token cargo run -p lattice-daemon -- mcp
 ```
 
-Read tools: `search`, `read`, `related`, `build_context`.
+Read tools: `search`, `read`, `related`, `build_context`, `get_dataset_schema`,
+`profile_dataset`.
 
 Proposal tools: `create_proposal`, `list_proposals`, `get_proposal`,
-`propose_page`. These persist reviewable bundles only — they do not apply
+`propose_page`, `propose_resource`, `propose_workflow`, `propose_interface`,
+`propose_artifact`. These persist reviewable bundles only — they do not apply
 mutations. Prefer the HTTP contract for automated tests; use MCP when wiring
 Claude Desktop / other stdio clients.
 
