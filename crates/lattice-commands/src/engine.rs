@@ -2529,6 +2529,7 @@ fn column_specs_as_new_columns(columns: &[ColumnSpec]) -> Vec<NewColumn<'_>> {
             rollup_aggregate: column.rollup_aggregate,
             rollup_field: column.rollup_field.as_deref(),
             formula: column.formula.as_deref(),
+            options: column.options.as_deref(),
         })
         .collect()
 }

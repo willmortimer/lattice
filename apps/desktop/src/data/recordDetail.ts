@@ -17,7 +17,9 @@ export type RecordFieldEditorKind =
   | "relation"
   | "lookup"
   | "rollup"
-  | "formula";
+  | "formula"
+  | "enum"
+  | "multi_enum";
 
 export function fieldEditorKind(fieldType: FieldType): RecordFieldEditorKind {
   switch (fieldType) {
@@ -38,6 +40,10 @@ export function fieldEditorKind(fieldType: FieldType): RecordFieldEditorKind {
       return "rollup";
     case "formula":
       return "formula";
+    case "enum":
+      return "enum";
+    case "multi_enum":
+      return "multi_enum";
     case "text":
       return "text";
     default: {
@@ -67,6 +73,10 @@ export function fieldTypeLabel(fieldType: FieldType): string {
       return "Rollup";
     case "formula":
       return "Formula";
+    case "enum":
+      return "Enum";
+    case "multi_enum":
+      return "Multi enum";
     case "text":
       return "Text";
     default: {
@@ -176,6 +186,8 @@ export function validateDraftField(text: string, fieldType: FieldType): string |
       }
       return null;
     }
+    case "enum":
+    case "multi_enum":
     case "text":
     case "long_text":
     case "boolean":
@@ -251,4 +263,30 @@ export function toggleRelationDraftId(draftText: string, recordId: string, selec
       : [...current, recordId]
     : current.filter((id) => id !== recordId);
   return relationDraftFromIds(next);
+}
+
+
+export function parseMultiEnumDraft(text: string): string[] {
+  return text
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+export function multiEnumDraftFromValues(values: string[]): string {
+  return values.join(", ");
+}
+
+export function toggleMultiEnumDraftValue(
+  draftText: string,
+  option: string,
+  selected: boolean,
+): string {
+  const current = parseMultiEnumDraft(draftText);
+  const next = selected
+    ? current.includes(option)
+      ? current
+      : [...current, option]
+    : current.filter((value) => value !== option);
+  return multiEnumDraftFromValues(next);
 }
