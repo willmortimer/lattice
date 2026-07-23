@@ -25,7 +25,6 @@ use tracing::{debug, info, warn};
 pub const DEFAULT_SCHEDULE_TICK: Duration = Duration::from_secs(5);
 
 /// In-process schedule runner over warm [`LatticeRuntime`] sessions.
-#[derive(Debug)]
 pub struct ScheduleRunner {
     runtime: Arc<LatticeRuntime>,
     /// Last fire time keyed by `(workspace_root, workflow_rel_path)`.
