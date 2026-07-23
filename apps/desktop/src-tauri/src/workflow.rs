@@ -15,6 +15,15 @@ use lattice_commands::{
     discover_workflows, list_workflow_runs, run_workflow, save_workflow_run, set_workflow_enabled,
     ExecutionResult, ExecutionStatus, WorkflowManifest, WorkflowRunRecord, WorkflowTrigger,
 };
+
+/// One in-flight workflow surfaced in the tray menu.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunningWorkflow {
+    pub execution_id: String,
+    pub workflow_path: String,
+    pub label: String,
+    pub started_at: String,
+}
 use lattice_core::Workspace;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
@@ -223,6 +232,7 @@ fn update_and_emit(app: &AppHandle, record: &Arc<Mutex<WorkflowRunRecord>>) {
     if let Err(err) = app.emit(WORKFLOW_EXECUTION_EVENT, &snapshot) {
         eprintln!("lattice: failed to emit {WORKFLOW_EXECUTION_EVENT}: {err}");
     }
+    crate::tray::refresh_from_workflows(app);
 }
 
 fn patch_record(
@@ -243,6 +253,47 @@ pub fn set_active_workspace(state: &WorkflowState, root: Option<PathBuf>) {
     if let Ok(mut slot) = state.root.lock() {
         *slot = root;
     }
+}
+
+/// Workspace root last used for workflow execution (for tray open-resource).
+pub fn active_workspace_root(state: &WorkflowState) -> Option<PathBuf> {
+    state.root.lock().ok().and_then(|slot| slot.clone())
+}
+
+/// Running workflow executions, newest first.
+pub fn running_workflows(state: &WorkflowState) -> Vec<RunningWorkflow> {
+    let Ok(map) = state.executions.lock() else {
+        return Vec::new();
+    };
+    let mut running = map
+        .iter()
+        .filter_map(|(execution_id, live)| {
+            let record = live.result.lock().ok()?;
+            if record.execution.status != ExecutionStatus::Running {
+                return None;
+            }
+            Some(RunningWorkflow {
+                execution_id: execution_id.clone(),
+                workflow_path: record.workflow_path.clone(),
+                label: workflow_tray_label(&record.workflow_path),
+                started_at: record.execution.started_at.clone(),
+            })
+        })
+        .collect::<Vec<_>>();
+    running.sort_by(|left, right| right.started_at.cmp(&left.started_at));
+    running
+}
+
+fn workflow_tray_label(workflow_path: &str) -> String {
+    let file_name = Path::new(workflow_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(workflow_path);
+    file_name
+        .strip_suffix(".workflow.yaml")
+        .or_else(|| file_name.strip_suffix(".workflow.yml"))
+        .unwrap_or(file_name)
+        .to_string()
 }
 
 /// Load and validate a workflow YAML for the desktop surface.
@@ -546,6 +597,15 @@ pub fn on_form_submitted(app: &AppHandle, root: &Path, package_path: &str, form_
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn workflow_tray_label_strips_suffix() {
+        assert_eq!(
+            workflow_tray_label("Automations/Contact intake.workflow.yaml"),
+            "Contact intake"
+        );
+        assert_eq!(workflow_tray_label("Simple.workflow.yml"), "Simple");
+    }
 
     #[test]
     fn manifest_view_exposes_trigger_type() {

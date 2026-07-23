@@ -20,6 +20,7 @@ use tauri::{
 };
 
 use crate::app_menu;
+use crate::workflow::{self, WorkflowState};
 
 const TRAY_ID: &str = "lattice.main-tray";
 
@@ -83,7 +84,7 @@ fn tray_template_icon() -> tauri::Result<Image<'static>> {
 }
 
 pub fn install_tray(app: &AppHandle) -> tauri::Result<()> {
-    let menu = app_menu::build_tray_menu(app)?;
+    let menu = app_menu::build_tray_menu(app, &[])?;
 
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .menu(&menu)
@@ -121,7 +122,74 @@ pub fn install_tray(app: &AppHandle) -> tauri::Result<()> {
     }
 
     let _tray = builder.build(app)?;
+    refresh_from_workflows(app);
     Ok(())
+}
+
+fn tray_running_jobs(app: &AppHandle) -> Vec<app_menu::TrayRunningJob> {
+    let Some(state) = app.try_state::<WorkflowState>() else {
+        return Vec::new();
+    };
+    workflow::running_workflows(&state)
+        .into_iter()
+        .map(|job| app_menu::TrayRunningJob {
+            execution_id: job.execution_id,
+            workflow_path: job.workflow_path,
+            label: job.label,
+        })
+        .collect()
+}
+
+fn workflow_workspace_root(app: &AppHandle) -> Option<String> {
+    app.try_state::<WorkflowState>()
+        .and_then(|state| workflow::active_workspace_root(&state))
+        .map(|root| root.to_string_lossy().into_owned())
+}
+
+/// Rebuild the tray menu and tooltip from live workflow execution state.
+pub fn refresh_from_workflows(app: &AppHandle) {
+    let running = tray_running_jobs(app);
+    let menu = match app_menu::build_tray_menu(app, &running) {
+        Ok(menu) => menu,
+        Err(err) => {
+            eprintln!("lattice: failed to build tray menu: {err}");
+            return;
+        }
+    };
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+        return;
+    };
+    if let Err(err) = tray.set_menu(Some(menu)) {
+        eprintln!("lattice: failed to update tray menu: {err}");
+    }
+    let tooltip = if running.is_empty() {
+        "Lattice".to_string()
+    } else if running.len() == 1 {
+        "Lattice — 1 workflow running".to_string()
+    } else {
+        format!("Lattice — {} workflows running", running.len())
+    };
+    if let Err(err) = tray.set_tooltip(Some(tooltip)) {
+        eprintln!("lattice: failed to update tray tooltip: {err}");
+    }
+}
+
+/// Workspace root + workflow path for the newest running execution, if any.
+pub fn latest_running_workflow(app: &AppHandle) -> Option<(String, String)> {
+    let root = workflow_workspace_root(app)?;
+    let state = app.try_state::<WorkflowState>()?;
+    let job = workflow::running_workflows(&state).into_iter().next()?;
+    Some((root, job.workflow_path))
+}
+
+/// Workspace root + workflow path for a specific running execution id.
+pub fn running_workflow_by_id(app: &AppHandle, execution_id: &str) -> Option<(String, String)> {
+    let root = workflow_workspace_root(app)?;
+    let state = app.try_state::<WorkflowState>()?;
+    let job = workflow::running_workflows(&state)
+        .into_iter()
+        .find(|job| job.execution_id == execution_id)?;
+    Some((root, job.workflow_path))
 }
 
 #[cfg(test)]
