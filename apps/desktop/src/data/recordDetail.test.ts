@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import type { DataColumn, DataRow } from "./types";
 import {
+  addAttachmentDraftPath,
+  attachmentDraftFromPaths,
+  attachmentFileName,
   collectDirtyValues,
   collectFormValues,
   draftFieldErrors,
@@ -11,6 +14,7 @@ import {
   fieldTypeLabel,
   hasDraftChanges,
   parseDraftField,
+  removeAttachmentDraftPath,
   toggleRelationDraftId,
   validateDraftField,
 } from "./recordDetail";
@@ -47,12 +51,14 @@ describe("recordDetail helpers", () => {
     expect(fieldEditorKind("formula")).toBe("formula");
     expect(fieldEditorKind("enum")).toBe("enum");
     expect(fieldEditorKind("multi_enum")).toBe("multi_enum");
+    expect(fieldEditorKind("attachment")).toBe("attachment");
     expect(fieldTypeLabel("decimal")).toBe("Decimal");
     expect(fieldTypeLabel("lookup")).toBe("Lookup");
     expect(fieldTypeLabel("rollup")).toBe("Rollup");
     expect(fieldTypeLabel("formula")).toBe("Formula");
     expect(fieldTypeLabel("enum")).toBe("Enum");
     expect(fieldTypeLabel("multi_enum")).toBe("Multi enum");
+    expect(fieldTypeLabel("attachment")).toBe("Attachment");
   });
 
   it("builds draft strings from row values", () => {
@@ -161,5 +167,39 @@ describe("recordDetail helpers", () => {
     expect(collectDirtyValues(updatedDraft, relationRow, relationColumns)).toEqual({
       company: { Relation: { record_ids: ["co_1", "co_2"] } },
     });
+  });
+
+  it("round-trips attachment drafts", () => {
+    const attachmentColumns: DataColumn[] = [
+      { name: "id", field_type: "text", sqlite_type: "TEXT" },
+      { name: "files", field_type: "attachment", sqlite_type: "TEXT" },
+    ];
+    const attachmentRow: DataRow = {
+      id: "rec_1",
+      values: {
+        id: { Text: "rec_1" },
+        files: { Attachment: { paths: ["attachments/a.txt"] } },
+      },
+    };
+
+    expect(draftValuesFromRow(attachmentRow, attachmentColumns)).toEqual({
+      id: "rec_1",
+      files: attachmentDraftFromPaths(["attachments/a.txt"]),
+    });
+    expect(
+      parseDraftField(attachmentDraftFromPaths(["attachments/a.txt", "attachments/b.pdf"]), "attachment"),
+    ).toEqual({
+      Attachment: { paths: ["attachments/a.txt", "attachments/b.pdf"] },
+    });
+    expect(
+      addAttachmentDraftPath(attachmentDraftFromPaths(["attachments/a.txt"]), "attachments/b.pdf"),
+    ).toBe(attachmentDraftFromPaths(["attachments/a.txt", "attachments/b.pdf"]));
+    expect(
+      removeAttachmentDraftPath(
+        attachmentDraftFromPaths(["attachments/a.txt", "attachments/b.pdf"]),
+        "attachments/a.txt",
+      ),
+    ).toBe(attachmentDraftFromPaths(["attachments/b.pdf"]));
+    expect(attachmentFileName("attachments/nested/spec.pdf")).toBe("spec.pdf");
   });
 });

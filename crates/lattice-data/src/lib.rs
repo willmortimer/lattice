@@ -36,7 +36,7 @@ pub use tabular::{
     TabularTable, TABULAR_IMPORT_MAX_ROWS,
 };
 pub use xlsx::parse_xlsx_file;
-pub use data_app::DataApp;
+pub use data_app::{validate_attachment_ref, DataApp};
 pub use formula::{evaluate_formula, formula_field_refs, validate_formula_syntax, FormulaError};
 pub use error::Error;
 pub use relation_target::{parse_relation_target, RelationTarget};

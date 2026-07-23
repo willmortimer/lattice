@@ -55,7 +55,7 @@ impl DataApp {
 
         // Empty package folders so progressive promotion can drop files without
         // inventing directory layout on first write.
-        for folder in ["forms", "interfaces"] {
+        for folder in ["forms", "interfaces", "attachments"] {
             let dir = package_path.join(folder);
             std::fs::create_dir_all(&dir).map_err(|source| Error::io(&dir, source))?;
         }
@@ -97,6 +97,65 @@ impl DataApp {
 
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// Directory for attachment column binaries (`{package}/attachments/`).
+    pub fn attachments_dir(&self) -> PathBuf {
+        self.path.join("attachments")
+    }
+
+    /// Copy a source file into the package `attachments/` directory.
+    ///
+    /// Returns a package-relative path using forward slashes
+    /// (`attachments/<file>`). Filenames are sanitized and uniquified.
+    pub fn add_attachment_file(&self, source_path: &Path) -> Result<String> {
+        if !source_path.is_file() {
+            return Err(Error::invalid_package(
+                source_path,
+                "attachment source must be an existing file",
+            ));
+        }
+        let attachments = self.attachments_dir();
+        std::fs::create_dir_all(&attachments)
+            .map_err(|source| Error::io(&attachments, source))?;
+
+        let original_name = source_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("attachment");
+        let safe_name = sanitize_attachment_filename(original_name);
+        let stem = Path::new(&safe_name)
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .unwrap_or("attachment");
+        let extension = Path::new(&safe_name)
+            .extension()
+            .and_then(|value| value.to_str());
+
+        let mut candidate_name = safe_name.clone();
+        let mut candidate = attachments.join(&candidate_name);
+        let mut suffix = 2usize;
+        while candidate.exists() {
+            candidate_name = match extension {
+                Some(ext) => format!("{stem}-{suffix}.{ext}"),
+                None => format!("{stem}-{suffix}"),
+            };
+            candidate = attachments.join(&candidate_name);
+            suffix += 1;
+        }
+
+        std::fs::copy(source_path, &candidate).map_err(|source| Error::io(&candidate, source))?;
+        Ok(format!("attachments/{candidate_name}").replace('\\', "/"))
+    }
+
+    /// Delete a package-relative attachment file under `attachments/` when present.
+    pub fn remove_attachment_file(&self, package_relative: &str) -> Result<()> {
+        validate_attachment_ref("attachments", "path", package_relative)?;
+        let absolute = self.path.join(package_relative);
+        if absolute.is_file() {
+            std::fs::remove_file(&absolute).map_err(|source| Error::io(&absolute, source))?;
+        }
+        Ok(())
     }
 
     pub fn title(&self) -> &str {
@@ -1471,6 +1530,28 @@ fn hydrate_junction_relations(
     Ok(())
 }
 
+fn sanitize_attachment_filename(name: &str) -> String {
+    let trimmed = name.trim();
+    let base = if trimmed.is_empty() {
+        "attachment"
+    } else {
+        trimmed
+    };
+    let sanitized: String = base
+        .chars()
+        .map(|ch| match ch {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '-' | '_' => ch,
+            _ => '_',
+        })
+        .collect();
+    let collapsed = sanitized.trim_matches('_').trim_matches('.');
+    if collapsed.is_empty() || collapsed == "." || collapsed == ".." {
+        "attachment".to_string()
+    } else {
+        collapsed.to_string()
+    }
+}
+
 fn validate_identifier(name: &str) -> Result<()> {
     let valid = !name.is_empty()
         && name
@@ -1637,6 +1718,7 @@ fn validate_row_values(
         match meta.field_type {
             FieldType::Relation => validate_relation_cell(conn, table, meta, value)?,
             FieldType::Enum | FieldType::MultiEnum => validate_enum_cell(table, meta, value)?,
+            FieldType::Attachment => validate_attachment_cell(table, meta, value)?,
             _ => {}
         }
     }
@@ -1723,6 +1805,66 @@ fn validate_enum_cell(table: &str, meta: &ColumnMeta, value: &CellValue) -> Resu
         },
         _ => Ok(()),
     }
+}
+
+fn validate_attachment_cell(table: &str, meta: &ColumnMeta, value: &CellValue) -> Result<()> {
+    match value {
+        CellValue::Null => Ok(()),
+        CellValue::Attachment { paths } => {
+            for path in paths {
+                validate_attachment_ref(table, &meta.name, path)?;
+            }
+            Ok(())
+        }
+        _ => Err(Error::table(
+            table,
+            format!("column {:?} expects an attachment value", meta.name),
+        )),
+    }
+}
+
+/// Package-relative attachment refs must live under `attachments/` with no traversal.
+pub fn validate_attachment_ref(table: &str, column: &str, path: &str) -> Result<()> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err(Error::table(
+            table,
+            format!("column {column:?} attachment path must be non-empty"),
+        ));
+    }
+    if trimmed != path {
+        return Err(Error::table(
+            table,
+            format!(
+                "column {column:?} attachment path {path:?} must not have leading/trailing whitespace"
+            ),
+        ));
+    }
+    if Path::new(trimmed).is_absolute() {
+        return Err(Error::table(
+            table,
+            format!("column {column:?} attachment path {path:?} must be package-relative"),
+        ));
+    }
+    let normalized = trimmed.replace('\\', "/");
+    if !normalized.starts_with("attachments/") || normalized == "attachments/" {
+        return Err(Error::table(
+            table,
+            format!(
+                "column {column:?} attachment path {path:?} must be under attachments/"
+            ),
+        ));
+    }
+    if normalized
+        .split('/')
+        .any(|part| part.is_empty() || part == "." || part == "..")
+    {
+        return Err(Error::table(
+            table,
+            format!("column {column:?} attachment path {path:?} is invalid"),
+        ));
+    }
+    Ok(())
 }
 
 fn validate_lookup_spec_for_add(
