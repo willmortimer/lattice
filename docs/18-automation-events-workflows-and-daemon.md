@@ -103,9 +103,8 @@ steps:
 v1 triggers: `manual`, `resource.changed` (path globs; debounced in the desktop
 watcher), `form.submitted` (form path or package + form id; wired from
 `insert_record` when a package form submits), and `schedule`
-(`interval_seconds` and/or `cron`, optional `timezone`; parse/validate only —
-no firing loop yet). `enabled: false` skips automatic triggers; manual Run still
-executes.
+(`interval_seconds` and/or `cron`, optional `timezone`). `enabled: false` skips
+automatic triggers; manual Run still executes.
 
 v1 steps: `task.run` (delegates to TaskRunner), `proposal.create` (source type
 `workflow`), optional `notification` (log only). Leaf steps may set optional
@@ -114,7 +113,12 @@ with a non-empty `parallel` child list (action `parallel` or omitted) runs those
 children concurrently (bounded, then join) before the next top-level step.
 Unknown actions/triggers are rejected at parse time. Run history is stored under
 `.lattice/workflows/runs/` (step results may include `attempts` when > 1).
-Schedule firing, durable daemon jobs, and a visual editor remain out of scope.
+
+**Schedule firing (latticed):** when a workspace session is open, the daemon
+polls enabled `schedule` workflows and fires those with a due `interval_seconds`
+(trigger label `schedule`). Cron-only schedules are parsed/validated but not
+evaluated yet (set `interval_seconds` to fire; cron evaluator is TODO). Durable
+job queues and a visual editor remain out of scope.
 
 Example with retry and parallel fan-out:
 

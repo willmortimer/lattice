@@ -184,6 +184,8 @@ pub async fn serve_with_shutdown_and_controllers(
     );
     let state = DaemonState::new_with_controllers(config, runtime, semantic, voice)
         .with_connections(Arc::clone(&connections));
+    let schedule_runner =
+        crate::schedule::spawn_schedule_runner(Arc::clone(&state.runtime), crate::DEFAULT_SCHEDULE_TICK);
     let api_shutdown = state.config.api_port.map(|port| {
         crate::http::spawn_localhost_api(state.clone(), port)
     });
@@ -218,6 +220,7 @@ pub async fn serve_with_shutdown_and_controllers(
         }
     }
 
+    schedule_runner.abort();
     if let Some(tx) = api_shutdown {
         let _ = tx.send(());
     }

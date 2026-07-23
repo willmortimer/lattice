@@ -164,6 +164,35 @@ By default `latticed` shuts down after the last client disconnects and a
 short idle period (30 seconds). This keeps on-demand launches from leaving a
 background process running unintentionally.
 
+## Schedule runner (WF3)
+
+While workspace sessions are open, `latticed` polls enabled `*.workflow.yaml`
+files with `trigger.type: schedule` about every 5 seconds. Due
+`interval_seconds` workflows run through `load_and_run_workflow` with trigger
+label `schedule`; run JSON lands under `.lattice/workflows/runs/`. Disabled
+workflows are skipped. Cron-only schedules are accepted at parse time but not
+fired yet (set `interval_seconds` to exercise the runner).
+
+Desktop `resource.changed` / `form.submitted` triggers are unchanged.
+
+Manual verify:
+
+```sh
+# In a workspace, add Automations/Tick.workflow.yaml with:
+#   trigger: { type: schedule, interval_seconds: 10 }
+#   steps: [{ id: note, action: notification, with: { message: tick } }]
+# Open the workspace via latticed (desktop or OpenWorkspace), keep the session
+# open, and watch `.lattice/workflows/runs/` for schedule-labelled runs.
+```
+
+Focused tests:
+
+```sh
+cargo test -p lattice-commands discover_scheduled_workflows -- --nocapture
+cargo test -p lattice-commands evaluate_schedule_due -- --nocapture
+cargo test -p lattice-daemon fires_due_interval_workflow -- --nocapture
+```
+
 ### Preference
 
 The desktop profile stores the preference in
