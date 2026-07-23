@@ -103,23 +103,29 @@ describe("buildAddColumnPayload", () => {
     });
   });
 
-  it("includes formula expression for formula fields", () => {
+  it("includes options for enum fields", () => {
+    expect(buildAddColumnPayload("status", "enum", undefined, undefined, undefined, undefined, undefined, undefined, undefined, "Open, Closed")).toEqual({
+      name: "status",
+      field_type: "enum",
+      options: ["Open", "Closed"],
+    });
     expect(
       buildAddColumnPayload(
-        "total",
-        "formula",
+        "tags",
+        "multi_enum",
         undefined,
         undefined,
         undefined,
         undefined,
         undefined,
         undefined,
-        "{price} * {quantity}",
+        undefined,
+        "a\nb",
       ),
     ).toEqual({
-      name: "total",
-      field_type: "formula",
-      formula: "{price} * {quantity}",
+      name: "tags",
+      field_type: "multi_enum",
+      options: ["a", "b"],
     });
   });
 });

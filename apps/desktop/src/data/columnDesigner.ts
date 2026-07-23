@@ -13,6 +13,8 @@ export const COLUMN_FIELD_TYPES: FieldType[] = [
   "lookup",
   "rollup",
   "formula",
+  "enum",
+  "multi_enum",
 ];
 
 export const ROLLUP_AGGREGATES: RollupAggregate[] = ["count", "sum", "min", "max"];
@@ -157,6 +159,34 @@ export function validateFormulaSpec(
   return null;
 }
 
+export function parseEnumOptionsText(text: string): string[] {
+  return text
+    .split(/[\n,]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+export function validateEnumOptions(
+  fieldType: FieldType,
+  optionsText: string | undefined,
+): string | null {
+  if (fieldType !== "enum" && fieldType !== "multi_enum") {
+    return null;
+  }
+  const options = parseEnumOptionsText(optionsText ?? "");
+  if (options.length === 0) {
+    return "Enter at least one option (comma or newline separated).";
+  }
+  const seen = new Set<string>();
+  for (const option of options) {
+    if (seen.has(option)) {
+      return `Duplicate option "${option}".`;
+    }
+    seen.add(option);
+  }
+  return null;
+}
+
 export interface AddColumnPayload {
   name: string;
   field_type: FieldType;
@@ -167,6 +197,7 @@ export interface AddColumnPayload {
   rollup_aggregate?: RollupAggregate;
   rollup_field?: string;
   formula?: string;
+  options?: string[];
 }
 
 export function buildAddColumnPayload(
@@ -179,6 +210,7 @@ export function buildAddColumnPayload(
   rollupAggregate?: RollupAggregate,
   rollupField?: string,
   formula?: string,
+  optionsText?: string,
 ): AddColumnPayload {
   const trimmed = name.trim();
   if (fieldType === "relation") {
@@ -211,6 +243,13 @@ export function buildAddColumnPayload(
       name: trimmed,
       field_type: fieldType,
       formula: formula?.trim(),
+    };
+  }
+  if (fieldType === "enum" || fieldType === "multi_enum") {
+    return {
+      name: trimmed,
+      field_type: fieldType,
+      options: parseEnumOptionsText(optionsText ?? ""),
     };
   }
   return {

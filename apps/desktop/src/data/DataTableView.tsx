@@ -5,6 +5,7 @@ import DataEditor, {
   GridCellKind,
   type EditableGridCell,
   type GridCell,
+  type ProvideEditorCallback,
   type GridColumn,
   type GridSelection,
   type Item,
@@ -1109,6 +1110,46 @@ export function DataTableView({
     }
   }, [demoMutate, filterField, filterableColumns]);
 
+  const editingColumnRef = useRef<(typeof visibleColumns)[number] | null>(null);
+
+  const provideEditor = useCallback<ProvideEditorCallback<GridCell>>((cell) => {
+    if (cell.kind !== GridCellKind.Text) {
+      return undefined;
+    }
+    const column = editingColumnRef.current;
+    if (!column || column.field_type !== "enum") {
+      return undefined;
+    }
+    const options = column.options ?? [];
+    return {
+      editor: (props) => (
+        <select
+          className="data-grid-enum-editor"
+          autoFocus
+          value={String(props.value.data ?? "")}
+          onChange={(event) => {
+            props.onFinishedEditing({
+              ...props.value,
+              data: event.currentTarget.value,
+              displayData: event.currentTarget.value,
+            });
+          }}
+          onBlur={() => props.onFinishedEditing(props.value)}
+        >
+          <option value="">—</option>
+          {options.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      ),
+      disablePadding: true,
+    };
+  }, []);
+
+
+
   return (
     <div className="data-table-pane">
       <header className="data-table-head">
@@ -1433,6 +1474,7 @@ export function DataTableView({
             />
           ) : (
             <DataEditor
+              provideEditor={provideEditor}
               width="100%"
               height="100%"
               columns={gridColumns}
@@ -1441,7 +1483,8 @@ export function DataTableView({
               onCellEdited={handleCellEdited}
               gridSelection={gridSelection}
               onGridSelectionChange={handleGridSelectionChange}
-              onCellActivated={([, rowIndex]) => {
+              onCellActivated={([columnIndex, rowIndex]) => {
+                editingColumnRef.current = visibleColumns[columnIndex] ?? null;
                 const row = dataRowAtGridIndex(gridDisplayRows, rowIndex);
                 if (row) openRecordDetail(row);
               }}

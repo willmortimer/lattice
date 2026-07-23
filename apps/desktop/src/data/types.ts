@@ -13,7 +13,9 @@ export type FieldType =
   | "relation"
   | "lookup"
   | "rollup"
-  | "formula";
+  | "formula"
+  | "enum"
+  | "multi_enum";
 
 /** Mirrors `lattice_data::RollupAggregate`. */
 export type RollupAggregate = "count" | "sum" | "min" | "max";
@@ -32,7 +34,8 @@ export type CellValue =
   | { Relation: { record_ids: string[] } }
   | { Lookup: { values: string[] } }
   | { Rollup: { value: number | null } }
-  | { Formula: { value: FormulaValue | null } };
+  | { Formula: { value: FormulaValue | null } }
+  | { MultiEnum: { values: string[] } };
 
 export interface DataColumn {
   name: string;
@@ -54,6 +57,8 @@ export interface DataColumn {
   rollup_field?: string;
   /** Expression for formula fields (e.g. `{price} * {quantity}`). */
   formula?: string;
+  /** Allowed values for enum / multi_enum fields. */
+  options?: string[];
 }
 
 export interface DataRow {
@@ -153,6 +158,10 @@ export function cellValueToDisplay(value: CellValue | undefined | null | string)
     if ("Text" in formulaValue) return formulaValue.Text ?? "";
     return "";
   }
+  if ("MultiEnum" in value) {
+    const values = value.MultiEnum?.values;
+    return Array.isArray(values) ? values.join(", ") : "";
+  }
   return "";
 }
 
@@ -201,6 +210,17 @@ export function displayToCellValue(text: string, fieldType: FieldType): CellValu
       }
       return { Formula: { value: { Text: text } } };
     }
+    case "enum":
+      return { Text: trimmed };
+    case "multi_enum":
+      return {
+        MultiEnum: {
+          values: trimmed
+            .split(",")
+            .map((part) => part.trim())
+            .filter(Boolean),
+        },
+      };
     case "text":
     case "long_text":
       return { Text: text };

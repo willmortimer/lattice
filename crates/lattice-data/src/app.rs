@@ -67,6 +67,9 @@ pub struct ColumnMetaYaml {
     /// Expression for [`FieldType::Formula`] (e.g. `{price} * {quantity}`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub formula: Option<String>,
+    /// Allowed values for [`FieldType::Enum`] / [`FieldType::MultiEnum`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub options: Option<Vec<String>>,
 }
 
 impl AppManifest {
@@ -135,6 +138,7 @@ impl AppManifest {
                 rollup_aggregate: None,
                 rollup_field: None,
                 formula: None,
+                options: None,
             });
     }
 

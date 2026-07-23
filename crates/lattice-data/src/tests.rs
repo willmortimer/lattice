@@ -860,6 +860,7 @@ fn relation_column_requires_relation_table_metadata() {
                 rollup_aggregate: None,
                 rollup_field: None,
                 formula: None,
+                options: None,
             }],
         )
         .unwrap_err()
@@ -2074,5 +2075,129 @@ fn cross_package_relation_rejects_junction_and_lookup() {
         .unwrap_err()
         .to_string();
     assert!(lookup_err.contains("across packages"));
+}
+
+#[test]
+fn enum_and_multi_enum_columns_round_trip() {
+    use crate::app::app_manifest_path;
+    use crate::NewColumn;
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Status.data");
+    let mut app = DataApp::create(&package_path, "Status", "items").unwrap();
+
+    let status_options = vec!["Open".to_string(), "Closed".to_string()];
+    let tag_options = vec!["bug".to_string(), "feature".to_string(), "docs".to_string()];
+    app.add_columns(
+        "items",
+        &[
+            NewColumn::new("title", FieldType::Text),
+            NewColumn::enumeration("status", &status_options),
+            NewColumn::multi_enumeration("tags", &tag_options),
+        ],
+    )
+    .unwrap();
+
+    let columns = app.columns("items").unwrap();
+    let status = columns
+        .iter()
+        .find(|column| column.name == "status")
+        .expect("status");
+    assert_eq!(status.field_type, FieldType::Enum);
+    assert_eq!(status.options.as_deref(), Some(status_options.as_slice()));
+    let tags = columns
+        .iter()
+        .find(|column| column.name == "tags")
+        .expect("tags");
+    assert_eq!(tags.field_type, FieldType::MultiEnum);
+    assert_eq!(tags.options.as_deref(), Some(tag_options.as_slice()));
+
+    let manifest_text = std::fs::read_to_string(app_manifest_path(&package_path)).unwrap();
+    assert!(manifest_text.contains("type: enum"));
+    assert!(manifest_text.contains("type: multi_enum"));
+    assert!(manifest_text.contains("Open"));
+    assert!(manifest_text.contains("feature"));
+
+    let row_id = app
+        .insert_row(
+            "items",
+            &BTreeMap::from([
+                ("title".into(), CellValue::Text("Ship enums".into())),
+                ("status".into(), CellValue::Text("Open".into())),
+                (
+                    "tags".into(),
+                    CellValue::MultiEnum {
+                        values: vec!["feature".into(), "docs".into()],
+                    },
+                ),
+            ]),
+        )
+        .unwrap();
+
+    let rows = app.list_rows("items", 10, 0).unwrap();
+    let row = rows.iter().find(|row| row.id == row_id).expect("row");
+    assert_eq!(
+        row.values.get("status"),
+        Some(&CellValue::Text("Open".into()))
+    );
+    assert_eq!(
+        row.values.get("tags"),
+        Some(&CellValue::MultiEnum {
+            values: vec!["feature".into(), "docs".into()],
+        })
+    );
+
+    app.update_row(
+        "items",
+        &row_id,
+        &BTreeMap::from([("status".into(), CellValue::Text("Closed".into()))]),
+    )
+    .unwrap();
+
+    let rejected = app
+        .update_row(
+            "items",
+            &row_id,
+            &BTreeMap::from([("status".into(), CellValue::Text("Nope".into()))]),
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(rejected.contains("not in options"));
+
+    let rejected_multi = app
+        .update_row(
+            "items",
+            &row_id,
+            &BTreeMap::from([(
+                "tags".into(),
+                CellValue::MultiEnum {
+                    values: vec!["missing".into()],
+                },
+            )]),
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(rejected_multi.contains("not in options"));
+
+    let missing_options = app
+        .add_columns("items", &[NewColumn::new("priority", FieldType::Enum)])
+        .unwrap_err()
+        .to_string();
+    assert!(missing_options.contains("requires options"));
+
+    // YAML round-trip via reopen.
+    let reopened = DataApp::open(&package_path).unwrap();
+    let columns = reopened.columns("items").unwrap();
+    let status = columns
+        .iter()
+        .find(|column| column.name == "status")
+        .expect("status after reopen");
+    assert_eq!(status.options.as_deref(), Some(status_options.as_slice()));
+    let rows = reopened.list_rows("items", 10, 0).unwrap();
+    let row = rows.iter().find(|row| row.id == row_id).expect("row");
+    assert_eq!(
+        row.values.get("status"),
+        Some(&CellValue::Text("Closed".into()))
+    );
 }
 
