@@ -318,6 +318,7 @@ fn cell_value_is_empty(value: Option<&CellValue>) -> bool {
         Some(CellValue::Text(text)) => text.is_empty(),
         Some(CellValue::Date(text)) => text.is_empty(),
         Some(CellValue::Relation { record_ids }) => record_ids.is_empty(),
+        Some(CellValue::MultiEnum { values }) => values.is_empty(),
         Some(CellValue::Lookup { values }) => values.is_empty(),
         Some(CellValue::Rollup { value }) => value.is_none(),
         Some(CellValue::Formula { value }) => value.is_none(),
