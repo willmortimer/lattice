@@ -5,9 +5,9 @@ use lattice_commands::{ColumnSpec, Command as SemanticCommand, CommandEngine, Tr
 use lattice_data::{
     cell_from_csv, parse_csv_file, parse_field_type_name, parse_tabular_file, resolve_field_types,
     save_form, tabular_format, tabular_format_label, CellValue, ColumnMeta, ConditionalFormatRule,
-    ConditionalFormatStyle, DataApp, FieldType, FilterOperator, Row, SortDirection, TabularTable,
-    ViewDef, ViewFilter, ViewSort, LAYOUT_BOARD, LAYOUT_CALENDAR, LAYOUT_GALLERY,
-    SUPPORTED_LAYOUT_TYPES,
+    ConditionalFormatStyle, DataApp, FieldType, FilterOperator, RollupAggregate, Row, SortDirection,
+    TabularTable, ViewDef, ViewFilter, ViewLayoutSummary, ViewSort, LAYOUT_BOARD, LAYOUT_CALENDAR,
+    LAYOUT_GALLERY, LAYOUT_GRID, SUPPORTED_LAYOUT_TYPES,
 };
 use serde::{Deserialize, Serialize};
 
@@ -45,6 +45,9 @@ pub struct DataAppSnapshot {
     pub cover_field: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub date_field: Option<String>,
+    /// Grid layout: per-field footer / group summary aggregates.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub summaries: Vec<LayoutSummaryDto>,
     /// View-scoped conditional format rules (grid cell styles).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub conditional_format: Vec<ConditionalFormatDto>,
@@ -58,6 +61,12 @@ pub struct FilterDto {
     pub field: String,
     pub operator: String,
     pub value: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LayoutSummaryDto {
+    pub field: String,
+    pub aggregate: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -93,6 +102,8 @@ pub struct ViewSummary {
     pub cover_field: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub date_field: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub summaries: Vec<LayoutSummaryDto>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -212,6 +223,24 @@ fn conditional_format_from_dto(rule: ConditionalFormatDto) -> ConditionalFormatR
     }
 }
 
+fn layout_summary_dto(summary: &ViewLayoutSummary) -> LayoutSummaryDto {
+    LayoutSummaryDto {
+        field: summary.field.clone(),
+        aggregate: summary.aggregate.as_str().to_string(),
+    }
+}
+
+fn layout_summary_from_dto(summary: LayoutSummaryDto) -> Result<ViewLayoutSummary, String> {
+    let aggregate = summary
+        .aggregate
+        .parse::<RollupAggregate>()
+        .map_err(|err| err.to_string())?;
+    Ok(ViewLayoutSummary {
+        field: summary.field,
+        aggregate,
+    })
+}
+
 fn snapshot_from_app(
     app: &DataApp,
     workspace_root: &Path,
@@ -271,6 +300,12 @@ fn snapshot_from_app(
         group_by: view.layout.group_by.clone(),
         cover_field: view.layout.cover_field.clone(),
         date_field: view.layout.date_field.clone(),
+        summaries: view
+            .layout
+            .summaries
+            .iter()
+            .map(layout_summary_dto)
+            .collect(),
         conditional_format: view
             .conditional_format
             .iter()
@@ -503,6 +538,12 @@ pub fn load_data_view(root: String, rel_path: String, name: String) -> Result<Vi
         group_by: view.layout.group_by.clone(),
         cover_field: view.layout.cover_field.clone(),
         date_field: view.layout.date_field.clone(),
+        summaries: view
+            .layout
+            .summaries
+            .iter()
+            .map(layout_summary_dto)
+            .collect(),
     })
 }
 
@@ -643,6 +684,9 @@ pub struct SaveViewRequest {
     /// Calendar layout only: column used to place records on the calendar.
     #[serde(default)]
     pub date_field: Option<String>,
+    /// Grid layout only: per-field footer / group summary aggregates.
+    #[serde(default)]
+    pub summaries: Vec<LayoutSummaryDto>,
     /// View-scoped conditional format rules (preserved on save).
     #[serde(default)]
     pub conditional_format: Vec<ConditionalFormatDto>,
@@ -670,6 +714,7 @@ pub fn save_data_view(
         group_by,
         cover_field,
         date_field,
+        summaries,
         conditional_format,
     } = request;
     if !SUPPORTED_LAYOUT_TYPES.contains(&layout_type.as_str()) {
@@ -682,7 +727,9 @@ pub fn save_data_view(
     view.layout.layout_type = layout_type;
     view.layout.columns = columns;
     // Layout-specific fields are exclusive; clear anything that does not belong.
-    view.layout.group_by = if view.layout.layout_type == LAYOUT_BOARD {
+    view.layout.group_by = if view.layout.layout_type == LAYOUT_BOARD
+        || view.layout.layout_type == LAYOUT_GRID
+    {
         group_by.filter(|value| !value.is_empty())
     } else {
         None
@@ -696,6 +743,14 @@ pub fn save_data_view(
         date_field.filter(|value| !value.is_empty())
     } else {
         None
+    };
+    view.layout.summaries = if view.layout.layout_type == LAYOUT_GRID {
+        summaries
+            .into_iter()
+            .map(layout_summary_from_dto)
+            .collect::<Result<Vec<_>, _>>()?
+    } else {
+        Vec::new()
     };
     if let Some(field) = sort_field {
         let direction = match sort_direction.as_deref() {
@@ -1577,6 +1632,7 @@ mod tests {
                 cover_field: Some("photo".into()),
                 date_field: Some("due_date".into()),
                 conditional_format: Vec::new(),
+                summaries: Vec::new(),
             },
         )
         .unwrap();
@@ -1600,6 +1656,7 @@ mod tests {
                 cover_field: Some("photo".into()),
                 date_field: None,
                 conditional_format: Vec::new(),
+                summaries: Vec::new(),
             },
         )
         .unwrap();
@@ -1622,6 +1679,7 @@ mod tests {
                 cover_field: None,
                 date_field: Some("due_date".into()),
                 conditional_format: Vec::new(),
+                summaries: Vec::new(),
             },
         )
         .unwrap();
@@ -1643,6 +1701,7 @@ mod tests {
                 cover_field: None,
                 date_field: None,
                 conditional_format: Vec::new(),
+                summaries: Vec::new(),
             },
         )
         .unwrap();
@@ -1690,6 +1749,7 @@ mod tests {
                 cover_field: None,
                 date_field: None,
                 conditional_format: Vec::new(),
+                summaries: Vec::new(),
             },
         )
         .unwrap_err();
@@ -1741,6 +1801,7 @@ mod tests {
                         text: Some("accent".into()),
                     },
                 }],
+                summaries: Vec::new(),
             },
         )
         .unwrap();
@@ -1754,6 +1815,69 @@ mod tests {
         let reopened = open_data_app(root, rel_path, Some("Highlighted".into()), None, None)
             .unwrap();
         assert_eq!(reopened.conditional_format, saved.conditional_format);
+    }
+
+    #[test]
+    fn save_data_view_round_trips_grid_grouping_and_summaries() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let rel_path = "CRM.data".to_string();
+
+        create_table_package(
+            root.clone(),
+            rel_path.clone(),
+            "CRM".to_string(),
+            "contacts".to_string(),
+        )
+        .unwrap();
+
+        rusqlite::Connection::open(dir.path().join("CRM.data/database.sqlite"))
+            .unwrap()
+            .execute_batch(
+                "ALTER TABLE contacts ADD COLUMN status TEXT;
+                 ALTER TABLE contacts ADD COLUMN amount REAL;",
+            )
+            .unwrap();
+
+        let saved = save_data_view(
+            root.clone(),
+            rel_path.clone(),
+            SaveViewRequest {
+                view_name: "Grouped".into(),
+                table: "contacts".into(),
+                columns: vec!["id".into(), "status".into(), "amount".into()],
+                sort_field: None,
+                sort_direction: None,
+                filters: Vec::new(),
+                layout_type: LAYOUT_GRID.to_string(),
+                group_by: Some("status".into()),
+                cover_field: None,
+                date_field: None,
+                conditional_format: Vec::new(),
+                summaries: vec![
+                    LayoutSummaryDto {
+                        field: "amount".into(),
+                        aggregate: "sum".into(),
+                    },
+                    LayoutSummaryDto {
+                        field: "status".into(),
+                        aggregate: "count".into(),
+                    },
+                ],
+            },
+        )
+        .unwrap();
+        assert_eq!(saved.group_by.as_deref(), Some("status"));
+        assert_eq!(saved.summaries.len(), 2);
+        assert_eq!(saved.summaries[0].aggregate, "sum");
+
+        let yaml = std::fs::read_to_string(dir.path().join("CRM.data/views/Grouped.yaml")).unwrap();
+        assert!(yaml.contains("group_by: status"));
+        assert!(yaml.contains("summaries:"));
+        assert!(yaml.contains("aggregate: sum"));
+
+        let reopened = open_data_app(root, rel_path, Some("Grouped".into()), None, None).unwrap();
+        assert_eq!(reopened.summaries, saved.summaries);
     }
 
     #[test]

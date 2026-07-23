@@ -52,8 +52,8 @@ pub use types::{
     RollupAggregate, Row, SchemaFilesSnapshot,
 };
 pub use view::{
-    write_package_view, ConditionalFormatRule, ConditionalFormatStyle, FilterOperator,
-    SortDirection, ViewDef, ViewFilter, ViewLayout, ViewSort, ViewSource, LAYOUT_BOARD,
+    write_package_view, compute_layout_summary, ConditionalFormatRule, ConditionalFormatStyle,
+    FilterOperator, SortDirection, ViewDef, ViewFilter, ViewLayout, ViewLayoutSummary, ViewSort, ViewSource, LAYOUT_BOARD,
     LAYOUT_CALENDAR, LAYOUT_FORM, LAYOUT_GALLERY, LAYOUT_GRID, LAYOUT_LIST, SUPPORTED_LAYOUT_TYPES,
     VIEW_FORMAT, VIEW_VERSION,
 };
