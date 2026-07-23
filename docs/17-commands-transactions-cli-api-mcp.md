@@ -75,8 +75,11 @@ The desktop persists general transaction proposals under
 `<workspace>/.lattice/proposals/` (sibling to link-repair). Review accepts a
 command subset into one `CommandEngine` transaction; reject/dismiss removes the
 pending file. MCP and the localhost HTTP API can create and inspect proposals
-(`create_proposal`, `list_proposals`, `get_proposal`, `propose_page`) with
-`source.type: mcp`; they do not apply proposals. Apply remains desktop-only.
+(`create_proposal`, `list_proposals`, `get_proposal`, `propose_page`,
+`propose_resource`, `propose_workflow`, `propose_interface`, `propose_artifact`)
+with `source.type: mcp`; they do not apply proposals. Apply remains desktop-only.
+Agents can also inspect `.dataset` packages via `get_dataset_schema` /
+`profile_dataset` (bounded reads).
 
 The review UI shows:
 
@@ -153,6 +156,7 @@ get_blocks
 get_backlinks
 list_relationship_edges
 get_dataset_schema
+profile_dataset
 query_dataset
 get_canvas_outline
 get_recent_changes
@@ -173,6 +177,11 @@ place_resource
 create_artifact
 run_task
 propose_transaction
+propose_page
+propose_resource
+propose_workflow
+propose_interface
+propose_artifact
 ```
 
 ### Context representations

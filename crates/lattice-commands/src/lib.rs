@@ -34,6 +34,7 @@ mod error;
 mod history;
 mod link_repair;
 mod proposal;
+mod propose_helpers;
 mod relationship;
 mod revisions;
 mod task;
@@ -76,6 +77,10 @@ pub use proposal::{
     apply_proposal, build_proposal_transaction, create_proposal, dismiss_proposal,
     list_proposal_summaries, load_proposal, new_proposal_id, proposal_now_iso, proposals_dir,
     save_proposal, PROPOSALS_DIR,
+};
+pub use propose_helpers::{
+    normalize_proposal_rel_path, propose_artifact, propose_interface, propose_resource,
+    propose_workflow, ProposeBundle,
 };
 pub use relationship::{list_relationship_edges, RelationshipEdge, RelationshipKind};
 pub use revisions::{
