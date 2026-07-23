@@ -88,11 +88,11 @@
         "nixpkgsIntelDarwin": "nixpkgsIntelDarwin"
       },
       "locked": {
-        "lastModified": 1784573223,
-        "narHash": "sha256-NbF9xvedSH1eAbm5ZolJAWkJFwhze8JEje+PwRy+diE=",
+        "lastModified": 1784704884,
+        "narHash": "sha256-FV/Frlu1iuylZDKm9SMKH1OMRcmDDm5cyHZharkraiM=",
         "owner": "willmortimer",
         "repo": "nxr",
-        "rev": "f5f78189059a4e4272d4afded305efd0a256c347",
+        "rev": "3d1c1dcc7c425e82cfb718742d2cd2444c9b3d87",
         "type": "github"
       },
       "original": {
