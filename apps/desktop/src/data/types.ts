@@ -67,6 +67,11 @@ export interface ViewFilter {
   value: string;
 }
 
+export interface LayoutSummary {
+  field: string;
+  aggregate: RollupAggregate;
+}
+
 export type ViewLayoutType = "grid" | "list" | "board" | "gallery" | "calendar" | "form";
 
 /** Saved view layout metadata for browser demo fixtures (from template seeds). */
@@ -105,6 +110,8 @@ export interface DataAppSnapshot {
   cover_field?: string;
   /** Calendar layout: column used to place records on the calendar. */
   date_field?: string;
+  /** Grid layout: per-field footer / group summary aggregates. */
+  summaries?: LayoutSummary[];
   /** View-scoped conditional format rules applied to matching grid cells. */
   conditional_format?: ConditionalFormatRule[];
   /** Browser demo: per-view layout metadata from template `dataPackages[].views`. */
@@ -218,6 +225,7 @@ export function cloneSnapshot(snapshot: DataAppSnapshot): DataAppSnapshot {
     group_by: snapshot.group_by,
     cover_field: snapshot.cover_field,
     date_field: snapshot.date_field,
+    summaries: snapshot.summaries?.map((summary) => ({ ...summary })),
     conditional_format: snapshot.conditional_format?.map((rule) => ({
       ...rule,
       style: { ...rule.style },

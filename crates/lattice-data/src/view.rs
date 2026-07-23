@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::app::DATABASE_FILENAME;
 use crate::error::Error;
-use crate::types::{CellValue, ColumnMeta, Row};
+use crate::types::{CellValue, ColumnMeta, FieldType, RollupAggregate, Row};
 use crate::Result;
 
 pub const VIEW_FORMAT: &str = "lattice-view";
@@ -68,15 +68,25 @@ pub struct ViewSource {
     pub table: String,
 }
 
+/// One footer or per-group summary aggregate for grid views.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ViewLayoutSummary {
+    pub field: String,
+    pub aggregate: RollupAggregate,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ViewLayout {
     #[serde(rename = "type")]
     pub layout_type: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub columns: Vec<String>,
-    /// Board layout only: column used to group cards into lanes.
+    /// Board layout: lane column. Grid layout: optional row grouping with per-group footers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group_by: Option<String>,
+    /// Grid layout only: per-field footer / group summary aggregates.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub summaries: Vec<ViewLayoutSummary>,
     /// Gallery layout only: column rendered as each card's cover.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cover_field: Option<String>,
@@ -130,6 +140,7 @@ impl ViewDef {
                 layout_type: LAYOUT_GRID.to_string(),
                 columns: Vec::new(),
                 group_by: None,
+                summaries: Vec::new(),
                 cover_field: None,
                 date_field: None,
             },
@@ -186,10 +197,20 @@ impl ViewDef {
         }
         if let Some(group_by) = &self.layout.group_by {
             validate_identifier(group_by)?;
-            if self.layout.layout_type != LAYOUT_BOARD {
+            if self.layout.layout_type != LAYOUT_BOARD && self.layout.layout_type != LAYOUT_GRID {
                 return Err(invalid(
-                    "layout.group_by is only supported for board views".to_string(),
+                    "layout.group_by is only supported for board and grid views".to_string(),
                 ));
+            }
+        }
+        if !self.layout.summaries.is_empty() {
+            if self.layout.layout_type != LAYOUT_GRID {
+                return Err(invalid(
+                    "layout.summaries is only supported for grid views".to_string(),
+                ));
+            }
+            for summary in &self.layout.summaries {
+                validate_identifier(&summary.field)?;
             }
         }
         if let Some(cover_field) = &self.layout.cover_field {
@@ -256,6 +277,67 @@ fn validate_style_token(path: &Path, token: Option<&str>, label: &str) -> Result
                 "{label} must be a non-empty semantic token name (a-z, digits, hyphens); got {token:?}"
             ),
         })
+    }
+}
+
+/// Compute one summary aggregate over `rows` for `field` using `field_type` hints.
+pub fn compute_layout_summary(
+    rows: &[Row],
+    field: &str,
+    field_type: FieldType,
+    aggregate: RollupAggregate,
+) -> Option<f64> {
+    match aggregate {
+        RollupAggregate::Count => Some(
+            rows.iter()
+                .filter(|row| !cell_value_is_empty(row.values.get(field)))
+                .count() as f64,
+        ),
+        RollupAggregate::Sum | RollupAggregate::Min | RollupAggregate::Max => {
+            let numbers: Vec<f64> = rows
+                .iter()
+                .filter_map(|row| numeric_cell_value(row.values.get(field), field_type))
+                .collect();
+            if numbers.is_empty() {
+                return None;
+            }
+            match aggregate {
+                RollupAggregate::Sum => Some(numbers.iter().sum()),
+                RollupAggregate::Min => numbers.into_iter().reduce(f64::min),
+                RollupAggregate::Max => numbers.into_iter().reduce(f64::max),
+                RollupAggregate::Count => unreachable!(),
+            }
+        }
+    }
+}
+
+fn cell_value_is_empty(value: Option<&CellValue>) -> bool {
+    match value {
+        None => true,
+        Some(CellValue::Null) => true,
+        Some(CellValue::Text(text)) => text.is_empty(),
+        Some(CellValue::Date(text)) => text.is_empty(),
+        Some(CellValue::Relation { record_ids }) => record_ids.is_empty(),
+        Some(CellValue::Lookup { values }) => values.is_empty(),
+        Some(CellValue::Rollup { value }) => value.is_none(),
+        Some(CellValue::Formula { value }) => value.is_none(),
+        Some(CellValue::Integer(_))
+        | Some(CellValue::Decimal(_))
+        | Some(CellValue::Boolean(_)) => false,
+    }
+}
+
+fn numeric_cell_value(value: Option<&CellValue>, field_type: FieldType) -> Option<f64> {
+    match value {
+        Some(CellValue::Integer(value)) => Some(*value as f64),
+        Some(CellValue::Decimal(value)) => Some(*value),
+        Some(CellValue::Rollup { value }) => *value,
+        Some(CellValue::Formula { value }) => match value {
+            Some(crate::types::FormulaValue::Number(number)) => Some(*number),
+            _ => None,
+        },
+        _ if matches!(field_type, FieldType::Integer | FieldType::Decimal) => None,
+        _ => None,
     }
 }
 

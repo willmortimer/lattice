@@ -3,6 +3,7 @@ import {
   type CellValue,
   type DataColumn,
   type DataRow,
+  type LayoutSummary,
   type ViewLayoutType,
 } from "./types";
 
@@ -21,6 +22,7 @@ export interface ViewLayoutSaveFields {
   groupBy?: string | null;
   coverField?: string | null;
   dateField?: string | null;
+  summaries?: LayoutSummary[];
 }
 
 /**
@@ -33,10 +35,16 @@ export function layoutFieldsForSave(
     groupBy?: string;
     coverField?: string;
     dateField?: string;
+    summaries?: LayoutSummary[];
   },
 ): ViewLayoutSaveFields {
   switch (layoutType) {
     case "grid":
+      return {
+        layoutType,
+        groupBy: fields.groupBy ?? null,
+        summaries: fields.summaries,
+      };
     case "list":
     case "form":
       return { layoutType };
@@ -72,6 +80,14 @@ export function seedLayoutFieldsForType(
 } {
   switch (layoutType) {
     case "grid":
+      // Optional grouping only — do not invent a board-style default.
+      return {
+        ...current,
+        groupBy:
+          current.groupBy && columns.some((column) => column.name === current.groupBy)
+            ? current.groupBy
+            : undefined,
+      };
     case "list":
     case "form":
       return current;
@@ -168,6 +184,14 @@ export function layoutFieldPickerSpecs(
 ): LayoutFieldPickerSpec[] {
   switch (layoutType) {
     case "grid":
+      return [
+        {
+          kind: "groupBy",
+          label: "Group by",
+          ariaLabel: "Grid group by column",
+          options: groupableColumnsForPicker(columns, current.groupBy),
+        },
+      ];
     case "list":
     case "form":
       return [];

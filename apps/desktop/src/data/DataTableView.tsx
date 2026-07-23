@@ -35,6 +35,12 @@ import {
 } from "./types";
 import { themeOverrideForCell } from "./conditionalFormat";
 import {
+  buildGroupedGridRows,
+  dataRowAtGridIndex,
+  type GridDisplayRow,
+  type GridRowKind,
+} from "./gridSummaries";
+import {
   layoutFieldPickerSpecs,
   layoutFieldPickerValue,
   layoutFieldsForSave,
@@ -127,6 +133,26 @@ function cycleSortDirection(
     field: nextField,
     direction: currentDirection === "asc" ? "desc" : "asc",
   };
+}
+
+function gridSummaryRowTheme(kind: GridRowKind): Partial<Theme> {
+  switch (kind) {
+    case "group-header":
+      return {
+        bgCell: token("--lt-panel", "#131923"),
+        textDark: token("--lt-text-soft", "#c9c2b7"),
+      };
+    case "group-footer":
+    case "grand-footer":
+      return {
+        bgCell: token("--lt-bg-raise", "#11161f"),
+        textDark: token("--lt-accent-bright", "#efb85f"),
+      };
+    default: {
+      const _exhaustive: never = kind;
+      return _exhaustive;
+    }
+  }
 }
 
 function setLayoutFieldValue(
@@ -738,17 +764,32 @@ export function DataTableView({
     return rows.slice(0, demoMutate ? preferences.pageSize : rows.length);
   }, [demoMutate, filters, preferences.pageSize, snapshot.rows, sortDirection, sortField]);
 
+  const gridSummaries = snapshot.summaries ?? [];
+  const gridGroupBy = layoutType === "grid" ? groupBy : undefined;
+  const gridDisplayRows = useMemo(
+    () =>
+      layoutType === "grid"
+        ? buildGroupedGridRows(displayRows, visibleColumns, gridGroupBy, gridSummaries)
+        : displayRows.map(
+            (dataRow): GridDisplayRow => ({
+              kind: "data",
+              dataRow,
+            }),
+          ),
+    [displayRows, gridGroupBy, gridSummaries, layoutType, visibleColumns],
+  );
+
   const selectedGridRow = useMemo(() => {
     const currentRow = gridSelection?.current?.cell[1];
     if (currentRow !== undefined) {
-      return displayRows[currentRow];
+      return dataRowAtGridIndex(gridDisplayRows, currentRow);
     }
     const selectedRows = gridSelection?.rows.toArray() ?? [];
     if (selectedRows.length > 0) {
-      return displayRows[selectedRows[0]];
+      return dataRowAtGridIndex(gridDisplayRows, selectedRows[0]!);
     }
     return undefined;
-  }, [displayRows, gridSelection]);
+  }, [gridDisplayRows, gridSelection]);
 
   const detailRow = useMemo(() => {
     if (!detailRowId) return undefined;
@@ -777,14 +818,14 @@ export function DataTableView({
       const rowIndex =
         selection.current?.cell[1] ?? selection.rows.toArray()[0];
       if (rowIndex === undefined) return;
-      const row = displayRows[rowIndex];
+      const row = dataRowAtGridIndex(gridDisplayRows, rowIndex);
       if (row) {
         setFormPanelOpen(false);
         setActivePackageForm(null);
         setDetailRowId(row.id);
       }
     },
-    [displayRows],
+    [gridDisplayRows],
   );
 
   const gridColumns = useMemo<GridColumn[]>(
@@ -804,8 +845,46 @@ export function DataTableView({
   const getCellContent = useCallback(
     ([columnIndex, rowIndex]: Item): GridCell => {
       const column = visibleColumns[columnIndex];
-      const row = displayRows[rowIndex];
-      if (!column || !row) {
+      const gridRow = gridDisplayRows[rowIndex];
+      if (!column || !gridRow) {
+        return {
+          kind: GridCellKind.Text,
+          data: "",
+          displayData: "",
+          allowOverlay: false,
+          readonly: true,
+        };
+      }
+
+      if (gridRow.kind !== "data") {
+        const summaryTheme = gridSummaryRowTheme(gridRow.kind);
+        let display = "";
+        if (gridRow.kind === "group-header") {
+          display =
+            columnIndex === 0
+              ? `${gridRow.groupKey ?? ""} (${gridRow.groupCount ?? 0})`
+              : "";
+        } else if (gridRow.kind === "group-footer") {
+          display =
+            columnIndex === 0
+              ? "Subtotal"
+              : (gridRow.summaryValues?.[column.name] ?? "");
+        } else {
+          display =
+            columnIndex === 0 ? "Total" : (gridRow.summaryValues?.[column.name] ?? "");
+        }
+        return {
+          kind: GridCellKind.Text,
+          data: display,
+          displayData: display,
+          allowOverlay: false,
+          readonly: true,
+          themeOverride: summaryTheme,
+        };
+      }
+
+      const row = gridRow.dataRow;
+      if (!row) {
         return {
           kind: GridCellKind.Text,
           data: "",
@@ -876,7 +955,7 @@ export function DataTableView({
     },
     [
       busy,
-      displayRows,
+      gridDisplayRows,
       preferences.zebraRows,
       relationLabelIndex,
       snapshot.conditional_format,
@@ -888,7 +967,7 @@ export function DataTableView({
   const handleCellEdited = useCallback(
     ([columnIndex, rowIndex]: Item, value: EditableGridCell) => {
       const column = visibleColumns[columnIndex];
-      const row = displayRows[rowIndex];
+      const row = dataRowAtGridIndex(gridDisplayRows, rowIndex);
       if (!column || !row || column.name === "id") return;
       const raw =
         value.kind === GridCellKind.Boolean
@@ -904,20 +983,20 @@ export function DataTableView({
               : "";
       void commitCell(row, column, raw);
     },
-    [commitCell, displayRows, visibleColumns],
+    [commitCell, gridDisplayRows, visibleColumns],
   );
 
   const deleteSelectedRows = useCallback(
     async (selection: GridSelection) => {
       const rows = selection.rows
         .toArray()
-        .map((index) => displayRows[index])
+        .map((index) => dataRowAtGridIndex(gridDisplayRows, index))
         .filter((row): row is DataRow => Boolean(row));
       for (const row of rows.reverse()) {
         await deleteRow(row);
       }
     },
-    [deleteRow, displayRows],
+    [deleteRow, gridDisplayRows],
   );
 
   const applyFilter = useCallback(() => {
@@ -946,7 +1025,10 @@ export function DataTableView({
         coverField,
         dateField,
       });
-      const layoutFields = layoutFieldsForSave(layoutType, seeded);
+      const layoutFields = layoutFieldsForSave(layoutType, {
+        ...seeded,
+        summaries: snapshotRef.current.summaries,
+      });
       const saved = await invoke<DataAppSnapshot>("save_data_view", {
         root,
         relPath,
@@ -1354,13 +1436,13 @@ export function DataTableView({
               width="100%"
               height="100%"
               columns={gridColumns}
-              rows={displayRows.length}
+              rows={gridDisplayRows.length}
               getCellContent={getCellContent}
               onCellEdited={handleCellEdited}
               gridSelection={gridSelection}
               onGridSelectionChange={handleGridSelectionChange}
               onCellActivated={([, rowIndex]) => {
-                const row = displayRows[rowIndex];
+                const row = dataRowAtGridIndex(gridDisplayRows, rowIndex);
                 if (row) openRecordDetail(row);
               }}
               onRowAppended={async () => {
