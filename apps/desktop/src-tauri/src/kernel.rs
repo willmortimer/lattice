@@ -181,7 +181,10 @@ mod tests {
             code: "1".into(),
         };
         let map = state.0.lock().expect("lock");
-        let err = map.get(&missing.session_id).expect_err("unknown");
+        let err = match map.get(&missing.session_id) {
+            Ok(_) => panic!("expected unknown session error"),
+            Err(err) => err,
+        };
         assert!(err.to_string().contains("kernel-missing"));
     }
 }
