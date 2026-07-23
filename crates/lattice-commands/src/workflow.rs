@@ -2116,4 +2116,5 @@ steps:
             .expect("started_at");
         let parsed = parse_iso8601_z(&record.execution.started_at).expect("parse");
         assert_eq!(last, parsed);
+    }
 }
