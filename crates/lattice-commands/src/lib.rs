@@ -102,8 +102,9 @@ pub use workflow::{
     resolve_workspace_path, run_workflow, save_workflow_run, set_workflow_enabled,
     workflow_runs_dir, workflows_dir, NotificationParams, ProposalCreateParams, ScheduleTrigger,
     TaskRunParams, WorkflowError, WorkflowManifest, WorkflowRunRecord, WorkflowStep,
-    WorkflowStepResult, WorkflowTrigger, SUPPORTED_VERSION as WORKFLOW_SUPPORTED_VERSION,
-    WORKFLOWS_DIR, WORKFLOW_FORMAT, WORKFLOW_RUNS_DIR,
+    WorkflowStepResult, WorkflowStepRetry, WorkflowTrigger,
+    MAX_PARALLEL_STEPS, SUPPORTED_VERSION as WORKFLOW_SUPPORTED_VERSION, WORKFLOWS_DIR,
+    WORKFLOW_FORMAT, WORKFLOW_RUNS_DIR,
 };
 
 /// Maximum byte size of one semantic resource edit.
