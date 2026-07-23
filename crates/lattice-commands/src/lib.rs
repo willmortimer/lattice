@@ -98,9 +98,10 @@ pub use template::{
 };
 pub use trash::TrashPolicy;
 pub use workflow::{
-    discover_workflows, list_workflow_runs, load_and_run_workflow, path_matches_glob,
-    resolve_workspace_path, run_workflow, save_workflow_run, set_workflow_enabled,
-    workflow_runs_dir, workflows_dir, NotificationParams, ProposalCreateParams, ScheduleTrigger,
+    discover_scheduled_workflows, discover_workflows, evaluate_schedule_due, last_schedule_run_at,
+    list_workflow_runs, load_and_run_workflow, path_matches_glob, resolve_workspace_path,
+    run_workflow, save_workflow_run, set_workflow_enabled, workflow_runs_dir, workflows_dir,
+    NotificationParams, ProposalCreateParams, ScheduleDue, ScheduleTrigger, ScheduledWorkflow,
     TaskRunParams, WorkflowError, WorkflowManifest, WorkflowRunRecord, WorkflowStep,
     WorkflowStepResult, WorkflowStepRetry, WorkflowTrigger,
     MAX_PARALLEL_STEPS, SUPPORTED_VERSION as WORKFLOW_SUPPORTED_VERSION, WORKFLOWS_DIR,
