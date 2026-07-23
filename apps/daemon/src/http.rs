@@ -17,10 +17,12 @@ use tokio::sync::oneshot;
 use tracing::{info, warn};
 
 use crate::api::{
-    api_build_context, api_create_proposal, api_get_proposal, api_list_proposals, api_propose_page,
-    api_read, api_related, api_search, ApiError, BuildContextParams, CreateProposalParams,
-    GetProposalParams, ListProposalsParams, ProposePageParams, ReadParams, RelatedParams,
-    SearchParams,
+    api_build_context, api_create_proposal, api_get_dataset_schema, api_get_proposal,
+    api_list_proposals, api_profile_dataset, api_propose_artifact, api_propose_interface,
+    api_propose_page, api_propose_resource, api_propose_workflow, api_read, api_related, api_search,
+    ApiError, BuildContextParams, CreateProposalParams, DatasetInspectParams, GetProposalParams,
+    ListProposalsParams, ProposePageParams, ProposeResourceParams, ProposeYamlParams, ReadParams,
+    RelatedParams, SearchParams,
 };
 use crate::config::DaemonConfig;
 use crate::server::DaemonState;
@@ -216,6 +218,90 @@ async fn route_propose_page(
     }
 }
 
+async fn route_propose_resource(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<ProposeResourceParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_propose_resource(&state.daemon.runtime, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_propose_workflow(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<ProposeYamlParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_propose_workflow(&state.daemon.runtime, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_propose_interface(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<ProposeYamlParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_propose_interface(&state.daemon.runtime, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_propose_artifact(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<ProposeYamlParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_propose_artifact(&state.daemon.runtime, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_get_dataset_schema(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<DatasetInspectParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_get_dataset_schema(&state.daemon.runtime, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_profile_dataset(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<DatasetInspectParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_profile_dataset(&state.daemon.runtime, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
 /// Build the localhost API router (no CORS — not a browser demo surface).
 pub fn router(daemon: DaemonState) -> Router {
     Router::new()
@@ -224,10 +310,22 @@ pub fn router(daemon: DaemonState) -> Router {
         .route("/v1/read", post(route_read))
         .route("/v1/related", post(route_related))
         .route("/v1/build_context", post(route_build_context))
+        .route("/v1/datasets/schema", post(route_get_dataset_schema))
+        .route("/v1/datasets/profile", post(route_profile_dataset))
         .route("/v1/proposals/create", post(route_create_proposal))
         .route("/v1/proposals/list", post(route_list_proposals))
         .route("/v1/proposals/get", post(route_get_proposal))
         .route("/v1/proposals/propose_page", post(route_propose_page))
+        .route("/v1/proposals/propose_resource", post(route_propose_resource))
+        .route("/v1/proposals/propose_workflow", post(route_propose_workflow))
+        .route(
+            "/v1/proposals/propose_interface",
+            post(route_propose_interface),
+        )
+        .route(
+            "/v1/proposals/propose_artifact",
+            post(route_propose_artifact),
+        )
         .with_state(HttpState { daemon })
 }
 

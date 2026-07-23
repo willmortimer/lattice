@@ -7,6 +7,7 @@ they do not call the CommandEngine.
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 import uuid
@@ -128,4 +129,113 @@ def propose_page(
         source_type=source_type,
         resource=resource,
         warnings=warnings,
+    )
+
+
+def _resource_create_command(path: str, content: str) -> dict[str, Any]:
+    rel = _normalize_rel_path(path)
+    encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
+    return {"type": "resource-create", "path": rel, "content": encoded}
+
+
+def propose_resource(
+    path: str,
+    content: str,
+    *,
+    summary: str | None = None,
+    source_type: str = "task",
+    resource: str | None = None,
+    warnings: list[str] | None = None,
+) -> dict:
+    """Propose a ``resource-create`` command for text ``content`` at ``path``."""
+    command = _resource_create_command(path, content)
+    rel = command["path"]
+    assert isinstance(rel, str)
+    return propose(
+        commands=[command],
+        summary=summary or f"Create resource {rel}",
+        source_type=source_type,
+        resource=resource,
+        warnings=warnings,
+    )
+
+
+def propose_workflow(
+    path: str,
+    content: str,
+    *,
+    summary: str | None = None,
+    source_type: str = "task",
+    resource: str | None = None,
+    warnings: list[str] | None = None,
+) -> dict:
+    """Propose creating a workflow YAML file (caller should validate YAML offline if needed)."""
+    rel = _normalize_rel_path(path)
+    extra = list(warnings or [])
+    if not rel.lower().endswith(".workflow.yaml"):
+        extra.append(
+            f"path {rel!r} does not end with .workflow.yaml; workflow discovery may ignore it"
+        )
+    return propose(
+        commands=[_resource_create_command(rel, content)],
+        summary=summary or f"Create workflow {rel}",
+        source_type=source_type,
+        resource=resource,
+        warnings=extra,
+    )
+
+
+def propose_interface(
+    path: str,
+    content: str,
+    *,
+    summary: str | None = None,
+    source_type: str = "task",
+    resource: str | None = None,
+    warnings: list[str] | None = None,
+) -> dict:
+    """Propose creating an interface YAML file."""
+    rel = _normalize_rel_path(path)
+    extra = list(warnings or [])
+    if not rel.lower().endswith(".interface.yaml"):
+        extra.append(
+            f"path {rel!r} does not end with .interface.yaml; package loaders may ignore it"
+        )
+    return propose(
+        commands=[_resource_create_command(rel, content)],
+        summary=summary or f"Create interface {rel}",
+        source_type=source_type,
+        resource=resource,
+        warnings=extra,
+    )
+
+
+def propose_artifact(
+    path: str,
+    content: str,
+    *,
+    summary: str | None = None,
+    source_type: str = "task",
+    resource: str | None = None,
+    warnings: list[str] | None = None,
+) -> dict:
+    """Propose creating an artifact.yaml manifest (package path or manifest path)."""
+    rel = _normalize_rel_path(path)
+    lower = rel.lower()
+    if lower.endswith("artifact.yaml"):
+        manifest = rel
+    elif lower.endswith(".artifact"):
+        manifest = f"{rel.rstrip('/')}/artifact.yaml"
+    else:
+        raise ValueError("artifact path must end with .artifact or artifact.yaml")
+    extra = list(warnings or [])
+    extra.append(
+        "proposal writes artifact.yaml only; entrypoint HTML and package dirs still need separate commands"
+    )
+    return propose(
+        commands=[_resource_create_command(manifest, content)],
+        summary=summary or f"Create artifact manifest {manifest}",
+        source_type=source_type,
+        resource=resource,
+        warnings=extra,
     )

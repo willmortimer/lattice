@@ -9,6 +9,7 @@
 
 mod api;
 mod config;
+mod dataset_api;
 mod embed_host;
 mod error;
 mod http;
@@ -21,11 +22,14 @@ mod spawn;
 mod voice_host;
 
 pub use api::{
-    api_build_context, api_create_proposal, api_get_proposal, api_list_proposals, api_propose_page,
-    api_read, api_related, api_search, ApiError, BuildContextParams, BuildContextResponse,
-    CreateProposalParams, GetProposalParams, ListProposalsParams, ListProposalsResponse,
-    ProposalResponse, ProposePageParams, ReadParams, ReadResponse, RelatedParams, RelatedResponse,
-    SearchParams, SearchResponse, MAX_CONTEXT_BYTES, MAX_HIT_LIMIT, MAX_READ_BYTES,
+    api_build_context, api_create_proposal, api_get_dataset_schema, api_get_proposal,
+    api_list_proposals, api_profile_dataset, api_propose_artifact, api_propose_interface,
+    api_propose_page, api_propose_resource, api_propose_workflow, api_read, api_related,
+    api_search, ApiError, BuildContextParams, BuildContextResponse, CreateProposalParams,
+    DatasetInspectParams, GetProposalParams, ListProposalsParams, ListProposalsResponse,
+    ProposalResponse, ProposePageParams, ProposeResourceParams, ProposeYamlParams, ReadParams,
+    ReadResponse, RelatedParams, RelatedResponse, SearchParams, SearchResponse, MAX_CONTEXT_BYTES,
+    MAX_HIT_LIMIT, MAX_READ_BYTES,
 };
 pub use config::{
     default_run_dir, default_socket_path, DaemonConfig, DEFAULT_API_PORT,
