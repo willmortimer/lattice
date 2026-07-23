@@ -221,6 +221,16 @@ impl LatticeRuntime {
             .len()
     }
 
+    /// Canonical roots of all warm sessions (order unspecified).
+    pub fn list_session_roots(&self) -> Vec<PathBuf> {
+        self.sessions_by_root
+            .read()
+            .expect("sessions poisoned")
+            .keys()
+            .cloned()
+            .collect()
+    }
+
     /// Stop watchers, release held workspace leases, and drop all warm sessions.
     ///
     /// Used during daemon shutdown so workspaces are not left locked.

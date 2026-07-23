@@ -17,6 +17,7 @@ mod idle;
 mod lease;
 pub mod mcp;
 mod preferences;
+mod schedule;
 mod server;
 mod spawn;
 mod voice_host;
@@ -57,6 +58,7 @@ pub use spawn::{spawn_latticed, wait_for_ready, SpawnOptions, SpawnedDaemon};
 pub use preferences::{
     DaemonPreferences, LATTICE_IDLE_SHUTDOWN_SECS_ENV, LATTICE_KEEP_SERVICES_RUNNING_ENV,
 };
+pub use schedule::{spawn_schedule_runner, ScheduleRunner, DEFAULT_SCHEDULE_TICK};
 pub use voice_host::{
     resolve_voice_host_bin, VoiceController, VoiceProviderMode, ENV_VOICE_FAKE,
     ENV_VOICE_HOST_BIN, ENV_VOICE_HOST_SOCKET, ENV_VOICE_MODEL_CACHE,

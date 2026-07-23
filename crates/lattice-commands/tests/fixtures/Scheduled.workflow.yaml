@@ -9,4 +9,4 @@ steps:
   - id: note
     action: notification
     with:
-      message: Scheduled workflow tick (schema fixture; not fired by a daemon yet)
+      message: Scheduled workflow tick (fired by latticed interval runner when due)

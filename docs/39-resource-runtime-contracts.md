@@ -109,15 +109,16 @@ desktop registers renderer `workflow-viewer` and opens an
 | Surface | Contract |
 |---|---|
 | Parse | `format: lattice-workflow`, version 1; unknown triggers/actions fail closed |
-| Triggers | `manual`, `resource.changed` (globs + debounce), `form.submitted` (via `insert_record` formName), `schedule` (`interval_seconds` and/or `cron`, optional `timezone`; parse only) |
+| Triggers | `manual`, `resource.changed` (globs + debounce), `form.submitted` (via `insert_record` formName), `schedule` (`interval_seconds` and/or `cron`, optional `timezone`; latticed fires intervals on open sessions; cron-only deferred) |
 | Steps | `task.run`, `proposal.create` (`source.type=workflow`), `notification` (log only) |
 | Enable | `enabled: false` skips automatic triggers; YAML rewritten by `workflow_set_enabled` |
 | History | `.lattice/workflows/runs/{executionId}.json` |
 | IPC | `workflow_load` / `workflow_run` / `workflow_cancel` / `workflow_list_runs` / `workflow_set_enabled` |
 | CLI | `lattice workflow run <path> [--root …]` |
 
-Manual Run still works when disabled. Schedule firing / latticed durable jobs /
-visual editors are out of scope for this contract.
+Manual Run still works when disabled. Cron-only schedule evaluation, durable
+job queues, and visual editors remain out of scope for this contract; interval
+schedules fire from `latticed` on open workspace sessions.
 
 ### Revision history presentation
 

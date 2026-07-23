@@ -4,14 +4,14 @@
 //! `task.run`, `proposal.create`, and log-only `notification` steps.
 //! Optional per-step `retry` (max attempts + backoff) and `parallel` child groups
 //! (bounded concurrent fan-out, then join) are supported by the runner.
-//! Schedule firing (daemon loop), durable jobs, and a visual editor are out of
-//! scope — `schedule` is parse/validate only until a later depth task.
+//! Interval schedule firing is owned by `latticed` (see daemon schedule runner).
+//! Cron-only schedules are parsed/validated but not evaluated yet.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use lattice_core::OPERATIONAL_DIR;
 use serde::{Deserialize, Serialize};
@@ -112,7 +112,9 @@ pub enum WorkflowTrigger {
         #[serde(default, skip_serializing_if = "Option::is_none", rename = "form_id")]
         form_id: Option<String>,
     },
-    /// Time-based trigger (parsed/validated only; no firing loop yet).
+    /// Time-based trigger. Interval firing is handled by `latticed`; cron-only
+    /// expressions are accepted at parse time but deferred until a cron evaluator
+    /// ships (interval is preferred when both are set).
     ///
     /// Require at least one of `interval_seconds` or `cron`. Unknown fields fail closed.
     Schedule(ScheduleTrigger),
@@ -475,7 +477,7 @@ fn deserialize_with<T: for<'de> Deserialize<'de>>(
     })
 }
 
-/// Fail-closed checks for `type: schedule` (schema only; no firing).
+/// Fail-closed checks for `type: schedule` fields.
 fn validate_schedule_trigger(schedule: &ScheduleTrigger, path: &Path) -> WorkflowResult<()> {
     let invalid = |message: String| WorkflowError::Invalid {
         path: path.to_path_buf(),
@@ -685,6 +687,167 @@ pub fn discover_workflows(workspace_root: &Path) -> WorkflowResult<Vec<(PathBuf,
     let mut found = Vec::new();
     discover_workflows_in(workspace_root, workspace_root, &mut found)?;
     Ok(found)
+}
+
+/// Enabled workflow with a `schedule` trigger, ready for daemon evaluation.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScheduledWorkflow {
+    pub path: PathBuf,
+    pub manifest: WorkflowManifest,
+}
+
+impl ScheduledWorkflow {
+    /// Borrow the schedule trigger fields.
+    pub fn schedule(&self) -> &ScheduleTrigger {
+        match &self.manifest.trigger {
+            WorkflowTrigger::Schedule(schedule) => schedule,
+            WorkflowTrigger::Manual
+            | WorkflowTrigger::ResourceChanged { .. }
+            | WorkflowTrigger::FormSubmitted { .. } => {
+                unreachable!("ScheduledWorkflow requires a schedule trigger")
+            }
+        }
+    }
+
+    /// Workspace-relative workflow path using `/` separators.
+    pub fn relative_path(&self, workspace_root: &Path) -> String {
+        self.path
+            .strip_prefix(workspace_root)
+            .unwrap_or(&self.path)
+            .to_string_lossy()
+            .replace('\\', "/")
+    }
+}
+
+/// Discover enabled workflows whose trigger is `type: schedule`.
+///
+/// Disabled workflows are omitted (manual Run still works via
+/// [`load_and_run_workflow`]).
+pub fn discover_scheduled_workflows(
+    workspace_root: &Path,
+) -> WorkflowResult<Vec<ScheduledWorkflow>> {
+    let mut out = Vec::new();
+    for (path, manifest) in discover_workflows(workspace_root)? {
+        if !manifest.enabled {
+            continue;
+        }
+        if matches!(manifest.trigger, WorkflowTrigger::Schedule(_)) {
+            out.push(ScheduledWorkflow { path, manifest });
+        }
+    }
+    Ok(out)
+}
+
+/// Result of evaluating whether a schedule trigger should fire.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScheduleDue {
+    /// Interval has elapsed (or there is no prior fire); run now.
+    Due,
+    /// Interval has not elapsed yet.
+    NotDue,
+    /// Cron-only schedule: accepted in YAML but not evaluated by this skeleton.
+    ///
+    /// TODO: add a lightweight cron evaluator (with optional IANA timezone) so
+    /// cron-only workflows fire without requiring `interval_seconds`.
+    CronDeferred,
+}
+
+/// Decide whether a schedule trigger is due at `now`.
+///
+/// Prefer `interval_seconds` when set (even if `cron` is also present). Cron-only
+/// triggers return [`ScheduleDue::CronDeferred`] until an evaluator ships.
+pub fn evaluate_schedule_due(
+    schedule: &ScheduleTrigger,
+    last_fire: Option<SystemTime>,
+    now: SystemTime,
+) -> ScheduleDue {
+    if let Some(interval) = schedule.interval_seconds.filter(|seconds| *seconds > 0) {
+        return match last_fire {
+            None => ScheduleDue::Due,
+            Some(last) => {
+                let elapsed = now.duration_since(last).unwrap_or(Duration::ZERO);
+                if elapsed.as_secs() >= interval {
+                    ScheduleDue::Due
+                } else {
+                    ScheduleDue::NotDue
+                }
+            }
+        };
+    }
+    if schedule
+        .cron
+        .as_ref()
+        .is_some_and(|value| !value.trim().is_empty())
+    {
+        return ScheduleDue::CronDeferred;
+    }
+    ScheduleDue::NotDue
+}
+
+/// Latest `started_at` among persisted runs with trigger label `schedule`.
+pub fn last_schedule_run_at(
+    workspace_root: &Path,
+    workflow_path: &str,
+) -> WorkflowResult<Option<SystemTime>> {
+    let runs = list_workflow_runs(workspace_root, workflow_path, 64)?;
+    for run in runs {
+        if run.trigger != "schedule" {
+            continue;
+        }
+        if let Some(started) = parse_iso8601_z(&run.execution.started_at) {
+            return Ok(Some(started));
+        }
+    }
+    Ok(None)
+}
+
+/// Parse UTC timestamps produced by [`crate::proposal_now_iso`] (`YYYY-MM-DDTHH:MM:SSZ`).
+fn parse_iso8601_z(value: &str) -> Option<SystemTime> {
+    let value = value.trim();
+    let (date, rest) = value.split_once('T')?;
+    let time = rest
+        .strip_suffix('Z')
+        .or_else(|| rest.strip_suffix('z'))?;
+    let time = time.split('.').next()?;
+    let mut date_parts = date.split('-');
+    let year: i32 = date_parts.next()?.parse().ok()?;
+    let month: u32 = date_parts.next()?.parse().ok()?;
+    let day: u32 = date_parts.next()?.parse().ok()?;
+    if date_parts.next().is_some() {
+        return None;
+    }
+    let mut time_parts = time.split(':');
+    let hour: u32 = time_parts.next()?.parse().ok()?;
+    let minute: u32 = time_parts.next()?.parse().ok()?;
+    let second: u32 = time_parts.next()?.parse().ok()?;
+    if time_parts.next().is_some() {
+        return None;
+    }
+    if !(1..=12).contains(&month)
+        || !(1..=31).contains(&day)
+        || hour > 23
+        || minute > 59
+        || second > 60
+    {
+        return None;
+    }
+    let days = days_from_civil(year, month, day);
+    let secs = days * 86_400 + i64::from(hour) * 3600 + i64::from(minute) * 60 + i64::from(second);
+    if secs < 0 {
+        return None;
+    }
+    Some(UNIX_EPOCH + Duration::from_secs(secs as u64))
+}
+
+/// Howard Hinnant `days_from_civil` (proleptic Gregorian) — inverse of proposal ISO helper.
+fn days_from_civil(year: i32, month: u32, day: u32) -> i64 {
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = (y - era * 400) as u32;
+    let mp = if month > 2 { month - 3 } else { month + 9 };
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    i64::from(era) * 146_097 + i64::from(doe) - 719_468
 }
 
 fn discover_workflows_in(
@@ -1842,4 +2005,115 @@ steps:
             MAX_PARALLEL_STEPS + 1
         )));
     }
+
+    #[test]
+    fn discover_scheduled_workflows_skips_disabled_and_non_schedule() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        fs::write(
+            root.join("On.workflow.yaml"),
+            r#"
+format: lattice-workflow
+version: 1
+name: On
+enabled: true
+trigger:
+  type: schedule
+  interval_seconds: 60
+steps: []
+"#,
+        )
+        .unwrap();
+        fs::write(
+            root.join("Off.workflow.yaml"),
+            r#"
+format: lattice-workflow
+version: 1
+name: Off
+enabled: false
+trigger:
+  type: schedule
+  interval_seconds: 60
+steps: []
+"#,
+        )
+        .unwrap();
+        fs::write(
+            root.join("Manual.workflow.yaml"),
+            r#"
+format: lattice-workflow
+version: 1
+name: Manual
+trigger:
+  type: manual
+steps: []
+"#,
+        )
+        .unwrap();
+
+        let found = discover_scheduled_workflows(root).expect("discover");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].manifest.name, "On");
+        assert_eq!(found[0].schedule().interval_seconds, Some(60));
+    }
+
+    #[test]
+    fn evaluate_schedule_due_interval_and_cron_deferred() {
+        let now = UNIX_EPOCH + Duration::from_secs(1_000_000);
+        let interval = ScheduleTrigger {
+            interval_seconds: Some(60),
+            cron: Some("0 * * * *".into()),
+            timezone: None,
+        };
+        assert_eq!(evaluate_schedule_due(&interval, None, now), ScheduleDue::Due);
+        assert_eq!(
+            evaluate_schedule_due(&interval, Some(now - Duration::from_secs(59)), now),
+            ScheduleDue::NotDue
+        );
+        assert_eq!(
+            evaluate_schedule_due(&interval, Some(now - Duration::from_secs(60)), now),
+            ScheduleDue::Due
+        );
+
+        let cron_only = ScheduleTrigger {
+            interval_seconds: None,
+            cron: Some("0 2 * * *".into()),
+            timezone: Some("UTC".into()),
+        };
+        assert_eq!(
+            evaluate_schedule_due(&cron_only, None, now),
+            ScheduleDue::CronDeferred
+        );
+    }
+
+    #[test]
+    fn last_schedule_run_at_reads_persisted_history() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        let workflow = root.join("Tick.workflow.yaml");
+        fs::write(
+            &workflow,
+            r#"
+format: lattice-workflow
+version: 1
+name: Tick
+trigger:
+  type: schedule
+  interval_seconds: 1
+steps:
+  - id: note
+    action: notification
+    with:
+      message: tick
+"#,
+        )
+        .unwrap();
+        let record =
+            load_and_run_workflow(root, &workflow, Some("schedule"), None).expect("run");
+        assert_eq!(record.trigger, "schedule");
+        let last = last_schedule_run_at(root, "Tick.workflow.yaml")
+            .expect("history")
+            .expect("started_at");
+        let parsed = parse_iso8601_z(&record.execution.started_at).expect("parse");
+        assert_eq!(last, parsed);
 }
