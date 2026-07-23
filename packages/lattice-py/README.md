@@ -10,6 +10,7 @@ import lattice
 lattice.workspace_root()
 lattice.dataset("Data/Orders.dataset")
 lattice.propose_page("Notes/Out.md", "# Hi\n", summary="Create Out")
+lattice.propose_workflow("Automations/Demo.workflow.yaml", yaml_text)
 lattice.workspace.dataset("Data/Orders.dataset")  # alias helper
 ```
 

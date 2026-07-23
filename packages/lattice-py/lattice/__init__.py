@@ -9,7 +9,14 @@ from __future__ import annotations
 
 from lattice._dataset import DatasetHandle, dataset
 from lattice._env import LatticeWorkspaceError, workspace_root
-from lattice._propose import propose, propose_page
+from lattice._propose import (
+    propose,
+    propose_artifact,
+    propose_interface,
+    propose_page,
+    propose_resource,
+    propose_workflow,
+)
 from lattice._workspace import WorkspaceHelper
 
 __all__ = [
@@ -18,7 +25,11 @@ __all__ = [
     "WorkspaceHelper",
     "dataset",
     "propose",
+    "propose_artifact",
+    "propose_interface",
     "propose_page",
+    "propose_resource",
+    "propose_workflow",
     "workspace",
     "workspace_root",
 ]

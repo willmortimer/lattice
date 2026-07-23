@@ -3199,6 +3199,8 @@ dependencies = [
  "lattice-client",
  "lattice-commands",
  "lattice-core",
+ "lattice-datasets",
+ "lattice-duckdb",
  "lattice-embed-host",
  "lattice-embedding",
  "lattice-handlers",

@@ -1,8 +1,10 @@
 //! Minimal MCP JSON-RPC stdio adapter over the governed context API.
 //!
-//! Exposes read tools (`search`, `read`, `related`, `build_context`) and
-//! proposal tools (`create_proposal`, `list_proposals`, `get_proposal`,
-//! `propose_page`). Writes create reviewable proposals only — no apply.
+//! Exposes read tools (`search`, `read`, `related`, `build_context`,
+//! `get_dataset_schema`, `profile_dataset`) and proposal tools
+//! (`create_proposal`, `list_proposals`, `get_proposal`, `propose_page`,
+//! `propose_resource`, `propose_workflow`, `propose_interface`,
+//! `propose_artifact`). Writes create reviewable proposals only — no apply.
 
 use std::io::{self, BufRead, Write};
 use std::sync::Arc;
@@ -12,10 +14,12 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::api::{
-    api_build_context, api_create_proposal, api_get_proposal, api_list_proposals, api_propose_page,
-    api_read, api_related, api_search, ApiError, BuildContextParams, CreateProposalParams,
-    GetProposalParams, ListProposalsParams, ProposePageParams, ReadParams, RelatedParams,
-    SearchParams,
+    api_build_context, api_create_proposal, api_get_dataset_schema, api_get_proposal,
+    api_list_proposals, api_profile_dataset, api_propose_artifact, api_propose_interface,
+    api_propose_page, api_propose_resource, api_propose_workflow, api_read, api_related, api_search,
+    ApiError, BuildContextParams, CreateProposalParams, DatasetInspectParams, GetProposalParams,
+    ListProposalsParams, ProposePageParams, ProposeResourceParams, ProposeYamlParams, ReadParams,
+    RelatedParams, SearchParams,
 };
 
 const PROTOCOL_VERSION: &str = "2024-11-05";
@@ -176,6 +180,35 @@ fn tool_descriptors() -> Value {
             }
         },
         {
+            "name": "get_dataset_schema",
+            "description": "Return column names/types for a .dataset package via a bounded LIMIT 0 describe. Does not mutate the workspace.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "workspaceId": { "type": "string" },
+                    "root": { "type": "string" },
+                    "path": { "type": "string", "description": "Workspace-relative .dataset path" },
+                    "sql": { "type": "string", "description": "Optional DuckDB relation SQL; defaults to facts/**/*.parquet" }
+                },
+                "required": ["path"]
+            }
+        },
+        {
+            "name": "profile_dataset",
+            "description": "Bounded DuckDB SUMMARIZE profile for a .dataset package (optional sample-row cap). Read-only.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "workspaceId": { "type": "string" },
+                    "root": { "type": "string" },
+                    "path": { "type": "string" },
+                    "sql": { "type": "string" },
+                    "maxSampleRows": { "type": "integer" }
+                },
+                "required": ["path"]
+            }
+        },
+        {
             "name": "create_proposal",
             "description": "Create a reviewable transaction proposal from semantic commands. Does not apply mutations.",
             "inputSchema": {
@@ -230,6 +263,66 @@ fn tool_descriptors() -> Value {
                 },
                 "required": ["path"]
             }
+        },
+        {
+            "name": "propose_resource",
+            "description": "Propose creating a text resource via resource-create. Does not apply.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "workspaceId": { "type": "string" },
+                    "root": { "type": "string" },
+                    "path": { "type": "string" },
+                    "content": { "type": "string" },
+                    "summary": { "type": "string" }
+                },
+                "required": ["path", "content"]
+            }
+        },
+        {
+            "name": "propose_workflow",
+            "description": "Validate workflow YAML and propose creating the workflow file. Does not apply.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "workspaceId": { "type": "string" },
+                    "root": { "type": "string" },
+                    "path": { "type": "string" },
+                    "content": { "type": "string" },
+                    "summary": { "type": "string" }
+                },
+                "required": ["path", "content"]
+            }
+        },
+        {
+            "name": "propose_interface",
+            "description": "Validate interface YAML and propose creating the interface file. Does not apply.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "workspaceId": { "type": "string" },
+                    "root": { "type": "string" },
+                    "path": { "type": "string" },
+                    "content": { "type": "string" },
+                    "summary": { "type": "string" }
+                },
+                "required": ["path", "content"]
+            }
+        },
+        {
+            "name": "propose_artifact",
+            "description": "Validate artifact.yaml and propose creating the manifest. Does not apply.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "workspaceId": { "type": "string" },
+                    "root": { "type": "string" },
+                    "path": { "type": "string" },
+                    "content": { "type": "string" },
+                    "summary": { "type": "string" }
+                },
+                "required": ["path", "content"]
+            }
         }
     ])
 }
@@ -246,10 +339,16 @@ fn handle_tools_call(runtime: &LatticeRuntime, id: Value, params: &Value) -> Val
         "read" => call_read(runtime, arguments),
         "related" => call_related(runtime, arguments),
         "build_context" => call_build_context(runtime, arguments),
+        "get_dataset_schema" => call_get_dataset_schema(runtime, arguments),
+        "profile_dataset" => call_profile_dataset(runtime, arguments),
         "create_proposal" => call_create_proposal(runtime, arguments),
         "list_proposals" => call_list_proposals(runtime, arguments),
         "get_proposal" => call_get_proposal(runtime, arguments),
         "propose_page" => call_propose_page(runtime, arguments),
+        "propose_resource" => call_propose_resource(runtime, arguments),
+        "propose_workflow" => call_propose_workflow(runtime, arguments),
+        "propose_interface" => call_propose_interface(runtime, arguments),
+        "propose_artifact" => call_propose_artifact(runtime, arguments),
         other => {
             return error(id, -32602, format!("unknown tool: {other}"));
         }
@@ -302,6 +401,20 @@ fn call_build_context(runtime: &LatticeRuntime, args: Value) -> Result<Value, Ap
     serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
 }
 
+fn call_get_dataset_schema(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
+    let params: DatasetInspectParams =
+        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    let response = api_get_dataset_schema(runtime, params)?;
+    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
+}
+
+fn call_profile_dataset(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
+    let params: DatasetInspectParams =
+        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    let response = api_profile_dataset(runtime, params)?;
+    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
+}
+
 fn call_create_proposal(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
     let params: CreateProposalParams =
         serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
@@ -330,6 +443,34 @@ fn call_propose_page(runtime: &LatticeRuntime, args: Value) -> Result<Value, Api
     serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
 }
 
+fn call_propose_resource(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
+    let params: ProposeResourceParams =
+        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    let response = api_propose_resource(runtime, params)?;
+    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
+}
+
+fn call_propose_workflow(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
+    let params: ProposeYamlParams =
+        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    let response = api_propose_workflow(runtime, params)?;
+    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
+}
+
+fn call_propose_interface(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
+    let params: ProposeYamlParams =
+        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    let response = api_propose_interface(runtime, params)?;
+    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
+}
+
+fn call_propose_artifact(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
+    let params: ProposeYamlParams =
+        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    let response = api_propose_artifact(runtime, params)?;
+    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
+}
+
 fn ok(id: Value, result: Value) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "result": result })
 }
@@ -345,10 +486,10 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn tools_list_includes_eight_tools() {
+    fn tools_list_includes_inspect_and_propose_helpers() {
         let tools = tool_descriptors();
         let arr = tools.as_array().unwrap();
-        assert_eq!(arr.len(), 8);
+        assert_eq!(arr.len(), 14);
         let names: Vec<&str> = arr.iter().filter_map(|t| t["name"].as_str()).collect();
         assert_eq!(
             names,
@@ -357,10 +498,16 @@ mod tests {
                 "read",
                 "related",
                 "build_context",
+                "get_dataset_schema",
+                "profile_dataset",
                 "create_proposal",
                 "list_proposals",
                 "get_proposal",
-                "propose_page"
+                "propose_page",
+                "propose_resource",
+                "propose_workflow",
+                "propose_interface",
+                "propose_artifact"
             ]
         );
     }
@@ -454,6 +601,65 @@ mod tests {
                 .as_str()
                 .unwrap(),
             "mcp"
+        );
+    }
+
+    #[test]
+    fn tools_call_propose_workflow_and_dataset_schema() {
+        let dir = TempDir::new().unwrap();
+        Workspace::init(dir.path(), "MCP").unwrap();
+        lattice_datasets::Dataset::create(&dir.path().join("Facts.dataset"), "Facts", None)
+            .unwrap();
+        let runtime = LatticeRuntime::new();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        let schema_req = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(json!(10)),
+            method: "tools/call".into(),
+            params: json!({
+                "name": "get_dataset_schema",
+                "arguments": { "root": root, "path": "Facts.dataset" }
+            }),
+        };
+        let schema_resp = dispatch(&runtime, &schema_req).unwrap();
+        assert_eq!(schema_resp["result"]["isError"], false);
+        assert_eq!(
+            schema_resp["result"]["structuredContent"]["empty"].as_bool(),
+            Some(true)
+        );
+
+        let yaml = r#"format: lattice-workflow
+version: 1
+name: Demo
+enabled: true
+trigger:
+  type: manual
+steps:
+  - id: notify
+    action: notification
+    with:
+      message: hi
+"#;
+        let wf_req = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(json!(11)),
+            method: "tools/call".into(),
+            params: json!({
+                "name": "propose_workflow",
+                "arguments": {
+                    "root": root,
+                    "path": "Automations/Demo.workflow.yaml",
+                    "content": yaml
+                }
+            }),
+        };
+        let wf_resp = dispatch(&runtime, &wf_req).unwrap();
+        assert_eq!(wf_resp["result"]["isError"], false);
+        assert!(!dir.path().join("Automations/Demo.workflow.yaml").exists());
+        assert_eq!(
+            wf_resp["result"]["structuredContent"]["proposal"]["commands"][0]["type"],
+            "resource-create"
         );
     }
 }
