@@ -1,0 +1,25 @@
+format: lattice-workflow
+version: 1
+name: Retry and parallel fixture
+enabled: true
+trigger:
+  type: manual
+steps:
+  - id: notify-with-retry
+    action: notification
+    retry:
+      max_attempts: 3
+      backoff_seconds: 0
+    with:
+      message: retried notification
+  - id: fan
+    action: parallel
+    parallel:
+      - id: left
+        action: notification
+        with:
+          message: left
+      - id: right
+        action: notification
+        with:
+          message: right
