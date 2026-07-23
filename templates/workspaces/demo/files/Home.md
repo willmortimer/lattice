@@ -86,38 +86,44 @@ unavailable banner.
 20. Open the new page (and optionally embed it from this Home after approve).
 21. Optional SDK story: open `Tasks/ProposePage.task` → **Run** (needs injected
     `lattice` / `uv`) → approve `Proposals/FromSdk.task.md`.
-22. Optional MCP story (daemon): `create_proposal` / `propose_page` tools — same
+22. Optional agent seed: open `Tasks/AgentFirstLook.task` → **Run** → inspect
+    Orders/Events → approve `CRM.data/interfaces/AgentDigest.interface.yaml` in the
+    inbox → open **Interfaces → Agent digest** (see [[Research/Agent first look]]).
+23. Optional MCP story (daemon): `get_dataset_schema` / `profile_dataset` →
+    `propose_interface` — same inbox path; sample transcript in
+    `docs/dev/first-look-agent-mcp.md`.
+24. Optional MCP page proposal: `create_proposal` / `propose_page` tools — same
     Proposals inbox path as friday demo steps 16–18.
-23. Optional derived: open `Derived/ContactBrief.derived.yaml` (stale) → **Rebuild**
+25. Optional derived: open `Derived/ContactBrief.derived.yaml` (stale) → **Rebuild**
     → edit `Derived/input.txt` → confirm stale again → Rebuild.
 
 ### Analytical datasets (DuckDB / Vega-Lite)
 
-24. Open `Data/Events.dataset` → **Preview** — Perspective grid over Hive Parquet (`facts/year=2026/month=07/`).
-25. Switch to **Chart** — auto Vega-Lite from the same Arrow IPC query.
-26. Switch to **Profile** — DuckDB `SUMMARIZE` column stats.
-27. Open `Dashboards/Signups by region.vl.json` — chart resource bound with `read_parquet(...)`.
-28. Optional CLI: `lattice dataset query-annotated Data/Events.dataset --json` (review overlay in `annotations.sqlite`).
+26. Open `Data/Events.dataset` → **Preview** — Perspective grid over Hive Parquet (`facts/year=2026/month=07/`).
+27. Switch to **Chart** — auto Vega-Lite from the same Arrow IPC query.
+28. Switch to **Profile** — DuckDB `SUMMARIZE` column stats.
+29. Open `Dashboards/Signups by region.vl.json` — chart resource bound with `read_parquet(...)`.
+30. Optional CLI: `lattice dataset query-annotated Data/Events.dataset --json` (review overlay in `annotations.sqlite`).
 
 ### Orders dataset & multi-series charts
 
-29. Open `Data/Orders.dataset` → **Preview** — ~3 000 synthetic retail rows across `facts/year=2026/month=0{1,2,3}/`.
-30. Open `Dashboards/Revenue by region and category.vl.json` — stacked bars (region × category).
-31. Open `Dashboards/Revenue by day.vl.json` — daily revenue time series (Jan–Mar 2026).
-32. Open `Dashboards/Revenue by channel.vl.json` — layered channel comparison (revenue bars + order counts).
+31. Open `Data/Orders.dataset` → **Preview** — ~3 000 synthetic retail rows across `facts/year=2026/month=0{1,2,3}/`.
+32. Open `Dashboards/Revenue by region and category.vl.json` — stacked bars (region × category).
+33. Open `Dashboards/Revenue by day.vl.json` — daily revenue time series (Jan–Mar 2026).
+34. Open `Dashboards/Revenue by channel.vl.json` — layered channel comparison (revenue bars + order counts).
 
 ### Places dataset (MapLibre lon/lat)
 
-33. Open `Data/Places.dataset` → **Preview** — ~20 named points with plain `lon` / `lat` doubles (WGS84) under `facts/places.parquet`.
-34. Switch to **Map** — offline MapLibre markers (`place_id`, `name`, `lon`, `lat`; solid `--lt-*` style, no remote tile basemap).
+35. Open `Data/Places.dataset` → **Preview** — ~20 named points with plain `lon` / `lat` doubles (WGS84) under `facts/places.parquet`.
+36. Switch to **Map** — offline MapLibre markers (`place_id`, `name`, `lon`, `lat`; solid `--lt-*` style, no remote tile basemap).
 
 ### Resource tree
 
-35. Create a folder under `Projects/` (context menu or **New folder**).
-36. Press **⌘Z** to undo the folder creation.
-37. Move [[Product/Vision]] into another folder; accept link repair when prompted.
-38. **⌘-click** two pages, drag to a folder (multi-select move).
-39. Select multiple items and delete — confirm the batch operation.
+37. Create a folder under `Projects/` (context menu or **New folder**).
+38. Press **⌘Z** to undo the folder creation.
+39. Move [[Product/Vision]] into another folder; accept link repair when prompted.
+40. **⌘-click** two pages, drag to a folder (multi-select move).
+41. Select multiple items and delete — confirm the batch operation.
 
 ### Where to look next
 
