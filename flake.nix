@@ -416,7 +416,7 @@
               done
               if [ -d "$app_src/Contents/Frameworks" ]; then
                 find "$app_src/Contents/Frameworks" -type f \( -perm -111 -o -name '*.dylib' -o -name '*.so' \) -print0 |
-                  while IFS= read -r -d '''' path; do
+                  while IFS= read -r -d $'\0' path; do
                     sign_bin "$path"
                   done
               fi
