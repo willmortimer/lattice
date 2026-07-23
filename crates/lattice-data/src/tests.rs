@@ -2201,3 +2201,82 @@ fn enum_and_multi_enum_columns_round_trip() {
     );
 }
 
+#[test]
+fn attachment_column_round_trip() {
+    use crate::app::app_manifest_path;
+    use crate::NewColumn;
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("Files.data");
+    let mut app = DataApp::create(&package_path, "Files", "items").unwrap();
+    assert!(package_path.join("attachments").is_dir());
+
+    app.add_columns("items", &[NewColumn::new("files", FieldType::Attachment)])
+        .unwrap();
+
+    let columns = app.columns("items").unwrap();
+    let files = columns
+        .iter()
+        .find(|column| column.name == "files")
+        .expect("files");
+    assert_eq!(files.field_type, FieldType::Attachment);
+
+    let manifest_text = std::fs::read_to_string(app_manifest_path(&package_path)).unwrap();
+    assert!(manifest_text.contains("type: attachment"));
+
+    let source = dir.path().join("note.txt");
+    std::fs::write(&source, b"hello").unwrap();
+    let relative = app.add_attachment_file(&source).unwrap();
+    assert!(relative.starts_with("attachments/"));
+    assert!(package_path.join(&relative).is_file());
+
+    let row_id = app
+        .insert_row(
+            "items",
+            &BTreeMap::from([(
+                "files".into(),
+                CellValue::Attachment {
+                    paths: vec![relative.clone()],
+                },
+            )]),
+        )
+        .unwrap();
+
+    let rows = app.list_rows("items", 10, 0).unwrap();
+    let row = rows.iter().find(|row| row.id == row_id).expect("row");
+    assert_eq!(
+        row.values.get("files"),
+        Some(&CellValue::Attachment {
+            paths: vec![relative.clone()],
+        })
+    );
+
+    let rejected = app
+        .update_row(
+            "items",
+            &row_id,
+            &BTreeMap::from([(
+                "files".into(),
+                CellValue::Attachment {
+                    paths: vec!["../escape.txt".into()],
+                },
+            )]),
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(rejected.contains("attachments/"));
+
+    app.remove_attachment_file(&relative).unwrap();
+    assert!(!package_path.join(&relative).exists());
+
+    let reopened = DataApp::open(&package_path).unwrap();
+    let columns = reopened.columns("items").unwrap();
+    assert_eq!(
+        columns
+            .iter()
+            .find(|column| column.name == "files")
+            .map(|column| column.field_type),
+        Some(FieldType::Attachment)
+    );
+}
+

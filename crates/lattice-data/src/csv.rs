@@ -57,9 +57,10 @@ pub fn parse_field_type_name(value: &str) -> Result<FieldType> {
         "formula" => Ok(FieldType::Formula),
         "enum" => Ok(FieldType::Enum),
         "multi_enum" => Ok(FieldType::MultiEnum),
+        "attachment" => Ok(FieldType::Attachment),
         other => Err(Error::table(
             "csv",
-            format!("unsupported field type {other:?}; expected text, long_text, integer, decimal, boolean, date, relation, lookup, rollup, formula, enum, or multi_enum"),
+            format!("unsupported field type {other:?}; expected text, long_text, integer, decimal, boolean, date, relation, lookup, rollup, formula, enum, multi_enum, or attachment"),
         )),
     }
 }
@@ -129,6 +130,23 @@ pub fn cell_from_csv(text: &str, field_type: FieldType) -> Result<CellValue> {
                     .collect()
             };
             Ok(CellValue::MultiEnum { values })
+        }
+        FieldType::Attachment => {
+            let paths: Vec<String> = if trimmed.starts_with('[') {
+                serde_json::from_str(trimmed).map_err(|_| {
+                    Error::table(
+                        "csv",
+                        format!("invalid attachment JSON array {trimmed:?}"),
+                    )
+                })?
+            } else {
+                trimmed
+                    .split(',')
+                    .map(|part| part.trim().to_string())
+                    .filter(|part| !part.is_empty())
+                    .collect()
+            };
+            Ok(CellValue::Attachment { paths })
         }
         FieldType::Lookup => Err(Error::table(
             "csv",

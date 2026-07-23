@@ -19,7 +19,8 @@ export type RecordFieldEditorKind =
   | "rollup"
   | "formula"
   | "enum"
-  | "multi_enum";
+  | "multi_enum"
+  | "attachment";
 
 export function fieldEditorKind(fieldType: FieldType): RecordFieldEditorKind {
   switch (fieldType) {
@@ -44,6 +45,8 @@ export function fieldEditorKind(fieldType: FieldType): RecordFieldEditorKind {
       return "enum";
     case "multi_enum":
       return "multi_enum";
+    case "attachment":
+      return "attachment";
     case "text":
       return "text";
     default: {
@@ -77,6 +80,8 @@ export function fieldTypeLabel(fieldType: FieldType): string {
       return "Enum";
     case "multi_enum":
       return "Multi enum";
+    case "attachment":
+      return "Attachment";
     case "text":
       return "Text";
     default: {
@@ -89,6 +94,9 @@ export function fieldTypeLabel(fieldType: FieldType): string {
 export function draftValueFromCell(value: CellValue | undefined, fieldType: FieldType): string {
   if (fieldType === "relation") {
     return relationDraftFromIds(extractRelationIds(value));
+  }
+  if (fieldType === "attachment") {
+    return attachmentDraftFromPaths(extractAttachmentPaths(value));
   }
   return cellValueToDisplay(value);
 }
@@ -105,6 +113,9 @@ export function parseDraftField(text: string, fieldType: FieldType): CellValue {
   if (fieldType === "relation") {
     return relationCellValue(parseRelationDraft(text));
   }
+  if (fieldType === "attachment") {
+    return { Attachment: { paths: parseAttachmentDraft(text) } };
+  }
   return displayToCellValue(text, fieldType);
 }
 
@@ -115,6 +126,12 @@ function draftFieldChanged(
 ): boolean {
   if (fieldType === "relation") {
     return !relationIdsEqual(extractRelationIds(current), parseRelationDraft(draftText));
+  }
+  if (fieldType === "attachment") {
+    const currentPaths = extractAttachmentPaths(current);
+    const nextPaths = parseAttachmentDraft(draftText);
+    if (currentPaths.length !== nextPaths.length) return true;
+    return currentPaths.some((path, index) => path !== nextPaths[index]);
   }
   return cellValueToDisplay(current) !== cellValueToDisplay(parseDraftField(draftText, fieldType));
 }
@@ -188,6 +205,7 @@ export function validateDraftField(text: string, fieldType: FieldType): string |
     }
     case "enum":
     case "multi_enum":
+    case "attachment":
     case "text":
     case "long_text":
     case "boolean":
@@ -224,6 +242,8 @@ export function emptyDraftValues(columns: DataColumn[]): Record<string, string> 
       draft[column.name] = "false";
     } else if (column.field_type === "relation") {
       draft[column.name] = relationDraftFromIds([]);
+    } else if (column.field_type === "attachment") {
+      draft[column.name] = attachmentDraftFromPaths([]);
     } else {
       draft[column.name] = "";
     }
@@ -247,7 +267,12 @@ export function collectFormValues(
       continue;
     }
     const text = draft[column.name] ?? "";
-    if (!text.trim() && column.field_type !== "boolean" && column.field_type !== "relation") {
+    if (
+      !text.trim() &&
+      column.field_type !== "boolean" &&
+      column.field_type !== "relation" &&
+      column.field_type !== "attachment"
+    ) {
       continue;
     }
     values[column.name] = parseDraftField(text, column.field_type);
@@ -289,4 +314,50 @@ export function toggleMultiEnumDraftValue(
       : [...current, option]
     : current.filter((value) => value !== option);
   return multiEnumDraftFromValues(next);
+}
+
+export function extractAttachmentPaths(value: CellValue | undefined): string[] {
+  if (!value || !("Attachment" in value)) return [];
+  const paths = value.Attachment?.paths;
+  return Array.isArray(paths) ? paths.filter((path) => typeof path === "string") : [];
+}
+
+export function parseAttachmentDraft(text: string): string[] {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (Array.isArray(parsed) && parsed.every((entry) => typeof entry === "string")) {
+        return parsed;
+      }
+    } catch {
+      // Fall through to comma-separated parsing.
+    }
+  }
+  return trimmed
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+export function attachmentDraftFromPaths(paths: string[]): string {
+  return JSON.stringify(paths);
+}
+
+export function attachmentFileName(path: string): string {
+  const parts = path.split(/[/\\]/);
+  return parts[parts.length - 1] || path;
+}
+
+export function addAttachmentDraftPath(draftText: string, path: string): string {
+  const current = parseAttachmentDraft(draftText);
+  if (current.includes(path)) {
+    return attachmentDraftFromPaths(current);
+  }
+  return attachmentDraftFromPaths([...current, path]);
+}
+
+export function removeAttachmentDraftPath(draftText: string, path: string): string {
+  return attachmentDraftFromPaths(parseAttachmentDraft(draftText).filter((entry) => entry !== path));
 }

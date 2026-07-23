@@ -1612,8 +1612,9 @@ fn parse_field_type(value: &str) -> Result<FieldType> {
         "formula" => Ok(FieldType::Formula),
         "enum" => Ok(FieldType::Enum),
         "multi_enum" => Ok(FieldType::MultiEnum),
+        "attachment" => Ok(FieldType::Attachment),
         other => bail!(
-            "unknown field type {other:?}; expected text, long_text, integer, decimal, boolean, date, relation, lookup, rollup, formula, enum, or multi_enum"
+            "unknown field type {other:?}; expected text, long_text, integer, decimal, boolean, date, relation, lookup, rollup, formula, enum, multi_enum, or attachment"
         ),
     }
 }

@@ -424,7 +424,9 @@ fn cell_to_eval(cell: Option<&CellValue>) -> EvalValue {
                 EvalValue::Text(text.clone())
             }
         }
-        Some(CellValue::Lookup { values }) | Some(CellValue::MultiEnum { values }) => {
+        Some(CellValue::Lookup { values })
+        | Some(CellValue::MultiEnum { values })
+        | Some(CellValue::Attachment { paths: values }) => {
             if values.is_empty() {
                 EvalValue::Null
             } else {
