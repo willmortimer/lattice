@@ -108,9 +108,41 @@ no firing loop yet). `enabled: false` skips automatic triggers; manual Run still
 executes.
 
 v1 steps: `task.run` (delegates to TaskRunner), `proposal.create` (source type
-`workflow`), optional `notification` (log only). Unknown actions/triggers are
-rejected at parse time. Run history is stored under `.lattice/workflows/runs/`.
+`workflow`), optional `notification` (log only). Leaf steps may set optional
+`retry` (`max_attempts` ≥ 1, `backoff_seconds` sleep between failures). A step
+with a non-empty `parallel` child list (action `parallel` or omitted) runs those
+children concurrently (bounded, then join) before the next top-level step.
+Unknown actions/triggers are rejected at parse time. Run history is stored under
+`.lattice/workflows/runs/` (step results may include `attempts` when > 1).
 Schedule firing, durable daemon jobs, and a visual editor remain out of scope.
+
+Example with retry and parallel fan-out:
+
+```yaml
+steps:
+  - id: flaky-task
+    action: task.run
+    retry:
+      max_attempts: 3
+      backoff_seconds: 2
+    with:
+      task: Flaky.task
+  - id: fan
+    action: parallel
+    parallel:
+      - id: left
+        action: notification
+        with:
+          message: left
+      - id: right
+        action: notification
+        with:
+          message: right
+  - id: after
+    action: notification
+    with:
+      message: joined
+```
 
 Earlier illustrative format (broader than v1):
 
