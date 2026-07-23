@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::fmt;
+use std::path::Path;
 use std::str::FromStr;
 
 use rusqlite::types::ValueRef;
@@ -27,6 +28,8 @@ pub enum FieldType {
     Enum,
     /// Multi-select from a fixed list of string options (stored as JSON TEXT array).
     MultiEnum,
+    /// File attachments stored as package-relative paths under `attachments/` (JSON TEXT array).
+    Attachment,
 }
 
 /// Aggregate function for [`FieldType::Rollup`].
@@ -90,8 +93,9 @@ impl FieldType {
             | FieldType::Lookup
             | FieldType::Rollup
             | FieldType::Formula
-            | FieldType::Enum
-            | FieldType::MultiEnum => "TEXT",
+            |             FieldType::Enum
+            | FieldType::MultiEnum
+            | FieldType::Attachment => "TEXT",
             FieldType::Integer | FieldType::Boolean => "INTEGER",
             FieldType::Decimal => "REAL",
         }
@@ -132,6 +136,7 @@ impl fmt::Display for FieldType {
             FieldType::Formula => write!(f, "formula"),
             FieldType::Enum => write!(f, "enum"),
             FieldType::MultiEnum => write!(f, "multi_enum"),
+            FieldType::Attachment => write!(f, "attachment"),
         }
     }
 }
@@ -177,6 +182,10 @@ pub enum CellValue {
     MultiEnum {
         values: Vec<String>,
     },
+    /// Package-relative paths for [`FieldType::Attachment`] (under `attachments/`).
+    Attachment {
+        paths: Vec<String>,
+    },
 }
 
 impl CellValue {
@@ -200,6 +209,11 @@ impl CellValue {
             CellValue::MultiEnum { values } => {
                 let encoded =
                     serde_json::to_string(values).expect("multi_enum values serialize to JSON");
+                rusqlite::types::Value::Text(encoded)
+            }
+            CellValue::Attachment { paths } => {
+                let encoded =
+                    serde_json::to_string(paths).expect("attachment paths serialize to JSON");
                 rusqlite::types::Value::Text(encoded)
             }
         }
@@ -226,7 +240,8 @@ impl CellValue {
                 | FieldType::Rollup
                 | FieldType::Formula
                 | FieldType::Enum
-                | FieldType::MultiEnum => Err(rusqlite::Error::InvalidColumnType(
+                | FieldType::MultiEnum
+                | FieldType::Attachment => Err(rusqlite::Error::InvalidColumnType(
                     0,
                     field_type.to_string(),
                     value_ref.data_type(),
@@ -239,7 +254,8 @@ impl CellValue {
                 | FieldType::Rollup
                 | FieldType::Formula
                 | FieldType::Enum
-                | FieldType::MultiEnum => Err(rusqlite::Error::InvalidColumnType(
+                | FieldType::MultiEnum
+                | FieldType::Attachment => Err(rusqlite::Error::InvalidColumnType(
                     0,
                     field_type.to_string(),
                     value_ref.data_type(),
@@ -284,6 +300,16 @@ impl CellValue {
                         })?;
                         Ok(CellValue::MultiEnum { values })
                     }
+                    FieldType::Attachment => {
+                        let paths: Vec<String> = serde_json::from_str(&text).map_err(|_| {
+                            rusqlite::Error::InvalidColumnType(
+                                0,
+                                text,
+                                rusqlite::types::Type::Text,
+                            )
+                        })?;
+                        Ok(CellValue::Attachment { paths })
+                    }
                     FieldType::Lookup => Ok(CellValue::Lookup { values: Vec::new() }),
                     FieldType::Rollup => Ok(CellValue::Rollup { value: None }),
                     FieldType::Formula => Ok(CellValue::Formula { value: None }),
@@ -317,6 +343,16 @@ impl CellValue {
             }
             CellValue::Relation { record_ids } => record_ids.join(", "),
             CellValue::MultiEnum { values } => values.join(", "),
+            CellValue::Attachment { paths } => paths
+                .iter()
+                .map(|path| {
+                    Path::new(path)
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or(path.as_str())
+                })
+                .collect::<Vec<_>>()
+                .join(", "),
             CellValue::Lookup { values } => values.join(", "),
             CellValue::Rollup { value: None } => String::new(),
             CellValue::Rollup { value: Some(n) } => {

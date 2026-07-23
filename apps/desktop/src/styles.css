@@ -4550,6 +4550,71 @@ html[data-motion="always"] *::after {
   background: var(--lt-bg-raise);
 }
 
+.record-detail-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.record-detail-attachments-empty {
+  margin: 0;
+  color: var(--lt-muted);
+  font-size: 12px;
+}
+
+.record-detail-attachments-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.record-detail-attachments-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--lt-line);
+  border-radius: 6px;
+  background: var(--lt-panel);
+}
+
+.record-detail-attachments-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--lt-text);
+  font-size: 13px;
+}
+
+.record-detail-attachments-remove,
+.record-detail-attachments-add {
+  flex-shrink: 0;
+  border: 1px solid var(--lt-line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--lt-text-soft);
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.record-detail-attachments-remove:hover,
+.record-detail-attachments-add:hover:not(:disabled) {
+  color: var(--lt-text);
+  border-color: var(--lt-accent);
+}
+
+.record-detail-attachments-add:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .record-detail-relation-option {
   display: grid;
   grid-template-columns: auto 1fr auto;

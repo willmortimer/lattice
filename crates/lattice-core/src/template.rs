@@ -758,10 +758,13 @@ fn seed_column_to_new_column<'a>(
             ),
         });
     }
-    if matches!(field_type, FieldType::Enum | FieldType::MultiEnum) {
+    if matches!(
+        field_type,
+        FieldType::Enum | FieldType::MultiEnum | FieldType::Attachment
+    ) {
         return Err(Error::TemplateValidation {
             message: format!(
-                "data package {}: enum / multi_enum columns are not supported in template seeds yet",
+                "data package {}: enum / multi_enum / attachment columns are not supported in template seeds yet",
                 package_path
             ),
         });
@@ -1277,11 +1280,13 @@ fn cell_from_json(
                 FieldType::Text | FieldType::LongText | FieldType::Date | FieldType::Enum => {
                     Ok(CellValue::Text(number.to_string()))
                 }
-                FieldType::Relation | FieldType::MultiEnum => Err(Error::TemplateValidation {
-                    message: format!(
-                        "data package {package_path}: relation/multi_enum cells must be a JSON array"
-                    ),
-                }),
+                FieldType::Relation | FieldType::MultiEnum | FieldType::Attachment => {
+                    Err(Error::TemplateValidation {
+                        message: format!(
+                            "data package {package_path}: relation/multi_enum/attachment cells must be a JSON array"
+                        ),
+                    })
+                }
                 FieldType::Lookup => Err(Error::TemplateValidation {
                     message: format!(
                         "data package {package_path}: lookup columns are read-only and cannot be seeded"
@@ -1346,6 +1351,11 @@ fn cell_from_json(
                         "data package {package_path}: multi_enum cells must be a JSON array of strings"
                     ),
                 }),
+                FieldType::Attachment => Err(Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path}: attachment cells must be a JSON array of paths"
+                    ),
+                }),
             }
         }
         serde_json::Value::Array(items) => match field_type {
@@ -1377,6 +1387,20 @@ fn cell_from_json(
                 }
                 Ok(CellValue::MultiEnum { values })
             }
+            FieldType::Attachment => {
+                let mut paths = Vec::with_capacity(items.len());
+                for item in items {
+                    let Some(text) = item.as_str() else {
+                        return Err(Error::TemplateValidation {
+                            message: format!(
+                                "data package {package_path}: attachment paths must be strings"
+                            ),
+                        });
+                    };
+                    paths.push(text.to_string());
+                }
+                Ok(CellValue::Attachment { paths })
+            }
             _ => Err(Error::TemplateValidation {
                 message: format!(
                     "data package {package_path}: row cells must be JSON primitives or null"
@@ -1405,6 +1429,7 @@ fn parse_field_type(value: &str) -> Option<FieldType> {
         "formula" => Some(FieldType::Formula),
         "enum" => Some(FieldType::Enum),
         "multi_enum" => Some(FieldType::MultiEnum),
+        "attachment" => Some(FieldType::Attachment),
         _ => None,
     }
 }

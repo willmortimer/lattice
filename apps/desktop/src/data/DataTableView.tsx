@@ -1428,6 +1428,9 @@ export function DataTableView({
             <DataFormView
               columns={snapshot.columns}
               rows={displayRows}
+              root={root}
+              packageRelPath={relPath}
+              nativeFileOps={!demoMutate}
               readOnly={busy || stale}
               busy={busy}
               onSubmit={createRecord}
@@ -1542,6 +1545,9 @@ export function DataTableView({
             activeTable={snapshot.default_table}
             rows={snapshot.rows}
             relationTargets={snapshot.relation_targets}
+            root={root}
+            packageRelPath={relPath}
+            nativeFileOps={!demoMutate}
             readOnly={busy || stale}
             saving={busy}
             onClose={() => setDetailRowId(null)}
@@ -1557,6 +1563,9 @@ export function DataTableView({
             columns={snapshot.columns}
             defaultTable={snapshot.default_table}
             relationTargets={snapshot.relation_targets}
+            root={root}
+            packageRelPath={relPath}
+            nativeFileOps={!demoMutate}
             busy={busy}
             readOnly={busy || stale}
             loadError={formsError}

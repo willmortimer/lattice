@@ -193,6 +193,8 @@ Source of truth: `crates/lattice-data/src/types.rs` (mirrored in
   read time; see [Formula fields](#formula-fields)).
 - `enum` — single-select from an explicit options list in column metadata.
 - `multi_enum` — multi-select from the same options list (stored as JSON TEXT).
+- `attachment` — list of package-relative file paths under the `.data` package
+  `attachments/` directory (stored as JSON TEXT).
 
 Storage remains ordinary SQLite column types; presentation and semantic metadata
 live in `app.yaml`.
@@ -202,7 +204,6 @@ live in `app.yaml`.
 These are product targets, **not** current `FieldType` variants:
 
 - Rich text; URL, email, phone; currency, percentage.
-- **Attachment column** type (see [Workspace attachments vs attachment columns](#workspace-attachments-vs-attachment-columns)).
 - User; geolocation; JSON.
 - Page/resource and artifact/app references.
 - Generated/AI fields (see [Generated fields](#generated-fields)).
@@ -215,8 +216,13 @@ These are product targets, **not** current `FieldType` variants:
 
 Workspace templates may set `attachmentsDirectory` in the workspace manifest — a
 folder where page and file resources store binary attachments. That setting is
-**not** an attachment column in a `.data` app; `FieldType::Attachment` does not
-exist yet and remains Phase 2+ roadmap work.
+**separate** from `FieldType::Attachment` columns inside a `.data` app.
+
+Attachment **columns** store a JSON array of package-relative paths under the
+package-local `attachments/` directory (for example
+`attachments/spec.pdf`). Uploading through record detail or form UI copies the
+chosen file into that directory via Tauri `add_data_attachment`; cell values
+remain ordinary command/transaction writes.
 
 ## Linked records
 
@@ -472,8 +478,9 @@ layout:
 Forms map input into transactions:
 
 - Create or update records.
-- Upload attachments (attachment **column** type not shipped; workspace
-  `attachmentsDirectory` is separate — see
+- Upload attachments (`FieldType::Attachment` columns store package-relative
+  paths under the `.data` package `attachments/` directory; workspace
+  `attachmentsDirectory` remains separate — see
   [Workspace attachments vs attachment columns](#workspace-attachments-vs-attachment-columns)).
 - Create related documents.
 - Create relationships.

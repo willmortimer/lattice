@@ -185,6 +185,8 @@ pub fn run() {
             data::insert_record,
             data::update_record,
             data::delete_record,
+            data::add_data_attachment,
+            data::remove_data_attachment,
             data::list_data_views,
             data::load_data_view,
             data::save_data_view,
