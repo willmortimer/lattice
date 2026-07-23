@@ -29,6 +29,17 @@ pub const ACTION_HOME: &str = "app.home";
 pub const ACTION_FILES: &str = "app.files";
 pub const ACTION_QUIT: &str = "app.quit";
 
+pub const ACTION_WORKFLOW_OPEN_LATEST: &str = "workflow.open-latest";
+pub const ACTION_WORKFLOW_OPEN_PREFIX: &str = "workflow.open.";
+
+/// One running workflow row in the tray menu.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrayRunningJob {
+    pub execution_id: String,
+    pub workflow_path: String,
+    pub label: String,
+}
+
 #[cfg(debug_assertions)]
 pub const ACTION_OPEN_INSPECTOR: &str = "developer.open-inspector";
 #[cfg(debug_assertions)]
@@ -54,11 +65,43 @@ pub fn emit_ui_action(app: &AppHandle, action: &str) {
     }
 }
 
+#[derive(Clone, Serialize)]
+struct OpenResourcePayload {
+    root: String,
+    path: String,
+}
+
+fn open_workflow_resource(app: &AppHandle, root: &str, workflow_path: &str) {
+    tray::show_main_window(app);
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.emit(
+            "open-resource",
+            OpenResourcePayload {
+                root: root.to_string(),
+                path: workflow_path.to_string(),
+            },
+        );
+    }
+}
+
 pub fn handle_action(app: &AppHandle, id: &str) {
     match id {
         ACTION_SHOW => tray::show_main_window(app),
         ACTION_QUICK_NOTE => tray::show_quick_note(app),
         ACTION_QUIT => tray::request_quit(app),
+        ACTION_WORKFLOW_OPEN_LATEST => {
+            if let Some((root, workflow_path)) = tray::latest_running_workflow(app) {
+                open_workflow_resource(app, &root, &workflow_path);
+            }
+        }
+        id if id.starts_with(ACTION_WORKFLOW_OPEN_PREFIX) => {
+            let execution_id = id.trim_start_matches(ACTION_WORKFLOW_OPEN_PREFIX);
+            if let Some((root, workflow_path)) =
+                tray::running_workflow_by_id(app, execution_id)
+            {
+                open_workflow_resource(app, &root, &workflow_path);
+            }
+        }
         ACTION_SETTINGS
         | ACTION_SEARCH
         | ACTION_COMMAND_PALETTE
@@ -333,7 +376,10 @@ pub fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 }
 
 /// Tray / status-item menu (macOS menu-bar residency).
-pub fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+pub fn build_tray_menu(
+    app: &AppHandle,
+    running: &[TrayRunningJob],
+) -> tauri::Result<Menu<tauri::Wry>> {
     let show = MenuItem::with_id(app, ACTION_SHOW, "Show Lattice", true, None::<&str>)?;
     let quick_note =
         MenuItem::with_id(app, ACTION_QUICK_NOTE, "Quick Note", true, Some("CmdOrCtrl+N"))?;
@@ -359,20 +405,67 @@ pub fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let sep2 = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, ACTION_QUIT, "Quit Lattice", true, None::<&str>)?;
 
-    Menu::with_items(
-        app,
-        &[
-            &show,
-            &quick_note,
-            &new_page,
-            &sep1,
-            &search,
-            &settings,
-            &open_workspace,
-            &sep2,
-            &quit,
-        ],
-    )
+    let mut job_items = Vec::new();
+    let mut job_refs: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = Vec::new();
+    let mut jobs_sep = None;
+    let mut summary = None;
+    let mut open_latest = None;
+
+    if !running.is_empty() {
+        jobs_sep = Some(PredefinedMenuItem::separator(app)?);
+        let summary_label = if running.len() == 1 {
+            "1 workflow running…".to_string()
+        } else {
+            format!("{} workflows running…", running.len())
+        };
+        summary = Some(MenuItem::with_id(
+            app,
+            "workflow.running-summary",
+            &summary_label,
+            false,
+            None::<&str>,
+        )?);
+        if running.len() > 1 {
+            open_latest = Some(MenuItem::with_id(
+                app,
+                ACTION_WORKFLOW_OPEN_LATEST,
+                "Open Latest Workflow",
+                true,
+                None::<&str>,
+            )?);
+        }
+        for job in running {
+            let action_id = format!("{ACTION_WORKFLOW_OPEN_PREFIX}{}", job.execution_id);
+            job_items.push(MenuItem::with_id(app, &action_id, &job.label, true, None::<&str>)?);
+        }
+        if let Some(sep) = jobs_sep.as_ref() {
+            job_refs.push(sep);
+        }
+        if let Some(item) = summary.as_ref() {
+            job_refs.push(item);
+        }
+        if let Some(item) = open_latest.as_ref() {
+            job_refs.push(item);
+        }
+        for item in &job_items {
+            job_refs.push(item);
+        }
+    }
+
+    let mut items: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = vec![
+        &show,
+        &quick_note,
+        &new_page,
+        &sep1,
+        &search,
+        &settings,
+        &open_workspace,
+    ];
+    items.extend(job_refs);
+    items.push(&sep2);
+    items.push(&quit);
+
+    Menu::with_items(app, &items)
 }
 
 #[cfg(test)]
