@@ -582,6 +582,13 @@ Optional additive fields on the same `InterfaceDef`:
 
 Component types (v1): `metric`, `chart`, `map`, `form`, `data-view`.
 
+`form` tiles embed the same field editors as the package **Forms** panel
+(`PackageFormFill`): scalar, relation, enum / multi-enum, and attachment fields
+with draft validation. **Submit** calls `insert_record` with the bound form id
+(`formName`), which fires enabled `form.submitted` workflows. Errors and submit
+progress stay local to the tile. The browser demo shows fields but disables
+submit with the standard native-only notice.
+
 Bindings use shared `BindingSpec` (`resource` | `saved-view` | `sqlite-query` |
 `duckdb-query` | `notebook-output` | `task-output`) with kebab-case `type` tags.
 IPC JSON uses camelCase field names (`cellId`). See

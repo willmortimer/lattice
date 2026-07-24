@@ -147,6 +147,16 @@
   min-height: 14rem;
 }
 
+.lt-interface-pane--form {
+  min-height: 10rem;
+}
+
+.lt-interface-pane--form .package-form-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
 .lt-interface-pane__header {
   margin: 0;
   font-size: 0.8rem;

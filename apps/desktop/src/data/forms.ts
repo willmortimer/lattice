@@ -149,6 +149,22 @@ export function collectPackageFormValues(
   return collectFormValues(draft, columns);
 }
 
+/** Insert a package form row and fire `form.submitted` when `formName` is set. */
+export async function submitPackageFormRecord(options: {
+  root: string;
+  relPath: string;
+  form: FormSummary;
+  values: Record<string, CellValue>;
+}): Promise<{ id: string; revision: string }> {
+  return invoke<{ id: string; revision: string }>("insert_record", {
+    root: options.root,
+    relPath: options.relPath,
+    table: options.form.table,
+    values: options.values,
+    formName: options.form.name,
+  });
+}
+
 export async function listDataForms(root: string, relPath: string): Promise<string[]> {
   return invoke<string[]>("list_data_forms", { root, relPath });
 }
