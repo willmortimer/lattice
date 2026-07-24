@@ -197,15 +197,25 @@ lattice publish export --artifact Artifacts/ContactPulse.artifact --out dist/pul
 Behavior:
 
 - **Page** — Markdown → standalone HTML with inlined `--lt-*` theme tokens
-  (built-in `lattice-slate` by default). No live Lattice process is required to
-  open the result in a browser.
+  (built-in `lattice-slate` by default). Local images and file links are copied
+  into `deps/` with rewritten `src`/`href` values. Missing images fail the
+  export; missing optional link targets are listed as warnings. No live Lattice
+  process is required to open the result in a browser.
 - **Interface** — Loads `*.interface.yaml`, freezes binding query results (SQLite
   when available; otherwise empty placeholder tables) into `snapshot.json`, and
-  writes a read-only HTML dashboard shell.
+  writes a read-only HTML dashboard shell. Referenced Vega-Lite chart specs
+  (`.vl.json`) and attachment files appearing in frozen rows are copied into
+  `deps/`. Missing chart specs fail the export; dataset / live-output bindings
+  that cannot be snapshotted are listed as warnings.
 - **Artifact** — Copies the `.artifact/` package into `--out`, writes
   `snapshot.json`, and injects a small script so named bindings resolve from the
-  frozen snapshot without a host iframe.
+  frozen snapshot without a host iframe. External local file resource bindings
+  are included in the dependency closure when present.
+
+The CLI prints copied dependencies and surfaces missing ones clearly after
+`exported <kind> -> <path>`.
 
 Exports never scrape the live DOM. Cross-filters and live DuckDB dashboards are
-out of scope for this snapshot path; DuckDB bindings export empty placeholders.
+out of scope for this snapshot path; DuckDB bindings export empty placeholders
+and their dataset packages are reported as unsupported for static closure.
 Cloudflare / Starlight docs-site pipelines remain separate (see above).
