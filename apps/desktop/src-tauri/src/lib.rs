@@ -117,6 +117,8 @@ pub fn run() {
             proposals::list_proposals,
             proposals::dismiss_proposal_cmd,
             proposals::apply_proposal_cmd,
+            proposals::preview_proposal_cmd,
+            proposals::validate_proposal_subset_cmd,
             proposals::create_demo_proposal,
             commands::list_history,
             commands::undo_last,

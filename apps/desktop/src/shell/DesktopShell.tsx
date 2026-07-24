@@ -725,6 +725,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
       {proposalReview && (
         <ProposalReviewModal
           proposal={proposalReview}
+          workspaceRoot={snapshot.root}
           busy={busy}
           onAccept={(selectedCommandIndices) => void handleProposalAccept(selectedCommandIndices)}
           onReject={() => void handleProposalReject()}

@@ -6,8 +6,8 @@ use std::path::Path;
 
 use lattice_commands::{
     apply_proposal, create_proposal, dismiss_proposal, list_proposal_summaries, load_proposal,
-    Command as SemanticCommand, ProposalSource, ProposalSourceType, TransactionProposal,
-    TransactionProposalSummary,
+    preview_proposal, validate_proposal_subset, Command as SemanticCommand, ProposalPreview,
+    ProposalSource, ProposalSourceType, TransactionProposal, TransactionProposalSummary,
 };
 use serde::Deserialize;
 
@@ -77,6 +77,30 @@ pub fn apply_proposal_cmd(
     selected_command_indices: Vec<usize>,
 ) -> Result<(), String> {
     apply_proposal(Path::new(&root), &proposal_id, &selected_command_indices)
+        .map_err(command_error_to_string)
+}
+
+/// Workspace-aware per-command previews + subset validity for the review modal.
+#[tauri::command]
+pub fn preview_proposal_cmd(
+    root: String,
+    proposal_id: String,
+    selected_command_indices: Vec<usize>,
+) -> Result<ProposalPreview, String> {
+    let proposal = load_proposal(Path::new(&root), &proposal_id).map_err(command_error_to_string)?;
+    preview_proposal(Path::new(&root), &proposal, &selected_command_indices)
+        .map_err(command_error_to_string)
+}
+
+/// Validate a selected command subset without applying.
+#[tauri::command]
+pub fn validate_proposal_subset_cmd(
+    root: String,
+    proposal_id: String,
+    selected_command_indices: Vec<usize>,
+) -> Result<(), String> {
+    let proposal = load_proposal(Path::new(&root), &proposal_id).map_err(command_error_to_string)?;
+    validate_proposal_subset(Path::new(&root), &proposal, &selected_command_indices)
         .map_err(command_error_to_string)
 }
 

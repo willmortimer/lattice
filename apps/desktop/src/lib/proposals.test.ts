@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import type { TransactionProposal } from "./executionContracts";
-import { commandSummaryLabel, defaultAcceptedCommandIndices } from "./proposals";
+import type { CommandPreviewDetail, TransactionProposal } from "./executionContracts";
+import {
+  commandSummaryLabel,
+  defaultAcceptedCommandIndices,
+  detailExcerpt,
+  previewCommandLabel,
+} from "./proposals";
 
 const sampleProposal: TransactionProposal = {
   id: "prop-1",
@@ -38,5 +43,45 @@ describe("commandSummaryLabel", () => {
 
   it("labels unknown payloads by index", () => {
     expect(commandSummaryLabel(null, 4)).toBe("Command 5");
+  });
+});
+
+describe("previewCommandLabel", () => {
+  it("prefers backend preview summary", () => {
+    expect(
+      previewCommandLabel(
+        {
+          index: 0,
+          commandType: "resource-create",
+          summary: "Create interface Agent digest (1 component)",
+          touchedPaths: ["CRM.data/interfaces/AgentDigest.interface.yaml"],
+          warnings: [],
+        },
+        sampleProposal.commands[0],
+        0,
+      ),
+    ).toBe("Create interface Agent digest (1 component)");
+  });
+});
+
+describe("detailExcerpt", () => {
+  it("returns text and summary excerpts", () => {
+    const textCreate: CommandPreviewDetail = {
+      kind: "text-create",
+      path: "Notes/A.md",
+      contentExcerpt: "# A",
+      truncated: false,
+      byteLen: 3,
+    };
+    expect(detailExcerpt(textCreate)).toBe("# A");
+    expect(
+      detailExcerpt({
+        kind: "interface-summary",
+        path: "x.interface.yaml",
+        excerpt: "format: lattice-interface",
+        truncated: false,
+      }),
+    ).toBe("format: lattice-interface");
+    expect(detailExcerpt(undefined)).toBeNull();
   });
 });

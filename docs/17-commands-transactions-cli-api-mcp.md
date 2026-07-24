@@ -81,6 +81,12 @@ with `source.type: mcp`; they do not apply proposals. Apply remains desktop-only
 Agents can also inspect `.dataset` packages via `get_dataset_schema` /
 `profile_dataset` (bounded reads).
 
+Before accept, the desktop calls `preview_proposal` / `validate_proposal_subset`
+so each command shows a bounded preview (text create/diff, record change,
+workflow/interface/artifact summaries, file-op metadata) and invalid subsets
+(missing create-before-update predecessors, path collisions, AlreadyExists) are
+rejected with Accept disabled.
+
 The review UI shows:
 
 - Files changed.

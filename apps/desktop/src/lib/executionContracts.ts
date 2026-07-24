@@ -88,3 +88,76 @@ export interface TransactionProposalSummary {
   createdAt: string;
   status: ProposalStatus;
 }
+
+/** Bounded per-command detail for proposal review. */
+export type CommandPreviewDetail =
+  | {
+      kind: "text-create";
+      path: string;
+      contentExcerpt: string;
+      truncated: boolean;
+      byteLen: number;
+    }
+  | {
+      kind: "text-diff";
+      path: string;
+      beforeExcerpt?: string;
+      afterExcerpt: string;
+      truncated: boolean;
+    }
+  | {
+      kind: "record-change";
+      path: string;
+      table: string;
+      operation: string;
+      id?: string;
+      fieldSummary: string;
+    }
+  | {
+      kind: "workflow-summary";
+      path: string;
+      name?: string;
+      stepCount?: number;
+      excerpt: string;
+      truncated: boolean;
+    }
+  | {
+      kind: "interface-summary";
+      path: string;
+      name?: string;
+      title?: string;
+      componentCount?: number;
+      excerpt: string;
+      truncated: boolean;
+    }
+  | {
+      kind: "artifact-summary";
+      path: string;
+      title?: string;
+      entrypoint?: string;
+      excerpt: string;
+      truncated: boolean;
+    }
+  | {
+      kind: "file-op";
+      operation: string;
+      paths: string[];
+      metadata?: Record<string, string>;
+    };
+
+export interface CommandPreview {
+  index: number;
+  commandType: string;
+  summary: string;
+  touchedPaths: string[];
+  warnings: string[];
+  detail?: CommandPreviewDetail;
+}
+
+export interface ProposalPreview {
+  proposalId: string;
+  commands: CommandPreview[];
+  subsetValid: boolean;
+  subsetErrors: string[];
+  missingPredecessors: number[];
+}

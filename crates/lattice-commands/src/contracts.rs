@@ -168,6 +168,110 @@ impl TransactionProposal {
     }
 }
 
+/// Bounded per-command detail for proposal review (no full payloads).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum CommandPreviewDetail {
+    /// New text resource (page or UTF-8 file create).
+    #[serde(rename_all = "camelCase")]
+    TextCreate {
+        path: String,
+        content_excerpt: String,
+        truncated: bool,
+        byte_len: usize,
+    },
+    /// Text update with optional on-disk before excerpt.
+    #[serde(rename_all = "camelCase")]
+    TextDiff {
+        path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        before_excerpt: Option<String>,
+        after_excerpt: String,
+        truncated: bool,
+    },
+    /// Table row insert/update/delete.
+    #[serde(rename_all = "camelCase")]
+    RecordChange {
+        path: String,
+        table: String,
+        operation: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
+        field_summary: String,
+    },
+    /// Parsed `*.workflow.yaml` create summary.
+    #[serde(rename_all = "camelCase")]
+    WorkflowSummary {
+        path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        step_count: Option<usize>,
+        excerpt: String,
+        truncated: bool,
+    },
+    /// Parsed `*.interface.yaml` create summary.
+    #[serde(rename_all = "camelCase")]
+    InterfaceSummary {
+        path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        component_count: Option<usize>,
+        excerpt: String,
+        truncated: bool,
+    },
+    /// Parsed `artifact.yaml` create summary.
+    #[serde(rename_all = "camelCase")]
+    ArtifactSummary {
+        path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        entrypoint: Option<String>,
+        excerpt: String,
+        truncated: bool,
+    },
+    /// Rename/move/delete/folder/package ops and other non-text mutations.
+    #[serde(rename_all = "camelCase")]
+    FileOp {
+        operation: String,
+        paths: Vec<String>,
+        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+        metadata: std::collections::BTreeMap<String, String>,
+    },
+}
+
+/// One command's reviewable preview inside a [`ProposalPreview`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommandPreview {
+    pub index: usize,
+    pub command_type: String,
+    pub summary: String,
+    pub touched_paths: Vec<String>,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<CommandPreviewDetail>,
+}
+
+/// Workspace-aware proposal review payload (selected subset validated).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProposalPreview {
+    pub proposal_id: String,
+    pub commands: Vec<CommandPreview>,
+    pub subset_valid: bool,
+    #[serde(default)]
+    pub subset_errors: Vec<String>,
+    /// Earlier unselected command indices inferred as required predecessors.
+    #[serde(default)]
+    pub missing_predecessors: Vec<usize>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
