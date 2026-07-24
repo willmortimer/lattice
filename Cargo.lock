@@ -3146,6 +3146,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-cloud"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "dirs",
+ "http-body-util",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tower",
+ "tracing",
+]
+
+[[package]]
 name = "lattice-commands"
 version = "0.1.0"
 dependencies = [
@@ -3466,6 +3483,17 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+]
+
+[[package]]
+name = "lattice-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "lattice-cloud",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
