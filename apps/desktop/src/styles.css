@@ -623,19 +623,20 @@ html[data-platform="macos"] .startup-splash {
    ========================================================================== */
 
 :root {
-  --lt-max-width: 68ch;
+  /* Editorial reading measure — keep distinct from theme --lt-max-width (shell). */
+  --lt-page-content-width: 68ch;
 }
 
 html[data-page-width="wide"] {
-  --lt-max-width: 96ch;
+  --lt-page-content-width: 96ch;
 }
 
 html[data-page-width="full"] {
-  --lt-max-width: 100%;
+  --lt-page-content-width: 100%;
 }
 
 .markdown-body {
-  max-width: var(--lt-max-width);
+  max-width: var(--lt-page-content-width);
   margin: 0 auto;
   user-select: text;
   cursor: auto;
@@ -831,7 +832,7 @@ html[data-page-width="full"] {
    ========================================================================== */
 
 .page-editor {
-  max-width: var(--lt-max-width);
+  max-width: var(--lt-page-content-width);
   margin: 0 auto;
 }
 
@@ -1656,7 +1657,7 @@ html[data-page-width="full"] {
    ========================================================================== */
 
 .backlinks-footer {
-  max-width: var(--lt-max-width);
+  max-width: var(--lt-page-content-width);
   margin: 40px auto 0;
   padding-top: 20px;
   border-top: 1px solid var(--lt-line);
