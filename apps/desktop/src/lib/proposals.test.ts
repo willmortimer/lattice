@@ -5,7 +5,10 @@ import {
   commandSummaryLabel,
   defaultAcceptedCommandIndices,
   detailExcerpt,
+  filterProposalSummaries,
+  pathsFromSelectedCommands,
   previewCommandLabel,
+  proposalStatusLabel,
 } from "./proposals";
 
 const sampleProposal: TransactionProposal = {
@@ -83,5 +86,76 @@ describe("detailExcerpt", () => {
       }),
     ).toBe("format: lattice-interface");
     expect(detailExcerpt(undefined)).toBeNull();
+  });
+});
+
+describe("pathsFromSelectedCommands", () => {
+  it("collects paths from selected commands", () => {
+    expect(pathsFromSelectedCommands(sampleProposal, [0, 2])).toEqual([
+      "Notes/A.md",
+      "Notes/C.md",
+    ]);
+  });
+
+  it("falls back to affected paths when commands lack paths", () => {
+    expect(
+      pathsFromSelectedCommands({ ...sampleProposal, commands: [null] }, [0]),
+    ).toEqual(["Notes/A.md", "Notes/B.md", "Notes/C.md"]);
+  });
+});
+
+describe("filterProposalSummaries", () => {
+  const summaries = [
+    {
+      id: "1",
+      source: { type: "task" as const, resource: "tasks/a.task" },
+      summary: "Create Notes/A.md",
+      commandCount: 1,
+      affectedPaths: ["Notes/A.md"],
+      warnings: [],
+      createdAt: "2026-07-21T17:00:00Z",
+      status: "pending" as const,
+    },
+    {
+      id: "2",
+      source: { type: "external" as const },
+      summary: "Rejected page",
+      commandCount: 1,
+      affectedPaths: ["Notes/B.md"],
+      warnings: [],
+      createdAt: "2026-07-21T17:01:00Z",
+      status: "rejected" as const,
+    },
+  ];
+
+  it("filters by status, source, and path query", () => {
+    expect(
+      filterProposalSummaries(summaries, {
+        status: "pending",
+        source: "all",
+        pathQuery: "",
+      }),
+    ).toHaveLength(1);
+    expect(
+      filterProposalSummaries(summaries, {
+        status: "all",
+        source: "task",
+        pathQuery: "",
+      })[0]?.id,
+    ).toBe("1");
+    expect(
+      filterProposalSummaries(summaries, {
+        status: "all",
+        source: "all",
+        pathQuery: "notes/b",
+      }),
+    ).toHaveLength(1);
+  });
+});
+
+describe("proposalStatusLabel", () => {
+  it("labels known statuses", () => {
+    expect(proposalStatusLabel("pending")).toBe("Pending");
+    expect(proposalStatusLabel("accepted")).toBe("Accepted");
   });
 });

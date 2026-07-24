@@ -285,6 +285,8 @@ fn governed_loop_smoke_demo_template() {
             warnings: vec![],
             created_at: String::new(),
             status: ProposalStatus::Pending,
+            resolved_at: None,
+            applied_transaction_id: None,
         },
     )
     .expect("dedupe proposal");

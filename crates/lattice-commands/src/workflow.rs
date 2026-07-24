@@ -1286,6 +1286,8 @@ fn execute_leaf_once(
                     warnings: params.warnings,
                     created_at: String::new(),
                     status: Default::default(),
+                    resolved_at: None,
+                    applied_transaction_id: None,
                 },
             )?;
             log.push_str(&format!("created proposal {}\n", created.id));
@@ -2567,6 +2569,8 @@ steps:
                 warnings: vec![],
                 created_at: String::new(),
                 status: Default::default(),
+                resolved_at: None,
+                applied_transaction_id: None,
             },
         )
         .unwrap();
