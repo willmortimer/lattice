@@ -280,7 +280,7 @@ tasks or show the Proposals inbox. Sample MCP JSON-RPC:
 
 | # | Step | Notes |
 | --- | --- | --- |
-| G1 | Profile `Data/Orders.dataset` and `Data/Events.dataset` | Desktop **Profile** tab, MCP `get_dataset_schema` + `profile_dataset`, or task CSV/Parquet inspect |
+| G1 | Profile `Data/Orders.dataset` and `Data/Events.dataset` | Desktop **Profile** tab, MCP `get_dataset_schema` + `profile_dataset`, or task `dataset.schema()` / `dataset.profile()` |
 | G2 | Propose interface or workflow YAML | MCP `propose_interface` / `propose_workflow`, or **Run** `Tasks/AgentFirstLook.task` (`lattice.propose_interface`) |
 | G3 | Open **Proposals** inbox → approve | Creates `CRM.data/interfaces/AgentDigest.interface.yaml` (task/MCP seed) — no apply from MCP |
 | G4 | Open `CRM.data` → **Interfaces** → **Agent digest** | Two metric tiles: Events signups total + Orders revenue total |

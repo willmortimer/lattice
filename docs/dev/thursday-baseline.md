@@ -41,7 +41,7 @@ desktop + site builds).
 | Desktop build | `pnpm --filter @lattice/desktop build` | **FAIL** — `DataTableView.tsx` type errors | ~2s |
 | Site build | `pnpm --filter @lattice/site build` | **PASS** | ~7s |
 | Daemon tests | `cargo test -p lattice-daemon` | **FAIL** — `spawn_helper_launches_binary` | ~288s |
-| Python tests | `cd packages/lattice-py && uv run --with pytest pytest` | **PASS** (8 tests) | ~2s |
+| Python tests | `cd packages/lattice-py && uv run --with pytest --with duckdb --with pyarrow pytest` | **PASS** (13 tests) | ~5s |
 | Theme outputs | `pnpm compile-theme` + `git diff` on generated theme files | **PASS** (no drift) | ~1s |
 | Template outputs | `pnpm compile-templates` + `git diff` on generated template files | **PASS** (no drift) | ~1s |
 
@@ -65,7 +65,7 @@ No feature or behavioral changes beyond fmt/clippy hygiene.
 | `lattice-publish`: non-exhaustive `CellValue` match — `MultiEnum` and `Attachment` arms missing in `snapshot.rs` | **T1** (attachment staging / field integration) | `cargo test -p lattice-publish` | **Yes** — blocks `cargo test --workspace` |
 | Desktop `DataTableView.tsx`: `GridCell` union does not cover attachment/multi-enum column types (`Type '"data"' is not assignable to type 'never'`, `data: string` vs `string[]`) | **T1** (attachment field editors in grid) | `pnpm --filter @lattice/desktop build` | **Yes** — blocks Gate A desktop build |
 | Daemon contract: `spawn_helper_launches_binary` times out waiting for spawned socket | **T6** (daemon lifecycle / spawn helper) | `cargo test -p lattice-daemon --test contract spawn_helper_launches_binary` | **Yes** for daemon CI; workspace `cargo test` may skip if publish fails first |
-| Python tests require explicit pytest dep in bare `uv run pytest` | **T8** (Python SDK / dev ergonomics) | `cd packages/lattice-py && uv run pytest` (fails); use `uv run --with pytest pytest` | **No** — tests pass with documented command; dev-env/docs gap |
+| Python tests require explicit pytest dep in bare `uv run pytest` | **T8** (Python SDK / dev ergonomics) | `cd packages/lattice-py && uv run pytest` (fails); use `uv run --with pytest --with duckdb --with pyarrow pytest` | **No** — tests pass with documented command; dev-env/docs gap |
 
 ### Non-blocking / informational
 
@@ -73,7 +73,7 @@ No feature or behavioral changes beyond fmt/clippy hygiene.
 | --- | --- |
 | Generated theme/template catalogs | Clean after `pnpm compile-theme` and `pnpm compile-templates` |
 | Site static build | Passes independently of desktop attachment grid work |
-| `lattice-py` | 8/8 tests pass with `uv run --with pytest pytest` |
+| `lattice-py` | 13/13 tests pass with `uv run --with pytest --with duckdb --with pyarrow pytest` |
 
 ## Packet ownership reference (T1–T8)
 
@@ -109,6 +109,6 @@ pnpm install --frozen-lockfile
 pnpm --filter @lattice/desktop build
 pnpm --filter @lattice/site build
 cargo test -p lattice-daemon
-cd packages/lattice-py && uv run --with pytest pytest
+cd packages/lattice-py && uv run --with pytest --with duckdb --with pyarrow pytest
 pnpm compile-theme && pnpm compile-templates
 ```

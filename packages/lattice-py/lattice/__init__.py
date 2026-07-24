@@ -8,6 +8,13 @@ inject this). ``PYTHONPATH`` must include this package's parent directory so
 from __future__ import annotations
 
 from lattice._dataset import DatasetHandle, dataset
+from lattice._dataset_inspect import (
+    ColumnProfile,
+    DatasetColumnSchema,
+    DatasetProfile,
+    DatasetSchema,
+    RelationProfile,
+)
 from lattice._env import LatticeWorkspaceError, workspace_root
 from lattice._propose import (
     propose,
@@ -20,8 +27,13 @@ from lattice._propose import (
 from lattice._workspace import WorkspaceHelper
 
 __all__ = [
+    "ColumnProfile",
+    "DatasetColumnSchema",
     "DatasetHandle",
+    "DatasetProfile",
+    "DatasetSchema",
     "LatticeWorkspaceError",
+    "RelationProfile",
     "WorkspaceHelper",
     "dataset",
     "propose",
