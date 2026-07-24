@@ -412,9 +412,9 @@ fn list_and_board_views_load_with_layout_metadata() {
     assert_eq!(loaded_grid.layout.group_by.as_deref(), Some("status"));
     assert_eq!(loaded_grid.layout.summaries.len(), 1);
 
-    let invalid_group_by = format!(
+    let invalid_group_by =
         "format: lattice-view\nversion: 1\nsource:\n  database: ../database.sqlite\n  table: records\nlayout:\n  type: gallery\n  group_by: status\n"
-    );
+            .to_string();
     std::fs::write(views_dir.join("Invalid.yaml"), invalid_group_by).unwrap();
     let err = app.load_view("Invalid").unwrap_err().to_string();
     assert!(err.contains("group_by"));
@@ -2277,4 +2277,150 @@ fn attachment_column_round_trip() {
             .map(|column| column.field_type),
         Some(FieldType::Attachment)
     );
+}
+
+#[test]
+fn stage_attachment_stays_out_of_package_until_promoted() {
+    use crate::{
+        cleanup_orphan_attachments, discard_staged_attachment, is_staged_attachment_path,
+        list_orphan_attachments, promote_attachment_cell_values, stage_attachment_file,
+        validate_staged_attachment_ref, NewColumn,
+    };
+
+    let workspace = tempdir().unwrap();
+    let package_path = workspace.path().join("Files.data");
+    let mut app = DataApp::create(&package_path, "Files", "items").unwrap();
+    app.add_columns("items", &[NewColumn::new("files", FieldType::Attachment)])
+        .unwrap();
+
+    let source = workspace.path().join("note.txt");
+    std::fs::write(&source, b"hello").unwrap();
+    let staged = stage_attachment_file(workspace.path(), &source).unwrap();
+    assert!(is_staged_attachment_path(&staged));
+    assert!(workspace.path().join(&staged).is_file());
+    assert!(!package_path
+        .join("attachments")
+        .read_dir()
+        .unwrap()
+        .any(|e| {
+            e.ok()
+                .map(|entry| entry.file_type().map(|ft| ft.is_file()).unwrap_or(false))
+                .unwrap_or(false)
+        }));
+
+    // Cancel path: discard staged file; package untouched.
+    discard_staged_attachment(workspace.path(), &staged).unwrap();
+    assert!(!workspace.path().join(&staged).exists());
+
+    let staged = stage_attachment_file(workspace.path(), &source).unwrap();
+    let mut values = BTreeMap::from([(
+        "files".into(),
+        CellValue::Attachment {
+            paths: vec![staged.clone()],
+        },
+    )]);
+    let (promoted, staged_sources) =
+        promote_attachment_cell_values(workspace.path(), &app, &mut values).unwrap();
+    assert_eq!(promoted.len(), 1);
+    assert_eq!(staged_sources, vec![staged.clone()]);
+    assert!(promoted[0].starts_with("attachments/"));
+    assert!(package_path.join(&promoted[0]).is_file());
+    // Staged remains until commit success discards it.
+    assert!(workspace.path().join(&staged).is_file());
+    discard_staged_attachment(workspace.path(), &staged).unwrap();
+
+    let row_id = app.insert_row("items", &values).unwrap();
+    assert_eq!(
+        app.get_row("items", &row_id)
+            .unwrap()
+            .unwrap()
+            .values
+            .get("files"),
+        Some(&CellValue::Attachment {
+            paths: promoted.clone(),
+        })
+    );
+
+    // Remove reference only — binary remains until cleanup.
+    app.update_row(
+        "items",
+        &row_id,
+        &BTreeMap::from([("files".into(), CellValue::Attachment { paths: vec![] })]),
+    )
+    .unwrap();
+    assert!(package_path.join(&promoted[0]).is_file());
+    let orphans = list_orphan_attachments(&app).unwrap();
+    assert_eq!(orphans, promoted);
+    let deleted = cleanup_orphan_attachments(&app).unwrap();
+    assert_eq!(deleted, promoted);
+    assert!(!package_path.join(&promoted[0]).exists());
+
+    validate_staged_attachment_ref(
+        "items",
+        "files",
+        ".lattice/staging/attachments/op/../escape.txt",
+    )
+    .unwrap_err();
+    crate::validate_attachment_ref("items", "files", "attachments/../escape.txt").unwrap_err();
+}
+
+#[test]
+fn shared_attachment_ref_survives_cleanup() {
+    use crate::{
+        cleanup_orphan_attachments, promote_attachment_cell_values, stage_attachment_file,
+        NewColumn,
+    };
+
+    let workspace = tempdir().unwrap();
+    let package_path = workspace.path().join("Files.data");
+    let mut app = DataApp::create(&package_path, "Files", "items").unwrap();
+    app.add_columns("items", &[NewColumn::new("files", FieldType::Attachment)])
+        .unwrap();
+
+    let source = workspace.path().join("shared.txt");
+    std::fs::write(&source, b"shared").unwrap();
+    let staged = stage_attachment_file(workspace.path(), &source).unwrap();
+    let mut values = BTreeMap::from([(
+        "files".into(),
+        CellValue::Attachment {
+            paths: vec![staged],
+        },
+    )]);
+    let (promoted, _) =
+        promote_attachment_cell_values(workspace.path(), &app, &mut values).unwrap();
+    let package_rel = promoted[0].clone();
+
+    let row_a = app.insert_row("items", &values).unwrap();
+    let row_b = app
+        .insert_row(
+            "items",
+            &BTreeMap::from([(
+                "files".into(),
+                CellValue::Attachment {
+                    paths: vec![package_rel.clone()],
+                },
+            )]),
+        )
+        .unwrap();
+
+    app.update_row(
+        "items",
+        &row_a,
+        &BTreeMap::from([("files".into(), CellValue::Attachment { paths: vec![] })]),
+    )
+    .unwrap();
+    assert!(cleanup_orphan_attachments(&app).unwrap().is_empty());
+    assert!(package_path.join(&package_rel).is_file());
+
+    app.update_row(
+        "items",
+        &row_b,
+        &BTreeMap::from([("files".into(), CellValue::Attachment { paths: vec![] })]),
+    )
+    .unwrap();
+    assert_eq!(
+        cleanup_orphan_attachments(&app).unwrap(),
+        vec![package_rel.clone()]
+    );
+    assert!(!package_path.join(&package_rel).exists());
 }

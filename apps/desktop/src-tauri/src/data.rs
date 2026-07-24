@@ -1176,41 +1176,19 @@ fn insert_record_inner(
         ))
         .map_err(command_error_to_string)?;
 
-    let revision = receipt
+    let outcome = receipt
         .outcomes
         .first()
-        .and_then(|outcome| outcome.resulting_revision.clone())
+        .ok_or_else(|| "record insert did not produce an outcome".to_string())?;
+    let revision = outcome
+        .resulting_revision
+        .clone()
         .ok_or_else(|| "record insert did not produce a resulting revision".to_string())?;
-
-    let id = find_inserted_row_id(&root, &rel_path, &table, &values)?;
+    let id = outcome
+        .resulting_record_id
+        .clone()
+        .ok_or_else(|| "record insert did not produce a record id".to_string())?;
     Ok(RecordMutation { id, revision })
-}
-
-fn find_inserted_row_id(
-    root: &str,
-    rel_path: &str,
-    table: &str,
-    values: &BTreeMap<String, CellValue>,
-) -> Result<String, String> {
-    let app = open_app_at(root, rel_path)?;
-    for row in app
-        .list_rows(table, ROW_LIMIT, 0)
-        .map_err(|err| err.to_string())?
-    {
-        if row_matches_values(&row, values) {
-            return Ok(row.id);
-        }
-    }
-    Err("inserted row could not be located after apply".to_string())
-}
-
-fn row_matches_values(row: &Row, values: &BTreeMap<String, CellValue>) -> bool {
-    values.iter().all(|(key, value)| {
-        if key == "id" {
-            return true;
-        }
-        row.values.get(key) == Some(value)
-    })
 }
 
 /// Update one row. Stale `base_revision` errors are prefixed with `STALE_REVISION:`.
@@ -1277,31 +1255,53 @@ pub fn delete_record(
         .ok_or_else(|| "record delete did not produce a resulting revision".to_string())
 }
 
-/// Copy a local file into a `.data` package `attachments/` directory.
+/// Stage a local file under `.lattice/staging/attachments/<operation-id>/`.
 ///
-/// Returns the package-relative path (`attachments/<filename>`).
+/// Returns the workspace-relative staged path. Promotion into the package
+/// `attachments/` directory happens on record insert/update commit.
 #[tauri::command]
 pub fn add_data_attachment(
     root: String,
     rel_path: String,
     source_path: String,
 ) -> Result<String, String> {
-    let app = open_app_at(&root, &rel_path)?;
+    // Ensure the target package exists before accepting staged bytes.
+    let _app = open_app_at(&root, &rel_path)?;
+    let (canonical_root, _) = resolve_within_root(&root, &rel_path)?;
     let source = PathBuf::from(&source_path);
-    app.add_attachment_file(&source)
-        .map_err(|err| err.to_string())
+    lattice_data::stage_attachment_file(&canonical_root, &source).map_err(|err| err.to_string())
 }
 
-/// Delete a package-relative attachment file under `attachments/` when present.
+/// Reference-only remove for package attachments; discard staged files.
+///
+/// Package-relative `attachments/` paths are left on disk (orphan cleanup is
+/// explicit). Staged paths under `.lattice/staging/attachments/` are deleted.
 #[tauri::command]
 pub fn remove_data_attachment(
     root: String,
     rel_path: String,
     attachment_path: String,
 ) -> Result<(), String> {
+    let (canonical_root, _) = resolve_within_root(&root, &rel_path)?;
+    if lattice_data::is_staged_attachment_path(&attachment_path) {
+        return lattice_data::discard_staged_attachment(&canonical_root, &attachment_path)
+            .map_err(|err| err.to_string());
+    }
+    // Package refs: verify package exists, but do not delete the binary.
+    let _app = open_app_at(&root, &rel_path)?;
+    lattice_data::validate_attachment_ref("attachments", "path", &attachment_path)
+        .map_err(|err| err.to_string())?;
+    Ok(())
+}
+
+/// Delete package attachment files that are not referenced by any cell.
+#[tauri::command]
+pub fn cleanup_data_attachment_orphans(
+    root: String,
+    rel_path: String,
+) -> Result<Vec<String>, String> {
     let app = open_app_at(&root, &rel_path)?;
-    app.remove_attachment_file(&attachment_path)
-        .map_err(|err| err.to_string())
+    lattice_data::cleanup_orphan_attachments(&app).map_err(|err| err.to_string())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

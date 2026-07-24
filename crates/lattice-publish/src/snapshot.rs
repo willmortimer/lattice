@@ -315,6 +315,8 @@ fn cell_to_json(value: Option<&lattice_data::CellValue>) -> serde_json::Value {
             Some(lattice_data::FormulaValue::Text(v)) => json!(v),
             Some(lattice_data::FormulaValue::Number(v)) => json!(v),
         },
+        Some(lattice_data::CellValue::MultiEnum { values }) => json!(values),
+        Some(lattice_data::CellValue::Attachment { paths }) => json!(paths),
     }
 }
 

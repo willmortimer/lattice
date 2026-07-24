@@ -740,6 +740,8 @@ pub struct CommandOutcome {
     /// The resulting content revision, when the command produces one (creates,
     /// updates, and the destination of a rename/move). `None` for deletes.
     pub resulting_revision: Option<String>,
+    /// Record id produced or targeted by record insert/update commands.
+    pub resulting_record_id: Option<String>,
 }
 
 /// The result of applying a transaction.
