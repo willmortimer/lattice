@@ -8,9 +8,9 @@ import { nativeOnlyDemoNotice } from "../data/browserDemoHonesty";
 import { PackageFormFill, packageFormFillTitle } from "../data/PackageFormFill";
 import {
   loadPackageForm,
-  submitPackageFormRecord,
   type FormSummary,
 } from "../data/forms";
+import { submitInterfaceFormRecord } from "./interfaceFormSubmit";
 import { EmbeddedDataView } from "../data/EmbeddedSavedDataView";
 import type { CellValue, DataAppSnapshot } from "../data/types";
 import { queryResultToValues } from "../lib/arrowToVegaData";
@@ -40,6 +40,8 @@ export interface InterfaceComponentHost {
   paramValues?: Record<string, string>;
   onOpenSavedView?: (viewName: string) => void;
   onOpenResource?: (path: string) => void;
+  /** Reload the host package snapshot after embedded form submit. */
+  onPackageSnapshotRefresh?: () => void | Promise<void>;
 }
 
 export interface RenderInterfaceComponentProps {
@@ -345,18 +347,18 @@ function FormComponent({ component, host }: RenderInterfaceComponentProps) {
       }
       setBusy(true);
       try {
-        const result = await submitPackageFormRecord({
+        return await submitInterfaceFormRecord({
           root: host.root,
           relPath: host.packagePath,
           form,
           values,
+          onPackageSnapshotRefresh: host.onPackageSnapshotRefresh,
         });
-        return { id: result.id };
       } finally {
         setBusy(false);
       }
     },
-    [form, host.packagePath, host.root],
+    [form, host.onPackageSnapshotRefresh, host.packagePath, host.root],
   );
 
   const title = form

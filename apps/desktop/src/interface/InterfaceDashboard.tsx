@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { openPackageSnapshot } from "../data/packageSnapshot";
 import type { DataAppSnapshot } from "../data/types";
 import type { InterfaceComponent, InterfaceDef } from "../lib/bindingSpec";
 import { renderInterfaceComponent } from "./componentRegistry";
@@ -45,6 +46,11 @@ export function InterfaceDashboard({
   const [paramValues, setParamValues] = useState(() =>
     initialParameterValues(parameterDefs),
   );
+  const [liveSnapshot, setLiveSnapshot] = useState<DataAppSnapshot | null>(snapshot);
+
+  useEffect(() => {
+    setLiveSnapshot(snapshot);
+  }, [snapshot]);
 
   const parametersKey = useMemo(
     () =>
@@ -65,18 +71,34 @@ export function InterfaceDashboard({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by parametersKey
   }, [def.name, parametersKey]);
 
+  const refreshPackageSnapshot = useCallback(async () => {
+    if (!root || demo) return;
+    const fresh = await openPackageSnapshot(root, packagePath);
+    setLiveSnapshot(fresh);
+  }, [demo, packagePath, root]);
+
   const host = useMemo(
     () => ({
       root,
       packagePath,
       demo,
-      snapshot,
-      packageRevision: snapshot?.package_revision ?? null,
+      snapshot: liveSnapshot,
+      packageRevision: liveSnapshot?.package_revision ?? null,
       paramValues,
       onOpenSavedView,
       onOpenResource,
+      onPackageSnapshotRefresh: refreshPackageSnapshot,
     }),
-    [demo, onOpenResource, onOpenSavedView, packagePath, paramValues, root, snapshot],
+    [
+      demo,
+      liveSnapshot,
+      onOpenResource,
+      onOpenSavedView,
+      packagePath,
+      paramValues,
+      refreshPackageSnapshot,
+      root,
+    ],
   );
 
   const persist = useCallback(
