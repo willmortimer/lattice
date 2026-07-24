@@ -24,9 +24,7 @@ pub use endpoint::{
     DEFAULT_MAX_UTTERANCE_MS, DEFAULT_SILENCE_DEBOUNCE_MS, ENV_AUTO_FINALIZE_ON_ENDPOINT,
 };
 pub use error::SpeechError;
-pub use final_model_memory::{
-    FinalModelLoadAction, FinalModelMemoryPolicy, FinalModelResidency,
-};
+pub use final_model_memory::{FinalModelLoadAction, FinalModelMemoryPolicy, FinalModelResidency};
 pub use in_process::{record_transcript_revision, InProcessVoiceService};
 pub use independent_final::{
     attempt_independent_final, capability_allows_offline_redecode, commit_final_transcript,
@@ -42,12 +40,11 @@ pub use protocol::{
     AudioChunk, AudioSampleFormat, CancelVoiceSessionRequest, CommandCandidatePayload,
     EndVoiceSessionRequest, EndpointReason, FinalTranscript, FinalizationMode,
     FinishUtteranceRequest, LanguageTag, ModelState, ModelStatus, PartialTranscriptPayload,
-    PrepareModelRequest, PROTOCOL_VERSION, SessionContext, SpeechCapabilities, SpeechSessionConfig,
+    PrepareModelRequest, SessionContext, SpeechCapabilities, SpeechSessionConfig,
     StableTranscriptPayload, StartVoiceSessionRequest, TranscriptionSessionState,
     UpdateSessionContextRequest, UtteranceId, VoiceEvent, VoiceRequest, VoiceSessionId,
+    PROTOCOL_VERSION,
 };
-pub use provider::{
-    NullSpeechProvider, SpeechEventSender, SpeechProvider, SpeechSession,
-};
+pub use provider::{NullSpeechProvider, SpeechEventSender, SpeechProvider, SpeechSession};
 pub use session::SessionStateMachine;
 pub use utterance_buffer::{FrozenUtteranceAudio, UtteranceAudioBuffer};

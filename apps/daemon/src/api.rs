@@ -54,10 +54,7 @@ impl ApiError {
 
     pub fn message(&self) -> &str {
         match self {
-            Self::BadRequest(m)
-            | Self::NotFound(m)
-            | Self::Forbidden(m)
-            | Self::Internal(m) => m,
+            Self::BadRequest(m) | Self::NotFound(m) | Self::Forbidden(m) | Self::Internal(m) => m,
         }
     }
 }
@@ -143,7 +140,10 @@ pub struct SearchResponse {
     pub hits: Vec<SearchHitDto>,
 }
 
-pub fn api_search(runtime: &LatticeRuntime, params: SearchParams) -> Result<SearchResponse, ApiError> {
+pub fn api_search(
+    runtime: &LatticeRuntime,
+    params: SearchParams,
+) -> Result<SearchResponse, ApiError> {
     if params.query.trim().is_empty() {
         return Err(ApiError::BadRequest("query must not be empty".into()));
     }
@@ -172,8 +172,11 @@ pub fn api_search(runtime: &LatticeRuntime, params: SearchParams) -> Result<Sear
                 if sensitivity == Sensitivity::Secret {
                     continue;
                 }
-                let (excerpt, redacted) =
-                    redact_excerpt_for_export(hit.snippet.as_deref().unwrap_or(""), sensitivity, export_policy);
+                let (excerpt, redacted) = redact_excerpt_for_export(
+                    hit.snippet.as_deref().unwrap_or(""),
+                    sensitivity,
+                    export_policy,
+                );
                 hits.push(SearchHitDto {
                     path,
                     title: hit.title,
@@ -211,7 +214,8 @@ pub fn api_search(runtime: &LatticeRuntime, params: SearchParams) -> Result<Sear
 }
 
 fn hybrid_hit_to_dto(hit: HybridSearchHit) -> SearchHitDto {
-    let (excerpt, redacted) = redact_excerpt_for_export(&hit.excerpt, hit.sensitivity, hit.export_policy);
+    let (excerpt, redacted) =
+        redact_excerpt_for_export(&hit.excerpt, hit.sensitivity, hit.export_policy);
     SearchHitDto {
         path: resource_path_from_uri(&hit.resource_uri),
         title: hit.title,
@@ -262,9 +266,7 @@ fn policy_for_session_path(
     session: &WorkspaceSession,
     path: &str,
 ) -> Result<(Sensitivity, ExportPolicy), String> {
-    session
-        .ensure_index_warm()
-        .map_err(|err| err.to_string())?;
+    session.ensure_index_warm().map_err(|err| err.to_string())?;
     session
         .index()
         .export_policy_for_path(Path::new(path))
@@ -468,14 +470,12 @@ pub fn api_related(
 
     let mut hits: Vec<RelatedHitDto> = Vec::new();
 
-    let backlinks = get_backlinks_with_session(&session, &params.path).map_err(ApiError::Internal)?;
+    let backlinks =
+        get_backlinks_with_session(&session, &params.path).map_err(ApiError::Internal)?;
     for link in backlinks.into_iter().take(limit) {
         let path = path_string(&link.source_path);
-        let (sensitivity, export_policy) =
-            policy_for_session_path(&session, &path).unwrap_or((
-                Sensitivity::Workspace,
-                ExportPolicy::Ask,
-            ));
+        let (sensitivity, export_policy) = policy_for_session_path(&session, &path)
+            .unwrap_or((Sensitivity::Workspace, ExportPolicy::Ask));
         if sensitivity == Sensitivity::Secret {
             continue;
         }
@@ -842,7 +842,8 @@ pub fn api_get_proposal(
         params.workspace.workspace_id.as_deref(),
         params.workspace.root.as_deref(),
     )?;
-    let proposal = load_proposal(session.root(), &params.proposal_id).map_err(command_error_to_api)?;
+    let proposal =
+        load_proposal(session.root(), &params.proposal_id).map_err(command_error_to_api)?;
     Ok(ProposalResponse {
         workspace_id: session.workspace_id().to_string(),
         proposal,
@@ -858,8 +859,7 @@ pub fn api_list_proposals(
         params.workspace.workspace_id.as_deref(),
         params.workspace.root.as_deref(),
     )?;
-    let proposals =
-        list_proposal_summaries(session.root()).map_err(command_error_to_api)?;
+    let proposals = list_proposal_summaries(session.root()).map_err(command_error_to_api)?;
     Ok(ListProposalsResponse {
         workspace_id: session.workspace_id().to_string(),
         proposals,
@@ -1151,7 +1151,10 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(ask.hits.iter().any(|h| h.path == "Ask.md" && h.export_redacted));
+        assert!(ask
+            .hits
+            .iter()
+            .any(|h| h.path == "Ask.md" && h.export_redacted));
 
         let session = runtime.open_workspace_session(dir.path()).unwrap();
         let read = api_read(

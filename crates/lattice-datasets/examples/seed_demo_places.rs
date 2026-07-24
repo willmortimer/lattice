@@ -14,11 +14,7 @@ fn main() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../templates/workspaces/demo/files/Data/Places.dataset");
     let csv = root.join("sources/places.csv");
-    assert!(
-        csv.is_file(),
-        "missing source CSV at {}",
-        csv.display()
-    );
+    assert!(csv.is_file(), "missing source CSV at {}", csv.display());
 
     // Wipe previous facts so re-runs are idempotent.
     let facts = root.join("facts");
@@ -40,9 +36,7 @@ fn main() {
         .expect("import_csv");
     println!("wrote {} ({} rows)", entry.path, entry.rows.unwrap_or(0));
 
-    let discovered = dataset
-        .discover_partitions()
-        .expect("discover_partitions");
+    let discovered = dataset.discover_partitions().expect("discover_partitions");
     println!(
         "manifest partitions: {}",
         discovered

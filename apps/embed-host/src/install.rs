@@ -32,9 +32,8 @@ pub fn install_model(
             manifest_path.display()
         ))
     })?;
-    let manifest: ModelManifest = serde_json::from_slice(&manifest_bytes).map_err(|error| {
-        EmbedHostError::protocol(format!("invalid manifest JSON: {error}"))
-    })?;
+    let manifest: ModelManifest = serde_json::from_slice(&manifest_bytes)
+        .map_err(|error| EmbedHostError::protocol(format!("invalid manifest JSON: {error}")))?;
     if manifest.schema_version != MANIFEST_SCHEMA_VERSION {
         return Err(EmbedHostError::protocol(format!(
             "unsupported manifest schema version {}",

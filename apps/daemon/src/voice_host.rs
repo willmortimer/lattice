@@ -65,13 +65,7 @@ impl VoiceProviderMode {
             .ok()
             .filter(|s| !s.is_empty())
             .map(PathBuf::from)
-            .or_else(|| {
-                if fake {
-                    resolve_voice_host_bin()
-                } else {
-                    None
-                }
-            });
+            .or_else(|| if fake { resolve_voice_host_bin() } else { None });
 
         if let Some(binary) = binary {
             let socket = socket.unwrap_or_else(default_voice_socket_path);
@@ -93,10 +87,7 @@ fn env_truthy(name: &str) -> bool {
 }
 
 fn default_voice_socket_path() -> PathBuf {
-    std::env::temp_dir().join(format!(
-        "lattice-voice-host-{}.sock",
-        std::process::id()
-    ))
+    std::env::temp_dir().join(format!("lattice-voice-host-{}.sock", std::process::id()))
 }
 
 /// Locate `lattice-voice-host` for tests / local launches.
@@ -118,10 +109,8 @@ pub fn resolve_voice_host_bin() -> Option<PathBuf> {
 
     // Walk common cargo target dirs from this crate / cwd.
     let candidates = [
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../target/debug/lattice-voice-host"),
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../target/release/lattice-voice-host"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/debug/lattice-voice-host"),
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/release/lattice-voice-host"),
         PathBuf::from("target/debug/lattice-voice-host"),
         PathBuf::from("target/release/lattice-voice-host"),
     ];
@@ -134,9 +123,8 @@ pub fn resolve_voice_host_bin() -> Option<PathBuf> {
 }
 
 fn which_bin(name: &str) -> std::io::Result<PathBuf> {
-    let path = std::env::var_os("PATH").ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::NotFound, "PATH not set")
-    })?;
+    let path = std::env::var_os("PATH")
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "PATH not set"))?;
     for dir in std::env::split_paths(&path) {
         let candidate = dir.join(name);
         if candidate.is_file() {
@@ -252,11 +240,7 @@ impl VoiceController {
                 if stop.load(Ordering::SeqCst) {
                     break;
                 }
-                let client = controller
-                    .client
-                    .lock()
-                    .expect("client poisoned")
-                    .clone();
+                let client = controller.client.lock().expect("client poisoned").clone();
                 let Some(client) = client else {
                     tokio::time::sleep(Duration::from_millis(100)).await;
                     continue;
@@ -317,7 +301,10 @@ impl VoiceController {
     }
 
     /// Proxy a voice-plane request to the supervised host.
-    pub async fn handle_request(&self, req: Request) -> std::result::Result<Response, lattice_protocol::Error> {
+    pub async fn handle_request(
+        &self,
+        req: Request,
+    ) -> std::result::Result<Response, lattice_protocol::Error> {
         let body = req.body.clone().ok_or_else(|| lattice_protocol::Error {
             code: "invalid_request".into(),
             message: "request body is required".into(),
@@ -347,13 +334,14 @@ impl VoiceController {
         }
 
         let client = self.client_or_reconnect().await?;
-        let response = client.forward(Request {
-            deadline_unix_ms: req.deadline_unix_ms,
-            idempotency_key: req.idempotency_key,
-            body: Some(body.clone()),
-        })
-        .await
-        .map_err(voice_host_error_to_wire)?;
+        let response = client
+            .forward(Request {
+                deadline_unix_ms: req.deadline_unix_ms,
+                idempotency_key: req.idempotency_key,
+                body: Some(body.clone()),
+            })
+            .await
+            .map_err(voice_host_error_to_wire)?;
 
         match &body {
             request::Body::StartVoiceSession(start) => {

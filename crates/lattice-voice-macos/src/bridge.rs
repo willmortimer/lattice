@@ -12,14 +12,14 @@ use std::sync::Mutex;
 use crate::error::BridgeResult;
 #[cfg(link_bridge)]
 use crate::error::{ensure_abi_version, map_status};
-#[cfg(any(link_bridge, test))]
-use crate::LATTICE_VOICE_BRIDGE_ABI_VERSION;
+#[cfg(test)]
+use crate::ffi::LATTICE_VOICE_OK;
 use crate::ffi::{
     copy_event_text, LatticeVoiceEngine, LatticeVoiceEvent, LatticeVoiceEventCallback,
     LatticeVoiceEventKind, LatticeVoiceSession,
 };
-#[cfg(test)]
-use crate::ffi::LATTICE_VOICE_OK;
+#[cfg(any(link_bridge, test))]
+use crate::LATTICE_VOICE_BRIDGE_ABI_VERSION;
 #[cfg(any(test, not(link_bridge)))]
 use lattice_voice::SpeechError;
 
@@ -111,11 +111,8 @@ pub(crate) trait VoiceBridgeBackend: Send + Sync {
         callback: LatticeVoiceEventCallback,
         context: *mut c_void,
     ) -> BridgeResult<LatticeVoiceSession>;
-    fn session_push_audio(
-        &self,
-        session: LatticeVoiceSession,
-        samples: &[f32],
-    ) -> BridgeResult<()>;
+    fn session_push_audio(&self, session: LatticeVoiceSession, samples: &[f32])
+        -> BridgeResult<()>;
     fn session_finish_utterance(&self, session: LatticeVoiceSession) -> BridgeResult<()>;
     fn session_cancel(&self, session: LatticeVoiceSession) -> BridgeResult<()>;
     fn session_destroy(&self, session: LatticeVoiceSession);
@@ -141,7 +138,8 @@ impl VoiceBridgeBackend for NativeBridge {
     }
 
     fn engine_create(&self, model_cache_dir: Option<&Path>) -> BridgeResult<LatticeVoiceEngine> {
-        let c_path = model_cache_dir.and_then(|path| CString::new(path.to_string_lossy().as_ref()).ok());
+        let c_path =
+            model_cache_dir.and_then(|path| CString::new(path.to_string_lossy().as_ref()).ok());
         let mut engine = 0_u64;
         let status = unsafe {
             crate::ffi::lattice_voice_engine_create(
@@ -184,11 +182,7 @@ impl VoiceBridgeBackend for NativeBridge {
         samples: &[f32],
     ) -> BridgeResult<()> {
         let status = unsafe {
-            crate::ffi::lattice_voice_session_push_audio(
-                session,
-                samples.as_ptr(),
-                samples.len(),
-            )
+            crate::ffi::lattice_voice_session_push_audio(session, samples.as_ptr(), samples.len())
         };
         map_status(status, "lattice_voice_session_push_audio")
     }

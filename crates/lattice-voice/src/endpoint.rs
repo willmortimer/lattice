@@ -119,8 +119,7 @@ impl EndpointPolicy {
             return EndpointSignal::None;
         }
 
-        let duration_ms =
-            (samples.len() as u64).saturating_mul(1000) / u64::from(sample_rate_hz);
+        let duration_ms = (samples.len() as u64).saturating_mul(1000) / u64::from(sample_rate_hz);
         let rms = rms(samples);
         let is_speech = rms >= self.speech_rms_threshold;
 
@@ -186,10 +185,7 @@ mod tests {
     fn silence_never_starts_speech() {
         let mut policy = EndpointPolicy::new(&EndpointOptions::default());
         let samples = speech_chunk(200, 16_000, 0.0);
-        assert_eq!(
-            policy.push_samples(&samples, 16_000),
-            EndpointSignal::None
-        );
+        assert_eq!(policy.push_samples(&samples, 16_000), EndpointSignal::None);
     }
 
     #[test]

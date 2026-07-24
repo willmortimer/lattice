@@ -19,10 +19,10 @@ use tracing::{info, warn};
 use crate::api::{
     api_build_context, api_create_proposal, api_get_dataset_schema, api_get_proposal,
     api_list_proposals, api_profile_dataset, api_propose_artifact, api_propose_interface,
-    api_propose_page, api_propose_resource, api_propose_workflow, api_read, api_related, api_search,
-    ApiError, BuildContextParams, CreateProposalParams, DatasetInspectParams, GetProposalParams,
-    ListProposalsParams, ProposePageParams, ProposeResourceParams, ProposeYamlParams, ReadParams,
-    RelatedParams, SearchParams,
+    api_propose_page, api_propose_resource, api_propose_workflow, api_read, api_related,
+    api_search, ApiError, BuildContextParams, CreateProposalParams, DatasetInspectParams,
+    GetProposalParams, ListProposalsParams, ProposePageParams, ProposeResourceParams,
+    ProposeYamlParams, ReadParams, RelatedParams, SearchParams,
 };
 use crate::config::DaemonConfig;
 use crate::server::DaemonState;
@@ -47,7 +47,8 @@ struct ErrorDetail {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        let status = StatusCode::from_u16(self.status_code()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        let status =
+            StatusCode::from_u16(self.status_code()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         (
             status,
             Json(ErrorBody {
@@ -82,7 +83,9 @@ fn extract_token(headers: &HeaderMap) -> Option<String> {
         }
     }
     let auth = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
-    let bearer = auth.strip_prefix("Bearer ").or_else(|| auth.strip_prefix("bearer "))?;
+    let bearer = auth
+        .strip_prefix("Bearer ")
+        .or_else(|| auth.strip_prefix("bearer "))?;
     let trimmed = bearer.trim();
     if trimmed.is_empty() {
         None
@@ -316,8 +319,14 @@ pub fn router(daemon: DaemonState) -> Router {
         .route("/v1/proposals/list", post(route_list_proposals))
         .route("/v1/proposals/get", post(route_get_proposal))
         .route("/v1/proposals/propose_page", post(route_propose_page))
-        .route("/v1/proposals/propose_resource", post(route_propose_resource))
-        .route("/v1/proposals/propose_workflow", post(route_propose_workflow))
+        .route(
+            "/v1/proposals/propose_resource",
+            post(route_propose_resource),
+        )
+        .route(
+            "/v1/proposals/propose_workflow",
+            post(route_propose_workflow),
+        )
         .route(
             "/v1/proposals/propose_interface",
             post(route_propose_interface),
@@ -365,7 +374,11 @@ pub fn spawn_localhost_api(daemon: DaemonState, port: u16) -> oneshot::Sender<()
 /// Helper for tests: bind an ephemeral port and return `(addr, shutdown_tx, join)`.
 pub async fn serve_localhost_api_ephemeral(
     daemon: DaemonState,
-) -> crate::Result<(SocketAddr, oneshot::Sender<()>, tokio::task::JoinHandle<crate::Result<()>>)> {
+) -> crate::Result<(
+    SocketAddr,
+    oneshot::Sender<()>,
+    tokio::task::JoinHandle<crate::Result<()>>,
+)> {
     let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, 0));
     let listener = tokio::net::TcpListener::bind(addr).await?;
     let bound = listener.local_addr()?;

@@ -5,8 +5,8 @@ use std::path::Path;
 use serde_json::Value;
 
 use crate::tabular::{build_tabular_table, enforce_row_limit, tabular_error};
-use crate::TabularTable;
 use crate::Result;
+use crate::TabularTable;
 
 /// Parse a JSON file containing an array of objects into a tabular table.
 pub fn parse_json_file(path: &Path) -> Result<TabularTable> {
@@ -52,7 +52,10 @@ pub fn parse_jsonl_file(path: &Path) -> Result<TabularTable> {
 
 fn array_of_objects(path: &Path, value: &Value) -> Result<Vec<serde_json::Map<String, Value>>> {
     let array = value.as_array().ok_or_else(|| {
-        tabular_error(path, "JSON import must be an array of objects at the top level")
+        tabular_error(
+            path,
+            "JSON import must be an array of objects at the top level",
+        )
     })?;
     if array.is_empty() {
         return Err(tabular_error(path, "JSON import array is empty"));
@@ -71,7 +74,10 @@ fn array_of_objects(path: &Path, value: &Value) -> Result<Vec<serde_json::Map<St
     Ok(objects)
 }
 
-fn objects_to_table(path: &Path, objects: &[serde_json::Map<String, Value>]) -> Result<TabularTable> {
+fn objects_to_table(
+    path: &Path,
+    objects: &[serde_json::Map<String, Value>],
+) -> Result<TabularTable> {
     let raw_headers = collect_headers(objects);
     let raw_rows = objects
         .iter()

@@ -3,10 +3,10 @@
 use std::path::{Path, PathBuf};
 
 use lattice_commands::{
-    build_batch_link_repair_plan, build_batch_link_repair_transaction, build_link_repair_transaction,
-    dismiss_link_repair_proposal, link_repair_now, list_link_repair_proposals,
-    load_link_repair_proposal, new_link_repair_plan_id, save_link_repair_proposal,
-    Command as SemanticCommand, CommandEngine, Transaction,
+    build_batch_link_repair_plan, build_batch_link_repair_transaction,
+    build_link_repair_transaction, dismiss_link_repair_proposal, link_repair_now,
+    list_link_repair_proposals, load_link_repair_proposal, new_link_repair_plan_id,
+    save_link_repair_proposal, Command as SemanticCommand, CommandEngine, Transaction,
 };
 use lattice_core::{
     BatchLinkRepairPlan, LinkRepairPlan, LinkRepairProposalSummary, LinkRepairSource,
@@ -83,19 +83,23 @@ pub fn preview_batch_link_repair(
 }
 
 #[tauri::command]
-pub fn get_link_repair_proposal(root: String, proposal_id: String) -> Result<LinkRepairPlan, String> {
+pub fn get_link_repair_proposal(
+    root: String,
+    proposal_id: String,
+) -> Result<LinkRepairPlan, String> {
     load_link_repair_proposal(Path::new(&root), &proposal_id).map_err(command_error_to_string)
 }
 
 #[tauri::command]
-pub fn list_link_repair_proposals_cmd(root: String) -> Result<Vec<LinkRepairProposalSummary>, String> {
+pub fn list_link_repair_proposals_cmd(
+    root: String,
+) -> Result<Vec<LinkRepairProposalSummary>, String> {
     list_link_repair_proposals(Path::new(&root)).map_err(command_error_to_string)
 }
 
 #[tauri::command]
 pub fn dismiss_link_repair_proposal_cmd(root: String, proposal_id: String) -> Result<(), String> {
-    dismiss_link_repair_proposal(Path::new(&root), &proposal_id)
-        .map_err(command_error_to_string)
+    dismiss_link_repair_proposal(Path::new(&root), &proposal_id).map_err(command_error_to_string)
 }
 
 #[tauri::command]
@@ -153,10 +157,8 @@ pub fn apply_batch_link_repair(
         .iter()
         .map(|change| (PathBuf::from(&change.from), PathBuf::from(&change.to)))
         .collect();
-    let summary = batch_link_repair_transaction_summary(
-        path_moves.len(),
-        accepted_candidate_ids.len(),
-    );
+    let summary =
+        batch_link_repair_transaction_summary(path_moves.len(), accepted_candidate_ids.len());
     let tx = build_batch_link_repair_transaction(
         &store,
         &path_moves,
@@ -320,9 +322,7 @@ mod tests {
         )
         .unwrap();
         let index = WorkspaceIndex::open(dir.path()).unwrap();
-        index
-            .remove_resource(Path::new("Notes/Other.md"))
-            .unwrap();
+        index.remove_resource(Path::new("Notes/Other.md")).unwrap();
         index
             .upsert_resource(&lattice_core::Resource {
                 path: "Notes/Renamed.md".into(),
@@ -337,19 +337,11 @@ mod tests {
     #[test]
     fn link_repair_transaction_summary_distinguishes_rename_and_move() {
         assert_eq!(
-            link_repair_transaction_summary(
-                Path::new("Notes/A.md"),
-                Path::new("Notes/B.md"),
-                2,
-            ),
+            link_repair_transaction_summary(Path::new("Notes/A.md"), Path::new("Notes/B.md"), 2,),
             "Rename Notes/A.md to Notes/B.md with 2 link repair(s)"
         );
         assert_eq!(
-            link_repair_transaction_summary(
-                Path::new("Notes/A.md"),
-                Path::new("Archive/A.md"),
-                1,
-            ),
+            link_repair_transaction_summary(Path::new("Notes/A.md"), Path::new("Archive/A.md"), 1,),
             "Move Notes/A.md to Archive/A.md with 1 link repair(s)"
         );
     }

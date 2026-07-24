@@ -218,10 +218,7 @@ async fn client_tolerates_host_crash() {
     wait_for_socket(&socket).await;
 
     let client = Arc::new(EmbedHostClient::connect(&socket).await.unwrap());
-    let session = client
-        .load_model(&installed.model_dir, None)
-        .await
-        .unwrap();
+    let session = client.load_model(&installed.model_dir, None).await.unwrap();
     let _ = session
         .embed_query(EmbedQueryRequest {
             text: "before crash".into(),
@@ -274,7 +271,9 @@ async fn install_rpc_via_client() {
         .await
         .unwrap();
     assert_eq!(installed.artifact_sha256, sha);
-    assert!(PathBuf::from(&installed.model_dir).join("fixture.bin").is_file());
+    assert!(PathBuf::from(&installed.model_dir)
+        .join("fixture.bin")
+        .is_file());
 
     server.abort();
 }
@@ -347,17 +346,18 @@ async fn query_and_cancel_not_blocked_by_slow_documents() {
 
     // Cancel of a non-existent id must also use the query lane and stay fast.
     let cancel_started = Instant::now();
-    let cancelled = tokio::time::timeout(
-        Duration::from_millis(150),
-        client.cancel("no-such-request"),
-    )
-    .await
-    .expect("cancel timed out behind documents")
-    .expect("cancel rpc");
+    let cancelled =
+        tokio::time::timeout(Duration::from_millis(150), client.cancel("no-such-request"))
+            .await
+            .expect("cancel timed out behind documents")
+            .expect("cancel rpc");
     assert!(!cancelled);
     assert!(cancel_started.elapsed() < Duration::from_millis(150));
 
-    let docs = docs_task.await.expect("docs join").expect("embed_documents");
+    let docs = docs_task
+        .await
+        .expect("docs join")
+        .expect("embed_documents");
     assert_eq!(docs.len(), 1);
 
     server.abort();
@@ -369,9 +369,8 @@ async fn query_and_cancel_not_blocked_by_slow_documents() {
 async fn llama_cpp_embeds_512d_when_gguf_present() {
     use lattice_embedding::qwen3_embedding_0_6b_q8_manifest;
 
-    let gguf = std::env::var("LATTICE_EMBED_LLAMA_GGUF").expect(
-        "set LATTICE_EMBED_LLAMA_GGUF to a verified Qwen3-Embedding-0.6B-Q8_0.gguf path",
-    );
+    let gguf = std::env::var("LATTICE_EMBED_LLAMA_GGUF")
+        .expect("set LATTICE_EMBED_LLAMA_GGUF to a verified Qwen3-Embedding-0.6B-Q8_0.gguf path");
     let gguf_path = PathBuf::from(&gguf);
     assert!(
         gguf_path.is_file(),
@@ -427,4 +426,3 @@ async fn llama_cpp_embeds_512d_when_gguf_present() {
 
     server.abort();
 }
-

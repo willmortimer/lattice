@@ -174,10 +174,7 @@ impl ScheduleRunner {
 /// Spawn a background loop that ticks open workspaces every `tick`.
 ///
 /// Abort the returned handle on daemon shutdown.
-pub fn spawn_schedule_runner(
-    runtime: Arc<LatticeRuntime>,
-    tick: Duration,
-) -> JoinHandle<()> {
+pub fn spawn_schedule_runner(runtime: Arc<LatticeRuntime>, tick: Duration) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut runner = ScheduleRunner::new(runtime);
         let mut interval = tokio::time::interval(tick);
@@ -243,9 +240,7 @@ steps:
         write_interval_workflow(root, "Disabled", false, 1);
 
         let runtime = Arc::new(LatticeRuntime::new());
-        let _session = runtime
-            .open_workspace_session(root)
-            .expect("open session");
+        let _session = runtime.open_workspace_session(root).expect("open session");
 
         let mut runner = ScheduleRunner::new(Arc::clone(&runtime));
         runner.tick_once().await;

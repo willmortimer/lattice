@@ -219,10 +219,7 @@ mod tests {
         // Unclosed quote-break: remainder is one phrase clause (still quoted).
         assert_eq!(build_fts_query("\" OR *"), "\" OR *\"");
         // Escaped quote inside a closed phrase: "" → one literal ".
-        assert_eq!(
-            build_fts_query("\"say \"\"hi\"\"\""),
-            "\"say \"\"hi\"\"\""
-        );
+        assert_eq!(build_fts_query("\"say \"\"hi\"\"\""), "\"say \"\"hi\"\"\"");
     }
 
     #[test]

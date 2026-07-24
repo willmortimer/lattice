@@ -241,18 +241,9 @@ mod tests {
 
     #[test]
     fn format_document_embedding_input_omits_empty_optional_fields() {
-        let formatted = format_document_embedding_input(
-            "Plain",
-            "note.txt",
-            &[],
-            None,
-            &[],
-            "Body only.",
-        );
-        assert_eq!(
-            formatted,
-            "Document: Plain\nPath: note.txt\n\nBody only."
-        );
+        let formatted =
+            format_document_embedding_input("Plain", "note.txt", &[], None, &[], "Body only.");
+        assert_eq!(formatted, "Document: Plain\nPath: note.txt\n\nBody only.");
         assert!(!formatted.contains("Section:"));
         assert!(!formatted.contains("Type:"));
         assert!(!formatted.contains("Tags:"));

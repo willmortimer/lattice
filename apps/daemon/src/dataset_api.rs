@@ -67,13 +67,13 @@ fn validate_rel_path(rel_path: &str) -> Result<(), ApiError> {
 
 fn resolve_package(root: &Path, rel_path: &str) -> Result<(PathBuf, PathBuf), ApiError> {
     validate_rel_path(rel_path)?;
-    let canonical_root = root.canonicalize().map_err(|err| {
-        ApiError::BadRequest(format!("workspace root {}: {err}", root.display()))
-    })?;
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|err| ApiError::BadRequest(format!("workspace root {}: {err}", root.display())))?;
     let package_abs = canonical_root.join(rel_path);
-    let canonical_package = package_abs.canonicalize().map_err(|_| {
-        ApiError::NotFound(format!("dataset not found at {rel_path}"))
-    })?;
+    let canonical_package = package_abs
+        .canonicalize()
+        .map_err(|_| ApiError::NotFound(format!("dataset not found at {rel_path}")))?;
     if !canonical_package.starts_with(&canonical_root) {
         return Err(ApiError::Forbidden(format!(
             "{rel_path:?} escapes the workspace root"

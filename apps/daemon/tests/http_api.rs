@@ -148,7 +148,10 @@ async fn search_and_read_round_trip_with_token() {
         .as_str()
         .unwrap()
         .contains("http-api-phrase"));
-    assert!(read_json["revision"].as_str().unwrap().starts_with("sha256:"));
+    assert!(read_json["revision"]
+        .as_str()
+        .unwrap()
+        .starts_with("sha256:"));
 }
 
 #[tokio::test]
@@ -258,7 +261,10 @@ async fn proposal_create_list_get_round_trip() {
     let create_json = body_json(create).await;
     let proposal_id = create_json["proposal"]["id"].as_str().unwrap().to_string();
     let workspace_id = create_json["workspaceId"].as_str().unwrap().to_string();
-    assert_eq!(create_json["proposal"]["source"]["type"].as_str().unwrap(), "mcp");
+    assert_eq!(
+        create_json["proposal"]["source"]["type"].as_str().unwrap(),
+        "mcp"
+    );
 
     let list = app
         .clone()
@@ -304,7 +310,9 @@ async fn proposal_create_list_get_round_trip() {
     assert_eq!(get.status(), StatusCode::OK);
     let get_json = body_json(get).await;
     assert_eq!(
-        get_json["proposal"]["commands"][0]["type"].as_str().unwrap(),
+        get_json["proposal"]["commands"][0]["type"]
+            .as_str()
+            .unwrap(),
         "page-create"
     );
 }

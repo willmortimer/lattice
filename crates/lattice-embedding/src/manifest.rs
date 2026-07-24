@@ -95,10 +95,7 @@ pub fn verify_file_sha256(path: &Path, expected_sha256: &str) -> Result<(), Embe
     let actual = file_sha256_hex(path)?;
     let expected = expected_sha256.trim().to_ascii_lowercase();
     if actual != expected {
-        return Err(EmbeddingError::ArtifactSha256Mismatch {
-            expected,
-            actual,
-        });
+        return Err(EmbeddingError::ArtifactSha256Mismatch { expected, actual });
     }
     Ok(())
 }
@@ -159,10 +156,7 @@ mod tests {
         write!(file, "hello").unwrap();
         let actual = file_sha256_hex(file.path()).unwrap();
         let err = verify_file_sha256(file.path(), "deadbeef").unwrap_err();
-        assert!(matches!(
-            err,
-            EmbeddingError::ArtifactSha256Mismatch { .. }
-        ));
+        assert!(matches!(err, EmbeddingError::ArtifactSha256Mismatch { .. }));
         verify_file_sha256(file.path(), &actual).unwrap();
     }
 }

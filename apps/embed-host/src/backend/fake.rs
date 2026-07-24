@@ -27,8 +27,7 @@ impl FakeBackend {
         manifest: &ModelManifest,
         dimensions: u32,
     ) -> Result<Self, EmbedHostError> {
-        let specification =
-            manifest.to_specification(dimensions, DistanceMetric::Cosine, true)?;
+        let specification = manifest.to_specification(dimensions, DistanceMetric::Cosine, true)?;
         // Keep provider_id reflecting the active host backend for namespace keys.
         let mut specification = specification;
         specification.provider_id = "fake".into();

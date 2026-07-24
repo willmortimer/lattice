@@ -116,7 +116,9 @@ impl ArtifactManifest {
             )));
         }
         if self.entrypoint.trim().is_empty() {
-            return Err(invalid("entrypoint must be a non-empty relative path".into()));
+            return Err(invalid(
+                "entrypoint must be a non-empty relative path".into(),
+            ));
         }
         if !is_safe_relative_path(&self.entrypoint) {
             return Err(invalid(format!(

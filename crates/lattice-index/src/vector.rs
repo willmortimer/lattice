@@ -344,8 +344,7 @@ mod tests {
         let mut cosine_raw = sample_namespace(&conn, 4);
         cosine_raw.specification.distance = DistanceMetric::Cosine;
         cosine_raw.specification.normalized = false;
-        let err =
-            search_vectors(&conn, &cosine_raw, &[1.0, 0.0, 0.0, 0.0], 1).unwrap_err();
+        let err = search_vectors(&conn, &cosine_raw, &[1.0, 0.0, 0.0, 0.0], 1).unwrap_err();
         assert!(matches!(
             err,
             VectorIndexError::UnsupportedDistance {

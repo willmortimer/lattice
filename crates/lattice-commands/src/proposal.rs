@@ -176,11 +176,7 @@ pub fn build_proposal_transaction(
 }
 
 /// Apply selected commands through [`CommandEngine`], then remove the proposal.
-pub fn apply_proposal(
-    workspace_root: &Path,
-    id: &str,
-    selected_indices: &[usize],
-) -> Result<()> {
+pub fn apply_proposal(workspace_root: &Path, id: &str, selected_indices: &[usize]) -> Result<()> {
     let proposal = load_proposal(workspace_root, id)?;
     if proposal.status != ProposalStatus::Pending {
         return Err(Error::InvalidResourceTarget {

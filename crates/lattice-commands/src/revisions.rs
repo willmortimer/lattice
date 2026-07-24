@@ -306,6 +306,7 @@ impl RevisionService {
 
     /// Record a semantic local revision. `before` may be absent for creates or
     /// directory/package deletes; that absence is retained in metadata.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn record_local_revision(
         &self,
         revision_id: &str,

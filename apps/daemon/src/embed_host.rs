@@ -109,9 +109,7 @@ impl SemanticProviderMode {
     }
 
     /// Deprecated alias for [`Self::from_env_or_default`].
-    #[deprecated(
-        note = "use from_env_or_default; Fake is only selected via LATTICE_SEMANTIC_FAKE"
-    )]
+    #[deprecated(note = "use from_env_or_default; Fake is only selected via LATTICE_SEMANTIC_FAKE")]
     pub fn from_env_or_fake() -> Self {
         Self::from_env_or_default()
     }
@@ -430,7 +428,10 @@ impl SemanticController {
     }
 
     /// Stop semantic indexing for a workspace (FTS remains available).
-    pub fn disable_workspace(&self, workspace_id: &str) -> std::result::Result<SemanticStatus, String> {
+    pub fn disable_workspace(
+        &self,
+        workspace_id: &str,
+    ) -> std::result::Result<SemanticStatus, String> {
         let session = self
             .runtime
             .get_session_by_id(workspace_id)
@@ -444,9 +445,8 @@ impl SemanticController {
     pub fn status_for_workspace(&self, workspace_id: &str) -> SemanticStatus {
         match self.runtime.get_session_by_id(workspace_id) {
             Some(session) => session.semantic_status(),
-            None => SemanticStatus::stopped().with_message(format!(
-                "workspace session not found for id {workspace_id}"
-            )),
+            None => SemanticStatus::stopped()
+                .with_message(format!("workspace session not found for id {workspace_id}")),
         }
     }
 
@@ -727,7 +727,10 @@ fn ensure_host_model_dir(models_dir: &Path) -> Result<(PathBuf, Option<u32>)> {
     if pinned_model_is_ready() {
         return Ok((qwen3_embedding_install_dir(), None));
     }
-    Ok((stage_fake_host_model(models_dir)?, Some(HOST_FAKE_DIMENSIONS)))
+    Ok((
+        stage_fake_host_model(models_dir)?,
+        Some(HOST_FAKE_DIMENSIONS),
+    ))
 }
 
 fn stage_fake_host_model(models_dir: &Path) -> Result<PathBuf> {
@@ -846,7 +849,9 @@ fn unavailable_status() -> SemanticStatus {
 }
 
 /// After Qwen download/prepare, production must run the pinned llama.cpp model.
-fn assert_production_llama_provider(provider: &dyn EmbeddingProvider) -> std::result::Result<(), String> {
+fn assert_production_llama_provider(
+    provider: &dyn EmbeddingProvider,
+) -> std::result::Result<(), String> {
     let spec = provider.specification();
     let pinned = qwen3_embedding_0_6b_q8_manifest();
     let hash = spec
@@ -928,9 +933,8 @@ pub fn resolve_embed_host_bin() -> Option<PathBuf> {
 }
 
 fn which_bin(name: &str) -> std::io::Result<PathBuf> {
-    let path = std::env::var_os("PATH").ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::NotFound, "PATH not set")
-    })?;
+    let path = std::env::var_os("PATH")
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "PATH not set"))?;
     for dir in std::env::split_paths(&path) {
         let candidate = dir.join(name);
         if candidate.is_file() {
@@ -971,9 +975,8 @@ mod tests {
             status.success(),
             "cargo build -p lattice-embed-host failed: {status}"
         );
-        resolve_embed_host_bin().expect(
-            "lattice-embed-host binary missing after build (set LATTICE_EMBED_HOST_BIN)",
-        )
+        resolve_embed_host_bin()
+            .expect("lattice-embed-host binary missing after build (set LATTICE_EMBED_HOST_BIN)")
     }
 
     #[test]
@@ -1182,7 +1185,11 @@ mod tests {
             "SpawnHost must use EmbedHostClient-backed provider"
         );
         assert_eq!(
-            controller.provider().expect("host provider").specification().dimensions,
+            controller
+                .provider()
+                .expect("host provider")
+                .specification()
+                .dimensions,
             HOST_FAKE_DIMENSIONS,
             "host fake fixture dimensions must differ from in-process Fake (12)"
         );
@@ -1250,8 +1257,7 @@ mod tests {
             "host RPC vectors must not come from in-process Fake dims"
         );
 
-        let hits =
-            hybrid_search_with_session_semantic(&session, "capability grants", 10).unwrap();
+        let hits = hybrid_search_with_session_semantic(&session, "capability grants", 10).unwrap();
         assert!(hits.iter().any(|h| h.semantic_rank.is_some()));
 
         assert!(controller.kill_supervised_host_for_test());

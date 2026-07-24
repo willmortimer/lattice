@@ -254,6 +254,9 @@ mod tests {
             )),
             "rewritten={rewritten}"
         );
-        assert!(!rewritten.contains("read_parquet('Data/"), "relative path should be gone: {rewritten}");
+        assert!(
+            !rewritten.contains("read_parquet('Data/"),
+            "relative path should be gone: {rewritten}"
+        );
     }
 }

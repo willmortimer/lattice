@@ -293,9 +293,7 @@ impl WorkspaceTemplate {
     pub fn catalog() -> Vec<TemplateDescriptor> {
         GENERATED_TEMPLATES
             .iter()
-            .filter(|template| {
-                template.visibility == "gallery" || template.visibility == "sample"
-            })
+            .filter(|template| template.visibility == "gallery" || template.visibility == "sample")
             .map(TemplateDescriptor::from_generated)
             .collect()
     }
@@ -559,7 +557,7 @@ fn materialize_data_package(
             return Err(map_data_error(error));
         }
     };
-    if let Some(directories) = created_directories.as_deref_mut() {
+    if let Some(directories) = created_directories {
         directories.push(package_path.clone());
     }
 
@@ -652,8 +650,7 @@ fn materialize_seed_table(
         .iter()
         .map(|column| seed_column_to_new_column(package_path, column))
         .collect::<Result<_>>()?;
-    app.add_columns(table, &columns)
-        .map_err(map_data_error)?;
+    app.add_columns(table, &columns).map_err(map_data_error)?;
 
     let column_types: BTreeMap<&str, FieldType> = columns
         .iter()
@@ -695,12 +692,14 @@ fn seed_column_to_new_column<'a>(
             ),
         })?;
     if field_type == FieldType::Relation {
-        let target = column.relation_table.ok_or_else(|| Error::TemplateValidation {
-            message: format!(
-                "data package {}: relation column {:?} requires relation_table",
-                package_path, column.name
-            ),
-        })?;
+        let target = column
+            .relation_table
+            .ok_or_else(|| Error::TemplateValidation {
+                message: format!(
+                    "data package {}: relation column {:?} requires relation_table",
+                    package_path, column.name
+                ),
+            })?;
         let mut new_column = NewColumn::relation(column.name, target);
         if let Some(junction) = column.junction_table {
             new_column = new_column.with_junction_table(junction);
@@ -708,33 +707,45 @@ fn seed_column_to_new_column<'a>(
         return Ok(new_column);
     }
     if field_type == FieldType::Lookup {
-        let lookup_relation = column.lookup_relation.ok_or_else(|| Error::TemplateValidation {
-            message: format!(
-                "data package {}: lookup column {:?} requires lookup_relation",
-                package_path, column.name
-            ),
-        })?;
-        let lookup_field = column.lookup_field.ok_or_else(|| Error::TemplateValidation {
-            message: format!(
-                "data package {}: lookup column {:?} requires lookup_field",
-                package_path, column.name
-            ),
-        })?;
-        return Ok(NewColumn::lookup(column.name, lookup_relation, lookup_field));
+        let lookup_relation = column
+            .lookup_relation
+            .ok_or_else(|| Error::TemplateValidation {
+                message: format!(
+                    "data package {}: lookup column {:?} requires lookup_relation",
+                    package_path, column.name
+                ),
+            })?;
+        let lookup_field = column
+            .lookup_field
+            .ok_or_else(|| Error::TemplateValidation {
+                message: format!(
+                    "data package {}: lookup column {:?} requires lookup_field",
+                    package_path, column.name
+                ),
+            })?;
+        return Ok(NewColumn::lookup(
+            column.name,
+            lookup_relation,
+            lookup_field,
+        ));
     }
     if field_type == FieldType::Rollup {
-        let rollup_relation = column.rollup_relation.ok_or_else(|| Error::TemplateValidation {
-            message: format!(
-                "data package {}: rollup column {:?} requires rollup_relation",
-                package_path, column.name
-            ),
-        })?;
-        let aggregate = column.rollup_aggregate.ok_or_else(|| Error::TemplateValidation {
-            message: format!(
-                "data package {}: rollup column {:?} requires rollup_aggregate",
-                package_path, column.name
-            ),
-        })?;
+        let rollup_relation = column
+            .rollup_relation
+            .ok_or_else(|| Error::TemplateValidation {
+                message: format!(
+                    "data package {}: rollup column {:?} requires rollup_relation",
+                    package_path, column.name
+                ),
+            })?;
+        let aggregate = column
+            .rollup_aggregate
+            .ok_or_else(|| Error::TemplateValidation {
+                message: format!(
+                    "data package {}: rollup column {:?} requires rollup_aggregate",
+                    package_path, column.name
+                ),
+            })?;
         let rollup_aggregate = aggregate.parse::<RollupAggregate>().map_err(|error| {
             Error::TemplateValidation {
                 message: format!(
@@ -833,9 +844,7 @@ fn sync_relation_from_backlink(
     source_table: &str,
     backlink_column: &str,
 ) -> Result<()> {
-    let rows = app
-        .list_rows(table, 10_000, 0)
-        .map_err(map_data_error)?;
+    let rows = app.list_rows(table, 10_000, 0).map_err(map_data_error)?;
     let mut links: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for row in rows {
         links.insert(row.id.clone(), Vec::new());
@@ -888,12 +897,14 @@ fn relation_columns_from_seed<'a>(
         if column.field_type != "relation" {
             continue;
         }
-        let target = column.relation_table.ok_or_else(|| Error::TemplateValidation {
-            message: format!(
-                "data package {}: relation column {:?} requires relation_table",
-                package_path, column.name
-            ),
-        })?;
+        let target = column
+            .relation_table
+            .ok_or_else(|| Error::TemplateValidation {
+                message: format!(
+                    "data package {}: relation column {:?} requires relation_table",
+                    package_path, column.name
+                ),
+            })?;
         relation_columns.push((column.name, target));
     }
     Ok(relation_columns)
@@ -915,12 +926,8 @@ fn resolve_seed_relation_values(
                 resolved.insert((*column_name).to_string(), CellValue::Null);
             }
             CellValue::Relation { record_ids } => {
-                let record_ids = resolve_seed_relation_refs(
-                    app,
-                    package_path,
-                    target_table,
-                    record_ids,
-                )?;
+                let record_ids =
+                    resolve_seed_relation_refs(app, package_path, target_table, record_ids)?;
                 resolved.insert(
                     (*column_name).to_string(),
                     CellValue::Relation { record_ids },
@@ -1031,7 +1038,11 @@ fn materialize_seed_form(
         }
     }
     let mut form = FormDef::new(seed.name, seed.table);
-    form.fields = seed.fields.iter().map(|field| (*field).to_string()).collect();
+    form.fields = seed
+        .fields
+        .iter()
+        .map(|field| (*field).to_string())
+        .collect();
     form.title = seed.title.map(str::to_string);
     form.description = seed.description.map(str::to_string);
     write_package_form(package_path, &form).map_err(map_data_error)
@@ -1110,23 +1121,27 @@ fn materialize_seed_action(
             }
             ActionKind::UpdateField {
                 field: field.to_string(),
-                value: seed.value.ok_or_else(|| Error::TemplateValidation {
-                    message: format!(
+                value: seed
+                    .value
+                    .ok_or_else(|| Error::TemplateValidation {
+                        message: format!(
                         "data package {package_path_label} action {:?} update_field requires value",
+                        seed.name
+                    ),
+                    })?
+                    .to_string(),
+            }
+        }
+        "open_url" => ActionKind::OpenUrl {
+            url: seed
+                .url
+                .ok_or_else(|| Error::TemplateValidation {
+                    message: format!(
+                        "data package {package_path_label} action {:?} open_url requires url",
                         seed.name
                     ),
                 })?
                 .to_string(),
-            }
-        }
-        "open_url" => ActionKind::OpenUrl {
-            url: seed.url.ok_or_else(|| Error::TemplateValidation {
-                message: format!(
-                    "data package {package_path_label} action {:?} open_url requires url",
-                    seed.name
-                ),
-            })?
-            .to_string(),
         },
         other => {
             return Err(Error::TemplateValidation {
@@ -1618,9 +1633,7 @@ pub fn template_catalog() -> Vec<TemplateDescriptor> {
 /// Look up one template by id or alias ([`resolve_template_id`]).
 pub fn template_descriptor(id: &str) -> Option<TemplateDescriptor> {
     let canonical = resolve_template_id(id)?;
-    Some(TemplateDescriptor::from_generated(
-        generated(canonical)?,
-    ))
+    Some(TemplateDescriptor::from_generated(generated(canonical)?))
 }
 
 fn strings(values: &[&str]) -> Vec<String> {
@@ -1667,9 +1680,10 @@ pub fn init_with_template(
     title: impl Into<String>,
     template_id: &str,
 ) -> Result<Workspace> {
-    let template_id = resolve_template_id(template_id).ok_or_else(|| Error::TemplateValidation {
-        message: format!("unknown workspace template {template_id:?}"),
-    })?;
+    let template_id =
+        resolve_template_id(template_id).ok_or_else(|| Error::TemplateValidation {
+            message: format!("unknown workspace template {template_id:?}"),
+        })?;
     WorkspaceProvisioner::provision(&WorkspaceCreationPlan {
         target: root.to_path_buf(),
         title: title.into(),
@@ -1941,7 +1955,10 @@ mod tests {
     fn template_catalog_and_descriptor_match_generated_order() {
         let catalog = template_catalog();
         assert_eq!(
-            catalog.iter().map(|template| template.id.as_str()).collect::<Vec<_>>(),
+            catalog
+                .iter()
+                .map(|template| template.id.as_str())
+                .collect::<Vec<_>>(),
             template_catalog_ids()
                 .into_iter()
                 .map(|id| id)
@@ -2320,7 +2337,9 @@ mod tests {
                 rollup_field: None,
             },
         ];
-        static ROWS: &[&str] = &[r#"{"name":"Ada","email":"ada@example.com","status":"Active","company":"Analytical"}"#];
+        static ROWS: &[&str] = &[
+            r#"{"name":"Ada","email":"ada@example.com","status":"Active","company":"Analytical"}"#,
+        ];
         static FORMS: &[SeedDataForm] = &[SeedDataForm {
             name: "ContactIntake",
             table: "contacts",
@@ -2523,8 +2542,7 @@ mod tests {
                 rollup_field: None,
             },
         ];
-        static CONTACT_ROWS: &[&str] =
-            &[r#"{"name":"Katherine Johnson","company":["NASA"]}"#];
+        static CONTACT_ROWS: &[&str] = &[r#"{"name":"Katherine Johnson","company":["NASA"]}"#];
         static PACKAGES: &[SeedDataPackage] = &[SeedDataPackage {
             path: "Data/Contacts.data",
             title: "Contacts",

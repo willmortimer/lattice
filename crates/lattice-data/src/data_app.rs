@@ -116,8 +116,7 @@ impl DataApp {
             ));
         }
         let attachments = self.attachments_dir();
-        std::fs::create_dir_all(&attachments)
-            .map_err(|source| Error::io(&attachments, source))?;
+        std::fs::create_dir_all(&attachments).map_err(|source| Error::io(&attachments, source))?;
 
         let original_name = source_path
             .file_name()
@@ -736,16 +735,11 @@ impl DataApp {
         limit: usize,
     ) -> Result<(Option<String>, Option<serde_json::Value>)> {
         let trimmed = self.validate_read_only_sql(sql)?;
-        let limit = limit.clamp(1, 100);
+        let _limit = limit.clamp(1, 100);
         let mut stmt = self.conn.prepare(trimmed)?;
         let column = stmt.column_name(0).ok().map(str::to_string);
         let mut rows = stmt.query([])?;
-        let mut seen = 0usize;
-        while let Some(row) = rows.next()? {
-            seen += 1;
-            if seen > limit {
-                break;
-            }
+        if let Some(row) = rows.next()? {
             let value: rusqlite::types::Value = row.get(0)?;
             let json = sqlite_value_to_json(value);
             return Ok((column, if json.is_null() { None } else { Some(json) }));
@@ -1850,9 +1844,7 @@ pub fn validate_attachment_ref(table: &str, column: &str, path: &str) -> Result<
     if !normalized.starts_with("attachments/") || normalized == "attachments/" {
         return Err(Error::table(
             table,
-            format!(
-                "column {column:?} attachment path {path:?} must be under attachments/"
-            ),
+            format!("column {column:?} attachment path {path:?} must be under attachments/"),
         ));
     }
     if normalized

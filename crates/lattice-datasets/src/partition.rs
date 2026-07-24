@@ -150,8 +150,8 @@ impl Dataset {
 
         let schema = batches[0].schema();
         let file = File::create(&abs).map_err(|source| Error::io(&abs, source))?;
-        let mut writer =
-            ArrowWriter::try_new(file, schema, None).map_err(|source| Error::parquet(&abs, source))?;
+        let mut writer = ArrowWriter::try_new(file, schema, None)
+            .map_err(|source| Error::parquet(&abs, source))?;
         let mut row_count = 0u64;
         for batch in batches {
             writer
@@ -259,7 +259,9 @@ impl Dataset {
             if key.contains(['=', '/', '\\']) || value.contains(['=', '/', '\\']) {
                 return Err(Error::invalid_package(
                     self.path(),
-                    format!("partition key/value may not contain '=', '/', or '\\\\': {key}={value}"),
+                    format!(
+                        "partition key/value may not contain '=', '/', or '\\\\': {key}={value}"
+                    ),
                 ));
             }
         }

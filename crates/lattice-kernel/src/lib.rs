@@ -15,7 +15,5 @@ pub use cwd::resolve_cwd_under_workspace;
 pub use discover::{inject_lattice_python_sdk, shipped_lattice_py_dir, PythonLauncher};
 pub use error::KernelError;
 pub use map::KernelSessionMap;
-pub use protocol::{
-    BridgeRequest, BridgeResponse, ExecuteResult, KernelOutput,
-};
+pub use protocol::{BridgeRequest, BridgeResponse, ExecuteResult, KernelOutput};
 pub use session::{shipped_bridge_script, KernelSession, StartOptions};

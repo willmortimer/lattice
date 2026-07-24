@@ -461,7 +461,9 @@ impl ReconnectableEmbedHostProvider {
 
 impl Drop for ReconnectableEmbedHostProvider {
     fn drop(&mut self) {
-        let ptr = self.specification.swap(std::ptr::null_mut(), Ordering::AcqRel);
+        let ptr = self
+            .specification
+            .swap(std::ptr::null_mut(), Ordering::AcqRel);
         if !ptr.is_null() {
             unsafe {
                 drop(Box::from_raw(ptr));

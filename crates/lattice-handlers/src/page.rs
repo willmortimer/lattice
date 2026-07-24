@@ -168,8 +168,8 @@ mod tests {
         .unwrap();
         assert!(revision.starts_with("sha256:"));
 
-        let content = std::fs::read_to_string(dir.path().join("Notes (conflict 2026-07-15).md"))
-            .unwrap();
+        let content =
+            std::fs::read_to_string(dir.path().join("Notes (conflict 2026-07-15).md")).unwrap();
         assert_eq!(content, "# Local copy\n");
 
         let err = create_page(

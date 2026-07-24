@@ -12,11 +12,11 @@ use lattice_protocol::{
     encode_frame, envelope, error_envelope, event, event_envelope, request, response,
     response_envelope, ApplyPageUpdateRequest, ApplyPageUpdateResponse,
     DisableSemanticSearchRequest, DisableSemanticSearchResponse, EnableSemanticSearchRequest,
-    EnableSemanticSearchResponse, Error as WireError, Event, FrameDecoder, GetSemanticStatusRequest,
-    GetSemanticStatusResponse, HealthRequest, HealthResponse, IndexProgress, OpenWorkspaceRequest,
-    OpenWorkspaceResponse, PingRequest, PingResponse, Request, ResourceChanged, Response,
-    SearchRequest, SearchResponse, SemanticStatus as WireSemanticStatus, WorkspaceLeaseChanged,
-    PROTOCOL_VERSION,
+    EnableSemanticSearchResponse, Error as WireError, Event, FrameDecoder,
+    GetSemanticStatusRequest, GetSemanticStatusResponse, HealthRequest, HealthResponse,
+    IndexProgress, OpenWorkspaceRequest, OpenWorkspaceResponse, PingRequest, PingResponse, Request,
+    ResourceChanged, Response, SearchRequest, SearchResponse, SemanticStatus as WireSemanticStatus,
+    WorkspaceLeaseChanged, PROTOCOL_VERSION,
 };
 use lattice_runtime::{
     IdempotentOutcome, LatticeRuntime, RuntimeEvent, RuntimeIndexProgress, RuntimeResourceChanged,
@@ -184,11 +184,14 @@ pub async fn serve_with_shutdown_and_controllers(
     );
     let state = DaemonState::new_with_controllers(config, runtime, semantic, voice)
         .with_connections(Arc::clone(&connections));
-    let schedule_runner =
-        crate::schedule::spawn_schedule_runner(Arc::clone(&state.runtime), crate::DEFAULT_SCHEDULE_TICK);
-    let api_shutdown = state.config.api_port.map(|port| {
-        crate::http::spawn_localhost_api(state.clone(), port)
-    });
+    let schedule_runner = crate::schedule::spawn_schedule_runner(
+        Arc::clone(&state.runtime),
+        crate::DEFAULT_SCHEDULE_TICK,
+    );
+    let api_shutdown = state
+        .config
+        .api_port
+        .map(|port| crate::http::spawn_localhost_api(state.clone(), port));
     let mut shutdown = shutdown;
     let mut idle_shutdown = idle_shutdown_rx;
     loop {
@@ -419,9 +422,9 @@ async fn handle_request(
             expected_revision,
             idempotency_key,
         ),
-        Some(request::Body::EnableSemanticSearch(EnableSemanticSearchRequest {
-            workspace_id,
-        })) => handle_enable_semantic(state, workspace_id),
+        Some(request::Body::EnableSemanticSearch(EnableSemanticSearchRequest { workspace_id })) => {
+            handle_enable_semantic(state, workspace_id)
+        }
         Some(request::Body::DisableSemanticSearch(DisableSemanticSearchRequest {
             workspace_id,
         })) => handle_disable_semantic(state, workspace_id),
@@ -499,9 +502,8 @@ fn handle_enable_semantic(
         .name("latticed-semantic-enable".into())
         .spawn(move || {
             let mut last_wire: Option<String> = None;
-            let status = match semantic_bg.enable_workspace_with_progress(
-                &workspace_bg,
-                &mut |progress| {
+            let status =
+                match semantic_bg.enable_workspace_with_progress(&workspace_bg, &mut |progress| {
                     let wire = semantic_status_to_wire(progress, Some(semantic_bg.as_ref()));
                     let fingerprint = format!(
                         "{}:{}:{:?}",
@@ -519,22 +521,21 @@ fn handle_enable_semantic(
                             status: Some(wire),
                         }),
                     );
-                },
-            ) {
-                Ok(status) => status,
-                Err(message) => {
-                    let failed = SemanticStatus {
-                        state: lattice_runtime::SemanticStatusState::Failed,
-                        pending_chunks: None,
-                        message: Some(message),
-                        progress_percent: None,
-                    };
-                    if let Some(session) = state_bg.runtime.get_session_by_id(&workspace_bg) {
-                        session.set_semantic_prepare_status(Some(failed.clone()));
+                }) {
+                    Ok(status) => status,
+                    Err(message) => {
+                        let failed = SemanticStatus {
+                            state: lattice_runtime::SemanticStatusState::Failed,
+                            pending_chunks: None,
+                            message: Some(message),
+                            progress_percent: None,
+                        };
+                        if let Some(session) = state_bg.runtime.get_session_by_id(&workspace_bg) {
+                            session.set_semantic_prepare_status(Some(failed.clone()));
+                        }
+                        failed
                     }
-                    failed
-                }
-            };
+                };
             state_bg.publish_event(
                 workspace_bg,
                 event::Body::SemanticStatus(lattice_protocol::SemanticStatusChanged {
@@ -608,9 +609,11 @@ fn handle_get_semantic_status(
     let status = semantic.status_for_workspace(&workspace_id);
     Ok((
         Response {
-            body: Some(response::Body::GetSemanticStatus(GetSemanticStatusResponse {
-                status: Some(semantic_status_to_wire(&status, Some(semantic))),
-            })),
+            body: Some(response::Body::GetSemanticStatus(
+                GetSemanticStatusResponse {
+                    status: Some(semantic_status_to_wire(&status, Some(semantic))),
+                },
+            )),
         },
         None,
     ))
@@ -626,9 +629,7 @@ fn semantic_status_to_wire(
         pending_chunks: status.pending_chunks,
         message: status.message.clone(),
         progress_percent: status.progress_percent,
-        provider_id: identity
-            .as_ref()
-            .map(|id| id.provider_id.clone()),
+        provider_id: identity.as_ref().map(|id| id.provider_id.clone()),
         model_id: identity.as_ref().and_then(|id| id.model_id.clone()),
         dimensions: identity.as_ref().and_then(|id| id.dimensions),
     }
@@ -701,11 +702,7 @@ async fn handle_search(
 }
 
 fn clamp_search_limit(limit: u32) -> usize {
-    let raw = if limit == 0 {
-        10
-    } else {
-        limit as usize
-    };
+    let raw = if limit == 0 { 10 } else { limit as usize };
     raw.clamp(1, crate::api::MAX_HIT_LIMIT)
 }
 

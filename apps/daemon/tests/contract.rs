@@ -250,7 +250,10 @@ async fn open_writes_lease_and_search_matches_embedded() {
             Some(response::Body::Search(daemon_hits)),
             Some(response::Body::Search(embedded_hits)),
         ) => {
-            assert!(!daemon_hits.hits.is_empty(), "daemon search should return hits");
+            assert!(
+                !daemon_hits.hits.is_empty(),
+                "daemon search should return hits"
+            );
             assert_eq!(daemon_hits.hits.len(), embedded_hits.hits.len());
             assert!(daemon_hits.hits.iter().any(|h| h.path.ends_with(".md")));
         }

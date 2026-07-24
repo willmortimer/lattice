@@ -25,9 +25,9 @@ pub use home::{
     default_debug_home_path, effective_default_workspace, ensure_lattice_home,
     initialize_active_lattice_home, initialize_dev_lattice_home, initialize_lattice_home,
     lattice_dev_home_enabled, lattice_dev_reset_demo_enabled, lattice_force_prod_home_enabled,
-    lattice_home_path, DEV_TEMPLATE_ID, DEV_WORKSPACE_NAME, LatticeHome, DEFAULT_DEBUG_HOME_RELATIVE,
-    DEFAULT_WORKSPACE_NAME, LATTICE_DEV_HOME_ENV, LATTICE_FORCE_PROD_HOME_ENV, LATTICE_HOME_ENV,
-    LATTICE_HOME_NAME, SETTINGS_DIR_NAME, STATE_DIR_NAME, WORKSPACES_DIR_NAME,
+    lattice_home_path, LatticeHome, DEFAULT_DEBUG_HOME_RELATIVE, DEFAULT_WORKSPACE_NAME,
+    DEV_TEMPLATE_ID, DEV_WORKSPACE_NAME, LATTICE_DEV_HOME_ENV, LATTICE_FORCE_PROD_HOME_ENV,
+    LATTICE_HOME_ENV, LATTICE_HOME_NAME, SETTINGS_DIR_NAME, STATE_DIR_NAME, WORKSPACES_DIR_NAME,
 };
 pub use lattice_profile::LATTICE_DEV_RESET_DEMO_ENV;
 pub use link_repair::{
@@ -53,10 +53,9 @@ pub use resource_runtime::{
 };
 pub use template::{
     apply_template, init_with_template, resolve_template_id, template_catalog,
-    template_catalog_ids, template_descriptor,
-    DefaultWorkspaceStatus, ProvisionDiagnostic, TemplateDescriptor, TemplateDirectory,
-    TemplateVisibility, WorkspaceCreationMode, WorkspaceCreationPlan, WorkspaceProvisionOutcome,
-    WorkspaceProvisioner, WorkspaceTemplate,
+    template_catalog_ids, template_descriptor, DefaultWorkspaceStatus, ProvisionDiagnostic,
+    TemplateDescriptor, TemplateDirectory, TemplateVisibility, WorkspaceCreationMode,
+    WorkspaceCreationPlan, WorkspaceProvisionOutcome, WorkspaceProvisioner, WorkspaceTemplate,
 };
 pub use validate::{Diagnostic, Severity};
 pub use watcher::{

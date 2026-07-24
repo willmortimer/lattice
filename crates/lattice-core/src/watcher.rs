@@ -100,26 +100,27 @@ impl WorkspaceWatcher {
         let (tx, rx) = mpsc::channel();
 
         let watch_root = canonical_root.clone();
-        let mut debouncer = new_debouncer(
-            debounce,
-            None,
-            move |result: DebounceEventResult| match result {
-                Ok(events) => {
-                    for event in &events {
-                        translate(&watch_root, &store, event, &tx);
+        let mut debouncer =
+            new_debouncer(
+                debounce,
+                None,
+                move |result: DebounceEventResult| match result {
+                    Ok(events) => {
+                        for event in &events {
+                            translate(&watch_root, &store, event, &tx);
+                        }
                     }
-                }
-                Err(errors) => {
-                    for error in errors {
-                        eprintln!("lattice: workspace watch error: {error}");
+                    Err(errors) => {
+                        for error in errors {
+                            eprintln!("lattice: workspace watch error: {error}");
+                        }
                     }
-                }
-            },
-        )
-        .map_err(|source| Error::Watch {
-            path: canonical_root.clone(),
-            source,
-        })?;
+                },
+            )
+            .map_err(|source| Error::Watch {
+                path: canonical_root.clone(),
+                source,
+            })?;
 
         debouncer
             .watch(&canonical_root, RecursiveMode::Recursive)

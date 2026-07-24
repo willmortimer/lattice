@@ -412,7 +412,7 @@ fn canvas_nodes_mut<'a>(path: &Path, document: &'a mut Value) -> Result<&'a mut 
         .ok_or_else(|| invalid_value(path, "nodes must be an array"))
 }
 
-fn canvas_edges<'a>(document: &'a Value) -> Option<&'a Vec<Value>> {
+fn canvas_edges(document: &Value) -> Option<&Vec<Value>> {
     document.get("edges").and_then(Value::as_array)
 }
 

@@ -203,7 +203,10 @@ fn trigger_view(trigger: &WorkflowTrigger) -> WorkflowTriggerView {
     }
 }
 
-fn manifest_view(manifest: WorkflowManifest, raw_yaml: String) -> Result<WorkflowManifestView, String> {
+fn manifest_view(
+    manifest: WorkflowManifest,
+    raw_yaml: String,
+) -> Result<WorkflowManifestView, String> {
     let mut steps = Vec::new();
     for step in &manifest.steps {
         let with = serde_json::to_value(&step.with).map_err(|err| err.to_string())?;
@@ -462,8 +465,7 @@ pub fn workflow_set_enabled(
 ) -> Result<WorkflowManifestView, String> {
     let workspace = open_workspace(Path::new(&request.root))?;
     let path = resolve_workflow(&workspace, &request.rel_path)?;
-    let manifest =
-        set_workflow_enabled(&path, request.enabled).map_err(|err| err.to_string())?;
+    let manifest = set_workflow_enabled(&path, request.enabled).map_err(|err| err.to_string())?;
     let raw_yaml = std::fs::read_to_string(&path).map_err(|err| err.to_string())?;
     manifest_view(manifest, raw_yaml)
 }

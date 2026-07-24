@@ -88,6 +88,7 @@ impl HistoryStore {
         Ok(conn.last_insert_rowid())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn insert_operation(
         &self,
         tx_rowid: i64,

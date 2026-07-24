@@ -43,12 +43,28 @@ fn conformance_fixtures_match_expected_profiles_and_diagnostics() {
     let root = workspace.path();
 
     let cases = [
-        ("bad.json", ResourceFormatProfile::Json, &["invalid-json"][..]),
-        ("bad.yaml", ResourceFormatProfile::Yaml, &["invalid-yaml"][..]),
-        ("fake.pdf", ResourceFormatProfile::Pdf, &["magic-mismatch"][..]),
+        (
+            "bad.json",
+            ResourceFormatProfile::Json,
+            &["invalid-json"][..],
+        ),
+        (
+            "bad.yaml",
+            ResourceFormatProfile::Yaml,
+            &["invalid-yaml"][..],
+        ),
+        (
+            "fake.pdf",
+            ResourceFormatProfile::Pdf,
+            &["magic-mismatch"][..],
+        ),
         ("minimal.pdf", ResourceFormatProfile::Pdf, &[]),
         ("truncated.pdf", ResourceFormatProfile::Pdf, &[]),
-        ("fake.png", ResourceFormatProfile::Image, &["magic-mismatch"][..]),
+        (
+            "fake.png",
+            ResourceFormatProfile::Image,
+            &["magic-mismatch"][..],
+        ),
         ("valid.png", ResourceFormatProfile::Image, &[]),
     ];
 

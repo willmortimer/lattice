@@ -122,9 +122,7 @@ impl CaptureProvider for SyntheticCaptureProvider {
             return Err(CaptureError::AlreadyRunning);
         }
         let Some(events) = self.events.clone() else {
-            return Err(CaptureError::invalid_argument(
-                "subscribe before start",
-            ));
+            return Err(CaptureError::invalid_argument("subscribe before start"));
         };
 
         let started_at = self.tick(1);
@@ -198,9 +196,7 @@ mod tests {
             other => panic!("expected Frame, got {other:?}"),
         }
 
-        provider
-            .emit_live_frame(&[0.5, 0.6])
-            .unwrap();
+        provider.emit_live_frame(&[0.5, 0.6]).unwrap();
         match rx.try_recv().unwrap() {
             CaptureEvent::Frame(frame) => {
                 assert_eq!(frame.sequence, 1);

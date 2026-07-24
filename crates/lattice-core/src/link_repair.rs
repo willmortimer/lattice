@@ -220,7 +220,11 @@ pub fn apply_span_replacements(
     let mut ordered = replacements.to_vec();
     ordered.sort_by(|left, right| right.0.cmp(&left.0));
     for (start, end, text) in ordered {
-        if start > end || end > output.len() || !output.is_char_boundary(start) || !output.is_char_boundary(end) {
+        if start > end
+            || end > output.len()
+            || !output.is_char_boundary(start)
+            || !output.is_char_boundary(end)
+        {
             return None;
         }
         output.replace_range(start..end, text);
@@ -300,7 +304,8 @@ fn wiki_stem_for(path: &Path) -> String {
 
 fn relative_markdown_target(source_path: &Path, new_resolved: &Path) -> String {
     let source_dir = source_path.parent().unwrap_or_else(|| Path::new(""));
-    let relative = relative_path(source_dir, new_resolved).unwrap_or_else(|| path_key(new_resolved));
+    let relative =
+        relative_path(source_dir, new_resolved).unwrap_or_else(|| path_key(new_resolved));
     if !relative.starts_with('.') && !relative.starts_with('/') {
         format!("./{relative}")
     } else {
@@ -337,10 +342,7 @@ fn relative_path(from_dir: &Path, to: &Path) -> Option<String> {
         output.push(component);
     }
     if output.as_os_str().is_empty() {
-        output.push(
-            to.file_name()
-                .unwrap_or_else(|| std::ffi::OsStr::new("")),
-        );
+        output.push(to.file_name().unwrap_or_else(|| std::ffi::OsStr::new("")));
     }
     Some(path_key(&output))
 }
@@ -386,10 +388,7 @@ pub fn build_repair_candidate(
     id: &str,
 ) -> LinkRepairCandidate {
     let old_target = occurrence.raw_target.clone();
-    let resolution = catalog.resolve(
-        Some(&occurrence.source_path),
-        &occurrence.raw_target,
-    );
+    let resolution = catalog.resolve(Some(&occurrence.source_path), &occurrence.raw_target);
     if !resolution_targets_path(&resolution, rename_from) {
         return LinkRepairCandidate {
             id: id.to_string(),
@@ -575,11 +574,8 @@ mod tests {
     #[test]
     fn span_replacements_apply_from_end_of_file() {
         let content = "[[A]] then [[B]]";
-        let updated = apply_span_replacements(
-            content,
-            &[(11, 16, "[[C]]"), (0, 5, "[[D]]")],
-        )
-        .unwrap();
+        let updated =
+            apply_span_replacements(content, &[(11, 16, "[[C]]"), (0, 5, "[[D]]")]).unwrap();
         assert_eq!(updated, "[[D]] then [[C]]");
     }
 
@@ -630,12 +626,8 @@ mod tests {
                 candidates: vec![candidate("b-0", "Notes/Home.md", 10, 15)],
             },
         ];
-        let batch = merge_batch_link_repair_plans(
-            "batch",
-            2,
-            LinkRepairSource::LatticeRename,
-            plans,
-        );
+        let batch =
+            merge_batch_link_repair_plans("batch", 2, LinkRepairSource::LatticeRename, plans);
         assert_eq!(batch.moves.len(), 2);
         assert_eq!(batch.omitted_co_moved_count, 1);
         assert_eq!(batch.candidates.len(), 2);
@@ -664,12 +656,8 @@ mod tests {
             created_at: 1,
             candidates,
         }];
-        let batch = merge_batch_link_repair_plans(
-            "batch",
-            1,
-            LinkRepairSource::LatticeRename,
-            plans,
-        );
+        let batch =
+            merge_batch_link_repair_plans("batch", 1, LinkRepairSource::LatticeRename, plans);
         assert!(batch.truncated);
         assert_eq!(batch.candidates.len(), LINK_REPAIR_BATCH_CANDIDATE_HARD_CAP);
         assert_eq!(

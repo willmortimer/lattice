@@ -120,10 +120,7 @@ fn write_read_partition_updates_manifest_and_files() {
         .write_partition_batch(&keys, &sample_batch(), None)
         .unwrap();
 
-    assert_eq!(
-        entry.path,
-        "facts/year=2025/month=12/part-000.parquet"
-    );
+    assert_eq!(entry.path, "facts/year=2025/month=12/part-000.parquet");
     assert_eq!(entry.keys.get("year").map(String::as_str), Some("2025"));
     assert_eq!(entry.keys.get("month").map(String::as_str), Some("12"));
     assert_eq!(entry.rows, Some(3));
@@ -179,11 +176,7 @@ fn discover_partitions_scans_facts_tree() {
 fn import_csv_writes_parquet_and_manifest() {
     let dir = tempfile::tempdir().unwrap();
     let csv_path = dir.path().join("events.csv");
-    std::fs::write(
-        &csv_path,
-        "event_id,count\ne1,10\ne2,20\ne3,30\n",
-    )
-    .unwrap();
+    std::fs::write(&csv_path, "event_id,count\ne1,10\ne2,20\ne3,30\n").unwrap();
 
     let package = dir.path().join("Import.dataset");
     let mut dataset = Dataset::create(&package, "Import", None).unwrap();
@@ -193,10 +186,7 @@ fn import_csv_writes_parquet_and_manifest() {
     ];
     let entry = dataset.import_csv(&csv_path, &keys, None).unwrap();
 
-    assert_eq!(
-        entry.path,
-        "facts/year=2026/month=01/part-000.parquet"
-    );
+    assert_eq!(entry.path, "facts/year=2026/month=01/part-000.parquet");
     assert_eq!(entry.rows, Some(3));
     assert!(package
         .join("facts/year=2026/month=01/part-000.parquet")

@@ -220,18 +220,14 @@ async fn ensure_voice_ready(app: &AppHandle, state: &VoiceState) -> Result<(), S
             return Ok(());
         }
         if inner.preparing {
-            return Err(
-                "voice model prepare is already in progress; wait for it to finish".into(),
-            );
+            return Err("voice model prepare is already in progress; wait for it to finish".into());
         }
     }
 
     {
         let mut inner = state.inner.lock().await;
         if inner.preparing {
-            return Err(
-                "voice model prepare is already in progress; wait for it to finish".into(),
-            );
+            return Err("voice model prepare is already in progress; wait for it to finish".into());
         }
         inner.preparing = true;
     }
@@ -301,17 +297,16 @@ pub async fn voice_status(state: State<'_, VoiceState>) -> Result<VoiceStatus, S
     #[cfg(all(target_os = "macos", feature = "voice"))]
     {
         let inner = state.inner.lock().await;
-        let prepared = inner.daemon.as_ref().is_some_and(|d| d.prepared)
-            || {
-                #[cfg(feature = "voice-embedded")]
-                {
-                    inner.embedded.is_some()
-                }
-                #[cfg(not(feature = "voice-embedded"))]
-                {
-                    false
-                }
-            };
+        let prepared = inner.daemon.as_ref().is_some_and(|d| d.prepared) || {
+            #[cfg(feature = "voice-embedded")]
+            {
+                inner.embedded.is_some()
+            }
+            #[cfg(not(feature = "voice-embedded"))]
+            {
+                false
+            }
+        };
         let message = if inner.preparing {
             Some("Preparing voice model…".into())
         } else if inner.daemon.as_ref().is_some_and(|d| d.prepared) {
@@ -454,13 +449,8 @@ pub async fn voice_start_session(
                 #[cfg(feature = "voice-embedded")]
                 {
                     ActiveSession::Embedded(
-                        embedded::start_session(
-                            app.clone(),
-                            &mut inner,
-                            session_id.clone(),
-                            hints,
-                        )
-                        .await?,
+                        embedded::start_session(app.clone(), &mut inner, session_id.clone(), hints)
+                            .await?,
                     )
                 }
                 #[cfg(not(feature = "voice-embedded"))]
@@ -503,10 +493,7 @@ pub async fn voice_push_audio(
     _session_id: String,
     _samples: Vec<f32>,
 ) -> Result<(), String> {
-    Err(
-        "voice_push_audio is retired: macOS dictation uses native capture (no WebView PCM)"
-            .into(),
-    )
+    Err("voice_push_audio is retired: macOS dictation uses native capture (no WebView PCM)".into())
 }
 
 #[tauri::command]

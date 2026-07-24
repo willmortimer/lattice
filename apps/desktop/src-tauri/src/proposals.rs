@@ -5,7 +5,7 @@
 use std::path::Path;
 
 use lattice_commands::{
-    apply_proposal, create_proposal, dismiss_proposal, load_proposal, list_proposal_summaries,
+    apply_proposal, create_proposal, dismiss_proposal, list_proposal_summaries, load_proposal,
     Command as SemanticCommand, ProposalSource, ProposalSourceType, TransactionProposal,
     TransactionProposalSummary,
 };

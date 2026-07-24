@@ -93,7 +93,7 @@ impl FieldType {
             | FieldType::Lookup
             | FieldType::Rollup
             | FieldType::Formula
-            |             FieldType::Enum
+            | FieldType::Enum
             | FieldType::MultiEnum
             | FieldType::Attachment => "TEXT",
             FieldType::Integer | FieldType::Boolean => "INTEGER",
@@ -292,21 +292,13 @@ impl CellValue {
                     }
                     FieldType::MultiEnum => {
                         let values: Vec<String> = serde_json::from_str(&text).map_err(|_| {
-                            rusqlite::Error::InvalidColumnType(
-                                0,
-                                text,
-                                rusqlite::types::Type::Text,
-                            )
+                            rusqlite::Error::InvalidColumnType(0, text, rusqlite::types::Type::Text)
                         })?;
                         Ok(CellValue::MultiEnum { values })
                     }
                     FieldType::Attachment => {
                         let paths: Vec<String> = serde_json::from_str(&text).map_err(|_| {
-                            rusqlite::Error::InvalidColumnType(
-                                0,
-                                text,
-                                rusqlite::types::Type::Text,
-                            )
+                            rusqlite::Error::InvalidColumnType(0, text, rusqlite::types::Type::Text)
                         })?;
                         Ok(CellValue::Attachment { paths })
                     }

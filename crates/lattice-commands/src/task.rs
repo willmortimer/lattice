@@ -279,7 +279,7 @@ impl SpawnedTask {
                 self.join_pipes();
                 Some(Err(TaskError::Io {
                     path: PathBuf::from("."),
-                    source: std::io::Error::new(std::io::ErrorKind::Other, "task wait failed"),
+                    source: std::io::Error::other("task wait failed"),
                 }))
             }
         }
@@ -402,11 +402,11 @@ impl TaskRunner {
 
         let mut stdout_pipe = child.stdout.take().ok_or_else(|| TaskError::Io {
             path: package_dir.clone(),
-            source: std::io::Error::new(std::io::ErrorKind::Other, "missing stdout pipe"),
+            source: std::io::Error::other("missing stdout pipe"),
         })?;
         let mut stderr_pipe = child.stderr.take().ok_or_else(|| TaskError::Io {
             path: package_dir.clone(),
-            source: std::io::Error::new(std::io::ErrorKind::Other, "missing stderr pipe"),
+            source: std::io::Error::other("missing stderr pipe"),
         })?;
 
         let stdout = Arc::new(Mutex::new(Vec::new()));

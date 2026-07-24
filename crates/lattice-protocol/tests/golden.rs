@@ -6,7 +6,7 @@ use lattice_protocol::{
     HealthResponse, IndexProgress, ModelState, ModelStatus, ModelStatusChanged,
     OpenWorkspaceRequest, OpenWorkspaceResponse, PartialTranscript, PingRequest,
     PrepareModelRequest, PrepareModelResponse, PushAudioChunkRequest, PushAudioChunkResponse,
-    Request, Response, ResourceChanged, SearchHit, SearchRequest, SearchResponse, SessionContext,
+    Request, ResourceChanged, Response, SearchHit, SearchRequest, SearchResponse, SessionContext,
     SessionFailed, SpeechCapabilities, SpeechSessionConfig, StartVoiceSessionRequest,
     StartVoiceSessionResponse, TranscriptionSessionState, UpdateSessionContextRequest,
     UpdateSessionContextResponse, WorkspaceLease, WorkspaceLeaseChanged, PROTOCOL_VERSION,
@@ -220,11 +220,13 @@ fn index_progress_event() -> lattice_protocol::Envelope {
         Event {
             sequence: 9,
             workspace_id: "ws-1".into(),
-            body: Some(lattice_protocol::event::Body::IndexProgress(IndexProgress {
-                phase: "upserted".into(),
-                path: Some("Notes.md".into()),
-                detail: None,
-            })),
+            body: Some(lattice_protocol::event::Body::IndexProgress(
+                IndexProgress {
+                    phase: "upserted".into(),
+                    path: Some("Notes.md".into()),
+                    detail: None,
+                },
+            )),
         },
     )
 }
@@ -513,11 +515,13 @@ fn session_failed_event() -> lattice_protocol::Envelope {
         Event {
             sequence: 23,
             workspace_id: String::new(),
-            body: Some(lattice_protocol::event::Body::SessionFailed(SessionFailed {
-                session_id: "vs-1".into(),
-                message: "host crashed".into(),
-                state: TranscriptionSessionState::Failed as i32,
-            })),
+            body: Some(lattice_protocol::event::Body::SessionFailed(
+                SessionFailed {
+                    session_id: "vs-1".into(),
+                    message: "host crashed".into(),
+                    state: TranscriptionSessionState::Failed as i32,
+                },
+            )),
         },
     )
 }

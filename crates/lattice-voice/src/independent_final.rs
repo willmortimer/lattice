@@ -56,8 +56,7 @@ impl IndependentFinalPolicy {
 pub fn capability_allows_offline_redecode(mode: FinalizationMode) -> bool {
     matches!(
         mode,
-        FinalizationMode::SameFamilyOfflineRedecode
-            | FinalizationMode::IndependentOfflineRedecode
+        FinalizationMode::SameFamilyOfflineRedecode | FinalizationMode::IndependentOfflineRedecode
     )
 }
 
@@ -65,13 +64,9 @@ pub fn capability_allows_offline_redecode(mode: FinalizationMode) -> bool {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IndependentFinalAttempt {
     /// Policy did not request a second path.
-    Skipped {
-        reason: &'static str,
-    },
+    Skipped { reason: &'static str },
     /// Policy requested a second path, but no real backend is available.
-    Unavailable {
-        reason: String,
-    },
+    Unavailable { reason: String },
     /// Offline re-decode produced the text that should be committed.
     Succeeded {
         text: String,
@@ -210,8 +205,9 @@ pub fn commit_final_transcript(
             streaming_flush.finalization_mode = mode;
             streaming_flush
         }
-        IndependentFinalAttempt::Skipped { .. }
-        | IndependentFinalAttempt::Unavailable { .. } => streaming_flush,
+        IndependentFinalAttempt::Skipped { .. } | IndependentFinalAttempt::Unavailable { .. } => {
+            streaming_flush
+        }
     }
 }
 
@@ -294,9 +290,6 @@ mod tests {
     fn unimplemented_backend_never_reports_independent_mode() {
         let stub = UnimplementedOfflineRedecode;
         assert!(!stub.is_implemented());
-        assert_eq!(
-            stub.finalization_mode(),
-            FinalizationMode::StreamingFlush
-        );
+        assert_eq!(stub.finalization_mode(), FinalizationMode::StreamingFlush);
     }
 }

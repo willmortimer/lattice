@@ -107,7 +107,9 @@ shape:
 "##;
     std::fs::write(&path, yaml).unwrap();
     let err = check_theme_file(&path).unwrap_err();
-    assert!(err.to_string().contains("terminal missing required ANSI key"));
+    assert!(err
+        .to_string()
+        .contains("terminal missing required ANSI key"));
 }
 
 #[test]
