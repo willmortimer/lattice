@@ -53,6 +53,29 @@
   --lt-titlebar: 38px;
   --lt-max-width: 1140px;
 
+  /* Token tier — theme-independent scale + surfaces derived from live roles.
+     Static values never vary by theme; derived ones use var() so they track
+     whichever theme is active. Safe to regenerate per-theme (idempotent). */
+  --lt-space-1: 4px;
+  --lt-space-2: 8px;
+  --lt-space-3: 12px;
+  --lt-space-4: 16px;
+  --lt-space-5: 24px;
+  --lt-space-6: 32px;
+  --lt-font-size-xs: 11px;
+  --lt-font-size-sm: 12px;
+  --lt-font-size-md: 13.5px;
+  --lt-font-size-lg: 16px;
+  --lt-font-weight-medium: 500;
+  --lt-font-weight-semibold: 600;
+  --lt-radius-xs: 4px;
+  --lt-radius-md: var(--lt-radius);
+  --lt-surface-raised: var(--lt-bg-raise);
+  --lt-surface-sunken: color-mix(in oklch, var(--lt-bg) 94%, black);
+  --lt-focus-ring: var(--lt-accent-bright);
+  --lt-warning: var(--lt-accent-deep);
+  --lt-success: var(--lt-term-green, #4e9a6c);
+
   /* Site aliases (--l-*) — same roles, legacy names used by marketing CSS */
   --l-bg: var(--lt-bg);
   --l-bg-2: var(--lt-bg-raise);

@@ -72,7 +72,7 @@ html[data-platform="macos"] .quick-note-native-titlebar {
 
 .quick-note-editor-stack {
   position: relative;
-  width: min(100%, var(--lt-page-content-width, 68ch));
+  width: min(100%, var(--lt-max-width));
   min-height: 100%;
   margin: 0 auto;
 }

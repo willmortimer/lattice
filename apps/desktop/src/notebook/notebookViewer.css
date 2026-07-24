@@ -11,7 +11,7 @@
   justify-content: space-between;
   gap: var(--lt-space-3);
   padding-bottom: var(--lt-space-3);
-  border-bottom: 1px solid var(--lt-color-border-subtle);
+  border-bottom: 1px solid var(--lt-line);
 }
 
 .lattice-notebook-toolbar-group {
@@ -23,7 +23,7 @@
 .lattice-notebook-kind {
   font-size: var(--lt-font-size-sm);
   font-weight: var(--lt-font-weight-medium);
-  color: var(--lt-color-text-secondary);
+  color: var(--lt-text-soft);
 }
 
 .lattice-notebook-run {
@@ -31,19 +31,19 @@
   font-size: var(--lt-font-size-sm);
   padding: 0.35rem 0.75rem;
   border-radius: var(--lt-radius-sm);
-  border: 1px solid var(--lt-color-border-subtle);
-  background: var(--lt-color-surface-raised);
-  color: var(--lt-color-text-muted);
+  border: 1px solid var(--lt-line);
+  background: var(--lt-bg-raise);
+  color: var(--lt-muted);
   cursor: not-allowed;
 }
 
 .lattice-notebook-run-active {
-  color: var(--lt-color-text-primary);
+  color: var(--lt-text);
   cursor: pointer;
 }
 
 .lattice-notebook-run-active:disabled {
-  color: var(--lt-color-text-muted);
+  color: var(--lt-muted);
   cursor: not-allowed;
 }
 
@@ -51,15 +51,15 @@
   margin: 0;
   padding: var(--lt-space-2) var(--lt-space-3);
   border-radius: var(--lt-radius-sm);
-  background: var(--lt-color-surface-sunken);
-  color: var(--lt-color-text-secondary);
+  background: var(--lt-surface-sunken);
+  color: var(--lt-text-soft);
   font-size: var(--lt-font-size-sm);
 }
 
 .lattice-notebook-banner-warn {
-  border: 1px solid color-mix(in srgb, var(--lt-color-danger) 40%, transparent);
-  background: color-mix(in srgb, var(--lt-color-danger) 8%, transparent);
-  color: var(--lt-color-text-primary);
+  border: 1px solid color-mix(in srgb, var(--lt-danger) 40%, transparent);
+  background: color-mix(in srgb, var(--lt-danger) 8%, transparent);
+  color: var(--lt-text);
 }
 
 .lattice-notebook-cells {
@@ -69,9 +69,9 @@
 }
 
 .lattice-notebook-cell {
-  border: 1px solid var(--lt-color-border-subtle);
+  border: 1px solid var(--lt-line);
   border-radius: var(--lt-radius-md);
-  background: var(--lt-color-surface-raised);
+  background: var(--lt-bg-raise);
   overflow: hidden;
 }
 
@@ -82,9 +82,9 @@
   gap: var(--lt-space-2);
   padding: 0.4rem 0.75rem;
   font-size: var(--lt-font-size-xs);
-  color: var(--lt-color-text-secondary);
-  background: var(--lt-color-surface-sunken);
-  border-bottom: 1px solid var(--lt-color-border-subtle);
+  color: var(--lt-text-soft);
+  background: var(--lt-surface-sunken);
+  border-bottom: 1px solid var(--lt-line);
 }
 
 .lattice-notebook-cell-body {
@@ -97,13 +97,13 @@
 
 .lattice-notebook-code .cm-editor {
   border-radius: var(--lt-radius-sm);
-  border: 1px solid var(--lt-color-border-subtle);
+  border: 1px solid var(--lt-line);
 }
 
 .lattice-notebook-raw {
   margin: 0;
   white-space: pre-wrap;
-  font-family: var(--lt-font-family-mono);
+  font-family: var(--lt-font-mono);
   font-size: var(--lt-font-size-sm);
 }
 
@@ -113,7 +113,7 @@
   gap: var(--lt-space-2);
   margin-top: var(--lt-space-3);
   padding-top: var(--lt-space-3);
-  border-top: 1px dashed var(--lt-color-border-subtle);
+  border-top: 1px dashed var(--lt-line);
 }
 
 .lattice-notebook-output-block {
@@ -128,7 +128,7 @@
 .lattice-notebook-output-chart {
   padding: var(--lt-space-2) var(--lt-space-3);
   border-radius: var(--lt-radius-sm);
-  background: var(--lt-color-surface-sunken);
+  background: var(--lt-surface-sunken);
 }
 
 .lattice-notebook-output-html table,
@@ -141,8 +141,8 @@
   margin: 0;
   padding: var(--lt-space-2) var(--lt-space-3);
   border-radius: var(--lt-radius-sm);
-  background: var(--lt-color-surface-sunken);
-  font-family: var(--lt-font-family-mono);
+  background: var(--lt-surface-sunken);
+  font-family: var(--lt-font-mono);
   font-size: var(--lt-font-size-sm);
   white-space: pre-wrap;
   overflow-x: auto;
@@ -150,19 +150,19 @@
 
 .lattice-notebook-output-stderr,
 .lattice-notebook-output-error {
-  color: var(--lt-color-danger);
+  color: var(--lt-danger);
 }
 
 .lattice-notebook-output-image {
   max-width: 100%;
   height: auto;
   border-radius: var(--lt-radius-sm);
-  border: 1px solid var(--lt-color-border-subtle);
+  border: 1px solid var(--lt-line);
 }
 
 .lattice-notebook-error {
   padding: var(--lt-space-4);
-  border: 1px solid var(--lt-color-danger);
+  border: 1px solid var(--lt-danger);
   border-radius: var(--lt-radius-md);
-  background: color-mix(in srgb, var(--lt-color-danger) 8%, transparent);
+  background: color-mix(in srgb, var(--lt-danger) 8%, transparent);
 }
