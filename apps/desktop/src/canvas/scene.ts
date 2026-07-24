@@ -4,6 +4,7 @@ import "pixi.js/unsafe-eval";
 import { Application, Container, FederatedPointerEvent, Graphics, Rectangle, Text } from "pixi.js";
 import type { CanvasNodeMove, CanvasNodeSize } from "./adapter";
 import type { CanvasData, CanvasEdge, CanvasNode } from "./types";
+import type { ResourceKind } from "../types";
 import { classifyPath } from "./classify";
 import { KIND_LABELS } from "../KindMark";
 import { hexToRgba, observeThemeChange, readCanvasPalette, type CanvasPalette } from "./colors";
@@ -17,6 +18,13 @@ const PORT_RADIUS = 5;
 const PORT_HIT = 12;
 const RESIZE_HANDLE = 10;
 const MIN_NODE_SIZE = 80;
+const CHIP_SIZE = 22;
+const CHIP_RADIUS = 6;
+/** Grid stays legible: fade out below this zoom instead of drawing dust. */
+const GRID_FADE_LO = 0.32;
+const GRID_FADE_HI = 0.55;
+/** Hard cap on dots per redraw; spacing doubles until under this. */
+const GRID_MAX_DOTS = 6000;
 const SIDES = ["top", "right", "bottom", "left"] as const;
 
 interface CanvasConnectRequest {
@@ -46,6 +54,12 @@ interface NodeCard {
   node: CanvasNode;
   ports: Map<Side, Graphics>;
   resizeHandle: Graphics;
+}
+
+interface GroupCard {
+  container: Container;
+  bg: Graphics;
+  node: CanvasNode & { type: "group" };
 }
 
 const SIDE_NORMAL: Record<Side, { x: number; y: number }> = {
@@ -87,12 +101,6 @@ function autoSide(from: CanvasNode, to: CanvasNode): Side {
   return dy >= 0 ? "bottom" : "top";
 }
 
-/** Parse a JSON Canvas node color: only hex is honored (Pixi cannot resolve CSS color-mix). */
-function nodeAccent(color?: string): string | null {
-  if (color && /^#[0-9a-fA-F]{3,8}$/.test(color)) return color;
-  return null;
-}
-
 /**
  * Imperative PixiJS v8 scene for a read-only JSON Canvas view: pan, zoom,
  * node selection, and file-node double-click. No React, no editing.
@@ -100,23 +108,32 @@ function nodeAccent(color?: string): string | null {
 export class CanvasScene {
   private app = new Application();
   private world = new Container();
+  /** Camera-tracked dot grid; redrawn (one Graphics) on every camera change. */
+  private gridLayer = new Graphics();
   private groupsLayer = new Container();
   private edgesLayer = new Container();
   private nodesLayer = new Container();
 
   private nodeCards = new Map<string, NodeCard>();
+  private groupCards = new Map<string, GroupCard>();
   private edgeGraphics = new Map<string, Graphics>();
   private selectedId: string | null = null;
   private selectedEdgeId: string | null = null;
   private hoveredId: string | null = null;
+  private hoveredEdgeId: string | null = null;
   private lastTapAt = new Map<string, number>();
   private suppressTapFor: string | null = null;
+  private zoomListeners = new Set<(scale: number) => void>();
+  private lastZoom = 1;
   private dragging: {
     id: string;
+    container: Container;
     startX: number;
     startY: number;
     nodeX: number;
     nodeY: number;
+    /** Group drags carry member cards along by the same delta. */
+    members: Array<{ id: string; container: Container; originX: number; originY: number }>;
     moved: boolean;
   } | null = null;
   private resizing: {
@@ -205,7 +222,8 @@ export class CanvasScene {
     this.app.canvas.tabIndex = 0;
     this.app.canvas.setAttribute("aria-label", "Canvas scene");
 
-    this.world.addChild(this.groupsLayer, this.edgesLayer, this.nodesLayer);
+    this.gridLayer.eventMode = "none";
+    this.world.addChild(this.gridLayer, this.groupsLayer, this.edgesLayer, this.nodesLayer);
     this.app.stage.addChild(this.world);
 
     this.app.stage.eventMode = "static";
@@ -233,6 +251,7 @@ export class CanvasScene {
           this.needsInitialFit = false;
           this.fitToContent(this.data.nodes);
         }
+        this.syncCamera();
       }
     });
     this.resizeObserver.observe(this.host);
@@ -288,6 +307,93 @@ export class CanvasScene {
     return this.toWorld(clientX - rect.left, clientY - rect.top);
   }
 
+  /** Current camera zoom (1 = 100%). */
+  getZoom(): number {
+    return this.world.scale.x;
+  }
+
+  /** Zoom about the viewport center (toolbar −/+/reset). */
+  setZoom(next: number) {
+    if (!this.initialized || this.destroyed) return;
+    const scale = clamp(next, MIN_SCALE, MAX_SCALE);
+    const old = this.world.scale.x;
+    if (scale === old) return;
+    const cx = (this.app.screen.width || this.host.clientWidth) / 2;
+    const cy = (this.app.screen.height || this.host.clientHeight) / 2;
+    const worldX = (cx - this.world.position.x) / old;
+    const worldY = (cy - this.world.position.y) / old;
+    this.world.scale.set(scale);
+    this.world.position.set(cx - worldX * scale, cy - worldY * scale);
+    this.syncCamera();
+  }
+
+  /** Subscribe to zoom changes; fires immediately with the current value. */
+  onZoomChange(listener: (scale: number) => void): () => void {
+    this.zoomListeners.add(listener);
+    listener(this.world.scale.x);
+    return () => {
+      this.zoomListeners.delete(listener);
+    };
+  }
+
+  /** Keep camera-dependent chrome (grid, zoom readout) in step after any pan/zoom. */
+  private syncCamera() {
+    this.updateGrid();
+    const zoom = this.world.scale.x;
+    if (zoom !== this.lastZoom) {
+      this.lastZoom = zoom;
+      for (const listener of this.zoomListeners) listener(zoom);
+    }
+  }
+
+  /**
+   * Redraw the dot grid for the visible world range only. One Graphics, dot
+   * count capped by doubling the spacing, faded out at low zoom so distant
+   * views stay calm.
+   */
+  private updateGrid() {
+    const g = this.gridLayer;
+    g.clear();
+    const scale = this.world.scale.x;
+    const fade = clamp((scale - GRID_FADE_LO) / (GRID_FADE_HI - GRID_FADE_LO), 0, 1);
+    g.alpha = fade;
+    if (fade <= 0) return;
+    const screenW = this.app.screen.width || this.host.clientWidth;
+    const screenH = this.app.screen.height || this.host.clientHeight;
+    if (screenW <= 8 || screenH <= 8) return;
+
+    let spacing = this.palette.GRID_SIZE;
+    const worldW = screenW / scale;
+    const worldH = screenH / scale;
+    let cols = Math.ceil(worldW / spacing) + 2;
+    let rows = Math.ceil(worldH / spacing) + 2;
+    while (cols * rows > GRID_MAX_DOTS) {
+      spacing *= 2;
+      cols = Math.ceil(worldW / spacing) + 2;
+      rows = Math.ceil(worldH / spacing) + 2;
+    }
+
+    const left = -this.world.position.x / scale;
+    const top = -this.world.position.y / scale;
+    const startX = Math.floor(left / spacing) * spacing;
+    const startY = Math.floor(top / spacing) * spacing;
+    // Constant on-screen dot size regardless of zoom (the layer is scaled).
+    const radius = 1.1 / scale;
+    for (let i = 0; i < cols; i += 1) {
+      for (let j = 0; j < rows; j += 1) {
+        g.circle(startX + i * spacing, startY + j * spacing, radius);
+      }
+    }
+    g.fill(this.palette.GRID_DOT);
+  }
+
+  /** JSON Canvas node/edge color: hex passes through, presets "1".."6" map to theme hues. */
+  private resolveNodeColor(color?: string): string | null {
+    if (!color) return null;
+    if (/^#[0-9a-fA-F]{3,8}$/.test(color)) return color;
+    return this.palette.PRESETS[color] ?? null;
+  }
+
   private rebuild(data: CanvasData, options: { fit: boolean }) {
     if (!this.initialized || this.destroyed) return;
     this.cancelLink();
@@ -303,16 +409,20 @@ export class CanvasScene {
     this.edgesLayer.removeChildren();
     this.nodesLayer.removeChildren();
     this.nodeCards.clear();
+    this.groupCards.clear();
     this.edgeGraphics.clear();
     this.selectedId = null;
     this.selectedEdgeId = null;
     this.hoveredId = null;
+    this.hoveredEdgeId = null;
 
     const byId = new Map(data.nodes.map((n) => [n.id, n]));
 
     for (const node of data.nodes) {
       if (node.type === "group") {
-        this.groupsLayer.addChild(this.buildGroup(node));
+        const group = this.buildGroup(node);
+        this.groupsLayer.addChild(group.container);
+        this.groupCards.set(node.id, group);
       } else {
         const card = this.buildCard(node);
         this.nodesLayer.addChild(card.container);
@@ -331,6 +441,14 @@ export class CanvasScene {
       g.on("pointertap", (e: FederatedPointerEvent) => {
         e.stopPropagation();
         this.selectEdge(edge.id);
+      });
+      g.on("pointerover", () => {
+        this.hoveredEdgeId = edge.id;
+        this.drawEdge(g, shell, edge, from, to, this.selectedEdgeId === edge.id, true);
+      });
+      g.on("pointerout", () => {
+        if (this.hoveredEdgeId === edge.id) this.hoveredEdgeId = null;
+        this.drawEdge(g, shell, edge, from, to, this.selectedEdgeId === edge.id, false);
       });
       shell.addChild(g);
       this.drawEdge(g, shell, edge, from, to, false);
@@ -352,50 +470,101 @@ export class CanvasScene {
     } else if (camera) {
       this.world.scale.set(camera.scale);
       this.world.position.set(camera.x, camera.y);
+      this.syncCamera();
     }
 
-    if (selectedId && this.nodeCards.has(selectedId)) {
+    if (selectedId && (this.nodeCards.has(selectedId) || this.groupCards.has(selectedId))) {
       this.selectNode(selectedId);
     } else if (selectedEdgeId && this.edgeGraphics.has(selectedEdgeId)) {
       this.selectEdge(selectedEdgeId);
     }
   }
 
-  private buildGroup(node: CanvasNode & { type: "group" }): Container {
+  private buildGroup(node: CanvasNode & { type: "group" }): GroupCard {
     const container = new Container();
     container.position.set(node.x, node.y);
 
-    const accent = nodeAccent(node.color);
-    const bg = new Graphics()
-      .roundRect(0, 0, node.width, node.height, CARD_RADIUS + 4)
-      .fill(accent ? withAlpha(accent, 0.08) : this.palette.BG_RAISE)
-      .stroke({ width: 1, color: accent ?? this.palette.LINE_STRONG });
+    const bg = new Graphics();
     container.addChild(bg);
+    this.paintGroup(bg, node, false, false);
 
     if (node.label) {
       const label = new Text({
         text: node.label,
         style: {
-          fontFamily: this.palette.FONT_DISPLAY,
-          fontSize: 14,
+          fontFamily: this.palette.FONT_UI,
+          fontSize: 12,
           fontWeight: "600",
+          letterSpacing: 0.2,
           fill: this.palette.TEXT_SOFT,
         },
       });
-      label.position.set(2, -22);
-      container.addChild(label);
+      const padX = 8;
+      const padY = 4;
+      const backdrop = new Graphics()
+        .roundRect(10, 10, label.width + padX * 2, label.height + padY * 2, 6)
+        .fill({ color: this.palette.BG_RAISE, alpha: 0.85 })
+        .stroke({ width: 1, color: this.palette.LINE });
+      label.position.set(10 + padX, 10 + padY);
+      container.addChild(backdrop, label);
     }
 
     container.eventMode = "static";
-    container.cursor = "default";
+    container.cursor = "pointer";
     container.hitArea = new Rectangle(0, 0, node.width, node.height);
     container.on("pointerdown", (e: FederatedPointerEvent) => {
+      if (this.linking) return;
       e.stopPropagation();
       this.beginNodeDrag(node.id, e);
     });
-    container.on("pointertap", () => this.selectNode(node.id));
+    container.on("pointertap", () => {
+      if (this.suppressTapFor === node.id) {
+        this.suppressTapFor = null;
+        return;
+      }
+      this.selectNode(node.id);
+    });
+    container.on("pointerover", () => this.setHoveredNode(node.id));
+    container.on("pointerout", () => {
+      if (this.hoveredId === node.id) this.setHoveredNode(null);
+    });
 
-    return container;
+    return { container, bg, node };
+  }
+
+  private paintGroup(bg: Graphics, node: CanvasNode, selected: boolean, hovered: boolean) {
+    const accent = this.resolveNodeColor(node.color);
+    const fill = (accent ? hexToRgba(accent, 0.06) : null) ?? this.palette.GROUP_WASH;
+    bg.clear().roundRect(0, 0, node.width, node.height, CARD_RADIUS + 4).fill(fill);
+    if (hovered && !selected) {
+      bg.roundRect(0, 0, node.width, node.height, CARD_RADIUS + 4).fill(this.palette.GROUP_WASH);
+    }
+    bg.roundRect(0, 0, node.width, node.height, CARD_RADIUS + 4).stroke({
+      width: selected ? 1.5 : 1,
+      color: selected ? this.palette.AMBER : accent ?? this.palette.LINE_STRONG,
+    });
+    if (selected) {
+      bg.roundRect(-3, -3, node.width + 6, node.height + 6, CARD_RADIUS + 7).stroke({
+        width: 2,
+        color: this.palette.ACCENT_GLOW,
+      });
+    }
+  }
+
+  /** Cards whose centers sit inside the group's current bounds ride along with it. */
+  private groupMemberCards(group: GroupCard): Array<{ id: string; card: NodeCard }> {
+    const gx = group.container.x;
+    const gy = group.container.y;
+    const { width, height } = group.node;
+    const members: Array<{ id: string; card: NodeCard }> = [];
+    for (const [id, card] of this.nodeCards) {
+      const cx = card.container.x + card.node.width / 2;
+      const cy = card.container.y + card.node.height / 2;
+      if (cx >= gx && cx <= gx + width && cy >= gy && cy <= gy + height) {
+        members.push({ id, card });
+      }
+    }
+    return members;
   }
 
   private buildCard(node: CanvasNode): NodeCard {
@@ -406,7 +575,7 @@ export class CanvasScene {
     container.addChild(bg);
     this.paintCard(bg, node, false);
 
-    const accent = nodeAccent(node.color);
+    const accent = this.resolveNodeColor(node.color);
     if (accent) {
       const stripe = new Graphics().roundRect(0, 0, 4, node.height, 2).fill(accent);
       container.addChild(stripe);
@@ -417,6 +586,11 @@ export class CanvasScene {
 
     if (node.type === "file") {
       const kind = classifyPath(node.file);
+      const hue = this.palette.KIND[kind];
+      container.addChild(this.buildKindChip(kind, hue, textX, CARD_PADDING));
+
+      const headX = textX + CHIP_SIZE + 9;
+      const headWidth = Math.max(8, node.width - headX - CARD_PADDING);
       const title = new Text({
         text: basename(node.file),
         style: {
@@ -425,49 +599,54 @@ export class CanvasScene {
           fontWeight: "600",
           fill: this.palette.TEXT,
           wordWrap: true,
-          wordWrapWidth: textWidth,
+          wordWrapWidth: headWidth,
           breakWords: true,
         },
       });
-      title.position.set(textX, CARD_PADDING);
+      title.position.set(headX, CARD_PADDING + 1);
       container.addChild(title);
 
       const kindLabel = new Text({
         text: KIND_LABELS[kind].toUpperCase(),
         style: {
           fontFamily: this.palette.FONT_MONO,
-          fontSize: 10,
-          letterSpacing: 0.6,
-          fill: this.palette.AMBER_DEEP,
+          fontSize: 9.5,
+          letterSpacing: 0.8,
+          fill: hue,
         },
       });
-      kindLabel.position.set(textX, CARD_PADDING + title.height + 6);
+      kindLabel.position.set(headX, CARD_PADDING + 1 + title.height + 4);
       container.addChild(kindLabel);
     } else if (node.type === "link") {
-      const title = new Text({
-        text: "Link",
+      const hue = this.palette.KIND.file;
+      container.addChild(this.buildLinkChip(hue, textX, CARD_PADDING));
+
+      const headX = textX + CHIP_SIZE + 9;
+      const caption = new Text({
+        text: "LINK",
         style: {
           fontFamily: this.palette.FONT_MONO,
-          fontSize: 10,
-          letterSpacing: 0.6,
+          fontSize: 9.5,
+          letterSpacing: 0.8,
           fill: this.palette.FAINT,
         },
       });
-      title.position.set(textX, CARD_PADDING);
-      container.addChild(title);
+      caption.position.set(headX, CARD_PADDING + 2);
+      container.addChild(caption);
 
       const url = new Text({
         text: node.url,
         style: {
           fontFamily: this.palette.FONT_MONO,
-          fontSize: 12,
-          fill: this.palette.AMBER,
+          fontSize: 11.5,
+          lineHeight: 16,
+          fill: this.palette.MUTED,
           wordWrap: true,
-          wordWrapWidth: textWidth,
+          wordWrapWidth: Math.max(8, node.width - headX - CARD_PADDING),
           breakWords: true,
         },
       });
-      url.position.set(textX, CARD_PADDING + title.height + 6);
+      url.position.set(headX, CARD_PADDING + 2 + caption.height + 4);
       container.addChild(url);
     } else if (node.type === "text") {
       const body = node.text.length > 300 ? `${node.text.slice(0, 300)}…` : node.text;
@@ -476,14 +655,14 @@ export class CanvasScene {
         style: {
           fontFamily: this.palette.FONT_UI,
           fontSize: 12.5,
-          lineHeight: 18,
+          lineHeight: 19,
           fill: this.palette.TEXT_SOFT,
           wordWrap: true,
-          wordWrapWidth: textWidth,
+          wordWrapWidth: Math.max(8, textWidth - 4),
           breakWords: true,
         },
       });
-      bodyText.position.set(textX, CARD_PADDING);
+      bodyText.position.set(textX + 2, CARD_PADDING + 2);
       container.addChild(bodyText);
     }
 
@@ -506,16 +685,56 @@ export class CanvasScene {
       this.beginNodeDrag(node.id, e);
     });
     container.on("pointertap", () => this.onNodeTap(node));
-    container.on("pointerover", () => {
-      this.hoveredId = node.id;
-      this.refreshPortVisibility();
-    });
+    container.on("pointerover", () => this.setHoveredNode(node.id));
     container.on("pointerout", () => {
-      if (this.hoveredId === node.id) this.hoveredId = null;
-      this.refreshPortVisibility();
+      if (this.hoveredId === node.id) this.setHoveredNode(null);
     });
 
     return { container, bg, node, ports, resizeHandle };
+  }
+
+  /** Rounded chip with a per-kind wash + Graphics glyph (no React/DOM in Pixi). */
+  private buildKindChip(kind: ResourceKind, hue: string, x: number, y: number): Graphics {
+    const chip = new Graphics()
+      .roundRect(0, 0, CHIP_SIZE, CHIP_SIZE, CHIP_RADIUS)
+      .fill(hexToRgba(hue, 0.14) ?? this.palette.AMBER_WASH)
+      .stroke({ width: 1, color: hexToRgba(hue, 0.4) ?? hue });
+    drawKindGlyph(chip, kind, CHIP_SIZE / 2, CHIP_SIZE / 2, 14, hue);
+    chip.position.set(x, y);
+    return chip;
+  }
+
+  private buildLinkChip(hue: string, x: number, y: number): Graphics {
+    const chip = new Graphics()
+      .roundRect(0, 0, CHIP_SIZE, CHIP_SIZE, CHIP_RADIUS)
+      .fill(hexToRgba(hue, 0.14) ?? this.palette.AMBER_WASH)
+      .stroke({ width: 1, color: hexToRgba(hue, 0.4) ?? hue });
+    drawLinkGlyph(chip, CHIP_SIZE / 2, CHIP_SIZE / 2, 14, hue);
+    chip.position.set(x, y);
+    return chip;
+  }
+
+  /** Hover repaints touch only the two affected cards, not every node. */
+  private setHoveredNode(id: string | null) {
+    if (this.hoveredId === id) return;
+    const prev = this.hoveredId;
+    this.hoveredId = id;
+    if (prev) this.refreshCardChrome(prev);
+    if (id) this.refreshCardChrome(id);
+  }
+
+  /** Re-derive one card's paint/ports/handle from current selection+hover state. */
+  private refreshCardChrome(id: string) {
+    const card = this.nodeCards.get(id);
+    if (card) {
+      const selected = this.selectedId === id;
+      this.paintCard(card.bg, card.node, selected, this.hoveredId === id);
+      card.resizeHandle.visible = selected;
+      this.updateCardPorts(id, card);
+      return;
+    }
+    const group = this.groupCards.get(id);
+    if (group) this.paintGroup(group.bg, group.node, this.selectedId === id, this.hoveredId === id);
   }
 
   private buildResizeHandle(node: CanvasNode): Graphics {
@@ -552,7 +771,8 @@ export class CanvasScene {
     port.eventMode = "static";
     port.cursor = "crosshair";
     port.hitArea = new Rectangle(-PORT_HIT, -PORT_HIT, PORT_HIT * 2, PORT_HIT * 2);
-    port.alpha = 0.4;
+    // Hidden until the node is hovered/selected or a link is in flight.
+    port.visible = false;
     this.paintPort(port, false);
     port.on("pointerdown", (e: FederatedPointerEvent) => {
       e.stopPropagation();
@@ -568,30 +788,57 @@ export class CanvasScene {
       .stroke({ width: 1.5, color: active ? this.palette.AMBER_BRIGHT : this.palette.AMBER });
   }
 
-  private refreshPortVisibility() {
-    for (const [id, card] of this.nodeCards) {
-      const emphasize =
-        this.linking !== null
-        || this.selectedId === id
-        || this.hoveredId === id;
-      for (const [side, port] of card.ports) {
-        const isSource = this.linking?.fromId === id && this.linking.fromSide === side;
-        port.alpha = isSource || emphasize ? 1 : 0.4;
-        this.paintPort(port, isSource);
-      }
+  /** Ports show while linking (targets), or on the hovered/selected node. */
+  private updateCardPorts(id: string, card: NodeCard) {
+    const direct = this.selectedId === id || this.hoveredId === id;
+    const show = this.linking !== null || direct;
+    for (const [side, port] of card.ports) {
+      const isSource = this.linking?.fromId === id && this.linking.fromSide === side;
+      port.visible = show;
+      port.alpha = isSource || direct ? 1 : 0.7;
+      this.paintPort(port, isSource);
     }
   }
 
-  private paintCard(bg: Graphics, node: CanvasNode, selected: boolean) {
+  private refreshPortVisibility() {
+    for (const [id, card] of this.nodeCards) {
+      this.updateCardPorts(id, card);
+    }
+  }
+
+  private paintCard(bg: Graphics, node: CanvasNode, selected: boolean, hovered = false) {
+    const { width, height } = node;
+    const accent = this.resolveNodeColor(node.color);
     const fill =
       node.type === "text"
         ? (hexToRgba(this.palette.AMBER, 0.14) ?? this.palette.AMBER_WASH)
         : this.palette.PANEL;
-    bg
-      .clear()
-      .roundRect(0, 0, node.width, node.height, CARD_RADIUS)
-      .fill(fill)
-      .stroke({ width: selected ? 2 : 1, color: selected ? this.palette.AMBER : this.palette.BORDER });
+    bg.clear();
+    // Painted elevation: two offset layers stand in for a blur (no Pixi filters).
+    bg.roundRect(-1, 3, width + 2, height + 1, CARD_RADIUS + 2).fill(this.palette.SHADOW_SOFT);
+    bg.roundRect(0, 1.5, width, height + 0.5, CARD_RADIUS + 1).fill(this.palette.SHADOW);
+    if (selected) {
+      bg.roundRect(-3, -3, width + 6, height + 6, CARD_RADIUS + 3).stroke({
+        width: 2,
+        color: this.palette.ACCENT_GLOW,
+      });
+    }
+    bg.roundRect(0, 0, width, height, CARD_RADIUS).fill(fill);
+    if (accent) {
+      const tint = hexToRgba(accent, 0.06);
+      if (tint) bg.roundRect(0, 0, width, height, CARD_RADIUS).fill(tint);
+    }
+    if (hovered && !selected) {
+      bg.roundRect(0, 0, width, height, CARD_RADIUS).fill(this.palette.HOVER);
+    }
+    bg.roundRect(0, 0, width, height, CARD_RADIUS).stroke({
+      width: selected ? 1.5 : 1,
+      color: selected
+        ? this.palette.AMBER
+        : hovered
+          ? this.palette.LINE_STRONG
+          : this.palette.BORDER,
+    });
   }
 
   private drawEdge(
@@ -601,6 +848,7 @@ export class CanvasScene {
     from: CanvasNode,
     to: CanvasNode,
     selected: boolean,
+    hovered = false,
   ) {
     const fromSide = edge.fromSide ?? autoSide(from, to);
     const toSide = edge.toSide ?? autoSide(to, from);
@@ -614,28 +862,29 @@ export class CanvasScene {
     const cp1 = { x: start.x + n1.x * bend, y: start.y + n1.y * bend };
     const cp2 = { x: end.x + n2.x * bend, y: end.y + n2.y * bend };
 
+    const accent = this.resolveNodeColor(edge.color);
     const stroke = selected
       ? this.palette.AMBER
-      : (nodeAccent(edge.color) ?? this.palette.LINE_STRONG);
+      : accent ?? (hovered ? this.palette.MUTED : this.palette.LINE_STRONG);
     g.clear();
-    // Wide near-invisible stroke for easier hit testing.
+    // Wide near-invisible stroke for easier hit testing (and edge hover).
     g.moveTo(start.x, start.y).bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, end.x, end.y).stroke({
       width: 14,
       color: 0xffffff,
       alpha: 0.001,
     });
     g.moveTo(start.x, start.y).bezierCurveTo(cp1.x, cp1.y, cp2.x, cp2.y, end.x, end.y).stroke({
-      width: selected ? 2.5 : 1.5,
+      width: selected ? 2.5 : hovered ? 2 : 1.5,
       color: stroke,
     });
 
     // Arrowhead pointing into the target node (opposite its outward normal).
     const dir = { x: -n2.x, y: -n2.y };
-    const size = 7;
+    const size = 6;
     const perp = { x: -dir.y, y: dir.x };
     const tip = end;
-    const left = { x: tip.x - dir.x * size + perp.x * (size * 0.55), y: tip.y - dir.y * size + perp.y * (size * 0.55) };
-    const right = { x: tip.x - dir.x * size - perp.x * (size * 0.55), y: tip.y - dir.y * size - perp.y * (size * 0.55) };
+    const left = { x: tip.x - dir.x * size + perp.x * (size * 0.45), y: tip.y - dir.y * size + perp.y * (size * 0.45) };
+    const right = { x: tip.x - dir.x * size - perp.x * (size * 0.45), y: tip.y - dir.y * size - perp.y * (size * 0.45) };
     g.poly([tip.x, tip.y, left.x, left.y, right.x, right.y]).fill(stroke);
 
     // Drop previous label children (everything except the path graphics at index 0).
@@ -663,7 +912,8 @@ export class CanvasScene {
           label.height + pad,
           4,
         )
-        .fill(this.palette.PANEL);
+        .fill(this.palette.PANEL)
+        .stroke({ width: 1, color: this.palette.LINE });
       shell.addChild(backdrop, label);
     }
   }
@@ -694,30 +944,18 @@ export class CanvasScene {
       this.refreshSelectionChrome();
       return;
     }
-    const prev = this.selectedId ? this.nodeCards.get(this.selectedId) : undefined;
-    if (prev) {
-      this.paintCard(prev.bg, prev.node, false);
-      prev.resizeHandle.visible = false;
-    }
-
+    const prev = this.selectedId;
     this.selectedId = id;
-    const next = id ? this.nodeCards.get(id) : undefined;
-    if (next) {
-      this.paintCard(next.bg, next.node, true);
-      next.resizeHandle.visible = true;
-    }
-    this.refreshPortVisibility();
+    if (prev) this.refreshCardChrome(prev);
+    if (id) this.refreshCardChrome(id);
     this.options.onSelectNode?.(id);
   }
 
   selectEdge(id: string | null) {
     if (this.selectedId) {
-      const prev = this.nodeCards.get(this.selectedId);
-      if (prev) {
-        this.paintCard(prev.bg, prev.node, false);
-        prev.resizeHandle.visible = false;
-      }
+      const prev = this.selectedId;
       this.selectedId = null;
+      this.refreshCardChrome(prev);
       this.options.onSelectNode?.(null);
     }
     if (this.selectedEdgeId === id) {
@@ -743,25 +981,49 @@ export class CanvasScene {
       const from = byId.get(edge.fromNode);
       const to = byId.get(edge.toNode);
       if (!g || !from || !to || !g.parent) continue;
-      this.drawEdge(g, g.parent as Container, edge, from, to, this.selectedEdgeId === edge.id);
+      this.drawEdge(
+        g,
+        g.parent as Container,
+        edge,
+        from,
+        to,
+        this.selectedEdgeId === edge.id,
+        this.hoveredEdgeId === edge.id,
+      );
     }
   }
 
   private refreshSelectionChrome() {
-    this.refreshPortVisibility();
-    const card = this.selectedId ? this.nodeCards.get(this.selectedId) : undefined;
-    if (card) card.resizeHandle.visible = true;
+    if (this.selectedId) this.refreshCardChrome(this.selectedId);
   }
 
   moveSelectedBy(dx: number, dy: number): boolean {
     if (!this.selectedId) return false;
     const card = this.nodeCards.get(this.selectedId);
-    if (!card) return false;
-    const x = card.node.x + dx;
-    const y = card.node.y + dy;
-    card.node = { ...card.node, x, y };
-    card.container.position.set(x, y);
-    this.options.onMoveNodes?.([{ id: this.selectedId, x, y }]);
+    if (card) {
+      const x = card.node.x + dx;
+      const y = card.node.y + dy;
+      card.node = { ...card.node, x, y };
+      card.container.position.set(x, y);
+      this.options.onMoveNodes?.([{ id: this.selectedId, x, y }]);
+      return true;
+    }
+    const group = this.groupCards.get(this.selectedId);
+    if (!group) return false;
+    const moves: CanvasNodeMove[] = [];
+    for (const member of this.groupMemberCards(group)) {
+      const mx = member.card.node.x + dx;
+      const my = member.card.node.y + dy;
+      member.card.node = { ...member.card.node, x: mx, y: my };
+      member.card.container.position.set(mx, my);
+      moves.push({ id: member.id, x: mx, y: my });
+    }
+    const x = group.node.x + dx;
+    const y = group.node.y + dy;
+    group.node = { ...group.node, x, y };
+    group.container.position.set(x, y);
+    moves.push({ id: this.selectedId, x, y });
+    this.options.onMoveNodes?.(moves);
     return true;
   }
 
@@ -779,16 +1041,29 @@ export class CanvasScene {
 
   private beginNodeDrag(id: string, event: FederatedPointerEvent) {
     const card = this.nodeCards.get(id);
-    if (!card) return;
+    const group = card ? undefined : this.groupCards.get(id);
+    if (!card && !group) return;
     this.selectNode(id);
+    const container = card ? card.container : group!.container;
+    // Group drags carry every card whose center sits inside the group frame.
+    const members = group
+      ? this.groupMemberCards(group).map((member) => ({
+          id: member.id,
+          container: member.card.container,
+          originX: member.card.container.x,
+          originY: member.card.container.y,
+        }))
+      : [];
     // Prefer the live container pose — card.node can lag if a prior drag
     // committed visually before React/disk state caught up.
     this.dragging = {
       id,
+      container,
       startX: event.global.x,
       startY: event.global.y,
-      nodeX: card.container.x,
-      nodeY: card.container.y,
+      nodeX: container.x,
+      nodeY: container.y,
+      members,
       moved: false,
     };
   }
@@ -941,6 +1216,7 @@ export class CanvasScene {
       screenW / 2 - (minX + boxW / 2) * scale,
       screenH / 2 - (minY + boxH / 2) * scale,
     );
+    this.syncCamera();
   }
 
   private onStagePointerDown = (e: FederatedPointerEvent) => {
@@ -976,18 +1252,20 @@ export class CanvasScene {
     }
     if (this.dragging) {
       const drag = this.dragging;
-      const card = this.nodeCards.get(drag.id);
-      if (!card) return;
       const dx = (e.global.x - drag.startX) / this.world.scale.x;
       const dy = (e.global.y - drag.startY) / this.world.scale.y;
       if (Math.abs(dx) > 1 || Math.abs(dy) > 1) drag.moved = true;
-      card.container.position.set(drag.nodeX + dx, drag.nodeY + dy);
+      drag.container.position.set(drag.nodeX + dx, drag.nodeY + dy);
+      for (const member of drag.members) {
+        member.container.position.set(member.originX + dx, member.originY + dy);
+      }
       return;
     }
     if (!this.panning) return;
     const dx = e.global.x - this.panStart.x;
     const dy = e.global.y - this.panStart.y;
     this.world.position.set(this.panOrigin.x + dx, this.panOrigin.y + dy);
+    this.syncCamera();
   };
 
   private onStagePointerUp = (e: FederatedPointerEvent) => {
@@ -1011,14 +1289,30 @@ export class CanvasScene {
     }
     if (this.dragging) {
       const drag = this.dragging;
-      const card = this.nodeCards.get(drag.id);
       this.dragging = null;
-      if (card && drag.moved) {
-        const x = card.container.x;
-        const y = card.container.y;
-        card.node = { ...card.node, x, y };
+      if (drag.moved) {
         this.suppressTapFor = drag.id;
-        this.options.onMoveNodes?.([{ id: drag.id, x, y }]);
+        const moves: CanvasNodeMove[] = [];
+        const card = this.nodeCards.get(drag.id);
+        const group = card ? undefined : this.groupCards.get(drag.id);
+        if (card) {
+          card.node = { ...card.node, x: card.container.x, y: card.container.y };
+          moves.push({ id: drag.id, x: card.container.x, y: card.container.y });
+        } else if (group) {
+          group.node = { ...group.node, x: group.container.x, y: group.container.y };
+          moves.push({ id: drag.id, x: group.container.x, y: group.container.y });
+        }
+        for (const member of drag.members) {
+          const memberCard = this.nodeCards.get(member.id);
+          if (!memberCard) continue;
+          memberCard.node = {
+            ...memberCard.node,
+            x: member.container.x,
+            y: member.container.y,
+          };
+          moves.push({ id: member.id, x: member.container.x, y: member.container.y });
+        }
+        if (moves.length > 0) this.options.onMoveNodes?.(moves);
       }
     }
     this.panning = false;
@@ -1042,12 +1336,14 @@ export class CanvasScene {
     } else {
       this.world.position.set(this.world.position.x - e.deltaX, this.world.position.y - e.deltaY);
     }
+    this.syncCamera();
   };
 
   destroy() {
     if (this.destroyed) return;
     this.destroyed = true;
     this.cancelLink();
+    this.zoomListeners.clear();
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.disconnectThemeObserver?.();
@@ -1081,11 +1377,119 @@ function clamp(v: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, v));
 }
 
-function withAlpha(hex: string, alpha: number): string {
-  const m = /^#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})/.exec(hex);
-  if (!m) return hex;
-  const [r, g, b] = m.slice(1).map((h) => parseInt(h, 16));
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+/**
+ * Kind glyphs on KindMark's 20-unit lattice grid, painted with Graphics
+ * primitives (no React/SVG in the Pixi scene). Centered at (cx, cy), sized
+ * to `size` px, stroked/filled in the kind hue.
+ */
+function drawKindGlyph(
+  g: Graphics,
+  kind: ResourceKind,
+  cx: number,
+  cy: number,
+  size: number,
+  color: string,
+) {
+  const u = size / 20;
+  const px = (x: number) => cx + (x - 10) * u;
+  const py = (y: number) => cy + (y - 10) * u;
+  const stroke = { width: 1.4, color, cap: "round" as const, join: "round" as const };
+
+  switch (kind) {
+    case "page":
+      // Doc lines, the last one trailing off.
+      g.moveTo(px(4), py(5.5)).lineTo(px(16), py(5.5))
+        .moveTo(px(4), py(10)).lineTo(px(16), py(10))
+        .moveTo(px(4), py(14.5)).lineTo(px(11), py(14.5))
+        .stroke(stroke);
+      break;
+    case "canvas":
+      // Spatial frame with corner nodes.
+      g.rect(px(5), py(5), 10 * u, 10 * u).stroke(stroke);
+      for (const [x, y] of [[5, 5], [15, 5], [5, 15], [15, 15]] as const) {
+        g.circle(px(x), py(y), 1.4 * u).fill(color);
+      }
+      break;
+    case "data-app":
+      // Grid of typed records.
+      for (const x of [5, 10, 15]) {
+        for (const y of [5, 10, 15]) {
+          g.circle(px(x), py(y), 1.4 * u).fill(color);
+        }
+      }
+      break;
+    case "dataset":
+      // Bars off the baseline.
+      g.moveTo(px(6), py(16)).lineTo(px(6), py(11))
+        .moveTo(px(10), py(16)).lineTo(px(10), py(6))
+        .moveTo(px(14), py(16)).lineTo(px(14), py(9))
+        .stroke({ ...stroke, width: 2.2 });
+      break;
+    case "notebook":
+      // Input cell over output cell.
+      g.roundRect(px(4.5), py(4.5), 11 * u, 11 * u, 1.5 * u).stroke(stroke);
+      g.moveTo(px(4.5), py(10)).lineTo(px(15.5), py(10)).stroke(stroke);
+      g.circle(px(7), py(7.25), 1.2 * u).fill(color);
+      break;
+    case "ink":
+      // A drawn stroke.
+      g.moveTo(px(4), py(14))
+        .bezierCurveTo(px(7), py(8), px(9), py(18), px(12), py(12))
+        .quadraticCurveTo(px(14), py(8.6), px(16), py(8.5))
+        .stroke(stroke);
+      break;
+    case "artifact":
+      // Sealed box.
+      g.roundRect(px(5), py(6), 10 * u, 8.5 * u, 1 * u).stroke(stroke);
+      g.moveTo(px(10), py(6)).lineTo(px(10), py(14.5)).stroke(stroke);
+      g.moveTo(px(5), py(9)).lineTo(px(15), py(9)).stroke(stroke);
+      break;
+    case "app":
+      // Window with a title bar.
+      g.roundRect(px(4.5), py(4.5), 11 * u, 11 * u, 2 * u).stroke(stroke);
+      g.moveTo(px(4.5), py(8)).lineTo(px(15.5), py(8)).stroke(stroke);
+      g.circle(px(6.8), py(6.3), 0.9 * u).fill(color);
+      break;
+    case "workflow":
+      // Arrow chain: start node, path, arrowhead.
+      g.circle(px(5), py(15), 1.5 * u).fill(color);
+      g.moveTo(px(6.5), py(13.5)).lineTo(px(14.2), py(5.8)).stroke(stroke);
+      g.moveTo(px(10.2), py(5.4)).lineTo(px(14.6), py(5.4)).lineTo(px(14.6), py(9.8)).stroke(stroke);
+      break;
+    case "task":
+      // Node plus completion tick.
+      g.circle(px(10), py(10), 6 * u).stroke(stroke);
+      g.moveTo(px(7.5), py(10)).lineTo(px(9.3), py(11.8)).lineTo(px(13), py(8.2)).stroke(stroke);
+      break;
+    case "derived":
+      // Generated output: a diamond.
+      g.poly([px(10), py(4.5), px(15.5), py(10), px(10), py(15.5), px(4.5), py(10)]).stroke(stroke);
+      break;
+    case "folder":
+      g.moveTo(px(3.5), py(7.5)).lineTo(px(7.5), py(7.5)).lineTo(px(9), py(5.5))
+        .lineTo(px(16.5), py(5.5)).lineTo(px(16.5), py(16)).lineTo(px(3.5), py(16))
+        .closePath()
+        .stroke(stroke);
+      break;
+    default:
+      // file — plain doc.
+      g.roundRect(px(6), py(3.5), 8 * u, 13 * u, 1.5 * u).stroke(stroke);
+      g.moveTo(px(8.5), py(8.5)).lineTo(px(13.5), py(8.5))
+        .moveTo(px(8.5), py(11.5)).lineTo(px(13.5), py(11.5))
+        .stroke(stroke);
+      break;
+  }
+}
+
+/** Chain-link glyph for URL nodes (link is not a ResourceKind). */
+function drawLinkGlyph(g: Graphics, cx: number, cy: number, size: number, color: string) {
+  const u = size / 20;
+  const px = (x: number) => cx + (x - 10) * u;
+  const py = (y: number) => cy + (y - 10) * u;
+  const stroke = { width: 1.4, color, cap: "round" as const, join: "round" as const };
+  g.circle(px(7), py(10), 3 * u).stroke(stroke);
+  g.circle(px(13), py(10), 3 * u).stroke(stroke);
+  g.moveTo(px(8.5), py(10)).lineTo(px(11.5), py(10)).stroke(stroke);
 }
 
 function bezierPoint(

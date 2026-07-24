@@ -87,6 +87,13 @@ pub struct TaskLimitsView {
     pub timeout_seconds: u64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskExecutionView {
+    /// When true, workflow `retry` may re-run this task safely.
+    pub idempotent: bool,
+}
+
 /// CamelCase manifest DTO for the desktop shell (YAML stays snake_case).
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -98,6 +105,7 @@ pub struct TaskManifestView {
     pub limits: TaskLimitsView,
     pub inputs: Vec<TaskIoView>,
     pub outputs: Vec<TaskIoView>,
+    pub execution: TaskExecutionView,
 }
 
 fn io_view(value: &TaskIoRef) -> TaskIoView {
@@ -124,6 +132,9 @@ fn manifest_view(manifest: TaskManifest) -> TaskManifestView {
         },
         inputs: manifest.inputs.iter().map(io_view).collect(),
         outputs: manifest.outputs.iter().map(io_view).collect(),
+        execution: TaskExecutionView {
+            idempotent: manifest.execution.idempotent,
+        },
     }
 }
 

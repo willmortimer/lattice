@@ -26,6 +26,10 @@ export interface TaskManifestDto {
   };
   inputs: TaskIoBinding[];
   outputs: TaskIoBinding[];
+  /** Execution semantics; `idempotent` gates workflow `retry` on this task. */
+  execution?: {
+    idempotent: boolean;
+  };
 }
 
 export type TaskRunResponse = {

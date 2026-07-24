@@ -1,11 +1,11 @@
-/* Dataset Map panel — MapLibre host chrome uses --lt-* tokens. */
+/* Dataset Map panel — MapLibre host chrome, popups, and controls on --lt-* tokens. */
 
 .maplibre-dataset-viewer {
   position: relative;
   flex: 1 1 auto;
   min-height: 280px;
   border: 1px solid var(--lt-line);
-  border-radius: var(--lt-radius-sm);
+  border-radius: var(--lt-radius-md);
   overflow: hidden;
   background: var(--lt-panel);
 }
@@ -22,7 +22,7 @@
   inset: 12px 12px auto;
   margin: 0;
   color: var(--lt-muted);
-  font: 0.85rem var(--lt-font-ui);
+  font: var(--lt-font-size-sm) var(--lt-font-ui);
   pointer-events: none;
 }
 
@@ -36,24 +36,133 @@
   justify-content: flex-start;
   height: 100%;
   min-height: 240px;
-  padding: 16px 18px;
+  padding: var(--lt-space-4) var(--lt-space-4);
   color: var(--lt-muted);
-  font: 0.85rem var(--lt-font-ui);
+  font: var(--lt-font-size-sm) var(--lt-font-ui);
 }
 
-/* Soften MapLibre chrome to Lattice surfaces when the library CSS is loaded. */
+/* ---- Controls (NavigationControl, attribution) ---- */
+
 .maplibre-dataset-viewer .maplibregl-ctrl-group {
   background: var(--lt-panel);
-  border: 1px solid var(--lt-line);
-  box-shadow: none;
+  border: 1px solid var(--lt-line-strong);
+  border-radius: var(--lt-radius-sm);
+  box-shadow: 0 2px 8px var(--lt-shadow, rgb(0 0 0 / 20%));
+  overflow: hidden;
+}
+
+.maplibre-dataset-viewer .maplibregl-ctrl-group:not(:empty) {
+  box-shadow: 0 2px 8px var(--lt-shadow, rgb(0 0 0 / 20%));
 }
 
 .maplibre-dataset-viewer .maplibregl-ctrl button {
   background-color: var(--lt-panel);
+  border: none;
+}
+
+.maplibre-dataset-viewer .maplibregl-ctrl button + button {
+  border-top: 1px solid var(--lt-line);
+}
+
+.maplibre-dataset-viewer .maplibregl-ctrl button:hover {
+  background-color: var(--lt-hover);
+}
+
+.maplibre-dataset-viewer .maplibregl-ctrl button:focus-visible {
+  outline: 2px solid var(--lt-focus-ring);
+  outline-offset: -2px;
+}
+
+/* The stock zoom icons are dark baked-in SVGs — invisible on dark themes.
+ * Replace them with theme-colored glyphs (zoom buttons only; the compact
+ * attribution toggle keeps its stock icon). */
+.maplibre-dataset-viewer .maplibregl-ctrl-zoom-in .maplibregl-ctrl-icon,
+.maplibre-dataset-viewer .maplibregl-ctrl-zoom-out .maplibregl-ctrl-icon {
+  background-image: none;
+}
+
+.maplibre-dataset-viewer .maplibregl-ctrl-zoom-in .maplibregl-ctrl-icon::after,
+.maplibre-dataset-viewer .maplibregl-ctrl-zoom-out .maplibregl-ctrl-icon::after {
+  display: block;
+  color: var(--lt-text-soft);
+  font: var(--lt-font-weight-semibold) 15px/29px var(--lt-font-ui);
+  text-align: center;
+}
+
+.maplibre-dataset-viewer .maplibregl-ctrl-zoom-in .maplibregl-ctrl-icon::after {
+  content: "+";
+}
+
+.maplibre-dataset-viewer .maplibregl-ctrl-zoom-out .maplibregl-ctrl-icon::after {
+  content: "−";
 }
 
 .maplibre-dataset-viewer .maplibregl-ctrl-attrib {
   background: color-mix(in oklch, var(--lt-panel) 88%, transparent);
   color: var(--lt-faint);
   font: 0.65rem var(--lt-font-ui);
+}
+
+.maplibre-dataset-viewer .maplibregl-ctrl-attrib a {
+  color: var(--lt-muted);
+}
+
+.maplibre-dataset-viewer .maplibregl-ctrl-attrib-button {
+  background-color: var(--lt-panel);
+}
+
+/* ---- Hover tooltip (maplibregl.Popup) ---- */
+
+.maplibre-dataset-popup .maplibregl-popup-content {
+  padding: var(--lt-space-2) var(--lt-space-3);
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius-sm);
+  background: var(--lt-panel);
+  color: var(--lt-text);
+  font-family: var(--lt-font-ui);
+  box-shadow: 0 4px 12px var(--lt-shadow-md, rgb(0 0 0 / 25%));
+  pointer-events: none;
+}
+
+.maplibre-dataset-popup .maplibregl-popup-tip {
+  display: none;
+}
+
+.maplibre-dataset-popup-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.maplibre-dataset-popup-label {
+  margin: 0;
+  font-size: var(--lt-font-size-sm);
+  font-weight: var(--lt-font-weight-semibold);
+  color: var(--lt-text);
+  overflow-wrap: anywhere;
+}
+
+.maplibre-dataset-popup-coords {
+  margin: 0;
+  font-family: var(--lt-font-mono);
+  font-size: var(--lt-font-size-xs);
+  color: var(--lt-muted);
+}
+
+/* ---- Permanent label chips (small point sets only) ---- */
+
+.maplibre-dataset-marker-label {
+  max-width: 160px;
+  padding: 1px 7px;
+  border: 1px solid var(--lt-line);
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--lt-panel) 88%, transparent);
+  color: var(--lt-text-soft);
+  font-family: var(--lt-font-ui);
+  font-size: var(--lt-font-size-xs);
+  line-height: 1.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
 }

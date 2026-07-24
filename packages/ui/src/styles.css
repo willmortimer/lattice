@@ -139,3 +139,130 @@
   margin: 5px;
   background: var(--lt-line);
 }
+
+/* Tabs: quiet segmented control. Active segment reads as the raised
+ * surface in both light and dark themes; inactive segments stay muted. */
+.ltui-tabs-list {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius-sm);
+  background: var(--lt-surface-sunken);
+}
+
+.ltui-tabs-tab {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: var(--lt-radius-xs);
+  padding: 4px 12px;
+  font: inherit;
+  font-size: var(--lt-font-size-sm);
+  font-weight: var(--lt-font-weight-medium);
+  line-height: 1.4;
+  color: var(--lt-muted);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    color 110ms ease,
+    background 110ms ease,
+    box-shadow 110ms ease;
+}
+
+.ltui-tabs-tab:hover {
+  color: var(--lt-text-soft);
+  background: var(--lt-hover);
+}
+
+.ltui-tabs-tab[data-active],
+.ltui-tabs-tab[aria-selected="true"] {
+  color: var(--lt-text);
+  background: var(--lt-surface-raised);
+  border-color: var(--lt-line);
+  box-shadow: 0 1px 2px color-mix(in oklch, var(--lt-shadow) 14%, transparent);
+}
+
+.ltui-tabs-tab:focus-visible {
+  outline: 2px solid var(--lt-focus-ring);
+  outline-offset: 1px;
+}
+
+.ltui-tabs-panel {
+  outline: none;
+}
+
+/* Surface header: one calm row above a resource surface. */
+.ltui-surface-header {
+  display: flex;
+  align-items: center;
+  gap: var(--lt-space-3);
+  min-height: 0;
+  padding: var(--lt-space-3) var(--lt-space-5);
+  border-bottom: 1px solid var(--lt-line);
+}
+
+.ltui-surface-header-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius-sm);
+  color: var(--lt-accent);
+  background: var(--lt-accent-wash);
+}
+
+.ltui-surface-header-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ltui-surface-header-title {
+  margin: 0;
+  font-size: var(--lt-font-size-lg);
+  font-weight: var(--lt-font-weight-semibold);
+  line-height: 1.25;
+  color: var(--lt-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ltui-surface-header-subtitle {
+  margin: 0;
+  font-size: var(--lt-font-size-xs);
+  color: var(--lt-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ltui-surface-header-subtitle code {
+  font-family: var(--lt-font-mono);
+  font-size: var(--lt-font-size-xs);
+}
+
+.ltui-surface-header-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--lt-space-2);
+  margin-left: auto;
+  color: var(--lt-muted);
+  font-size: var(--lt-font-size-xs);
+}
+
+.ltui-surface-header-meta + .ltui-surface-header-actions {
+  margin-left: 0;
+}
+
+.ltui-surface-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--lt-space-2);
+  margin-left: auto;
+  flex: 0 0 auto;
+}

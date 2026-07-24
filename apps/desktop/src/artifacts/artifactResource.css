@@ -1,3 +1,7 @@
+/* Artifact surface: the sandboxed frame stays the star; the chrome above it
+ * names the trust boundary and the bindings. Builds on the shared
+ * resource-surface system in renderers/taskResource.css. */
+
 .artifact-sandbox {
   display: flex;
   flex-direction: column;
@@ -16,24 +20,26 @@
 }
 
 .artifact-sandbox-status {
-  margin: 1rem;
+  margin: var(--lt-space-4);
   color: var(--lt-text-soft);
-  font-size: 0.9rem;
+  font-size: var(--lt-font-size-md);
 }
 
 .artifact-sandbox-fallback {
-  margin: 1rem;
-  padding: 0.85rem 1rem;
+  margin: var(--lt-space-4);
+  padding: var(--lt-space-3) var(--lt-space-4);
   border: 1px solid var(--lt-border);
   border-radius: var(--lt-radius-sm);
   background: var(--lt-panel);
 }
 
 .artifact-sandbox-fallback-file {
-  margin: 0.5rem 0 0;
+  margin: var(--lt-space-2) 0 0;
   color: var(--lt-muted);
-  font-size: 0.85rem;
+  font-size: var(--lt-font-size-sm);
 }
+
+/* ---- Surface shell ---- */
 
 .artifact-resource {
   display: flex;
@@ -42,29 +48,103 @@
   min-height: 0;
 }
 
-.artifact-resource-header {
+.main-scroll:has(.artifact-resource) {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.65rem 0.9rem;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+.artifact-resource-error {
+  margin: var(--lt-space-3) var(--lt-space-5) 0;
+}
+
+/* Tabs shell must let the preview panel take the remaining viewport. */
+.artifact-tabs {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.artifact-tabs-panel {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  margin-top: var(--lt-space-3);
+}
+
+.artifact-tabs-panel[hidden] {
+  display: none;
+}
+
+.artifact-tabs-panel .surface-body {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ---- Bindings disclosure ---- */
+
+.artifact-bindings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lt-space-3);
+  padding: var(--lt-space-3) var(--lt-space-5);
   border-bottom: 1px solid var(--lt-line);
   background: var(--lt-panel);
-  color: var(--lt-text-soft);
-  font-size: 0.85rem;
 }
 
-.artifact-resource-header strong {
-  color: var(--lt-text);
-  font-weight: 600;
+.artifact-bindings-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--lt-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.artifact-resource-meta {
-  margin-left: auto;
-  color: var(--lt-muted);
+.artifact-binding {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--lt-space-2);
+  padding: var(--lt-space-3);
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius-sm);
+  background: var(--lt-bg);
+}
+
+.artifact-binding-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lt-space-2);
+}
+
+.artifact-binding-name {
   font-family: var(--lt-font-mono);
-  font-size: 0.75rem;
+  font-size: var(--lt-font-size-sm);
+  font-weight: var(--lt-font-weight-semibold);
+  color: var(--lt-text);
 }
 
+.artifact-binding-sql {
+  margin: 0;
+  max-height: 7rem;
+  padding: var(--lt-space-2) var(--lt-space-3);
+  border-radius: var(--lt-radius-xs);
+  font-family: var(--lt-font-mono);
+  font-size: var(--lt-font-size-xs);
+  line-height: 1.6;
+  color: var(--lt-text-soft);
+  background: var(--lt-surface-sunken);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: auto;
+}
+
+/* Interface-embedded artifacts keep their own bordered frame. */
 .artifact-embed {
   min-height: 16rem;
   border: 1px solid var(--lt-border);

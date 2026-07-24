@@ -1,110 +1,11 @@
-/* Analytical dataset surface — Perspective grid + room for sibling panels. */
-
-.dataset-surface {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  gap: 0;
-  background: var(--lt-bg);
-}
-
-.dataset-surface-header .placeholder-mark {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-}
-
-.dataset-surface-title {
-  margin: 0;
-  font: 600 0.95rem var(--lt-font-ui);
-  color: var(--lt-text);
-}
-
-.dataset-surface-meta {
-  margin: 0;
-  font: 0.78rem var(--lt-font-mono);
-  color: var(--lt-muted);
-}
-
-.dataset-surface-path {
-  margin: 0;
-  font: 0.75rem var(--lt-font-mono);
-  color: var(--lt-faint);
-  overflow-wrap: anywhere;
-}
-
-.dataset-surface-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.dataset-surface-main {
-  flex: 1 1 auto;
-  min-height: 0;
-  position: relative;
-  display: flex;
-  flex-direction: column;
-}
-
-.dataset-surface-fallback {
-  height: 100%;
-  overflow: auto;
-  padding: 16px 18px;
-  text-align: left;
-}
-
-.dataset-surface-fallback pre {
-  margin: 12px 0 0;
-  padding: 12px;
-  border: 1px solid var(--lt-line);
-  border-radius: 8px;
-  background: var(--lt-bg-raise);
-  color: var(--lt-text-soft);
-  font: 0.75rem/1.45 var(--lt-font-mono);
-  overflow: auto;
-}
-
-.dataset-surface-alert {
-  margin: 0;
-  color: var(--lt-danger, #c45c4a);
-  font: 0.85rem var(--lt-font-ui);
-}
-
-.dataset-plan-panel {
-  height: 100%;
-  overflow: auto;
-  padding: 16px 18px;
-  text-align: left;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.dataset-plan-section {
-  min-width: 0;
-}
-
-.dataset-plan-heading {
-  margin: 0 0 8px;
-  font: 600 0.8rem var(--lt-font-ui);
-  color: var(--lt-muted);
-}
-
-.dataset-plan-pre {
-  margin: 0;
-  padding: 12px;
-  border: 1px solid var(--lt-line);
-  border-radius: 8px;
-  background: var(--lt-bg-raise);
-  color: var(--lt-text-soft);
-  font: 0.75rem/1.45 var(--lt-font-mono);
-  overflow: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
+/* Perspective analytical grid — Lattice theme bridge + host framing.
+ *
+ * pro-dark.css (loaded by perspectiveRuntime) stays as the STRUCTURAL base:
+ * it carries layout metrics, icon masks, and the dark select arrows. Every
+ * color it hardcodes is overridden below from `--lt-*` tokens, so the grid
+ * follows all 34 Lattice themes. Selectors carry `[theme="Pro Dark"]` plus an
+ * ancestor class / `:root` prefix so they outrank the vendor rules regardless
+ * of stylesheet order. */
 
 .perspective-dataset-viewer {
   position: relative;
@@ -113,48 +14,195 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--lt-space-2);
   min-width: 0;
 }
 
+.perspective-dataset-viewer-status {
+  position: absolute;
+  z-index: 1;
+  inset: 12px 12px auto;
+  margin: 0;
+  color: var(--lt-muted);
+  font: var(--lt-font-size-sm) var(--lt-font-ui);
+  pointer-events: none;
+}
+
+.perspective-dataset-viewer[data-status="ready"] .perspective-dataset-viewer-status {
+  display: none;
+}
+
+/* Framed like `.data-grid-frame` so Preview matches the .data grid views. */
+.perspective-dataset-viewer-host {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 280px;
+  height: 100%;
+  background: var(--lt-panel);
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius-md);
+  overflow: hidden;
+}
+
+/* Truncation / row-count meta line under the grid. */
+.perspective-dataset-footer {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0 2px;
+  color: var(--lt-muted);
+  font-family: var(--lt-font-mono);
+  font-size: var(--lt-font-size-xs);
+}
+
+/*
+ * `<perspective-viewer>` is a custom element — default `display: inline`
+ * ignores height/min-height, which paints Configure + column chrome over a
+ * solid grey host (no Datagrid body). Force a block box that fills the host.
+ */
+.perspective-dataset-viewer-el {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+/* ---- Lattice theme for <perspective-viewer> ----
+ * Perspective themes are CSS custom properties on the element. Variable names
+ * verified against @finos/perspective-viewer/dist/css/pro-dark.css (3.8.0) and
+ * perspective-viewer-datagrid.css. */
+.perspective-dataset-viewer-host perspective-viewer,
+.perspective-dataset-viewer-host perspective-viewer[theme="Pro Dark"] {
+  color: var(--lt-text);
+  background-color: var(--lt-panel);
+
+  /* Grid + shell type. Mono matches the .data grid cell font. */
+  font-family: var(--lt-font-mono);
+  --interface-monospace--font-family: var(--lt-font-mono);
+  --button--font-family: var(--lt-font-ui);
+
+  /* Shell chrome */
+  --root--background: var(--lt-panel);
+  --plugin--background: var(--lt-panel);
+  --sidebar--background: var(--lt-panel);
+  --icon--color: var(--lt-text-soft);
+  --inactive--color: var(--lt-muted);
+  --inactive--border-color: var(--lt-line);
+  --active--color: var(--lt-accent);
+  --active--background: var(--lt-accent-wash);
+  --error--color: var(--lt-danger);
+  --modal-target--background: var(--lt-hover);
+  --overflow-hint-icon--color: var(--lt-warning);
+  --warning--background: var(--lt-warning);
+  --warning--color: var(--lt-bg);
+  --select--background-color: transparent;
+  --column-drop-container--background: transparent;
+
+  /* regular-table datagrid cells */
+  --rt-pos-cell--color: var(--lt-success);
+  --rt-neg-cell--color: var(--lt-danger);
+  --rt-hover--border-color: var(--lt-accent);
+
+  /* Chart-adjacent (d3fc plugins), kept in-theme should one load. */
+  --d3fc-gridline--color: var(--lt-line);
+  --d3fc-axis-ticks--color: var(--lt-text-soft);
+  --d3fc-axis--lines: var(--lt-line-strong);
+  --d3fc-legend--background: var(--lt-panel);
+  --d3fc-legend--text: var(--lt-text-soft);
+  --d3fc-tooltip--background: var(--lt-panel);
+  --d3fc-tooltip--background--color: var(--lt-panel);
+  --d3fc-tooltip--color: var(--lt-text);
+  --d3fc-tooltip--border-color: var(--lt-line);
+  --d3fc-tooltip--box-shadow: 0 4px 12px var(--lt-shadow-md, rgb(0 0 0 / 25%));
+  --d3fc-treedata--labels: var(--lt-text);
+  --d3fc-treedata--hover-highlight: var(--lt-text);
+
+  /* Expression editor accents */
+  --expression--operator-color: var(--lt-text-soft);
+  --expression--function-color: var(--lt-accent);
+  --expression--error-color: var(--lt-danger);
+  --code-editor-symbol--color: var(--lt-text);
+  --code-editor-literal--color: var(--lt-accent-bright);
+  --code-editor-operator--color: var(--lt-success);
+  --code-editor-comment--color: var(--lt-muted);
+  --code-editor-column--color: var(--lt-accent-deep);
+}
+
+/* Settings-panel menus portal outside the viewer, so theme them globally.
+ * `:root` prefix outranks the vendor `[theme="Pro Dark"]` element rules. */
+:root perspective-dropdown[theme="Pro Dark"],
+:root perspective-copy-menu[theme="Pro Dark"],
+:root perspective-export-menu[theme="Pro Dark"],
+:root perspective-date-column-style[theme="Pro Dark"],
+:root perspective-datetime-column-style[theme="Pro Dark"],
+:root perspective-number-column-style[theme="Pro Dark"],
+:root perspective-string-column-style[theme="Pro Dark"] {
+  color: var(--lt-text);
+  background-color: var(--lt-panel);
+  border: 1px solid var(--lt-line-strong);
+  border-radius: var(--lt-radius-sm);
+  font-family: var(--lt-font-ui);
+  --interface-monospace--font-family: var(--lt-font-mono);
+  --icon--color: var(--lt-text-soft);
+  --inactive--color: var(--lt-muted);
+  --inactive--border-color: var(--lt-line);
+  --root--background: var(--lt-panel);
+  --plugin--background: var(--lt-panel);
+  --active--color: var(--lt-accent);
+  --active--background: var(--lt-accent-wash);
+  --error--color: var(--lt-danger);
+  --modal-target--background: var(--lt-hover);
+}
+
+/* ---- Renderer diagnostics (visible only with Show renderer stats) ---- */
+
 .perspective-dataset-debug {
   flex: 0 0 auto;
-  margin: 0 0 4px;
-  padding: 8px 10px;
+  margin: 0;
+  padding: var(--lt-space-2) var(--lt-space-3);
   border: 1px solid var(--lt-line);
   border-radius: var(--lt-radius-sm);
-  background: var(--lt-bg-raise);
+  background: var(--lt-surface-sunken);
   color: var(--lt-muted);
-  font: 0.75rem/1.4 var(--lt-font-mono);
+  font-family: var(--lt-font-mono);
+  font-size: var(--lt-font-size-xs);
+  line-height: 1.5;
 }
 
 .perspective-dataset-debug summary {
   cursor: pointer;
-  font: 600 0.78rem var(--lt-font-ui);
+  font-family: var(--lt-font-ui);
+  font-size: var(--lt-font-size-xs);
+  font-weight: var(--lt-font-weight-semibold);
   color: var(--lt-text-soft);
 }
 
 .perspective-dataset-debug pre {
-  margin: 8px 0 0;
+  margin: var(--lt-space-2) 0 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
 .perspective-dataset-sample {
-  margin-top: 8px;
+  margin-top: var(--lt-space-2);
   overflow: auto;
 }
 
 .perspective-dataset-sample-label {
-  margin: 0 0 6px;
-  font: 0.75rem var(--lt-font-ui);
+  margin: 0 0 var(--lt-space-1);
+  font-family: var(--lt-font-ui);
+  font-size: var(--lt-font-size-xs);
   color: var(--lt-muted);
 }
 
 .perspective-dataset-sample table {
   width: 100%;
   border-collapse: collapse;
-  font: 0.75rem/1.35 var(--lt-font-mono);
+  font-family: var(--lt-font-mono);
+  font-size: var(--lt-font-size-xs);
+  line-height: 1.4;
 }
 
 .perspective-dataset-sample th,
@@ -168,55 +216,5 @@
 .perspective-dataset-sample th {
   background: var(--lt-panel);
   color: var(--lt-muted);
-  font-weight: 600;
-}
-
-.perspective-dataset-viewer-status {
-  position: absolute;
-  z-index: 1;
-  inset: 12px 12px auto;
-  margin: 0;
-  color: var(--lt-muted);
-  font: 0.85rem var(--lt-font-ui);
-  pointer-events: none;
-}
-
-.perspective-dataset-viewer[data-status="ready"] .perspective-dataset-viewer-status {
-  display: none;
-}
-
-.perspective-dataset-viewer-host {
-  position: relative;
-  flex: 1 1 auto;
-  min-height: 280px;
-  height: 100%;
-  background: var(--lt-panel);
-  border: 1px solid var(--lt-line);
-  border-radius: var(--lt-radius-sm);
-  overflow: hidden;
-}
-
-/*
- * `<perspective-viewer>` is a custom element — default `display: inline` ignores
- * height/min-height, which paints Configure + column chrome over a solid grey
- * host (no Datagrid body). Force a block box that fills the host.
- */
-.perspective-dataset-viewer-el {
-  display: block;
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  box-sizing: border-box;
-  --perspective-background-color: var(--lt-panel);
-  --perspective-color: var(--lt-text);
-}
-
-/* When the main scroll hosts a dataset surface, fill the pane edge-to-edge. */
-.main-scroll:has(.dataset-surface) {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding: 0;
+  font-weight: var(--lt-font-weight-semibold);
 }

@@ -9,6 +9,9 @@ import type { ArrowFieldMeta } from "../lib/arrowIpc";
 import { arrowIpcToValues, sampleRowsToValues } from "../lib/arrowToVegaData";
 import "./perspective.css";
 
+/** Hard cap on rows decoded from Arrow IPC into JSON for the grid. */
+const MAX_PREVIEW_ROWS = 10_000;
+
 export interface PerspectiveDatasetViewerProps {
   /** Arrow IPC stream bytes from `query_dataset_arrow`. */
   ipcBytes: Uint8Array | number[] | ArrayBuffer;
@@ -18,18 +21,23 @@ export interface PerspectiveDatasetViewerProps {
   sampleRows?: unknown[][];
   /** Declared row count from the Arrow transport control message. */
   rowCount?: number;
+  /** Whether the server truncated the result at its row/byte limit. */
+  truncated?: boolean;
   /** Bump to force a reload (e.g. after re-query). */
   loadKey?: string | number;
+  /** Show the diagnostics panel (Settings → Diagnostics → renderer stats). */
+  showDiagnostics?: boolean;
   onReady?: () => void;
   onError?: (message: string) => void;
 }
 
-type LoadPath = "json-sample" | "json-arrow-decode" | "arrow-native";
+type LoadPath = "json-arrow-decode" | "json-sample";
 
 export type PerspectiveDebugInfo = {
   loadPath: LoadPath;
   ipcBytes: number;
   expectedRows: number;
+  loadedRows: number;
   tableSize: number | null;
   hostWidth: number;
   hostHeight: number;
@@ -41,17 +49,20 @@ export type PerspectiveDebugInfo = {
 /**
  * Hosts `<perspective-viewer>` for dataset Preview.
  *
- * Bounded Preview prefers JSON row objects (control sample or apache-arrow
- * decode) because Perspective's native Arrow path has painted schema chrome
- * with an empty Datagrid body under Tauri WKWebView. Diagnostics stay visible
- * so we can verify table size vs host geometry.
+ * Loads JSON row objects decoded from the Arrow IPC payload via apache-arrow
+ * (bounded at {@link MAX_PREVIEW_ROWS}) — Perspective's native Arrow ingestion
+ * has painted schema chrome with an empty Datagrid body under Tauri WKWebView,
+ * so the JSON path is deliberate. The control-message sample is only a last
+ * resort when IPC decode yields nothing.
  */
 export function PerspectiveDatasetViewer({
   ipcBytes,
   schema = [],
   sampleRows = [],
   rowCount = 0,
+  truncated = false,
   loadKey = 0,
+  showDiagnostics = false,
   onReady,
   onError,
 }: PerspectiveDatasetViewerProps) {
@@ -64,6 +75,7 @@ export function PerspectiveDatasetViewer({
   const onReadyRef = useRef(onReady);
   const onErrorRef = useRef(onError);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [loadedRows, setLoadedRows] = useState(0);
   const [debug, setDebug] = useState<PerspectiveDebugInfo | null>(null);
 
   ipcBytesRef.current = ipcBytes;
@@ -79,6 +91,7 @@ export function PerspectiveDatasetViewer({
     if (!host) return;
 
     setStatus("loading");
+    setLoadedRows(0);
     setDebug(null);
 
     void (async () => {
@@ -94,23 +107,28 @@ export function PerspectiveDatasetViewer({
         viewer.style.display = "block";
         viewer.style.width = "100%";
         viewer.style.height = "100%";
+        // Structural base theme; perspective.css re-colors it from --lt-* tokens.
         viewer.setAttribute("theme", "Pro Dark");
         // Explicit plugin — without it WKWebView sometimes paints an empty chrome.
         viewer.setAttribute("plugin", "Datagrid");
         host.append(viewer);
 
         const buffer = ipcBytesToArrayBuffer(ipcBytesRef.current);
-        const { table, loadPath, note } = await buildPerspectiveTable(runtime.worker, {
-          buffer,
-          schema: schemaRef.current,
-          sampleRows: sampleRowsRef.current,
-        });
+        const { table, rows, loadPath, note } = await buildPerspectiveTable(
+          runtime.worker,
+          {
+            buffer,
+            schema: schemaRef.current,
+            sampleRows: sampleRowsRef.current,
+          },
+        );
         if (cancelled) {
           await Promise.resolve(table.delete());
           return;
         }
 
         tableRef.current = table;
+        setLoadedRows(rows);
         await viewer.load(table);
         try {
           await viewer.restore?.({
@@ -141,6 +159,7 @@ export function PerspectiveDatasetViewer({
           loadPath,
           ipcBytes: buffer.byteLength,
           expectedRows: rowCountRef.current,
+          loadedRows: rows,
           tableSize,
           hostWidth: Math.round(hostRect.width),
           hostHeight: Math.round(hostRect.height),
@@ -196,6 +215,15 @@ export function PerspectiveDatasetViewer({
   const showSample =
     debug !== null && sampleRows.length > 0 && schema.length > 0;
 
+  const footer =
+    status === "ready" && loadedRows > 0
+      ? truncated
+        ? `${loadedRows.toLocaleString()} of ${Math.max(rowCount, loadedRows).toLocaleString()}+ rows (truncated at query limit)`
+        : loadedRows < rowCount
+          ? `${loadedRows.toLocaleString()} of ${rowCount.toLocaleString()} rows (preview cap)`
+          : `${loadedRows.toLocaleString()} row${loadedRows === 1 ? "" : "s"}`
+      : null;
+
   return (
     <div className="perspective-dataset-viewer" data-status={status}>
       {status === "loading" ? (
@@ -203,20 +231,17 @@ export function PerspectiveDatasetViewer({
           Loading analytical grid…
         </p>
       ) : null}
-      {debug ? (
+      {showDiagnostics && debug ? (
         <details
           className="perspective-dataset-debug"
-          open={
-            debug.loadPath === "arrow-native" ||
-            (debug.tableSize ?? 0) === 0 ||
-            debug.hostHeight < 120
-          }
+          open={(debug.tableSize ?? 0) === 0 || debug.hostHeight < 120}
         >
           <summary>Preview diagnostics</summary>
           <pre>
             {`path=${debug.loadPath}
 ipcBytes=${debug.ipcBytes}
 expectedRows=${debug.expectedRows}
+loadedRows=${debug.loadedRows}
 tableSize=${debug.tableSize ?? "n/a"}
 host=${debug.hostWidth}×${debug.hostHeight}
 viewer=${debug.viewerWidth}×${debug.viewerHeight}
@@ -250,6 +275,7 @@ ${debug.note}`}
         </details>
       ) : null}
       <div ref={hostRef} className="perspective-dataset-viewer-host" />
+      {footer ? <p className="perspective-dataset-footer">{footer}</p> : null}
     </div>
   );
 }
@@ -266,39 +292,35 @@ async function buildPerspectiveTable(
     schema: ArrowFieldMeta[];
     sampleRows: unknown[][];
   },
-): Promise<{ table: PerspectiveTable; loadPath: LoadPath; note: string }> {
+): Promise<{ table: PerspectiveTable; rows: number; loadPath: LoadPath; note: string }> {
+  // Full transported batch first: decode Arrow IPC with apache-arrow into plain
+  // row objects and feed Perspective JSON. Native Arrow ingestion is avoided on
+  // purpose (empty Datagrid body under WKWebView).
+  if (input.buffer.byteLength > 0) {
+    try {
+      const decoded = arrowIpcToValues(input.buffer, MAX_PREVIEW_ROWS);
+      if (decoded.length > 0) {
+        const table = await Promise.resolve(worker.table(decoded));
+        return {
+          table,
+          rows: decoded.length,
+          loadPath: "json-arrow-decode",
+          note: "Decoded Arrow IPC via apache-arrow, then JSON → Perspective (WKWebView-safe path)",
+        };
+      }
+    } catch {
+      /* fall back to the bounded control-message sample */
+    }
+  }
+
   const fromSample = sampleRowsToValues(input.sampleRows, input.schema);
   if (fromSample.length > 0) {
     const table = await Promise.resolve(worker.table(fromSample));
     return {
       table,
+      rows: fromSample.length,
       loadPath: "json-sample",
-      note: "Loaded control-message sample rows as JSON (WKWebView-safe Preview path)",
-    };
-  }
-
-  if (input.buffer.byteLength > 0) {
-    try {
-      const decoded = arrowIpcToValues(input.buffer);
-      if (decoded.length > 0) {
-        const table = await Promise.resolve(worker.table(decoded));
-        return {
-          table,
-          loadPath: "json-arrow-decode",
-          note: "Decoded Arrow IPC via apache-arrow, then JSON → Perspective",
-        };
-      }
-    } catch {
-      /* try native Arrow next */
-    }
-
-    const table = await Promise.resolve(
-      worker.table(input.buffer, { format: "arrow" }),
-    );
-    return {
-      table,
-      loadPath: "arrow-native",
-      note: "Perspective native Arrow IPC loader (no JSON sample available)",
+      note: "Arrow IPC decode yielded no rows — loaded bounded control-message sample instead",
     };
   }
 

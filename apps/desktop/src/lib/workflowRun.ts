@@ -3,11 +3,21 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type { ExecutionResult, ExecutionStatus } from "./executionContracts";
 
+/** Per-step retry policy (total attempts including the first try). */
+export interface WorkflowStepRetryDto {
+  maxAttempts: number;
+  backoffSeconds: number;
+}
+
 /** Declared workflow step from `*.workflow.yaml` (camelCase IPC). */
 export interface WorkflowStepDto {
   id: string;
   action: string;
   with: unknown;
+  /** Retry policy for leaf steps (absent when the step runs once). */
+  retry?: WorkflowStepRetryDto;
+  /** Concurrent children; non-empty marks this step as a parallel group. */
+  parallel?: WorkflowStepDto[];
 }
 
 /** Trigger summary for the workflow surface. */

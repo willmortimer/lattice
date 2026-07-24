@@ -26,10 +26,23 @@ describe("readCanvasPalette", () => {
     expect(palette.TEXT).toBe(TEXT);
     expect(palette.AMBER).toBe(LT.accent);
     expect(palette.BORDER).toBe("rgba(140, 162, 196, 0.18)");
+    // New slots: dark-theme shadow alpha, grid defaults, kind/preset hues.
+    expect(palette.BG).toBe(LT.bg);
+    expect(palette.SHADOW).toBe("rgba(0, 0, 0, 0.32)");
+    expect(palette.SHADOW_SOFT).toBe("rgba(0, 0, 0, 0.16)");
+    expect(palette.GRID_SIZE).toBe(34);
+    expect(palette.GRID_DOT).toBe("rgba(140, 162, 196, 0.22)");
+    expect(palette.KIND.canvas).toBe(LT.accent);
+    expect(palette.KIND.file).toBe(LT.slate);
+    expect(palette.KIND.dataset).toBe("#5fa671");
+    expect(palette.PRESETS["1"]).toBe("#d9776b");
+    expect(palette.PRESETS["6"]).toBe("#a98ad0");
   });
 
   it("reads live CSS role tokens when document styles are present", () => {
     const vars = new Map<string, string>([
+      ["--lt-bg", "#f4f1ea"],
+      ["--lt-term-green", "#3f8f5a"],
       ["--lt-panel", "#10252d"],
       ["--lt-bg-raise", "#0c1c22"],
       ["--lt-slate", "#7ec8c8"],
@@ -70,6 +83,15 @@ describe("readCanvasPalette", () => {
     expect(palette.LINE_STRONG).toBe("rgba(126, 200, 200, 0.22)");
     expect(palette.AMBER_WASH).toBe("rgba(45, 212, 191, 0.1)");
     expect(palette.FONT_UI).toEqual(["Space Grotesk", "system-ui", "sans-serif"]);
+    // Light background (#f4f1ea) quiets the painted shadows.
+    expect(palette.SHADOW).toBe("rgba(0, 0, 0, 0.12)");
+    expect(palette.SHADOW_SOFT).toBe("rgba(0, 0, 0, 0.06)");
+    // Theme terminal palette wins over the fixed fallback hue.
+    expect(palette.KIND.dataset).toBe("#3f8f5a");
+    expect(palette.PRESETS["4"]).toBe("#3f8f5a");
+    // Accent-derived slots track the live accent.
+    expect(palette.KIND.canvas).toBe("#2dd4bf");
+    expect(palette.ACCENT_GLOW).toBe("rgba(45, 212, 191, 0.3)");
 
     // @ts-expect-error cleanup node stub
     delete globalThis.getComputedStyle;

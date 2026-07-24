@@ -1,8 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Button, SurfaceHeader, TabsList, TabsPanel, TabsRoot, TabsTab } from "@lattice/ui";
 
 import { inBrowser } from "../demo";
 import { KindMark } from "../KindMark";
-import type { ExecutionResult } from "../lib/executionContracts";
+import {
+  formatDurationBetween,
+  formatSeconds,
+} from "../lib/relativeTime";
 import {
   cancelWorkflow,
   listenWorkflowExecutionUpdates,
@@ -13,66 +17,287 @@ import {
   toExecutionResult,
   type WorkflowManifestDto,
   type WorkflowRunRecordDto,
+  type WorkflowStepDto,
 } from "../lib/workflowRun";
 import type { OpenResourceSession } from "../resourceSession";
 import type { ResourceRendererProps } from "../resourceRendererRegistry";
 import type { ResourceRendererContext } from "./RendererContext";
+import { LogBlock, SourcePanel, StatusPill, SurfaceCard, TimeAgo, statusLabel } from "./surfaceKit";
 import "./taskResource.css";
 import "./workflowResource.css";
 
-function formatDuration(startedAt: string, finishedAt?: string): string | null {
-  const start = Date.parse(startedAt);
-  if (Number.isNaN(start)) return null;
-  const end = finishedAt ? Date.parse(finishedAt) : Date.now();
-  if (Number.isNaN(end)) return null;
-  const ms = Math.max(0, end - start);
-  if (ms < 1000) return `${ms}ms`;
-  const seconds = ms / 1000;
-  if (seconds < 60) return `${seconds.toFixed(1)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const rem = seconds - minutes * 60;
-  return `${minutes}m ${rem.toFixed(0)}s`;
+/** Pull known `with` params out of the untyped step payload (YAML snake_case). */
+function stepParams(step: WorkflowStepDto): Record<string, unknown> {
+  return step.with && typeof step.with === "object" && !Array.isArray(step.with)
+    ? (step.with as Record<string, unknown>)
+    : {};
 }
 
-function statusLabel(status: ExecutionResult["status"]): string {
-  switch (status) {
-    case "running":
-      return "Running";
-    case "succeeded":
-      return "Succeeded";
-    case "failed":
-      return "Failed";
-    case "cancelled":
-      return "Cancelled";
-    default: {
-      const _exhaustive: never = status;
-      return _exhaustive;
-    }
+function asString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function shortTriggerLabel(manifest: WorkflowManifestDto): string {
+  switch (manifest.trigger.type) {
+    case "manual":
+      return "manual trigger";
+    case "resource.changed":
+      return "runs on file change";
+    case "form.submitted":
+      return "runs on form submit";
+    case "schedule":
+      return manifest.trigger.intervalSeconds != null
+        ? `every ${formatSeconds(manifest.trigger.intervalSeconds)}`
+        : "on a cron schedule";
+    default:
+      return manifest.trigger.type;
   }
 }
 
-function triggerSummary(manifest: WorkflowManifestDto): string {
+/** The trigger as a human sentence — what makes this workflow fire. */
+function TriggerCard({
+  manifest,
+  onOpenFile,
+}: {
+  manifest: WorkflowManifestDto;
+  onOpenFile: (path: string) => void;
+}) {
   const trigger = manifest.trigger;
+  let body: ReactNode;
   switch (trigger.type) {
     case "manual":
-      return "manual";
-    case "resource.changed":
-      return `resource.changed (${(trigger.paths ?? []).join(", ") || "no paths"})`;
+      body = <p className="workflow-trigger-sentence">Runs only when started by hand — from this surface or an agent.</p>;
+      break;
+    case "resource.changed": {
+      const paths = trigger.paths ?? [];
+      body = (
+        <div className="workflow-trigger-stack">
+          <p className="workflow-trigger-sentence">
+            Runs when files matching {paths.length === 1 ? "this pattern change" : "these patterns change"}:
+          </p>
+          {paths.length > 0 ? (
+            <ul className="surface-chips">
+              {paths.map((glob) => (
+                <li key={glob}>
+                  <span className="surface-chip">{glob}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="surface-caption">No paths declared — this trigger never fires.</p>
+          )}
+        </div>
+      );
+      break;
+    }
     case "form.submitted": {
-      const parts = [
-        trigger.package,
-        trigger.formId ?? trigger.form,
-      ].filter(Boolean);
-      return `form.submitted (${parts.join(" / ") || "unspecified"})`;
+      const formName = trigger.formId ?? trigger.form;
+      body = (
+        <p className="workflow-trigger-sentence">
+          Runs when form{" "}
+          {formName ? <code>{formName}</code> : <em>(unspecified)</em>}
+          {trigger.package ? (
+            <>
+              {" "}in{" "}
+              <button
+                type="button"
+                className="surface-link"
+                onClick={() => onOpenFile(trigger.package!)}
+              >
+                <code>{trigger.package}</code>
+              </button>
+            </>
+          ) : null}{" "}
+          is submitted.
+        </p>
+      );
+      break;
+    }
+    case "schedule": {
+      const cadence =
+        trigger.intervalSeconds != null ? (
+          <>Runs every {formatSeconds(trigger.intervalSeconds)}</>
+        ) : trigger.cron ? (
+          <>
+            Runs on cron <code>{trigger.cron}</code>
+          </>
+        ) : (
+          <>Runs on a schedule</>
+        );
+      body = (
+        <p className="workflow-trigger-sentence">
+          {cadence}
+          {trigger.timezone ? <> · {trigger.timezone}</> : null}
+          {!manifest.enabled ? " (paused while disabled)" : null}.
+        </p>
+      );
+      break;
     }
     default:
-      return trigger.type;
+      body = <p className="workflow-trigger-sentence">{trigger.type}</p>;
   }
+  return <SurfaceCard title="Trigger">{body}</SurfaceCard>;
+}
+
+/** One declared step (recursive for parallel groups). */
+function StepRow({
+  step,
+  index,
+  onOpenFile,
+}: {
+  step: WorkflowStepDto;
+  index: string;
+  onOpenFile: (path: string) => void;
+}) {
+  const params = stepParams(step);
+  const children = step.parallel ?? [];
+  const isGroup = children.length > 0;
+  const taskPath = step.action === "task.run" ? asString(params.task) : null;
+  const summary = step.action === "proposal.create" ? asString(params.summary) : null;
+  const message = step.action === "notification" ? asString(params.message) : null;
+  const unsafeRetry = step.action === "task.run" && params.allow_unsafe_retry === true;
+
+  return (
+    <li className="workflow-step">
+      <span className="workflow-step-index" aria-hidden>
+        {index}
+      </span>
+      <div className="workflow-step-main">
+        <div className="workflow-step-head">
+          <span className="workflow-step-id">{step.id}</span>
+          <span className="surface-badge" data-tone="accent">
+            {isGroup ? "parallel" : step.action}
+          </span>
+          {step.retry && step.retry.maxAttempts > 1 ? (
+            <span
+              className="surface-badge"
+              title="Total attempts including the first try"
+            >
+              retries ×{step.retry.maxAttempts}
+              {step.retry.backoffSeconds > 0 ? ` · ${step.retry.backoffSeconds}s backoff` : ""}
+            </span>
+          ) : null}
+          {unsafeRetry ? (
+            <span
+              className="surface-badge"
+              data-tone="warning"
+              title="This step may retry a task that is not declared idempotent"
+            >
+              unsafe retry allowed
+            </span>
+          ) : null}
+        </div>
+        {taskPath ? (
+          <p className="workflow-step-detail">
+            Runs task{" "}
+            <button type="button" className="surface-link" onClick={() => onOpenFile(taskPath)}>
+              <code>{taskPath}</code>
+            </button>
+          </p>
+        ) : null}
+        {summary ? <p className="workflow-step-detail">Proposes: “{summary}”</p> : null}
+        {message ? <p className="workflow-step-detail">Posts: “{message}”</p> : null}
+        {isGroup ? (
+          <>
+            <p className="workflow-step-detail">
+              {children.length} step{children.length === 1 ? "" : "s"} run concurrently:
+            </p>
+            <ol className="workflow-step-children">
+              {children.map((child, childIndex) => (
+                <StepRow
+                  key={child.id}
+                  step={child}
+                  index={`${index}.${childIndex + 1}`}
+                  onOpenFile={onOpenFile}
+                />
+              ))}
+            </ol>
+          </>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
+function ProposalLinks({
+  ids,
+  onOpenProposal,
+}: {
+  ids: string[];
+  onOpenProposal?: (id: string) => void;
+}) {
+  if (ids.length === 0) return null;
+  return (
+    <p className="workflow-proposal-links">
+      {ids.length === 1 ? "Proposal" : "Proposals"}:{" "}
+      {ids.map((id, index) => (
+        <span key={id}>
+          {index > 0 ? ", " : null}
+          {onOpenProposal ? (
+            <button type="button" className="surface-link" onClick={() => onOpenProposal(id)}>
+              <code>{id.slice(0, 8)}</code>
+            </button>
+          ) : (
+            <code>{id.slice(0, 8)}</code>
+          )}
+        </span>
+      ))}
+    </p>
+  );
+}
+
+/** Execution detail shared by the inline card and expanded history rows. */
+function RunDetail({
+  record,
+  onOpenProposal,
+}: {
+  record: WorkflowRunRecordDto;
+  onOpenProposal?: (id: string) => void;
+}) {
+  const execution = toExecutionResult(record);
+  const proposalIds =
+    execution.proposalIds && execution.proposalIds.length > 0
+      ? execution.proposalIds
+      : execution.proposalId
+        ? [execution.proposalId]
+        : (record.steps.map((step) => step.proposalId).filter(Boolean) as string[]);
+  return (
+    <div className="workflow-run-detail">
+      <ProposalLinks ids={proposalIds} onOpenProposal={onOpenProposal} />
+      {record.steps.length > 0 ? (
+        <ol className="workflow-run-steps">
+          {record.steps.map((step) => (
+            <li key={step.id} className="workflow-run-step">
+              <div className="workflow-run-step-head">
+                <span className="workflow-step-id">{step.id}</span>
+                <span className="surface-badge">{step.action}</span>
+                {step.attempts != null && step.attempts > 1 ? (
+                  <span className="surface-badge">{step.attempts} attempts</span>
+                ) : null}
+                <StatusPill status={step.status} label={statusLabel(step.status)} />
+              </div>
+              {step.log ? <LogBlock label="Step log" text={step.log} /> : null}
+            </li>
+          ))}
+        </ol>
+      ) : null}
+      {execution.stdout.length > 0 || execution.status === "running" ? (
+        <LogBlock
+          label="Stdout"
+          text={execution.stdout || "…"}
+          defaultOpen={execution.status === "running"}
+        />
+      ) : null}
+      {execution.stderr.length > 0 ? (
+        <LogBlock label="Stderr" text={execution.stderr} tone="danger" />
+      ) : null}
+    </div>
+  );
 }
 
 /**
- * First-class `*.workflow.yaml` surface: summary, Run/enable, recent runs, step logs.
- * Native only — browser demo shows an honest degraded banner.
+ * `*.workflow.yaml` surface: what fires it, what it does, how it has run,
+ * and the YAML itself — hand-editable with optimistic save.
  */
 export function WorkflowResourceRenderer({
   context,
@@ -93,12 +318,19 @@ export function WorkflowResourceRenderer({
   const refreshHistory = async () => {
     if (!root || inBrowser) return;
     try {
-      const runs = await listWorkflowRuns(root, path, 10);
+      const runs = await listWorkflowRuns(root, path, 20);
       setHistory(runs);
     } catch (err) {
       // Non-fatal: surface stays usable without history.
       console.warn("workflow history load failed", err);
     }
+  };
+
+  const refreshManifest = () => {
+    if (inBrowser || !root) return;
+    void loadWorkflow(root, path)
+      .then(setManifest)
+      .catch((err: unknown) => setError(String(err)));
   };
 
   useEffect(() => {
@@ -194,230 +426,190 @@ export function WorkflowResourceRenderer({
     }
   };
 
-  if (inBrowser) {
-    return (
-      <div className="task-surface workflow-surface">
-        <header className="task-surface-header">
-          <span className="placeholder-mark" aria-hidden>
-            <KindMark kind="workflow" size={28} />
-          </span>
-          <div>
-            <p className="task-surface-title">Workflow</p>
-            <p className="task-surface-path">
-              <code>{path}</code>
-            </p>
-          </div>
-        </header>
-        <div className="task-surface-body">
-          <p className="task-surface-banner task-surface-banner-warn" role="status">
-            Workflow execution requires the native desktop app. The browser demo cannot run tasks
-            or create proposals.
-          </p>
-          <ManifestSummary manifest={manifest} />
-        </div>
-      </div>
-    );
-  }
+  const handleSourceSaved = () => {
+    refreshManifest();
+  };
 
-  const execution = run ? toExecutionResult(run) : null;
+  const currentRun = run ?? history[0] ?? null;
+  const execution = currentRun ? toExecutionResult(currentRun) : null;
   const running = busy || execution?.status === "running";
   const duration =
-    execution != null ? formatDuration(execution.startedAt, execution.finishedAt) : null;
-  const proposalIds =
-    execution?.proposalIds && execution.proposalIds.length > 0
-      ? execution.proposalIds
-      : execution?.proposalId
-        ? [execution.proposalId]
-        : (run?.steps.map((step) => step.proposalId).filter(Boolean) as string[] | undefined) ??
-          [];
+    execution != null ? formatDurationBetween(execution.startedAt, execution.finishedAt) : null;
+  const stepCount = manifest.steps.length;
+  const native = !inBrowser && root != null;
 
   return (
-    <div className="task-surface workflow-surface">
-      <header className="task-surface-header">
-        <span className="placeholder-mark" aria-hidden>
-          <KindMark kind="workflow" size={28} />
-        </span>
-        <div>
-          <p className="task-surface-title">{manifest.name || "Workflow"}</p>
-          <p className="task-surface-path">
-            <code>{path}</code>
-          </p>
-        </div>
-        <div className="task-surface-actions">
-          <button
-            type="button"
-            className="task-surface-button"
-            onClick={() => void handleToggleEnabled()}
-            disabled={!root || toggling}
-            aria-pressed={manifest.enabled}
-          >
-            {manifest.enabled ? "Disable" : "Enable"}
-          </button>
-          {running ? (
-            <button type="button" className="task-surface-button" onClick={() => void handleCancel()}>
-              Cancel
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="task-surface-button task-surface-button-primary"
-              onClick={() => void handleRun()}
-              disabled={!root}
+    <div className="resource-surface workflow-surface">
+      <SurfaceHeader
+        icon={<KindMark kind="workflow" size={20} />}
+        title={manifest.name || "Workflow"}
+        subtitle={
+          <>
+            Automation · {stepCount} step{stepCount === 1 ? "" : "s"} · {shortTriggerLabel(manifest)}
+          </>
+        }
+        meta={
+          <StatusPill
+            status={manifest.enabled ? "enabled" : "disabled"}
+            label={manifest.enabled ? "Enabled" : "Disabled"}
+          />
+        }
+        actions={
+          <>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => void handleToggleEnabled()}
+              disabled={!native || toggling}
+              aria-pressed={manifest.enabled}
             >
-              Run
-            </button>
-          )}
-        </div>
-      </header>
-
-      <div className="task-surface-body">
-        {error && (
-          <p className="task-surface-banner task-surface-banner-warn" role="alert">
-            {error}
-          </p>
-        )}
-
-        {!manifest.enabled && (
-          <p className="task-surface-banner" role="status">
-            Automatic triggers are skipped while this workflow is disabled. Manual Run still works.
-          </p>
-        )}
-
-        <ManifestSummary manifest={manifest} />
-
-        <section className="workflow-raw" aria-label="Raw YAML">
-          <h3>Raw YAML</h3>
-          <pre>{manifest.rawYaml}</pre>
-        </section>
-
-        {run && (
-          <section className="task-surface-execution" aria-label="Workflow execution">
-            <div className="task-surface-execution-meta">
-              <span>
-                Status: <strong>{statusLabel(execution!.status)}</strong>
-              </span>
-              <span>Trigger: {run.trigger}</span>
-              {duration && <span>Duration: {duration}</span>}
-              {execution?.finishedAt && <span>Finished: {execution.finishedAt}</span>}
-            </div>
-            {proposalIds.length > 0 && (
-              <p className="workflow-proposal-link">
-                {proposalIds.length === 1 ? "Proposal:" : "Proposals:"}{" "}
-                {proposalIds.map((id, index) => (
-                  <span key={id}>
-                    {index > 0 ? ", " : null}
-                    {context.callbacks.onOpenProposal ? (
-                      <button
-                        type="button"
-                        className="task-surface-link"
-                        onClick={() => context.callbacks.onOpenProposal?.(id)}
-                      >
-                        <code>{id}</code>
-                        {proposalIds.length === 1 ? " (open inbox)" : null}
-                      </button>
-                    ) : (
-                      <code>{id}</code>
-                    )}
-                  </span>
-                ))}
-              </p>
+              {manifest.enabled ? "Disable" : "Enable"}
+            </Button>
+            {running ? (
+              <Button size="sm" variant="danger" onClick={() => void handleCancel()}>
+                Cancel
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => void handleRun()}
+                disabled={!native}
+              >
+                Run
+              </Button>
             )}
-            {run.steps.length > 0 && (
-              <div className="workflow-steps" aria-label="Step logs">
-                <h3>Steps</h3>
-                <ol>
-                  {run.steps.map((step) => (
-                    <li key={step.id}>
-                      <div className="workflow-step-meta">
-                        <strong>{step.id}</strong>
-                        <span>{step.action}</span>
-                        <span>{statusLabel(step.status)}</span>
-                      </div>
-                      {step.log && <pre>{step.log}</pre>}
-                    </li>
+          </>
+        }
+      />
+
+      <TabsRoot defaultValue="overview">
+        <div className="surface-tabs">
+          <TabsList aria-label="Workflow sections">
+            <TabsTab value="overview">Overview</TabsTab>
+            <TabsTab value="runs">Runs</TabsTab>
+            <TabsTab value="source">Source</TabsTab>
+          </TabsList>
+        </div>
+
+        <TabsPanel value="overview">
+          <div className="surface-body" data-width="reading">
+            {inBrowser ? (
+              <p className="surface-banner" role="status">
+                Workflow execution requires the native desktop app. The browser demo cannot run
+                tasks or create proposals.
+              </p>
+            ) : null}
+            {error ? (
+              <p className="surface-banner" data-tone="danger" role="alert">
+                {error}
+              </p>
+            ) : null}
+            {!manifest.enabled ? (
+              <p className="surface-banner" role="status">
+                Automatic triggers are skipped while this workflow is disabled. Manual Run still
+                works.
+              </p>
+            ) : null}
+
+            <TriggerCard manifest={manifest} onOpenFile={context.callbacks.onOpenFile} />
+
+            <SurfaceCard title="Step plan" ariaLabel="Step plan">
+              {stepCount > 0 ? (
+                <ol className="workflow-steps">
+                  {manifest.steps.map((step, index) => (
+                    <StepRow
+                      key={step.id}
+                      step={step}
+                      index={String(index + 1)}
+                      onOpenFile={context.callbacks.onOpenFile}
+                    />
                   ))}
                 </ol>
-              </div>
-            )}
-            {(execution!.stdout.length > 0 || running) && (
-              <div className="task-surface-log">
-                <h3>Stdout</h3>
-                <pre>{execution!.stdout || (running ? "…" : "")}</pre>
-              </div>
-            )}
-            {execution!.stderr.length > 0 && (
-              <div className="task-surface-log task-surface-log-stderr">
-                <h3>Stderr</h3>
-                <pre>{execution!.stderr}</pre>
-              </div>
-            )}
-          </section>
-        )}
+              ) : (
+                <p className="surface-caption">
+                  No steps declared yet — add them under <code>steps:</code> in the Source tab.
+                </p>
+              )}
+            </SurfaceCard>
 
-        {history.length > 0 && (
-          <section className="workflow-history" aria-label="Recent executions">
-            <h3>Recent executions</h3>
-            <ul>
-              {history.map((entry) => (
-                <li key={entry.execution.id}>
-                  <button
-                    type="button"
-                    className="task-surface-link"
-                    onClick={() => {
-                      executionIdRef.current = entry.execution.id;
-                      setRun(entry);
-                    }}
-                  >
-                    <code>{entry.execution.id.slice(0, 8)}</code>
-                  </button>
-                  <span>{statusLabel(entry.execution.status)}</span>
-                  <span>{entry.trigger}</span>
-                  <span>{entry.execution.startedAt}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ManifestSummary({ manifest }: { manifest: WorkflowManifestDto }) {
-  return (
-    <section className="task-surface-manifest" aria-label="Workflow manifest">
-      <dl className="task-surface-dl">
-        <div>
-          <dt>Name</dt>
-          <dd>{manifest.name}</dd>
-        </div>
-        <div>
-          <dt>Enabled</dt>
-          <dd>{manifest.enabled ? "yes" : "no"}</dd>
-        </div>
-        <div>
-          <dt>Trigger</dt>
-          <dd>{triggerSummary(manifest)}</dd>
-        </div>
-        <div>
-          <dt>Steps</dt>
-          <dd>{manifest.steps.length}</dd>
-        </div>
-      </dl>
-      {manifest.steps.length > 0 && (
-        <div className="task-surface-io">
-          <div>
-            <h3>Step plan</h3>
-            <ul>
-              {manifest.steps.map((step) => (
-                <li key={step.id}>
-                  <code>{step.id}</code> — {step.action}
-                </li>
-              ))}
-            </ul>
+            {currentRun && execution ? (
+              <SurfaceCard
+                title={run ? "Current run" : "Last run"}
+                ariaLabel="Workflow execution"
+              >
+                <div className="workflow-run-body">
+                  <div className="surface-meta-row">
+                    <StatusPill status={execution.status} label={statusLabel(execution.status)} />
+                    <span>trigger: {currentRun.trigger}</span>
+                    {duration ? <span>{duration}</span> : null}
+                    <TimeAgo iso={execution.startedAt} prefix="started" />
+                  </div>
+                  <RunDetail record={currentRun} onOpenProposal={context.callbacks.onOpenProposal} />
+                </div>
+              </SurfaceCard>
+            ) : null}
           </div>
-        </div>
-      )}
-    </section>
+        </TabsPanel>
+
+        <TabsPanel value="runs">
+          <div className="surface-body" data-width="reading">
+            {history.length === 0 ? (
+              <p className="surface-empty">
+                {native
+                  ? "No runs recorded yet. Run the workflow to see its history here."
+                  : "Run history requires the native desktop app."}
+              </p>
+            ) : (
+              <ul className="workflow-history" aria-label="Recent runs">
+                {history.map((entry) => {
+                  const entryDuration = formatDurationBetween(
+                    entry.execution.startedAt,
+                    entry.execution.finishedAt,
+                  );
+                  return (
+                    <li key={entry.execution.id}>
+                      <details className="workflow-run">
+                        <summary>
+                          <StatusPill
+                            status={entry.execution.status}
+                            label={statusLabel(entry.execution.status)}
+                          />
+                          <span className="workflow-run-trigger">{entry.trigger}</span>
+                          <TimeAgo iso={entry.execution.startedAt} />
+                          {entryDuration ? (
+                            <span className="workflow-run-duration">{entryDuration}</span>
+                          ) : null}
+                          <code className="workflow-run-id">{entry.execution.id.slice(0, 8)}</code>
+                        </summary>
+                        <div className="workflow-run-body">
+                          <RunDetail
+                            record={entry}
+                            onOpenProposal={context.callbacks.onOpenProposal}
+                          />
+                        </div>
+                      </details>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </TabsPanel>
+
+        <TabsPanel value="source">
+          <div className="surface-body">
+            <SourcePanel
+              root={root}
+              path={path}
+              fallbackContent={manifest.rawYaml}
+              reloadToken={context.reloadToken}
+              onSaved={handleSourceSaved}
+              hint="This YAML is the workflow. Edit trigger, steps, retry, or parallel groups and save — the surface picks the change up immediately."
+            />
+          </div>
+        </TabsPanel>
+      </TabsRoot>
+    </div>
   );
 }

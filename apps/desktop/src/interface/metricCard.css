@@ -4,10 +4,10 @@
   gap: 0.35rem;
   height: 100%;
   padding: 0.85rem 1rem;
-  border: 1px solid var(--lt-border, #333);
+  border: 1px solid var(--lt-border);
   border-radius: 6px;
-  background: var(--lt-panel, #161616);
-  color: var(--lt-fg, #f2f2f2);
+  background: var(--lt-panel);
+  color: var(--lt-text);
 }
 
 .lt-metric-card__title {
@@ -16,7 +16,7 @@
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
-  color: var(--lt-muted, #9a9a9a);
+  color: var(--lt-muted);
 }
 
 .lt-metric-card__value {
@@ -30,11 +30,11 @@
 .lt-metric-card__subtitle {
   margin: 0;
   font-size: 0.8rem;
-  color: var(--lt-muted, #9a9a9a);
+  color: var(--lt-muted);
 }
 
 .lt-metric-card__error {
   margin: 0;
   font-size: 0.75rem;
-  color: var(--lt-danger, #e57373);
+  color: var(--lt-danger);
 }

@@ -8,6 +8,32 @@ use crate::error::{Error, Result};
 
 const DEFAULT_THEME_ID: &str = "lattice-slate";
 
+/// Theme-independent token tier (spacing / type scale / weight / radius) plus
+/// surfaces derived from live roles via `var()`. Mirrors the tier emitted by
+/// `scripts/compile-theme.mjs` into `theme-tokens.css` — kept in sync by hand
+/// since published shells don't run through that build step.
+const EXTRA_TOKENS: &str = "\
+  --lt-space-1: 4px;
+  --lt-space-2: 8px;
+  --lt-space-3: 12px;
+  --lt-space-4: 16px;
+  --lt-space-5: 24px;
+  --lt-space-6: 32px;
+  --lt-font-size-xs: 11px;
+  --lt-font-size-sm: 12px;
+  --lt-font-size-md: 13.5px;
+  --lt-font-size-lg: 16px;
+  --lt-font-weight-medium: 500;
+  --lt-font-weight-semibold: 600;
+  --lt-radius-xs: 4px;
+  --lt-radius-md: var(--lt-radius);
+  --lt-surface-raised: var(--lt-bg-raise);
+  --lt-surface-sunken: color-mix(in oklch, var(--lt-bg) 94%, black);
+  --lt-focus-ring: var(--lt-accent-bright);
+  --lt-warning: var(--lt-accent-deep);
+  --lt-success: var(--lt-term-green, #4e9a6c);
+";
+
 /// Flatten a built-in theme into CSS custom properties for `:root`.
 pub fn builtin_theme_vars(theme_id: Option<&str>) -> Result<BTreeMap<String, String>> {
     let id = theme_id.unwrap_or(DEFAULT_THEME_ID);
@@ -26,6 +52,7 @@ pub fn theme_css(vars: &BTreeMap<String, String>) -> String {
         css.push_str(value);
         css.push_str(";\n");
     }
+    css.push_str(EXTRA_TOKENS);
     css.push_str("}\n");
     css
 }

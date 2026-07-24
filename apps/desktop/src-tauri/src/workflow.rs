@@ -120,10 +120,22 @@ pub struct WorkflowTriggerView {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct WorkflowStepRetryView {
+    pub max_attempts: u32,
+    pub backoff_seconds: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkflowStepView {
     pub id: String,
     pub action: String,
     pub with: serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retry: Option<WorkflowStepRetryView>,
+    /// Concurrent children; non-empty marks this step as a parallel group.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub parallel: Vec<WorkflowStepView>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -207,19 +219,34 @@ fn trigger_view(trigger: &WorkflowTrigger) -> WorkflowTriggerView {
     }
 }
 
+fn step_view(step: &lattice_commands::WorkflowStep) -> Result<WorkflowStepView, String> {
+    let with = serde_json::to_value(&step.with).map_err(|err| err.to_string())?;
+    let parallel = step
+        .parallel
+        .iter()
+        .map(step_view)
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(WorkflowStepView {
+        id: step.id.clone(),
+        action: step.action.clone(),
+        with,
+        retry: step.retry.as_ref().map(|retry| WorkflowStepRetryView {
+            max_attempts: retry.max_attempts,
+            backoff_seconds: retry.backoff_seconds,
+        }),
+        parallel,
+    })
+}
+
 fn manifest_view(
     manifest: WorkflowManifest,
     raw_yaml: String,
 ) -> Result<WorkflowManifestView, String> {
-    let mut steps = Vec::new();
-    for step in &manifest.steps {
-        let with = serde_json::to_value(&step.with).map_err(|err| err.to_string())?;
-        steps.push(WorkflowStepView {
-            id: step.id.clone(),
-            action: step.action.clone(),
-            with,
-        });
-    }
+    let steps = manifest
+        .steps
+        .iter()
+        .map(step_view)
+        .collect::<Result<Vec<_>, _>>()?;
     Ok(WorkflowManifestView {
         format: manifest.format,
         version: manifest.version,

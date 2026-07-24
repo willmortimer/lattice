@@ -1,17 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Map as MapLibreMap, StyleSpecification } from "maplibre-gl";
+import type {
+  Map as MapLibreMap,
+  Marker as MapLibreMarker,
+  Popup as MapLibrePopup,
+  StyleSpecification,
+} from "maplibre-gl";
 
+import { observeThemeChange, readToken } from "../canvas/colors";
 import {
   detectLonLatColumns,
   extractGeoPoints,
   type GeoPoint,
 } from "../lib/geoColumns";
+import { worldLand } from "./worldLand";
 import "./maplibre.css";
 
 /**
  * MapLibre GL JS (BSD-3-Clause; ~3–4 MB min+gzip JS, larger with CSS/workers).
  * Loaded lazily so Preview/Chart/Profile paths do not pay the map cost.
- * Offline-first style: solid `--lt-*` background, no remote basemap tiles.
+ *
+ * Offline-first: no remote tiles. Geography is a vendored Natural Earth 110m
+ * land layer (public domain, see worldLand.ts) plus a generated 30° graticule.
+ * Labels/tooltips are DOM (Popup/Marker) because symbol layers would need a
+ * glyphs endpoint we do not ship.
  */
 
 export interface MapLibreDatasetViewerProps {
@@ -24,25 +35,93 @@ export interface MapLibreDatasetViewerProps {
   onError?: (message: string) => void;
 }
 
-function readCssToken(name: string, fallback: string): string {
-  if (typeof document === "undefined") return fallback;
-  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return value || fallback;
+/** Permanent DOM label chips are only rendered at or below this point count. */
+const MAX_PERMANENT_LABELS = 30;
+
+interface MapPalette {
+  /** Ocean / empty space. */
+  background: string;
+  landFill: string;
+  landLine: string;
+  graticule: string;
+  circle: string;
+  circleStroke: string;
+  halo: string;
 }
 
-function prefersReducedMotion(): boolean {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+/**
+ * Resolve a CSS color expression (including color-mix()) to a concrete color
+ * MapLibre's parser accepts, via a computed-style probe element.
+ */
+function resolveCssColor(expression: string, fallback: string): string {
+  if (typeof document === "undefined" || expression.trim() === "") return fallback;
+  const probe = document.createElement("span");
+  probe.style.display = "none";
+  probe.style.color = expression;
+  document.body.append(probe);
+  const resolved = getComputedStyle(probe).color;
+  probe.remove();
+  return resolved && resolved.trim() !== "" ? resolved : fallback;
 }
 
-function buildOfflineStyle(points: GeoPoint[]): StyleSpecification {
-  const background = readCssToken("--lt-panel", "#1a1a1a");
-  const circle = readCssToken("--lt-accent", "#f5a623");
-  const stroke = readCssToken("--lt-bg", "#0d0d0d");
+/** Resolve `--lt-*` token → concrete color, tolerating color-mix() values. */
+function tokenColor(name: string, fallback: string): string {
+  return resolveCssColor(readToken(name, fallback), fallback);
+}
 
+/** Re-alpha a resolved rgb()/rgba() color; falls back to the input on parse miss. */
+function withAlpha(color: string, alpha: number): string {
+  const m = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/.exec(color);
+  if (!m) return color;
+  return `rgba(${m[1]}, ${m[2]}, ${m[3]}, ${alpha})`;
+}
+
+function readMapPalette(): MapPalette {
+  const slate = tokenColor("--lt-slate", "rgb(140, 162, 196)");
+  return {
+    background: tokenColor("--lt-bg", "#0d0d0d"),
+    landFill: withAlpha(slate, 0.14),
+    landLine: withAlpha(slate, 0.28),
+    graticule: withAlpha(slate, 0.1),
+    circle: tokenColor("--lt-accent", "#f5a623"),
+    circleStroke: tokenColor("--lt-bg", "#0d0d0d"),
+    halo: withAlpha(tokenColor("--lt-accent", "rgb(245, 166, 35)"), 0.18),
+  };
+}
+
+/** 30° graticule as one MultiLineString (thin, low-alpha world grid). */
+function buildGraticule(): { type: "MultiLineString"; coordinates: number[][][] } {
+  const lines: number[][][] = [];
+  for (let lon = -180; lon <= 180; lon += 30) {
+    const meridian: number[][] = [];
+    for (let lat = -85; lat <= 85; lat += 5) meridian.push([lon, lat]);
+    lines.push(meridian);
+  }
+  for (let lat = -60; lat <= 60; lat += 30) {
+    const parallel: number[][] = [];
+    for (let lon = -180; lon <= 180; lon += 5) parallel.push([lon, lat]);
+    lines.push(parallel);
+  }
+  return { type: "MultiLineString", coordinates: lines };
+}
+
+function buildOfflineStyle(points: GeoPoint[], palette: MapPalette): StyleSpecification {
   return {
     version: 8,
     sources: {
+      land: {
+        type: "geojson",
+        data: worldLand,
+        attribution: "Natural Earth",
+      },
+      graticule: {
+        type: "geojson",
+        data: {
+          type: "Feature",
+          properties: {},
+          geometry: buildGraticule(),
+        },
+      },
       places: {
         type: "geojson",
         data: {
@@ -50,7 +129,11 @@ function buildOfflineStyle(points: GeoPoint[]): StyleSpecification {
           features: points.map((point, index) => ({
             type: "Feature",
             id: index,
-            properties: { label: point.label ?? "" },
+            properties: {
+              label: point.label ?? "",
+              lon: point.lon,
+              lat: point.lat,
+            },
             geometry: {
               type: "Point",
               coordinates: [point.lon, point.lat],
@@ -63,22 +146,89 @@ function buildOfflineStyle(points: GeoPoint[]): StyleSpecification {
       {
         id: "background",
         type: "background",
-        paint: { "background-color": background },
+        paint: { "background-color": palette.background },
+      },
+      {
+        id: "land-fill",
+        type: "fill",
+        source: "land",
+        paint: { "fill-color": palette.landFill },
+      },
+      {
+        id: "land-line",
+        type: "line",
+        source: "land",
+        paint: { "line-color": palette.landLine, "line-width": 0.75 },
+      },
+      {
+        id: "graticule",
+        type: "line",
+        source: "graticule",
+        paint: { "line-color": palette.graticule, "line-width": 0.5 },
+      },
+      {
+        // Subtle halo beneath each dot so points read on any land/ocean color.
+        id: "places-halo",
+        type: "circle",
+        source: "places",
+        paint: {
+          "circle-radius": 12,
+          "circle-color": palette.halo,
+          "circle-blur": 0.6,
+        },
       },
       {
         id: "places-circle",
         type: "circle",
         source: "places",
         paint: {
-          "circle-radius": 7,
-          "circle-color": circle,
+          "circle-radius": 6,
+          "circle-color": palette.circle,
           "circle-stroke-width": 1.5,
-          "circle-stroke-color": stroke,
+          "circle-stroke-color": palette.circleStroke,
           "circle-opacity": 0.92,
         },
       },
     ],
   };
+}
+
+function applyPalette(map: MapLibreMap, palette: MapPalette): void {
+  map.setPaintProperty("background", "background-color", palette.background);
+  map.setPaintProperty("land-fill", "fill-color", palette.landFill);
+  map.setPaintProperty("land-line", "line-color", palette.landLine);
+  map.setPaintProperty("graticule", "line-color", palette.graticule);
+  map.setPaintProperty("places-halo", "circle-color", palette.halo);
+  map.setPaintProperty("places-circle", "circle-color", palette.circle);
+  map.setPaintProperty("places-circle", "circle-stroke-color", palette.circleStroke);
+}
+
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function formatCoordinate(lon: number, lat: number): string {
+  const ns = lat >= 0 ? "N" : "S";
+  const ew = lon >= 0 ? "E" : "W";
+  return `${Math.abs(lat).toFixed(3)}°${ns} ${Math.abs(lon).toFixed(3)}°${ew}`;
+}
+
+/** Tooltip body built via DOM APIs — never string HTML from row data. */
+function buildPopupContent(label: string, lon: number, lat: number): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "maplibre-dataset-popup-body";
+  if (label !== "") {
+    const title = document.createElement("p");
+    title.className = "maplibre-dataset-popup-label";
+    title.textContent = label;
+    wrap.append(title);
+  }
+  const coords = document.createElement("p");
+  coords.className = "maplibre-dataset-popup-coords";
+  coords.textContent = formatCoordinate(lon, lat);
+  wrap.append(coords);
+  return wrap;
 }
 
 function fitPoints(map: MapLibreMap, points: GeoPoint[]): void {
@@ -152,6 +302,9 @@ export function MapLibreDatasetViewer({
     if (!host) return;
 
     setStatus("loading");
+    const markers: MapLibreMarker[] = [];
+    let popup: MapLibrePopup | null = null;
+    let unobserveTheme: (() => void) | null = null;
 
     void (async () => {
       try {
@@ -167,12 +320,76 @@ export function MapLibreDatasetViewer({
 
         const map = new MapCtor({
           container,
-          style: buildOfflineStyle(points),
+          style: buildOfflineStyle(points, readMapPalette()),
           center: [points[0]!.lon, points[0]!.lat],
-          zoom: 1.5,
+          zoom: 1.2,
+          minZoom: 0.4,
+          renderWorldCopies: false,
+          maxBounds: [
+            [-185, -86],
+            [185, 86],
+          ],
           attributionControl: { compact: true },
         });
         mapRef.current = map;
+
+        map.addControl(
+          new maplibre.NavigationControl({ showCompass: false }),
+          "top-right",
+        );
+
+        // Hover tooltip (DOM popup — no glyph atlas required).
+        popup = new maplibre.Popup({
+          closeButton: false,
+          closeOnClick: false,
+          className: "maplibre-dataset-popup",
+          offset: 12,
+          maxWidth: "260px",
+        });
+
+        map.on("mousemove", "places-circle", (event) => {
+          const feature = event.features?.[0];
+          if (!feature || feature.geometry.type !== "Point") return;
+          map.getCanvas().style.cursor = "pointer";
+          const [lon, lat] = feature.geometry.coordinates as [number, number];
+          const label = String(feature.properties?.label ?? "");
+          popup
+            ?.setLngLat([lon, lat])
+            .setDOMContent(buildPopupContent(label, lon, lat))
+            .addTo(map);
+        });
+        map.on("mouseleave", "places-circle", () => {
+          map.getCanvas().style.cursor = "";
+          popup?.remove();
+        });
+
+        // Permanent label chips for small point sets.
+        if (points.length <= MAX_PERMANENT_LABELS) {
+          for (const point of points) {
+            if (!point.label) continue;
+            const chip = document.createElement("div");
+            chip.className = "maplibre-dataset-marker-label";
+            chip.textContent = point.label;
+            const marker = new maplibre.Marker({
+              element: chip,
+              anchor: "left",
+              offset: [10, 0],
+            })
+              .setLngLat([point.lon, point.lat])
+              .addTo(map);
+            markers.push(marker);
+          }
+        }
+
+        // Live theme swaps: repaint colors in place, no remount.
+        unobserveTheme = observeThemeChange(() => {
+          if (!mapRef.current) return;
+          try {
+            applyPalette(mapRef.current, readMapPalette());
+          } catch {
+            /* style may be mid-load during teardown */
+          }
+        });
 
         map.on("load", () => {
           if (cancelled) return;
@@ -196,6 +413,9 @@ export function MapLibreDatasetViewer({
 
     return () => {
       cancelled = true;
+      unobserveTheme?.();
+      popup?.remove();
+      for (const marker of markers) marker.remove();
       const map = mapRef.current;
       mapRef.current = null;
       if (map) {
