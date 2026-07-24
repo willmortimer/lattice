@@ -93,6 +93,7 @@ export function useDesktopController() {
     ((result: "accepted" | "rejected" | "cancelled") => void) | null
   >(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [agentPanelOpen, setAgentPanelOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [treeRenameRequest, setTreeRenameRequest] = useState<{ path: string; token: number } | null>(null);
@@ -916,11 +917,11 @@ export function useDesktopController() {
     proposalSummaries, proposalInboxLoading, proposalApplyOutcome, proposalReview, refreshProposalInbox, openProposalReview,
     handleProposalAccept, handleProposalReject, handleProposalCancel, handleCreateDemoProposal,
     openProposalResourcePath, dismissProposalApplyOutcome,
-    openTabs, navigation, inspectorOpen, editingTitle, titleDraft, assetRoot, wikiTargets, pageEditorRef,
+    openTabs, navigation, inspectorOpen, agentPanelOpen, editingTitle, titleDraft, assetRoot, wikiTargets, pageEditorRef,
     recents, page, currentPageRevisionRef,
     paletteItems, hasCapability, setSettings, setStartup, setError,
     setSaveState, setNewWorkspaceOpen, setSearchPaneOpen, setPaletteOpen,
-    setActivityArea, setInspectorOpen, setDismissedNoticeCodes, setEditingTitle, setTitleDraft, setSidebarWidth,
+    setActivityArea, setInspectorOpen, setAgentPanelOpen, setDismissedNoticeCodes, setEditingTitle, setTitleDraft, setSidebarWidth,
     handleTreeCollapsedPathsChange,
     setLinkPicker,
     setStatusToast, applyThemeCatalog, rememberWorkspace, clearRecents, resetSettings, handleGetStarted,

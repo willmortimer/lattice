@@ -71,6 +71,8 @@ Transactions include:
 
 Scripts, apps, workflows, and agents should prefer returning a proposal rather than writing directly.
 
+The optional embedded desktop agent (`agentd`, supervised by `latticed`) follows the same proposal-only mutation policy; see [Embedded Agent Architecture](architecture/embedded-agent.md) and [ADR 0044](decisions/0044-embedded-agent-sidecar.md).
+
 The desktop persists general transaction proposals under
 `<workspace>/.lattice/proposals/` (sibling to link-repair). Review accepts a
 command subset into one `CommandEngine` transaction; reject/dismiss removes the
