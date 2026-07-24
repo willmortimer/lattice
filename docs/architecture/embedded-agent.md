@@ -2205,6 +2205,49 @@ Success condition:
 
 > A user can prompt a Pioneer-backed agent in the Tauri app and receive a streamed response through `latticed`.
 
+#### Phase A verification
+
+Run from the repository root (EA6, July 24 2026):
+
+| Command | Result (EA6) |
+| --- | --- |
+| `pnpm --filter @lattice/agent-protocol test` | **16 passed** (1 file) |
+| `LATTICE_AGENT_FAKE=1 pnpm --filter @lattice/agentd test` | **4 passed** (1 file) |
+| `pnpm --filter @lattice/desktop test -- src/lib/agent.test.ts src/agent` | **476 passed** (101 files; vitest runs the full desktop suite when deps are warm) |
+| `cargo test -p lattice-daemon --lib agent` | **SKIPPED** — cold worktree `target/` would recompile the workspace; EA3 merge verified **6 passed** at `8ef2d97` |
+
+**Manual desktop smoke (fake path, no Pioneer key)**
+
+1. From the repo or worktree root, start the native shell (no voice sidecar needed):
+   ```sh
+   nxr desktop-dev
+   # or: pnpm --filter @lattice/desktop tauri:dev:novoice
+   ```
+2. When the desktop **spawns** `latticed` and no `PIONEER_API_KEY` is set, EA4 injects `LATTICE_AGENT_FAKE=1` automatically (in-process fake backend; no Node `agentd` required).
+3. Open or create a workspace (First Look seeds on first `tauri:dev`).
+4. Toggle the agent panel: **Robot** icon in the activity rail (left) or header → **Show agent**.
+5. Send a prompt in the composer → expect a streamed fake reply (deterministic text deltas).
+
+**Pioneer path (key holders)**
+
+1. Set in `.env` or shell (never commit secrets):
+   ```sh
+   PIONEER_API_KEY=…
+   LATTICE_AGENT_PROVIDER=pioneer
+   LATTICE_AGENT_MODEL=<model-from-pioneer-catalog>
+   ```
+2. Unset `LATTICE_AGENT_FAKE` (or leave unset). Optionally set `LATTICE_AGENTD_BIN` to `apps/agentd/scripts/run.sh` if auto-discovery fails.
+3. **Restart** so spawn env applies: quit the desktop app (or stop `latticed`) and relaunch `nxr desktop-dev`. Agent env is forwarded only when the desktop **spawns** `latticed`, not when attaching to an already-running daemon.
+4. Open the Robot panel and send a prompt → streamed Pioneer-backed reply via supervised `agentd`.
+
+See also: [`apps/agentd/README.md`](../../apps/agentd/README.md), [`apps/daemon/README.md`](../../apps/daemon/README.md#embedded-agent-phase-a--ea3).
+
+**Known Phase A risks**
+
+- **`ai` v7 vs `@ai-sdk/react` bundling `ai` v6** — `LatticeAgentProvider` uses `transport as never` until the dependency graph aligns on one `ai` major.
+- **Spawn-order env** — `LATTICE_AGENT_*` and provider keys apply when the desktop spawns `latticed`; attaching to an existing socket does not retroactively configure the agent plane.
+- **Browser demo** — the Vite browser fixture shows an agent panel placeholder (`AgentThread` requires a native workspace root); fake/Pioneer smoke is Tauri-only.
+
 ### Phase B: Lattice tools
 
 1. Implement a typed `LatticeToolClient` over the existing authenticated localhost API.

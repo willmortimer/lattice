@@ -24,6 +24,10 @@ Sequenced `Event.body = AgentEvent` carries `run_id`, `event_type`, and
 
 Without agent env, these RPCs return `agent_unavailable` (not `unimplemented`).
 
+**Phase A verification checklist** (automated tests, manual Tauri smoke, Pioneer
+path, known risks):
+[`docs/architecture/embedded-agent.md` § Phase A verification](../../docs/architecture/embedded-agent.md#phase-a-verification).
+
 ### Environment
 
 | Variable | Purpose |
