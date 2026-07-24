@@ -19,6 +19,10 @@ text, `latticed` protocol), read `docs/voice/README.md` and
 `docs/decisions/0040-local-voice-dictation-documentation.md` before changing
 boundaries.
 
+For the embedded agent (`agentd` sidecar, assistant-ui chat shell, proposal
+workflow), read `docs/architecture/embedded-agent.md` and
+`docs/decisions/0044-embedded-agent-sidecar.md` before changing boundaries.
+
 Use the ADRs in `docs/decisions/` for accepted decisions. New irreversible
 choices should receive an ADR rather than silently becoming implementation
 facts.
@@ -27,6 +31,7 @@ facts.
 
 - `apps/cli/`: headless `lattice` CLI.
 - `apps/daemon/`: `latticed` Unix-domain daemon (control plane over LatticeRuntime).
+- `apps/agentd/`: Node 22 embedded agent sidecar (supervised by `latticed`; see `docs/architecture/embedded-agent.md`).
 - `apps/desktop/`: Tauri 2 desktop shell using React, TypeScript, and Vite.
 - `crates/`: Rust domain crates for resources, storage, commands, indexing,
   data applications, and themes.
