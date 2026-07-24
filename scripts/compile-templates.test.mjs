@@ -179,7 +179,7 @@ test("template compiler accepts read-only formula column metadata", () => {
     ...templates,
     ...compileTemplates().filter((template) => template.id === "demo"),
   ]);
-  assert.match(source, /"formula": "\\{subtotal\\} \\+ \\{tax\\}"/);
+  assert.ok(source.includes('"formula": "{subtotal} + {tax}"'));
 });
 
 test("template compiler accepts declarative dataPackage views", () => {

@@ -1954,8 +1954,8 @@ export function emitDemoWorkspace(templates) {
     if (directory.purpose) directoryPurposes[directory.path] = directory.purpose;
   }
   const snapshot = {
-    root: "/Users/you/Lattice/Workspaces/First Look",
-    title: "First Look",
+    root: `/Users/you/Lattice/Workspaces/${template.recommendedTitle}`,
+    title: template.recommendedTitle,
     id: DEMO_WORKSPACE_ID,
     capabilities: template.capabilities,
     defaults,
