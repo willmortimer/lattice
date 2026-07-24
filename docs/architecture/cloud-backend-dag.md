@@ -1,6 +1,6 @@
 # Cloud backend hackathon DAG
 
-**Status:** Active orchestration  
+**Status:** CB0–CB3 merged into BASE (`08575c1`)  
 **BASE branch:** `feat/cloud-backend`  
 **BASE worktree:** `.worktrees/feat-cloud-backend`  
 **Domain:** https://lattice-notes.com (Cloudflare)  
