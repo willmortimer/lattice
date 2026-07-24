@@ -130,7 +130,9 @@ Full `nxr task check` / `cargo test --workspace` was **not** re-run end-to-end i
 
 ### Known limitations (honest shipped boundaries)
 
-- **Scheduler:** open-session interval only; cron parsed but not executed; no durable closed-desktop registry (Phase 5 / T9).
+- **Scheduler:** interval schedules on open sessions **and** opted-in known-workspace
+  registry roots (closed-desktop while `latticed` is alive + scheduler lease).
+  Cron parsed but not executed; no durable offline queue / connector refresh.
 - **Attachments:** staged until commit; orphan cleanup is explicit (CLI/Tauri), no TTL sweep for abandoned staging dirs; UX polish (open/reveal/drag-drop) deferred.
 - **Proposal inbox:** rich previews + subset validation shipped; full filtering/archive lifecycle deferred (P2-3).
 - **Interfaces:** embedded forms + saved views shipped; form submit bumps host snapshot revision so sibling embedded data-views refresh (F0).
@@ -142,14 +144,14 @@ Full `nxr task check` / `cargo test --workspace` was **not** re-run end-to-end i
 1. First Look: prepare workspace → agent task schema/profile → proposal → rich review (T5) → approve → interface.
 2. OpsDashboard: embedded form submit → Board/data-view refresh (F0); workflow → proposal optional.
 3. Derived ContactBrief: stale reasons + atomic rebuild.
-4. Tray: desktop + daemon schedule job visibility/cancel (open session).
+4. Tray: desktop + daemon schedule job visibility/cancel (open session or registered closed-desktop).
 
 Friday rehearsal checklist: [friday-demo.md](./friday-demo.md).
 
 ### Friday continuation packets
 
 - Wire interface form submit → host snapshot revision refresh for embedded views.
-- T9 scheduler durability increments (known-workspace registry, lease vs idle shutdown).
+- Cron evaluator + further scheduler durability (beyond known-workspace registry / lease).
 - Proposal inbox filters + open-result actions.
 - Attachment inventory UI + staging TTL cleanup.
 - Interface builder insert/bind/reorder (P1-14).

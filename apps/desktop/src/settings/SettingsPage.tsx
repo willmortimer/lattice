@@ -30,6 +30,11 @@ import {
   type SemanticStatus,
 } from "../lib/semantic";
 import type { WorkspaceSnapshot } from "../types";
+import {
+  getBackgroundScheduleStatus,
+  setBackgroundSchedulesEnabled,
+  type BackgroundScheduleStatus,
+} from "../lib/backgroundSchedules";
 import { HistoryRetentionSettings } from "./HistoryRetentionSettings";
 import type { AppSettings } from "./model";
 import { TOGGLEABLE_WORKSPACE_CAPABILITIES } from "./workspaceCapabilities";
@@ -139,6 +144,10 @@ export function SettingsPage({
   const [defaultWorkspaceDraft, setDefaultWorkspaceDraft] = useState(
     startup.defaultWorkspace ?? "",
   );
+  const [backgroundSchedules, setBackgroundSchedules] = useState<BackgroundScheduleStatus | null>(
+    null,
+  );
+  const [backgroundSchedulesError, setBackgroundSchedulesError] = useState<string | null>(null);
 
   useEffect(() => {
     setQuickNoteDraft(workspace.defaults.quickNoteDirectory);
@@ -148,11 +157,49 @@ export function SettingsPage({
     setDefaultWorkspaceDraft(startup.defaultWorkspace ?? "");
   }, [startup.defaultWorkspace]);
 
+  useEffect(() => {
+    if (inBrowser || !workspace.root) {
+      setBackgroundSchedules(null);
+      setBackgroundSchedulesError(null);
+      return;
+    }
+    let cancelled = false;
+    void getBackgroundScheduleStatus(workspace.root)
+      .then((status) => {
+        if (!cancelled) {
+          setBackgroundSchedules(status);
+          setBackgroundSchedulesError(null);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setBackgroundSchedules(null);
+          setBackgroundSchedulesError(err instanceof Error ? err.message : String(err));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace.root]);
+
   function update<K extends Exclude<keyof AppSettings, "format" | "version">>(
     group: K,
     patch: Partial<AppSettings[K]>,
   ) {
     onChange({ ...settings, [group]: { ...settings[group], ...patch } });
+  }
+
+  async function onToggleBackgroundSchedules(enabled: boolean) {
+    if (!workspace.root || inBrowser) {
+      return;
+    }
+    try {
+      const status = await setBackgroundSchedulesEnabled(workspace.root, enabled);
+      setBackgroundSchedules(status);
+      setBackgroundSchedulesError(null);
+    } catch (err: unknown) {
+      setBackgroundSchedulesError(err instanceof Error ? err.message : String(err));
+    }
   }
 
   return (
@@ -540,6 +587,28 @@ export function SettingsPage({
                 onChange={(keepServicesRunning) => update("services", { keepServicesRunning })}
               />
             </SettingRow>
+            <SettingRow
+              title="Allow background schedules"
+              description="Opt this workspace into interval schedule runs while the desktop is closed. Requires latticed; holds a scheduler lease so idle shutdown does not stop the daemon. Cron is still deferred."
+            >
+              <Toggle
+                label="Allow background schedules"
+                checked={Boolean(backgroundSchedules?.enabled)}
+                onChange={(enabled) => {
+                  void onToggleBackgroundSchedules(enabled);
+                }}
+              />
+            </SettingRow>
+            {backgroundSchedulesError ? (
+              <p className="settings-copy" role="status">
+                Background schedules unavailable: {backgroundSchedulesError}
+              </p>
+            ) : null}
+            {backgroundSchedules?.lastError ? (
+              <p className="settings-copy" role="status">
+                Last schedule error: {backgroundSchedules.lastError}
+              </p>
+            ) : null}
             <h2 className="settings-subsection">Revision history retention</h2>
             <HistoryRetentionSettings
               workspaceRoot={workspace.root || null}

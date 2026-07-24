@@ -89,6 +89,11 @@ impl DaemonState {
         self
     }
 
+    /// Shared connection / idle-shutdown tracker when serving live clients.
+    pub fn connections(&self) -> Option<&Arc<ConnectionTracker>> {
+        self.connections.as_ref()
+    }
+
     fn next_sequence(&self) -> u64 {
         self.next_event_seq.fetch_add(1, Ordering::Relaxed)
     }
@@ -186,9 +191,10 @@ pub async fn serve_with_shutdown_and_controllers(
     );
     let state = DaemonState::new_with_controllers(config, runtime, semantic, voice)
         .with_connections(Arc::clone(&connections));
-    let schedule_runner = crate::schedule::spawn_schedule_runner(
+    let schedule_runner = crate::schedule::spawn_schedule_runner_with_connections(
         Arc::clone(&state.runtime),
         Arc::clone(&state.jobs),
+        Some(Arc::clone(&connections)),
         crate::DEFAULT_SCHEDULE_TICK,
     );
     let api_shutdown = state

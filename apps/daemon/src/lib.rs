@@ -19,6 +19,7 @@ mod lease;
 pub mod mcp;
 mod preferences;
 mod schedule;
+mod scheduler_api;
 mod server;
 mod spawn;
 mod voice_host;
@@ -48,6 +49,7 @@ pub use http::{
     daemon_state_for_tests, router as api_router, serve_localhost_api,
     serve_localhost_api_ephemeral, spawn_localhost_api,
 };
+pub use idle::ConnectionTracker;
 pub use jobs::JobRegistry;
 pub use lease::{
     daemon_lease_claim, lease_file_for_daemon, lease_path, lease_to_wire, write_workspace_lease,
@@ -57,7 +59,15 @@ pub use lease::{
 pub use preferences::{
     DaemonPreferences, LATTICE_IDLE_SHUTDOWN_SECS_ENV, LATTICE_KEEP_SERVICES_RUNNING_ENV,
 };
-pub use schedule::{spawn_schedule_runner, ScheduleRunner, DEFAULT_SCHEDULE_TICK};
+pub use schedule::{
+    spawn_schedule_runner, spawn_schedule_runner_with_connections, ScheduleRunner,
+    DEFAULT_SCHEDULE_TICK,
+};
+pub use scheduler_api::{
+    api_scheduler_list, api_scheduler_register, api_scheduler_set_enabled,
+    api_scheduler_unregister, SchedulerListResponse, SchedulerSetEnabledParams,
+    SchedulerWorkspaceParams, SchedulerWorkspaceResponse,
+};
 pub use server::{
     serve, serve_with_shutdown, serve_with_shutdown_and_controllers,
     serve_with_shutdown_and_semantic, DaemonState,

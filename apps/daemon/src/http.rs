@@ -26,6 +26,10 @@ use crate::api::{
     ProposeResourceParams, ProposeYamlParams, ReadParams, RelatedParams, SearchParams,
 };
 use crate::config::DaemonConfig;
+use crate::scheduler_api::{
+    api_scheduler_list, api_scheduler_register, api_scheduler_set_enabled,
+    api_scheduler_unregister, SchedulerSetEnabledParams, SchedulerWorkspaceParams,
+};
 use crate::server::DaemonState;
 
 const AUTH_HEADER: &str = "x-lattice-token";
@@ -358,6 +362,58 @@ async fn route_cancel_job(
     }
 }
 
+async fn route_scheduler_register(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<SchedulerWorkspaceParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_scheduler_register(&state.daemon, body).await {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_scheduler_unregister(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<SchedulerWorkspaceParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_scheduler_unregister(&state.daemon, body).await {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_scheduler_set_enabled(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<SchedulerSetEnabledParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_scheduler_set_enabled(&state.daemon, body).await {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_scheduler_list(State(state): State<HttpState>, headers: HeaderMap) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_scheduler_list(&state.daemon).await {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
 /// Build the localhost API router (no CORS — not a browser demo surface).
 pub fn router(daemon: DaemonState) -> Router {
     Router::new()
@@ -372,6 +428,13 @@ pub fn router(daemon: DaemonState) -> Router {
         .route("/v1/jobs/list_recent", post(route_list_recent_jobs))
         .route("/v1/jobs/get", post(route_get_job))
         .route("/v1/jobs/cancel", post(route_cancel_job))
+        .route("/v1/scheduler/register", post(route_scheduler_register))
+        .route("/v1/scheduler/unregister", post(route_scheduler_unregister))
+        .route(
+            "/v1/scheduler/set_enabled",
+            post(route_scheduler_set_enabled),
+        )
+        .route("/v1/scheduler/list", post(route_scheduler_list))
         .route("/v1/proposals/create", post(route_create_proposal))
         .route("/v1/proposals/list", post(route_list_proposals))
         .route("/v1/proposals/get", post(route_get_proposal))
