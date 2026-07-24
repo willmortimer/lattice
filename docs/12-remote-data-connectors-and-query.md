@@ -141,6 +141,24 @@ Extract manifests record:
 - Output partition paths.
 - Refresh policy.
 
+### GitHub repository Extract
+
+GitHub connected repos follow
+[ADR 0045](decisions/0045-github-connected-repos-are-readonly-extracts.md):
+
+- Auth via a Lattice GitHub App (device flow) from the **CLI**
+  (`lattice github login` / `lattice github connect owner/repo`); tokens in the
+  OS keychain. Desktop browses Connected extracts only — it does not run
+  install/login UI.
+- Binding YAML under `.lattice/connectors/github/<binding_id>.yaml` with
+  `mode: read` and capabilities `list` / `read` / `snapshot`.
+- Shallow clone (`git clone --depth 1`) into
+  `.lattice/connectors/github/<binding_id>/checkout/`.
+- Desktop shows a separate Connected roots tree; files open read-only.
+- Checkout is never opened as a nested Lattice workspace, even if it contains
+  `lattice.yaml`.
+- Offline: serve the last extract and surface a stale/offline badge.
+
 ## OpenAPI and GraphQL
 
 OpenAPI can generate:

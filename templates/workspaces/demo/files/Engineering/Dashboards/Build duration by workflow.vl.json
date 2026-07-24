@@ -1,0 +1,32 @@
+{
+  "lattice": {
+    "data": {
+      "dataset": "Engineering/Build Status.dataset",
+      "sql": "SELECT workflow, outcome, round(avg(duration_seconds), 1) AS avg_duration_seconds, count(*) AS runs FROM read_parquet('Engineering/Build Status.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true) GROUP BY workflow, outcome ORDER BY workflow, outcome"
+    }
+  },
+  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+  "title": "Average build duration by workflow",
+  "data": { "name": "table" },
+  "mark": { "type": "bar", "tooltip": true, "cornerRadiusEnd": 3 },
+  "encoding": {
+    "x": {
+      "field": "workflow",
+      "type": "nominal",
+      "title": "Workflow",
+      "sort": "-y",
+      "axis": { "labelAngle": -28 }
+    },
+    "y": {
+      "field": "avg_duration_seconds",
+      "type": "quantitative",
+      "title": "Average duration (seconds)"
+    },
+    "color": {
+      "field": "outcome",
+      "type": "nominal",
+      "title": "Outcome"
+    },
+    "xOffset": { "field": "outcome" }
+  }
+}

@@ -45,5 +45,6 @@ These records capture architecture choices that should not be silently reversed.
 - [ADR 0041: Daemon IPC uses Protobuf over a private Unix-domain socket](0041-daemon-ipc-protobuf.md)
 - [ADR 0042: Hybrid local search with FTS5 and Qwen3 embeddings](0042-hybrid-search-qwen3-embedding.md)
 - [ADR 0043: Voice model ownership moves to latticed (D5)](0043-voice-ownership-in-latticed.md)
+- [ADR 0045: GitHub connected repos are read-only Extract mirrors](0045-github-connected-repos-are-readonly-extracts.md)
 
 Voice subsystem ADRs (FluidAudio, provisional/final transcripts, capture ownership, commands) live under [`docs/voice/adr/`](../voice/adr/).

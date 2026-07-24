@@ -60,6 +60,7 @@ lattice-datasets.workspace = true
 lattice-duckdb.workspace = true
 lattice-arrow-transport.workspace = true
 lattice-handlers.workspace = true
+lattice-connectors.workspace = true
 lattice-runtime.workspace = true
 lattice-terminal.workspace = true
 lattice-kernel.workspace = true

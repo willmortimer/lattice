@@ -7,6 +7,9 @@ import { ProposalInboxPanel } from "../ProposalInboxPanel";
 import { ProposalReviewModal } from "../ProposalReviewModal";
 import { batchWarnThresholdExceeded } from "../lib/linkRepair";
 import { hasTauri } from "../lib/ipc";
+import { ConnectedRoots } from "../ConnectedRoots";
+import { GithubFileViewer } from "../GithubFileViewer";
+import { githubReadCheckoutFile } from "../lib/github";
 import { NewWorkspaceDialog } from "../NewWorkspaceDialog";
 import { CommandPalette } from "../CommandPalette";
 import { ResourceTree } from "../ResourceTree";
@@ -83,6 +86,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
     treeRenameRequest,
     navigateHistory, closeTab, reorderTab, beginSidebarResize, commitTitle, updateWorkspaceSettings,
     handleOpenWiki, openLinkTarget, handleNotebookContentChange, handleRevisionChange,
+    setSession,
   } = model;
 
   const splashVisible = useStartupSplash({
@@ -318,9 +322,37 @@ export function DesktopShell({ model }: DesktopShellProps) {
               onMoveToFolder={(fromPaths, toDir) => void handleMoveToFolder(fromPaths, toDir)}
               renameRequest={treeRenameRequest}
               revealPath={revealPath}
-              activeFolderPath={browserActiveFolderPath}
-              onActiveFolderChange={setBrowserActiveFolderPath}
+              activeFolderPath={inBrowser ? browserActiveFolderPath : null}
+              onActiveFolderChange={inBrowser ? setBrowserActiveFolderPath : undefined}
             />
+            {!inBrowser && (
+              <ConnectedRoots
+                workspaceRoot={snapshot.root}
+                onError={setError}
+                onOpenFile={(detail) => {
+                  void githubReadCheckoutFile(snapshot.root, detail.bindingId, detail.path)
+                    .then((file) => {
+                      setSession({
+                        kind: "github-file",
+                        bindingId: detail.bindingId,
+                        owner: detail.owner,
+                        repo: detail.repo,
+                        path: detail.path,
+                        content: file.content,
+                        stale: detail.stale,
+                        resource: {
+                          path: `github://${detail.owner}/${detail.repo}/${detail.path}`,
+                          kind: "file",
+                        },
+                      });
+                      setActivityArea("files");
+                    })
+                    .catch((error) =>
+                      setError(error instanceof Error ? error.message : String(error)),
+                    );
+                }}
+              />
+            )}
           </nav>
           {hasTauri && (
             <ProposalInboxPanel
@@ -597,7 +629,11 @@ export function DesktopShell({ model }: DesktopShellProps) {
                   </div>
                 ) : (
                   <div className="main-scroll">
-                    {!selected && (
+                    {session?.kind === "github-file" ? (
+                      <GithubFileViewer session={session} />
+                    ) : (
+                      <>
+                    {!selected && !session && (
                       <div className="placeholder">
                         <p className="placeholder-copy">Select a resource from Files.</p>
                         <p className="placeholder-sub">⌘N opens Quick Note · {QUICK_NOTE_SHORTCUT} works globally</p>
@@ -643,6 +679,8 @@ export function DesktopShell({ model }: DesktopShellProps) {
                           },
                         }}
                       />
+                    )}
+                      </>
                     )}
                   </div>
                 )

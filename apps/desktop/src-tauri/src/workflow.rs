@@ -438,7 +438,6 @@ fn spawn_workflow_run(
             &trigger,
             Some(execution_id_thread),
             Some(&cancel_thread),
-            Some(&execution_id_thread),
         ) {
             Ok(finished) => {
                 patch_record(&record_thread, |r| *r = finished);

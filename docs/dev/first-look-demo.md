@@ -1,6 +1,31 @@
-# First Look demo — 2026-07-20
+# Lattice — Building Lattice showcase
 
-Evidence pass against the Home.md **First Look tour — new surfaces** checklist.
+The stable `demo` template ID now provisions the **Lattice — Building Lattice**
+company workspace. It keeps the original First Look feature-lab resources and
+native/browser honesty contracts while making product, engineering, hackathon,
+operations, CRM, analytics, and internal documentation the primary story.
+
+## Company workspace recording path
+
+| Scene | Resource | Proof |
+| --- | --- | --- |
+| Product | `Product/Roadmap.data` → `ProductPulse` | Roadmap, feature maturity, feedback, decisions, interface metrics and intake |
+| Engineering | `Engineering/Delivery.data` → `ReleaseRoom` | Issues, synthetic PRs/releases and CI analytics |
+| Analytics | `Engineering/Build Status.dataset` | Local Parquet → DuckDB → bounded Arrow IPC → Preview/Chart/Profile/Plan |
+| Operations | `Operations/Company.data` → `RunwayDashboard` | Expense form, formulas, vendors, budgets, revenue and live operating metrics |
+| CRM | `CRM/Feedback.data` → `FeedbackOps` | Feedback form → workflow → proposal → approval |
+| Composition | `Hackathon/Pitch.canvas` | Ordered product story using canonical resources |
+| Repository | `Engineering/Repository.md` | Explicit authenticated connected-root path with deterministic local fallback |
+
+Run `nxr prepare-first-look`, create a new workspace from the sample, and follow
+`Hackathon/Demo Script.md`. Existing demo workspaces are never rewritten.
+
+## Historical First Look evidence
+
+Evidence pass against the former Home.md **First Look tour — new surfaces**
+checklist. The historical rows remain useful because the company showcase
+retains the underlying CRM, analytics, automation, notebook, canvas, search and
+voice fixtures.
 Historical rows below retain the 2026-07-20 data-support polish BASE; tip for
 this closeout is the Phase 3 polish integration tip after P3P01–P06 / P2F01 /
 P2J01 / P2X01 / P2S01–P02 (all packets merged before P3P07 docs).

@@ -7,6 +7,7 @@ mod data;
 mod dataset;
 mod dataset_sessions;
 mod derived;
+mod github;
 mod kernel;
 mod link_repair;
 mod profile;
@@ -131,6 +132,11 @@ pub fn run() {
             commands::create_workspace,
             commands::list_templates,
             commands::update_workspace_manifest,
+            github::github_list_bindings,
+            github::github_refresh_repo,
+            github::github_disconnect_repo,
+            github::github_list_checkout_tree,
+            github::github_read_checkout_file,
             profile::get_profile_snapshot,
             profile::save_desktop_settings,
             profile::save_workspace_startup_settings,

@@ -82,6 +82,17 @@ export type OpenResourceSession =
       manifest: ArtifactManifestDto;
     }
   | {
+      kind: "github-file";
+      /** Synthetic resource for tab/selection chrome; not a workspace path. */
+      resource: Resource;
+      bindingId: string;
+      owner: string;
+      repo: string;
+      path: string;
+      content: string;
+      stale: boolean;
+    }
+  | {
       kind: "unknown";
       resource: Resource;
     };

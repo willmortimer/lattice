@@ -1,326 +1,137 @@
 ---
-title: Home
+title: Lattice — Building Lattice
 ---
 
-# Home
+# Lattice — Building Lattice
 
-Kitchen-sink tour of the **First Look** sample workspace. Everything here is an
-ordinary file under a real directory — open it in any editor, or stay inside Lattice.
+This is Lattice operating itself: product planning, engineering delivery,
+hackathon preparation, company operations, customer feedback, analytical data,
+internal documentation, and governed automation in one local-first workspace.
 
-**Native vs browser:** Perspective Preview, Vega-Lite Chart, DuckDB Profile,
-workflows, tasks, derived rebuild, and the Proposals inbox require the **native
-desktop app** (`nxr desktop-dev` or Lattice.app). The Vite browser fixture seeds
-the same files but labels visualization / automation **unavailable**.
-Installing Lattice.app does **not** rewrite an existing First Look folder — create
-a new workspace from the First Look template, or copy missing seeds from
-`templates/workspaces/demo/files/` (for example `Data/Events.dataset`,
-`Automations/`, and `Dashboards/`). Sticky `target/dev-home` picks up template
-changes when `LATTICE_DEV_RESET_DEMO=1` (default for `desktop-dev` / `tauri:dev`).
+Everything is inspectable on disk. The company records are synthetic; the
+product and architecture material describes the real Lattice application and
+its current implementation boundaries.
 
-## Quick start
+## The five-minute story
 
-1. Search with **⌘K** — keyword FTS is always on; semantic search is **off by default**. Enable it in **Settings → Search** for hybrid FTS + embeddings (try `latticed` or `FinalizationMode`).
-2. Scroll [[Research/Long Read]] — long-form perf and virtualization fixture.
-3. Open `Canvases/Product Strategy.canvas` — double-click file nodes to jump.
-4. Capture with **⌘N** into `Inbox/` — type or **hold-to-dictate**; finals get glossary / ITN normalize (see [[Inbox/Sample capture]]).
-5. Open `CRM.data` — contacts + companies, relations, board/gallery/calendar/form.
-6. Also open `Projects/Delivery.data`, `Data/Metrics.data`, and `OKRs.data` for more table shapes.
-7. Open `Data/Events.dataset` — DuckDB Parquet facts → Perspective **Preview**, Vega-Lite **Chart**, DuckDB **Profile**.
-8. Open `Dashboards/Signups by region.vl.json` — bound Vega-Lite chart over the same Hive Parquet.
-9. Open `Data/Orders.dataset` — multi-month retail facts (~3 000 rows) for richer charts.
-10. Open the Orders dashboards — stacked region/category, daily revenue, and channel comparison (`.vl.json` under `Dashboards/`).
-11. Open `Data/Places.dataset` — ~20 WGS84 lon/lat points (`name`, `lon`, `lat`) for MapLibre.
-12. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.
-13. Open `Notebooks/Orders analytics.ipynb` — native `ipykernel` when available,
-    else Pyodide; mounted Orders CSV (`sources/orders.csv`); DuckDB SQL stays native.
-14. Open `Notebooks/CRM exploration.ipynb` — CRM tour notebook (markdown + code stubs).
-15. Create pages from `Templates/` — daily and meeting note scaffolds.
-16. Read [[Research/Local Runtime]] — daemon, search, and voice process model.
+1. Open `Product/Roadmap.data` → **Interfaces → Product pulse**. Review shipped,
+   active, and blocked work beside feedback and accepted decisions.
+2. Open `Engineering/Delivery.data` → **Interfaces → Release room**. Move from
+   issues and pull requests to the real `Engineering/Build Status.dataset`.
+3. Open `Engineering/Build Status.dataset` → **Preview**, **Chart**, **Profile**,
+   and **Plan**. Then open
+   `Engineering/Dashboards/Build duration by workflow.vl.json`.
+4. Open `Operations/Company.data` → **Interfaces → Runway dashboard**. Submit
+   **Expense intake** and watch the operational view refresh.
+5. Open `CRM/Feedback.data` → **Forms → Feedback intake**. Submit feedback, then
+   approve the governed follow-up in the **Proposals** inbox.
+6. Open `Hackathon/Launch.data` and [[Hackathon/Demo Script]] to move from the
+   live workspace into the recording narrative.
+7. Finish on `Hackathon/Pitch.canvas`: the same resources become the presentation
+   surface without duplicating their source data.
 
-## First Look tour — new surfaces
+## Company map
 
-Work through this checklist to exercise the latest desktop shell, data, search,
-and voice features. Each step is safe in the sample workspace; undo where noted.
+| Area | Open first | What it proves |
+| --- | --- | --- |
+| Product | `Product/Roadmap.data` | Roadmap, features, feedback, decisions, formulas, views, interfaces |
+| Engineering | `Engineering/Delivery.data` | Issues, pull requests, releases, build analytics, repository context |
+| Hackathon | `Hackathon/Launch.data` | Deliverables, sponsors, deadlines, demo script, pitch canvas |
+| Operations | `Operations/Company.data` | Expenses, vendors, budgets, revenue, forms, rollups and executive metrics |
+| CRM | `CRM.data` and `CRM/Feedback.data` | Contacts, relations, intake, feedback triage and governed proposals |
+| Docs | [[Docs/Product Overview]] | Current product surface, architecture, limits and recording language |
 
-### Search & local runtime
+## Agent and repository path
 
-1. Press **⌘K** — keyword FTS works immediately (no download). Semantic search stays **off** until you enable **Settings → Search → Semantic search** (downloads ~640 MB local Qwen3 GGUF on first enable; or set `LATTICE_SEMANTIC_FAKE=1` for Fake vectors in dev).
-2. Search for `VoiceContextBuilder` or `EndpointDetected` (seeded on [[Research/Local Runtime]]). With semantic on and ready, hybrid hits may show Keyword / Semantic / Both; otherwise expect keyword-only.
-3. Skim [[Research/Architecture]] for the core vs latticed diagrams.
+Read [[Engineering/Repository]] before recording the repository segment.
+Connected GitHub roots require authentication and are intentionally not
+pre-seeded in a template. When the connector is available, connect the Lattice
+repository, inspect recent commits, compare them with `Product/Roadmap.data`,
+and propose an update rather than writing directly.
 
-### Voice & Quick Note
+The existing `Tasks/AgentFirstLook.task` remains a deterministic governed-agent
+path: it inspects local analytical datasets, proposes an interface, and waits
+for approval. The embedded agent surface and cloud APIs are experimental
+capabilities tracked in the roadmap; this fixture does not fake their readiness.
 
-4. Open any page → hold the microphone control to dictate; release for a single final insert (provisional text is ghost-only; finals run glossary / ITN normalize).
-5. Press **⌘N** for Quick Note → hold-to-dictate → release → note saves once; Escape cancels without junk ASR text. Try glossary tokens from [[Research/Local Runtime]] (`FinalizationMode`, `CRM.data`).
-6. Optional continuous mode: set `LATTICE_VOICE_AUTO_FINALIZE_ON_ENDPOINT=1` before launch (silence debounce endpoints); default hold-to-talk needs no VAD.
+## Native capability tour
 
-### CRM layouts and saved views
+The native desktop app provides the complete path. The browser fixture uses the
+same source template but labels filesystem, DuckDB, workflow, task, and proposal
+operations honestly when unavailable.
 
-7. Open `CRM.data` and switch **Board**, **Gallery**, **Calendar**, and **Form** from the view picker.
-8. In each layout, change the layout field pickers (group-by, cover field, date field, visible columns).
-9. Click **Save view** to persist the layout under `CRM.data/views/` (native).
-10. Open a contact row and inspect **company** and **reports_to** — add or change links in record detail.
+### Pages, search, canvas, voice
 
-### More data apps
+- Press **⌘K** for keyword search. Semantic search is opt-in under
+  **Settings → Search** because its local model is not downloaded silently.
+- Open [[Docs/Product Overview]], [[Engineering/Architecture]], and
+  [[Research/Long Read]] for narrative pages, Mermaid, embeds, and long-document
+  behavior.
+- Open `Canvases/Product Strategy.canvas` and `Hackathon/Pitch.canvas`.
+- Press **⌘N** for Quick Note; hold the microphone control to dictate locally.
 
-11. Open `Projects/Delivery.data` — board by status + calendar on `due` (no relations; simpler schema).
-12. Open `Data/Metrics.data` — decimal metrics board by category (Voice / Search / Data / Editor).
-13. Open `OKRs.data` — objectives board by confidence status.
+### Data applications
 
-### CRM package forms
+- `Product/Roadmap.data`: Board, Calendar, Form, Product pulse interface.
+- `Engineering/Delivery.data`: issue board, calendar, intake, Release room.
+- `Hackathon/Launch.data`: deliverables and sponsor records.
+- `Operations/Company.data`: Expense intake, budgets, vendors, revenue and
+  Runway dashboard.
+- `CRM.data`: contacts, companies, linked records, lookup, rollup, junction
+  relation, Board, Gallery, Calendar and Form.
+- `CRM/Feedback.data`: feedback board and Feedback intake form.
 
-14. Open `CRM.data` → **Forms** → **Contact intake**.
-15. Submit a new contact; the row appears and relation pickers stay in sync with `companies`.
-16. Open `Projects/Delivery.data` → **Forms** → **Delivery intake** and add an item.
+All native mutations use semantic commands. Save a view, add a column, edit a
+record, submit a form, then use **⌘Z** where applicable.
 
-### Automation path (form → workflow → proposal → approve)
+### Governed automation
 
-Native desktop only — browser opens the workflow/task surfaces with an honest
-unavailable banner.
+1. Submit `CRM/Feedback.data → Forms → Feedback intake`.
+2. Open `Automations/Feedback intake.workflow.yaml`.
+3. Open the **Proposals** inbox.
+4. Review and approve the proposed `Proposals/Feedback triage.md`.
+5. Open the new page and inspect the workflow run.
 
-17. Confirm `Automations/Contact intake.workflow.yaml` is enabled (`form.submitted`
-    on `CRM.data` / `ContactIntake`).
-18. Submit **CRM.data → Forms → Contact intake** again (or **Run** on the workflow).
-19. Open the **Proposals** inbox — approve the page-create for
-    `Proposals/Contact intake follow-up.md`.
-20. Open the new page (and optionally embed it from this Home after approve).
-21. Optional SDK story: open `Tasks/ProposePage.task` → **Run** (needs injected
-    `lattice` / `uv`) → approve `Proposals/FromSdk.task.md`.
-22. Optional agent seed: open `Tasks/AgentFirstLook.task` → **Run** → inspect
-    Orders/Events → approve `CRM.data/interfaces/AgentDigest.interface.yaml` in the
-    inbox → open **Interfaces → Agent digest** (see [[Research/Agent first look]]).
-23. Optional MCP story (daemon): `get_dataset_schema` / `profile_dataset` →
-    `propose_interface` — same inbox path; sample transcript in
-    `docs/dev/first-look-agent-mcp.md`.
-24. Optional MCP page proposal: `create_proposal` / `propose_page` tools — same
-    Proposals inbox path as friday demo steps 16–18.
-25. Optional derived: open `Derived/ContactBrief.derived.yaml` (stale) → **Rebuild**
-    → edit `Derived/input.txt` → confirm stale again → Rebuild.
+The original Contact intake workflow, task runner, derived-resource rebuild,
+MCP proposal helpers, and `AgentFirstLook.task` remain under `Automations/`,
+`Tasks/`, and `Derived/` as a deeper feature lab.
 
-### Ops dashboard (embedded form + Board refresh)
+### Analytical data
 
-Native desktop only — rehearse the Friday F0 path without leaving the interface.
+- `Engineering/Build Status.dataset`: real fixture for CI duration, outcome,
+  workflow and branch analysis.
+- `Data/Events.dataset`: Hive Parquet plus SQLite annotation overlay.
+- `Data/Orders.dataset`: multi-month synthetic revenue facts.
+- `Data/Places.dataset`: offline lon/lat MapLibre path.
+- `Notebooks/Orders analytics.ipynb`: native kernel or Pyodide notebook.
 
-26. Open `CRM.data` → **Interfaces** → **Ops dashboard** (or double-click **CRM
-    OpsDashboard** on `Canvases/Product Strategy.canvas`).
-27. Note the metric, chart, map, embedded **Board** data-view, and **Contact intake**
-    form on one surface.
-28. Submit the embedded **Contact intake** form with a new name/email — the **Board**
-    data-view should refresh in place (new card appears; no manual reload).
-29. Optional: submit again and open the **Proposals** inbox to approve the workflow
-    follow-up page (automation path from step 17).
+Current native transport is bounded Arrow IPC over workspace-local Parquet.
+Remote R2 reads, streamed record batches, full GeoParquet, cross-filtered BI,
+and query progress metrics remain roadmap work; [[Docs/Product Overview]]
+contains the precise recording boundary.
 
-**Agent digest** is pre-seeded under **Interfaces → Agent digest** for a fast metric
-walkthrough. To rehearse inspect→propose→approve, run `Tasks/AgentFirstLook.task`
-and approve the inbox proposal (see [[Research/Agent first look]]).
+## Supporting feature lab
 
-### Analytical datasets (DuckDB / Vega-Lite)
+The prior First Look material remains available so the demo still covers every
+recently shipped surface:
 
-30. Open `Data/Events.dataset` → **Preview** — Perspective grid over Hive Parquet (`facts/year=2026/month=07/`).
-31. Switch to **Chart** — auto Vega-Lite from the same Arrow IPC query.
-32. Switch to **Profile** — DuckDB `SUMMARIZE` column stats.
-33. Open `Dashboards/Signups by region.vl.json` — chart resource bound with `read_parquet(...)`.
-34. Optional CLI: `lattice dataset query-annotated Data/Events.dataset --json` (review overlay in `annotations.sqlite`).
-
-### Orders dataset & multi-series charts
-
-35. Open `Data/Orders.dataset` → **Preview** — ~3 000 synthetic retail rows across `facts/year=2026/month=0{1,2,3}/`.
-36. Open `Dashboards/Revenue by region and category.vl.json` — stacked bars (region × category).
-37. Open `Dashboards/Revenue by day.vl.json` — daily revenue time series (Jan–Mar 2026).
-38. Open `Dashboards/Revenue by channel.vl.json` — layered channel comparison (revenue bars + order counts).
-
-### Places dataset (MapLibre lon/lat)
-
-39. Open `Data/Places.dataset` → **Preview** — ~20 named points with plain `lon` / `lat` doubles (WGS84) under `facts/places.parquet`.
-40. Switch to **Map** — offline MapLibre markers (`place_id`, `name`, `lon`, `lat`; solid `--lt-*` style, no remote tile basemap).
-
-### Resource tree
-
-41. Create a folder under `Projects/` (context menu or **New folder**).
-42. Press **⌘Z** to undo the folder creation.
-43. Move [[Product/Vision]] into another folder; accept link repair when prompted.
-44. **⌘-click** two pages, drag to a folder (multi-select move).
-45. Select multiple items and delete — confirm the batch operation.
-
-### Where to look next
-
-| Surface | Try |
+| Resource | Purpose |
 | --- | --- |
-| [[Research/Local Runtime]] | Daemon, FTS + optional semantic, voice ownership |
-| [[Research/Long Read]] | Scroll perf, embeds, extended checklist |
-| [[Product/Release Notes]] | What shipped in this sample |
-| `Canvases/Product Strategy.canvas` | Spatial links + CRM view subpaths |
+| `CRM.data → Interfaces → Ops dashboard` | Metric, chart, map, saved view and embedded form |
+| `CRM.data → Interfaces → Agent digest` | Pre-seeded governed-agent result |
+| `Projects/Delivery.data` | Compact board/calendar/form fixture |
+| `Data/Metrics.data` | Decimal metrics and multiple layouts |
+| `OKRs.data` | Objective board |
+| `Artifacts/ContactPulse.artifact` | Sandboxed interactive artifact |
+| `Derived/ContactBrief.derived.yaml` | Lineage, stale detection and rebuild |
+| `Notebooks/CRM exploration.ipynb` | Notebook resource path |
+| `Resources/` | JSON, YAML, TypeScript, SQL, text and SVG |
 
-## Product
+## Recording prep
 
-| Page | What to try |
-| --- | --- |
-| [[Product/Vision]] | Short north-star narrative |
-| [[Product/Principles]] | Invariants and constraints |
-| [[Product/Roadmap]] | Phased delivery themes |
-| [[Product/Release Notes]] | Changelog-style sample |
+Run `nxr prepare-first-look`, then create a **new** workspace from this template
+or launch the resettable development profile. Existing workspaces are never
+silently rewritten.
 
-## Research
-
-| Page | What to try |
-| --- | --- |
-| [[Research/Local Runtime]] | latticed, FTS + optional semantic, Quick Note voice |
-| [[Research/Long Read]] | Scroll perf, Mermaid, wiki links, `:::lattice-embed` |
-| [[Research/Architecture]] | System diagrams (core + daemon) |
-| [[Research/Competitor Analysis]] | Comparison table |
-| [[Research/Market Notes]] | Segments and hypotheses |
-| [[Research/Interview Synthesis]] | Quotes mapped to CRM fields |
-
-## Inbox & templates
-
-- [[Inbox/Sample capture]] — triage-ready quick note (dictation-friendly)
-- [[Templates/Daily Note]] — `{{date}}` / `{{title}}` placeholders preserved at provision
-- [[Templates/Meeting Note]] — agenda, decisions, action items
-
-Workspace defaults point quick capture at `Inbox/` and templates at `Templates/`.
-
-## Canvas, data apps & analytics
-
-| Resource | Kind |
-| --- | --- |
-| `Canvases/Product Strategy.canvas` | Spatial board linking Product pages + CRM views |
-| `CRM.data` | SQLite CRM (`companies` + `contacts`, relations, forms) |
-| `Projects/Delivery.data` | Delivery board/calendar (status + due) |
-| `Data/Metrics.data` | Decimal metrics by category |
-| `OKRs.data` | Objectives / key results board |
-| `Data/Events.dataset` | Analytical package — Hive Parquet facts + `annotations.sqlite` |
-| `Dashboards/Signups by region.vl.json` | Vega-Lite chart bound to Events via DuckDB |
-| `Data/Orders.dataset` | Retail orders — multi-month Hive Parquet for multi-series charts |
-| `Dashboards/Revenue by region and category.vl.json` | Stacked bars (Orders region × category) |
-| `Dashboards/Revenue by day.vl.json` | Daily revenue time series (Orders) |
-| `Dashboards/Revenue by channel.vl.json` | Layered channel comparison (Orders) |
-| `Data/Places.dataset` | Named WGS84 points (`lon`/`lat`) for MapLibre |
-| `Artifacts/ContactPulse.artifact` | Sandboxed HTML artifact (embedded above) |
-| `Automations/Contact intake.workflow.yaml` | Form-submitted workflow → proposal |
-| `Tasks/ContactIntakeHello.task` | `uv` task for the intake workflow |
-| `Tasks/ProposePage.task` | Optional SDK propose_page demo |
-| `Derived/ContactBrief.derived.yaml` | Stale → rebuild derived HTML |
-| `Data/sample.csv` | Flat CSV import sample |
-| `Notebooks/Orders analytics.ipynb` | Orders CSV tour (native ipykernel or Pyodide) |
-| `Notebooks/CRM exploration.ipynb` | CRM tour notebook (nbformat v4) |
-
-### CRM views
-
-Open `CRM.data` and switch layouts from the view picker. The template seeds saved
-views under `CRM.data/views/` (one YAML file per view):
-
-| View | Layout | Key field |
-| ---- | ------ | --------- |
-| Board | `board` | `status` |
-| Calendar | `calendar` | `due_date` |
-| Gallery | `gallery` | `company` (cover) |
-| Form | `form` | — |
-
-Supported layout types also include `grid` and `list`. Board groups contacts by
-`status`; calendar plots `due_date`; gallery uses `company` as a cover field.
-
-The **company** column links each contact to a row in the seeded `companies` table.
-The **reports_to** column is a self-relation on `contacts`. The **tags** column is a
-junction-backed M2M to the seeded `tags` table (`contact_tags` as source of truth;
-grid/IPC still use `Relation { record_ids }`). Template relation seeds accept
-**record ids** or display **names** (matched via each target table's `name`
-column at provision time).
-
-### CRM package forms
-
-| Form | Table | Fields |
-| ---- | ----- | ------ |
-| ContactIntake | `contacts` | `name`, `email`, `status`, `company` |
-
-Embed a view from a page (see [[Research/Long Read]]):
-
-```markdown
-:::lattice-embed
-resource: CRM.data/views/Board.yaml
-fallback: "Open CRM board view"
-:::
-```
-
-Open the sandboxed Contact pulse artifact (card vs interactive):
-
-:::lattice-embed
-resource: Artifacts/ContactPulse.artifact
-mode: card
-:::
-
-:::lattice-embed
-resource: Artifacts/ContactPulse.artifact
-mode: interactive
-height: 320
-:::
-
-After approving the Contact intake workflow proposal, embed the follow-up page:
-
-```markdown
-:::lattice-embed
-resource: Proposals/Contact intake follow-up.md
-fallback: "Approve the Contact intake proposal first"
-:::
-```
-
-### Automations, tasks & derived
-
-| Resource | Kind |
-| --- | --- |
-| `Automations/Contact intake.workflow.yaml` | Workflow — `form.submitted` → task.run → proposal.create |
-| `Tasks/ContactIntakeHello.task` | Reliable `uv` task used by the intake workflow |
-| `Tasks/ProposePage.task` | Optional SDK `lattice.propose_page` demo |
-| `Derived/ContactBrief.derived.yaml` | Derived — stale → Rebuild → `dist/index.html` |
-| [[Proposals/README]] | Where approved page-create proposals land |
-
-## Resources
-
-| File | Notes |
-| --- | --- |
-| `Resources/config.json` | Feature flags sample |
-| `Resources/schema.yaml` | Small YAML schema |
-| `Resources/hooks.json` | Workspace hook sketch |
-| `Resources/example.ts` | Tiny TypeScript export |
-| `Resources/types.ts` | CRM-related types |
-| `Resources/queries.sql` | Example SELECT statements |
-| `Resources/notes.txt` | Plain text |
-| `Resources/mark.svg` | Generated Lattice mark |
-
-## Map
-
-| Path | Kind |
-| --- | --- |
-| [[Product/Vision]] | page |
-| [[Product/Principles]] | page |
-| [[Product/Roadmap]] | page |
-| [[Product/Release Notes]] | page |
-| [[Research/Local Runtime]] | page (daemon / search / voice) |
-| [[Research/Long Read]] | page (long / embed) |
-| [[Research/Architecture]] | page |
-| [[Research/Competitor Analysis]] | page |
-| [[Research/Market Notes]] | page |
-| [[Research/Interview Synthesis]] | page |
-| [[Inbox/Sample capture]] | page |
-| `Templates/` | page templates |
-| `Canvases/Product Strategy.canvas` | canvas |
-| `CRM.data` | data app |
-| `Projects/Delivery.data` | data app |
-| `Data/Metrics.data` | data app |
-| `OKRs.data` | data app |
-| `Data/Events.dataset` | dataset (Parquet + annotations) |
-| `Dashboards/Signups by region.vl.json` | Vega-Lite chart |
-| `Data/Orders.dataset` | dataset (multi-month Parquet) |
-| `Dashboards/Revenue by region and category.vl.json` | Vega-Lite chart (Orders) |
-| `Dashboards/Revenue by day.vl.json` | Vega-Lite chart (Orders) |
-| `Dashboards/Revenue by channel.vl.json` | Vega-Lite chart (Orders) |
-| `Data/Places.dataset` | dataset (WGS84 lon/lat points) |
-| `Artifacts/ContactPulse.artifact` | sandboxed HTML artifact |
-| `Automations/Contact intake.workflow.yaml` | workflow |
-| `Tasks/ContactIntakeHello.task` | task |
-| `Tasks/ProposePage.task` | task (SDK optional) |
-| `Derived/ContactBrief.derived.yaml` | derived |
-| [[Proposals/README]] | page |
-| `Data/sample.csv` | CSV file |
-| `Notebooks/Orders analytics.ipynb` | notebook |
-| `Notebooks/CRM exploration.ipynb` | notebook |
-| `Resources/` | code & config files |
+Continue with [[Hackathon/Demo Script]] for the exact recording sequence and
+fallbacks.

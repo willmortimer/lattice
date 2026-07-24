@@ -3037,6 +3037,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "keyring"
+version = "3.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eebcc3aff044e5944a8fbaf69eb277d11986064cba30c468730e8b9909fb551c"
+dependencies = [
+ "log",
+ "zeroize",
+]
+
+[[package]]
 name = "kqueue"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3114,6 +3124,7 @@ dependencies = [
  "assert_cmd",
  "clap",
  "lattice-commands",
+ "lattice-connectors",
  "lattice-core",
  "lattice-data",
  "lattice-datasets",
@@ -3164,6 +3175,22 @@ dependencies = [
  "thiserror 2.0.18",
  "trash",
  "uuid",
+]
+
+[[package]]
+name = "lattice-connectors"
+version = "0.1.0"
+dependencies = [
+ "keyring",
+ "lattice-core",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "thiserror 2.0.18",
+ "ureq",
+ "uuid",
+ "walkdir",
 ]
 
 [[package]]
@@ -3268,6 +3295,7 @@ dependencies = [
  "lattice-audio-macos",
  "lattice-client",
  "lattice-commands",
+ "lattice-connectors",
  "lattice-core",
  "lattice-data",
  "lattice-datasets",
@@ -3368,6 +3396,7 @@ name = "lattice-handlers"
 version = "0.1.0"
 dependencies = [
  "lattice-commands",
+ "lattice-connectors",
  "lattice-core",
  "lattice-embedding",
  "lattice-index",

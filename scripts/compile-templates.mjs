@@ -54,6 +54,7 @@ const SQLITE_TYPES = {
   relation: "TEXT",
   lookup: "TEXT",
   rollup: "TEXT",
+  formula: "TEXT",
 };
 const TEMPLATE_CATEGORIES = [
   "Everyday",
@@ -79,6 +80,7 @@ const FIELD_TYPES = new Set([
   "relation",
   "lookup",
   "rollup",
+  "formula",
 ]);
 const ROLLUP_AGGREGATES = new Set(["count", "sum", "min", "max"]);
 const VIEW_LAYOUTS = new Set(["grid", "list", "board", "gallery", "calendar", "form"]);
@@ -314,6 +316,20 @@ function normalizeSeedColumn(column, template, columnLabel) {
     );
   }
 
+  let formula;
+  if (column.type === "formula") {
+    if (typeof column.formula !== "string" || column.formula.trim().length === 0) {
+      throw new Error(
+        `${template}: ${columnLabel}.formula must be a non-empty expression for formula columns`,
+      );
+    }
+    formula = column.formula;
+  } else if (column.formula !== undefined) {
+    throw new Error(
+      `${template}: ${columnLabel}.formula is only supported for formula columns`,
+    );
+  }
+
   return {
     name: column.name,
     type: column.type,
@@ -324,6 +340,7 @@ function normalizeSeedColumn(column, template, columnLabel) {
     ...(rollupRelation === undefined ? {} : { rollup_relation: rollupRelation }),
     ...(rollupAggregate === undefined ? {} : { rollup_aggregate: rollupAggregate }),
     ...(rollupField === undefined ? {} : { rollup_field: rollupField }),
+    ...(formula === undefined ? {} : { formula }),
   };
 }
 
@@ -1146,7 +1163,7 @@ function rustDirectory(directory) {
 }
 
 function rustDataColumn(column) {
-  return `SeedDataColumn { name: ${rustString(column.name)}, field_type: ${rustString(column.type)}, relation_table: ${rustOptionString(column.relation_table)}, junction_table: ${rustOptionString(column.junction_table)}, lookup_relation: ${rustOptionString(column.lookup_relation)}, lookup_field: ${rustOptionString(column.lookup_field)}, rollup_relation: ${rustOptionString(column.rollup_relation)}, rollup_aggregate: ${rustOptionString(column.rollup_aggregate)}, rollup_field: ${rustOptionString(column.rollup_field)} }`;
+  return `SeedDataColumn { name: ${rustString(column.name)}, field_type: ${rustString(column.type)}, relation_table: ${rustOptionString(column.relation_table)}, junction_table: ${rustOptionString(column.junction_table)}, lookup_relation: ${rustOptionString(column.lookup_relation)}, lookup_field: ${rustOptionString(column.lookup_field)}, rollup_relation: ${rustOptionString(column.rollup_relation)}, rollup_aggregate: ${rustOptionString(column.rollup_aggregate)}, rollup_field: ${rustOptionString(column.rollup_field)}, formula: ${rustOptionString(column.formula)} }`;
 }
 
 function rustDataForm(form) {
@@ -1380,7 +1397,12 @@ function buildDemoTableSnapshot(tableName, columns, rows, rowIdsByTable, legacyI
     const id = demoRowId(row, index, legacyIds ? undefined : tableName);
     const values = { id: { Text: id } };
     for (const column of columns) {
-      if (column.type === "relation" || column.type === "lookup" || column.type === "rollup") {
+      if (
+        column.type === "relation" ||
+        column.type === "lookup" ||
+        column.type === "rollup" ||
+        column.type === "formula"
+      ) {
         continue;
       }
       const raw = Object.prototype.hasOwnProperty.call(row, column.name) ? row[column.name] : null;
@@ -1424,6 +1446,10 @@ function buildDemoTableSnapshot(tableName, columns, rows, rowIdsByTable, legacyI
       }
       if (column.type === "rollup") {
         entry.values[column.name] = { Rollup: { value: null } };
+        continue;
+      }
+      if (column.type === "formula") {
+        entry.values[column.name] = { Formula: { value: null } };
       }
     }
   }
@@ -1510,6 +1536,72 @@ function demoCellAsText(value) {
   return null;
 }
 
+function demoCellAsNumber(value) {
+  if (!value || "Null" in value) return null;
+  if ("Integer" in value) return Number(value.Integer);
+  if ("Decimal" in value) return Number(value.Decimal);
+  if ("Rollup" in value && value.Rollup?.value != null) return Number(value.Rollup.value);
+  if ("Formula" in value && value.Formula?.value && "Number" in value.Formula.value) {
+    return Number(value.Formula.value.Number);
+  }
+  return null;
+}
+
+function evaluateDemoNumericFormula(expression, values) {
+  const tokens = [];
+  const pattern = /\s*(\{[A-Za-z_][A-Za-z0-9_]*\}|\d+(?:\.\d+)?|[()+\-*/])\s*/gy;
+  let index = 0;
+  while (index < expression.length) {
+    pattern.lastIndex = index;
+    const match = pattern.exec(expression);
+    if (!match || match.index !== index) return null;
+    tokens.push(match[1]);
+    index = pattern.lastIndex;
+  }
+  let cursor = 0;
+  const peek = () => tokens[cursor];
+  const take = () => tokens[cursor++];
+  const primary = () => {
+    const token = take();
+    if (token === "(") {
+      const value = sum();
+      if (take() !== ")") return null;
+      return value;
+    }
+    if (token === "+" || token === "-") {
+      const value = primary();
+      return value == null ? null : token === "-" ? -value : value;
+    }
+    if (token?.startsWith("{")) {
+      return demoCellAsNumber(values[token.slice(1, -1)]);
+    }
+    const value = Number(token);
+    return Number.isFinite(value) ? value : null;
+  };
+  const product = () => {
+    let value = primary();
+    while (peek() === "*" || peek() === "/") {
+      const operator = take();
+      const right = primary();
+      if (value == null || right == null || (operator === "/" && right === 0)) return null;
+      value = operator === "*" ? value * right : value / right;
+    }
+    return value;
+  };
+  const sum = () => {
+    let value = product();
+    while (peek() === "+" || peek() === "-") {
+      const operator = take();
+      const right = product();
+      if (value == null || right == null) return null;
+      value = operator === "+" ? value + right : value - right;
+    }
+    return value;
+  };
+  const result = sum();
+  return cursor === tokens.length && Number.isFinite(result) ? result : null;
+}
+
 function resolveDemoComputedColumns(tableName, columns, rows, tableSnapshots) {
   for (const row of rows) {
     for (const column of columns) {
@@ -1547,6 +1639,13 @@ function resolveDemoComputedColumns(tableName, columns, rows, tableSnapshots) {
           }
         }
         row.values[column.name] = { Rollup: { value: count } };
+        continue;
+      }
+      if (column.type === "formula") {
+        const value = evaluateDemoNumericFormula(column.formula, row.values);
+        row.values[column.name] = {
+          Formula: { value: value == null ? null : { Number: value } },
+        };
       }
     }
   }
@@ -1566,6 +1665,7 @@ function demoColumnMetadata(column) {
       ? {}
       : { rollup_aggregate: column.rollup_aggregate }),
     ...(column.rollup_field === undefined ? {} : { rollup_field: column.rollup_field }),
+    ...(column.formula === undefined ? {} : { formula: column.formula }),
   };
 }
 

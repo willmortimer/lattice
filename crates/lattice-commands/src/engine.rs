@@ -591,6 +591,7 @@ impl CommandEngine {
     pub(crate) fn validate_one(&self, command: &Command) -> Result<()> {
         match command {
             Command::PageCreate { path, .. } | Command::ResourceCreate { path, .. } => {
+                self.reject_operational_mutation_target(path)?;
                 match self.metadata_opt(path)? {
                     None => Ok(()),
                     Some(_) => Err(Error::AlreadyExists { path: path.clone() }),
@@ -662,6 +663,8 @@ impl CommandEngine {
                 Ok(())
             }
             Command::ResourceRename { from, to } => {
+                self.reject_operational_mutation_target(from)?;
+                self.reject_operational_mutation_target(to)?;
                 if self.metadata_opt(from)?.is_none() {
                     return Err(Error::NotFound { path: from.clone() });
                 }
@@ -671,6 +674,8 @@ impl CommandEngine {
                 Ok(())
             }
             Command::ResourceMove { from, to_dir } => {
+                self.reject_operational_mutation_target(from)?;
+                self.reject_operational_mutation_target(to_dir)?;
                 if self.metadata_opt(from)?.is_none() {
                     return Err(Error::NotFound { path: from.clone() });
                 }
@@ -683,24 +688,28 @@ impl CommandEngine {
                     });
                 }
                 let dest = to_dir.join(file_name(from));
+                self.reject_operational_mutation_target(&dest)?;
                 if self.metadata_opt(&dest)?.is_some() {
                     return Err(Error::AlreadyExists { path: dest });
                 }
                 Ok(())
             }
             Command::ResourceDelete { path } => {
+                self.reject_operational_mutation_target(path)?;
                 if self.metadata_opt(path)?.is_none() {
                     return Err(Error::NotFound { path: path.clone() });
                 }
                 Ok(())
             }
             Command::FolderCreate { path } => {
+                self.reject_operational_mutation_target(path)?;
                 if self.metadata_opt(path)?.is_some() {
                     return Err(Error::AlreadyExists { path: path.clone() });
                 }
                 self.ensure_parent_directory(path)
             }
             Command::TableCreate { path, .. } | Command::DatasetCreate { path, .. } => {
+                self.reject_operational_mutation_target(path)?;
                 match self.metadata_opt(path)? {
                     None => Ok(()),
                     Some(_) => Err(Error::AlreadyExists { path: path.clone() }),
@@ -1222,6 +1231,20 @@ impl CommandEngine {
                 path: path.to_path_buf(),
                 size: size as u64,
                 max: MAX_RESOURCE_EDIT_BYTES as u64,
+            });
+        }
+        Ok(())
+    }
+
+    /// Reject mutations under `.lattice/` (includes GitHub connector extracts).
+    fn reject_operational_mutation_target(&self, path: &Path) -> Result<()> {
+        let is_operational = path.components().any(|component| {
+            component.as_os_str() == std::ffi::OsStr::new(lattice_core::OPERATIONAL_DIR)
+        });
+        if is_operational {
+            return Err(Error::ResourceNotEditable {
+                path: path.to_path_buf(),
+                profile: "internal".into(),
             });
         }
         Ok(())

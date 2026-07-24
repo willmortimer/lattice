@@ -42,6 +42,7 @@ pub(crate) struct SeedDataColumn {
     pub rollup_relation: Option<&'static str>,
     pub rollup_aggregate: Option<&'static str>,
     pub rollup_field: Option<&'static str>,
+    pub formula: Option<&'static str>,
 }
 
 #[derive(Debug)]
@@ -762,12 +763,15 @@ fn seed_column_to_new_column<'a>(
         ));
     }
     if field_type == FieldType::Formula {
-        return Err(Error::TemplateValidation {
-            message: format!(
-                "data package {}: formula columns are not supported in template seeds yet",
-                package_path
-            ),
-        });
+        let expression = column
+            .formula
+            .ok_or_else(|| Error::TemplateValidation {
+                message: format!(
+                    "data package {}: formula column {:?} requires formula",
+                    package_path, column.name
+                ),
+            })?;
+        return Ok(NewColumn::formula(column.name, expression));
     }
     if matches!(
         field_type,
@@ -2029,6 +2033,7 @@ mod tests {
                 rollup_relation: None,
                 rollup_aggregate: None,
                 rollup_field: None,
+                formula: None,
             },
             SeedDataColumn {
                 name: "email",
@@ -2040,6 +2045,7 @@ mod tests {
                 rollup_relation: None,
                 rollup_aggregate: None,
                 rollup_field: None,
+                formula: None,
             },
         ];
         static ROWS: &[&str] = &[
@@ -2105,6 +2111,114 @@ mod tests {
     }
 
     #[test]
+    fn provisioned_data_packages_materialize_formula_metadata_and_values() {
+        static COLUMNS: &[SeedDataColumn] = &[
+            SeedDataColumn {
+                name: "name",
+                field_type: "text",
+                relation_table: None,
+                junction_table: None,
+                lookup_relation: None,
+                lookup_field: None,
+                rollup_relation: None,
+                rollup_aggregate: None,
+                rollup_field: None,
+                formula: None,
+            },
+            SeedDataColumn {
+                name: "subtotal",
+                field_type: "decimal",
+                relation_table: None,
+                junction_table: None,
+                lookup_relation: None,
+                lookup_field: None,
+                rollup_relation: None,
+                rollup_aggregate: None,
+                rollup_field: None,
+                formula: None,
+            },
+            SeedDataColumn {
+                name: "tax",
+                field_type: "decimal",
+                relation_table: None,
+                junction_table: None,
+                lookup_relation: None,
+                lookup_field: None,
+                rollup_relation: None,
+                rollup_aggregate: None,
+                rollup_field: None,
+                formula: None,
+            },
+            SeedDataColumn {
+                name: "total",
+                field_type: "formula",
+                relation_table: None,
+                junction_table: None,
+                lookup_relation: None,
+                lookup_field: None,
+                rollup_relation: None,
+                rollup_aggregate: None,
+                rollup_field: None,
+                formula: Some("{subtotal} + {tax}"),
+            },
+        ];
+        static PACKAGES: &[SeedDataPackage] = &[SeedDataPackage {
+            path: "Operations/Expenses.data",
+            title: "Expenses",
+            table: "expenses",
+            columns: COLUMNS,
+            rows_json: &[r#"{"name":"Fixture","subtotal":20,"tax":5}"#],
+            extra_tables: &[],
+            views: &[],
+            forms: &[],
+            actions: &[],
+            interfaces: &[],
+        }];
+        static TEMPLATE: GeneratedTemplate = GeneratedTemplate {
+            id: "formula-fixture",
+            order: 1,
+            name: "Formula Fixture",
+            category: "Test",
+            description: "Formula template fixture",
+            visibility: "gallery",
+            recommended: false,
+            recommended_title: "Formula",
+            directories: &[],
+            preview: &["Operations/Expenses.data"],
+            capabilities: &["pages", "sqlite"],
+            quick_note_directory: "Inbox",
+            daily_note_directory: None,
+            attachments_directory: None,
+            template_directory: None,
+            archive_directory: None,
+            open_on_create: None,
+            files: &[],
+            data_packages: PACKAGES,
+        };
+
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("FormulaWorkspace");
+        create_workspace_at(&root, "Formula", &TEMPLATE).unwrap();
+
+        let app = DataApp::open(&root.join("Operations/Expenses.data")).unwrap();
+        let columns = app.columns("expenses").unwrap();
+        assert_eq!(
+            columns
+                .iter()
+                .find(|column| column.name == "total")
+                .and_then(|column| column.formula.as_deref()),
+            Some("{subtotal} + {tax}")
+        );
+        let rows = app.list_rows("expenses", 10, 0).unwrap();
+        assert_eq!(
+            rows[0].values.get("total"),
+            Some(&CellValue::Formula {
+                value: Some(lattice_data::FormulaValue::Number(25.0)),
+            })
+        );
+    }
+
+    #[test]
     fn existing_folder_rolls_back_failed_data_package_materialization() {
         static COLUMNS: &[SeedDataColumn] = &[SeedDataColumn {
             name: "name",
@@ -2116,6 +2230,7 @@ mod tests {
             rollup_relation: None,
             rollup_aggregate: None,
             rollup_field: None,
+            formula: None,
         }];
         static PACKAGES: &[SeedDataPackage] = &[SeedDataPackage {
             path: "Data/Broken.data",
@@ -2183,6 +2298,7 @@ mod tests {
                 rollup_relation: None,
                 rollup_aggregate: None,
                 rollup_field: None,
+                formula: None,
             },
             SeedDataColumn {
                 name: "status",
@@ -2194,6 +2310,7 @@ mod tests {
                 rollup_relation: None,
                 rollup_aggregate: None,
                 rollup_field: None,
+                formula: None,
             },
             SeedDataColumn {
                 name: "company",
@@ -2205,6 +2322,7 @@ mod tests {
                 rollup_relation: None,
                 rollup_aggregate: None,
                 rollup_field: None,
+                formula: None,
             },
         ];
         static ROWS: &[&str] = &[r#"{"name":"Ada","status":"Active","company":"Analytical"}"#];
@@ -2302,6 +2420,7 @@ mod tests {
                 rollup_relation: None,
                 rollup_aggregate: None,
                 rollup_field: None,
+                formula: None,
             },
             SeedDataColumn {
                 name: "email",
@@ -2313,6 +2432,7 @@ mod tests {
                 rollup_relation: None,
                 rollup_aggregate: None,
                 rollup_field: None,
+                formula: None,
             },
             SeedDataColumn {
                 name: "status",
@@ -2324,6 +2444,7 @@ mod tests {
                 rollup_relation: None,
                 rollup_aggregate: None,
                 rollup_field: None,
+                formula: None,
             },
             SeedDataColumn {
                 name: "company",
@@ -2335,6 +2456,7 @@ mod tests {
                 rollup_relation: None,
                 rollup_aggregate: None,
                 rollup_field: None,
+                formula: None,
             },
         ];
         static ROWS: &[&str] = &[
@@ -2420,6 +2542,7 @@ mod tests {
                 rollup_relation: None,
                 rollup_aggregate: None,
                 rollup_field: None,
+                formula: None,
             },
             SeedDataColumn {
                 name: "reports_to",
@@ -2431,6 +2554,7 @@ mod tests {
                 rollup_relation: None,
                 rollup_aggregate: None,
                 rollup_field: None,
+                formula: None,
             },
         ];
         static ROWS: &[&str] = &[
@@ -2511,6 +2635,7 @@ mod tests {
             rollup_relation: None,
             rollup_aggregate: None,
             rollup_field: None,
+            formula: None,
         }];
         static COMPANY_ROWS: &[&str] = &[r#"{"name":"NASA"}"#];
         static EXTRA_TABLES: &[SeedDataExtraTable] = &[SeedDataExtraTable {
@@ -2529,6 +2654,7 @@ mod tests {
                 rollup_relation: None,
                 rollup_aggregate: None,
                 rollup_field: None,
+                formula: None,
             },
             SeedDataColumn {
                 name: "company",
@@ -2540,6 +2666,7 @@ mod tests {
                 rollup_relation: None,
                 rollup_aggregate: None,
                 rollup_field: None,
+                formula: None,
             },
         ];
         static CONTACT_ROWS: &[&str] = &[r#"{"name":"Katherine Johnson","company":["NASA"]}"#];

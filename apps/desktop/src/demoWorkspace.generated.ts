@@ -12,7 +12,9 @@ export const demoSnapshot: WorkspaceSnapshot = {
   "capabilities": [
     "pages",
     "canvas",
-    "sqlite"
+    "sqlite",
+    "parquet",
+    "jupyter"
   ],
   "defaults": {
     "quickNoteDirectory": "Inbox",
@@ -23,7 +25,14 @@ export const demoSnapshot: WorkspaceSnapshot = {
   "directoryPurposes": {
     "Inbox": "Drop quick captures here — triage into Product or Research.",
     "Projects": "Active workstreams with a clear outcome.",
-    "Product": "Product narrative, vision, principles, and roadmap pages.",
+    "Product": "Roadmap, features, feedback, decisions, vision and release notes.",
+    "Engineering": "Issues, pull requests, releases, build analytics, architecture and repository context.",
+    "Engineering/Architecture": "Current implementation and system-boundary documentation.",
+    "Engineering/Dashboards": "Build and release visualizations bound to analytical datasets.",
+    "Hackathon": "Deliverables, sponsors, recording script and ordered pitch canvas.",
+    "Operations": "Expenses, vendors, budgets, revenue and runway documentation.",
+    "CRM": "Customer feedback intake and program documentation beside the relational CRM.",
+    "Docs": "Internal product documentation for the real Lattice application.",
     "Research": "Notes, comparisons, long reads, and diagrams.",
     "Notebooks": "Reproducible analysis notebooks beside CRM and CSV seeds.",
     "Canvases": "Spatial boards that link into workspace files.",
@@ -76,6 +85,11 @@ export const demoSnapshot: WorkspaceSnapshot = {
       "formatId": "file:yaml"
     },
     {
+      "path": "Automations/Feedback intake.workflow.yaml",
+      "kind": "file",
+      "formatId": "file:yaml"
+    },
+    {
       "path": "Canvases",
       "kind": "folder"
     },
@@ -84,7 +98,19 @@ export const demoSnapshot: WorkspaceSnapshot = {
       "kind": "canvas"
     },
     {
+      "path": "CRM",
+      "kind": "folder"
+    },
+    {
       "path": "CRM.data",
+      "kind": "data-app"
+    },
+    {
+      "path": "CRM/Feedback Program.md",
+      "kind": "page"
+    },
+    {
+      "path": "CRM/Feedback.data",
       "kind": "data-app"
     },
     {
@@ -231,6 +257,82 @@ export const demoSnapshot: WorkspaceSnapshot = {
       "formatId": "file:text"
     },
     {
+      "path": "Docs",
+      "kind": "folder"
+    },
+    {
+      "path": "Docs/Product Overview.md",
+      "kind": "page"
+    },
+    {
+      "path": "Engineering",
+      "kind": "folder"
+    },
+    {
+      "path": "Engineering/Architecture",
+      "kind": "folder"
+    },
+    {
+      "path": "Engineering/Architecture.md",
+      "kind": "page"
+    },
+    {
+      "path": "Engineering/Build Status.dataset/dataset.yaml",
+      "kind": "file",
+      "formatId": "file:yaml"
+    },
+    {
+      "path": "Engineering/Build Status.dataset/facts/year=2026/month=07/builds.parquet",
+      "kind": "file",
+      "formatId": "file:unknown"
+    },
+    {
+      "path": "Engineering/Build Status.dataset/README.md",
+      "kind": "page"
+    },
+    {
+      "path": "Engineering/Build Status.dataset/sources/builds.csv",
+      "kind": "file",
+      "formatId": "file:text"
+    },
+    {
+      "path": "Engineering/Dashboards",
+      "kind": "folder"
+    },
+    {
+      "path": "Engineering/Dashboards/Build duration by workflow.vl.json",
+      "kind": "file",
+      "formatId": "file:json"
+    },
+    {
+      "path": "Engineering/Delivery.data",
+      "kind": "data-app"
+    },
+    {
+      "path": "Engineering/Release Readiness.md",
+      "kind": "page"
+    },
+    {
+      "path": "Engineering/Repository.md",
+      "kind": "page"
+    },
+    {
+      "path": "Hackathon",
+      "kind": "folder"
+    },
+    {
+      "path": "Hackathon/Demo Script.md",
+      "kind": "page"
+    },
+    {
+      "path": "Hackathon/Launch.data",
+      "kind": "data-app"
+    },
+    {
+      "path": "Hackathon/Pitch.canvas",
+      "kind": "canvas"
+    },
+    {
       "path": "Inbox",
       "kind": "folder"
     },
@@ -255,6 +357,18 @@ export const demoSnapshot: WorkspaceSnapshot = {
       "kind": "data-app"
     },
     {
+      "path": "Operations",
+      "kind": "folder"
+    },
+    {
+      "path": "Operations/Company.data",
+      "kind": "data-app"
+    },
+    {
+      "path": "Operations/Runway.md",
+      "kind": "page"
+    },
+    {
       "path": "Product",
       "kind": "folder"
     },
@@ -265,6 +379,10 @@ export const demoSnapshot: WorkspaceSnapshot = {
     {
       "path": "Product/Release Notes.md",
       "kind": "page"
+    },
+    {
+      "path": "Product/Roadmap.data",
+      "kind": "data-app"
     },
     {
       "path": "Product/Roadmap.md",
@@ -448,271 +566,122 @@ export const demoSnapshot: WorkspaceSnapshot = {
 export const demoCanvas = {
   "nodes": [
     {
-      "id": "intro",
+      "id": "thesis",
       "type": "text",
-      "x": 60,
+      "x": 40,
       "y": 60,
+      "width": 320,
+      "height": 180,
+      "text": "Lattice building Lattice\n\nOne local-first workspace for product, engineering, operations, CRM, analytics, docs, and governed automation."
+    },
+    {
+      "id": "product",
+      "type": "file",
+      "file": "Product/Roadmap.data",
+      "subpath": "interfaces/ProductPulse",
+      "x": 430,
+      "y": 20,
+      "width": 250,
+      "height": 140
+    },
+    {
+      "id": "engineering",
+      "type": "file",
+      "file": "Engineering/Delivery.data",
+      "subpath": "interfaces/ReleaseRoom",
+      "x": 760,
+      "y": 20,
+      "width": 250,
+      "height": 140
+    },
+    {
+      "id": "builds",
+      "type": "file",
+      "file": "Engineering/Build Status.dataset",
+      "x": 1090,
+      "y": 20,
+      "width": 250,
+      "height": 140
+    },
+    {
+      "id": "operations",
+      "type": "file",
+      "file": "Operations/Company.data",
+      "subpath": "interfaces/RunwayDashboard",
+      "x": 430,
+      "y": 260,
+      "width": 250,
+      "height": 140
+    },
+    {
+      "id": "feedback",
+      "type": "file",
+      "file": "CRM/Feedback.data",
+      "subpath": "interfaces/FeedbackOps",
+      "x": 760,
+      "y": 260,
+      "width": 250,
+      "height": 140
+    },
+    {
+      "id": "docs",
+      "type": "file",
+      "file": "Docs/Product Overview.md",
+      "x": 1090,
+      "y": 260,
+      "width": 250,
+      "height": 140
+    },
+    {
+      "id": "governed",
+      "type": "text",
+      "x": 760,
+      "y": 500,
       "width": 300,
-      "height": 160,
-      "text": "First Look canvas — double-click file nodes. Data apps open grids; CRM nodes can target saved Board/Gallery views or the ContactOps interface via subpath."
-    },
-    {
-      "id": "vision",
-      "type": "file",
-      "file": "Product/Vision.md",
-      "x": 400,
-      "y": 40,
-      "width": 220,
-      "height": 120
-    },
-    {
-      "id": "principles",
-      "type": "file",
-      "file": "Product/Principles.md",
-      "x": 400,
-      "y": 200,
-      "width": 220,
-      "height": 120
-    },
-    {
-      "id": "roadmap",
-      "type": "file",
-      "file": "Product/Roadmap.md",
-      "x": 660,
-      "y": 40,
-      "width": 220,
-      "height": 120
-    },
-    {
-      "id": "long-read",
-      "type": "file",
-      "file": "Research/Long Read.md",
-      "x": 660,
-      "y": 200,
-      "width": 240,
-      "height": 120
-    },
-    {
-      "id": "architecture",
-      "type": "file",
-      "file": "Research/Architecture.md",
-      "x": 400,
-      "y": 360,
-      "width": 220,
-      "height": 120
-    },
-    {
-      "id": "crm-board-label",
-      "type": "text",
-      "x": 900,
-      "y": 60,
-      "width": 120,
-      "height": 40,
-      "text": "CRM Board view"
-    },
-    {
-      "id": "crm-board",
-      "type": "file",
-      "file": "CRM.data",
-      "subpath": "views/Board",
-      "x": 900,
-      "y": 100,
-      "width": 200,
-      "height": 100
-    },
-    {
-      "id": "crm-gallery-label",
-      "type": "text",
-      "x": 1120,
-      "y": 60,
-      "width": 130,
-      "height": 40,
-      "text": "CRM Gallery view"
-    },
-    {
-      "id": "crm-gallery",
-      "type": "file",
-      "file": "CRM.data",
-      "subpath": "views/Gallery.yaml",
-      "x": 1120,
-      "y": 100,
-      "width": 200,
-      "height": 100
-    },
-    {
-      "id": "crm-interface-label",
-      "type": "text",
-      "x": 1340,
-      "y": 60,
-      "width": 160,
-      "height": 40,
-      "text": "CRM ContactOps"
-    },
-    {
-      "id": "crm-interface",
-      "type": "file",
-      "file": "CRM.data",
-      "subpath": "interfaces/ContactOps",
-      "x": 1340,
-      "y": 100,
-      "width": 200,
-      "height": 100
-    },
-    {
-      "id": "crm-ops-dashboard-label",
-      "type": "text",
-      "x": 1560,
-      "y": 60,
-      "width": 180,
-      "height": 40,
-      "text": "CRM OpsDashboard"
-    },
-    {
-      "id": "crm-ops-dashboard",
-      "type": "file",
-      "file": "CRM.data",
-      "subpath": "interfaces/OpsDashboard",
-      "x": 1560,
-      "y": 100,
-      "width": 200,
-      "height": 100
-    },
-    {
-      "id": "crm-notebook-label",
-      "type": "text",
-      "x": 900,
-      "y": 240,
-      "width": 200,
-      "height": 40,
-      "text": "CRM exploration notebook"
-    },
-    {
-      "id": "crm-notebook",
-      "type": "file",
-      "file": "Notebooks/CRM exploration.ipynb",
-      "x": 900,
-      "y": 280,
-      "width": 240,
-      "height": 120
-    },
-    {
-      "id": "delivery-label",
-      "type": "text",
-      "x": 900,
-      "y": 440,
-      "width": 160,
-      "height": 40,
-      "text": "Delivery board"
-    },
-    {
-      "id": "delivery",
-      "type": "file",
-      "file": "Projects/Delivery.data",
-      "subpath": "views/Board",
-      "x": 900,
-      "y": 480,
-      "width": 200,
-      "height": 100
-    },
-    {
-      "id": "metrics-label",
-      "type": "text",
-      "x": 1120,
-      "y": 440,
-      "width": 160,
-      "height": 40,
-      "text": "Metrics board"
-    },
-    {
-      "id": "metrics",
-      "type": "file",
-      "file": "Data/Metrics.data",
-      "subpath": "views/Board",
-      "x": 1120,
-      "y": 480,
-      "width": 200,
-      "height": 100
-    },
-    {
-      "id": "okrs-label",
-      "type": "text",
-      "x": 1340,
-      "y": 440,
-      "width": 120,
-      "height": 40,
-      "text": "OKRs board"
-    },
-    {
-      "id": "okrs",
-      "type": "file",
-      "file": "OKRs.data",
-      "subpath": "views/Board",
-      "x": 1340,
-      "y": 480,
-      "width": 200,
-      "height": 100
+      "height": 150,
+      "text": "Inspect → relate → propose → approve → refresh\n\nEvery visible mutation uses the same semantic command core."
     }
   ],
   "edges": [
     {
       "id": "e1",
-      "fromNode": "intro",
-      "toNode": "vision"
+      "fromNode": "thesis",
+      "toNode": "product"
     },
     {
       "id": "e2",
-      "fromNode": "vision",
-      "toNode": "roadmap"
+      "fromNode": "product",
+      "toNode": "engineering"
     },
     {
       "id": "e3",
-      "fromNode": "vision",
-      "toNode": "principles"
+      "fromNode": "engineering",
+      "toNode": "builds"
     },
     {
       "id": "e4",
-      "fromNode": "principles",
-      "toNode": "architecture"
+      "fromNode": "product",
+      "toNode": "operations"
     },
     {
       "id": "e5",
-      "fromNode": "roadmap",
-      "toNode": "long-read"
+      "fromNode": "operations",
+      "toNode": "feedback"
     },
     {
       "id": "e6",
-      "fromNode": "long-read",
-      "toNode": "crm-board"
+      "fromNode": "feedback",
+      "toNode": "docs"
     },
     {
       "id": "e7",
-      "fromNode": "crm-board",
-      "toNode": "crm-gallery"
-    },
-    {
-      "id": "e7b",
-      "fromNode": "crm-gallery",
-      "toNode": "crm-interface"
+      "fromNode": "engineering",
+      "toNode": "governed"
     },
     {
       "id": "e8",
-      "fromNode": "crm-board",
-      "toNode": "crm-notebook"
-    },
-    {
-      "id": "e9",
-      "fromNode": "crm-notebook",
-      "toNode": "delivery"
-    },
-    {
-      "id": "e10",
-      "fromNode": "delivery",
-      "toNode": "metrics"
-    },
-    {
-      "id": "e11",
-      "fromNode": "metrics",
-      "toNode": "okrs"
+      "fromNode": "feedback",
+      "toNode": "governed"
     }
   ]
 };
@@ -6279,6 +6248,3489 @@ export const demoDataApps: Record<string, DataAppSnapshot> = {
       ]
     },
     "layout_type": "grid"
+  },
+  "Product/Roadmap.data": {
+    "title": "Product roadmap",
+    "default_table": "roadmap",
+    "package_revision": "demo:0",
+    "columns": [
+      {
+        "name": "id",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "name",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "area",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "status",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "owner",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "target",
+        "field_type": "date",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "confidence",
+        "field_type": "decimal",
+        "sqlite_type": "REAL"
+      },
+      {
+        "name": "evidence",
+        "field_type": "long_text",
+        "sqlite_type": "TEXT"
+      }
+    ],
+    "rows": [
+      {
+        "id": "0198-demo-data-applications-vertical-slice",
+        "values": {
+          "id": {
+            "Text": "0198-demo-data-applications-vertical-slice"
+          },
+          "name": {
+            "Text": "Data applications vertical slice"
+          },
+          "area": {
+            "Text": "Data"
+          },
+          "status": {
+            "Text": "Shipped"
+          },
+          "owner": {
+            "Text": "Product data"
+          },
+          "target": {
+            "Date": "2026-07-12"
+          },
+          "confidence": {
+            "Decimal": 1
+          },
+          "evidence": {
+            "Text": "SQLite packages, typed fields, relations, formulas, rollups, views, forms, actions and interfaces."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-local-analytical-workbench",
+        "values": {
+          "id": {
+            "Text": "0198-demo-local-analytical-workbench"
+          },
+          "name": {
+            "Text": "Local analytical workbench"
+          },
+          "area": {
+            "Text": "Analytics"
+          },
+          "status": {
+            "Text": "Shipped"
+          },
+          "owner": {
+            "Text": "Analytics"
+          },
+          "target": {
+            "Date": "2026-07-18"
+          },
+          "confidence": {
+            "Decimal": 1
+          },
+          "evidence": {
+            "Text": "Local Hive Parquet, DuckDB, bounded Arrow IPC, Perspective, Vega-Lite, Profile, Plan, Cancel and point Map."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-governed-automation-loop",
+        "values": {
+          "id": {
+            "Text": "0198-demo-governed-automation-loop"
+          },
+          "name": {
+            "Text": "Governed automation loop"
+          },
+          "area": {
+            "Text": "Automation"
+          },
+          "status": {
+            "Text": "Shipped"
+          },
+          "owner": {
+            "Text": "Runtime"
+          },
+          "target": {
+            "Date": "2026-07-21"
+          },
+          "confidence": {
+            "Decimal": 0.95
+          },
+          "evidence": {
+            "Text": "Form event, workflow, task, proposal, approval, derived resource and undo."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-embedded-agent-phase-a",
+        "values": {
+          "id": {
+            "Text": "0198-demo-embedded-agent-phase-a"
+          },
+          "name": {
+            "Text": "Embedded agent Phase A"
+          },
+          "area": {
+            "Text": "Agents"
+          },
+          "status": {
+            "Text": "Experimental"
+          },
+          "owner": {
+            "Text": "Agent platform"
+          },
+          "target": {
+            "Date": "2026-07-24"
+          },
+          "confidence": {
+            "Decimal": 0.75
+          },
+          "evidence": {
+            "Text": "Tracked main includes sidecar supervision, fake-provider verification, Tauri streaming transport and an assistant panel."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-github-connected-repository",
+        "values": {
+          "id": {
+            "Text": "0198-demo-github-connected-repository"
+          },
+          "name": {
+            "Text": "GitHub connected repository"
+          },
+          "area": {
+            "Text": "Connectors"
+          },
+          "status": {
+            "Text": "In progress"
+          },
+          "owner": {
+            "Text": "Connectors"
+          },
+          "target": {
+            "Date": "2026-07-27"
+          },
+          "confidence": {
+            "Decimal": 0.7
+          },
+          "evidence": {
+            "Text": "Read-only owned-repository extract; issues, pull requests and writeback remain later depth."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-remote-parquet-on-r2",
+        "values": {
+          "id": {
+            "Text": "0198-demo-remote-parquet-on-r2"
+          },
+          "name": {
+            "Text": "Remote Parquet on R2"
+          },
+          "area": {
+            "Text": "Analytics"
+          },
+          "status": {
+            "Text": "Planned"
+          },
+          "owner": {
+            "Text": "Analytics"
+          },
+          "target": {
+            "Date": "2026-08-08"
+          },
+          "confidence": {
+            "Decimal": 0.55
+          },
+          "evidence": {
+            "Text": "Requires explicit network capability, secret broker, httpfs packaging, streaming batches, progress and cache policy."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-presentation-and-publishing",
+        "values": {
+          "id": {
+            "Text": "0198-demo-presentation-and-publishing"
+          },
+          "name": {
+            "Text": "Presentation and publishing"
+          },
+          "area": {
+            "Text": "Publishing"
+          },
+          "status": {
+            "Text": "Planned"
+          },
+          "owner": {
+            "Text": "Product"
+          },
+          "target": {
+            "Date": "2026-08-20"
+          },
+          "confidence": {
+            "Decimal": 0.45
+          },
+          "evidence": {
+            "Text": "Current demo uses ordered canvas states; full presentation bookmarks, .show resources and connected publishing remain future work."
+          }
+        }
+      }
+    ],
+    "row_offset": 0,
+    "row_limit": 7,
+    "row_total": 7,
+    "has_more": false,
+    "available_views": [
+      "All",
+      "Board",
+      "Calendar",
+      "Form"
+    ],
+    "active_view": "All",
+    "filters": [],
+    "saved_views": [
+      {
+        "name": "All",
+        "layout_type": "grid"
+      },
+      {
+        "name": "Board",
+        "layout_type": "board",
+        "group_by": "status"
+      },
+      {
+        "name": "Calendar",
+        "layout_type": "calendar",
+        "date_field": "target"
+      },
+      {
+        "name": "Form",
+        "layout_type": "form"
+      }
+    ],
+    "relation_targets": {
+      "features": [
+        {
+          "id": "0198-demo-features-interface-component-builder",
+          "values": {
+            "id": {
+              "Text": "0198-demo-features-interface-component-builder"
+            },
+            "name": {
+              "Text": "Interface component builder"
+            },
+            "category": {
+              "Text": "Data apps"
+            },
+            "maturity": {
+              "Text": "Demo ready"
+            },
+            "surface": {
+              "Text": "Native desktop"
+            },
+            "notes": {
+              "Text": "Insert, bind and remove dashboard components without a full drag-layout IDE."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-features-attachment-lifecycle",
+          "values": {
+            "id": {
+              "Text": "0198-demo-features-attachment-lifecycle"
+            },
+            "name": {
+              "Text": "Attachment lifecycle"
+            },
+            "category": {
+              "Text": "Data apps"
+            },
+            "maturity": {
+              "Text": "Demo ready"
+            },
+            "surface": {
+              "Text": "Native desktop + CLI"
+            },
+            "notes": {
+              "Text": "Staging, commit, inventory, orphan cleanup and age-based staging cleanup."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-features-closed-desktop-schedule-registry",
+          "values": {
+            "id": {
+              "Text": "0198-demo-features-closed-desktop-schedule-registry"
+            },
+            "name": {
+              "Text": "Closed-desktop schedule registry"
+            },
+            "category": {
+              "Text": "Automation"
+            },
+            "maturity": {
+              "Text": "Demo ready"
+            },
+            "surface": {
+              "Text": "latticed"
+            },
+            "notes": {
+              "Text": "Known-workspace registry supports durable schedule discovery."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-features-connected-github-roots",
+          "values": {
+            "id": {
+              "Text": "0198-demo-features-connected-github-roots"
+            },
+            "name": {
+              "Text": "Connected GitHub roots"
+            },
+            "category": {
+              "Text": "Connectors"
+            },
+            "maturity": {
+              "Text": "In progress"
+            },
+            "surface": {
+              "Text": "Desktop"
+            },
+            "notes": {
+              "Text": "Authentication and read-only repository extraction are explicit; never seed credentials."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-features-cloud-share-and-publish-apis",
+          "values": {
+            "id": {
+              "Text": "0198-demo-features-cloud-share-and-publish-apis"
+            },
+            "name": {
+              "Text": "Cloud share and publish APIs"
+            },
+            "category": {
+              "Text": "Cloud"
+            },
+            "maturity": {
+              "Text": "Experimental"
+            },
+            "surface": {
+              "Text": "lattice-server"
+            },
+            "notes": {
+              "Text": "Tracked main contains backend APIs and OAuth discovery; the fixture does not imply production hosting."
+            }
+          }
+        }
+      ],
+      "feedback": [
+        {
+          "id": "0198-demo-feedback-show-the-underlying-query-plan",
+          "values": {
+            "id": {
+              "Text": "0198-demo-feedback-show-the-underlying-query-plan"
+            },
+            "name": {
+              "Text": "Show the underlying query plan"
+            },
+            "segment": {
+              "Text": "Data team"
+            },
+            "theme": {
+              "Text": "Trust"
+            },
+            "priority": {
+              "Text": "High"
+            },
+            "notes": {
+              "Text": "Profile and Plan now make the analytical path inspectable."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-feedback-keep-the-first-screen-quiet",
+          "values": {
+            "id": {
+              "Text": "0198-demo-feedback-keep-the-first-screen-quiet"
+            },
+            "name": {
+              "Text": "Keep the first screen quiet"
+            },
+            "segment": {
+              "Text": "Student"
+            },
+            "theme": {
+              "Text": "Progressive disclosure"
+            },
+            "priority": {
+              "Text": "High"
+            },
+            "notes": {
+              "Text": "Advanced capabilities should remain contextual."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-feedback-let-agents-propose-not-silently-rewrite",
+          "values": {
+            "id": {
+              "Text": "0198-demo-feedback-let-agents-propose-not-silently-rewrite"
+            },
+            "name": {
+              "Text": "Let agents propose, not silently rewrite"
+            },
+            "segment": {
+              "Text": "Engineering"
+            },
+            "theme": {
+              "Text": "Governance"
+            },
+            "priority": {
+              "Text": "Critical"
+            },
+            "notes": {
+              "Text": "Proposal review is shared by tasks, workflows and MCP."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-feedback-connect-the-actual-repository",
+          "values": {
+            "id": {
+              "Text": "0198-demo-feedback-connect-the-actual-repository"
+            },
+            "name": {
+              "Text": "Connect the actual repository"
+            },
+            "segment": {
+              "Text": "Founder"
+            },
+            "theme": {
+              "Text": "Connectors"
+            },
+            "priority": {
+              "Text": "Medium"
+            },
+            "notes": {
+              "Text": "Read-only connected roots come before issue and pull-request writeback."
+            }
+          }
+        }
+      ],
+      "decisions": [
+        {
+          "id": "0198-demo-decisions-arrow-native-data-boundaries",
+          "values": {
+            "id": {
+              "Text": "0198-demo-decisions-arrow-native-data-boundaries"
+            },
+            "name": {
+              "Text": "Arrow-native data boundaries"
+            },
+            "status": {
+              "Text": "Accepted"
+            },
+            "decided_on": {
+              "Date": "2026-07-08"
+            },
+            "rationale": {
+              "Text": "Large data crosses process boundaries in bounded columnar representations."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-decisions-declarative-staged-templates",
+          "values": {
+            "id": {
+              "Text": "0198-demo-decisions-declarative-staged-templates"
+            },
+            "name": {
+              "Text": "Declarative staged templates"
+            },
+            "status": {
+              "Text": "Accepted"
+            },
+            "decided_on": {
+              "Date": "2026-07-10"
+            },
+            "rationale": {
+              "Text": "Templates provision once and never retain ownership of user content."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-decisions-github-roots-are-read-only-extracts",
+          "values": {
+            "id": {
+              "Text": "0198-demo-decisions-github-roots-are-read-only-extracts"
+            },
+            "name": {
+              "Text": "GitHub roots are read-only extracts"
+            },
+            "status": {
+              "Text": "Accepted"
+            },
+            "decided_on": {
+              "Date": "2026-07-24"
+            },
+            "rationale": {
+              "Text": "The owned Git repository remains authoritative while Lattice provides indexed context."
+            }
+          }
+        }
+      ],
+      "roadmap": [
+        {
+          "id": "0198-demo-data-applications-vertical-slice",
+          "values": {
+            "id": {
+              "Text": "0198-demo-data-applications-vertical-slice"
+            },
+            "name": {
+              "Text": "Data applications vertical slice"
+            },
+            "area": {
+              "Text": "Data"
+            },
+            "status": {
+              "Text": "Shipped"
+            },
+            "owner": {
+              "Text": "Product data"
+            },
+            "target": {
+              "Date": "2026-07-12"
+            },
+            "confidence": {
+              "Decimal": 1
+            },
+            "evidence": {
+              "Text": "SQLite packages, typed fields, relations, formulas, rollups, views, forms, actions and interfaces."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-local-analytical-workbench",
+          "values": {
+            "id": {
+              "Text": "0198-demo-local-analytical-workbench"
+            },
+            "name": {
+              "Text": "Local analytical workbench"
+            },
+            "area": {
+              "Text": "Analytics"
+            },
+            "status": {
+              "Text": "Shipped"
+            },
+            "owner": {
+              "Text": "Analytics"
+            },
+            "target": {
+              "Date": "2026-07-18"
+            },
+            "confidence": {
+              "Decimal": 1
+            },
+            "evidence": {
+              "Text": "Local Hive Parquet, DuckDB, bounded Arrow IPC, Perspective, Vega-Lite, Profile, Plan, Cancel and point Map."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-governed-automation-loop",
+          "values": {
+            "id": {
+              "Text": "0198-demo-governed-automation-loop"
+            },
+            "name": {
+              "Text": "Governed automation loop"
+            },
+            "area": {
+              "Text": "Automation"
+            },
+            "status": {
+              "Text": "Shipped"
+            },
+            "owner": {
+              "Text": "Runtime"
+            },
+            "target": {
+              "Date": "2026-07-21"
+            },
+            "confidence": {
+              "Decimal": 0.95
+            },
+            "evidence": {
+              "Text": "Form event, workflow, task, proposal, approval, derived resource and undo."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-embedded-agent-phase-a",
+          "values": {
+            "id": {
+              "Text": "0198-demo-embedded-agent-phase-a"
+            },
+            "name": {
+              "Text": "Embedded agent Phase A"
+            },
+            "area": {
+              "Text": "Agents"
+            },
+            "status": {
+              "Text": "Experimental"
+            },
+            "owner": {
+              "Text": "Agent platform"
+            },
+            "target": {
+              "Date": "2026-07-24"
+            },
+            "confidence": {
+              "Decimal": 0.75
+            },
+            "evidence": {
+              "Text": "Tracked main includes sidecar supervision, fake-provider verification, Tauri streaming transport and an assistant panel."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-github-connected-repository",
+          "values": {
+            "id": {
+              "Text": "0198-demo-github-connected-repository"
+            },
+            "name": {
+              "Text": "GitHub connected repository"
+            },
+            "area": {
+              "Text": "Connectors"
+            },
+            "status": {
+              "Text": "In progress"
+            },
+            "owner": {
+              "Text": "Connectors"
+            },
+            "target": {
+              "Date": "2026-07-27"
+            },
+            "confidence": {
+              "Decimal": 0.7
+            },
+            "evidence": {
+              "Text": "Read-only owned-repository extract; issues, pull requests and writeback remain later depth."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-remote-parquet-on-r2",
+          "values": {
+            "id": {
+              "Text": "0198-demo-remote-parquet-on-r2"
+            },
+            "name": {
+              "Text": "Remote Parquet on R2"
+            },
+            "area": {
+              "Text": "Analytics"
+            },
+            "status": {
+              "Text": "Planned"
+            },
+            "owner": {
+              "Text": "Analytics"
+            },
+            "target": {
+              "Date": "2026-08-08"
+            },
+            "confidence": {
+              "Decimal": 0.55
+            },
+            "evidence": {
+              "Text": "Requires explicit network capability, secret broker, httpfs packaging, streaming batches, progress and cache policy."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-presentation-and-publishing",
+          "values": {
+            "id": {
+              "Text": "0198-demo-presentation-and-publishing"
+            },
+            "name": {
+              "Text": "Presentation and publishing"
+            },
+            "area": {
+              "Text": "Publishing"
+            },
+            "status": {
+              "Text": "Planned"
+            },
+            "owner": {
+              "Text": "Product"
+            },
+            "target": {
+              "Date": "2026-08-20"
+            },
+            "confidence": {
+              "Decimal": 0.45
+            },
+            "evidence": {
+              "Text": "Current demo uses ordered canvas states; full presentation bookmarks, .show resources and connected publishing remain future work."
+            }
+          }
+        }
+      ]
+    },
+    "layout_type": "grid"
+  },
+  "Engineering/Delivery.data": {
+    "title": "Engineering delivery",
+    "default_table": "issues",
+    "package_revision": "demo:0",
+    "columns": [
+      {
+        "name": "id",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "name",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "area",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "status",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "priority",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "owner",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "due",
+        "field_type": "date",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "notes",
+        "field_type": "long_text",
+        "sqlite_type": "TEXT"
+      }
+    ],
+    "rows": [
+      {
+        "id": "0198-demo-package-httpfs-for-governed-remote-parquet",
+        "values": {
+          "id": {
+            "Text": "0198-demo-package-httpfs-for-governed-remote-parquet"
+          },
+          "name": {
+            "Text": "Package httpfs for governed remote Parquet"
+          },
+          "area": {
+            "Text": "Analytics"
+          },
+          "status": {
+            "Text": "Backlog"
+          },
+          "priority": {
+            "Text": "High"
+          },
+          "owner": {
+            "Text": "Analytics"
+          },
+          "due": {
+            "Date": "2026-08-04"
+          },
+          "notes": {
+            "Text": "Add explicit network capability, secret lookup, host allowlist, cancellation and cache policy."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-stream-arrow-record-batches-over-daemon-ipc",
+        "values": {
+          "id": {
+            "Text": "0198-demo-stream-arrow-record-batches-over-daemon-ipc"
+          },
+          "name": {
+            "Text": "Stream Arrow record batches over daemon IPC"
+          },
+          "area": {
+            "Text": "Runtime"
+          },
+          "status": {
+            "Text": "Backlog"
+          },
+          "priority": {
+            "Text": "High"
+          },
+          "owner": {
+            "Text": "Runtime"
+          },
+          "due": {
+            "Date": "2026-08-07"
+          },
+          "notes": {
+            "Text": "Current transport is bounded Arrow IPC from a collected result."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-seed-attachment-fields-in-workspace-templates",
+        "values": {
+          "id": {
+            "Text": "0198-demo-seed-attachment-fields-in-workspace-templates"
+          },
+          "name": {
+            "Text": "Seed attachment fields in workspace templates"
+          },
+          "area": {
+            "Text": "Data apps"
+          },
+          "status": {
+            "Text": "Ready"
+          },
+          "priority": {
+            "Text": "Medium"
+          },
+          "owner": {
+            "Text": "Data"
+          },
+          "due": {
+            "Date": "2026-07-30"
+          },
+          "notes": {
+            "Text": "Runtime attachment staging works; declarative template seeds still reject attachment columns."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-github-read-only-connected-root",
+        "values": {
+          "id": {
+            "Text": "0198-demo-github-read-only-connected-root"
+          },
+          "name": {
+            "Text": "GitHub read-only connected root"
+          },
+          "area": {
+            "Text": "Connectors"
+          },
+          "status": {
+            "Text": "In progress"
+          },
+          "priority": {
+            "Text": "High"
+          },
+          "owner": {
+            "Text": "Connectors"
+          },
+          "due": {
+            "Date": "2026-07-27"
+          },
+          "notes": {
+            "Text": "Bind an owned repo, refresh a shallow extract and browse files without mutating the Git checkout."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-embedded-agent-phase-b-tools",
+        "values": {
+          "id": {
+            "Text": "0198-demo-embedded-agent-phase-b-tools"
+          },
+          "name": {
+            "Text": "Embedded agent Phase B tools"
+          },
+          "area": {
+            "Text": "Agents"
+          },
+          "status": {
+            "Text": "Ready"
+          },
+          "priority": {
+            "Text": "Medium"
+          },
+          "owner": {
+            "Text": "Agent platform"
+          },
+          "due": {
+            "Date": "2026-08-01"
+          },
+          "notes": {
+            "Text": "Phase A proves lifecycle and streaming; tool authority must remain capability-scoped."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-presentation-bookmarks-and-ordered-scenes",
+        "values": {
+          "id": {
+            "Text": "0198-demo-presentation-bookmarks-and-ordered-scenes"
+          },
+          "name": {
+            "Text": "Presentation bookmarks and ordered scenes"
+          },
+          "area": {
+            "Text": "Publishing"
+          },
+          "status": {
+            "Text": "Backlog"
+          },
+          "priority": {
+            "Text": "Medium"
+          },
+          "owner": {
+            "Text": "Product"
+          },
+          "due": {
+            "Date": "2026-08-18"
+          },
+          "notes": {
+            "Text": "Hackathon/Pitch.canvas is the current honest fallback."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-first-look-company-fixture",
+        "values": {
+          "id": {
+            "Text": "0198-demo-first-look-company-fixture"
+          },
+          "name": {
+            "Text": "First Look company fixture"
+          },
+          "area": {
+            "Text": "Demo"
+          },
+          "status": {
+            "Text": "In review"
+          },
+          "priority": {
+            "Text": "Critical"
+          },
+          "owner": {
+            "Text": "Product"
+          },
+          "due": {
+            "Date": "2026-07-24"
+          },
+          "notes": {
+            "Text": "Lattice uses Lattice for roadmap, delivery, analytics, operations, CRM, docs and demo preparation."
+          }
+        }
+      }
+    ],
+    "row_offset": 0,
+    "row_limit": 7,
+    "row_total": 7,
+    "has_more": false,
+    "available_views": [
+      "All",
+      "Board",
+      "Calendar",
+      "Form"
+    ],
+    "active_view": "All",
+    "filters": [],
+    "saved_views": [
+      {
+        "name": "All",
+        "layout_type": "grid"
+      },
+      {
+        "name": "Board",
+        "layout_type": "board",
+        "group_by": "status"
+      },
+      {
+        "name": "Calendar",
+        "layout_type": "calendar",
+        "date_field": "due"
+      },
+      {
+        "name": "Form",
+        "layout_type": "form"
+      }
+    ],
+    "relation_targets": {
+      "pull_requests": [
+        {
+          "id": "0198-demo-pull_requests-hackathon-interface-refresh",
+          "values": {
+            "id": {
+              "Text": "0198-demo-pull_requests-hackathon-interface-refresh"
+            },
+            "name": {
+              "Text": "Hackathon interface refresh"
+            },
+            "number": {
+              "Integer": 184
+            },
+            "author": {
+              "Text": "runtime"
+            },
+            "status": {
+              "Text": "Merged"
+            },
+            "merged_on": {
+              "Date": "2026-07-21"
+            },
+            "summary": {
+              "Text": "Embedded form submit refreshes sibling data views."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-pull_requests-themed-analytical-surfaces",
+          "values": {
+            "id": {
+              "Text": "0198-demo-pull_requests-themed-analytical-surfaces"
+            },
+            "name": {
+              "Text": "Themed analytical surfaces"
+            },
+            "number": {
+              "Integer": 189
+            },
+            "author": {
+              "Text": "desktop"
+            },
+            "status": {
+              "Text": "Merged"
+            },
+            "merged_on": {
+              "Date": "2026-07-23"
+            },
+            "summary": {
+              "Text": "Perspective, chart, map and resource chrome align with semantic theme tokens."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-pull_requests-embedded-agent-phase-a",
+          "values": {
+            "id": {
+              "Text": "0198-demo-pull_requests-embedded-agent-phase-a"
+            },
+            "name": {
+              "Text": "Embedded agent Phase A"
+            },
+            "number": {
+              "Integer": 193
+            },
+            "author": {
+              "Text": "agents"
+            },
+            "status": {
+              "Text": "Merged"
+            },
+            "merged_on": {
+              "Date": "2026-07-24"
+            },
+            "summary": {
+              "Text": "Sidecar lifecycle, fake provider, daemon RPC, Tauri channel and assistant panel."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-pull_requests-github-connected-roots",
+          "values": {
+            "id": {
+              "Text": "0198-demo-pull_requests-github-connected-roots"
+            },
+            "name": {
+              "Text": "GitHub connected roots"
+            },
+            "number": {
+              "Integer": 196
+            },
+            "author": {
+              "Text": "connectors"
+            },
+            "status": {
+              "Text": "Draft"
+            },
+            "merged_on": {
+              "Null": null
+            },
+            "summary": {
+              "Text": "Read-only owned-repository extraction and desktop browsing."
+            }
+          }
+        }
+      ],
+      "releases": [
+        {
+          "id": "0198-demo-releases-hackathon-preview",
+          "values": {
+            "id": {
+              "Text": "0198-demo-releases-hackathon-preview"
+            },
+            "name": {
+              "Text": "Hackathon preview"
+            },
+            "channel": {
+              "Text": "Internal"
+            },
+            "status": {
+              "Text": "Ready"
+            },
+            "released_on": {
+              "Date": "2026-07-24"
+            },
+            "notes": {
+              "Text": "Local desktop, First Look fixture and deterministic recording path."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-releases-connected-workspace-preview",
+          "values": {
+            "id": {
+              "Text": "0198-demo-releases-connected-workspace-preview"
+            },
+            "name": {
+              "Text": "Connected workspace preview"
+            },
+            "channel": {
+              "Text": "Internal"
+            },
+            "status": {
+              "Text": "Preparing"
+            },
+            "released_on": {
+              "Date": "2026-07-27"
+            },
+            "notes": {
+              "Text": "Adds explicit GitHub connected-root setup."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-releases-remote-analytics-preview",
+          "values": {
+            "id": {
+              "Text": "0198-demo-releases-remote-analytics-preview"
+            },
+            "name": {
+              "Text": "Remote analytics preview"
+            },
+            "channel": {
+              "Text": "Experimental"
+            },
+            "status": {
+              "Text": "Planned"
+            },
+            "released_on": {
+              "Null": null
+            },
+            "notes": {
+              "Text": "Remote Parquet, streaming Arrow batches and visible scan metrics."
+            }
+          }
+        }
+      ],
+      "issues": [
+        {
+          "id": "0198-demo-package-httpfs-for-governed-remote-parquet",
+          "values": {
+            "id": {
+              "Text": "0198-demo-package-httpfs-for-governed-remote-parquet"
+            },
+            "name": {
+              "Text": "Package httpfs for governed remote Parquet"
+            },
+            "area": {
+              "Text": "Analytics"
+            },
+            "status": {
+              "Text": "Backlog"
+            },
+            "priority": {
+              "Text": "High"
+            },
+            "owner": {
+              "Text": "Analytics"
+            },
+            "due": {
+              "Date": "2026-08-04"
+            },
+            "notes": {
+              "Text": "Add explicit network capability, secret lookup, host allowlist, cancellation and cache policy."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-stream-arrow-record-batches-over-daemon-ipc",
+          "values": {
+            "id": {
+              "Text": "0198-demo-stream-arrow-record-batches-over-daemon-ipc"
+            },
+            "name": {
+              "Text": "Stream Arrow record batches over daemon IPC"
+            },
+            "area": {
+              "Text": "Runtime"
+            },
+            "status": {
+              "Text": "Backlog"
+            },
+            "priority": {
+              "Text": "High"
+            },
+            "owner": {
+              "Text": "Runtime"
+            },
+            "due": {
+              "Date": "2026-08-07"
+            },
+            "notes": {
+              "Text": "Current transport is bounded Arrow IPC from a collected result."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-seed-attachment-fields-in-workspace-templates",
+          "values": {
+            "id": {
+              "Text": "0198-demo-seed-attachment-fields-in-workspace-templates"
+            },
+            "name": {
+              "Text": "Seed attachment fields in workspace templates"
+            },
+            "area": {
+              "Text": "Data apps"
+            },
+            "status": {
+              "Text": "Ready"
+            },
+            "priority": {
+              "Text": "Medium"
+            },
+            "owner": {
+              "Text": "Data"
+            },
+            "due": {
+              "Date": "2026-07-30"
+            },
+            "notes": {
+              "Text": "Runtime attachment staging works; declarative template seeds still reject attachment columns."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-github-read-only-connected-root",
+          "values": {
+            "id": {
+              "Text": "0198-demo-github-read-only-connected-root"
+            },
+            "name": {
+              "Text": "GitHub read-only connected root"
+            },
+            "area": {
+              "Text": "Connectors"
+            },
+            "status": {
+              "Text": "In progress"
+            },
+            "priority": {
+              "Text": "High"
+            },
+            "owner": {
+              "Text": "Connectors"
+            },
+            "due": {
+              "Date": "2026-07-27"
+            },
+            "notes": {
+              "Text": "Bind an owned repo, refresh a shallow extract and browse files without mutating the Git checkout."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-embedded-agent-phase-b-tools",
+          "values": {
+            "id": {
+              "Text": "0198-demo-embedded-agent-phase-b-tools"
+            },
+            "name": {
+              "Text": "Embedded agent Phase B tools"
+            },
+            "area": {
+              "Text": "Agents"
+            },
+            "status": {
+              "Text": "Ready"
+            },
+            "priority": {
+              "Text": "Medium"
+            },
+            "owner": {
+              "Text": "Agent platform"
+            },
+            "due": {
+              "Date": "2026-08-01"
+            },
+            "notes": {
+              "Text": "Phase A proves lifecycle and streaming; tool authority must remain capability-scoped."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-presentation-bookmarks-and-ordered-scenes",
+          "values": {
+            "id": {
+              "Text": "0198-demo-presentation-bookmarks-and-ordered-scenes"
+            },
+            "name": {
+              "Text": "Presentation bookmarks and ordered scenes"
+            },
+            "area": {
+              "Text": "Publishing"
+            },
+            "status": {
+              "Text": "Backlog"
+            },
+            "priority": {
+              "Text": "Medium"
+            },
+            "owner": {
+              "Text": "Product"
+            },
+            "due": {
+              "Date": "2026-08-18"
+            },
+            "notes": {
+              "Text": "Hackathon/Pitch.canvas is the current honest fallback."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-first-look-company-fixture",
+          "values": {
+            "id": {
+              "Text": "0198-demo-first-look-company-fixture"
+            },
+            "name": {
+              "Text": "First Look company fixture"
+            },
+            "area": {
+              "Text": "Demo"
+            },
+            "status": {
+              "Text": "In review"
+            },
+            "priority": {
+              "Text": "Critical"
+            },
+            "owner": {
+              "Text": "Product"
+            },
+            "due": {
+              "Date": "2026-07-24"
+            },
+            "notes": {
+              "Text": "Lattice uses Lattice for roadmap, delivery, analytics, operations, CRM, docs and demo preparation."
+            }
+          }
+        }
+      ]
+    },
+    "layout_type": "grid"
+  },
+  "Hackathon/Launch.data": {
+    "title": "Hackathon launch",
+    "default_table": "deliverables",
+    "package_revision": "demo:0",
+    "columns": [
+      {
+        "name": "id",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "name",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "workstream",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "owner",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "status",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "due",
+        "field_type": "date",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "demo_risk",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "notes",
+        "field_type": "long_text",
+        "sqlite_type": "TEXT"
+      }
+    ],
+    "rows": [
+      {
+        "id": "0198-demo-lattice-company-workspace",
+        "values": {
+          "id": {
+            "Text": "0198-demo-lattice-company-workspace"
+          },
+          "name": {
+            "Text": "Lattice company workspace"
+          },
+          "workstream": {
+            "Text": "Fixture"
+          },
+          "owner": {
+            "Text": "Product"
+          },
+          "status": {
+            "Text": "In review"
+          },
+          "due": {
+            "Date": "2026-07-24"
+          },
+          "demo_risk": {
+            "Text": "Low"
+          },
+          "notes": {
+            "Text": "Product, engineering, operations, CRM, docs and feature-lab paths."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-five-minute-screen-recording",
+        "values": {
+          "id": {
+            "Text": "0198-demo-five-minute-screen-recording"
+          },
+          "name": {
+            "Text": "Five-minute screen recording"
+          },
+          "workstream": {
+            "Text": "Story"
+          },
+          "owner": {
+            "Text": "Demo"
+          },
+          "status": {
+            "Text": "Ready"
+          },
+          "due": {
+            "Date": "2026-07-25"
+          },
+          "demo_risk": {
+            "Text": "Medium"
+          },
+          "notes": {
+            "Text": "Use the deterministic local path; connect GitHub only when auth is warm."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-build-analytics-rehearsal",
+        "values": {
+          "id": {
+            "Text": "0198-demo-build-analytics-rehearsal"
+          },
+          "name": {
+            "Text": "Build analytics rehearsal"
+          },
+          "workstream": {
+            "Text": "Analytics"
+          },
+          "owner": {
+            "Text": "Engineering"
+          },
+          "status": {
+            "Text": "Ready"
+          },
+          "due": {
+            "Date": "2026-07-24"
+          },
+          "demo_risk": {
+            "Text": "Low"
+          },
+          "notes": {
+            "Text": "Preview, Chart, Profile and Plan over Build Status.dataset."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-expense-intake-rehearsal",
+        "values": {
+          "id": {
+            "Text": "0198-demo-expense-intake-rehearsal"
+          },
+          "name": {
+            "Text": "Expense intake rehearsal"
+          },
+          "workstream": {
+            "Text": "Operations"
+          },
+          "owner": {
+            "Text": "Operations"
+          },
+          "status": {
+            "Text": "Ready"
+          },
+          "due": {
+            "Date": "2026-07-24"
+          },
+          "demo_risk": {
+            "Text": "Low"
+          },
+          "notes": {
+            "Text": "Submit a synthetic expense and show spend refresh."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-feedback-proposal-rehearsal",
+        "values": {
+          "id": {
+            "Text": "0198-demo-feedback-proposal-rehearsal"
+          },
+          "name": {
+            "Text": "Feedback proposal rehearsal"
+          },
+          "workstream": {
+            "Text": "Automation"
+          },
+          "owner": {
+            "Text": "Runtime"
+          },
+          "status": {
+            "Text": "Ready"
+          },
+          "due": {
+            "Date": "2026-07-24"
+          },
+          "demo_risk": {
+            "Text": "Low"
+          },
+          "notes": {
+            "Text": "Form submit → workflow → proposal → approve."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-connected-repository-segment",
+        "values": {
+          "id": {
+            "Text": "0198-demo-connected-repository-segment"
+          },
+          "name": {
+            "Text": "Connected repository segment"
+          },
+          "workstream": {
+            "Text": "Connector"
+          },
+          "owner": {
+            "Text": "Engineering"
+          },
+          "status": {
+            "Text": "Optional"
+          },
+          "due": {
+            "Date": "2026-07-25"
+          },
+          "demo_risk": {
+            "Text": "High"
+          },
+          "notes": {
+            "Text": "Requires authenticated GitHub setup; local fallback is documented."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-pitch-canvas-close",
+        "values": {
+          "id": {
+            "Text": "0198-demo-pitch-canvas-close"
+          },
+          "name": {
+            "Text": "Pitch canvas close"
+          },
+          "workstream": {
+            "Text": "Story"
+          },
+          "owner": {
+            "Text": "Demo"
+          },
+          "status": {
+            "Text": "Ready"
+          },
+          "due": {
+            "Date": "2026-07-25"
+          },
+          "demo_risk": {
+            "Text": "Low"
+          },
+          "notes": {
+            "Text": "Use Hackathon/Pitch.canvas; do not claim a shipped .show format."
+          }
+        }
+      }
+    ],
+    "row_offset": 0,
+    "row_limit": 7,
+    "row_total": 7,
+    "has_more": false,
+    "available_views": [
+      "All",
+      "Board",
+      "Calendar",
+      "Form"
+    ],
+    "active_view": "All",
+    "filters": [],
+    "saved_views": [
+      {
+        "name": "All",
+        "layout_type": "grid"
+      },
+      {
+        "name": "Board",
+        "layout_type": "board",
+        "group_by": "status"
+      },
+      {
+        "name": "Calendar",
+        "layout_type": "calendar",
+        "date_field": "due"
+      },
+      {
+        "name": "Form",
+        "layout_type": "form"
+      }
+    ],
+    "relation_targets": {
+      "sponsors": [
+        {
+          "id": "0198-demo-sponsors-cloudflare",
+          "values": {
+            "id": {
+              "Text": "0198-demo-sponsors-cloudflare"
+            },
+            "name": {
+              "Text": "Cloudflare"
+            },
+            "category": {
+              "Text": "Platform"
+            },
+            "contact": {
+              "Text": "Hackathon program"
+            },
+            "status": {
+              "Text": "Confirmed"
+            },
+            "deliverable": {
+              "Text": "R2 analytical architecture and future remote-data path"
+            },
+            "notes": {
+              "Text": "Current fixture stays local and explicitly labels R2 as a next step."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-sponsors-open-data-community",
+          "values": {
+            "id": {
+              "Text": "0198-demo-sponsors-open-data-community"
+            },
+            "name": {
+              "Text": "Open data community"
+            },
+            "category": {
+              "Text": "Data"
+            },
+            "contact": {
+              "Text": "Public datasets"
+            },
+            "status": {
+              "Text": "Research"
+            },
+            "deliverable": {
+              "Text": "Synthetic and openly licensed analytical sources"
+            },
+            "notes": {
+              "Text": "Pin versions and preserve provenance."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-sponsors-lattice",
+          "values": {
+            "id": {
+              "Text": "0198-demo-sponsors-lattice"
+            },
+            "name": {
+              "Text": "Lattice"
+            },
+            "category": {
+              "Text": "Product"
+            },
+            "contact": {
+              "Text": "Internal"
+            },
+            "status": {
+              "Text": "Confirmed"
+            },
+            "deliverable": {
+              "Text": "Open local-first compound workspace"
+            },
+            "notes": {
+              "Text": "The product is the demo subject and the demo tool."
+            }
+          }
+        }
+      ],
+      "deliverables": [
+        {
+          "id": "0198-demo-lattice-company-workspace",
+          "values": {
+            "id": {
+              "Text": "0198-demo-lattice-company-workspace"
+            },
+            "name": {
+              "Text": "Lattice company workspace"
+            },
+            "workstream": {
+              "Text": "Fixture"
+            },
+            "owner": {
+              "Text": "Product"
+            },
+            "status": {
+              "Text": "In review"
+            },
+            "due": {
+              "Date": "2026-07-24"
+            },
+            "demo_risk": {
+              "Text": "Low"
+            },
+            "notes": {
+              "Text": "Product, engineering, operations, CRM, docs and feature-lab paths."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-five-minute-screen-recording",
+          "values": {
+            "id": {
+              "Text": "0198-demo-five-minute-screen-recording"
+            },
+            "name": {
+              "Text": "Five-minute screen recording"
+            },
+            "workstream": {
+              "Text": "Story"
+            },
+            "owner": {
+              "Text": "Demo"
+            },
+            "status": {
+              "Text": "Ready"
+            },
+            "due": {
+              "Date": "2026-07-25"
+            },
+            "demo_risk": {
+              "Text": "Medium"
+            },
+            "notes": {
+              "Text": "Use the deterministic local path; connect GitHub only when auth is warm."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-build-analytics-rehearsal",
+          "values": {
+            "id": {
+              "Text": "0198-demo-build-analytics-rehearsal"
+            },
+            "name": {
+              "Text": "Build analytics rehearsal"
+            },
+            "workstream": {
+              "Text": "Analytics"
+            },
+            "owner": {
+              "Text": "Engineering"
+            },
+            "status": {
+              "Text": "Ready"
+            },
+            "due": {
+              "Date": "2026-07-24"
+            },
+            "demo_risk": {
+              "Text": "Low"
+            },
+            "notes": {
+              "Text": "Preview, Chart, Profile and Plan over Build Status.dataset."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-expense-intake-rehearsal",
+          "values": {
+            "id": {
+              "Text": "0198-demo-expense-intake-rehearsal"
+            },
+            "name": {
+              "Text": "Expense intake rehearsal"
+            },
+            "workstream": {
+              "Text": "Operations"
+            },
+            "owner": {
+              "Text": "Operations"
+            },
+            "status": {
+              "Text": "Ready"
+            },
+            "due": {
+              "Date": "2026-07-24"
+            },
+            "demo_risk": {
+              "Text": "Low"
+            },
+            "notes": {
+              "Text": "Submit a synthetic expense and show spend refresh."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-feedback-proposal-rehearsal",
+          "values": {
+            "id": {
+              "Text": "0198-demo-feedback-proposal-rehearsal"
+            },
+            "name": {
+              "Text": "Feedback proposal rehearsal"
+            },
+            "workstream": {
+              "Text": "Automation"
+            },
+            "owner": {
+              "Text": "Runtime"
+            },
+            "status": {
+              "Text": "Ready"
+            },
+            "due": {
+              "Date": "2026-07-24"
+            },
+            "demo_risk": {
+              "Text": "Low"
+            },
+            "notes": {
+              "Text": "Form submit → workflow → proposal → approve."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-connected-repository-segment",
+          "values": {
+            "id": {
+              "Text": "0198-demo-connected-repository-segment"
+            },
+            "name": {
+              "Text": "Connected repository segment"
+            },
+            "workstream": {
+              "Text": "Connector"
+            },
+            "owner": {
+              "Text": "Engineering"
+            },
+            "status": {
+              "Text": "Optional"
+            },
+            "due": {
+              "Date": "2026-07-25"
+            },
+            "demo_risk": {
+              "Text": "High"
+            },
+            "notes": {
+              "Text": "Requires authenticated GitHub setup; local fallback is documented."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-pitch-canvas-close",
+          "values": {
+            "id": {
+              "Text": "0198-demo-pitch-canvas-close"
+            },
+            "name": {
+              "Text": "Pitch canvas close"
+            },
+            "workstream": {
+              "Text": "Story"
+            },
+            "owner": {
+              "Text": "Demo"
+            },
+            "status": {
+              "Text": "Ready"
+            },
+            "due": {
+              "Date": "2026-07-25"
+            },
+            "demo_risk": {
+              "Text": "Low"
+            },
+            "notes": {
+              "Text": "Use Hackathon/Pitch.canvas; do not claim a shipped .show format."
+            }
+          }
+        }
+      ]
+    },
+    "layout_type": "grid"
+  },
+  "Operations/Company.data": {
+    "title": "Company operations",
+    "default_table": "expenses",
+    "package_revision": "demo:0",
+    "columns": [
+      {
+        "name": "id",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "name",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "vendor",
+        "field_type": "relation",
+        "sqlite_type": "TEXT",
+        "relation_table": "vendors"
+      },
+      {
+        "name": "department",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "project",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "subtotal",
+        "field_type": "decimal",
+        "sqlite_type": "REAL"
+      },
+      {
+        "name": "tax",
+        "field_type": "decimal",
+        "sqlite_type": "REAL"
+      },
+      {
+        "name": "total",
+        "field_type": "decimal",
+        "sqlite_type": "REAL"
+      },
+      {
+        "name": "incurred_on",
+        "field_type": "date",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "status",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "receipt_path",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "notes",
+        "field_type": "long_text",
+        "sqlite_type": "TEXT"
+      }
+    ],
+    "rows": [
+      {
+        "id": "0198-demo-mac-mini-ci-runner",
+        "values": {
+          "id": {
+            "Text": "0198-demo-mac-mini-ci-runner"
+          },
+          "name": {
+            "Text": "Mac mini CI runner"
+          },
+          "department": {
+            "Text": "Engineering"
+          },
+          "project": {
+            "Text": "Build infrastructure"
+          },
+          "subtotal": {
+            "Decimal": 599
+          },
+          "tax": {
+            "Decimal": 58.4
+          },
+          "total": {
+            "Decimal": 657.4
+          },
+          "incurred_on": {
+            "Date": "2026-07-02"
+          },
+          "status": {
+            "Text": "Approved"
+          },
+          "receipt_path": {
+            "Text": "Operations/Receipts/mac-mini-ci.pdf"
+          },
+          "notes": {
+            "Text": "Synthetic fixture record; receipt path is illustrative until attachment columns are seedable."
+          },
+          "vendor": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-vendors-apple"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "0198-demo-r2-analytics-pilot",
+        "values": {
+          "id": {
+            "Text": "0198-demo-r2-analytics-pilot"
+          },
+          "name": {
+            "Text": "R2 analytics pilot"
+          },
+          "department": {
+            "Text": "Engineering"
+          },
+          "project": {
+            "Text": "Remote analytics"
+          },
+          "subtotal": {
+            "Decimal": 62.4
+          },
+          "tax": {
+            "Decimal": 0
+          },
+          "total": {
+            "Decimal": 62.4
+          },
+          "incurred_on": {
+            "Date": "2026-07-05"
+          },
+          "status": {
+            "Text": "Approved"
+          },
+          "receipt_path": {
+            "Text": "Operations/Receipts/r2-pilot.pdf"
+          },
+          "notes": {
+            "Text": "Synthetic object-storage and operations spend."
+          },
+          "vendor": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-vendors-cloudflare"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "0198-demo-design-review-session",
+        "values": {
+          "id": {
+            "Text": "0198-demo-design-review-session"
+          },
+          "name": {
+            "Text": "Design review session"
+          },
+          "department": {
+            "Text": "Product"
+          },
+          "project": {
+            "Text": "Desktop polish"
+          },
+          "subtotal": {
+            "Decimal": 1200
+          },
+          "tax": {
+            "Decimal": 0
+          },
+          "total": {
+            "Decimal": 1200
+          },
+          "incurred_on": {
+            "Date": "2026-07-08"
+          },
+          "status": {
+            "Text": "Paid"
+          },
+          "receipt_path": {
+            "Text": "Operations/Receipts/design-review.pdf"
+          },
+          "notes": {
+            "Text": "External design-review fixture."
+          },
+          "vendor": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-vendors-quiet-signal-studio"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "0198-demo-hackathon-travel",
+        "values": {
+          "id": {
+            "Text": "0198-demo-hackathon-travel"
+          },
+          "name": {
+            "Text": "Hackathon travel"
+          },
+          "department": {
+            "Text": "Go to market"
+          },
+          "project": {
+            "Text": "Hackathon"
+          },
+          "subtotal": {
+            "Decimal": 486
+          },
+          "tax": {
+            "Decimal": 41.25
+          },
+          "total": {
+            "Decimal": 527.25
+          },
+          "incurred_on": {
+            "Date": "2026-07-16"
+          },
+          "status": {
+            "Text": "Submitted"
+          },
+          "receipt_path": {
+            "Text": "Operations/Receipts/hackathon-travel.pdf"
+          },
+          "notes": {
+            "Text": "Submit through Expense intake during the recording."
+          },
+          "vendor": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-vendors-north-coast-air"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "0198-demo-domain-renewal",
+        "values": {
+          "id": {
+            "Text": "0198-demo-domain-renewal"
+          },
+          "name": {
+            "Text": "Domain renewal"
+          },
+          "department": {
+            "Text": "Operations"
+          },
+          "project": {
+            "Text": "Company"
+          },
+          "subtotal": {
+            "Decimal": 18
+          },
+          "tax": {
+            "Decimal": 0
+          },
+          "total": {
+            "Decimal": 18
+          },
+          "incurred_on": {
+            "Date": "2026-07-20"
+          },
+          "status": {
+            "Text": "Approved"
+          },
+          "receipt_path": {
+            "Text": "Operations/Receipts/domain.pdf"
+          },
+          "notes": {
+            "Text": "Annual domain renewal."
+          },
+          "vendor": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-vendors-name-registry"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": "0198-demo-demo-microphone",
+        "values": {
+          "id": {
+            "Text": "0198-demo-demo-microphone"
+          },
+          "name": {
+            "Text": "Demo microphone"
+          },
+          "department": {
+            "Text": "Product"
+          },
+          "project": {
+            "Text": "Hackathon"
+          },
+          "subtotal": {
+            "Decimal": 149
+          },
+          "tax": {
+            "Decimal": 14.53
+          },
+          "total": {
+            "Decimal": 163.53
+          },
+          "incurred_on": {
+            "Date": "2026-07-22"
+          },
+          "status": {
+            "Text": "Needs review"
+          },
+          "receipt_path": {
+            "Text": "Operations/Receipts/microphone.pdf"
+          },
+          "notes": {
+            "Text": "Useful example for approval state."
+          },
+          "vendor": {
+            "Relation": {
+              "record_ids": [
+                "0198-demo-vendors-signal-supply"
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "row_offset": 0,
+    "row_limit": 6,
+    "row_total": 6,
+    "has_more": false,
+    "available_views": [
+      "All",
+      "Board",
+      "Calendar",
+      "Form"
+    ],
+    "active_view": "All",
+    "filters": [],
+    "saved_views": [
+      {
+        "name": "All",
+        "layout_type": "grid"
+      },
+      {
+        "name": "Board",
+        "layout_type": "board",
+        "group_by": "status"
+      },
+      {
+        "name": "Calendar",
+        "layout_type": "calendar",
+        "date_field": "incurred_on"
+      },
+      {
+        "name": "Form",
+        "layout_type": "form"
+      }
+    ],
+    "relation_targets": {
+      "vendors": [
+        {
+          "id": "0198-demo-vendors-apple",
+          "values": {
+            "id": {
+              "Text": "0198-demo-vendors-apple"
+            },
+            "name": {
+              "Text": "Apple"
+            },
+            "category": {
+              "Text": "Hardware"
+            },
+            "renewal_on": {
+              "Null": null
+            },
+            "monthly_commitment": {
+              "Decimal": 0
+            },
+            "owner": {
+              "Text": "Engineering"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-vendors-cloudflare",
+          "values": {
+            "id": {
+              "Text": "0198-demo-vendors-cloudflare"
+            },
+            "name": {
+              "Text": "Cloudflare"
+            },
+            "category": {
+              "Text": "Infrastructure"
+            },
+            "renewal_on": {
+              "Date": "2026-08-05"
+            },
+            "monthly_commitment": {
+              "Decimal": 62.4
+            },
+            "owner": {
+              "Text": "Engineering"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-vendors-quiet-signal-studio",
+          "values": {
+            "id": {
+              "Text": "0198-demo-vendors-quiet-signal-studio"
+            },
+            "name": {
+              "Text": "Quiet Signal Studio"
+            },
+            "category": {
+              "Text": "Professional services"
+            },
+            "renewal_on": {
+              "Null": null
+            },
+            "monthly_commitment": {
+              "Decimal": 0
+            },
+            "owner": {
+              "Text": "Product"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-vendors-north-coast-air",
+          "values": {
+            "id": {
+              "Text": "0198-demo-vendors-north-coast-air"
+            },
+            "name": {
+              "Text": "North Coast Air"
+            },
+            "category": {
+              "Text": "Travel"
+            },
+            "renewal_on": {
+              "Null": null
+            },
+            "monthly_commitment": {
+              "Decimal": 0
+            },
+            "owner": {
+              "Text": "Operations"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-vendors-name-registry",
+          "values": {
+            "id": {
+              "Text": "0198-demo-vendors-name-registry"
+            },
+            "name": {
+              "Text": "Name Registry"
+            },
+            "category": {
+              "Text": "Domains"
+            },
+            "renewal_on": {
+              "Date": "2027-07-20"
+            },
+            "monthly_commitment": {
+              "Decimal": 1.5
+            },
+            "owner": {
+              "Text": "Operations"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-vendors-signal-supply",
+          "values": {
+            "id": {
+              "Text": "0198-demo-vendors-signal-supply"
+            },
+            "name": {
+              "Text": "Signal Supply"
+            },
+            "category": {
+              "Text": "Equipment"
+            },
+            "renewal_on": {
+              "Null": null
+            },
+            "monthly_commitment": {
+              "Decimal": 0
+            },
+            "owner": {
+              "Text": "Product"
+            }
+          }
+        }
+      ],
+      "budgets": [
+        {
+          "id": "0198-demo-budgets-engineering",
+          "values": {
+            "id": {
+              "Text": "0198-demo-budgets-engineering"
+            },
+            "name": {
+              "Text": "Engineering"
+            },
+            "planned": {
+              "Decimal": 6500
+            },
+            "actual": {
+              "Decimal": 3830
+            },
+            "variance": {
+              "Decimal": 2670
+            },
+            "status": {
+              "Text": "On track"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-budgets-product",
+          "values": {
+            "id": {
+              "Text": "0198-demo-budgets-product"
+            },
+            "name": {
+              "Text": "Product"
+            },
+            "planned": {
+              "Decimal": 4200
+            },
+            "actual": {
+              "Decimal": 3014
+            },
+            "variance": {
+              "Decimal": 1186
+            },
+            "status": {
+              "Text": "On track"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-budgets-go-to-market",
+          "values": {
+            "id": {
+              "Text": "0198-demo-budgets-go-to-market"
+            },
+            "name": {
+              "Text": "Go to market"
+            },
+            "planned": {
+              "Decimal": 3000
+            },
+            "actual": {
+              "Decimal": 2468
+            },
+            "variance": {
+              "Decimal": 532
+            },
+            "status": {
+              "Text": "Watch"
+            }
+          }
+        },
+        {
+          "id": "0198-demo-budgets-operations",
+          "values": {
+            "id": {
+              "Text": "0198-demo-budgets-operations"
+            },
+            "name": {
+              "Text": "Operations"
+            },
+            "planned": {
+              "Decimal": 1800
+            },
+            "actual": {
+              "Decimal": 1042
+            },
+            "variance": {
+              "Decimal": 758
+            },
+            "status": {
+              "Text": "On track"
+            }
+          }
+        }
+      ],
+      "revenue": [
+        {
+          "id": "0198-demo-revenue-2026-05",
+          "values": {
+            "id": {
+              "Text": "0198-demo-revenue-2026-05"
+            },
+            "name": {
+              "Text": "2026-05"
+            },
+            "recurring": {
+              "Decimal": 8200
+            },
+            "services": {
+              "Decimal": 1800
+            },
+            "total": {
+              "Decimal": 10000
+            },
+            "closed_on": {
+              "Date": "2026-05-31"
+            },
+            "notes": {
+              "Text": "Synthetic internal revenue."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-revenue-2026-06",
+          "values": {
+            "id": {
+              "Text": "0198-demo-revenue-2026-06"
+            },
+            "name": {
+              "Text": "2026-06"
+            },
+            "recurring": {
+              "Decimal": 9600
+            },
+            "services": {
+              "Decimal": 2400
+            },
+            "total": {
+              "Decimal": 12000
+            },
+            "closed_on": {
+              "Date": "2026-06-30"
+            },
+            "notes": {
+              "Text": "Synthetic internal revenue."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-revenue-2026-07",
+          "values": {
+            "id": {
+              "Text": "0198-demo-revenue-2026-07"
+            },
+            "name": {
+              "Text": "2026-07"
+            },
+            "recurring": {
+              "Decimal": 11800
+            },
+            "services": {
+              "Decimal": 3200
+            },
+            "total": {
+              "Decimal": 15000
+            },
+            "closed_on": {
+              "Date": "2026-07-24"
+            },
+            "notes": {
+              "Text": "Month-to-date synthetic internal revenue."
+            }
+          }
+        }
+      ],
+      "expenses": [
+        {
+          "id": "0198-demo-mac-mini-ci-runner",
+          "values": {
+            "id": {
+              "Text": "0198-demo-mac-mini-ci-runner"
+            },
+            "name": {
+              "Text": "Mac mini CI runner"
+            },
+            "department": {
+              "Text": "Engineering"
+            },
+            "project": {
+              "Text": "Build infrastructure"
+            },
+            "subtotal": {
+              "Decimal": 599
+            },
+            "tax": {
+              "Decimal": 58.4
+            },
+            "total": {
+              "Decimal": 657.4
+            },
+            "incurred_on": {
+              "Date": "2026-07-02"
+            },
+            "status": {
+              "Text": "Approved"
+            },
+            "receipt_path": {
+              "Text": "Operations/Receipts/mac-mini-ci.pdf"
+            },
+            "notes": {
+              "Text": "Synthetic fixture record; receipt path is illustrative until attachment columns are seedable."
+            },
+            "vendor": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-vendors-apple"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "0198-demo-r2-analytics-pilot",
+          "values": {
+            "id": {
+              "Text": "0198-demo-r2-analytics-pilot"
+            },
+            "name": {
+              "Text": "R2 analytics pilot"
+            },
+            "department": {
+              "Text": "Engineering"
+            },
+            "project": {
+              "Text": "Remote analytics"
+            },
+            "subtotal": {
+              "Decimal": 62.4
+            },
+            "tax": {
+              "Decimal": 0
+            },
+            "total": {
+              "Decimal": 62.4
+            },
+            "incurred_on": {
+              "Date": "2026-07-05"
+            },
+            "status": {
+              "Text": "Approved"
+            },
+            "receipt_path": {
+              "Text": "Operations/Receipts/r2-pilot.pdf"
+            },
+            "notes": {
+              "Text": "Synthetic object-storage and operations spend."
+            },
+            "vendor": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-vendors-cloudflare"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "0198-demo-design-review-session",
+          "values": {
+            "id": {
+              "Text": "0198-demo-design-review-session"
+            },
+            "name": {
+              "Text": "Design review session"
+            },
+            "department": {
+              "Text": "Product"
+            },
+            "project": {
+              "Text": "Desktop polish"
+            },
+            "subtotal": {
+              "Decimal": 1200
+            },
+            "tax": {
+              "Decimal": 0
+            },
+            "total": {
+              "Decimal": 1200
+            },
+            "incurred_on": {
+              "Date": "2026-07-08"
+            },
+            "status": {
+              "Text": "Paid"
+            },
+            "receipt_path": {
+              "Text": "Operations/Receipts/design-review.pdf"
+            },
+            "notes": {
+              "Text": "External design-review fixture."
+            },
+            "vendor": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-vendors-quiet-signal-studio"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "0198-demo-hackathon-travel",
+          "values": {
+            "id": {
+              "Text": "0198-demo-hackathon-travel"
+            },
+            "name": {
+              "Text": "Hackathon travel"
+            },
+            "department": {
+              "Text": "Go to market"
+            },
+            "project": {
+              "Text": "Hackathon"
+            },
+            "subtotal": {
+              "Decimal": 486
+            },
+            "tax": {
+              "Decimal": 41.25
+            },
+            "total": {
+              "Decimal": 527.25
+            },
+            "incurred_on": {
+              "Date": "2026-07-16"
+            },
+            "status": {
+              "Text": "Submitted"
+            },
+            "receipt_path": {
+              "Text": "Operations/Receipts/hackathon-travel.pdf"
+            },
+            "notes": {
+              "Text": "Submit through Expense intake during the recording."
+            },
+            "vendor": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-vendors-north-coast-air"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "0198-demo-domain-renewal",
+          "values": {
+            "id": {
+              "Text": "0198-demo-domain-renewal"
+            },
+            "name": {
+              "Text": "Domain renewal"
+            },
+            "department": {
+              "Text": "Operations"
+            },
+            "project": {
+              "Text": "Company"
+            },
+            "subtotal": {
+              "Decimal": 18
+            },
+            "tax": {
+              "Decimal": 0
+            },
+            "total": {
+              "Decimal": 18
+            },
+            "incurred_on": {
+              "Date": "2026-07-20"
+            },
+            "status": {
+              "Text": "Approved"
+            },
+            "receipt_path": {
+              "Text": "Operations/Receipts/domain.pdf"
+            },
+            "notes": {
+              "Text": "Annual domain renewal."
+            },
+            "vendor": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-vendors-name-registry"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "0198-demo-demo-microphone",
+          "values": {
+            "id": {
+              "Text": "0198-demo-demo-microphone"
+            },
+            "name": {
+              "Text": "Demo microphone"
+            },
+            "department": {
+              "Text": "Product"
+            },
+            "project": {
+              "Text": "Hackathon"
+            },
+            "subtotal": {
+              "Decimal": 149
+            },
+            "tax": {
+              "Decimal": 14.53
+            },
+            "total": {
+              "Decimal": 163.53
+            },
+            "incurred_on": {
+              "Date": "2026-07-22"
+            },
+            "status": {
+              "Text": "Needs review"
+            },
+            "receipt_path": {
+              "Text": "Operations/Receipts/microphone.pdf"
+            },
+            "notes": {
+              "Text": "Useful example for approval state."
+            },
+            "vendor": {
+              "Relation": {
+                "record_ids": [
+                  "0198-demo-vendors-signal-supply"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "layout_type": "grid"
+  },
+  "CRM/Feedback.data": {
+    "title": "Customer feedback",
+    "default_table": "feedback",
+    "package_revision": "demo:0",
+    "columns": [
+      {
+        "name": "id",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "name",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "company",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "source",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "theme",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "priority",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "status",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "owner",
+        "field_type": "text",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "received_on",
+        "field_type": "date",
+        "sqlite_type": "TEXT"
+      },
+      {
+        "name": "notes",
+        "field_type": "long_text",
+        "sqlite_type": "TEXT"
+      }
+    ],
+    "rows": [
+      {
+        "id": "0198-demo-show-exactly-what-an-agent-changed",
+        "values": {
+          "id": {
+            "Text": "0198-demo-show-exactly-what-an-agent-changed"
+          },
+          "name": {
+            "Text": "Show exactly what an agent changed"
+          },
+          "company": {
+            "Text": "Northwind Research"
+          },
+          "source": {
+            "Text": "Design partner"
+          },
+          "theme": {
+            "Text": "Governance"
+          },
+          "priority": {
+            "Text": "Critical"
+          },
+          "status": {
+            "Text": "Planned"
+          },
+          "owner": {
+            "Text": "Runtime"
+          },
+          "received_on": {
+            "Date": "2026-07-03"
+          },
+          "notes": {
+            "Text": "Proposal review should show format-aware effects rather than a generic file count."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-keep-tables-fast-beyond-saas-limits",
+        "values": {
+          "id": {
+            "Text": "0198-demo-keep-tables-fast-beyond-saas-limits"
+          },
+          "name": {
+            "Text": "Keep tables fast beyond SaaS limits"
+          },
+          "company": {
+            "Text": "Atlas Field Labs"
+          },
+          "source": {
+            "Text": "Interview"
+          },
+          "theme": {
+            "Text": "Analytics"
+          },
+          "priority": {
+            "Text": "High"
+          },
+          "status": {
+            "Text": "Shipped"
+          },
+          "owner": {
+            "Text": "Analytics"
+          },
+          "received_on": {
+            "Date": "2026-07-07"
+          },
+          "notes": {
+            "Text": "Local Parquet + DuckDB + Arrow vertical slice now demonstrates the architecture."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-open-the-same-files-in-vs-code",
+        "values": {
+          "id": {
+            "Text": "0198-demo-open-the-same-files-in-vs-code"
+          },
+          "name": {
+            "Text": "Open the same files in VS Code"
+          },
+          "company": {
+            "Text": "Quiet Systems"
+          },
+          "source": {
+            "Text": "Demo"
+          },
+          "theme": {
+            "Text": "Open formats"
+          },
+          "priority": {
+            "Text": "High"
+          },
+          "status": {
+            "Text": "Shipped"
+          },
+          "owner": {
+            "Text": "Core"
+          },
+          "received_on": {
+            "Date": "2026-07-09"
+          },
+          "notes": {
+            "Text": "Canonical content remains inspectable in a normal workspace directory."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-connect-our-github-repository",
+        "values": {
+          "id": {
+            "Text": "0198-demo-connect-our-github-repository"
+          },
+          "name": {
+            "Text": "Connect our GitHub repository"
+          },
+          "company": {
+            "Text": "Sable Software"
+          },
+          "source": {
+            "Text": "CRM"
+          },
+          "theme": {
+            "Text": "Connectors"
+          },
+          "priority": {
+            "Text": "High"
+          },
+          "status": {
+            "Text": "In progress"
+          },
+          "owner": {
+            "Text": "Connectors"
+          },
+          "received_on": {
+            "Date": "2026-07-17"
+          },
+          "notes": {
+            "Text": "Start read-only; add issue and pull-request depth later."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-use-a-form-without-leaving-the-dashboard",
+        "values": {
+          "id": {
+            "Text": "0198-demo-use-a-form-without-leaving-the-dashboard"
+          },
+          "name": {
+            "Text": "Use a form without leaving the dashboard"
+          },
+          "company": {
+            "Text": "Orbit Works"
+          },
+          "source": {
+            "Text": "Usability test"
+          },
+          "theme": {
+            "Text": "Data apps"
+          },
+          "priority": {
+            "Text": "Medium"
+          },
+          "status": {
+            "Text": "Shipped"
+          },
+          "owner": {
+            "Text": "Desktop"
+          },
+          "received_on": {
+            "Date": "2026-07-20"
+          },
+          "notes": {
+            "Text": "Embedded form submit refreshes sibling data views."
+          }
+        }
+      },
+      {
+        "id": "0198-demo-publish-the-final-report-interactively",
+        "values": {
+          "id": {
+            "Text": "0198-demo-publish-the-final-report-interactively"
+          },
+          "name": {
+            "Text": "Publish the final report interactively"
+          },
+          "company": {
+            "Text": "Morrow Education"
+          },
+          "source": {
+            "Text": "Interview"
+          },
+          "theme": {
+            "Text": "Publishing"
+          },
+          "priority": {
+            "Text": "Medium"
+          },
+          "status": {
+            "Text": "Backlog"
+          },
+          "owner": {
+            "Text": "Publishing"
+          },
+          "received_on": {
+            "Date": "2026-07-22"
+          },
+          "notes": {
+            "Text": "Apps and connected publishing remain later roadmap phases."
+          }
+        }
+      }
+    ],
+    "row_offset": 0,
+    "row_limit": 6,
+    "row_total": 6,
+    "has_more": false,
+    "available_views": [
+      "All",
+      "Board",
+      "Calendar",
+      "Form"
+    ],
+    "active_view": "All",
+    "filters": [],
+    "saved_views": [
+      {
+        "name": "All",
+        "layout_type": "grid"
+      },
+      {
+        "name": "Board",
+        "layout_type": "board",
+        "group_by": "status"
+      },
+      {
+        "name": "Calendar",
+        "layout_type": "calendar",
+        "date_field": "received_on"
+      },
+      {
+        "name": "Form",
+        "layout_type": "form"
+      }
+    ],
+    "relation_targets": {
+      "feedback": [
+        {
+          "id": "0198-demo-show-exactly-what-an-agent-changed",
+          "values": {
+            "id": {
+              "Text": "0198-demo-show-exactly-what-an-agent-changed"
+            },
+            "name": {
+              "Text": "Show exactly what an agent changed"
+            },
+            "company": {
+              "Text": "Northwind Research"
+            },
+            "source": {
+              "Text": "Design partner"
+            },
+            "theme": {
+              "Text": "Governance"
+            },
+            "priority": {
+              "Text": "Critical"
+            },
+            "status": {
+              "Text": "Planned"
+            },
+            "owner": {
+              "Text": "Runtime"
+            },
+            "received_on": {
+              "Date": "2026-07-03"
+            },
+            "notes": {
+              "Text": "Proposal review should show format-aware effects rather than a generic file count."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-keep-tables-fast-beyond-saas-limits",
+          "values": {
+            "id": {
+              "Text": "0198-demo-keep-tables-fast-beyond-saas-limits"
+            },
+            "name": {
+              "Text": "Keep tables fast beyond SaaS limits"
+            },
+            "company": {
+              "Text": "Atlas Field Labs"
+            },
+            "source": {
+              "Text": "Interview"
+            },
+            "theme": {
+              "Text": "Analytics"
+            },
+            "priority": {
+              "Text": "High"
+            },
+            "status": {
+              "Text": "Shipped"
+            },
+            "owner": {
+              "Text": "Analytics"
+            },
+            "received_on": {
+              "Date": "2026-07-07"
+            },
+            "notes": {
+              "Text": "Local Parquet + DuckDB + Arrow vertical slice now demonstrates the architecture."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-open-the-same-files-in-vs-code",
+          "values": {
+            "id": {
+              "Text": "0198-demo-open-the-same-files-in-vs-code"
+            },
+            "name": {
+              "Text": "Open the same files in VS Code"
+            },
+            "company": {
+              "Text": "Quiet Systems"
+            },
+            "source": {
+              "Text": "Demo"
+            },
+            "theme": {
+              "Text": "Open formats"
+            },
+            "priority": {
+              "Text": "High"
+            },
+            "status": {
+              "Text": "Shipped"
+            },
+            "owner": {
+              "Text": "Core"
+            },
+            "received_on": {
+              "Date": "2026-07-09"
+            },
+            "notes": {
+              "Text": "Canonical content remains inspectable in a normal workspace directory."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-connect-our-github-repository",
+          "values": {
+            "id": {
+              "Text": "0198-demo-connect-our-github-repository"
+            },
+            "name": {
+              "Text": "Connect our GitHub repository"
+            },
+            "company": {
+              "Text": "Sable Software"
+            },
+            "source": {
+              "Text": "CRM"
+            },
+            "theme": {
+              "Text": "Connectors"
+            },
+            "priority": {
+              "Text": "High"
+            },
+            "status": {
+              "Text": "In progress"
+            },
+            "owner": {
+              "Text": "Connectors"
+            },
+            "received_on": {
+              "Date": "2026-07-17"
+            },
+            "notes": {
+              "Text": "Start read-only; add issue and pull-request depth later."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-use-a-form-without-leaving-the-dashboard",
+          "values": {
+            "id": {
+              "Text": "0198-demo-use-a-form-without-leaving-the-dashboard"
+            },
+            "name": {
+              "Text": "Use a form without leaving the dashboard"
+            },
+            "company": {
+              "Text": "Orbit Works"
+            },
+            "source": {
+              "Text": "Usability test"
+            },
+            "theme": {
+              "Text": "Data apps"
+            },
+            "priority": {
+              "Text": "Medium"
+            },
+            "status": {
+              "Text": "Shipped"
+            },
+            "owner": {
+              "Text": "Desktop"
+            },
+            "received_on": {
+              "Date": "2026-07-20"
+            },
+            "notes": {
+              "Text": "Embedded form submit refreshes sibling data views."
+            }
+          }
+        },
+        {
+          "id": "0198-demo-publish-the-final-report-interactively",
+          "values": {
+            "id": {
+              "Text": "0198-demo-publish-the-final-report-interactively"
+            },
+            "name": {
+              "Text": "Publish the final report interactively"
+            },
+            "company": {
+              "Text": "Morrow Education"
+            },
+            "source": {
+              "Text": "Interview"
+            },
+            "theme": {
+              "Text": "Publishing"
+            },
+            "priority": {
+              "Text": "Medium"
+            },
+            "status": {
+              "Text": "Backlog"
+            },
+            "owner": {
+              "Text": "Publishing"
+            },
+            "received_on": {
+              "Date": "2026-07-22"
+            },
+            "notes": {
+              "Text": "Apps and connected publishing remain later roadmap phases."
+            }
+          }
+        }
+      ]
+    },
+    "layout_type": "grid"
   }
 };
 
@@ -6327,7 +9779,97 @@ export const demoPackageFormsByPath: Record<string, FormSummary[]> = {
     }
   ],
   "Data/Metrics.data": [],
-  "OKRs.data": []
+  "OKRs.data": [],
+  "Product/Roadmap.data": [
+    {
+      "name": "RoadmapIntake",
+      "table": "roadmap",
+      "fields": [
+        "name",
+        "area",
+        "status",
+        "owner",
+        "target",
+        "confidence",
+        "evidence"
+      ],
+      "title": "Roadmap intake",
+      "description": "Propose a structured roadmap item."
+    }
+  ],
+  "Engineering/Delivery.data": [
+    {
+      "name": "IssueIntake",
+      "table": "issues",
+      "fields": [
+        "name",
+        "area",
+        "status",
+        "priority",
+        "owner",
+        "due",
+        "notes"
+      ],
+      "title": "Engineering issue",
+      "description": "Capture a scoped engineering issue."
+    }
+  ],
+  "Hackathon/Launch.data": [
+    {
+      "name": "DeliverableIntake",
+      "table": "deliverables",
+      "fields": [
+        "name",
+        "workstream",
+        "owner",
+        "status",
+        "due",
+        "demo_risk",
+        "notes"
+      ],
+      "title": "Hackathon deliverable",
+      "description": "Add or rehearse a launch deliverable."
+    }
+  ],
+  "Operations/Company.data": [
+    {
+      "name": "ExpenseIntake",
+      "table": "expenses",
+      "fields": [
+        "name",
+        "vendor",
+        "department",
+        "project",
+        "subtotal",
+        "tax",
+        "incurred_on",
+        "status",
+        "receipt_path",
+        "notes"
+      ],
+      "title": "Expense intake",
+      "description": "Create a typed operational expense. Attachment seed support remains a separate follow-up."
+    }
+  ],
+  "CRM/Feedback.data": [
+    {
+      "name": "FeedbackIntake",
+      "table": "feedback",
+      "fields": [
+        "name",
+        "company",
+        "source",
+        "theme",
+        "priority",
+        "status",
+        "owner",
+        "received_on",
+        "notes"
+      ],
+      "title": "Feedback intake",
+      "description": "Capture a customer signal, then let the governed workflow propose narrative triage."
+    }
+  ]
 };
 
 export const demoPackageActions: ActionSummary[] = [
@@ -6358,7 +9900,56 @@ export const demoPackageActionsByPath: Record<string, ActionSummary[]> = {
   ],
   "Projects/Delivery.data": [],
   "Data/Metrics.data": [],
-  "OKRs.data": []
+  "OKRs.data": [],
+  "Product/Roadmap.data": [
+    {
+      "name": "OpenRoadmapIntake",
+      "label": "Add roadmap item",
+      "table": "roadmap",
+      "scope": "toolbar",
+      "action": {
+        "type": "insert_record",
+        "form": "RoadmapIntake"
+      }
+    }
+  ],
+  "Engineering/Delivery.data": [
+    {
+      "name": "OpenIssueIntake",
+      "label": "Add engineering issue",
+      "table": "issues",
+      "scope": "toolbar",
+      "action": {
+        "type": "insert_record",
+        "form": "IssueIntake"
+      }
+    }
+  ],
+  "Hackathon/Launch.data": [],
+  "Operations/Company.data": [
+    {
+      "name": "OpenExpenseIntake",
+      "label": "Add expense",
+      "table": "expenses",
+      "scope": "toolbar",
+      "action": {
+        "type": "insert_record",
+        "form": "ExpenseIntake"
+      }
+    }
+  ],
+  "CRM/Feedback.data": [
+    {
+      "name": "OpenFeedbackIntake",
+      "label": "Add feedback",
+      "table": "feedback",
+      "scope": "toolbar",
+      "action": {
+        "type": "insert_record",
+        "form": "FeedbackIntake"
+      }
+    }
+  ]
 };
 
 export const demoPackageInterfaces: InterfaceSummary[] = [
@@ -6639,16 +10230,378 @@ export const demoPackageInterfacesByPath: Record<string, InterfaceSummary[]> = {
   ],
   "Projects/Delivery.data": [],
   "Data/Metrics.data": [],
-  "OKRs.data": []
+  "OKRs.data": [],
+  "Product/Roadmap.data": [
+    {
+      "name": "ProductPulse",
+      "views": [
+        "Board"
+      ],
+      "forms": [
+        "RoadmapIntake"
+      ],
+      "title": "Product pulse",
+      "description": "Roadmap state, feature maturity, customer feedback and accepted decisions.",
+      "layout": {
+        "columns": 12
+      },
+      "components": [
+        {
+          "id": "shipped_count",
+          "type": "metric",
+          "span": 3,
+          "title": "Shipped roadmap items",
+          "binding": {
+            "type": "sqlite-query",
+            "resource": ".",
+            "sql": "SELECT COUNT(*) AS value FROM roadmap WHERE status = 'Shipped'",
+            "limit": 1
+          }
+        },
+        {
+          "id": "open_feedback",
+          "type": "metric",
+          "span": 3,
+          "title": "High-priority signals",
+          "binding": {
+            "type": "sqlite-query",
+            "resource": ".",
+            "sql": "SELECT COUNT(*) AS value FROM feedback WHERE priority IN ('High', 'Critical')",
+            "limit": 1
+          }
+        },
+        {
+          "id": "accepted_decisions",
+          "type": "metric",
+          "span": 3,
+          "title": "Accepted decisions",
+          "binding": {
+            "type": "sqlite-query",
+            "resource": ".",
+            "sql": "SELECT COUNT(*) AS value FROM decisions WHERE status = 'Accepted'",
+            "limit": 1
+          }
+        },
+        {
+          "id": "roadmap_board",
+          "type": "data-view",
+          "span": 8,
+          "title": "Roadmap",
+          "binding": {
+            "type": "saved-view",
+            "resource": ".",
+            "view": "Board"
+          }
+        },
+        {
+          "id": "roadmap_intake",
+          "type": "form",
+          "span": 4,
+          "binding": {
+            "type": "resource",
+            "resource": "."
+          },
+          "form": "RoadmapIntake"
+        }
+      ]
+    }
+  ],
+  "Engineering/Delivery.data": [
+    {
+      "name": "ReleaseRoom",
+      "views": [
+        "Board"
+      ],
+      "forms": [
+        "IssueIntake"
+      ],
+      "title": "Release room",
+      "description": "Issues, pull requests, release state and CI duration from the Build Status dataset.",
+      "layout": {
+        "columns": 12
+      },
+      "components": [
+        {
+          "id": "open_issues",
+          "type": "metric",
+          "span": 3,
+          "title": "Open engineering issues",
+          "binding": {
+            "type": "sqlite-query",
+            "resource": ".",
+            "sql": "SELECT COUNT(*) AS value FROM issues WHERE status NOT IN ('Done', 'Closed')",
+            "limit": 1
+          }
+        },
+        {
+          "id": "merged_prs",
+          "type": "metric",
+          "span": 3,
+          "title": "Merged pull requests",
+          "binding": {
+            "type": "sqlite-query",
+            "resource": ".",
+            "sql": "SELECT COUNT(*) AS value FROM pull_requests WHERE status = 'Merged'",
+            "limit": 1
+          }
+        },
+        {
+          "id": "build_chart",
+          "type": "chart",
+          "span": 6,
+          "title": "Build duration",
+          "binding": {
+            "type": "duckdb-query",
+            "resources": [
+              "Engineering/Build Status.dataset"
+            ],
+            "sql": "SELECT workflow, outcome, round(avg(duration_seconds), 1) AS avg_duration_seconds, count(*) AS runs FROM read_parquet('Engineering/Build Status.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true) GROUP BY workflow, outcome ORDER BY workflow, outcome",
+            "limit": 100
+          },
+          "chart": "Engineering/Dashboards/Build duration by workflow.vl.json"
+        },
+        {
+          "id": "issue_board",
+          "type": "data-view",
+          "span": 8,
+          "title": "Engineering board",
+          "binding": {
+            "type": "saved-view",
+            "resource": ".",
+            "view": "Board"
+          }
+        },
+        {
+          "id": "issue_intake",
+          "type": "form",
+          "span": 4,
+          "binding": {
+            "type": "resource",
+            "resource": "."
+          },
+          "form": "IssueIntake"
+        }
+      ]
+    }
+  ],
+  "Hackathon/Launch.data": [
+    {
+      "name": "LaunchRoom",
+      "views": [
+        "Board"
+      ],
+      "forms": [
+        "DeliverableIntake"
+      ],
+      "title": "Hackathon launch room",
+      "description": "Deliverables, sponsor context and the next launch action.",
+      "layout": {
+        "columns": 12
+      },
+      "components": [
+        {
+          "id": "ready_deliverables",
+          "type": "metric",
+          "span": 3,
+          "title": "Ready deliverables",
+          "binding": {
+            "type": "sqlite-query",
+            "resource": ".",
+            "sql": "SELECT COUNT(*) AS value FROM deliverables WHERE status = 'Ready'",
+            "limit": 1
+          }
+        },
+        {
+          "id": "high_risk",
+          "type": "metric",
+          "span": 3,
+          "title": "High-risk segments",
+          "binding": {
+            "type": "sqlite-query",
+            "resource": ".",
+            "sql": "SELECT COUNT(*) AS value FROM deliverables WHERE demo_risk = 'High'",
+            "limit": 1
+          }
+        },
+        {
+          "id": "launch_board",
+          "type": "data-view",
+          "span": 8,
+          "title": "Launch board",
+          "binding": {
+            "type": "saved-view",
+            "resource": ".",
+            "view": "Board"
+          }
+        },
+        {
+          "id": "deliverable_intake",
+          "type": "form",
+          "span": 4,
+          "binding": {
+            "type": "resource",
+            "resource": "."
+          },
+          "form": "DeliverableIntake"
+        }
+      ]
+    }
+  ],
+  "Operations/Company.data": [
+    {
+      "name": "RunwayDashboard",
+      "views": [
+        "Board"
+      ],
+      "forms": [
+        "ExpenseIntake"
+      ],
+      "title": "Runway dashboard",
+      "description": "Synthetic revenue, spend, operating result and an embedded expense workflow.",
+      "layout": {
+        "columns": 12
+      },
+      "components": [
+        {
+          "id": "revenue_mtd",
+          "type": "metric",
+          "span": 3,
+          "title": "July revenue",
+          "binding": {
+            "type": "sqlite-query",
+            "resource": ".",
+            "sql": "SELECT COALESCE(SUM(recurring + services), 0) AS value FROM revenue WHERE name = '2026-07'",
+            "limit": 1
+          }
+        },
+        {
+          "id": "spend_mtd",
+          "type": "metric",
+          "span": 3,
+          "title": "July recorded spend",
+          "binding": {
+            "type": "sqlite-query",
+            "resource": ".",
+            "sql": "SELECT COALESCE(SUM(subtotal + tax), 0) AS value FROM expenses WHERE incurred_on >= '2026-07-01'",
+            "limit": 1
+          }
+        },
+        {
+          "id": "operating_result",
+          "type": "metric",
+          "span": 3,
+          "title": "July operating result",
+          "binding": {
+            "type": "sqlite-query",
+            "resource": ".",
+            "sql": "SELECT (SELECT COALESCE(SUM(recurring + services), 0) FROM revenue WHERE name = '2026-07') - (SELECT COALESCE(SUM(subtotal + tax), 0) FROM expenses WHERE incurred_on >= '2026-07-01') AS value",
+            "limit": 1
+          }
+        },
+        {
+          "id": "expense_board",
+          "type": "data-view",
+          "span": 8,
+          "title": "Expense approval",
+          "binding": {
+            "type": "saved-view",
+            "resource": ".",
+            "view": "Board"
+          }
+        },
+        {
+          "id": "expense_intake",
+          "type": "form",
+          "span": 4,
+          "binding": {
+            "type": "resource",
+            "resource": "."
+          },
+          "form": "ExpenseIntake"
+        }
+      ]
+    }
+  ],
+  "CRM/Feedback.data": [
+    {
+      "name": "FeedbackOps",
+      "views": [
+        "Board"
+      ],
+      "forms": [
+        "FeedbackIntake"
+      ],
+      "title": "Feedback operations",
+      "description": "Customer-signal triage with an embedded form and governed follow-up.",
+      "layout": {
+        "columns": 12
+      },
+      "components": [
+        {
+          "id": "open_signals",
+          "type": "metric",
+          "span": 3,
+          "title": "Open signals",
+          "binding": {
+            "type": "sqlite-query",
+            "resource": ".",
+            "sql": "SELECT COUNT(*) AS value FROM feedback WHERE status NOT IN ('Shipped', 'Closed')",
+            "limit": 1
+          }
+        },
+        {
+          "id": "critical_signals",
+          "type": "metric",
+          "span": 3,
+          "title": "Critical signals",
+          "binding": {
+            "type": "sqlite-query",
+            "resource": ".",
+            "sql": "SELECT COUNT(*) AS value FROM feedback WHERE priority = 'Critical'",
+            "limit": 1
+          }
+        },
+        {
+          "id": "feedback_board",
+          "type": "data-view",
+          "span": 8,
+          "title": "Feedback board",
+          "binding": {
+            "type": "saved-view",
+            "resource": ".",
+            "view": "Board"
+          }
+        },
+        {
+          "id": "feedback_intake",
+          "type": "form",
+          "span": 4,
+          "binding": {
+            "type": "resource",
+            "resource": "."
+          },
+          "form": "FeedbackIntake"
+        }
+      ]
+    }
+  ]
 };
 
 export const demoPages: Record<string, string> = {
-  "Home.md": "---\ntitle: Home\n---\n\n# Home\n\nKitchen-sink tour of the **First Look** sample workspace. Everything here is an\nordinary file under a real directory — open it in any editor, or stay inside Lattice.\n\n**Native vs browser:** Perspective Preview, Vega-Lite Chart, DuckDB Profile,\nworkflows, tasks, derived rebuild, and the Proposals inbox require the **native\ndesktop app** (`nxr desktop-dev` or Lattice.app). The Vite browser fixture seeds\nthe same files but labels visualization / automation **unavailable**.\nInstalling Lattice.app does **not** rewrite an existing First Look folder — create\na new workspace from the First Look template, or copy missing seeds from\n`templates/workspaces/demo/files/` (for example `Data/Events.dataset`,\n`Automations/`, and `Dashboards/`). Sticky `target/dev-home` picks up template\nchanges when `LATTICE_DEV_RESET_DEMO=1` (default for `desktop-dev` / `tauri:dev`).\n\n## Quick start\n\n1. Search with **⌘K** — keyword FTS is always on; semantic search is **off by default**. Enable it in **Settings → Search** for hybrid FTS + embeddings (try `latticed` or `FinalizationMode`).\n2. Scroll [[Research/Long Read]] — long-form perf and virtualization fixture.\n3. Open `Canvases/Product Strategy.canvas` — double-click file nodes to jump.\n4. Capture with **⌘N** into `Inbox/` — type or **hold-to-dictate**; finals get glossary / ITN normalize (see [[Inbox/Sample capture]]).\n5. Open `CRM.data` — contacts + companies, relations, board/gallery/calendar/form.\n6. Also open `Projects/Delivery.data`, `Data/Metrics.data`, and `OKRs.data` for more table shapes.\n7. Open `Data/Events.dataset` — DuckDB Parquet facts → Perspective **Preview**, Vega-Lite **Chart**, DuckDB **Profile**.\n8. Open `Dashboards/Signups by region.vl.json` — bound Vega-Lite chart over the same Hive Parquet.\n9. Open `Data/Orders.dataset` — multi-month retail facts (~3 000 rows) for richer charts.\n10. Open the Orders dashboards — stacked region/category, daily revenue, and channel comparison (`.vl.json` under `Dashboards/`).\n11. Open `Data/Places.dataset` — ~20 WGS84 lon/lat points (`name`, `lon`, `lat`) for MapLibre.\n12. Browse `Resources/` for JSON, YAML, TypeScript, SQL, and the Lattice mark SVG.\n13. Open `Notebooks/Orders analytics.ipynb` — native `ipykernel` when available,\n    else Pyodide; mounted Orders CSV (`sources/orders.csv`); DuckDB SQL stays native.\n14. Open `Notebooks/CRM exploration.ipynb` — CRM tour notebook (markdown + code stubs).\n15. Create pages from `Templates/` — daily and meeting note scaffolds.\n16. Read [[Research/Local Runtime]] — daemon, search, and voice process model.\n\n## First Look tour — new surfaces\n\nWork through this checklist to exercise the latest desktop shell, data, search,\nand voice features. Each step is safe in the sample workspace; undo where noted.\n\n### Search & local runtime\n\n1. Press **⌘K** — keyword FTS works immediately (no download). Semantic search stays **off** until you enable **Settings → Search → Semantic search** (downloads ~640 MB local Qwen3 GGUF on first enable; or set `LATTICE_SEMANTIC_FAKE=1` for Fake vectors in dev).\n2. Search for `VoiceContextBuilder` or `EndpointDetected` (seeded on [[Research/Local Runtime]]). With semantic on and ready, hybrid hits may show Keyword / Semantic / Both; otherwise expect keyword-only.\n3. Skim [[Research/Architecture]] for the core vs latticed diagrams.\n\n### Voice & Quick Note\n\n4. Open any page → hold the microphone control to dictate; release for a single final insert (provisional text is ghost-only; finals run glossary / ITN normalize).\n5. Press **⌘N** for Quick Note → hold-to-dictate → release → note saves once; Escape cancels without junk ASR text. Try glossary tokens from [[Research/Local Runtime]] (`FinalizationMode`, `CRM.data`).\n6. Optional continuous mode: set `LATTICE_VOICE_AUTO_FINALIZE_ON_ENDPOINT=1` before launch (silence debounce endpoints); default hold-to-talk needs no VAD.\n\n### CRM layouts and saved views\n\n7. Open `CRM.data` and switch **Board**, **Gallery**, **Calendar**, and **Form** from the view picker.\n8. In each layout, change the layout field pickers (group-by, cover field, date field, visible columns).\n9. Click **Save view** to persist the layout under `CRM.data/views/` (native).\n10. Open a contact row and inspect **company** and **reports_to** — add or change links in record detail.\n\n### More data apps\n\n11. Open `Projects/Delivery.data` — board by status + calendar on `due` (no relations; simpler schema).\n12. Open `Data/Metrics.data` — decimal metrics board by category (Voice / Search / Data / Editor).\n13. Open `OKRs.data` — objectives board by confidence status.\n\n### CRM package forms\n\n14. Open `CRM.data` → **Forms** → **Contact intake**.\n15. Submit a new contact; the row appears and relation pickers stay in sync with `companies`.\n16. Open `Projects/Delivery.data` → **Forms** → **Delivery intake** and add an item.\n\n### Automation path (form → workflow → proposal → approve)\n\nNative desktop only — browser opens the workflow/task surfaces with an honest\nunavailable banner.\n\n17. Confirm `Automations/Contact intake.workflow.yaml` is enabled (`form.submitted`\n    on `CRM.data` / `ContactIntake`).\n18. Submit **CRM.data → Forms → Contact intake** again (or **Run** on the workflow).\n19. Open the **Proposals** inbox — approve the page-create for\n    `Proposals/Contact intake follow-up.md`.\n20. Open the new page (and optionally embed it from this Home after approve).\n21. Optional SDK story: open `Tasks/ProposePage.task` → **Run** (needs injected\n    `lattice` / `uv`) → approve `Proposals/FromSdk.task.md`.\n22. Optional agent seed: open `Tasks/AgentFirstLook.task` → **Run** → inspect\n    Orders/Events → approve `CRM.data/interfaces/AgentDigest.interface.yaml` in the\n    inbox → open **Interfaces → Agent digest** (see [[Research/Agent first look]]).\n23. Optional MCP story (daemon): `get_dataset_schema` / `profile_dataset` →\n    `propose_interface` — same inbox path; sample transcript in\n    `docs/dev/first-look-agent-mcp.md`.\n24. Optional MCP page proposal: `create_proposal` / `propose_page` tools — same\n    Proposals inbox path as friday demo steps 16–18.\n25. Optional derived: open `Derived/ContactBrief.derived.yaml` (stale) → **Rebuild**\n    → edit `Derived/input.txt` → confirm stale again → Rebuild.\n\n### Ops dashboard (embedded form + Board refresh)\n\nNative desktop only — rehearse the Friday F0 path without leaving the interface.\n\n26. Open `CRM.data` → **Interfaces** → **Ops dashboard** (or double-click **CRM\n    OpsDashboard** on `Canvases/Product Strategy.canvas`).\n27. Note the metric, chart, map, embedded **Board** data-view, and **Contact intake**\n    form on one surface.\n28. Submit the embedded **Contact intake** form with a new name/email — the **Board**\n    data-view should refresh in place (new card appears; no manual reload).\n29. Optional: submit again and open the **Proposals** inbox to approve the workflow\n    follow-up page (automation path from step 17).\n\n**Agent digest** is pre-seeded under **Interfaces → Agent digest** for a fast metric\nwalkthrough. To rehearse inspect→propose→approve, run `Tasks/AgentFirstLook.task`\nand approve the inbox proposal (see [[Research/Agent first look]]).\n\n### Analytical datasets (DuckDB / Vega-Lite)\n\n30. Open `Data/Events.dataset` → **Preview** — Perspective grid over Hive Parquet (`facts/year=2026/month=07/`).\n31. Switch to **Chart** — auto Vega-Lite from the same Arrow IPC query.\n32. Switch to **Profile** — DuckDB `SUMMARIZE` column stats.\n33. Open `Dashboards/Signups by region.vl.json` — chart resource bound with `read_parquet(...)`.\n34. Optional CLI: `lattice dataset query-annotated Data/Events.dataset --json` (review overlay in `annotations.sqlite`).\n\n### Orders dataset & multi-series charts\n\n35. Open `Data/Orders.dataset` → **Preview** — ~3 000 synthetic retail rows across `facts/year=2026/month=0{1,2,3}/`.\n36. Open `Dashboards/Revenue by region and category.vl.json` — stacked bars (region × category).\n37. Open `Dashboards/Revenue by day.vl.json` — daily revenue time series (Jan–Mar 2026).\n38. Open `Dashboards/Revenue by channel.vl.json` — layered channel comparison (revenue bars + order counts).\n\n### Places dataset (MapLibre lon/lat)\n\n39. Open `Data/Places.dataset` → **Preview** — ~20 named points with plain `lon` / `lat` doubles (WGS84) under `facts/places.parquet`.\n40. Switch to **Map** — offline MapLibre markers (`place_id`, `name`, `lon`, `lat`; solid `--lt-*` style, no remote tile basemap).\n\n### Resource tree\n\n41. Create a folder under `Projects/` (context menu or **New folder**).\n42. Press **⌘Z** to undo the folder creation.\n43. Move [[Product/Vision]] into another folder; accept link repair when prompted.\n44. **⌘-click** two pages, drag to a folder (multi-select move).\n45. Select multiple items and delete — confirm the batch operation.\n\n### Where to look next\n\n| Surface | Try |\n| --- | --- |\n| [[Research/Local Runtime]] | Daemon, FTS + optional semantic, voice ownership |\n| [[Research/Long Read]] | Scroll perf, embeds, extended checklist |\n| [[Product/Release Notes]] | What shipped in this sample |\n| `Canvases/Product Strategy.canvas` | Spatial links + CRM view subpaths |\n\n## Product\n\n| Page | What to try |\n| --- | --- |\n| [[Product/Vision]] | Short north-star narrative |\n| [[Product/Principles]] | Invariants and constraints |\n| [[Product/Roadmap]] | Phased delivery themes |\n| [[Product/Release Notes]] | Changelog-style sample |\n\n## Research\n\n| Page | What to try |\n| --- | --- |\n| [[Research/Local Runtime]] | latticed, FTS + optional semantic, Quick Note voice |\n| [[Research/Long Read]] | Scroll perf, Mermaid, wiki links, `:::lattice-embed` |\n| [[Research/Architecture]] | System diagrams (core + daemon) |\n| [[Research/Competitor Analysis]] | Comparison table |\n| [[Research/Market Notes]] | Segments and hypotheses |\n| [[Research/Interview Synthesis]] | Quotes mapped to CRM fields |\n\n## Inbox & templates\n\n- [[Inbox/Sample capture]] — triage-ready quick note (dictation-friendly)\n- [[Templates/Daily Note]] — `{{date}}` / `{{title}}` placeholders preserved at provision\n- [[Templates/Meeting Note]] — agenda, decisions, action items\n\nWorkspace defaults point quick capture at `Inbox/` and templates at `Templates/`.\n\n## Canvas, data apps & analytics\n\n| Resource | Kind |\n| --- | --- |\n| `Canvases/Product Strategy.canvas` | Spatial board linking Product pages + CRM views |\n| `CRM.data` | SQLite CRM (`companies` + `contacts`, relations, forms) |\n| `Projects/Delivery.data` | Delivery board/calendar (status + due) |\n| `Data/Metrics.data` | Decimal metrics by category |\n| `OKRs.data` | Objectives / key results board |\n| `Data/Events.dataset` | Analytical package — Hive Parquet facts + `annotations.sqlite` |\n| `Dashboards/Signups by region.vl.json` | Vega-Lite chart bound to Events via DuckDB |\n| `Data/Orders.dataset` | Retail orders — multi-month Hive Parquet for multi-series charts |\n| `Dashboards/Revenue by region and category.vl.json` | Stacked bars (Orders region × category) |\n| `Dashboards/Revenue by day.vl.json` | Daily revenue time series (Orders) |\n| `Dashboards/Revenue by channel.vl.json` | Layered channel comparison (Orders) |\n| `Data/Places.dataset` | Named WGS84 points (`lon`/`lat`) for MapLibre |\n| `Artifacts/ContactPulse.artifact` | Sandboxed HTML artifact (embedded above) |\n| `Automations/Contact intake.workflow.yaml` | Form-submitted workflow → proposal |\n| `Tasks/ContactIntakeHello.task` | `uv` task for the intake workflow |\n| `Tasks/ProposePage.task` | Optional SDK propose_page demo |\n| `Derived/ContactBrief.derived.yaml` | Stale → rebuild derived HTML |\n| `Data/sample.csv` | Flat CSV import sample |\n| `Notebooks/Orders analytics.ipynb` | Orders CSV tour (native ipykernel or Pyodide) |\n| `Notebooks/CRM exploration.ipynb` | CRM tour notebook (nbformat v4) |\n\n### CRM views\n\nOpen `CRM.data` and switch layouts from the view picker. The template seeds saved\nviews under `CRM.data/views/` (one YAML file per view):\n\n| View | Layout | Key field |\n| ---- | ------ | --------- |\n| Board | `board` | `status` |\n| Calendar | `calendar` | `due_date` |\n| Gallery | `gallery` | `company` (cover) |\n| Form | `form` | — |\n\nSupported layout types also include `grid` and `list`. Board groups contacts by\n`status`; calendar plots `due_date`; gallery uses `company` as a cover field.\n\nThe **company** column links each contact to a row in the seeded `companies` table.\nThe **reports_to** column is a self-relation on `contacts`. The **tags** column is a\njunction-backed M2M to the seeded `tags` table (`contact_tags` as source of truth;\ngrid/IPC still use `Relation { record_ids }`). Template relation seeds accept\n**record ids** or display **names** (matched via each target table's `name`\ncolumn at provision time).\n\n### CRM package forms\n\n| Form | Table | Fields |\n| ---- | ----- | ------ |\n| ContactIntake | `contacts` | `name`, `email`, `status`, `company` |\n\nEmbed a view from a page (see [[Research/Long Read]]):\n\n```markdown\n:::lattice-embed\nresource: CRM.data/views/Board.yaml\nfallback: \"Open CRM board view\"\n:::\n```\n\nOpen the sandboxed Contact pulse artifact (card vs interactive):\n\n:::lattice-embed\nresource: Artifacts/ContactPulse.artifact\nmode: card\n:::\n\n:::lattice-embed\nresource: Artifacts/ContactPulse.artifact\nmode: interactive\nheight: 320\n:::\n\nAfter approving the Contact intake workflow proposal, embed the follow-up page:\n\n```markdown\n:::lattice-embed\nresource: Proposals/Contact intake follow-up.md\nfallback: \"Approve the Contact intake proposal first\"\n:::\n```\n\n### Automations, tasks & derived\n\n| Resource | Kind |\n| --- | --- |\n| `Automations/Contact intake.workflow.yaml` | Workflow — `form.submitted` → task.run → proposal.create |\n| `Tasks/ContactIntakeHello.task` | Reliable `uv` task used by the intake workflow |\n| `Tasks/ProposePage.task` | Optional SDK `lattice.propose_page` demo |\n| `Derived/ContactBrief.derived.yaml` | Derived — stale → Rebuild → `dist/index.html` |\n| [[Proposals/README]] | Where approved page-create proposals land |\n\n## Resources\n\n| File | Notes |\n| --- | --- |\n| `Resources/config.json` | Feature flags sample |\n| `Resources/schema.yaml` | Small YAML schema |\n| `Resources/hooks.json` | Workspace hook sketch |\n| `Resources/example.ts` | Tiny TypeScript export |\n| `Resources/types.ts` | CRM-related types |\n| `Resources/queries.sql` | Example SELECT statements |\n| `Resources/notes.txt` | Plain text |\n| `Resources/mark.svg` | Generated Lattice mark |\n\n## Map\n\n| Path | Kind |\n| --- | --- |\n| [[Product/Vision]] | page |\n| [[Product/Principles]] | page |\n| [[Product/Roadmap]] | page |\n| [[Product/Release Notes]] | page |\n| [[Research/Local Runtime]] | page (daemon / search / voice) |\n| [[Research/Long Read]] | page (long / embed) |\n| [[Research/Architecture]] | page |\n| [[Research/Competitor Analysis]] | page |\n| [[Research/Market Notes]] | page |\n| [[Research/Interview Synthesis]] | page |\n| [[Inbox/Sample capture]] | page |\n| `Templates/` | page templates |\n| `Canvases/Product Strategy.canvas` | canvas |\n| `CRM.data` | data app |\n| `Projects/Delivery.data` | data app |\n| `Data/Metrics.data` | data app |\n| `OKRs.data` | data app |\n| `Data/Events.dataset` | dataset (Parquet + annotations) |\n| `Dashboards/Signups by region.vl.json` | Vega-Lite chart |\n| `Data/Orders.dataset` | dataset (multi-month Parquet) |\n| `Dashboards/Revenue by region and category.vl.json` | Vega-Lite chart (Orders) |\n| `Dashboards/Revenue by day.vl.json` | Vega-Lite chart (Orders) |\n| `Dashboards/Revenue by channel.vl.json` | Vega-Lite chart (Orders) |\n| `Data/Places.dataset` | dataset (WGS84 lon/lat points) |\n| `Artifacts/ContactPulse.artifact` | sandboxed HTML artifact |\n| `Automations/Contact intake.workflow.yaml` | workflow |\n| `Tasks/ContactIntakeHello.task` | task |\n| `Tasks/ProposePage.task` | task (SDK optional) |\n| `Derived/ContactBrief.derived.yaml` | derived |\n| [[Proposals/README]] | page |\n| `Data/sample.csv` | CSV file |\n| `Notebooks/Orders analytics.ipynb` | notebook |\n| `Notebooks/CRM exploration.ipynb` | notebook |\n| `Resources/` | code & config files |\n",
+  "Home.md": "---\ntitle: Lattice — Building Lattice\n---\n\n# Lattice — Building Lattice\n\nThis is Lattice operating itself: product planning, engineering delivery,\nhackathon preparation, company operations, customer feedback, analytical data,\ninternal documentation, and governed automation in one local-first workspace.\n\nEverything is inspectable on disk. The company records are synthetic; the\nproduct and architecture material describes the real Lattice application and\nits current implementation boundaries.\n\n## The five-minute story\n\n1. Open `Product/Roadmap.data` → **Interfaces → Product pulse**. Review shipped,\n   active, and blocked work beside feedback and accepted decisions.\n2. Open `Engineering/Delivery.data` → **Interfaces → Release room**. Move from\n   issues and pull requests to the real `Engineering/Build Status.dataset`.\n3. Open `Engineering/Build Status.dataset` → **Preview**, **Chart**, **Profile**,\n   and **Plan**. Then open\n   `Engineering/Dashboards/Build duration by workflow.vl.json`.\n4. Open `Operations/Company.data` → **Interfaces → Runway dashboard**. Submit\n   **Expense intake** and watch the operational view refresh.\n5. Open `CRM/Feedback.data` → **Forms → Feedback intake**. Submit feedback, then\n   approve the governed follow-up in the **Proposals** inbox.\n6. Open `Hackathon/Launch.data` and [[Hackathon/Demo Script]] to move from the\n   live workspace into the recording narrative.\n7. Finish on `Hackathon/Pitch.canvas`: the same resources become the presentation\n   surface without duplicating their source data.\n\n## Company map\n\n| Area | Open first | What it proves |\n| --- | --- | --- |\n| Product | `Product/Roadmap.data` | Roadmap, features, feedback, decisions, formulas, views, interfaces |\n| Engineering | `Engineering/Delivery.data` | Issues, pull requests, releases, build analytics, repository context |\n| Hackathon | `Hackathon/Launch.data` | Deliverables, sponsors, deadlines, demo script, pitch canvas |\n| Operations | `Operations/Company.data` | Expenses, vendors, budgets, revenue, forms, rollups and executive metrics |\n| CRM | `CRM.data` and `CRM/Feedback.data` | Contacts, relations, intake, feedback triage and governed proposals |\n| Docs | [[Docs/Product Overview]] | Current product surface, architecture, limits and recording language |\n\n## Agent and repository path\n\nRead [[Engineering/Repository]] before recording the repository segment.\nConnected GitHub roots require authentication and are intentionally not\npre-seeded in a template. When the connector is available, connect the Lattice\nrepository, inspect recent commits, compare them with `Product/Roadmap.data`,\nand propose an update rather than writing directly.\n\nThe existing `Tasks/AgentFirstLook.task` remains a deterministic governed-agent\npath: it inspects local analytical datasets, proposes an interface, and waits\nfor approval. The embedded agent surface and cloud APIs are experimental\ncapabilities tracked in the roadmap; this fixture does not fake their readiness.\n\n## Native capability tour\n\nThe native desktop app provides the complete path. The browser fixture uses the\nsame source template but labels filesystem, DuckDB, workflow, task, and proposal\noperations honestly when unavailable.\n\n### Pages, search, canvas, voice\n\n- Press **⌘K** for keyword search. Semantic search is opt-in under\n  **Settings → Search** because its local model is not downloaded silently.\n- Open [[Docs/Product Overview]], [[Engineering/Architecture]], and\n  [[Research/Long Read]] for narrative pages, Mermaid, embeds, and long-document\n  behavior.\n- Open `Canvases/Product Strategy.canvas` and `Hackathon/Pitch.canvas`.\n- Press **⌘N** for Quick Note; hold the microphone control to dictate locally.\n\n### Data applications\n\n- `Product/Roadmap.data`: Board, Calendar, Form, Product pulse interface.\n- `Engineering/Delivery.data`: issue board, calendar, intake, Release room.\n- `Hackathon/Launch.data`: deliverables and sponsor records.\n- `Operations/Company.data`: Expense intake, budgets, vendors, revenue and\n  Runway dashboard.\n- `CRM.data`: contacts, companies, linked records, lookup, rollup, junction\n  relation, Board, Gallery, Calendar and Form.\n- `CRM/Feedback.data`: feedback board and Feedback intake form.\n\nAll native mutations use semantic commands. Save a view, add a column, edit a\nrecord, submit a form, then use **⌘Z** where applicable.\n\n### Governed automation\n\n1. Submit `CRM/Feedback.data → Forms → Feedback intake`.\n2. Open `Automations/Feedback intake.workflow.yaml`.\n3. Open the **Proposals** inbox.\n4. Review and approve the proposed `Proposals/Feedback triage.md`.\n5. Open the new page and inspect the workflow run.\n\nThe original Contact intake workflow, task runner, derived-resource rebuild,\nMCP proposal helpers, and `AgentFirstLook.task` remain under `Automations/`,\n`Tasks/`, and `Derived/` as a deeper feature lab.\n\n### Analytical data\n\n- `Engineering/Build Status.dataset`: real fixture for CI duration, outcome,\n  workflow and branch analysis.\n- `Data/Events.dataset`: Hive Parquet plus SQLite annotation overlay.\n- `Data/Orders.dataset`: multi-month synthetic revenue facts.\n- `Data/Places.dataset`: offline lon/lat MapLibre path.\n- `Notebooks/Orders analytics.ipynb`: native kernel or Pyodide notebook.\n\nCurrent native transport is bounded Arrow IPC over workspace-local Parquet.\nRemote R2 reads, streamed record batches, full GeoParquet, cross-filtered BI,\nand query progress metrics remain roadmap work; [[Docs/Product Overview]]\ncontains the precise recording boundary.\n\n## Supporting feature lab\n\nThe prior First Look material remains available so the demo still covers every\nrecently shipped surface:\n\n| Resource | Purpose |\n| --- | --- |\n| `CRM.data → Interfaces → Ops dashboard` | Metric, chart, map, saved view and embedded form |\n| `CRM.data → Interfaces → Agent digest` | Pre-seeded governed-agent result |\n| `Projects/Delivery.data` | Compact board/calendar/form fixture |\n| `Data/Metrics.data` | Decimal metrics and multiple layouts |\n| `OKRs.data` | Objective board |\n| `Artifacts/ContactPulse.artifact` | Sandboxed interactive artifact |\n| `Derived/ContactBrief.derived.yaml` | Lineage, stale detection and rebuild |\n| `Notebooks/CRM exploration.ipynb` | Notebook resource path |\n| `Resources/` | JSON, YAML, TypeScript, SQL, text and SVG |\n\n## Recording prep\n\nRun `nxr prepare-first-look`, then create a **new** workspace from this template\nor launch the resettable development profile. Existing workspaces are never\nsilently rewritten.\n\nContinue with [[Hackathon/Demo Script]] for the exact recording sequence and\nfallbacks.\n",
   "Inbox/Sample capture.md": "---\ntitle: Sample capture\ntags: [inbox]\n---\n\n# Sample capture\n\nQuick note seeded in `Inbox/` — triage into [[Product/]] or [[Research/]] when ready.\n\n## Raw thought\n\nUse the First Look demo daily: open [[Research/Long Read]], add a CRM row,\ncapture here with **⌘N** (type or hold-to-dictate), promote to a full page from\n[[Templates/Daily Note]].\n\nDictation tip: say identifiers like `VoiceContextBuilder` or paths like\n`Inbox/Sample capture` — finals run glossary / ITN normalize before save.\n\n- [ ] Review [[Product/Release Notes]]\n- [ ] Skim [[Research/Local Runtime]] for daemon / search / voice\n- [ ] Check `CRM.data` calendar layout for August due dates\n- [ ] Pin [[Canvases/Product Strategy.canvas]] in sidebar\n\n#inbox\n",
+  "Docs/Product Overview.md": "---\ntitle: Product overview\n---\n\n# Product overview\n\nLattice is a fast local-first workspace for documents, data applications,\nanalytical datasets, notebooks, canvases, automation, and software. Canonical\ncontent remains ordinary files and open packages in a real directory.\n\n## What this build demonstrates\n\n| Capability | Current demonstration |\n| --- | --- |\n| Pages | Markdown editing, links, embeds, Mermaid, search and quick capture |\n| Canvas | JSON Canvas navigation with page, data-view and interface nodes |\n| Data applications | SQLite tables, typed fields, relations, formulas, rollups, views, forms, actions and interfaces |\n| Analytical datasets | Workspace-local Hive Parquet queried with DuckDB |\n| Transport | Bounded Arrow IPC into Perspective, Vega-Lite and MapLibre |\n| Notebooks | Jupyter resources through Pyodide or a native kernel |\n| Automation | Tasks, workflows, proposals, approval, logs and derived resources |\n| External agents | CLI, local API, daemon and MCP proposal paths |\n| Voice | Local capture and finalization through `latticed` |\n\n## Honest boundaries\n\n- Dataset queries are local and bounded; remote R2/S3 sources and streaming\n  Arrow record batches are not presented as shipped.\n- Maps use plain longitude/latitude points with an offline style; full\n  GeoParquet geometry and spatial joins remain later work.\n- The GitHub connected-root path is read-only and requires explicit\n  authentication. Issues, pull requests, and writeback remain future connector\n  depth unless the active build says otherwise.\n- Presentation bookmarks, `.show` resources, and connected publishing are not\n  yet the native presentation product. This fixture uses an ordered canvas.\n- The embedded agent and cloud backend are experimental surfaces. Canonical\n  automation still uses semantic commands and governed proposals.\n\n## Architecture\n\n```mermaid\nflowchart TD\n    Workspace[\"Canonical workspace directory\"] --> Runtime[\"Rust resource runtime\"]\n    Runtime --> Commands[\"Commands + transactions\"]\n    Runtime --> Search[\"Search + context\"]\n    Runtime --> Data[\"SQLite + DuckDB + Arrow\"]\n    Runtime --> Daemon[\"latticed\"]\n    Commands --> Desktop[\"Desktop shell\"]\n    Commands --> CLI[\"CLI / API / MCP\"]\n    Data --> Viewers[\"Grid / chart / map / notebook\"]\n    Daemon --> Tasks[\"Tasks / workflows / agents\"]\n```\n\nSee [[Engineering/Architecture]] and [[Research/Local Runtime]] for the deeper\nruntime diagrams.\n",
   "Product/Vision.md": "---\ntitle: Vision\n---\n\n# Vision\n\nA fast local workspace that treats documents, data, notebooks, and canvases as ordinary files.\n\nSee also [[Product/Principles]], [[Product/Roadmap]], [[Product/Release Notes]], and\n[[Research/Competitor Analysis]]. For volume testing, open [[Research/Long Read]].\n",
   "Product/Principles.md": "---\ntitle: Principles\ntags: [product]\n---\n\n# Principles\n\nGuiding constraints for Lattice — referenced from [[Product/Vision]] and [[Product/Roadmap]].\n\n## Local-first\n\nThe workspace is a directory on disk. Canonical content stays inspectable outside\nLattice. Offline is the normal state.\n\n## Commands, not side doors\n\nEvery mutation flows through the semantic command core. The React shell coordinates;\nit does not become a privileged writer.\n\n## Progressive disclosure\n\nPrimary creation vocabulary: **Page**, **Canvas**, **Table**, **Notebook**, **File**.\nAdvanced source, history, and conflicts belong under per-resource Inspect surfaces.\n\n## Honest reconciliation\n\nExternal edits are legitimate. Lattice watches the tree and reconciles without\nsilent data loss.\n\n## Performance as product\n\nLarge pages like [[Research/Long Read]], wide tables in `CRM.data`, and canvas\npanning should meet documented budgets before new abstractions land.\n\nSee [[Home]] for a tour of this sample workspace.\n",
-  "Product/Roadmap.md": "---\ntitle: Roadmap\n---\n\n# Roadmap\n\n**Shipped in First Look** — see [[Product/Release Notes]]: pages, canvas, hybrid\nsearch, voice, CRM + data apps, DuckDB datasets (Preview / Chart / Profile /\nPlan / Map), workflows / tasks / proposals / artifacts, and notebooks (native\n`ipykernel` + Pyodide on desktop).\n\n**Next themes**\n\n1. Compose interfaces, live embeds, lineage, and derived outputs across resources\n2. Cross-filter dashboards, semantic models, and publishing (Phase 6–7)\n3. Deeper automation history, durable jobs, and connector refresh (Phase 5)\n\nAligned with [[Product/Principles]].\n\nBack to [[Home]].\n",
-  "Product/Release Notes.md": "---\ntitle: Release Notes\ntags: [product]\n---\n\n# Release Notes\n\nSample changelog page for the First Look workspace — not a live feed.\n\n## 2026.07 — Analytical First Look (DuckDB / Vega-Lite / Map)\n\n- `Data/Events.dataset` — Hive Parquet under `facts/year=2026/month=07/`, source CSV in `sources/`\n- `annotations.sqlite` review overlay (`event_annotations`) for annotate / query-annotated demos\n- `Dashboards/Signups by region.vl.json` — Vega-Lite bound with `read_parquet(...)`\n- Desktop viewer tabs: Perspective **Preview**, Vega-Lite **Chart**, DuckDB **Profile**, **Plan**, MapLibre **Map**\n- `Data/Places.dataset` — ~20 WGS84 lon/lat points (`facts/places.parquet`) with offline MapLibre markers\n- [[Home]] tour steps 24–34 cover the analytics path (native / Tauri; not the browser fixture)\n\n## 2026.07 — Notebooks, automation & artifacts\n\n- Native `ipykernel` sessions on desktop (Pyodide fallback; browser fixture Pyodide-only)\n- Notebook viewer + **Run** with undoable `ResourceUpdate`\n- `Automations/Contact intake.workflow.yaml` — form-submitted workflow → proposal inbox\n- `Tasks/ContactIntakeHello.task`, `Tasks/ProposePage.task`, and `Derived/ContactBrief.derived.yaml` rebuild path\n- `Artifacts/ContactPulse.artifact` — sandboxed HTML embeds\n\n## 2026.07 — Daemon, search, voice\n\n- **latticed** — local UDS daemon with workspace sessions, one-writer lease, watcher + incremental FTS, keep-running idle shutdown\n- **Search** — keyword FTS5 over structural chunks is always on; semantic / hybrid RRF fusion is **off by default** — enable in **Settings → Search** (optional embed-host when warm)\n- **Voice D5** — `lattice-voice-host`, daemon voice proxy, Tauri thin client (native mic stays in-process; PCM over daemon)\n- **Native capture** — AVAudioEngine + AVAudioConverter, binary PCM, pre-roll, bounded queue (no WebView `number[]` PCM)\n- **Finalization** — honest `FinalizationMode` (StreamingFlush; independent offline redecode deferred); glossary / ITN normalize on finals; Lattice energy VAD + optional continuous auto-finalize\n- **Quick Note dictation** — **⌘N** hold-to-dictate, provisional overlay, atomic save; silence-only discard; glossary tips on [[Research/Local Runtime]]\n- Multiple `.data` fixtures: `CRM.data`, `Projects/Delivery.data`, `Data/Metrics.data`, `OKRs.data`\n- [[Research/Local Runtime]] — tour page for the process model and try-queries\n\n## 2026.07 — First Look enrichment (earlier)\n\n- Expanded `CRM.data` with email, company, due dates, notes, saved views, and a `reports_to` relation column\n- Seeded `CRM.data/forms/ContactIntake.form.yaml` for package form intake\n- Added [[Research/Long Read]] for scroll and search perf fixtures\n- New [[Templates/Daily Note]] and [[Templates/Meeting Note]] page templates\n- Extra files under `Resources/` for code and config samples\n- [[Home]] tour checklist for layouts, Save view, folder undo, link repair, multi-select, and relations\n- `Notebooks/CRM exploration.ipynb` — CRM tour notebook seed\n- `Canvases/Product Strategy.canvas` — CRM view subpaths (`views/Board`, `views/Gallery.yaml`)\n\n## 2026.06 — Kitchen sink baseline\n\n- Home tour, Product and Research pages, sample canvas\n- Mermaid in [[Research/Architecture]]\n- CSV under `Data/sample.csv`\n\n## Next\n\nTracked on [[Product/Roadmap]]:\n\n1. Cross-resource dashboards, bindings, cross-filtering, and publishing (Phase 6–7)\n2. Query profiler UI / GeoParquet / remote tile basemaps (Phase 3 polish)\n3. Durable scheduled jobs and richer automation history (Phase 5)\n4. Login-item / always-on Quick Note (out of scope; keep-running covers warm daemon)\n\n#product\n",
+  "Product/Roadmap.md": "---\ntitle: Roadmap\n---\n\n# Roadmap\n\nThe structured roadmap lives in `Product/Roadmap.data`. Open **Product pulse**\nfor the recording view, or switch among the roadmap, features, feedback, and\ndecisions tables for the underlying records.\n\n## Shipped foundation\n\n- Pages, search, quick capture, canvas and local voice.\n- SQLite data applications with relations, formulas, rollups, forms, actions\n  and interfaces.\n- Local Hive Parquet through DuckDB, bounded Arrow IPC, Perspective, Vega-Lite,\n  Profile, Plan, Cancel and point maps.\n- Notebooks, artifacts, tasks, workflows, proposals and derived resources.\n- Known-workspace scheduling and the governed inspect → propose → approve loop.\n\n## Active edge\n\n- Embedded agent Phase A is experimental.\n- GitHub connected roots are read-only and in progress in this checkout.\n- Cloud share, publish, backup and MCP endpoints are experimental backend APIs.\n\n## Next product increments\n\n1. Remote Parquet with explicit network authority, secrets, streaming batches,\n   progress and cache policy.\n2. Deeper connected-repository metadata and governed writeback.\n3. Cross-filtered BI, semantic models and full GeoParquet.\n4. Presentation bookmarks, ordered scenes and connected publishing.\n\nAligned with [[Product/Principles]] and [[Docs/Product Overview]].\n\nBack to [[Home]].\n",
+  "Product/Release Notes.md": "---\ntitle: Release Notes\ntags: [product]\n---\n\n# Release Notes\n\nSample changelog page for the Lattice company workspace — not a live feed.\n\n## 2026.07 — Lattice building Lattice\n\n- `Product/Roadmap.data` — roadmap, feature maturity, feedback and decisions.\n- `Engineering/Delivery.data` — issues, synthetic pull requests and releases.\n- `Engineering/Build Status.dataset` — deterministic CI Parquet with a bound\n  Vega-Lite build-duration chart.\n- `Hackathon/Launch.data`, [[Hackathon/Demo Script]], and\n  `Hackathon/Pitch.canvas` — rehearsal and presentation resources.\n- `Operations/Company.data` — expense intake, vendors, budgets, revenue,\n  formulas and executive metrics.\n- `CRM/Feedback.data` + `Automations/Feedback intake.workflow.yaml` — structured\n  feedback through a governed triage proposal.\n- [[Docs/Product Overview]], [[Engineering/Repository]], and\n  [[Engineering/Architecture]] — current implementation and honest boundaries.\n\n## 2026.07 — Analytical First Look (DuckDB / Vega-Lite / Map)\n\n- `Data/Events.dataset` — Hive Parquet under `facts/year=2026/month=07/`, source CSV in `sources/`\n- `annotations.sqlite` review overlay (`event_annotations`) for annotate / query-annotated demos\n- `Dashboards/Signups by region.vl.json` — Vega-Lite bound with `read_parquet(...)`\n- Desktop viewer tabs: Perspective **Preview**, Vega-Lite **Chart**, DuckDB **Profile**, **Plan**, MapLibre **Map**\n- `Data/Places.dataset` — ~20 WGS84 lon/lat points (`facts/places.parquet`) with offline MapLibre markers\n- [[Home]] links the analytics path (native / Tauri; not the browser fixture)\n\n## 2026.07 — Notebooks, automation & artifacts\n\n- Native `ipykernel` sessions on desktop (Pyodide fallback; browser fixture Pyodide-only)\n- Notebook viewer + **Run** with undoable `ResourceUpdate`\n- `Automations/Contact intake.workflow.yaml` — form-submitted workflow → proposal inbox\n- `Tasks/ContactIntakeHello.task`, `Tasks/ProposePage.task`, and `Derived/ContactBrief.derived.yaml` rebuild path\n- `Artifacts/ContactPulse.artifact` — sandboxed HTML embeds\n\n## 2026.07 — Daemon, search, voice\n\n- **latticed** — local UDS daemon with workspace sessions, one-writer lease, watcher + incremental FTS, keep-running idle shutdown\n- **Search** — keyword FTS5 over structural chunks is always on; semantic / hybrid RRF fusion is **off by default** — enable in **Settings → Search** (optional embed-host when warm)\n- **Voice D5** — `lattice-voice-host`, daemon voice proxy, Tauri thin client (native mic stays in-process; PCM over daemon)\n- **Native capture** — AVAudioEngine + AVAudioConverter, binary PCM, pre-roll, bounded queue (no WebView `number[]` PCM)\n- **Finalization** — honest `FinalizationMode` (StreamingFlush; independent offline redecode deferred); glossary / ITN normalize on finals; Lattice energy VAD + optional continuous auto-finalize\n- **Quick Note dictation** — **⌘N** hold-to-dictate, provisional overlay, atomic save; silence-only discard; glossary tips on [[Research/Local Runtime]]\n- Multiple `.data` fixtures: `CRM.data`, `Projects/Delivery.data`, `Data/Metrics.data`, `OKRs.data`\n- [[Research/Local Runtime]] — tour page for the process model and try-queries\n\n## 2026.07 — First Look enrichment (earlier)\n\n- Expanded `CRM.data` with email, company, due dates, notes, saved views, and a `reports_to` relation column\n- Seeded `CRM.data/forms/ContactIntake.form.yaml` for package form intake\n- Added [[Research/Long Read]] for scroll and search perf fixtures\n- New [[Templates/Daily Note]] and [[Templates/Meeting Note]] page templates\n- Extra files under `Resources/` for code and config samples\n- [[Home]] tour checklist for layouts, Save view, folder undo, link repair, multi-select, and relations\n- `Notebooks/CRM exploration.ipynb` — CRM tour notebook seed\n- `Canvases/Product Strategy.canvas` — CRM view subpaths (`views/Board`, `views/Gallery.yaml`)\n\n## 2026.06 — Kitchen sink baseline\n\n- Home tour, Product and Research pages, sample canvas\n- Mermaid in [[Research/Architecture]]\n- CSV under `Data/sample.csv`\n\n## Next\n\nTracked on [[Product/Roadmap]]:\n\n1. Cross-resource dashboards, bindings, cross-filtering, and publishing (Phase 6–7)\n2. Query profiler UI / GeoParquet / remote tile basemaps (Phase 3 polish)\n3. Durable scheduled jobs and richer automation history (Phase 5)\n4. Login-item / always-on Quick Note (out of scope; keep-running covers warm daemon)\n\n#product\n",
+  "Engineering/Repository.md": "---\ntitle: Repository and connected roots\n---\n\n# Repository and connected roots\n\nThe Lattice source repository is the engineering evidence behind this workspace.\nThe fixture does not bundle a mutable clone or credentials.\n\n## Recording path\n\n1. Connect the owned Lattice GitHub repository from **Connected roots**.\n2. Browse the extracted read-only files inside Lattice.\n3. Open recent commits in the repository context.\n4. Compare the implementation with `Product/Roadmap.data`.\n5. Propose a roadmap or release-note change.\n6. Review and approve the semantic proposal.\n\nIf the connector is unavailable, use [[Engineering/Architecture]],\n`Engineering/Delivery.data`, and `Engineering/Build Status.dataset`. They are\ndeterministic local resources and make no network claim.\n\n## Connector boundary\n\nConnected repository material is an inspectable read-only extract under\nLattice operational state. The owned Git repository remains authoritative.\nAuthentication, refresh, and future issue or pull-request APIs are separate\ncapabilities; the workspace’s synthetic issue and pull-request tables are demo\ncompany records, not a fake live GitHub response.\n",
+  "Engineering/Architecture.md": "---\ntitle: Engineering architecture\n---\n\n# Engineering architecture\n\nLattice separates canonical content, semantic mutation, specialized rendering,\nand optional long-lived services.\n\n```mermaid\nflowchart LR\n    Files[\"Markdown · SQLite · Parquet · Canvas · Jupyter\"] --> Core[\"lattice-runtime\"]\n    Core --> Command[\"lattice-commands\"]\n    Core --> Index[\"lattice-index\"]\n    Core --> Data[\"lattice-data / lattice-duckdb\"]\n    Command --> Tauri[\"Tauri handlers\"]\n    Command --> CLI[\"lattice CLI\"]\n    Command --> MCP[\"latticed MCP\"]\n    Tauri --> React[\"React shell\"]\n    Data --> Specialized[\"Glide · Perspective · Vega-Lite · MapLibre\"]\n    MCP --> Agents[\"External or embedded agents\"]\n```\n\nThe frontend coordinates lifecycle and intent. Rust owns canonical resource\nstate, validation, storage, commands, search, data orchestration, and capability\nenforcement.\n\nRelated material:\n\n- [[Docs/Product Overview]]\n- [[Research/Architecture]]\n- [[Research/Local Runtime]]\n- [[Product/Principles]]\n",
+  "Engineering/Release Readiness.md": "---\ntitle: Release readiness\n---\n\n# Release readiness\n\n## Current gate\n\n- Product narrative and capability boundaries reviewed.\n- Data-app smoke path: form → record → interface refresh.\n- Governed loop: form → workflow → proposal → approve.\n- Dataset path: Parquet → DuckDB → Arrow IPC → viewer.\n- Browser fallback remains explicit.\n- Existing workspaces are not rewritten during install.\n\n## Evidence\n\nOpen `Engineering/Build Status.dataset` and\n`Engineering/Dashboards/Build duration by workflow.vl.json`. The rows are\nsynthetic but deterministic and exercise the same query and visualization path\nused for larger analytical datasets.\n\n## Known demo fallbacks\n\n- If Perspective initialization fails, use Profile and Plan.\n- If a native Python kernel is unavailable, use Pyodide.\n- If GitHub authentication is unavailable, use [[Engineering/Repository]] and\n  the local engineering records.\n- If semantic search is cold, use keyword search.\n",
+  "Engineering/Build Status.dataset/README.md": "# Build status\n\nDeterministic synthetic CI runs for the Lattice engineering demo.\n\n| Path | Role |\n| --- | --- |\n| `sources/builds.csv` | Inspectable source rows |\n| `facts/year=2026/month=07/builds.parquet` | Hive Parquet facts |\n\nColumns include workflow, branch, runner, outcome, duration, test count and\nfailure count. Open the package for Perspective Preview, Vega-Lite Chart,\nDuckDB Profile and EXPLAIN Plan.\n\nRe-seed from the repository root:\n\n```sh\ncargo run -p lattice-datasets --example seed_demo_build_status\npnpm compile-templates\n```\n",
+  "Hackathon/Demo Script.md": "---\ntitle: Hackathon demo script\n---\n\n# Hackathon demo script\n\n## Opening — the workspace operates the company\n\nOpen [[Home]] and say:\n\n> Lattice is an open local-first workspace where documents, operational data,\n> analytical data, notebooks, canvases, and automation remain inspectable\n> resources instead of disappearing into a hosted application.\n\n## Scene 1 — product and engineering\n\n1. Open `Product/Roadmap.data → Product pulse`.\n2. Show roadmap status, feature maturity, feedback and decisions.\n3. Open `Engineering/Delivery.data → Release room`.\n4. Open `Engineering/Build Status.dataset`.\n5. Move through Preview, Chart, Profile and Plan.\n6. Open [[Engineering/Repository]] and, when authenticated, the connected root.\n\n## Scene 2 — company operations\n\n1. Open `Operations/Company.data → Runway dashboard`.\n2. Point out revenue, spend and operating-result metrics.\n3. Submit **Expense intake**.\n4. Show the expense record appear in the Board or Calendar.\n5. Explain that expenses change spend and operating result, not revenue.\n\n## Scene 3 — governed customer feedback\n\n1. Open `CRM/Feedback.data → Feedback operations`.\n2. Submit **Feedback intake**.\n3. Open the workflow run.\n4. Review the proposal.\n5. Approve `Proposals/Feedback triage.md`.\n\n## Scene 4 — composition\n\nOpen `Hackathon/Pitch.canvas`. The closing scene uses the same product, build,\noperations, CRM and documentation resources rather than copied screenshots.\n\n## Fallback language\n\n- Local analytics: “DuckDB queries partitioned Parquet and transfers a bounded\n  Arrow IPC result into specialized viewers.”\n- Connected repository unavailable: “The template keeps network authority\n  explicit; this local release evidence is always available.”\n- Agent unavailable: run `Tasks/AgentFirstLook.task` for the deterministic\n  inspect → propose → approve path.\n",
+  "Operations/Runway.md": "---\ntitle: Runway model\n---\n\n# Runway model\n\n`Operations/Company.data` keeps mutable company facts in SQLite:\n\n- expenses;\n- vendors;\n- monthly budgets;\n- monthly revenue.\n\nExpense intake updates actual spend and the executive operating-result metric.\nIt does not rewrite revenue. Analytical snapshots may later materialize the\noperational records into Parquet without changing the source-of-truth model.\n\nThe fixture uses simple synthetic numbers so a recording can explain the\nrelationship clearly. It is not an accounting system or financial forecast.\n",
+  "CRM/Feedback Program.md": "---\ntitle: Feedback program\n---\n\n# Feedback program\n\nCustomer feedback enters through `CRM/Feedback.data → Forms → Feedback intake`.\nThe operational record remains editable in SQLite. A form-submitted workflow\ncreates a governed proposal for a narrative triage note.\n\nThis separates:\n\n- the customer’s raw signal;\n- product classification and ownership;\n- derived narrative;\n- approval of any workspace mutation.\n\nUse `CRM.data` for contact and company relations. Use `CRM/Feedback.data` for\nthe feedback lifecycle.\n",
   "Research/Local Runtime.md": "---\ntitle: Local Runtime\ntags: [architecture, search, voice]\n---\n\n# Local Runtime\n\nHow Lattice keeps authority local after the daemon + voice sprints. Everything\nbelow is a real directory on disk — `latticed` is optional warmth, not a cloud.\n\n## Process model\n\n```mermaid\nflowchart TB\n  Desktop[lattice-desktop]\n  Daemon[latticed]\n  Embed[lattice-embed-host]\n  Voice[lattice-voice-host]\n\n  Desktop -->|UDS Protobuf| Daemon\n  Desktop -->|native mic PCM| Daemon\n  Daemon --> Embed\n  Daemon --> Voice\n  Desktop -->|embedded fallback| VoiceBridge[in-process FluidAudio]\n```\n\n| Process | Owns |\n| --- | --- |\n| **Desktop** | UI, mic capture, page/canvas hot loops |\n| **latticed** | Workspace sessions, search jobs, voice session policy, one-writer lease |\n| **embed-host** | Embedding model isolation (fake or llama stub today) |\n| **voice-host** | ASR isolation (fake UDS or FluidAudio) |\n\nDev tip: `pnpm tauri:dev:voice-daemon` / `LATTICE_VOICE_DAEMON=1` forces the thin\ndaemon path. Default `desktop-dev` still allows `voice-embedded` fallback.\n\n## Search\n\n**⌘K** hits a hybrid index:\n\n1. **Lexical** — FTS5 over structural chunks (headings, paths, body spans)\n2. **Semantic** — optional embedding namespace when a provider is warm\n3. **Fusion** — RRF merge with provenance (chunk offsets, heading path)\n\nTry queries that hit this page: `latticed`, `EndpointDetected`,\n`VoiceContextBuilder`, or `CRM.data/views/Board`.\n\nGlossary-friendly tokens for dictation ITN demos:\n\n- Identifiers: `VoiceContextBuilder`, `FinalizationMode`, `EndpointOptions`\n- Paths: `/Users/shared/lattice/CRM.data`, `Inbox/Sample capture.md`\n- Commands: `ApplyPageUpdate`, `StartVoiceSession`\n\n## Voice & Quick Note\n\n| Surface | How |\n| --- | --- |\n| In-page hold-to-talk | Microphone control in the page header |\n| Quick Note | **⌘N** → hold-to-dictate → provisional ghost → one save |\n| Continuous (opt-in) | `LATTICE_VOICE_AUTO_FINALIZE_ON_ENDPOINT=1` or session endpoint options |\n\nProvisional text never enters Markdown storage. Finals go through the command\ncore (one editor transaction / one Quick Note save). Cancel clears ghosts.\n\nHold-to-talk still uses explicit finish; Lattice energy VAD reports\n`endpoint_detection` for continuous mode — Unified FluidAudio has no EOU\ncallback.\n\n## Related\n\n- [[Research/Architecture]] — simpler core diagram\n- [[Product/Release Notes]] — what shipped in this sample\n- [[Home]] — full tour checklist\n- `CRM.data` — data application package beside this narrative\n\nBack to [[Home]].\n",
   "Research/Agent first look.md": "---\ntitle: Agent first look\n---\n\n# Agent first look\n\nRehearsable **inspect → propose → approve** path for agents and tasks on the\nFirst Look workspace. Uses AG1 MCP helpers (`get_dataset_schema`,\n`profile_dataset`, `propose_interface`) or the injected `lattice` SDK inside\ntasks. Proposals land in the inbox — nothing applies until you approve.\n\n## Task path (native desktop)\n\n**Fast path:** **Interfaces → Agent digest** is pre-seeded on the First Look template\n(two metric tiles over Events signups and Orders revenue). Use this when you only\nneed the interface surface.\n\n**Full path (inspect → propose → approve):**\n\n1. Open `Tasks/AgentFirstLook.task` → **Run** (needs `uv` + injected `lattice`).\n2. The task inspects `Data/Orders.dataset` and `Data/Events.dataset` via\n   `lattice.dataset(...).schema()` and `.profile(sample_rows=500)` (bounded\n   DuckDB inspect, matching MCP `get_dataset_schema` / `profile_dataset`), prints\n   a JSON summary, then calls `lattice.propose_interface` for\n   `CRM.data/interfaces/AgentDigest.interface.yaml`.\n3. Open the **Proposals** inbox → approve the resource-create proposal (or reject if\n   you only wanted to rehearse inspect).\n4. Open `CRM.data` → **Interfaces** → **Agent digest** — two metric tiles over\n   Events signups and Orders revenue.\n\nSame inbox semantics as [[Proposals/README]] and the Contact intake workflow.\n\n## MCP path (daemon)\n\nWith `latticed` serving the open workspace, an agent can:\n\n1. `get_dataset_schema` on `Data/Orders.dataset` and `Data/Events.dataset`.\n2. `profile_dataset` on the same paths (bounded DuckDB `SUMMARIZE`).\n3. `propose_interface` (or `propose_workflow`) with validated YAML — no apply.\n\nSample JSON-RPC transcript: `docs/dev/first-look-agent-mcp.md` in the repo.\n\n## Related seeds\n\n- `Tasks/ProposePage.task` — SDK `propose_page` only.\n- `Automations/Contact intake.workflow.yaml` — form → workflow → `proposal.create`.\n- `CRM.data` → **Interfaces** → **Ops dashboard** — hand-authored multi-component\n  interface (metric, chart, map, embedded Board + Contact intake). Embedded form\n  submit refreshes the Board data-view in place (F0).\n- `CRM.data` → **Interfaces** → **Agent digest** — pre-seeded metric digest; optional\n  `AgentFirstLook.task` rehearses inspect→propose→approve over the same path.\n",
   "Research/Long Read.md": "---\ntitle: Long Read\ntags: [research, perf, scroll]\n---\n\n# Long Read\n\nA deliberately long page for scroll, virtualization, and search-index stress tests.\nSkim the table of contents, follow wiki links, and open embedded resources without\nleaving the narrative.\n\n## Table of contents\n\n1. [[#Why this page exists]]\n2. [[#System map]]\n3. [[#Data flow]]\n4. [[#Collaboration model]]\n5. [[#Search and indexing]]\n6. [[#Canvas composition]]\n7. [[#CRM in context]]\n8. [[#Release rhythm]]\n9. [[#Interview themes]]\n10. [[#Competitive landscape]]\n11. [[#Principles in practice]]\n12. [[#Embedded resource]]\n13. [[#Appendix A — glossary]]\n14. [[#Appendix B — checklist]]\n\n## Why this page exists\n\nDaily demo use needs realistic volume: headings, lists, tables, code fences,\nMermaid diagrams, and cross-links that mirror how teams actually write. This page\nties together [[Product/Vision]], [[Product/Principles]], [[Product/Roadmap]], and\n[[Research/Architecture]] so perf work catches regressions in real reading paths.\n\nRelated notes: [[Research/Market Notes]], [[Research/Interview Synthesis]],\n[[Research/Competitor Analysis]], and the quick capture in [[Inbox/Sample capture]].\n\n## System map\n\nLattice keeps the workspace directory authoritative. The desktop shell coordinates;\nRust owns commands, validation, and storage.\n\n```mermaid\nflowchart TB\n  subgraph workspace [Workspace on disk]\n    Pages[Pages .md]\n    Canvas[Canvases .canvas]\n    Data[Data apps .data]\n    Files[Ordinary files]\n  end\n  subgraph core [Rust core]\n    Cmd[Command core]\n    Idx[Search index]\n    Store[Resource store]\n  end\n  subgraph ui [Desktop shell]\n    Shell[Shell UI]\n    Editor[Page editor]\n    Grid[Data views]\n  end\n  Pages --> Store\n  Canvas --> Store\n  Data --> Store\n  Files --> Store\n  Shell --> Cmd\n  Editor --> Cmd\n  Grid --> Cmd\n  Cmd --> Store\n  Cmd --> Idx\n```\n\n## Data flow\n\nExternal edits and Lattice mutations must reconcile honestly. Nothing in the UI\nbecomes a privileged writer.\n\n```mermaid\nsequenceDiagram\n  participant User\n  participant UI as Desktop shell\n  participant Core as Command core\n  participant Disk as Workspace files\n  User->>UI: Edit page / table row\n  UI->>Core: Semantic command\n  Core->>Core: Validate + transaction\n  Core->>Disk: Atomic write\n  Core-->>UI: Coarse state update\n  Disk-->>Core: External change (watcher)\n  Core-->>UI: Reconcile + notify\n```\n\nSee `Resources/queries.sql` for example read patterns against tabular data.\n\n## Collaboration model\n\nPages accumulate block-level identity over time. Wiki links like [[Home]] and\n[[Product/Release Notes]] stay readable in any Markdown tool. Canvas nodes can\nanchor back to blocks once IDs are assigned.\n\n| Concern | Lattice stance |\n| --- | --- |\n| Canonical storage | Real files and folders |\n| Offline | Default, not exceptional |\n| Rich tables | `.data` packages beside pages |\n| Deep tooling | Inspect surfaces per resource |\n\n## Search and indexing\n\n⌘K should find this page by title, tags, and body text. Repeated keywords below\nexercise index tokenization without nonsense padding.\n\n- workspace workspace workspace\n- canvas canvas canvas\n- sqlite sqlite sqlite\n- mermaid mermaid mermaid\n- embed embed embed\n\nLong paragraphs also matter: teams paste meeting notes, specs, and interview\ntranscripts that run thousands of words. Scroll performance should stay stable\nwhen the caret moves from the first heading through nested lists, tables, and\nfenced code blocks.\n\n## Canvas composition\n\nOpen [[Canvases/Product Strategy.canvas]] and double-click file nodes. The board\nlinks [[Product/Vision]] to [[Product/Roadmap]] spatially — a different reading\norder than this linear page.\n\n```mermaid\nflowchart LR\n  Intro[Canvas intro] --> Vision[[Product/Vision]]\n  Vision --> Roadmap[[Product/Roadmap]]\n  Roadmap --> CRM[CRM.data]\n  CRM --> Long[Long Read]\n```\n\n## CRM in context\n\n`CRM.data` ships ~20 sample contacts with email, company, due dates, status,\nnotes, and a **reports_to** self-relation. Open the data app from [[Home]] or\nsearch for a name like **Grace Hopper**.\n\nIn the data app header, switch layouts (grid, list, board, gallery, calendar, form)\nfrom the view picker. Adjust layout field pickers and **Save view** to persist YAML\nunder `CRM.data/views/`. Board, Calendar, Gallery, and Form are seeded from the\ntemplate manifest (see [[Home#CRM views]] and [[Home#First Look tour — new surfaces]]).\n\n## Release rhythm\n\nCross-link to [[Product/Release Notes]] for a changelog-style page. Roadmap themes\nfrom [[Product/Roadmap]] should stay aligned with principles in [[Product/Principles]].\n\n1. Instrument perf budgets before adding shell weight.\n2. Keep browser demo honest about filesystem authority.\n3. Prefer bounded queries over hydrating entire workspaces.\n\n## Interview themes\n\n[[Research/Interview Synthesis]] summarizes recurring quotes. [[Research/Market Notes]]\ntracks segments and pricing assumptions. Together they inform [[Research/Competitor Analysis]].\n\n> \"I want Notion-like tables without giving up my git repo.\"\n>\n> \"Canvas is for spatial thinking, not replacing the outline.\"\n\n## Competitive landscape\n\n| Product | Strength | Tradeoff |\n| --- | --- | --- |\n| Obsidian | Local Markdown | Weak relational data |\n| Notion | Polished blocks | Export friction |\n| Airtable | Typed columns | Cloud-centric |\n| Lattice | Files + commands | Young surface area |\n\n#research #product #strategy\n\n## Principles in practice\n\nFrom [[Product/Principles]]:\n\n- **Local-first** — edits work on a plane without Wi‑Fi.\n- **Inspectable** — `Resources/` holds JSON, YAML, TypeScript, and SVG you can diff.\n- **Progressive disclosure** — Page, Canvas, Table, Notebook, File as primary vocabulary.\n\n```typescript\n// Resources/example.ts — tiny module referenced from docs\nexport function greet(name: string): string {\n  return `Hello, ${name}`;\n}\n```\n\n## Embedded resource\n\nThe block below embeds [[Product/Vision]] inline. In read mode it renders a preview\ncard; activate it to open the full page.\n\n:::lattice-embed\nresource: ../Product/Vision.md\nfallback: \"[[Product/Vision]]\"\n:::\n\n## Appendix A — glossary\n\n| Term | Meaning |\n| --- | --- |\n| Data app | `.data` directory with SQLite + manifest |\n| Command | Validated mutation through Rust core |\n| Canvas | Spatial `.canvas` JSON graph |\n| View | YAML layout over a table (`views/*.yaml`) |\n\n## Appendix B — checklist\n\nUse this list when benchmarking scroll and typing on this page:\n\n- [ ] Scroll from top to bottom without layout thrash\n- [ ] Collapse and expand a long section mentally — caret stable\n- [ ] Follow five wiki links and return via history\n- [ ] Render all Mermaid blocks\n- [ ] Open the lattice-embed card\n- [ ] Search for \"Grace Hopper\" and jump to CRM\n- [ ] Complete the [[Home#First Look tour — new surfaces]] checklist (layouts, relations, tree)\n\n---\n\nBack to [[Home]]. Architecture diagram: [[Research/Architecture]].\n",
@@ -6659,13 +10612,16 @@ export const demoPages: Record<string, string> = {
   "Templates/Daily Note.md": "---\ntitle: \"{{title}}\"\ndate: {{date}}\n---\n\n# {{date}}\n\n## Focus\n\n-\n\n## Log\n\n-\n\n## Open loops\n\n- [ ]\n\n## Links\n\n-\n",
   "Templates/Meeting Note.md": "---\ntitle: \"{{title}}\"\ndate: {{date}}\nattendees: []\n---\n\n# {{title}}\n\n## Agenda\n\n1.\n\n## Notes\n\n## Decisions\n\n## Action items\n\n- [ ] Owner — task (due: )\n\n## Related\n\n-\n",
   "Data/Events.dataset/README.md": "# Events\n\nSample analytical `.dataset` for the First Look demo.\n\n| Path | Role |\n| --- | --- |\n| `sources/signups.csv` | Editable source CSV (re-import via `seed_demo_events`) |\n| `facts/year=2026/month=07/signups.parquet` | Hive Parquet partition (DuckDB `read_parquet`) |\n| `annotations.sqlite` | Review overlay (`event_annotations`) |\n\nOpen this package in the desktop app for **Preview** (Perspective), **Chart**\n(Vega-Lite), and **Profile** (DuckDB `SUMMARIZE`). Or open\n`Dashboards/Signups by region.vl.json` for a bound chart resource.\n\nRe-seed from the repo root:\n\n```sh\ncargo run -p lattice-datasets --example seed_demo_events\npnpm compile-templates\n```\n",
-  "Data/Orders.dataset/README.md": "# Orders\n\nSynthetic retail orders for the First Look analytics demo (~3 000 rows).\n\n**Attribution:** Lattice-generated synthetic data for product demos — not a\nthird-party or production dump.\n\n| Path | Role |\n| --- | --- |\n| `sources/orders.csv` | Editable source CSV (re-import via `seed_demo_orders`) |\n| `facts/year=2026/month=0{1,2,3}/orders.parquet` | Hive Parquet partitions (DuckDB `read_parquet`) |\n\nColumns: `order_id`, `ordered_at`, `region`, `category`, `channel`, `revenue`,\n`units`. Date range spans January–March 2026 for multi-month time charts.\n\nBound Vega-Lite dashboards (workspace-relative `read_parquet`):\n\n- `Dashboards/Revenue by region and category.vl.json`\n- `Dashboards/Revenue by day.vl.json`\n- `Dashboards/Revenue by channel.vl.json`\n\nRe-seed from the repo root:\n\n```sh\ncargo run -p lattice-datasets --example seed_demo_orders\npnpm compile-templates\n```\n",
+  "Data/Orders.dataset/README.md": "# Orders\n\nSynthetic retail orders for the First Look analytics demo (~3 000 rows).\n\n**Attribution:** Lattice-generated synthetic data for product demos — not a\nthird-party or production dump.\n\n| Path | Role |\n| --- | --- |\n| `sources/orders.csv` | Editable source CSV (re-import via `seed_demo_orders`) |\n| `facts/year=2026/month=0{1,2,3}/orders.parquet` | Hive Parquet partitions (DuckDB `read_parquet`) |\n\nColumns: `order_id`, `ordered_at`, `region`, `category`, `channel`, `revenue`,\n`units`. Date range spans January–March 2026 for multi-month time charts.\n\nRe-seed from the repo root:\n\n```sh\ncargo run -p lattice-datasets --example seed_demo_orders\npnpm compile-templates\n```\n",
   "Data/Places.dataset/README.md": "# Places\n\nSample geospatial `.dataset` for the First Look demo (~20 WGS84 points).\n\n**Attribution:** Lattice-generated synthetic places for product demos — not a\nthird-party gazetteer dump.\n\n| Path | Role |\n| --- | --- |\n| `sources/places.csv` | Editable source CSV (re-import via `seed_demo_places`) |\n| `facts/places.parquet` | Point facts (`place_id`, `name`, `lon`, `lat`) |\n\nColumns use plain `lon` / `lat` doubles (EPSG:4326 / WGS84) — enough for\nMapLibre markers without DuckDB spatial extensions.\n\nRe-seed from the repo root:\n\n```sh\ncargo run -p lattice-datasets --example seed_demo_places\npnpm compile-templates\n```\n",
   "Artifacts/ContactPulse.artifact/README.md": "# Contact pulse\n\nSandboxed HTML artifact that reads a named `contactCount` BindingSpec against\n`CRM.data`. Open this package in Lattice (native) to run the live surface.\n",
   "Proposals/README.md": "---\ntitle: Proposals\n---\n\n# Proposals\n\nReviewable pages land here after you **approve** a proposal from the Proposals\ninbox (native desktop).\n\nThe First Look automation path:\n\n1. Submit **CRM.data → Forms → Contact intake**.\n2. `Automations/Contact intake.workflow.yaml` runs `Tasks/ContactIntakeHello.task`,\n   then creates a page-create proposal for `Proposals/Contact intake follow-up.md`.\n3. Approve in the inbox — this folder gains the follow-up page.\n\n**Agent-generate path (AG2):** **Interfaces → Agent digest** is pre-seeded for a\nfast walkthrough. To rehearse inspect→propose→approve, run `Tasks/AgentFirstLook.task`\n(or MCP `get_dataset_schema` / `profile_dataset` → `propose_interface`) to propose\n`CRM.data/interfaces/AgentDigest.interface.yaml`. Approve in the inbox if you want\nto replace the seed via proposal. See [[Research/Agent first look]].\n"
 };
 
 export const demoTextFiles: Record<string, string> = {
+  "Engineering/Build Status.dataset/dataset.yaml": "format: lattice-dataset\nversion: 1\nid: demo-build-status-dataset\ntitle: Build status\ndescription: Synthetic CI runs for the Lattice engineering release-room demo.\npartitions:\n- path: facts/year=2026/month=07/builds.parquet\n  keys:\n    month: '07'\n    year: '2026'\n  rows: 34\n  bytes: 4504\n",
+  "Engineering/Build Status.dataset/sources/builds.csv": "build_id,started_at,workflow,branch,runner,outcome,duration_seconds,tests,failures\nbuild-001,2026-07-01T09:10:00Z,Rust workspace,main,macos-arm64,success,428,684,0\nbuild-002,2026-07-01T09:16:00Z,Desktop frontend,main,macos-arm64,success,176,312,0\nbuild-003,2026-07-01T09:22:00Z,Site build,main,linux-x64,success,88,42,0\nbuild-004,2026-07-02T14:02:00Z,Rust workspace,feat/data-apps,macos-arm64,failure,451,684,3\nbuild-005,2026-07-02T14:08:00Z,Desktop frontend,feat/data-apps,macos-arm64,success,184,319,0\nbuild-006,2026-07-03T11:30:00Z,Template compile,main,linux-x64,success,24,18,0\nbuild-007,2026-07-04T17:45:00Z,Native smoke,feat/voice,macos-arm64,success,312,27,0\nbuild-008,2026-07-05T08:12:00Z,Rust workspace,feat/voice,macos-arm64,success,419,692,0\nbuild-009,2026-07-06T10:04:00Z,Desktop frontend,feat/interfaces,macos-arm64,failure,203,326,2\nbuild-010,2026-07-06T10:10:00Z,Native smoke,feat/interfaces,macos-arm64,failure,348,27,1\nbuild-011,2026-07-07T13:41:00Z,Desktop frontend,feat/interfaces,macos-arm64,success,181,329,0\nbuild-012,2026-07-08T07:55:00Z,Rust workspace,main,macos-arm64,success,407,701,0\nbuild-013,2026-07-08T08:02:00Z,Template compile,main,linux-x64,success,22,18,0\nbuild-014,2026-07-09T16:20:00Z,Site build,feat/docs,linux-x64,success,92,42,0\nbuild-015,2026-07-10T12:17:00Z,Desktop frontend,feat/datasets,macos-arm64,success,173,335,0\nbuild-016,2026-07-10T12:24:00Z,Native smoke,feat/datasets,macos-arm64,success,297,31,0\nbuild-017,2026-07-11T18:33:00Z,Rust workspace,feat/datasets,macos-arm64,success,398,715,0\nbuild-018,2026-07-12T09:44:00Z,Template compile,feat/demo,linux-x64,failure,29,18,1\nbuild-019,2026-07-12T10:02:00Z,Template compile,feat/demo,linux-x64,success,23,18,0\nbuild-020,2026-07-13T15:26:00Z,Desktop frontend,main,macos-arm64,success,169,341,0\nbuild-021,2026-07-14T08:50:00Z,Rust workspace,feat/daemon,macos-arm64,success,391,726,0\nbuild-022,2026-07-14T09:01:00Z,Native smoke,feat/daemon,macos-arm64,success,305,33,0\nbuild-023,2026-07-15T11:11:00Z,Site build,main,linux-x64,success,84,44,0\nbuild-024,2026-07-16T14:38:00Z,Desktop frontend,feat/theme,macos-arm64,success,165,348,0\nbuild-025,2026-07-17T16:06:00Z,Rust workspace,feat/theme,macos-arm64,failure,416,731,2\nbuild-026,2026-07-17T16:19:00Z,Rust workspace,feat/theme,macos-arm64,success,389,731,0\nbuild-027,2026-07-18T07:30:00Z,Template compile,main,linux-x64,success,21,19,0\nbuild-028,2026-07-19T10:47:00Z,Desktop frontend,feat/agent,macos-arm64,success,171,352,0\nbuild-029,2026-07-20T13:52:00Z,Rust workspace,feat/agent,macos-arm64,success,402,744,0\nbuild-030,2026-07-21T09:05:00Z,Native smoke,feat/github,macos-arm64,failure,337,35,1\nbuild-031,2026-07-22T09:18:00Z,Native smoke,feat/github,macos-arm64,success,301,35,0\nbuild-032,2026-07-23T17:40:00Z,Desktop frontend,main,macos-arm64,success,162,358,0\nbuild-033,2026-07-24T08:15:00Z,Rust workspace,main,macos-arm64,success,381,752,0\nbuild-034,2026-07-24T08:23:00Z,Template compile,main,linux-x64,success,20,19,0\n",
+  "Engineering/Dashboards/Build duration by workflow.vl.json": "{\n  \"lattice\": {\n    \"data\": {\n      \"dataset\": \"Engineering/Build Status.dataset\",\n      \"sql\": \"SELECT workflow, outcome, round(avg(duration_seconds), 1) AS avg_duration_seconds, count(*) AS runs FROM read_parquet('Engineering/Build Status.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true) GROUP BY workflow, outcome ORDER BY workflow, outcome\"\n    }\n  },\n  \"$schema\": \"https://vega.github.io/schema/vega-lite/v6.json\",\n  \"title\": \"Average build duration by workflow\",\n  \"data\": { \"name\": \"table\" },\n  \"mark\": { \"type\": \"bar\", \"tooltip\": true, \"cornerRadiusEnd\": 3 },\n  \"encoding\": {\n    \"x\": {\n      \"field\": \"workflow\",\n      \"type\": \"nominal\",\n      \"title\": \"Workflow\",\n      \"sort\": \"-y\",\n      \"axis\": { \"labelAngle\": -28 }\n    },\n    \"y\": {\n      \"field\": \"avg_duration_seconds\",\n      \"type\": \"quantitative\",\n      \"title\": \"Average duration (seconds)\"\n    },\n    \"color\": {\n      \"field\": \"outcome\",\n      \"type\": \"nominal\",\n      \"title\": \"Outcome\"\n    },\n    \"xOffset\": { \"field\": \"outcome\" }\n  }\n}\n",
   "Data/sample.csv": "name,role,status\nAda Lovelace,Analyst,Active\nGrace Hopper,Engineer,Active\n",
   "Data/Events.dataset/dataset.yaml": "format: lattice-dataset\nversion: 1\nid: demo-events-dataset\ntitle: Events\ndescription: Sample analytical facts for Vega-Lite / Perspective / DuckDB demos (Hive Parquet + annotation overlay).\npartitions:\n- path: facts/year=2026/month=07/signups.parquet\n  keys:\n    month: '07'\n    year: '2026'\n  rows: 5\n  bytes: 1198\n",
   "Data/Events.dataset/sources/signups.csv": "event_id,region,signups\nevt-north,North,42\nevt-south,South,28\nevt-east,East,35\nevt-west,West,19\nevt-central,Central,31\n",
@@ -6680,6 +10636,7 @@ export const demoTextFiles: Record<string, string> = {
   "Artifacts/ContactPulse.artifact/artifact.yaml": "format: lattice-artifact\nversion: 1\ntitle: Contact pulse\nentrypoint: ./index.html\nbindings:\n  contactCount:\n    type: sqlite-query\n    resource: CRM.data\n    sql: SELECT COUNT(*) AS value FROM contacts\n    limit: 1\npermissions:\n  network: []\n  workspace_write: []\nfallback:\n  file: ./README.md\n",
   "Artifacts/ContactPulse.artifact/index.html": "<!DOCTYPE html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"utf-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n    <title>Contact pulse</title>\n    <style>\n      :root {\n        color-scheme: light dark;\n        font-family: var(--lt-font-ui, system-ui, sans-serif);\n        background: var(--lt-bg, #f4f6fa);\n        color: var(--lt-text, #121822);\n      }\n      body {\n        margin: 0;\n        padding: 1.25rem;\n        background: var(--lt-bg, #f4f6fa);\n        color: var(--lt-text, #121822);\n      }\n      h1 {\n        margin: 0 0 0.5rem;\n        font: 600 1.25rem/1.3 var(--lt-font-display, Georgia, serif);\n      }\n      .card {\n        border: 1px solid var(--lt-border, #c5ccd8);\n        border-radius: var(--lt-radius, 9px);\n        background: var(--lt-panel, #fff);\n        padding: 1rem 1.1rem;\n        max-width: 22rem;\n      }\n      .label {\n        color: var(--lt-muted, #6b778c);\n        font-size: 0.8rem;\n        letter-spacing: 0.02em;\n        text-transform: uppercase;\n      }\n      .value {\n        margin-top: 0.35rem;\n        font-size: 2rem;\n        font-weight: 600;\n        color: var(--lt-accent, #c47a0a);\n      }\n      .status {\n        margin-top: 0.75rem;\n        color: var(--lt-text-soft, #3a4558);\n        font-size: 0.9rem;\n      }\n      button {\n        margin-top: 1rem;\n        border: 1px solid var(--lt-border, #c5ccd8);\n        border-radius: var(--lt-radius-sm, 6px);\n        background: var(--lt-bg-raise, #eef1f7);\n        color: var(--lt-text, #121822);\n        padding: 0.4rem 0.75rem;\n        cursor: pointer;\n        font: inherit;\n      }\n      button:focus-visible {\n        outline: 2px solid var(--lt-accent, #c47a0a);\n        outline-offset: 2px;\n      }\n    </style>\n  </head>\n  <body>\n    <h1 id=\"title\">Contact pulse</h1>\n    <div class=\"card\">\n      <div class=\"label\">Contacts</div>\n      <div class=\"value\" id=\"count\">…</div>\n      <p class=\"status\" id=\"status\">Requesting binding…</p>\n      <button type=\"button\" id=\"open-crm\">Open CRM.data</button>\n    </div>\n    <script>\n      (function () {\n        var pending = Object.create(null);\n        var reqId = 0;\n\n        function post(message) {\n          parent.postMessage(message, \"*\");\n        }\n\n        function requestBinding(name) {\n          var id = \"req-\" + String(++reqId);\n          return new Promise(function (resolve, reject) {\n            pending[id] = { resolve: resolve, reject: reject };\n            post({ type: \"lattice.artifact.requestBinding\", id: id, name: name });\n          });\n        }\n\n        window.addEventListener(\"message\", function (event) {\n          var data = event.data;\n          if (!data || typeof data !== \"object\") return;\n          if (data.type === \"lattice.artifact.theme\" && data.vars) {\n            var root = document.documentElement;\n            Object.keys(data.vars).forEach(function (key) {\n              root.style.setProperty(key, data.vars[key]);\n            });\n            if (data.background) {\n              document.body.style.background = data.background;\n            }\n            return;\n          }\n          if (data.type === \"lattice.artifact.init\") {\n            if (data.title) {\n              document.getElementById(\"title\").textContent = data.title;\n              document.title = data.title;\n            }\n            post({ type: \"lattice.artifact.notify\", title: data.title || \"Contact pulse\", height: 280 });\n            return;\n          }\n          if (data.type === \"lattice.artifact.bindingResult\") {\n            var waiter = pending[data.id];\n            if (!waiter) return;\n            delete pending[data.id];\n            if (data.ok) waiter.resolve(data.data);\n            else waiter.reject(new Error(data.error || \"Binding failed\"));\n          }\n        });\n\n        document.getElementById(\"open-crm\").addEventListener(\"click\", function () {\n          post({ type: \"lattice.artifact.openResource\", path: \"CRM.data\" });\n        });\n\n        requestBinding(\"contactCount\")\n          .then(function (result) {\n            var value =\n              result && result.kind === \"scalar\"\n                ? result.value\n                : result && result.value != null\n                  ? result.value\n                  : \"—\";\n            document.getElementById(\"count\").textContent = String(value);\n            document.getElementById(\"status\").textContent = \"Bound via contactCount\";\n          })\n          .catch(function (err) {\n            document.getElementById(\"count\").textContent = \"—\";\n            document.getElementById(\"status\").textContent = String(err && err.message ? err.message : err);\n          });\n      })();\n    </script>\n  </body>\n</html>\n",
   "Automations/Contact intake.workflow.yaml": "format: lattice-workflow\nversion: 1\nname: Contact intake\nenabled: true\ntrigger:\n  type: form.submitted\n  package: CRM.data\n  form: ContactIntake\nsteps:\n  - id: run-hello\n    action: task.run\n    with:\n      task: Tasks/ContactIntakeHello.task\n  - id: create-proposal\n    action: proposal.create\n    with:\n      summary: Create Proposals/Contact intake follow-up.md from Contact intake workflow\n      commands:\n        - type: page-create\n          path: Proposals/Contact intake follow-up.md\n          content: |\n            ---\n            title: Contact intake follow-up\n            ---\n\n            # Contact intake follow-up\n\n            Created by `Automations/Contact intake.workflow.yaml` after\n            `Tasks/ContactIntakeHello.task` ran on a **Contact intake** form submit.\n\n            ## Rehearsable path\n\n            1. Submit **CRM.data → Forms → Contact intake** (native desktop).\n            2. Open the **Proposals** inbox and approve this page-create proposal.\n            3. Open this page — or embed it from [[Home]] after approve.\n\n            ```markdown\n            :::lattice-embed\n            resource: Proposals/Contact intake follow-up.md\n            fallback: \"Approve the Contact intake proposal first\"\n            :::\n            ```\n      warnings:\n        - Demo proposal — safe to reject if you only wanted to exercise the run.\n  - id: notify\n    action: notification\n    with:\n      message: Contact intake workflow finished\n",
+  "Automations/Feedback intake.workflow.yaml": "format: lattice-workflow\nversion: 1\nname: Feedback intake\nenabled: true\ntrigger:\n  type: form.submitted\n  package: CRM/Feedback.data\n  form: FeedbackIntake\nsteps:\n  - id: create-proposal\n    action: proposal.create\n    with:\n      summary: Create a governed feedback triage note\n      commands:\n        - type: page-create\n          path: Proposals/Feedback triage.md\n          content: |\n            ---\n            title: Feedback triage\n            ---\n\n            # Feedback triage\n\n            Proposed after a submission to\n            `CRM/Feedback.data → Forms → Feedback intake`.\n\n            ## Review\n\n            - Confirm the customer and source.\n            - Link the signal to `Product/Roadmap.data`.\n            - Decide whether it changes scope, priority, or documentation.\n            - Preserve the original structured record.\n      warnings:\n        - Demo proposal; review before applying.\n  - id: notify\n    action: notification\n    with:\n      message: Feedback intake is ready for triage\n",
   "Tasks/ContactIntakeHello.task/task.yaml": "format: lattice-task\nversion: 1\nruntime:\n  type: python\n  provider: uv\n  project: .\nentrypoint:\n  command: [python, main.py]\nlimits:\n  timeout_seconds: 60\n",
   "Tasks/ContactIntakeHello.task/main.py": "\"\"\"Reliable uv demo task for the Contact intake workflow.\"\"\"\n\nprint(\"contact-intake-hello: ok\")\n",
   "Tasks/ProposePage.task/task.yaml": "format: lattice-task\nversion: 1\nruntime:\n  type: python\n  provider: uv\n  project: .\nentrypoint:\n  command: [python, main.py]\nlimits:\n  timeout_seconds: 60\noutputs:\n  - path: Proposals/FromSdk.task.md\n    kind: page\n",

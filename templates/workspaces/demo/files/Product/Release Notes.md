@@ -5,7 +5,22 @@ tags: [product]
 
 # Release Notes
 
-Sample changelog page for the First Look workspace — not a live feed.
+Sample changelog page for the Lattice company workspace — not a live feed.
+
+## 2026.07 — Lattice building Lattice
+
+- `Product/Roadmap.data` — roadmap, feature maturity, feedback and decisions.
+- `Engineering/Delivery.data` — issues, synthetic pull requests and releases.
+- `Engineering/Build Status.dataset` — deterministic CI Parquet with a bound
+  Vega-Lite build-duration chart.
+- `Hackathon/Launch.data`, [[Hackathon/Demo Script]], and
+  `Hackathon/Pitch.canvas` — rehearsal and presentation resources.
+- `Operations/Company.data` — expense intake, vendors, budgets, revenue,
+  formulas and executive metrics.
+- `CRM/Feedback.data` + `Automations/Feedback intake.workflow.yaml` — structured
+  feedback through a governed triage proposal.
+- [[Docs/Product Overview]], [[Engineering/Repository]], and
+  [[Engineering/Architecture]] — current implementation and honest boundaries.
 
 ## 2026.07 — Analytical First Look (DuckDB / Vega-Lite / Map)
 
@@ -14,7 +29,7 @@ Sample changelog page for the First Look workspace — not a live feed.
 - `Dashboards/Signups by region.vl.json` — Vega-Lite bound with `read_parquet(...)`
 - Desktop viewer tabs: Perspective **Preview**, Vega-Lite **Chart**, DuckDB **Profile**, **Plan**, MapLibre **Map**
 - `Data/Places.dataset` — ~20 WGS84 lon/lat points (`facts/places.parquet`) with offline MapLibre markers
-- [[Home]] tour steps 24–34 cover the analytics path (native / Tauri; not the browser fixture)
+- [[Home]] links the analytics path (native / Tauri; not the browser fixture)
 
 ## 2026.07 — Notebooks, automation & artifacts
 

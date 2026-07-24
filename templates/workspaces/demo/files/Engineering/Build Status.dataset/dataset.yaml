@@ -1,0 +1,12 @@
+format: lattice-dataset
+version: 1
+id: demo-build-status-dataset
+title: Build status
+description: Synthetic CI runs for the Lattice engineering release-room demo.
+partitions:
+- path: facts/year=2026/month=07/builds.parquet
+  keys:
+    month: '07'
+    year: '2026'
+  rows: 34
+  bytes: 4504

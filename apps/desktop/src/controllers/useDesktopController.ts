@@ -938,5 +938,6 @@ export function useDesktopController() {
     treeRenameRequest,
     handleNotebookContentChange,
     handleRevisionChange,
+    setSession,
   };
 }

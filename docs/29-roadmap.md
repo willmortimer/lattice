@@ -122,6 +122,12 @@ Success: reliable automation while desktop is closed.
 
 Success: Lattice functions as a serious data workbench and dashboard environment.
 
+Early plugin spike (may land ahead of full Phase 6/8 framework): GitHub App
+connect + sandboxed shallow-clone Extract under `.lattice/connectors/github/`
+([ADR 0045](decisions/0045-github-connected-repos-are-readonly-extracts.md)) —
+auth, bind owned repo, Connected roots browse, read-only file open. Issues/PRs
+and writeback remain later.
+
 ## Phase 7: Lattice Apps and publishing
 
 - Full Lattice App packages.

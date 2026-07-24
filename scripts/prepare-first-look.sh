@@ -14,6 +14,12 @@ cargo run -p lattice-datasets --example seed_demo_events --quiet
 echo "prepare-first-look: seed_demo_places"
 cargo run -p lattice-datasets --example seed_demo_places --quiet
 
+echo "prepare-first-look: seed_demo_orders"
+cargo run -p lattice-datasets --example seed_demo_orders --quiet
+
+echo "prepare-first-look: seed_demo_build_status"
+cargo run -p lattice-datasets --example seed_demo_build_status --quiet
+
 echo "prepare-first-look: compile-templates"
 pnpm compile-templates
 
@@ -24,6 +30,11 @@ required=(
   "$demo/Data/Events.dataset/facts/year=2026/month=07/signups.parquet"
   "$demo/Data/Events.dataset/annotations.sqlite"
   "$demo/Data/Places.dataset/facts/places.parquet"
+  "$demo/Data/Orders.dataset/facts/year=2026/month=03/orders.parquet"
+  "$demo/Engineering/Build Status.dataset/facts/year=2026/month=07/builds.parquet"
+  "$demo/Engineering/Dashboards/Build duration by workflow.vl.json"
+  "$demo/Hackathon/Pitch.canvas"
+  "$demo/Operations/Runway.md"
   "apps/desktop/src/demoWorkspace.generated.ts"
   "crates/lattice-core/src/template_catalog.generated.rs"
 )

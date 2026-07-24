@@ -757,6 +757,33 @@ fn resource_update_rejects_read_only_and_internal_targets() {
         operational_result,
         Err(Error::ResourceNotEditable { .. })
     ));
+
+    // Connector extract paths under `.lattice/connectors/.../checkout` must not
+    // accept create/delete through the semantic command core (ADR 0044).
+    let extract = PathBuf::from(".lattice/connectors/github/b1/checkout/README.md");
+    if let Some(parent) = dir.path().join(&extract).parent() {
+        std::fs::create_dir_all(parent).unwrap();
+    }
+    std::fs::write(dir.path().join(&extract), b"remote\n").unwrap();
+    let create_in_extract = engine.apply(Transaction::new(
+        "Create inside extract",
+        vec![Command::PageCreate {
+            path: PathBuf::from(".lattice/connectors/github/b1/checkout/new.md"),
+            content: "nope\n".into(),
+        }],
+    ));
+    assert!(matches!(
+        create_in_extract,
+        Err(Error::ResourceNotEditable { .. })
+    ));
+    let delete_extract = engine.apply(Transaction::new(
+        "Delete extract file",
+        vec![Command::ResourceDelete { path: extract }],
+    ));
+    assert!(matches!(
+        delete_extract,
+        Err(Error::ResourceNotEditable { .. })
+    ));
 }
 
 #[test]

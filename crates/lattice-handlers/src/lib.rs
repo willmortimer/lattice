@@ -10,6 +10,7 @@
 //! the host already holds an explicit runtime handle.
 
 mod error;
+mod github;
 mod home;
 mod page;
 mod path;
@@ -17,6 +18,10 @@ mod search;
 mod workspace;
 
 pub use error::{command_error_to_string, STALE_REVISION_PREFIX};
+pub use github::{
+    github_disconnect_repo, github_list_bindings, github_list_checkout_tree,
+    github_read_checkout_file, github_refresh_repo,
+};
 pub use home::{
     create_workspace, ensure_home, list_templates, LatticeHomeInfo, WorkspaceProvisionResult,
 };

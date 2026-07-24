@@ -196,6 +196,11 @@ enum Command {
         #[command(subcommand)]
         command: WorkflowCommand,
     },
+    /// GitHub App connected repos (login/connect via CLI; desktop browses only).
+    Github {
+        #[command(subcommand)]
+        command: GithubCommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -240,6 +245,43 @@ enum WorkflowCommand {
         /// Path to a workflow YAML file.
         path: PathBuf,
         /// Workspace root (defaults to current directory).
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum GithubCommand {
+    /// Device-flow login for the Lattice GitHub App (`LATTICE_GITHUB_APP_CLIENT_ID`).
+    Login,
+    /// Shallow-clone a repo into `.lattice/connectors/github/` (read-only extract).
+    Connect {
+        /// Repository as `owner/name`.
+        repo: String,
+        /// Workspace root. Defaults to discovering from cwd.
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+    /// List connected GitHub extracts for a workspace.
+    List {
+        /// Workspace root. Defaults to discovering from cwd.
+        #[arg(long)]
+        root: Option<PathBuf>,
+        /// Emit JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Refresh a connected extract (`binding id` or `owner/name`).
+    Refresh {
+        /// Binding id or `owner/name`.
+        target: String,
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+    /// Disconnect and delete a connected extract.
+    Disconnect {
+        /// Binding id or `owner/name`.
+        target: String,
         #[arg(long)]
         root: Option<PathBuf>,
     },
@@ -826,6 +868,13 @@ fn run(command: Command) -> Result<ExitCode> {
         },
         Command::Workflow { command } => match command {
             WorkflowCommand::Run { path, root } => cmd_workflow_run(path, root),
+        },
+        Command::Github { command } => match command {
+            GithubCommand::Login => cmd_github_login(),
+            GithubCommand::Connect { repo, root } => cmd_github_connect(repo, root),
+            GithubCommand::List { root, json } => cmd_github_list(root, json),
+            GithubCommand::Refresh { target, root } => cmd_github_refresh(target, root),
+            GithubCommand::Disconnect { target, root } => cmd_github_disconnect(target, root),
         },
     }
 }
@@ -1544,7 +1593,7 @@ fn attachment_inventory_output(entry: AttachmentInventoryEntry) -> AttachmentInv
         modified_at_secs: entry
             .modified_at
             .and_then(|time| time.duration_since(SystemTime::UNIX_EPOCH).ok())
-            .map(|duration| duration.as_secs()),
+            .map(|duration| duration.as_secs() as i64),
         missing_on_disk: entry.missing_on_disk,
     }
 }
@@ -2525,6 +2574,186 @@ fn cmd_workflow_run(path: PathBuf, root: Option<PathBuf>) -> Result<ExitCode> {
             Ok(ExitCode::FAILURE)
         }
     }
+}
+
+fn github_token_store() -> Box<dyn lattice_connectors::TokenStore> {
+    use lattice_connectors::TokenStore;
+    let keychain = lattice_connectors::KeychainTokenStore::new();
+    let probe = "lattice.github.cli.probe";
+    match keychain.set(
+        probe,
+        &lattice_connectors::TokenMaterial {
+            access_token: "probe".into(),
+            refresh_token: None,
+            expires_in: None,
+            token_type: None,
+        },
+    ) {
+        Ok(()) => {
+            let _ = keychain.delete(probe);
+            Box::new(keychain)
+        }
+        Err(_) => Box::new(lattice_connectors::MemoryTokenStore::new()),
+    }
+}
+
+fn github_client_id() -> Result<String> {
+    std::env::var("LATTICE_GITHUB_APP_CLIENT_ID")
+        .context("set LATTICE_GITHUB_APP_CLIENT_ID to your GitHub App client id")
+}
+
+fn parse_owner_repo(spec: &str) -> Result<(String, String)> {
+    let (owner, repo) = spec
+        .split_once('/')
+        .with_context(|| format!("expected owner/name, got {spec:?}"))?;
+    if owner.is_empty() || repo.is_empty() || repo.contains('/') {
+        bail!("expected owner/name, got {spec:?}");
+    }
+    Ok((owner.to_string(), repo.to_string()))
+}
+
+fn resolve_github_binding_id(root: &Path, target: &str) -> Result<String> {
+    if !target.contains('/') {
+        return Ok(target.to_string());
+    }
+    let (owner, repo) = parse_owner_repo(target)?;
+    let bindings = lattice_connectors::list_bindings(root).map_err(|err| anyhow::anyhow!("{err}"))?;
+    bindings
+        .into_iter()
+        .find(|b| b.binding.owner == owner && b.binding.repo == repo)
+        .map(|b| b.binding.id)
+        .with_context(|| format!("no connected repo matching {owner}/{repo}"))
+}
+
+fn cmd_github_login() -> Result<ExitCode> {
+    use lattice_connectors::TokenStore;
+    let client_id = github_client_id()?;
+    let (start, pending) =
+        lattice_connectors::device_flow_start(&lattice_connectors::HttpGitHubAuthClient, &client_id)
+            .map_err(|err| anyhow::anyhow!("{err}"))?;
+    println!("Open {} and enter code: {}", start.verification_uri, start.user_code);
+    println!("Waiting for authorization…");
+    loop {
+        std::thread::sleep(std::time::Duration::from_secs(pending.interval.max(1)));
+        match lattice_connectors::device_flow_poll(
+            &lattice_connectors::HttpGitHubAuthClient,
+            &pending,
+        )
+        .map_err(|err| anyhow::anyhow!("{err}"))?
+        {
+            lattice_connectors::DeviceFlowPollResult::Pending { .. } => continue,
+            lattice_connectors::DeviceFlowPollResult::SlowDown { interval } => {
+                std::thread::sleep(std::time::Duration::from_secs(interval.max(1)));
+            }
+            lattice_connectors::DeviceFlowPollResult::Complete(material) => {
+                let store = github_token_store();
+                store
+                    .set(lattice_connectors::GITHUB_USER_TOKEN_KEY, &material)
+                    .map_err(|err| anyhow::anyhow!("{err}"))?;
+                println!("Logged in. Token stored for `lattice github connect`.");
+                return Ok(ExitCode::SUCCESS);
+            }
+            lattice_connectors::DeviceFlowPollResult::Expired => {
+                bail!("authorization expired; run `lattice github login` again")
+            }
+            lattice_connectors::DeviceFlowPollResult::Denied => {
+                bail!("authorization denied")
+            }
+            lattice_connectors::DeviceFlowPollResult::Error(message) => bail!("{message}"),
+        }
+    }
+}
+
+fn cmd_github_connect(repo_spec: String, root: Option<PathBuf>) -> Result<ExitCode> {
+    use lattice_connectors::TokenStore;
+    let start = cwd_or(root)?;
+    let ws = Workspace::discover(&start)?;
+    let (owner, repo) = parse_owner_repo(&repo_spec)?;
+    let store = github_token_store();
+    let material = store
+        .get(lattice_connectors::GITHUB_USER_TOKEN_KEY)
+        .map_err(|err| anyhow::anyhow!("{err}"))?
+        .context("not logged in; run `lattice github login` first")?;
+    let summary = lattice_connectors::get_repo(
+        &lattice_connectors::HttpGitHubApiClient,
+        &material.access_token,
+        &owner,
+        &repo,
+    )
+    .map_err(|err| anyhow::anyhow!("{err}"))?;
+    let connected = lattice_connectors::connect_repo(
+        ws.root(),
+        store.as_ref(),
+        lattice_connectors::ConnectRepoInput {
+            owner: summary.owner,
+            repo: summary.name,
+            repo_id: summary.id,
+            default_branch: summary.default_branch,
+            installation_id: summary.installation_id,
+            access_token: material.access_token,
+        },
+    )
+    .map_err(|err| anyhow::anyhow!("{err}"))?;
+    println!(
+        "connected {}/{} -> {} (binding {})",
+        connected.binding.owner,
+        connected.binding.repo,
+        connected.binding.extract.path,
+        connected.binding.id
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_github_list(root: Option<PathBuf>, json: bool) -> Result<ExitCode> {
+    let start = cwd_or(root)?;
+    let ws = Workspace::discover(&start)?;
+    let bindings =
+        lattice_connectors::list_bindings(ws.root()).map_err(|err| anyhow::anyhow!("{err}"))?;
+    if json {
+        println!("{}", serde_json::to_string_pretty(&bindings)?);
+    } else if bindings.is_empty() {
+        println!("(no connected GitHub repos)");
+    } else {
+        for item in bindings {
+            let stale = if item.stale { " stale" } else { "" };
+            println!(
+                "{}\t{}/{}\t{}{}",
+                item.binding.id,
+                item.binding.owner,
+                item.binding.repo,
+                item.binding.extract.path,
+                stale
+            );
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_github_refresh(target: String, root: Option<PathBuf>) -> Result<ExitCode> {
+    let start = cwd_or(root)?;
+    let ws = Workspace::discover(&start)?;
+    let binding_id = resolve_github_binding_id(ws.root(), &target)?;
+    let store = github_token_store();
+    let connected = lattice_connectors::refresh_repo(ws.root(), store.as_ref(), &binding_id)
+        .map_err(|err| anyhow::anyhow!("{err}"))?;
+    println!(
+        "refreshed {}/{} ({})",
+        connected.binding.owner,
+        connected.binding.repo,
+        connected.binding.head_sha.as_deref().unwrap_or("unknown")
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_github_disconnect(target: String, root: Option<PathBuf>) -> Result<ExitCode> {
+    let start = cwd_or(root)?;
+    let ws = Workspace::discover(&start)?;
+    let binding_id = resolve_github_binding_id(ws.root(), &target)?;
+    let store = github_token_store();
+    lattice_connectors::disconnect_repo(ws.root(), store.as_ref(), &binding_id)
+        .map_err(|err| anyhow::anyhow!("{err}"))?;
+    println!("disconnected {binding_id}");
+    Ok(ExitCode::SUCCESS)
 }
 
 fn exit_code_from_i32(code: i32) -> ExitCode {

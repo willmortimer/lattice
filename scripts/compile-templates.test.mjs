@@ -150,6 +150,38 @@ test("template compiler accepts declarative dataPackages", () => {
   assert.equal(templates[0].dataPackages[0].rows.length, 1);
 });
 
+test("template compiler accepts read-only formula column metadata", () => {
+  const templates = compileTemplates(
+    fixture({
+      directories: ["Data"],
+      dataPackages: [
+        {
+          path: "Data/Expenses.data",
+          title: "Expenses",
+          table: "expenses",
+          columns: [
+            { name: "name", type: "text" },
+            { name: "subtotal", type: "decimal" },
+            { name: "tax", type: "decimal" },
+            { name: "total", type: "formula", formula: "{subtotal} + {tax}" },
+          ],
+          rows: [{ name: "Fixture", subtotal: 20, tax: 5 }],
+        },
+      ],
+    }),
+  );
+  assert.deepEqual(templates[0].dataPackages[0].columns[3], {
+    name: "total",
+    type: "formula",
+    formula: "{subtotal} + {tax}",
+  });
+  const source = emitDemoWorkspace([
+    ...templates,
+    ...compileTemplates().filter((template) => template.id === "demo"),
+  ]);
+  assert.match(source, /"formula": "\\{subtotal\\} \\+ \\{tax\\}"/);
+});
+
 test("template compiler accepts declarative dataPackage views", () => {
   const templates = compileTemplates(
     fixture({
@@ -296,19 +328,36 @@ test("template compiler accepts declarative dataPackage interfaces", () => {
   assert.match(interfaces[1].components[0].binding.sql, /\{\{region\}\}/);
 });
 
-test("demo template emits kitchen-sink browser fixture", () => {
+test("demo template emits Lattice company showcase and browser feature lab", () => {
   const templates = compileTemplates();
   const demo = templates.find((template) => template.id === "demo");
   assert.ok(demo);
   assert.equal(demo.openOnCreate, "Home.md");
+  assert.equal(demo.name, "Lattice — Building Lattice");
   assert.ok(demo.dataPackages.some((entry) => entry.path === "CRM.data"));
   assert.ok(demo.dataPackages.some((entry) => entry.path === "Projects/Delivery.data"));
   assert.ok(demo.dataPackages.some((entry) => entry.path === "Data/Metrics.data"));
   assert.ok(demo.dataPackages.some((entry) => entry.path === "OKRs.data"));
+  assert.ok(demo.dataPackages.some((entry) => entry.path === "Product/Roadmap.data"));
+  assert.ok(demo.dataPackages.some((entry) => entry.path === "Engineering/Delivery.data"));
+  assert.ok(demo.dataPackages.some((entry) => entry.path === "Hackathon/Launch.data"));
+  assert.ok(demo.dataPackages.some((entry) => entry.path === "Operations/Company.data"));
+  assert.ok(demo.dataPackages.some((entry) => entry.path === "CRM/Feedback.data"));
   assert.ok(demo.files.some((file) => file.path === "Research/Architecture.md"));
+  assert.ok(demo.files.some((file) => file.path === "Docs/Product Overview.md"));
+  assert.ok(demo.files.some((file) => file.path === "Engineering/Build Status.dataset/dataset.yaml"));
+  assert.ok(
+    demo.files.some(
+      (file) => file.path === "Engineering/Dashboards/Build duration by workflow.vl.json",
+    ),
+  );
+  assert.ok(demo.files.some((file) => file.path === "Hackathon/Pitch.canvas"));
+  assert.ok(demo.files.some((file) => file.path === "Automations/Feedback intake.workflow.yaml"));
   assert.ok(demo.files.some((file) => file.path === "Data/sample.csv"));
   assert.ok(demo.files.some((file) => file.path === "Resources/mark.svg"));
   assert.ok(demo.directories.some((entry) => entry.path === "Inbox" && entry.purpose));
+  assert.ok(demo.directories.some((entry) => entry.path === "Engineering" && entry.purpose));
+  assert.ok(demo.directories.some((entry) => entry.path === "Operations" && entry.purpose));
 
   const source = emitDemoWorkspace(templates);
   assert.match(source, /export const demoSnapshot/);
@@ -316,7 +365,7 @@ test("demo template emits kitchen-sink browser fixture", () => {
   assert.match(source, /Projects\/Delivery\.data/);
   assert.match(source, /Data\/Metrics\.data/);
   assert.match(source, /OKRs\.data/);
-  assert.match(source, /"title": "First Look"/);
+  assert.match(source, /"title": "Lattice"/);
   assert.match(source, /"sourceTemplate": "demo"/);
   assert.match(source, /"id": "0198-demo"/);
   assert.match(source, /"id": "0198-demo-ada-lovelace"/);

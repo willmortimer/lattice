@@ -1,0 +1,38 @@
+format: lattice-workflow
+version: 1
+name: Feedback intake
+enabled: true
+trigger:
+  type: form.submitted
+  package: CRM/Feedback.data
+  form: FeedbackIntake
+steps:
+  - id: create-proposal
+    action: proposal.create
+    with:
+      summary: Create a governed feedback triage note
+      commands:
+        - type: page-create
+          path: Proposals/Feedback triage.md
+          content: |
+            ---
+            title: Feedback triage
+            ---
+
+            # Feedback triage
+
+            Proposed after a submission to
+            `CRM/Feedback.data → Forms → Feedback intake`.
+
+            ## Review
+
+            - Confirm the customer and source.
+            - Link the signal to `Product/Roadmap.data`.
+            - Decide whether it changes scope, priority, or documentation.
+            - Preserve the original structured record.
+      warnings:
+        - Demo proposal; review before applying.
+  - id: notify
+    action: notification
+    with:
+      message: Feedback intake is ready for triage

@@ -850,12 +850,12 @@ export const GENERATED_TEMPLATE_CATALOG = [
   {
     "id": "demo",
     "order": 60,
-    "name": "First Look",
+    "name": "Lattice — Building Lattice",
     "category": "Sample",
-    "description": "Kitchen-sink sample: CRM + Delivery + Metrics + OKRs data apps, Events.dataset + Orders.dataset + Places.dataset (DuckDB Parquet + Vega-Lite + MapLibre lon/lat), Contact intake workflow → proposal, AgentFirstLook inspect→propose seed, tasks + derived rebuild, canvas, notebooks, hybrid search try-queries, voice/Quick Note tips, daemon runtime diagram, templates, and assorted files.",
+    "description": "Lattice operating itself: product roadmap, engineering delivery and build analytics, hackathon launch planning, expenses and runway, CRM feedback, internal docs, canvases, notebooks, governed workflows, proposals, tasks, derived resources, voice, search, and the complete First Look feature lab.",
     "visibility": "sample",
     "recommended": false,
-    "recommendedTitle": "First Look",
+    "recommendedTitle": "Lattice",
     "directories": [
       {
         "path": "Inbox",
@@ -867,7 +867,35 @@ export const GENERATED_TEMPLATE_CATALOG = [
       },
       {
         "path": "Product",
-        "purpose": "Product narrative, vision, principles, and roadmap pages."
+        "purpose": "Roadmap, features, feedback, decisions, vision and release notes."
+      },
+      {
+        "path": "Engineering",
+        "purpose": "Issues, pull requests, releases, build analytics, architecture and repository context."
+      },
+      {
+        "path": "Engineering/Architecture",
+        "purpose": "Current implementation and system-boundary documentation."
+      },
+      {
+        "path": "Engineering/Dashboards",
+        "purpose": "Build and release visualizations bound to analytical datasets."
+      },
+      {
+        "path": "Hackathon",
+        "purpose": "Deliverables, sponsors, recording script and ordered pitch canvas."
+      },
+      {
+        "path": "Operations",
+        "purpose": "Expenses, vendors, budgets, revenue and runway documentation."
+      },
+      {
+        "path": "CRM",
+        "purpose": "Customer feedback intake and program documentation beside the relational CRM."
+      },
+      {
+        "path": "Docs",
+        "purpose": "Internal product documentation for the real Lattice application."
       },
       {
         "path": "Research",
@@ -924,6 +952,17 @@ export const GENERATED_TEMPLATE_CATALOG = [
     ],
     "preview": [
       "Home.md",
+      "Product/Roadmap.data",
+      "Engineering/Delivery.data",
+      "Engineering/Build Status.dataset",
+      "Engineering/Dashboards/Build duration by workflow.vl.json",
+      "Operations/Company.data",
+      "CRM/Feedback.data",
+      "Hackathon/Launch.data",
+      "Hackathon/Demo Script.md",
+      "Hackathon/Pitch.canvas",
+      "Docs/Product Overview.md",
+      "Engineering/Repository.md",
       "Research/Local Runtime.md",
       "Research/Agent first look.md",
       "Research/Long Read.md",
@@ -955,7 +994,9 @@ export const GENERATED_TEMPLATE_CATALOG = [
     "capabilities": [
       "pages",
       "canvas",
-      "sqlite"
+      "sqlite",
+      "parquet",
+      "jupyter"
     ],
     "workspaceDefaults": {
       "quickNoteDirectory": "Inbox",
@@ -1803,6 +1844,1681 @@ export const GENERATED_TEMPLATE_CATALOG = [
         "forms": [],
         "actions": [],
         "interfaces": []
+      },
+      {
+        "path": "Product/Roadmap.data",
+        "title": "Product roadmap",
+        "table": "roadmap",
+        "columns": [
+          {
+            "name": "name",
+            "type": "text"
+          },
+          {
+            "name": "area",
+            "type": "text"
+          },
+          {
+            "name": "status",
+            "type": "text"
+          },
+          {
+            "name": "owner",
+            "type": "text"
+          },
+          {
+            "name": "target",
+            "type": "date"
+          },
+          {
+            "name": "confidence",
+            "type": "decimal"
+          },
+          {
+            "name": "evidence",
+            "type": "long_text"
+          }
+        ],
+        "rows": [
+          {
+            "name": "Data applications vertical slice",
+            "area": "Data",
+            "status": "Shipped",
+            "owner": "Product data",
+            "target": "2026-07-12",
+            "confidence": 1,
+            "evidence": "SQLite packages, typed fields, relations, formulas, rollups, views, forms, actions and interfaces."
+          },
+          {
+            "name": "Local analytical workbench",
+            "area": "Analytics",
+            "status": "Shipped",
+            "owner": "Analytics",
+            "target": "2026-07-18",
+            "confidence": 1,
+            "evidence": "Local Hive Parquet, DuckDB, bounded Arrow IPC, Perspective, Vega-Lite, Profile, Plan, Cancel and point Map."
+          },
+          {
+            "name": "Governed automation loop",
+            "area": "Automation",
+            "status": "Shipped",
+            "owner": "Runtime",
+            "target": "2026-07-21",
+            "confidence": 0.95,
+            "evidence": "Form event, workflow, task, proposal, approval, derived resource and undo."
+          },
+          {
+            "name": "Embedded agent Phase A",
+            "area": "Agents",
+            "status": "Experimental",
+            "owner": "Agent platform",
+            "target": "2026-07-24",
+            "confidence": 0.75,
+            "evidence": "Tracked main includes sidecar supervision, fake-provider verification, Tauri streaming transport and an assistant panel."
+          },
+          {
+            "name": "GitHub connected repository",
+            "area": "Connectors",
+            "status": "In progress",
+            "owner": "Connectors",
+            "target": "2026-07-27",
+            "confidence": 0.7,
+            "evidence": "Read-only owned-repository extract; issues, pull requests and writeback remain later depth."
+          },
+          {
+            "name": "Remote Parquet on R2",
+            "area": "Analytics",
+            "status": "Planned",
+            "owner": "Analytics",
+            "target": "2026-08-08",
+            "confidence": 0.55,
+            "evidence": "Requires explicit network capability, secret broker, httpfs packaging, streaming batches, progress and cache policy."
+          },
+          {
+            "name": "Presentation and publishing",
+            "area": "Publishing",
+            "status": "Planned",
+            "owner": "Product",
+            "target": "2026-08-20",
+            "confidence": 0.45,
+            "evidence": "Current demo uses ordered canvas states; full presentation bookmarks, .show resources and connected publishing remain future work."
+          }
+        ],
+        "extraTables": [
+          {
+            "table": "features",
+            "columns": [
+              {
+                "name": "name",
+                "type": "text"
+              },
+              {
+                "name": "category",
+                "type": "text"
+              },
+              {
+                "name": "maturity",
+                "type": "text"
+              },
+              {
+                "name": "surface",
+                "type": "text"
+              },
+              {
+                "name": "notes",
+                "type": "long_text"
+              }
+            ],
+            "rows": [
+              {
+                "name": "Interface component builder",
+                "category": "Data apps",
+                "maturity": "Demo ready",
+                "surface": "Native desktop",
+                "notes": "Insert, bind and remove dashboard components without a full drag-layout IDE."
+              },
+              {
+                "name": "Attachment lifecycle",
+                "category": "Data apps",
+                "maturity": "Demo ready",
+                "surface": "Native desktop + CLI",
+                "notes": "Staging, commit, inventory, orphan cleanup and age-based staging cleanup."
+              },
+              {
+                "name": "Closed-desktop schedule registry",
+                "category": "Automation",
+                "maturity": "Demo ready",
+                "surface": "latticed",
+                "notes": "Known-workspace registry supports durable schedule discovery."
+              },
+              {
+                "name": "Connected GitHub roots",
+                "category": "Connectors",
+                "maturity": "In progress",
+                "surface": "Desktop",
+                "notes": "Authentication and read-only repository extraction are explicit; never seed credentials."
+              },
+              {
+                "name": "Cloud share and publish APIs",
+                "category": "Cloud",
+                "maturity": "Experimental",
+                "surface": "lattice-server",
+                "notes": "Tracked main contains backend APIs and OAuth discovery; the fixture does not imply production hosting."
+              }
+            ]
+          },
+          {
+            "table": "feedback",
+            "columns": [
+              {
+                "name": "name",
+                "type": "text"
+              },
+              {
+                "name": "segment",
+                "type": "text"
+              },
+              {
+                "name": "theme",
+                "type": "text"
+              },
+              {
+                "name": "priority",
+                "type": "text"
+              },
+              {
+                "name": "notes",
+                "type": "long_text"
+              }
+            ],
+            "rows": [
+              {
+                "name": "Show the underlying query plan",
+                "segment": "Data team",
+                "theme": "Trust",
+                "priority": "High",
+                "notes": "Profile and Plan now make the analytical path inspectable."
+              },
+              {
+                "name": "Keep the first screen quiet",
+                "segment": "Student",
+                "theme": "Progressive disclosure",
+                "priority": "High",
+                "notes": "Advanced capabilities should remain contextual."
+              },
+              {
+                "name": "Let agents propose, not silently rewrite",
+                "segment": "Engineering",
+                "theme": "Governance",
+                "priority": "Critical",
+                "notes": "Proposal review is shared by tasks, workflows and MCP."
+              },
+              {
+                "name": "Connect the actual repository",
+                "segment": "Founder",
+                "theme": "Connectors",
+                "priority": "Medium",
+                "notes": "Read-only connected roots come before issue and pull-request writeback."
+              }
+            ]
+          },
+          {
+            "table": "decisions",
+            "columns": [
+              {
+                "name": "name",
+                "type": "text"
+              },
+              {
+                "name": "status",
+                "type": "text"
+              },
+              {
+                "name": "decided_on",
+                "type": "date"
+              },
+              {
+                "name": "rationale",
+                "type": "long_text"
+              }
+            ],
+            "rows": [
+              {
+                "name": "Arrow-native data boundaries",
+                "status": "Accepted",
+                "decided_on": "2026-07-08",
+                "rationale": "Large data crosses process boundaries in bounded columnar representations."
+              },
+              {
+                "name": "Declarative staged templates",
+                "status": "Accepted",
+                "decided_on": "2026-07-10",
+                "rationale": "Templates provision once and never retain ownership of user content."
+              },
+              {
+                "name": "GitHub roots are read-only extracts",
+                "status": "Accepted",
+                "decided_on": "2026-07-24",
+                "rationale": "The owned Git repository remains authoritative while Lattice provides indexed context."
+              }
+            ]
+          }
+        ],
+        "views": [
+          {
+            "name": "Board",
+            "layout": "board",
+            "group_by": "status",
+            "columns": [
+              "name",
+              "area",
+              "owner",
+              "status"
+            ]
+          },
+          {
+            "name": "Calendar",
+            "layout": "calendar",
+            "date_field": "target",
+            "columns": []
+          },
+          {
+            "name": "Form",
+            "layout": "form",
+            "columns": []
+          }
+        ],
+        "forms": [
+          {
+            "name": "RoadmapIntake",
+            "table": "roadmap",
+            "fields": [
+              "name",
+              "area",
+              "status",
+              "owner",
+              "target",
+              "confidence",
+              "evidence"
+            ],
+            "title": "Roadmap intake",
+            "description": "Propose a structured roadmap item."
+          }
+        ],
+        "actions": [
+          {
+            "name": "OpenRoadmapIntake",
+            "label": "Add roadmap item",
+            "table": "roadmap",
+            "scope": "toolbar",
+            "action": {
+              "type": "insert_record",
+              "form": "RoadmapIntake"
+            }
+          }
+        ],
+        "interfaces": [
+          {
+            "name": "ProductPulse",
+            "views": [
+              "Board"
+            ],
+            "forms": [
+              "RoadmapIntake"
+            ],
+            "title": "Product pulse",
+            "description": "Roadmap state, feature maturity, customer feedback and accepted decisions.",
+            "layoutColumns": 12,
+            "components": [
+              {
+                "id": "shipped_count",
+                "type": "metric",
+                "span": 3,
+                "title": "Shipped roadmap items",
+                "binding": {
+                  "type": "sqlite-query",
+                  "resource": ".",
+                  "sql": "SELECT COUNT(*) AS value FROM roadmap WHERE status = 'Shipped'",
+                  "limit": 1
+                }
+              },
+              {
+                "id": "open_feedback",
+                "type": "metric",
+                "span": 3,
+                "title": "High-priority signals",
+                "binding": {
+                  "type": "sqlite-query",
+                  "resource": ".",
+                  "sql": "SELECT COUNT(*) AS value FROM feedback WHERE priority IN ('High', 'Critical')",
+                  "limit": 1
+                }
+              },
+              {
+                "id": "accepted_decisions",
+                "type": "metric",
+                "span": 3,
+                "title": "Accepted decisions",
+                "binding": {
+                  "type": "sqlite-query",
+                  "resource": ".",
+                  "sql": "SELECT COUNT(*) AS value FROM decisions WHERE status = 'Accepted'",
+                  "limit": 1
+                }
+              },
+              {
+                "id": "roadmap_board",
+                "type": "data-view",
+                "span": 8,
+                "title": "Roadmap",
+                "binding": {
+                  "type": "saved-view",
+                  "resource": ".",
+                  "view": "Board"
+                }
+              },
+              {
+                "id": "roadmap_intake",
+                "type": "form",
+                "span": 4,
+                "binding": {
+                  "type": "resource",
+                  "resource": "."
+                },
+                "form": "RoadmapIntake"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "path": "Engineering/Delivery.data",
+        "title": "Engineering delivery",
+        "table": "issues",
+        "columns": [
+          {
+            "name": "name",
+            "type": "text"
+          },
+          {
+            "name": "area",
+            "type": "text"
+          },
+          {
+            "name": "status",
+            "type": "text"
+          },
+          {
+            "name": "priority",
+            "type": "text"
+          },
+          {
+            "name": "owner",
+            "type": "text"
+          },
+          {
+            "name": "due",
+            "type": "date"
+          },
+          {
+            "name": "notes",
+            "type": "long_text"
+          }
+        ],
+        "rows": [
+          {
+            "name": "Package httpfs for governed remote Parquet",
+            "area": "Analytics",
+            "status": "Backlog",
+            "priority": "High",
+            "owner": "Analytics",
+            "due": "2026-08-04",
+            "notes": "Add explicit network capability, secret lookup, host allowlist, cancellation and cache policy."
+          },
+          {
+            "name": "Stream Arrow record batches over daemon IPC",
+            "area": "Runtime",
+            "status": "Backlog",
+            "priority": "High",
+            "owner": "Runtime",
+            "due": "2026-08-07",
+            "notes": "Current transport is bounded Arrow IPC from a collected result."
+          },
+          {
+            "name": "Seed attachment fields in workspace templates",
+            "area": "Data apps",
+            "status": "Ready",
+            "priority": "Medium",
+            "owner": "Data",
+            "due": "2026-07-30",
+            "notes": "Runtime attachment staging works; declarative template seeds still reject attachment columns."
+          },
+          {
+            "name": "GitHub read-only connected root",
+            "area": "Connectors",
+            "status": "In progress",
+            "priority": "High",
+            "owner": "Connectors",
+            "due": "2026-07-27",
+            "notes": "Bind an owned repo, refresh a shallow extract and browse files without mutating the Git checkout."
+          },
+          {
+            "name": "Embedded agent Phase B tools",
+            "area": "Agents",
+            "status": "Ready",
+            "priority": "Medium",
+            "owner": "Agent platform",
+            "due": "2026-08-01",
+            "notes": "Phase A proves lifecycle and streaming; tool authority must remain capability-scoped."
+          },
+          {
+            "name": "Presentation bookmarks and ordered scenes",
+            "area": "Publishing",
+            "status": "Backlog",
+            "priority": "Medium",
+            "owner": "Product",
+            "due": "2026-08-18",
+            "notes": "Hackathon/Pitch.canvas is the current honest fallback."
+          },
+          {
+            "name": "First Look company fixture",
+            "area": "Demo",
+            "status": "In review",
+            "priority": "Critical",
+            "owner": "Product",
+            "due": "2026-07-24",
+            "notes": "Lattice uses Lattice for roadmap, delivery, analytics, operations, CRM, docs and demo preparation."
+          }
+        ],
+        "extraTables": [
+          {
+            "table": "pull_requests",
+            "columns": [
+              {
+                "name": "name",
+                "type": "text"
+              },
+              {
+                "name": "number",
+                "type": "integer"
+              },
+              {
+                "name": "author",
+                "type": "text"
+              },
+              {
+                "name": "status",
+                "type": "text"
+              },
+              {
+                "name": "merged_on",
+                "type": "date"
+              },
+              {
+                "name": "summary",
+                "type": "long_text"
+              }
+            ],
+            "rows": [
+              {
+                "name": "Hackathon interface refresh",
+                "number": 184,
+                "author": "runtime",
+                "status": "Merged",
+                "merged_on": "2026-07-21",
+                "summary": "Embedded form submit refreshes sibling data views."
+              },
+              {
+                "name": "Themed analytical surfaces",
+                "number": 189,
+                "author": "desktop",
+                "status": "Merged",
+                "merged_on": "2026-07-23",
+                "summary": "Perspective, chart, map and resource chrome align with semantic theme tokens."
+              },
+              {
+                "name": "Embedded agent Phase A",
+                "number": 193,
+                "author": "agents",
+                "status": "Merged",
+                "merged_on": "2026-07-24",
+                "summary": "Sidecar lifecycle, fake provider, daemon RPC, Tauri channel and assistant panel."
+              },
+              {
+                "name": "GitHub connected roots",
+                "number": 196,
+                "author": "connectors",
+                "status": "Draft",
+                "merged_on": null,
+                "summary": "Read-only owned-repository extraction and desktop browsing."
+              }
+            ]
+          },
+          {
+            "table": "releases",
+            "columns": [
+              {
+                "name": "name",
+                "type": "text"
+              },
+              {
+                "name": "channel",
+                "type": "text"
+              },
+              {
+                "name": "status",
+                "type": "text"
+              },
+              {
+                "name": "released_on",
+                "type": "date"
+              },
+              {
+                "name": "notes",
+                "type": "long_text"
+              }
+            ],
+            "rows": [
+              {
+                "name": "Hackathon preview",
+                "channel": "Internal",
+                "status": "Ready",
+                "released_on": "2026-07-24",
+                "notes": "Local desktop, First Look fixture and deterministic recording path."
+              },
+              {
+                "name": "Connected workspace preview",
+                "channel": "Internal",
+                "status": "Preparing",
+                "released_on": "2026-07-27",
+                "notes": "Adds explicit GitHub connected-root setup."
+              },
+              {
+                "name": "Remote analytics preview",
+                "channel": "Experimental",
+                "status": "Planned",
+                "released_on": null,
+                "notes": "Remote Parquet, streaming Arrow batches and visible scan metrics."
+              }
+            ]
+          }
+        ],
+        "views": [
+          {
+            "name": "Board",
+            "layout": "board",
+            "group_by": "status",
+            "columns": [
+              "name",
+              "area",
+              "priority",
+              "owner",
+              "status"
+            ]
+          },
+          {
+            "name": "Calendar",
+            "layout": "calendar",
+            "date_field": "due",
+            "columns": []
+          },
+          {
+            "name": "Form",
+            "layout": "form",
+            "columns": []
+          }
+        ],
+        "forms": [
+          {
+            "name": "IssueIntake",
+            "table": "issues",
+            "fields": [
+              "name",
+              "area",
+              "status",
+              "priority",
+              "owner",
+              "due",
+              "notes"
+            ],
+            "title": "Engineering issue",
+            "description": "Capture a scoped engineering issue."
+          }
+        ],
+        "actions": [
+          {
+            "name": "OpenIssueIntake",
+            "label": "Add engineering issue",
+            "table": "issues",
+            "scope": "toolbar",
+            "action": {
+              "type": "insert_record",
+              "form": "IssueIntake"
+            }
+          }
+        ],
+        "interfaces": [
+          {
+            "name": "ReleaseRoom",
+            "views": [
+              "Board"
+            ],
+            "forms": [
+              "IssueIntake"
+            ],
+            "title": "Release room",
+            "description": "Issues, pull requests, release state and CI duration from the Build Status dataset.",
+            "layoutColumns": 12,
+            "components": [
+              {
+                "id": "open_issues",
+                "type": "metric",
+                "span": 3,
+                "title": "Open engineering issues",
+                "binding": {
+                  "type": "sqlite-query",
+                  "resource": ".",
+                  "sql": "SELECT COUNT(*) AS value FROM issues WHERE status NOT IN ('Done', 'Closed')",
+                  "limit": 1
+                }
+              },
+              {
+                "id": "merged_prs",
+                "type": "metric",
+                "span": 3,
+                "title": "Merged pull requests",
+                "binding": {
+                  "type": "sqlite-query",
+                  "resource": ".",
+                  "sql": "SELECT COUNT(*) AS value FROM pull_requests WHERE status = 'Merged'",
+                  "limit": 1
+                }
+              },
+              {
+                "id": "build_chart",
+                "type": "chart",
+                "span": 6,
+                "title": "Build duration",
+                "binding": {
+                  "type": "duckdb-query",
+                  "resources": [
+                    "Engineering/Build Status.dataset"
+                  ],
+                  "sql": "SELECT workflow, outcome, round(avg(duration_seconds), 1) AS avg_duration_seconds, count(*) AS runs FROM read_parquet('Engineering/Build Status.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true) GROUP BY workflow, outcome ORDER BY workflow, outcome",
+                  "limit": 100
+                },
+                "chart": "Engineering/Dashboards/Build duration by workflow.vl.json"
+              },
+              {
+                "id": "issue_board",
+                "type": "data-view",
+                "span": 8,
+                "title": "Engineering board",
+                "binding": {
+                  "type": "saved-view",
+                  "resource": ".",
+                  "view": "Board"
+                }
+              },
+              {
+                "id": "issue_intake",
+                "type": "form",
+                "span": 4,
+                "binding": {
+                  "type": "resource",
+                  "resource": "."
+                },
+                "form": "IssueIntake"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "path": "Hackathon/Launch.data",
+        "title": "Hackathon launch",
+        "table": "deliverables",
+        "columns": [
+          {
+            "name": "name",
+            "type": "text"
+          },
+          {
+            "name": "workstream",
+            "type": "text"
+          },
+          {
+            "name": "owner",
+            "type": "text"
+          },
+          {
+            "name": "status",
+            "type": "text"
+          },
+          {
+            "name": "due",
+            "type": "date"
+          },
+          {
+            "name": "demo_risk",
+            "type": "text"
+          },
+          {
+            "name": "notes",
+            "type": "long_text"
+          }
+        ],
+        "rows": [
+          {
+            "name": "Lattice company workspace",
+            "workstream": "Fixture",
+            "owner": "Product",
+            "status": "In review",
+            "due": "2026-07-24",
+            "demo_risk": "Low",
+            "notes": "Product, engineering, operations, CRM, docs and feature-lab paths."
+          },
+          {
+            "name": "Five-minute screen recording",
+            "workstream": "Story",
+            "owner": "Demo",
+            "status": "Ready",
+            "due": "2026-07-25",
+            "demo_risk": "Medium",
+            "notes": "Use the deterministic local path; connect GitHub only when auth is warm."
+          },
+          {
+            "name": "Build analytics rehearsal",
+            "workstream": "Analytics",
+            "owner": "Engineering",
+            "status": "Ready",
+            "due": "2026-07-24",
+            "demo_risk": "Low",
+            "notes": "Preview, Chart, Profile and Plan over Build Status.dataset."
+          },
+          {
+            "name": "Expense intake rehearsal",
+            "workstream": "Operations",
+            "owner": "Operations",
+            "status": "Ready",
+            "due": "2026-07-24",
+            "demo_risk": "Low",
+            "notes": "Submit a synthetic expense and show spend refresh."
+          },
+          {
+            "name": "Feedback proposal rehearsal",
+            "workstream": "Automation",
+            "owner": "Runtime",
+            "status": "Ready",
+            "due": "2026-07-24",
+            "demo_risk": "Low",
+            "notes": "Form submit → workflow → proposal → approve."
+          },
+          {
+            "name": "Connected repository segment",
+            "workstream": "Connector",
+            "owner": "Engineering",
+            "status": "Optional",
+            "due": "2026-07-25",
+            "demo_risk": "High",
+            "notes": "Requires authenticated GitHub setup; local fallback is documented."
+          },
+          {
+            "name": "Pitch canvas close",
+            "workstream": "Story",
+            "owner": "Demo",
+            "status": "Ready",
+            "due": "2026-07-25",
+            "demo_risk": "Low",
+            "notes": "Use Hackathon/Pitch.canvas; do not claim a shipped .show format."
+          }
+        ],
+        "extraTables": [
+          {
+            "table": "sponsors",
+            "columns": [
+              {
+                "name": "name",
+                "type": "text"
+              },
+              {
+                "name": "category",
+                "type": "text"
+              },
+              {
+                "name": "contact",
+                "type": "text"
+              },
+              {
+                "name": "status",
+                "type": "text"
+              },
+              {
+                "name": "deliverable",
+                "type": "text"
+              },
+              {
+                "name": "notes",
+                "type": "long_text"
+              }
+            ],
+            "rows": [
+              {
+                "name": "Cloudflare",
+                "category": "Platform",
+                "contact": "Hackathon program",
+                "status": "Confirmed",
+                "deliverable": "R2 analytical architecture and future remote-data path",
+                "notes": "Current fixture stays local and explicitly labels R2 as a next step."
+              },
+              {
+                "name": "Open data community",
+                "category": "Data",
+                "contact": "Public datasets",
+                "status": "Research",
+                "deliverable": "Synthetic and openly licensed analytical sources",
+                "notes": "Pin versions and preserve provenance."
+              },
+              {
+                "name": "Lattice",
+                "category": "Product",
+                "contact": "Internal",
+                "status": "Confirmed",
+                "deliverable": "Open local-first compound workspace",
+                "notes": "The product is the demo subject and the demo tool."
+              }
+            ]
+          }
+        ],
+        "views": [
+          {
+            "name": "Board",
+            "layout": "board",
+            "group_by": "status",
+            "columns": [
+              "name",
+              "workstream",
+              "owner",
+              "demo_risk",
+              "status"
+            ]
+          },
+          {
+            "name": "Calendar",
+            "layout": "calendar",
+            "date_field": "due",
+            "columns": []
+          },
+          {
+            "name": "Form",
+            "layout": "form",
+            "columns": []
+          }
+        ],
+        "forms": [
+          {
+            "name": "DeliverableIntake",
+            "table": "deliverables",
+            "fields": [
+              "name",
+              "workstream",
+              "owner",
+              "status",
+              "due",
+              "demo_risk",
+              "notes"
+            ],
+            "title": "Hackathon deliverable",
+            "description": "Add or rehearse a launch deliverable."
+          }
+        ],
+        "actions": [],
+        "interfaces": [
+          {
+            "name": "LaunchRoom",
+            "views": [
+              "Board"
+            ],
+            "forms": [
+              "DeliverableIntake"
+            ],
+            "title": "Hackathon launch room",
+            "description": "Deliverables, sponsor context and the next launch action.",
+            "layoutColumns": 12,
+            "components": [
+              {
+                "id": "ready_deliverables",
+                "type": "metric",
+                "span": 3,
+                "title": "Ready deliverables",
+                "binding": {
+                  "type": "sqlite-query",
+                  "resource": ".",
+                  "sql": "SELECT COUNT(*) AS value FROM deliverables WHERE status = 'Ready'",
+                  "limit": 1
+                }
+              },
+              {
+                "id": "high_risk",
+                "type": "metric",
+                "span": 3,
+                "title": "High-risk segments",
+                "binding": {
+                  "type": "sqlite-query",
+                  "resource": ".",
+                  "sql": "SELECT COUNT(*) AS value FROM deliverables WHERE demo_risk = 'High'",
+                  "limit": 1
+                }
+              },
+              {
+                "id": "launch_board",
+                "type": "data-view",
+                "span": 8,
+                "title": "Launch board",
+                "binding": {
+                  "type": "saved-view",
+                  "resource": ".",
+                  "view": "Board"
+                }
+              },
+              {
+                "id": "deliverable_intake",
+                "type": "form",
+                "span": 4,
+                "binding": {
+                  "type": "resource",
+                  "resource": "."
+                },
+                "form": "DeliverableIntake"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "path": "Operations/Company.data",
+        "title": "Company operations",
+        "table": "expenses",
+        "columns": [
+          {
+            "name": "name",
+            "type": "text"
+          },
+          {
+            "name": "vendor",
+            "type": "relation",
+            "relation_table": "vendors"
+          },
+          {
+            "name": "department",
+            "type": "text"
+          },
+          {
+            "name": "project",
+            "type": "text"
+          },
+          {
+            "name": "subtotal",
+            "type": "decimal"
+          },
+          {
+            "name": "tax",
+            "type": "decimal"
+          },
+          {
+            "name": "total",
+            "type": "decimal"
+          },
+          {
+            "name": "incurred_on",
+            "type": "date"
+          },
+          {
+            "name": "status",
+            "type": "text"
+          },
+          {
+            "name": "receipt_path",
+            "type": "text"
+          },
+          {
+            "name": "notes",
+            "type": "long_text"
+          }
+        ],
+        "rows": [
+          {
+            "name": "Mac mini CI runner",
+            "vendor": [
+              "Apple"
+            ],
+            "department": "Engineering",
+            "project": "Build infrastructure",
+            "subtotal": 599,
+            "tax": 58.4,
+            "incurred_on": "2026-07-02",
+            "status": "Approved",
+            "receipt_path": "Operations/Receipts/mac-mini-ci.pdf",
+            "notes": "Synthetic fixture record; receipt path is illustrative until attachment columns are seedable.",
+            "total": 657.4
+          },
+          {
+            "name": "R2 analytics pilot",
+            "vendor": [
+              "Cloudflare"
+            ],
+            "department": "Engineering",
+            "project": "Remote analytics",
+            "subtotal": 62.4,
+            "tax": 0,
+            "incurred_on": "2026-07-05",
+            "status": "Approved",
+            "receipt_path": "Operations/Receipts/r2-pilot.pdf",
+            "notes": "Synthetic object-storage and operations spend.",
+            "total": 62.4
+          },
+          {
+            "name": "Design review session",
+            "vendor": [
+              "Quiet Signal Studio"
+            ],
+            "department": "Product",
+            "project": "Desktop polish",
+            "subtotal": 1200,
+            "tax": 0,
+            "incurred_on": "2026-07-08",
+            "status": "Paid",
+            "receipt_path": "Operations/Receipts/design-review.pdf",
+            "notes": "External design-review fixture.",
+            "total": 1200
+          },
+          {
+            "name": "Hackathon travel",
+            "vendor": [
+              "North Coast Air"
+            ],
+            "department": "Go to market",
+            "project": "Hackathon",
+            "subtotal": 486,
+            "tax": 41.25,
+            "incurred_on": "2026-07-16",
+            "status": "Submitted",
+            "receipt_path": "Operations/Receipts/hackathon-travel.pdf",
+            "notes": "Submit through Expense intake during the recording.",
+            "total": 527.25
+          },
+          {
+            "name": "Domain renewal",
+            "vendor": [
+              "Name Registry"
+            ],
+            "department": "Operations",
+            "project": "Company",
+            "subtotal": 18,
+            "tax": 0,
+            "incurred_on": "2026-07-20",
+            "status": "Approved",
+            "receipt_path": "Operations/Receipts/domain.pdf",
+            "notes": "Annual domain renewal.",
+            "total": 18
+          },
+          {
+            "name": "Demo microphone",
+            "vendor": [
+              "Signal Supply"
+            ],
+            "department": "Product",
+            "project": "Hackathon",
+            "subtotal": 149,
+            "tax": 14.53,
+            "incurred_on": "2026-07-22",
+            "status": "Needs review",
+            "receipt_path": "Operations/Receipts/microphone.pdf",
+            "notes": "Useful example for approval state.",
+            "total": 163.53
+          }
+        ],
+        "extraTables": [
+          {
+            "table": "vendors",
+            "columns": [
+              {
+                "name": "name",
+                "type": "text"
+              },
+              {
+                "name": "category",
+                "type": "text"
+              },
+              {
+                "name": "renewal_on",
+                "type": "date"
+              },
+              {
+                "name": "monthly_commitment",
+                "type": "decimal"
+              },
+              {
+                "name": "owner",
+                "type": "text"
+              }
+            ],
+            "rows": [
+              {
+                "name": "Apple",
+                "category": "Hardware",
+                "renewal_on": null,
+                "monthly_commitment": 0,
+                "owner": "Engineering"
+              },
+              {
+                "name": "Cloudflare",
+                "category": "Infrastructure",
+                "renewal_on": "2026-08-05",
+                "monthly_commitment": 62.4,
+                "owner": "Engineering"
+              },
+              {
+                "name": "Quiet Signal Studio",
+                "category": "Professional services",
+                "renewal_on": null,
+                "monthly_commitment": 0,
+                "owner": "Product"
+              },
+              {
+                "name": "North Coast Air",
+                "category": "Travel",
+                "renewal_on": null,
+                "monthly_commitment": 0,
+                "owner": "Operations"
+              },
+              {
+                "name": "Name Registry",
+                "category": "Domains",
+                "renewal_on": "2027-07-20",
+                "monthly_commitment": 1.5,
+                "owner": "Operations"
+              },
+              {
+                "name": "Signal Supply",
+                "category": "Equipment",
+                "renewal_on": null,
+                "monthly_commitment": 0,
+                "owner": "Product"
+              }
+            ]
+          },
+          {
+            "table": "budgets",
+            "columns": [
+              {
+                "name": "name",
+                "type": "text"
+              },
+              {
+                "name": "planned",
+                "type": "decimal"
+              },
+              {
+                "name": "actual",
+                "type": "decimal"
+              },
+              {
+                "name": "variance",
+                "type": "decimal"
+              },
+              {
+                "name": "status",
+                "type": "text"
+              }
+            ],
+            "rows": [
+              {
+                "name": "Engineering",
+                "planned": 6500,
+                "actual": 3830,
+                "status": "On track",
+                "variance": 2670
+              },
+              {
+                "name": "Product",
+                "planned": 4200,
+                "actual": 3014,
+                "status": "On track",
+                "variance": 1186
+              },
+              {
+                "name": "Go to market",
+                "planned": 3000,
+                "actual": 2468,
+                "status": "Watch",
+                "variance": 532
+              },
+              {
+                "name": "Operations",
+                "planned": 1800,
+                "actual": 1042,
+                "status": "On track",
+                "variance": 758
+              }
+            ]
+          },
+          {
+            "table": "revenue",
+            "columns": [
+              {
+                "name": "name",
+                "type": "text"
+              },
+              {
+                "name": "recurring",
+                "type": "decimal"
+              },
+              {
+                "name": "services",
+                "type": "decimal"
+              },
+              {
+                "name": "total",
+                "type": "decimal"
+              },
+              {
+                "name": "closed_on",
+                "type": "date"
+              },
+              {
+                "name": "notes",
+                "type": "long_text"
+              }
+            ],
+            "rows": [
+              {
+                "name": "2026-05",
+                "recurring": 8200,
+                "services": 1800,
+                "closed_on": "2026-05-31",
+                "notes": "Synthetic internal revenue.",
+                "total": 10000
+              },
+              {
+                "name": "2026-06",
+                "recurring": 9600,
+                "services": 2400,
+                "closed_on": "2026-06-30",
+                "notes": "Synthetic internal revenue.",
+                "total": 12000
+              },
+              {
+                "name": "2026-07",
+                "recurring": 11800,
+                "services": 3200,
+                "closed_on": "2026-07-24",
+                "notes": "Month-to-date synthetic internal revenue.",
+                "total": 15000
+              }
+            ]
+          }
+        ],
+        "views": [
+          {
+            "name": "Board",
+            "layout": "board",
+            "group_by": "status",
+            "columns": [
+              "name",
+              "department",
+              "project",
+              "total",
+              "status"
+            ]
+          },
+          {
+            "name": "Calendar",
+            "layout": "calendar",
+            "date_field": "incurred_on",
+            "columns": []
+          },
+          {
+            "name": "Form",
+            "layout": "form",
+            "columns": []
+          }
+        ],
+        "forms": [
+          {
+            "name": "ExpenseIntake",
+            "table": "expenses",
+            "fields": [
+              "name",
+              "vendor",
+              "department",
+              "project",
+              "subtotal",
+              "tax",
+              "incurred_on",
+              "status",
+              "receipt_path",
+              "notes"
+            ],
+            "title": "Expense intake",
+            "description": "Create a typed operational expense. Attachment seed support remains a separate follow-up."
+          }
+        ],
+        "actions": [
+          {
+            "name": "OpenExpenseIntake",
+            "label": "Add expense",
+            "table": "expenses",
+            "scope": "toolbar",
+            "action": {
+              "type": "insert_record",
+              "form": "ExpenseIntake"
+            }
+          }
+        ],
+        "interfaces": [
+          {
+            "name": "RunwayDashboard",
+            "views": [
+              "Board"
+            ],
+            "forms": [
+              "ExpenseIntake"
+            ],
+            "title": "Runway dashboard",
+            "description": "Synthetic revenue, spend, operating result and an embedded expense workflow.",
+            "layoutColumns": 12,
+            "components": [
+              {
+                "id": "revenue_mtd",
+                "type": "metric",
+                "span": 3,
+                "title": "July revenue",
+                "binding": {
+                  "type": "sqlite-query",
+                  "resource": ".",
+                  "sql": "SELECT COALESCE(SUM(recurring + services), 0) AS value FROM revenue WHERE name = '2026-07'",
+                  "limit": 1
+                }
+              },
+              {
+                "id": "spend_mtd",
+                "type": "metric",
+                "span": 3,
+                "title": "July recorded spend",
+                "binding": {
+                  "type": "sqlite-query",
+                  "resource": ".",
+                  "sql": "SELECT COALESCE(SUM(subtotal + tax), 0) AS value FROM expenses WHERE incurred_on >= '2026-07-01'",
+                  "limit": 1
+                }
+              },
+              {
+                "id": "operating_result",
+                "type": "metric",
+                "span": 3,
+                "title": "July operating result",
+                "binding": {
+                  "type": "sqlite-query",
+                  "resource": ".",
+                  "sql": "SELECT (SELECT COALESCE(SUM(recurring + services), 0) FROM revenue WHERE name = '2026-07') - (SELECT COALESCE(SUM(subtotal + tax), 0) FROM expenses WHERE incurred_on >= '2026-07-01') AS value",
+                  "limit": 1
+                }
+              },
+              {
+                "id": "expense_board",
+                "type": "data-view",
+                "span": 8,
+                "title": "Expense approval",
+                "binding": {
+                  "type": "saved-view",
+                  "resource": ".",
+                  "view": "Board"
+                }
+              },
+              {
+                "id": "expense_intake",
+                "type": "form",
+                "span": 4,
+                "binding": {
+                  "type": "resource",
+                  "resource": "."
+                },
+                "form": "ExpenseIntake"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "path": "CRM/Feedback.data",
+        "title": "Customer feedback",
+        "table": "feedback",
+        "columns": [
+          {
+            "name": "name",
+            "type": "text"
+          },
+          {
+            "name": "company",
+            "type": "text"
+          },
+          {
+            "name": "source",
+            "type": "text"
+          },
+          {
+            "name": "theme",
+            "type": "text"
+          },
+          {
+            "name": "priority",
+            "type": "text"
+          },
+          {
+            "name": "status",
+            "type": "text"
+          },
+          {
+            "name": "owner",
+            "type": "text"
+          },
+          {
+            "name": "received_on",
+            "type": "date"
+          },
+          {
+            "name": "notes",
+            "type": "long_text"
+          }
+        ],
+        "rows": [
+          {
+            "name": "Show exactly what an agent changed",
+            "company": "Northwind Research",
+            "source": "Design partner",
+            "theme": "Governance",
+            "priority": "Critical",
+            "status": "Planned",
+            "owner": "Runtime",
+            "received_on": "2026-07-03",
+            "notes": "Proposal review should show format-aware effects rather than a generic file count."
+          },
+          {
+            "name": "Keep tables fast beyond SaaS limits",
+            "company": "Atlas Field Labs",
+            "source": "Interview",
+            "theme": "Analytics",
+            "priority": "High",
+            "status": "Shipped",
+            "owner": "Analytics",
+            "received_on": "2026-07-07",
+            "notes": "Local Parquet + DuckDB + Arrow vertical slice now demonstrates the architecture."
+          },
+          {
+            "name": "Open the same files in VS Code",
+            "company": "Quiet Systems",
+            "source": "Demo",
+            "theme": "Open formats",
+            "priority": "High",
+            "status": "Shipped",
+            "owner": "Core",
+            "received_on": "2026-07-09",
+            "notes": "Canonical content remains inspectable in a normal workspace directory."
+          },
+          {
+            "name": "Connect our GitHub repository",
+            "company": "Sable Software",
+            "source": "CRM",
+            "theme": "Connectors",
+            "priority": "High",
+            "status": "In progress",
+            "owner": "Connectors",
+            "received_on": "2026-07-17",
+            "notes": "Start read-only; add issue and pull-request depth later."
+          },
+          {
+            "name": "Use a form without leaving the dashboard",
+            "company": "Orbit Works",
+            "source": "Usability test",
+            "theme": "Data apps",
+            "priority": "Medium",
+            "status": "Shipped",
+            "owner": "Desktop",
+            "received_on": "2026-07-20",
+            "notes": "Embedded form submit refreshes sibling data views."
+          },
+          {
+            "name": "Publish the final report interactively",
+            "company": "Morrow Education",
+            "source": "Interview",
+            "theme": "Publishing",
+            "priority": "Medium",
+            "status": "Backlog",
+            "owner": "Publishing",
+            "received_on": "2026-07-22",
+            "notes": "Apps and connected publishing remain later roadmap phases."
+          }
+        ],
+        "extraTables": [],
+        "views": [
+          {
+            "name": "Board",
+            "layout": "board",
+            "group_by": "status",
+            "columns": [
+              "name",
+              "company",
+              "theme",
+              "priority",
+              "owner",
+              "status"
+            ]
+          },
+          {
+            "name": "Calendar",
+            "layout": "calendar",
+            "date_field": "received_on",
+            "columns": []
+          },
+          {
+            "name": "Form",
+            "layout": "form",
+            "columns": []
+          }
+        ],
+        "forms": [
+          {
+            "name": "FeedbackIntake",
+            "table": "feedback",
+            "fields": [
+              "name",
+              "company",
+              "source",
+              "theme",
+              "priority",
+              "status",
+              "owner",
+              "received_on",
+              "notes"
+            ],
+            "title": "Feedback intake",
+            "description": "Capture a customer signal, then let the governed workflow propose narrative triage."
+          }
+        ],
+        "actions": [
+          {
+            "name": "OpenFeedbackIntake",
+            "label": "Add feedback",
+            "table": "feedback",
+            "scope": "toolbar",
+            "action": {
+              "type": "insert_record",
+              "form": "FeedbackIntake"
+            }
+          }
+        ],
+        "interfaces": [
+          {
+            "name": "FeedbackOps",
+            "views": [
+              "Board"
+            ],
+            "forms": [
+              "FeedbackIntake"
+            ],
+            "title": "Feedback operations",
+            "description": "Customer-signal triage with an embedded form and governed follow-up.",
+            "layoutColumns": 12,
+            "components": [
+              {
+                "id": "open_signals",
+                "type": "metric",
+                "span": 3,
+                "title": "Open signals",
+                "binding": {
+                  "type": "sqlite-query",
+                  "resource": ".",
+                  "sql": "SELECT COUNT(*) AS value FROM feedback WHERE status NOT IN ('Shipped', 'Closed')",
+                  "limit": 1
+                }
+              },
+              {
+                "id": "critical_signals",
+                "type": "metric",
+                "span": 3,
+                "title": "Critical signals",
+                "binding": {
+                  "type": "sqlite-query",
+                  "resource": ".",
+                  "sql": "SELECT COUNT(*) AS value FROM feedback WHERE priority = 'Critical'",
+                  "limit": 1
+                }
+              },
+              {
+                "id": "feedback_board",
+                "type": "data-view",
+                "span": 8,
+                "title": "Feedback board",
+                "binding": {
+                  "type": "saved-view",
+                  "resource": ".",
+                  "view": "Board"
+                }
+              },
+              {
+                "id": "feedback_intake",
+                "type": "form",
+                "span": 4,
+                "binding": {
+                  "type": "resource",
+                  "resource": "."
+                },
+                "form": "FeedbackIntake"
+              }
+            ]
+          }
+        ]
       }
     ]
   },

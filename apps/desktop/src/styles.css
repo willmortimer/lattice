@@ -383,6 +383,133 @@ html[data-platform="macos"] .startup-splash {
   gap: 1px;
 }
 
+.connected-roots {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--lt-border-subtle, rgba(127, 127, 127, 0.25));
+  flex-shrink: 0;
+  max-height: 42%;
+  overflow: auto;
+}
+
+.connected-roots-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 4px 6px;
+}
+
+.connected-roots-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--lt-fg-muted, #888);
+}
+
+.connected-empty,
+.connected-auth-panel {
+  font-size: 12px;
+  color: var(--lt-fg-muted, #888);
+  padding: 4px 6px 8px;
+  line-height: 1.4;
+}
+
+.connected-repo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.connected-repo-item,
+.connected-binding-toggle,
+.connected-tree-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+
+.connected-repo-item:hover,
+.connected-binding-toggle:hover,
+.connected-tree-row:hover {
+  background: var(--lt-bg-hover, rgba(127, 127, 127, 0.12));
+}
+
+.connected-binding-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.connected-binding-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.connected-binding-toggle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.connected-stale {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  color: var(--lt-warning, #b45309);
+  white-space: nowrap;
+}
+
+.connected-tree-file {
+  font-size: 12px;
+}
+
+.github-file-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.github-file-banner {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--lt-fg-muted, #888);
+  border-bottom: 1px solid var(--lt-border-subtle, rgba(127, 127, 127, 0.25));
+}
+
+.github-file-content {
+  margin: 0;
+  padding: 16px 18px;
+  overflow: auto;
+  flex: 1;
+  font-family: var(--lt-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .resource-tree-virtual {
   --resource-tree-row-height: 30px;
   width: 100%;
