@@ -2623,6 +2623,147 @@ html[data-page-width="full"] {
   align-self: flex-start;
 }
 
+.proposal-inbox-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.proposal-inbox-filter-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.proposal-inbox-filter-label {
+  font-size: 10.5px;
+  color: var(--lt-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.proposal-inbox-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.proposal-inbox-chip {
+  padding: 2px 8px;
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius-sm);
+  background: transparent;
+  color: var(--lt-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.proposal-inbox-chip.is-active {
+  border-color: var(--lt-accent);
+  color: var(--lt-accent-bright);
+  background: color-mix(in srgb, var(--lt-accent) 12%, transparent);
+}
+
+.proposal-inbox-path-search,
+.proposal-inbox-source-select {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius-sm);
+  background: var(--lt-bg);
+  color: inherit;
+  font-size: 11.5px;
+}
+
+.proposal-inbox-item-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.proposal-inbox-status {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: var(--lt-radius-sm);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.proposal-inbox-status.is-pending {
+  color: var(--lt-accent-bright);
+  background: color-mix(in srgb, var(--lt-accent) 14%, transparent);
+}
+
+.proposal-inbox-status.is-accepted {
+  color: var(--lt-success, #2f8f5b);
+  background: color-mix(in srgb, var(--lt-success, #2f8f5b) 12%, transparent);
+}
+
+.proposal-inbox-status.is-rejected {
+  color: var(--lt-muted);
+  background: var(--lt-bg-raise);
+}
+
+.proposal-inbox-item.is-archived {
+  cursor: default;
+  opacity: 0.88;
+}
+
+.proposal-inbox-item.is-archived:hover,
+.proposal-inbox-item.is-archived:focus-visible {
+  border-color: transparent;
+  background: transparent;
+}
+
+.proposal-inbox-transaction {
+  font-family: var(--lt-font-mono);
+}
+
+.proposal-inbox-note {
+  margin: 0;
+  color: var(--lt-muted);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.proposal-apply-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 95;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: min(92vw, 28rem);
+  padding: 10px 12px;
+  border-radius: var(--lt-radius-sm);
+  border: 1px solid var(--lt-line-strong);
+  background: var(--lt-panel);
+  box-shadow: 0 10px 28px var(--lt-shadow-md);
+}
+
+.proposal-apply-toast-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.proposal-apply-toast-transaction {
+  font-family: var(--lt-font-mono);
+  color: var(--lt-muted);
+  font-size: 11px;
+}
+
+.proposal-apply-toast-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .proposal-review-panel {
   position: fixed;
   z-index: 81;

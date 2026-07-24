@@ -22,6 +22,7 @@ import {
   dismissProposal,
   getProposal,
   listProposals,
+  pathsFromSelectedCommands,
   type TransactionProposal,
   type TransactionProposalSummary,
 } from "../lib/proposals";
@@ -82,6 +83,11 @@ export function useDesktopController() {
     ((result: "accepted" | "deferred" | "cancelled") => void) | null
   >(null);
   const [proposalSummaries, setProposalSummaries] = useState<TransactionProposalSummary[]>([]);
+  const [proposalInboxLoading, setProposalInboxLoading] = useState(false);
+  const [proposalApplyOutcome, setProposalApplyOutcome] = useState<{
+    transactionId: string;
+    openPaths: string[];
+  } | null>(null);
   const [proposalReview, setProposalReview] = useState<TransactionProposal | null>(null);
   const proposalResolverRef = useRef<
     ((result: "accepted" | "rejected" | "cancelled") => void) | null
@@ -308,10 +314,13 @@ export function useDesktopController() {
       setProposalSummaries([]);
       return;
     }
+    setProposalInboxLoading(true);
     try {
       setProposalSummaries(await listProposals(root));
     } catch (err) {
       setError(String(err));
+    } finally {
+      setProposalInboxLoading(false);
     }
   }, []);
 
@@ -349,11 +358,12 @@ export function useDesktopController() {
     if (!review || !root) return;
     setBusy(true);
     try {
-      await applyProposal(root, review.id, selectedCommandIndices);
+      const transactionId = await applyProposal(root, review.id, selectedCommandIndices);
+      const openPaths = pathsFromSelectedCommands(review, selectedCommandIndices);
       finishProposalReview("accepted");
       await refreshResources();
       await refreshProposalInbox();
-      setStatusToast("Proposal applied");
+      setProposalApplyOutcome({ transactionId, openPaths });
     } catch (err) {
       setError(String(err));
       finishProposalReview("cancelled");
@@ -382,6 +392,10 @@ export function useDesktopController() {
   const handleProposalCancel = useCallback(() => {
     finishProposalReview("cancelled");
   }, [finishProposalReview]);
+
+  const dismissProposalApplyOutcome = useCallback(() => {
+    setProposalApplyOutcome(null);
+  }, []);
 
   const handleCreateDemoProposal = useCallback(async () => {
     const root = snapshotRef.current?.root;
@@ -422,6 +436,23 @@ export function useDesktopController() {
   const { selected, selectedPaths, session, pageRef, currentPageRevisionRef, reloadToken, handleSelect, setSession } = resourceController;
   const page = session?.kind === "page" ? session : null;
   useEffect(() => { selectedRef.current = selected; }, [selected]);
+
+  const openProposalResourcePath = useCallback(async (path: string) => {
+    let current = snapshotRef.current;
+    if (!current) return;
+    let resource = current.resources.find((entry) => entry.path === path);
+    if (!resource) {
+      await refreshResources();
+      current = snapshotRef.current;
+      resource = current?.resources.find((entry) => entry.path === path);
+    }
+    if (resource) {
+      await handleSelect(resource);
+      setProposalApplyOutcome(null);
+      return;
+    }
+    setError(`Could not open ${path}`);
+  }, [handleSelect, refreshResources]);
 
   const handleNotebookContentChange = useCallback((content: string, revision: string) => {
     setSession((previous) =>
@@ -882,8 +913,9 @@ export function useDesktopController() {
     profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth, treeCollapsedPaths, revealPath, linkPicker,
     csvImportReview, handleCancelCsvImport, handleConfirmCsvImport, handleCsvImportColumnTypeChange,
     linkRepairReview, handleLinkRepairAccept, handleLinkRepairDefer,
-    proposalSummaries, proposalReview, refreshProposalInbox, openProposalReview,
+    proposalSummaries, proposalInboxLoading, proposalApplyOutcome, proposalReview, refreshProposalInbox, openProposalReview,
     handleProposalAccept, handleProposalReject, handleProposalCancel, handleCreateDemoProposal,
+    openProposalResourcePath, dismissProposalApplyOutcome,
     openTabs, navigation, inspectorOpen, editingTitle, titleDraft, assetRoot, wikiTargets, pageEditorRef,
     recents, page, currentPageRevisionRef,
     paletteItems, hasCapability, setSettings, setStartup, setError,

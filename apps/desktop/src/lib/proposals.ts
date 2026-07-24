@@ -5,6 +5,7 @@ import type {
   CommandPreviewDetail,
   ProposalPreview,
   ProposalSourceType,
+  ProposalStatus,
   TransactionProposal,
   TransactionProposalSummary,
 } from "./executionContracts";
@@ -19,6 +20,20 @@ export type {
   TransactionProposal,
   TransactionProposalSummary,
 } from "./executionContracts";
+
+export type ProposalInboxStatusFilter = "all" | ProposalStatus;
+export type ProposalInboxSourceFilter = "all" | ProposalSourceType;
+
+export interface ProposalInboxFilters {
+  status: ProposalInboxStatusFilter;
+  source: ProposalInboxSourceFilter;
+  pathQuery: string;
+}
+
+export interface ApplyProposalResult {
+  transactionId: string;
+  openPaths: string[];
+}
 
 export interface CreateProposalInput {
   summary: string;
@@ -48,6 +63,59 @@ export function commandSummaryLabel(command: unknown, index: number): string {
         ? record.from
         : null;
   return path ? `${type}: ${path}` : type;
+}
+
+/** Paths introduced or touched by the selected command subset (for open-result). */
+export function pathsFromSelectedCommands(
+  proposal: TransactionProposal,
+  selectedCommandIndices: readonly number[],
+): string[] {
+  const paths = new Set<string>();
+  for (const index of selectedCommandIndices) {
+    const command = proposal.commands[index];
+    if (!command || typeof command !== "object") continue;
+    const record = command as Record<string, unknown>;
+    if (typeof record.path === "string") paths.add(record.path);
+    if (typeof record.to === "string") paths.add(record.to);
+    if (typeof record.from === "string" && typeof record.to !== "string") {
+      paths.add(record.from);
+    }
+    if (typeof record.toDir === "string" && typeof record.from === "string") {
+      const fileName = record.from.split("/").pop();
+      if (fileName) paths.add(`${record.toDir}/${fileName}`);
+    }
+  }
+  if (paths.size > 0) return [...paths];
+  return proposal.affectedPaths.slice(0, 3);
+}
+
+export function proposalStatusLabel(status: ProposalStatus): string {
+  switch (status) {
+    case "pending":
+      return "Pending";
+    case "accepted":
+      return "Accepted";
+    case "rejected":
+      return "Rejected";
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
+  }
+}
+
+export function filterProposalSummaries(
+  proposals: readonly TransactionProposalSummary[],
+  filters: ProposalInboxFilters,
+): TransactionProposalSummary[] {
+  const query = filters.pathQuery.trim().toLowerCase();
+  return proposals.filter((item) => {
+    if (filters.status !== "all" && item.status !== filters.status) return false;
+    if (filters.source !== "all" && item.source.type !== filters.source) return false;
+    if (!query) return true;
+    if (item.summary.toLowerCase().includes(query)) return true;
+    return item.affectedPaths.some((path) => path.toLowerCase().includes(query));
+  });
 }
 
 /** Prefer backend preview summary; fall back to local command labeling. */
@@ -108,8 +176,8 @@ export async function applyProposal(
   root: string,
   proposalId: string,
   selectedCommandIndices: number[],
-): Promise<void> {
-  await invoke("apply_proposal_cmd", {
+): Promise<string> {
+  return invoke("apply_proposal_cmd", {
     root,
     proposalId,
     selectedCommandIndices,

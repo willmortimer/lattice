@@ -2,6 +2,7 @@ import { inBrowser } from "../demo";
 import { demoSearch } from "../demo";
 import { TabularImportReviewDialog } from "../data/CsvImportReviewDialog";
 import { LinkRepairReviewModal } from "../LinkRepairReviewModal";
+import { ProposalApplyToast } from "../ProposalApplyToast";
 import { ProposalInboxPanel } from "../ProposalInboxPanel";
 import { ProposalReviewModal } from "../ProposalReviewModal";
 import { batchWarnThresholdExceeded } from "../lib/linkRepair";
@@ -65,8 +66,9 @@ export function DesktopShell({ model }: DesktopShellProps) {
     treeCollapsedPaths, revealPath, linkPicker, csvImportReview,
     handleCancelCsvImport, handleConfirmCsvImport, handleCsvImportColumnTypeChange,
     linkRepairReview, handleLinkRepairAccept, handleLinkRepairDefer,
-    proposalSummaries, proposalReview, refreshProposalInbox, openProposalReview,
+    proposalSummaries, proposalInboxLoading, proposalApplyOutcome, proposalReview, refreshProposalInbox, openProposalReview,
     handleProposalAccept, handleProposalReject, handleProposalCancel, handleCreateDemoProposal,
+    openProposalResourcePath, dismissProposalApplyOutcome,
     openTabs, navigation, inspectorOpen, editingTitle, titleDraft, assetRoot,
     wikiTargets, pageEditorRef, paletteItems, hasCapability, setSettings, setStartup, setError,
     recents, page, setSaveState, setLinkPicker, handleImportEditorAsset,
@@ -324,6 +326,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
             <ProposalInboxPanel
               proposals={proposalSummaries}
               busy={busy}
+              loading={proposalInboxLoading}
               onRefresh={refreshProposalInbox}
               onOpen={(proposalId) => void openProposalReview(proposalId)}
               onCreateDemo={() => void handleCreateDemoProposal()}
@@ -783,6 +786,14 @@ export function DesktopShell({ model }: DesktopShellProps) {
         onPickFolder={pickWorkspaceFolder}
         onCreate={(args) => void handleCreateWorkspace(args)}
       />
+      {proposalApplyOutcome && (
+        <ProposalApplyToast
+          transactionId={proposalApplyOutcome.transactionId}
+          openPaths={proposalApplyOutcome.openPaths}
+          onOpenPath={(path) => void openProposalResourcePath(path)}
+          onDismiss={dismissProposalApplyOutcome}
+        />
+      )}
       {statusToast && <div className="status-toast">{statusToast}</div>}
     </div>
     </TooltipProvider>

@@ -823,6 +823,8 @@ pub fn api_create_proposal(
             warnings: params.warnings,
             created_at: String::new(),
             status: Default::default(),
+            resolved_at: None,
+            applied_transaction_id: None,
         },
     )
     .map_err(command_error_to_api)?;

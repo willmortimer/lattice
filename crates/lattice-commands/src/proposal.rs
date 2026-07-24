@@ -157,7 +157,7 @@ pub fn load_proposal(workspace_root: &Path, id: &str) -> Result<TransactionPropo
     serde_json::from_str(&payload).map_err(Error::from)
 }
 
-/// List summaries of pending proposals, newest first.
+/// List summaries of all persisted proposals (pending, accepted, rejected), newest first.
 pub fn list_proposal_summaries(workspace_root: &Path) -> Result<Vec<TransactionProposalSummary>> {
     let dir = proposals_dir(workspace_root);
     if !dir.is_dir() {
@@ -172,22 +172,33 @@ pub fn list_proposal_summaries(workspace_root: &Path) -> Result<Vec<TransactionP
         }
         let payload = fs::read_to_string(&path).map_err(|source| Error::io(&path, source))?;
         let proposal: TransactionProposal = serde_json::from_str(&payload)?;
-        if proposal.status != ProposalStatus::Pending {
-            continue;
-        }
         summaries.push(proposal.summary());
     }
-    summaries.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+    summaries.sort_by(|left, right| {
+        let left_key = left.resolved_at.as_deref().unwrap_or(left.created_at.as_str());
+        let right_key = right.resolved_at.as_deref().unwrap_or(right.created_at.as_str());
+        right_key.cmp(left_key)
+    });
     Ok(summaries)
 }
 
-/// Remove a persisted proposal without applying it (reject / dismiss).
+fn archive_proposal(workspace_root: &Path, mut proposal: TransactionProposal) -> Result<()> {
+    proposal.commands.clear();
+    save_proposal(workspace_root, &proposal)
+}
+
+/// Reject a pending proposal and retain a lightweight archive row.
 pub fn dismiss_proposal(workspace_root: &Path, id: &str) -> Result<()> {
-    let path = proposal_path(workspace_root, id);
-    if path.is_file() {
-        fs::remove_file(&path).map_err(|source| Error::io(&path, source))?;
+    let mut proposal = load_proposal(workspace_root, id)?;
+    if proposal.status != ProposalStatus::Pending {
+        return Err(Error::InvalidResourceTarget {
+            path: PathBuf::from(".lattice/proposals").join(format!("{id}.json")),
+            reason: format!("proposal is not pending (status={:?})", proposal.status),
+        });
     }
-    Ok(())
+    proposal.status = ProposalStatus::Rejected;
+    proposal.resolved_at = Some(proposal_now_iso());
+    archive_proposal(workspace_root, proposal)
 }
 
 /// Build a transaction from the selected command indices (order preserved).
@@ -309,9 +320,13 @@ pub fn preview_proposal(
     })
 }
 
-/// Apply selected commands through [`CommandEngine`], then remove the proposal.
-pub fn apply_proposal(workspace_root: &Path, id: &str, selected_indices: &[usize]) -> Result<()> {
-    let proposal = load_proposal(workspace_root, id)?;
+/// Apply selected commands through [`CommandEngine`], then archive the proposal.
+pub fn apply_proposal(
+    workspace_root: &Path,
+    id: &str,
+    selected_indices: &[usize],
+) -> Result<String> {
+    let mut proposal = load_proposal(workspace_root, id)?;
     if proposal.status != ProposalStatus::Pending {
         return Err(Error::InvalidResourceTarget {
             path: PathBuf::from(".lattice/proposals").join(format!("{id}.json")),
@@ -321,9 +336,12 @@ pub fn apply_proposal(workspace_root: &Path, id: &str, selected_indices: &[usize
     validate_proposal_subset(workspace_root, &proposal, selected_indices)?;
     let tx = build_proposal_transaction(&proposal, selected_indices)?;
     let mut engine = CommandEngine::open(workspace_root)?;
-    engine.apply(tx)?;
-    dismiss_proposal(workspace_root, id)?;
-    Ok(())
+    let receipt = engine.apply(tx)?;
+    proposal.status = ProposalStatus::Accepted;
+    proposal.resolved_at = Some(proposal_now_iso());
+    proposal.applied_transaction_id = Some(receipt.transaction_id.clone());
+    archive_proposal(workspace_root, proposal)?;
+    Ok(receipt.transaction_id)
 }
 
 fn path_display(path: &Path) -> String {
@@ -921,6 +939,8 @@ mod tests {
             warnings: vec![],
             created_at: "2026-07-21T17:00:00Z".into(),
             status: ProposalStatus::Pending,
+            resolved_at: None,
+            applied_transaction_id: None,
         }
     }
 
@@ -941,12 +961,16 @@ mod tests {
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].id, created.id);
         assert_eq!(listed[0].command_count, 1);
+        assert_eq!(listed[0].status, ProposalStatus::Pending);
 
         let loaded = load_proposal(dir.path(), &created.id).unwrap();
         assert_eq!(loaded.summary, created.summary);
 
         dismiss_proposal(dir.path(), &created.id).unwrap();
-        assert!(list_proposal_summaries(dir.path()).unwrap().is_empty());
+        let archived = list_proposal_summaries(dir.path()).unwrap();
+        assert_eq!(archived.len(), 1);
+        assert_eq!(archived[0].status, ProposalStatus::Rejected);
+        assert!(archived[0].resolved_at.is_some());
     }
 
     #[test]
@@ -975,14 +999,20 @@ mod tests {
             warnings: vec!["demo".into()],
             created_at: "2026-07-21T17:05:00Z".into(),
             status: ProposalStatus::Pending,
+            resolved_at: None,
+            applied_transaction_id: None,
         };
         save_proposal(dir.path(), &proposal).unwrap();
 
         // Accept only the first command.
-        apply_proposal(dir.path(), "multi", &[0]).unwrap();
+        let tx_id = apply_proposal(dir.path(), "multi", &[0]).unwrap();
+        assert!(!tx_id.is_empty());
         assert!(dir.path().join("Notes/One.md").exists());
         assert!(!dir.path().join("Notes/Two.md").exists());
-        assert!(list_proposal_summaries(dir.path()).unwrap().is_empty());
+        let archived = list_proposal_summaries(dir.path()).unwrap();
+        assert_eq!(archived.len(), 1);
+        assert_eq!(archived[0].status, ProposalStatus::Accepted);
+        assert_eq!(archived[0].applied_transaction_id.as_deref(), Some(tx_id.as_str()));
 
         let mut engine = CommandEngine::open(dir.path()).unwrap();
         let undone = engine.undo().unwrap().expect("undo");
@@ -997,7 +1027,37 @@ mod tests {
         let err = apply_proposal(dir.path(), "p1", &[3]).unwrap_err();
         assert!(err.to_string().contains("out of range"));
         // Proposal remains pending.
-        assert_eq!(list_proposal_summaries(dir.path()).unwrap().len(), 1);
+        assert_eq!(
+            list_proposal_summaries(dir.path())
+                .unwrap()
+                .into_iter()
+                .filter(|item| item.status == ProposalStatus::Pending)
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn list_includes_pending_accepted_and_rejected() {
+        let dir = workspace();
+        let pending = create_proposal(dir.path(), demo_proposal("pending", "Notes/Pending.md")).unwrap();
+        let rejected = create_proposal(dir.path(), demo_proposal("rejected", "Notes/Rejected.md")).unwrap();
+        dismiss_proposal(dir.path(), &rejected.id).unwrap();
+        let accepted = create_proposal(dir.path(), demo_proposal("accepted", "Notes/Accepted.md")).unwrap();
+        apply_proposal(dir.path(), &accepted.id, &[0]).unwrap();
+
+        let listed = list_proposal_summaries(dir.path()).unwrap();
+        assert_eq!(listed.len(), 3);
+        let statuses: BTreeSet<_> = listed.iter().map(|item| item.status).collect();
+        assert_eq!(
+            statuses,
+            BTreeSet::from([
+                ProposalStatus::Pending,
+                ProposalStatus::Accepted,
+                ProposalStatus::Rejected
+            ])
+        );
+        assert!(listed.iter().any(|item| item.id == pending.id));
     }
 
     #[test]
@@ -1081,6 +1141,8 @@ mod tests {
             warnings: vec![],
             created_at: "2026-07-21T17:10:00Z".into(),
             status: ProposalStatus::Pending,
+            resolved_at: None,
+            applied_transaction_id: None,
         };
         save_proposal(dir.path(), &proposal).unwrap();
 
@@ -1127,6 +1189,8 @@ mod tests {
             warnings: vec![],
             created_at: "2026-07-21T17:11:00Z".into(),
             status: ProposalStatus::Pending,
+            resolved_at: None,
+            applied_transaction_id: None,
         };
 
         let err = validate_proposal_subset(dir.path(), &proposal, &[0, 1]).unwrap_err();
@@ -1209,6 +1273,8 @@ components:
             warnings: vec![],
             created_at: "2026-07-21T17:12:00Z".into(),
             status: ProposalStatus::Pending,
+            resolved_at: None,
+            applied_transaction_id: None,
         };
 
         let preview = preview_proposal(dir.path(), &proposal, &[]).unwrap();
