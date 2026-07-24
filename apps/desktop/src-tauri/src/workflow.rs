@@ -346,6 +346,7 @@ fn spawn_workflow_run(
             finished_at: None,
             outputs: Vec::new(),
             proposal_id: None,
+            proposal_ids: Vec::new(),
         },
         steps: Vec::new(),
     };
@@ -371,6 +372,7 @@ fn spawn_workflow_run(
     let app_thread = app.clone();
     let record_thread = Arc::clone(&record);
     let cancel_thread = Arc::clone(&cancel);
+    let execution_id_thread = execution_id.clone();
     let root = workspace.root().to_path_buf();
     let workflow_path = path;
 
@@ -397,6 +399,7 @@ fn spawn_workflow_run(
             &manifest,
             &trigger,
             Some(&cancel_thread),
+            Some(&execution_id_thread),
         ) {
             Ok(finished) => {
                 patch_record(&record_thread, |r| *r = finished);

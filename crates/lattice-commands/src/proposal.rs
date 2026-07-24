@@ -76,10 +76,17 @@ pub fn save_proposal(workspace_root: &Path, proposal: &TransactionProposal) -> R
 }
 
 /// Create and persist a proposal, assigning id/created_at when empty.
+///
+/// When [`ProposalSource::idempotency_key`] is present (`{execution_id}:{step_id}`),
+/// returns the existing **pending** proposal with that key instead of minting a
+/// duplicate — safe for workflow step retries after a post-persist failure.
 pub fn create_proposal(
     workspace_root: &Path,
     mut proposal: TransactionProposal,
 ) -> Result<TransactionProposal> {
+    if let Some(existing) = find_pending_by_idempotency_key(workspace_root, &proposal)? {
+        return Ok(existing);
+    }
     if proposal.id.trim().is_empty() {
         proposal.id = new_proposal_id();
     }
@@ -92,6 +99,36 @@ pub fn create_proposal(
     }
     save_proposal(workspace_root, &proposal)?;
     Ok(proposal)
+}
+
+/// Look up a pending proposal whose source matches `{execution_id}:{step_id}`.
+pub fn find_pending_by_idempotency_key(
+    workspace_root: &Path,
+    proposal: &TransactionProposal,
+) -> Result<Option<TransactionProposal>> {
+    let Some(key) = proposal.source.idempotency_key() else {
+        return Ok(None);
+    };
+    let dir = proposals_dir(workspace_root);
+    if !dir.is_dir() {
+        return Ok(None);
+    }
+    for entry in fs::read_dir(&dir).map_err(|source| Error::io(&dir, source))? {
+        let entry = entry.map_err(|source| Error::io(&dir, source))?;
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("json") {
+            continue;
+        }
+        let payload = fs::read_to_string(&path).map_err(|source| Error::io(&path, source))?;
+        let existing: TransactionProposal = serde_json::from_str(&payload)?;
+        if existing.status != ProposalStatus::Pending {
+            continue;
+        }
+        if existing.source.idempotency_key().as_deref() == Some(key.as_str()) {
+            return Ok(Some(existing));
+        }
+    }
+    Ok(None)
 }
 
 fn affected_paths_from_commands(commands: &[Command]) -> Vec<String> {
@@ -210,6 +247,8 @@ mod tests {
             source: ProposalSource {
                 source_type: ProposalSourceType::Task,
                 resource: Some("tasks/demo.task".into()),
+                execution_id: None,
+                step_id: None,
             },
             summary: format!("Create {path}"),
             commands: vec![Command::PageCreate {
@@ -256,6 +295,8 @@ mod tests {
             source: ProposalSource {
                 source_type: ProposalSourceType::External,
                 resource: None,
+                execution_id: None,
+                step_id: None,
             },
             summary: "Create two pages".into(),
             commands: vec![
@@ -328,5 +369,26 @@ mod tests {
         }
         assert_eq!(proposal.affected_paths, vec!["Notes/SdkSample.md"]);
         assert_eq!(proposal.status, ProposalStatus::Pending);
+    }
+
+    #[test]
+    fn create_proposal_dedupes_by_execution_and_step() {
+        let dir = workspace();
+        let mut first = demo_proposal("", "Notes/A.md");
+        first.source.execution_id = Some("exec-dedupe".into());
+        first.source.step_id = Some("propose".into());
+        let created = create_proposal(dir.path(), first).unwrap();
+
+        // Simulate post-persist failure: caller retries create with same key.
+        let mut retry = demo_proposal("", "Notes/A.md");
+        retry.source.execution_id = Some("exec-dedupe".into());
+        retry.source.step_id = Some("propose".into());
+        retry.summary = "Different summary should not create a second proposal".into();
+        let again = create_proposal(dir.path(), retry).unwrap();
+
+        assert_eq!(again.id, created.id);
+        assert_eq!(list_proposal_summaries(dir.path()).unwrap().len(), 1);
+        let loaded = load_proposal(dir.path(), &created.id).unwrap();
+        assert_eq!(loaded.summary, created.summary);
     }
 }

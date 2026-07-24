@@ -41,7 +41,10 @@ export interface ExecutionResult {
   /** ISO-8601 */
   finishedAt?: string;
   outputs: ResourceOutput[];
+  /** First proposal id (compat); prefer `proposalIds` when multiple. */
   proposalId?: string;
+  /** All proposal ids produced by this execution (parallel-safe). */
+  proposalIds?: string[];
 }
 
 export type ProposalSourceType =
@@ -54,6 +57,8 @@ export type ProposalSourceType =
 export interface ProposalSource {
   type: ProposalSourceType;
   resource?: string;
+  executionId?: string;
+  stepId?: string;
 }
 
 export type ProposalStatus = "pending" | "accepted" | "rejected";

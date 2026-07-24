@@ -17,6 +17,7 @@ describe("workflowRun adapters", () => {
         finishedAt: "2026-07-21T16:00:01Z",
         outputs: [],
         proposalId: "prop-1",
+        proposalIds: ["prop-1"],
       },
       steps: [
         {
@@ -25,12 +26,14 @@ describe("workflowRun adapters", () => {
           status: "succeeded",
           log: "created proposal prop-1\n",
           proposalId: "prop-1",
+          attempts: 1,
         },
       ],
     };
     const mapped = toExecutionResult(raw);
     expect(mapped.status).toBe("succeeded");
     expect(mapped.proposalId).toBe("prop-1");
+    expect(mapped.proposalIds).toEqual(["prop-1"]);
     expect(raw.steps[0]?.action).toBe("proposal.create");
   });
 });

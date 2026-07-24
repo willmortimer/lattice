@@ -221,6 +221,7 @@ pub fn task_run(
         finished_at: None,
         outputs: Vec::new(),
         proposal_id: None,
+        proposal_ids: Vec::new(),
     }));
     let spawned_slot: Arc<Mutex<Option<SpawnedTask>>> = Arc::new(Mutex::new(None));
     let cancel = Arc::new(AtomicBool::new(false));
