@@ -241,10 +241,20 @@ Naming: `*.derived.yaml` (or `.yml`) is classified as
 `ResourceKind::Derived`. Relative paths resolve from the manifest directory.
 
 Lattice tracks `current` / `stale` / `building` / `failed` by hashing listed
-input files (v1 also expands simple `*` / `**` globs) and comparing against
-lineage recorded under `.lattice/derived/`. Rebuild runs the declared
-`builder.task` through the existing task runner and refreshes lineage on
-success.
+input files (v1 also expands simple `*` / `**` globs), the builder task
+package, and the declared output, then comparing against lineage recorded
+under `.lattice/derived/`. `current` requires all of those to exist with
+matching hashes; otherwise Lattice reports structured `staleReasons`
+(`never-built`, `input-changed`, `input-missing`, `output-missing`,
+`output-changed`, `builder-failed`, `builder-changed`).
+
+Rebuild runs the declared `builder.task` through the existing task runner with
+`LATTICE_DERIVED_OUTPUT` / `LATTICE_DERIVED_STAGING` pointing at
+`.lattice/derived/staging/<build-id>/`. On success Lattice verifies the staged
+artifact and atomically promotes it to the declared output path; on failure or
+interruption the previous output is left untouched (last-known-good). Per-resource
+build locks serialize concurrent rebuilds; abandoned staging directories are
+cleaned up.
 
 Declared inputs, builder task, and output also surface as `input` /
 `output` edges in the Inspect relationship graph (see

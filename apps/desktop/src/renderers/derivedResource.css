@@ -69,3 +69,10 @@
   font-family: var(--lt-font-mono, ui-monospace, monospace);
   font-size: var(--lt-font-size-xs, 0.75rem);
 }
+
+.derived-stale-reasons {
+  margin: calc(-1 * var(--lt-space-2)) 0 var(--lt-space-3);
+  padding: 0 0 0 var(--lt-space-5);
+  color: var(--lt-color-text-secondary);
+  font-size: var(--lt-font-size-sm);
+}

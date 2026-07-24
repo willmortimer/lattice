@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use lattice_commands::{
-    load_derived_status, rebuild_derived, DerivedInputHash, DerivedManifest, DerivedState,
-    DerivedStatus, TaskRunner,
+    load_derived_status, rebuild_derived, DerivedInputHash, DerivedManifest, DerivedStaleReason,
+    DerivedState, DerivedStatus, TaskRunner,
 };
 use lattice_core::Workspace;
 use serde::{Deserialize, Serialize};
@@ -64,6 +64,12 @@ pub struct DerivedStatusView {
     pub inputs: Vec<DerivedInputView>,
     pub current_inputs: Vec<DerivedInputView>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub builder_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stale_reasons: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub last_built_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_error: Option<String>,
@@ -81,6 +87,10 @@ fn state_str(state: DerivedState) -> String {
     state.as_str().to_string()
 }
 
+fn stale_reason_str(reason: DerivedStaleReason) -> String {
+    reason.as_str().to_string()
+}
+
 fn status_view(status: DerivedStatus) -> DerivedStatusView {
     DerivedStatusView {
         resource_path: status.resource_path,
@@ -90,6 +100,9 @@ fn status_view(status: DerivedStatus) -> DerivedStatusView {
         refresh_mode: status.refresh_mode,
         inputs: status.inputs.iter().map(input_view).collect(),
         current_inputs: status.current_inputs.iter().map(input_view).collect(),
+        output_hash: status.output_hash,
+        builder_hash: status.builder_hash,
+        stale_reasons: status.stale_reasons.iter().copied().map(stale_reason_str).collect(),
         last_built_at: status.last_built_at,
         last_error: status.last_error,
     }
@@ -188,6 +201,9 @@ pub fn derived_rebuild(
                         refresh_mode: "on-demand".into(),
                         inputs: Vec::new(),
                         current_inputs: Vec::new(),
+                        output_hash: None,
+                        builder_hash: None,
+                        stale_reasons: vec!["builder-failed".into()],
                         last_built_at: None,
                         last_error: Some(err.to_string()),
                     },

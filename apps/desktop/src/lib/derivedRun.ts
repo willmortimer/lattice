@@ -20,6 +20,15 @@ export interface DerivedManifestDto {
 
 export type DerivedLifecycleState = "current" | "stale" | "building" | "failed";
 
+export type DerivedStaleReason =
+  | "never-built"
+  | "input-changed"
+  | "input-missing"
+  | "output-missing"
+  | "output-changed"
+  | "builder-failed"
+  | "builder-changed";
+
 /** Live derived status from `derived_load_status` / rebuild events. */
 export interface DerivedStatusDto {
   resourcePath: string;
@@ -29,6 +38,9 @@ export interface DerivedStatusDto {
   refreshMode: string;
   inputs: DerivedInputDto[];
   currentInputs: DerivedInputDto[];
+  outputHash?: string;
+  builderHash?: string;
+  staleReasons?: DerivedStaleReason[];
   lastBuiltAt?: string;
   lastError?: string;
 }

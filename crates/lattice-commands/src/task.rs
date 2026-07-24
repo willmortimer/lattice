@@ -350,6 +350,18 @@ impl TaskRunner {
 
     /// Resolve `path` (task package dir or `task.yaml`) and spawn it without blocking.
     pub fn spawn(&self, path: &Path) -> TaskResult<SpawnedTask> {
+        self.spawn_with_env(path, &[])
+    }
+
+    /// Like [`Self::spawn`], with additional child environment variables.
+    ///
+    /// Used by derived rebuild to point builders at a staging output path via
+    /// `LATTICE_DERIVED_OUTPUT` / `LATTICE_DERIVED_STAGING`.
+    pub fn spawn_with_env(
+        &self,
+        path: &Path,
+        extra_env: &[(&str, &str)],
+    ) -> TaskResult<SpawnedTask> {
         let (package_dir, _) = resolve_task_paths(path)?;
         // Absolute paths keep `uv --directory` valid when combined with
         // `current_dir(package)` — a relative `--directory` would be resolved
@@ -384,6 +396,10 @@ impl TaskRunner {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+
+        for (key, value) in extra_env {
+            cmd.env(key, value);
+        }
 
         // Injectable workspace SDK (`packages/lattice-py`) for propose*/dataset.
         inject_lattice_python_sdk(&mut cmd, &package_dir);
@@ -459,6 +475,15 @@ impl TaskRunner {
     /// Resolve `path` (task package dir or `task.yaml`) and run it to completion.
     pub fn run(&self, path: &Path) -> TaskResult<TaskRunOutput> {
         self.spawn(path)?.wait()
+    }
+
+    /// Like [`Self::run`], with additional child environment variables.
+    pub fn run_with_env(
+        &self,
+        path: &Path,
+        extra_env: &[(&str, &str)],
+    ) -> TaskResult<TaskRunOutput> {
+        self.spawn_with_env(path, extra_env)?.wait()
     }
 }
 
