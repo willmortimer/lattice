@@ -2,9 +2,9 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { TopLevelSpec } from "vega-lite";
 
 import { PerspectiveDatasetViewer } from "../analytics/PerspectiveDatasetViewer";
-import "../analytics/perspective.css";
 import { VegaLiteChart } from "../components/VegaLiteChart";
 import "../components/vegaLiteChart.css";
+import "./datasetSurface.css";
 import { inBrowser } from "../demo";
 import { KindMark } from "../KindMark";
 import type { ArrowQueryResult, ArrowTransportDump } from "../lib/arrowIpc";
@@ -22,6 +22,7 @@ import {
   profileDataset,
   type RelationProfile,
 } from "../lib/datasetProfile";
+import { readTextWindow } from "../lib/resourceRuntime";
 import { detectLonLatColumns } from "../lib/geoColumns";
 import { buildAutoBarChartSpec } from "../lib/vegaLiteChart";
 import type { OpenResourceSession } from "../resourceSession";
@@ -60,6 +61,33 @@ function panelBusyLabel(panel: DatasetPanel): string {
   }
 }
 
+/** DuckDB types whose Min/Max/Q50 read best right-aligned. */
+function isNumericDataType(dataType: string): boolean {
+  return /INT|DECIMAL|NUMERIC|FLOAT|DOUBLE|REAL/i.test(dataType);
+}
+
+/** Display title fallback: `Reports/Usage.dataset` → `Usage`. */
+function datasetPathTitle(path: string): string {
+  const base = path.split("/").pop() ?? path;
+  return base.replace(/\.dataset$/i, "") || path;
+}
+
+/**
+ * Best-effort `title:` line from a dataset.yaml manifest window.
+ * Full YAML parsing is unnecessary for one scalar top-level key.
+ */
+function parseManifestTitle(content: string): string | null {
+  for (const line of content.split("\n")) {
+    const match = /^title:\s*(.+)\s*$/.exec(line);
+    if (!match) continue;
+    const raw = match[1]!.trim();
+    const unquoted = /^(['"])(.*)\1$/.exec(raw);
+    const title = (unquoted ? unquoted[2]! : raw).trim();
+    return title.length > 0 ? title : null;
+  }
+  return null;
+}
+
 /**
  * Dataset surface: Preview (Perspective), Chart (Vega-Lite), Profile (DuckDB SUMMARIZE),
  * Plan (DuckDB EXPLAIN), Map (MapLibre lon/lat).
@@ -71,34 +99,87 @@ export function DatasetResourceRenderer({
   const isDataset = session.kind === "dataset";
   const root = context.workspaceRoot;
   const path = isDataset ? session.resource.path : "";
+  const queryKey = `${path}:${context.reloadToken}`;
+
   const [panel, setPanel] = useState<DatasetPanel>("preview");
+  // Tabular query result (Preview / Chart / Map), cached across tab switches
+  // for the same path + reload token so switching tabs does not re-run DuckDB.
   const [result, setResult] = useState<ArrowQueryResult | null>(null);
   const [dump, setDump] = useState<ArrowTransportDump | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
+  const [resultKey, setResultKey] = useState<string | null>(null);
   const [profile, setProfile] = useState<RelationProfile | null>(null);
   const [profileSummary, setProfileSummary] = useState<string | null>(null);
+  const [profileKey, setProfileKey] = useState<string | null>(null);
   const [explain, setExplain] = useState<ExplainDatasetResponse | null>(null);
+  const [planKey, setPlanKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [viewerFailed, setViewerFailed] = useState(false);
-  const [viewerError, setViewerError] = useState<string | null>(null);
+  // Per-viewer failure state — a Map failure must not downgrade Preview.
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [mapError, setMapError] = useState<string | null>(null);
+  const [manifestTitle, setManifestTitle] = useState<string | null>(null);
   const loadAbortRef = useRef<AbortController | null>(null);
+
+  // Drop caches when the dataset itself changes.
+  useEffect(() => {
+    setResult(null);
+    setDump(null);
+    setSummary(null);
+    setResultKey(null);
+    setProfile(null);
+    setProfileSummary(null);
+    setProfileKey(null);
+    setExplain(null);
+    setPlanKey(null);
+    setError(null);
+    setPreviewFailed(false);
+    setPreviewError(null);
+    setMapError(null);
+  }, [path]);
+
+  // Best-effort manifest title (dataset.yaml lives inside the package).
+  useEffect(() => {
+    if (!isDataset || !root) {
+      setManifestTitle(null);
+      return;
+    }
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const window = await readTextWindow(
+          { root, path: `${path}/dataset.yaml`, offset: 0, length: 8192 },
+          controller.signal,
+        );
+        if (controller.signal.aborted) return;
+        setManifestTitle(parseManifestTitle(window.content));
+      } catch {
+        if (!controller.signal.aborted) setManifestTitle(null);
+      }
+    })();
+    return () => controller.abort();
+  }, [isDataset, root, path, context.reloadToken]);
 
   useEffect(() => {
     if (!isDataset || !root) {
-      setResult(null);
-      setDump(null);
-      setSummary(null);
-      setProfile(null);
-      setProfileSummary(null);
-      setExplain(null);
       setError(null);
-      setViewerFailed(false);
-      setViewerError(null);
       setBusy(false);
       loadAbortRef.current = null;
       return;
     }
+    const cached =
+      panel === "profile"
+        ? profileKey === queryKey
+        : panel === "plan"
+          ? planKey === queryKey
+          : resultKey === queryKey;
+    if (cached) {
+      // A failure on another panel must not mask this panel's cached data.
+      setError(null);
+      return;
+    }
+
     const controller = new AbortController();
     loadAbortRef.current = controller;
     setBusy(true);
@@ -111,16 +192,19 @@ export function DatasetResourceRenderer({
           if (controller.signal.aborted) return;
           setProfile(nextProfile);
           setProfileSummary(formatProfileSummary(nextProfile));
+          setProfileKey(queryKey);
           return;
         }
         if (panel === "plan") {
           const nextExplain = await explainDataset(root, path, {}, controller.signal);
           if (controller.signal.aborted) return;
           setExplain(nextExplain);
+          setPlanKey(queryKey);
           return;
         }
-        setViewerFailed(false);
-        setViewerError(null);
+        setPreviewFailed(false);
+        setPreviewError(null);
+        setMapError(null);
         const {
           result: nextResult,
           dump: nextDump,
@@ -130,14 +214,22 @@ export function DatasetResourceRenderer({
         setResult(nextResult);
         setDump(nextDump);
         setSummary(nextSummary);
+        setResultKey(queryKey);
       } catch (err: unknown) {
         if (controller.signal.aborted || isDatasetRequestAborted(err)) return;
-        setResult(null);
-        setDump(null);
-        setSummary(null);
-        setProfile(null);
-        setProfileSummary(null);
-        setExplain(null);
+        if (panel === "profile") {
+          setProfile(null);
+          setProfileSummary(null);
+          setProfileKey(null);
+        } else if (panel === "plan") {
+          setExplain(null);
+          setPlanKey(null);
+        } else {
+          setResult(null);
+          setDump(null);
+          setSummary(null);
+          setResultKey(null);
+        }
         setError(err instanceof Error ? err.message : String(err));
       } finally {
         if (loadAbortRef.current === controller) {
@@ -154,7 +246,7 @@ export function DatasetResourceRenderer({
         loadAbortRef.current = null;
       }
     };
-  }, [isDataset, root, path, context.reloadToken, panel]);
+  }, [isDataset, root, path, queryKey, panel, resultKey, profileKey, planKey]);
 
   const chartSpec = useMemo<TopLevelSpec | null>(() => {
     if (!dump || !result) return null;
@@ -179,15 +271,17 @@ export function DatasetResourceRenderer({
 
   if (!isDataset) return null;
 
+  const title = manifestTitle ?? datasetPathTitle(path);
+
   if (inBrowser) {
     return (
       <div className="dataset-surface">
         <header className="dataset-surface-header">
-          <span className="placeholder-mark" aria-hidden>
-            <KindMark kind="dataset" size={28} />
+          <span className="dataset-surface-mark" aria-hidden>
+            <KindMark kind="dataset" size={20} />
           </span>
-          <div>
-            <p className="dataset-surface-title">Dataset</p>
+          <div className="dataset-surface-heading">
+            <p className="dataset-surface-title">{title}</p>
             <p className="dataset-surface-path">
               <code>{path}</code>
             </p>
@@ -207,26 +301,24 @@ export function DatasetResourceRenderer({
     );
   }
 
-  const showPerspective = Boolean(root && result && !viewerFailed && !busy && !error);
+  const showPerspective = Boolean(root && result && !previewFailed && !busy && !error);
   const loadKey = `${path}:${context.reloadToken}`;
+  const headerMeta =
+    panel === "profile" ? profileSummary : panel === "plan" ? null : summary;
 
   return (
     <div className="dataset-surface">
       <header className="dataset-surface-header">
-        <span className="placeholder-mark" aria-hidden>
-          <KindMark kind="dataset" size={28} />
+        <span className="dataset-surface-mark" aria-hidden>
+          <KindMark kind="dataset" size={20} />
         </span>
-        <div>
-          <p className="dataset-surface-title">Dataset</p>
+        <div className="dataset-surface-heading">
+          <p className="dataset-surface-title">{title}</p>
           <p className="dataset-surface-path">
             <code>{path}</code>
           </p>
         </div>
-        {panel === "profile"
-          ? profileSummary && <p className="dataset-surface-meta">{profileSummary}</p>
-          : panel === "plan"
-            ? null
-            : summary && <p className="dataset-surface-meta">{summary}</p>}
+        {headerMeta ? <p className="dataset-surface-meta">{headerMeta}</p> : null}
       </header>
 
       <div className="dataset-panel-tabs" role="tablist" aria-label="Dataset panels">
@@ -251,13 +343,13 @@ export function DatasetResourceRenderer({
         <div className="dataset-surface-main">
           {!root ? (
             <div className="dataset-surface-fallback">
-              <p className="placeholder-sub">
+              <p className="placeholder-sub dataset-surface-note">
                 Open a native workspace to run DuckDB → Arrow IPC → Perspective.
               </p>
             </div>
           ) : busy ? (
             <div className="dataset-surface-fallback dataset-surface-busy">
-              <p className="placeholder-sub">{panelBusyLabel(panel)}</p>
+              <p className="placeholder-sub dataset-surface-note">{panelBusyLabel(panel)}</p>
               <button
                 type="button"
                 className="dataset-cancel-button"
@@ -288,36 +380,49 @@ export function DatasetResourceRenderer({
           ) : panel === "profile" ? (
             profile ? (
               profile.columns.length > 0 ? (
-                <div className="dataset-profile-panel" style={{ overflow: "auto" }}>
-                  <table>
+                <div className="dataset-profile-panel">
+                  <table className="dataset-profile-table">
                     <thead>
                       <tr>
                         <th scope="col">Column</th>
                         <th scope="col">Type</th>
-                        <th scope="col">Null %</th>
-                        <th scope="col">Distinct</th>
+                        <th scope="col" className="dataset-profile-cell-numeric">
+                          Null %
+                        </th>
+                        <th scope="col" className="dataset-profile-cell-numeric">
+                          Distinct
+                        </th>
                         <th scope="col">Min</th>
                         <th scope="col">Max</th>
                         <th scope="col">Q50</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {profile.columns.map((column) => (
-                        <tr key={column.name}>
-                          <th scope="row">{column.name}</th>
-                          <td>{column.dataType}</td>
-                          <td>{formatPercent(column.nullPercentage)}</td>
-                          <td>{formatDistinct(column.approxDistinct)}</td>
-                          <td>{column.min ?? "—"}</td>
-                          <td>{column.max ?? "—"}</td>
-                          <td>{column.q50 ?? "—"}</td>
-                        </tr>
-                      ))}
+                      {profile.columns.map((column) => {
+                        const valueClass = isNumericDataType(column.dataType)
+                          ? "dataset-profile-cell-numeric"
+                          : "dataset-profile-cell-value";
+                        return (
+                          <tr key={column.name}>
+                            <th scope="row">{column.name}</th>
+                            <td className="dataset-profile-cell-type">{column.dataType}</td>
+                            <td className="dataset-profile-cell-numeric">
+                              {formatPercent(column.nullPercentage)}
+                            </td>
+                            <td className="dataset-profile-cell-numeric">
+                              {formatDistinct(column.approxDistinct)}
+                            </td>
+                            <td className={valueClass}>{column.min ?? "—"}</td>
+                            <td className={valueClass}>{column.max ?? "—"}</td>
+                            <td className={valueClass}>{column.q50 ?? "—"}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
               ) : (
-                <p className="placeholder-sub">No columns to profile.</p>
+                <p className="placeholder-sub dataset-surface-note">No columns to profile.</p>
               )
             ) : null
           ) : panel === "chart" ? (
@@ -329,7 +434,7 @@ export function DatasetResourceRenderer({
                 <VegaLiteChart spec={chartSpec} />
               </div>
             ) : (
-              <p className="placeholder-sub">
+              <p className="placeholder-sub dataset-surface-note">
                 No chartable rows yet. Import facts into this dataset package.
               </p>
             )
@@ -347,9 +452,14 @@ export function DatasetResourceRenderer({
                     </>
                   ) : null}
                 </p>
+                {mapError ? (
+                  <p className="dataset-surface-alert" role="alert">
+                    Map failed: {mapError}
+                  </p>
+                ) : null}
                 <Suspense
                   fallback={
-                    <p className="placeholder-sub" aria-live="polite">
+                    <p className="placeholder-sub dataset-surface-note" aria-live="polite">
                       Loading map…
                     </p>
                   }
@@ -359,8 +469,7 @@ export function DatasetResourceRenderer({
                     columnNames={mapColumnNames}
                     loadKey={loadKey}
                     onError={(message) => {
-                      setViewerFailed(true);
-                      setViewerError(message);
+                      setMapError(message);
                     }}
                   />
                 </Suspense>
@@ -372,14 +481,16 @@ export function DatasetResourceRenderer({
               schema={result.schemaMeta.fields}
               sampleRows={result.sampleRows ?? []}
               rowCount={result.rowCount}
+              truncated={result.truncated}
               loadKey={loadKey}
+              showDiagnostics={context.settings.diagnostics.showRendererStats}
               onError={(message) => {
-                setViewerFailed(true);
-                setViewerError(message);
+                setPreviewFailed(true);
+                setPreviewError(message);
               }}
             />
           ) : dump ? (
-            <DatasetArrowFallback dump={dump} viewerError={viewerError} />
+            <DatasetArrowFallback dump={dump} viewerError={previewError} />
           ) : null}
         </div>
       </div>
@@ -398,24 +509,29 @@ function DatasetArrowFallback({
     <div className="dataset-surface-fallback">
       {viewerError ? (
         <p className="dataset-surface-alert" role="alert">
-          Perspective unavailable — showing schema preview. ({viewerError})
+          Analytical grid unavailable — {viewerError}
         </p>
       ) : (
-        <p className="placeholder-sub">Schema preview (analytical grid not loaded)</p>
+        <p className="placeholder-sub dataset-surface-note">
+          Analytical grid not loaded. Raw transport diagnostics below.
+        </p>
       )}
-      <pre>
-        {JSON.stringify(
-          {
-            schema: dump.schema,
-            sampleRows: dump.sampleRows,
-            ipcBytes: dump.ipcByteLength,
-            rowCount: dump.rowCount,
-            truncated: dump.truncated,
-          },
-          null,
-          2,
-        )}
-      </pre>
+      <div className="dataset-diagnostic-panel">
+        <p className="dataset-diagnostic-title">Arrow transport diagnostics</p>
+        <pre>
+          {JSON.stringify(
+            {
+              schema: dump.schema,
+              sampleRows: dump.sampleRows,
+              ipcBytes: dump.ipcByteLength,
+              rowCount: dump.rowCount,
+              truncated: dump.truncated,
+            },
+            null,
+            2,
+          )}
+        </pre>
+      </div>
     </div>
   );
 }
