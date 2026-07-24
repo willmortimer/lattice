@@ -26,6 +26,10 @@ const SEMANTIC_EVENT: &str = "semantic-event";
 
 const ENV_EMBED_HOST_BIN: &str = "LATTICE_EMBED_HOST_BIN";
 const ENV_SEMANTIC_FAKE: &str = "LATTICE_SEMANTIC_FAKE";
+const ENV_EMBEDDING_PROVIDER: &str = "LATTICE_EMBEDDING_PROVIDER";
+const ENV_EMBEDDING_MODEL: &str = "LATTICE_EMBEDDING_MODEL";
+const ENV_EMBEDDING_DIMENSIONS: &str = "LATTICE_EMBEDDING_DIMENSIONS";
+const ENV_PIONEER_API_KEY: &str = "PIONEER_API_KEY";
 
 #[derive(Default)]
 pub struct SemanticState {
@@ -154,15 +158,21 @@ fn resolve_embed_host_bin() -> Option<PathBuf> {
 fn semantic_spawn_host_env() -> SpawnHostEnv {
     let mut extra_env = Vec::new();
 
-    if std::env::var_os(ENV_EMBED_HOST_BIN)
-        .filter(|v| !v.is_empty())
-        .is_none()
-    {
-        if let Some(host) = resolve_embed_host_bin() {
-            extra_env.push((
-                ENV_EMBED_HOST_BIN.to_string(),
-                host.to_string_lossy().into(),
-            ));
+    let pioneer_embeddings = std::env::var(ENV_EMBEDDING_PROVIDER)
+        .ok()
+        .is_some_and(|value| value.trim().eq_ignore_ascii_case("pioneer"));
+
+    if !pioneer_embeddings {
+        if std::env::var_os(ENV_EMBED_HOST_BIN)
+            .filter(|v| !v.is_empty())
+            .is_none()
+        {
+            if let Some(host) = resolve_embed_host_bin() {
+                extra_env.push((
+                    ENV_EMBED_HOST_BIN.to_string(),
+                    host.to_string_lossy().into(),
+                ));
+            }
         }
     }
 
@@ -172,12 +182,27 @@ fn semantic_spawn_host_env() -> SpawnHostEnv {
         extra_env.push((ENV_SEMANTIC_FAKE.to_string(), "1".into()));
     }
 
+    for key in [
+        ENV_EMBEDDING_PROVIDER,
+        ENV_EMBEDDING_MODEL,
+        ENV_EMBEDDING_DIMENSIONS,
+        ENV_PIONEER_API_KEY,
+    ] {
+        if let Ok(value) = std::env::var(key) {
+            if !value.is_empty() {
+                extra_env.push((key.to_string(), value));
+            }
+        }
+    }
+
     SpawnHostEnv {
         extra_env,
-        handshake_hint: Some(
+        handshake_hint: Some(if pioneer_embeddings {
+            "ensure PIONEER_API_KEY is set for LATTICE_EMBEDDING_PROVIDER=pioneer"
+        } else {
             "ensure lattice-embed-host is available: build lattice-embed-host, \
-             or set LATTICE_EMBED_HOST_BIN",
-        ),
+             or set LATTICE_EMBED_HOST_BIN"
+        }),
     }
 }
 

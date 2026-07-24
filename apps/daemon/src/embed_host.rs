@@ -6,9 +6,12 @@
 //! bounded exponential backoff and reconnect the provider.
 //!
 //! Production default discovers/spawns `lattice-embed-host`. In-process Fake is
-//! only selected when `LATTICE_SEMANTIC_FAKE=1`. When the host binary cannot be
-//! found, the controller starts in [`SemanticProviderMode::Unavailable`] so FTS
-//! still works and enable reports a clear failure (never a silent Fake).
+//! only selected when `LATTICE_SEMANTIC_FAKE=1`. When
+//! `LATTICE_EMBEDDING_PROVIDER=pioneer`, embeddings use Pioneer
+//! `/v1/embeddings` in-process (no GGUF). When the host binary cannot be found
+//! and Pioneer is not selected, the controller starts in
+//! [`SemanticProviderMode::Unavailable`] so FTS still works and enable reports
+//! a clear failure (never a silent Fake).
 
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -19,10 +22,11 @@ use std::time::Duration;
 
 use lattice_embed_host::{install_model, ReconnectableEmbedHostProvider};
 use lattice_embedding::{
-    pinned_model_is_ready, qwen3_embedding_0_6b_q8_manifest, qwen3_embedding_install_dir,
-    semantic_fake_enabled, sha256_hex, DistanceMetric, EmbeddingProvider, EmbeddingSpecification,
-    FakeEmbeddingProvider, ModelManifest, PoolingStrategy, MANIFEST_SCHEMA_VERSION,
-    QWEN3_EMBEDDING_MODEL_ID, QWEN3_EMBEDDING_MODEL_REVISION, QWEN3_EMBEDDING_SHA256,
+    pinned_model_is_ready, pioneer_embedding_requested, qwen3_embedding_0_6b_q8_manifest,
+    qwen3_embedding_install_dir, semantic_fake_enabled, sha256_hex, DistanceMetric,
+    EmbeddingProvider, EmbeddingSpecification, FakeEmbeddingProvider, ModelManifest,
+    PioneerEmbeddingProvider, PoolingStrategy, MANIFEST_SCHEMA_VERSION, QWEN3_EMBEDDING_MODEL_ID,
+    QWEN3_EMBEDDING_MODEL_REVISION, QWEN3_EMBEDDING_SHA256,
 };
 use lattice_runtime::{
     IndexProgressPhase, LatticeRuntime, RuntimeEvent, RuntimeIndexProgress, SemanticStatus,
@@ -59,6 +63,10 @@ const UNAVAILABLE_MESSAGE: &str =
 pub enum SemanticProviderMode {
     /// Deterministic in-process fake (tests / CI via `LATTICE_SEMANTIC_FAKE=1`).
     FakeInProcess,
+    /// Pioneer OpenAI-compatible `/v1/embeddings` in-process (Actian-ready remote path).
+    ///
+    /// Selected when `LATTICE_EMBEDDING_PROVIDER=pioneer` and `PIONEER_API_KEY` is set.
+    PioneerInProcess,
     /// Connect to an already-running embed-host socket (supervision optional).
     ExternalSocket { socket: PathBuf },
     /// Spawn `lattice-embed-host` and supervise it.
@@ -81,6 +89,9 @@ impl SemanticProviderMode {
     pub fn from_env() -> Option<Self> {
         if env_truthy(ENV_SEMANTIC_FAKE) {
             return Some(Self::FakeInProcess);
+        }
+        if pioneer_embedding_requested() {
+            return Some(Self::PioneerInProcess);
         }
         if let Ok(socket) = std::env::var(ENV_EMBED_HOST_SOCKET) {
             let socket = PathBuf::from(socket);
@@ -199,6 +210,29 @@ impl SemanticController {
             SemanticProviderMode::FakeInProcess => {
                 let provider: Arc<dyn EmbeddingProvider> =
                     Arc::new(FakeEmbeddingProvider::new(fake_specification()));
+                Ok(Arc::new(Self {
+                    runtime,
+                    provider: Some(provider),
+                    host_provider: None,
+                    runtime_handle: None,
+                    _owned_runtime: None,
+                    host: Mutex::new(None),
+                    sessions: Mutex::new(Vec::new()),
+                    stop: Arc::new(AtomicBool::new(false)),
+                    supervisor: Mutex::new(None),
+                }))
+            }
+            SemanticProviderMode::PioneerInProcess => {
+                let provider = PioneerEmbeddingProvider::from_env().map_err(|err| {
+                    Error::Spawn(format!("pioneer embedding provider: {err}"))
+                })?;
+                let provider: Arc<dyn EmbeddingProvider> = Arc::new(provider);
+                info!(
+                    provider = provider.specification().provider_id.as_str(),
+                    model = provider.specification().model_id.as_str(),
+                    dims = provider.specification().dimensions,
+                    "semantic embeddings using Pioneer remote provider"
+                );
                 Ok(Arc::new(Self {
                     runtime,
                     provider: Some(provider),
@@ -346,7 +380,12 @@ impl SemanticController {
         lattice_handlers::prepare_semantic_model_for_session(&session, on_progress)?;
         self.reload_host_after_prepare()
             .map_err(|err| err.to_string())?;
-        if !semantic_fake_enabled() && self.host_provider.is_some() && pinned_model_is_ready() {
+        // Remote Pioneer and Fake skip the pinned-llama fail-closed check.
+        if !semantic_fake_enabled()
+            && !pioneer_embedding_requested()
+            && self.host_provider.is_some()
+            && pinned_model_is_ready()
+        {
             if let Some(provider) = self.provider.as_ref() {
                 if let Err(message) = assert_production_llama_provider(provider.as_ref()) {
                     let failed = SemanticStatus {
@@ -989,6 +1028,15 @@ mod tests {
             matches!(mode, SemanticProviderMode::FakeInProcess),
             "LATTICE_SEMANTIC_FAKE / from_env Fake must win over binary discovery"
         );
+    }
+
+    #[test]
+    fn from_env_or_default_prefers_pioneer_over_discovery() {
+        let mode = SemanticProviderMode::resolve_default(
+            || Some(SemanticProviderMode::PioneerInProcess),
+            || Some(PathBuf::from("/tmp/would-not-use")),
+        );
+        assert!(matches!(mode, SemanticProviderMode::PioneerInProcess));
     }
 
     #[test]

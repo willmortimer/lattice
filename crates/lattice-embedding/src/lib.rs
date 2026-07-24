@@ -6,12 +6,16 @@
 //!
 //! Model download/install lives here so enablement hosts can stage the pinned
 //! Qwen3 GGUF without pulling network work into search requests.
+//!
+//! Optional remote Pioneer embeddings (`LATTICE_EMBEDDING_PROVIDER=pioneer`)
+//! share the same [`EmbeddingProvider`] contract for Actian-ready upserts.
 
 mod download;
 mod error;
 mod manifest;
 mod paths;
 mod pinned;
+mod pioneer;
 mod provider;
 mod specification;
 mod status;
@@ -35,6 +39,12 @@ pub use pinned::{
     QWEN3_EMBEDDING_INSTALL_SLUG, QWEN3_EMBEDDING_LICENSE, QWEN3_EMBEDDING_MODEL_ID,
     QWEN3_EMBEDDING_MODEL_REVISION, QWEN3_EMBEDDING_SHA256, QWEN3_EMBEDDING_SIZE_BYTES,
     QWEN3_EMBEDDING_SIZE_LABEL,
+};
+pub use pioneer::{
+    pioneer_embedding_requested, pioneer_embedding_specification, PioneerEmbeddingProvider,
+    ENV_EMBEDDING_DIMENSIONS, ENV_EMBEDDING_MODEL, ENV_EMBEDDING_PROVIDER, ENV_PIONEER_API_KEY,
+    PIONEER_EMBEDDING_BASE_URL, PIONEER_EMBEDDING_DIMENSIONS, PIONEER_EMBEDDING_MODEL_ID,
+    PIONEER_EMBEDDING_PROVIDER_ID,
 };
 pub use provider::{
     EmbedDocumentRequest, EmbedQueryRequest, EmbeddingProvider, EmbeddingVector,

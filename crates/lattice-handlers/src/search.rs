@@ -2,9 +2,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use lattice_embedding::{
-    acquire_pinned_embedding_model, download_progress_percent, semantic_fake_enabled,
-    DistanceMetric, EmbeddingProvider, EmbeddingSpecification, FakeEmbeddingProvider,
-    PoolingStrategy,
+    acquire_pinned_embedding_model, download_progress_percent, pioneer_embedding_requested,
+    semantic_fake_enabled, DistanceMetric, EmbeddingProvider, EmbeddingSpecification,
+    FakeEmbeddingProvider, PoolingStrategy,
 };
 use lattice_index::{
     Backlink, ChunkSearchHit, EmbedPendingStats, EmbeddingNamespace, HybridSearchHit, SearchHit,
@@ -478,7 +478,8 @@ pub fn prepare_semantic_model_for_session(
     session: &WorkspaceSession,
     on_progress: &mut impl FnMut(&SemanticStatus),
 ) -> Result<(), String> {
-    if semantic_fake_enabled() {
+    // Fake and remote Pioneer skip the local Qwen GGUF download.
+    if semantic_fake_enabled() || pioneer_embedding_requested() {
         session.set_semantic_prepare_status(None);
         return Ok(());
     }
