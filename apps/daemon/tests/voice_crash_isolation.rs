@@ -86,6 +86,7 @@ async fn spawn_daemon_with_voice() -> ServerGuard {
         runtime,
         None,
         Some(Arc::clone(&voice)),
+        None,
         shutdown_rx,
     ));
 

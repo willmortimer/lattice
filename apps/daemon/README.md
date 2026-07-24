@@ -1,8 +1,51 @@
 # latticed
 
 Long-lived Lattice daemon: Unix-domain control plane, optional semantic indexing,
-optional voice-host supervision, and an authenticated **localhost-only** HTTP /
-MCP context API.
+optional voice-host supervision, optional embedded-agent supervision, and an
+authenticated **localhost-only** HTTP / MCP context API.
+
+## Embedded agent (Phase A / EA3)
+
+`latticed` supervises the Node `agentd` sidecar (or an in-process fake backend).
+Desktop / Tauri must **not** spawn `agentd` directly — see
+[`docs/architecture/embedded-agent.md`](../../docs/architecture/embedded-agent.md)
+and [ADR 0044](../../docs/decisions/0044-embedded-agent-sidecar.md).
+
+### Control-plane RPCs (EA4 entry points)
+
+| Request | Response | Purpose |
+| --- | --- | --- |
+| `StartAgentRun` | `StartAgentRunResponse` | Start a run; stream `AgentEvent` notifications |
+| `CancelAgentRun` | `CancelAgentRunResponse` | Cancel an in-flight run |
+| `GetAgentHealth` | `GetAgentHealthResponse` | Backend health (`fake` / `sidecar`, degraded) |
+
+Sequenced `Event.body = AgentEvent` carries `run_id`, `event_type`, and
+`payload_json` (opaque JSON mirroring `@lattice/agent-protocol`).
+
+Without agent env, these RPCs return `agent_unavailable` (not `unimplemented`).
+
+### Environment
+
+| Variable | Purpose |
+| --- | --- |
+| `LATTICE_AGENT_FAKE=1` | In-process `FakeAgentBackend` (tests / CI; no Node) |
+| `LATTICE_AGENTD_BIN` | Path to Node/tsx entry or packaged `agentd` executable |
+| `LATTICE_AGENT_PROVIDER` | `pioneer` / `openai` / `fake` (passed through to sidecar) |
+| `LATTICE_AGENT_MODEL` | Model id passed through to sidecar |
+| `PIONEER_API_KEY` / `OPENAI_API_KEY` | Injected at `agentd` spawn only (never logged) |
+
+```sh
+# Fake backend for daemon tests / local smoke without Node
+LATTICE_AGENT_FAKE=1 \
+  cargo run -p lattice-daemon -- --auth-token dev-token --api-port 0
+
+# Supervised sidecar (requires agentd from EA2)
+LATTICE_AGENTD_BIN="npx tsx apps/agentd/src/index.ts" \
+  LATTICE_AGENT_PROVIDER=pioneer \
+  LATTICE_AGENT_MODEL=your-model \
+  PIONEER_API_KEY=… \
+  cargo run -p lattice-daemon -- --auth-token dev-token --api-port 0
+```
 
 ## Voice host (D5)
 

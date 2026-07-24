@@ -1,15 +1,17 @@
 use lattice_protocol::{
     decode_frame, encode_frame, event_envelope, request_envelope, response_envelope,
     ApplyPageUpdateRequest, ApplyPageUpdateResponse, AudioGap, AudioSampleFormat,
-    CancelVoiceSessionRequest, CancelVoiceSessionResponse, Event, FinalTranscript,
-    FinalizationMode, FinishUtteranceRequest, FinishUtteranceResponse, HealthRequest,
+    CancelAgentRunRequest, CancelAgentRunResponse, CancelVoiceSessionRequest,
+    CancelVoiceSessionResponse, Event, FinalTranscript, FinalizationMode, FinishUtteranceRequest,
+    FinishUtteranceResponse, GetAgentHealthRequest, GetAgentHealthResponse, HealthRequest,
     HealthResponse, IndexProgress, ModelState, ModelStatus, ModelStatusChanged,
     OpenWorkspaceRequest, OpenWorkspaceResponse, PartialTranscript, PingRequest,
     PrepareModelRequest, PrepareModelResponse, PushAudioChunkRequest, PushAudioChunkResponse,
     Request, ResourceChanged, Response, SearchHit, SearchRequest, SearchResponse, SessionContext,
-    SessionFailed, SpeechCapabilities, SpeechSessionConfig, StartVoiceSessionRequest,
-    StartVoiceSessionResponse, TranscriptionSessionState, UpdateSessionContextRequest,
-    UpdateSessionContextResponse, WorkspaceLease, WorkspaceLeaseChanged, PROTOCOL_VERSION,
+    SessionFailed, SpeechCapabilities, SpeechSessionConfig, StartAgentRunRequest,
+    StartAgentRunResponse, StartVoiceSessionRequest, StartVoiceSessionResponse,
+    TranscriptionSessionState, UpdateSessionContextRequest, UpdateSessionContextResponse,
+    WorkspaceLease, WorkspaceLeaseChanged, PROTOCOL_VERSION,
 };
 use prost::Message;
 use std::path::PathBuf;
@@ -543,6 +545,113 @@ fn audio_gap_event() -> lattice_protocol::Envelope {
     )
 }
 
+fn start_agent_run_request() -> lattice_protocol::Envelope {
+    request_envelope(
+        "golden-start-agent",
+        Request {
+            deadline_unix_ms: None,
+            idempotency_key: Some("idem-agent-start".into()),
+            body: Some(lattice_protocol::request::Body::StartAgentRun(
+                StartAgentRunRequest {
+                    workspace_id: "ws-agent".into(),
+                    thread_id: "thread-1".into(),
+                    run_id: Some("run-1".into()),
+                    provider: "pioneer".into(),
+                    model: "gpt-test".into(),
+                    prompt: Some("hello".into()),
+                    messages_json: None,
+                },
+            )),
+        },
+    )
+}
+
+fn start_agent_run_response() -> lattice_protocol::Envelope {
+    response_envelope(
+        "golden-start-agent-res",
+        Response {
+            body: Some(lattice_protocol::response::Body::StartAgentRun(
+                StartAgentRunResponse {
+                    run_id: "run-1".into(),
+                    thread_id: "thread-1".into(),
+                },
+            )),
+        },
+    )
+}
+
+fn cancel_agent_run_request() -> lattice_protocol::Envelope {
+    request_envelope(
+        "golden-cancel-agent",
+        Request {
+            deadline_unix_ms: None,
+            idempotency_key: None,
+            body: Some(lattice_protocol::request::Body::CancelAgentRun(
+                CancelAgentRunRequest {
+                    run_id: "run-1".into(),
+                },
+            )),
+        },
+    )
+}
+
+fn cancel_agent_run_response() -> lattice_protocol::Envelope {
+    response_envelope(
+        "golden-cancel-agent-res",
+        Response {
+            body: Some(lattice_protocol::response::Body::CancelAgentRun(
+                CancelAgentRunResponse {},
+            )),
+        },
+    )
+}
+
+fn get_agent_health_request() -> lattice_protocol::Envelope {
+    request_envelope(
+        "golden-agent-health",
+        Request {
+            deadline_unix_ms: None,
+            idempotency_key: None,
+            body: Some(lattice_protocol::request::Body::GetAgentHealth(
+                GetAgentHealthRequest {},
+            )),
+        },
+    )
+}
+
+fn get_agent_health_response() -> lattice_protocol::Envelope {
+    response_envelope(
+        "golden-agent-health-res",
+        Response {
+            body: Some(lattice_protocol::response::Body::GetAgentHealth(
+                GetAgentHealthResponse {
+                    ok: true,
+                    backend: "fake".into(),
+                    degraded: false,
+                },
+            )),
+        },
+    )
+}
+
+fn agent_event() -> lattice_protocol::Envelope {
+    event_envelope(
+        "golden-agent-event",
+        Event {
+            sequence: 11,
+            workspace_id: "ws-agent".into(),
+            body: Some(lattice_protocol::event::Body::AgentEvent(
+                lattice_protocol::AgentEvent {
+                    run_id: "run-1".into(),
+                    event_type: "run_started".into(),
+                    payload_json: r#"{"type":"run_started","runId":"run-1","threadId":"thread-1"}"#
+                        .into(),
+                },
+            )),
+        },
+    )
+}
+
 fn assert_golden(name: &str, envelope: &lattice_protocol::Envelope) {
     let path = fixtures_dir().join(name);
     let actual = envelope.encode_to_vec();
@@ -749,6 +858,47 @@ fn golden_session_failed_event() {
 #[test]
 fn golden_audio_gap_event() {
     assert_golden("audio_gap_event.hex", &audio_gap_event());
+}
+
+#[test]
+fn golden_start_agent_run_request() {
+    assert_golden("start_agent_run_request.hex", &start_agent_run_request());
+}
+
+#[test]
+fn golden_start_agent_run_response() {
+    assert_golden("start_agent_run_response.hex", &start_agent_run_response());
+}
+
+#[test]
+fn golden_cancel_agent_run_request() {
+    assert_golden("cancel_agent_run_request.hex", &cancel_agent_run_request());
+}
+
+#[test]
+fn golden_cancel_agent_run_response() {
+    assert_golden(
+        "cancel_agent_run_response.hex",
+        &cancel_agent_run_response(),
+    );
+}
+
+#[test]
+fn golden_get_agent_health_request() {
+    assert_golden("get_agent_health_request.hex", &get_agent_health_request());
+}
+
+#[test]
+fn golden_get_agent_health_response() {
+    assert_golden(
+        "get_agent_health_response.hex",
+        &get_agent_health_response(),
+    );
+}
+
+#[test]
+fn golden_agent_event() {
+    assert_golden("agent_event.hex", &agent_event());
 }
 
 #[test]

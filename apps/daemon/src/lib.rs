@@ -7,6 +7,7 @@
 //! Also exposes an authenticated localhost HTTP API (`127.0.0.1` only) and an
 //! optional MCP stdio adapter for governed search/read/context and proposal tools.
 
+mod agent;
 mod api;
 mod config;
 mod dataset_api;
@@ -23,6 +24,13 @@ mod server;
 mod spawn;
 mod voice_host;
 
+pub use agent::{
+    resolve_agentd_bin, AgentCommand, AgentController, AgentEvent, AgentEventSink,
+    AgentProviderMode, AgentRunHandle, AgentRunId, AgentRuntimeBackend, AgentRuntimeError,
+    AgentRuntimeHealth, FakeAgentBackend, ProviderKind, SidecarAgentBackend, StartAgentRunRequest,
+    ENV_AGENTD_BIN, ENV_AGENT_FAKE, ENV_AGENT_MODEL, ENV_AGENT_PROVIDER,
+    PROTOCOL_VERSION as AGENT_PROTOCOL_VERSION,
+};
 pub use api::{
     api_build_context, api_cancel_job, api_create_proposal, api_get_dataset_schema, api_get_job,
     api_get_proposal, api_list_active_jobs, api_list_proposals, api_list_recent_jobs,

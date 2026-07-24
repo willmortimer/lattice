@@ -4,8 +4,9 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use lattice_daemon::{
-    default_socket_path, mcp, serve_with_shutdown_and_controllers, DaemonConfig, DaemonPreferences,
-    SemanticController, SemanticProviderMode, VoiceController, VoiceProviderMode, DEFAULT_API_PORT,
+    default_socket_path, mcp, serve_with_shutdown_and_controllers, AgentController,
+    AgentProviderMode, DaemonConfig, DaemonPreferences, SemanticController, SemanticProviderMode,
+    VoiceController, VoiceProviderMode, DEFAULT_API_PORT,
 };
 use lattice_runtime::LatticeRuntime;
 use tracing_subscriber::EnvFilter;
@@ -136,6 +137,17 @@ async fn main() -> Result<()> {
         }
         None => None,
     };
+    let agent = match AgentProviderMode::from_env() {
+        Some(mode) => {
+            tracing::info!(?mode, "agent runtime enabled via environment");
+            Some(
+                AgentController::start(mode)
+                    .await
+                    .map_err(|err| anyhow::anyhow!("start agent controller: {err}"))?,
+            )
+        }
+        None => None,
+    };
 
     {
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -145,7 +157,7 @@ async fn main() -> Result<()> {
             }
             let _ = tx.send(());
         });
-        serve_with_shutdown_and_controllers(config, runtime, semantic, voice, rx)
+        serve_with_shutdown_and_controllers(config, runtime, semantic, voice, agent, rx)
             .await
             .context("latticed serve failed")?;
     }
