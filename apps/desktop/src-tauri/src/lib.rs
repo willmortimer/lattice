@@ -1,3 +1,4 @@
+mod agent;
 mod app_menu;
 mod artifact;
 mod canvas;
@@ -43,7 +44,8 @@ pub fn run() {
         .manage(theme::ThemeWatchState::default())
         .manage(resource_links::ResourceCatalogState::default())
         .manage(voice::VoiceState::default())
-        .manage(semantic::SemanticState::default());
+        .manage(semantic::SemanticState::default())
+        .manage(agent::AgentState::default());
 
     // Socket bridge for `@srsholmes/tauri-playwright` (WKWebView / WebView2 / WebKitGTK).
     // Only listen when explicitly enabled so normal debug runs stay quiet.
@@ -241,6 +243,9 @@ pub fn run() {
             semantic::semantic_disable,
             scheduler::get_background_schedule_status,
             scheduler::set_background_schedules_enabled,
+            agent::agent_health,
+            agent::agent_start_run,
+            agent::agent_cancel_run,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

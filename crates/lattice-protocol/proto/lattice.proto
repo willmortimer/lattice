@@ -46,6 +46,10 @@ message Request {
     EnableSemanticSearchRequest enable_semantic_search = 50;
     DisableSemanticSearchRequest disable_semantic_search = 51;
     GetSemanticStatusRequest get_semantic_status = 52;
+    // Embedded agent plane (field numbers 60–69).
+    StartAgentRunRequest start_agent_run = 60;
+    CancelAgentRunRequest cancel_agent_run = 61;
+    GetAgentHealthRequest get_agent_health = 62;
   }
 }
 
@@ -69,6 +73,9 @@ message Response {
     EnableSemanticSearchResponse enable_semantic_search = 50;
     DisableSemanticSearchResponse disable_semantic_search = 51;
     GetSemanticStatusResponse get_semantic_status = 52;
+    StartAgentRunResponse start_agent_run = 60;
+    CancelAgentRunResponse cancel_agent_run = 61;
+    GetAgentHealthResponse get_agent_health = 62;
   }
 }
 
@@ -96,6 +103,8 @@ message Event {
     EndpointDetected endpoint_detected = 30;
     // Semantic status (field 50+; keep voice 20–39).
     SemanticStatusChanged semantic_status = 50;
+    // Embedded agent events (field 60+).
+    AgentEvent agent_event = 60;
   }
 }
 
@@ -527,4 +536,47 @@ message AudioGap {
   uint64 next_sequence = 3;
   uint64 detected_at_ns = 4;
   optional string reason = 5;
+}
+
+// Embedded agent plane (Phase A). Event payloads mirror
+// `@lattice/agent-protocol` JSONL as opaque JSON for forward compatibility.
+message StartAgentRunRequest {
+  string workspace_id = 1;
+  string thread_id = 2;
+  // Optional; latticed generates a UUIDv7 when empty.
+  optional string run_id = 3;
+  // pioneer | openai | fake
+  string provider = 4;
+  string model = 5;
+  optional string prompt = 6;
+  // Optional JSON array of AI SDK UIMessage objects.
+  optional string messages_json = 7;
+}
+
+message StartAgentRunResponse {
+  string run_id = 1;
+  string thread_id = 2;
+}
+
+message CancelAgentRunRequest {
+  string run_id = 1;
+}
+
+message CancelAgentRunResponse {}
+
+message GetAgentHealthRequest {}
+
+message GetAgentHealthResponse {
+  bool ok = 1;
+  // fake | sidecar
+  string backend = 2;
+  bool degraded = 3;
+}
+
+message AgentEvent {
+  string run_id = 1;
+  // Discriminator matching agent-protocol event `type` (run_started, …).
+  string event_type = 2;
+  // Full JSON object for the event (Phase A opaque payload).
+  string payload_json = 3;
 }

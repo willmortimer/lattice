@@ -10,13 +10,14 @@ use lattice_client::{
 };
 use lattice_protocol::{
     encode_frame, envelope, error_envelope, event, event_envelope, request, response,
-    response_envelope, ApplyPageUpdateRequest, ApplyPageUpdateResponse,
-    DisableSemanticSearchRequest, DisableSemanticSearchResponse, EnableSemanticSearchRequest,
-    EnableSemanticSearchResponse, Error as WireError, Event, FrameDecoder,
-    GetSemanticStatusRequest, GetSemanticStatusResponse, HealthRequest, HealthResponse,
-    IndexProgress, OpenWorkspaceRequest, OpenWorkspaceResponse, PingRequest, PingResponse, Request,
-    ResourceChanged, Response, SearchRequest, SearchResponse, SemanticStatus as WireSemanticStatus,
-    WorkspaceLeaseChanged, PROTOCOL_VERSION,
+    response_envelope, ApplyPageUpdateRequest, ApplyPageUpdateResponse, CancelAgentRunRequest,
+    CancelAgentRunResponse, DisableSemanticSearchRequest, DisableSemanticSearchResponse,
+    EnableSemanticSearchRequest, EnableSemanticSearchResponse, Error as WireError, Event,
+    FrameDecoder, GetAgentHealthRequest, GetAgentHealthResponse, GetSemanticStatusRequest,
+    GetSemanticStatusResponse, HealthRequest, HealthResponse, IndexProgress, OpenWorkspaceRequest,
+    OpenWorkspaceResponse, PingRequest, PingResponse, Request, ResourceChanged, Response,
+    SearchRequest, SearchResponse, SemanticStatus as WireSemanticStatus, StartAgentRunRequest,
+    StartAgentRunResponse, WorkspaceLeaseChanged, PROTOCOL_VERSION,
 };
 use lattice_runtime::{
     IdempotentOutcome, LatticeRuntime, RuntimeEvent, RuntimeIndexProgress, RuntimeResourceChanged,
@@ -41,6 +42,7 @@ pub struct DaemonState {
     pub jobs: Arc<crate::jobs::JobRegistry>,
     pub semantic: Option<Arc<crate::embed_host::SemanticController>>,
     pub voice: Option<Arc<crate::voice_host::VoiceController>>,
+    pub agent: Option<Arc<crate::agent::AgentController>>,
     connections: Option<Arc<ConnectionTracker>>,
     event_tx: broadcast::Sender<Event>,
     next_event_seq: Arc<AtomicU64>,
@@ -48,7 +50,7 @@ pub struct DaemonState {
 
 impl DaemonState {
     pub fn new(config: DaemonConfig, runtime: Arc<LatticeRuntime>) -> Self {
-        Self::new_with_controllers(config, runtime, None, None)
+        Self::new_with_controllers(config, runtime, None, None, None)
     }
 
     pub fn new_with_semantic(
@@ -56,7 +58,7 @@ impl DaemonState {
         runtime: Arc<LatticeRuntime>,
         semantic: Option<Arc<crate::embed_host::SemanticController>>,
     ) -> Self {
-        Self::new_with_controllers(config, runtime, semantic, None)
+        Self::new_with_controllers(config, runtime, semantic, None, None)
     }
 
     pub fn new_with_controllers(
@@ -64,11 +66,15 @@ impl DaemonState {
         runtime: Arc<LatticeRuntime>,
         semantic: Option<Arc<crate::embed_host::SemanticController>>,
         voice: Option<Arc<crate::voice_host::VoiceController>>,
+        agent: Option<Arc<crate::agent::AgentController>>,
     ) -> Self {
         let (event_tx, _) = broadcast::channel(64);
         let next_event_seq = Arc::new(AtomicU64::new(1));
         if let Some(voice) = voice.as_ref() {
             voice.attach_event_fanout(event_tx.clone(), Arc::clone(&next_event_seq));
+        }
+        if let Some(agent) = agent.as_ref() {
+            agent.attach_event_fanout(event_tx.clone(), Arc::clone(&next_event_seq));
         }
         let state = Self {
             config: Arc::new(config),
@@ -76,6 +82,7 @@ impl DaemonState {
             jobs: Arc::new(crate::jobs::JobRegistry::new()),
             semantic,
             voice,
+            agent,
             connections: None,
             event_tx,
             next_event_seq,
@@ -151,7 +158,7 @@ pub async fn serve_with_shutdown(
     runtime: Arc<LatticeRuntime>,
     shutdown: oneshot::Receiver<()>,
 ) -> Result<()> {
-    serve_with_shutdown_and_controllers(config, runtime, None, None, shutdown).await
+    serve_with_shutdown_and_controllers(config, runtime, None, None, None, shutdown).await
 }
 
 /// Bind and serve with an optional semantic indexing controller.
@@ -161,15 +168,16 @@ pub async fn serve_with_shutdown_and_semantic(
     semantic: Option<Arc<crate::embed_host::SemanticController>>,
     shutdown: oneshot::Receiver<()>,
 ) -> Result<()> {
-    serve_with_shutdown_and_controllers(config, runtime, semantic, None, shutdown).await
+    serve_with_shutdown_and_controllers(config, runtime, semantic, None, None, shutdown).await
 }
 
-/// Bind and serve with optional semantic + voice controllers.
+/// Bind and serve with optional semantic + voice + agent controllers.
 pub async fn serve_with_shutdown_and_controllers(
     config: DaemonConfig,
     runtime: Arc<LatticeRuntime>,
     semantic: Option<Arc<crate::embed_host::SemanticController>>,
     voice: Option<Arc<crate::voice_host::VoiceController>>,
+    agent: Option<Arc<crate::agent::AgentController>>,
     shutdown: oneshot::Receiver<()>,
 ) -> Result<()> {
     let socket_path = config.socket_path.clone();
@@ -189,7 +197,7 @@ pub async fn serve_with_shutdown_and_controllers(
         config.idle_shutdown_timeout,
         idle_shutdown_tx,
     );
-    let state = DaemonState::new_with_controllers(config, runtime, semantic, voice)
+    let state = DaemonState::new_with_controllers(config, runtime, semantic, voice, agent)
         .with_connections(Arc::clone(&connections));
     let schedule_runner = crate::schedule::spawn_schedule_runner_with_connections(
         Arc::clone(&state.runtime),
@@ -241,6 +249,9 @@ pub async fn serve_with_shutdown_and_controllers(
     }
     if let Some(voice) = state.voice.as_ref() {
         voice.shutdown();
+    }
+    if let Some(agent) = state.agent.as_ref() {
+        agent.shutdown().await;
     }
     state.runtime.shutdown_all_sessions();
     let _ = std::fs::remove_file(&socket_path);
@@ -440,6 +451,13 @@ async fn handle_request(
         Some(request::Body::GetSemanticStatus(GetSemanticStatusRequest { workspace_id })) => {
             handle_get_semantic_status(state, workspace_id)
         }
+        Some(request::Body::StartAgentRun(req)) => handle_start_agent_run(state, req).await,
+        Some(request::Body::CancelAgentRun(CancelAgentRunRequest { run_id })) => {
+            handle_cancel_agent_run(state, run_id).await
+        }
+        Some(request::Body::GetAgentHealth(GetAgentHealthRequest {})) => {
+            handle_get_agent_health(state).await
+        }
         Some(
             body @ (request::Body::PrepareModel(_)
             | request::Body::GetVoiceCapabilities(_)
@@ -626,6 +644,127 @@ fn handle_get_semantic_status(
         },
         None,
     ))
+}
+
+async fn handle_start_agent_run(
+    state: &DaemonState,
+    req: StartAgentRunRequest,
+) -> std::result::Result<(Response, Option<(String, lattice_protocol::WorkspaceLease)>), WireError>
+{
+    let agent = state.agent.as_ref().ok_or_else(|| WireError {
+        code: "agent_unavailable".into(),
+        message: "agent runtime is not configured (set LATTICE_AGENT_FAKE=1 or LATTICE_AGENTD_BIN)"
+            .into(),
+        details: None,
+    })?;
+
+    let provider = if req.provider.is_empty() {
+        agent.default_provider()
+    } else {
+        crate::agent::ProviderKind::parse(&req.provider).ok_or_else(|| WireError {
+            code: "agent_invalid_request".into(),
+            message: format!(
+                "unknown provider {:?}; expected pioneer|openai|fake",
+                req.provider
+            ),
+            details: None,
+        })?
+    };
+    let model = if req.model.is_empty() {
+        agent.default_model()
+    } else {
+        req.model
+    };
+    let messages = match req.messages_json.as_deref() {
+        None | Some("") => None,
+        Some(raw) => {
+            let value: serde_json::Value = serde_json::from_str(raw).map_err(|err| WireError {
+                code: "agent_invalid_request".into(),
+                message: format!("messages_json is not valid JSON: {err}"),
+                details: None,
+            })?;
+            let arr = value.as_array().ok_or_else(|| WireError {
+                code: "agent_invalid_request".into(),
+                message: "messages_json must be a JSON array".into(),
+                details: None,
+            })?;
+            Some(arr.clone())
+        }
+    };
+
+    let start = crate::agent::StartAgentRunRequest {
+        thread_id: req.thread_id,
+        run_id: crate::agent::AgentRunId::new(req.run_id.unwrap_or_default()),
+        provider,
+        model,
+        messages,
+        prompt: req.prompt,
+        workspace_id: req.workspace_id,
+    };
+    let handle = agent.start_run(start).await.map_err(agent_error_to_wire)?;
+    Ok((
+        Response {
+            body: Some(response::Body::StartAgentRun(StartAgentRunResponse {
+                run_id: handle.run_id.to_string(),
+                thread_id: handle.thread_id,
+            })),
+        },
+        None,
+    ))
+}
+
+async fn handle_cancel_agent_run(
+    state: &DaemonState,
+    run_id: String,
+) -> std::result::Result<(Response, Option<(String, lattice_protocol::WorkspaceLease)>), WireError>
+{
+    let agent = state.agent.as_ref().ok_or_else(|| WireError {
+        code: "agent_unavailable".into(),
+        message: "agent runtime is not configured (set LATTICE_AGENT_FAKE=1 or LATTICE_AGENTD_BIN)"
+            .into(),
+        details: None,
+    })?;
+    agent
+        .cancel_run(crate::agent::AgentRunId::new(run_id))
+        .await
+        .map_err(agent_error_to_wire)?;
+    Ok((
+        Response {
+            body: Some(response::Body::CancelAgentRun(CancelAgentRunResponse {})),
+        },
+        None,
+    ))
+}
+
+async fn handle_get_agent_health(
+    state: &DaemonState,
+) -> std::result::Result<(Response, Option<(String, lattice_protocol::WorkspaceLease)>), WireError>
+{
+    let agent = state.agent.as_ref().ok_or_else(|| WireError {
+        code: "agent_unavailable".into(),
+        message: "agent runtime is not configured (set LATTICE_AGENT_FAKE=1 or LATTICE_AGENTD_BIN)"
+            .into(),
+        details: None,
+    })?;
+    let health = agent.health().await.map_err(agent_error_to_wire)?;
+    Ok((
+        Response {
+            body: Some(response::Body::GetAgentHealth(GetAgentHealthResponse {
+                ok: health.ok,
+                backend: health.backend,
+                degraded: health.degraded,
+            })),
+        },
+        None,
+    ))
+}
+
+fn agent_error_to_wire(err: crate::agent::AgentRuntimeError) -> WireError {
+    WireError {
+        code: err.wire_code().into(),
+        message: err.to_string(),
+        details: None,
+    }
 }
 
 fn semantic_status_to_wire(

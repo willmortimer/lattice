@@ -6,8 +6,8 @@ import type { ActionSummary } from "./data/actions";
 import type { InterfaceSummary } from "./data/interfaces";
 
 export const demoSnapshot: WorkspaceSnapshot = {
-  "root": "/Users/you/Lattice/Workspaces/First Look",
-  "title": "First Look",
+  "root": "/Users/you/Lattice/Workspaces/Lattice",
+  "title": "Lattice",
   "id": "0198-demo",
   "capabilities": [
     "pages",

@@ -1,3 +1,7 @@
+import { AgentHeader } from "../agent/AgentHeader";
+import { AgentPanelShell } from "../agent/AgentPanelShell";
+import { AgentThread } from "../agent/AgentThread";
+import { LatticeAgentProvider } from "../agent/LatticeAgentProvider";
 import { inBrowser } from "../demo";
 import { demoSearch } from "../demo";
 import { TabularImportReviewDialog } from "../data/CsvImportReviewDialog";
@@ -47,6 +51,7 @@ import {
   List as MenuIcon,
   MagnifyingGlass,
   Plus,
+  Robot,
   Sidebar,
   Sparkle,
   Table,
@@ -72,10 +77,10 @@ export function DesktopShell({ model }: DesktopShellProps) {
     proposalSummaries, proposalInboxLoading, proposalApplyOutcome, proposalReview, refreshProposalInbox, openProposalReview,
     handleProposalAccept, handleProposalReject, handleProposalCancel, handleCreateDemoProposal,
     openProposalResourcePath, dismissProposalApplyOutcome,
-    openTabs, navigation, inspectorOpen, editingTitle, titleDraft, assetRoot,
+    openTabs, navigation, inspectorOpen, agentPanelOpen, editingTitle, titleDraft, assetRoot,
     wikiTargets, pageEditorRef, paletteItems, hasCapability, setSettings, setStartup, setError,
     recents, page, setSaveState, setLinkPicker, handleImportEditorAsset,
-    setNewWorkspaceOpen, setSearchPaneOpen, setPaletteOpen, setActivityArea, setInspectorOpen,
+    setNewWorkspaceOpen, setSearchPaneOpen, setPaletteOpen, setActivityArea, setInspectorOpen, setAgentPanelOpen,
     setDismissedNoticeCodes, setEditingTitle, setTitleDraft, applyThemeCatalog,
     clearRecents, resetSettings, handleGetStarted, handleOpenWorkspace, openRecent,
     handleCreateWorkspace, openNewWorkspaceDialog, pickWorkspaceFolder, handleNewPage, handleQuickNote,
@@ -235,6 +240,13 @@ export function DesktopShell({ model }: DesktopShellProps) {
               <Terminal size={17} />
             </IconButton>
           )}
+          <IconButton
+            label={agentPanelOpen ? "Hide agent" : "Show agent"}
+            className={agentPanelOpen ? "activity-button-active" : ""}
+            onClick={() => setAgentPanelOpen((open) => !open)}
+          >
+            <Robot size={17} />
+          </IconButton>
           <div className="activity-spacer" />
           <IconButton
             label="Settings"
@@ -475,6 +487,13 @@ export function DesktopShell({ model }: DesktopShellProps) {
                   Open
                 </Button>
               )}
+              <IconButton
+                label={agentPanelOpen ? "Hide agent" : "Show agent"}
+                className={agentPanelOpen ? "header-button-active" : ""}
+                onClick={() => setAgentPanelOpen((open) => !open)}
+              >
+                <Robot size={16} />
+              </IconButton>
               <IconButton
                 label={inspectorOpen ? "Hide inspector" : "Show inspector"}
                 className={inspectorOpen ? "header-button-active" : ""}
@@ -719,6 +738,15 @@ export function DesktopShell({ model }: DesktopShellProps) {
                 onClose={() => setInspectorOpen(false)}
                 onOpenFile={handleOpenFile}
               />
+            )}
+
+            {agentPanelOpen && (
+              <AgentPanelShell>
+                <LatticeAgentProvider workspaceRoot={inBrowser ? null : snapshot.root}>
+                  <AgentHeader onClose={() => setAgentPanelOpen(false)} />
+                  <AgentThread workspaceRoot={inBrowser ? null : snapshot.root} />
+                </LatticeAgentProvider>
+              </AgentPanelShell>
             )}
           </div>
 
