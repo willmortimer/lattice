@@ -5,6 +5,7 @@
 
 mod action;
 mod app;
+mod attachment;
 mod binding;
 mod csv;
 mod data_app;
@@ -27,6 +28,12 @@ pub use action::{
     ACTION_FILE_SUFFIX, ACTION_FORMAT, ACTION_VERSION,
 };
 pub use app::DEFAULT_VIEW_NAME;
+pub use attachment::{
+    attachment_paths_in_values, cleanup_orphan_attachments, cleanup_unreferenced_attachments,
+    collect_attachment_refs, discard_staged_attachment, is_staged_attachment_path,
+    list_orphan_attachments, promote_attachment_cell_values, promote_staged_attachment,
+    stage_attachment_file, validate_staged_attachment_ref, STAGED_ATTACHMENT_PREFIX,
+};
 pub use binding::BindingSpec;
 pub use csv::{
     cell_from_csv, parse_csv_file, parse_field_type_name, resolve_field_types, CsvTable,

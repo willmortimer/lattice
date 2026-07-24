@@ -2,7 +2,11 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use lattice_core::Workspace;
-use lattice_data::{DataApp, DeletedRowSnapshot, NewColumn, Row, SchemaFilesSnapshot};
+use lattice_data::{
+    attachment_paths_in_values, cleanup_unreferenced_attachments, discard_staged_attachment,
+    promote_attachment_cell_values, DataApp, DeletedRowSnapshot, NewColumn, Row,
+    SchemaFilesSnapshot,
+};
 use lattice_datasets::Dataset;
 use lattice_storage::{
     BufferedWriter, NativeWorkspaceStore, RecoveryJournal, ResourceMetadata, WorkspaceStore,
@@ -244,8 +248,14 @@ impl CommandEngine {
                     summary: stored.summary,
                     outcomes: ops
                         .into_iter()
-                        .map(|o| CommandOutcome {
-                            resulting_revision: o.resulting_revision,
+                        .map(|o| {
+                            let record_id = serde_json::from_str::<Command>(&o.forward_json)
+                                .ok()
+                                .and_then(|forward| record_id_from_command(&forward));
+                            CommandOutcome {
+                                resulting_revision: o.resulting_revision,
+                                resulting_record_id: record_id,
+                            }
                         })
                         .collect(),
                     idempotent_replay: true,
@@ -311,6 +321,7 @@ impl CommandEngine {
                 .into_iter()
                 .map(|op| CommandOutcome {
                     resulting_revision: op.resulting_revision,
+                    resulting_record_id: record_id_from_command(&op.forward),
                 })
                 .collect(),
             idempotent_replay: false,
@@ -349,9 +360,18 @@ impl CommandEngine {
 
         // Apply inverses newest-first.
         let inverses: Vec<Command> = parsed.iter().map(|(_, inverse)| inverse.clone()).collect();
-        for ((_, inverse), op) in parsed.iter().zip(&ops).rev() {
+        let mut attachment_cleanup_candidates: Vec<(PathBuf, Vec<String>)> = Vec::new();
+        for ((forward, inverse), op) in parsed.iter().zip(&ops).rev() {
+            if let Some(candidate) =
+                attachment_paths_to_cleanup_after_undo(forward, op.prior_content.as_deref())
+            {
+                attachment_cleanup_candidates.push(candidate);
+            }
             self.apply_inverse(inverse, op.prior_content.as_deref())?;
         }
+
+        // Drop binaries introduced solely by the undone ops when unreferenced.
+        self.cleanup_attachment_candidates(&attachment_cleanup_candidates)?;
 
         self.history.set_undone(stored.rowid, true)?;
         Ok(Some(UndoReport {
@@ -1534,27 +1554,47 @@ impl CommandEngine {
                 id,
             } => {
                 let app = self.open_data_app(path)?;
-                let row_id = if let Some(row_id) = id.clone() {
-                    let mut row_values = values.clone();
-                    row_values.insert(
-                        "id".to_string(),
-                        lattice_data::CellValue::Text(row_id.clone()),
-                    );
-                    let row = Row {
-                        id: row_id.clone(),
-                        values: row_values,
-                    };
-                    app.restore_row(table, &row)?;
-                    row_id
-                } else {
-                    app.insert_row(table, values)?
+                let mut committed_values = values.clone();
+                let (promoted, staged_sources) =
+                    promote_attachment_cell_values(&self.root, &app, &mut committed_values)
+                        .map_err(|source| Error::InvalidResourceTarget {
+                            path: path.clone(),
+                            reason: source.to_string(),
+                        })?;
+                let row_id = match (|| -> Result<String> {
+                    if let Some(row_id) = id.clone() {
+                        let mut row_values = committed_values.clone();
+                        row_values.insert(
+                            "id".to_string(),
+                            lattice_data::CellValue::Text(row_id.clone()),
+                        );
+                        let row = Row {
+                            id: row_id.clone(),
+                            values: row_values,
+                        };
+                        app.restore_row(table, &row)?;
+                        Ok(row_id)
+                    } else {
+                        Ok(app.insert_row(table, &committed_values)?)
+                    }
+                })() {
+                    Ok(row_id) => {
+                        for staged in &staged_sources {
+                            let _ = discard_staged_attachment(&self.root, staged);
+                        }
+                        row_id
+                    }
+                    Err(err) => {
+                        let _ = cleanup_unreferenced_attachments(&app, &promoted);
+                        return Err(err);
+                    }
                 };
                 let revision = app.package_revision()?;
                 Ok(AppliedOp {
                     forward: Command::RecordInsert {
                         path: path.clone(),
                         table: table.clone(),
-                        values: values.clone(),
+                        values: committed_values,
                         id: Some(row_id.clone()),
                     },
                     inverse: Command::RecordDelete {
@@ -1581,10 +1621,29 @@ impl CommandEngine {
                     .get_row(table, id)?
                     .ok_or_else(|| Error::NotFound { path: path.clone() })?;
                 let prior_values = row_values_without_id(&prior_row);
-                app.update_row(table, id, values)?;
+                let mut committed_values = values.clone();
+                let (promoted, staged_sources) =
+                    promote_attachment_cell_values(&self.root, &app, &mut committed_values)
+                        .map_err(|source| Error::InvalidResourceTarget {
+                            path: path.clone(),
+                            reason: source.to_string(),
+                        })?;
+                if let Err(err) = app.update_row(table, id, &committed_values) {
+                    let _ = cleanup_unreferenced_attachments(&app, &promoted);
+                    return Err(err.into());
+                }
+                for staged in &staged_sources {
+                    let _ = discard_staged_attachment(&self.root, staged);
+                }
                 let revision = app.package_revision()?;
                 Ok(AppliedOp {
-                    forward: command.clone(),
+                    forward: Command::RecordUpdate {
+                        path: path.clone(),
+                        table: table.clone(),
+                        id: id.clone(),
+                        values: committed_values,
+                        base_revision: revision.clone(),
+                    },
                     inverse: Command::RecordUpdate {
                         path: path.clone(),
                         table: table.clone(),
@@ -2340,6 +2399,17 @@ impl CommandEngine {
         Ok(DataApp::open(&self.root.join(path))?)
     }
 
+    fn cleanup_attachment_candidates(&self, candidates: &[(PathBuf, Vec<String>)]) -> Result<()> {
+        for (package_path, paths) in candidates {
+            if paths.is_empty() {
+                continue;
+            }
+            let app = self.open_data_app(package_path)?;
+            let _ = cleanup_unreferenced_attachments(&app, paths)?;
+        }
+        Ok(())
+    }
+
     fn package_revision(&self, path: &Path) -> Result<String> {
         Ok(self.open_data_app(path)?.package_revision()?)
     }
@@ -2519,6 +2589,65 @@ fn row_values_without_id(row: &Row) -> std::collections::BTreeMap<String, lattic
         .filter(|(key, _)| key.as_str() != "id")
         .map(|(key, value)| (key.clone(), value.clone()))
         .collect()
+}
+
+fn record_id_from_command(command: &Command) -> Option<String> {
+    match command {
+        Command::RecordInsert { id, .. } => id.clone(),
+        Command::RecordUpdate { id, .. } | Command::RecordDelete { id, .. } => Some(id.clone()),
+        _ => None,
+    }
+}
+
+/// Paths that the forward command introduced and that undo should consider for
+/// orphan cleanup (never deletes still-referenced binaries).
+fn attachment_paths_to_cleanup_after_undo(
+    forward: &Command,
+    prior_content: Option<&[u8]>,
+) -> Option<(PathBuf, Vec<String>)> {
+    match forward {
+        Command::RecordInsert {
+            path: package_path,
+            values,
+            ..
+        } => {
+            let paths = attachment_paths_in_values(values)
+                .into_iter()
+                .filter(|attachment| attachment.starts_with("attachments/"))
+                .collect::<Vec<_>>();
+            if paths.is_empty() {
+                None
+            } else {
+                Some((package_path.clone(), paths))
+            }
+        }
+        Command::RecordUpdate {
+            path: package_path,
+            values,
+            ..
+        } => {
+            let after = attachment_paths_in_values(values)
+                .into_iter()
+                .filter(|attachment| attachment.starts_with("attachments/"))
+                .collect::<std::collections::BTreeSet<_>>();
+            let before = prior_content
+                .and_then(|bytes| serde_json::from_slice::<Row>(bytes).ok())
+                .map(|row| {
+                    attachment_paths_in_values(&row_values_without_id(&row))
+                        .into_iter()
+                        .filter(|attachment| attachment.starts_with("attachments/"))
+                        .collect::<std::collections::BTreeSet<_>>()
+                })
+                .unwrap_or_default();
+            let introduced: Vec<String> = after.difference(&before).cloned().collect();
+            if introduced.is_empty() {
+                None
+            } else {
+                Some((package_path.clone(), introduced))
+            }
+        }
+        _ => None,
+    }
 }
 
 fn column_specs_as_new_columns(columns: &[ColumnSpec]) -> Vec<NewColumn<'_>> {

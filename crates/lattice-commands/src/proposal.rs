@@ -283,7 +283,7 @@ mod tests {
 
         let mut engine = CommandEngine::open(dir.path()).unwrap();
         let undone = engine.undo().unwrap().expect("undo");
-        assert_eq!(undone.transaction_id.is_empty(), false);
+        assert!(!undone.transaction_id.is_empty());
         assert!(!dir.path().join("Notes/One.md").exists());
     }
 

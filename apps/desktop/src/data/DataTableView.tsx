@@ -136,7 +136,9 @@ function cycleSortDirection(
   };
 }
 
-function gridSummaryRowTheme(kind: GridRowKind): Partial<Theme> {
+function gridSummaryRowTheme(
+  kind: Exclude<GridRowKind, "data">,
+): Partial<Theme> {
   switch (kind) {
     case "group-header":
       return {
@@ -945,6 +947,33 @@ export function DataTableView({
           themeOverride,
         };
       }
+      if (column.field_type === "multi_enum") {
+        const bubbles =
+          row.values[column.name] &&
+          typeof row.values[column.name] === "object" &&
+          "MultiEnum" in (row.values[column.name] as object)
+            ? ((row.values[column.name] as { MultiEnum?: { values?: string[] } }).MultiEnum
+                ?.values ?? [])
+            : display
+              ? display.split(",").map((part) => part.trim()).filter(Boolean)
+              : [];
+        return {
+          kind: GridCellKind.Bubble,
+          data: bubbles,
+          allowOverlay: false,
+          themeOverride,
+        };
+      }
+      if (column.field_type === "attachment") {
+        return {
+          kind: GridCellKind.Text,
+          data: display,
+          displayData: display,
+          allowOverlay: false,
+          readonly: true,
+          themeOverride,
+        };
+      }
       return {
         kind: GridCellKind.Text,
         data: display,
@@ -1121,29 +1150,34 @@ export function DataTableView({
       return undefined;
     }
     const options = column.options ?? [];
+    const textCell = cell;
     return {
-      editor: (props) => (
-        <select
-          className="data-grid-enum-editor"
-          autoFocus
-          value={String(props.value.data ?? "")}
-          onChange={(event) => {
-            props.onFinishedEditing({
-              ...props.value,
-              data: event.currentTarget.value,
-              displayData: event.currentTarget.value,
-            });
-          }}
-          onBlur={() => props.onFinishedEditing(props.value)}
-        >
-          <option value="">—</option>
-          {options.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
-      ),
+      editor: (props) => {
+        const current =
+          props.value.kind === GridCellKind.Text ? String(props.value.data ?? "") : "";
+        return (
+          <select
+            className="data-grid-enum-editor"
+            autoFocus
+            value={current}
+            onChange={(event) => {
+              props.onFinishedEditing({
+                ...textCell,
+                data: event.currentTarget.value,
+                displayData: event.currentTarget.value,
+              });
+            }}
+            onBlur={() => props.onFinishedEditing(props.value)}
+          >
+            <option value="">—</option>
+            {options.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        );
+      },
       disablePadding: true,
     };
   }, []);
