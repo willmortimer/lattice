@@ -385,7 +385,6 @@ fn spawn_workflow_run(
     let execution_id_thread = execution_id.clone();
     let root = workspace.root().to_path_buf();
     let workflow_path = path;
-    let execution_id_thread = execution_id.clone();
 
     thread::spawn(move || {
         let manifest = match WorkflowManifest::load(&workflow_path) {
@@ -411,7 +410,6 @@ fn spawn_workflow_run(
             &trigger,
             Some(execution_id_thread),
             Some(&cancel_thread),
-            Some(&execution_id_thread),
         ) {
             Ok(finished) => {
                 patch_record(&record_thread, |r| *r = finished);
