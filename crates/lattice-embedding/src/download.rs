@@ -126,12 +126,7 @@ pub fn acquire_pinned_embedding_model(
     };
 
     let download_result = if let Some(source) = semantic_model_source_override() {
-        copy_with_progress(
-            &source,
-            &staging,
-            Some(file_len(&source)?),
-            &mut monotonic,
-        )
+        copy_with_progress(&source, &staging, Some(file_len(&source)?), &mut monotonic)
     } else {
         download_https_with_progress(
             QWEN3_EMBEDDING_DOWNLOAD_URL,
@@ -154,17 +149,14 @@ pub fn acquire_pinned_embedding_model(
         }
     }
 
-    let model_dir = match install_artifact_beside_manifest(
-        &manifest,
-        &staging,
-        &embeddings_models_dir(),
-    ) {
-        Ok(dir) => dir,
-        Err(error) => {
-            let _ = fs::remove_file(&staging);
-            return Err(error);
-        }
-    };
+    let model_dir =
+        match install_artifact_beside_manifest(&manifest, &staging, &embeddings_models_dir()) {
+            Ok(dir) => dir,
+            Err(error) => {
+                let _ = fs::remove_file(&staging);
+                return Err(error);
+            }
+        };
     let _ = fs::remove_file(&staging);
     Ok(AcquireResult {
         artifact_path: model_dir.join(&manifest.artifact),
@@ -295,9 +287,9 @@ fn download_https_with_progress(
     expected_size: Option<u64>,
     progress: &mut ProgressFn<'_>,
 ) -> Result<(), EmbeddingError> {
-    let response = ureq::get(url).call().map_err(|error| {
-        EmbeddingError::provider(format!("download failed for {url}: {error}"))
-    })?;
+    let response = ureq::get(url)
+        .call()
+        .map_err(|error| EmbeddingError::provider(format!("download failed for {url}: {error}")))?;
     let header_len = response
         .header("Content-Length")
         .and_then(|value| value.parse::<u64>().ok());
@@ -456,10 +448,7 @@ mod tests {
         std::env::set_var(ENV_SEMANTIC_MODEL_SOURCE, &fixture);
 
         let err = acquire_pinned_embedding_model(&mut |_, _| {}).unwrap_err();
-        assert!(matches!(
-            err,
-            EmbeddingError::ArtifactSha256Mismatch { .. }
-        ));
+        assert!(matches!(err, EmbeddingError::ArtifactSha256Mismatch { .. }));
         assert!(!qwen3_embedding_install_dir()
             .join(QWEN3_EMBEDDING_ARTIFACT)
             .exists());
@@ -475,12 +464,10 @@ mod tests {
         fs::write(&artifact, b"not-the-expected-bytes").unwrap();
         let mut manifest = qwen3_embedding_0_6b_q8_manifest();
         manifest.artifact = "bad.bin".into();
-        let err = install_artifact_beside_manifest(&manifest, &artifact, &dir.path().join("models"))
-            .unwrap_err();
-        assert!(matches!(
-            err,
-            EmbeddingError::ArtifactSha256Mismatch { .. }
-        ));
+        let err =
+            install_artifact_beside_manifest(&manifest, &artifact, &dir.path().join("models"))
+                .unwrap_err();
+        assert!(matches!(err, EmbeddingError::ArtifactSha256Mismatch { .. }));
         assert!(!dir
             .path()
             .join("models")

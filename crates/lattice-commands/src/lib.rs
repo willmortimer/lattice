@@ -54,14 +54,18 @@ pub use command::{
     Transaction, TransactionReceipt, UndoReport,
 };
 pub use contracts::{
-    BindingSpec, ExecutionResult, ExecutionStatus, ProposalSource, ProposalSourceType,
-    ProposalStatus, ResourceOutput, TransactionProposal, TransactionProposalSummary,
+    BindingSpec, CommandPreview, CommandPreviewDetail, ExecutionResult, ExecutionStatus,
+    ExecutionSummary, ProposalPreview, ProposalSource, ProposalSourceType, ProposalStatus,
+    ResourceOutput, TransactionProposal, TransactionProposalSummary, CANCEL_OWNER_DAEMON,
+    CANCEL_OWNER_DESKTOP, CANCEL_OWNER_NONE,
 };
 pub use derived::{
-    derived_dir, hash_input_pattern, hash_inputs, lineage_path, load_derived_status, load_lineage,
-    rebuild_derived, save_lineage, DerivedBuilder, DerivedError, DerivedInputHash, DerivedLineage,
-    DerivedManifest, DerivedRefresh, DerivedResult, DerivedState, DerivedStatus, DERIVED_DIR,
-    DERIVED_FORMAT, SUPPORTED_VERSION as DERIVED_SUPPORTED_VERSION,
+    cleanup_abandoned_staging, derived_dir, hash_builder_package, hash_input_pattern, hash_inputs,
+    lineage_path, load_derived_status, load_lineage, rebuild_derived, save_lineage, staging_root,
+    DerivedBuilder, DerivedError, DerivedInputHash, DerivedLineage, DerivedManifest,
+    DerivedRefresh, DerivedResult, DerivedStaleReason, DerivedState, DerivedStatus, DERIVED_DIR,
+    DERIVED_FORMAT, ENV_DERIVED_OUTPUT, ENV_DERIVED_OUTPUT_REL, ENV_DERIVED_STAGING, STAGING_DIR,
+    SUPPORTED_VERSION as DERIVED_SUPPORTED_VERSION,
 };
 pub use engine::CommandEngine;
 pub use error::Error;
@@ -75,8 +79,8 @@ pub use link_repair::{
 };
 pub use proposal::{
     apply_proposal, build_proposal_transaction, create_proposal, dismiss_proposal,
-    list_proposal_summaries, load_proposal, new_proposal_id, proposal_now_iso, proposals_dir,
-    save_proposal, PROPOSALS_DIR,
+    list_proposal_summaries, load_proposal, new_proposal_id, preview_proposal, proposal_now_iso,
+    proposals_dir, save_proposal, validate_proposal_subset, PROPOSALS_DIR,
 };
 pub use propose_helpers::{
     normalize_proposal_rel_path, propose_artifact, propose_interface, propose_resource,
@@ -90,22 +94,25 @@ pub use revisions::{
 };
 pub use task::{
     kill_child_tree, resolve_task_paths, run_task, shipped_lattice_py_dir, SpawnedTask,
-    TaskEntrypoint, TaskError, TaskIoRef, TaskLimits, TaskManifest, TaskRunOutput, TaskRunner,
-    TaskRuntime, DEFAULT_TIMEOUT_SECONDS, TASK_FORMAT, TASK_MANIFEST_FILENAME, UV_PROVIDER,
+    TaskEntrypoint, TaskError, TaskExecutionMeta, TaskIoRef, TaskLimits, TaskManifest,
+    TaskRunOutput, TaskRunner, TaskRuntime, DEFAULT_TIMEOUT_SECONDS, TASK_FORMAT,
+    TASK_MANIFEST_FILENAME, UV_PROVIDER,
 };
 pub use template::{
     instantiate_template, resolve_page_create_content, title_from_page_path, utc_iso_date,
 };
 pub use trash::TrashPolicy;
 pub use workflow::{
-    discover_scheduled_workflows, discover_workflows, evaluate_schedule_due, last_schedule_run_at,
-    list_workflow_runs, load_and_run_workflow, path_matches_glob, resolve_workspace_path,
-    run_workflow, save_workflow_run, set_workflow_enabled, workflow_runs_dir, workflows_dir,
-    NotificationParams, ProposalCreateParams, ScheduleDue, ScheduleTrigger, ScheduledWorkflow,
-    TaskRunParams, WorkflowError, WorkflowManifest, WorkflowRunRecord, WorkflowStep,
-    WorkflowStepResult, WorkflowStepRetry, WorkflowTrigger,
-    MAX_PARALLEL_STEPS, SUPPORTED_VERSION as WORKFLOW_SUPPORTED_VERSION, WORKFLOWS_DIR,
-    WORKFLOW_FORMAT, WORKFLOW_RUNS_DIR,
+    discover_scheduled_workflows, discover_workflows, evaluate_schedule_due,
+    execution_summary_from_record, last_schedule_run_at, list_all_workflow_runs,
+    list_workflow_runs, load_and_run_workflow, load_and_run_workflow_with_id, load_workflow_run,
+    path_matches_glob, reconcile_abandoned_workflow_runs, resolve_workspace_path, run_workflow,
+    run_workflow_with_id, save_workflow_run, set_workflow_enabled, workflow_runs_dir,
+    workflows_dir, NotificationParams, ProposalCreateParams, ScheduleDue, ScheduleTrigger,
+    ScheduledWorkflow, TaskRunParams, WorkflowError, WorkflowManifest, WorkflowRunRecord,
+    WorkflowStep, WorkflowStepResult, WorkflowStepRetry, WorkflowTrigger, MAX_PARALLEL_STEPS,
+    SUPPORTED_VERSION as WORKFLOW_SUPPORTED_VERSION, WORKFLOWS_DIR, WORKFLOW_FORMAT,
+    WORKFLOW_RUNS_DIR,
 };
 
 /// Maximum byte size of one semantic resource edit.

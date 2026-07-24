@@ -5,9 +5,9 @@ use lattice_commands::{ColumnSpec, Command as SemanticCommand, CommandEngine, Tr
 use lattice_data::{
     cell_from_csv, parse_csv_file, parse_field_type_name, parse_tabular_file, resolve_field_types,
     save_form, tabular_format, tabular_format_label, CellValue, ColumnMeta, ConditionalFormatRule,
-    ConditionalFormatStyle, DataApp, FieldType, FilterOperator, RollupAggregate, Row, SortDirection,
-    TabularTable, ViewDef, ViewFilter, ViewLayoutSummary, ViewSort, LAYOUT_BOARD, LAYOUT_CALENDAR,
-    LAYOUT_GALLERY, LAYOUT_GRID, SUPPORTED_LAYOUT_TYPES,
+    ConditionalFormatStyle, DataApp, FieldType, FilterOperator, RollupAggregate, Row,
+    SortDirection, TabularTable, ViewDef, ViewFilter, ViewLayoutSummary, ViewSort, LAYOUT_BOARD,
+    LAYOUT_CALENDAR, LAYOUT_GALLERY, LAYOUT_GRID, SUPPORTED_LAYOUT_TYPES,
 };
 use serde::{Deserialize, Serialize};
 
@@ -329,15 +329,10 @@ fn load_relation_target_rows(
         lattice_data::RelationTarget::Local { table } => app
             .list_rows(table, ROW_LIMIT, 0)
             .map_err(|err| err.to_string()),
-        lattice_data::RelationTarget::CrossPackage {
-            package_rel,
-            table,
-        } => {
+        lattice_data::RelationTarget::CrossPackage { package_rel, table } => {
             let foreign_path = workspace_root.join(package_rel);
             let foreign = DataApp::open(&foreign_path).map_err(|err| {
-                format!(
-                    "failed to open cross-package relation target {target_spec:?}: {err}"
-                )
+                format!("failed to open cross-package relation target {target_spec:?}: {err}")
             })?;
             foreign
                 .list_rows(table, ROW_LIMIT, 0)
@@ -645,7 +640,8 @@ pub fn save_data_interface(
     interface.parameters = request.parameters;
     interface.layout = request.layout;
     interface.components = request.components;
-    lattice_data::write_package_interface(&package_path, &interface).map_err(|err| err.to_string())?;
+    lattice_data::write_package_interface(&package_path, &interface)
+        .map_err(|err| err.to_string())?;
     Ok(interface_summary(interface))
 }
 
@@ -736,13 +732,12 @@ pub fn save_data_view(
     view.layout.layout_type = layout_type;
     view.layout.columns = columns;
     // Layout-specific fields are exclusive; clear anything that does not belong.
-    view.layout.group_by = if view.layout.layout_type == LAYOUT_BOARD
-        || view.layout.layout_type == LAYOUT_GRID
-    {
-        group_by.filter(|value| !value.is_empty())
-    } else {
-        None
-    };
+    view.layout.group_by =
+        if view.layout.layout_type == LAYOUT_BOARD || view.layout.layout_type == LAYOUT_GRID {
+            group_by.filter(|value| !value.is_empty())
+        } else {
+            None
+        };
     view.layout.cover_field = if view.layout.layout_type == LAYOUT_GALLERY {
         cover_field.filter(|value| !value.is_empty())
     } else {
@@ -905,7 +900,10 @@ pub fn preview_csv_import(csv_path: String) -> Result<CsvImportPreviewDto, Strin
     preview_tabular_import(csv_path)
 }
 
-fn tabular_import_preview_from_table(path: &Path, parsed: &TabularTable) -> TabularImportPreviewDto {
+fn tabular_import_preview_from_table(
+    path: &Path,
+    parsed: &TabularTable,
+) -> TabularImportPreviewDto {
     let format = tabular_format_label(tabular_format(path)).to_string();
     let columns = parsed
         .headers
@@ -1015,12 +1013,7 @@ fn commit_tabular_import_inner(
 
     for row in &parsed.rows {
         let mut values = BTreeMap::new();
-        for ((header, field_type), cell) in parsed
-            .headers
-            .iter()
-            .zip(field_types)
-            .zip(row.iter())
-        {
+        for ((header, field_type), cell) in parsed.headers.iter().zip(field_types).zip(row.iter()) {
             values.insert(
                 header.clone(),
                 cell_from_csv(cell, *field_type).map_err(|err| err.to_string())?,
@@ -1058,11 +1051,7 @@ pub fn commit_tabular_import(
 ) -> Result<(String, DataAppSnapshot), String> {
     let path = Path::new(&source_path);
     let parsed = parse_tabular_file(path).map_err(|err| err.to_string())?;
-    let field_types = field_types_from_column_dtos(
-        &parsed.headers,
-        &parsed.field_types,
-        &columns,
-    )?;
+    let field_types = field_types_from_column_dtos(&parsed.headers, &parsed.field_types, &columns)?;
     let table = table_name.unwrap_or_else(|| "records".to_string());
     let title = title.unwrap_or_else(|| package_name.trim().replace(".data", ""));
     let source_label = tabular_format_label(tabular_format(path));
@@ -1087,14 +1076,7 @@ pub fn commit_csv_import(
     title: Option<String>,
     table_name: Option<String>,
 ) -> Result<(String, DataAppSnapshot), String> {
-    commit_tabular_import(
-        root,
-        csv_path,
-        package_name,
-        columns,
-        title,
-        table_name,
-    )
+    commit_tabular_import(root, csv_path, package_name, columns, title, table_name)
 }
 
 /// Import a CSV file into a new `.data` package and return its snapshot.
@@ -1194,41 +1176,19 @@ fn insert_record_inner(
         ))
         .map_err(command_error_to_string)?;
 
-    let revision = receipt
+    let outcome = receipt
         .outcomes
         .first()
-        .and_then(|outcome| outcome.resulting_revision.clone())
+        .ok_or_else(|| "record insert did not produce an outcome".to_string())?;
+    let revision = outcome
+        .resulting_revision
+        .clone()
         .ok_or_else(|| "record insert did not produce a resulting revision".to_string())?;
-
-    let id = find_inserted_row_id(&root, &rel_path, &table, &values)?;
+    let id = outcome
+        .resulting_record_id
+        .clone()
+        .ok_or_else(|| "record insert did not produce a record id".to_string())?;
     Ok(RecordMutation { id, revision })
-}
-
-fn find_inserted_row_id(
-    root: &str,
-    rel_path: &str,
-    table: &str,
-    values: &BTreeMap<String, CellValue>,
-) -> Result<String, String> {
-    let app = open_app_at(root, rel_path)?;
-    for row in app
-        .list_rows(table, ROW_LIMIT, 0)
-        .map_err(|err| err.to_string())?
-    {
-        if row_matches_values(&row, values) {
-            return Ok(row.id);
-        }
-    }
-    Err("inserted row could not be located after apply".to_string())
-}
-
-fn row_matches_values(row: &Row, values: &BTreeMap<String, CellValue>) -> bool {
-    values.iter().all(|(key, value)| {
-        if key == "id" {
-            return true;
-        }
-        row.values.get(key) == Some(value)
-    })
 }
 
 /// Update one row. Stale `base_revision` errors are prefixed with `STALE_REVISION:`.
@@ -1295,31 +1255,53 @@ pub fn delete_record(
         .ok_or_else(|| "record delete did not produce a resulting revision".to_string())
 }
 
-/// Copy a local file into a `.data` package `attachments/` directory.
+/// Stage a local file under `.lattice/staging/attachments/<operation-id>/`.
 ///
-/// Returns the package-relative path (`attachments/<filename>`).
+/// Returns the workspace-relative staged path. Promotion into the package
+/// `attachments/` directory happens on record insert/update commit.
 #[tauri::command]
 pub fn add_data_attachment(
     root: String,
     rel_path: String,
     source_path: String,
 ) -> Result<String, String> {
-    let app = open_app_at(&root, &rel_path)?;
+    // Ensure the target package exists before accepting staged bytes.
+    let _app = open_app_at(&root, &rel_path)?;
+    let (canonical_root, _) = resolve_within_root(&root, &rel_path)?;
     let source = PathBuf::from(&source_path);
-    app.add_attachment_file(&source)
-        .map_err(|err| err.to_string())
+    lattice_data::stage_attachment_file(&canonical_root, &source).map_err(|err| err.to_string())
 }
 
-/// Delete a package-relative attachment file under `attachments/` when present.
+/// Reference-only remove for package attachments; discard staged files.
+///
+/// Package-relative `attachments/` paths are left on disk (orphan cleanup is
+/// explicit). Staged paths under `.lattice/staging/attachments/` are deleted.
 #[tauri::command]
 pub fn remove_data_attachment(
     root: String,
     rel_path: String,
     attachment_path: String,
 ) -> Result<(), String> {
+    let (canonical_root, _) = resolve_within_root(&root, &rel_path)?;
+    if lattice_data::is_staged_attachment_path(&attachment_path) {
+        return lattice_data::discard_staged_attachment(&canonical_root, &attachment_path)
+            .map_err(|err| err.to_string());
+    }
+    // Package refs: verify package exists, but do not delete the binary.
+    let _app = open_app_at(&root, &rel_path)?;
+    lattice_data::validate_attachment_ref("attachments", "path", &attachment_path)
+        .map_err(|err| err.to_string())?;
+    Ok(())
+}
+
+/// Delete package attachment files that are not referenced by any cell.
+#[tauri::command]
+pub fn cleanup_data_attachment_orphans(
+    root: String,
+    rel_path: String,
+) -> Result<Vec<String>, String> {
     let app = open_app_at(&root, &rel_path)?;
-    app.remove_attachment_file(&attachment_path)
-        .map_err(|err| err.to_string())
+    lattice_data::cleanup_orphan_attachments(&app).map_err(|err| err.to_string())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1484,16 +1466,10 @@ mod tests {
         let package_path = dir.path().join("CRM.data");
         let mut app = DataApp::open(&package_path).unwrap();
         app.add_table("companies").unwrap();
-        app.add_columns(
-            "companies",
-            &[NewColumn::new("name", FieldType::Text)],
-        )
-        .unwrap();
-        app.add_columns(
-            "contacts",
-            &[NewColumn::relation("company", "companies")],
-        )
-        .unwrap();
+        app.add_columns("companies", &[NewColumn::new("name", FieldType::Text)])
+            .unwrap();
+        app.add_columns("contacts", &[NewColumn::relation("company", "companies")])
+            .unwrap();
         app.insert_row(
             "companies",
             &BTreeMap::from([("name".into(), CellValue::Text("Acme".into()))]),
@@ -1543,10 +1519,7 @@ mod tests {
 
         let mut directory = DataApp::open(&dir.path().join("Directory.data")).unwrap();
         directory
-            .add_columns(
-                "companies",
-                &[NewColumn::new("name", FieldType::Text)],
-            )
+            .add_columns("companies", &[NewColumn::new("name", FieldType::Text)])
             .unwrap();
         directory
             .insert_row(
@@ -1743,13 +1716,19 @@ mod tests {
         .unwrap();
         assert_eq!(form.layout_type, lattice_data::LAYOUT_FORM);
 
-        let reloaded_board =
-            open_data_app(root.clone(), rel_path.clone(), Some("ByStatus".into()), None, None)
-                .unwrap();
+        let reloaded_board = open_data_app(
+            root.clone(),
+            rel_path.clone(),
+            Some("ByStatus".into()),
+            None,
+            None,
+        )
+        .unwrap();
         assert_eq!(reloaded_board.layout_type, LAYOUT_BOARD);
         assert_eq!(reloaded_board.group_by.as_deref(), Some("status"));
 
-        let yaml = std::fs::read_to_string(dir.path().join("CRM.data/views/ByStatus.yaml")).unwrap();
+        let yaml =
+            std::fs::read_to_string(dir.path().join("CRM.data/views/ByStatus.yaml")).unwrap();
         assert!(yaml.contains("type: board"));
         assert!(yaml.contains("group_by: status"));
         assert!(!yaml.contains("cover_field"));
@@ -1848,8 +1827,8 @@ mod tests {
             Some("accent-wash")
         );
 
-        let reopened = open_data_app(root, rel_path, Some("Highlighted".into()), None, None)
-            .unwrap();
+        let reopened =
+            open_data_app(root, rel_path, Some("Highlighted".into()), None, None).unwrap();
         assert_eq!(reopened.conditional_format, saved.conditional_format);
     }
 
@@ -2134,21 +2113,19 @@ mod tests {
         .unwrap();
 
         assert_eq!(snapshot.columns.len(), 3);
+        assert!(snapshot
+            .columns
+            .iter()
+            .any(|column| column.name == "name" && column.field_type == "text"));
+        assert!(snapshot
+            .columns
+            .iter()
+            .any(|column| column.name == "age" && column.field_type == "integer"));
         assert!(
-            snapshot
-                .columns
-                .iter()
-                .any(|column| column.name == "name" && column.field_type == "text")
+            std::fs::read_to_string(dir.path().join("CRM.data/schema.sql"))
+                .unwrap()
+                .contains("ADD COLUMN name")
         );
-        assert!(
-            snapshot
-                .columns
-                .iter()
-                .any(|column| column.name == "age" && column.field_type == "integer")
-        );
-        assert!(std::fs::read_to_string(dir.path().join("CRM.data/schema.sql"))
-            .unwrap()
-            .contains("ADD COLUMN name"));
     }
 
     #[test]
@@ -2219,11 +2196,7 @@ mod tests {
     fn preview_csv_import_returns_inferred_columns_and_samples() {
         let dir = init_workspace();
         let csv_path = dir.path().join("people.csv");
-        std::fs::write(
-            &csv_path,
-            "name,active,count\nAda,true,1\nGrace,false,2\n",
-        )
-        .unwrap();
+        std::fs::write(&csv_path, "name,active,count\nAda,true,1\nGrace,false,2\n").unwrap();
 
         let preview = preview_csv_import(csv_path.to_string_lossy().into_owned()).unwrap();
         assert_eq!(preview.row_count, 2);
@@ -2289,8 +2262,7 @@ mod tests {
         )
         .unwrap();
 
-        let preview =
-            preview_tabular_import(json_path.to_string_lossy().into_owned()).unwrap();
+        let preview = preview_tabular_import(json_path.to_string_lossy().into_owned()).unwrap();
         assert_eq!(preview.format, "JSON");
         assert_eq!(preview.row_count, 2);
         assert_eq!(preview.columns.len(), 3);
@@ -2365,28 +2337,14 @@ mod tests {
             .unwrap();
         }
 
-        let first = open_data_app(
-            root.clone(),
-            rel_path.clone(),
-            None,
-            Some(2),
-            Some(0),
-        )
-        .unwrap();
+        let first = open_data_app(root.clone(), rel_path.clone(), None, Some(2), Some(0)).unwrap();
         assert_eq!(first.row_offset, 0);
         assert_eq!(first.row_limit, 2);
         assert_eq!(first.row_total, 5);
         assert!(first.has_more);
         assert_eq!(first.rows.len(), 2);
 
-        let second = open_data_app(
-            root.clone(),
-            rel_path.clone(),
-            None,
-            Some(2),
-            Some(2),
-        )
-        .unwrap();
+        let second = open_data_app(root.clone(), rel_path.clone(), None, Some(2), Some(2)).unwrap();
         assert_eq!(second.row_offset, 2);
         assert_eq!(second.row_limit, 2);
         assert_eq!(second.row_total, 5);

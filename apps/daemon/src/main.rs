@@ -105,7 +105,9 @@ async fn main() -> Result<()> {
         .with_idle_shutdown_timeout(idle_shutdown_timeout);
 
     if keep_services_running {
-        tracing::info!("keep-services-running enabled; daemon will stay up after clients disconnect");
+        tracing::info!(
+            "keep-services-running enabled; daemon will stay up after clients disconnect"
+        );
     } else {
         tracing::info!(
             secs = idle_shutdown_timeout.as_secs(),

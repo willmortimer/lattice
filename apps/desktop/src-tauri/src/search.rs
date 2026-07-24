@@ -41,14 +41,8 @@ pub async fn search_workspace(
     };
 
     if prefer_daemon {
-        match crate::semantic::search_via_daemon(
-            &state,
-            &root,
-            query.clone(),
-            limit,
-            mode.clone(),
-        )
-        .await
+        match crate::semantic::search_via_daemon(&state, &root, query.clone(), limit, mode.clone())
+            .await
         {
             Ok(Some(hits)) => return Ok(hits),
             Ok(None) => { /* fall through */ }
@@ -90,8 +84,8 @@ mod tests {
         let root = dir.path().to_string_lossy().into_owned();
 
         let state = SemanticState::default();
-        let hits = lattice_handlers::search_workspace_ui(root, "welcome".to_string(), 10, None)
-            .unwrap();
+        let hits =
+            lattice_handlers::search_workspace_ui(root, "welcome".to_string(), 10, None).unwrap();
         assert!(hits.iter().any(|h| h.path.ends_with("Notes.md")));
         assert!(hits.iter().all(|h| h.chunk_id.is_none()));
         let _ = state;
@@ -107,9 +101,13 @@ mod tests {
         .unwrap();
         let root = dir.path().to_string_lossy().into_owned();
 
-        let hits =
-            lattice_handlers::search_workspace_ui(root, "capability".to_string(), 10, Some("hybrid"))
-                .unwrap();
+        let hits = lattice_handlers::search_workspace_ui(
+            root,
+            "capability".to_string(),
+            10,
+            Some("hybrid"),
+        )
+        .unwrap();
         assert!(hits.iter().any(|h| h.path.ends_with("Notes.md")));
         assert!(hits.iter().any(|h| h.chunk_id.is_some()));
         assert!(hits.iter().all(|h| h.semantic_rank.is_none()));
@@ -119,8 +117,8 @@ mod tests {
     fn search_workspace_rejects_unknown_mode() {
         let dir = init_workspace();
         let root = dir.path().to_string_lossy().into_owned();
-        let err =
-            lattice_handlers::search_workspace_ui(root, "x".into(), 10, Some("vector")).unwrap_err();
+        let err = lattice_handlers::search_workspace_ui(root, "x".into(), 10, Some("vector"))
+            .unwrap_err();
         assert!(err.contains("unsupported search mode"));
         assert_eq!(SearchMode::parse(Some("fts")).unwrap(), SearchMode::Fts);
     }

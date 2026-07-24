@@ -4,12 +4,12 @@
 
 use lattice_audio::CaptureError;
 
+use crate::error::BridgeResult;
 #[cfg(link_bridge)]
 use crate::error::{ensure_abi_version, map_status};
-use crate::error::BridgeResult;
-use crate::ffi::{LatticeAudioCapture, LatticeAudioEventCallback};
 #[cfg(link_bridge)]
 use crate::ffi;
+use crate::ffi::{LatticeAudioCapture, LatticeAudioEventCallback};
 #[cfg(link_bridge)]
 use crate::LATTICE_AUDIO_BRIDGE_ABI_VERSION;
 

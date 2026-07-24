@@ -7,15 +7,15 @@ mod data;
 mod dataset;
 mod dataset_sessions;
 mod derived;
+mod kernel;
 mod link_repair;
-mod proposals;
 mod profile;
+mod proposals;
 mod relationship;
 mod resource_links;
 mod revisions;
 mod search;
 mod semantic;
-mod kernel;
 mod task;
 mod terminal;
 mod theme;
@@ -117,6 +117,8 @@ pub fn run() {
             proposals::list_proposals,
             proposals::dismiss_proposal_cmd,
             proposals::apply_proposal_cmd,
+            proposals::preview_proposal_cmd,
+            proposals::validate_proposal_subset_cmd,
             proposals::create_demo_proposal,
             commands::list_history,
             commands::undo_last,
@@ -187,6 +189,7 @@ pub fn run() {
             data::delete_record,
             data::add_data_attachment,
             data::remove_data_attachment,
+            data::cleanup_data_attachment_orphans,
             data::list_data_views,
             data::load_data_view,
             data::save_data_view,

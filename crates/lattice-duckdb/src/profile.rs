@@ -55,9 +55,7 @@ impl DuckDbEngine {
             });
         }
 
-        let summarize_sql = format!(
-            "SUMMARIZE SELECT * FROM ({trimmed}) AS _lattice_rel"
-        );
+        let summarize_sql = format!("SUMMARIZE SELECT * FROM ({trimmed}) AS _lattice_rel");
         let batch = self.query(&summarize_sql)?;
         let columns = summarize_batch_to_columns(&batch)?;
 

@@ -13,14 +13,9 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum BindingSpec {
     /// Open or preview a workspace resource as-is.
-    Resource {
-        resource: String,
-    },
+    Resource { resource: String },
     /// Open a saved view inside a `.data` package.
-    SavedView {
-        resource: String,
-        view: String,
-    },
+    SavedView { resource: String, view: String },
     /// Bounded read-only SQL against a `.data` package SQLite database.
     SqliteQuery {
         resource: String,
@@ -42,10 +37,7 @@ pub enum BindingSpec {
         cell_id: String,
     },
     /// Bind to a named task output artifact.
-    TaskOutput {
-        resource: String,
-        name: String,
-    },
+    TaskOutput { resource: String, name: String },
 }
 
 fn default_query_limit() -> usize {

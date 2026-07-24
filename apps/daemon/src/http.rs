@@ -17,12 +17,13 @@ use tokio::sync::oneshot;
 use tracing::{info, warn};
 
 use crate::api::{
-    api_build_context, api_create_proposal, api_get_dataset_schema, api_get_proposal,
-    api_list_proposals, api_profile_dataset, api_propose_artifact, api_propose_interface,
-    api_propose_page, api_propose_resource, api_propose_workflow, api_read, api_related, api_search,
-    ApiError, BuildContextParams, CreateProposalParams, DatasetInspectParams, GetProposalParams,
-    ListProposalsParams, ProposePageParams, ProposeResourceParams, ProposeYamlParams, ReadParams,
-    RelatedParams, SearchParams,
+    api_build_context, api_cancel_job, api_create_proposal, api_get_dataset_schema, api_get_job,
+    api_get_proposal, api_list_active_jobs, api_list_proposals, api_list_recent_jobs,
+    api_profile_dataset, api_propose_artifact, api_propose_interface, api_propose_page,
+    api_propose_resource, api_propose_workflow, api_read, api_related, api_search, ApiError,
+    BuildContextParams, CancelJobParams, CreateProposalParams, DatasetInspectParams, GetJobParams,
+    GetProposalParams, ListJobsParams, ListProposalsParams, ProposePageParams,
+    ProposeResourceParams, ProposeYamlParams, ReadParams, RelatedParams, SearchParams,
 };
 use crate::config::DaemonConfig;
 use crate::server::DaemonState;
@@ -47,7 +48,8 @@ struct ErrorDetail {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        let status = StatusCode::from_u16(self.status_code()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        let status =
+            StatusCode::from_u16(self.status_code()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         (
             status,
             Json(ErrorBody {
@@ -82,7 +84,9 @@ fn extract_token(headers: &HeaderMap) -> Option<String> {
         }
     }
     let auth = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
-    let bearer = auth.strip_prefix("Bearer ").or_else(|| auth.strip_prefix("bearer "))?;
+    let bearer = auth
+        .strip_prefix("Bearer ")
+        .or_else(|| auth.strip_prefix("bearer "))?;
     let trimmed = bearer.trim();
     if trimmed.is_empty() {
         None
@@ -302,6 +306,58 @@ async fn route_profile_dataset(
     }
 }
 
+async fn route_list_active_jobs(State(state): State<HttpState>, headers: HeaderMap) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_list_active_jobs(&state.daemon.jobs) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_list_recent_jobs(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<ListJobsParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_list_recent_jobs(&state.daemon.jobs, &state.daemon.runtime, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_get_job(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<GetJobParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_get_job(&state.daemon.jobs, &state.daemon.runtime, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_cancel_job(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<CancelJobParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_cancel_job(&state.daemon.jobs, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
 /// Build the localhost API router (no CORS — not a browser demo surface).
 pub fn router(daemon: DaemonState) -> Router {
     Router::new()
@@ -312,12 +368,22 @@ pub fn router(daemon: DaemonState) -> Router {
         .route("/v1/build_context", post(route_build_context))
         .route("/v1/datasets/schema", post(route_get_dataset_schema))
         .route("/v1/datasets/profile", post(route_profile_dataset))
+        .route("/v1/jobs/list_active", post(route_list_active_jobs))
+        .route("/v1/jobs/list_recent", post(route_list_recent_jobs))
+        .route("/v1/jobs/get", post(route_get_job))
+        .route("/v1/jobs/cancel", post(route_cancel_job))
         .route("/v1/proposals/create", post(route_create_proposal))
         .route("/v1/proposals/list", post(route_list_proposals))
         .route("/v1/proposals/get", post(route_get_proposal))
         .route("/v1/proposals/propose_page", post(route_propose_page))
-        .route("/v1/proposals/propose_resource", post(route_propose_resource))
-        .route("/v1/proposals/propose_workflow", post(route_propose_workflow))
+        .route(
+            "/v1/proposals/propose_resource",
+            post(route_propose_resource),
+        )
+        .route(
+            "/v1/proposals/propose_workflow",
+            post(route_propose_workflow),
+        )
         .route(
             "/v1/proposals/propose_interface",
             post(route_propose_interface),
@@ -365,7 +431,11 @@ pub fn spawn_localhost_api(daemon: DaemonState, port: u16) -> oneshot::Sender<()
 /// Helper for tests: bind an ephemeral port and return `(addr, shutdown_tx, join)`.
 pub async fn serve_localhost_api_ephemeral(
     daemon: DaemonState,
-) -> crate::Result<(SocketAddr, oneshot::Sender<()>, tokio::task::JoinHandle<crate::Result<()>>)> {
+) -> crate::Result<(
+    SocketAddr,
+    oneshot::Sender<()>,
+    tokio::task::JoinHandle<crate::Result<()>>,
+)> {
     let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, 0));
     let listener = tokio::net::TcpListener::bind(addr).await?;
     let bound = listener.local_addr()?;

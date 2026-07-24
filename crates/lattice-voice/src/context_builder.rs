@@ -71,16 +71,17 @@ impl VoiceContextBuilder {
         let mut terms = Vec::new();
         let mut seen = std::collections::HashSet::new();
 
-        let push_term = |term: &str, terms: &mut Vec<String>, seen: &mut std::collections::HashSet<String>| {
-            let normalized = normalize_term(term);
-            if normalized.is_empty() {
-                return;
-            }
-            let key = normalized.to_ascii_lowercase();
-            if seen.insert(key) {
-                terms.push(normalized);
-            }
-        };
+        let push_term =
+            |term: &str, terms: &mut Vec<String>, seen: &mut std::collections::HashSet<String>| {
+                let normalized = normalize_term(term);
+                if normalized.is_empty() {
+                    return;
+                }
+                let key = normalized.to_ascii_lowercase();
+                if seen.insert(key) {
+                    terms.push(normalized);
+                }
+            };
 
         // Prefer exact caller-supplied names first.
         for term in &input.extra_glossary_terms {

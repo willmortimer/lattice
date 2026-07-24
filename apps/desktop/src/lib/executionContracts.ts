@@ -41,7 +41,10 @@ export interface ExecutionResult {
   /** ISO-8601 */
   finishedAt?: string;
   outputs: ResourceOutput[];
+  /** First proposal id (compat); prefer `proposalIds` when multiple. */
   proposalId?: string;
+  /** All proposal ids produced by this execution (parallel-safe). */
+  proposalIds?: string[];
 }
 
 export type ProposalSourceType =
@@ -54,6 +57,8 @@ export type ProposalSourceType =
 export interface ProposalSource {
   type: ProposalSourceType;
   resource?: string;
+  executionId?: string;
+  stepId?: string;
 }
 
 export type ProposalStatus = "pending" | "accepted" | "rejected";
@@ -82,4 +87,77 @@ export interface TransactionProposalSummary {
   /** ISO-8601 */
   createdAt: string;
   status: ProposalStatus;
+}
+
+/** Bounded per-command detail for proposal review. */
+export type CommandPreviewDetail =
+  | {
+      kind: "text-create";
+      path: string;
+      contentExcerpt: string;
+      truncated: boolean;
+      byteLen: number;
+    }
+  | {
+      kind: "text-diff";
+      path: string;
+      beforeExcerpt?: string;
+      afterExcerpt: string;
+      truncated: boolean;
+    }
+  | {
+      kind: "record-change";
+      path: string;
+      table: string;
+      operation: string;
+      id?: string;
+      fieldSummary: string;
+    }
+  | {
+      kind: "workflow-summary";
+      path: string;
+      name?: string;
+      stepCount?: number;
+      excerpt: string;
+      truncated: boolean;
+    }
+  | {
+      kind: "interface-summary";
+      path: string;
+      name?: string;
+      title?: string;
+      componentCount?: number;
+      excerpt: string;
+      truncated: boolean;
+    }
+  | {
+      kind: "artifact-summary";
+      path: string;
+      title?: string;
+      entrypoint?: string;
+      excerpt: string;
+      truncated: boolean;
+    }
+  | {
+      kind: "file-op";
+      operation: string;
+      paths: string[];
+      metadata?: Record<string, string>;
+    };
+
+export interface CommandPreview {
+  index: number;
+  commandType: string;
+  summary: string;
+  touchedPaths: string[];
+  warnings: string[];
+  detail?: CommandPreviewDetail;
+}
+
+export interface ProposalPreview {
+  proposalId: string;
+  commands: CommandPreview[];
+  subsetValid: boolean;
+  subsetErrors: string[];
+  missingPredecessors: number[];
 }

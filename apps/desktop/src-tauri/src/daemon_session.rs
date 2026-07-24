@@ -59,9 +59,8 @@ pub fn socket_path() -> PathBuf {
 }
 
 pub fn which_bin(name: &str) -> std::io::Result<PathBuf> {
-    let path = std::env::var_os("PATH").ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::NotFound, "PATH not set")
-    })?;
+    let path = std::env::var_os("PATH")
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "PATH not set"))?;
     for dir in std::env::split_paths(&path) {
         let candidate = dir.join(name);
         if candidate.is_file() {

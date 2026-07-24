@@ -89,7 +89,9 @@ impl CaptureProvider for MacOsCaptureProvider {
         let capture = self.capture.as_ref().expect("capture created");
 
         let state = Box::new(CallbackState { events });
-        let context = (&*state as *const CallbackState).cast::<c_void>().cast_mut();
+        let context = (&*state as *const CallbackState)
+            .cast::<c_void>()
+            .cast_mut();
         self.callback_state = Some(state);
 
         match capture.start(Some(on_bridge_event), context) {

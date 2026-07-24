@@ -139,11 +139,10 @@ impl InterfaceDef {
 
     /// Parse YAML text and validate as if loaded from `path` (stem checks use `path`).
     pub fn parse_str(text: &str, path: &Path) -> Result<Self> {
-        let interface: InterfaceDef =
-            serde_yaml::from_str(text).map_err(|source| Error::Yaml {
-                path: path.to_path_buf(),
-                source,
-            })?;
+        let interface: InterfaceDef = serde_yaml::from_str(text).map_err(|source| Error::Yaml {
+            path: path.to_path_buf(),
+            source,
+        })?;
         interface.check(path)?;
         Ok(interface)
     }

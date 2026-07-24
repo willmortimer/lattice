@@ -43,7 +43,9 @@ impl BridgeState {
     pub fn new(default_root: Option<String>) -> Self {
         Self {
             default_root,
-            auth_token: std::env::var(BRIDGE_TOKEN_ENV).ok().filter(|s| !s.is_empty()),
+            auth_token: std::env::var(BRIDGE_TOKEN_ENV)
+                .ok()
+                .filter(|s| !s.is_empty()),
         }
     }
 
@@ -148,8 +150,9 @@ struct CreateWorkspaceRequest {
 }
 
 fn resolve_root(state: &BridgeState, root: Option<String>) -> Result<String, Response> {
-    root.or_else(|| state.default_root.clone())
-        .ok_or_else(|| handler_error("workspace root is required (pass root or start with --root)".into()))
+    root.or_else(|| state.default_root.clone()).ok_or_else(|| {
+        handler_error("workspace root is required (pass root or start with --root)".into())
+    })
 }
 
 fn handler_error(message: String) -> Response {
@@ -169,10 +172,7 @@ fn handler_result<T: Serialize>(result: Result<T, String>) -> Response {
 }
 
 fn extract_token(headers: &HeaderMap) -> Option<String> {
-    if let Some(value) = headers
-        .get("x-lattice-token")
-        .and_then(|v| v.to_str().ok())
-    {
+    if let Some(value) = headers.get("x-lattice-token").and_then(|v| v.to_str().ok()) {
         let trimmed = value.trim();
         if !trimmed.is_empty() {
             return Some(trimmed.to_string());
@@ -264,7 +264,11 @@ async fn route_apply_page_update(
         Err(response) => return response,
     };
     match apply_page_update(root, body.rel_path, body.content, body.base_revision) {
-        Ok(revision) => (StatusCode::OK, Json(serde_json::json!({ "revision": revision }))).into_response(),
+        Ok(revision) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "revision": revision })),
+        )
+            .into_response(),
         Err(message) => handler_error(message),
     }
 }
@@ -288,7 +292,11 @@ async fn route_create_page(
         body.template_path,
         body.title,
     ) {
-        Ok(revision) => (StatusCode::OK, Json(serde_json::json!({ "revision": revision }))).into_response(),
+        Ok(revision) => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "revision": revision })),
+        )
+            .into_response(),
         Err(message) => handler_error(message),
     }
 }
@@ -357,14 +365,14 @@ async fn route_ensure_home(State(state): State<BridgeState>, headers: HeaderMap)
     handler_result(ensure_home())
 }
 
-async fn route_list_templates(
-    State(state): State<BridgeState>,
-    headers: HeaderMap,
-) -> Response {
+async fn route_list_templates(State(state): State<BridgeState>, headers: HeaderMap) -> Response {
     if let Err(resp) = require_bridge_auth(&state, &headers) {
         return resp;
     }
-    (StatusCode::OK, Json(serde_json::to_value(list_templates()).expect("templates serialize")))
+    (
+        StatusCode::OK,
+        Json(serde_json::to_value(list_templates()).expect("templates serialize")),
+    )
         .into_response()
 }
 
@@ -493,9 +501,7 @@ mod tests {
                     .method("POST")
                     .uri("/open_workspace")
                     .header("content-type", "application/json")
-                    .body(Body::from(
-                        serde_json::json!({ "path": root }).to_string(),
-                    ))
+                    .body(Body::from(serde_json::json!({ "path": root }).to_string()))
                     .unwrap(),
             )
             .await

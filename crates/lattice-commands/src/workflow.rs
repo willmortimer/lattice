@@ -11,7 +11,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use lattice_core::OPERATIONAL_DIR;
 use serde::{Deserialize, Serialize};
@@ -20,7 +20,7 @@ use crate::contracts::{
     ExecutionResult, ExecutionStatus, ProposalSource, ProposalSourceType, TransactionProposal,
 };
 use crate::proposal::{create_proposal, proposal_now_iso};
-use crate::task::{TaskError, TaskRunner};
+use crate::task::{TaskError, TaskManifest, TaskRunner, TASK_MANIFEST_FILENAME};
 use crate::Command;
 
 pub const WORKFLOW_FORMAT: &str = "lattice-workflow";
@@ -175,6 +175,12 @@ fn is_one_attempt(value: &u32) -> bool {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TaskRunParams {
     pub task: String,
+    /// Acknowledge retrying a task that does not declare `execution.idempotent: true`.
+    ///
+    /// Required when the step sets `retry.max_attempts > 1` and the task is not
+    /// marked idempotent; without this flag the runner rejects the retry policy.
+    #[serde(default)]
+    pub allow_unsafe_retry: bool,
 }
 
 /// Parameters for `proposal.create`.
@@ -208,10 +214,7 @@ pub struct WorkflowStepResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proposal_id: Option<String>,
     /// Attempts consumed (including the successful one, or all failed tries).
-    #[serde(
-        default = "default_attempts",
-        skip_serializing_if = "is_one_attempt"
-    )]
+    #[serde(default = "default_attempts", skip_serializing_if = "is_one_attempt")]
     pub attempts: u32,
 }
 
@@ -281,8 +284,12 @@ impl WorkflowManifest {
                 form_id,
             } => {
                 let has_form_path = form.as_ref().is_some_and(|value| !value.trim().is_empty());
-                let has_package_form = package.as_ref().is_some_and(|value| !value.trim().is_empty())
-                    && (form_id.as_ref().is_some_and(|value| !value.trim().is_empty())
+                let has_package_form = package
+                    .as_ref()
+                    .is_some_and(|value| !value.trim().is_empty())
+                    && (form_id
+                        .as_ref()
+                        .is_some_and(|value| !value.trim().is_empty())
                         || form.as_ref().is_some_and(|value| !value.trim().is_empty()));
                 if !has_form_path && !has_package_form {
                     return Err(invalid(
@@ -308,9 +315,9 @@ impl WorkflowManifest {
             return false;
         }
         match &self.trigger {
-            WorkflowTrigger::ResourceChanged { paths } => {
-                paths.iter().any(|pattern| path_matches_glob(changed_path, pattern))
-            }
+            WorkflowTrigger::ResourceChanged { paths } => paths
+                .iter()
+                .any(|pattern| path_matches_glob(changed_path, pattern)),
             _ => false,
         }
     }
@@ -334,7 +341,9 @@ impl WorkflowManifest {
             return false;
         };
 
-        if let Some(form_path) = form.as_ref().filter(|value| value.contains('/') || value.contains('\\'))
+        if let Some(form_path) = form
+            .as_ref()
+            .filter(|value| value.contains('/') || value.contains('\\'))
         {
             if let Some(submitted) = form_file_path {
                 if normalize_rel(submitted) == normalize_rel(form_path) {
@@ -613,6 +622,149 @@ pub fn save_workflow_run(workspace_root: &Path, record: &WorkflowRunRecord) -> W
     Ok(())
 }
 
+/// Load one workflow run by execution id.
+pub fn load_workflow_run(
+    workspace_root: &Path,
+    execution_id: &str,
+) -> WorkflowResult<WorkflowRunRecord> {
+    let path = workflow_runs_dir(workspace_root).join(format!("{execution_id}.json"));
+    let payload = fs::read_to_string(&path).map_err(|source| WorkflowError::Io {
+        path: path.clone(),
+        source,
+    })?;
+    serde_json::from_str(&payload).map_err(|err| WorkflowError::Invalid {
+        path,
+        message: format!("invalid run record: {err}"),
+    })
+}
+
+/// List recent workflow runs across all workflows (newest first), capped.
+pub fn list_all_workflow_runs(
+    workspace_root: &Path,
+    limit: usize,
+) -> WorkflowResult<Vec<WorkflowRunRecord>> {
+    let dir = workflow_runs_dir(workspace_root);
+    if !dir.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut runs = Vec::new();
+    for entry in fs::read_dir(&dir).map_err(|source| WorkflowError::Io {
+        path: dir.clone(),
+        source,
+    })? {
+        let entry = entry.map_err(|source| WorkflowError::Io {
+            path: dir.clone(),
+            source,
+        })?;
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("json") {
+            continue;
+        }
+        let payload = fs::read_to_string(&path).map_err(|source| WorkflowError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        let record: WorkflowRunRecord =
+            serde_json::from_str(&payload).map_err(|err| WorkflowError::Invalid {
+                path,
+                message: format!("invalid run record: {err}"),
+            })?;
+        runs.push(record);
+    }
+    runs.sort_by(|left, right| {
+        right
+            .execution
+            .started_at
+            .cmp(&left.execution.started_at)
+            .then_with(|| right.execution.id.cmp(&left.execution.id))
+    });
+    if runs.len() > limit {
+        runs.truncate(limit);
+    }
+    Ok(runs)
+}
+
+/// Mark stranded `running` run JSON as `abandoned` after a daemon restart.
+///
+/// Policy: any on-disk run still `running` cannot still be owned by this process,
+/// so it is closed as abandoned (not cancelled — cancel implies an intentional stop).
+pub fn reconcile_abandoned_workflow_runs(workspace_root: &Path) -> WorkflowResult<usize> {
+    let runs = list_all_workflow_runs(workspace_root, usize::MAX)?;
+    let mut marked = 0usize;
+    let finished_at = now_iso();
+    for mut record in runs {
+        if record.execution.status != ExecutionStatus::Running {
+            continue;
+        }
+        record.execution.status = ExecutionStatus::Abandoned;
+        record.execution.finished_at = Some(finished_at.clone());
+        if record.execution.stderr.is_empty() {
+            record.execution.stderr =
+                "abandoned: owning process exited before the run finished\n".into();
+        } else if !record.execution.stderr.ends_with('\n') {
+            record.execution.stderr.push('\n');
+            record
+                .execution
+                .stderr
+                .push_str("abandoned: owning process exited before the run finished\n");
+        } else {
+            record
+                .execution
+                .stderr
+                .push_str("abandoned: owning process exited before the run finished\n");
+        }
+        save_workflow_run(workspace_root, &record)?;
+        marked += 1;
+    }
+    Ok(marked)
+}
+
+/// Build a shared [`ExecutionSummary`] from a persisted run record.
+pub fn execution_summary_from_record(
+    workspace_root: &Path,
+    record: &WorkflowRunRecord,
+    cancel_owner: &str,
+) -> crate::ExecutionSummary {
+    let cancellable = record.execution.status == ExecutionStatus::Running
+        && cancel_owner != crate::CANCEL_OWNER_NONE;
+    let current_step_id = record
+        .steps
+        .iter()
+        .rev()
+        .find(|step| step.status == ExecutionStatus::Running)
+        .or_else(|| record.steps.last())
+        .map(|step| step.id.clone());
+    let attempt = record.steps.last().map(|step| step.attempts);
+    let mut proposal_ids = record.execution.proposal_ids.clone();
+    if proposal_ids.is_empty() {
+        if let Some(id) = &record.execution.proposal_id {
+            proposal_ids.push(id.clone());
+        }
+    }
+    for step in &record.steps {
+        if let Some(id) = &step.proposal_id {
+            if !proposal_ids.iter().any(|existing| existing == id) {
+                proposal_ids.push(id.clone());
+            }
+        }
+    }
+    crate::ExecutionSummary {
+        execution_id: record.execution.id.clone(),
+        workspace_root: workspace_root.to_string_lossy().replace('\\', "/"),
+        resource_path: record.workflow_path.clone(),
+        kind: "workflow".into(),
+        trigger: record.trigger.clone(),
+        status: record.execution.status,
+        started_at: record.execution.started_at.clone(),
+        finished_at: record.execution.finished_at.clone(),
+        current_step_id,
+        attempt,
+        proposal_ids,
+        cancel_owner: cancel_owner.to_string(),
+        cancellable,
+    }
+}
+
 /// List recent workflow runs for a workflow path (newest first), capped.
 pub fn list_workflow_runs(
     workspace_root: &Path,
@@ -683,7 +835,9 @@ pub fn set_workflow_enabled(path: &Path, enabled: bool) -> WorkflowResult<Workfl
 }
 
 /// Discover `*.workflow.yaml` / `*.workflow.yml` under a workspace root.
-pub fn discover_workflows(workspace_root: &Path) -> WorkflowResult<Vec<(PathBuf, WorkflowManifest)>> {
+pub fn discover_workflows(
+    workspace_root: &Path,
+) -> WorkflowResult<Vec<(PathBuf, WorkflowManifest)>> {
     let mut found = Vec::new();
     discover_workflows_in(workspace_root, workspace_root, &mut found)?;
     Ok(found)
@@ -805,9 +959,7 @@ pub fn last_schedule_run_at(
 fn parse_iso8601_z(value: &str) -> Option<SystemTime> {
     let value = value.trim();
     let (date, rest) = value.split_once('T')?;
-    let time = rest
-        .strip_suffix('Z')
-        .or_else(|| rest.strip_suffix('z'))?;
+    let time = rest.strip_suffix('Z').or_else(|| rest.strip_suffix('z'))?;
     let time = time.split('.').next()?;
     let mut date_parts = date.split('-');
     let year: i32 = date_parts.next()?.parse().ok()?;
@@ -850,6 +1002,7 @@ fn days_from_civil(year: i32, month: u32, day: u32) -> i64 {
     i64::from(era) * 146_097 + i64::from(doe) - 719_468
 }
 
+#[allow(clippy::only_used_in_recursion)]
 fn discover_workflows_in(
     workspace_root: &Path,
     dir: &Path,
@@ -906,10 +1059,7 @@ pub fn resolve_workspace_path(workspace_root: &Path, workflow_path: &Path, rel: 
     if candidate.is_absolute() {
         return candidate.to_path_buf();
     }
-    let from_workflow = workflow_path
-        .parent()
-        .unwrap_or(workspace_root)
-        .join(rel);
+    let from_workflow = workflow_path.parent().unwrap_or(workspace_root).join(rel);
     if from_workflow.exists() {
         return from_workflow;
     }
@@ -921,7 +1071,7 @@ struct LeafOutcome {
     log: String,
     stdout: String,
     stderr: String,
-    proposal_id: Option<String>,
+    proposal_ids: Vec<String>,
 }
 
 struct StepBatchOutcome {
@@ -930,7 +1080,7 @@ struct StepBatchOutcome {
     status: ExecutionStatus,
     stdout: String,
     stderr: String,
-    proposal_id: Option<String>,
+    proposal_ids: Vec<String>,
 }
 
 fn retry_budget(retry: Option<&WorkflowStepRetry>) -> (u32, u64) {
@@ -940,10 +1090,105 @@ fn retry_budget(retry: Option<&WorkflowStepRetry>) -> (u32, u64) {
     }
 }
 
+fn extend_proposal_ids(into: &mut Vec<String>, from: impl IntoIterator<Item = String>) {
+    for id in from {
+        if !into.contains(&id) {
+            into.push(id);
+        }
+    }
+}
+
+fn primary_proposal_id(ids: &[String]) -> Option<String> {
+    ids.first().cloned()
+}
+
+/// Sleep up to `backoff_seconds`, returning early when cancel is set.
+/// Returns `true` when cancelled during the wait.
+fn interruptible_backoff(backoff_seconds: u64, cancel: Option<&AtomicBool>) -> bool {
+    if backoff_seconds == 0 {
+        return cancel.is_some_and(|flag| flag.load(Ordering::SeqCst));
+    }
+    let deadline = Instant::now() + Duration::from_secs(backoff_seconds);
+    while Instant::now() < deadline {
+        if cancel.is_some_and(|flag| flag.load(Ordering::SeqCst)) {
+            return true;
+        }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        thread::sleep(remaining.min(Duration::from_millis(50)));
+    }
+    cancel.is_some_and(|flag| flag.load(Ordering::SeqCst))
+}
+
+fn task_package_manifest(
+    workspace_root: &Path,
+    workflow_path: &Path,
+    task_rel: &str,
+) -> WorkflowResult<(PathBuf, TaskManifest)> {
+    let task_path = resolve_workspace_path(workspace_root, workflow_path, task_rel);
+    let package_dir = if task_path.is_file() {
+        task_path
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or(task_path.clone())
+    } else {
+        task_path.clone()
+    };
+    let manifest_path = if package_dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name == TASK_MANIFEST_FILENAME)
+    {
+        package_dir.clone()
+    } else {
+        package_dir.join(TASK_MANIFEST_FILENAME)
+    };
+    let manifest = TaskManifest::load(&manifest_path)?;
+    Ok((task_path, manifest))
+}
+
+fn reject_unsafe_task_retry(
+    workspace_root: &Path,
+    workflow_path: &Path,
+    step: &WorkflowStep,
+    max_attempts: u32,
+) -> WorkflowResult<Option<LeafOutcome>> {
+    if max_attempts <= 1 || step.action != "task.run" {
+        return Ok(None);
+    }
+    let params: TaskRunParams = deserialize_with(&step.with, workflow_path, &step.id)?;
+    if params.allow_unsafe_retry {
+        return Ok(None);
+    }
+    let (_, manifest) = match task_package_manifest(workspace_root, workflow_path, &params.task) {
+        Ok(value) => value,
+        // Missing/invalid packages fail inside the attempt loop with the usual errors.
+        Err(_) => return Ok(None),
+    };
+    if manifest.execution.idempotent {
+        return Ok(None);
+    }
+    let msg = format!(
+        "task {:?} is not marked execution.idempotent; refusing retry \
+         (max_attempts={max_attempts}) without with.allow_unsafe_retry: true",
+        params.task
+    );
+    Ok(Some(LeafOutcome {
+        status: ExecutionStatus::Failed,
+        log: format!("{msg}\n"),
+        stdout: String::new(),
+        stderr: format!("[{}] {msg}\n", step.id),
+        proposal_ids: Vec::new(),
+    }))
+}
+
 fn execute_leaf_once(
     workspace_root: &Path,
     workflow_path: &Path,
     workflow_rel: &str,
+    execution_id: &str,
     step: &WorkflowStep,
     runner: &TaskRunner,
 ) -> WorkflowResult<LeafOutcome> {
@@ -968,7 +1213,7 @@ fn execute_leaf_once(
                             log,
                             stdout,
                             stderr,
-                            proposal_id: None,
+                            proposal_ids: Vec::new(),
                         })
                     } else {
                         let msg = format!(
@@ -982,7 +1227,7 @@ fn execute_leaf_once(
                             log,
                             stdout,
                             stderr,
-                            proposal_id: None,
+                            proposal_ids: Vec::new(),
                         })
                     }
                 }
@@ -993,6 +1238,8 @@ fn execute_leaf_once(
                 }) => {
                     log.push_str(&task_stdout);
                     log.push_str(&task_stderr);
+                    // Process group already killed by the runner; note cleanup for retry logs.
+                    log.push_str("timeout cleanup: process group killed before retry\n");
                     stderr.push_str(&format!(
                         "[{}] task timed out after {timeout_seconds}s\n",
                         step.id
@@ -1002,7 +1249,7 @@ fn execute_leaf_once(
                         log,
                         stdout,
                         stderr,
-                        proposal_id: None,
+                        proposal_ids: Vec::new(),
                     })
                 }
                 Err(err) => {
@@ -1015,7 +1262,7 @@ fn execute_leaf_once(
                         log,
                         stdout,
                         stderr,
-                        proposal_id: None,
+                        proposal_ids: Vec::new(),
                     })
                 }
             }
@@ -1030,6 +1277,8 @@ fn execute_leaf_once(
                     source: ProposalSource {
                         source_type: ProposalSourceType::Workflow,
                         resource: Some(workflow_rel.to_string()),
+                        execution_id: Some(execution_id.to_string()),
+                        step_id: Some(step.id.clone()),
                     },
                     summary: params.summary,
                     commands: params.commands,
@@ -1046,12 +1295,11 @@ fn execute_leaf_once(
                 log,
                 stdout,
                 stderr,
-                proposal_id: Some(created.id),
+                proposal_ids: vec![created.id],
             })
         }
         "notification" => {
-            let params: NotificationParams =
-                deserialize_with(&step.with, workflow_path, &step.id)?;
+            let params: NotificationParams = deserialize_with(&step.with, workflow_path, &step.id)?;
             let message = if params.message.is_empty() {
                 format!("notification from step {}", step.id)
             } else {
@@ -1066,7 +1314,7 @@ fn execute_leaf_once(
                 log,
                 stdout,
                 stderr,
-                proposal_id: None,
+                proposal_ids: Vec::new(),
             })
         }
         other => Err(WorkflowError::Invalid {
@@ -1080,17 +1328,42 @@ fn execute_leaf_with_retry(
     workspace_root: &Path,
     workflow_path: &Path,
     workflow_rel: &str,
+    execution_id: &str,
     step: &WorkflowStep,
     runner: &TaskRunner,
     cancel: Option<&AtomicBool>,
 ) -> WorkflowResult<StepBatchOutcome> {
     let (max_attempts, backoff_seconds) = retry_budget(step.retry.as_ref());
-    let (outcome, attempts_used, combined_log) = run_attempts(
-        max_attempts,
-        backoff_seconds,
-        cancel,
-        || execute_leaf_once(workspace_root, workflow_path, workflow_rel, step, runner),
-    )?;
+    if let Some(rejected) =
+        reject_unsafe_task_retry(workspace_root, workflow_path, step, max_attempts)?
+    {
+        return Ok(StepBatchOutcome {
+            results: vec![WorkflowStepResult {
+                id: step.id.clone(),
+                action: step.action.clone(),
+                status: ExecutionStatus::Failed,
+                log: rejected.log,
+                proposal_id: None,
+                attempts: 1,
+            }],
+            status: ExecutionStatus::Failed,
+            stdout: rejected.stdout,
+            stderr: rejected.stderr,
+            proposal_ids: Vec::new(),
+        });
+    }
+
+    let (outcome, attempts_used, combined_log) =
+        run_attempts(max_attempts, backoff_seconds, cancel, || {
+            execute_leaf_once(
+                workspace_root,
+                workflow_path,
+                workflow_rel,
+                execution_id,
+                step,
+                runner,
+            )
+        })?;
 
     match outcome.status {
         ExecutionStatus::Succeeded => Ok(StepBatchOutcome {
@@ -1099,13 +1372,13 @@ fn execute_leaf_with_retry(
                 action: step.action.clone(),
                 status: ExecutionStatus::Succeeded,
                 log: combined_log,
-                proposal_id: outcome.proposal_id.clone(),
+                proposal_id: primary_proposal_id(&outcome.proposal_ids),
                 attempts: attempts_used,
             }],
             status: ExecutionStatus::Succeeded,
             stdout: outcome.stdout,
             stderr: String::new(),
-            proposal_id: outcome.proposal_id,
+            proposal_ids: outcome.proposal_ids,
         }),
         ExecutionStatus::Cancelled => Ok(StepBatchOutcome {
             results: vec![WorkflowStepResult {
@@ -1119,22 +1392,24 @@ fn execute_leaf_with_retry(
             status: ExecutionStatus::Cancelled,
             stdout: String::new(),
             stderr: format!("[{}] cancelled\n", step.id),
-            proposal_id: None,
+            proposal_ids: Vec::new(),
         }),
-        ExecutionStatus::Failed | ExecutionStatus::Running => Ok(StepBatchOutcome {
-            results: vec![WorkflowStepResult {
-                id: step.id.clone(),
-                action: step.action.clone(),
+        ExecutionStatus::Failed | ExecutionStatus::Running | ExecutionStatus::Abandoned => {
+            Ok(StepBatchOutcome {
+                results: vec![WorkflowStepResult {
+                    id: step.id.clone(),
+                    action: step.action.clone(),
+                    status: ExecutionStatus::Failed,
+                    log: combined_log,
+                    proposal_id: None,
+                    attempts: attempts_used,
+                }],
                 status: ExecutionStatus::Failed,
-                log: combined_log,
-                proposal_id: None,
-                attempts: attempts_used,
-            }],
-            status: ExecutionStatus::Failed,
-            stdout: outcome.stdout,
-            stderr: outcome.stderr,
-            proposal_id: None,
-        }),
+                stdout: outcome.stdout,
+                stderr: outcome.stderr,
+                proposal_ids: Vec::new(),
+            })
+        }
     }
 }
 
@@ -1156,7 +1431,7 @@ where
         log: String::new(),
         stdout: String::new(),
         stderr: String::new(),
-        proposal_id: None,
+        proposal_ids: Vec::new(),
     };
 
     for attempt in 1..=max_attempts {
@@ -1176,8 +1451,10 @@ where
         }
         if attempt < max_attempts {
             combined_log.push_str("retrying after failure\n");
-            if backoff_seconds > 0 {
-                thread::sleep(Duration::from_secs(backoff_seconds));
+            if interruptible_backoff(backoff_seconds, cancel) {
+                combined_log.push_str("cancelled during backoff\n");
+                last.status = ExecutionStatus::Cancelled;
+                return Ok((last, attempts_used, combined_log));
             }
         }
     }
@@ -1189,6 +1466,7 @@ fn execute_parallel_group(
     workspace_root: &Path,
     workflow_path: &Path,
     workflow_rel: &str,
+    execution_id: &str,
     step: &WorkflowStep,
     runner: &TaskRunner,
     cancel: Option<&AtomicBool>,
@@ -1212,6 +1490,7 @@ fn execute_parallel_group(
                             workspace_root,
                             workflow_path,
                             workflow_rel,
+                            execution_id,
                             child,
                             runner,
                             cancel,
@@ -1247,21 +1526,19 @@ fn execute_parallel_group(
     let mut results = Vec::new();
     let mut stdout = String::new();
     let mut stderr = String::new();
-    let mut proposal_id = None;
+    let mut proposal_ids = Vec::new();
     let mut any_failed = false;
     let mut any_cancelled = cancelled;
 
     for batch in child_batches {
         match batch.status {
-            ExecutionStatus::Failed => any_failed = true,
+            ExecutionStatus::Failed | ExecutionStatus::Abandoned => any_failed = true,
             ExecutionStatus::Cancelled => any_cancelled = true,
             ExecutionStatus::Succeeded | ExecutionStatus::Running => {}
         }
         stdout.push_str(&batch.stdout);
         stderr.push_str(&batch.stderr);
-        if batch.proposal_id.is_some() {
-            proposal_id = batch.proposal_id;
-        }
+        extend_proposal_ids(&mut proposal_ids, batch.proposal_ids);
         results.extend(batch.results);
     }
 
@@ -1292,11 +1569,14 @@ fn execute_parallel_group(
         action: "parallel".into(),
         status: group_status,
         log: group_log,
-        proposal_id: proposal_id.clone(),
+        proposal_id: primary_proposal_id(&proposal_ids),
         attempts: 1,
     });
     if group_status == ExecutionStatus::Succeeded {
-        stdout.push_str(&format!("[{}] parallel ok ({child_count} children)\n", step.id));
+        stdout.push_str(&format!(
+            "[{}] parallel ok ({child_count} children)\n",
+            step.id
+        ));
     }
 
     Ok(StepBatchOutcome {
@@ -1304,7 +1584,7 @@ fn execute_parallel_group(
         status: group_status,
         stdout,
         stderr,
-        proposal_id,
+        proposal_ids,
     })
 }
 
@@ -1312,6 +1592,7 @@ fn execute_top_level_step(
     workspace_root: &Path,
     workflow_path: &Path,
     workflow_rel: &str,
+    execution_id: &str,
     step: &WorkflowStep,
     runner: &TaskRunner,
     cancel: Option<&AtomicBool>,
@@ -1321,6 +1602,7 @@ fn execute_top_level_step(
             workspace_root,
             workflow_path,
             workflow_rel,
+            execution_id,
             step,
             runner,
             cancel,
@@ -1330,6 +1612,7 @@ fn execute_top_level_step(
         workspace_root,
         workflow_path,
         workflow_rel,
+        execution_id,
         step,
         runner,
         cancel,
@@ -1341,14 +1624,23 @@ fn execute_top_level_step(
 /// Steps run sequentially. A `parallel` group fans out its children concurrently
 /// (bounded by [`MAX_PARALLEL_STEPS`]), joins, then the runner continues. Leaf
 /// steps honor optional `retry` before the failure is treated as terminal.
+///
+/// When `execution_id` is `Some`, that id is used for the run record and for
+/// `proposal.create` idempotency keys (`{execution_id}:{step_id}`). Desktop hosts
+/// must pass the same id they expose to the UI.
 pub fn run_workflow(
     workspace_root: &Path,
     workflow_path: &Path,
     manifest: &WorkflowManifest,
     trigger: &str,
     cancel: Option<&AtomicBool>,
+    execution_id: Option<&str>,
 ) -> WorkflowResult<WorkflowRunRecord> {
-    let execution_id = uuid::Uuid::now_v7().to_string();
+    let execution_id = execution_id
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+        .map(|id| id.to_string())
+        .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
     let started_at = now_iso();
     let workflow_rel = workflow_path
         .strip_prefix(workspace_root)
@@ -1356,10 +1648,69 @@ pub fn run_workflow(
         .to_string_lossy()
         .replace('\\', "/");
 
+    let placeholder = WorkflowRunRecord {
+        workflow_path: workflow_rel.clone(),
+        trigger: trigger.to_string(),
+        execution: ExecutionResult {
+            id: execution_id.clone(),
+            status: ExecutionStatus::Running,
+            stdout: String::new(),
+            stderr: String::new(),
+            started_at: started_at.clone(),
+            finished_at: None,
+            outputs: Vec::new(),
+            proposal_id: None,
+            proposal_ids: Vec::new(),
+        },
+        steps: Vec::new(),
+    };
+    save_workflow_run(workspace_root, &placeholder)?;
+
+    run_workflow_body(
+        workspace_root,
+        workflow_path,
+        manifest,
+        trigger,
+        cancel,
+        execution_id,
+        started_at,
+        workflow_rel,
+    )
+}
+
+/// Like [`run_workflow`], but accepts an owned optional execution id (daemon schedule path).
+pub fn run_workflow_with_id(
+    workspace_root: &Path,
+    workflow_path: &Path,
+    manifest: &WorkflowManifest,
+    trigger: &str,
+    execution_id: Option<String>,
+    cancel: Option<&AtomicBool>,
+) -> WorkflowResult<WorkflowRunRecord> {
+    run_workflow(
+        workspace_root,
+        workflow_path,
+        manifest,
+        trigger,
+        cancel,
+        execution_id.as_deref(),
+    )
+}
+
+fn run_workflow_body(
+    workspace_root: &Path,
+    workflow_path: &Path,
+    manifest: &WorkflowManifest,
+    trigger: &str,
+    cancel: Option<&AtomicBool>,
+    execution_id: String,
+    started_at: String,
+    workflow_rel: String,
+) -> WorkflowResult<WorkflowRunRecord> {
     let mut step_results = Vec::new();
     let mut stdout = String::new();
     let mut stderr = String::new();
-    let mut proposal_id = None;
+    let mut proposal_ids = Vec::new();
     let mut status = ExecutionStatus::Succeeded;
 
     let runner = TaskRunner::new();
@@ -1375,20 +1726,19 @@ pub fn run_workflow(
             workspace_root,
             workflow_path,
             &workflow_rel,
+            &execution_id,
             step,
             &runner,
             cancel,
         )?;
         stdout.push_str(&batch.stdout);
         stderr.push_str(&batch.stderr);
-        if batch.proposal_id.is_some() {
-            proposal_id = batch.proposal_id.clone();
-        }
+        extend_proposal_ids(&mut proposal_ids, batch.proposal_ids);
         step_results.extend(batch.results);
 
         match batch.status {
             ExecutionStatus::Succeeded => {}
-            ExecutionStatus::Failed => {
+            ExecutionStatus::Failed | ExecutionStatus::Abandoned => {
                 status = ExecutionStatus::Failed;
                 break;
             }
@@ -1421,7 +1771,8 @@ pub fn run_workflow(
             started_at,
             finished_at: Some(now_iso()),
             outputs: Vec::new(),
-            proposal_id,
+            proposal_id: primary_proposal_id(&proposal_ids),
+            proposal_ids,
         },
         steps: step_results,
     };
@@ -1435,10 +1786,35 @@ pub fn load_and_run_workflow(
     workflow_path: &Path,
     trigger_override: Option<&str>,
     cancel: Option<&AtomicBool>,
+    execution_id: Option<&str>,
 ) -> WorkflowResult<WorkflowRunRecord> {
     let manifest = WorkflowManifest::load(workflow_path)?;
     let trigger = trigger_override.unwrap_or_else(|| trigger_label(&manifest.trigger));
-    run_workflow(workspace_root, workflow_path, &manifest, trigger, cancel)
+    run_workflow(
+        workspace_root,
+        workflow_path,
+        &manifest,
+        trigger,
+        cancel,
+        execution_id,
+    )
+}
+
+/// Like [`load_and_run_workflow`], with an optional owned pre-assigned execution id.
+pub fn load_and_run_workflow_with_id(
+    workspace_root: &Path,
+    workflow_path: &Path,
+    trigger_override: Option<&str>,
+    execution_id: Option<String>,
+    cancel: Option<&AtomicBool>,
+) -> WorkflowResult<WorkflowRunRecord> {
+    load_and_run_workflow(
+        workspace_root,
+        workflow_path,
+        trigger_override,
+        cancel,
+        execution_id.as_deref(),
+    )
 }
 
 #[cfg(test)]
@@ -1561,18 +1937,26 @@ steps:
       message: proposal created
 "##;
         fs::write(&workflow_path, yaml).unwrap();
-        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None)
+        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None, None)
             .expect("run");
         assert_eq!(record.execution.status, ExecutionStatus::Succeeded);
         let proposal_id = record.execution.proposal_id.expect("proposal id");
+        assert_eq!(record.execution.proposal_ids, vec![proposal_id.clone()]);
         let proposal = crate::load_proposal(dir.path(), &proposal_id).unwrap();
         assert_eq!(proposal.source.source_type, ProposalSourceType::Workflow);
         assert_eq!(
             proposal.source.resource.as_deref(),
             Some("Simple.workflow.yaml")
         );
+        assert_eq!(
+            proposal.source.execution_id.as_deref(),
+            Some(record.execution.id.as_str())
+        );
+        assert_eq!(proposal.source.step_id.as_deref(), Some("propose"));
         assert_eq!(record.steps.len(), 2);
-        assert!(workflow_runs_dir(dir.path()).join(format!("{}.json", record.execution.id)).is_file());
+        assert!(workflow_runs_dir(dir.path())
+            .join(format!("{}.json", record.execution.id))
+            .is_file());
     }
 
     #[test]
@@ -1627,7 +2011,8 @@ trigger:
   interval_seconds: 3600
 steps: []
 "#;
-        let manifest = WorkflowManifest::parse(Path::new("Hourly.workflow.yaml"), yaml).expect("parse");
+        let manifest =
+            WorkflowManifest::parse(Path::new("Hourly.workflow.yaml"), yaml).expect("parse");
         assert_eq!(
             manifest.trigger,
             WorkflowTrigger::Schedule(ScheduleTrigger {
@@ -1652,7 +2037,8 @@ trigger:
   timezone: America/Los_Angeles
 steps: []
 "#;
-        let manifest = WorkflowManifest::parse(Path::new("Nightly.workflow.yaml"), yaml).expect("parse");
+        let manifest =
+            WorkflowManifest::parse(Path::new("Nightly.workflow.yaml"), yaml).expect("parse");
         match &manifest.trigger {
             WorkflowTrigger::Schedule(schedule) => {
                 assert!(schedule.interval_seconds.is_none());
@@ -1813,7 +2199,7 @@ steps:
                     log: format!("fail-{calls}\n"),
                     stdout: String::new(),
                     stderr: format!("err-{calls}\n"),
-                    proposal_id: None,
+                    proposal_ids: Vec::new(),
                 })
             } else {
                 Ok(LeafOutcome {
@@ -1821,7 +2207,7 @@ steps:
                     log: "ok\n".into(),
                     stdout: "ok\n".into(),
                     stderr: String::new(),
-                    proposal_id: None,
+                    proposal_ids: Vec::new(),
                 })
             }
         })
@@ -1844,7 +2230,7 @@ steps:
                 log: format!("fail-{calls}\n"),
                 stdout: String::new(),
                 stderr: format!("err-{calls}\n"),
-                proposal_id: None,
+                proposal_ids: Vec::new(),
             })
         })
         .expect("retry loop");
@@ -1875,7 +2261,7 @@ steps:
       task: DoesNotExist.task
 "#;
         fs::write(&workflow_path, yaml).unwrap();
-        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None)
+        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None, None)
             .expect("run");
         assert_eq!(record.execution.status, ExecutionStatus::Failed);
         assert_eq!(record.steps.len(), 1);
@@ -1914,7 +2300,7 @@ steps:
       message: after-join
 "#;
         fs::write(&workflow_path, yaml).unwrap();
-        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None)
+        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None, None)
             .expect("run");
         assert_eq!(record.execution.status, ExecutionStatus::Succeeded);
         let ids: Vec<_> = record.steps.iter().map(|s| s.id.as_str()).collect();
@@ -1953,10 +2339,13 @@ steps:
       message: should-not-run
 "#;
         fs::write(&workflow_path, yaml).unwrap();
-        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None)
+        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None, None)
             .expect("run");
         assert_eq!(record.execution.status, ExecutionStatus::Failed);
-        assert!(record.steps.iter().any(|s| s.id == "fan" && s.status == ExecutionStatus::Failed));
+        assert!(record
+            .steps
+            .iter()
+            .any(|s| s.id == "fan" && s.status == ExecutionStatus::Failed));
         assert!(record.steps.iter().all(|s| s.id != "after"));
         assert!(!record.execution.stdout.contains("should-not-run"));
     }
@@ -1992,7 +2381,7 @@ steps:
 "#
         );
         fs::write(&workflow_path, yaml).unwrap();
-        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None)
+        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None, None)
             .expect("run");
         assert_eq!(record.execution.status, ExecutionStatus::Succeeded);
         let child_results = record.steps.len() - 1; // exclude group summary
@@ -2065,7 +2454,10 @@ steps: []
             cron: Some("0 * * * *".into()),
             timezone: None,
         };
-        assert_eq!(evaluate_schedule_due(&interval, None, now), ScheduleDue::Due);
+        assert_eq!(
+            evaluate_schedule_due(&interval, None, now),
+            ScheduleDue::Due
+        );
         assert_eq!(
             evaluate_schedule_due(&interval, Some(now - Duration::from_secs(59)), now),
             ScheduleDue::NotDue
@@ -2109,12 +2501,349 @@ steps:
         )
         .unwrap();
         let record =
-            load_and_run_workflow(root, &workflow, Some("schedule"), None).expect("run");
+            load_and_run_workflow(root, &workflow, Some("schedule"), None, None).expect("run");
         assert_eq!(record.trigger, "schedule");
         let last = last_schedule_run_at(root, "Tick.workflow.yaml")
             .expect("history")
             .expect("started_at");
         let parsed = parse_iso8601_z(&record.execution.started_at).expect("parse");
         assert_eq!(last, parsed);
+    }
+
+    #[test]
+    fn proposal_create_retry_dedupes_existing_pending() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("lattice.yaml"), "id: test\ntitle: Test\n").unwrap();
+        let workflow_path = dir.path().join("Dedupe.workflow.yaml");
+        let yaml = r##"
+format: lattice-workflow
+version: 1
+name: Dedupe
+trigger:
+  type: manual
+steps:
+  - id: propose
+    action: proposal.create
+    retry:
+      max_attempts: 2
+      backoff_seconds: 0
+    with:
+      summary: Create once
+      commands:
+        - type: page-create
+          path: Notes/Once.md
+          content: "# Once\n"
+"##;
+        fs::write(&workflow_path, yaml).unwrap();
+        let execution_id = "exec-stable-dedupe";
+        let record = run_workflow(
+            dir.path(),
+            &workflow_path,
+            &WorkflowManifest::load(&workflow_path).unwrap(),
+            "manual",
+            None,
+            Some(execution_id),
+        )
+        .expect("run");
+        assert_eq!(record.execution.id, execution_id);
+        assert_eq!(record.execution.status, ExecutionStatus::Succeeded);
+        assert_eq!(record.execution.proposal_ids.len(), 1);
+        let first_id = record.execution.proposal_ids[0].clone();
+
+        // Simulate post-persist failure: create again with the same key.
+        let again = create_proposal(
+            dir.path(),
+            TransactionProposal {
+                id: String::new(),
+                source: ProposalSource {
+                    source_type: ProposalSourceType::Workflow,
+                    resource: Some("Dedupe.workflow.yaml".into()),
+                    execution_id: Some(execution_id.into()),
+                    step_id: Some("propose".into()),
+                },
+                summary: "Create once again".into(),
+                commands: vec![],
+                affected_paths: vec![],
+                warnings: vec![],
+                created_at: String::new(),
+                status: Default::default(),
+            },
+        )
+        .unwrap();
+        assert_eq!(again.id, first_id);
+        assert_eq!(crate::list_proposal_summaries(dir.path()).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn rejects_retry_on_non_idempotent_task_without_unsafe_ack() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("lattice.yaml"), "id: test\ntitle: Test\n").unwrap();
+        let task_dir = dir.path().join("Unsafe.task");
+        fs::create_dir_all(&task_dir).unwrap();
+        fs::write(
+            task_dir.join("task.yaml"),
+            r#"format: lattice-task
+version: 1
+runtime:
+  type: python
+  provider: uv
+entrypoint:
+  command: [python, main.py]
+"#,
+        )
+        .unwrap();
+        fs::write(task_dir.join("main.py"), "print('ok')\n").unwrap();
+        let workflow_path = dir.path().join("UnsafeRetry.workflow.yaml");
+        fs::write(
+            &workflow_path,
+            r#"
+format: lattice-workflow
+version: 1
+name: Unsafe retry
+trigger:
+  type: manual
+steps:
+  - id: run
+    action: task.run
+    retry:
+      max_attempts: 3
+      backoff_seconds: 0
+    with:
+      task: Unsafe.task
+"#,
+        )
+        .unwrap();
+        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None, None)
+            .expect("run");
+        assert_eq!(record.execution.status, ExecutionStatus::Failed);
+        assert_eq!(record.steps[0].attempts, 1);
+        assert!(record.steps[0].log.contains("allow_unsafe_retry"));
+        assert!(record
+            .execution
+            .stderr
+            .contains("not marked execution.idempotent"));
+    }
+
+    #[test]
+    fn allows_retry_when_task_declares_idempotent() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("lattice.yaml"), "id: test\ntitle: Test\n").unwrap();
+        let task_dir = dir.path().join("Safe.task");
+        fs::create_dir_all(&task_dir).unwrap();
+        fs::write(
+            task_dir.join("task.yaml"),
+            r#"format: lattice-task
+version: 1
+runtime:
+  type: python
+  provider: uv
+entrypoint:
+  command: [python, main.py]
+execution:
+  idempotent: true
+"#,
+        )
+        .unwrap();
+        // Entrypoint that does not need uv project markers beyond what runner expects —
+        // missing uv will fail attempts; we only assert the unsafe gate did not fire.
+        fs::write(task_dir.join("main.py"), "print('ok')\n").unwrap();
+        let workflow_path = dir.path().join("SafeRetry.workflow.yaml");
+        fs::write(
+            &workflow_path,
+            r#"
+format: lattice-workflow
+version: 1
+name: Safe retry
+trigger:
+  type: manual
+steps:
+  - id: run
+    action: task.run
+    retry:
+      max_attempts: 2
+      backoff_seconds: 0
+    with:
+      task: Safe.task
+"#,
+        )
+        .unwrap();
+        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None, None)
+            .expect("run");
+        assert!(
+            !record.steps[0].log.contains("allow_unsafe_retry"),
+            "idempotent task should not hit unsafe rejection: {}",
+            record.steps[0].log
+        );
+        // Either succeeds (uv present) or retries then fails (uv missing) — not single-attempt reject.
+        assert!(record.steps[0].attempts >= 1);
+        if record.execution.status == ExecutionStatus::Failed {
+            assert!(
+                record.steps[0].attempts > 1
+                    || record.steps[0].log.contains("attempt 1/2")
+                    || record.execution.stderr.contains("uv")
+                    || record.execution.stderr.contains("MissingTool")
+                    || record.steps[0].log.contains("missing"),
+                "unexpected failure without retry: {}",
+                record.steps[0].log
+            );
+        }
+    }
+
+    #[test]
+    fn run_attempts_cancels_during_backoff() {
+        use std::sync::atomic::AtomicU32;
+        use std::sync::Arc;
+
+        let cancel = Arc::new(AtomicBool::new(false));
+        let calls = Arc::new(AtomicU32::new(0));
+        let cancel_thread = Arc::clone(&cancel);
+        let calls_thread = Arc::clone(&calls);
+        let handle = thread::spawn(move || {
+            run_attempts(3, 2, Some(cancel_thread.as_ref()), || {
+                let n = calls_thread.fetch_add(1, Ordering::SeqCst) + 1;
+                Ok(LeafOutcome {
+                    status: ExecutionStatus::Failed,
+                    log: format!("fail-{n}\n"),
+                    stdout: String::new(),
+                    stderr: format!("err-{n}\n"),
+                    proposal_ids: Vec::new(),
+                })
+            })
+        });
+        // Flip cancel shortly after the first failure enters backoff.
+        thread::sleep(Duration::from_millis(100));
+        cancel.store(true, Ordering::SeqCst);
+        let (outcome, attempts, log) = handle.join().unwrap().expect("retry loop");
+        assert_eq!(outcome.status, ExecutionStatus::Cancelled);
+        assert_eq!(attempts, 1);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert!(log.contains("cancelled during backoff"));
+    }
+
+    #[test]
+    fn parallel_proposal_children_retain_all_ids() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("lattice.yaml"), "id: test\ntitle: Test\n").unwrap();
+        let workflow_path = dir.path().join("ParallelProposals.workflow.yaml");
+        fs::write(
+            &workflow_path,
+            r##"
+format: lattice-workflow
+version: 1
+name: Parallel proposals
+trigger:
+  type: manual
+steps:
+  - id: fan
+    action: parallel
+    parallel:
+      - id: left
+        action: proposal.create
+        with:
+          summary: Left
+          commands:
+            - type: page-create
+              path: Notes/Left.md
+              content: "# Left\n"
+      - id: right
+        action: proposal.create
+        with:
+          summary: Right
+          commands:
+            - type: page-create
+              path: Notes/Right.md
+              content: "# Right\n"
+"##,
+        )
+        .unwrap();
+        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None, None)
+            .expect("run");
+        assert_eq!(record.execution.status, ExecutionStatus::Succeeded);
+        assert_eq!(record.execution.proposal_ids.len(), 2);
+        let left = record
+            .steps
+            .iter()
+            .find(|s| s.id == "left")
+            .and_then(|s| s.proposal_id.clone())
+            .expect("left proposal");
+        let right = record
+            .steps
+            .iter()
+            .find(|s| s.id == "right")
+            .and_then(|s| s.proposal_id.clone())
+            .expect("right proposal");
+        assert_ne!(left, right);
+        assert!(record.execution.proposal_ids.contains(&left));
+        assert!(record.execution.proposal_ids.contains(&right));
+        assert_eq!(
+            record.execution.proposal_id.as_deref(),
+            Some(record.execution.proposal_ids[0].as_str())
+        );
+    }
+
+    #[test]
+    fn run_workflow_honors_stable_execution_id() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("lattice.yaml"), "id: test\ntitle: Test\n").unwrap();
+        let workflow_path = dir.path().join("StableId.workflow.yaml");
+        fs::write(
+            &workflow_path,
+            r#"
+format: lattice-workflow
+version: 1
+name: Stable
+trigger:
+  type: manual
+steps:
+  - id: note
+    action: notification
+    with:
+      message: hi
+"#,
+        )
+        .unwrap();
+        let record = run_workflow(
+            dir.path(),
+            &workflow_path,
+            &WorkflowManifest::load(&workflow_path).unwrap(),
+            "manual",
+            None,
+            Some("desktop-stable-id"),
+        )
+        .expect("run");
+        assert_eq!(record.execution.id, "desktop-stable-id");
+        assert!(workflow_runs_dir(dir.path())
+            .join("desktop-stable-id.json")
+            .is_file());
+    }
+
+    #[test]
+    fn reconcile_abandoned_marks_stranded_running_runs() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("lattice.yaml"), "id: test\ntitle: Test\n").unwrap();
+        let running = WorkflowRunRecord {
+            workflow_path: "Stuck.workflow.yaml".into(),
+            trigger: "schedule".into(),
+            execution: ExecutionResult {
+                id: "exec-abandoned-1".into(),
+                status: ExecutionStatus::Running,
+                stdout: String::new(),
+                stderr: String::new(),
+                started_at: "2026-07-24T12:00:00Z".into(),
+                finished_at: None,
+                outputs: Vec::new(),
+                proposal_id: None,
+                proposal_ids: Vec::new(),
+            },
+            steps: Vec::new(),
+        };
+        save_workflow_run(dir.path(), &running).expect("save running");
+        let marked = reconcile_abandoned_workflow_runs(dir.path()).expect("reconcile");
+        assert_eq!(marked, 1);
+        let loaded = load_workflow_run(dir.path(), "exec-abandoned-1").expect("load");
+        assert_eq!(loaded.execution.status, ExecutionStatus::Abandoned);
+        assert!(loaded.execution.finished_at.is_some());
+        assert!(loaded.execution.stderr.contains("abandoned"));
+        assert_eq!(reconcile_abandoned_workflow_runs(dir.path()).unwrap(), 0);
     }
 }

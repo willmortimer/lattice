@@ -55,10 +55,11 @@ impl DatasetManifest {
 
     pub fn load(path: &Path) -> Result<Self> {
         let text = std::fs::read_to_string(path).map_err(|source| Error::io(path, source))?;
-        let manifest: DatasetManifest = serde_yaml::from_str(&text).map_err(|source| Error::Yaml {
-            path: path.to_path_buf(),
-            source,
-        })?;
+        let manifest: DatasetManifest =
+            serde_yaml::from_str(&text).map_err(|source| Error::Yaml {
+                path: path.to_path_buf(),
+                source,
+            })?;
         manifest.check(path)?;
         Ok(manifest)
     }

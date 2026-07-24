@@ -7,13 +7,13 @@ use lattice_embedding::{
     PoolingStrategy,
 };
 use lattice_index::{
-    Backlink, CHUNKER_VERSION, ChunkSearchHit, EmbedPendingStats, EmbeddingNamespace,
-    HybridSearchHit, SearchHit,
+    Backlink, ChunkSearchHit, EmbedPendingStats, EmbeddingNamespace, HybridSearchHit, SearchHit,
+    CHUNKER_VERSION,
 };
 use lattice_runtime::{
     default_runtime, hybrid_search_with_session_semantic,
-    hybrid_search_with_session_semantic_async, LatticeRuntime, SemanticAvailability, SemanticStatus,
-    SemanticStatusState, SemanticWorkerConfig, WorkspaceSession,
+    hybrid_search_with_session_semantic_async, LatticeRuntime, SemanticAvailability,
+    SemanticStatus, SemanticStatusState, SemanticWorkerConfig, WorkspaceSession,
 };
 use serde::Serialize;
 
@@ -644,14 +644,12 @@ mod tests {
 
         let hits = search_workspace_chunks(root, "structural".to_string(), 10).unwrap();
         assert!(hits.iter().any(|hit| hit.path.ends_with("Guide.md")));
-        assert!(
-            hits.iter()
-                .any(|hit| hit.heading_path.contains(&"Intro".to_string()))
-        );
-        assert!(
-            hits.iter()
-                .all(|hit| hit.source_end_byte > hit.source_start_byte)
-        );
+        assert!(hits
+            .iter()
+            .any(|hit| hit.heading_path.contains(&"Intro".to_string())));
+        assert!(hits
+            .iter()
+            .all(|hit| hit.source_end_byte > hit.source_start_byte));
     }
 
     #[test]
@@ -691,10 +689,9 @@ mod tests {
         let root = dir.path().to_string_lossy().into_owned();
 
         let hits = hybrid_search_workspace(root, "capability".to_string(), 10).unwrap();
-        assert!(
-            hits.iter()
-                .any(|hit| hit.resource_uri.ends_with("Notes.md"))
-        );
+        assert!(hits
+            .iter()
+            .any(|hit| hit.resource_uri.ends_with("Notes.md")));
         assert!(hits.iter().all(|hit| hit.semantic_rank.is_none()));
     }
 
@@ -834,10 +831,9 @@ mod tests {
         let ui: Vec<SearchHitUi> = raw.into_iter().map(SearchHitUi::from_hybrid).collect();
         assert!(!ui.is_empty());
         assert!(ui.iter().any(|hit| hit.semantic_rank.is_some()));
-        assert!(
-            ui.iter()
-                .any(|hit| hit.fused_score.is_some_and(|s| s > 0.0))
-        );
+        assert!(ui
+            .iter()
+            .any(|hit| hit.fused_score.is_some_and(|s| s > 0.0)));
         assert!(ui.iter().any(|hit| hit.chunk_id.is_some()));
     }
 

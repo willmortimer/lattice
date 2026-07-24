@@ -40,7 +40,10 @@ async fn idle_shutdown_exits_after_last_client_disconnects() {
     while tokio::time::Instant::now() < deadline {
         if let Ok(Some(status)) = spawned.try_wait() {
             assert!(status.success(), "daemon should exit 0 on idle shutdown");
-            assert!(!spawned.socket_path.exists(), "socket file should be removed");
+            assert!(
+                !spawned.socket_path.exists(),
+                "socket file should be removed"
+            );
             return;
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
@@ -155,11 +158,15 @@ async fn idle_shutdown_respects_configured_timeout() {
     let dir = TempDir::new().expect("tempdir");
     let socket = dir.path().join("idle-bounded.sock");
     let idle_secs = 1u64;
-    let opts = SpawnOptions::new(env!("CARGO_BIN_EXE_latticed"), &socket, "idle-bounded-token")
-        .with_instance_id("idle-bounded")
-        .with_keep_services_running(false)
-        .with_idle_shutdown_secs(idle_secs)
-        .with_ready_timeout(Duration::from_secs(10));
+    let opts = SpawnOptions::new(
+        env!("CARGO_BIN_EXE_latticed"),
+        &socket,
+        "idle-bounded-token",
+    )
+    .with_instance_id("idle-bounded")
+    .with_keep_services_running(false)
+    .with_idle_shutdown_secs(idle_secs)
+    .with_ready_timeout(Duration::from_secs(10));
 
     let mut spawned = spawn_latticed(opts).await.expect("spawn latticed");
     let client = DaemonClient::connect(&spawned.socket_path, &spawned.auth_token)

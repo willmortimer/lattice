@@ -43,9 +43,7 @@ pub fn parse_relation_target(spec: &str) -> Result<RelationTarget<'_>, String> {
         let package_rel = package_rel.trim();
         let table = table.trim();
         if package_rel.is_empty() || table.is_empty() {
-            return Err(
-                "cross-package relation_table must be `Path/To/Package.data#table`".into(),
-            );
+            return Err("cross-package relation_table must be `Path/To/Package.data#table`".into());
         }
         if table.contains('#') {
             return Err("cross-package relation_table must contain exactly one '#'".into());

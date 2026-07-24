@@ -8,7 +8,8 @@ dependencies = []
 
 [project.optional-dependencies]
 data = ["pyarrow", "pandas"]
-dev = ["pytest>=8"]
+duckdb = ["duckdb>=1.1.0"]
+dev = ["pytest>=8", "duckdb>=1.1.0", "pyarrow"]
 
 [build-system]
 requires = ["hatchling"]

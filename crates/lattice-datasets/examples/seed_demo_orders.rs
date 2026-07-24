@@ -17,11 +17,7 @@ fn main() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../templates/workspaces/demo/files/Data/Orders.dataset");
     let csv = root.join("sources/orders.csv");
-    assert!(
-        csv.is_file(),
-        "missing source CSV at {}",
-        csv.display()
-    );
+    assert!(csv.is_file(), "missing source CSV at {}", csv.display());
 
     // Wipe previous facts so re-runs are idempotent.
     let facts = root.join("facts");
@@ -55,9 +51,7 @@ fn main() {
     }
 
     // Drop any stale manifest entries left from a prior seed shape.
-    let discovered = dataset
-        .discover_partitions()
-        .expect("discover_partitions");
+    let discovered = dataset.discover_partitions().expect("discover_partitions");
     println!(
         "manifest partitions: {}",
         discovered
@@ -95,10 +89,7 @@ fn split_csv_by_year_month(csv: &Path) -> std::io::Result<BTreeMap<(String, Stri
             )
         })?;
 
-    let tmp_dir = csv
-        .parent()
-        .expect("sources/")
-        .join(".seed-orders-tmp");
+    let tmp_dir = csv.parent().expect("sources/").join(".seed-orders-tmp");
     if tmp_dir.exists() {
         std::fs::remove_dir_all(&tmp_dir)?;
     }

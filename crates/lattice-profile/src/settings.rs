@@ -411,22 +411,14 @@ impl Default for DesktopSettings {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchSettings {
     #[serde(default)]
     pub semantic_enabled: bool,
 }
 
-impl Default for SearchSettings {
-    fn default() -> Self {
-        Self {
-            semantic_enabled: false,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ServicesSettings {
     /// When true, `latticed` stays running after the last client disconnects.
@@ -436,15 +428,6 @@ pub struct ServicesSettings {
     /// menu bar / tray (not a login item). Quit from the tray exits fully.
     #[serde(default)]
     pub keep_app_in_menu_bar: bool,
-}
-
-impl Default for ServicesSettings {
-    fn default() -> Self {
-        Self {
-            keep_services_running: false,
-            keep_app_in_menu_bar: false,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

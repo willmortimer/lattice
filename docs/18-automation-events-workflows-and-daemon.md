@@ -108,17 +108,66 @@ automatic triggers; manual Run still executes.
 
 v1 steps: `task.run` (delegates to TaskRunner), `proposal.create` (source type
 `workflow`), optional `notification` (log only). Leaf steps may set optional
-`retry` (`max_attempts` ≥ 1, `backoff_seconds` sleep between failures). A step
-with a non-empty `parallel` child list (action `parallel` or omitted) runs those
-children concurrently (bounded, then join) before the next top-level step.
-Unknown actions/triggers are rejected at parse time. Run history is stored under
-`.lattice/workflows/runs/` (step results may include `attempts` when > 1).
+`retry` (`max_attempts` ≥ 1, `backoff_seconds` interruptible sleep between
+failures — cancel wakes the wait). A step with a non-empty `parallel` child list
+(action `parallel` or omitted) runs those children concurrently (bounded, then
+join) before the next top-level step. Unknown actions/triggers are rejected at
+parse time. Run history is stored under `.lattice/workflows/runs/` (step results
+may include `attempts` when > 1). Execution results carry `proposalIds` (all ids
+from the run; `proposalId` remains the first for compatibility).
+
+**Retry safety:** `proposal.create` is idempotent per run via key
+`{execution_id}:{step_id}` stamped on `ProposalSource` — a retry that already
+persisted a pending proposal returns that proposal instead of minting a
+duplicate. `task.run` retries require either `execution.idempotent: true` on the
+task manifest or an explicit `with.allow_unsafe_retry: true` on the step; without
+one of those, `max_attempts > 1` is rejected before the first attempt.
+
+Example task declaration:
+
+```yaml
+# task.yaml
+execution:
+  idempotent: true
+```
+
+Unsafe override on a workflow step:
+
+```yaml
+- id: side-effect
+  action: task.run
+  retry:
+    max_attempts: 3
+    backoff_seconds: 2
+  with:
+    task: SideEffect.task
+    allow_unsafe_retry: true
+```
 
 **Schedule firing (latticed):** when a workspace session is open, the daemon
 polls enabled `schedule` workflows and fires those with a due `interval_seconds`
 (trigger label `schedule`). Cron-only schedules are parsed/validated but not
 evaluated yet (set `interval_seconds` to fire; cron evaluator is TODO). Durable
-job queues and a visual editor remain out of scope.
+job queues, a known-workspace registry, and closed-desktop cron remain out of
+scope — interval schedules do **not** claim durability while the desktop is
+closed.
+
+**Job status (tray / HTTP):** daemon-owned schedule runs register in an
+in-memory job registry under a stable `executionId` (same id in
+`.lattice/workflows/runs/*.json`). Localhost routes:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/v1/jobs/list_active` | In-flight daemon jobs |
+| `POST` | `/v1/jobs/list_recent` | Recent + optional workspace disk history |
+| `POST` | `/v1/jobs/get` | One job by `executionId` |
+| `POST` | `/v1/jobs/cancel` | Cooperative cancel (daemon-owned only) |
+
+On OpenWorkspace / schedule tick, stranded on-disk `running` records are marked
+`abandoned` (process exited before finish). Desktop tray merges in-process
+`WorkflowState` runs with daemon jobs (HTTP when `LATTICE_AUTH_TOKEN` + API port
+are available, else disk `running` schedule records). Cancel ownership is
+explicit: `desktop` vs `daemon`.
 
 Example with retry and parallel fan-out:
 
@@ -241,10 +290,20 @@ Naming: `*.derived.yaml` (or `.yml`) is classified as
 `ResourceKind::Derived`. Relative paths resolve from the manifest directory.
 
 Lattice tracks `current` / `stale` / `building` / `failed` by hashing listed
-input files (v1 also expands simple `*` / `**` globs) and comparing against
-lineage recorded under `.lattice/derived/`. Rebuild runs the declared
-`builder.task` through the existing task runner and refreshes lineage on
-success.
+input files (v1 also expands simple `*` / `**` globs), the builder task
+package, and the declared output, then comparing against lineage recorded
+under `.lattice/derived/`. `current` requires all of those to exist with
+matching hashes; otherwise Lattice reports structured `staleReasons`
+(`never-built`, `input-changed`, `input-missing`, `output-missing`,
+`output-changed`, `builder-failed`, `builder-changed`).
+
+Rebuild runs the declared `builder.task` through the existing task runner with
+`LATTICE_DERIVED_OUTPUT` / `LATTICE_DERIVED_STAGING` pointing at
+`.lattice/derived/staging/<build-id>/`. On success Lattice verifies the staged
+artifact and atomically promotes it to the declared output path; on failure or
+interruption the previous output is left untouched (last-known-good). Per-resource
+build locks serialize concurrent rebuilds; abandoned staging directories are
+cleaned up.
 
 Declared inputs, builder task, and output also surface as `input` /
 `output` edges in the Inspect relationship graph (see

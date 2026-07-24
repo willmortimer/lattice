@@ -56,6 +56,17 @@ pub enum Error {
     )]
     IntraTransactionConflict { path: PathBuf },
 
+    /// Selected proposal subset omits an earlier command that creates a path
+    /// required by a selected command (inferred from NotFound preconditions).
+    #[error(
+        "proposal subset is missing predecessor command {required_index} \
+         (needed to create {path})"
+    )]
+    SubsetMissingDependency {
+        required_index: usize,
+        path: PathBuf,
+    },
+
     /// Undo/redo refused because a resource changed outside Lattice since the
     /// transaction was applied (ADR 0023 external-write guard).
     #[error(

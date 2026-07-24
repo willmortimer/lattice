@@ -27,13 +27,13 @@ impl Dataset {
     ) -> Result<PartitionEntry> {
         let batch_schema = infer_csv_schema(csv_path)?;
         let file = File::open(csv_path).map_err(|source| Error::io(csv_path, source))?;
-        let mut reader = ReaderBuilder::new(batch_schema)
+        let reader = ReaderBuilder::new(batch_schema)
             .with_header(true)
             .build(file)
             .map_err(|source| Error::csv(csv_path, source.to_string()))?;
 
         let mut batches = Vec::new();
-        while let Some(batch) = reader.next() {
+        for batch in reader {
             batches.push(batch.map_err(|source| Error::csv(csv_path, source.to_string()))?);
         }
 

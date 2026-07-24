@@ -38,7 +38,12 @@ pub struct TrayRunningJob {
     pub execution_id: String,
     pub workflow_path: String,
     pub label: String,
+    pub workspace_root: String,
+    pub cancel_owner: String,
+    pub cancellable: bool,
 }
+
+pub const ACTION_WORKFLOW_CANCEL_PREFIX: &str = "workflow.cancel.";
 
 #[cfg(debug_assertions)]
 pub const ACTION_OPEN_INSPECTOR: &str = "developer.open-inspector";
@@ -96,10 +101,16 @@ pub fn handle_action(app: &AppHandle, id: &str) {
         }
         id if id.starts_with(ACTION_WORKFLOW_OPEN_PREFIX) => {
             let execution_id = id.trim_start_matches(ACTION_WORKFLOW_OPEN_PREFIX);
-            if let Some((root, workflow_path)) =
-                tray::running_workflow_by_id(app, execution_id)
-            {
+            if let Some((root, workflow_path)) = tray::running_workflow_by_id(app, execution_id) {
                 open_workflow_resource(app, &root, &workflow_path);
+            }
+        }
+        id if id.starts_with(ACTION_WORKFLOW_CANCEL_PREFIX) => {
+            let execution_id = id.trim_start_matches(ACTION_WORKFLOW_CANCEL_PREFIX);
+            if let Err(err) = tray::cancel_running_job(app, execution_id) {
+                eprintln!("lattice: cancel workflow {execution_id}: {err}");
+            } else {
+                tray::refresh_from_workflows(app);
             }
         }
         ACTION_SETTINGS
@@ -135,13 +146,7 @@ pub fn handle_action(app: &AppHandle, id: &str) {
 }
 
 pub fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
-    let settings = MenuItem::with_id(
-        app,
-        ACTION_SETTINGS,
-        "Settings…",
-        true,
-        Some("CmdOrCtrl+,"),
-    )?;
+    let settings = MenuItem::with_id(app, ACTION_SETTINGS, "Settings…", true, Some("CmdOrCtrl+,"))?;
     let search = MenuItem::with_id(
         app,
         ACTION_SEARCH,
@@ -171,12 +176,27 @@ pub fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         Some("CmdOrCtrl+Shift+N"),
     )?;
     let new_table = MenuItem::with_id(app, ACTION_NEW_TABLE, "New Table…", true, None::<&str>)?;
-    let new_workspace =
-        MenuItem::with_id(app, ACTION_NEW_WORKSPACE, "New Workspace…", true, None::<&str>)?;
-    let open_workspace =
-        MenuItem::with_id(app, ACTION_OPEN_WORKSPACE, "Open Workspace…", true, None::<&str>)?;
-    let undo_lattice =
-        MenuItem::with_id(app, ACTION_UNDO, "Undo Last Workspace Change", true, None::<&str>)?;
+    let new_workspace = MenuItem::with_id(
+        app,
+        ACTION_NEW_WORKSPACE,
+        "New Workspace…",
+        true,
+        None::<&str>,
+    )?;
+    let open_workspace = MenuItem::with_id(
+        app,
+        ACTION_OPEN_WORKSPACE,
+        "Open Workspace…",
+        true,
+        None::<&str>,
+    )?;
+    let undo_lattice = MenuItem::with_id(
+        app,
+        ACTION_UNDO,
+        "Undo Last Workspace Change",
+        true,
+        None::<&str>,
+    )?;
     let home = MenuItem::with_id(app, ACTION_HOME, "Home", true, None::<&str>)?;
     let files = MenuItem::with_id(app, ACTION_FILES, "Files", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, ACTION_QUIT, "Quit Lattice", true, Some("CmdOrCtrl+Q"))?;
@@ -381,8 +401,13 @@ pub fn build_tray_menu(
     running: &[TrayRunningJob],
 ) -> tauri::Result<Menu<tauri::Wry>> {
     let show = MenuItem::with_id(app, ACTION_SHOW, "Show Lattice", true, None::<&str>)?;
-    let quick_note =
-        MenuItem::with_id(app, ACTION_QUICK_NOTE, "Quick Note", true, Some("CmdOrCtrl+N"))?;
+    let quick_note = MenuItem::with_id(
+        app,
+        ACTION_QUICK_NOTE,
+        "Quick Note",
+        true,
+        Some("CmdOrCtrl+N"),
+    )?;
     let new_page = MenuItem::with_id(
         app,
         ACTION_NEW_PAGE,
@@ -397,10 +422,14 @@ pub fn build_tray_menu(
         true,
         Some("CmdOrCtrl+K"),
     )?;
-    let settings =
-        MenuItem::with_id(app, ACTION_SETTINGS, "Settings…", true, Some("CmdOrCtrl+,"))?;
-    let open_workspace =
-        MenuItem::with_id(app, ACTION_OPEN_WORKSPACE, "Open Workspace…", true, None::<&str>)?;
+    let settings = MenuItem::with_id(app, ACTION_SETTINGS, "Settings…", true, Some("CmdOrCtrl+,"))?;
+    let open_workspace = MenuItem::with_id(
+        app,
+        ACTION_OPEN_WORKSPACE,
+        "Open Workspace…",
+        true,
+        None::<&str>,
+    )?;
     let sep1 = PredefinedMenuItem::separator(app)?;
     let sep2 = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, ACTION_QUIT, "Quit Lattice", true, None::<&str>)?;
@@ -436,7 +465,24 @@ pub fn build_tray_menu(
         }
         for job in running {
             let action_id = format!("{ACTION_WORKFLOW_OPEN_PREFIX}{}", job.execution_id);
-            job_items.push(MenuItem::with_id(app, &action_id, &job.label, true, None::<&str>)?);
+            job_items.push(MenuItem::with_id(
+                app,
+                &action_id,
+                &job.label,
+                true,
+                None::<&str>,
+            )?);
+            if job.cancellable {
+                let cancel_id = format!("{ACTION_WORKFLOW_CANCEL_PREFIX}{}", job.execution_id);
+                let cancel_label = format!("Cancel “{}”", job.label);
+                job_items.push(MenuItem::with_id(
+                    app,
+                    &cancel_id,
+                    &cancel_label,
+                    true,
+                    None::<&str>,
+                )?);
+            }
         }
         if let Some(sep) = jobs_sep.as_ref() {
             job_refs.push(sep);

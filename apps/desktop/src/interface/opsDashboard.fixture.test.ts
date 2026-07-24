@@ -11,7 +11,9 @@ describe("OpsDashboard fixture", () => {
     expect(types.has("metric")).toBe(true);
     expect(types.has("chart")).toBe(true);
     expect(types.has("map")).toBe(true);
-    expect(types.size).toBeGreaterThanOrEqual(3);
+    expect(types.has("form")).toBe(true);
+    expect(types.has("data-view")).toBe(true);
+    expect(types.size).toBeGreaterThanOrEqual(5);
   });
 
   it("declares a region parameter and substitutes it into chart/map SQL", () => {

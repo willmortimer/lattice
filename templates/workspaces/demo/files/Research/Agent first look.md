@@ -12,9 +12,11 @@ tasks. Proposals land in the inbox — nothing applies until you approve.
 ## Task path (native desktop)
 
 1. Open `Tasks/AgentFirstLook.task` → **Run** (needs `uv` + injected `lattice`).
-2. The task inspects `Data/Orders.dataset` and `Data/Events.dataset` (CSV
-   headers + Parquet partition counts), prints a JSON summary, then calls
-   `lattice.propose_interface` for `CRM.data/interfaces/AgentDigest.interface.yaml`.
+2. The task inspects `Data/Orders.dataset` and `Data/Events.dataset` via
+   `lattice.dataset(...).schema()` and `.profile(sample_rows=500)` (bounded
+   DuckDB inspect, matching MCP `get_dataset_schema` / `profile_dataset`), prints
+   a JSON summary, then calls `lattice.propose_interface` for
+   `CRM.data/interfaces/AgentDigest.interface.yaml`.
 3. Open the **Proposals** inbox → approve the resource-create proposal.
 4. Open `CRM.data` → **Interfaces** → **Agent digest** — two metric tiles over
    Events signups and Orders revenue.

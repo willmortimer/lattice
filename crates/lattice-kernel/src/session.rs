@@ -91,12 +91,14 @@ impl KernelSession {
     /// Spawn an arbitrary command as a bridge (used by unit tests with a mock).
     pub fn spawn_command(mut cmd: Command) -> Result<Self, KernelError> {
         let mut child = cmd.spawn().map_err(KernelError::spawn)?;
-        let stdin = child.stdin.take().ok_or_else(|| {
-            KernelError::spawn("bridge stdin was not captured")
-        })?;
-        let stdout = child.stdout.take().ok_or_else(|| {
-            KernelError::spawn("bridge stdout was not captured")
-        })?;
+        let stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| KernelError::spawn("bridge stdin was not captured"))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| KernelError::spawn("bridge stdout was not captured"))?;
         if let Some(stderr) = child.stderr.take() {
             thread::spawn(move || {
                 let reader = BufReader::new(stderr);
@@ -176,47 +178,45 @@ impl KernelSession {
 
         let mut outputs = Vec::new();
         let deadline = std::time::Instant::now() + REQUEST_TIMEOUT;
-        let result = (|| {
-            loop {
-                let remaining = deadline.saturating_duration_since(std::time::Instant::now());
-                if remaining.is_zero() {
-                    return Err(KernelError::Timeout);
+        let result = (|| loop {
+            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+            if remaining.is_zero() {
+                return Err(KernelError::Timeout);
+            }
+            let response = recv_response(&rx, remaining)?;
+            match response {
+                BridgeResponse::Stream { name, text, .. } => {
+                    outputs.push(KernelOutput::Stream { name, text });
                 }
-                let response = recv_response(&rx, remaining)?;
-                match response {
-                    BridgeResponse::Stream { name, text, .. } => {
-                        outputs.push(KernelOutput::Stream { name, text });
-                    }
-                    BridgeResponse::ExecuteResult { data, .. } => {
-                        outputs.push(KernelOutput::ExecuteResult { data });
-                    }
-                    BridgeResponse::DisplayData { data, .. } => {
-                        outputs.push(KernelOutput::DisplayData { data });
-                    }
-                    BridgeResponse::Error {
+                BridgeResponse::ExecuteResult { data, .. } => {
+                    outputs.push(KernelOutput::ExecuteResult { data });
+                }
+                BridgeResponse::DisplayData { data, .. } => {
+                    outputs.push(KernelOutput::DisplayData { data });
+                }
+                BridgeResponse::Error {
+                    ename,
+                    evalue,
+                    traceback,
+                    ..
+                } => {
+                    outputs.push(KernelOutput::Error {
                         ename,
                         evalue,
                         traceback,
-                        ..
-                    } => {
-                        outputs.push(KernelOutput::Error {
-                            ename,
-                            evalue,
-                            traceback,
-                        });
-                    }
-                    BridgeResponse::Done { status, .. } => {
-                        return Ok(ExecuteResult {
-                            request_id: request_id.clone(),
-                            status,
-                            outputs,
-                        });
-                    }
-                    BridgeResponse::BridgeError { message, .. } => {
-                        return Err(KernelError::protocol(message));
-                    }
-                    BridgeResponse::Ready => continue,
+                    });
                 }
+                BridgeResponse::Done { status, .. } => {
+                    return Ok(ExecuteResult {
+                        request_id: request_id.clone(),
+                        status,
+                        outputs,
+                    });
+                }
+                BridgeResponse::BridgeError { message, .. } => {
+                    return Err(KernelError::protocol(message));
+                }
+                BridgeResponse::Ready => continue,
             }
         })();
 

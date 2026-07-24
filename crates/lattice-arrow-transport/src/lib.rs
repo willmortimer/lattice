@@ -11,8 +11,8 @@ mod schema_meta;
 
 pub use cancel::{AtomicCancel, CancelCheck, NeverCancel};
 pub use encode::{
-    decode_ipc_stream, encode_duckdb_batch, encode_duckdb_batch_with_cancel, EncodedBatch,
-    EncodeOptions, DEFAULT_SAMPLE_ROWS,
+    decode_ipc_stream, encode_duckdb_batch, encode_duckdb_batch_with_cancel, EncodeOptions,
+    EncodedBatch, DEFAULT_SAMPLE_ROWS,
 };
 pub use error::Error;
 pub use limits::{DEFAULT_MAX_BYTES, DEFAULT_MAX_ROWS};

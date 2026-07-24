@@ -112,6 +112,20 @@ pub struct TaskManifest {
     /// Declared outputs (informational in v1; surfaced on [`crate::ExecutionResult`]).
     #[serde(default)]
     pub outputs: Vec<TaskIoRef>,
+    /// Execution semantics (idempotency for workflow retries).
+    #[serde(default)]
+    pub execution: TaskExecutionMeta,
+}
+
+/// Optional execution metadata on a task package.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct TaskExecutionMeta {
+    /// When true, workflow `retry` may re-run this task safely.
+    ///
+    /// Default is false: a step with `retry.max_attempts > 1` must set
+    /// `with.allow_unsafe_retry: true` or the runner rejects the retry policy.
+    #[serde(default)]
+    pub idempotent: bool,
 }
 
 /// Runtime block: currently Python via `uv` only.
@@ -279,7 +293,7 @@ impl SpawnedTask {
                 self.join_pipes();
                 Some(Err(TaskError::Io {
                     path: PathBuf::from("."),
-                    source: std::io::Error::new(std::io::ErrorKind::Other, "task wait failed"),
+                    source: std::io::Error::other("task wait failed"),
                 }))
             }
         }
@@ -350,6 +364,18 @@ impl TaskRunner {
 
     /// Resolve `path` (task package dir or `task.yaml`) and spawn it without blocking.
     pub fn spawn(&self, path: &Path) -> TaskResult<SpawnedTask> {
+        self.spawn_with_env(path, &[])
+    }
+
+    /// Like [`Self::spawn`], with additional child environment variables.
+    ///
+    /// Used by derived rebuild to point builders at a staging output path via
+    /// `LATTICE_DERIVED_OUTPUT` / `LATTICE_DERIVED_STAGING`.
+    pub fn spawn_with_env(
+        &self,
+        path: &Path,
+        extra_env: &[(&str, &str)],
+    ) -> TaskResult<SpawnedTask> {
         let (package_dir, _) = resolve_task_paths(path)?;
         // Absolute paths keep `uv --directory` valid when combined with
         // `current_dir(package)` — a relative `--directory` would be resolved
@@ -385,6 +411,10 @@ impl TaskRunner {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
+        for (key, value) in extra_env {
+            cmd.env(key, value);
+        }
+
         // Injectable workspace SDK (`packages/lattice-py`) for propose*/dataset.
         inject_lattice_python_sdk(&mut cmd, &package_dir);
 
@@ -402,11 +432,11 @@ impl TaskRunner {
 
         let mut stdout_pipe = child.stdout.take().ok_or_else(|| TaskError::Io {
             path: package_dir.clone(),
-            source: std::io::Error::new(std::io::ErrorKind::Other, "missing stdout pipe"),
+            source: std::io::Error::other("missing stdout pipe"),
         })?;
         let mut stderr_pipe = child.stderr.take().ok_or_else(|| TaskError::Io {
             path: package_dir.clone(),
-            source: std::io::Error::new(std::io::ErrorKind::Other, "missing stderr pipe"),
+            source: std::io::Error::other("missing stderr pipe"),
         })?;
 
         let stdout = Arc::new(Mutex::new(Vec::new()));
@@ -459,6 +489,15 @@ impl TaskRunner {
     /// Resolve `path` (task package dir or `task.yaml`) and run it to completion.
     pub fn run(&self, path: &Path) -> TaskResult<TaskRunOutput> {
         self.spawn(path)?.wait()
+    }
+
+    /// Like [`Self::run`], with additional child environment variables.
+    pub fn run_with_env(
+        &self,
+        path: &Path,
+        extra_env: &[(&str, &str)],
+    ) -> TaskResult<TaskRunOutput> {
+        self.spawn_with_env(path, extra_env)?.wait()
     }
 }
 
@@ -663,6 +702,29 @@ entrypoint:
         assert_eq!(m.runtime.project, ".");
         assert!(m.inputs.is_empty());
         assert!(m.outputs.is_empty());
+        assert!(!m.execution.idempotent);
+    }
+
+    #[test]
+    fn parses_execution_idempotent_flag() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("task.yaml");
+        fs::write(
+            &path,
+            r#"format: lattice-task
+version: 1
+runtime:
+  type: python
+  provider: uv
+entrypoint:
+  command: [python, main.py]
+execution:
+  idempotent: true
+"#,
+        )
+        .unwrap();
+        let m = TaskManifest::load(&path).unwrap();
+        assert!(m.execution.idempotent);
     }
 
     #[test]

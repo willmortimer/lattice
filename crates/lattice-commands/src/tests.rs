@@ -6,8 +6,8 @@ use serde_json::Value;
 use tempfile::TempDir;
 
 use crate::{
-    CanvasNodeMove, CanvasNodeResize, Command, CommandEngine, Error, PathRemap, Transaction,
-    TrashPolicy, MAX_RESOURCE_EDIT_BYTES,
+    CanvasNodeMove, CanvasNodeResize, ColumnSpec, Command, CommandEngine, Error, PathRemap,
+    Transaction, TrashPolicy, MAX_RESOURCE_EDIT_BYTES,
 };
 
 /// A fresh workspace + engine. Tests use [`TrashPolicy::LocalFallbackOnly`]
@@ -2099,3 +2099,270 @@ fn cross_package_relation_columns_add_and_write_reject() {
         .unwrap();
 }
 
+#[test]
+fn attachment_stage_save_cancel_failure_undo_and_cleanup() {
+    use std::collections::BTreeMap;
+
+    use lattice_data::{
+        cleanup_orphan_attachments, discard_staged_attachment, is_staged_attachment_path,
+        list_orphan_attachments, stage_attachment_file, CellValue, FieldType,
+    };
+
+    let (dir, mut engine) = engine();
+    engine
+        .apply(Transaction::new(
+            "Create files package",
+            vec![Command::TableCreate {
+                path: PathBuf::from("Files.data"),
+                title: "Files".into(),
+                table_name: "items".into(),
+            }],
+        ))
+        .unwrap();
+    let base = lattice_data::DataApp::open(&dir.path().join("Files.data"))
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Add attachment column",
+            vec![Command::ColumnsAdd {
+                path: PathBuf::from("Files.data"),
+                table: "items".into(),
+                columns: vec![ColumnSpec::new("files", FieldType::Attachment)],
+                base_revision: base,
+            }],
+        ))
+        .unwrap();
+
+    let source = dir.path().join("spec.txt");
+    std::fs::write(&source, b"spec").unwrap();
+
+    // Add + cancel: staged discarded, no package file.
+    let staged = stage_attachment_file(dir.path(), &source).unwrap();
+    assert!(is_staged_attachment_path(&staged));
+    discard_staged_attachment(dir.path(), &staged).unwrap();
+    assert!(!dir.path().join(&staged).exists());
+    assert!(list_orphan_attachments(
+        &lattice_data::DataApp::open(&dir.path().join("Files.data")).unwrap()
+    )
+    .unwrap()
+    .is_empty());
+
+    // Add + save: package file + ref exist; staged discarded.
+    let staged = stage_attachment_file(dir.path(), &source).unwrap();
+    let insert = engine
+        .apply(Transaction::new(
+            "Insert with attachment",
+            vec![Command::RecordInsert {
+                path: PathBuf::from("Files.data"),
+                table: "items".into(),
+                values: BTreeMap::from([(
+                    "files".into(),
+                    CellValue::Attachment {
+                        paths: vec![staged.clone()],
+                    },
+                )]),
+                id: None,
+            }],
+        ))
+        .unwrap();
+    assert!(!dir.path().join(&staged).exists());
+    let row_id = insert.outcomes[0]
+        .resulting_record_id
+        .clone()
+        .expect("insert id");
+    let app = lattice_data::DataApp::open(&dir.path().join("Files.data")).unwrap();
+    let row = app.get_row("items", &row_id).unwrap().unwrap();
+    let CellValue::Attachment { paths } = row.values.get("files").cloned().unwrap() else {
+        panic!("expected attachment cell");
+    };
+    assert_eq!(paths.len(), 1);
+    let package_rel = paths[0].clone();
+    assert!(dir.path().join("Files.data").join(&package_rel).is_file());
+
+    // Add + forced failure: invalid path in same cell → no package promotion retained.
+    let staged_fail = stage_attachment_file(dir.path(), &source).unwrap();
+    let before_attachments: Vec<_> = std::fs::read_dir(dir.path().join("Files.data/attachments"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name())
+        .collect();
+    let failed = engine.apply(Transaction::new(
+        "Insert with bad attachment",
+        vec![Command::RecordInsert {
+            path: PathBuf::from("Files.data"),
+            table: "items".into(),
+            values: BTreeMap::from([(
+                "files".into(),
+                CellValue::Attachment {
+                    paths: vec![staged_fail.clone(), "attachments/../escape.txt".into()],
+                },
+            )]),
+            id: None,
+        }],
+    ));
+    assert!(failed.is_err());
+    // Staged file preserved for retry; package not polluted with a new orphan from this attempt.
+    assert!(dir.path().join(&staged_fail).is_file());
+    let after_attachments: Vec<_> = std::fs::read_dir(dir.path().join("Files.data/attachments"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name())
+        .collect();
+    assert_eq!(before_attachments, after_attachments);
+    discard_staged_attachment(dir.path(), &staged_fail).unwrap();
+
+    // Remove reference + save: binary remains until cleanup.
+    let base = app.package_revision().unwrap();
+    engine
+        .apply(Transaction::new(
+            "Clear attachment refs",
+            vec![Command::RecordUpdate {
+                path: PathBuf::from("Files.data"),
+                table: "items".into(),
+                id: row_id.clone(),
+                values: BTreeMap::from([("files".into(), CellValue::Attachment { paths: vec![] })]),
+                base_revision: base,
+            }],
+        ))
+        .unwrap();
+    assert!(dir.path().join("Files.data").join(&package_rel).is_file());
+
+    // Undo remove: restores ref without data loss.
+    engine.undo().unwrap().unwrap();
+    let app = lattice_data::DataApp::open(&dir.path().join("Files.data")).unwrap();
+    assert_eq!(
+        app.get_row("items", &row_id)
+            .unwrap()
+            .unwrap()
+            .values
+            .get("files"),
+        Some(&CellValue::Attachment {
+            paths: vec![package_rel.clone()],
+        })
+    );
+    assert!(dir.path().join("Files.data").join(&package_rel).is_file());
+
+    // Shared ref: second row keeps file through cleanup after first drops it.
+    let second = engine
+        .apply(Transaction::new(
+            "Second row shares attachment",
+            vec![Command::RecordInsert {
+                path: PathBuf::from("Files.data"),
+                table: "items".into(),
+                values: BTreeMap::from([(
+                    "files".into(),
+                    CellValue::Attachment {
+                        paths: vec![package_rel.clone()],
+                    },
+                )]),
+                id: None,
+            }],
+        ))
+        .unwrap();
+    let second_id = second.outcomes[0]
+        .resulting_record_id
+        .clone()
+        .expect("second id");
+    let base = lattice_data::DataApp::open(&dir.path().join("Files.data"))
+        .unwrap()
+        .package_revision()
+        .unwrap();
+    engine
+        .apply(Transaction::new(
+            "Drop first row ref",
+            vec![Command::RecordUpdate {
+                path: PathBuf::from("Files.data"),
+                table: "items".into(),
+                id: row_id.clone(),
+                values: BTreeMap::from([("files".into(), CellValue::Attachment { paths: vec![] })]),
+                base_revision: base,
+            }],
+        ))
+        .unwrap();
+    let app = lattice_data::DataApp::open(&dir.path().join("Files.data")).unwrap();
+    assert!(cleanup_orphan_attachments(&app).unwrap().is_empty());
+    assert!(dir.path().join("Files.data").join(&package_rel).is_file());
+
+    let base = app.package_revision().unwrap();
+    engine
+        .apply(Transaction::new(
+            "Drop second row ref",
+            vec![Command::RecordUpdate {
+                path: PathBuf::from("Files.data"),
+                table: "items".into(),
+                id: second_id,
+                values: BTreeMap::from([("files".into(), CellValue::Attachment { paths: vec![] })]),
+                base_revision: base,
+            }],
+        ))
+        .unwrap();
+    let app = lattice_data::DataApp::open(&dir.path().join("Files.data")).unwrap();
+    assert_eq!(
+        cleanup_orphan_attachments(&app).unwrap(),
+        vec![package_rel.clone()]
+    );
+    assert!(!dir.path().join("Files.data").join(&package_rel).exists());
+
+    // Undo after add cleans the introduced file when unreferenced.
+    let staged = stage_attachment_file(dir.path(), &source).unwrap();
+    engine
+        .apply(Transaction::new(
+            "Insert for undo cleanup",
+            vec![Command::RecordInsert {
+                path: PathBuf::from("Files.data"),
+                table: "items".into(),
+                values: BTreeMap::from([(
+                    "files".into(),
+                    CellValue::Attachment {
+                        paths: vec![staged],
+                    },
+                )]),
+                id: None,
+            }],
+        ))
+        .unwrap();
+    let app = lattice_data::DataApp::open(&dir.path().join("Files.data")).unwrap();
+    let inserted = app
+        .list_rows("items", 20, 0)
+        .unwrap()
+        .into_iter()
+        .find(|row| {
+            matches!(
+                row.values.get("files"),
+                Some(CellValue::Attachment { paths }) if !paths.is_empty()
+            )
+        })
+        .expect("row with attachment");
+    let CellValue::Attachment { paths } = inserted.values.get("files").cloned().unwrap() else {
+        panic!("attachment");
+    };
+    let added_path = paths[0].clone();
+    assert!(dir.path().join("Files.data").join(&added_path).is_file());
+    engine.undo().unwrap().unwrap();
+    assert!(
+        !dir.path().join("Files.data").join(&added_path).exists(),
+        "undo should clean unreferenced promoted attachment"
+    );
+
+    // Path traversal fail-closed.
+    let staged = stage_attachment_file(dir.path(), &source).unwrap();
+    let err = engine
+        .apply(Transaction::new(
+            "Traversal reject",
+            vec![Command::RecordInsert {
+                path: PathBuf::from("Files.data"),
+                table: "items".into(),
+                values: BTreeMap::from([(
+                    "files".into(),
+                    CellValue::Attachment {
+                        paths: vec!["attachments/../../etc/passwd".into()],
+                    },
+                )]),
+                id: None,
+            }],
+        ))
+        .unwrap_err()
+        .to_string();
+    assert!(err.contains("attachments") || err.contains("invalid"));
+    discard_staged_attachment(dir.path(), &staged).unwrap();
+}

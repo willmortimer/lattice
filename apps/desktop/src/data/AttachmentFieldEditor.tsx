@@ -21,6 +21,10 @@ interface AttachmentFieldEditorProps {
   label: string;
 }
 
+function isStagedAttachmentPath(path: string): boolean {
+  return path.replace(/\\/g, "/").startsWith(".lattice/staging/attachments/");
+}
+
 export function AttachmentFieldEditor({
   value,
   onChange,
@@ -46,12 +50,13 @@ export function AttachmentFieldEditor({
     if (!selected || Array.isArray(selected)) return;
     setBusy(true);
     try {
-      const packagePath = await invoke<string>("add_data_attachment", {
+      // Stage under .lattice/; package promotion happens on record commit.
+      const stagedPath = await invoke<string>("add_data_attachment", {
         root,
         relPath: packageRelPath,
         sourcePath: selected,
       });
-      onChange(addAttachmentDraftPath(value, packagePath));
+      onChange(addAttachmentDraftPath(value, stagedPath));
     } catch (err) {
       setError(String(err));
     } finally {
@@ -63,8 +68,12 @@ export function AttachmentFieldEditor({
     async (path: string) => {
       if (readOnly) return;
       setError(null);
+      // Draft update is authoritative for package refs; staged files are discarded.
       onChange(removeAttachmentDraftPath(value, path));
       if (!canMutateFiles || !root || !packageRelPath) return;
+      if (!isStagedAttachmentPath(path)) {
+        return;
+      }
       try {
         await invoke("remove_data_attachment", {
           root,

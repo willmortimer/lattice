@@ -88,6 +88,10 @@ X-Lattice-Token: <token>
 | `POST` | `/v1/build_context` | Bounded excerpts; `export_policy=ask/deny` omitted or flagged |
 | `POST` | `/v1/datasets/schema` | Bounded `.dataset` column schema (`LIMIT 0`) |
 | `POST` | `/v1/datasets/profile` | Bounded DuckDB `SUMMARIZE` profile |
+| `POST` | `/v1/jobs/list_active` | In-flight daemon-owned workflow jobs |
+| `POST` | `/v1/jobs/list_recent` | Recent jobs (+ optional workspace disk history) |
+| `POST` | `/v1/jobs/get` | Job detail by `executionId` |
+| `POST` | `/v1/jobs/cancel` | Cooperative cancel (daemon-owned active only) |
 | `POST` | `/v1/proposals/create` | Create a reviewable transaction proposal (no apply) |
 | `POST` | `/v1/proposals/list` | List pending proposals in the workspace inbox |
 | `POST` | `/v1/proposals/get` | Load one proposal by id |
@@ -168,10 +172,29 @@ background process running unintentionally.
 
 While workspace sessions are open, `latticed` polls enabled `*.workflow.yaml`
 files with `trigger.type: schedule` about every 5 seconds. Due
-`interval_seconds` workflows run through `load_and_run_workflow` with trigger
-label `schedule`; run JSON lands under `.lattice/workflows/runs/`. Disabled
+`interval_seconds` workflows run through `load_and_run_workflow_with_id` with
+trigger label `schedule`; run JSON lands under `.lattice/workflows/runs/` using
+the same `executionId` registered in the daemon job registry. Disabled
 workflows are skipped. Cron-only schedules are accepted at parse time but not
 fired yet (set `interval_seconds` to exercise the runner).
+
+**Honest lifecycle:** this is **open-session interval scheduling only**. It does
+not provide cron evaluation, a durable known-workspace registry, or
+closed-desktop durability (see T9). If the daemon restarts mid-run, stranded
+`running` records are marked `abandoned` on the next OpenWorkspace / schedule
+tick.
+
+### Job status HTTP API
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/v1/jobs/list_active` | In-flight daemon-owned jobs |
+| `POST` | `/v1/jobs/list_recent` | Recent jobs; optional `root` / `workspaceId` merges disk history |
+| `POST` | `/v1/jobs/get` | Detail by `executionId` |
+| `POST` | `/v1/jobs/cancel` | Cooperative cancel for daemon-owned active jobs |
+
+Auth matches other `/v1/*` routes. Desktop tray merges these with in-process
+workflow runs; cancel routes to `cancel_owner` (`daemon` or `desktop`).
 
 Desktop `resource.changed` / `form.submitted` triggers are unchanged.
 
@@ -183,6 +206,9 @@ Manual verify:
 #   steps: [{ id: note, action: notification, with: { message: tick } }]
 # Open the workspace via latticed (desktop or OpenWorkspace), keep the session
 # open, and watch `.lattice/workflows/runs/` for schedule-labelled runs.
+# List active jobs:
+#   curl -s -X POST http://127.0.0.1:18787/v1/jobs/list_active \
+#     -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{}'
 ```
 
 Focused tests:
@@ -191,6 +217,7 @@ Focused tests:
 cargo test -p lattice-commands discover_scheduled_workflows -- --nocapture
 cargo test -p lattice-commands evaluate_schedule_due -- --nocapture
 cargo test -p lattice-daemon fires_due_interval_workflow -- --nocapture
+cargo test -p lattice-daemon --test contract spawn_helper_launches_binary -- --nocapture
 ```
 
 ### Preference

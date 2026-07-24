@@ -54,10 +54,7 @@ impl ApiError {
 
     pub fn message(&self) -> &str {
         match self {
-            Self::BadRequest(m)
-            | Self::NotFound(m)
-            | Self::Forbidden(m)
-            | Self::Internal(m) => m,
+            Self::BadRequest(m) | Self::NotFound(m) | Self::Forbidden(m) | Self::Internal(m) => m,
         }
     }
 }
@@ -143,7 +140,10 @@ pub struct SearchResponse {
     pub hits: Vec<SearchHitDto>,
 }
 
-pub fn api_search(runtime: &LatticeRuntime, params: SearchParams) -> Result<SearchResponse, ApiError> {
+pub fn api_search(
+    runtime: &LatticeRuntime,
+    params: SearchParams,
+) -> Result<SearchResponse, ApiError> {
     if params.query.trim().is_empty() {
         return Err(ApiError::BadRequest("query must not be empty".into()));
     }
@@ -172,8 +172,11 @@ pub fn api_search(runtime: &LatticeRuntime, params: SearchParams) -> Result<Sear
                 if sensitivity == Sensitivity::Secret {
                     continue;
                 }
-                let (excerpt, redacted) =
-                    redact_excerpt_for_export(hit.snippet.as_deref().unwrap_or(""), sensitivity, export_policy);
+                let (excerpt, redacted) = redact_excerpt_for_export(
+                    hit.snippet.as_deref().unwrap_or(""),
+                    sensitivity,
+                    export_policy,
+                );
                 hits.push(SearchHitDto {
                     path,
                     title: hit.title,
@@ -211,7 +214,8 @@ pub fn api_search(runtime: &LatticeRuntime, params: SearchParams) -> Result<Sear
 }
 
 fn hybrid_hit_to_dto(hit: HybridSearchHit) -> SearchHitDto {
-    let (excerpt, redacted) = redact_excerpt_for_export(&hit.excerpt, hit.sensitivity, hit.export_policy);
+    let (excerpt, redacted) =
+        redact_excerpt_for_export(&hit.excerpt, hit.sensitivity, hit.export_policy);
     SearchHitDto {
         path: resource_path_from_uri(&hit.resource_uri),
         title: hit.title,
@@ -262,9 +266,7 @@ fn policy_for_session_path(
     session: &WorkspaceSession,
     path: &str,
 ) -> Result<(Sensitivity, ExportPolicy), String> {
-    session
-        .ensure_index_warm()
-        .map_err(|err| err.to_string())?;
+    session.ensure_index_warm().map_err(|err| err.to_string())?;
     session
         .index()
         .export_policy_for_path(Path::new(path))
@@ -468,14 +470,12 @@ pub fn api_related(
 
     let mut hits: Vec<RelatedHitDto> = Vec::new();
 
-    let backlinks = get_backlinks_with_session(&session, &params.path).map_err(ApiError::Internal)?;
+    let backlinks =
+        get_backlinks_with_session(&session, &params.path).map_err(ApiError::Internal)?;
     for link in backlinks.into_iter().take(limit) {
         let path = path_string(&link.source_path);
-        let (sensitivity, export_policy) =
-            policy_for_session_path(&session, &path).unwrap_or((
-                Sensitivity::Workspace,
-                ExportPolicy::Ask,
-            ));
+        let (sensitivity, export_policy) = policy_for_session_path(&session, &path)
+            .unwrap_or((Sensitivity::Workspace, ExportPolicy::Ask));
         if sensitivity == Sensitivity::Secret {
             continue;
         }
@@ -814,6 +814,8 @@ pub fn api_create_proposal(
             source: ProposalSource {
                 source_type: ProposalSourceType::Mcp,
                 resource: params.source_resource,
+                execution_id: None,
+                step_id: None,
             },
             summary: params.summary,
             commands: params.commands,
@@ -842,7 +844,8 @@ pub fn api_get_proposal(
         params.workspace.workspace_id.as_deref(),
         params.workspace.root.as_deref(),
     )?;
-    let proposal = load_proposal(session.root(), &params.proposal_id).map_err(command_error_to_api)?;
+    let proposal =
+        load_proposal(session.root(), &params.proposal_id).map_err(command_error_to_api)?;
     Ok(ProposalResponse {
         workspace_id: session.workspace_id().to_string(),
         proposal,
@@ -858,8 +861,7 @@ pub fn api_list_proposals(
         params.workspace.workspace_id.as_deref(),
         params.workspace.root.as_deref(),
     )?;
-    let proposals =
-        list_proposal_summaries(session.root()).map_err(command_error_to_api)?;
+    let proposals = list_proposal_summaries(session.root()).map_err(command_error_to_api)?;
     Ok(ListProposalsResponse {
         workspace_id: session.workspace_id().to_string(),
         proposals,
@@ -977,6 +979,127 @@ pub fn api_propose_artifact(
 ) -> Result<ProposalResponse, ApiError> {
     let bundle = propose_artifact(&params.path, &params.content).map_err(command_error_to_api)?;
     api_from_propose_bundle(runtime, params.workspace, bundle, params.summary)
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListJobsParams {
+    #[serde(default)]
+    pub workspace_id: Option<String>,
+    #[serde(default)]
+    pub root: Option<String>,
+    #[serde(default)]
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetJobParams {
+    #[serde(default)]
+    pub workspace_id: Option<String>,
+    #[serde(default)]
+    pub root: Option<String>,
+    pub execution_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CancelJobParams {
+    pub execution_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ListJobsResponse {
+    pub jobs: Vec<lattice_commands::ExecutionSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct JobResponse {
+    pub job: lattice_commands::ExecutionSummary,
+}
+
+pub fn api_list_active_jobs(jobs: &crate::jobs::JobRegistry) -> Result<ListJobsResponse, ApiError> {
+    Ok(ListJobsResponse {
+        jobs: jobs.list_active()?,
+    })
+}
+
+pub fn api_list_recent_jobs(
+    jobs: &crate::jobs::JobRegistry,
+    runtime: &LatticeRuntime,
+    params: ListJobsParams,
+) -> Result<ListJobsResponse, ApiError> {
+    let limit = params.limit.unwrap_or(20).clamp(1, 64);
+    let mut combined = jobs.list_recent(limit)?;
+    if params.workspace_id.is_some() || params.root.is_some() {
+        let session = resolve_session(
+            runtime,
+            params.workspace_id.as_deref(),
+            params.root.as_deref(),
+        )?;
+        let disk = crate::jobs::disk_recent_for_workspace(session.root(), limit)?;
+        for item in disk {
+            if combined
+                .iter()
+                .any(|existing| existing.execution_id == item.execution_id)
+            {
+                continue;
+            }
+            combined.push(item);
+        }
+        combined.sort_by(|left, right| {
+            right
+                .started_at
+                .cmp(&left.started_at)
+                .then_with(|| right.execution_id.cmp(&left.execution_id))
+        });
+        combined.truncate(limit);
+    }
+    Ok(ListJobsResponse { jobs: combined })
+}
+
+pub fn api_get_job(
+    jobs: &crate::jobs::JobRegistry,
+    runtime: &LatticeRuntime,
+    params: GetJobParams,
+) -> Result<JobResponse, ApiError> {
+    if params.execution_id.trim().is_empty() {
+        return Err(ApiError::BadRequest("executionId must not be empty".into()));
+    }
+    match jobs.get(&params.execution_id) {
+        Ok(job) => Ok(JobResponse { job }),
+        Err(ApiError::NotFound(_)) => {
+            if params.workspace_id.is_none() && params.root.is_none() {
+                return Err(ApiError::NotFound(format!(
+                    "job not found: {}",
+                    params.execution_id
+                )));
+            }
+            let session = resolve_session(
+                runtime,
+                params.workspace_id.as_deref(),
+                params.root.as_deref(),
+            )?;
+            Ok(JobResponse {
+                job: crate::jobs::disk_get(session.root(), &params.execution_id)?,
+            })
+        }
+        Err(err) => Err(err),
+    }
+}
+
+pub fn api_cancel_job(
+    jobs: &crate::jobs::JobRegistry,
+    params: CancelJobParams,
+) -> Result<JobResponse, ApiError> {
+    if params.execution_id.trim().is_empty() {
+        return Err(ApiError::BadRequest("executionId must not be empty".into()));
+    }
+    Ok(JobResponse {
+        job: jobs.cancel(&params.execution_id)?,
+    })
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1151,7 +1274,10 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(ask.hits.iter().any(|h| h.path == "Ask.md" && h.export_redacted));
+        assert!(ask
+            .hits
+            .iter()
+            .any(|h| h.path == "Ask.md" && h.export_redacted));
 
         let session = runtime.open_workspace_session(dir.path()).unwrap();
         let read = api_read(

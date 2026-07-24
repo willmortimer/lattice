@@ -147,6 +147,44 @@
   min-height: 14rem;
 }
 
+.lt-interface-pane--form {
+  min-height: 10rem;
+}
+
+.lt-interface-pane--data-view {
+  min-height: 10rem;
+}
+
+.lt-embedded-data-view__scroll {
+  flex: 1;
+  min-height: 0;
+  max-height: 14rem;
+  overflow: auto;
+}
+
+.lt-embedded-data-view__scroll--board {
+  max-height: 16rem;
+}
+
+.lt-embedded-data-view__grid {
+  flex: 1;
+  min-height: 0;
+  max-height: 16rem;
+  overflow: hidden;
+  border: 1px solid var(--lt-border, #333);
+  border-radius: 6px;
+}
+
+.lt-embedded-data-view__filters {
+  font-size: 0.75rem;
+}
+
+.lt-interface-pane--form .package-form-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
 .lt-interface-pane__header {
   margin: 0;
   font-size: 0.8rem;

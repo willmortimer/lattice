@@ -1,10 +1,13 @@
 """Build Derived/dist/index.html from Derived/input.txt for the stale→rebuild demo."""
 
+import os
 from pathlib import Path
 
 derived_dir = Path(__file__).resolve().parent.parent
 input_path = derived_dir / "input.txt"
-out_path = derived_dir / "dist" / "index.html"
+# Prefer Lattice staging path so failed rebuilds never overwrite last-known-good.
+out_env = os.environ.get("LATTICE_DERIVED_OUTPUT")
+out_path = Path(out_env) if out_env else derived_dir / "dist" / "index.html"
 body = input_path.read_text(encoding="utf-8").strip() if input_path.is_file() else "(missing input)"
 out_path.parent.mkdir(parents=True, exist_ok=True)
 out_path.write_text(

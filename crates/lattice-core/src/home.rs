@@ -323,7 +323,10 @@ mod tests {
         let (home, outcome) = initialize_active_lattice_home().unwrap();
         assert_eq!(
             home.root.canonicalize().unwrap(),
-            cwd.path().join(DEFAULT_DEBUG_HOME_RELATIVE).canonicalize().unwrap()
+            cwd.path()
+                .join(DEFAULT_DEBUG_HOME_RELATIVE)
+                .canonicalize()
+                .unwrap()
         );
         assert!(outcome.workspace.root().join("CRM.data").is_dir());
         std::env::set_current_dir(previous).unwrap();

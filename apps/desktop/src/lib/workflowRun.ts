@@ -39,6 +39,7 @@ export interface WorkflowStepResultDto {
   status: ExecutionStatus;
   log: string;
   proposalId?: string;
+  attempts?: number;
 }
 
 /** Full run record emitted by `workflow-execution-updated`. */

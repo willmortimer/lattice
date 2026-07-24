@@ -220,9 +220,16 @@ folder where page and file resources store binary attachments. That setting is
 
 Attachment **columns** store a JSON array of package-relative paths under the
 package-local `attachments/` directory (for example
-`attachments/spec.pdf`). Uploading through record detail or form UI copies the
-chosen file into that directory via Tauri `add_data_attachment`; cell values
-remain ordinary command/transaction writes.
+`attachments/spec.pdf`). Selecting a file in record detail or form UI stages
+bytes under `.lattice/staging/attachments/<operation-id>/` via Tauri
+`add_data_attachment`. The draft may hold staged paths and/or existing package
+paths. On successful `RecordInsert` / `RecordUpdate`, the command engine
+promotes staged files into `attachments/` and commits package-relative refs in
+SQLite. Removing a path from a draft drops the reference only; package binaries
+are not deleted until an explicit orphan cleanup confirms they are unreferenced.
+Cancel and failed saves leave package files untouched; staged files for removed
+draft entries are discarded. The browser demo remains honest and does not
+pretend to persist files.
 
 ## Linked records
 
@@ -574,6 +581,13 @@ Optional additive fields on the same `InterfaceDef`:
   `binding` / `form` / `chart`
 
 Component types (v1): `metric`, `chart`, `map`, `form`, `data-view`.
+
+`form` tiles embed the same field editors as the package **Forms** panel
+(`PackageFormFill`): scalar, relation, enum / multi-enum, and attachment fields
+with draft validation. **Submit** calls `insert_record` with the bound form id
+(`formName`), which fires enabled `form.submitted` workflows. Errors and submit
+progress stay local to the tile. The browser demo shows fields but disables
+submit with the standard native-only notice.
 
 Bindings use shared `BindingSpec` (`resource` | `saved-view` | `sqlite-query` |
 `duckdb-query` | `notebook-output` | `task-output`) with kebab-case `type` tags.

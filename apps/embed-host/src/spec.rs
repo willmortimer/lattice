@@ -1,6 +1,4 @@
-use lattice_embedding::{
-    DistanceMetric, EmbeddingSpecification, PoolingStrategy,
-};
+use lattice_embedding::{DistanceMetric, EmbeddingSpecification, PoolingStrategy};
 
 use crate::EmbeddingSpec;
 

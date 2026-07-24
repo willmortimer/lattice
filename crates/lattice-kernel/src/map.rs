@@ -64,12 +64,12 @@ impl KernelSessionMap {
     }
 
     pub fn shutdown(&mut self, session_id: &str) -> Result<(), KernelError> {
-        let session = self
-            .sessions
-            .remove(session_id)
-            .ok_or_else(|| KernelError::UnknownSession {
-                session_id: session_id.to_string(),
-            })?;
+        let session =
+            self.sessions
+                .remove(session_id)
+                .ok_or_else(|| KernelError::UnknownSession {
+                    session_id: session_id.to_string(),
+                })?;
         session.shutdown()
     }
 

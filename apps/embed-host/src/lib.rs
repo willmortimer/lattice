@@ -18,9 +18,7 @@ pub use client::{
     socket_path_in, EmbedHostClient, EmbedHostSession, ReconnectableEmbedHostProvider,
 };
 pub use error::EmbedHostError;
-pub use framing::{
-    decode_frame, encode_frame, try_decode_frame, FrameDecoder, MAX_FRAME_LENGTH,
-};
+pub use framing::{decode_frame, encode_frame, try_decode_frame, FrameDecoder, MAX_FRAME_LENGTH};
 pub use install::{install_model, InstallResult};
 pub use server::{run_server, HostConfig, HostState};
 pub use spec::{embedding_spec_from_proto, embedding_spec_to_proto};

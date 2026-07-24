@@ -93,9 +93,7 @@ pub fn kernel_execute(
         map.get(&request.session_id)
             .map_err(|_| unknown_session(&request.session_id))?
     };
-    session
-        .execute(request.code)
-        .map_err(|err| err.to_string())
+    session.execute(request.code).map_err(|err| err.to_string())
 }
 
 /// Interrupt in-flight execution on a live session.

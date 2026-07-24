@@ -34,6 +34,42 @@ pub enum ExecutionStatus {
     Succeeded,
     Failed,
     Cancelled,
+    /// Was `running` when the owning process exited (daemon restart / crash).
+    Abandoned,
+}
+
+/// Who may request cooperative cancel for an in-flight execution.
+pub const CANCEL_OWNER_DAEMON: &str = "daemon";
+/// Desktop in-process workflow / task execution.
+pub const CANCEL_OWNER_DESKTOP: &str = "desktop";
+/// Terminal or non-cancellable summary (history only).
+pub const CANCEL_OWNER_NONE: &str = "none";
+
+/// Shared job-status row for tray, daemon HTTP, and run history.
+///
+/// Same `execution_id` is used from registration through the persisted run JSON.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutionSummary {
+    pub execution_id: String,
+    pub workspace_root: String,
+    pub resource_path: String,
+    /// e.g. `workflow`
+    pub kind: String,
+    pub trigger: String,
+    pub status: ExecutionStatus,
+    pub started_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finished_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_step_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attempt: Option<u32>,
+    #[serde(default)]
+    pub proposal_ids: Vec<String>,
+    /// `daemon` | `desktop` | `none`
+    pub cancel_owner: String,
+    pub cancellable: bool,
 }
 
 /// Captured result of a long-running execution for desktop / daemon IPC.
@@ -51,8 +87,12 @@ pub struct ExecutionResult {
     pub finished_at: Option<String>,
     #[serde(default)]
     pub outputs: Vec<ResourceOutput>,
+    /// First proposal id when any were produced (compat with single-id callers).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proposal_id: Option<String>,
+    /// All proposal ids produced by this execution (parallel-safe; order preserved).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub proposal_ids: Vec<String>,
 }
 
 /// Origin of a [`TransactionProposal`].
@@ -74,6 +114,31 @@ pub struct ProposalSource {
     pub source_type: ProposalSourceType,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resource: Option<String>,
+    /// Workflow/task execution that minted this proposal (idempotency provenance).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_id: Option<String>,
+    /// Workflow step id within that execution (paired with [`Self::execution_id`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_id: Option<String>,
+}
+
+impl ProposalSource {
+    /// Idempotency key `{execution_id}:{step_id}` when both provenance fields are set.
+    pub fn idempotency_key(&self) -> Option<String> {
+        match (
+            self.execution_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty()),
+            self.step_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty()),
+        ) {
+            (Some(execution_id), Some(step_id)) => Some(format!("{execution_id}:{step_id}")),
+            _ => None,
+        }
+    }
 }
 
 /// Lifecycle state of a persisted [`TransactionProposal`].
@@ -139,6 +204,110 @@ impl TransactionProposal {
     }
 }
 
+/// Bounded per-command detail for proposal review (no full payloads).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+pub enum CommandPreviewDetail {
+    /// New text resource (page or UTF-8 file create).
+    #[serde(rename_all = "camelCase")]
+    TextCreate {
+        path: String,
+        content_excerpt: String,
+        truncated: bool,
+        byte_len: usize,
+    },
+    /// Text update with optional on-disk before excerpt.
+    #[serde(rename_all = "camelCase")]
+    TextDiff {
+        path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        before_excerpt: Option<String>,
+        after_excerpt: String,
+        truncated: bool,
+    },
+    /// Table row insert/update/delete.
+    #[serde(rename_all = "camelCase")]
+    RecordChange {
+        path: String,
+        table: String,
+        operation: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        id: Option<String>,
+        field_summary: String,
+    },
+    /// Parsed `*.workflow.yaml` create summary.
+    #[serde(rename_all = "camelCase")]
+    WorkflowSummary {
+        path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        step_count: Option<usize>,
+        excerpt: String,
+        truncated: bool,
+    },
+    /// Parsed `*.interface.yaml` create summary.
+    #[serde(rename_all = "camelCase")]
+    InterfaceSummary {
+        path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        component_count: Option<usize>,
+        excerpt: String,
+        truncated: bool,
+    },
+    /// Parsed `artifact.yaml` create summary.
+    #[serde(rename_all = "camelCase")]
+    ArtifactSummary {
+        path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        title: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        entrypoint: Option<String>,
+        excerpt: String,
+        truncated: bool,
+    },
+    /// Rename/move/delete/folder/package ops and other non-text mutations.
+    #[serde(rename_all = "camelCase")]
+    FileOp {
+        operation: String,
+        paths: Vec<String>,
+        #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+        metadata: std::collections::BTreeMap<String, String>,
+    },
+}
+
+/// One command's reviewable preview inside a [`ProposalPreview`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommandPreview {
+    pub index: usize,
+    pub command_type: String,
+    pub summary: String,
+    pub touched_paths: Vec<String>,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<CommandPreviewDetail>,
+}
+
+/// Workspace-aware proposal review payload (selected subset validated).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProposalPreview {
+    pub proposal_id: String,
+    pub commands: Vec<CommandPreview>,
+    pub subset_valid: bool,
+    #[serde(default)]
+    pub subset_errors: Vec<String>,
+    /// Earlier unselected command indices inferred as required predecessors.
+    #[serde(default)]
+    pub missing_predecessors: Vec<usize>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -159,16 +328,37 @@ mod tests {
                 hash: Some("sha256:abc123".into()),
             }],
             proposal_id: Some("prop-7".into()),
+            proposal_ids: vec!["prop-7".into(), "prop-8".into()],
         };
 
         let json = serde_json::to_string(&result).unwrap();
         assert!(json.contains("\"startedAt\""));
         assert!(json.contains("\"finishedAt\""));
         assert!(json.contains("\"proposalId\""));
+        assert!(json.contains("\"proposalIds\""));
         assert_eq!(
             serde_json::from_str::<ExecutionResult>(&json).unwrap(),
             result
         );
+    }
+
+    #[test]
+    fn proposal_source_idempotency_key() {
+        let source = ProposalSource {
+            source_type: ProposalSourceType::Workflow,
+            resource: Some("Automations/Demo.workflow.yaml".into()),
+            execution_id: Some("exec-1".into()),
+            step_id: Some("propose".into()),
+        };
+        assert_eq!(source.idempotency_key().as_deref(), Some("exec-1:propose"));
+        assert!(ProposalSource {
+            source_type: ProposalSourceType::Task,
+            resource: None,
+            execution_id: None,
+            step_id: None,
+        }
+        .idempotency_key()
+        .is_none());
     }
 
     #[test]
@@ -178,6 +368,8 @@ mod tests {
             source: ProposalSource {
                 source_type: ProposalSourceType::Task,
                 resource: Some("tasks/hello.task".into()),
+                execution_id: None,
+                step_id: None,
             },
             summary: "Create welcome page".into(),
             commands: vec![Command::PageCreate {
@@ -224,9 +416,6 @@ mod tests {
         };
         let json = serde_json::to_string(&binding).unwrap();
         assert!(json.contains("\"type\":\"saved-view\""));
-        assert_eq!(
-            serde_json::from_str::<BindingSpec>(&json).unwrap(),
-            binding
-        );
+        assert_eq!(serde_json::from_str::<BindingSpec>(&json).unwrap(), binding);
     }
 }

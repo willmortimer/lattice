@@ -69,14 +69,13 @@ impl LlamaEngine {
         let backend = shared_backend()?;
         // Offload all layers to Metal when the metal feature is linked.
         let model_params = LlamaModelParams::default().with_n_gpu_layers(1_000);
-        let model = LlamaModel::load_from_file(backend, artifact_path, &model_params).map_err(
-            |error| {
+        let model =
+            LlamaModel::load_from_file(backend, artifact_path, &model_params).map_err(|error| {
                 EmbedHostError::BackendUnavailable(format!(
                     "failed to load GGUF {}: {error}",
                     artifact_path.display()
                 ))
-            },
-        )?;
+            })?;
         Ok(Self {
             context: None,
             model,
@@ -126,9 +125,15 @@ impl LlamaEngine {
         Ok(tokens)
     }
 
-    fn embed_text(&mut self, text: &str, dimensions: u32) -> Result<EmbeddingVector, EmbeddingError> {
+    fn embed_text(
+        &mut self,
+        text: &str,
+        dimensions: u32,
+    ) -> Result<EmbeddingVector, EmbeddingError> {
         let mut vectors = self.embed_texts(&[text], dimensions)?;
-        vectors.pop().ok_or_else(|| EmbeddingError::provider("empty embed_texts result"))
+        vectors
+            .pop()
+            .ok_or_else(|| EmbeddingError::provider("empty embed_texts result"))
     }
 
     /// Embed one or more texts, packing multiple sequences into one decode when
@@ -182,9 +187,9 @@ impl LlamaEngine {
                 .map_err(|error| EmbeddingError::provider(format!("decode: {error}")))?;
 
             for seq_offset in 0..seq_count {
-                let embedding = ctx.embeddings_seq_ith(seq_offset as i32).map_err(|error| {
-                    EmbeddingError::provider(format!("embeddings: {error}"))
-                })?;
+                let embedding = ctx
+                    .embeddings_seq_ith(seq_offset as i32)
+                    .map_err(|error| EmbeddingError::provider(format!("embeddings: {error}")))?;
                 // Copy before the next decode reuses context embedding buffers.
                 out.push(EmbeddingVector {
                     values: matryoshka_l2(embedding, dimensions as usize)?,

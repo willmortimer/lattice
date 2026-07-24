@@ -1,11 +1,18 @@
-import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
 import type { TopLevelSpec } from "vega-lite";
 
 import { VegaLiteChart } from "../components/VegaLiteChart";
 import "../components/vegaLiteChart.css";
 import { inBrowser } from "../demo";
-import { loadDataForm, type FormSummary } from "../data/forms";
-import type { DataAppSnapshot } from "../data/types";
+import { nativeOnlyDemoNotice } from "../data/browserDemoHonesty";
+import { PackageFormFill, packageFormFillTitle } from "../data/PackageFormFill";
+import {
+  loadPackageForm,
+  submitPackageFormRecord,
+  type FormSummary,
+} from "../data/forms";
+import { EmbeddedDataView } from "../data/EmbeddedSavedDataView";
+import type { CellValue, DataAppSnapshot } from "../data/types";
 import { queryResultToValues } from "../lib/arrowToVegaData";
 import type { BindingSpec, InterfaceComponent } from "../lib/bindingSpec";
 import { isDatasetRequestAborted } from "../lib/datasetCancel";
@@ -27,6 +34,8 @@ export interface InterfaceComponentHost {
   demo?: boolean;
   /** Optional snapshot for same-package data-view / form embedding. */
   snapshot?: DataAppSnapshot | null;
+  /** Package revision for reloading embedded saved views after mutations. */
+  packageRevision?: string | null;
   /** Live filter-bar values; substituted into query binding SQL as `{{name}}`. */
   paramValues?: Record<string, string>;
   onOpenSavedView?: (viewName: string) => void;
@@ -270,62 +279,98 @@ function MapComponent({ component, host }: RenderInterfaceComponentProps) {
 
 function DataViewComponent({ component, host }: RenderInterfaceComponentProps) {
   const binding = component.binding;
-  const viewName =
-    binding?.type === "saved-view"
-      ? binding.view
-      : host.snapshot?.active_view ?? component.title ?? "view";
+  if (binding?.type !== "saved-view") {
+    const title = component.title ?? component.id;
+    return (
+      <div className="lt-interface-pane">
+        <header className="lt-interface-pane__header">{title}</header>
+        <p className="lt-interface-pane__error" role="alert">
+          Data view components require a saved-view binding.
+        </p>
+      </div>
+    );
+  }
+
+  const packagePath = resolveBindingResource(host.packagePath, binding.resource);
+  const viewName = binding.view;
   const title = component.title ?? viewName;
 
   return (
-    <div className="lt-interface-pane">
-      <header className="lt-interface-pane__header">{title}</header>
-      <p className="lt-interface-pane__muted">
-        Saved data view <code>{viewName}</code>
-        {host.snapshot ? ` · ${host.snapshot.row_total} rows` : null}
-      </p>
-      {host.onOpenSavedView ? (
-        <button
-          type="button"
-          className="lt-interface-pane__action"
-          onClick={() => host.onOpenSavedView?.(viewName)}
-        >
-          Open full view
-        </button>
-      ) : null}
-    </div>
+    <EmbeddedDataView
+      root={host.root}
+      packagePath={packagePath}
+      viewName={viewName}
+      title={title}
+      demo={host.demo}
+      packageRevision={host.packageRevision ?? host.snapshot?.package_revision ?? null}
+      onOpenFullView={
+        host.onOpenSavedView ? () => host.onOpenSavedView?.(viewName) : undefined
+      }
+    />
   );
 }
 
 function FormComponent({ component, host }: RenderInterfaceComponentProps) {
   const formName = component.form;
   const [form, setForm] = useState<FormSummary | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const isDemo = host.demo || inBrowser;
+  const nativeOps = !isDemo && Boolean(host.root);
 
   useEffect(() => {
     if (!formName) {
-      setError("Form component requires form:");
+      setForm(null);
+      setLoadError("Form component requires form:");
       return;
     }
-    if (!host.root || host.demo || inBrowser) {
-      setForm({
-        name: formName,
-        table: host.snapshot?.default_table ?? "contacts",
-        fields: [],
-        title: component.title,
-      });
-      return;
-    }
-    void loadDataForm(host.root, host.packagePath, formName)
+    setLoadError(null);
+    void loadPackageForm({
+      root: host.root ?? "",
+      relPath: host.packagePath,
+      name: formName,
+      demo: isDemo,
+    })
       .then(setForm)
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)));
-  }, [component.title, formName, host.demo, host.packagePath, host.root, host.snapshot?.default_table]);
+      .catch((err: unknown) => {
+        setForm(null);
+        setLoadError(err instanceof Error ? err.message : String(err));
+      });
+  }, [formName, host.packagePath, host.root, isDemo]);
 
-  if (error) {
+  const handleSubmit = useCallback(
+    async (values: Record<string, CellValue>): Promise<{ id: string }> => {
+      if (!host.root || !form) {
+        throw new Error("Open a native workspace to submit package forms.");
+      }
+      setBusy(true);
+      try {
+        const result = await submitPackageFormRecord({
+          root: host.root,
+          relPath: host.packagePath,
+          form,
+          values,
+        });
+        return { id: result.id };
+      } finally {
+        setBusy(false);
+      }
+    },
+    [form, host.packagePath, host.root],
+  );
+
+  const title = form
+    ? packageFormFillTitle(form, component.title)
+    : (component.title ?? formName ?? "Form");
+  const columns = host.snapshot?.columns ?? [];
+  const relationTargets = host.snapshot?.relation_targets;
+
+  if (loadError) {
     return (
       <div className="lt-interface-pane">
-        <header className="lt-interface-pane__header">{component.title ?? formName}</header>
+        <header className="lt-interface-pane__header">{title}</header>
         <p className="lt-interface-pane__error" role="alert">
-          {error}
+          {loadError}
         </p>
       </div>
     );
@@ -339,15 +384,22 @@ function FormComponent({ component, host }: RenderInterfaceComponentProps) {
   }
 
   return (
-    <div className="lt-interface-pane">
-      <header className="lt-interface-pane__header">{form.title ?? component.title ?? form.name}</header>
-      <p className="lt-interface-pane__muted">
-        Package form <code>{form.name}</code>
-        {form.fields.length > 0 ? ` · fields: ${form.fields.join(", ")}` : null}
-      </p>
-      <p className="lt-interface-pane__muted">
-        Use the data-app Forms panel to submit records for this package.
-      </p>
+    <div className="lt-interface-pane lt-interface-pane--form">
+      <header className="lt-interface-pane__header">{title}</header>
+      <PackageFormFill
+        form={form}
+        columns={columns}
+        relationTargets={relationTargets}
+        root={host.root ?? undefined}
+        packageRelPath={host.packagePath}
+        nativeFileOps={nativeOps}
+        submitDisabled={isDemo}
+        submitDisabledNotice={
+          isDemo ? nativeOnlyDemoNotice("Package form submit") : null
+        }
+        busy={busy}
+        onSubmit={handleSubmit}
+      />
     </div>
   );
 }

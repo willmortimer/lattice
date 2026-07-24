@@ -7,22 +7,31 @@
 //!
 //! On macOS the tray uses a monochrome template mark (`tray-template.png`), not
 //! the full-color Dock/app icon, so it matches system menu-bar styling.
+//!
+//! Running jobs merge desktop in-process [`WorkflowState`] with daemon-owned
+//! schedule runs (HTTP job API when available, else on-disk `running` records).
 
+use std::collections::HashSet;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
+use lattice_commands::{
+    execution_summary_from_record, list_all_workflow_runs, ExecutionStatus, CANCEL_OWNER_DAEMON,
+    CANCEL_OWNER_DESKTOP, CANCEL_OWNER_NONE,
+};
 use lattice_core::ensure_lattice_home;
 use lattice_profile::{DesktopSettings, DESKTOP_SETTINGS_SPEC};
 use serde::Serialize;
-use tauri::{
-    image::Image,
-    tray::TrayIconBuilder,
-    AppHandle, Emitter, Manager,
-};
+use tauri::{image::Image, tray::TrayIconBuilder, AppHandle, Emitter, Manager};
 
 use crate::app_menu;
 use crate::workflow::{self, WorkflowState};
 
 const TRAY_ID: &str = "lattice.main-tray";
+const ENV_AUTH_TOKEN: &str = "LATTICE_AUTH_TOKEN";
+const ENV_API_PORT: &str = "LATTICE_API_PORT";
+const DEFAULT_API_PORT: u16 = 18787;
 
 static QUITTING: AtomicBool = AtomicBool::new(false);
 
@@ -70,10 +79,7 @@ pub fn show_quick_note(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("quick-note") {
         let _ = window.show();
         let _ = window.set_focus();
-        let _ = window.emit(
-            "quick-note-open",
-            QuickNoteOpenPayload { root: None },
-        );
+        let _ = window.emit("quick-note-open", QuickNoteOpenPayload { root: None });
     }
 }
 
@@ -126,7 +132,19 @@ pub fn install_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-fn tray_running_jobs(app: &AppHandle) -> Vec<app_menu::TrayRunningJob> {
+fn tray_label(workflow_path: &str) -> String {
+    let file_name = Path::new(workflow_path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(workflow_path);
+    file_name
+        .strip_suffix(".workflow.yaml")
+        .or_else(|| file_name.strip_suffix(".workflow.yml"))
+        .unwrap_or(file_name)
+        .to_string()
+}
+
+fn desktop_running_jobs(app: &AppHandle) -> Vec<app_menu::TrayRunningJob> {
     let Some(state) = app.try_state::<WorkflowState>() else {
         return Vec::new();
     };
@@ -136,8 +154,106 @@ fn tray_running_jobs(app: &AppHandle) -> Vec<app_menu::TrayRunningJob> {
             execution_id: job.execution_id,
             workflow_path: job.workflow_path,
             label: job.label,
+            workspace_root: job.workspace_root,
+            cancel_owner: job.cancel_owner,
+            cancellable: job.cancellable,
         })
         .collect()
+}
+
+fn disk_daemon_running_jobs(workspace_root: &Path) -> Vec<app_menu::TrayRunningJob> {
+    let Ok(runs) = list_all_workflow_runs(workspace_root, 32) else {
+        return Vec::new();
+    };
+    runs.into_iter()
+        .filter(|record| record.execution.status == ExecutionStatus::Running)
+        .filter(|record| record.trigger == "schedule")
+        .map(|record| {
+            let summary =
+                execution_summary_from_record(workspace_root, &record, CANCEL_OWNER_DAEMON);
+            app_menu::TrayRunningJob {
+                execution_id: summary.execution_id,
+                workflow_path: summary.resource_path.clone(),
+                label: tray_label(&summary.resource_path),
+                workspace_root: summary.workspace_root,
+                cancel_owner: CANCEL_OWNER_DAEMON.into(),
+                cancellable: summary.cancellable,
+            }
+        })
+        .collect()
+}
+
+fn http_daemon_running_jobs() -> Vec<app_menu::TrayRunningJob> {
+    let token = match std::env::var(ENV_AUTH_TOKEN) {
+        Ok(token) if !token.trim().is_empty() => token,
+        _ => return Vec::new(),
+    };
+    let port = std::env::var(ENV_API_PORT)
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+        .filter(|port| *port != 0)
+        .unwrap_or(DEFAULT_API_PORT);
+
+    let url = format!("http://127.0.0.1:{port}/v1/jobs/list_active");
+    let response = match ureq::post(&url)
+        .set("authorization", &format!("Bearer {token}"))
+        .set("content-type", "application/json")
+        .timeout(Duration::from_millis(400))
+        .send_string("{}")
+    {
+        Ok(response) => response,
+        Err(_) => return Vec::new(),
+    };
+    #[derive(serde::Deserialize)]
+    struct ListBody {
+        jobs: Vec<lattice_commands::ExecutionSummary>,
+    }
+    let body: ListBody = match response
+        .into_string()
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+    {
+        Some(body) => body,
+        None => return Vec::new(),
+    };
+    body.jobs
+        .into_iter()
+        .filter(|job| job.status == ExecutionStatus::Running)
+        .map(|job| app_menu::TrayRunningJob {
+            execution_id: job.execution_id,
+            workflow_path: job.resource_path.clone(),
+            label: tray_label(&job.resource_path),
+            workspace_root: job.workspace_root,
+            cancel_owner: if job.cancel_owner.is_empty() {
+                CANCEL_OWNER_DAEMON.into()
+            } else {
+                job.cancel_owner
+            },
+            cancellable: job.cancellable,
+        })
+        .collect()
+}
+
+fn tray_running_jobs(app: &AppHandle) -> Vec<app_menu::TrayRunningJob> {
+    let mut jobs = desktop_running_jobs(app);
+    let mut seen: HashSet<String> = jobs.iter().map(|job| job.execution_id.clone()).collect();
+
+    for job in http_daemon_running_jobs() {
+        if seen.insert(job.execution_id.clone()) {
+            jobs.push(job);
+        }
+    }
+
+    if let Some(root) = workflow_workspace_root(app) {
+        for job in disk_daemon_running_jobs(Path::new(&root)) {
+            if seen.insert(job.execution_id.clone()) {
+                jobs.push(job);
+            }
+        }
+    }
+
+    jobs.sort_by(|left, right| right.execution_id.cmp(&left.execution_id));
+    jobs
 }
 
 fn workflow_workspace_root(app: &AppHandle) -> Option<String> {
@@ -176,20 +292,72 @@ pub fn refresh_from_workflows(app: &AppHandle) {
 
 /// Workspace root + workflow path for the newest running execution, if any.
 pub fn latest_running_workflow(app: &AppHandle) -> Option<(String, String)> {
-    let root = workflow_workspace_root(app)?;
-    let state = app.try_state::<WorkflowState>()?;
-    let job = workflow::running_workflows(&state).into_iter().next()?;
+    let job = tray_running_jobs(app).into_iter().next()?;
+    let root = if job.workspace_root.is_empty() {
+        workflow_workspace_root(app)?
+    } else {
+        job.workspace_root
+    };
     Some((root, job.workflow_path))
 }
 
 /// Workspace root + workflow path for a specific running execution id.
 pub fn running_workflow_by_id(app: &AppHandle, execution_id: &str) -> Option<(String, String)> {
-    let root = workflow_workspace_root(app)?;
-    let state = app.try_state::<WorkflowState>()?;
-    let job = workflow::running_workflows(&state)
+    let job = tray_running_jobs(app)
         .into_iter()
         .find(|job| job.execution_id == execution_id)?;
+    let root = if job.workspace_root.is_empty() {
+        workflow_workspace_root(app)?
+    } else {
+        job.workspace_root
+    };
     Some((root, job.workflow_path))
+}
+
+/// Cancel a running job, routing to desktop or daemon owner.
+pub fn cancel_running_job(app: &AppHandle, execution_id: &str) -> Result<(), String> {
+    let job = tray_running_jobs(app)
+        .into_iter()
+        .find(|job| job.execution_id == execution_id)
+        .ok_or_else(|| format!("unknown running job: {execution_id}"))?;
+    if !job.cancellable {
+        return Err(format!("job {execution_id} is not cancellable"));
+    }
+    match job.cancel_owner.as_str() {
+        CANCEL_OWNER_DESKTOP => {
+            let state = app
+                .try_state::<WorkflowState>()
+                .ok_or_else(|| "workflow state unavailable".to_string())?;
+            workflow::request_cancel(&state, execution_id)
+        }
+        CANCEL_OWNER_DAEMON => cancel_daemon_job(execution_id),
+        CANCEL_OWNER_NONE => Err(format!("job {execution_id} has no cancel owner")),
+        other => Err(format!("unknown cancel owner '{other}' for {execution_id}")),
+    }
+}
+
+fn cancel_daemon_job(execution_id: &str) -> Result<(), String> {
+    let token = std::env::var(ENV_AUTH_TOKEN)
+        .map_err(|_| format!("{ENV_AUTH_TOKEN} required to cancel daemon jobs"))?;
+    let port = std::env::var(ENV_API_PORT)
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+        .filter(|port| *port != 0)
+        .unwrap_or(DEFAULT_API_PORT);
+    let url = format!("http://127.0.0.1:{port}/v1/jobs/cancel");
+    let body = serde_json::json!({ "executionId": execution_id }).to_string();
+    let response = ureq::post(&url)
+        .set("authorization", &format!("Bearer {token}"))
+        .set("content-type", "application/json")
+        .timeout(Duration::from_secs(2))
+        .send_string(&body)
+        .map_err(|err| format!("daemon cancel failed: {err}"))?;
+    if response.status() >= 300 {
+        let status = response.status();
+        let text = response.into_string().unwrap_or_default();
+        return Err(format!("daemon cancel HTTP {status}: {text}"));
+    }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -1,12 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import type {
+  CommandPreview,
+  CommandPreviewDetail,
+  ProposalPreview,
   ProposalSourceType,
   TransactionProposal,
   TransactionProposalSummary,
 } from "./executionContracts";
 
 export type {
+  CommandPreview,
+  CommandPreviewDetail,
+  ProposalPreview,
   ProposalSource,
   ProposalSourceType,
   ProposalStatus,
@@ -44,6 +50,38 @@ export function commandSummaryLabel(command: unknown, index: number): string {
   return path ? `${type}: ${path}` : type;
 }
 
+/** Prefer backend preview summary; fall back to local command labeling. */
+export function previewCommandLabel(
+  preview: CommandPreview | undefined,
+  command: unknown,
+  index: number,
+): string {
+  if (preview?.summary) return preview.summary;
+  return commandSummaryLabel(command, index);
+}
+
+export function detailExcerpt(detail: CommandPreviewDetail | undefined): string | null {
+  if (!detail) return null;
+  switch (detail.kind) {
+    case "text-create":
+      return detail.contentExcerpt;
+    case "text-diff":
+      return detail.afterExcerpt;
+    case "workflow-summary":
+    case "interface-summary":
+    case "artifact-summary":
+      return detail.excerpt;
+    case "record-change":
+      return detail.fieldSummary || null;
+    case "file-op":
+      return detail.paths.join(" → ");
+    default: {
+      const _exhaustive: never = detail;
+      return _exhaustive;
+    }
+  }
+}
+
 export async function createProposal(
   root: string,
   proposal: CreateProposalInput,
@@ -72,6 +110,30 @@ export async function applyProposal(
   selectedCommandIndices: number[],
 ): Promise<void> {
   await invoke("apply_proposal_cmd", {
+    root,
+    proposalId,
+    selectedCommandIndices,
+  });
+}
+
+export async function previewProposal(
+  root: string,
+  proposalId: string,
+  selectedCommandIndices: number[],
+): Promise<ProposalPreview> {
+  return invoke("preview_proposal_cmd", {
+    root,
+    proposalId,
+    selectedCommandIndices,
+  });
+}
+
+export async function validateProposalSubset(
+  root: string,
+  proposalId: string,
+  selectedCommandIndices: number[],
+): Promise<void> {
+  await invoke("validate_proposal_subset_cmd", {
     root,
     proposalId,
     selectedCommandIndices,

@@ -18,9 +18,9 @@ mod status;
 
 pub use download::{
     acquire_pinned_embedding_model, download_progress_percent, install_artifact_beside_manifest,
-    progress_total_hint,
-    pinned_model_is_ready, semantic_fake_enabled, semantic_model_source_override, AcquireResult,
-    ProgressFn, ENV_SEMANTIC_FAKE, ENV_SEMANTIC_MODEL_SOURCE,
+    pinned_model_is_ready, progress_total_hint, semantic_fake_enabled,
+    semantic_model_source_override, AcquireResult, ProgressFn, ENV_SEMANTIC_FAKE,
+    ENV_SEMANTIC_MODEL_SOURCE,
 };
 pub use error::EmbeddingError;
 pub use manifest::{

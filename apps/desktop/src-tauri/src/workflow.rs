@@ -12,8 +12,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use lattice_commands::{
-    discover_workflows, list_workflow_runs, run_workflow, save_workflow_run, set_workflow_enabled,
-    ExecutionResult, ExecutionStatus, WorkflowManifest, WorkflowRunRecord, WorkflowTrigger,
+    discover_workflows, list_workflow_runs, run_workflow_with_id, save_workflow_run,
+    set_workflow_enabled, ExecutionResult, ExecutionStatus, WorkflowManifest, WorkflowRunRecord,
+    WorkflowTrigger, CANCEL_OWNER_DESKTOP,
 };
 
 /// One in-flight workflow surfaced in the tray menu.
@@ -23,6 +24,9 @@ pub struct RunningWorkflow {
     pub workflow_path: String,
     pub label: String,
     pub started_at: String,
+    pub workspace_root: String,
+    pub cancel_owner: String,
+    pub cancellable: bool,
 }
 use lattice_core::Workspace;
 use serde::{Deserialize, Serialize};
@@ -203,7 +207,10 @@ fn trigger_view(trigger: &WorkflowTrigger) -> WorkflowTriggerView {
     }
 }
 
-fn manifest_view(manifest: WorkflowManifest, raw_yaml: String) -> Result<WorkflowManifestView, String> {
+fn manifest_view(
+    manifest: WorkflowManifest,
+    raw_yaml: String,
+) -> Result<WorkflowManifestView, String> {
     let mut steps = Vec::new();
     for step in &manifest.steps {
         let with = serde_json::to_value(&step.with).map_err(|err| err.to_string())?;
@@ -262,6 +269,9 @@ pub fn active_workspace_root(state: &WorkflowState) -> Option<PathBuf> {
 
 /// Running workflow executions, newest first.
 pub fn running_workflows(state: &WorkflowState) -> Vec<RunningWorkflow> {
+    let workspace_root = active_workspace_root(state)
+        .map(|root| root.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let Ok(map) = state.executions.lock() else {
         return Vec::new();
     };
@@ -277,6 +287,9 @@ pub fn running_workflows(state: &WorkflowState) -> Vec<RunningWorkflow> {
                 workflow_path: record.workflow_path.clone(),
                 label: workflow_tray_label(&record.workflow_path),
                 started_at: record.execution.started_at.clone(),
+                workspace_root: workspace_root.clone(),
+                cancel_owner: CANCEL_OWNER_DESKTOP.into(),
+                cancellable: true,
             })
         })
         .collect::<Vec<_>>();
@@ -343,6 +356,7 @@ fn spawn_workflow_run(
             finished_at: None,
             outputs: Vec::new(),
             proposal_id: None,
+            proposal_ids: Vec::new(),
         },
         steps: Vec::new(),
     };
@@ -368,8 +382,10 @@ fn spawn_workflow_run(
     let app_thread = app.clone();
     let record_thread = Arc::clone(&record);
     let cancel_thread = Arc::clone(&cancel);
+    let execution_id_thread = execution_id.clone();
     let root = workspace.root().to_path_buf();
     let workflow_path = path;
+    let execution_id_thread = execution_id.clone();
 
     thread::spawn(move || {
         let manifest = match WorkflowManifest::load(&workflow_path) {
@@ -388,12 +404,14 @@ fn spawn_workflow_run(
             }
         };
 
-        match run_workflow(
+        match run_workflow_with_id(
             &root,
             &workflow_path,
             &manifest,
             &trigger,
+            Some(execution_id_thread),
             Some(&cancel_thread),
+            Some(&execution_id_thread),
         ) {
             Ok(finished) => {
                 patch_record(&record_thread, |r| *r = finished);
@@ -420,18 +438,26 @@ fn spawn_workflow_run(
 }
 
 /// Request cancellation between steps (best-effort).
+///
+/// Desktop owns cancel for in-process runs. Daemon-owned schedule runs must be
+/// cancelled via the daemon job API (`/v1/jobs/cancel`).
 #[tauri::command]
 pub fn workflow_cancel(
     request: WorkflowExecutionRequest,
     state: tauri::State<'_, WorkflowState>,
 ) -> Result<(), String> {
+    request_cancel(&state, &request.execution_id)
+}
+
+/// Non-Tauri cancel entry used by the tray menu.
+pub fn request_cancel(state: &WorkflowState, execution_id: &str) -> Result<(), String> {
     let map = state
         .executions
         .lock()
         .map_err(|_| "workflow state lock poisoned")?;
     let live = map
-        .get(&request.execution_id)
-        .ok_or_else(|| format!("unknown workflow execution: {}", request.execution_id))?;
+        .get(execution_id)
+        .ok_or_else(|| format!("unknown workflow execution: {execution_id}"))?;
     live.cancel.store(true, Ordering::SeqCst);
     Ok(())
 }
@@ -462,8 +488,7 @@ pub fn workflow_set_enabled(
 ) -> Result<WorkflowManifestView, String> {
     let workspace = open_workspace(Path::new(&request.root))?;
     let path = resolve_workflow(&workspace, &request.rel_path)?;
-    let manifest =
-        set_workflow_enabled(&path, request.enabled).map_err(|err| err.to_string())?;
+    let manifest = set_workflow_enabled(&path, request.enabled).map_err(|err| err.to_string())?;
     let raw_yaml = std::fs::read_to_string(&path).map_err(|err| err.to_string())?;
     manifest_view(manifest, raw_yaml)
 }
