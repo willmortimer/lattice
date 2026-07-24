@@ -566,122 +566,271 @@ export const demoSnapshot: WorkspaceSnapshot = {
 export const demoCanvas = {
   "nodes": [
     {
-      "id": "thesis",
+      "id": "intro",
       "type": "text",
-      "x": 40,
+      "x": 60,
       "y": 60,
-      "width": 320,
-      "height": 180,
-      "text": "Lattice building Lattice\n\nOne local-first workspace for product, engineering, operations, CRM, analytics, docs, and governed automation."
-    },
-    {
-      "id": "product",
-      "type": "file",
-      "file": "Product/Roadmap.data",
-      "subpath": "interfaces/ProductPulse",
-      "x": 430,
-      "y": 20,
-      "width": 250,
-      "height": 140
-    },
-    {
-      "id": "engineering",
-      "type": "file",
-      "file": "Engineering/Delivery.data",
-      "subpath": "interfaces/ReleaseRoom",
-      "x": 760,
-      "y": 20,
-      "width": 250,
-      "height": 140
-    },
-    {
-      "id": "builds",
-      "type": "file",
-      "file": "Engineering/Build Status.dataset",
-      "x": 1090,
-      "y": 20,
-      "width": 250,
-      "height": 140
-    },
-    {
-      "id": "operations",
-      "type": "file",
-      "file": "Operations/Company.data",
-      "subpath": "interfaces/RunwayDashboard",
-      "x": 430,
-      "y": 260,
-      "width": 250,
-      "height": 140
-    },
-    {
-      "id": "feedback",
-      "type": "file",
-      "file": "CRM/Feedback.data",
-      "subpath": "interfaces/FeedbackOps",
-      "x": 760,
-      "y": 260,
-      "width": 250,
-      "height": 140
-    },
-    {
-      "id": "docs",
-      "type": "file",
-      "file": "Docs/Product Overview.md",
-      "x": 1090,
-      "y": 260,
-      "width": 250,
-      "height": 140
-    },
-    {
-      "id": "governed",
-      "type": "text",
-      "x": 760,
-      "y": 500,
       "width": 300,
-      "height": 150,
-      "text": "Inspect → relate → propose → approve → refresh\n\nEvery visible mutation uses the same semantic command core."
+      "height": 160,
+      "text": "First Look canvas — double-click file nodes. Data apps open grids; CRM nodes can target saved Board/Gallery views or the ContactOps interface via subpath."
+    },
+    {
+      "id": "vision",
+      "type": "file",
+      "file": "Product/Vision.md",
+      "x": 400,
+      "y": 40,
+      "width": 220,
+      "height": 120
+    },
+    {
+      "id": "principles",
+      "type": "file",
+      "file": "Product/Principles.md",
+      "x": 400,
+      "y": 200,
+      "width": 220,
+      "height": 120
+    },
+    {
+      "id": "roadmap",
+      "type": "file",
+      "file": "Product/Roadmap.md",
+      "x": 660,
+      "y": 40,
+      "width": 220,
+      "height": 120
+    },
+    {
+      "id": "long-read",
+      "type": "file",
+      "file": "Research/Long Read.md",
+      "x": 660,
+      "y": 200,
+      "width": 240,
+      "height": 120
+    },
+    {
+      "id": "architecture",
+      "type": "file",
+      "file": "Research/Architecture.md",
+      "x": 400,
+      "y": 360,
+      "width": 220,
+      "height": 120
+    },
+    {
+      "id": "crm-board-label",
+      "type": "text",
+      "x": 900,
+      "y": 60,
+      "width": 120,
+      "height": 40,
+      "text": "CRM Board view"
+    },
+    {
+      "id": "crm-board",
+      "type": "file",
+      "file": "CRM.data",
+      "subpath": "views/Board",
+      "x": 900,
+      "y": 100,
+      "width": 200,
+      "height": 100
+    },
+    {
+      "id": "crm-gallery-label",
+      "type": "text",
+      "x": 1120,
+      "y": 60,
+      "width": 130,
+      "height": 40,
+      "text": "CRM Gallery view"
+    },
+    {
+      "id": "crm-gallery",
+      "type": "file",
+      "file": "CRM.data",
+      "subpath": "views/Gallery.yaml",
+      "x": 1120,
+      "y": 100,
+      "width": 200,
+      "height": 100
+    },
+    {
+      "id": "crm-interface-label",
+      "type": "text",
+      "x": 1340,
+      "y": 60,
+      "width": 160,
+      "height": 40,
+      "text": "CRM ContactOps"
+    },
+    {
+      "id": "crm-interface",
+      "type": "file",
+      "file": "CRM.data",
+      "subpath": "interfaces/ContactOps",
+      "x": 1340,
+      "y": 100,
+      "width": 200,
+      "height": 100
+    },
+    {
+      "id": "crm-ops-dashboard-label",
+      "type": "text",
+      "x": 1560,
+      "y": 60,
+      "width": 180,
+      "height": 40,
+      "text": "CRM OpsDashboard"
+    },
+    {
+      "id": "crm-ops-dashboard",
+      "type": "file",
+      "file": "CRM.data",
+      "subpath": "interfaces/OpsDashboard",
+      "x": 1560,
+      "y": 100,
+      "width": 200,
+      "height": 100
+    },
+    {
+      "id": "crm-notebook-label",
+      "type": "text",
+      "x": 900,
+      "y": 240,
+      "width": 200,
+      "height": 40,
+      "text": "CRM exploration notebook"
+    },
+    {
+      "id": "crm-notebook",
+      "type": "file",
+      "file": "Notebooks/CRM exploration.ipynb",
+      "x": 900,
+      "y": 280,
+      "width": 240,
+      "height": 120
+    },
+    {
+      "id": "delivery-label",
+      "type": "text",
+      "x": 900,
+      "y": 440,
+      "width": 160,
+      "height": 40,
+      "text": "Delivery board"
+    },
+    {
+      "id": "delivery",
+      "type": "file",
+      "file": "Projects/Delivery.data",
+      "subpath": "views/Board",
+      "x": 900,
+      "y": 480,
+      "width": 200,
+      "height": 100
+    },
+    {
+      "id": "metrics-label",
+      "type": "text",
+      "x": 1120,
+      "y": 440,
+      "width": 160,
+      "height": 40,
+      "text": "Metrics board"
+    },
+    {
+      "id": "metrics",
+      "type": "file",
+      "file": "Data/Metrics.data",
+      "subpath": "views/Board",
+      "x": 1120,
+      "y": 480,
+      "width": 200,
+      "height": 100
+    },
+    {
+      "id": "okrs-label",
+      "type": "text",
+      "x": 1340,
+      "y": 440,
+      "width": 120,
+      "height": 40,
+      "text": "OKRs board"
+    },
+    {
+      "id": "okrs",
+      "type": "file",
+      "file": "OKRs.data",
+      "subpath": "views/Board",
+      "x": 1340,
+      "y": 480,
+      "width": 200,
+      "height": 100
     }
   ],
   "edges": [
     {
       "id": "e1",
-      "fromNode": "thesis",
-      "toNode": "product"
+      "fromNode": "intro",
+      "toNode": "vision"
     },
     {
       "id": "e2",
-      "fromNode": "product",
-      "toNode": "engineering"
+      "fromNode": "vision",
+      "toNode": "roadmap"
     },
     {
       "id": "e3",
-      "fromNode": "engineering",
-      "toNode": "builds"
+      "fromNode": "vision",
+      "toNode": "principles"
     },
     {
       "id": "e4",
-      "fromNode": "product",
-      "toNode": "operations"
+      "fromNode": "principles",
+      "toNode": "architecture"
     },
     {
       "id": "e5",
-      "fromNode": "operations",
-      "toNode": "feedback"
+      "fromNode": "roadmap",
+      "toNode": "long-read"
     },
     {
       "id": "e6",
-      "fromNode": "feedback",
-      "toNode": "docs"
+      "fromNode": "long-read",
+      "toNode": "crm-board"
     },
     {
       "id": "e7",
-      "fromNode": "engineering",
-      "toNode": "governed"
+      "fromNode": "crm-board",
+      "toNode": "crm-gallery"
+    },
+    {
+      "id": "e7b",
+      "fromNode": "crm-gallery",
+      "toNode": "crm-interface"
     },
     {
       "id": "e8",
-      "fromNode": "feedback",
-      "toNode": "governed"
+      "fromNode": "crm-board",
+      "toNode": "crm-notebook"
+    },
+    {
+      "id": "e9",
+      "fromNode": "crm-notebook",
+      "toNode": "delivery"
+    },
+    {
+      "id": "e10",
+      "fromNode": "delivery",
+      "toNode": "metrics"
+    },
+    {
+      "id": "e11",
+      "fromNode": "metrics",
+      "toNode": "okrs"
     }
   ]
 };

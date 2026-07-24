@@ -1749,7 +1749,14 @@ function buildDemoNotebooks(template) {
 }
 
 function buildDemoCanvas(template) {
-  const canvas = template.files.find((file) => resourceKindForPath(file.path) === "canvas");
+  // Prefer the kitchen-sink Product Strategy board when present; Pitch.canvas is
+  // hackathon-specific and should not replace the browser feature-lab canvas.
+  const canvases = template.files.filter(
+    (file) => resourceKindForPath(file.path) === "canvas",
+  );
+  const canvas =
+    canvases.find((file) => file.path === "Canvases/Product Strategy.canvas") ??
+    canvases[0];
   if (!canvas) {
     throw new Error(`${DEMO_TEMPLATE_ID}: expected at least one .canvas seed for browser demo`);
   }
