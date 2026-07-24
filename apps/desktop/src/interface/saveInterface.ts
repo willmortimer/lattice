@@ -6,11 +6,16 @@ export async function savePackageInterface(options: {
   root: string;
   relPath: string;
   def: InterfaceDef;
+  /** Optimistic concurrency token from `DataAppSnapshot.package_revision`. */
+  baseRevision?: string | null;
 }): Promise<InterfaceDef> {
   return invoke<InterfaceDef>("save_data_interface", {
     root: options.root,
     relPath: options.relPath,
-    request: options.def,
+    request: {
+      ...options.def,
+      baseRevision: options.baseRevision ?? undefined,
+    },
   });
 }
 

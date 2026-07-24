@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use crate::binding::BindingSpec;
 use crate::error::Error;
@@ -243,6 +244,11 @@ pub(crate) fn interface_name_from_path(path: &Path) -> Option<String> {
 }
 
 /// Write `interfaces/{name}.interface.yaml` inside a `.data` package.
+///
+/// When the file already exists, known fields from `interface` are merged into
+/// the on-disk YAML mapping so unknown future keys (top-level or per-component)
+/// survive builder edits. Invalid drafts must fail [`InterfaceDef::check`]
+/// before this is called so a bad save cannot clobber the file.
 pub fn write_package_interface(package_path: &Path, interface: &InterfaceDef) -> Result<()> {
     validate_identifier(&interface.name)?;
     let path = interface_path(package_path, &interface.name);
@@ -250,7 +256,126 @@ pub fn write_package_interface(package_path: &Path, interface: &InterfaceDef) ->
     let interfaces_dir = package_path.join("interfaces");
     std::fs::create_dir_all(&interfaces_dir)
         .map_err(|source| Error::io(&interfaces_dir, source))?;
-    let contents = interface.to_yaml()?;
+    let next_value = serde_yaml::to_value(interface).map_err(|source| Error::Yaml {
+        path: PathBuf::from("<interface>"),
+        source,
+    })?;
+    let contents = if path.is_file() {
+        match std::fs::read_to_string(&path) {
+            Ok(existing_text) => match serde_yaml::from_str::<serde_yaml::Value>(&existing_text) {
+                Ok(existing) => {
+                    let merged = merge_interface_yaml(existing, next_value);
+                    serde_yaml::to_string(&merged).map_err(|source| Error::Yaml {
+                        path: path.clone(),
+                        source,
+                    })?
+                }
+                // Unreadable existing YAML: refuse to destroy it when merge fails.
+                Err(source) => {
+                    return Err(Error::Yaml {
+                        path: path.clone(),
+                        source,
+                    });
+                }
+            },
+            Err(source) => return Err(Error::io(&path, source)),
+        }
+    } else {
+        interface.to_yaml()?
+    };
     std::fs::write(&path, contents).map_err(|source| Error::io(&path, source))?;
     Ok(())
+}
+
+/// Deep-merge interface YAML, preserving unknown keys and matching components by `id`.
+fn merge_interface_yaml(existing: serde_yaml::Value, update: serde_yaml::Value) -> serde_yaml::Value {
+    match (existing, update) {
+        (serde_yaml::Value::Mapping(mut base), serde_yaml::Value::Mapping(patch)) => {
+            for (key, value) in patch {
+                if key.as_str() == Some("components") {
+                    let existing_components = base
+                        .remove(&key)
+                        .unwrap_or(serde_yaml::Value::Sequence(Vec::new()));
+                    base.insert(key, merge_components_yaml(existing_components, value));
+                    continue;
+                }
+                let prior = base.remove(&key);
+                match (prior, value) {
+                    (
+                        Some(serde_yaml::Value::Mapping(prior_map)),
+                        next @ serde_yaml::Value::Mapping(_),
+                    ) => {
+                        base.insert(
+                            key,
+                            merge_interface_yaml(serde_yaml::Value::Mapping(prior_map), next),
+                        );
+                    }
+                    (_, next) => {
+                        base.insert(key, next);
+                    }
+                }
+            }
+            serde_yaml::Value::Mapping(base)
+        }
+        (_, update) => update,
+    }
+}
+
+fn merge_components_yaml(
+    existing: serde_yaml::Value,
+    update: serde_yaml::Value,
+) -> serde_yaml::Value {
+    let serde_yaml::Value::Sequence(update_seq) = update else {
+        return update;
+    };
+    let existing_seq = match existing {
+        serde_yaml::Value::Sequence(seq) => seq,
+        _ => Vec::new(),
+    };
+
+    let mut by_id: std::collections::BTreeMap<String, serde_yaml::Value> =
+        std::collections::BTreeMap::new();
+    for item in existing_seq {
+        if let Some(id) = component_id(&item) {
+            by_id.insert(id, item);
+        }
+    }
+
+    let mut merged = Vec::with_capacity(update_seq.len());
+    let mut seen = std::collections::BTreeSet::new();
+    for item in update_seq {
+        if let Some(id) = component_id(&item) {
+            seen.insert(id.clone());
+            if let Some(prior) = by_id.remove(&id) {
+                merged.push(merge_interface_yaml(prior, item));
+            } else {
+                merged.push(item);
+            }
+        } else {
+            merged.push(item);
+        }
+    }
+    // Drop components removed by the builder; do not re-append leftovers.
+    let _ = seen;
+    serde_yaml::Value::Sequence(merged)
+}
+
+fn component_id(value: &serde_yaml::Value) -> Option<String> {
+    value
+        .as_mapping()
+        .and_then(|map| map.get(serde_yaml::Value::String("id".into())))
+        .and_then(|id| id.as_str())
+        .map(str::to_string)
+}
+
+/// Sha256 content revision of an on-disk interface YAML (`sha256:<hex>`).
+pub fn interface_content_revision(package_path: &Path, name: &str) -> Result<Option<String>> {
+    validate_identifier(name)?;
+    let path = interface_path(package_path, name);
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let bytes = std::fs::read(&path).map_err(|source| Error::io(&path, source))?;
+    let digest = Sha256::digest(&bytes);
+    Ok(Some(format!("sha256:{}", hex::encode(digest))))
 }

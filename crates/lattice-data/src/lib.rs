@@ -48,9 +48,9 @@ pub use form::{
 };
 pub use formula::{evaluate_formula, formula_field_refs, validate_formula_syntax, FormulaError};
 pub use interface::{
-    write_package_interface, InterfaceComponent, InterfaceComponentType, InterfaceDef,
-    InterfaceLayout, InterfaceParameter, INTERFACE_FILE_SUFFIX, INTERFACE_FORMAT,
-    INTERFACE_VERSION,
+    interface_content_revision, write_package_interface, InterfaceComponent,
+    InterfaceComponentType, InterfaceDef, InterfaceLayout, InterfaceParameter,
+    INTERFACE_FILE_SUFFIX, INTERFACE_FORMAT, INTERFACE_VERSION,
 };
 pub use json_import::{parse_json_file, parse_jsonl_file};
 pub use relation_target::{parse_relation_target, RelationTarget};

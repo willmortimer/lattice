@@ -14,7 +14,11 @@ import { submitInterfaceFormRecord } from "./interfaceFormSubmit";
 import { EmbeddedDataView } from "../data/EmbeddedSavedDataView";
 import type { CellValue, DataAppSnapshot } from "../data/types";
 import { queryResultToValues } from "../lib/arrowToVegaData";
-import type { BindingSpec, InterfaceComponent } from "../lib/bindingSpec";
+import type {
+  BindingSpec,
+  InterfaceComponent,
+  InterfaceComponentType,
+} from "../lib/bindingSpec";
 import { isDatasetRequestAborted } from "../lib/datasetCancel";
 import { queryDatasetArrow } from "../lib/datasetQuery";
 import { buildAutoBarChartSpec } from "../lib/vegaLiteChart";
@@ -22,6 +26,15 @@ import { MetricCard } from "./MetricCard";
 import { applyParametersToBinding } from "./parameterSubstitution";
 import { primaryDuckdbResource, resolveBindingResource } from "./resolveBinding";
 import { queryDataSqlScalar } from "./saveInterface";
+
+/** Registry order for the interface builder type picker. */
+export const INTERFACE_COMPONENT_TYPES: readonly InterfaceComponentType[] = [
+  "metric",
+  "chart",
+  "map",
+  "data-view",
+  "form",
+] as const;
 
 const MapLibreDatasetViewer = lazy(async () => {
   const mod = await import("../analytics/MapLibreDatasetViewer");

@@ -623,9 +623,17 @@ pub struct SaveInterfaceRequest {
     pub layout: Option<lattice_data::InterfaceLayout>,
     #[serde(default)]
     pub components: Vec<lattice_data::InterfaceComponent>,
+    /// Optional content revision of the existing interface YAML (`sha256:<hex>`).
+    #[serde(default)]
+    pub base_revision: Option<String>,
 }
 
-/// Persist `interfaces/{name}.interface.yaml` (layout/reorder saves).
+/// Persist `interfaces/{name}.interface.yaml` (layout/reorder/builder saves).
+///
+/// When `baseRevision` is provided it must match the sha256 of the existing
+/// interface YAML file (`sha256:<hex>`). Mismatch returns `STALE_REVISION:…`
+/// without writing so concurrent edits cannot destroy on-disk YAML. Invalid
+/// drafts fail validation inside `write_package_interface` before any write.
 #[tauri::command]
 pub fn save_data_interface(
     root: String,
@@ -633,6 +641,23 @@ pub fn save_data_interface(
     request: SaveInterfaceRequest,
 ) -> Result<InterfaceSummary, String> {
     let (_, package_path) = resolve_within_root(&root, &rel_path)?;
+    if let Some(expected) = request.base_revision.as_deref() {
+        let current = lattice_data::interface_content_revision(&package_path, &request.name)
+            .map_err(|err| err.to_string())?;
+        match current {
+            Some(current) if current == expected => {}
+            Some(current) => {
+                return Err(format!(
+                    "STALE_REVISION: interface save expected {expected}, found {current}"
+                ));
+            }
+            None => {
+                return Err(format!(
+                    "STALE_REVISION: interface save expected {expected}, but file is missing"
+                ));
+            }
+        }
+    }
     let mut interface = lattice_data::InterfaceDef::new(request.name);
     interface.views = request.views;
     interface.forms = request.forms;

@@ -1411,6 +1411,61 @@ components:
 }
 
 #[test]
+fn write_package_interface_preserves_unknown_yaml_fields() {
+    use crate::{BindingSpec, InterfaceComponent, InterfaceComponentType};
+
+    let dir = tempdir().unwrap();
+    let package_path = dir.path().join("CRM.data");
+    let _app = DataApp::create(&package_path, "CRM", "contacts").unwrap();
+    let interfaces_dir = package_path.join("interfaces");
+    std::fs::create_dir_all(&interfaces_dir).unwrap();
+    let path = interfaces_dir.join("Ops.interface.yaml");
+    std::fs::write(
+        &path,
+        r#"
+format: lattice-interface
+version: 1
+name: Ops
+views: []
+forms: []
+futureTop: keep-me
+components:
+  - id: board
+    type: data-view
+    span: 6
+    title: Board
+    futureTile: keep-tile
+    binding:
+      type: saved-view
+      resource: .
+      view: Board
+"#,
+    )
+    .unwrap();
+
+    let mut interface = InterfaceDef::new("Ops");
+    interface.components = vec![InterfaceComponent {
+        id: "board".into(),
+        component_type: InterfaceComponentType::DataView,
+        span: 4,
+        title: Some("Board renamed".into()),
+        binding: Some(BindingSpec::SavedView {
+            resource: ".".into(),
+            view: "Board".into(),
+        }),
+        form: None,
+        chart: None,
+    }];
+    write_package_interface(&package_path, &interface).unwrap();
+
+    let text = std::fs::read_to_string(&path).unwrap();
+    assert!(text.contains("futureTop: keep-me"));
+    assert!(text.contains("futureTile: keep-tile"));
+    assert!(text.contains("span: 4"));
+    assert!(text.contains("Board renamed"));
+}
+
+#[test]
 fn lookup_column_resolves_related_field_values() {
     use crate::NewColumn;
 
