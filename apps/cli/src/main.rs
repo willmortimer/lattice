@@ -2248,9 +2248,10 @@ fn cmd_workflow_run(path: PathBuf, root: Option<PathBuf>) -> Result<ExitCode> {
             }
             Ok(match record.execution.status {
                 ExecutionStatus::Succeeded => ExitCode::SUCCESS,
-                ExecutionStatus::Cancelled | ExecutionStatus::Failed | ExecutionStatus::Running => {
-                    ExitCode::FAILURE
-                }
+                ExecutionStatus::Cancelled
+                | ExecutionStatus::Failed
+                | ExecutionStatus::Running
+                | ExecutionStatus::Abandoned => ExitCode::FAILURE,
             })
         }
         Err(err) => {

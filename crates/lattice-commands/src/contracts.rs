@@ -34,6 +34,42 @@ pub enum ExecutionStatus {
     Succeeded,
     Failed,
     Cancelled,
+    /// Was `running` when the owning process exited (daemon restart / crash).
+    Abandoned,
+}
+
+/// Who may request cooperative cancel for an in-flight execution.
+pub const CANCEL_OWNER_DAEMON: &str = "daemon";
+/// Desktop in-process workflow / task execution.
+pub const CANCEL_OWNER_DESKTOP: &str = "desktop";
+/// Terminal or non-cancellable summary (history only).
+pub const CANCEL_OWNER_NONE: &str = "none";
+
+/// Shared job-status row for tray, daemon HTTP, and run history.
+///
+/// Same `execution_id` is used from registration through the persisted run JSON.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExecutionSummary {
+    pub execution_id: String,
+    pub workspace_root: String,
+    pub resource_path: String,
+    /// e.g. `workflow`
+    pub kind: String,
+    pub trigger: String,
+    pub status: ExecutionStatus,
+    pub started_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finished_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_step_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attempt: Option<u32>,
+    #[serde(default)]
+    pub proposal_ids: Vec<String>,
+    /// `daemon` | `desktop` | `none`
+    pub cancel_owner: String,
+    pub cancellable: bool,
 }
 
 /// Captured result of a long-running execution for desktop / daemon IPC.

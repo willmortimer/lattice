@@ -55,8 +55,9 @@ pub use command::{
 };
 pub use contracts::{
     BindingSpec, CommandPreview, CommandPreviewDetail, ExecutionResult, ExecutionStatus,
-    ProposalPreview, ProposalSource, ProposalSourceType, ProposalStatus, ResourceOutput,
-    TransactionProposal, TransactionProposalSummary,
+    ExecutionSummary, ProposalPreview, ProposalSource, ProposalSourceType, ProposalStatus,
+    ResourceOutput, TransactionProposal, TransactionProposalSummary, CANCEL_OWNER_DAEMON,
+    CANCEL_OWNER_DESKTOP, CANCEL_OWNER_NONE,
 };
 pub use derived::{
     cleanup_abandoned_staging, derived_dir, hash_builder_package, hash_input_pattern, hash_inputs,
@@ -102,12 +103,14 @@ pub use template::{
 };
 pub use trash::TrashPolicy;
 pub use workflow::{
-    discover_scheduled_workflows, discover_workflows, evaluate_schedule_due, last_schedule_run_at,
-    list_workflow_runs, load_and_run_workflow, path_matches_glob, resolve_workspace_path,
-    run_workflow, save_workflow_run, set_workflow_enabled, workflow_runs_dir, workflows_dir,
-    NotificationParams, ProposalCreateParams, ScheduleDue, ScheduleTrigger, ScheduledWorkflow,
-    TaskRunParams, WorkflowError, WorkflowManifest, WorkflowRunRecord, WorkflowStep,
-    WorkflowStepResult, WorkflowStepRetry, WorkflowTrigger, MAX_PARALLEL_STEPS,
+    discover_scheduled_workflows, discover_workflows, evaluate_schedule_due,
+    execution_summary_from_record, last_schedule_run_at, list_all_workflow_runs,
+    list_workflow_runs, load_and_run_workflow, load_and_run_workflow_with_id, load_workflow_run,
+    path_matches_glob, reconcile_abandoned_workflow_runs, resolve_workspace_path, run_workflow,
+    run_workflow_with_id, save_workflow_run, set_workflow_enabled, workflow_runs_dir,
+    workflows_dir, NotificationParams, ProposalCreateParams, ScheduleDue, ScheduleTrigger,
+    ScheduledWorkflow, TaskRunParams, WorkflowError, WorkflowManifest, WorkflowRunRecord,
+    WorkflowStep, WorkflowStepResult, WorkflowStepRetry, WorkflowTrigger, MAX_PARALLEL_STEPS,
     SUPPORTED_VERSION as WORKFLOW_SUPPORTED_VERSION, WORKFLOWS_DIR, WORKFLOW_FORMAT,
     WORKFLOW_RUNS_DIR,
 };

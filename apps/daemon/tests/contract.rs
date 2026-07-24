@@ -566,9 +566,11 @@ async fn open_workspace_watcher_indexes_external_file_and_emits_events() {
 async fn spawn_helper_launches_binary() {
     let dir = TempDir::new().expect("tempdir");
     let socket = dir.path().join("spawned.sock");
+    // Defaults: keep-running + semantic fake isolate from interactive Lattice.app
+    // embed-host socket contention (Gate A flake).
     let opts = SpawnOptions::new(env!("CARGO_BIN_EXE_latticed"), &socket, "spawn-token")
         .with_instance_id("spawned-id")
-        .with_ready_timeout(Duration::from_secs(10));
+        .with_ready_timeout(Duration::from_secs(30));
 
     let mut spawned = spawn_latticed(opts).await.expect("spawn latticed");
     assert_eq!(spawned.instance_id, "spawned-id");

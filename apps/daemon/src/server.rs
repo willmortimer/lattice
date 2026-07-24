@@ -38,6 +38,7 @@ use crate::lease::{daemon_lease_claim, lease_to_wire, require_workspace_lease};
 pub struct DaemonState {
     pub config: Arc<DaemonConfig>,
     pub runtime: Arc<LatticeRuntime>,
+    pub jobs: Arc<crate::jobs::JobRegistry>,
     pub semantic: Option<Arc<crate::embed_host::SemanticController>>,
     pub voice: Option<Arc<crate::voice_host::VoiceController>>,
     connections: Option<Arc<ConnectionTracker>>,
@@ -72,6 +73,7 @@ impl DaemonState {
         let state = Self {
             config: Arc::new(config),
             runtime,
+            jobs: Arc::new(crate::jobs::JobRegistry::new()),
             semantic,
             voice,
             connections: None,
@@ -186,6 +188,7 @@ pub async fn serve_with_shutdown_and_controllers(
         .with_connections(Arc::clone(&connections));
     let schedule_runner = crate::schedule::spawn_schedule_runner(
         Arc::clone(&state.runtime),
+        Arc::clone(&state.jobs),
         crate::DEFAULT_SCHEDULE_TICK,
     );
     let api_shutdown = state
@@ -648,6 +651,7 @@ fn handle_open_workspace(
 
     // Semantic indexing is user-driven via EnableSemanticSearch (E4), not
     // auto-attached on open.
+    crate::jobs::reconcile_or_warn(&state.jobs, session.root());
 
     let wire_lease = lease_to_wire(&lease_file);
     let workspace_id = session.workspace_id().to_string();

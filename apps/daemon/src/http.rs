@@ -17,12 +17,13 @@ use tokio::sync::oneshot;
 use tracing::{info, warn};
 
 use crate::api::{
-    api_build_context, api_create_proposal, api_get_dataset_schema, api_get_proposal,
-    api_list_proposals, api_profile_dataset, api_propose_artifact, api_propose_interface,
-    api_propose_page, api_propose_resource, api_propose_workflow, api_read, api_related,
-    api_search, ApiError, BuildContextParams, CreateProposalParams, DatasetInspectParams,
-    GetProposalParams, ListProposalsParams, ProposePageParams, ProposeResourceParams,
-    ProposeYamlParams, ReadParams, RelatedParams, SearchParams,
+    api_build_context, api_cancel_job, api_create_proposal, api_get_dataset_schema, api_get_job,
+    api_get_proposal, api_list_active_jobs, api_list_proposals, api_list_recent_jobs,
+    api_profile_dataset, api_propose_artifact, api_propose_interface, api_propose_page,
+    api_propose_resource, api_propose_workflow, api_read, api_related, api_search, ApiError,
+    BuildContextParams, CancelJobParams, CreateProposalParams, DatasetInspectParams, GetJobParams,
+    GetProposalParams, ListJobsParams, ListProposalsParams, ProposePageParams,
+    ProposeResourceParams, ProposeYamlParams, ReadParams, RelatedParams, SearchParams,
 };
 use crate::config::DaemonConfig;
 use crate::server::DaemonState;
@@ -305,6 +306,58 @@ async fn route_profile_dataset(
     }
 }
 
+async fn route_list_active_jobs(State(state): State<HttpState>, headers: HeaderMap) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_list_active_jobs(&state.daemon.jobs) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_list_recent_jobs(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<ListJobsParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_list_recent_jobs(&state.daemon.jobs, &state.daemon.runtime, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_get_job(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<GetJobParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_get_job(&state.daemon.jobs, &state.daemon.runtime, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_cancel_job(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<CancelJobParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_cancel_job(&state.daemon.jobs, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
 /// Build the localhost API router (no CORS — not a browser demo surface).
 pub fn router(daemon: DaemonState) -> Router {
     Router::new()
@@ -315,6 +368,10 @@ pub fn router(daemon: DaemonState) -> Router {
         .route("/v1/build_context", post(route_build_context))
         .route("/v1/datasets/schema", post(route_get_dataset_schema))
         .route("/v1/datasets/profile", post(route_profile_dataset))
+        .route("/v1/jobs/list_active", post(route_list_active_jobs))
+        .route("/v1/jobs/list_recent", post(route_list_recent_jobs))
+        .route("/v1/jobs/get", post(route_get_job))
+        .route("/v1/jobs/cancel", post(route_cancel_job))
         .route("/v1/proposals/create", post(route_create_proposal))
         .route("/v1/proposals/list", post(route_list_proposals))
         .route("/v1/proposals/get", post(route_get_proposal))

@@ -1,25 +1,34 @@
 //! Interval schedule runner skeleton for open workspace sessions.
 //!
 //! Discovers enabled `type: schedule` workflows, evaluates interval due times,
-//! and executes them via [`lattice_commands::load_and_run_workflow`] with trigger
-//! label `schedule`. Runs persist under `.lattice/workflows/runs/`.
+//! and executes them via [`lattice_commands::load_and_run_workflow`] with
+//! trigger label `schedule`. Runs persist under `.lattice/workflows/runs/`.
 //!
 //! Cron-only schedules are skipped with a debug log until a cron evaluator lands
 //! (see [`lattice_commands::ScheduleDue::CronDeferred`]). Desktop event triggers
 //! (`resource.changed` / `form.submitted`) are unchanged.
+//!
+//! **Honest lifecycle:** interval schedules fire only while a workspace session
+//! is open in this daemon process. This is not cron durability and not
+//! closed-desktop scheduling (those need a known-workspace registry + evaluator).
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use lattice_commands::{
     discover_scheduled_workflows, evaluate_schedule_due, last_schedule_run_at,
-    load_and_run_workflow, ScheduleDue,
+    load_and_run_workflow, proposal_now_iso, ScheduleDue,
 };
 use lattice_runtime::LatticeRuntime;
 use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
+
+use crate::jobs::{
+    reconcile_or_warn, running_schedule_summary, summary_from_finished, JobRegistry,
+};
 
 /// Default polling period for open-session schedule evaluation.
 pub const DEFAULT_SCHEDULE_TICK: Duration = Duration::from_secs(5);
@@ -27,6 +36,7 @@ pub const DEFAULT_SCHEDULE_TICK: Duration = Duration::from_secs(5);
 /// In-process schedule runner over warm [`LatticeRuntime`] sessions.
 pub struct ScheduleRunner {
     runtime: Arc<LatticeRuntime>,
+    jobs: Arc<JobRegistry>,
     /// Last fire time keyed by `(workspace_root, workflow_rel_path)`.
     last_fire: HashMap<(PathBuf, String), SystemTime>,
     /// Workflows currently executing a schedule-sourced run.
@@ -34,9 +44,10 @@ pub struct ScheduleRunner {
 }
 
 impl ScheduleRunner {
-    pub fn new(runtime: Arc<LatticeRuntime>) -> Self {
+    pub fn new(runtime: Arc<LatticeRuntime>, jobs: Arc<JobRegistry>) -> Self {
         Self {
             runtime,
+            jobs,
             last_fire: HashMap::new(),
             in_flight: HashSet::new(),
         }
@@ -46,6 +57,7 @@ impl ScheduleRunner {
     pub async fn tick_once(&mut self) {
         let roots = self.runtime.list_session_roots();
         for root in roots {
+            reconcile_or_warn(&self.jobs, &root);
             self.tick_workspace(&root).await;
         }
     }
@@ -133,14 +145,39 @@ impl ScheduleRunner {
                     let workflow_path = item.path.clone();
                     let run_root = root.clone();
                     let fired_at = SystemTime::now();
-                    let result = tokio::task::spawn_blocking(move || {
-                        load_and_run_workflow(&run_root, &workflow_path, Some("schedule"), None, None)
+                    let execution_id = uuid::Uuid::now_v7().to_string();
+                    let started_at = proposal_now_iso();
+                    let cancel = Arc::new(AtomicBool::new(false));
+                    let summary =
+                        running_schedule_summary(&run_root, &rel, &execution_id, &started_at);
+                    if let Err(err) = self.jobs.begin(summary, Arc::clone(&cancel)) {
+                        warn!(
+                            workflow = %rel,
+                            error = %err,
+                            "failed to register schedule job"
+                        );
+                    }
+
+                    let result = tokio::task::spawn_blocking({
+                        let cancel = Arc::clone(&cancel);
+                        let execution_id = execution_id.clone();
+                        move || {
+                            load_and_run_workflow(
+                                &run_root,
+                                &workflow_path,
+                                Some("schedule"),
+                                Some(cancel.as_ref()),
+                                Some(execution_id.as_str()),
+                            )
+                        }
                     })
                     .await;
                     self.in_flight.remove(&key);
                     match result {
                         Ok(Ok(record)) => {
                             self.last_fire.insert(key, fired_at);
+                            let finished = summary_from_finished(&root, &record);
+                            let _ = self.jobs.finish(finished);
                             info!(
                                 workflow = %rel,
                                 execution_id = %record.execution.id,
@@ -151,6 +188,22 @@ impl ScheduleRunner {
                         Ok(Err(err)) => {
                             // Still advance last_fire so a hard failure does not tight-loop.
                             self.last_fire.insert(key, fired_at);
+                            let failed = lattice_commands::ExecutionSummary {
+                                execution_id: execution_id.clone(),
+                                workspace_root: root.to_string_lossy().replace('\\', "/"),
+                                resource_path: rel.clone(),
+                                kind: "workflow".into(),
+                                trigger: "schedule".into(),
+                                status: lattice_commands::ExecutionStatus::Failed,
+                                started_at,
+                                finished_at: Some(proposal_now_iso()),
+                                current_step_id: None,
+                                attempt: None,
+                                proposal_ids: Vec::new(),
+                                cancel_owner: lattice_commands::CANCEL_OWNER_NONE.into(),
+                                cancellable: false,
+                            };
+                            let _ = self.jobs.finish(failed);
                             warn!(
                                 workflow = %rel,
                                 error = %err,
@@ -158,6 +211,22 @@ impl ScheduleRunner {
                             );
                         }
                         Err(err) => {
+                            let failed = lattice_commands::ExecutionSummary {
+                                execution_id: execution_id.clone(),
+                                workspace_root: root.to_string_lossy().replace('\\', "/"),
+                                resource_path: rel.clone(),
+                                kind: "workflow".into(),
+                                trigger: "schedule".into(),
+                                status: lattice_commands::ExecutionStatus::Failed,
+                                started_at,
+                                finished_at: Some(proposal_now_iso()),
+                                current_step_id: None,
+                                attempt: None,
+                                proposal_ids: Vec::new(),
+                                cancel_owner: lattice_commands::CANCEL_OWNER_NONE.into(),
+                                cancellable: false,
+                            };
+                            let _ = self.jobs.finish(failed);
                             warn!(
                                 workflow = %rel,
                                 error = %err,
@@ -174,16 +243,20 @@ impl ScheduleRunner {
 /// Spawn a background loop that ticks open workspaces every `tick`.
 ///
 /// Abort the returned handle on daemon shutdown.
-pub fn spawn_schedule_runner(runtime: Arc<LatticeRuntime>, tick: Duration) -> JoinHandle<()> {
+pub fn spawn_schedule_runner(
+    runtime: Arc<LatticeRuntime>,
+    jobs: Arc<JobRegistry>,
+    tick: Duration,
+) -> JoinHandle<()> {
     tokio::spawn(async move {
-        let mut runner = ScheduleRunner::new(runtime);
+        let mut runner = ScheduleRunner::new(runtime, jobs);
         let mut interval = tokio::time::interval(tick);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         // First tick completes immediately; skip so we wait one period after start.
         interval.tick().await;
         info!(
             secs = tick.as_secs_f64(),
-            "schedule runner started (interval schedules on open sessions)"
+            "schedule runner started (interval schedules on open sessions only; not cron / closed-desktop durable)"
         );
         loop {
             interval.tick().await;
@@ -240,9 +313,10 @@ steps:
         write_interval_workflow(root, "Disabled", false, 1);
 
         let runtime = Arc::new(LatticeRuntime::new());
+        let jobs = Arc::new(JobRegistry::new());
         let _session = runtime.open_workspace_session(root).expect("open session");
 
-        let mut runner = ScheduleRunner::new(Arc::clone(&runtime));
+        let mut runner = ScheduleRunner::new(Arc::clone(&runtime), Arc::clone(&jobs));
         runner.tick_once().await;
 
         let enabled_runs =
@@ -253,6 +327,16 @@ steps:
             load_trigger(root, "Enabled.workflow.yaml"),
             WorkflowTrigger::Schedule(_)
         ));
+
+        let active = jobs.list_active().expect("active");
+        assert!(
+            active.is_empty(),
+            "completed schedule run should leave active empty"
+        );
+        let recent = jobs.list_recent(8).expect("recent");
+        assert_eq!(recent.len(), 1);
+        assert_eq!(recent[0].execution_id, enabled_runs[0].execution.id);
+        assert_eq!(recent[0].trigger, "schedule");
 
         let disabled_runs =
             list_workflow_runs(root, "Disabled.workflow.yaml", 8).expect("disabled runs");
