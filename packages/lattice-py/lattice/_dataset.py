@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from lattice._dataset_inspect import DatasetProfile, DatasetSchema, profile_dataset, get_dataset_schema
 from lattice._env import workspace_root
 
 
@@ -83,6 +84,19 @@ class DatasetHandle:
         raise FileNotFoundError(
             f"no Parquet under facts/ or CSV under sources/ for {self.path}"
         )
+
+    def schema(self, sql: str | None = None) -> DatasetSchema:
+        """Bounded schema snapshot (DuckDB ``LIMIT 0`` describe)."""
+        return get_dataset_schema(self, sql=sql)
+
+    def profile(
+        self,
+        *,
+        sample_rows: int | None = None,
+        sql: str | None = None,
+    ) -> DatasetProfile:
+        """Bounded DuckDB ``SUMMARIZE`` profile over facts Parquet."""
+        return profile_dataset(self, sample_rows=sample_rows, sql=sql)
 
 
 def dataset(path: str) -> DatasetHandle:
