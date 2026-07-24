@@ -773,10 +773,20 @@ pub(crate) static GENERATED_TEMPLATES: &[GeneratedTemplate] = &[
                     "ContactIntake"
                 ],
                 title: Some("Ops dashboard"),
-                description: Some("Multi-component CRM interface (metric, chart, map, data-view, form)."),
+                description: Some("Multi-component CRM interface (metric, chart, map, data-view, form). Embedded Contact intake submit refreshes the Board data-view in place (F0)."),
                 layout_columns: Some(12),
                 parameters_json: Some("{\"region\":{\"type\":\"string\",\"default\":\"all\"}}"),
                 components_json: Some("[{\"id\":\"contact_count\",\"type\":\"metric\",\"span\":3,\"title\":\"Contacts\",\"binding\":{\"type\":\"sqlite-query\",\"resource\":\".\",\"sql\":\"SELECT COUNT(*) AS value FROM contacts\",\"limit\":1}},{\"id\":\"revenue_chart\",\"type\":\"chart\",\"span\":6,\"title\":\"Revenue by region\",\"binding\":{\"type\":\"duckdb-query\",\"resources\":[\"Data/Orders.dataset\"],\"sql\":\"SELECT region, sum(revenue) AS revenue FROM read_parquet('Data/Orders.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true) WHERE ('{{region}}' = 'all' OR region = '{{region}}') GROUP BY region ORDER BY region\",\"limit\":100},\"chart\":\"Dashboards/Revenue by region and category.vl.json\"},{\"id\":\"places_map\",\"type\":\"map\",\"span\":6,\"title\":\"Places\",\"binding\":{\"type\":\"duckdb-query\",\"resources\":[\"Data/Places.dataset\"],\"sql\":\"SELECT * FROM read_parquet('Data/Places.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true) WHERE ('{{region}}' = 'all' OR '{{region}}' IS NOT NULL)\",\"limit\":500}},{\"id\":\"board\",\"type\":\"data-view\",\"span\":6,\"title\":\"Board\",\"binding\":{\"type\":\"saved-view\",\"resource\":\".\",\"view\":\"Board\"}},{\"id\":\"intake\",\"type\":\"form\",\"span\":6,\"binding\":{\"type\":\"resource\",\"resource\":\".\"},\"form\":\"ContactIntake\"}]"),
+            },
+                SeedDataInterface {
+                name: "AgentDigest",
+                views: &[],
+                forms: &[],
+                title: Some("Agent digest"),
+                description: Some("Pre-seeded Orders/Events metric digest. Optional: run AgentFirstLook.task to rehearse inspect→propose→approve over the same interface path."),
+                layout_columns: Some(12),
+                parameters_json: None,
+                components_json: Some("[{\"id\":\"signups_total\",\"type\":\"metric\",\"span\":6,\"title\":\"Total signups (Events)\",\"binding\":{\"type\":\"duckdb-query\",\"resources\":[\"Data/Events.dataset\"],\"sql\":\"SELECT COALESCE(SUM(signups), 0) AS value FROM read_parquet('Data/Events.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true)\",\"limit\":1}},{\"id\":\"revenue_total\",\"type\":\"metric\",\"span\":6,\"title\":\"Total revenue (Orders)\",\"binding\":{\"type\":\"duckdb-query\",\"resources\":[\"Data/Orders.dataset\"],\"sql\":\"SELECT COALESCE(SUM(revenue), 0) AS value FROM read_parquet('Data/Orders.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true)\",\"limit\":1}}]"),
             }
             ],
         },
