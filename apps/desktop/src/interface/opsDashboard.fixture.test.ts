@@ -44,4 +44,18 @@ describe("OpsDashboard fixture", () => {
     }
     expect(map.binding.sql).toContain("{{region}}");
   });
+
+  it("supports builder bind round-trip for data-view and form tiles", () => {
+    const board = DEMO_OPS_DASHBOARD.components?.find((item) => item.id === "board");
+    expect(board).toMatchObject({
+      type: "data-view",
+      binding: { type: "saved-view", resource: ".", view: "Board" },
+    });
+    const intake = DEMO_OPS_DASHBOARD.components?.find((item) => item.id === "intake");
+    expect(intake).toMatchObject({
+      type: "form",
+      form: "ContactIntake",
+      binding: { type: "resource", resource: "." },
+    });
+  });
 });

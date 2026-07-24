@@ -1,17 +1,24 @@
 //! Static export entry points for pages, interfaces, and artifacts.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use lattice_commands::{is_safe_relative_path, resolve_manifest_path, ArtifactManifest};
 use lattice_core::Workspace;
-use lattice_data::InterfaceDef;
+use lattice_data::{BindingSpec, InterfaceDef};
 use walkdir::WalkDir;
 
+use crate::deps::{
+    attachment_paths_in_table, CopiedDependency, DependencyCollector, DependencyKind,
+    MissingDependency,
+};
 use crate::error::{Error, Result};
-use crate::markdown::{escape_attr, escape_html, markdown_to_html};
+use crate::markdown::{
+    collect_markdown_local_refs, escape_attr, escape_html, markdown_to_html_with_rewrites,
+};
 use crate::snapshot::{
-    freeze_artifact_bindings, freeze_interface, render_table_html, write_json, ArtifactSnapshot,
-    InterfaceSnapshot,
+    apply_chart_paths, freeze_artifact_bindings, freeze_interface, render_table_html, write_json,
+    ArtifactSnapshot, InterfaceSnapshot,
 };
 use crate::theme::{builtin_theme_vars, shell_style_block};
 
@@ -32,6 +39,27 @@ pub struct ExportReport {
     pub out_dir: PathBuf,
     pub primary_html: PathBuf,
     pub kind: &'static str,
+    /// Local files copied into the export under `deps/`.
+    pub copied_dependencies: Vec<CopiedDependency>,
+    /// Missing or disallowed dependencies (optional ones warn; required fail before report).
+    pub missing_dependencies: Vec<MissingDependency>,
+}
+
+impl ExportReport {
+    fn with_closure(
+        out_dir: PathBuf,
+        primary_html: PathBuf,
+        kind: &'static str,
+        closure: crate::deps::DependencyClosure,
+    ) -> Self {
+        Self {
+            out_dir,
+            primary_html,
+            kind,
+            copied_dependencies: closure.copied,
+            missing_dependencies: closure.missing,
+        }
+    }
 }
 
 /// Export a page, interface, or artifact as self-contained offline HTML.
@@ -77,8 +105,19 @@ fn export_page(workspace_root: &Path, out_dir: &Path, page_path: &Path) -> Resul
     }
     let markdown =
         std::fs::read_to_string(&absolute).map_err(|source| Error::io(&absolute, source))?;
+    let page_dir = absolute
+        .parent()
+        .ok_or_else(|| Error::message("page path has no parent directory"))?;
+
+    let mut collector = DependencyCollector::new(workspace_root, page_dir)?;
+    for local in collect_markdown_local_refs(&markdown) {
+        // Images are required page assets; plain local links warn when missing.
+        collector.add(&local.href, DependencyKind::PageAsset, local.is_image);
+    }
+    let closure = collector.materialize(out_dir)?;
+
     let title = page_title(&markdown, &absolute);
-    let body = markdown_to_html(&markdown)?;
+    let body = markdown_to_html_with_rewrites(&markdown, &closure.rewrites)?;
     let vars = builtin_theme_vars(None)?;
     let html = document_shell(
         &title,
@@ -94,11 +133,12 @@ fn export_page(workspace_root: &Path, out_dir: &Path, page_path: &Path) -> Resul
 
     let primary = out_dir.join("index.html");
     std::fs::write(&primary, html).map_err(|source| Error::io(&primary, source))?;
-    Ok(ExportReport {
-        out_dir: out_dir.to_path_buf(),
-        primary_html: primary,
-        kind: "page",
-    })
+    Ok(ExportReport::with_closure(
+        out_dir.to_path_buf(),
+        primary,
+        "page",
+        closure,
+    ))
 }
 
 fn export_interface(
@@ -112,7 +152,48 @@ fn export_interface(
         Error::message("interface path must be inside a package `interfaces/` directory")
     })?;
 
-    let snapshot = freeze_interface(workspace_root, package_path, &interface)?;
+    let mut snapshot = freeze_interface(workspace_root, package_path, &interface)?;
+
+    let mut collector = DependencyCollector::new(workspace_root, workspace_root)?;
+    let mut chart_by_component: BTreeMap<String, String> = BTreeMap::new();
+
+    for component in &interface.components {
+        if let Some(chart) = &component.chart {
+            // Chart specs referenced on components are required export assets.
+            collector.add(chart, DependencyKind::ChartSpec, true);
+            chart_by_component.insert(component.id.clone(), chart.clone());
+        }
+        if let Some(binding) = &component.binding {
+            collect_binding_deps(&mut collector, binding);
+        }
+    }
+
+    for component in &snapshot.components {
+        if let Some(table) = &component.table {
+            for attachment in attachment_paths_in_table(table) {
+                let package_rel = package_path
+                    .strip_prefix(workspace_root)
+                    .unwrap_or(package_path);
+                let declared = Path::new(package_rel)
+                    .join(&attachment)
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                collector.add(&declared, DependencyKind::Attachment, false);
+            }
+        }
+    }
+
+    let closure = collector.materialize(out_dir)?;
+
+    // Remap chart declarations to export-relative destinations.
+    let mut chart_dests: BTreeMap<String, String> = BTreeMap::new();
+    for (component_id, declared) in &chart_by_component {
+        if let Some(dest) = closure.rewrites.get(declared) {
+            chart_dests.insert(component_id.clone(), dest.clone());
+        }
+    }
+    apply_chart_paths(&mut snapshot, &chart_dests);
+
     let snapshot_path = out_dir.join("snapshot.json");
     write_json(&snapshot_path, &snapshot)?;
 
@@ -126,11 +207,54 @@ fn export_interface(
 
     let primary = out_dir.join("index.html");
     std::fs::write(&primary, html).map_err(|source| Error::io(&primary, source))?;
-    Ok(ExportReport {
-        out_dir: out_dir.to_path_buf(),
-        primary_html: primary,
-        kind: "interface",
-    })
+    Ok(ExportReport::with_closure(
+        out_dir.to_path_buf(),
+        primary,
+        "interface",
+        closure,
+    ))
+}
+
+fn collect_binding_deps(collector: &mut DependencyCollector, binding: &BindingSpec) {
+    match binding {
+        BindingSpec::Resource { resource } => {
+            if resource != "." && looks_like_static_file(resource) {
+                // Copy when the resource is a regular local file (e.g. `.vl.json`).
+                collector.add(resource, DependencyKind::LocalFile, false);
+            }
+        }
+        BindingSpec::DuckdbQuery { resources, .. } => {
+            for resource in resources {
+                collector.add_unsupported(
+                    resource,
+                    DependencyKind::LocalFile,
+                    "dataset snapshot not included in static export",
+                );
+            }
+        }
+        BindingSpec::NotebookOutput { resource, .. } | BindingSpec::TaskOutput { resource, .. } => {
+            collector.add_unsupported(
+                resource,
+                DependencyKind::LocalFile,
+                "live output binding is not snapshotted as a file dependency",
+            );
+        }
+        BindingSpec::SqliteQuery { .. } | BindingSpec::SavedView { .. } => {
+            // Query / view results are frozen into snapshot.json; package DBs stay in-place.
+        }
+    }
+}
+
+fn looks_like_static_file(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    if lower.ends_with(".data")
+        || lower.ends_with(".dataset")
+        || lower.ends_with(".artifact")
+        || lower.ends_with(".task")
+    {
+        return false;
+    }
+    Path::new(path).extension().is_some()
 }
 
 fn render_interface_body(snapshot: &InterfaceSnapshot) -> String {
@@ -147,6 +271,12 @@ fn render_interface_body(snapshot: &InterfaceSnapshot) -> String {
         }
         if let Some(table) = &component.table {
             inner.push_str(&render_table_html(table));
+        }
+        if let Some(chart) = &component.chart {
+            inner.push_str(&format!(
+                r#"<p class="lt-muted">Chart spec: <a href="{href}"><code>{href}</code></a></p>"#,
+                href = escape_attr(chart),
+            ));
         }
         if let Some(note) = &component.note {
             inner.push_str(&format!("<p class=\"lt-muted\">{}</p>", escape_html(note)));
@@ -216,7 +346,21 @@ fn export_artifact(
         )));
     }
 
+    let entry_src = package_dir.join(&manifest.entrypoint);
+    if !entry_src.is_file() {
+        return Err(Error::message(format!(
+            "required artifact entrypoint missing: {}",
+            manifest.entrypoint
+        )));
+    }
+
     copy_package_tree(&package_dir, out_dir)?;
+
+    let mut collector = DependencyCollector::new(workspace_root, workspace_root)?;
+    for binding in manifest.bindings.values() {
+        collect_binding_deps(&mut collector, binding);
+    }
+    let closure = collector.materialize(out_dir)?;
 
     let bindings = freeze_artifact_bindings(workspace_root, &manifest.bindings)?;
     let snapshot = ArtifactSnapshot {
@@ -305,11 +449,12 @@ window.__LATTICE_PUBLISH_THEME__ = {theme_json};
         std::fs::write(&index_path, index).map_err(|source| Error::io(&index_path, source))?;
     }
 
-    Ok(ExportReport {
-        out_dir: out_dir.to_path_buf(),
-        primary_html: entry_out,
-        kind: "artifact",
-    })
+    Ok(ExportReport::with_closure(
+        out_dir.to_path_buf(),
+        entry_out,
+        "artifact",
+        closure,
+    ))
 }
 
 fn copy_package_tree(from: &Path, to: &Path) -> Result<()> {

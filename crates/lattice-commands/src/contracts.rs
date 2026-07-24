@@ -142,7 +142,7 @@ impl ProposalSource {
 }
 
 /// Lifecycle state of a persisted [`TransactionProposal`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ProposalStatus {
     #[default]
@@ -171,6 +171,12 @@ pub struct TransactionProposal {
     /// Review lifecycle; omitted in older payloads defaults to pending.
     #[serde(default, skip_serializing_if = "is_pending")]
     pub status: ProposalStatus,
+    /// ISO-8601 timestamp when the proposal was accepted or rejected.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved_at: Option<String>,
+    /// History transaction id when status is accepted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub applied_transaction_id: Option<String>,
 }
 
 /// Inbox row for a persisted proposal (no command payloads).
@@ -186,6 +192,10 @@ pub struct TransactionProposalSummary {
     pub warnings: Vec<String>,
     pub created_at: String,
     pub status: ProposalStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub applied_transaction_id: Option<String>,
 }
 
 impl TransactionProposal {
@@ -200,6 +210,8 @@ impl TransactionProposal {
             warnings: self.warnings.clone(),
             created_at: self.created_at.clone(),
             status: self.status,
+            resolved_at: self.resolved_at.clone(),
+            applied_transaction_id: self.applied_transaction_id.clone(),
         }
     }
 }
@@ -380,6 +392,8 @@ mod tests {
             warnings: vec!["dry-run only".into()],
             created_at: "2026-07-21T16:30:00Z".into(),
             status: ProposalStatus::Pending,
+            resolved_at: None,
+            applied_transaction_id: None,
         };
 
         let json = serde_json::to_string(&proposal).unwrap();

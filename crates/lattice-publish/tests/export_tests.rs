@@ -43,6 +43,59 @@ fn exports_markdown_page_to_standalone_html() {
 }
 
 #[test]
+fn exports_page_with_local_image_dependency() {
+    let dir = tempdir().unwrap();
+    let root = dir.path().join("ws");
+    fs::create_dir_all(root.join("assets")).unwrap();
+    init_workspace(&root);
+    fs::write(root.join("assets/diagram.png"), b"fakepng").unwrap();
+    fs::write(
+        root.join("Guide.md"),
+        "# Guide\n\nSee the diagram:\n\n![Diagram](assets/diagram.png)\n",
+    )
+    .unwrap();
+
+    let out = dir.path().join("out-page-deps");
+    let report = export(
+        &root,
+        &out,
+        ExportTarget::Page(Path::new("Guide.md").into()),
+    )
+    .unwrap();
+    assert_eq!(report.copied_dependencies.len(), 1);
+    assert_eq!(
+        report.copied_dependencies[0].dest,
+        "deps/assets/diagram.png"
+    );
+    assert!(out.join("deps/assets/diagram.png").is_file());
+    let html = fs::read_to_string(report.primary_html).unwrap();
+    assert!(html.contains("src=\"deps/assets/diagram.png\""));
+    assert!(report.missing_dependencies.is_empty());
+}
+
+#[test]
+fn page_export_fails_when_required_image_missing() {
+    let dir = tempdir().unwrap();
+    let root = dir.path().join("ws");
+    fs::create_dir_all(&root).unwrap();
+    init_workspace(&root);
+    fs::write(
+        root.join("Broken.md"),
+        "# Broken\n\n![Missing](assets/gone.png)\n",
+    )
+    .unwrap();
+
+    let out = dir.path().join("out-broken");
+    let err = export(
+        &root,
+        &out,
+        ExportTarget::Page(Path::new("Broken.md").into()),
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("assets/gone.png"));
+}
+
+#[test]
 fn exports_interface_with_frozen_sqlite_metric() {
     let dir = tempdir().unwrap();
     let root = dir.path().join("ws");
@@ -87,6 +140,52 @@ fn exports_interface_with_frozen_sqlite_metric() {
     let snapshot = fs::read_to_string(out.join("snapshot.json")).unwrap();
     assert!(snapshot.contains("lattice-publish-interface-snapshot"));
     assert!(snapshot.contains("contact_count"));
+}
+
+#[test]
+fn exports_interface_with_chart_spec_dependency() {
+    let dir = tempdir().unwrap();
+    let root = dir.path().join("ws");
+    fs::create_dir_all(root.join("Dashboards")).unwrap();
+    init_workspace(&root);
+
+    let package = root.join("CRM.data");
+    DataApp::create(&package, "CRM", "contacts").unwrap();
+
+    let chart_path = "Dashboards/Revenue.vl.json";
+    fs::write(
+        root.join(chart_path),
+        r#"{"$schema":"https://vega.github.io/schema/vega-lite/v5.json","data":{"values":[{"x":1}]},"mark":"bar","encoding":{"x":{"field":"x"}}}"#,
+    )
+    .unwrap();
+
+    let mut interface = InterfaceDef::new("Charts");
+    interface.title = Some("Charts".into());
+    interface.layout = Some(InterfaceLayout { columns: 12 });
+    interface.components = vec![InterfaceComponent {
+        id: "revenue".into(),
+        component_type: InterfaceComponentType::Chart,
+        span: 6,
+        title: Some("Revenue".into()),
+        binding: None,
+        form: None,
+        chart: Some(chart_path.into()),
+    }];
+    write_package_interface(&package, &interface).unwrap();
+
+    let out = dir.path().join("out-chart");
+    let report = export(
+        &root,
+        &out,
+        ExportTarget::Interface(Path::new("CRM.data/interfaces/Charts.interface.yaml").into()),
+    )
+    .unwrap();
+    assert_eq!(report.copied_dependencies.len(), 1);
+    assert!(out.join("deps/Dashboards/Revenue.vl.json").is_file());
+    let snapshot = fs::read_to_string(out.join("snapshot.json")).unwrap();
+    assert!(snapshot.contains("deps/Dashboards/Revenue.vl.json"));
+    let html = fs::read_to_string(report.primary_html).unwrap();
+    assert!(html.contains("deps/Dashboards/Revenue.vl.json"));
 }
 
 #[test]

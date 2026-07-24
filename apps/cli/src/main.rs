@@ -15,7 +15,10 @@ use lattice_core::{
     TemplateVisibility, Workspace,
 };
 use lattice_data::{
-    parse_field_type_name, parse_tabular_file, resolve_field_types, CellValue, DataApp, FieldType,
+    cleanup_orphan_attachments_with_options, cleanup_stale_attachment_staging,
+    list_attachment_inventory, list_orphan_attachments, parse_field_type_name,
+    parse_tabular_file, resolve_field_types, AttachmentInventoryEntry, CellValue, DataApp,
+    FieldType, StagingCleanupReport,
 };
 use lattice_datasets::{parse_partition_key_specs, Dataset, EventAnnotation};
 use lattice_duckdb::{DuckDbEngine, ScalarValue};
@@ -511,6 +514,48 @@ enum TableCommand {
         #[command(subcommand)]
         command: TableViewCommand,
     },
+    /// Attachment inventory and cleanup for `.data` packages.
+    Attachments {
+        #[command(subcommand)]
+        command: TableAttachmentsCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum TableAttachmentsCommand {
+    /// List referenced attachment paths and on-disk metadata.
+    Inventory {
+        /// Workspace path of the `.data` package.
+        path: PathBuf,
+        /// Emit output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Delete package attachment files not referenced by any cell.
+    CleanupOrphans {
+        /// Workspace path of the `.data` package.
+        path: PathBuf,
+        /// Preview paths that would be deleted without removing files.
+        #[arg(long)]
+        dry_run: bool,
+        /// Emit output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Delete stale workspace staging directories under `.lattice/staging/attachments/`.
+    CleanupStaging {
+        /// Workspace path or any path inside the workspace. Defaults to cwd.
+        path: Option<PathBuf>,
+        /// Maximum age in hours before a staging directory is eligible (default 24).
+        #[arg(long, default_value_t = 24)]
+        max_age_hours: u64,
+        /// Preview candidates without deleting.
+        #[arg(long)]
+        dry_run: bool,
+        /// Emit output as JSON.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -674,6 +719,22 @@ fn run(command: Command) -> Result<ExitCode> {
                 TableViewCommand::Show { path, name, json } => {
                     cmd_table_view_show(path, name, json)
                 }
+            },
+            TableCommand::Attachments { command } => match command {
+                TableAttachmentsCommand::Inventory { path, json } => {
+                    cmd_table_attachments_inventory(path, json)
+                }
+                TableAttachmentsCommand::CleanupOrphans {
+                    path,
+                    dry_run,
+                    json,
+                } => cmd_table_attachments_cleanup_orphans(path, dry_run, json),
+                TableAttachmentsCommand::CleanupStaging {
+                    path,
+                    max_age_hours,
+                    dry_run,
+                    json,
+                } => cmd_table_attachments_cleanup_staging(path, max_age_hours, dry_run, json),
             },
         },
         Command::Dataset { command } => match command {
@@ -1469,6 +1530,184 @@ fn cmd_table_view_show(path: PathBuf, name: String, json: bool) -> Result<ExitCo
 }
 
 #[derive(serde::Serialize)]
+struct AttachmentInventoryOutput {
+    path: String,
+    size_bytes: Option<u64>,
+    modified_at_secs: Option<i64>,
+    missing_on_disk: bool,
+}
+
+fn attachment_inventory_output(entry: AttachmentInventoryEntry) -> AttachmentInventoryOutput {
+    AttachmentInventoryOutput {
+        path: entry.path,
+        size_bytes: entry.size_bytes,
+        modified_at_secs: entry
+            .modified_at
+            .and_then(|time| time.duration_since(SystemTime::UNIX_EPOCH).ok())
+            .map(|duration| duration.as_secs()),
+        missing_on_disk: entry.missing_on_disk,
+    }
+}
+
+fn cmd_table_attachments_inventory(path: PathBuf, json: bool) -> Result<ExitCode> {
+    let start = std::env::current_dir().context("failed to determine current directory")?;
+    let ws = Workspace::discover(&start)?;
+    let rel = workspace_relative(&ws, &path)?;
+    let app = DataApp::open(&ws.root().join(&rel))?;
+    let inventory = list_attachment_inventory(&app)?;
+    let output = inventory
+        .into_iter()
+        .map(attachment_inventory_output)
+        .collect::<Vec<_>>();
+
+    if json {
+        print_json(&output)?;
+    } else if output.is_empty() {
+        println!("no referenced attachments");
+    } else {
+        for entry in output {
+            let size = entry
+                .size_bytes
+                .map(|bytes| bytes.to_string())
+                .unwrap_or_else(|| "missing".to_string());
+            let modified = entry
+                .modified_at_secs
+                .map(|secs| secs.to_string())
+                .unwrap_or_else(|| "-".to_string());
+            println!(
+                "{}  size={size}  modified={modified}  missing={}",
+                entry.path, entry.missing_on_disk
+            );
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_table_attachments_cleanup_orphans(
+    path: PathBuf,
+    dry_run: bool,
+    json: bool,
+) -> Result<ExitCode> {
+    let start = std::env::current_dir().context("failed to determine current directory")?;
+    let ws = Workspace::discover(&start)?;
+    let rel = workspace_relative(&ws, &path)?;
+    let app = DataApp::open(&ws.root().join(&rel))?;
+    let paths = if dry_run {
+        list_orphan_attachments(&app)?
+    } else {
+        cleanup_orphan_attachments_with_options(&app, false)?
+    };
+
+    if json {
+        print_json(&paths)?;
+    } else if paths.is_empty() {
+        println!(
+            "{}",
+            if dry_run {
+                "no orphan attachments"
+            } else {
+                "deleted 0 orphan attachments"
+            }
+        );
+    } else if dry_run {
+        println!("orphan attachments:");
+        for path in &paths {
+            println!("  {path}");
+        }
+    } else {
+        println!("deleted {} orphan attachment(s):", paths.len());
+        for path in &paths {
+            println!("  {path}");
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_table_attachments_cleanup_staging(
+    path: Option<PathBuf>,
+    max_age_hours: u64,
+    dry_run: bool,
+    json: bool,
+) -> Result<ExitCode> {
+    let start = path
+        .map(Ok)
+        .unwrap_or_else(|| std::env::current_dir().context("failed to determine current directory"))?;
+    let ws = Workspace::discover(&start)?;
+    let max_age = std::time::Duration::from_secs(max_age_hours.saturating_mul(60 * 60));
+    let report = cleanup_stale_attachment_staging(ws.root(), max_age, dry_run)?;
+
+    if json {
+        print_json(&staging_cleanup_output(&report))?;
+    } else if report.candidates.is_empty() {
+        println!(
+            "{} stale staging director{}",
+            if dry_run { "no" } else { "deleted 0" },
+            if dry_run { "ies" } else { "y" }
+        );
+    } else if dry_run {
+        println!(
+            "stale staging directories (max age {max_age_hours}h):"
+        );
+        for candidate in &report.candidates {
+            println!("  {}", candidate.operation_id);
+            for staged in &candidate.staged_paths {
+                println!("    {staged}");
+            }
+        }
+    } else {
+        println!(
+            "deleted {} stale staging director{}:",
+            report.deleted_operation_ids.len(),
+            if report.deleted_operation_ids.len() == 1 {
+                "y"
+            } else {
+                "ies"
+            }
+        );
+        for operation_id in &report.deleted_operation_ids {
+            println!("  {operation_id}");
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+#[derive(serde::Serialize)]
+struct StagingCleanupOutput {
+    dry_run: bool,
+    max_age_secs: u64,
+    candidates: Vec<StagingCleanupCandidateOutput>,
+    deleted_operation_ids: Vec<String>,
+}
+
+#[derive(serde::Serialize)]
+struct StagingCleanupCandidateOutput {
+    operation_id: String,
+    staged_paths: Vec<String>,
+    modified_at_secs: Option<u64>,
+}
+
+fn staging_cleanup_output(report: &StagingCleanupReport) -> StagingCleanupOutput {
+    StagingCleanupOutput {
+        dry_run: report.dry_run,
+        max_age_secs: report.max_age_secs,
+        candidates: report
+            .candidates
+            .iter()
+            .map(|candidate| StagingCleanupCandidateOutput {
+                operation_id: candidate.operation_id.clone(),
+                staged_paths: candidate.staged_paths.clone(),
+                modified_at_secs: candidate.modified_at.and_then(|time| {
+                    time.duration_since(SystemTime::UNIX_EPOCH)
+                        .ok()
+                        .map(|duration| duration.as_secs())
+                }),
+            })
+            .collect(),
+        deleted_operation_ids: report.deleted_operation_ids.clone(),
+    }
+}
+
+#[derive(serde::Serialize)]
 struct TableShowOutput {
     path: PathBuf,
     title: String,
@@ -2097,6 +2336,33 @@ fn cmd_publish_export(
         report.kind,
         report.primary_html.display()
     );
+    if !report.copied_dependencies.is_empty() {
+        println!(
+            "copied {} dependenc{}",
+            report.copied_dependencies.len(),
+            if report.copied_dependencies.len() == 1 {
+                "y"
+            } else {
+                "ies"
+            }
+        );
+        for dep in &report.copied_dependencies {
+            println!("  {} -> {}", dep.declared, dep.dest);
+        }
+    }
+    if !report.missing_dependencies.is_empty() {
+        for missing in &report.missing_dependencies {
+            let label = if missing.required {
+                "error"
+            } else {
+                "warning"
+            };
+            println!(
+                "{label}: missing dependency `{}` ({})",
+                missing.declared, missing.reason
+            );
+        }
+    }
     Ok(ExitCode::SUCCESS)
 }
 

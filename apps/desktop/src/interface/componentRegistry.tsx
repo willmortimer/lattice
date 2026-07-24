@@ -8,13 +8,17 @@ import { nativeOnlyDemoNotice } from "../data/browserDemoHonesty";
 import { PackageFormFill, packageFormFillTitle } from "../data/PackageFormFill";
 import {
   loadPackageForm,
-  submitPackageFormRecord,
   type FormSummary,
 } from "../data/forms";
+import { submitInterfaceFormRecord } from "./interfaceFormSubmit";
 import { EmbeddedDataView } from "../data/EmbeddedSavedDataView";
 import type { CellValue, DataAppSnapshot } from "../data/types";
 import { queryResultToValues } from "../lib/arrowToVegaData";
-import type { BindingSpec, InterfaceComponent } from "../lib/bindingSpec";
+import type {
+  BindingSpec,
+  InterfaceComponent,
+  InterfaceComponentType,
+} from "../lib/bindingSpec";
 import { isDatasetRequestAborted } from "../lib/datasetCancel";
 import { queryDatasetArrow } from "../lib/datasetQuery";
 import { buildAutoBarChartSpec } from "../lib/vegaLiteChart";
@@ -22,6 +26,15 @@ import { MetricCard } from "./MetricCard";
 import { applyParametersToBinding } from "./parameterSubstitution";
 import { primaryDuckdbResource, resolveBindingResource } from "./resolveBinding";
 import { queryDataSqlScalar } from "./saveInterface";
+
+/** Registry order for the interface builder type picker. */
+export const INTERFACE_COMPONENT_TYPES: readonly InterfaceComponentType[] = [
+  "metric",
+  "chart",
+  "map",
+  "data-view",
+  "form",
+] as const;
 
 const MapLibreDatasetViewer = lazy(async () => {
   const mod = await import("../analytics/MapLibreDatasetViewer");
@@ -40,6 +53,8 @@ export interface InterfaceComponentHost {
   paramValues?: Record<string, string>;
   onOpenSavedView?: (viewName: string) => void;
   onOpenResource?: (path: string) => void;
+  /** Reload the host package snapshot after embedded form submit. */
+  onPackageSnapshotRefresh?: () => void | Promise<void>;
 }
 
 export interface RenderInterfaceComponentProps {
@@ -345,18 +360,18 @@ function FormComponent({ component, host }: RenderInterfaceComponentProps) {
       }
       setBusy(true);
       try {
-        const result = await submitPackageFormRecord({
+        return await submitInterfaceFormRecord({
           root: host.root,
           relPath: host.packagePath,
           form,
           values,
+          onPackageSnapshotRefresh: host.onPackageSnapshotRefresh,
         });
-        return { id: result.id };
       } finally {
         setBusy(false);
       }
     },
-    [form, host.packagePath, host.root],
+    [form, host.onPackageSnapshotRefresh, host.packagePath, host.root],
   );
 
   const title = form

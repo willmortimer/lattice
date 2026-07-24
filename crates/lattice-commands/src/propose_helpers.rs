@@ -41,6 +41,8 @@ impl ProposeBundle {
                 warnings: self.warnings,
                 created_at: String::new(),
                 status: ProposalStatus::Pending,
+                resolved_at: None,
+                applied_transaction_id: None,
             },
         )
     }

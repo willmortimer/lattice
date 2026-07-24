@@ -1,8 +1,13 @@
+mod scheduler;
 mod settings;
 mod state;
 
 use std::path::{Path, PathBuf};
 
+pub use scheduler::{
+    default_scheduler_registry_path, KnownWorkspaceEntry, KnownWorkspaceRegistry,
+    LATTICE_SCHEDULER_REGISTRY_ENV, SCHEDULER_DIR_NAME, WORKSPACES_REGISTRY_FILENAME,
+};
 pub use settings::{
     DesktopSettings, SearchSettings, ServicesSettings, SettingsDiagnostic,
     SettingsDiagnosticSeverity, SettingsLoad, SettingsSnapshot, SettingsSpec, SettingsStore,
@@ -199,6 +204,12 @@ pub enum Error {
         path: PathBuf,
         #[source]
         source: serde_yaml::Error,
+    },
+    #[error("failed to serialize scheduler registry at {path}: {source}")]
+    Json {
+        path: PathBuf,
+        #[source]
+        source: serde_json::Error,
     },
     #[error("profile database error: {0}")]
     Sqlite(#[from] rusqlite::Error),

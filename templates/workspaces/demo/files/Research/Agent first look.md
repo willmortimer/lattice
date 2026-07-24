@@ -11,13 +11,20 @@ tasks. Proposals land in the inbox — nothing applies until you approve.
 
 ## Task path (native desktop)
 
+**Fast path:** **Interfaces → Agent digest** is pre-seeded on the First Look template
+(two metric tiles over Events signups and Orders revenue). Use this when you only
+need the interface surface.
+
+**Full path (inspect → propose → approve):**
+
 1. Open `Tasks/AgentFirstLook.task` → **Run** (needs `uv` + injected `lattice`).
 2. The task inspects `Data/Orders.dataset` and `Data/Events.dataset` via
    `lattice.dataset(...).schema()` and `.profile(sample_rows=500)` (bounded
    DuckDB inspect, matching MCP `get_dataset_schema` / `profile_dataset`), prints
    a JSON summary, then calls `lattice.propose_interface` for
    `CRM.data/interfaces/AgentDigest.interface.yaml`.
-3. Open the **Proposals** inbox → approve the resource-create proposal.
+3. Open the **Proposals** inbox → approve the resource-create proposal (or reject if
+   you only wanted to rehearse inspect).
 4. Open `CRM.data` → **Interfaces** → **Agent digest** — two metric tiles over
    Events signups and Orders revenue.
 
@@ -38,4 +45,7 @@ Sample JSON-RPC transcript: `docs/dev/first-look-agent-mcp.md` in the repo.
 - `Tasks/ProposePage.task` — SDK `propose_page` only.
 - `Automations/Contact intake.workflow.yaml` — form → workflow → `proposal.create`.
 - `CRM.data` → **Interfaces** → **Ops dashboard** — hand-authored multi-component
-  interface the agent seed mirrors.
+  interface (metric, chart, map, embedded Board + Contact intake). Embedded form
+  submit refreshes the Board data-view in place (F0).
+- `CRM.data` → **Interfaces** → **Agent digest** — pre-seeded metric digest; optional
+  `AgentFirstLook.task` rehearses inspect→propose→approve over the same path.

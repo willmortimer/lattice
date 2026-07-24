@@ -75,6 +75,10 @@ export interface TransactionProposal {
   createdAt: string;
   /** Defaults to pending when omitted (older payloads). */
   status?: ProposalStatus;
+  /** ISO-8601 when accepted or rejected. */
+  resolvedAt?: string;
+  /** History transaction id when accepted. */
+  appliedTransactionId?: string;
 }
 
 export interface TransactionProposalSummary {
@@ -87,6 +91,8 @@ export interface TransactionProposalSummary {
   /** ISO-8601 */
   createdAt: string;
   status: ProposalStatus;
+  resolvedAt?: string;
+  appliedTransactionId?: string;
 }
 
 /** Bounded per-command detail for proposal review. */

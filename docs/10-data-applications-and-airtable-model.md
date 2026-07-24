@@ -143,8 +143,10 @@ Lookup's `ColumnsAdd` flow.
 bind saved views and/or package forms. JSON Canvas file nodes open an interface
 via `subpath: interfaces/{name}` (or `interfaces/{name}.interface.yaml`); the
 shell loads the interface and opens the primary bound view (first `views`
-entry). Demo CRM ships `ContactOps` (Board + ContactIntake). A drag-layout
-interface builder remains future work.
+entry) when no dashboard `components` are present. Demo CRM ships `ContactOps`
+(Board + ContactIntake). Native desktop includes a bounded in-app Builder for
+insert/remove/bind of dashboard components; a full drag-layout IDE remains
+future work.
 
 **Actions and buttons.** Declarative actions live under `actions/*.action.yaml`.
 Wave 2 MVP kinds: `insert_record` (optional bound form + column defaults),
@@ -230,6 +232,18 @@ are not deleted until an explicit orphan cleanup confirms they are unreferenced.
 Cancel and failed saves leave package files untouched; staged files for removed
 draft entries are discarded. The browser demo remains honest and does not
 pretend to persist files.
+
+**Inventory and cleanup (V1):** `list_attachment_inventory` reports every
+referenced package path with size, mtime, and a missing-on-disk flag.
+`cleanup_orphan_attachments` removes unreferenced files under
+`attachments/`. `cleanup_stale_attachment_staging` sweeps abandoned
+`.lattice/staging/attachments/<operation-id>/` directories older than a TTL
+(default 24h). Staging cleanup is age-based only — drafts that still reference
+staged paths but are older than the TTL are not protected and may need
+re-attach after a sweep. Desktop Tauri commands:
+`list_data_attachment_inventory`, `cleanup_data_attachment_orphans` (optional
+`dry_run`), and `cleanup_data_attachment_staging` (preview via `dry_run`).
+CLI: `lattice table attachments inventory|cleanup-orphans|cleanup-staging`.
 
 ## Linked records
 
@@ -605,7 +619,13 @@ selection pub/sub is out of scope.
 Demo CRM ships `interfaces/ContactOps.interface.yaml` (Board + ContactIntake,
 legacy navigation) and `interfaces/OpsDashboard.interface.yaml` (metric + chart
 + map + data-view + form, with a `region` parameter). Light drag-reorder and
-span resize persist YAML via `save_data_interface`.
+span resize persist YAML via `save_data_interface`. Native desktop also exposes
+a **Builder** toggle on the interface dashboard: insert/remove registry
+components (`metric` / `chart` / `map` / `data-view` / `form`), edit title/span,
+and bind tiles to saved views, package forms, sqlite-query, or duckdb-query
+through a compact BindingSpec editor. Invalid binding drafts surface inline
+errors without writing; saves merge into existing YAML so unknown future fields
+are preserved where possible. The browser demo labels builder as native-only.
 
 Airtable-like operational surfaces over shared data can also include:
 

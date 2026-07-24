@@ -29,10 +29,13 @@ pub use action::{
 };
 pub use app::DEFAULT_VIEW_NAME;
 pub use attachment::{
-    attachment_paths_in_values, cleanup_orphan_attachments, cleanup_unreferenced_attachments,
-    collect_attachment_refs, discard_staged_attachment, is_staged_attachment_path,
-    list_orphan_attachments, promote_attachment_cell_values, promote_staged_attachment,
-    stage_attachment_file, validate_staged_attachment_ref, STAGED_ATTACHMENT_PREFIX,
+    attachment_paths_in_values, cleanup_orphan_attachments,
+    cleanup_orphan_attachments_with_options, cleanup_stale_attachment_staging,
+    cleanup_unreferenced_attachments, collect_attachment_refs, discard_staged_attachment,
+    is_staged_attachment_path, list_attachment_inventory, list_orphan_attachments,
+    promote_attachment_cell_values, promote_staged_attachment, stage_attachment_file,
+    validate_staged_attachment_ref, AttachmentInventoryEntry, StagingCleanupCandidate,
+    StagingCleanupReport, DEFAULT_STAGING_TTL, STAGED_ATTACHMENT_PREFIX,
 };
 pub use binding::BindingSpec;
 pub use csv::{
@@ -45,9 +48,9 @@ pub use form::{
 };
 pub use formula::{evaluate_formula, formula_field_refs, validate_formula_syntax, FormulaError};
 pub use interface::{
-    write_package_interface, InterfaceComponent, InterfaceComponentType, InterfaceDef,
-    InterfaceLayout, InterfaceParameter, INTERFACE_FILE_SUFFIX, INTERFACE_FORMAT,
-    INTERFACE_VERSION,
+    interface_content_revision, write_package_interface, InterfaceComponent,
+    InterfaceComponentType, InterfaceDef, InterfaceLayout, InterfaceParameter,
+    INTERFACE_FILE_SUFFIX, INTERFACE_FORMAT, INTERFACE_VERSION,
 };
 pub use json_import::{parse_json_file, parse_jsonl_file};
 pub use relation_target::{parse_relation_target, RelationTarget};

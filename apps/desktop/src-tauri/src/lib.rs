@@ -14,6 +14,7 @@ mod proposals;
 mod relationship;
 mod resource_links;
 mod revisions;
+mod scheduler;
 mod search;
 mod semantic;
 mod task;
@@ -190,6 +191,8 @@ pub fn run() {
             data::add_data_attachment,
             data::remove_data_attachment,
             data::cleanup_data_attachment_orphans,
+            data::list_data_attachment_inventory,
+            data::cleanup_data_attachment_staging,
             data::list_data_views,
             data::load_data_view,
             data::save_data_view,
@@ -230,6 +233,8 @@ pub fn run() {
             semantic::semantic_status,
             semantic::semantic_enable,
             semantic::semantic_disable,
+            scheduler::get_background_schedule_status,
+            scheduler::set_background_schedules_enabled,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

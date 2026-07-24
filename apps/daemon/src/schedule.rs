@@ -1,4 +1,4 @@
-//! Interval schedule runner skeleton for open workspace sessions.
+//! Interval schedule runner for open sessions and registered closed-desktop roots.
 //!
 //! Discovers enabled `type: schedule` workflows, evaluates interval due times,
 //! and executes them via [`lattice_commands::load_and_run_workflow`] with
@@ -8,9 +8,14 @@
 //! (see [`lattice_commands::ScheduleDue::CronDeferred`]). Desktop event triggers
 //! (`resource.changed` / `form.submitted`) are unchanged.
 //!
-//! **Honest lifecycle:** interval schedules fire only while a workspace session
-//! is open in this daemon process. This is not cron durability and not
-//! closed-desktop scheduling (those need a known-workspace registry + evaluator).
+//! **Honest lifecycle (bounded V1):**
+//! - Interval schedules fire for warm UI sessions **and** for workspaces the
+//!   user registered for background schedules (known-workspace registry).
+//! - When any registered workspace is enabled with `keepRunning`, the daemon
+//!   holds a scheduler lease so idle shutdown does not stop `latticed`.
+//! - Registered roots are opened on demand for due work, then released when the
+//!   tick did not inherit an already-warm UI session.
+//! - Cron evaluation and durable offline job queues remain deferred.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -22,44 +27,215 @@ use lattice_commands::{
     discover_scheduled_workflows, evaluate_schedule_due, last_schedule_run_at,
     load_and_run_workflow, proposal_now_iso, ScheduleDue,
 };
+use lattice_profile::{default_scheduler_registry_path, KnownWorkspaceRegistry};
 use lattice_runtime::LatticeRuntime;
 use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
+use crate::idle::ConnectionTracker;
 use crate::jobs::{
     reconcile_or_warn, running_schedule_summary, summary_from_finished, JobRegistry,
 };
 
-/// Default polling period for open-session schedule evaluation.
+/// Default polling period for schedule evaluation.
 pub const DEFAULT_SCHEDULE_TICK: Duration = Duration::from_secs(5);
 
-/// In-process schedule runner over warm [`LatticeRuntime`] sessions.
+/// In-process schedule runner over warm and on-demand [`LatticeRuntime`] sessions.
 pub struct ScheduleRunner {
     runtime: Arc<LatticeRuntime>,
     jobs: Arc<JobRegistry>,
+    connections: Option<Arc<ConnectionTracker>>,
+    registry_path: PathBuf,
     /// Last fire time keyed by `(workspace_root, workflow_rel_path)`.
     last_fire: HashMap<(PathBuf, String), SystemTime>,
     /// Workflows currently executing a schedule-sourced run.
     in_flight: HashSet<(PathBuf, String)>,
+    /// Missing-root roots we already warned about (avoid tight-loop log spam).
+    missing_root_warned: HashSet<PathBuf>,
 }
 
 impl ScheduleRunner {
     pub fn new(runtime: Arc<LatticeRuntime>, jobs: Arc<JobRegistry>) -> Self {
+        Self::with_registry_path(runtime, jobs, None, default_scheduler_registry_path())
+    }
+
+    pub fn with_connections(
+        runtime: Arc<LatticeRuntime>,
+        jobs: Arc<JobRegistry>,
+        connections: Arc<ConnectionTracker>,
+    ) -> Self {
+        Self::with_registry_path(
+            runtime,
+            jobs,
+            Some(connections),
+            default_scheduler_registry_path(),
+        )
+    }
+
+    pub fn with_registry_path(
+        runtime: Arc<LatticeRuntime>,
+        jobs: Arc<JobRegistry>,
+        connections: Option<Arc<ConnectionTracker>>,
+        registry_path: PathBuf,
+    ) -> Self {
         Self {
             runtime,
             jobs,
+            connections,
+            registry_path,
             last_fire: HashMap::new(),
             in_flight: HashSet::new(),
+            missing_root_warned: HashSet::new(),
         }
     }
 
-    /// Evaluate every open session once (serial per due workflow).
+    fn load_registry(&self) -> KnownWorkspaceRegistry {
+        KnownWorkspaceRegistry::load_or_default(&self.registry_path).unwrap_or_default()
+    }
+
+    fn save_registry(&self, registry: &KnownWorkspaceRegistry) {
+        if let Err(err) = registry.save(&self.registry_path) {
+            warn!(
+                path = %self.registry_path.display(),
+                error = %err,
+                "failed to persist known-workspace registry"
+            );
+        }
+    }
+
+    async fn sync_scheduler_lease(&self, registry: &KnownWorkspaceRegistry) {
+        let Some(connections) = self.connections.as_ref() else {
+            return;
+        };
+        connections
+            .set_scheduler_lease(registry.scheduler_lease_active())
+            .await;
+    }
+
+    /// Evaluate open sessions and registered closed-desktop roots once.
     pub async fn tick_once(&mut self) {
-        let roots = self.runtime.list_session_roots();
-        for root in roots {
+        let mut registry = self.load_registry();
+        self.sync_scheduler_lease(&registry).await;
+
+        let warm_roots: HashSet<PathBuf> = self.runtime.list_session_roots().into_iter().collect();
+        let mut touched: HashSet<PathBuf> = HashSet::new();
+
+        for root in warm_roots.iter() {
+            reconcile_or_warn(&self.jobs, root);
+            self.tick_workspace(root).await;
+            touched.insert(root.clone());
+            self.record_successful_scan(&mut registry, root).await;
+        }
+
+        let enabled: Vec<(PathBuf, bool)> = registry
+            .enabled_entries()
+            .map(|entry| (PathBuf::from(&entry.root), entry.keep_running))
+            .collect();
+
+        for (root, _keep_running) in enabled {
+            if touched.contains(&root) {
+                continue;
+            }
+            if !root.is_dir() {
+                self.record_missing_root(&mut registry, &root);
+                continue;
+            }
+            self.missing_root_warned.remove(&root);
+
+            let opened_on_demand = match self.runtime.get_session(&root) {
+                Ok(Some(_)) => false,
+                Ok(None) => match self.runtime.open_workspace_session(&root) {
+                    Ok(_) => true,
+                    Err(err) => {
+                        self.record_open_failure(&mut registry, &root, &err.to_string());
+                        continue;
+                    }
+                },
+                Err(err) => {
+                    self.record_open_failure(&mut registry, &root, &err.to_string());
+                    continue;
+                }
+            };
+
             reconcile_or_warn(&self.jobs, &root);
             self.tick_workspace(&root).await;
+            self.record_successful_scan(&mut registry, &root).await;
+            touched.insert(root.clone());
+
+            if opened_on_demand {
+                if let Err(err) = self.runtime.close_session(&root) {
+                    warn!(
+                        root = %root.display(),
+                        error = %err,
+                        "failed to release on-demand schedule session"
+                    );
+                }
+            }
         }
+
+        self.save_registry(&registry);
+        self.sync_scheduler_lease(&registry).await;
+    }
+
+    async fn record_successful_scan(&self, registry: &mut KnownWorkspaceRegistry, root: &Path) {
+        let workflows = match tokio::task::spawn_blocking({
+            let root = root.to_path_buf();
+            move || discover_scheduled_workflows(&root)
+        })
+        .await
+        {
+            Ok(Ok(items)) => items
+                .iter()
+                .map(|item| item.relative_path(root))
+                .collect::<Vec<_>>(),
+            _ => Vec::new(),
+        };
+
+        let workspace_id = self
+            .runtime
+            .get_session(root)
+            .ok()
+            .flatten()
+            .map(|session| session.workspace_id().to_string());
+
+        if let Some(entry) = registry.get_mut(root) {
+            entry.schedule_workflows = workflows;
+            entry.last_scan_at = Some(proposal_now_iso());
+            entry.last_error = None;
+            if let Some(id) = workspace_id {
+                entry.workspace_id = Some(id);
+            }
+        }
+    }
+
+    fn record_missing_root(&mut self, registry: &mut KnownWorkspaceRegistry, root: &Path) {
+        let message = format!(
+            "workspace root missing or not a directory: {}",
+            root.display()
+        );
+        if let Some(entry) = registry.get_mut(root) {
+            entry.last_error = Some(message.clone());
+            entry.last_scan_at = Some(proposal_now_iso());
+        }
+        if self.missing_root_warned.insert(root.to_path_buf()) {
+            warn!(root = %root.display(), "registered schedule workspace root missing");
+        } else {
+            debug!(root = %root.display(), "registered schedule workspace root still missing");
+        }
+    }
+
+    fn record_open_failure(
+        &mut self,
+        registry: &mut KnownWorkspaceRegistry,
+        root: &Path,
+        detail: &str,
+    ) {
+        let message = format!("failed to open workspace for schedule tick: {detail}");
+        if let Some(entry) = registry.get_mut(root) {
+            entry.last_error = Some(message.clone());
+            entry.last_scan_at = Some(proposal_now_iso());
+        }
+        warn!(root = %root.display(), error = %detail, "schedule on-demand open failed");
     }
 
     /// Evaluate schedule triggers for a single workspace root.
@@ -240,7 +416,7 @@ impl ScheduleRunner {
     }
 }
 
-/// Spawn a background loop that ticks open workspaces every `tick`.
+/// Spawn a background loop that ticks open + registered workspaces every `tick`.
 ///
 /// Abort the returned handle on daemon shutdown.
 pub fn spawn_schedule_runner(
@@ -248,15 +424,28 @@ pub fn spawn_schedule_runner(
     jobs: Arc<JobRegistry>,
     tick: Duration,
 ) -> JoinHandle<()> {
+    spawn_schedule_runner_with_connections(runtime, jobs, None, tick)
+}
+
+/// Spawn the schedule runner with an optional connection tracker for leases.
+pub fn spawn_schedule_runner_with_connections(
+    runtime: Arc<LatticeRuntime>,
+    jobs: Arc<JobRegistry>,
+    connections: Option<Arc<ConnectionTracker>>,
+    tick: Duration,
+) -> JoinHandle<()> {
     tokio::spawn(async move {
-        let mut runner = ScheduleRunner::new(runtime, jobs);
+        let mut runner = match connections {
+            Some(connections) => ScheduleRunner::with_connections(runtime, jobs, connections),
+            None => ScheduleRunner::new(runtime, jobs),
+        };
         let mut interval = tokio::time::interval(tick);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         // First tick completes immediately; skip so we wait one period after start.
         interval.tick().await;
         info!(
             secs = tick.as_secs_f64(),
-            "schedule runner started (interval schedules on open sessions only; not cron / closed-desktop durable)"
+            "schedule runner started (interval on open sessions + registered closed-desktop roots; cron still deferred)"
         );
         loop {
             interval.tick().await;
@@ -269,10 +458,19 @@ pub fn spawn_schedule_runner(
 mod tests {
     use super::*;
     use std::fs;
+    use std::sync::{Mutex, OnceLock};
 
     use lattice_commands::{list_workflow_runs, WorkflowTrigger};
     use lattice_core::Workspace;
+    use lattice_profile::LATTICE_SCHEDULER_REGISTRY_ENV;
     use tempfile::TempDir;
+
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 
     fn init_workspace() -> TempDir {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -353,6 +551,116 @@ steps:
         let enabled_runs =
             list_workflow_runs(root, "Enabled.workflow.yaml", 8).expect("enabled runs");
         assert_eq!(enabled_runs.len(), 2);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn fires_registered_workspace_without_open_ui_session() {
+        let _guard = env_lock();
+        let dir = init_workspace();
+        let root = dir.path();
+        write_interval_workflow(root, "Background", true, 1);
+
+        let registry_dir = tempfile::tempdir().expect("registry dir");
+        let registry_path = registry_dir.path().join("workspaces.json");
+        std::env::set_var(LATTICE_SCHEDULER_REGISTRY_ENV, &registry_path);
+
+        let mut registry = KnownWorkspaceRegistry::default();
+        registry.register(root, true);
+        registry.save(&registry_path).expect("save registry");
+
+        let runtime = Arc::new(LatticeRuntime::new());
+        let jobs = Arc::new(JobRegistry::new());
+        assert_eq!(runtime.session_count(), 0);
+
+        let mut runner = ScheduleRunner::with_registry_path(
+            Arc::clone(&runtime),
+            Arc::clone(&jobs),
+            None,
+            registry_path.clone(),
+        );
+        runner.tick_once().await;
+
+        let runs = list_workflow_runs(root, "Background.workflow.yaml", 8).expect("runs");
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].trigger, "schedule");
+        assert_eq!(
+            runtime.session_count(),
+            0,
+            "on-demand session should be released after tick"
+        );
+
+        let loaded = KnownWorkspaceRegistry::load_or_default(&registry_path).expect("reload");
+        let entry = loaded.get(root).expect("registered");
+        assert!(entry.last_error.is_none());
+        assert!(entry
+            .schedule_workflows
+            .iter()
+            .any(|path| path == "Background.workflow.yaml"));
+
+        std::env::remove_var(LATTICE_SCHEDULER_REGISTRY_ENV);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn missing_root_records_failed_schedule_state_without_tight_loop() {
+        let registry_dir = tempfile::tempdir().expect("registry dir");
+        let registry_path = registry_dir.path().join("workspaces.json");
+        let missing = registry_dir.path().join("gone-workspace");
+
+        let mut registry = KnownWorkspaceRegistry::default();
+        registry.register(&missing, true);
+        // Force a non-canonical path that will not exist.
+        registry.workspaces[0].root = missing.to_string_lossy().replace('\\', "/");
+        registry.save(&registry_path).expect("save");
+
+        let runtime = Arc::new(LatticeRuntime::new());
+        let jobs = Arc::new(JobRegistry::new());
+        let mut runner = ScheduleRunner::with_registry_path(
+            Arc::clone(&runtime),
+            Arc::clone(&jobs),
+            None,
+            registry_path.clone(),
+        );
+        runner.tick_once().await;
+        runner.tick_once().await;
+
+        let loaded = KnownWorkspaceRegistry::load_or_default(&registry_path).expect("reload");
+        let entry = &loaded.workspaces[0];
+        let err = entry.last_error.as_deref().expect("last_error");
+        assert!(
+            err.contains("missing") || err.contains("not a directory"),
+            "unexpected last_error: {err}"
+        );
+        assert_eq!(runtime.session_count(), 0);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn registry_lease_keeps_connection_tracker_intent() {
+        let dir = init_workspace();
+        let root = dir.path();
+        let registry_dir = tempfile::tempdir().expect("registry dir");
+        let registry_path = registry_dir.path().join("workspaces.json");
+
+        let mut registry = KnownWorkspaceRegistry::default();
+        registry.register(root, true);
+        registry.save(&registry_path).expect("save");
+
+        let (tx, mut rx) = tokio::sync::oneshot::channel();
+        let tracker = ConnectionTracker::new(false, Duration::from_millis(40), tx);
+        let runtime = Arc::new(LatticeRuntime::new());
+        let jobs = Arc::new(JobRegistry::new());
+        let mut runner = ScheduleRunner::with_registry_path(
+            Arc::clone(&runtime),
+            Arc::clone(&jobs),
+            Some(Arc::clone(&tracker)),
+            registry_path,
+        );
+        runner.tick_once().await;
+        assert!(tracker.scheduler_lease_held());
+
+        tracker.on_connect().await;
+        drop(tracker.guard());
+        tokio::time::sleep(Duration::from_millis(120)).await;
+        assert!(rx.try_recv().is_err(), "lease should block idle shutdown");
     }
 
     fn load_trigger(root: &Path, rel: &str) -> WorkflowTrigger {

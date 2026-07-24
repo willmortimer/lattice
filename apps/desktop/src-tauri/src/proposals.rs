@@ -49,6 +49,8 @@ pub fn create_proposal_cmd(
             warnings: proposal.warnings,
             created_at: String::new(),
             status: Default::default(),
+            resolved_at: None,
+            applied_transaction_id: None,
         },
     )
     .map_err(command_error_to_string)?;
@@ -75,7 +77,7 @@ pub fn apply_proposal_cmd(
     root: String,
     proposal_id: String,
     selected_command_indices: Vec<usize>,
-) -> Result<(), String> {
+) -> Result<String, String> {
     apply_proposal(Path::new(&root), &proposal_id, &selected_command_indices)
         .map_err(command_error_to_string)
 }

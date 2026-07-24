@@ -92,6 +92,10 @@ X-Lattice-Token: <token>
 | `POST` | `/v1/jobs/list_recent` | Recent jobs (+ optional workspace disk history) |
 | `POST` | `/v1/jobs/get` | Job detail by `executionId` |
 | `POST` | `/v1/jobs/cancel` | Cooperative cancel (daemon-owned active only) |
+| `POST` | `/v1/scheduler/register` | Opt workspace into background interval schedules |
+| `POST` | `/v1/scheduler/unregister` | Remove workspace from known-workspace registry |
+| `POST` | `/v1/scheduler/set_enabled` | Enable/disable registered background schedules |
+| `POST` | `/v1/scheduler/list` | List registry + scheduler lease intent |
 | `POST` | `/v1/proposals/create` | Create a reviewable transaction proposal (no apply) |
 | `POST` | `/v1/proposals/list` | List pending proposals in the workspace inbox |
 | `POST` | `/v1/proposals/get` | Load one proposal by id |
@@ -168,21 +172,37 @@ By default `latticed` shuts down after the last client disconnects and a
 short idle period (30 seconds). This keeps on-demand launches from leaving a
 background process running unintentionally.
 
-## Schedule runner (WF3)
+## Schedule runner (WF3 / T9 bounded)
 
-While workspace sessions are open, `latticed` polls enabled `*.workflow.yaml`
-files with `trigger.type: schedule` about every 5 seconds. Due
-`interval_seconds` workflows run through `load_and_run_workflow_with_id` with
-trigger label `schedule`; run JSON lands under `.lattice/workflows/runs/` using
-the same `executionId` registered in the daemon job registry. Disabled
-workflows are skipped. Cron-only schedules are accepted at parse time but not
-fired yet (set `interval_seconds` to exercise the runner).
+`latticed` polls enabled `*.workflow.yaml` files with `trigger.type: schedule`
+about every 5 seconds for warm open sessions and for roots in the
+known-workspace registry (`{data}/Lattice/scheduler/workspaces.json`, or
+`LATTICE_SCHEDULER_REGISTRY`). Due `interval_seconds` workflows run through
+`load_and_run_workflow` with trigger label `schedule`; run JSON lands under
+`.lattice/workflows/runs/` using the same `executionId` registered in the
+daemon job registry. Disabled workflows are skipped. Cron-only schedules are
+accepted at parse time but not fired yet (set `interval_seconds` to exercise
+the runner).
 
-**Honest lifecycle:** this is **open-session interval scheduling only**. It does
-not provide cron evaluation, a durable known-workspace registry, or
-closed-desktop durability (see T9). If the daemon restarts mid-run, stranded
-`running` records are marked `abandoned` on the next OpenWorkspace / schedule
-tick.
+**Honest lifecycle:** interval + registered closed-desktop while the daemon is
+alive. Opt-in registration holds a **scheduler lease** so idle shutdown does not
+kill background work when the desktop disconnects. Registered roots open on
+demand for a tick and release warm state afterward. Missing roots set
+`lastError` without tight-looping. This is **not** cron durability or a durable
+offline job queue. If the daemon restarts mid-run, stranded `running` records
+are marked `abandoned` on the next OpenWorkspace / schedule tick.
+
+### Scheduler registry HTTP API
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/v1/scheduler/register` | Register a workspace root (`{ "root", "enabled?" }`) |
+| `POST` | `/v1/scheduler/unregister` | Remove a root |
+| `POST` | `/v1/scheduler/set_enabled` | Enable/disable (`{ "root", "enabled" }`) |
+| `POST` | `/v1/scheduler/list` | List entries + `schedulerLeaseActive` |
+
+Desktop Settings → **Allow background schedules** opts the current workspace in
+(via HTTP when the API is up, else direct registry file write).
 
 ### Job status HTTP API
 
@@ -204,9 +224,12 @@ Manual verify:
 # In a workspace, add Automations/Tick.workflow.yaml with:
 #   trigger: { type: schedule, interval_seconds: 10 }
 #   steps: [{ id: note, action: notification, with: { message: tick } }]
-# Open the workspace via latticed (desktop or OpenWorkspace), keep the session
-# open, and watch `.lattice/workflows/runs/` for schedule-labelled runs.
-# List active jobs:
+# Register for closed-desktop:
+#   curl -s -X POST http://127.0.0.1:18787/v1/scheduler/register \
+#     -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+#     -d "{\"root\":\"$PWD\",\"enabled\":true}"
+# Watch `.lattice/workflows/runs/` even after disconnecting the desktop client
+# (daemon stays up via scheduler lease). List active jobs:
 #   curl -s -X POST http://127.0.0.1:18787/v1/jobs/list_active \
 #     -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{}'
 ```
@@ -217,6 +240,10 @@ Focused tests:
 cargo test -p lattice-commands discover_scheduled_workflows -- --nocapture
 cargo test -p lattice-commands evaluate_schedule_due -- --nocapture
 cargo test -p lattice-daemon fires_due_interval_workflow -- --nocapture
+cargo test -p lattice-daemon fires_registered_workspace_without_open_ui_session -- --nocapture
+cargo test -p lattice-daemon missing_root_records_failed_schedule_state -- --nocapture
+cargo test -p lattice-daemon registry_lease_keeps_connection_tracker_intent -- --nocapture
+cargo test -p lattice-profile register_persist_and_reload -- --nocapture
 cargo test -p lattice-daemon --test contract spawn_helper_launches_binary -- --nocapture
 ```
 
@@ -234,6 +261,9 @@ When `keepServicesRunning` is `true`, the daemon remains running after clients
 disconnect until it receives `SIGTERM`/`SIGINT` or an explicit stop. The
 desktop shell can set this preference; the on-demand spawn helper
 ([`spawn_latticed`](src/spawn.rs)) reads it automatically.
+
+Enabled known-workspace registrations independently hold a scheduler lease
+(even when `keepServicesRunning` is false).
 
 ### CLI overrides
 

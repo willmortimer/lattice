@@ -1,13 +1,54 @@
 //! Minimal Markdown → HTML for offline page exports (no live Lattice).
 
+use std::collections::BTreeMap;
+
 use crate::error::Result;
+
+/// Local file reference found in Markdown (image or link).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MarkdownLocalRef {
+    pub href: String,
+    /// Image refs are treated as required page assets; plain links are optional.
+    pub is_image: bool,
+}
 
 /// Convert CommonMark-ish Markdown into an HTML fragment.
 ///
 /// Supports headings, paragraphs, fenced code, lists, blockquotes, hr, and
-/// a small set of inline marks (code, bold, italic, links). Enough for page
-/// export without pulling a Markdown crate into the workspace.
+/// a small set of inline marks (code, bold, italic, links, images). Enough for
+/// page export without pulling a Markdown crate into the workspace.
 pub fn markdown_to_html(markdown: &str) -> Result<String> {
+    markdown_to_html_with_rewrites(markdown, &BTreeMap::new())
+}
+
+/// Like [`markdown_to_html`], rewriting local `href`/`src` values via `rewrites`.
+pub fn markdown_to_html_with_rewrites(
+    markdown: &str,
+    rewrites: &BTreeMap<String, String>,
+) -> Result<String> {
+    render_markdown(markdown, rewrites)
+}
+
+/// Collect local image and link targets from Markdown (skips external URLs).
+pub fn collect_markdown_local_refs(markdown: &str) -> Vec<MarkdownLocalRef> {
+    let mut refs = Vec::new();
+    let mut in_code = false;
+    for line in markdown.lines() {
+        if line.starts_with("```") {
+            in_code = !in_code;
+            continue;
+        }
+        if in_code {
+            continue;
+        }
+        collect_inline_local_refs(line, &mut refs);
+    }
+    refs.sort_by(|a, b| (&a.href, a.is_image).cmp(&(&b.href, b.is_image)));
+    refs.dedup();
+    refs
+}
+
+fn render_markdown(markdown: &str, rewrites: &BTreeMap<String, String>) -> Result<String> {
     let mut out = String::new();
     let mut lines = markdown.lines().peekable();
     let mut in_code = false;
@@ -74,7 +115,10 @@ pub fn markdown_to_html(markdown: &str) -> Result<String> {
                 list_open = false;
             }
             let (level, text) = rest;
-            out.push_str(&format!("<h{level}>{}</h{level}>\n", render_inline(text)));
+            out.push_str(&format!(
+                "<h{level}>{}</h{level}>\n",
+                render_inline(text, rewrites)
+            ));
             continue;
         }
 
@@ -86,7 +130,7 @@ pub fn markdown_to_html(markdown: &str) -> Result<String> {
                 out.push_str("<ul>\n");
                 list_open = true;
             }
-            out.push_str(&format!("<li>{}</li>\n", render_inline(item)));
+            out.push_str(&format!("<li>{}</li>\n", render_inline(item, rewrites)));
             continue;
         }
 
@@ -97,7 +141,7 @@ pub fn markdown_to_html(markdown: &str) -> Result<String> {
             }
             out.push_str(&format!(
                 "<blockquote><p>{}</p></blockquote>\n",
-                render_inline(quote)
+                render_inline(quote, rewrites)
             ));
             continue;
         }
@@ -125,7 +169,7 @@ pub fn markdown_to_html(markdown: &str) -> Result<String> {
             para.push_str(next_trim);
             lines.next();
         }
-        out.push_str(&format!("<p>{}</p>\n", render_inline(&para)));
+        out.push_str(&format!("<p>{}</p>\n", render_inline(&para, rewrites)));
     }
 
     if in_code {
@@ -163,7 +207,7 @@ fn strip_heading(line: &str) -> Option<(u8, &str)> {
     Some((level, rest))
 }
 
-fn render_inline(input: &str) -> String {
+fn render_inline(input: &str, rewrites: &BTreeMap<String, String>) -> String {
     let mut out = String::new();
     let chars: Vec<char> = input.chars().collect();
     let mut i = 0;
@@ -178,10 +222,23 @@ fn render_inline(input: &str) -> String {
                 continue;
             }
         }
+        if chars[i] == '!' && chars.get(i + 1) == Some(&'[') {
+            if let Some(link) = parse_link(&chars[i + 1..]) {
+                let href = rewrite_href(&link.href, rewrites);
+                out.push_str("<img src=\"");
+                out.push_str(&escape_attr(&href));
+                out.push_str("\" alt=\"");
+                out.push_str(&escape_attr(&link.text));
+                out.push_str("\" />");
+                i += 1 + link.consumed;
+                continue;
+            }
+        }
         if chars[i] == '[' {
             if let Some(link) = parse_link(&chars[i..]) {
+                let href = rewrite_href(&link.href, rewrites);
                 out.push_str("<a href=\"");
-                out.push_str(&escape_attr(&link.href));
+                out.push_str(&escape_attr(&href));
                 out.push_str("\">");
                 out.push_str(&escape_html(&link.text));
                 out.push_str("</a>");
@@ -215,6 +272,51 @@ fn render_inline(input: &str) -> String {
         i += 1;
     }
     out
+}
+
+fn rewrite_href(href: &str, rewrites: &BTreeMap<String, String>) -> String {
+    rewrites
+        .get(href)
+        .cloned()
+        .unwrap_or_else(|| href.to_string())
+}
+
+fn collect_inline_local_refs(input: &str, refs: &mut Vec<MarkdownLocalRef>) {
+    let chars: Vec<char> = input.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '`' {
+            if let Some(end) = chars[i + 1..].iter().position(|&c| c == '`') {
+                i += end + 2;
+                continue;
+            }
+        }
+        if chars[i] == '!' && chars.get(i + 1) == Some(&'[') {
+            if let Some(link) = parse_link(&chars[i + 1..]) {
+                if !crate::deps::is_external_ref(&link.href) {
+                    refs.push(MarkdownLocalRef {
+                        href: link.href,
+                        is_image: true,
+                    });
+                }
+                i += 1 + link.consumed;
+                continue;
+            }
+        }
+        if chars[i] == '[' {
+            if let Some(link) = parse_link(&chars[i..]) {
+                if !crate::deps::is_external_ref(&link.href) {
+                    refs.push(MarkdownLocalRef {
+                        href: link.href,
+                        is_image: false,
+                    });
+                }
+                i += link.consumed;
+                continue;
+            }
+        }
+        i += 1;
+    }
 }
 
 struct Link<'a> {
@@ -294,5 +396,23 @@ mod tests {
         let html = markdown_to_html("```rust\nfn main() {}\n```\n").unwrap();
         assert!(html.contains("language-rust"));
         assert!(html.contains("fn main() {}"));
+    }
+
+    #[test]
+    fn renders_image_with_rewrite() {
+        let mut rewrites = BTreeMap::new();
+        rewrites.insert("assets/a.png".into(), "deps/assets/a.png".into());
+        let html = markdown_to_html_with_rewrites("![Diagram](assets/a.png)\n", &rewrites).unwrap();
+        assert!(html.contains("<img src=\"deps/assets/a.png\" alt=\"Diagram\" />"));
+    }
+
+    #[test]
+    fn collects_local_image_and_link_refs() {
+        let refs = collect_markdown_local_refs(
+            "# T\n\n![a](assets/a.png)\n\nSee [notes](Notes.md) and [web](https://example.com).\n",
+        );
+        assert!(refs.iter().any(|r| r.href == "assets/a.png" && r.is_image));
+        assert!(refs.iter().any(|r| r.href == "Notes.md" && !r.is_image));
+        assert!(!refs.iter().any(|r| r.href.contains("example.com")));
     }
 }

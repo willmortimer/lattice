@@ -30,6 +30,9 @@ pub struct ComponentSnapshot {
     pub metric: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub table: Option<TableSnapshot>,
+    /// Export-relative path to a copied Vega-Lite (`.vl.json`) chart spec.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chart: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
 }
@@ -120,6 +123,7 @@ pub fn freeze_interface(
                     ".",
                     view,
                 )?),
+                chart: None,
                 note: None,
             });
         }
@@ -131,6 +135,7 @@ pub fn freeze_interface(
                 span: 12,
                 metric: None,
                 table: None,
+                chart: None,
                 note: Some("Form surfaces are not interactive in static exports.".into()),
             });
         }
@@ -235,8 +240,22 @@ fn freeze_component(
         span: component.span,
         metric,
         table,
+        // Filled by export after dependency closure copies chart specs.
+        chart: None,
         note,
     })
+}
+
+/// Attach export-relative chart paths onto frozen component snapshots.
+pub fn apply_chart_paths(
+    snapshot: &mut InterfaceSnapshot,
+    chart_by_component: &std::collections::BTreeMap<String, String>,
+) {
+    for component in &mut snapshot.components {
+        if let Some(path) = chart_by_component.get(&component.id) {
+            component.chart = Some(path.clone());
+        }
+    }
 }
 
 fn snapshot_sqlite(
