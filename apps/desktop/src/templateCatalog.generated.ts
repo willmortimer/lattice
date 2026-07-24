@@ -1408,7 +1408,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
               "ContactIntake"
             ],
             "title": "Ops dashboard",
-            "description": "Multi-component CRM interface (metric, chart, map, data-view, form).",
+            "description": "Multi-component CRM interface (metric, chart, map, data-view, form). Embedded Contact intake submit refreshes the Board data-view in place (F0).",
             "parameters": {
               "region": {
                 "type": "string",
@@ -1478,6 +1478,44 @@ export const GENERATED_TEMPLATE_CATALOG = [
                   "resource": "."
                 },
                 "form": "ContactIntake"
+              }
+            ]
+          },
+          {
+            "name": "AgentDigest",
+            "views": [],
+            "forms": [],
+            "title": "Agent digest",
+            "description": "Pre-seeded Orders/Events metric digest. Optional: run AgentFirstLook.task to rehearse inspect→propose→approve over the same interface path.",
+            "layoutColumns": 12,
+            "components": [
+              {
+                "id": "signups_total",
+                "type": "metric",
+                "span": 6,
+                "title": "Total signups (Events)",
+                "binding": {
+                  "type": "duckdb-query",
+                  "resources": [
+                    "Data/Events.dataset"
+                  ],
+                  "sql": "SELECT COALESCE(SUM(signups), 0) AS value FROM read_parquet('Data/Events.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true)",
+                  "limit": 1
+                }
+              },
+              {
+                "id": "revenue_total",
+                "type": "metric",
+                "span": 6,
+                "title": "Total revenue (Orders)",
+                "binding": {
+                  "type": "duckdb-query",
+                  "resources": [
+                    "Data/Orders.dataset"
+                  ],
+                  "sql": "SELECT COALESCE(SUM(revenue), 0) AS value FROM read_parquet('Data/Orders.dataset/facts/**/*.parquet', hive_partitioning = true, union_by_name = true)",
+                  "limit": 1
+                }
               }
             ]
           }

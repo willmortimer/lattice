@@ -133,16 +133,18 @@ Full `nxr task check` / `cargo test --workspace` was **not** re-run end-to-end i
 - **Scheduler:** open-session interval only; cron parsed but not executed; no durable closed-desktop registry (Phase 5 / T9).
 - **Attachments:** staged until commit; orphan cleanup is explicit (CLI/Tauri), no TTL sweep for abandoned staging dirs; UX polish (open/reveal/drag-drop) deferred.
 - **Proposal inbox:** rich previews + subset validation shipped; full filtering/archive lifecycle deferred (P2-3).
-- **Interfaces:** embedded forms + saved views shipped; form submit does not yet bump host `package_revision` to auto-refresh sibling embedded views (small follow-up).
+- **Interfaces:** embedded forms + saved views shipped; form submit bumps host snapshot revision so sibling embedded data-views refresh (F0).
 - **Python SDK:** schema/profile parity for datasets; full read/search/propose Phase 4 surface deferred.
 - **Daemon jobs:** list/get/cancel + tray merge for schedule runs; not full durable job queue/recovery.
 
 ### Friday-ready demo paths
 
 1. First Look: prepare workspace → agent task schema/profile → proposal → rich review (T5) → approve → interface.
-2. OpsDashboard: embedded form submit → workflow → proposal; embedded Board/grid data-view.
+2. OpsDashboard: embedded form submit → Board/data-view refresh (F0); workflow → proposal optional.
 3. Derived ContactBrief: stale reasons + atomic rebuild.
 4. Tray: desktop + daemon schedule job visibility/cancel (open session).
+
+Friday rehearsal checklist: [friday-demo.md](./friday-demo.md).
 
 ### Friday continuation packets
 

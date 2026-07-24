@@ -14,7 +14,8 @@ The First Look automation path:
    then creates a page-create proposal for `Proposals/Contact intake follow-up.md`.
 3. Approve in the inbox — this folder gains the follow-up page.
 
-**Agent-generate path (AG2):** run `Tasks/AgentFirstLook.task` (or MCP
-`get_dataset_schema` / `profile_dataset` → `propose_interface`) to propose
-`CRM.data/interfaces/AgentDigest.interface.yaml`. Approve in the inbox, then open
-**CRM.data → Interfaces → Agent digest**. See [[Research/Agent first look]].
+**Agent-generate path (AG2):** **Interfaces → Agent digest** is pre-seeded for a
+fast walkthrough. To rehearse inspect→propose→approve, run `Tasks/AgentFirstLook.task`
+(or MCP `get_dataset_schema` / `profile_dataset` → `propose_interface`) to propose
+`CRM.data/interfaces/AgentDigest.interface.yaml`. Approve in the inbox if you want
+to replace the seed via proposal. See [[Research/Agent first look]].

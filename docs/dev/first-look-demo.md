@@ -83,6 +83,50 @@ nxr prepare-first-look
 #     pnpm compile-templates
 ```
 
+## Friday demo rehearsal (2026-07-24)
+
+Linear script for the Friday First Look closeout on `friday/integration` after F0
+(embedded form submit → sibling data-view refresh). Run from repo root before
+native rehearsal:
+
+```sh
+nxr prepare-first-look
+```
+
+### Pre-flight (automated)
+
+| Step | Command | Result (2026-07-24) |
+| --- | --- | --- |
+| Seed + catalogs | `nxr prepare-first-look` | **PASS** — Events/Places Parquet, `compile-templates`, 8 path checks |
+| Governed loop | `cargo test -p lattice-commands --test governed_loop_smoke -- --nocapture` | **PASS** (~3s test; form → workflow → proposal → derived → undo) |
+
+### Rehearsal script (native desktop)
+
+Use `nxr desktop-dev` (sticky `target/dev-home` with `LATTICE_DEV_RESET_DEMO=1`) or
+open a **new** First Look workspace from the template after `prepare-first-look`.
+Existing `~/Lattice/Workspaces/First Look` folders are **not** rewritten on install.
+
+| # | Step | What to verify |
+| --- | --- | --- |
+| 1 | Launch desktop; open First Look workspace | Home.md loads; CRM + datasets present |
+| 2 | `CRM.data` → **Interfaces** → **Ops dashboard** | Metric, chart, map, embedded Board + Contact intake visible |
+| 3 | Submit embedded **Contact intake** form | New contact appears on embedded **Board** without manual reload (F0) |
+| 4 | Optional: **Proposals** inbox → approve Contact intake follow-up | `Proposals/Contact intake follow-up.md` created |
+| 5 | **Interfaces** → **Agent digest** | Pre-seeded Events signups + Orders revenue metrics |
+| 6 | Optional: `Tasks/AgentFirstLook.task` → **Run** → approve inbox | Rich proposal review → approve → open Agent digest (same interface path) |
+| 7 | Optional MCP: `propose_interface` transcript | See [first-look-agent-mcp.md](./first-look-agent-mcp.md); same inbox semantics |
+| 8 | `Derived/ContactBrief.derived.yaml` → **Rebuild** | Stale → current; edit `Derived/input.txt` → stale again → Rebuild |
+
+### Honest boundaries (Friday)
+
+- **No peer sharing** — single-user local workspace; collaboration is out of scope.
+- **Cron deferred** — scheduler is open-session interval only; cron expressions parse but do not execute.
+- **Closed-desktop schedules** — durable registry / lease vs idle shutdown may still land in F5; tray shows open-session schedule runs only.
+- **Attachment columns** — not seedable in workspace templates yet (`template.rs` validation); attachment UX is native-only, staged until commit.
+- **Browser fixture** — Ops dashboard, workflows, proposals, and dataset viz remain native-only or honestly gated.
+
+Detailed checklist results: [friday-demo.md](./friday-demo.md).
+
 ## Friday demo staging
 
 For packaging rehearsal, cold-open sanity, voice/Quick Note, proposals accept/undo,
@@ -291,8 +335,8 @@ tasks or show the Proposals inbox. Sample MCP JSON-RPC:
 | --- | --- | --- |
 | G1 | Profile `Data/Orders.dataset` and `Data/Events.dataset` | Desktop **Profile** tab, MCP `get_dataset_schema` + `profile_dataset`, or task `dataset.schema()` / `dataset.profile()` |
 | G2 | Propose interface or workflow YAML | MCP `propose_interface` / `propose_workflow`, or **Run** `Tasks/AgentFirstLook.task` (`lattice.propose_interface`) |
-| G3 | Open **Proposals** inbox → approve | Creates `CRM.data/interfaces/AgentDigest.interface.yaml` (task/MCP seed) — no apply from MCP |
-| G4 | Open `CRM.data` → **Interfaces** → **Agent digest** | Two metric tiles: Events signups total + Orders revenue total |
+| G3 | Open **Proposals** inbox → approve | Creates or replaces `CRM.data/interfaces/AgentDigest.interface.yaml` (task/MCP seed) — pre-seeded interface also available without approve |
+| G4 | Open `CRM.data` → **Interfaces** → **Agent digest** | Two metric tiles: Events signups total + Orders revenue total (pre-seeded; approve optional) |
 | G5 | Optional MCP transcript | Walk `docs/dev/first-look-agent-mcp.md` with daemon attached to the same workspace |
 
 Task walkthrough (no daemon):
