@@ -144,13 +144,35 @@ Unsafe override on a workflow step:
     allow_unsafe_retry: true
 ```
 
-**Schedule firing (latticed):** when a workspace session is open, the daemon
-polls enabled `schedule` workflows and fires those with a due `interval_seconds`
-(trigger label `schedule`). Cron-only schedules are parsed/validated but not
-evaluated yet (set `interval_seconds` to fire; cron evaluator is TODO). Durable
-job queues, a known-workspace registry, and closed-desktop cron remain out of
-scope — interval schedules do **not** claim durability while the desktop is
-closed.
+**Schedule firing (latticed):** interval schedules fire for:
+
+1. Warm workspace sessions opened by a connected client (UI), and
+2. Workspaces the user opted into via the known-workspace registry
+   (`{data}/Lattice/scheduler/workspaces.json`, overridable with
+   `LATTICE_SCHEDULER_REGISTRY`) — including while the desktop is closed.
+
+When any registered workspace is enabled with `keepRunning`, the daemon holds a
+**scheduler lease** so idle shutdown does not stop `latticed` after the last
+client disconnects. Registered roots are opened on demand for due interval work,
+then released when they were not already warm. Missing roots surface as
+`lastError` on the registry entry without tight-looping.
+
+Cron-only schedules are parsed/validated but not evaluated yet (set
+`interval_seconds` to fire; cron evaluator is TODO). Durable offline job queues
+and connector refresh remain out of scope.
+
+Localhost scheduler registry routes:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/v1/scheduler/register` | Opt a workspace root into background schedules |
+| `POST` | `/v1/scheduler/unregister` | Remove a workspace from the registry |
+| `POST` | `/v1/scheduler/set_enabled` | Enable/disable a registered (or newly registered) root |
+| `POST` | `/v1/scheduler/list` | List registry entries + lease intent |
+
+Desktop Settings → Performance & lifecycle exposes **Allow background schedules**
+for the current workspace (calls the HTTP API when available, else writes the
+registry file directly).
 
 **Job status (tray / HTTP):** daemon-owned schedule runs register in an
 in-memory job registry under a stable `executionId` (same id in

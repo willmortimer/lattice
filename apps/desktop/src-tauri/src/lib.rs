@@ -14,6 +14,7 @@ mod proposals;
 mod relationship;
 mod resource_links;
 mod revisions;
+mod scheduler;
 mod search;
 mod semantic;
 mod task;
@@ -232,6 +233,8 @@ pub fn run() {
             semantic::semantic_status,
             semantic::semantic_enable,
             semantic::semantic_disable,
+            scheduler::get_background_schedule_status,
+            scheduler::set_background_schedules_enabled,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
