@@ -112,7 +112,6 @@ function gridCellForColumn(
       kind: GridCellKind.Bubble,
       data: bubbles,
       allowOverlay: false,
-      readonly: true,
       themeOverride,
     };
   }

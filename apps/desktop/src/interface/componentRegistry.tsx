@@ -11,7 +11,7 @@ import {
   submitPackageFormRecord,
   type FormSummary,
 } from "../data/forms";
-import { EmbeddedDataView } from "../data/EmbeddedDataView";
+import { EmbeddedDataView } from "../data/EmbeddedSavedDataView";
 import type { CellValue, DataAppSnapshot } from "../data/types";
 import { queryResultToValues } from "../lib/arrowToVegaData";
 import type { BindingSpec, InterfaceComponent } from "../lib/bindingSpec";

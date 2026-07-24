@@ -108,12 +108,56 @@ The test provisions a temp workspace from the `demo` template, inserts a
 and applies the workflow proposal, rebuilds `Derived/ContactBrief.derived.yaml`
 (stale → current), checks workflow relationship edges, and undoes the apply.
 Boundary diagnostics print to stderr as `[governed-loop] …` lines.
-- **Gate C** (post-T6–T8): full integration + demo surfaces.
+
+## Gate C — Thursday finish line (2026-07-24)
+
+| Field | Value |
+| --- | --- |
+| Integration SHA | `52b54103db278fcc3d6042162cdd5fa757389cb5` (+ follow-up T7a casing fix commit) |
+| Packets merged | T0–T8, T7a, T7b |
+
+### Spot checks run on integration tip
+
+| Check | Result |
+| --- | --- |
+| `cargo test -p lattice-commands --test governed_loop_smoke` | **PASS** (~11s) |
+| `cargo check -p lattice-commands` | **PASS** |
+| `cargo test -p lattice-daemon --test contract spawn_helper_launches_binary` | **PASS** (after T6) |
+| `pnpm --filter @lattice/desktop build` | **PASS** (after T7a casing/`BubbleCell` fix) |
+| `cargo test -p lattice-publish` | **PASS** (after T1) |
+
+Full `nxr task check` / `cargo test --workspace` was **not** re-run end-to-end in this session; use Gate A commands above for a fresh full suite before demo freeze.
+
+### Known limitations (honest shipped boundaries)
+
+- **Scheduler:** open-session interval only; cron parsed but not executed; no durable closed-desktop registry (Phase 5 / T9).
+- **Attachments:** staged until commit; orphan cleanup is explicit (CLI/Tauri), no TTL sweep for abandoned staging dirs; UX polish (open/reveal/drag-drop) deferred.
+- **Proposal inbox:** rich previews + subset validation shipped; full filtering/archive lifecycle deferred (P2-3).
+- **Interfaces:** embedded forms + saved views shipped; form submit does not yet bump host `package_revision` to auto-refresh sibling embedded views (small follow-up).
+- **Python SDK:** schema/profile parity for datasets; full read/search/propose Phase 4 surface deferred.
+- **Daemon jobs:** list/get/cancel + tray merge for schedule runs; not full durable job queue/recovery.
+
+### Friday-ready demo paths
+
+1. First Look: prepare workspace → agent task schema/profile → proposal → rich review (T5) → approve → interface.
+2. OpsDashboard: embedded form submit → workflow → proposal; embedded Board/grid data-view.
+3. Derived ContactBrief: stale reasons + atomic rebuild.
+4. Tray: desktop + daemon schedule job visibility/cancel (open session).
+
+### Friday continuation packets
+
+- Wire interface form submit → host snapshot revision refresh for embedded views.
+- T9 scheduler durability increments (known-workspace registry, lease vs idle shutdown).
+- Proposal inbox filters + open-result actions.
+- Attachment inventory UI + staging TTL cleanup.
+- Interface builder insert/bind/reorder (P1-14).
+- Full Python read/search/context + revision-aware propose helpers.
+- Publishing dependency closure; relationship impact analysis UI.
 
 ## Re-run baseline
 
 ```sh
-# From repo root on thursday/integration @ e3b5243
+# From repo root on thursday/integration
 nxr task check
 
 # Or decomposed
@@ -126,4 +170,7 @@ pnpm --filter @lattice/site build
 cargo test -p lattice-daemon
 cd packages/lattice-py && uv run --with pytest --with duckdb --with pyarrow pytest
 pnpm compile-theme && pnpm compile-templates
+
+# Governed loop
+cargo test -p lattice-commands --test governed_loop_smoke -- --nocapture
 ```
