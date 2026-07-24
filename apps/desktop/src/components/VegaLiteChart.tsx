@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { TopLevelSpec } from "vega-lite";
 
+import { observeThemeChange } from "../canvas/colors";
+import { buildVegaConfig } from "./vegaTheme";
 import "./vegaLiteChart.css";
 
 export interface VegaLiteChartProps {
@@ -23,7 +25,8 @@ async function embedChart(
   await embed(container, spec, {
     actions: false,
     renderer: "svg",
-    theme: "dark",
+    // Spec-level config wins over this base (vega-lite merges spec.config last).
+    config: buildVegaConfig(),
     ast: true,
     expr: expressionInterpreter,
   });
@@ -55,6 +58,9 @@ function withMeasuredWidth(spec: TopLevelSpec, width: number): TopLevelSpec {
 export function VegaLiteChart({ spec, className }: VegaLiteChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [themeEpoch, setThemeEpoch] = useState(0);
+
+  useEffect(() => observeThemeChange(() => setThemeEpoch((n) => n + 1)), []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -80,7 +86,7 @@ export function VegaLiteChart({ spec, className }: VegaLiteChartProps) {
       cancelled = true;
       container.replaceChildren();
     };
-  }, [spec]);
+  }, [spec, themeEpoch]);
 
   return (
     <div className={className ? `vega-lite-chart ${className}` : "vega-lite-chart"}>
