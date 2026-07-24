@@ -71,6 +71,7 @@ export function InterfaceDashboard({
       packagePath,
       demo,
       snapshot,
+      packageRevision: snapshot?.package_revision ?? null,
       paramValues,
       onOpenSavedView,
       onOpenResource,

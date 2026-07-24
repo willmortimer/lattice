@@ -11,6 +11,7 @@ import {
   submitPackageFormRecord,
   type FormSummary,
 } from "../data/forms";
+import { EmbeddedDataView } from "../data/EmbeddedDataView";
 import type { CellValue, DataAppSnapshot } from "../data/types";
 import { queryResultToValues } from "../lib/arrowToVegaData";
 import type { BindingSpec, InterfaceComponent } from "../lib/bindingSpec";
@@ -33,6 +34,8 @@ export interface InterfaceComponentHost {
   demo?: boolean;
   /** Optional snapshot for same-package data-view / form embedding. */
   snapshot?: DataAppSnapshot | null;
+  /** Package revision for reloading embedded saved views after mutations. */
+  packageRevision?: string | null;
   /** Live filter-bar values; substituted into query binding SQL as `{{name}}`. */
   paramValues?: Record<string, string>;
   onOpenSavedView?: (viewName: string) => void;
@@ -276,29 +279,34 @@ function MapComponent({ component, host }: RenderInterfaceComponentProps) {
 
 function DataViewComponent({ component, host }: RenderInterfaceComponentProps) {
   const binding = component.binding;
-  const viewName =
-    binding?.type === "saved-view"
-      ? binding.view
-      : host.snapshot?.active_view ?? component.title ?? "view";
+  if (binding?.type !== "saved-view") {
+    const title = component.title ?? component.id;
+    return (
+      <div className="lt-interface-pane">
+        <header className="lt-interface-pane__header">{title}</header>
+        <p className="lt-interface-pane__error" role="alert">
+          Data view components require a saved-view binding.
+        </p>
+      </div>
+    );
+  }
+
+  const packagePath = resolveBindingResource(host.packagePath, binding.resource);
+  const viewName = binding.view;
   const title = component.title ?? viewName;
 
   return (
-    <div className="lt-interface-pane">
-      <header className="lt-interface-pane__header">{title}</header>
-      <p className="lt-interface-pane__muted">
-        Saved data view <code>{viewName}</code>
-        {host.snapshot ? ` · ${host.snapshot.row_total} rows` : null}
-      </p>
-      {host.onOpenSavedView ? (
-        <button
-          type="button"
-          className="lt-interface-pane__action"
-          onClick={() => host.onOpenSavedView?.(viewName)}
-        >
-          Open full view
-        </button>
-      ) : null}
-    </div>
+    <EmbeddedDataView
+      root={host.root}
+      packagePath={packagePath}
+      viewName={viewName}
+      title={title}
+      demo={host.demo}
+      packageRevision={host.packageRevision ?? host.snapshot?.package_revision ?? null}
+      onOpenFullView={
+        host.onOpenSavedView ? () => host.onOpenSavedView?.(viewName) : undefined
+      }
+    />
   );
 }
 
