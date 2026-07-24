@@ -2097,6 +2097,33 @@ fn cmd_publish_export(
         report.kind,
         report.primary_html.display()
     );
+    if !report.copied_dependencies.is_empty() {
+        println!(
+            "copied {} dependenc{}",
+            report.copied_dependencies.len(),
+            if report.copied_dependencies.len() == 1 {
+                "y"
+            } else {
+                "ies"
+            }
+        );
+        for dep in &report.copied_dependencies {
+            println!("  {} -> {}", dep.declared, dep.dest);
+        }
+    }
+    if !report.missing_dependencies.is_empty() {
+        for missing in &report.missing_dependencies {
+            let label = if missing.required {
+                "error"
+            } else {
+                "warning"
+            };
+            println!(
+                "{label}: missing dependency `{}` ({})",
+                missing.declared, missing.reason
+            );
+        }
+    }
     Ok(ExitCode::SUCCESS)
 }
 
