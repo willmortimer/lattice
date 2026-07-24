@@ -29,7 +29,13 @@ export interface ResourceOutput {
   hash?: string;
 }
 
-export type ExecutionStatus = "running" | "succeeded" | "failed" | "cancelled";
+export type ExecutionStatus =
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancelled"
+  /** Owning process exited before the run finished (daemon restart). */
+  | "abandoned";
 
 export interface ExecutionResult {
   id: string;

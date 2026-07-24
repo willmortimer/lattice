@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { Button, SurfaceHeader, TabsList, TabsPanel, TabsRoot, TabsTab } from "@lattice/ui";
 
 import { inBrowser } from "../demo";
 import { KindMark } from "../KindMark";
 import type { ExecutionResult } from "../lib/executionContracts";
+import { formatDurationBetween, formatSeconds } from "../lib/relativeTime";
 import {
   cancelTask,
   listenTaskExecutionUpdates,
@@ -10,46 +12,57 @@ import {
   runTask,
   toExecutionResult,
   type TaskManifestDto,
+  type TaskIoBinding,
 } from "../lib/taskRun";
 import type { OpenResourceSession } from "../resourceSession";
 import type { ResourceRendererProps } from "../resourceRendererRegistry";
 import type { ResourceRendererContext } from "./RendererContext";
+import { LogBlock, SourcePanel, StatusPill, SurfaceCard, TimeAgo, statusLabel } from "./surfaceKit";
 import "./taskResource.css";
 
-function formatDuration(startedAt: string, finishedAt?: string): string | null {
-  const start = Date.parse(startedAt);
-  if (Number.isNaN(start)) return null;
-  const end = finishedAt ? Date.parse(finishedAt) : Date.now();
-  if (Number.isNaN(end)) return null;
-  const ms = Math.max(0, end - start);
-  if (ms < 1000) return `${ms}ms`;
-  const seconds = ms / 1000;
-  if (seconds < 60) return `${seconds.toFixed(1)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const rem = seconds - minutes * 60;
-  return `${minutes}m ${rem.toFixed(0)}s`;
+/** "Etl.task" → "Etl": the package directory is the task's name. */
+function taskNameFromPath(path: string): string {
+  const base = path.replace(/\/+$/, "").split("/").pop() ?? path;
+  return base.replace(/\.task$/i, "") || base;
 }
 
-function statusLabel(status: ExecutionResult["status"]): string {
-  switch (status) {
-    case "running":
-      return "Running";
-    case "succeeded":
-      return "Succeeded";
-    case "failed":
-      return "Failed";
-    case "cancelled":
-      return "Cancelled";
-    default: {
-      const _exhaustive: never = status;
-      return _exhaustive;
-    }
-  }
+function IoList({
+  entries,
+  onOpenFile,
+}: {
+  entries: TaskIoBinding[];
+  onOpenFile?: (path: string) => void;
+}) {
+  return (
+    <ul className="surface-chips">
+      {entries.map((entry) => (
+        <li key={entry.path}>
+          {onOpenFile ? (
+            <button
+              type="button"
+              className="surface-chip"
+              onClick={() => onOpenFile(entry.path)}
+              title={entry.kind ? `${entry.path} (${entry.kind})` : entry.path}
+            >
+              {entry.path}
+            </button>
+          ) : (
+            <span
+              className="surface-chip"
+              title={entry.kind ? `${entry.path} (${entry.kind})` : entry.path}
+            >
+              {entry.path}
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 /**
- * First-class `*.task/` surface: manifest summary, Run/Cancel, and execution logs.
- * Native only — browser demo shows an honest degraded banner.
+ * `*.task/` package surface: what the task runs, under which limits, and the
+ * `task.yaml` manifest itself — hand-editable with optimistic save.
  */
 export function TaskResourceRenderer({
   context,
@@ -64,6 +77,13 @@ export function TaskResourceRenderer({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const executionIdRef = useRef<string | null>(null);
+
+  const refreshManifest = () => {
+    if (inBrowser || !root) return;
+    void loadTaskManifest(root, path)
+      .then(setManifest)
+      .catch((err: unknown) => setError(String(err)));
+  };
 
   useEffect(() => {
     setManifest(session.manifest);
@@ -137,178 +157,205 @@ export function TaskResourceRenderer({
     }
   };
 
-  if (inBrowser) {
-    return (
-      <div className="task-surface">
-        <header className="task-surface-header">
-          <span className="placeholder-mark" aria-hidden>
-            <KindMark kind="task" size={28} />
-          </span>
-          <div>
-            <p className="task-surface-title">Task</p>
-            <p className="task-surface-path">
-              <code>{path}</code>
-            </p>
-          </div>
-        </header>
-        <div className="task-surface-body">
-          <p className="task-surface-banner task-surface-banner-warn" role="status">
-            Task execution requires the native desktop app. The browser demo cannot run{" "}
-            <code>uv</code> packages or stream process logs.
-          </p>
-          <ManifestSummary manifest={manifest} />
-        </div>
-      </div>
-    );
-  }
-
+  const name = taskNameFromPath(path);
+  const native = !inBrowser && root != null;
   const running = busy || execution?.status === "running";
   const duration =
-    execution != null ? formatDuration(execution.startedAt, execution.finishedAt) : null;
+    execution != null ? formatDurationBetween(execution.startedAt, execution.finishedAt) : null;
+  const idempotent = manifest.execution?.idempotent === true;
+  const manifestPath = `${path.replace(/\/+$/, "")}/task.yaml`;
 
   return (
-    <div className="task-surface">
-      <header className="task-surface-header">
-        <span className="placeholder-mark" aria-hidden>
-          <KindMark kind="task" size={28} />
-        </span>
-        <div>
-          <p className="task-surface-title">Task</p>
-          <p className="task-surface-path">
-            <code>{path}</code>
-          </p>
-        </div>
-        <div className="task-surface-actions">
-          {running ? (
-            <button type="button" className="task-surface-button" onClick={() => void handleCancel()}>
-              Cancel
-            </button>
-          ) : (
-            <button
-              type="button"
-              className="task-surface-button task-surface-button-primary"
-              onClick={() => void handleRun()}
-              disabled={!root}
+    <div className="resource-surface task-surface">
+      <SurfaceHeader
+        icon={<KindMark kind="task" size={20} />}
+        title={name}
+        subtitle={
+          <>
+            {manifest.runtime.type} task · {manifest.runtime.provider} · times out after{" "}
+            {formatSeconds(manifest.limits.timeoutSeconds)}
+          </>
+        }
+        meta={
+          idempotent ? (
+            <span
+              className="surface-badge"
+              data-tone="success"
+              title="Safe to re-run: workflows may retry this task"
             >
+              idempotent
+            </span>
+          ) : null
+        }
+        actions={
+          running ? (
+            <Button size="sm" variant="danger" onClick={() => void handleCancel()}>
+              Cancel
+            </Button>
+          ) : (
+            <Button size="sm" variant="primary" onClick={() => void handleRun()} disabled={!native}>
               Run
-            </button>
-          )}
+            </Button>
+          )
+        }
+      />
+
+      <TabsRoot defaultValue="overview">
+        <div className="surface-tabs">
+          <TabsList aria-label="Task sections">
+            <TabsTab value="overview">Overview</TabsTab>
+            <TabsTab value="source">Source</TabsTab>
+          </TabsList>
         </div>
-      </header>
 
-      <div className="task-surface-body">
-        {error && (
-          <p className="task-surface-banner task-surface-banner-warn" role="alert">
-            {error}
-          </p>
-        )}
+        <TabsPanel value="overview">
+          <div className="surface-body" data-width="reading">
+            {inBrowser ? (
+              <p className="surface-banner" role="status">
+                Task execution requires the native desktop app. The browser demo cannot run{" "}
+                <code>uv</code> packages or stream process logs.
+              </p>
+            ) : null}
+            {error ? (
+              <p className="surface-banner" data-tone="danger" role="alert">
+                {error}
+              </p>
+            ) : null}
 
-        <ManifestSummary manifest={manifest} />
+            <SurfaceCard title="Runtime" ariaLabel="Task runtime">
+              <dl className="surface-kv">
+                <div>
+                  <dt>Runtime</dt>
+                  <dd>
+                    {manifest.runtime.type} via {manifest.runtime.provider}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Project</dt>
+                  <dd>
+                    <code>{manifest.runtime.project}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Entrypoint</dt>
+                  <dd>
+                    {manifest.entrypoint.command.map((argument, index) => (
+                      <span className="surface-chip" key={`${index}:${argument}`}>
+                        {argument}
+                      </span>
+                    ))}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Timeout</dt>
+                  <dd>{formatSeconds(manifest.limits.timeoutSeconds)}</dd>
+                </div>
+                <div>
+                  <dt>Re-runs</dt>
+                  <dd>
+                    {idempotent ? (
+                      <>
+                        <span className="surface-badge" data-tone="success">
+                          idempotent
+                        </span>
+                        <span className="surface-caption">
+                          Safe to re-run — workflows may retry this task automatically.
+                        </span>
+                      </>
+                    ) : (
+                      <span className="surface-caption">
+                        Not declared idempotent — workflow retries need{" "}
+                        <code>allow_unsafe_retry</code>.
+                      </span>
+                    )}
+                  </dd>
+                </div>
+              </dl>
+            </SurfaceCard>
 
-        {execution && (
-          <section className="task-surface-execution" aria-label="Task execution">
-            <div className="task-surface-execution-meta">
-              <span>
-                Status: <strong>{statusLabel(execution.status)}</strong>
-              </span>
-              {duration && <span>Duration: {duration}</span>}
-              {execution.finishedAt && <span>Finished: {execution.finishedAt}</span>}
-            </div>
-            {(execution.stdout.length > 0 || running) && (
-              <div className="task-surface-log">
-                <h3>Stdout</h3>
-                <pre>{execution.stdout || (running ? "…" : "")}</pre>
-              </div>
+            {(manifest.inputs.length > 0 || manifest.outputs.length > 0) && (
+              <SurfaceCard title="Declared I/O" ariaLabel="Declared inputs and outputs">
+                <dl className="surface-kv">
+                  {manifest.inputs.length > 0 ? (
+                    <div>
+                      <dt>Inputs</dt>
+                      <dd>
+                        <IoList
+                          entries={manifest.inputs}
+                          onOpenFile={context.callbacks.onOpenFile}
+                        />
+                      </dd>
+                    </div>
+                  ) : null}
+                  {manifest.outputs.length > 0 ? (
+                    <div>
+                      <dt>Outputs</dt>
+                      <dd>
+                        <IoList
+                          entries={manifest.outputs}
+                          onOpenFile={context.callbacks.onOpenFile}
+                        />
+                      </dd>
+                    </div>
+                  ) : null}
+                </dl>
+                <p className="surface-caption surface-card-footnote">
+                  Declared for documentation — the runner does not enforce them.
+                </p>
+              </SurfaceCard>
             )}
-            {execution.stderr.length > 0 && (
-              <div className="task-surface-log task-surface-log-stderr">
-                <h3>Stderr</h3>
-                <pre>{execution.stderr}</pre>
-              </div>
-            )}
-            {execution.outputs.length > 0 && (
-              <div className="task-surface-outputs">
-                <h3>Outputs</h3>
-                <ul>
-                  {execution.outputs.map((output) => (
-                    <li key={output.path}>
-                      <button
-                        type="button"
-                        className="task-surface-link"
-                        onClick={() => context.callbacks.onOpenFile(output.path)}
-                      >
-                        <code>{output.path}</code>
-                        {output.kind ? ` (${output.kind})` : ""}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </section>
-        )}
-      </div>
+
+            {execution ? (
+              <SurfaceCard title="Last run" ariaLabel="Task execution">
+                <div className="surface-stack">
+                  <div className="surface-meta-row">
+                    <StatusPill status={execution.status} label={statusLabel(execution.status)} />
+                    {duration ? <span>{duration}</span> : null}
+                    <TimeAgo iso={execution.startedAt} prefix="started" />
+                  </div>
+                  {execution.stdout.length > 0 || running ? (
+                    <LogBlock label="Stdout" text={execution.stdout || "…"} defaultOpen={running} />
+                  ) : null}
+                  {execution.stderr.length > 0 ? (
+                    <LogBlock label="Stderr" text={execution.stderr} tone="danger" />
+                  ) : null}
+                  {execution.outputs.length > 0 ? (
+                    <div>
+                      <h4 className="surface-card-title">Outputs</h4>
+                      <ul className="surface-chips">
+                        {execution.outputs.map((output) => (
+                          <li key={output.path}>
+                            <button
+                              type="button"
+                              className="surface-chip"
+                              onClick={() => context.callbacks.onOpenFile(output.path)}
+                              title={output.kind ? `${output.path} (${output.kind})` : output.path}
+                            >
+                              {output.path}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
+              </SurfaceCard>
+            ) : null}
+          </div>
+        </TabsPanel>
+
+        <TabsPanel value="source">
+          <div className="surface-body">
+            <SourcePanel
+              root={root}
+              path={manifestPath}
+              reloadToken={context.reloadToken}
+              onSaved={refreshManifest}
+              hint="task.yaml declares the runtime, entrypoint, limits, and I/O for this package. Edit and save — the overview refreshes immediately."
+            />
+          </div>
+        </TabsPanel>
+      </TabsRoot>
     </div>
-  );
-}
-
-function ManifestSummary({ manifest }: { manifest: TaskManifestDto }) {
-  return (
-    <section className="task-surface-manifest" aria-label="Task manifest">
-      <dl className="task-surface-dl">
-        <div>
-          <dt>Runtime</dt>
-          <dd>
-            {manifest.runtime.type} / {manifest.runtime.provider}
-          </dd>
-        </div>
-        <div>
-          <dt>Project</dt>
-          <dd>
-            <code>{manifest.runtime.project}</code>
-          </dd>
-        </div>
-        <div>
-          <dt>Entrypoint</dt>
-          <dd>
-            <code>{manifest.entrypoint.command.join(" ")}</code>
-          </dd>
-        </div>
-        <div>
-          <dt>Timeout</dt>
-          <dd>{manifest.limits.timeoutSeconds}s</dd>
-        </div>
-      </dl>
-      {(manifest.inputs.length > 0 || manifest.outputs.length > 0) && (
-        <div className="task-surface-io">
-          {manifest.inputs.length > 0 && (
-            <div>
-              <h3>Inputs</h3>
-              <ul>
-                {manifest.inputs.map((entry) => (
-                  <li key={`in:${entry.path}`}>
-                    <code>{entry.path}</code>
-                    {entry.kind ? ` (${entry.kind})` : ""}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {manifest.outputs.length > 0 && (
-            <div>
-              <h3>Outputs</h3>
-              <ul>
-                {manifest.outputs.map((entry) => (
-                  <li key={`out:${entry.path}`}>
-                    <code>{entry.path}</code>
-                    {entry.kind ? ` (${entry.kind})` : ""}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-    </section>
   );
 }

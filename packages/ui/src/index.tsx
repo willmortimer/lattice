@@ -87,10 +87,75 @@ export const PopoverPopup = Popover.Popup;
 export const PopoverClose = Popover.Close;
 
 export const TabsRoot = Tabs.Root;
-export const TabsList = Tabs.List;
-export const TabsTab = Tabs.Tab;
-export const TabsPanel = Tabs.Panel;
+
+export type TabsListProps = Omit<ComponentProps<typeof Tabs.List>, "className"> & {
+  className?: string;
+};
+
+/** Quiet segmented tab list — sunken track, raised active segment. */
+export function TabsList({ className, ...props }: TabsListProps) {
+  return <Tabs.List className={classes("ltui-tabs-list", className)} {...props} />;
+}
+
+export type TabsTabProps = Omit<ComponentProps<typeof Tabs.Tab>, "className"> & {
+  className?: string;
+};
+
+export function TabsTab({ className, ...props }: TabsTabProps) {
+  return <Tabs.Tab className={classes("ltui-tabs-tab", className)} {...props} />;
+}
+
+export type TabsPanelProps = Omit<ComponentProps<typeof Tabs.Panel>, "className"> & {
+  className?: string;
+};
+
+export function TabsPanel({ className, ...props }: TabsPanelProps) {
+  return <Tabs.Panel className={classes("ltui-tabs-panel", className)} {...props} />;
+}
+
 export const TabsIndicator = Tabs.Indicator;
+
+export interface SurfaceHeaderProps {
+  /** Leading mark (the desktop app passes its KindMark here). */
+  icon?: ReactNode;
+  title: ReactNode;
+  /** Short code-ish subtitle (path, entrypoint, …) rendered in mono. */
+  subtitle?: ReactNode;
+  /** Right-aligned metadata (pills, counts) before the actions. */
+  meta?: ReactNode;
+  actions?: ReactNode;
+  className?: string;
+}
+
+/**
+ * Compact resource-surface header: icon, title + one-line subtitle on the
+ * left, metadata and actions on the right. The shell breadcrumb already
+ * shows the full path, so this stays a single quiet row.
+ */
+export function SurfaceHeader({
+  icon,
+  title,
+  subtitle,
+  meta,
+  actions,
+  className,
+}: SurfaceHeaderProps) {
+  return (
+    <header className={classes("ltui-surface-header", className)}>
+      {icon ? (
+        <span className="ltui-surface-header-icon" aria-hidden>
+          {icon}
+        </span>
+      ) : null}
+      <div className="ltui-surface-header-text">
+        <h1 className="ltui-surface-header-title">{title}</h1>
+        {subtitle ? <p className="ltui-surface-header-subtitle">{subtitle}</p> : null}
+      </div>
+      {meta ? <div className="ltui-surface-header-meta">{meta}</div> : null}
+      {actions ? <div className="ltui-surface-header-actions">{actions}</div> : null}
+    </header>
+  );
+}
 
 export const DialogRoot = Dialog.Root;
 export const DialogPortal = Dialog.Portal;

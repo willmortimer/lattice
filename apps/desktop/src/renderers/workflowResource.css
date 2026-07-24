@@ -1,72 +1,199 @@
-.workflow-raw h3,
-.workflow-steps h3,
-.workflow-history h3 {
-  margin: 0 0 var(--lt-space-2);
-  font-size: var(--lt-font-size-sm);
-  font-weight: var(--lt-font-weight-medium);
-  color: var(--lt-color-text-secondary);
+/* Workflow surface: trigger sentence, step plan, run history.
+ * Builds on the shared resource-surface system in taskResource.css. */
+
+.workflow-trigger-sentence {
+  margin: 0;
+  font-size: var(--lt-font-size-md);
+  line-height: 1.55;
+  color: var(--lt-text);
 }
 
-.workflow-raw pre {
-  margin: 0;
-  padding: var(--lt-space-3);
-  border-radius: var(--lt-radius-sm);
-  background: var(--lt-color-surface-sunken);
-  color: var(--lt-color-text-primary);
+.workflow-trigger-sentence code {
+  font-family: var(--lt-font-mono);
   font-size: var(--lt-font-size-sm);
-  overflow: auto;
-  max-height: 14rem;
-  white-space: pre-wrap;
-  word-break: break-word;
+  color: var(--lt-text);
 }
 
-.workflow-steps ol {
-  margin: 0;
-  padding-left: 1.2rem;
+.workflow-trigger-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lt-space-2);
+}
+
+/* ---- Step plan ---- */
+
+.workflow-steps {
   display: flex;
   flex-direction: column;
   gap: var(--lt-space-3);
-}
-
-.workflow-step-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--lt-space-2);
-  font-size: var(--lt-font-size-sm);
-  color: var(--lt-color-text-secondary);
-}
-
-.workflow-steps pre {
-  margin: var(--lt-space-2) 0 0;
-  padding: var(--lt-space-2) var(--lt-space-3);
-  border-radius: var(--lt-radius-sm);
-  background: var(--lt-color-surface-sunken);
-  font-size: var(--lt-font-size-sm);
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 10rem;
-  overflow: auto;
-}
-
-.workflow-history ul {
-  list-style: none;
   margin: 0;
   padding: 0;
+  list-style: none;
+}
+
+.workflow-step {
   display: flex;
+  gap: var(--lt-space-3);
+  align-items: flex-start;
+}
+
+.workflow-step-index {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  margin-top: 1px;
+  border: 1px solid var(--lt-line);
+  border-radius: 999px;
+  font-family: var(--lt-font-mono);
+  font-size: var(--lt-font-size-xs);
+  color: var(--lt-muted);
+  background: var(--lt-surface-sunken);
+}
+
+.workflow-step-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
   flex-direction: column;
+  gap: var(--lt-space-1);
+}
+
+.workflow-step-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--lt-space-2);
 }
 
-.workflow-history li {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--lt-space-3);
+.workflow-step-id {
+  font-family: var(--lt-font-mono);
   font-size: var(--lt-font-size-sm);
-  color: var(--lt-color-text-secondary);
-  align-items: baseline;
+  font-weight: var(--lt-font-weight-semibold);
+  color: var(--lt-text);
 }
 
-.workflow-proposal-link {
+.workflow-step-detail {
   margin: 0;
   font-size: var(--lt-font-size-sm);
+  line-height: 1.5;
+  color: var(--lt-text-soft);
+  overflow-wrap: anywhere;
+}
+
+/* Parallel children: indented rail under the group row. */
+.workflow-step-children {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lt-space-2);
+  margin: var(--lt-space-1) 0 0;
+  padding: 0 0 0 var(--lt-space-3);
+  border-left: 2px solid var(--lt-line);
+  list-style: none;
+}
+
+/* ---- Run history & execution detail ---- */
+
+.workflow-history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lt-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workflow-run {
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius);
+  background: var(--lt-panel);
+  overflow: hidden;
+}
+
+.workflow-run > summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lt-space-2) var(--lt-space-3);
+  padding: var(--lt-space-2) var(--lt-space-3);
+  font-size: var(--lt-font-size-sm);
+  color: var(--lt-text-soft);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+}
+
+.workflow-run > summary::-webkit-details-marker {
+  display: none;
+}
+
+.workflow-run > summary:hover {
+  background: var(--lt-hover);
+}
+
+.workflow-run > summary:focus-visible {
+  outline: 2px solid var(--lt-focus-ring);
+  outline-offset: -2px;
+}
+
+.workflow-run-trigger {
+  color: var(--lt-text-soft);
+}
+
+.workflow-run-duration {
+  color: var(--lt-muted);
+}
+
+.workflow-run-id {
+  margin-left: auto;
+  font-family: var(--lt-font-mono);
+  font-size: var(--lt-font-size-xs);
+  color: var(--lt-faint);
+}
+
+.workflow-run-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lt-space-3);
+}
+
+.workflow-run[open] > .workflow-run-body {
+  padding: var(--lt-space-3);
+  border-top: 1px solid var(--lt-line);
+}
+
+.workflow-run-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lt-space-3);
+}
+
+.workflow-run-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lt-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workflow-run-step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lt-space-1);
+}
+
+.workflow-run-step-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lt-space-2);
+}
+
+.workflow-proposal-links {
+  margin: 0;
+  font-size: var(--lt-font-size-sm);
+  color: var(--lt-text-soft);
 }
