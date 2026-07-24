@@ -8,6 +8,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Component, Path, PathBuf};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use uuid::Uuid;
 
@@ -17,6 +18,35 @@ use crate::{Error, Result};
 
 /// Workspace-relative prefix for staged attachment binaries.
 pub const STAGED_ATTACHMENT_PREFIX: &str = ".lattice/staging/attachments";
+
+/// Default TTL for abandoned attachment staging operation directories.
+pub const DEFAULT_STAGING_TTL: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// One referenced attachment path and its on-disk metadata.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AttachmentInventoryEntry {
+    pub path: String,
+    pub size_bytes: Option<u64>,
+    pub modified_at: Option<SystemTime>,
+    pub missing_on_disk: bool,
+}
+
+/// A staging operation directory eligible for TTL cleanup.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StagingCleanupCandidate {
+    pub operation_id: String,
+    pub staged_paths: Vec<String>,
+    pub modified_at: Option<SystemTime>,
+}
+
+/// Result of a staging TTL cleanup (preview or delete).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StagingCleanupReport {
+    pub dry_run: bool,
+    pub max_age_secs: u64,
+    pub candidates: Vec<StagingCleanupCandidate>,
+    pub deleted_operation_ids: Vec<String>,
+}
 
 /// Returns true when `path` is a workspace-relative staged attachment identity.
 pub fn is_staged_attachment_path(path: &str) -> bool {
@@ -207,6 +237,33 @@ pub fn collect_attachment_refs(app: &DataApp) -> Result<HashSet<String>> {
     Ok(refs)
 }
 
+/// List every attachment path referenced by cells with on-disk metadata.
+pub fn list_attachment_inventory(app: &DataApp) -> Result<Vec<AttachmentInventoryEntry>> {
+    let refs = collect_attachment_refs(app)?;
+    let mut entries: Vec<AttachmentInventoryEntry> = refs
+        .into_iter()
+        .map(|path| {
+            let absolute = app.path().join(&path);
+            match std::fs::metadata(&absolute) {
+                Ok(meta) => AttachmentInventoryEntry {
+                    path,
+                    size_bytes: Some(meta.len()),
+                    modified_at: meta.modified().ok(),
+                    missing_on_disk: false,
+                },
+                Err(_) => AttachmentInventoryEntry {
+                    path,
+                    size_bytes: None,
+                    modified_at: None,
+                    missing_on_disk: true,
+                },
+            }
+        })
+        .collect();
+    entries.sort_by(|left, right| left.path.cmp(&right.path));
+    Ok(entries)
+}
+
 /// List files under `{package}/attachments/` that are not referenced by any cell.
 pub fn list_orphan_attachments(app: &DataApp) -> Result<Vec<String>> {
     let refs = collect_attachment_refs(app)?;
@@ -243,10 +300,98 @@ pub fn list_orphan_attachments(app: &DataApp) -> Result<Vec<String>> {
 
 /// Delete verified orphans under `{package}/attachments/`.
 ///
-/// Returns the package-relative paths that were removed.
+/// When `dry_run` is true, returns the paths that would be removed without
+/// deleting files.
 pub fn cleanup_orphan_attachments(app: &DataApp) -> Result<Vec<String>> {
+    cleanup_orphan_attachments_with_options(app, false)
+}
+
+/// Delete verified orphans under `{package}/attachments/`.
+pub fn cleanup_orphan_attachments_with_options(
+    app: &DataApp,
+    dry_run: bool,
+) -> Result<Vec<String>> {
     let orphans = list_orphan_attachments(app)?;
+    if dry_run {
+        return Ok(orphans);
+    }
     cleanup_unreferenced_attachments(app, &orphans)
+}
+
+/// Delete abandoned staging operation directories older than `max_age`.
+///
+/// Uses the newest mtime among each operation directory and its files. Drafts
+/// that still reference staged paths but are older than the TTL are not
+/// protected — users may need to re-attach those files after cleanup.
+pub fn cleanup_stale_attachment_staging(
+    workspace_root: &Path,
+    max_age: Duration,
+    dry_run: bool,
+) -> Result<StagingCleanupReport> {
+    let staging_root = workspace_root
+        .join(".lattice")
+        .join("staging")
+        .join("attachments");
+    if !staging_root.is_dir() {
+        return Ok(StagingCleanupReport {
+            dry_run,
+            max_age_secs: max_age.as_secs(),
+            candidates: Vec::new(),
+            deleted_operation_ids: Vec::new(),
+        });
+    }
+
+    let cutoff = SystemTime::now()
+        .checked_sub(max_age)
+        .unwrap_or(UNIX_EPOCH);
+    let mut candidates = Vec::new();
+    let mut deleted_operation_ids = Vec::new();
+
+    for entry in
+        std::fs::read_dir(&staging_root).map_err(|source| Error::io(&staging_root, source))?
+    {
+        let entry = entry.map_err(|source| Error::io(&staging_root, source))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|source| Error::io(entry.path(), source))?;
+        if !file_type.is_dir() {
+            continue;
+        }
+        let operation_id = entry.file_name().to_string_lossy().into_owned();
+        if operation_id.is_empty() || operation_id == "." || operation_id == ".." {
+            continue;
+        }
+
+        let operation_dir = entry.path();
+        let Some(modified_at) = newest_mtime_in_dir(&operation_dir)? else {
+            continue;
+        };
+        if modified_at > cutoff {
+            continue;
+        }
+
+        let staged_paths = staged_paths_in_operation(&operation_id, &operation_dir)?;
+        candidates.push(StagingCleanupCandidate {
+            operation_id: operation_id.clone(),
+            staged_paths,
+            modified_at: Some(modified_at),
+        });
+
+        if !dry_run {
+            std::fs::remove_dir_all(&operation_dir)
+                .map_err(|source| Error::io(&operation_dir, source))?;
+            deleted_operation_ids.push(operation_id);
+        }
+    }
+
+    candidates.sort_by(|left, right| left.operation_id.cmp(&right.operation_id));
+    deleted_operation_ids.sort();
+    Ok(StagingCleanupReport {
+        dry_run,
+        max_age_secs: max_age.as_secs(),
+        candidates,
+        deleted_operation_ids,
+    })
 }
 
 /// Delete `candidates` only when they are not referenced by any attachment cell.
@@ -283,6 +428,57 @@ pub fn attachment_paths_in_values(values: &BTreeMap<String, CellValue>) -> Vec<S
         }
     }
     paths
+}
+
+fn newest_mtime_in_dir(dir: &Path) -> Result<Option<SystemTime>> {
+    let mut newest = std::fs::metadata(dir)
+        .ok()
+        .and_then(|meta| meta.modified().ok());
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(_) => return Ok(newest),
+    };
+    for entry in entries {
+        let entry = entry.map_err(|source| Error::io(dir, source))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|source| Error::io(entry.path(), source))?;
+        if !file_type.is_file() {
+            continue;
+        }
+        if let Ok(modified_at) = entry.metadata().and_then(|meta| meta.modified()) {
+            newest = Some(match newest {
+                Some(current) if current >= modified_at => current,
+                _ => modified_at,
+            });
+        }
+    }
+    Ok(newest)
+}
+
+fn staged_paths_in_operation(operation_id: &str, operation_dir: &Path) -> Result<Vec<String>> {
+    let mut paths = Vec::new();
+    for entry in
+        std::fs::read_dir(operation_dir).map_err(|source| Error::io(operation_dir, source))?
+    {
+        let entry = entry.map_err(|source| Error::io(operation_dir, source))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|source| Error::io(entry.path(), source))?;
+        if !file_type.is_file() {
+            continue;
+        }
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        if name.is_empty() || name == "." || name == ".." {
+            continue;
+        }
+        paths.push(format!("{STAGED_ATTACHMENT_PREFIX}/{operation_id}/{name}"));
+    }
+    paths.sort();
+    Ok(paths)
 }
 
 fn resolve_staged_absolute(workspace_root: &Path, staged_rel: &str) -> Result<PathBuf> {

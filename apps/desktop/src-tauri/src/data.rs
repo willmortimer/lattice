@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use lattice_commands::{ColumnSpec, Command as SemanticCommand, CommandEngine, Transaction};
 use lattice_data::{
@@ -1299,9 +1300,98 @@ pub fn remove_data_attachment(
 pub fn cleanup_data_attachment_orphans(
     root: String,
     rel_path: String,
+    dry_run: Option<bool>,
 ) -> Result<Vec<String>, String> {
     let app = open_app_at(&root, &rel_path)?;
-    lattice_data::cleanup_orphan_attachments(&app).map_err(|err| err.to_string())
+    lattice_data::cleanup_orphan_attachments_with_options(&app, dry_run.unwrap_or(false))
+        .map_err(|err| err.to_string())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachmentInventoryEntryDto {
+    pub path: String,
+    pub size_bytes: Option<u64>,
+    pub modified_at_secs: Option<i64>,
+    pub missing_on_disk: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StagingCleanupCandidateDto {
+    pub operation_id: String,
+    pub staged_paths: Vec<String>,
+    pub modified_at_secs: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StagingCleanupReportDto {
+    pub dry_run: bool,
+    pub max_age_secs: u64,
+    pub candidates: Vec<StagingCleanupCandidateDto>,
+    pub deleted_operation_ids: Vec<String>,
+}
+
+fn system_time_to_secs(time: SystemTime) -> Option<i64> {
+    time.duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|duration| duration.as_secs() as i64)
+}
+
+/// List attachment paths referenced by cells with on-disk metadata.
+#[tauri::command]
+pub fn list_data_attachment_inventory(
+    root: String,
+    rel_path: String,
+) -> Result<Vec<AttachmentInventoryEntryDto>, String> {
+    let app = open_app_at(&root, &rel_path)?;
+    lattice_data::list_attachment_inventory(&app)
+        .map_err(|err| err.to_string())
+        .map(|entries| {
+            entries
+                .into_iter()
+                .map(|entry| AttachmentInventoryEntryDto {
+                    path: entry.path,
+                    size_bytes: entry.size_bytes,
+                    modified_at_secs: entry.modified_at.and_then(system_time_to_secs),
+                    missing_on_disk: entry.missing_on_disk,
+                })
+                .collect()
+        })
+}
+
+/// Preview or delete abandoned attachment staging directories older than `max_age_hours`.
+#[tauri::command]
+pub fn cleanup_data_attachment_staging(
+    root: String,
+    max_age_hours: Option<u64>,
+    dry_run: Option<bool>,
+) -> Result<StagingCleanupReportDto, String> {
+    let (canonical_root, _) = resolve_within_root(&root, ".")?;
+    let max_age = std::time::Duration::from_secs(
+        max_age_hours.unwrap_or(24).saturating_mul(60 * 60),
+    );
+    let report = lattice_data::cleanup_stale_attachment_staging(
+        &canonical_root,
+        max_age,
+        dry_run.unwrap_or(false),
+    )
+    .map_err(|err| err.to_string())?;
+    Ok(StagingCleanupReportDto {
+        dry_run: report.dry_run,
+        max_age_secs: report.max_age_secs,
+        candidates: report
+            .candidates
+            .into_iter()
+            .map(|candidate| StagingCleanupCandidateDto {
+                operation_id: candidate.operation_id,
+                staged_paths: candidate.staged_paths,
+                modified_at_secs: candidate.modified_at.and_then(system_time_to_secs),
+            })
+            .collect(),
+        deleted_operation_ids: report.deleted_operation_ids,
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

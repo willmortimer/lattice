@@ -231,6 +231,18 @@ Cancel and failed saves leave package files untouched; staged files for removed
 draft entries are discarded. The browser demo remains honest and does not
 pretend to persist files.
 
+**Inventory and cleanup (V1):** `list_attachment_inventory` reports every
+referenced package path with size, mtime, and a missing-on-disk flag.
+`cleanup_orphan_attachments` removes unreferenced files under
+`attachments/`. `cleanup_stale_attachment_staging` sweeps abandoned
+`.lattice/staging/attachments/<operation-id>/` directories older than a TTL
+(default 24h). Staging cleanup is age-based only — drafts that still reference
+staged paths but are older than the TTL are not protected and may need
+re-attach after a sweep. Desktop Tauri commands:
+`list_data_attachment_inventory`, `cleanup_data_attachment_orphans` (optional
+`dry_run`), and `cleanup_data_attachment_staging` (preview via `dry_run`).
+CLI: `lattice table attachments inventory|cleanup-orphans|cleanup-staging`.
+
 ## Linked records
 
 ### MVP cell shape (Phase 1)

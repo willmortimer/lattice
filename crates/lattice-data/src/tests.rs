@@ -2424,3 +2424,102 @@ fn shared_attachment_ref_survives_cleanup() {
     );
     assert!(!package_path.join(&package_rel).exists());
 }
+
+#[test]
+fn attachment_inventory_reports_metadata_and_missing_files() {
+    use crate::{
+        list_attachment_inventory, promote_attachment_cell_values, stage_attachment_file, NewColumn,
+    };
+
+    let workspace = tempdir().unwrap();
+    let package_path = workspace.path().join("Files.data");
+    let mut app = DataApp::create(&package_path, "Files", "items").unwrap();
+    app.add_columns("items", &[NewColumn::new("files", FieldType::Attachment)])
+        .unwrap();
+
+    let source = workspace.path().join("note.txt");
+    std::fs::write(&source, b"hello").unwrap();
+    let staged = stage_attachment_file(workspace.path(), &source).unwrap();
+    let mut values = BTreeMap::from([(
+        "files".into(),
+        CellValue::Attachment {
+            paths: vec![staged.clone()],
+        },
+    )]);
+    let (promoted, _) =
+        promote_attachment_cell_values(workspace.path(), &app, &mut values).unwrap();
+    app.insert_row("items", &values).unwrap();
+
+    let inventory = list_attachment_inventory(&app).unwrap();
+    assert_eq!(inventory.len(), 1);
+    assert_eq!(inventory[0].path, promoted[0]);
+    assert_eq!(inventory[0].size_bytes, Some(5));
+    assert!(!inventory[0].missing_on_disk);
+    assert!(inventory[0].modified_at.is_some());
+
+    std::fs::remove_file(package_path.join(&promoted[0])).unwrap();
+    let inventory = list_attachment_inventory(&app).unwrap();
+    assert!(inventory[0].missing_on_disk);
+    assert_eq!(inventory[0].size_bytes, None);
+}
+
+#[test]
+fn cleanup_stale_attachment_staging_respects_ttl_and_dry_run() {
+    use std::time::Duration;
+
+    use filetime::{set_file_mtime, FileTime};
+
+    use crate::{
+        cleanup_stale_attachment_staging, stage_attachment_file, DEFAULT_STAGING_TTL,
+    };
+
+    let workspace = tempdir().unwrap();
+    let source = workspace.path().join("note.txt");
+    std::fs::write(&source, b"hello").unwrap();
+
+    let fresh = stage_attachment_file(workspace.path(), &source).unwrap();
+    let stale = stage_attachment_file(workspace.path(), &source).unwrap();
+    assert_ne!(fresh, stale);
+
+    let stale_dir = workspace
+        .path()
+        .join(".lattice/staging/attachments")
+        .join(
+            stale
+                .trim_start_matches(".lattice/staging/attachments/")
+                .split('/')
+                .next()
+                .unwrap(),
+        );
+    let old = FileTime::from_system_time(
+        std::time::SystemTime::now() - DEFAULT_STAGING_TTL - Duration::from_secs(3600),
+    );
+    let _ = set_file_mtime(&stale_dir, old);
+    for entry in std::fs::read_dir(&stale_dir).unwrap() {
+        let entry = entry.unwrap();
+        if entry.file_type().unwrap().is_file() {
+            let _ = set_file_mtime(entry.path(), old);
+        }
+    }
+
+    let preview = cleanup_stale_attachment_staging(
+        workspace.path(),
+        DEFAULT_STAGING_TTL,
+        true,
+    )
+    .unwrap();
+    assert!(preview.dry_run);
+    assert_eq!(preview.candidates.len(), 1);
+    assert!(workspace.path().join(&stale).is_file());
+    assert!(workspace.path().join(&fresh).is_file());
+
+    let deleted = cleanup_stale_attachment_staging(
+        workspace.path(),
+        DEFAULT_STAGING_TTL,
+        false,
+    )
+    .unwrap();
+    assert_eq!(deleted.deleted_operation_ids.len(), 1);
+    assert!(!workspace.path().join(&stale).exists());
+    assert!(workspace.path().join(&fresh).is_file());
+}
