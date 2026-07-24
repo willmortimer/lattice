@@ -573,7 +573,7 @@ impl CommandEngine {
     /// Validate every command against the *current* workspace state, without
     /// mutating anything. Also rejects transactions where two commands touch
     /// the same path (v0: no sequential dependencies within a transaction).
-    fn validate(&self, commands: &[Command]) -> Result<()> {
+    pub(crate) fn validate(&self, commands: &[Command]) -> Result<()> {
         let mut seen: BTreeSet<PathBuf> = BTreeSet::new();
         for command in commands {
             for path in command.touched_paths() {
@@ -588,7 +588,7 @@ impl CommandEngine {
         Ok(())
     }
 
-    fn validate_one(&self, command: &Command) -> Result<()> {
+    pub(crate) fn validate_one(&self, command: &Command) -> Result<()> {
         match command {
             Command::PageCreate { path, .. } | Command::ResourceCreate { path, .. } => {
                 match self.metadata_opt(path)? {

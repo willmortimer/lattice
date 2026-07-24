@@ -54,8 +54,9 @@ pub use command::{
     Transaction, TransactionReceipt, UndoReport,
 };
 pub use contracts::{
-    BindingSpec, ExecutionResult, ExecutionStatus, ProposalSource, ProposalSourceType,
-    ProposalStatus, ResourceOutput, TransactionProposal, TransactionProposalSummary,
+    BindingSpec, CommandPreview, CommandPreviewDetail, ExecutionResult, ExecutionStatus,
+    ProposalPreview, ProposalSource, ProposalSourceType, ProposalStatus, ResourceOutput,
+    TransactionProposal, TransactionProposalSummary,
 };
 pub use derived::{
     cleanup_abandoned_staging, derived_dir, hash_builder_package, hash_input_pattern, hash_inputs,
@@ -77,8 +78,8 @@ pub use link_repair::{
 };
 pub use proposal::{
     apply_proposal, build_proposal_transaction, create_proposal, dismiss_proposal,
-    list_proposal_summaries, load_proposal, new_proposal_id, proposal_now_iso, proposals_dir,
-    save_proposal, PROPOSALS_DIR,
+    list_proposal_summaries, load_proposal, new_proposal_id, preview_proposal, proposal_now_iso,
+    proposals_dir, save_proposal, validate_proposal_subset, PROPOSALS_DIR,
 };
 pub use propose_helpers::{
     normalize_proposal_rel_path, propose_artifact, propose_interface, propose_resource,
