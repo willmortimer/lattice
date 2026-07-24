@@ -93,6 +93,21 @@ No feature or behavioral changes beyond fmt/clippy hygiene.
 ## Next gates
 
 - **Gate B** (post-T1/T2/T4/T5 + T3): `nxr task check` + governed-loop smoke + attachment/proposal/derived smokes.
+
+### Governed-loop smoke (T3)
+
+Canonical backend integration test for form → workflow → proposal → approve →
+derived → refresh → undo on the First Look `demo` template:
+
+```sh
+cargo test -p lattice-commands --test governed_loop_smoke -- --nocapture
+```
+
+The test provisions a temp workspace from the `demo` template, inserts a
+`ContactIntake` row, runs `Automations/Contact intake.workflow.yaml`, previews
+and applies the workflow proposal, rebuilds `Derived/ContactBrief.derived.yaml`
+(stale → current), checks workflow relationship edges, and undoes the apply.
+Boundary diagnostics print to stderr as `[governed-loop] …` lines.
 - **Gate C** (post-T6–T8): full integration + demo surfaces.
 
 ## Re-run baseline
