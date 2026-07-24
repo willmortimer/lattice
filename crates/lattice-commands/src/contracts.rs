@@ -51,8 +51,12 @@ pub struct ExecutionResult {
     pub finished_at: Option<String>,
     #[serde(default)]
     pub outputs: Vec<ResourceOutput>,
+    /// First proposal id when any were produced (compat with single-id callers).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proposal_id: Option<String>,
+    /// All proposal ids produced by this execution (parallel-safe; order preserved).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub proposal_ids: Vec<String>,
 }
 
 /// Origin of a [`TransactionProposal`].
@@ -74,6 +78,31 @@ pub struct ProposalSource {
     pub source_type: ProposalSourceType,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resource: Option<String>,
+    /// Workflow/task execution that minted this proposal (idempotency provenance).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_id: Option<String>,
+    /// Workflow step id within that execution (paired with [`Self::execution_id`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step_id: Option<String>,
+}
+
+impl ProposalSource {
+    /// Idempotency key `{execution_id}:{step_id}` when both provenance fields are set.
+    pub fn idempotency_key(&self) -> Option<String> {
+        match (
+            self.execution_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty()),
+            self.step_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty()),
+        ) {
+            (Some(execution_id), Some(step_id)) => Some(format!("{execution_id}:{step_id}")),
+            _ => None,
+        }
+    }
 }
 
 /// Lifecycle state of a persisted [`TransactionProposal`].
@@ -159,16 +188,37 @@ mod tests {
                 hash: Some("sha256:abc123".into()),
             }],
             proposal_id: Some("prop-7".into()),
+            proposal_ids: vec!["prop-7".into(), "prop-8".into()],
         };
 
         let json = serde_json::to_string(&result).unwrap();
         assert!(json.contains("\"startedAt\""));
         assert!(json.contains("\"finishedAt\""));
         assert!(json.contains("\"proposalId\""));
+        assert!(json.contains("\"proposalIds\""));
         assert_eq!(
             serde_json::from_str::<ExecutionResult>(&json).unwrap(),
             result
         );
+    }
+
+    #[test]
+    fn proposal_source_idempotency_key() {
+        let source = ProposalSource {
+            source_type: ProposalSourceType::Workflow,
+            resource: Some("Automations/Demo.workflow.yaml".into()),
+            execution_id: Some("exec-1".into()),
+            step_id: Some("propose".into()),
+        };
+        assert_eq!(source.idempotency_key().as_deref(), Some("exec-1:propose"));
+        assert!(ProposalSource {
+            source_type: ProposalSourceType::Task,
+            resource: None,
+            execution_id: None,
+            step_id: None,
+        }
+        .idempotency_key()
+        .is_none());
     }
 
     #[test]
@@ -178,6 +228,8 @@ mod tests {
             source: ProposalSource {
                 source_type: ProposalSourceType::Task,
                 resource: Some("tasks/hello.task".into()),
+                execution_id: None,
+                step_id: None,
             },
             summary: "Create welcome page".into(),
             commands: vec![Command::PageCreate {

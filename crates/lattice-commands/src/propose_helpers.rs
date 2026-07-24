@@ -305,6 +305,8 @@ permissions:
                 ProposalSource {
                     source_type: ProposalSourceType::Mcp,
                     resource: None,
+                    execution_id: None,
+                    step_id: None,
                 },
             )
             .unwrap();

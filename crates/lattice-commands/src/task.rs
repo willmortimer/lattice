@@ -112,6 +112,20 @@ pub struct TaskManifest {
     /// Declared outputs (informational in v1; surfaced on [`crate::ExecutionResult`]).
     #[serde(default)]
     pub outputs: Vec<TaskIoRef>,
+    /// Execution semantics (idempotency for workflow retries).
+    #[serde(default)]
+    pub execution: TaskExecutionMeta,
+}
+
+/// Optional execution metadata on a task package.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct TaskExecutionMeta {
+    /// When true, workflow `retry` may re-run this task safely.
+    ///
+    /// Default is false: a step with `retry.max_attempts > 1` must set
+    /// `with.allow_unsafe_retry: true` or the runner rejects the retry policy.
+    #[serde(default)]
+    pub idempotent: bool,
 }
 
 /// Runtime block: currently Python via `uv` only.
@@ -688,6 +702,29 @@ entrypoint:
         assert_eq!(m.runtime.project, ".");
         assert!(m.inputs.is_empty());
         assert!(m.outputs.is_empty());
+        assert!(!m.execution.idempotent);
+    }
+
+    #[test]
+    fn parses_execution_idempotent_flag() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("task.yaml");
+        fs::write(
+            &path,
+            r#"format: lattice-task
+version: 1
+runtime:
+  type: python
+  provider: uv
+entrypoint:
+  command: [python, main.py]
+execution:
+  idempotent: true
+"#,
+        )
+        .unwrap();
+        let m = TaskManifest::load(&path).unwrap();
+        assert!(m.execution.idempotent);
     }
 
     #[test]

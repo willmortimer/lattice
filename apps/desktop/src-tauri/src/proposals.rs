@@ -40,6 +40,8 @@ pub fn create_proposal_cmd(
             source: ProposalSource {
                 source_type: proposal.source_type.unwrap_or(ProposalSourceType::External),
                 resource: proposal.source_resource,
+                execution_id: None,
+                step_id: None,
             },
             summary: proposal.summary,
             commands: proposal.commands,

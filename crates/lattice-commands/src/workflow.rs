@@ -11,7 +11,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use lattice_core::OPERATIONAL_DIR;
 use serde::{Deserialize, Serialize};
@@ -20,7 +20,7 @@ use crate::contracts::{
     ExecutionResult, ExecutionStatus, ProposalSource, ProposalSourceType, TransactionProposal,
 };
 use crate::proposal::{create_proposal, proposal_now_iso};
-use crate::task::{TaskError, TaskRunner};
+use crate::task::{TaskError, TaskManifest, TaskRunner, TASK_MANIFEST_FILENAME};
 use crate::Command;
 
 pub const WORKFLOW_FORMAT: &str = "lattice-workflow";
@@ -175,6 +175,12 @@ fn is_one_attempt(value: &u32) -> bool {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TaskRunParams {
     pub task: String,
+    /// Acknowledge retrying a task that does not declare `execution.idempotent: true`.
+    ///
+    /// Required when the step sets `retry.max_attempts > 1` and the task is not
+    /// marked idempotent; without this flag the runner rejects the retry policy.
+    #[serde(default)]
+    pub allow_unsafe_retry: bool,
 }
 
 /// Parameters for `proposal.create`.
@@ -922,7 +928,7 @@ struct LeafOutcome {
     log: String,
     stdout: String,
     stderr: String,
-    proposal_id: Option<String>,
+    proposal_ids: Vec<String>,
 }
 
 struct StepBatchOutcome {
@@ -931,7 +937,7 @@ struct StepBatchOutcome {
     status: ExecutionStatus,
     stdout: String,
     stderr: String,
-    proposal_id: Option<String>,
+    proposal_ids: Vec<String>,
 }
 
 fn retry_budget(retry: Option<&WorkflowStepRetry>) -> (u32, u64) {
@@ -941,10 +947,105 @@ fn retry_budget(retry: Option<&WorkflowStepRetry>) -> (u32, u64) {
     }
 }
 
+fn extend_proposal_ids(into: &mut Vec<String>, from: impl IntoIterator<Item = String>) {
+    for id in from {
+        if !into.contains(&id) {
+            into.push(id);
+        }
+    }
+}
+
+fn primary_proposal_id(ids: &[String]) -> Option<String> {
+    ids.first().cloned()
+}
+
+/// Sleep up to `backoff_seconds`, returning early when cancel is set.
+/// Returns `true` when cancelled during the wait.
+fn interruptible_backoff(backoff_seconds: u64, cancel: Option<&AtomicBool>) -> bool {
+    if backoff_seconds == 0 {
+        return cancel.is_some_and(|flag| flag.load(Ordering::SeqCst));
+    }
+    let deadline = Instant::now() + Duration::from_secs(backoff_seconds);
+    while Instant::now() < deadline {
+        if cancel.is_some_and(|flag| flag.load(Ordering::SeqCst)) {
+            return true;
+        }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        thread::sleep(remaining.min(Duration::from_millis(50)));
+    }
+    cancel.is_some_and(|flag| flag.load(Ordering::SeqCst))
+}
+
+fn task_package_manifest(
+    workspace_root: &Path,
+    workflow_path: &Path,
+    task_rel: &str,
+) -> WorkflowResult<(PathBuf, TaskManifest)> {
+    let task_path = resolve_workspace_path(workspace_root, workflow_path, task_rel);
+    let package_dir = if task_path.is_file() {
+        task_path
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or(task_path.clone())
+    } else {
+        task_path.clone()
+    };
+    let manifest_path = if package_dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name == TASK_MANIFEST_FILENAME)
+    {
+        package_dir.clone()
+    } else {
+        package_dir.join(TASK_MANIFEST_FILENAME)
+    };
+    let manifest = TaskManifest::load(&manifest_path)?;
+    Ok((task_path, manifest))
+}
+
+fn reject_unsafe_task_retry(
+    workspace_root: &Path,
+    workflow_path: &Path,
+    step: &WorkflowStep,
+    max_attempts: u32,
+) -> WorkflowResult<Option<LeafOutcome>> {
+    if max_attempts <= 1 || step.action != "task.run" {
+        return Ok(None);
+    }
+    let params: TaskRunParams = deserialize_with(&step.with, workflow_path, &step.id)?;
+    if params.allow_unsafe_retry {
+        return Ok(None);
+    }
+    let (_, manifest) = match task_package_manifest(workspace_root, workflow_path, &params.task) {
+        Ok(value) => value,
+        // Missing/invalid packages fail inside the attempt loop with the usual errors.
+        Err(_) => return Ok(None),
+    };
+    if manifest.execution.idempotent {
+        return Ok(None);
+    }
+    let msg = format!(
+        "task {:?} is not marked execution.idempotent; refusing retry \
+         (max_attempts={max_attempts}) without with.allow_unsafe_retry: true",
+        params.task
+    );
+    Ok(Some(LeafOutcome {
+        status: ExecutionStatus::Failed,
+        log: format!("{msg}\n"),
+        stdout: String::new(),
+        stderr: format!("[{}] {msg}\n", step.id),
+        proposal_ids: Vec::new(),
+    }))
+}
+
 fn execute_leaf_once(
     workspace_root: &Path,
     workflow_path: &Path,
     workflow_rel: &str,
+    execution_id: &str,
     step: &WorkflowStep,
     runner: &TaskRunner,
 ) -> WorkflowResult<LeafOutcome> {
@@ -969,7 +1070,7 @@ fn execute_leaf_once(
                             log,
                             stdout,
                             stderr,
-                            proposal_id: None,
+                            proposal_ids: Vec::new(),
                         })
                     } else {
                         let msg = format!(
@@ -983,7 +1084,7 @@ fn execute_leaf_once(
                             log,
                             stdout,
                             stderr,
-                            proposal_id: None,
+                            proposal_ids: Vec::new(),
                         })
                     }
                 }
@@ -994,6 +1095,8 @@ fn execute_leaf_once(
                 }) => {
                     log.push_str(&task_stdout);
                     log.push_str(&task_stderr);
+                    // Process group already killed by the runner; note cleanup for retry logs.
+                    log.push_str("timeout cleanup: process group killed before retry\n");
                     stderr.push_str(&format!(
                         "[{}] task timed out after {timeout_seconds}s\n",
                         step.id
@@ -1003,7 +1106,7 @@ fn execute_leaf_once(
                         log,
                         stdout,
                         stderr,
-                        proposal_id: None,
+                        proposal_ids: Vec::new(),
                     })
                 }
                 Err(err) => {
@@ -1016,7 +1119,7 @@ fn execute_leaf_once(
                         log,
                         stdout,
                         stderr,
-                        proposal_id: None,
+                        proposal_ids: Vec::new(),
                     })
                 }
             }
@@ -1031,6 +1134,8 @@ fn execute_leaf_once(
                     source: ProposalSource {
                         source_type: ProposalSourceType::Workflow,
                         resource: Some(workflow_rel.to_string()),
+                        execution_id: Some(execution_id.to_string()),
+                        step_id: Some(step.id.clone()),
                     },
                     summary: params.summary,
                     commands: params.commands,
@@ -1047,7 +1152,7 @@ fn execute_leaf_once(
                 log,
                 stdout,
                 stderr,
-                proposal_id: Some(created.id),
+                proposal_ids: vec![created.id],
             })
         }
         "notification" => {
@@ -1066,7 +1171,7 @@ fn execute_leaf_once(
                 log,
                 stdout,
                 stderr,
-                proposal_id: None,
+                proposal_ids: Vec::new(),
             })
         }
         other => Err(WorkflowError::Invalid {
@@ -1080,14 +1185,41 @@ fn execute_leaf_with_retry(
     workspace_root: &Path,
     workflow_path: &Path,
     workflow_rel: &str,
+    execution_id: &str,
     step: &WorkflowStep,
     runner: &TaskRunner,
     cancel: Option<&AtomicBool>,
 ) -> WorkflowResult<StepBatchOutcome> {
     let (max_attempts, backoff_seconds) = retry_budget(step.retry.as_ref());
+    if let Some(rejected) =
+        reject_unsafe_task_retry(workspace_root, workflow_path, step, max_attempts)?
+    {
+        return Ok(StepBatchOutcome {
+            results: vec![WorkflowStepResult {
+                id: step.id.clone(),
+                action: step.action.clone(),
+                status: ExecutionStatus::Failed,
+                log: rejected.log,
+                proposal_id: None,
+                attempts: 1,
+            }],
+            status: ExecutionStatus::Failed,
+            stdout: rejected.stdout,
+            stderr: rejected.stderr,
+            proposal_ids: Vec::new(),
+        });
+    }
+
     let (outcome, attempts_used, combined_log) =
         run_attempts(max_attempts, backoff_seconds, cancel, || {
-            execute_leaf_once(workspace_root, workflow_path, workflow_rel, step, runner)
+            execute_leaf_once(
+                workspace_root,
+                workflow_path,
+                workflow_rel,
+                execution_id,
+                step,
+                runner,
+            )
         })?;
 
     match outcome.status {
@@ -1097,13 +1229,13 @@ fn execute_leaf_with_retry(
                 action: step.action.clone(),
                 status: ExecutionStatus::Succeeded,
                 log: combined_log,
-                proposal_id: outcome.proposal_id.clone(),
+                proposal_id: primary_proposal_id(&outcome.proposal_ids),
                 attempts: attempts_used,
             }],
             status: ExecutionStatus::Succeeded,
             stdout: outcome.stdout,
             stderr: String::new(),
-            proposal_id: outcome.proposal_id,
+            proposal_ids: outcome.proposal_ids,
         }),
         ExecutionStatus::Cancelled => Ok(StepBatchOutcome {
             results: vec![WorkflowStepResult {
@@ -1117,7 +1249,7 @@ fn execute_leaf_with_retry(
             status: ExecutionStatus::Cancelled,
             stdout: String::new(),
             stderr: format!("[{}] cancelled\n", step.id),
-            proposal_id: None,
+            proposal_ids: Vec::new(),
         }),
         ExecutionStatus::Failed | ExecutionStatus::Running => Ok(StepBatchOutcome {
             results: vec![WorkflowStepResult {
@@ -1131,7 +1263,7 @@ fn execute_leaf_with_retry(
             status: ExecutionStatus::Failed,
             stdout: outcome.stdout,
             stderr: outcome.stderr,
-            proposal_id: None,
+            proposal_ids: Vec::new(),
         }),
     }
 }
@@ -1154,7 +1286,7 @@ where
         log: String::new(),
         stdout: String::new(),
         stderr: String::new(),
-        proposal_id: None,
+        proposal_ids: Vec::new(),
     };
 
     for attempt in 1..=max_attempts {
@@ -1174,8 +1306,10 @@ where
         }
         if attempt < max_attempts {
             combined_log.push_str("retrying after failure\n");
-            if backoff_seconds > 0 {
-                thread::sleep(Duration::from_secs(backoff_seconds));
+            if interruptible_backoff(backoff_seconds, cancel) {
+                combined_log.push_str("cancelled during backoff\n");
+                last.status = ExecutionStatus::Cancelled;
+                return Ok((last, attempts_used, combined_log));
             }
         }
     }
@@ -1187,6 +1321,7 @@ fn execute_parallel_group(
     workspace_root: &Path,
     workflow_path: &Path,
     workflow_rel: &str,
+    execution_id: &str,
     step: &WorkflowStep,
     runner: &TaskRunner,
     cancel: Option<&AtomicBool>,
@@ -1210,6 +1345,7 @@ fn execute_parallel_group(
                             workspace_root,
                             workflow_path,
                             workflow_rel,
+                            execution_id,
                             child,
                             runner,
                             cancel,
@@ -1245,7 +1381,7 @@ fn execute_parallel_group(
     let mut results = Vec::new();
     let mut stdout = String::new();
     let mut stderr = String::new();
-    let mut proposal_id = None;
+    let mut proposal_ids = Vec::new();
     let mut any_failed = false;
     let mut any_cancelled = cancelled;
 
@@ -1257,9 +1393,7 @@ fn execute_parallel_group(
         }
         stdout.push_str(&batch.stdout);
         stderr.push_str(&batch.stderr);
-        if batch.proposal_id.is_some() {
-            proposal_id = batch.proposal_id;
-        }
+        extend_proposal_ids(&mut proposal_ids, batch.proposal_ids);
         results.extend(batch.results);
     }
 
@@ -1290,7 +1424,7 @@ fn execute_parallel_group(
         action: "parallel".into(),
         status: group_status,
         log: group_log,
-        proposal_id: proposal_id.clone(),
+        proposal_id: primary_proposal_id(&proposal_ids),
         attempts: 1,
     });
     if group_status == ExecutionStatus::Succeeded {
@@ -1305,7 +1439,7 @@ fn execute_parallel_group(
         status: group_status,
         stdout,
         stderr,
-        proposal_id,
+        proposal_ids,
     })
 }
 
@@ -1313,6 +1447,7 @@ fn execute_top_level_step(
     workspace_root: &Path,
     workflow_path: &Path,
     workflow_rel: &str,
+    execution_id: &str,
     step: &WorkflowStep,
     runner: &TaskRunner,
     cancel: Option<&AtomicBool>,
@@ -1322,6 +1457,7 @@ fn execute_top_level_step(
             workspace_root,
             workflow_path,
             workflow_rel,
+            execution_id,
             step,
             runner,
             cancel,
@@ -1331,6 +1467,7 @@ fn execute_top_level_step(
         workspace_root,
         workflow_path,
         workflow_rel,
+        execution_id,
         step,
         runner,
         cancel,
@@ -1342,14 +1479,23 @@ fn execute_top_level_step(
 /// Steps run sequentially. A `parallel` group fans out its children concurrently
 /// (bounded by [`MAX_PARALLEL_STEPS`]), joins, then the runner continues. Leaf
 /// steps honor optional `retry` before the failure is treated as terminal.
+///
+/// When `execution_id` is `Some`, that id is used for the run record and for
+/// `proposal.create` idempotency keys (`{execution_id}:{step_id}`). Desktop hosts
+/// must pass the same id they expose to the UI.
 pub fn run_workflow(
     workspace_root: &Path,
     workflow_path: &Path,
     manifest: &WorkflowManifest,
     trigger: &str,
     cancel: Option<&AtomicBool>,
+    execution_id: Option<&str>,
 ) -> WorkflowResult<WorkflowRunRecord> {
-    let execution_id = uuid::Uuid::now_v7().to_string();
+    let execution_id = execution_id
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+        .map(|id| id.to_string())
+        .unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
     let started_at = now_iso();
     let workflow_rel = workflow_path
         .strip_prefix(workspace_root)
@@ -1360,7 +1506,7 @@ pub fn run_workflow(
     let mut step_results = Vec::new();
     let mut stdout = String::new();
     let mut stderr = String::new();
-    let mut proposal_id = None;
+    let mut proposal_ids = Vec::new();
     let mut status = ExecutionStatus::Succeeded;
 
     let runner = TaskRunner::new();
@@ -1376,15 +1522,14 @@ pub fn run_workflow(
             workspace_root,
             workflow_path,
             &workflow_rel,
+            &execution_id,
             step,
             &runner,
             cancel,
         )?;
         stdout.push_str(&batch.stdout);
         stderr.push_str(&batch.stderr);
-        if batch.proposal_id.is_some() {
-            proposal_id = batch.proposal_id.clone();
-        }
+        extend_proposal_ids(&mut proposal_ids, batch.proposal_ids);
         step_results.extend(batch.results);
 
         match batch.status {
@@ -1422,7 +1567,8 @@ pub fn run_workflow(
             started_at,
             finished_at: Some(now_iso()),
             outputs: Vec::new(),
-            proposal_id,
+            proposal_id: primary_proposal_id(&proposal_ids),
+            proposal_ids,
         },
         steps: step_results,
     };
@@ -1436,10 +1582,18 @@ pub fn load_and_run_workflow(
     workflow_path: &Path,
     trigger_override: Option<&str>,
     cancel: Option<&AtomicBool>,
+    execution_id: Option<&str>,
 ) -> WorkflowResult<WorkflowRunRecord> {
     let manifest = WorkflowManifest::load(workflow_path)?;
     let trigger = trigger_override.unwrap_or_else(|| trigger_label(&manifest.trigger));
-    run_workflow(workspace_root, workflow_path, &manifest, trigger, cancel)
+    run_workflow(
+        workspace_root,
+        workflow_path,
+        &manifest,
+        trigger,
+        cancel,
+        execution_id,
+    )
 }
 
 #[cfg(test)]
@@ -1562,16 +1716,22 @@ steps:
       message: proposal created
 "##;
         fs::write(&workflow_path, yaml).unwrap();
-        let record =
-            load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None).expect("run");
+        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None, None)
+            .expect("run");
         assert_eq!(record.execution.status, ExecutionStatus::Succeeded);
         let proposal_id = record.execution.proposal_id.expect("proposal id");
+        assert_eq!(record.execution.proposal_ids, vec![proposal_id.clone()]);
         let proposal = crate::load_proposal(dir.path(), &proposal_id).unwrap();
         assert_eq!(proposal.source.source_type, ProposalSourceType::Workflow);
         assert_eq!(
             proposal.source.resource.as_deref(),
             Some("Simple.workflow.yaml")
         );
+        assert_eq!(
+            proposal.source.execution_id.as_deref(),
+            Some(record.execution.id.as_str())
+        );
+        assert_eq!(proposal.source.step_id.as_deref(), Some("propose"));
         assert_eq!(record.steps.len(), 2);
         assert!(workflow_runs_dir(dir.path())
             .join(format!("{}.json", record.execution.id))
@@ -1818,7 +1978,7 @@ steps:
                     log: format!("fail-{calls}\n"),
                     stdout: String::new(),
                     stderr: format!("err-{calls}\n"),
-                    proposal_id: None,
+                    proposal_ids: Vec::new(),
                 })
             } else {
                 Ok(LeafOutcome {
@@ -1826,7 +1986,7 @@ steps:
                     log: "ok\n".into(),
                     stdout: "ok\n".into(),
                     stderr: String::new(),
-                    proposal_id: None,
+                    proposal_ids: Vec::new(),
                 })
             }
         })
@@ -1849,7 +2009,7 @@ steps:
                 log: format!("fail-{calls}\n"),
                 stdout: String::new(),
                 stderr: format!("err-{calls}\n"),
-                proposal_id: None,
+                proposal_ids: Vec::new(),
             })
         })
         .expect("retry loop");
@@ -1880,8 +2040,8 @@ steps:
       task: DoesNotExist.task
 "#;
         fs::write(&workflow_path, yaml).unwrap();
-        let record =
-            load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None).expect("run");
+        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None, None)
+            .expect("run");
         assert_eq!(record.execution.status, ExecutionStatus::Failed);
         assert_eq!(record.steps.len(), 1);
         assert_eq!(record.steps[0].attempts, 3);
@@ -1919,8 +2079,8 @@ steps:
       message: after-join
 "#;
         fs::write(&workflow_path, yaml).unwrap();
-        let record =
-            load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None).expect("run");
+        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None, None)
+            .expect("run");
         assert_eq!(record.execution.status, ExecutionStatus::Succeeded);
         let ids: Vec<_> = record.steps.iter().map(|s| s.id.as_str()).collect();
         assert_eq!(ids, vec!["left", "right", "fan", "after"]);
@@ -1958,8 +2118,8 @@ steps:
       message: should-not-run
 "#;
         fs::write(&workflow_path, yaml).unwrap();
-        let record =
-            load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None).expect("run");
+        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None, None)
+            .expect("run");
         assert_eq!(record.execution.status, ExecutionStatus::Failed);
         assert!(record
             .steps
@@ -2000,8 +2160,8 @@ steps:
 "#
         );
         fs::write(&workflow_path, yaml).unwrap();
-        let record =
-            load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None).expect("run");
+        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None, None)
+            .expect("run");
         assert_eq!(record.execution.status, ExecutionStatus::Succeeded);
         let child_results = record.steps.len() - 1; // exclude group summary
         assert_eq!(child_results, MAX_PARALLEL_STEPS + 1);
@@ -2119,12 +2279,320 @@ steps:
 "#,
         )
         .unwrap();
-        let record = load_and_run_workflow(root, &workflow, Some("schedule"), None).expect("run");
+        let record =
+            load_and_run_workflow(root, &workflow, Some("schedule"), None, None).expect("run");
         assert_eq!(record.trigger, "schedule");
         let last = last_schedule_run_at(root, "Tick.workflow.yaml")
             .expect("history")
             .expect("started_at");
         let parsed = parse_iso8601_z(&record.execution.started_at).expect("parse");
         assert_eq!(last, parsed);
+    }
+
+    #[test]
+    fn proposal_create_retry_dedupes_existing_pending() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("lattice.yaml"), "id: test\ntitle: Test\n").unwrap();
+        let workflow_path = dir.path().join("Dedupe.workflow.yaml");
+        let yaml = r##"
+format: lattice-workflow
+version: 1
+name: Dedupe
+trigger:
+  type: manual
+steps:
+  - id: propose
+    action: proposal.create
+    retry:
+      max_attempts: 2
+      backoff_seconds: 0
+    with:
+      summary: Create once
+      commands:
+        - type: page-create
+          path: Notes/Once.md
+          content: "# Once\n"
+"##;
+        fs::write(&workflow_path, yaml).unwrap();
+        let execution_id = "exec-stable-dedupe";
+        let record = run_workflow(
+            dir.path(),
+            &workflow_path,
+            &WorkflowManifest::load(&workflow_path).unwrap(),
+            "manual",
+            None,
+            Some(execution_id),
+        )
+        .expect("run");
+        assert_eq!(record.execution.id, execution_id);
+        assert_eq!(record.execution.status, ExecutionStatus::Succeeded);
+        assert_eq!(record.execution.proposal_ids.len(), 1);
+        let first_id = record.execution.proposal_ids[0].clone();
+
+        // Simulate post-persist failure: create again with the same key.
+        let again = create_proposal(
+            dir.path(),
+            TransactionProposal {
+                id: String::new(),
+                source: ProposalSource {
+                    source_type: ProposalSourceType::Workflow,
+                    resource: Some("Dedupe.workflow.yaml".into()),
+                    execution_id: Some(execution_id.into()),
+                    step_id: Some("propose".into()),
+                },
+                summary: "Create once again".into(),
+                commands: vec![],
+                affected_paths: vec![],
+                warnings: vec![],
+                created_at: String::new(),
+                status: Default::default(),
+            },
+        )
+        .unwrap();
+        assert_eq!(again.id, first_id);
+        assert_eq!(crate::list_proposal_summaries(dir.path()).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn rejects_retry_on_non_idempotent_task_without_unsafe_ack() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("lattice.yaml"), "id: test\ntitle: Test\n").unwrap();
+        let task_dir = dir.path().join("Unsafe.task");
+        fs::create_dir_all(&task_dir).unwrap();
+        fs::write(
+            task_dir.join("task.yaml"),
+            r#"format: lattice-task
+version: 1
+runtime:
+  type: python
+  provider: uv
+entrypoint:
+  command: [python, main.py]
+"#,
+        )
+        .unwrap();
+        fs::write(task_dir.join("main.py"), "print('ok')\n").unwrap();
+        let workflow_path = dir.path().join("UnsafeRetry.workflow.yaml");
+        fs::write(
+            &workflow_path,
+            r#"
+format: lattice-workflow
+version: 1
+name: Unsafe retry
+trigger:
+  type: manual
+steps:
+  - id: run
+    action: task.run
+    retry:
+      max_attempts: 3
+      backoff_seconds: 0
+    with:
+      task: Unsafe.task
+"#,
+        )
+        .unwrap();
+        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None, None)
+            .expect("run");
+        assert_eq!(record.execution.status, ExecutionStatus::Failed);
+        assert_eq!(record.steps[0].attempts, 1);
+        assert!(record.steps[0].log.contains("allow_unsafe_retry"));
+        assert!(record
+            .execution
+            .stderr
+            .contains("not marked execution.idempotent"));
+    }
+
+    #[test]
+    fn allows_retry_when_task_declares_idempotent() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("lattice.yaml"), "id: test\ntitle: Test\n").unwrap();
+        let task_dir = dir.path().join("Safe.task");
+        fs::create_dir_all(&task_dir).unwrap();
+        fs::write(
+            task_dir.join("task.yaml"),
+            r#"format: lattice-task
+version: 1
+runtime:
+  type: python
+  provider: uv
+entrypoint:
+  command: [python, main.py]
+execution:
+  idempotent: true
+"#,
+        )
+        .unwrap();
+        // Entrypoint that does not need uv project markers beyond what runner expects —
+        // missing uv will fail attempts; we only assert the unsafe gate did not fire.
+        fs::write(task_dir.join("main.py"), "print('ok')\n").unwrap();
+        let workflow_path = dir.path().join("SafeRetry.workflow.yaml");
+        fs::write(
+            &workflow_path,
+            r#"
+format: lattice-workflow
+version: 1
+name: Safe retry
+trigger:
+  type: manual
+steps:
+  - id: run
+    action: task.run
+    retry:
+      max_attempts: 2
+      backoff_seconds: 0
+    with:
+      task: Safe.task
+"#,
+        )
+        .unwrap();
+        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None, None)
+            .expect("run");
+        assert!(
+            !record.steps[0].log.contains("allow_unsafe_retry"),
+            "idempotent task should not hit unsafe rejection: {}",
+            record.steps[0].log
+        );
+        // Either succeeds (uv present) or retries then fails (uv missing) — not single-attempt reject.
+        assert!(record.steps[0].attempts >= 1);
+        if record.execution.status == ExecutionStatus::Failed {
+            assert!(
+                record.steps[0].attempts > 1
+                    || record.steps[0].log.contains("attempt 1/2")
+                    || record.execution.stderr.contains("uv")
+                    || record.execution.stderr.contains("MissingTool")
+                    || record.steps[0].log.contains("missing"),
+                "unexpected failure without retry: {}",
+                record.steps[0].log
+            );
+        }
+    }
+
+    #[test]
+    fn run_attempts_cancels_during_backoff() {
+        use std::sync::atomic::AtomicU32;
+        use std::sync::Arc;
+
+        let cancel = Arc::new(AtomicBool::new(false));
+        let calls = Arc::new(AtomicU32::new(0));
+        let cancel_thread = Arc::clone(&cancel);
+        let calls_thread = Arc::clone(&calls);
+        let handle = thread::spawn(move || {
+            run_attempts(3, 2, Some(cancel_thread.as_ref()), || {
+                let n = calls_thread.fetch_add(1, Ordering::SeqCst) + 1;
+                Ok(LeafOutcome {
+                    status: ExecutionStatus::Failed,
+                    log: format!("fail-{n}\n"),
+                    stdout: String::new(),
+                    stderr: format!("err-{n}\n"),
+                    proposal_ids: Vec::new(),
+                })
+            })
+        });
+        // Flip cancel shortly after the first failure enters backoff.
+        thread::sleep(Duration::from_millis(100));
+        cancel.store(true, Ordering::SeqCst);
+        let (outcome, attempts, log) = handle.join().unwrap().expect("retry loop");
+        assert_eq!(outcome.status, ExecutionStatus::Cancelled);
+        assert_eq!(attempts, 1);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert!(log.contains("cancelled during backoff"));
+    }
+
+    #[test]
+    fn parallel_proposal_children_retain_all_ids() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("lattice.yaml"), "id: test\ntitle: Test\n").unwrap();
+        let workflow_path = dir.path().join("ParallelProposals.workflow.yaml");
+        fs::write(
+            &workflow_path,
+            r##"
+format: lattice-workflow
+version: 1
+name: Parallel proposals
+trigger:
+  type: manual
+steps:
+  - id: fan
+    action: parallel
+    parallel:
+      - id: left
+        action: proposal.create
+        with:
+          summary: Left
+          commands:
+            - type: page-create
+              path: Notes/Left.md
+              content: "# Left\n"
+      - id: right
+        action: proposal.create
+        with:
+          summary: Right
+          commands:
+            - type: page-create
+              path: Notes/Right.md
+              content: "# Right\n"
+"##,
+        )
+        .unwrap();
+        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None, None)
+            .expect("run");
+        assert_eq!(record.execution.status, ExecutionStatus::Succeeded);
+        assert_eq!(record.execution.proposal_ids.len(), 2);
+        let left = record
+            .steps
+            .iter()
+            .find(|s| s.id == "left")
+            .and_then(|s| s.proposal_id.clone())
+            .expect("left proposal");
+        let right = record
+            .steps
+            .iter()
+            .find(|s| s.id == "right")
+            .and_then(|s| s.proposal_id.clone())
+            .expect("right proposal");
+        assert_ne!(left, right);
+        assert!(record.execution.proposal_ids.contains(&left));
+        assert!(record.execution.proposal_ids.contains(&right));
+        assert_eq!(
+            record.execution.proposal_id.as_deref(),
+            Some(record.execution.proposal_ids[0].as_str())
+        );
+    }
+
+    #[test]
+    fn run_workflow_honors_stable_execution_id() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("lattice.yaml"), "id: test\ntitle: Test\n").unwrap();
+        let workflow_path = dir.path().join("StableId.workflow.yaml");
+        fs::write(
+            &workflow_path,
+            r#"
+format: lattice-workflow
+version: 1
+name: Stable
+trigger:
+  type: manual
+steps:
+  - id: note
+    action: notification
+    with:
+      message: hi
+"#,
+        )
+        .unwrap();
+        let record = run_workflow(
+            dir.path(),
+            &workflow_path,
+            &WorkflowManifest::load(&workflow_path).unwrap(),
+            "manual",
+            None,
+            Some("desktop-stable-id"),
+        )
+        .expect("run");
+        assert_eq!(record.execution.id, "desktop-stable-id");
+        assert!(workflow_runs_dir(dir.path())
+            .join("desktop-stable-id.json")
+            .is_file());
     }
 }

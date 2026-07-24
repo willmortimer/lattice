@@ -108,11 +108,41 @@ automatic triggers; manual Run still executes.
 
 v1 steps: `task.run` (delegates to TaskRunner), `proposal.create` (source type
 `workflow`), optional `notification` (log only). Leaf steps may set optional
-`retry` (`max_attempts` ≥ 1, `backoff_seconds` sleep between failures). A step
-with a non-empty `parallel` child list (action `parallel` or omitted) runs those
-children concurrently (bounded, then join) before the next top-level step.
-Unknown actions/triggers are rejected at parse time. Run history is stored under
-`.lattice/workflows/runs/` (step results may include `attempts` when > 1).
+`retry` (`max_attempts` ≥ 1, `backoff_seconds` interruptible sleep between
+failures — cancel wakes the wait). A step with a non-empty `parallel` child list
+(action `parallel` or omitted) runs those children concurrently (bounded, then
+join) before the next top-level step. Unknown actions/triggers are rejected at
+parse time. Run history is stored under `.lattice/workflows/runs/` (step results
+may include `attempts` when > 1). Execution results carry `proposalIds` (all ids
+from the run; `proposalId` remains the first for compatibility).
+
+**Retry safety:** `proposal.create` is idempotent per run via key
+`{execution_id}:{step_id}` stamped on `ProposalSource` — a retry that already
+persisted a pending proposal returns that proposal instead of minting a
+duplicate. `task.run` retries require either `execution.idempotent: true` on the
+task manifest or an explicit `with.allow_unsafe_retry: true` on the step; without
+one of those, `max_attempts > 1` is rejected before the first attempt.
+
+Example task declaration:
+
+```yaml
+# task.yaml
+execution:
+  idempotent: true
+```
+
+Unsafe override on a workflow step:
+
+```yaml
+- id: side-effect
+  action: task.run
+  retry:
+    max_attempts: 3
+    backoff_seconds: 2
+  with:
+    task: SideEffect.task
+    allow_unsafe_retry: true
+```
 
 **Schedule firing (latticed):** when a workspace session is open, the daemon
 polls enabled `schedule` workflows and fires those with a due `interval_seconds`

@@ -134,7 +134,7 @@ impl ScheduleRunner {
                     let run_root = root.clone();
                     let fired_at = SystemTime::now();
                     let result = tokio::task::spawn_blocking(move || {
-                        load_and_run_workflow(&run_root, &workflow_path, Some("schedule"), None)
+                        load_and_run_workflow(&run_root, &workflow_path, Some("schedule"), None, None)
                     })
                     .await;
                     self.in_flight.remove(&key);

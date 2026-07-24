@@ -2228,6 +2228,7 @@ fn cmd_workflow_run(path: PathBuf, root: Option<PathBuf>) -> Result<ExitCode> {
         &workflow_path,
         Some("manual"),
         None,
+        None,
     ) {
         Ok(record) => {
             if !record.execution.stdout.is_empty() {
@@ -2242,7 +2243,7 @@ fn cmd_workflow_run(path: PathBuf, root: Option<PathBuf>) -> Result<ExitCode> {
                     eprintln!();
                 }
             }
-            if let Some(proposal_id) = &record.execution.proposal_id {
+            for proposal_id in &record.execution.proposal_ids {
                 eprintln!("proposal: {proposal_id}");
             }
             Ok(match record.execution.status {

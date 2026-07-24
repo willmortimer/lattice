@@ -814,6 +814,8 @@ pub fn api_create_proposal(
             source: ProposalSource {
                 source_type: ProposalSourceType::Mcp,
                 resource: params.source_resource,
+                execution_id: None,
+                step_id: None,
             },
             summary: params.summary,
             commands: params.commands,

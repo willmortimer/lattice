@@ -223,7 +223,13 @@ export function WorkflowResourceRenderer({
   const running = busy || execution?.status === "running";
   const duration =
     execution != null ? formatDuration(execution.startedAt, execution.finishedAt) : null;
-  const proposalId = execution?.proposalId ?? run?.steps.find((step) => step.proposalId)?.proposalId;
+  const proposalIds =
+    execution?.proposalIds && execution.proposalIds.length > 0
+      ? execution.proposalIds
+      : execution?.proposalId
+        ? [execution.proposalId]
+        : (run?.steps.map((step) => step.proposalId).filter(Boolean) as string[] | undefined) ??
+          [];
 
   return (
     <div className="task-surface workflow-surface">
@@ -294,20 +300,26 @@ export function WorkflowResourceRenderer({
               {duration && <span>Duration: {duration}</span>}
               {execution?.finishedAt && <span>Finished: {execution.finishedAt}</span>}
             </div>
-            {proposalId && (
+            {proposalIds.length > 0 && (
               <p className="workflow-proposal-link">
-                Proposal:{" "}
-                {context.callbacks.onOpenProposal ? (
-                  <button
-                    type="button"
-                    className="task-surface-link"
-                    onClick={() => context.callbacks.onOpenProposal?.(proposalId)}
-                  >
-                    <code>{proposalId}</code> (open inbox)
-                  </button>
-                ) : (
-                  <code>{proposalId}</code>
-                )}
+                {proposalIds.length === 1 ? "Proposal:" : "Proposals:"}{" "}
+                {proposalIds.map((id, index) => (
+                  <span key={id}>
+                    {index > 0 ? ", " : null}
+                    {context.callbacks.onOpenProposal ? (
+                      <button
+                        type="button"
+                        className="task-surface-link"
+                        onClick={() => context.callbacks.onOpenProposal?.(id)}
+                      >
+                        <code>{id}</code>
+                        {proposalIds.length === 1 ? " (open inbox)" : null}
+                      </button>
+                    ) : (
+                      <code>{id}</code>
+                    )}
+                  </span>
+                ))}
               </p>
             )}
             {run.steps.length > 0 && (
