@@ -148,7 +148,26 @@ Unsafe override on a workflow step:
 polls enabled `schedule` workflows and fires those with a due `interval_seconds`
 (trigger label `schedule`). Cron-only schedules are parsed/validated but not
 evaluated yet (set `interval_seconds` to fire; cron evaluator is TODO). Durable
-job queues and a visual editor remain out of scope.
+job queues, a known-workspace registry, and closed-desktop cron remain out of
+scope — interval schedules do **not** claim durability while the desktop is
+closed.
+
+**Job status (tray / HTTP):** daemon-owned schedule runs register in an
+in-memory job registry under a stable `executionId` (same id in
+`.lattice/workflows/runs/*.json`). Localhost routes:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/v1/jobs/list_active` | In-flight daemon jobs |
+| `POST` | `/v1/jobs/list_recent` | Recent + optional workspace disk history |
+| `POST` | `/v1/jobs/get` | One job by `executionId` |
+| `POST` | `/v1/jobs/cancel` | Cooperative cancel (daemon-owned only) |
+
+On OpenWorkspace / schedule tick, stranded on-disk `running` records are marked
+`abandoned` (process exited before finish). Desktop tray merges in-process
+`WorkflowState` runs with daemon jobs (HTTP when `LATTICE_AUTH_TOKEN` + API port
+are available, else disk `running` schedule records). Cancel ownership is
+explicit: `desktop` vs `daemon`.
 
 Example with retry and parallel fan-out:
 

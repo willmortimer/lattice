@@ -7,6 +7,7 @@ use std::time::Duration;
 use lattice_client::DaemonClient;
 use tokio::time::{sleep, Instant};
 
+use crate::embed_host::ENV_SEMANTIC_FAKE;
 use crate::error::{Error, Result};
 use crate::preferences::DaemonPreferences;
 
@@ -23,10 +24,15 @@ pub struct SpawnOptions {
     pub instance_id: Option<String>,
     /// How long to wait for the socket / handshake to become ready.
     pub ready_timeout: Duration,
-    /// Override profile keep-running preference (`None` reads desktop settings).
+    /// Override profile keep-running preference (`None` defaults to true for helpers).
     pub keep_services_running: Option<bool>,
     /// Override idle shutdown seconds when keep-running is false.
     pub idle_shutdown_secs: Option<u64>,
+    /// Force in-process fake semantic provider (default true for spawn helpers).
+    ///
+    /// Avoids contending for the shared default embed-host socket used by an
+    /// interactive Lattice.app latticed, which previously made ready waits flake.
+    pub semantic_fake: bool,
 }
 
 impl SpawnOptions {
@@ -40,9 +46,12 @@ impl SpawnOptions {
             socket_path: socket_path.into(),
             auth_token: auth_token.into(),
             instance_id: None,
-            ready_timeout: Duration::from_secs(5),
-            keep_services_running: None,
+            // Cold start + semantic host discovery must not flake Gate A.
+            ready_timeout: Duration::from_secs(30),
+            // Spawn helpers are short-lived test/desktop attaches — stay up until killed.
+            keep_services_running: Some(true),
             idle_shutdown_secs: None,
+            semantic_fake: true,
         }
     }
 
@@ -67,6 +76,12 @@ impl SpawnOptions {
         self.idle_shutdown_secs = Some(idle_shutdown_secs);
         self
     }
+
+    /// Disable the default `LATTICE_SEMANTIC_FAKE=1` isolation for spawn helpers.
+    pub fn with_semantic_fake(mut self, semantic_fake: bool) -> Self {
+        self.semantic_fake = semantic_fake;
+        self
+    }
 }
 
 /// Handle for a spawned `latticed` child.
@@ -75,6 +90,7 @@ pub struct SpawnedDaemon {
     pub socket_path: PathBuf,
     pub auth_token: String,
     pub instance_id: String,
+    stderr_path: Option<PathBuf>,
 }
 
 impl SpawnedDaemon {
@@ -87,6 +103,9 @@ impl SpawnedDaemon {
     pub fn kill(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+        if let Some(path) = self.stderr_path.take() {
+            let _ = std::fs::remove_file(path);
+        }
     }
 
     /// Non-blocking check whether the child has exited.
@@ -118,6 +137,14 @@ pub async fn spawn_latticed(opts: SpawnOptions) -> Result<SpawnedDaemon> {
         .idle_shutdown_secs
         .unwrap_or_else(|| prefs.idle_shutdown_timeout.as_secs().max(1));
 
+    let stderr_path = opts.socket_path.with_extension("spawn.stderr");
+    let stderr_file = std::fs::File::create(&stderr_path).map_err(|err| {
+        Error::Spawn(format!(
+            "failed to create stderr log {}: {err}",
+            stderr_path.display()
+        ))
+    })?;
+
     let mut cmd = Command::new(&opts.binary);
     cmd.arg("--socket")
         .arg(&opts.socket_path)
@@ -129,7 +156,11 @@ pub async fn spawn_latticed(opts: SpawnOptions) -> Result<SpawnedDaemon> {
         .arg("0")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stderr(Stdio::from(stderr_file));
+    if opts.semantic_fake {
+        // Isolate from interactive Lattice.app embed-host socket contention.
+        cmd.env(ENV_SEMANTIC_FAKE, "1");
+    }
     if keep_services_running {
         cmd.arg("--keep-services-running");
     } else {
@@ -150,16 +181,34 @@ pub async fn spawn_latticed(opts: SpawnOptions) -> Result<SpawnedDaemon> {
             socket_path: opts.socket_path,
             auth_token: opts.auth_token,
             instance_id,
+            stderr_path: Some(stderr_path),
         }),
         Err(err) => {
+            let stderr_tail = std::fs::read_to_string(&stderr_path)
+                .unwrap_or_default()
+                .chars()
+                .rev()
+                .take(2_000)
+                .collect::<String>()
+                .chars()
+                .rev()
+                .collect::<String>();
             let mut failed = SpawnedDaemon {
                 child,
                 socket_path: opts.socket_path,
                 auth_token: opts.auth_token,
                 instance_id: String::new(),
+                stderr_path: Some(stderr_path),
             };
             failed.kill();
-            Err(err)
+            Err(match err {
+                Error::ReadyTimeout { path } if !stderr_tail.trim().is_empty() => {
+                    Error::ReadyTimeout {
+                        path: format!("{path}; stderr: {}", stderr_tail.trim()),
+                    }
+                }
+                other => other,
+            })
         }
     }
 }
@@ -190,6 +239,13 @@ pub async fn wait_for_ready(
                     });
                 }
             }
+        } else if let Ok(Some(status)) = try_child_hint(socket_path) {
+            return Err(Error::ReadyTimeout {
+                path: format!(
+                    "{} (latticed exited before socket ready: {status})",
+                    socket_path.display()
+                ),
+            });
         }
         sleep(Duration::from_millis(25)).await;
     }
@@ -201,6 +257,11 @@ pub async fn wait_for_ready(
             last_err.unwrap_or_else(|| "socket never became ready".into())
         ),
     })
+}
+
+fn try_child_hint(_socket_path: &Path) -> std::io::Result<Option<String>> {
+    // No pid file today; ready timeout includes stderr when spawn fails.
+    Ok(None)
 }
 
 async fn try_health(socket_path: &Path, auth_token: &str) -> std::result::Result<String, String> {

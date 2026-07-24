@@ -622,6 +622,149 @@ pub fn save_workflow_run(workspace_root: &Path, record: &WorkflowRunRecord) -> W
     Ok(())
 }
 
+/// Load one workflow run by execution id.
+pub fn load_workflow_run(
+    workspace_root: &Path,
+    execution_id: &str,
+) -> WorkflowResult<WorkflowRunRecord> {
+    let path = workflow_runs_dir(workspace_root).join(format!("{execution_id}.json"));
+    let payload = fs::read_to_string(&path).map_err(|source| WorkflowError::Io {
+        path: path.clone(),
+        source,
+    })?;
+    serde_json::from_str(&payload).map_err(|err| WorkflowError::Invalid {
+        path,
+        message: format!("invalid run record: {err}"),
+    })
+}
+
+/// List recent workflow runs across all workflows (newest first), capped.
+pub fn list_all_workflow_runs(
+    workspace_root: &Path,
+    limit: usize,
+) -> WorkflowResult<Vec<WorkflowRunRecord>> {
+    let dir = workflow_runs_dir(workspace_root);
+    if !dir.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut runs = Vec::new();
+    for entry in fs::read_dir(&dir).map_err(|source| WorkflowError::Io {
+        path: dir.clone(),
+        source,
+    })? {
+        let entry = entry.map_err(|source| WorkflowError::Io {
+            path: dir.clone(),
+            source,
+        })?;
+        let path = entry.path();
+        if path.extension().and_then(|value| value.to_str()) != Some("json") {
+            continue;
+        }
+        let payload = fs::read_to_string(&path).map_err(|source| WorkflowError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        let record: WorkflowRunRecord =
+            serde_json::from_str(&payload).map_err(|err| WorkflowError::Invalid {
+                path,
+                message: format!("invalid run record: {err}"),
+            })?;
+        runs.push(record);
+    }
+    runs.sort_by(|left, right| {
+        right
+            .execution
+            .started_at
+            .cmp(&left.execution.started_at)
+            .then_with(|| right.execution.id.cmp(&left.execution.id))
+    });
+    if runs.len() > limit {
+        runs.truncate(limit);
+    }
+    Ok(runs)
+}
+
+/// Mark stranded `running` run JSON as `abandoned` after a daemon restart.
+///
+/// Policy: any on-disk run still `running` cannot still be owned by this process,
+/// so it is closed as abandoned (not cancelled — cancel implies an intentional stop).
+pub fn reconcile_abandoned_workflow_runs(workspace_root: &Path) -> WorkflowResult<usize> {
+    let runs = list_all_workflow_runs(workspace_root, usize::MAX)?;
+    let mut marked = 0usize;
+    let finished_at = now_iso();
+    for mut record in runs {
+        if record.execution.status != ExecutionStatus::Running {
+            continue;
+        }
+        record.execution.status = ExecutionStatus::Abandoned;
+        record.execution.finished_at = Some(finished_at.clone());
+        if record.execution.stderr.is_empty() {
+            record.execution.stderr =
+                "abandoned: owning process exited before the run finished\n".into();
+        } else if !record.execution.stderr.ends_with('\n') {
+            record.execution.stderr.push('\n');
+            record
+                .execution
+                .stderr
+                .push_str("abandoned: owning process exited before the run finished\n");
+        } else {
+            record
+                .execution
+                .stderr
+                .push_str("abandoned: owning process exited before the run finished\n");
+        }
+        save_workflow_run(workspace_root, &record)?;
+        marked += 1;
+    }
+    Ok(marked)
+}
+
+/// Build a shared [`ExecutionSummary`] from a persisted run record.
+pub fn execution_summary_from_record(
+    workspace_root: &Path,
+    record: &WorkflowRunRecord,
+    cancel_owner: &str,
+) -> crate::ExecutionSummary {
+    let cancellable = record.execution.status == ExecutionStatus::Running
+        && cancel_owner != crate::CANCEL_OWNER_NONE;
+    let current_step_id = record
+        .steps
+        .iter()
+        .rev()
+        .find(|step| step.status == ExecutionStatus::Running)
+        .or_else(|| record.steps.last())
+        .map(|step| step.id.clone());
+    let attempt = record.steps.last().map(|step| step.attempts);
+    let mut proposal_ids = record.execution.proposal_ids.clone();
+    if proposal_ids.is_empty() {
+        if let Some(id) = &record.execution.proposal_id {
+            proposal_ids.push(id.clone());
+        }
+    }
+    for step in &record.steps {
+        if let Some(id) = &step.proposal_id {
+            if !proposal_ids.iter().any(|existing| existing == id) {
+                proposal_ids.push(id.clone());
+            }
+        }
+    }
+    crate::ExecutionSummary {
+        execution_id: record.execution.id.clone(),
+        workspace_root: workspace_root.to_string_lossy().replace('\\', "/"),
+        resource_path: record.workflow_path.clone(),
+        kind: "workflow".into(),
+        trigger: record.trigger.clone(),
+        status: record.execution.status,
+        started_at: record.execution.started_at.clone(),
+        finished_at: record.execution.finished_at.clone(),
+        current_step_id,
+        attempt,
+        proposal_ids,
+        cancel_owner: cancel_owner.to_string(),
+        cancellable,
+    }
+}
+
 /// List recent workflow runs for a workflow path (newest first), capped.
 pub fn list_workflow_runs(
     workspace_root: &Path,
@@ -1251,20 +1394,22 @@ fn execute_leaf_with_retry(
             stderr: format!("[{}] cancelled\n", step.id),
             proposal_ids: Vec::new(),
         }),
-        ExecutionStatus::Failed | ExecutionStatus::Running => Ok(StepBatchOutcome {
-            results: vec![WorkflowStepResult {
-                id: step.id.clone(),
-                action: step.action.clone(),
+        ExecutionStatus::Failed | ExecutionStatus::Running | ExecutionStatus::Abandoned => {
+            Ok(StepBatchOutcome {
+                results: vec![WorkflowStepResult {
+                    id: step.id.clone(),
+                    action: step.action.clone(),
+                    status: ExecutionStatus::Failed,
+                    log: combined_log,
+                    proposal_id: None,
+                    attempts: attempts_used,
+                }],
                 status: ExecutionStatus::Failed,
-                log: combined_log,
-                proposal_id: None,
-                attempts: attempts_used,
-            }],
-            status: ExecutionStatus::Failed,
-            stdout: outcome.stdout,
-            stderr: outcome.stderr,
-            proposal_ids: Vec::new(),
-        }),
+                stdout: outcome.stdout,
+                stderr: outcome.stderr,
+                proposal_ids: Vec::new(),
+            })
+        }
     }
 }
 
@@ -1387,7 +1532,7 @@ fn execute_parallel_group(
 
     for batch in child_batches {
         match batch.status {
-            ExecutionStatus::Failed => any_failed = true,
+            ExecutionStatus::Failed | ExecutionStatus::Abandoned => any_failed = true,
             ExecutionStatus::Cancelled => any_cancelled = true,
             ExecutionStatus::Succeeded | ExecutionStatus::Running => {}
         }
@@ -1503,6 +1648,65 @@ pub fn run_workflow(
         .to_string_lossy()
         .replace('\\', "/");
 
+    let placeholder = WorkflowRunRecord {
+        workflow_path: workflow_rel.clone(),
+        trigger: trigger.to_string(),
+        execution: ExecutionResult {
+            id: execution_id.clone(),
+            status: ExecutionStatus::Running,
+            stdout: String::new(),
+            stderr: String::new(),
+            started_at: started_at.clone(),
+            finished_at: None,
+            outputs: Vec::new(),
+            proposal_id: None,
+            proposal_ids: Vec::new(),
+        },
+        steps: Vec::new(),
+    };
+    save_workflow_run(workspace_root, &placeholder)?;
+
+    run_workflow_body(
+        workspace_root,
+        workflow_path,
+        manifest,
+        trigger,
+        cancel,
+        execution_id,
+        started_at,
+        workflow_rel,
+    )
+}
+
+/// Like [`run_workflow`], but accepts an owned optional execution id (daemon schedule path).
+pub fn run_workflow_with_id(
+    workspace_root: &Path,
+    workflow_path: &Path,
+    manifest: &WorkflowManifest,
+    trigger: &str,
+    execution_id: Option<String>,
+    cancel: Option<&AtomicBool>,
+) -> WorkflowResult<WorkflowRunRecord> {
+    run_workflow(
+        workspace_root,
+        workflow_path,
+        manifest,
+        trigger,
+        cancel,
+        execution_id.as_deref(),
+    )
+}
+
+fn run_workflow_body(
+    workspace_root: &Path,
+    workflow_path: &Path,
+    manifest: &WorkflowManifest,
+    trigger: &str,
+    cancel: Option<&AtomicBool>,
+    execution_id: String,
+    started_at: String,
+    workflow_rel: String,
+) -> WorkflowResult<WorkflowRunRecord> {
     let mut step_results = Vec::new();
     let mut stdout = String::new();
     let mut stderr = String::new();
@@ -1534,7 +1738,7 @@ pub fn run_workflow(
 
         match batch.status {
             ExecutionStatus::Succeeded => {}
-            ExecutionStatus::Failed => {
+            ExecutionStatus::Failed | ExecutionStatus::Abandoned => {
                 status = ExecutionStatus::Failed;
                 break;
             }
@@ -1593,6 +1797,23 @@ pub fn load_and_run_workflow(
         trigger,
         cancel,
         execution_id,
+    )
+}
+
+/// Like [`load_and_run_workflow`], with an optional owned pre-assigned execution id.
+pub fn load_and_run_workflow_with_id(
+    workspace_root: &Path,
+    workflow_path: &Path,
+    trigger_override: Option<&str>,
+    execution_id: Option<String>,
+    cancel: Option<&AtomicBool>,
+) -> WorkflowResult<WorkflowRunRecord> {
+    load_and_run_workflow(
+        workspace_root,
+        workflow_path,
+        trigger_override,
+        cancel,
+        execution_id.as_deref(),
     )
 }
 
@@ -2594,5 +2815,35 @@ steps:
         assert!(workflow_runs_dir(dir.path())
             .join("desktop-stable-id.json")
             .is_file());
+    }
+
+    #[test]
+    fn reconcile_abandoned_marks_stranded_running_runs() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("lattice.yaml"), "id: test\ntitle: Test\n").unwrap();
+        let running = WorkflowRunRecord {
+            workflow_path: "Stuck.workflow.yaml".into(),
+            trigger: "schedule".into(),
+            execution: ExecutionResult {
+                id: "exec-abandoned-1".into(),
+                status: ExecutionStatus::Running,
+                stdout: String::new(),
+                stderr: String::new(),
+                started_at: "2026-07-24T12:00:00Z".into(),
+                finished_at: None,
+                outputs: Vec::new(),
+                proposal_id: None,
+                proposal_ids: Vec::new(),
+            },
+            steps: Vec::new(),
+        };
+        save_workflow_run(dir.path(), &running).expect("save running");
+        let marked = reconcile_abandoned_workflow_runs(dir.path()).expect("reconcile");
+        assert_eq!(marked, 1);
+        let loaded = load_workflow_run(dir.path(), "exec-abandoned-1").expect("load");
+        assert_eq!(loaded.execution.status, ExecutionStatus::Abandoned);
+        assert!(loaded.execution.finished_at.is_some());
+        assert!(loaded.execution.stderr.contains("abandoned"));
+        assert_eq!(reconcile_abandoned_workflow_runs(dir.path()).unwrap(), 0);
     }
 }

@@ -983,6 +983,127 @@ pub fn api_propose_artifact(
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ListJobsParams {
+    #[serde(default)]
+    pub workspace_id: Option<String>,
+    #[serde(default)]
+    pub root: Option<String>,
+    #[serde(default)]
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetJobParams {
+    #[serde(default)]
+    pub workspace_id: Option<String>,
+    #[serde(default)]
+    pub root: Option<String>,
+    pub execution_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CancelJobParams {
+    pub execution_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ListJobsResponse {
+    pub jobs: Vec<lattice_commands::ExecutionSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct JobResponse {
+    pub job: lattice_commands::ExecutionSummary,
+}
+
+pub fn api_list_active_jobs(jobs: &crate::jobs::JobRegistry) -> Result<ListJobsResponse, ApiError> {
+    Ok(ListJobsResponse {
+        jobs: jobs.list_active()?,
+    })
+}
+
+pub fn api_list_recent_jobs(
+    jobs: &crate::jobs::JobRegistry,
+    runtime: &LatticeRuntime,
+    params: ListJobsParams,
+) -> Result<ListJobsResponse, ApiError> {
+    let limit = params.limit.unwrap_or(20).clamp(1, 64);
+    let mut combined = jobs.list_recent(limit)?;
+    if params.workspace_id.is_some() || params.root.is_some() {
+        let session = resolve_session(
+            runtime,
+            params.workspace_id.as_deref(),
+            params.root.as_deref(),
+        )?;
+        let disk = crate::jobs::disk_recent_for_workspace(session.root(), limit)?;
+        for item in disk {
+            if combined
+                .iter()
+                .any(|existing| existing.execution_id == item.execution_id)
+            {
+                continue;
+            }
+            combined.push(item);
+        }
+        combined.sort_by(|left, right| {
+            right
+                .started_at
+                .cmp(&left.started_at)
+                .then_with(|| right.execution_id.cmp(&left.execution_id))
+        });
+        combined.truncate(limit);
+    }
+    Ok(ListJobsResponse { jobs: combined })
+}
+
+pub fn api_get_job(
+    jobs: &crate::jobs::JobRegistry,
+    runtime: &LatticeRuntime,
+    params: GetJobParams,
+) -> Result<JobResponse, ApiError> {
+    if params.execution_id.trim().is_empty() {
+        return Err(ApiError::BadRequest("executionId must not be empty".into()));
+    }
+    match jobs.get(&params.execution_id) {
+        Ok(job) => Ok(JobResponse { job }),
+        Err(ApiError::NotFound(_)) => {
+            if params.workspace_id.is_none() && params.root.is_none() {
+                return Err(ApiError::NotFound(format!(
+                    "job not found: {}",
+                    params.execution_id
+                )));
+            }
+            let session = resolve_session(
+                runtime,
+                params.workspace_id.as_deref(),
+                params.root.as_deref(),
+            )?;
+            Ok(JobResponse {
+                job: crate::jobs::disk_get(session.root(), &params.execution_id)?,
+            })
+        }
+        Err(err) => Err(err),
+    }
+}
+
+pub fn api_cancel_job(
+    jobs: &crate::jobs::JobRegistry,
+    params: CancelJobParams,
+) -> Result<JobResponse, ApiError> {
+    if params.execution_id.trim().is_empty() {
+        return Err(ApiError::BadRequest("executionId must not be empty".into()));
+    }
+    Ok(JobResponse {
+        job: jobs.cancel(&params.execution_id)?,
+    })
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DatasetInspectParams {
     #[serde(flatten)]
     pub workspace: WorkspaceRefParams,

@@ -38,7 +38,12 @@ pub struct TrayRunningJob {
     pub execution_id: String,
     pub workflow_path: String,
     pub label: String,
+    pub workspace_root: String,
+    pub cancel_owner: String,
+    pub cancellable: bool,
 }
+
+pub const ACTION_WORKFLOW_CANCEL_PREFIX: &str = "workflow.cancel.";
 
 #[cfg(debug_assertions)]
 pub const ACTION_OPEN_INSPECTOR: &str = "developer.open-inspector";
@@ -98,6 +103,14 @@ pub fn handle_action(app: &AppHandle, id: &str) {
             let execution_id = id.trim_start_matches(ACTION_WORKFLOW_OPEN_PREFIX);
             if let Some((root, workflow_path)) = tray::running_workflow_by_id(app, execution_id) {
                 open_workflow_resource(app, &root, &workflow_path);
+            }
+        }
+        id if id.starts_with(ACTION_WORKFLOW_CANCEL_PREFIX) => {
+            let execution_id = id.trim_start_matches(ACTION_WORKFLOW_CANCEL_PREFIX);
+            if let Err(err) = tray::cancel_running_job(app, execution_id) {
+                eprintln!("lattice: cancel workflow {execution_id}: {err}");
+            } else {
+                tray::refresh_from_workflows(app);
             }
         }
         ACTION_SETTINGS
@@ -459,6 +472,17 @@ pub fn build_tray_menu(
                 true,
                 None::<&str>,
             )?);
+            if job.cancellable {
+                let cancel_id = format!("{ACTION_WORKFLOW_CANCEL_PREFIX}{}", job.execution_id);
+                let cancel_label = format!("Cancel “{}”", job.label);
+                job_items.push(MenuItem::with_id(
+                    app,
+                    &cancel_id,
+                    &cancel_label,
+                    true,
+                    None::<&str>,
+                )?);
+            }
         }
         if let Some(sep) = jobs_sep.as_ref() {
             job_refs.push(sep);
