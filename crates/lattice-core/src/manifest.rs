@@ -195,7 +195,9 @@ mod tests {
     #[test]
     fn directory_metadata_round_trips_and_is_omitted_when_empty() {
         let mut manifest = WorkspaceManifest::new("Dirs");
-        assert!(!serde_yaml::to_string(&manifest).unwrap().contains("directories"));
+        assert!(!serde_yaml::to_string(&manifest)
+            .unwrap()
+            .contains("directories"));
         manifest.directories.insert(
             "Inbox".into(),
             DirectoryMeta {

@@ -42,10 +42,7 @@ impl SpeechEventSender {
 pub trait SpeechProvider: Send + Sync {
     fn capabilities(&self) -> SpeechCapabilities;
 
-    async fn prepare(
-        &self,
-        request: PrepareModelRequest,
-    ) -> Result<ModelStatus, SpeechError>;
+    async fn prepare(&self, request: PrepareModelRequest) -> Result<ModelStatus, SpeechError>;
 
     async fn start_session(
         &self,
@@ -121,10 +118,7 @@ impl SpeechProvider for NullSpeechProvider {
         self.capabilities.clone()
     }
 
-    async fn prepare(
-        &self,
-        _request: PrepareModelRequest,
-    ) -> Result<ModelStatus, SpeechError> {
+    async fn prepare(&self, _request: PrepareModelRequest) -> Result<ModelStatus, SpeechError> {
         Ok(ModelStatus {
             state: crate::protocol::ModelState::Ready,
             model_version: Some("null-0.1".into()),
@@ -263,11 +257,9 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use bytes::Bytes;
-    use crate::independent_final::{
-        FakeIndependentOfflineRedecode, IndependentFinalPolicy,
-    };
+    use crate::independent_final::{FakeIndependentOfflineRedecode, IndependentFinalPolicy};
     use crate::protocol::{AudioSampleFormat, FinalizationMode, SessionContext, VoiceEvent};
+    use bytes::Bytes;
 
     fn sample_chunk(session_id: &str, sequence: u64) -> AudioChunk {
         AudioChunk {
@@ -357,9 +349,8 @@ mod tests {
 
     #[tokio::test]
     async fn null_provider_buffers_frames_and_keeps_flush_without_backend() {
-        let provider = NullSpeechProvider::new().with_policy(IndependentFinalPolicy::for_tests(
-            true, false,
-        ));
+        let provider =
+            NullSpeechProvider::new().with_policy(IndependentFinalPolicy::for_tests(true, false));
         let (events, _rx) = SpeechEventSender::pair();
         let mut session = provider
             .start_session(sample_config("voice_buf"), events)

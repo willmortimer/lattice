@@ -208,10 +208,7 @@ pub struct WorkflowStepResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proposal_id: Option<String>,
     /// Attempts consumed (including the successful one, or all failed tries).
-    #[serde(
-        default = "default_attempts",
-        skip_serializing_if = "is_one_attempt"
-    )]
+    #[serde(default = "default_attempts", skip_serializing_if = "is_one_attempt")]
     pub attempts: u32,
 }
 
@@ -281,8 +278,12 @@ impl WorkflowManifest {
                 form_id,
             } => {
                 let has_form_path = form.as_ref().is_some_and(|value| !value.trim().is_empty());
-                let has_package_form = package.as_ref().is_some_and(|value| !value.trim().is_empty())
-                    && (form_id.as_ref().is_some_and(|value| !value.trim().is_empty())
+                let has_package_form = package
+                    .as_ref()
+                    .is_some_and(|value| !value.trim().is_empty())
+                    && (form_id
+                        .as_ref()
+                        .is_some_and(|value| !value.trim().is_empty())
                         || form.as_ref().is_some_and(|value| !value.trim().is_empty()));
                 if !has_form_path && !has_package_form {
                     return Err(invalid(
@@ -308,9 +309,9 @@ impl WorkflowManifest {
             return false;
         }
         match &self.trigger {
-            WorkflowTrigger::ResourceChanged { paths } => {
-                paths.iter().any(|pattern| path_matches_glob(changed_path, pattern))
-            }
+            WorkflowTrigger::ResourceChanged { paths } => paths
+                .iter()
+                .any(|pattern| path_matches_glob(changed_path, pattern)),
             _ => false,
         }
     }
@@ -334,7 +335,9 @@ impl WorkflowManifest {
             return false;
         };
 
-        if let Some(form_path) = form.as_ref().filter(|value| value.contains('/') || value.contains('\\'))
+        if let Some(form_path) = form
+            .as_ref()
+            .filter(|value| value.contains('/') || value.contains('\\'))
         {
             if let Some(submitted) = form_file_path {
                 if normalize_rel(submitted) == normalize_rel(form_path) {
@@ -683,7 +686,9 @@ pub fn set_workflow_enabled(path: &Path, enabled: bool) -> WorkflowResult<Workfl
 }
 
 /// Discover `*.workflow.yaml` / `*.workflow.yml` under a workspace root.
-pub fn discover_workflows(workspace_root: &Path) -> WorkflowResult<Vec<(PathBuf, WorkflowManifest)>> {
+pub fn discover_workflows(
+    workspace_root: &Path,
+) -> WorkflowResult<Vec<(PathBuf, WorkflowManifest)>> {
     let mut found = Vec::new();
     discover_workflows_in(workspace_root, workspace_root, &mut found)?;
     Ok(found)
@@ -805,9 +810,7 @@ pub fn last_schedule_run_at(
 fn parse_iso8601_z(value: &str) -> Option<SystemTime> {
     let value = value.trim();
     let (date, rest) = value.split_once('T')?;
-    let time = rest
-        .strip_suffix('Z')
-        .or_else(|| rest.strip_suffix('z'))?;
+    let time = rest.strip_suffix('Z').or_else(|| rest.strip_suffix('z'))?;
     let time = time.split('.').next()?;
     let mut date_parts = date.split('-');
     let year: i32 = date_parts.next()?.parse().ok()?;
@@ -850,6 +853,7 @@ fn days_from_civil(year: i32, month: u32, day: u32) -> i64 {
     i64::from(era) * 146_097 + i64::from(doe) - 719_468
 }
 
+#[allow(clippy::only_used_in_recursion)]
 fn discover_workflows_in(
     workspace_root: &Path,
     dir: &Path,
@@ -906,10 +910,7 @@ pub fn resolve_workspace_path(workspace_root: &Path, workflow_path: &Path, rel: 
     if candidate.is_absolute() {
         return candidate.to_path_buf();
     }
-    let from_workflow = workflow_path
-        .parent()
-        .unwrap_or(workspace_root)
-        .join(rel);
+    let from_workflow = workflow_path.parent().unwrap_or(workspace_root).join(rel);
     if from_workflow.exists() {
         return from_workflow;
     }
@@ -1050,8 +1051,7 @@ fn execute_leaf_once(
             })
         }
         "notification" => {
-            let params: NotificationParams =
-                deserialize_with(&step.with, workflow_path, &step.id)?;
+            let params: NotificationParams = deserialize_with(&step.with, workflow_path, &step.id)?;
             let message = if params.message.is_empty() {
                 format!("notification from step {}", step.id)
             } else {
@@ -1085,12 +1085,10 @@ fn execute_leaf_with_retry(
     cancel: Option<&AtomicBool>,
 ) -> WorkflowResult<StepBatchOutcome> {
     let (max_attempts, backoff_seconds) = retry_budget(step.retry.as_ref());
-    let (outcome, attempts_used, combined_log) = run_attempts(
-        max_attempts,
-        backoff_seconds,
-        cancel,
-        || execute_leaf_once(workspace_root, workflow_path, workflow_rel, step, runner),
-    )?;
+    let (outcome, attempts_used, combined_log) =
+        run_attempts(max_attempts, backoff_seconds, cancel, || {
+            execute_leaf_once(workspace_root, workflow_path, workflow_rel, step, runner)
+        })?;
 
     match outcome.status {
         ExecutionStatus::Succeeded => Ok(StepBatchOutcome {
@@ -1296,7 +1294,10 @@ fn execute_parallel_group(
         attempts: 1,
     });
     if group_status == ExecutionStatus::Succeeded {
-        stdout.push_str(&format!("[{}] parallel ok ({child_count} children)\n", step.id));
+        stdout.push_str(&format!(
+            "[{}] parallel ok ({child_count} children)\n",
+            step.id
+        ));
     }
 
     Ok(StepBatchOutcome {
@@ -1561,8 +1562,8 @@ steps:
       message: proposal created
 "##;
         fs::write(&workflow_path, yaml).unwrap();
-        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None)
-            .expect("run");
+        let record =
+            load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None).expect("run");
         assert_eq!(record.execution.status, ExecutionStatus::Succeeded);
         let proposal_id = record.execution.proposal_id.expect("proposal id");
         let proposal = crate::load_proposal(dir.path(), &proposal_id).unwrap();
@@ -1572,7 +1573,9 @@ steps:
             Some("Simple.workflow.yaml")
         );
         assert_eq!(record.steps.len(), 2);
-        assert!(workflow_runs_dir(dir.path()).join(format!("{}.json", record.execution.id)).is_file());
+        assert!(workflow_runs_dir(dir.path())
+            .join(format!("{}.json", record.execution.id))
+            .is_file());
     }
 
     #[test]
@@ -1627,7 +1630,8 @@ trigger:
   interval_seconds: 3600
 steps: []
 "#;
-        let manifest = WorkflowManifest::parse(Path::new("Hourly.workflow.yaml"), yaml).expect("parse");
+        let manifest =
+            WorkflowManifest::parse(Path::new("Hourly.workflow.yaml"), yaml).expect("parse");
         assert_eq!(
             manifest.trigger,
             WorkflowTrigger::Schedule(ScheduleTrigger {
@@ -1652,7 +1656,8 @@ trigger:
   timezone: America/Los_Angeles
 steps: []
 "#;
-        let manifest = WorkflowManifest::parse(Path::new("Nightly.workflow.yaml"), yaml).expect("parse");
+        let manifest =
+            WorkflowManifest::parse(Path::new("Nightly.workflow.yaml"), yaml).expect("parse");
         match &manifest.trigger {
             WorkflowTrigger::Schedule(schedule) => {
                 assert!(schedule.interval_seconds.is_none());
@@ -1875,8 +1880,8 @@ steps:
       task: DoesNotExist.task
 "#;
         fs::write(&workflow_path, yaml).unwrap();
-        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None)
-            .expect("run");
+        let record =
+            load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None).expect("run");
         assert_eq!(record.execution.status, ExecutionStatus::Failed);
         assert_eq!(record.steps.len(), 1);
         assert_eq!(record.steps[0].attempts, 3);
@@ -1914,8 +1919,8 @@ steps:
       message: after-join
 "#;
         fs::write(&workflow_path, yaml).unwrap();
-        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None)
-            .expect("run");
+        let record =
+            load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None).expect("run");
         assert_eq!(record.execution.status, ExecutionStatus::Succeeded);
         let ids: Vec<_> = record.steps.iter().map(|s| s.id.as_str()).collect();
         assert_eq!(ids, vec!["left", "right", "fan", "after"]);
@@ -1953,10 +1958,13 @@ steps:
       message: should-not-run
 "#;
         fs::write(&workflow_path, yaml).unwrap();
-        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None)
-            .expect("run");
+        let record =
+            load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None).expect("run");
         assert_eq!(record.execution.status, ExecutionStatus::Failed);
-        assert!(record.steps.iter().any(|s| s.id == "fan" && s.status == ExecutionStatus::Failed));
+        assert!(record
+            .steps
+            .iter()
+            .any(|s| s.id == "fan" && s.status == ExecutionStatus::Failed));
         assert!(record.steps.iter().all(|s| s.id != "after"));
         assert!(!record.execution.stdout.contains("should-not-run"));
     }
@@ -1992,8 +2000,8 @@ steps:
 "#
         );
         fs::write(&workflow_path, yaml).unwrap();
-        let record = load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None)
-            .expect("run");
+        let record =
+            load_and_run_workflow(dir.path(), &workflow_path, Some("manual"), None).expect("run");
         assert_eq!(record.execution.status, ExecutionStatus::Succeeded);
         let child_results = record.steps.len() - 1; // exclude group summary
         assert_eq!(child_results, MAX_PARALLEL_STEPS + 1);
@@ -2065,7 +2073,10 @@ steps: []
             cron: Some("0 * * * *".into()),
             timezone: None,
         };
-        assert_eq!(evaluate_schedule_due(&interval, None, now), ScheduleDue::Due);
+        assert_eq!(
+            evaluate_schedule_due(&interval, None, now),
+            ScheduleDue::Due
+        );
         assert_eq!(
             evaluate_schedule_due(&interval, Some(now - Duration::from_secs(59)), now),
             ScheduleDue::NotDue
@@ -2108,8 +2119,7 @@ steps:
 "#,
         )
         .unwrap();
-        let record =
-            load_and_run_workflow(root, &workflow, Some("schedule"), None).expect("run");
+        let record = load_and_run_workflow(root, &workflow, Some("schedule"), None).expect("run");
         assert_eq!(record.trigger, "schedule");
         let last = last_schedule_run_at(root, "Tick.workflow.yaml")
             .expect("history")

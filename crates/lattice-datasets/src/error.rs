@@ -58,10 +58,7 @@ impl Error {
         }
     }
 
-    pub(crate) fn parquet(
-        path: impl Into<PathBuf>,
-        source: parquet::errors::ParquetError,
-    ) -> Self {
+    pub(crate) fn parquet(path: impl Into<PathBuf>, source: parquet::errors::ParquetError) -> Self {
         Error::Parquet {
             path: path.into(),
             source,

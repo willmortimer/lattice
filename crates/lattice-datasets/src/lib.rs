@@ -22,8 +22,8 @@ pub use manifest::{
     DATASET_MANIFEST_FILENAME, SUPPORTED_VERSION,
 };
 pub use package::{
-    validate_package_layout, Dataset, ANNOTATIONS_FILENAME, FACTS_DIR, QUERIES_DIR, README_FILENAME,
-    VIEWS_DIR,
+    validate_package_layout, Dataset, ANNOTATIONS_FILENAME, FACTS_DIR, QUERIES_DIR,
+    README_FILENAME, VIEWS_DIR,
 };
 pub use partition::{
     hive_facts_relative_path, hive_keys_from_relative_path, normalize_facts_relative,

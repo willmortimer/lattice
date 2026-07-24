@@ -14,11 +14,7 @@ fn main() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../templates/workspaces/demo/files/Data/Events.dataset");
     let csv = root.join("sources/signups.csv");
-    assert!(
-        csv.is_file(),
-        "missing source CSV at {}",
-        csv.display()
-    );
+    assert!(csv.is_file(), "missing source CSV at {}", csv.display());
 
     // Wipe previous facts / annotations so re-runs are idempotent.
     let facts = root.join("facts");
@@ -61,12 +57,7 @@ fn main() {
             Some("Lowest signups — check campaign coverage.".into()),
             false,
         ),
-        EventAnnotation::new(
-            "evt-central",
-            Some("keep".into()),
-            None,
-            true,
-        ),
+        EventAnnotation::new("evt-central", Some("keep".into()), None, true),
     ] {
         dataset
             .upsert_annotation(&annotation)

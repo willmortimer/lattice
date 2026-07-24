@@ -159,7 +159,10 @@ fn semantic_spawn_host_env() -> SpawnHostEnv {
         .is_none()
     {
         if let Some(host) = resolve_embed_host_bin() {
-            extra_env.push((ENV_EMBED_HOST_BIN.to_string(), host.to_string_lossy().into()));
+            extra_env.push((
+                ENV_EMBED_HOST_BIN.to_string(),
+                host.to_string_lossy().into(),
+            ));
         }
     }
 
@@ -178,14 +181,12 @@ fn semantic_spawn_host_env() -> SpawnHostEnv {
     }
 }
 
-fn spawn_status_forwarder(app: AppHandle, client: Arc<DaemonClient>) -> tokio::task::JoinHandle<()> {
+fn spawn_status_forwarder(
+    app: AppHandle,
+    client: Arc<DaemonClient>,
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
-        let mut events = match client
-            .subscribe(EventFilter {
-                workspace_id: None,
-            })
-            .await
-        {
+        let mut events = match client.subscribe(EventFilter { workspace_id: None }).await {
             Ok(stream) => stream,
             Err(_) => return,
         };
@@ -247,7 +248,8 @@ async fn ensure_workspace(
 }
 
 fn status_from_response(status: Option<WireSemanticStatus>) -> Result<SemanticStatusDto, String> {
-    let status = status.ok_or_else(|| "semantic status missing from daemon response".to_string())?;
+    let status =
+        status.ok_or_else(|| "semantic status missing from daemon response".to_string())?;
     Ok(SemanticStatusDto::from(&status))
 }
 
@@ -418,7 +420,11 @@ pub async fn semantic_disable(
 
 /// Map a wire/state string into a Settings label (pure helper for tests).
 #[cfg(test)]
-pub fn status_label(state: &str, pending_chunks: Option<u64>, progress_percent: Option<u32>) -> String {
+pub fn status_label(
+    state: &str,
+    pending_chunks: Option<u64>,
+    progress_percent: Option<u32>,
+) -> String {
     let parsed = SemanticStatusState::parse(state);
     match parsed {
         Some(SemanticStatusState::Stopped) => "Not prepared".into(),
@@ -445,9 +451,15 @@ mod tests {
     #[test]
     fn status_label_covers_all_states() {
         assert_eq!(status_label("stopped", None, None), "Not prepared");
-        assert_eq!(status_label("downloading", None, Some(37)), "Downloading 37%");
+        assert_eq!(
+            status_label("downloading", None, Some(37)),
+            "Downloading 37%"
+        );
         assert_eq!(status_label("preparing", None, None), "Preparing…");
-        assert_eq!(status_label("indexing", Some(3), None), "Indexing (3 pending)");
+        assert_eq!(
+            status_label("indexing", Some(3), None),
+            "Indexing (3 pending)"
+        );
         assert_eq!(status_label("ready", Some(0), None), "Ready");
         assert!(status_label("degraded", None, None).contains("Degraded"));
         assert_eq!(status_label("failed", None, None), "Failed");

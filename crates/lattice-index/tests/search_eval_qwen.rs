@@ -23,9 +23,7 @@ use lattice_core::Workspace;
 use lattice_embed_host::{
     install_model, socket_path_in, EmbedHostClient, ReconnectableEmbedHostProvider,
 };
-use lattice_embedding::{
-    qwen3_embedding_0_6b_q8_manifest, EmbedQueryRequest, EmbeddingProvider,
-};
+use lattice_embedding::{qwen3_embedding_0_6b_q8_manifest, EmbedQueryRequest, EmbeddingProvider};
 use lattice_index::{WorkspaceIndex, CHUNKER_VERSION};
 use serde::Deserialize;
 use tempfile::TempDir;
@@ -320,9 +318,7 @@ fn research_search_eval_fts_vs_hybrid_qwen() {
         let start = Instant::now();
         rt.block_on(async {
             provider
-                .embed_query(EmbedQueryRequest {
-                    text: probe.into(),
-                })
+                .embed_query(EmbedQueryRequest { text: probe.into() })
                 .await
                 .expect("cold embed_query")
         });
@@ -334,9 +330,7 @@ fn research_search_eval_fts_vs_hybrid_qwen() {
         let start = Instant::now();
         rt.block_on(async {
             provider
-                .embed_query(EmbedQueryRequest {
-                    text: probe.into(),
-                })
+                .embed_query(EmbedQueryRequest { text: probe.into() })
                 .await
                 .expect("warm embed_query")
         });
@@ -369,12 +363,7 @@ fn research_search_eval_fts_vs_hybrid_qwen() {
 
         let hybrid_start = Instant::now();
         let hybrid_hits = index
-            .hybrid_search(
-                &query.text,
-                10,
-                Some(provider.as_ref()),
-                Some(namespace.id),
-            )
+            .hybrid_search(&query.text, 10, Some(provider.as_ref()), Some(namespace.id))
             .expect("hybrid_search");
         let hybrid_ms = hybrid_start.elapsed().as_secs_f64() * 1000.0;
         hybrid_latencies_ms.push(hybrid_ms);

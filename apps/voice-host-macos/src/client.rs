@@ -5,14 +5,15 @@ use std::sync::Arc;
 
 use bytes::{Bytes, BytesMut};
 use lattice_protocol::{
-    encode_frame, envelope, request, request_envelope, response, Event,
-    FinishUtteranceRequest, FrameDecoder, GetVoiceCapabilitiesRequest, HealthRequest,
-    HealthResponse, PrepareModelRequest, PushAudioChunkRequest, Request, Response,
-    SessionContext, SpeechSessionConfig, StartVoiceSessionRequest, UnloadVoiceModelRequest,
-    UnloadVoiceModelResponse, VoiceHostStatusRequest, VoiceHostStatusResponse, PROTOCOL_VERSION,
+    encode_frame, envelope, request, request_envelope, response, Event, FinishUtteranceRequest,
+    FrameDecoder, GetVoiceCapabilitiesRequest, HealthRequest, HealthResponse, PrepareModelRequest,
+    PushAudioChunkRequest, Request, Response, SessionContext, SpeechSessionConfig,
+    StartVoiceSessionRequest, UnloadVoiceModelRequest, UnloadVoiceModelResponse,
+    VoiceHostStatusRequest, VoiceHostStatusResponse, PROTOCOL_VERSION,
 };
 use lattice_voice::{
-    AudioChunk, AudioSampleFormat, ModelStatus, SpeechCapabilities, PROTOCOL_VERSION as VOICE_PROTOCOL_VERSION,
+    AudioChunk, AudioSampleFormat, ModelStatus, SpeechCapabilities,
+    PROTOCOL_VERSION as VOICE_PROTOCOL_VERSION,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
@@ -38,8 +39,9 @@ impl VoiceHostClient {
         let socket_path = socket_path.as_ref().to_path_buf();
         let stream = UnixStream::connect(&socket_path).await?;
         let (reader, writer) = stream.into_split();
-        let pending: Arc<Mutex<HashMap<String, oneshot::Sender<Result<Response, VoiceHostError>>>>> =
-            Arc::new(Mutex::new(HashMap::new()));
+        let pending: Arc<
+            Mutex<HashMap<String, oneshot::Sender<Result<Response, VoiceHostError>>>>,
+        > = Arc::new(Mutex::new(HashMap::new()));
         let (event_tx, _) = broadcast::channel(64);
         spawn_reader(reader, Arc::clone(&pending), event_tx.clone());
 
@@ -387,9 +389,7 @@ impl VoiceHostClient {
     }
 }
 
-fn sample_format_to_proto(
-    format: AudioSampleFormat,
-) -> lattice_protocol::AudioSampleFormat {
+fn sample_format_to_proto(format: AudioSampleFormat) -> lattice_protocol::AudioSampleFormat {
     match format {
         AudioSampleFormat::F32 => lattice_protocol::AudioSampleFormat::F32,
         AudioSampleFormat::I16Le => lattice_protocol::AudioSampleFormat::I16Le,

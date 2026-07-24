@@ -15,9 +15,7 @@ pub enum BridgeRequest {
 impl BridgeRequest {
     pub fn id(&self) -> &str {
         match self {
-            Self::Execute { id, .. }
-            | Self::Interrupt { id }
-            | Self::Shutdown { id } => id,
+            Self::Execute { id, .. } | Self::Interrupt { id } | Self::Shutdown { id } => id,
         }
     }
 
@@ -144,7 +142,8 @@ mod tests {
             } if name == "stdout" && text == "hi\n"
         ));
 
-        let err = r#"{"type":"error","id":"r1","ename":"ValueError","evalue":"x","traceback":["t"]}"#;
+        let err =
+            r#"{"type":"error","id":"r1","ename":"ValueError","evalue":"x","traceback":["t"]}"#;
         let parsed = BridgeResponse::from_line(err).expect("error");
         match parsed {
             BridgeResponse::Error {
@@ -173,7 +172,8 @@ mod tests {
             other => panic!("unexpected: {other:?}"),
         }
 
-        let result = r#"{"type":"execute_result","id":"r1","data":{"text/plain":"42","image/png":"abc"}}"#;
+        let result =
+            r#"{"type":"execute_result","id":"r1","data":{"text/plain":"42","image/png":"abc"}}"#;
         let parsed = BridgeResponse::from_line(result).expect("execute_result");
         match parsed {
             BridgeResponse::ExecuteResult { data, .. } => {

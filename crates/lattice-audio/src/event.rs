@@ -16,7 +16,9 @@ impl GapEvent {
     /// Number of missing sequence numbers in `(from_sequence, to_sequence)`.
     #[must_use]
     pub fn missing_count(&self) -> u64 {
-        self.to_sequence.saturating_sub(self.from_sequence).saturating_sub(1)
+        self.to_sequence
+            .saturating_sub(self.from_sequence)
+            .saturating_sub(1)
     }
 }
 

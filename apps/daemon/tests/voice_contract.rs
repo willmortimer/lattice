@@ -61,9 +61,8 @@ fn ensure_voice_host_bin() -> PathBuf {
         status.success(),
         "cargo build -p lattice-voice-host failed: {status}"
     );
-    resolve_voice_host_bin().expect(
-        "lattice-voice-host binary missing after build (set LATTICE_VOICE_HOST_BIN)",
-    )
+    resolve_voice_host_bin()
+        .expect("lattice-voice-host binary missing after build (set LATTICE_VOICE_HOST_BIN)")
 }
 
 async fn spawn_daemon_with_voice() -> ServerGuard {
@@ -129,9 +128,7 @@ async fn voice_rpcs_proxy_through_daemon_with_fake_host() {
         .expect("connect");
 
     let mut events = client
-        .subscribe(EventFilter {
-            workspace_id: None,
-        })
+        .subscribe(EventFilter { workspace_id: None })
         .await
         .expect("subscribe");
 
@@ -323,10 +320,12 @@ async fn voice_rpcs_proxy_through_daemon_with_fake_host() {
         .request(Request {
             deadline_unix_ms: None,
             idempotency_key: None,
-            body: Some(request::Body::CancelVoiceSession(CancelVoiceSessionRequest {
-                session_id: "daemon-voice-3".into(),
-                reason: Some("test cleanup".into()),
-            })),
+            body: Some(request::Body::CancelVoiceSession(
+                CancelVoiceSessionRequest {
+                    session_id: "daemon-voice-3".into(),
+                    reason: Some("test cleanup".into()),
+                },
+            )),
         })
         .await
         .expect("cancel");

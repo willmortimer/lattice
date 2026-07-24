@@ -66,7 +66,9 @@ impl UtteranceAudioBuffer {
         channels: u8,
     ) -> Result<(), SpeechError> {
         if channels == 0 {
-            return Err(SpeechError::provider("utterance buffer requires channels > 0"));
+            return Err(SpeechError::provider(
+                "utterance buffer requires channels > 0",
+            ));
         }
         if sample_rate_hz == 0 {
             return Err(SpeechError::provider(
@@ -175,7 +177,9 @@ fn decode_f32_payload(payload: &Bytes) -> Result<Vec<f32>, SpeechError> {
 
 fn decode_i16_le_payload(payload: &Bytes) -> Result<Vec<f32>, SpeechError> {
     if payload.len() % 2 != 0 {
-        return Err(SpeechError::provider("I16 LE payload length is not aligned"));
+        return Err(SpeechError::provider(
+            "I16 LE payload length is not aligned",
+        ));
     }
     let mut samples = Vec::with_capacity(payload.len() / 2);
     for bytes in payload.chunks_exact(2) {

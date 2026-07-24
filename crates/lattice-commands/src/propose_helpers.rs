@@ -251,7 +251,8 @@ permissions:
 
     #[test]
     fn propose_workflow_validates_and_warns_on_suffix() {
-        let bundle = propose_workflow("Automations/Demo.workflow.yaml", valid_workflow_yaml()).unwrap();
+        let bundle =
+            propose_workflow("Automations/Demo.workflow.yaml", valid_workflow_yaml()).unwrap();
         assert!(bundle.warnings.is_empty());
         assert!(matches!(bundle.commands[0], Command::ResourceCreate { .. }));
 
@@ -268,9 +269,11 @@ permissions:
 
     #[test]
     fn propose_interface_validates_stem() {
-        let bundle =
-            propose_interface("CRM.data/interfaces/Overview.interface.yaml", valid_interface_yaml())
-                .unwrap();
+        let bundle = propose_interface(
+            "CRM.data/interfaces/Overview.interface.yaml",
+            valid_interface_yaml(),
+        )
+        .unwrap();
         assert!(bundle.warnings.is_empty());
 
         let err = propose_interface(

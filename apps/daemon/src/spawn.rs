@@ -114,9 +114,9 @@ pub async fn spawn_latticed(opts: SpawnOptions) -> Result<SpawnedDaemon> {
     let keep_services_running = opts
         .keep_services_running
         .unwrap_or(prefs.keep_services_running);
-    let idle_shutdown_secs = opts.idle_shutdown_secs.unwrap_or_else(|| {
-        prefs.idle_shutdown_timeout.as_secs().max(1)
-    });
+    let idle_shutdown_secs = opts
+        .idle_shutdown_secs
+        .unwrap_or_else(|| prefs.idle_shutdown_timeout.as_secs().max(1));
 
     let mut cmd = Command::new(&opts.binary);
     cmd.arg("--socket")
@@ -133,7 +133,8 @@ pub async fn spawn_latticed(opts: SpawnOptions) -> Result<SpawnedDaemon> {
     if keep_services_running {
         cmd.arg("--keep-services-running");
     } else {
-        cmd.arg("--idle-shutdown-secs").arg(idle_shutdown_secs.to_string());
+        cmd.arg("--idle-shutdown-secs")
+            .arg(idle_shutdown_secs.to_string());
     }
     if let Some(instance_id) = &opts.instance_id {
         cmd.arg("--instance-id").arg(instance_id);

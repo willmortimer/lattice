@@ -548,8 +548,7 @@ fn split_block_by_char_budget(block: MergedBlock) -> Vec<MergedBlock> {
             break;
         }
         let mut end = cursor;
-        let mut char_count = 0;
-        for (offset, _) in remaining.char_indices() {
+        for (char_count, (offset, _)) in remaining.char_indices().enumerate() {
             if char_count >= HARD_MAX_CHUNK_CHARS {
                 break;
             }
@@ -560,7 +559,6 @@ fn split_block_by_char_budget(block: MergedBlock) -> Vec<MergedBlock> {
                     .next()
                     .map(char::len_utf8)
                     .unwrap_or(0);
-            char_count += 1;
         }
         if end <= cursor {
             end = block.text.len();

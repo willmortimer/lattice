@@ -33,12 +33,10 @@ pub fn voice_request_from_proto(
         Body::StartVoiceSession(req) => Ok(Some(VoiceRequest::StartVoiceSession(
             start_from_proto(req)?,
         ))),
-        Body::PushAudioChunk(req) => Ok(Some(VoiceRequest::PushAudioChunk(chunk_from_proto(
-            req,
-        )?))),
-        Body::FinishUtterance(req) => Ok(Some(VoiceRequest::FinishUtterance(finish_from_proto(
-            req,
-        )))),
+        Body::PushAudioChunk(req) => Ok(Some(VoiceRequest::PushAudioChunk(chunk_from_proto(req)?))),
+        Body::FinishUtterance(req) => {
+            Ok(Some(VoiceRequest::FinishUtterance(finish_from_proto(req))))
+        }
         Body::UpdateSessionContext(req) => Ok(Some(VoiceRequest::UpdateSessionContext(
             update_context_from_proto(req),
         ))),
@@ -250,9 +248,7 @@ fn endpoint_reason_to_proto(
         lattice_voice::EndpointReason::MaxUtteranceLength => {
             lattice_protocol::EndpointReason::MaxUtteranceLength
         }
-        lattice_voice::EndpointReason::ProviderEou => {
-            lattice_protocol::EndpointReason::ProviderEou
-        }
+        lattice_voice::EndpointReason::ProviderEou => lattice_protocol::EndpointReason::ProviderEou,
     }
 }
 
@@ -267,10 +263,7 @@ fn session_context_from_proto(context: ProtoSessionContext) -> SessionContext {
 
 fn chunk_from_proto(req: ProtoPush) -> Result<AudioChunk, VoiceHostError> {
     let channels = u8::try_from(req.channels).map_err(|_| {
-        VoiceHostError::protocol(format!(
-            "channels {} exceeds u8 (max 255)",
-            req.channels
-        ))
+        VoiceHostError::protocol(format!("channels {} exceeds u8 (max 255)", req.channels))
     })?;
     let sample_format = sample_format_from_proto(req.sample_format())?;
     Ok(AudioChunk {
@@ -388,9 +381,9 @@ fn finalization_from_proto(
         ProtoFinalizationMode::IndependentOfflineRedecode => {
             Ok(FinalizationMode::IndependentOfflineRedecode)
         }
-        ProtoFinalizationMode::Unspecified => Err(VoiceHostError::protocol(
-            "finalization mode is unspecified",
-        )),
+        ProtoFinalizationMode::Unspecified => {
+            Err(VoiceHostError::protocol("finalization mode is unspecified"))
+        }
     }
 }
 

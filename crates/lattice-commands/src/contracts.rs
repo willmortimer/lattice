@@ -224,9 +224,6 @@ mod tests {
         };
         let json = serde_json::to_string(&binding).unwrap();
         assert!(json.contains("\"type\":\"saved-view\""));
-        assert_eq!(
-            serde_json::from_str::<BindingSpec>(&json).unwrap(),
-            binding
-        );
+        assert_eq!(serde_json::from_str::<BindingSpec>(&json).unwrap(), binding);
     }
 }

@@ -6,9 +6,7 @@ use tauri::{AppHandle, Emitter};
 use tokio::sync::Mutex;
 
 use super::capture::{ensure_capture, pump_capture_frames, stop_capture_and_rearm};
-use super::{
-    VoiceInner, VoiceSessionContextHints, VoiceUiEvent, VOICE_EVENT,
-};
+use super::{VoiceInner, VoiceSessionContextHints, VoiceUiEvent, VOICE_EVENT};
 
 pub(super) struct EmbeddedBackend {
     pub provider: Arc<lattice_voice_macos::FluidAudioSpeechProvider>,
@@ -139,8 +137,8 @@ pub(super) async fn start_session(
 ) -> Result<EmbeddedActiveSession, String> {
     use lattice_audio::CaptureProvider;
     use lattice_voice::{
-        SessionContext, SpeechEventSender, SpeechProvider, SpeechSessionConfig, VoiceContextBuilder,
-        VoiceContextInput, VoiceEvent,
+        SessionContext, SpeechEventSender, SpeechProvider, SpeechSessionConfig,
+        VoiceContextBuilder, VoiceContextInput, VoiceEvent,
     };
 
     let provider = ensure_provider(&app, inner).await?;
@@ -367,7 +365,11 @@ pub(super) async fn cancel_session(
     Ok(())
 }
 
-pub(super) async fn shutdown_active(active: EmbeddedActiveSession, rearm: bool, inner: &mut VoiceInner) {
+pub(super) async fn shutdown_active(
+    active: EmbeddedActiveSession,
+    rearm: bool,
+    inner: &mut VoiceInner,
+) {
     active.pump.abort();
     {
         let mut guard = active.session.lock().await;

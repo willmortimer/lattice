@@ -96,9 +96,7 @@ impl EnvProvider {
     }
 
     fn resolve_uv_project(&self, project_dir: &Path) -> Result<ResolvedEnv> {
-        let project_dir = project_dir
-            .canonicalize()
-            .map_err(|source| EnvError::Io(source))?;
+        let project_dir = project_dir.canonicalize().map_err(EnvError::Io)?;
 
         let has_pyproject = project_dir.join("pyproject.toml").is_file();
         let has_lock = project_dir.join("uv.lock").is_file();
@@ -168,14 +166,11 @@ impl EnvProvider {
     }
 
     fn resolve_nix(&self, root: &Path) -> Result<ResolvedEnv> {
-        let root = root
-            .canonicalize()
-            .map_err(|source| EnvError::Io(source))?;
+        let root = root.canonicalize().map_err(EnvError::Io)?;
 
         let search = self.search_path();
-        let nix = find_on_path("nix", &search).ok_or_else(|| EnvError::MissingTool {
-            tool: "nix".into(),
-        })?;
+        let nix = find_on_path("nix", &search)
+            .ok_or_else(|| EnvError::MissingTool { tool: "nix".into() })?;
 
         let has_flake = root.join("flake.nix").is_file();
         let has_shell = root.join("shell.nix").is_file();
@@ -191,10 +186,7 @@ impl EnvProvider {
         // Prefer flake when both exist; never fall back to system Python.
         let output = if has_flake {
             let root_str = root.to_str().ok_or_else(|| EnvError::Unavailable {
-                reason: format!(
-                    "nix root is not valid UTF-8: {}",
-                    root.display()
-                ),
+                reason: format!("nix root is not valid UTF-8: {}", root.display()),
             })?;
             let installable = format!("path:{root_str}#");
             Command::new(&nix)
@@ -205,10 +197,7 @@ impl EnvProvider {
         } else {
             let shell_nix = root.join("shell.nix");
             let shell_str = shell_nix.to_str().ok_or_else(|| EnvError::Unavailable {
-                reason: format!(
-                    "shell.nix path is not valid UTF-8: {}",
-                    shell_nix.display()
-                ),
+                reason: format!("shell.nix path is not valid UTF-8: {}", shell_nix.display()),
             })?;
             Command::new(&nix)
                 .args(["print-dev-env", "--json", "-f", shell_str])
@@ -314,7 +303,10 @@ exit 1
                     }
                 }
             });
-            let escaped = payload.to_string().replace('\\', "\\\\").replace('"', "\\\"");
+            let escaped = payload
+                .to_string()
+                .replace('\\', "\\\\")
+                .replace('"', "\\\"");
             format!("#!/bin/sh\necho \"{escaped}\"\n")
         };
         write_executable(&bin_dir.join("nix"), script.as_bytes());
@@ -466,7 +458,10 @@ exit 1
         let path_bin = tempfile::tempdir().unwrap();
         write_fake_nix(path_bin.path(), nix_bin.path(), false);
         // Ambient system python must be ignored; only nix PATH counts.
-        write_executable(&path_bin.path().join("python3"), b"#!/bin/sh\necho system\n");
+        write_executable(
+            &path_bin.path().join("python3"),
+            b"#!/bin/sh\necho system\n",
+        );
 
         let provider = EnvProvider::with_path(path_with(&[path_bin.path()]));
         let resolved = provider
@@ -489,8 +484,11 @@ exit 1
     #[test]
     fn nix_shell_nix_resolves_via_print_dev_env() {
         let root = tempfile::tempdir().unwrap();
-        fs::write(root.path().join("shell.nix"), b"{ pkgs ? import <nixpkgs> {} }: pkgs.mkShell {}\n")
-            .unwrap();
+        fs::write(
+            root.path().join("shell.nix"),
+            b"{ pkgs ? import <nixpkgs> {} }: pkgs.mkShell {}\n",
+        )
+        .unwrap();
 
         let nix_bin = tempfile::tempdir().unwrap();
         let python = nix_bin.path().join("python");

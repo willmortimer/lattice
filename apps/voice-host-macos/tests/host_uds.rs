@@ -47,12 +47,7 @@ async fn fake_backend_transcribes_fixture_over_uds() {
     let dir = tempdir().unwrap();
     let socket = socket_path_in(dir.path());
 
-    let state = HostState::new(HostConfig::new(
-        socket.clone(),
-        BackendKind::Fake,
-        None,
-    ))
-    .unwrap();
+    let state = HostState::new(HostConfig::new(socket.clone(), BackendKind::Fake, None)).unwrap();
     let server = tokio::spawn(run_server(Arc::clone(&state)));
 
     wait_for_socket(&socket).await;

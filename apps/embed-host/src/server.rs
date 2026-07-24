@@ -21,7 +21,7 @@ use crate::spec::embedding_spec_to_proto;
 use crate::{
     envelope, error_envelope, request, response_envelope, CancelResponse, EmbedDocumentsResponse,
     EmbedQueryResponse, EmbeddingVector, Envelope, HealthResponse, InstallModelResponse,
-    LoadModelResponse, PROTOCOL_VERSION, Request, Response, StatusResponse, UnloadModelResponse,
+    LoadModelResponse, Request, Response, StatusResponse, UnloadModelResponse, PROTOCOL_VERSION,
 };
 
 /// Host process configuration.
@@ -221,9 +221,7 @@ async fn handle_request(
         }
         request::Body::LoadModel(load) => handle_load(state, load).await,
         request::Body::UnloadModel(_) => handle_unload(state).await,
-        request::Body::EmbedQuery(embed) => {
-            handle_embed_query(state, request_id, embed.text).await
-        }
+        request::Body::EmbedQuery(embed) => handle_embed_query(state, request_id, embed.text).await,
         request::Body::EmbedDocuments(embed) => {
             handle_embed_documents(state, request_id, embed.documents).await
         }
@@ -286,12 +284,8 @@ async fn handle_load(
         move || {
             let (manifest, artifact_path) = load_manifest(&model_dir)?;
             let dims = dimensions.unwrap_or(manifest.default_dimensions);
-            let loaded = LoadedBackend::new(open_backend(
-                backend,
-                &manifest,
-                &artifact_path,
-                dims,
-            )?);
+            let loaded =
+                LoadedBackend::new(open_backend(backend, &manifest, &artifact_path, dims)?);
             let model_id = manifest.model_id.clone();
             let spec = loaded.specification().clone();
             Ok::<_, EmbedHostError>((loaded, model_id, spec))
@@ -345,9 +339,7 @@ async fn handle_embed_query(
             Arc::clone(guard.as_ref().ok_or(EmbedHostError::ModelNotLoaded)?)
         };
         ensure_not_cancelled(&cancel)?;
-        let vector = backend
-            .embed_query(EmbedQueryRequest { text })
-            .await?;
+        let vector = backend.embed_query(EmbedQueryRequest { text }).await?;
         ensure_not_cancelled(&cancel)?;
         state.queries_completed.fetch_add(1, Ordering::Relaxed);
         Ok(Response {

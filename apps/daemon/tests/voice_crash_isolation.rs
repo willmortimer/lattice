@@ -56,9 +56,8 @@ fn ensure_voice_host_bin() -> PathBuf {
         status.success(),
         "cargo build -p lattice-voice-host failed: {status}"
     );
-    resolve_voice_host_bin().expect(
-        "lattice-voice-host binary missing after build (set LATTICE_VOICE_HOST_BIN)",
-    )
+    resolve_voice_host_bin()
+        .expect("lattice-voice-host binary missing after build (set LATTICE_VOICE_HOST_BIN)")
 }
 
 async fn spawn_daemon_with_voice() -> ServerGuard {
@@ -178,13 +177,18 @@ async fn supervised_voice_host_crash_daemon_survives_and_recovers() {
         "voice plane should be degraded after host kill"
     );
 
-    let health = client.request(health_request()).await.expect("daemon health");
+    let health = client
+        .request(health_request())
+        .await
+        .expect("daemon health");
     match health.body {
         Some(response::Body::Health(h)) => assert_eq!(h.instance_id, "crash-isolation"),
         other => panic!("unexpected health during degradation: {other:?}"),
     }
 
-    let voice_err = voice_capabilities(&client).await.expect_err("voice during outage");
+    let voice_err = voice_capabilities(&client)
+        .await
+        .expect_err("voice during outage");
     let message = voice_err.to_string();
     assert!(
         message.contains("voice_host_unavailable")
@@ -204,7 +208,10 @@ async fn supervised_voice_host_crash_daemon_survives_and_recovers() {
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    assert!(recovered, "voice plane should recover after supervisor restart");
+    assert!(
+        recovered,
+        "voice plane should recover after supervisor restart"
+    );
     let recovery_ms = recovery_start.elapsed().as_millis();
     eprintln!("LIFECYCLE_MEAS: voice_host_recovery_ms={recovery_ms}");
 
@@ -220,7 +227,10 @@ async fn supervised_voice_host_crash_daemon_survives_and_recovers() {
         .expect("reopen workspace after recovery");
     match reopen.body {
         Some(response::Body::OpenWorkspace(resp)) => {
-            assert!(resp.lease.is_some(), "workspace lease intact after recovery");
+            assert!(
+                resp.lease.is_some(),
+                "workspace lease intact after recovery"
+            );
         }
         other => panic!("unexpected reopen: {other:?}"),
     }

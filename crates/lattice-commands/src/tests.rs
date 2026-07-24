@@ -2098,4 +2098,3 @@ fn cross_package_relation_columns_add_and_write_reject() {
         ))
         .unwrap();
 }
-

@@ -185,9 +185,9 @@ fn tokenize(input: &str) -> Result<Vec<Token>, FormulaError> {
                     i += 1;
                 }
                 let lit: String = chars[start..i].iter().collect();
-                let number = lit.parse::<f64>().map_err(|_| {
-                    FormulaError::new(format!("invalid numeric literal {lit:?}"))
-                })?;
+                let number = lit
+                    .parse::<f64>()
+                    .map_err(|_| FormulaError::new(format!("invalid numeric literal {lit:?}")))?;
                 tokens.push(Token::Number(number));
             }
             other => {
@@ -355,7 +355,7 @@ impl Parser {
                     let right = self.parse_unary(values)?;
                     left = match (left, right) {
                         (EvalValue::Null, _) | (_, EvalValue::Null) => EvalValue::Null,
-                        (EvalValue::Number(_), EvalValue::Number(b)) if b == 0.0 => EvalValue::Null,
+                        (EvalValue::Number(_), EvalValue::Number(0.0)) => EvalValue::Null,
                         (EvalValue::Number(a), EvalValue::Number(b)) => EvalValue::Number(a / b),
                         _ => EvalValue::Null,
                     };
@@ -442,7 +442,9 @@ fn cell_to_eval(cell: Option<&CellValue>) -> EvalValue {
 fn concat_values(left: EvalValue, right: EvalValue) -> EvalValue {
     match (left, right) {
         (EvalValue::Null, _) | (_, EvalValue::Null) => EvalValue::Null,
-        (left, right) => EvalValue::Text(format!("{}{}", display_eval(&left), display_eval(&right))),
+        (left, right) => {
+            EvalValue::Text(format!("{}{}", display_eval(&left), display_eval(&right)))
+        }
     }
 }
 
@@ -456,11 +458,7 @@ fn add_or_concat(left: EvalValue, right: EvalValue) -> EvalValue {
     }
 }
 
-fn arithmetic(
-    left: EvalValue,
-    right: EvalValue,
-    op: impl Fn(f64, f64) -> f64,
-) -> EvalValue {
+fn arithmetic(left: EvalValue, right: EvalValue, op: impl Fn(f64, f64) -> f64) -> EvalValue {
     match (left, right) {
         (EvalValue::Null, _) | (_, EvalValue::Null) => EvalValue::Null,
         (EvalValue::Number(a), EvalValue::Number(b)) => EvalValue::Number(op(a, b)),

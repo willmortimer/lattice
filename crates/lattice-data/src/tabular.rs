@@ -23,14 +23,19 @@ pub(crate) fn build_tabular_table(
     raw_rows: Vec<Vec<String>>,
 ) -> Result<TabularTable> {
     if raw_headers.is_empty() {
-        return Err(Error::invalid_package(path, "tabular import has no header row"));
+        return Err(Error::invalid_package(
+            path,
+            "tabular import has no header row",
+        ));
     }
 
     let headers = sanitize_headers(raw_headers)?;
     if headers.is_empty() {
         return Err(Error::invalid_package(
             path,
-            format!("tabular import has no usable columns after sanitizing headers: {raw_headers:?}"),
+            format!(
+                "tabular import has no usable columns after sanitizing headers: {raw_headers:?}"
+            ),
         ));
     }
 
@@ -39,10 +44,10 @@ pub(crate) fn build_tabular_table(
 
     for raw_row in raw_rows {
         let mut row = Vec::with_capacity(headers.len());
-        for index in 0..headers.len() {
+        for (index, samples) in column_samples.iter_mut().enumerate() {
             let cell = raw_row.get(index).map(|value| value.trim()).unwrap_or("");
             if !cell.is_empty() {
-                column_samples[index].push(cell.to_string());
+                samples.push(cell.to_string());
             }
             row.push(cell.to_string());
         }
@@ -183,9 +188,7 @@ pub(crate) fn enforce_row_limit(path: &Path, row_count: usize) -> Result<()> {
     if row_count > TABULAR_IMPORT_MAX_ROWS {
         return Err(tabular_error(
             path,
-            format!(
-                "tabular import exceeds row limit ({row_count} > {TABULAR_IMPORT_MAX_ROWS})"
-            ),
+            format!("tabular import exceeds row limit ({row_count} > {TABULAR_IMPORT_MAX_ROWS})"),
         ));
     }
     Ok(())

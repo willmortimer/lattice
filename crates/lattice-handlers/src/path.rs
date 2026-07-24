@@ -74,10 +74,7 @@ mod tests {
         let root = dir.path().to_string_lossy().into_owned();
 
         let (_, candidate) = resolve_within_root(&root, "Notes.md").unwrap();
-        assert_eq!(
-            std::fs::read_to_string(candidate).unwrap(),
-            "# Hi\n"
-        );
+        assert_eq!(std::fs::read_to_string(candidate).unwrap(), "# Hi\n");
     }
 
     #[test]
@@ -88,10 +85,7 @@ mod tests {
         std::fs::create_dir_all(&ws).unwrap();
         Workspace::init(&ws, "Inner").unwrap();
 
-        let result = resolve_within_root(
-            &ws.to_string_lossy(),
-            "../secret.txt",
-        );
+        let result = resolve_within_root(&ws.to_string_lossy(), "../secret.txt");
         assert!(result.is_err());
     }
 }

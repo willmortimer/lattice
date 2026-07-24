@@ -3,8 +3,8 @@ use std::path::Path;
 use calamine::{open_workbook, Data, Reader, Xlsx};
 
 use crate::tabular::{build_tabular_table, enforce_row_limit, tabular_error};
-use crate::TabularTable;
 use crate::Result;
+use crate::TabularTable;
 
 /// Parse the first worksheet of an `.xlsx` workbook into a tabular table.
 pub fn parse_xlsx_file(path: &Path) -> Result<TabularTable> {

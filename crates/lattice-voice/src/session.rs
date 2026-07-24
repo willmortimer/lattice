@@ -61,10 +61,7 @@ impl SessionStateMachine {
     }
 }
 
-fn is_valid_transition(
-    from: TranscriptionSessionState,
-    to: TranscriptionSessionState,
-) -> bool {
+fn is_valid_transition(from: TranscriptionSessionState, to: TranscriptionSessionState) -> bool {
     use TranscriptionSessionState::*;
 
     if from == to {
@@ -98,7 +95,9 @@ mod tests {
         machine
             .transition(TranscriptionSessionState::Preparing)
             .unwrap();
-        machine.transition(TranscriptionSessionState::Ready).unwrap();
+        machine
+            .transition(TranscriptionSessionState::Ready)
+            .unwrap();
         machine
             .transition(TranscriptionSessionState::Listening)
             .unwrap();
@@ -146,7 +145,9 @@ mod tests {
         machine
             .transition(TranscriptionSessionState::Preparing)
             .unwrap();
-        machine.transition(TranscriptionSessionState::Ready).unwrap();
+        machine
+            .transition(TranscriptionSessionState::Ready)
+            .unwrap();
         machine
             .transition(TranscriptionSessionState::Listening)
             .unwrap();
@@ -172,7 +173,9 @@ mod tests {
         machine
             .transition(TranscriptionSessionState::Preparing)
             .unwrap();
-        machine.transition(TranscriptionSessionState::Ready).unwrap();
+        machine
+            .transition(TranscriptionSessionState::Ready)
+            .unwrap();
         machine
             .transition(TranscriptionSessionState::Listening)
             .unwrap();

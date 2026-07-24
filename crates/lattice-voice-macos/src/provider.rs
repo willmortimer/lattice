@@ -10,8 +10,8 @@ use lattice_voice::{
     commit_final_transcript, AudioChunk, AudioSampleFormat, FinalModelMemoryPolicy,
     FinalTranscript, FinalizationMode, IndependentFinalPolicy, ModelState, ModelStatus,
     PartialTranscriptPayload, PrepareModelRequest, SpeechCapabilities, SpeechError,
-    SpeechEventSender, SpeechProvider, SpeechSession, SpeechSessionConfig,
-    StableTranscriptPayload, UnimplementedOfflineRedecode, UtteranceAudioBuffer, VoiceEvent,
+    SpeechEventSender, SpeechProvider, SpeechSession, SpeechSessionConfig, StableTranscriptPayload,
+    UnimplementedOfflineRedecode, UtteranceAudioBuffer, VoiceEvent,
 };
 use tokio::task::JoinHandle;
 
@@ -152,10 +152,7 @@ impl SpeechProvider for FluidAudioSpeechProvider {
             )));
         }
 
-        ensure_abi_version(
-            LATTICE_VOICE_BRIDGE_ABI_VERSION,
-            self.backend.abi_version(),
-        )?;
+        ensure_abi_version(LATTICE_VOICE_BRIDGE_ABI_VERSION, self.backend.abi_version())?;
 
         let backend = Arc::clone(&self.backend);
         let engine = self.ensure_engine()?;
@@ -193,11 +190,8 @@ impl SpeechProvider for FluidAudioSpeechProvider {
         let callback_ptr = Box::into_raw(callback_ctx);
 
         let backend = Arc::clone(&self.backend);
-        let session = backend.session_start(
-            engine,
-            Some(bridge_event_callback),
-            callback_ptr.cast(),
-        )?;
+        let session =
+            backend.session_start(engine, Some(bridge_event_callback), callback_ptr.cast())?;
 
         let shared = Arc::new(Mutex::new(SessionSharedState::default()));
         let utterance_id = "utt_1".to_string();
@@ -339,7 +333,9 @@ impl SpeechSession for FluidAudioSpeechSession {
         // Baseline: StreamingUnifiedAsrManager.finish() (StreamingFlush).
         tokio::task::spawn_blocking(move || backend.session_finish_utterance(session))
             .await
-            .map_err(|err| SpeechError::provider(format!("finish_utterance task failed: {err}")))??;
+            .map_err(|err| {
+                SpeechError::provider(format!("finish_utterance task failed: {err}"))
+            })??;
 
         let processing_ms = started.elapsed().as_millis() as u64;
         let final_text = self
@@ -434,8 +430,8 @@ fn spawn_event_dispatcher(
             };
 
             let result = match event.kind {
-                LatticeVoiceEventKind::Partial => events.send(VoiceEvent::PartialTranscript(
-                    PartialTranscriptPayload {
+                LatticeVoiceEventKind::Partial => {
+                    events.send(VoiceEvent::PartialTranscript(PartialTranscriptPayload {
                         session_id: session_id.clone(),
                         utterance_id: utterance_id.clone(),
                         revision,
@@ -443,19 +439,19 @@ fn spawn_event_dispatcher(
                         stable_prefix_bytes: event.stable_prefix_bytes,
                         started_at_ms: 0,
                         ended_at_ms: 0,
-                    },
-                )),
-                LatticeVoiceEventKind::Stable => events.send(VoiceEvent::StableTranscript(
-                    StableTranscriptPayload {
+                    }))
+                }
+                LatticeVoiceEventKind::Stable => {
+                    events.send(VoiceEvent::StableTranscript(StableTranscriptPayload {
                         session_id: session_id.clone(),
                         utterance_id: utterance_id.clone(),
                         revision,
                         text: event.text,
                         stable_prefix_bytes: event.stable_prefix_bytes,
-                    },
-                )),
-                LatticeVoiceEventKind::Final => events.send(VoiceEvent::FinalTranscript(
-                    FinalTranscript {
+                    }))
+                }
+                LatticeVoiceEventKind::Final => {
+                    events.send(VoiceEvent::FinalTranscript(FinalTranscript {
                         session_id: session_id.clone(),
                         utterance_id: utterance_id.clone(),
                         replaces_revision: revision,
@@ -465,8 +461,8 @@ fn spawn_event_dispatcher(
                         finalization_mode: FinalizationMode::StreamingFlush,
                         duration_ms: 0,
                         processing_ms: 0,
-                    },
-                )),
+                    }))
+                }
                 LatticeVoiceEventKind::SpeechStarted => events.send(VoiceEvent::SpeechStarted {
                     session_id: session_id.clone(),
                     utterance_id: utterance_id.clone(),
@@ -696,10 +692,7 @@ mod tests {
         let bridge = Arc::new(MockBridge::new(LATTICE_VOICE_BRIDGE_ABI_VERSION));
         let provider = FluidAudioSpeechProvider::with_backend(bridge, PathBuf::new());
         let action = provider.request_final_model_load();
-        assert_eq!(
-            action,
-            lattice_voice::FinalModelLoadAction::StartLazyLoad
-        );
+        assert_eq!(action, lattice_voice::FinalModelLoadAction::StartLazyLoad);
         // Idle unload is a no-op until mark_ready; stub must not panic.
         assert!(!provider.maybe_unload_final_model_idle());
     }

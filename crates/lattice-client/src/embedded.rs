@@ -7,10 +7,10 @@ use async_trait::async_trait;
 use lattice_protocol::{
     request, response, ApplyPageUpdateRequest, ApplyPageUpdateResponse, HealthRequest,
     HealthResponse, OpenWorkspaceRequest, OpenWorkspaceResponse, PingRequest, PingResponse,
-    SearchRequest, SearchResponse, WorkspaceLease, Request, Response, PROTOCOL_VERSION,
+    Request, Response, SearchRequest, SearchResponse, WorkspaceLease, PROTOCOL_VERSION,
 };
 use lattice_runtime::{
-    IdempotentOutcome, LatticeRuntime, LeaseClaim, OWNER_EMBEDDED, require_workspace_lease,
+    require_workspace_lease, IdempotentOutcome, LatticeRuntime, LeaseClaim, OWNER_EMBEDDED,
 };
 
 use crate::client::LatticeClient;
@@ -139,12 +139,14 @@ impl EmbeddedClient {
         runtime: &LatticeRuntime,
         req: SearchRequest,
     ) -> Result<Response, ClientError> {
-        let session = runtime.get_session_by_id(&req.workspace_id).ok_or_else(|| {
-            ClientError::UnexpectedResponse(format!(
-                "workspace session not found for id {}",
-                req.workspace_id
-            ))
-        })?;
+        let session = runtime
+            .get_session_by_id(&req.workspace_id)
+            .ok_or_else(|| {
+                ClientError::UnexpectedResponse(format!(
+                    "workspace session not found for id {}",
+                    req.workspace_id
+                ))
+            })?;
         let limit = if req.limit == 0 {
             10
         } else {
@@ -185,12 +187,14 @@ impl EmbeddedClient {
         req: ApplyPageUpdateRequest,
         idempotency_key: Option<String>,
     ) -> Result<Response, ClientError> {
-        let session = runtime.get_session_by_id(&req.workspace_id).ok_or_else(|| {
-            ClientError::UnexpectedResponse(format!(
-                "workspace session not found for id {}",
-                req.workspace_id
-            ))
-        })?;
+        let session = runtime
+            .get_session_by_id(&req.workspace_id)
+            .ok_or_else(|| {
+                ClientError::UnexpectedResponse(format!(
+                    "workspace session not found for id {}",
+                    req.workspace_id
+                ))
+            })?;
 
         let claim = session
             .write_lease_claim()
@@ -374,7 +378,11 @@ mod tests {
     async fn open_and_search_through_runtime() {
         let dir = tempfile::tempdir().unwrap();
         Workspace::init(dir.path(), "Embedded Runtime").unwrap();
-        std::fs::write(dir.path().join("Notes.md"), "# Hi\n\nEmbedded search text.\n").unwrap();
+        std::fs::write(
+            dir.path().join("Notes.md"),
+            "# Hi\n\nEmbedded search text.\n",
+        )
+        .unwrap();
 
         let runtime = Arc::new(LatticeRuntime::new());
         let client = EmbeddedClient::new("embedded-rt")

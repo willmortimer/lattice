@@ -147,7 +147,12 @@ fn parquet_left_join_annotations_returns_labeled_rows() {
         .unwrap();
 
     assert_eq!(batch.num_rows, 3);
-    let names: Vec<&str> = batch.schema.fields.iter().map(|f| f.name.as_str()).collect();
+    let names: Vec<&str> = batch
+        .schema
+        .fields
+        .iter()
+        .map(|f| f.name.as_str())
+        .collect();
     assert!(names.contains(&"event_id"), "{names:?}");
     assert!(names.contains(&"label"), "{names:?}");
     assert!(names.contains(&"notes"), "{names:?}");
@@ -282,9 +287,8 @@ fn interrupt_handle_cancels_long_query() {
 
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
-        let result = engine.query(
-            "SELECT count(*) AS n FROM range(10000000) t1, range(1000000) t2",
-        );
+        let result =
+            engine.query("SELECT count(*) AS n FROM range(10000000) t1, range(1000000) t2");
         let _ = tx.send(result);
     });
 

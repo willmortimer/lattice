@@ -61,7 +61,10 @@ fn chunk_from_samples(session_id: &str, sequence: u64, samples: &[f32]) -> Audio
 async fn live_fixture_streams_partials_and_final() {
     let fixture = fixture_path();
     if !fixture.is_file() {
-        eprintln!("skipping live-asr: fixture missing at {}", fixture.display());
+        eprintln!(
+            "skipping live-asr: fixture missing at {}",
+            fixture.display()
+        );
         return;
     }
 
@@ -90,7 +93,10 @@ async fn live_fixture_streams_partials_and_final() {
         endpoint: lattice_voice::EndpointOptions::default(),
     };
 
-    let mut session = provider.start_session(config, events).await.expect("session");
+    let mut session = provider
+        .start_session(config, events)
+        .await
+        .expect("session");
     let samples = load_f32_mono_16k(&fixture);
     let started = Instant::now();
     let mut sequence = 0_u64;
@@ -118,7 +124,10 @@ async fn live_fixture_streams_partials_and_final() {
     eprintln!("live-asr processing_ms={}", final_transcript.processing_ms);
     eprintln!("live-asr total_elapsed_ms={elapsed_ms}");
 
-    assert!(partial_count > 0, "expected at least one partial transcript");
+    assert!(
+        partial_count > 0,
+        "expected at least one partial transcript"
+    );
     assert!(
         !final_transcript.text.trim().is_empty(),
         "expected non-empty final transcript"

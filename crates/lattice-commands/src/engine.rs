@@ -726,14 +726,17 @@ impl CommandEngine {
                                 ),
                             });
                         };
-                        let parsed = lattice_data::parse_relation_target(target).map_err(
-                            |message| Error::InvalidResourceTarget {
-                                path: path.clone(),
-                                reason: format!("relation column {:?}: {message}", column.name),
-                            },
-                        )?;
+                        let parsed =
+                            lattice_data::parse_relation_target(target).map_err(|message| {
+                                Error::InvalidResourceTarget {
+                                    path: path.clone(),
+                                    reason: format!("relation column {:?}: {message}", column.name),
+                                }
+                            })?;
                         match parsed {
-                            lattice_data::RelationTarget::Local { table: target_table } => {
+                            lattice_data::RelationTarget::Local {
+                                table: target_table,
+                            } => {
                                 if !app.list_tables()?.iter().any(|name| name == target_table) {
                                     return Err(Error::NotFound { path: path.clone() });
                                 }
@@ -770,7 +773,10 @@ impl CommandEngine {
                                         ),
                                     }
                                 })?;
-                                if !foreign.list_tables()?.iter().any(|name| name == target_table)
+                                if !foreign
+                                    .list_tables()?
+                                    .iter()
+                                    .any(|name| name == target_table)
                                 {
                                     return Err(Error::InvalidResourceTarget {
                                         path: path.clone(),

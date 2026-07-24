@@ -12,10 +12,12 @@ pub fn resolve_cwd_under_workspace(
     workspace_root: &Path,
     cwd: &Path,
 ) -> Result<PathBuf, KernelError> {
-    let root = workspace_root.canonicalize().map_err(|_| KernelError::CwdNotAllowed {
-        cwd: cwd.to_path_buf(),
-        workspace_root: workspace_root.to_path_buf(),
-    })?;
+    let root = workspace_root
+        .canonicalize()
+        .map_err(|_| KernelError::CwdNotAllowed {
+            cwd: cwd.to_path_buf(),
+            workspace_root: workspace_root.to_path_buf(),
+        })?;
 
     let absolute = if cwd.is_absolute() {
         cwd.to_path_buf()
@@ -23,10 +25,12 @@ pub fn resolve_cwd_under_workspace(
         root.join(cwd)
     };
 
-    let resolved = absolute.canonicalize().map_err(|_| KernelError::CwdNotAllowed {
-        cwd: absolute.clone(),
-        workspace_root: root.clone(),
-    })?;
+    let resolved = absolute
+        .canonicalize()
+        .map_err(|_| KernelError::CwdNotAllowed {
+            cwd: absolute.clone(),
+            workspace_root: root.clone(),
+        })?;
 
     if !resolved.is_dir() {
         return Err(KernelError::CwdNotAllowed {
@@ -62,7 +66,8 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let nested = dir.path().join("notebooks");
         fs::create_dir(&nested).expect("mkdir");
-        let resolved = resolve_cwd_under_workspace(dir.path(), Path::new("notebooks")).expect("allow");
+        let resolved =
+            resolve_cwd_under_workspace(dir.path(), Path::new("notebooks")).expect("allow");
         assert_eq!(resolved, nested.canonicalize().unwrap());
     }
 

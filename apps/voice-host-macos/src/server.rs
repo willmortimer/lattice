@@ -281,10 +281,7 @@ async fn handle_unload(
     let mut inner = state.inner.lock().await;
 
     // Drop live sessions by rebuilding the service around a fresh provider.
-    let provider = open_provider(
-        state.config.backend,
-        state.config.model_cache_dir.clone(),
-    )?;
+    let provider = open_provider(state.config.backend, state.config.model_cache_dir.clone())?;
     inner.provider = Arc::clone(&provider);
     inner.service = InProcessVoiceService::new(provider);
     inner.active_sessions = 0;
@@ -298,7 +295,9 @@ async fn handle_unload(
     let status = inner.model_status.clone();
     drop(inner);
 
-    let _ = events.send(lattice_voice::VoiceEvent::ModelStatusChanged(status.clone()));
+    let _ = events.send(lattice_voice::VoiceEvent::ModelStatusChanged(
+        status.clone(),
+    ));
 
     Ok(Response {
         body: Some(response::Body::UnloadVoiceModel(UnloadVoiceModelResponse {
@@ -323,7 +322,9 @@ async fn handle_voice_request(
                 .await
                 .map_err(VoiceHostError::Speech)?;
             events
-                .send(lattice_voice::VoiceEvent::ModelStatusChanged(status.clone()))
+                .send(lattice_voice::VoiceEvent::ModelStatusChanged(
+                    status.clone(),
+                ))
                 .map_err(VoiceHostError::Speech)?;
             inner.model_status = status.clone();
             if status.state == ModelState::Ready {

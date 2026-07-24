@@ -2,9 +2,7 @@
 
 use std::time::{Duration, Instant};
 
-use lattice_client::{
-    request, response, DaemonClient, HealthRequest, LatticeClient, Request,
-};
+use lattice_client::{request, response, DaemonClient, HealthRequest, LatticeClient, Request};
 use lattice_daemon::{spawn_latticed, SpawnOptions};
 
 fn health_request() -> Request {

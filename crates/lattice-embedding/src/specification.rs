@@ -54,7 +54,10 @@ impl EmbeddingSpecification {
             self.instruction_version,
             chunker_version,
         );
-        format!("sha256:{}", crate::manifest::sha256_hex(material.as_bytes()))
+        format!(
+            "sha256:{}",
+            crate::manifest::sha256_hex(material.as_bytes())
+        )
     }
 }
 

@@ -1,25 +1,22 @@
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
-use lattice_commands::{
-    Command as SemanticCommand, CommandEngine, Transaction,
-};
+use lattice_commands::{Command as SemanticCommand, CommandEngine, Transaction};
 use lattice_core::{
-    inspect_resource as inspect_native_resource,
-    read_resource_range as read_native_resource_range, read_text_window as read_native_text_window,
-    ResourceKind, ResourceRuntimeError, Workspace,
+    inspect_resource as inspect_native_resource, read_resource_range as read_native_resource_range,
+    read_text_window as read_native_text_window, ResourceKind, ResourceRuntimeError, Workspace,
 };
 use lattice_handlers::{self, join_within_root, snapshot_from_workspace};
 use lattice_storage::{NativeWorkspaceStore, WorkspaceStore};
 use serde::Serialize;
 use tauri::ipc::{InvokeBody, Request, Response};
 
+#[allow(unused_imports)]
+pub use lattice_handlers::STALE_REVISION_PREFIX;
 pub use lattice_handlers::{
     command_error_to_string, resolve_within_root, LatticeHomeInfo, PageContent,
     WorkspaceProvisionResult, WorkspaceSnapshot,
 };
-#[allow(unused_imports)]
-pub use lattice_handlers::STALE_REVISION_PREFIX;
 
 const MAX_EDITOR_ASSET_BYTES: usize = 8 * 1024 * 1024;
 
@@ -357,11 +354,7 @@ pub fn move_resource(root: String, from: String, to_dir: String) -> Result<(), S
 
 /// Move one or more resources into a directory in a single transaction (one undo).
 #[tauri::command]
-pub fn move_resources(
-    root: String,
-    from_paths: Vec<String>,
-    to_dir: String,
-) -> Result<(), String> {
+pub fn move_resources(root: String, from_paths: Vec<String>, to_dir: String) -> Result<(), String> {
     let mut unique = Vec::new();
     for path in from_paths {
         let trimmed = path.trim();
@@ -431,9 +424,7 @@ pub fn duplicate_resource(root: String, path: String) -> Result<String, String> 
     let (canonical_root, _) = resolve_within_root(&root, &path)?;
     let source = PathBuf::from(&path);
     let store = NativeWorkspaceStore::new(&canonical_root);
-    let metadata = store
-        .metadata(&source)
-        .map_err(|err| err.to_string())?;
+    let metadata = store.metadata(&source).map_err(|err| err.to_string())?;
     if metadata.is_dir {
         return Err(format!("cannot duplicate directory {path:?}"));
     }
@@ -458,14 +449,16 @@ pub fn duplicate_resource(root: String, path: String) -> Result<String, String> 
     let mut engine = CommandEngine::open(&canonical_root).map_err(command_error_to_string)?;
     engine
         .apply(Transaction::new(
-            format!("Duplicate {} to {}", source.display(), destination.display()),
+            format!(
+                "Duplicate {} to {}",
+                source.display(),
+                destination.display()
+            ),
             vec![command],
         ))
         .map_err(command_error_to_string)?;
 
-    Ok(destination
-        .to_string_lossy()
-        .replace('\\', "/"))
+    Ok(destination.to_string_lossy().replace('\\', "/"))
 }
 
 /// Create an empty folder beneath the workspace root through the semantic
@@ -845,12 +838,7 @@ mod tests {
         std::fs::write(dir.path().join("Note.md"), "# Note\n").unwrap();
         let root = dir.path().to_string_lossy().into_owned();
 
-        move_resource(
-            root.clone(),
-            "Note.md".to_string(),
-            "Inbox".to_string(),
-        )
-        .unwrap();
+        move_resource(root.clone(), "Note.md".to_string(), "Inbox".to_string()).unwrap();
 
         assert!(!dir.path().join("Note.md").exists());
         assert!(dir.path().join("Inbox/Note.md").exists());

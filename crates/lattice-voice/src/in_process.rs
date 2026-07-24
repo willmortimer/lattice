@@ -5,9 +5,9 @@ use crate::endpoint::{decode_f32_le, EndpointPolicy, EndpointSignal};
 use crate::error::SpeechError;
 use crate::normalize::{normalize_final_transcript, NormalizationContext};
 use crate::protocol::{
-    AudioChunk, AudioSampleFormat, FinishUtteranceRequest, PROTOCOL_VERSION, SessionContext,
+    AudioChunk, AudioSampleFormat, FinishUtteranceRequest, SessionContext,
     TranscriptionSessionState, UpdateSessionContextRequest, VoiceEvent, VoiceRequest,
-    VoiceSessionId,
+    VoiceSessionId, PROTOCOL_VERSION,
 };
 use crate::provider::{SpeechEventSender, SpeechProvider, SpeechSession};
 use crate::session::SessionStateMachine;
@@ -148,12 +148,12 @@ impl InProcessVoiceService {
         &self,
         session_id: &VoiceSessionId,
     ) -> Result<SessionContext, SpeechError> {
-        let session = self
-            .sessions
-            .get(session_id)
-            .ok_or_else(|| SpeechError::SessionNotFound {
-                session_id: session_id.clone(),
-            })?;
+        let session =
+            self.sessions
+                .get(session_id)
+                .ok_or_else(|| SpeechError::SessionNotFound {
+                    session_id: session_id.clone(),
+                })?;
         Ok(session.session_context.clone())
     }
 
@@ -294,12 +294,12 @@ impl InProcessVoiceService {
         session_id: &VoiceSessionId,
         events: &SpeechEventSender,
     ) -> Result<(), SpeechError> {
-        let mut session = self
-            .sessions
-            .remove(session_id)
-            .ok_or_else(|| SpeechError::SessionNotFound {
-                session_id: session_id.clone(),
-            })?;
+        let mut session =
+            self.sessions
+                .remove(session_id)
+                .ok_or_else(|| SpeechError::SessionNotFound {
+                    session_id: session_id.clone(),
+                })?;
 
         if !session.state.is_terminal() {
             let _ = session.state.cancel();
@@ -325,13 +325,16 @@ impl InProcessVoiceService {
         Ok(())
     }
 
-    fn session_mut(&mut self, session_id: &VoiceSessionId) -> Result<&mut ActiveSession, SpeechError> {
-        let session = self
-            .sessions
-            .get_mut(session_id)
-            .ok_or_else(|| SpeechError::SessionNotFound {
-                session_id: session_id.clone(),
-            })?;
+    fn session_mut(
+        &mut self,
+        session_id: &VoiceSessionId,
+    ) -> Result<&mut ActiveSession, SpeechError> {
+        let session =
+            self.sessions
+                .get_mut(session_id)
+                .ok_or_else(|| SpeechError::SessionNotFound {
+                    session_id: session_id.clone(),
+                })?;
 
         if session.state.is_terminal() {
             return Err(SpeechError::SessionTerminal {
@@ -395,13 +398,13 @@ pub fn record_transcript_revision(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bytes::Bytes;
     use crate::endpoint::EndpointOptions;
     use crate::protocol::{
         EndpointReason, SessionContext, SpeechSessionConfig, StartVoiceSessionRequest,
         UpdateSessionContextRequest,
     };
     use crate::provider::NullSpeechProvider;
+    use bytes::Bytes;
 
     fn sample_chunk(session_id: &str, sequence: u64) -> AudioChunk {
         // Quiet PCM — hold-to-talk still accepts audio without VAD onset.
@@ -534,11 +537,7 @@ mod tests {
 
         service
             .handle_request(
-                VoiceRequest::PushAudioChunk(f32_chunk(
-                    "voice_cont",
-                    0,
-                    &speech_samples(50, 0.2),
-                )),
+                VoiceRequest::PushAudioChunk(f32_chunk("voice_cont", 0, &speech_samples(50, 0.2))),
                 &events,
             )
             .await
@@ -551,11 +550,7 @@ mod tests {
 
         service
             .handle_request(
-                VoiceRequest::PushAudioChunk(f32_chunk(
-                    "voice_cont",
-                    1,
-                    &speech_samples(120, 0.0),
-                )),
+                VoiceRequest::PushAudioChunk(f32_chunk("voice_cont", 1, &speech_samples(120, 0.0))),
                 &events,
             )
             .await

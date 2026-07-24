@@ -11,9 +11,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use lattice_client::{
-    request, response, DaemonClient, EventFilter, LatticeClient, Request,
-};
+use lattice_client::{request, response, DaemonClient, EventFilter, LatticeClient, Request};
 use lattice_protocol::{
     event, AudioSampleFormat, CancelVoiceSessionRequest, EndVoiceSessionRequest,
     FinishUtteranceRequest, PrepareModelRequest, PushAudioChunkRequest, SessionContext,
@@ -25,9 +23,7 @@ use tokio::sync::{oneshot, Mutex};
 use crate::daemon_session::{self, SpawnHostEnv, SpawnedDaemon};
 
 use super::capture::{ensure_capture, pump_capture_frames, stop_capture_and_rearm};
-use super::{
-    VoiceInner, VoiceSessionContextHints, VoiceUiEvent, VOICE_EVENT,
-};
+use super::{VoiceInner, VoiceSessionContextHints, VoiceUiEvent, VOICE_EVENT};
 
 /// Force daemon-only voice (no in-process FluidAudio fallback).
 pub const ENV_VOICE_DAEMON: &str = "LATTICE_VOICE_DAEMON";
@@ -151,8 +147,8 @@ fn voice_spawn_host_env() -> (SpawnHostEnv, bool) {
 ///
 /// The third tuple element is whether the daemon is expected to run a fake
 /// voice-host (`LATTICE_VOICE_FAKE` already set, or auto-enabled on spawn).
-pub(super) async fn connect_or_spawn()
--> Result<(Arc<DaemonClient>, Option<SpawnedDaemon>, bool), String> {
+pub(super) async fn connect_or_spawn(
+) -> Result<(Arc<DaemonClient>, Option<SpawnedDaemon>, bool), String> {
     let ambient_fake = env_truthy("LATTICE_VOICE_FAKE");
     let (host_env, auto_fake) = voice_spawn_host_env();
     // auto_fake only applies when we actually spawn; connecting to an existing
@@ -162,10 +158,7 @@ pub(super) async fn connect_or_spawn()
     Ok((client, child, fake_host))
 }
 
-pub(super) async fn prepare(
-    app: &AppHandle,
-    backend: &mut DaemonBackend,
-) -> Result<(), String> {
+pub(super) async fn prepare(app: &AppHandle, backend: &mut DaemonBackend) -> Result<(), String> {
     if backend.prepared {
         return Ok(());
     }
@@ -315,9 +308,7 @@ pub(super) async fn start_session(
     }
 
     let mut events = client
-        .subscribe(EventFilter {
-            workspace_id: None,
-        })
+        .subscribe(EventFilter { workspace_id: None })
         .await
         .map_err(|err| format!("subscribe voice events failed: {err}"))?;
 
@@ -463,9 +454,7 @@ pub(super) async fn finish_session(
     active: DaemonActiveSession,
     inner: &mut VoiceInner,
 ) -> Result<(), String> {
-    use lattice_voice::{
-        normalize_final_transcript, FinalTranscript, FinalizationMode,
-    };
+    use lattice_voice::{normalize_final_transcript, FinalTranscript, FinalizationMode};
 
     stop_capture_and_rearm(inner);
     active.pump.abort();

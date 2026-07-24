@@ -107,20 +107,14 @@ pub fn cell_from_csv(text: &str, field_type: FieldType) -> Result<CellValue> {
         }
         FieldType::Relation => {
             let record_ids: Vec<String> = serde_json::from_str(trimmed).map_err(|_| {
-                Error::table(
-                    "csv",
-                    format!("invalid relation JSON array {trimmed:?}"),
-                )
+                Error::table("csv", format!("invalid relation JSON array {trimmed:?}"))
             })?;
             Ok(CellValue::Relation { record_ids })
         }
         FieldType::MultiEnum => {
             let values: Vec<String> = if trimmed.starts_with('[') {
                 serde_json::from_str(trimmed).map_err(|_| {
-                    Error::table(
-                        "csv",
-                        format!("invalid multi_enum JSON array {trimmed:?}"),
-                    )
+                    Error::table("csv", format!("invalid multi_enum JSON array {trimmed:?}"))
                 })?
             } else {
                 trimmed
@@ -134,10 +128,7 @@ pub fn cell_from_csv(text: &str, field_type: FieldType) -> Result<CellValue> {
         FieldType::Attachment => {
             let paths: Vec<String> = if trimmed.starts_with('[') {
                 serde_json::from_str(trimmed).map_err(|_| {
-                    Error::table(
-                        "csv",
-                        format!("invalid attachment JSON array {trimmed:?}"),
-                    )
+                    Error::table("csv", format!("invalid attachment JSON array {trimmed:?}"))
                 })?
             } else {
                 trimmed
@@ -207,7 +198,10 @@ mod tests {
     #[test]
     fn parse_field_type_name_accepts_snake_case_labels() {
         assert_eq!(parse_field_type_name("text").unwrap(), FieldType::Text);
-        assert_eq!(parse_field_type_name("INTEGER").unwrap(), FieldType::Integer);
+        assert_eq!(
+            parse_field_type_name("INTEGER").unwrap(),
+            FieldType::Integer
+        );
         assert!(parse_field_type_name("unknown").is_err());
     }
 

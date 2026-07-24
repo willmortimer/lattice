@@ -117,10 +117,7 @@ fn profile_target_dir() -> Option<PathBuf> {
     let profile = std::env::var("PROFILE").unwrap_or_else(|_| "debug".into());
     let mut dir = out_dir;
     while let Some(parent) = dir.parent() {
-        if dir
-            .file_name()
-            .is_some_and(|name| name == profile.as_str())
-        {
+        if dir.file_name().is_some_and(|name| name == profile.as_str()) {
             return Some(dir);
         }
         dir = parent.to_path_buf();

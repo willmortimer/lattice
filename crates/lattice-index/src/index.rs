@@ -188,7 +188,10 @@ impl WorkspaceIndex {
     pub fn export_policy_for_path(
         &self,
         path: &Path,
-    ) -> Result<(crate::provenance::Sensitivity, crate::provenance::ExportPolicy)> {
+    ) -> Result<(
+        crate::provenance::Sensitivity,
+        crate::provenance::ExportPolicy,
+    )> {
         let rel = normalize_workspace_path(path)?;
         let conn = self.conn.lock().unwrap();
         let row: Option<(String, String)> = conn
@@ -387,11 +390,14 @@ impl WorkspaceIndex {
             out
         };
 
-        let mut stats = EmbedPendingStats::default();
-        stats.skipped = {
+        let skipped = {
             let conn = self.conn.lock().unwrap();
             let total = list_chunks_for_embedding(&conn)?.len();
             total.saturating_sub(pending.len())
+        };
+        let mut stats = EmbedPendingStats {
+            skipped,
+            ..Default::default()
         };
 
         for batch in pending.chunks(batch_size) {
@@ -880,6 +886,7 @@ impl WorkspaceIndex {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn persist_search_chunks(
     tx: &rusqlite::Transaction<'_>,
     workspace_id: &str,
@@ -1560,7 +1567,10 @@ mod tests {
         };
         assert!(!after_ids.is_empty());
         let removed: Vec<_> = before_ids.difference(&after_ids).cloned().collect();
-        assert!(!removed.is_empty(), "expected at least one removed chunk id");
+        assert!(
+            !removed.is_empty(),
+            "expected at least one removed chunk id"
+        );
 
         let conn = index.conn.lock().unwrap();
         for chunk_id in &removed {

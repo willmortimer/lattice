@@ -85,10 +85,7 @@ pub enum ArtifactBindingResultView {
         binding: BindingSpec,
     },
     #[serde(rename = "resource")]
-    Resource {
-        path: String,
-        binding: BindingSpec,
-    },
+    Resource { path: String, binding: BindingSpec },
     #[serde(rename = "saved-view")]
     SavedView {
         resource: String,
@@ -163,7 +160,9 @@ fn manifest_view(manifest: ArtifactManifest, package_path: String) -> ArtifactMa
 
 /// Load and validate `artifact.yaml` for a workspace-relative `.artifact/` package.
 #[tauri::command]
-pub fn artifact_load_manifest(request: ArtifactLoadRequest) -> Result<ArtifactManifestView, String> {
+pub fn artifact_load_manifest(
+    request: ArtifactLoadRequest,
+) -> Result<ArtifactManifestView, String> {
     let workspace = open_workspace(Path::new(&request.root))?;
     let (package, package_path) = resolve_package(&workspace, &request.rel_path)?;
     let manifest = load_manifest_at(&package)?;
@@ -248,9 +247,7 @@ pub fn artifact_resolve_binding(
         BindingSpec::DuckdbQuery { .. }
         | BindingSpec::NotebookOutput { .. }
         | BindingSpec::TaskOutput { .. } => Ok(ArtifactBindingResultView::Unsupported {
-            message: format!(
-                "binding type is declared but not resolved in artifact sandbox v1"
-            ),
+            message: format!("binding type is declared but not resolved in artifact sandbox v1"),
             binding,
         }),
     }

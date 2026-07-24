@@ -6,7 +6,6 @@
 mod action;
 mod app;
 mod binding;
-mod tabular;
 mod csv;
 mod data_app;
 mod error;
@@ -15,6 +14,7 @@ mod formula;
 mod interface;
 mod json_import;
 mod relation_target;
+mod tabular;
 mod types;
 mod view;
 mod xlsx;
@@ -27,36 +27,38 @@ pub use action::{
     ACTION_FILE_SUFFIX, ACTION_FORMAT, ACTION_VERSION,
 };
 pub use app::DEFAULT_VIEW_NAME;
+pub use binding::BindingSpec;
 pub use csv::{
     cell_from_csv, parse_csv_file, parse_field_type_name, resolve_field_types, CsvTable,
 };
-pub use json_import::{parse_json_file, parse_jsonl_file};
-pub use tabular::{
-    infer_field_type, sanitize_column_name, tabular_format, tabular_format_label, TabularFormat,
-    TabularTable, TABULAR_IMPORT_MAX_ROWS,
-};
-pub use xlsx::parse_xlsx_file;
 pub use data_app::{validate_attachment_ref, DataApp};
-pub use formula::{evaluate_formula, formula_field_refs, validate_formula_syntax, FormulaError};
 pub use error::Error;
-pub use relation_target::{parse_relation_target, RelationTarget};
-pub use form::{save_form, write_package_form, FormDef, FORM_FILE_SUFFIX, FORM_FORMAT, FORM_VERSION};
-pub use binding::BindingSpec;
+pub use form::{
+    save_form, write_package_form, FormDef, FORM_FILE_SUFFIX, FORM_FORMAT, FORM_VERSION,
+};
+pub use formula::{evaluate_formula, formula_field_refs, validate_formula_syntax, FormulaError};
 pub use interface::{
     write_package_interface, InterfaceComponent, InterfaceComponentType, InterfaceDef,
     InterfaceLayout, InterfaceParameter, INTERFACE_FILE_SUFFIX, INTERFACE_FORMAT,
     INTERFACE_VERSION,
+};
+pub use json_import::{parse_json_file, parse_jsonl_file};
+pub use relation_target::{parse_relation_target, RelationTarget};
+pub use tabular::{
+    infer_field_type, sanitize_column_name, tabular_format, tabular_format_label, TabularFormat,
+    TabularTable, TABULAR_IMPORT_MAX_ROWS,
 };
 pub use types::{
     CellValue, ColumnMeta, DeletedRowSnapshot, FieldType, FormulaValue, NewColumn, RelationStrip,
     RollupAggregate, Row, SchemaFilesSnapshot,
 };
 pub use view::{
-    write_package_view, compute_layout_summary, ConditionalFormatRule, ConditionalFormatStyle,
-    FilterOperator, SortDirection, ViewDef, ViewFilter, ViewLayout, ViewLayoutSummary, ViewSort, ViewSource, LAYOUT_BOARD,
-    LAYOUT_CALENDAR, LAYOUT_FORM, LAYOUT_GALLERY, LAYOUT_GRID, LAYOUT_LIST, SUPPORTED_LAYOUT_TYPES,
-    VIEW_FORMAT, VIEW_VERSION,
+    compute_layout_summary, write_package_view, ConditionalFormatRule, ConditionalFormatStyle,
+    FilterOperator, SortDirection, ViewDef, ViewFilter, ViewLayout, ViewLayoutSummary, ViewSort,
+    ViewSource, LAYOUT_BOARD, LAYOUT_CALENDAR, LAYOUT_FORM, LAYOUT_GALLERY, LAYOUT_GRID,
+    LAYOUT_LIST, SUPPORTED_LAYOUT_TYPES, VIEW_FORMAT, VIEW_VERSION,
 };
+pub use xlsx::parse_xlsx_file;
 
 pub type Result<T> = std::result::Result<T, Error>;
 

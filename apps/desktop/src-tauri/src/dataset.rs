@@ -3,8 +3,8 @@
 use std::path::Path;
 
 use lattice_arrow_transport::{
-    encode_duckdb_batch, encode_duckdb_batch_with_cancel, EncodedBatch, EncodeOptions,
-    NeverCancel, SchemaMeta, DEFAULT_MAX_ROWS,
+    encode_duckdb_batch, encode_duckdb_batch_with_cancel, EncodeOptions, EncodedBatch, NeverCancel,
+    SchemaMeta, DEFAULT_MAX_ROWS,
 };
 use lattice_datasets::Dataset;
 use lattice_duckdb::{sql_string_literal, DuckDbEngine, RelationProfile};
@@ -70,7 +70,10 @@ fn cancelled_arrow_response(sql: String) -> QueryDatasetArrowResponse {
     }
 }
 
-fn map_query_error(err: lattice_duckdb::Error, sql: &str) -> Result<QueryDatasetArrowResponse, String> {
+fn map_query_error(
+    err: lattice_duckdb::Error,
+    sql: &str,
+) -> Result<QueryDatasetArrowResponse, String> {
     if err.is_cancelled() {
         return Ok(cancelled_arrow_response(sql.to_string()));
     }

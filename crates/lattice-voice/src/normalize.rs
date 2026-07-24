@@ -125,7 +125,8 @@ fn find_path_replacement(text: &str, known_paths: &[String]) -> Option<(usize, u
         }
 
         for start in 0..tokens.len() {
-            let Some(end_token) = match_path_words_flexible(&token_words, start, &path_words) else {
+            let Some(end_token) = match_path_words_flexible(&token_words, start, &path_words)
+            else {
                 continue;
             };
             if !span_has_slash_marker(&token_words[start..end_token]) {
@@ -136,7 +137,10 @@ fn find_path_replacement(text: &str, known_paths: &[String]) -> Option<(usize, u
             let end_byte = tokens[end_token.saturating_sub(1)].end;
             let candidate = (start_byte, end_byte, path.clone());
 
-            if best.as_ref().is_none_or(|(s, e, _)| (end_byte - start_byte) > (e - s)) {
+            if best
+                .as_ref()
+                .is_none_or(|(s, e, _)| (end_byte - start_byte) > (e - s))
+            {
                 best = Some(candidate);
             }
         }
@@ -146,10 +150,7 @@ fn find_path_replacement(text: &str, known_paths: &[String]) -> Option<(usize, u
 }
 
 fn flattened_path_words(path: &str) -> Vec<String> {
-    path_components(path)
-        .into_iter()
-        .flatten()
-        .collect()
+    path_components(path).into_iter().flatten().collect()
 }
 
 fn match_path_words_flexible(
@@ -294,18 +295,14 @@ fn apply_identifier_casing(
 
 fn is_identifier_candidate(term: &str) -> bool {
     term.contains('_')
-        || term
-            .chars()
-            .any(|ch| ch.is_ascii_uppercase())
+        || term.chars().any(|ch| ch.is_ascii_uppercase())
             && term.chars().any(|ch| ch.is_ascii_lowercase())
 }
 
 fn spoken_variants(term: &str) -> Vec<String> {
     let mut variants = vec![term.to_ascii_lowercase()];
 
-    let camel = split_camel_case(term)
-        .join(" ")
-        .to_ascii_lowercase();
+    let camel = split_camel_case(term).join(" ").to_ascii_lowercase();
     if !camel.is_empty() {
         variants.push(camel);
     }
@@ -423,10 +420,7 @@ mod tests {
         let raw = "users will developer lattice slash crates slash lattice voice";
         let normalized = normalize_transcript(
             raw,
-            &context(
-                &[],
-                &["/Users/will/Developer/lattice/crates/lattice-voice"],
-            ),
+            &context(&[], &["/Users/will/Developer/lattice/crates/lattice-voice"]),
         );
 
         assert_eq!(
@@ -449,10 +443,7 @@ mod tests {
         let raw = "users will developer lattice crates lattice voice";
         let normalized = normalize_transcript(
             raw,
-            &context(
-                &[],
-                &["/Users/will/Developer/lattice/crates/lattice-voice"],
-            ),
+            &context(&[], &["/Users/will/Developer/lattice/crates/lattice-voice"]),
         );
 
         assert_eq!(normalized.normalized, raw);
@@ -515,10 +506,8 @@ mod tests {
             processing_ms: 5,
         };
 
-        let normalized = normalize_final_transcript(
-            final_transcript,
-            &context(&["AsrManager"], &[]),
-        );
+        let normalized =
+            normalize_final_transcript(final_transcript, &context(&["AsrManager"], &[]));
 
         assert_eq!(normalized.text, "open AsrManager.");
         assert_eq!(

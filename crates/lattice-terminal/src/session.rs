@@ -238,10 +238,8 @@ mod tests {
 
     #[test]
     fn spawn_rejects_nonexistent_cwd() {
-        let missing = std::env::temp_dir().join(format!(
-            "lattice-terminal-missing-{}",
-            std::process::id()
-        ));
+        let missing =
+            std::env::temp_dir().join(format!("lattice-terminal-missing-{}", std::process::id()));
         let err = match TerminalSession::spawn(SpawnOptions::new(&missing, 80, 24)) {
             Err(err) => err,
             Ok(_) => panic!("spawn should fail for missing cwd"),

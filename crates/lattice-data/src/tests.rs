@@ -279,7 +279,12 @@ fn grid_layout_summaries_round_trip_and_compute() {
         Some(3.0)
     );
     assert_eq!(
-        compute_layout_summary(&rows[..2], "amount", FieldType::Decimal, RollupAggregate::Sum),
+        compute_layout_summary(
+            &rows[..2],
+            "amount",
+            FieldType::Decimal,
+            RollupAggregate::Sum
+        ),
         Some(15.0)
     );
 }
@@ -673,8 +678,8 @@ fn relation_column_validates_target_record_ids() {
 
 #[test]
 fn junction_relation_round_trips_insert_update_delete() {
-    use crate::NewColumn;
     use crate::app::database_path;
+    use crate::NewColumn;
 
     let dir = tempdir().unwrap();
     let package_path = dir.path().join("CRM.data");
@@ -787,9 +792,7 @@ fn junction_relation_round_trips_insert_update_delete() {
     let after_delete = app.get_row("contacts", &contact_id).unwrap().unwrap();
     assert_eq!(
         after_delete.values.get("tags"),
-        Some(&CellValue::Relation {
-            record_ids: vec![],
-        })
+        Some(&CellValue::Relation { record_ids: vec![] })
     );
 
     app.restore_relation_strips(&strips).unwrap();
@@ -802,11 +805,8 @@ fn junction_relation_round_trips_insert_update_delete() {
     );
 
     // JSON TEXT relations remain the default path.
-    app.add_columns(
-        "contacts",
-        &[NewColumn::relation("reports_to", "contacts")],
-    )
-    .unwrap();
+    app.add_columns("contacts", &[NewColumn::relation("reports_to", "contacts")])
+        .unwrap();
     let boss = app
         .insert_row(
             "contacts",
@@ -1007,7 +1007,10 @@ fn form_def_round_trip_list_and_load() {
     assert!(yaml.contains("fields:"));
 
     write_package_form(&package_path, &form).unwrap();
-    assert!(package_path.join("forms").join("intake.form.yaml").is_file());
+    assert!(package_path
+        .join("forms")
+        .join("intake.form.yaml")
+        .is_file());
 
     let forms = app.list_forms().unwrap();
     assert_eq!(forms, vec!["intake".to_string()]);
@@ -1093,12 +1096,10 @@ fn action_def_round_trip_list_and_load() {
     assert!(yaml.contains("type: insert_record"));
 
     write_package_action(&package_path, &action).unwrap();
-    assert!(
-        package_path
-            .join("actions")
-            .join("new_contact.action.yaml")
-            .is_file()
-    );
+    assert!(package_path
+        .join("actions")
+        .join("new_contact.action.yaml")
+        .is_file());
 
     let actions = app.list_actions().unwrap();
     assert_eq!(actions, vec!["new_contact".to_string()]);
@@ -1169,7 +1170,10 @@ fn load_action_rejects_unknown_defaults_and_fields() {
     );
     write_package_action(&package_path, &bad_default).unwrap();
     let err = app.load_action("bad_default").unwrap_err().to_string();
-    assert!(err.contains("unknown column") && err.contains("missing"), "{err}");
+    assert!(
+        err.contains("unknown column") && err.contains("missing"),
+        "{err}"
+    );
 
     let bad_field = ActionDef::new(
         "bad_field",
@@ -1182,7 +1186,10 @@ fn load_action_rejects_unknown_defaults_and_fields() {
     );
     write_package_action(&package_path, &bad_field).unwrap();
     let err = app.load_action("bad_field").unwrap_err().to_string();
-    assert!(err.contains("unknown column") && err.contains("missing"), "{err}");
+    assert!(
+        err.contains("unknown column") && err.contains("missing"),
+        "{err}"
+    );
 }
 
 #[test]
@@ -1745,10 +1752,7 @@ fn rollup_column_resolves_count_and_sum() {
         .update_row(
             "orders",
             &order_id,
-            &BTreeMap::from([(
-                "item_count".into(),
-                CellValue::Rollup { value: Some(99.0) },
-            )]),
+            &BTreeMap::from([("item_count".into(), CellValue::Rollup { value: Some(99.0) })]),
         )
         .unwrap_err()
         .to_string();
@@ -1773,11 +1777,8 @@ fn rollup_column_requires_valid_relation_and_field() {
         ],
     )
     .unwrap();
-    app.add_columns(
-        "orders",
-        &[NewColumn::relation("items", "line_items")],
-    )
-    .unwrap();
+    app.add_columns("orders", &[NewColumn::relation("items", "line_items")])
+        .unwrap();
 
     let missing_relation = app
         .add_columns(
@@ -1850,7 +1851,11 @@ fn formula_column_resolves_at_read_time() {
 
     let manifest_text = std::fs::read_to_string(app_manifest_path(&package_path)).unwrap();
     assert!(manifest_text.contains("type: formula"));
-    assert!(manifest_text.contains("formula: \"{price} * {quantity}\"") || manifest_text.contains("formula: '{price} * {quantity}'") || manifest_text.contains("{price} * {quantity}"));
+    assert!(
+        manifest_text.contains("formula: \"{price} * {quantity}\"")
+            || manifest_text.contains("formula: '{price} * {quantity}'")
+            || manifest_text.contains("{price} * {quantity}")
+    );
 
     let row_id = app
         .insert_row(
@@ -1862,7 +1867,10 @@ fn formula_column_resolves_at_read_time() {
         )
         .unwrap();
     let rows = app.list_rows("items", 10, 0).unwrap();
-    let row = rows.iter().find(|row| row.id == row_id).expect("inserted row");
+    let row = rows
+        .iter()
+        .find(|row| row.id == row_id)
+        .expect("inserted row");
     assert_eq!(
         row.values.get("total"),
         Some(&CellValue::Formula {
@@ -1878,7 +1886,10 @@ fn formula_column_resolves_at_read_time() {
     )
     .unwrap();
     let rows = app.list_rows("items", 10, 0).unwrap();
-    let row = rows.iter().find(|row| row.id == row_id).expect("updated row");
+    let row = rows
+        .iter()
+        .find(|row| row.id == row_id)
+        .expect("updated row");
     assert_eq!(
         row.values.get("total"),
         Some(&CellValue::Formula { value: None })
@@ -1910,10 +1921,7 @@ fn formula_column_resolves_at_read_time() {
     assert!(missing_ref.contains("missing"));
 
     let formula_ref = app
-        .add_columns(
-            "items",
-            &[NewColumn::formula("nested", "{total} + 1")],
-        )
+        .add_columns("items", &[NewColumn::formula("nested", "{total} + 1")])
         .unwrap_err()
         .to_string();
     assert!(formula_ref.contains("cannot reference formula"));
@@ -1935,10 +1943,7 @@ fn cross_package_relation_rejects_writes_and_keeps_same_package() {
     let mut directory =
         DataApp::create(&dir.path().join("Directory.data"), "Directory", "companies").unwrap();
     directory
-        .add_columns(
-            "companies",
-            &[NewColumn::new("name", FieldType::Text)],
-        )
+        .add_columns("companies", &[NewColumn::new("name", FieldType::Text)])
         .unwrap();
     let company_id = directory
         .insert_row(
@@ -2015,11 +2020,8 @@ fn cross_package_relation_rejects_writes_and_keeps_same_package() {
     crm.add_table("tags").unwrap();
     crm.add_columns("tags", &[NewColumn::new("name", FieldType::Text)])
         .unwrap();
-    crm.add_columns(
-        "contacts",
-        &[NewColumn::relation("tags", "tags")],
-    )
-    .unwrap();
+    crm.add_columns("contacts", &[NewColumn::relation("tags", "tags")])
+        .unwrap();
     let tag_id = crm
         .insert_row(
             "tags",
@@ -2068,10 +2070,7 @@ fn cross_package_relation_rejects_junction_and_lookup() {
     )
     .unwrap();
     let lookup_err = crm
-        .add_columns(
-            "contacts",
-            &[NewColumn::lookup("org_name", "org", "name")],
-        )
+        .add_columns("contacts", &[NewColumn::lookup("org_name", "org", "name")])
         .unwrap_err()
         .to_string();
     assert!(lookup_err.contains("across packages"));
@@ -2279,4 +2278,3 @@ fn attachment_column_round_trip() {
         Some(FieldType::Attachment)
     );
 }
-

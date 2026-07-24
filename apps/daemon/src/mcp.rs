@@ -16,10 +16,10 @@ use serde_json::{json, Value};
 use crate::api::{
     api_build_context, api_create_proposal, api_get_dataset_schema, api_get_proposal,
     api_list_proposals, api_profile_dataset, api_propose_artifact, api_propose_interface,
-    api_propose_page, api_propose_resource, api_propose_workflow, api_read, api_related, api_search,
-    ApiError, BuildContextParams, CreateProposalParams, DatasetInspectParams, GetProposalParams,
-    ListProposalsParams, ProposePageParams, ProposeResourceParams, ProposeYamlParams, ReadParams,
-    RelatedParams, SearchParams,
+    api_propose_page, api_propose_resource, api_propose_workflow, api_read, api_related,
+    api_search, ApiError, BuildContextParams, CreateProposalParams, DatasetInspectParams,
+    GetProposalParams, ListProposalsParams, ProposePageParams, ProposeResourceParams,
+    ProposeYamlParams, ReadParams, RelatedParams, SearchParams,
 };
 
 const PROTOCOL_VERSION: &str = "2024-11-05";
@@ -109,11 +109,7 @@ fn dispatch(runtime: &LatticeRuntime, request: &JsonRpcRequest) -> Option<Value>
         "ping" => Some(ok(id, json!({}))),
         "tools/list" => Some(ok(id, json!({ "tools": tool_descriptors() }))),
         "tools/call" => Some(handle_tools_call(runtime, id, &request.params)),
-        other => Some(error(
-            id,
-            -32601,
-            format!("method not found: {other}"),
-        )),
+        other => Some(error(id, -32601, format!("method not found: {other}"))),
     }
 }
 
@@ -328,11 +324,11 @@ fn tool_descriptors() -> Value {
 }
 
 fn handle_tools_call(runtime: &LatticeRuntime, id: Value, params: &Value) -> Value {
-    let name = params
-        .get("name")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    let arguments = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
+    let name = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
+    let arguments = params
+        .get("arguments")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
 
     let result = match name {
         "search" => call_search(runtime, arguments),

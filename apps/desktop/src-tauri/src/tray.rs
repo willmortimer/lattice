@@ -13,11 +13,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use lattice_core::ensure_lattice_home;
 use lattice_profile::{DesktopSettings, DESKTOP_SETTINGS_SPEC};
 use serde::Serialize;
-use tauri::{
-    image::Image,
-    tray::TrayIconBuilder,
-    AppHandle, Emitter, Manager,
-};
+use tauri::{image::Image, tray::TrayIconBuilder, AppHandle, Emitter, Manager};
 
 use crate::app_menu;
 use crate::workflow::{self, WorkflowState};
@@ -70,10 +66,7 @@ pub fn show_quick_note(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("quick-note") {
         let _ = window.show();
         let _ = window.set_focus();
-        let _ = window.emit(
-            "quick-note-open",
-            QuickNoteOpenPayload { root: None },
-        );
+        let _ = window.emit("quick-note-open", QuickNoteOpenPayload { root: None });
     }
 }
 

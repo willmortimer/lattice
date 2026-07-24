@@ -21,11 +21,7 @@ pub struct Dataset {
 
 impl Dataset {
     /// Create a new empty `.dataset` package with the canonical layout.
-    pub fn create(
-        package_path: &Path,
-        title: &str,
-        description: Option<&str>,
-    ) -> Result<Self> {
+    pub fn create(package_path: &Path, title: &str, description: Option<&str>) -> Result<Self> {
         if package_path.exists() {
             return Err(Error::invalid_package(
                 package_path,
@@ -41,13 +37,11 @@ impl Dataset {
         }
 
         let readme_path = package_path.join(README_FILENAME);
-        let readme = format!("# {title}\n\nAnalytical dataset package. Facts land in `{FACTS_DIR}/`.\n");
+        let readme =
+            format!("# {title}\n\nAnalytical dataset package. Facts land in `{FACTS_DIR}/`.\n");
         std::fs::write(&readme_path, readme).map_err(|source| Error::io(&readme_path, source))?;
 
-        let manifest = DatasetManifest::new(
-            title,
-            description.map(str::to_string),
-        );
+        let manifest = DatasetManifest::new(title, description.map(str::to_string));
         let manifest_path = dataset_manifest_path(package_path);
         manifest.save(&manifest_path)?;
 
@@ -93,7 +87,8 @@ impl Dataset {
     /// Content hash of `dataset.yaml` for optimistic concurrency later.
     pub fn package_revision(&self) -> Result<String> {
         let manifest_path = dataset_manifest_path(&self.path);
-        let bytes = std::fs::read(&manifest_path).map_err(|source| Error::io(&manifest_path, source))?;
+        let bytes =
+            std::fs::read(&manifest_path).map_err(|source| Error::io(&manifest_path, source))?;
         let digest = Sha256::digest(bytes);
         Ok(format!("sha256:{}", hex::encode(digest)))
     }
@@ -109,7 +104,10 @@ pub fn validate_package_layout(package_path: &Path) -> Result<()> {
     }
 
     for (label, path) in [
-        (DATASET_MANIFEST_FILENAME, dataset_manifest_path(package_path)),
+        (
+            DATASET_MANIFEST_FILENAME,
+            dataset_manifest_path(package_path),
+        ),
         (README_FILENAME, package_path.join(README_FILENAME)),
         (FACTS_DIR, package_path.join(FACTS_DIR)),
     ] {

@@ -231,8 +231,16 @@ impl ViewDef {
         }
         for rule in &self.conditional_format {
             validate_identifier(&rule.field)?;
-            validate_style_token(path, rule.style.bg.as_deref(), "conditional_format.style.bg")?;
-            validate_style_token(path, rule.style.text.as_deref(), "conditional_format.style.text")?;
+            validate_style_token(
+                path,
+                rule.style.bg.as_deref(),
+                "conditional_format.style.bg",
+            )?;
+            validate_style_token(
+                path,
+                rule.style.text.as_deref(),
+                "conditional_format.style.text",
+            )?;
             if rule.style.bg.is_none() && rule.style.text.is_none() {
                 return Err(invalid(
                     "conditional_format rule requires at least one of style.bg or style.text"
@@ -323,9 +331,9 @@ fn cell_value_is_empty(value: Option<&CellValue>) -> bool {
         Some(CellValue::Lookup { values }) => values.is_empty(),
         Some(CellValue::Rollup { value }) => value.is_none(),
         Some(CellValue::Formula { value }) => value.is_none(),
-        Some(CellValue::Integer(_))
-        | Some(CellValue::Decimal(_))
-        | Some(CellValue::Boolean(_)) => false,
+        Some(CellValue::Integer(_)) | Some(CellValue::Decimal(_)) | Some(CellValue::Boolean(_)) => {
+            false
+        }
     }
 }
 
@@ -334,10 +342,9 @@ fn numeric_cell_value(value: Option<&CellValue>, field_type: FieldType) -> Optio
         Some(CellValue::Integer(value)) => Some(*value as f64),
         Some(CellValue::Decimal(value)) => Some(*value),
         Some(CellValue::Rollup { value }) => *value,
-        Some(CellValue::Formula { value }) => match value {
-            Some(crate::types::FormulaValue::Number(number)) => Some(*number),
-            _ => None,
-        },
+        Some(CellValue::Formula {
+            value: Some(crate::types::FormulaValue::Number(number)),
+        }) => Some(*number),
         _ if matches!(field_type, FieldType::Integer | FieldType::Decimal) => None,
         _ => None,
     }
