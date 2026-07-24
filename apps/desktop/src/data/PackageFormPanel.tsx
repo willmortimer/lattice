@@ -1,32 +1,14 @@
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
 
 import type { CellValue, DataColumn, DataRow } from "./types";
-import { AttachmentFieldEditor } from "./AttachmentFieldEditor";
+import { fieldTypeLabel } from "./recordDetail";
+import { PackageFormFill } from "./PackageFormFill";
 import {
-  buildRelationLabelIndex,
-  formatRelationDisplay,
-  parseRelationDraft,
-  relationRecordLabel,
-  type RelationLabelIndex,
-} from "./relationDisplay";
-import {
-  draftFieldErrors,
-  fieldEditorKind,
-  fieldTypeLabel,
-  parseMultiEnumDraft,
-  toggleMultiEnumDraftValue,
-  toggleRelationDraftId,
-} from "./recordDetail";
-import {
-  collectPackageFormValues,
   emptyFormDesignerDraft,
-  emptyPackageFormDraft,
   formDesignerColumnOptions,
   formDesignerDraftFromForm,
   formDisplayTitle,
-  missingFormFields,
   moveFormDesignerField,
-  resolvePackageFormColumns,
   toggleFormDesignerField,
   validateFormDesignerDraft,
   type FormDesignerDraft,
@@ -79,70 +61,21 @@ export function PackageFormPanel({
   );
   const [designerError, setDesignerError] = useState<string | null>(null);
 
-  const formColumns = useMemo(
-    () => (activeForm ? resolvePackageFormColumns(columns, activeForm.fields) : []),
-    [activeForm, columns],
-  );
-  const unknownFields = useMemo(
-    () => (activeForm ? missingFormFields(columns, activeForm.fields) : []),
-    [activeForm, columns],
-  );
   const designerColumns = useMemo(() => formDesignerColumnOptions(columns), [columns]);
-  const [draft, setDraft] = useState<Record<string, string>>({});
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [createdRecordId, setCreatedRecordId] = useState<string | null>(null);
-  const relationLabelIndex = useMemo(
-    () => buildRelationLabelIndex(relationTargets),
-    [relationTargets],
+  const designerValidation = useMemo(
+    () => validateFormDesignerDraft(designerDraft, columns),
+    [columns, designerDraft],
   );
 
   useEffect(() => {
     setMode(activeForm ? "fill" : "list");
   }, [activeForm?.name]);
 
-  useEffect(() => {
-    setDraft(emptyPackageFormDraft(formColumns));
-    setSubmitError(null);
-    setCreatedRecordId(null);
-  }, [formColumns, activeForm?.name]);
-
-  const errors = useMemo(() => draftFieldErrors(draft, formColumns), [draft, formColumns]);
-  const hasErrors = Object.keys(errors).length > 0;
-  const designerValidation = useMemo(
-    () => validateFormDesignerDraft(designerDraft, columns),
-    [columns, designerDraft],
-  );
-
-  const updateField = useCallback((name: string, value: string) => {
-    setDraft((current) => ({ ...current, [name]: value }));
-    setSubmitError(null);
-    setCreatedRecordId(null);
-  }, []);
-
-  const resetDraft = useCallback(() => {
-    setDraft(emptyPackageFormDraft(formColumns));
-    setSubmitError(null);
-  }, [formColumns]);
-
   const openDesigner = useCallback((seed?: FormSummary) => {
     setDesignerDraft(seed ? formDesignerDraftFromForm(seed) : emptyFormDesignerDraft());
     setDesignerError(null);
     setMode("design");
   }, []);
-
-  const handleSubmit = useCallback(async () => {
-    if (!activeForm || hasErrors || readOnly) {
-      return;
-    }
-    setSubmitError(null);
-    try {
-      const result = await onSubmit(activeForm, collectPackageFormValues(draft, formColumns));
-      setCreatedRecordId(result.id);
-      resetDraft();
-    } catch (err) {
-      setSubmitError(String(err));
-    }
-  }, [activeForm, draft, formColumns, hasErrors, onSubmit, readOnly, resetDraft]);
 
   const handleSaveDesigner = useCallback(async () => {
     if (!onSaveForm || readOnly || busy) {
@@ -315,9 +248,9 @@ export function PackageFormPanel({
             ))
           )}
         </div>
-      ) : (
-        <div className="package-form-body">
-          {!readOnly && onSaveForm && (
+      ) : activeForm ? (
+        <>
+          {!readOnly && onSaveForm ? (
             <div className="package-form-toolbar">
               <button
                 type="button"
@@ -328,172 +261,20 @@ export function PackageFormPanel({
                 Edit form
               </button>
             </div>
-          )}
-          {activeForm.description && (
-            <p className="package-form-description">{activeForm.description}</p>
-          )}
-          {unknownFields.length > 0 && (
-            <p className="package-form-warning" role="status">
-              Unknown fields skipped: {unknownFields.join(", ")}
-            </p>
-          )}
-          {createdRecordId && (
-            <p className="package-form-success" role="status">
-              Record created ({createdRecordId}).
-            </p>
-          )}
-
-          {formColumns.length === 0 ? (
-            <p className="package-form-empty">
-              This form has no fields that match the open table columns.
-            </p>
-          ) : (
-            <div className="package-form-fields">
-              {formColumns.map((column) => {
-                const editorKind = fieldEditorKind(column.field_type);
-                const value = draft[column.name] ?? "";
-                const error = errors[column.name];
-
-                return (
-                  <label key={column.name} className="record-detail-field">
-                    <span className="record-detail-field-label">
-                      {column.name}
-                      <span className="record-detail-field-type">
-                        {fieldTypeLabel(column.field_type)}
-                      </span>
-                    </span>
-                    {editorKind === "boolean" ? (
-                      <label className="record-detail-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={value === "true"}
-                          disabled={readOnly || busy}
-                          onChange={(event) =>
-                            updateField(
-                              column.name,
-                              event.currentTarget.checked ? "true" : "false",
-                            )
-                          }
-                        />
-                        <span>{value === "true" ? "True" : "False"}</span>
-                      </label>
-                    ) : editorKind === "textarea" ? (
-                      <textarea
-                        className="record-detail-input record-detail-textarea"
-                        value={value}
-                        readOnly={readOnly || busy}
-                        rows={4}
-                        onChange={(event) =>
-                          updateField(column.name, event.currentTarget.value)
-                        }
-                      />
-                    ) : editorKind === "relation" ? (
-                      <PackageFormRelationEditor
-                        column={column}
-                        draftText={value}
-                        disabled={readOnly || busy}
-                        options={relationTargets?.[column.relation_table ?? ""] ?? []}
-                        labelIndex={relationLabelIndex}
-                        onChange={(next) => updateField(column.name, next)}
-                      />
-                    ) : editorKind === "enum" ? (
-                      <select
-                        className="record-detail-input"
-                        value={value}
-                        disabled={readOnly || busy}
-                        onChange={(event) =>
-                          updateField(column.name, event.currentTarget.value)
-                        }
-                      >
-                        <option value="">—</option>
-                        {(column.options ?? []).map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    ) : editorKind === "multi_enum" ? (
-                      <div
-                        className="record-detail-relation-options"
-                        role="group"
-                        aria-label={column.name}
-                      >
-                        {(column.options ?? []).map((option) => {
-                          const selected = parseMultiEnumDraft(value).includes(option);
-                          return (
-                            <label key={option} className="record-detail-checkbox">
-                              <input
-                                type="checkbox"
-                                checked={selected}
-                                disabled={readOnly || busy}
-                                onChange={(event) =>
-                                  updateField(
-                                    column.name,
-                                    toggleMultiEnumDraftValue(
-                                      value,
-                                      option,
-                                      event.currentTarget.checked,
-                                    ),
-                                  )
-                                }
-                              />
-                              <span>{option}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    ) : editorKind === "attachment" ? (
-                      <AttachmentFieldEditor
-                        value={value}
-                        onChange={(next) => updateField(column.name, next)}
-                        root={root}
-                        packageRelPath={packageRelPath}
-                        nativeFileOps={nativeFileOps}
-                        readOnly={readOnly || busy}
-                        label={column.name}
-                      />
-                    ) : (
-                      <input
-                        className="record-detail-input"
-                        type={editorKind === "number" ? "text" : editorKind}
-                        inputMode={editorKind === "number" ? "decimal" : undefined}
-                        value={value}
-                        readOnly={readOnly || busy}
-                        onChange={(event) =>
-                          updateField(column.name, event.currentTarget.value)
-                        }
-                      />
-                    )}
-                    {error && <span className="record-detail-field-error">{error}</span>}
-                  </label>
-                );
-              })}
-            </div>
-          )}
-
-          <footer className="package-form-foot">
-            {submitError && <p className="record-detail-save-error">{submitError}</p>}
-            <div className="record-detail-actions">
-              <button
-                type="button"
-                className="secondary-button"
-                disabled={busy || readOnly}
-                onClick={resetDraft}
-              >
-                Clear
-              </button>
-              <button
-                type="button"
-                className="primary-button"
-                disabled={hasErrors || busy || readOnly || formColumns.length === 0}
-                onClick={() => void handleSubmit()}
-              >
-                {busy ? "Submitting…" : "Submit"}
-              </button>
-            </div>
-          </footer>
-        </div>
-      )}
+          ) : null}
+          <PackageFormFill
+            form={activeForm}
+            columns={columns}
+            relationTargets={relationTargets}
+            root={root}
+            packageRelPath={packageRelPath}
+            nativeFileOps={nativeFileOps}
+            readOnly={readOnly}
+            busy={busy}
+            onSubmit={(values) => onSubmit(activeForm, values)}
+          />
+        </>
+      ) : null}
     </aside>
   );
 }
@@ -622,86 +403,6 @@ function PackageFormDesigner({
           </button>
         </div>
       </footer>
-    </div>
-  );
-}
-
-function PackageFormRelationEditor({
-  column,
-  draftText,
-  disabled,
-  options,
-  labelIndex,
-  onChange,
-}: {
-  column: DataColumn;
-  draftText: string;
-  disabled: boolean;
-  options: DataRow[];
-  labelIndex: RelationLabelIndex;
-  onChange: (next: string) => void;
-}) {
-  const selectedIds = useMemo(() => parseRelationDraft(draftText), [draftText]);
-  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
-  const summary = useMemo(
-    () => formatRelationDisplay(selectedIds, column.relation_table, labelIndex),
-    [column.relation_table, labelIndex, selectedIds],
-  );
-  const missingSelected = selectedIds.filter(
-    (recordId) => !options.some((option) => option.id === recordId),
-  );
-
-  if (!column.relation_table) {
-    return (
-      <p className="record-detail-relation-empty">
-        This relation field is missing <code>relation_table</code> metadata.
-      </p>
-    );
-  }
-
-  return (
-    <div className="record-detail-relation">
-      {summary && <p className="record-detail-relation-summary">{summary}</p>}
-      {options.length === 0 && missingSelected.length === 0 ? (
-        <p className="record-detail-relation-empty">No rows in {column.relation_table}.</p>
-      ) : (
-        <div className="record-detail-relation-options" role="group" aria-label={column.name}>
-          {options.map((option) => {
-            const label = relationRecordLabel(option);
-            const checked = selectedSet.has(option.id);
-            return (
-              <label key={option.id} className="record-detail-relation-option">
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={disabled}
-                  onChange={(event) =>
-                    onChange(
-                      toggleRelationDraftId(draftText, option.id, event.currentTarget.checked),
-                    )
-                  }
-                />
-                <span className="record-detail-relation-option-label">{label || option.id}</span>
-                <span className="record-detail-relation-option-id">{option.id}</span>
-              </label>
-            );
-          })}
-          {missingSelected.map((recordId) => (
-            <label key={recordId} className="record-detail-relation-option">
-              <input
-                type="checkbox"
-                checked
-                disabled={disabled}
-                onChange={(event) =>
-                  onChange(toggleRelationDraftId(draftText, recordId, event.currentTarget.checked))
-                }
-              />
-              <span className="record-detail-relation-option-label">{recordId}</span>
-              <span className="record-detail-relation-option-id">missing target row</span>
-            </label>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
