@@ -15,6 +15,7 @@ name = "latticed"
 path = "src/main.rs"
 
 [dependencies]
+async-trait.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 bytes.workspace = true

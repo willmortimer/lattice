@@ -4,8 +4,10 @@
 //! include Health/Ping, OpenWorkspace/Search, ApplyPageUpdate (D3 one-writer
 //! mutations), sequenced ResourceChanged / IndexProgress events (D4), the
 //! voice session plane (PrepareModel / StartVoiceSession / PushAudioChunk /
-//! transcripts / AudioGap) on the same Envelope (ADR 0043), and the semantic
-//! search plane (EnableSemanticSearch / GetSemanticStatus / SemanticStatusChanged).
+//! transcripts / AudioGap) on the same Envelope (ADR 0043), the semantic
+//! search plane (EnableSemanticSearch / GetSemanticStatus / SemanticStatusChanged),
+//! and the embedded agent plane (StartAgentRun / CancelAgentRun / GetAgentHealth /
+//! AgentEvent; ADR 0044).
 
 mod error;
 mod framing;

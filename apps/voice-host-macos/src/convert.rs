@@ -53,7 +53,10 @@ pub fn voice_request_from_proto(
         | Body::UnloadVoiceModel(_)
         | Body::EnableSemanticSearch(_)
         | Body::DisableSemanticSearch(_)
-        | Body::GetSemanticStatus(_) => Ok(None),
+        | Body::GetSemanticStatus(_)
+        | Body::StartAgentRun(_)
+        | Body::CancelAgentRun(_)
+        | Body::GetAgentHealth(_) => Ok(None),
     }
 }
 
