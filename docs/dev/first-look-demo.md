@@ -270,7 +270,16 @@ same files but cannot run workflows, tasks, or proposals.
 | A6 | Optional MCP: `create_proposal` / `propose_page` | Same inbox path; useful for friday demo steps 16–18 |
 | A7 | Optional: `Derived/ContactBrief.derived.yaml` → **Rebuild** | Edit `Derived/input.txt` to see stale → rebuild |
 
-Manual smoke (no automated e2e yet): walk A1–A4 on a fresh First Look seed.
+Manual smoke (no UI e2e): walk A1–A4 on a fresh First Look seed.
+
+Automated backend smoke (T3) exercises the same path without the desktop shell:
+
+```sh
+cargo test -p lattice-commands --test governed_loop_smoke -- --nocapture
+```
+
+See [Thursday Gate A baseline](./thursday-baseline.md#governed-loop-smoke-t3) for
+boundary diagnostics and Gate B context.
 
 ## Agent-generate path (inspect → propose → approve)
 
