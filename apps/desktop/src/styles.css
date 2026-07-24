@@ -1115,11 +1115,8 @@ html[data-page-width="full"] {
   flex-direction: column;
   position: relative;
   overflow: hidden;
-  background-image:
-    radial-gradient(circle at 0 0, var(--lt-node-dot-soft) 1px, transparent 1.6px),
-    linear-gradient(var(--lt-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--lt-line) 1px, transparent 1px);
-  background-size: 34px 34px;
+  /* Dot grid now lives in the Pixi scene so it tracks pan/zoom. */
+  background: var(--lt-bg);
 }
 
 .canvas-viewer {

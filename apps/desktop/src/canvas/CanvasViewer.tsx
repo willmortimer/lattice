@@ -98,6 +98,7 @@ export function CanvasViewer({
   const [connectFromId, setConnectFromId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [textEdit, setTextEdit] = useState<{ id: string; text: string } | null>(null);
+  const [zoomPct, setZoomPct] = useState(100);
 
   connectModeRef.current = connectMode;
   connectFromIdRef.current = connectFromId;
@@ -329,6 +330,9 @@ export function CanvasViewer({
       },
     });
     sceneRef.current = scene;
+    const unsubscribeZoom = scene.onZoomChange((zoom) => {
+      setZoomPct(Math.round(zoom * 100));
+    });
     // Scene remounts without a `data` identity change leave Pixi empty unless we
     // re-apply the latest snapshot when the new scene becomes ready.
     void scene.ready
@@ -348,6 +352,7 @@ export function CanvasViewer({
         );
       });
     return () => {
+      unsubscribeZoom();
       sceneRef.current = null;
       scene.destroy();
     };
@@ -590,9 +595,6 @@ export function CanvasViewer({
           <button type="button" onClick={() => sceneRef.current?.removeSelected()}>
             {selectedEdgeId ? "Delete edge" : "Remove"}
           </button>
-          <button type="button" onClick={() => sceneRef.current?.fitView()}>
-            Fit
-          </button>
           <button
             type="button"
             className={outlineOpen ? "is-active" : undefined}
@@ -610,6 +612,38 @@ export function CanvasViewer({
                 ? "Press Delete to remove the selected edge"
                 : "Drag ports to connect · SE corner to resize · drop resources under pan/zoom"}
           </span>
+          <button
+            type="button"
+            aria-label="Zoom out"
+            onClick={() => {
+              const scene = sceneRef.current;
+              if (scene) scene.setZoom(scene.getZoom() / 1.25);
+            }}
+          >
+            −
+          </button>
+          <button
+            type="button"
+            aria-label="Reset zoom to 100%"
+            title="Reset zoom"
+            style={{ minWidth: 52, fontVariantNumeric: "tabular-nums" }}
+            onClick={() => sceneRef.current?.setZoom(1)}
+          >
+            {zoomPct}%
+          </button>
+          <button
+            type="button"
+            aria-label="Zoom in"
+            onClick={() => {
+              const scene = sceneRef.current;
+              if (scene) scene.setZoom(scene.getZoom() * 1.25);
+            }}
+          >
+            +
+          </button>
+          <button type="button" onClick={() => sceneRef.current?.fitView()}>
+            Fit
+          </button>
         </div>
         {placeOpen && (
           <div className="canvas-place-panel" role="dialog" aria-label="Place resource on canvas">
