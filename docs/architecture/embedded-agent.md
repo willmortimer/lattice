@@ -2214,7 +2214,7 @@ Run from the repository root (EA6, July 24 2026):
 | `pnpm --filter @lattice/agent-protocol test` | **16 passed** (1 file) |
 | `LATTICE_AGENT_FAKE=1 pnpm --filter @lattice/agentd test` | **4 passed** (1 file) |
 | `pnpm --filter @lattice/desktop test -- src/lib/agent.test.ts src/agent` | **476 passed** (101 files; vitest runs the full desktop suite when deps are warm) |
-| `cargo test -p lattice-daemon --lib agent` | **SKIPPED** — cold worktree `target/` would recompile the workspace; EA3 merge verified **6 passed** at `8ef2d97` |
+| `cargo test -p lattice-daemon --lib agent` | **SKIPPED** — cold worktree `target/` would recompile the workspace; EA3 merge verified **6 passed** at `8ef2d97`; parent re-verified **6 passed** on warm `feat-embedded-agent` `target/` |
 
 **Manual desktop smoke (fake path, no Pioneer key)**
 
