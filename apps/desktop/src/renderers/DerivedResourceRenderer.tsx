@@ -8,6 +8,7 @@ import {
   rebuildDerived,
   type DerivedLifecycleState,
   type DerivedManifestDto,
+  type DerivedStaleReason,
   type DerivedStatusDto,
 } from "../lib/derivedRun";
 import type { OpenResourceSession } from "../resourceSession";
@@ -28,6 +29,29 @@ function statusLabel(state: DerivedLifecycleState): string {
       return "Failed";
     default: {
       const _exhaustive: never = state;
+      return _exhaustive;
+    }
+  }
+}
+
+function staleReasonLabel(reason: DerivedStaleReason): string {
+  switch (reason) {
+    case "never-built":
+      return "Never built";
+    case "input-changed":
+      return "Input changed";
+    case "input-missing":
+      return "Input missing";
+    case "output-missing":
+      return "Output missing";
+    case "output-changed":
+      return "Output changed";
+    case "builder-failed":
+      return "Builder failed";
+    case "builder-changed":
+      return "Builder changed";
+    default: {
+      const _exhaustive: never = reason;
       return _exhaustive;
     }
   }
@@ -174,6 +198,14 @@ export function DerivedResourceRenderer({
             <span className="derived-status-meta">Never built</span>
           )}
         </p>
+
+        {(status?.staleReasons?.length ?? 0) > 0 && state !== "current" && (
+          <ul className="derived-stale-reasons" aria-label="Stale reasons">
+            {(status?.staleReasons ?? []).map((reason) => (
+              <li key={reason}>{staleReasonLabel(reason)}</li>
+            ))}
+          </ul>
+        )}
 
         {status?.lastError && state === "failed" && (
           <p className="task-surface-banner task-surface-banner-warn" role="alert">

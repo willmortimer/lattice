@@ -58,10 +58,12 @@ pub use contracts::{
     ProposalStatus, ResourceOutput, TransactionProposal, TransactionProposalSummary,
 };
 pub use derived::{
-    derived_dir, hash_input_pattern, hash_inputs, lineage_path, load_derived_status, load_lineage,
-    rebuild_derived, save_lineage, DerivedBuilder, DerivedError, DerivedInputHash, DerivedLineage,
-    DerivedManifest, DerivedRefresh, DerivedResult, DerivedState, DerivedStatus, DERIVED_DIR,
-    DERIVED_FORMAT, SUPPORTED_VERSION as DERIVED_SUPPORTED_VERSION,
+    cleanup_abandoned_staging, derived_dir, hash_builder_package, hash_input_pattern, hash_inputs,
+    lineage_path, load_derived_status, load_lineage, rebuild_derived, save_lineage, staging_root,
+    DerivedBuilder, DerivedError, DerivedInputHash, DerivedLineage, DerivedManifest,
+    DerivedRefresh, DerivedResult, DerivedStaleReason, DerivedState, DerivedStatus, DERIVED_DIR,
+    DERIVED_FORMAT, ENV_DERIVED_OUTPUT, ENV_DERIVED_OUTPUT_REL, ENV_DERIVED_STAGING, STAGING_DIR,
+    SUPPORTED_VERSION as DERIVED_SUPPORTED_VERSION,
 };
 pub use engine::CommandEngine;
 pub use error::Error;
