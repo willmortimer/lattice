@@ -81,9 +81,9 @@ flowchart TD
 | --- | --- | --- | --- |
 | C1 | Anchor + spatial event schemas | done | composer-2.5 |
 | C2 | Search/API `block_id` on hits | done | composer-2.5 |
-| C3 | agentd spatial tools + event emission | pending | composer-2.5 |
-| C4 | Desktop spatial store + event consumer | pending | composer-2.5 |
-| C5 | Tiptap + Glide anchor adapters | pending | composer-2.5 |
+| C3 | agentd spatial tools + event emission | done | composer-2.5 |
+| C4 | Desktop spatial store + event consumer | done | composer-2.5 |
+| C5 | Tiptap + Glide anchor adapters | done | composer-2.5 |
 | C6 | Overlay host + Guide/Quiet | pending | composer-2.5 |
 | C7 | Trail replay + fixtures/tests | pending | composer-2.5 |
 
