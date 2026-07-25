@@ -1,6 +1,7 @@
 import type { Extensions } from "@tiptap/core";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 
+import { AgentAnchorHighlight } from "../agent/adapters/AgentAnchorHighlight";
 import { BlockDragHandle } from "./BlockDragHandle";
 import { CodeBlockView } from "./CodeBlockView";
 import { DictationProvisional } from "./DictationProvisional";
@@ -41,4 +42,5 @@ export const liveEditorExtensions: Extensions = [
   ...richEditorExtensions,
   BlockDragHandle,
   DictationProvisional,
+  AgentAnchorHighlight,
 ];

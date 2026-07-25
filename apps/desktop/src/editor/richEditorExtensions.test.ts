@@ -39,8 +39,9 @@ describe("richEditorExtensions", () => {
   });
 
   it("extends live editing with drag handles and dictation chrome", () => {
-    expect(liveEditorExtensions).toHaveLength(richEditorExtensions.length + 2);
+    expect(liveEditorExtensions).toHaveLength(richEditorExtensions.length + 3);
     expect(extensionByName(liveEditorExtensions, "blockDragHandle")).toBeDefined();
     expect(extensionByName(liveEditorExtensions, "dictationProvisional")).toBeDefined();
+    expect(extensionByName(liveEditorExtensions, "agentAnchorHighlight")).toBeDefined();
   });
 });

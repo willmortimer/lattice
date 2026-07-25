@@ -3,6 +3,7 @@ import type { AppSettings } from "../settings/model";
 import { invoke } from "@tauri-apps/api/core";
 import DataEditor, {
   GridCellKind,
+  type DataEditorRef,
   type EditableGridCell,
   type GridCell,
   type ProvideEditorCallback,
@@ -13,6 +14,7 @@ import DataEditor, {
 } from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { registerDatasetAnchorSurface } from "../agent/adapters/surfaces";
 import { AddColumnPanel } from "./AddColumnPanel";
 import { DataActionsMenu } from "./DataActionsMenu";
 import { RecordDetailPanel } from "./RecordDetailPanel";
@@ -225,6 +227,11 @@ export function DataTableView({
   const [formsError, setFormsError] = useState<string | null>(null);
   const revisionRef = useRef(snapshot.package_revision);
   const snapshotRef = useRef(snapshot);
+  const gridEditorRef = useRef<DataEditorRef>(null);
+  const gridSelectionRef = useRef<GridSelection | undefined>(undefined);
+  const gridDisplayRowsRef = useRef<GridDisplayRow[]>([]);
+  const visibleColumnsRef = useRef<DataColumn[]>([]);
+  const layoutTypeRef = useRef<ViewLayoutType>(layoutType);
   const rowFetchLimit = preferences.pageSize;
 
   useEffect(() => {
@@ -781,6 +788,30 @@ export function DataTableView({
           ),
     [displayRows, gridGroupBy, gridSummaries, layoutType, visibleColumns],
   );
+
+  useEffect(() => {
+    gridSelectionRef.current = gridSelection;
+    layoutTypeRef.current = layoutType;
+  }, [gridSelection, layoutType]);
+
+  useEffect(() => {
+    gridDisplayRowsRef.current = gridDisplayRows;
+    visibleColumnsRef.current = visibleColumns;
+  }, [gridDisplayRows, visibleColumns]);
+
+  useEffect(() => {
+    return registerDatasetAnchorSurface({
+      resourceId: relPath,
+      getLayoutType: () => layoutTypeRef.current,
+      getGridDisplayRows: () => gridDisplayRowsRef.current,
+      getVisibleColumnCount: () => visibleColumnsRef.current.length,
+      getColumnIndex: (columnName) =>
+        visibleColumnsRef.current.findIndex((column) => column.name === columnName),
+      getGridSelection: () => gridSelectionRef.current,
+      setGridSelection,
+      scrollToCell: (col, row) => gridEditorRef.current?.scrollTo(col, row, "both"),
+    });
+  }, [relPath]);
 
   const selectedGridRow = useMemo(() => {
     const currentRow = gridSelection?.current?.cell[1];
@@ -1511,6 +1542,7 @@ export function DataTableView({
             />
           ) : (
             <DataEditor
+              ref={gridEditorRef}
               provideEditor={provideEditor}
               width="100%"
               height="100%"

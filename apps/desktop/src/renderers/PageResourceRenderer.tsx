@@ -34,6 +34,7 @@ export function PageResourceRenderer({
         <PageEditor
           key={`${session.resource.path}#${context.reloadToken}`}
           ref={context.pageEditorRef}
+          resourceId={session.resource.path}
           raw={session.content}
           revision={session.revision}
           io={session.io}
