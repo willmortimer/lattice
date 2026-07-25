@@ -163,7 +163,12 @@ impl AgentController {
 
     pub async fn health(&self) -> Result<AgentRuntimeHealth, AgentRuntimeError> {
         let mut health = self.backend.health().await?;
-        health.backend = self.backend_name.clone();
+        // Badge / health UI expect a provider kind (`fake` | `pioneer` | `openai`),
+        // not the transport name (`sidecar`).
+        health.backend = match self.backend_name.as_str() {
+            "fake" => "fake".into(),
+            _ => self.default_provider().as_str().to_string(),
+        };
         health.degraded = health.degraded || self.is_degraded();
         health.ok = health.ok && !health.degraded;
         Ok(health)

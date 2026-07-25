@@ -1,19 +1,37 @@
 import { describe, expect, it } from "vitest";
 
-import { agentProviderLabel, resolveAgentProviderKind } from "./providerKind";
+import {
+  agentProviderLabel,
+  isAgentProviderKind,
+  resolveAgentProviderKind,
+} from "./providerKind";
 
 describe("resolveAgentProviderKind", () => {
-  it("prefers the last run backend over health", () => {
+  it("prefers the last run provider over health", () => {
     expect(resolveAgentProviderKind("fake", "pioneer")).toBe("pioneer");
   });
 
-  it("falls back to health and then fake", () => {
+  it("uses health when no run provider is recorded", () => {
     expect(resolveAgentProviderKind("openai", null)).toBe("openai");
-    expect(resolveAgentProviderKind(null, null)).toBe("fake");
+    expect(resolveAgentProviderKind("pioneer", null)).toBe("pioneer");
+    expect(resolveAgentProviderKind("fake", null)).toBe("fake");
+  });
+
+  it("does not treat missing or transport health as Fake", () => {
+    expect(resolveAgentProviderKind(null, null)).toBe("unknown");
+    expect(resolveAgentProviderKind("sidecar", null)).toBe("unknown");
+    expect(resolveAgentProviderKind("sidecar", "pioneer")).toBe("pioneer");
   });
 
   it("maps unknown backends to unknown", () => {
     expect(resolveAgentProviderKind("custom-backend", null)).toBe("unknown");
+  });
+});
+
+describe("isAgentProviderKind", () => {
+  it("accepts known providers only", () => {
+    expect(isAgentProviderKind("pioneer")).toBe(true);
+    expect(isAgentProviderKind("sidecar")).toBe(false);
   });
 });
 

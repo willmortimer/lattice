@@ -1,20 +1,36 @@
 export type AgentProviderKind = "fake" | "pioneer" | "openai" | "unknown";
 
+const PROVIDER_KINDS = new Set<string>(["fake", "pioneer", "openai"]);
+
+/**
+ * Resolve the badge provider kind.
+ *
+ * Prefers the last run's provider, then health. Health may report a transport
+ * name (`sidecar`) from older daemons — that is not treated as Fake.
+ */
 export function resolveAgentProviderKind(
   healthBackend: string | null,
   lastEventBackend: string | null,
 ): AgentProviderKind {
-  const raw = (lastEventBackend ?? healthBackend ?? "fake").toLowerCase();
-  if (raw === "fake") {
-    return "fake";
-  }
-  if (raw === "pioneer") {
-    return "pioneer";
-  }
-  if (raw === "openai") {
-    return "openai";
+  for (const candidate of [lastEventBackend, healthBackend]) {
+    if (candidate == null || candidate.trim() === "") {
+      continue;
+    }
+    const raw = candidate.toLowerCase();
+    if (PROVIDER_KINDS.has(raw)) {
+      return raw as AgentProviderKind;
+    }
+    // Legacy / transport labels — never collapse these to Fake.
+    if (raw === "sidecar") {
+      continue;
+    }
   }
   return "unknown";
+}
+
+/** True when `value` is a known provider kind suitable for the badge store. */
+export function isAgentProviderKind(value: string): value is AgentProviderKind {
+  return PROVIDER_KINDS.has(value.toLowerCase());
 }
 
 export function agentProviderLabel(kind: AgentProviderKind): string {
