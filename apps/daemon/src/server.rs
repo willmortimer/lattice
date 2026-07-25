@@ -68,7 +68,9 @@ impl DaemonState {
         voice: Option<Arc<crate::voice_host::VoiceController>>,
         agent: Option<Arc<crate::agent::AgentController>>,
     ) -> Self {
-        let (event_tx, _) = broadcast::channel(64);
+        // Shared fan-out for workspace + agent events. Sized to absorb index
+        // bursts without dropping a run_completed/run_failed the UI awaits.
+        let (event_tx, _) = broadcast::channel(1024);
         let next_event_seq = Arc::new(AtomicU64::new(1));
         if let Some(voice) = voice.as_ref() {
             voice.attach_event_fanout(event_tx.clone(), Arc::clone(&next_event_seq));

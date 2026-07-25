@@ -356,19 +356,54 @@ pub async fn agent_start_run(
         other => return Err(format!("unexpected StartAgentRun response: {other:?}")),
     };
 
-    while let Some(result) = events.next().await {
-        let Ok(event) = result else {
-            break;
-        };
-        let Some(event::Body::AgentEvent(agent_event)) = event.body else {
-            continue;
-        };
-        if agent_event.run_id != run_id {
-            continue;
+    // Bound the wait so a dropped event stream cannot wedge the composer forever.
+    let wait = async {
+        while let Some(result) = events.next().await {
+            let event = match result {
+                Ok(event) => event,
+                Err(err) => {
+                    let _ = channel.send(AgentStreamMsg::Error {
+                        run_id: run_id.clone(),
+                        message: format!("agent event stream failed: {err}"),
+                    });
+                    return Ok(());
+                }
+            };
+            let Some(event::Body::AgentEvent(agent_event)) = event.body else {
+                continue;
+            };
+            if agent_event.run_id != run_id {
+                continue;
+            }
+            let payload = parse_payload_json(&agent_event.payload_json)?;
+            if forward_agent_event(&channel, &run_id, &agent_event.event_type, &payload) {
+                return Ok(());
+            }
         }
-        let payload = parse_payload_json(&agent_event.payload_json)?;
-        if forward_agent_event(&channel, &run_id, &agent_event.event_type, &payload) {
-            break;
+        let _ = channel.send(AgentStreamMsg::Error {
+            run_id: run_id.clone(),
+            message: "agent event stream ended before run completed".into(),
+        });
+        Ok::<(), String>(())
+    };
+
+    match tokio::time::timeout(std::time::Duration::from_secs(120), wait).await {
+        Ok(Ok(())) => {}
+        Ok(Err(err)) => return Err(err),
+        Err(_) => {
+            let _ = client
+                .request(Request {
+                    deadline_unix_ms: None,
+                    idempotency_key: None,
+                    body: Some(request::Body::CancelAgentRun(CancelAgentRunRequest {
+                        run_id: run_id.clone(),
+                    })),
+                })
+                .await;
+            let _ = channel.send(AgentStreamMsg::Error {
+                run_id: run_id.clone(),
+                message: "agent run timed out waiting for events".into(),
+            });
         }
     }
 

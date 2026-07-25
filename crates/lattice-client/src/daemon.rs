@@ -56,7 +56,9 @@ impl DaemonClient {
 
         let pending: Arc<Mutex<HashMap<String, oneshot::Sender<Result<Response, ClientError>>>>> =
             Arc::new(Mutex::new(HashMap::new()));
-        let (event_tx, _) = broadcast::channel(64);
+        // Agent runs and index progress share this bus; keep headroom so a
+        // burst cannot Lagged-drop the terminal agent event the UI waits on.
+        let (event_tx, _) = broadcast::channel(1024);
         spawn_reader(reader, Arc::clone(&pending), event_tx.clone());
 
         Ok(Self {

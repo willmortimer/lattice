@@ -46,7 +46,7 @@ LATTICE_AGENT_FAKE=1 \
 # Supervised sidecar (requires agentd from EA2)
 LATTICE_AGENTD_BIN="npx tsx apps/agentd/src/index.ts" \
   LATTICE_AGENT_PROVIDER=pioneer \
-  LATTICE_AGENT_MODEL=your-model \
+  LATTICE_AGENT_MODEL=claude-sonnet-4-5 \
   PIONEER_API_KEY=… \
   cargo run -p lattice-daemon -- --auth-token dev-token --api-port 0
 ```

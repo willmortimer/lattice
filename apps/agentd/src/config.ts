@@ -58,7 +58,11 @@ export function loadConfig(
     : parseProvider(env.LATTICE_AGENT_PROVIDER);
   const defaultModel =
     env.LATTICE_AGENT_MODEL?.trim() ||
-    (defaultProvider === "fake" ? "fake-model" : "gpt-4.1-mini");
+    (defaultProvider === "fake"
+      ? "fake-model"
+      : defaultProvider === "pioneer"
+        ? "claude-sonnet-4-5"
+        : "gpt-4.1-mini");
 
   return {
     forceFake,

@@ -81,7 +81,7 @@ sidecar (or uses an in-process fake backend). See
 ```sh
 export LATTICE_AGENTD_BIN="$(pwd)/apps/agentd/scripts/run.sh"
 export LATTICE_AGENT_PROVIDER=pioneer
-export LATTICE_AGENT_MODEL=pioneer/auto
+export LATTICE_AGENT_MODEL=claude-sonnet-4-5
 export PIONEER_API_KEY=…                # never commit
 pnpm --filter @lattice/desktop tauri:dev:novoice
 ```
