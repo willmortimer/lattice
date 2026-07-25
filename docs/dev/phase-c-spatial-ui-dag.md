@@ -1,6 +1,6 @@
 # Phase C Spatial UI DAG (anchors / highlight / navigate)
 
-**Status:** Planned  
+**Status:** MVP complete (C1–C7 landed)  
 **Created:** 2026-07-24  
 **BASE:** `main` (active at plan time; ahead of origin)  
 **Integration:** land each task branch onto `BASE` before launching dependents  
