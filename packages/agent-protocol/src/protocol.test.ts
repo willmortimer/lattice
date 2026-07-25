@@ -97,6 +97,51 @@ describe("events", () => {
       retryable: true,
     },
     { type: "health", ok: true },
+    {
+      type: "step_started",
+      runId: "run-1",
+      stepId: "step-nav",
+      kind: "navigation",
+      label: "Focus inventory row",
+    },
+    {
+      type: "step_completed",
+      runId: "run-1",
+      stepId: "step-nav",
+      durationMs: 42,
+      summary: "Revealed table row",
+    },
+    {
+      type: "evidence_added",
+      runId: "run-1",
+      evidenceId: "ev-1",
+      resourceId: "page:notes",
+      path: "notes.md",
+      excerpt: "Quarterly revenue increased.",
+      anchor: {
+        kind: "markdown-block",
+        resourceId: "page:notes",
+        blockId: "blk-2",
+      },
+      score: 0.91,
+    },
+    {
+      type: "overlay_show",
+      runId: "run-1",
+      overlayId: "ov-1",
+      anchors: [
+        {
+          kind: "dataset-region",
+          resourceId: "table:inventory",
+          rowKeys: ["row-7"],
+          columns: ["sku"],
+        },
+      ],
+      purpose: "attention",
+      commentary: "Low stock",
+    },
+    { type: "overlay_clear", runId: "run-1", overlayId: "ov-1" },
+    { type: "overlay_clear", runId: "run-1" },
   ];
 
   it.each(eventFixtures)("round-trips %o", (event) => {
@@ -113,6 +158,27 @@ describe("events", () => {
     expect(() => parseEvent('{"type":"hello_ack","protocolVersion":0}')).toThrow();
     expect(() =>
       parseEvent(JSON.stringify({ type: "run_failed", runId: "r" })),
+    ).toThrow();
+    expect(() =>
+      parseEvent(
+        JSON.stringify({
+          type: "overlay_show",
+          runId: "run-1",
+          overlayId: "ov-1",
+          anchors: [],
+          purpose: "attention",
+        }),
+      ),
+    ).toThrow();
+    expect(() =>
+      parseEvent(
+        JSON.stringify({
+          type: "step_completed",
+          runId: "run-1",
+          stepId: "step-1",
+          durationMs: -1,
+        }),
+      ),
     ).toThrow();
   });
 });

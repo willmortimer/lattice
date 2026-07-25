@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { MAX_OVERLAY_ANCHORS, workspaceAnchorSchema } from "./anchors";
 import { uiMessageChunkSchema } from "./messages";
 import { providerKindSchema } from "./provider";
 import { PROTOCOL_VERSION } from "./version";
@@ -42,6 +43,70 @@ export const healthEventSchema = z.object({
   ok: z.boolean(),
 });
 
+export const agentStepKindSchema = z.enum([
+  "model",
+  "tool",
+  "search",
+  "navigation",
+  "draft",
+  "execution",
+  "validation",
+  "proposal",
+]);
+
+export const overlayPurposeSchema = z.enum([
+  "attention",
+  "evidence",
+  "warning",
+  "change",
+]);
+
+export const stepStartedEventSchema = z.object({
+  type: z.literal("step_started"),
+  runId: z.string(),
+  stepId: z.string(),
+  kind: agentStepKindSchema,
+  label: z.string(),
+});
+
+export const stepCompletedEventSchema = z.object({
+  type: z.literal("step_completed"),
+  runId: z.string(),
+  stepId: z.string(),
+  durationMs: z.number().nonnegative(),
+  summary: z.string().optional(),
+});
+
+export const evidenceAddedEventSchema = z.object({
+  type: z.literal("evidence_added"),
+  runId: z.string(),
+  evidenceId: z.string(),
+  resourceId: z.string(),
+  path: z.string(),
+  revision: z.string().min(1).optional(),
+  excerpt: z.string(),
+  anchor: workspaceAnchorSchema.optional(),
+  score: z.number().optional(),
+});
+
+export const overlayShowEventSchema = z.object({
+  type: z.literal("overlay_show"),
+  runId: z.string(),
+  overlayId: z.string(),
+  anchors: z
+    .array(workspaceAnchorSchema)
+    .min(1)
+    .max(MAX_OVERLAY_ANCHORS),
+  purpose: overlayPurposeSchema,
+  commentary: z.string().optional(),
+});
+
+export const overlayClearEventSchema = z.object({
+  type: z.literal("overlay_clear"),
+  runId: z.string(),
+  overlayId: z.string().optional(),
+});
+
 export const agentEventSchema = z.discriminatedUnion("type", [
   helloAckEventSchema,
   runStartedEventSchema,
@@ -49,6 +114,11 @@ export const agentEventSchema = z.discriminatedUnion("type", [
   runCompletedEventSchema,
   runFailedEventSchema,
   healthEventSchema,
+  stepStartedEventSchema,
+  stepCompletedEventSchema,
+  evidenceAddedEventSchema,
+  overlayShowEventSchema,
+  overlayClearEventSchema,
 ]);
 
 export type HelloAckEvent = z.infer<typeof helloAckEventSchema>;
@@ -57,6 +127,13 @@ export type MessageChunkEvent = z.infer<typeof messageChunkEventSchema>;
 export type RunCompletedEvent = z.infer<typeof runCompletedEventSchema>;
 export type RunFailedEvent = z.infer<typeof runFailedEventSchema>;
 export type HealthEvent = z.infer<typeof healthEventSchema>;
+export type AgentStepKind = z.infer<typeof agentStepKindSchema>;
+export type OverlayPurpose = z.infer<typeof overlayPurposeSchema>;
+export type StepStartedEvent = z.infer<typeof stepStartedEventSchema>;
+export type StepCompletedEvent = z.infer<typeof stepCompletedEventSchema>;
+export type EvidenceAddedEvent = z.infer<typeof evidenceAddedEventSchema>;
+export type OverlayShowEvent = z.infer<typeof overlayShowEventSchema>;
+export type OverlayClearEvent = z.infer<typeof overlayClearEventSchema>;
 export type AgentEvent = z.infer<typeof agentEventSchema>;
 
 export function parseEvent(line: string): AgentEvent {
