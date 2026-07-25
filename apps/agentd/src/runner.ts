@@ -175,7 +175,8 @@ async function streamRun(
       });
       return;
     }
-    const message = err instanceof Error ? err.message : String(err);
+    const raw = err instanceof Error ? err.message : String(err);
+    const message = clarifyProviderToolLoopError(raw, model);
     logDiag(`run ${runId} failed`, err);
     sink({
       type: "run_failed",
@@ -184,6 +185,22 @@ async function streamRun(
       retryable: true,
     });
   }
+}
+
+/** Pioneer chat-completions tool continuations fail on several popular IDs. */
+function clarifyProviderToolLoopError(message: string, model: string): string {
+  const lower = message.toLowerCase();
+  const looksLikeToolLoopBreak =
+    lower.includes("invalid argument") ||
+    lower.includes("extra inputs are not permitted");
+  if (!looksLikeToolLoopBreak) {
+    return message;
+  }
+  return (
+    `${message} — model ${model} likely cannot continue after tool results on ` +
+    `Pioneer chat completions. Try MiniMaxAI/MiniMax-M3 or gpt-5.4-nano ` +
+    `(or pioneer/auto when enabled).`
+  );
 }
 
 type ActiveRun = {

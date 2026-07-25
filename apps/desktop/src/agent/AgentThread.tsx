@@ -1,5 +1,6 @@
 import {
   ComposerPrimitive,
+  ErrorPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
   type ToolCallMessagePartProps,
@@ -10,11 +11,29 @@ export interface AgentThreadProps {
   workspaceRoot: string | null;
 }
 
-function AgentToolFallback({ toolName }: ToolCallMessagePartProps) {
+function toolStatusLabel(status: ToolCallMessagePartProps["status"]): string {
+  switch (status.type) {
+    case "running":
+      return "Running";
+    case "complete":
+      return "Done";
+    case "incomplete":
+      return "Failed";
+    case "requires-action":
+      return "Waiting";
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
+  }
+}
+
+function AgentToolFallback({ toolName, status }: ToolCallMessagePartProps) {
   return (
     <div className="agent-tool-fallback">
       <span className="agent-tool-fallback-label">Tool</span>
       <code>{toolName}</code>
+      <span className="agent-tool-fallback-status">{toolStatusLabel(status)}</span>
     </div>
   );
 }
@@ -37,6 +56,11 @@ function AgentAssistantMessage() {
           },
         }}
       />
+      <MessagePrimitive.Error>
+        <ErrorPrimitive.Root className="agent-message-error">
+          <ErrorPrimitive.Message />
+        </ErrorPrimitive.Root>
+      </MessagePrimitive.Error>
     </MessagePrimitive.Root>
   );
 }

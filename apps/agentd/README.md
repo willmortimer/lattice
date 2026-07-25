@@ -81,9 +81,20 @@ sidecar (or uses an in-process fake backend). See
 ```sh
 export LATTICE_AGENTD_BIN="$(pwd)/apps/agentd/scripts/run.sh"
 export LATTICE_AGENT_PROVIDER=pioneer
-export LATTICE_AGENT_MODEL=gemini-3.5-flash-lite
+export LATTICE_AGENT_MODEL=MiniMaxAI/MiniMax-M3
 export PIONEER_API_KEY=…                # never commit
 pnpm --filter @lattice/desktop tauri:dev:novoice
 ```
 
 Quit any stale `latticed` / Lattice.app first so spawn picks up agent + API env.
+
+### Pioneer model tool-loop notes
+
+Many Gemini Flash / Claude IDs fail the **second** chat-completions turn after
+tool results (`invalid argument`, or `annotations: Extra inputs are not
+permitted`). The UI then looks stalled on the first `TOOL` row if the failure
+is not surfaced.
+
+Verified multi-turn tool loops on Pioneer today: `MiniMaxAI/MiniMax-M3`,
+`gpt-5.4-nano`. Prefer `pioneer/auto` when your account enables the router.
+Probe with `apps/agentd/scripts/probe-tool-loop.mts`.

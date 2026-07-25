@@ -147,6 +147,59 @@ describe("TauriAgentChatTransport", () => {
     expect(JSON.stringify(chunks)).not.toContain("apiKey");
   });
 
+  it("surfaces invoke error even when Channel Error races behind close", async () => {
+    invokeMock.mockImplementation(async (_command, payload) => {
+      const channel = payload.channel as { onmessage: (message: AgentStreamMsg) => void };
+      channel.onmessage({
+        kind: "agentEvent",
+        runId: "run-err",
+        event: { type: "run_started", runId: "run-err", threadId: "thread-1" },
+      });
+      channel.onmessage({
+        kind: "uiChunk",
+        runId: "run-err",
+        chunk: { type: "tool-input-available", toolCallId: "t1", toolName: "search", input: {} },
+      });
+      // Simulate the race: invoke returns failure before Channel Error is delivered.
+      return {
+        runId: "run-err",
+        threadId: "thread-1",
+        error: "Request contains an invalid argument.",
+      };
+    });
+
+    const transport = new TauriAgentChatTransport({
+      workspaceRoot: "/tmp/workspace",
+      threadId: "thread-1",
+    });
+
+    const stream = await transport.sendMessages({
+      chatId: "thread-1",
+      trigger: "submit-message",
+      messageId: undefined,
+      messages: [
+        {
+          id: "m1",
+          role: "user",
+          parts: [{ type: "text", text: "hi" }],
+        },
+      ],
+      abortSignal: undefined,
+    });
+
+    const reader = stream.getReader();
+    await expect(
+      (async () => {
+        while (true) {
+          const { done } = await reader.read();
+          if (done) {
+            throw new Error("stream closed without error");
+          }
+        }
+      })(),
+    ).rejects.toThrow(/invalid argument/);
+  });
+
   it("cancels the active run via stop()", async () => {
     invokeMock.mockImplementation(async (command, payload) => {
       if (command === "agent_cancel_run") {

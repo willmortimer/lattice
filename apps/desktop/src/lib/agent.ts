@@ -22,6 +22,8 @@ export type AgentStartRunArgs = {
 export type AgentStartRunResult = {
   runId: string;
   threadId: string;
+  /** Present when the run failed; authoritative over Channel ordering. */
+  error?: string;
 };
 
 export type AgentStreamMsg =
@@ -147,7 +149,7 @@ export class TauriAgentChatTransport implements ChatTransport<UIMessage> {
 
         void (async () => {
           try {
-            await startAgentRun(
+            const result = await startAgentRun(
               {
                 workspaceRoot: this.options.workspaceRoot,
                 threadId,
@@ -168,12 +170,18 @@ export class TauriAgentChatTransport implements ChatTransport<UIMessage> {
                   },
                 });
 
+                // Channel Done/Error can race the invoke promise. Prefer the
+                // returned `error` field below when the stream is still open.
                 if (outcome === "done") {
                   closeOnce();
                 }
               },
             );
-            closeOnce();
+            if (result.error) {
+              failOnce(new Error(result.error));
+            } else {
+              closeOnce();
+            }
           } catch (error) {
             failOnce(error);
           } finally {

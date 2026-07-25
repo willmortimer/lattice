@@ -59,6 +59,11 @@ pub struct AgentHealthDto {
 pub struct AgentStartRunResult {
     pub run_id: String,
     pub thread_id: String,
+    /// Set when the run ended in failure. Authoritative for the webview:
+    /// Tauri Channel delivery can race the invoke promise, so the transport
+    /// must not treat invoke resolution alone as success.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -358,16 +363,18 @@ pub async fn agent_start_run(
     };
 
     // Bound the wait so a dropped event stream cannot wedge the composer forever.
+    // `Ok(None)` = completed; `Ok(Some(message))` = failed with message.
     let wait = async {
         while let Some(result) = events.next().await {
             let event = match result {
                 Ok(event) => event,
                 Err(err) => {
+                    let message = format!("agent event stream failed: {err}");
                     let _ = channel.send(AgentStreamMsg::Error {
                         run_id: run_id.clone(),
-                        message: format!("agent event stream failed: {err}"),
+                        message: message.clone(),
                     });
-                    return Ok(());
+                    return Ok(Some(message));
                 }
             };
             let Some(event::Body::AgentEvent(agent_event)) = event.body else {
@@ -377,19 +384,32 @@ pub async fn agent_start_run(
                 continue;
             }
             let payload = parse_payload_json(&agent_event.payload_json)?;
-            if forward_agent_event(&channel, &run_id, &agent_event.event_type, &payload) {
-                return Ok(());
+            let event_type = agent_event.event_type.as_str();
+            if forward_agent_event(&channel, &run_id, event_type, &payload) {
+                let error = if event_type == "run_failed" {
+                    Some(
+                        payload
+                            .get("message")
+                            .and_then(|value| value.as_str())
+                            .unwrap_or("agent run failed")
+                            .to_string(),
+                    )
+                } else {
+                    None
+                };
+                return Ok(error);
             }
         }
+        let message = "agent event stream ended before run completed".to_string();
         let _ = channel.send(AgentStreamMsg::Error {
             run_id: run_id.clone(),
-            message: "agent event stream ended before run completed".into(),
+            message: message.clone(),
         });
-        Ok::<(), String>(())
+        Ok::<Option<String>, String>(Some(message))
     };
 
-    match tokio::time::timeout(std::time::Duration::from_secs(120), wait).await {
-        Ok(Ok(())) => {}
+    let error = match tokio::time::timeout(std::time::Duration::from_secs(120), wait).await {
+        Ok(Ok(error)) => error,
         Ok(Err(err)) => return Err(err),
         Err(_) => {
             let _ = client
@@ -401,14 +421,20 @@ pub async fn agent_start_run(
                     })),
                 })
                 .await;
+            let message = "agent run timed out waiting for events".to_string();
             let _ = channel.send(AgentStreamMsg::Error {
                 run_id: run_id.clone(),
-                message: "agent run timed out waiting for events".into(),
+                message: message.clone(),
             });
+            Some(message)
         }
-    }
+    };
 
-    Ok(AgentStartRunResult { run_id, thread_id })
+    Ok(AgentStartRunResult {
+        run_id,
+        thread_id,
+        error,
+    })
 }
 
 #[tauri::command]

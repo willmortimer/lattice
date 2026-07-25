@@ -61,7 +61,7 @@ export function loadConfig(
     (defaultProvider === "fake"
       ? "fake-model"
       : defaultProvider === "pioneer"
-        ? "gemini-3.5-flash-lite"
+        ? "MiniMaxAI/MiniMax-M3"
         : "gpt-4.1-mini");
 
   return {
