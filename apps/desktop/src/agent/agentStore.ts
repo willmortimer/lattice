@@ -176,20 +176,18 @@ export function applySpatialAgentEvent(
       });
 
       if (!found) {
+        const synthesized: TrailStep = {
+          stepId: event.stepId,
+          runId: event.runId,
+          kind: "execution",
+          label: event.summary ?? event.stepId,
+          status: "completed",
+          durationMs: event.durationMs,
+          ...(event.summary !== undefined ? { summary: event.summary } : {}),
+        };
         return {
           ...state,
-          trailSteps: [
-            ...trailSteps,
-            {
-              stepId: event.stepId,
-              runId: event.runId,
-              kind: "execution",
-              label: event.summary ?? event.stepId,
-              status: "completed" as const,
-              durationMs: event.durationMs,
-              ...(event.summary !== undefined ? { summary: event.summary } : {}),
-            },
-          ].slice(-MAX_TRAIL_STEPS),
+          trailSteps: [...trailSteps, synthesized].slice(-MAX_TRAIL_STEPS),
         };
       }
 
