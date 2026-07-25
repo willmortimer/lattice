@@ -139,6 +139,7 @@ async fn daemon_subscribe_yields_filtered_stream() {
     let mut stream = client
         .subscribe(EventFilter {
             workspace_id: Some("ws".into()),
+            agent_events_only: false,
         })
         .await
         .expect("subscribe");

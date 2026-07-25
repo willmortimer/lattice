@@ -118,7 +118,7 @@ impl AgentController {
         }
 
         let workspace_id = request.workspace_id.clone();
-        let (tx, mut rx) = mpsc::channel::<AgentEvent>(64);
+        let (tx, mut rx) = mpsc::channel::<AgentEvent>(1024);
         let handle = self.backend.start_run(request, tx).await?;
 
         if let Some((event_tx, next_seq)) = self

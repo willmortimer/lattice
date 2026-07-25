@@ -129,7 +129,7 @@ async fn voice_rpcs_proxy_through_daemon_with_fake_host() {
         .expect("connect");
 
     let mut events = client
-        .subscribe(EventFilter { workspace_id: None })
+        .subscribe(EventFilter { workspace_id: None, agent_events_only: false })
         .await
         .expect("subscribe");
 

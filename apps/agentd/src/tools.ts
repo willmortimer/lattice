@@ -107,10 +107,13 @@ export function createLatticeTools(): FunctionTool<LatticeRunContext, any, strin
     execute: async (args, runContext) => {
       const ctx = runCtx(runContext);
       const client = requireClient(ctx);
+      // Prefer FTS by default: hybrid waits on embeddings and can stall the
+      // streamed tool turn under Pioneer embedding load / cold index.
+      const mode = args.mode ?? "fts";
       const body = withWorkspace(ctx, args, {
         query: args.query,
         ...(args.limit != null ? { limit: args.limit } : {}),
-        ...(args.mode != null ? { mode: args.mode } : {}),
+        mode,
       });
       return asToolJson(await client.search(body));
     },

@@ -268,10 +268,8 @@ impl LatticeClient for DaemonClient {
             loop {
                 match event_rx.recv().await {
                     Ok(event) => {
-                        if let Some(workspace_id) = filter.workspace_id.as_ref() {
-                            if &event.workspace_id != workspace_id {
-                                continue;
-                            }
+                        if !crate::events::event_matches_filter(&event, &filter) {
+                            continue;
                         }
                         if tx.send(Ok(event)).await.is_err() {
                             break;

@@ -60,16 +60,36 @@ async function emitUiStream(
       if (done) {
         break;
       }
+      // Tools execute inside agentd; mark providerExecuted so AI SDK / useChat
+      // does not await a client-side onToolCall before consuming later chunks.
       sink({
         type: "message_chunk",
         runId,
-        chunk: value,
+        chunk: markProviderExecutedToolChunk(value),
       });
     }
   } finally {
     signal.removeEventListener("abort", onAbort);
     reader.releaseLock();
   }
+}
+
+function markProviderExecutedToolChunk(chunk: UiMessageChunk): UiMessageChunk {
+  if (typeof chunk !== "object" || chunk === null || !("type" in chunk)) {
+    return chunk;
+  }
+  const type = (chunk as { type?: unknown }).type;
+  if (
+    type !== "tool-input-start" &&
+    type !== "tool-input-delta" &&
+    type !== "tool-input-available" &&
+    type !== "tool-input-error" &&
+    type !== "tool-output-available" &&
+    type !== "tool-output-error"
+  ) {
+    return chunk;
+  }
+  return { ...(chunk as Record<string, unknown>), providerExecuted: true } as UiMessageChunk;
 }
 
 async function streamRun(

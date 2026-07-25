@@ -330,6 +330,7 @@ pub async fn agent_start_run(
     let mut events = client
         .subscribe(EventFilter {
             workspace_id: Some(workspace_id.clone()),
+            agent_events_only: true,
         })
         .await
         .map_err(|err| format!("subscribe agent events failed: {err}"))?;
