@@ -60,7 +60,7 @@ pub(crate) fn load_chunk_rows(
     let sql = format!(
         "SELECT c.chunk_id, r.id, r.path, c.title, c.heading_path_json, c.text,
                 c.source_start_byte, c.source_end_byte, c.content_hash,
-                c.chunker_version, c.sensitivity, c.export_policy
+                c.chunker_version, c.sensitivity, c.export_policy, c.block_id
          FROM search_chunks c
          JOIN resources r ON r.id = c.resource_id
          WHERE c.chunk_id IN ({placeholders})"
@@ -87,6 +87,7 @@ pub(crate) fn load_chunk_rows(
                 chunker_version: row.get(9)?,
                 sensitivity: row.get(10)?,
                 export_policy: row.get(11)?,
+                block_id: row.get(12)?,
             })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -107,6 +108,7 @@ pub(crate) struct ChunkHydrationRow {
     pub chunker_version: String,
     pub sensitivity: String,
     pub export_policy: String,
+    pub block_id: Option<String>,
 }
 
 /// Pending chunk metadata for embedding.

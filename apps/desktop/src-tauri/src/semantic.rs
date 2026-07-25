@@ -335,6 +335,7 @@ pub async fn search_via_daemon(
                         Some(hit.heading_path)
                     },
                     chunk_id: hit.chunk_id,
+                    block_id: None,
                     sensitivity: hit.sensitivity,
                     export_policy: hit.export_policy,
                 })

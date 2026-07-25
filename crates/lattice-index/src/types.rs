@@ -68,6 +68,9 @@ pub struct HybridSearchHit {
     pub resource_uri: String,
     pub resource_id: String,
     pub chunk_id: String,
+    /// Structural block id for markdown-block anchors (when indexed).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub block_id: Option<String>,
     pub title: String,
     pub heading_path: Vec<String>,
     pub excerpt: String,

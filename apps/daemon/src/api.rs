@@ -111,6 +111,8 @@ pub struct SearchHitDto {
     pub excerpt: Option<String>,
     pub score: f64,
     pub chunk_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub block_id: Option<String>,
     pub heading_path: Vec<String>,
     pub source_start_byte: Option<u64>,
     pub source_end_byte: Option<u64>,
@@ -183,6 +185,7 @@ pub fn api_search(
                     excerpt,
                     score: hit.rank,
                     chunk_id: None,
+                    block_id: None,
                     heading_path: Vec::new(),
                     source_start_byte: None,
                     source_end_byte: None,
@@ -222,6 +225,7 @@ fn hybrid_hit_to_dto(hit: HybridSearchHit) -> SearchHitDto {
         excerpt,
         score: f64::from(hit.fused_score),
         chunk_id: Some(hit.chunk_id),
+        block_id: hit.block_id,
         heading_path: hit.heading_path,
         source_start_byte: Some(hit.source_start_byte),
         source_end_byte: Some(hit.source_end_byte),
@@ -565,6 +569,8 @@ pub struct ContextExcerpt {
     pub export_redacted: bool,
     pub needs_consent: bool,
     pub provenance: Option<ProvenanceDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub block_id: Option<String>,
     pub source_start_byte: Option<u64>,
     pub source_end_byte: Option<u64>,
 }
@@ -626,6 +632,7 @@ pub fn api_build_context(
                     model_revision: hit.provenance.model_revision,
                     instruction_version: hit.provenance.instruction_version,
                 }),
+                block_id: hit.block_id.clone(),
                 source_start_byte: Some(hit.source_start_byte),
                 source_end_byte: Some(hit.source_end_byte),
             });
@@ -654,6 +661,7 @@ pub fn api_build_context(
                         model_revision: hit.provenance.model_revision,
                         instruction_version: hit.provenance.instruction_version,
                     }),
+                    block_id: hit.block_id.clone(),
                     source_start_byte: Some(hit.source_start_byte),
                     source_end_byte: Some(hit.source_end_byte),
                 });
@@ -690,6 +698,7 @@ pub fn api_build_context(
                         model_revision: hit.provenance.model_revision,
                         instruction_version: hit.provenance.instruction_version,
                     }),
+                    block_id: hit.block_id.clone(),
                     source_start_byte: Some(hit.source_start_byte),
                     source_end_byte: Some(hit.source_end_byte),
                 });
@@ -1229,6 +1238,38 @@ mod tests {
         )
         .unwrap();
         (dir, LatticeRuntime::new())
+    }
+
+    #[test]
+    fn hybrid_search_hit_includes_block_id() {
+        let (dir, runtime) = fixture();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        let search = api_search(
+            &runtime,
+            SearchParams {
+                workspace_id: None,
+                root: Some(root.clone()),
+                query: "unique-phrase-xyz".into(),
+                limit: Some(5),
+                mode: Some("hybrid".into()),
+            },
+        )
+        .unwrap();
+
+        let notes_hit = search
+            .hits
+            .iter()
+            .find(|hit| hit.path == "Notes.md")
+            .expect("expected hybrid hit for Notes.md");
+        let block_id = notes_hit
+            .block_id
+            .as_deref()
+            .filter(|id| !id.is_empty())
+            .expect("expected non-empty blockId on indexed page chunk");
+
+        let json = serde_json::to_value(notes_hit).unwrap();
+        assert_eq!(json.get("blockId").and_then(|v| v.as_str()), Some(block_id));
     }
 
     #[test]
