@@ -99,4 +99,15 @@ describe("ResourceRendererRegistry", () => {
     expect(deriveResourceFormatId({ path: "Data/sample.csv", kind: "file" })).toBe("file:text");
     expect(deriveResourceFormatId({ path: "Data/sample.tsv", kind: "file" })).toBe("file:text");
   });
+
+  it("maps .vl.json to vega-lite even when stamped as file:json", () => {
+    expect(
+      deriveResourceFormatId({
+        path: "Dashboards/Signups by region.vl.json",
+        kind: "file",
+        formatId: "file:json",
+      }),
+    ).toBe("file:vega-lite");
+    expect(deriveResourceFormatId({ path: "config.json", kind: "file" })).toBe("file:json");
+  });
 });

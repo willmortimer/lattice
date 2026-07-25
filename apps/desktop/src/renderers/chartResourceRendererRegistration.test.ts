@@ -25,5 +25,14 @@ describe("chartResourceRendererRegistration", () => {
         formatId: "file:vega-lite",
       }).definition.id,
     ).toBe(chartResourceRendererDefinition.id);
+
+    // Stale catalogs may stamp plain JSON; path must still select the chart renderer.
+    expect(
+      registry.resolve({
+        kind: "file",
+        path: "Dashboards/Signups by region.vl.json",
+        formatId: "file:json",
+      }).definition.id,
+    ).toBe(chartResourceRendererDefinition.id);
   });
 });

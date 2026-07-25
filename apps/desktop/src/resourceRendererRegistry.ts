@@ -137,7 +137,7 @@ export class ResourceRendererRegistry<TContext, TSession> {
   ): RendererResolution<TContext, TSession> {
     const resource: Resource =
       typeof resourceOrKind === "string" ? { path: "", kind: resourceOrKind } : resourceOrKind;
-    const formatId = resource.formatId ?? deriveResourceFormatId(resource);
+    const formatId = deriveResourceFormatId(resource);
     const candidates = this.definitions
       .map(({ definition, order }) => ({
         definition,
@@ -216,6 +216,10 @@ const CODE_EXTENSIONS = new Set(["js", "jsx", "ts", "tsx", "rs", "py", "go", "ja
 
 /** Stable browser/native-independent format IDs for ordinary files. */
 export function deriveResourceFormatId(resource: Resource): string {
+  // Chart specs win over a stamped `file:json` (demo catalog used to mis-label these).
+  if (resource.kind === "file" && resource.path.toLowerCase().endsWith(".vl.json")) {
+    return "file:vega-lite";
+  }
   if (resource.formatId) return resource.formatId;
   if (resource.kind !== "file") return resource.kind;
   const extension = resource.path.split(".").pop()?.toLowerCase() ?? "";
@@ -223,9 +227,7 @@ export function deriveResourceFormatId(resource: Resource): string {
   if (extension === "pdf") return "file:pdf";
   if (["txt", "md", "markdown", "log", "csv", "tsv"].includes(extension)) return "file:text";
   if (CODE_EXTENSIONS.has(extension)) return "file:code";
-  if (extension === "json") {
-    return resource.path.toLowerCase().endsWith(".vl.json") ? "file:vega-lite" : "file:json";
-  }
+  if (extension === "json") return "file:json";
   if (["yaml", "yml"].includes(extension)) return "file:yaml";
   return "file:unknown";
 }

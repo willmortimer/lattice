@@ -120,22 +120,22 @@ export const demoSnapshot: WorkspaceSnapshot = {
     {
       "path": "Dashboards/Revenue by channel.vl.json",
       "kind": "file",
-      "formatId": "file:json"
+      "formatId": "file:vega-lite"
     },
     {
       "path": "Dashboards/Revenue by day.vl.json",
       "kind": "file",
-      "formatId": "file:json"
+      "formatId": "file:vega-lite"
     },
     {
       "path": "Dashboards/Revenue by region and category.vl.json",
       "kind": "file",
-      "formatId": "file:json"
+      "formatId": "file:vega-lite"
     },
     {
       "path": "Dashboards/Signups by region.vl.json",
       "kind": "file",
-      "formatId": "file:json"
+      "formatId": "file:vega-lite"
     },
     {
       "path": "Data",
@@ -302,7 +302,7 @@ export const demoSnapshot: WorkspaceSnapshot = {
     {
       "path": "Engineering/Dashboards/Build duration by workflow.vl.json",
       "kind": "file",
-      "formatId": "file:json"
+      "formatId": "file:vega-lite"
     },
     {
       "path": "Engineering/Delivery.data",

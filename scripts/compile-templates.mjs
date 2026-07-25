@@ -1368,6 +1368,8 @@ function formatIdForPath(path) {
   if (extension === "pdf") return "file:pdf";
   if (["txt", "md", "markdown", "log", "csv", "tsv"].includes(extension)) return "file:text";
   if (CODE_EXTENSIONS.has(extension)) return "file:code";
+  // Compound chart suffix must beat plain `.json` (same rule as deriveResourceFormatId).
+  if (path.toLowerCase().endsWith(".vl.json")) return "file:vega-lite";
   if (extension === "json") return "file:json";
   if (["yaml", "yml"].includes(extension)) return "file:yaml";
   return "file:unknown";

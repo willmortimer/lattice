@@ -372,6 +372,8 @@ test("demo template emits Lattice company showcase and browser feature lab", () 
   assert.match(source, /Resources\/mark\.svg/);
   assert.match(source, /"formatId": "file:image"/);
   assert.match(source, /"formatId": "file:text"/);
+  assert.match(source, /"formatId": "file:vega-lite"/);
+  assert.match(source, /Dashboards\/Signups by region\.vl\.json/);
   assert.match(source, /CRM\.data/);
   assert.match(source, /"relation_targets"/);
   assert.match(source, /mermaid/);
