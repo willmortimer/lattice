@@ -5190,6 +5190,26 @@ html[data-motion="always"] *::after {
   user-select: none;
 }
 
+.agent-anchor-highlight {
+  background: color-mix(in srgb, var(--lt-accent-wash) 55%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--lt-accent) 45%, transparent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.agent-anchor-highlight--evidence {
+  background: color-mix(in srgb, var(--lt-accent) 18%, transparent);
+}
+
+.agent-anchor-highlight--warning {
+  background: color-mix(in srgb, var(--lt-danger) 16%, transparent);
+  outline-color: color-mix(in srgb, var(--lt-danger) 40%, transparent);
+}
+
+.agent-anchor-highlight--change {
+  background: color-mix(in srgb, var(--lt-slate) 20%, transparent);
+}
+
 .tab-strip {
   display: flex;
   min-height: 34px;

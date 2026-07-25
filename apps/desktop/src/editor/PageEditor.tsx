@@ -29,6 +29,7 @@ import {
   TextStrikethrough,
 } from "@phosphor-icons/react";
 
+import { registerPageAnchorSurface } from "../agent/adapters/surfaces";
 import { ConflictEnvelope } from "./ConflictEnvelope";
 import { liveEditorExtensions } from "./richEditorExtensions";
 import {
@@ -119,6 +120,8 @@ interface PageEditorProps {
   showFrontmatter?: boolean;
   pageWidth?: PageWidth;
   onPageWidthChange?: (width: PageWidth) => void;
+  /** Workspace resource path used for agent anchor registration. */
+  resourceId?: string;
 }
 
 /** Imperative escape hatch for a parent that needs the live buffer outside
@@ -164,6 +167,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     showFrontmatter = true,
     pageWidth = "standard",
     onPageWidthChange,
+    resourceId,
   },
   ref,
 ) {
@@ -443,6 +447,11 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
       ?.querySelector<HTMLElement>("[contenteditable='true']")
       ?.setAttribute("spellcheck", spellcheck ? "true" : "false");
   }, [spellcheck]);
+
+  useEffect(() => {
+    if (!editor || !resourceId) return;
+    return registerPageAnchorSurface(resourceId, editor);
+  }, [editor, resourceId]);
 
   useImperativeHandle(
     ref,
