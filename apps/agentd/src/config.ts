@@ -61,7 +61,7 @@ export function loadConfig(
     (defaultProvider === "fake"
       ? "fake-model"
       : defaultProvider === "pioneer"
-        ? "claude-sonnet-4-5"
+        ? "gemini-3.5-flash-lite"
         : "gpt-4.1-mini");
 
   return {

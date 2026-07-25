@@ -5868,6 +5868,7 @@ html[data-motion="always"] *::after {
   display: flex;
   min-height: 0;
   flex-direction: column;
+  overflow: hidden;
   border-left: 1px solid var(--lt-line-strong);
   background: var(--lt-panel);
 }
@@ -5961,6 +5962,8 @@ html[data-motion="always"] *::after {
   min-height: 0;
   flex: 1;
   flex-direction: column;
+  overflow-y: auto;
+  padding: 12px 12px 0;
 }
 
 .agent-thread-empty {
@@ -5980,6 +5983,10 @@ html[data-motion="always"] *::after {
 }
 
 .agent-thread-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin: 0 -12px;
   padding: 10px 12px 12px;
   border-top: 1px solid var(--lt-line);
   background: color-mix(in oklch, var(--lt-bg) 88%, var(--lt-panel));
@@ -6041,6 +6048,7 @@ html[data-motion="always"] *::after {
 .agent-composer-input {
   width: 100%;
   min-height: 72px;
+  max-height: 160px;
   padding: 10px 11px;
   border: 1px solid var(--lt-line);
   border-radius: 8px;
@@ -6049,7 +6057,8 @@ html[data-motion="always"] *::after {
   font-family: var(--lt-font-sans);
   font-size: 12.5px;
   line-height: 1.45;
-  resize: vertical;
+  overflow-y: auto;
+  resize: none;
 }
 
 .agent-composer-input:focus {
