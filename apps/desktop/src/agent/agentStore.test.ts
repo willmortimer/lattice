@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
+  applyOverlayShowToTrailSteps,
   applySpatialAgentEvent,
   initialAgentSessionState,
   shouldRevealViewport,
@@ -156,6 +157,100 @@ describe("applySpatialAgentEvent", () => {
         score: 0.92,
       },
     ]);
+  });
+
+  it("associates overlay_show anchors with the in-progress trail step", () => {
+    const started = applySpatialAgentEvent(initialAgentSessionState, {
+      type: "step_started",
+      runId: "run-1",
+      stepId: "step-1",
+      kind: "search",
+      label: "Search demo page",
+    });
+
+    const withOverlay = applySpatialAgentEvent(started, {
+      type: "overlay_show",
+      runId: "run-1",
+      overlayId: "overlay-1",
+      anchors: [markdownAnchor],
+      purpose: "attention",
+      commentary: "Look here",
+    });
+
+    expect(withOverlay.trailSteps[0]).toMatchObject({
+      stepId: "step-1",
+      anchors: [markdownAnchor],
+      overlayId: "overlay-1",
+      purpose: "attention",
+      commentary: "Look here",
+    });
+    expect(withOverlay.activeOverlays["overlay-1"]).toBeDefined();
+  });
+
+  it("backfills replay anchors onto the latest navigation step", () => {
+    const navigation = applySpatialAgentEvent(initialAgentSessionState, {
+      type: "step_started",
+      runId: "run-1",
+      stepId: "nav-1",
+      kind: "navigation",
+      label: "Open page",
+    });
+    const navigationDone = applySpatialAgentEvent(navigation, {
+      type: "step_completed",
+      runId: "run-1",
+      stepId: "nav-1",
+      durationMs: 12,
+    });
+    const toolStep = applySpatialAgentEvent(navigationDone, {
+      type: "step_started",
+      runId: "run-1",
+      stepId: "tool-1",
+      kind: "tool",
+      label: "Focus anchor",
+    });
+    const withOverlay = applySpatialAgentEvent(toolStep, {
+      type: "overlay_show",
+      runId: "run-1",
+      overlayId: "overlay-1",
+      anchors: [markdownAnchor],
+      purpose: "attention",
+    });
+
+    expect(withOverlay.trailSteps[0]).toMatchObject({
+      stepId: "nav-1",
+      anchors: [markdownAnchor],
+      overlayId: "overlay-1",
+    });
+    expect(withOverlay.trailSteps[1]).toMatchObject({
+      stepId: "tool-1",
+      anchors: [markdownAnchor],
+      overlayId: "overlay-1",
+    });
+  });
+});
+
+describe("applyOverlayShowToTrailSteps", () => {
+  it("attaches replay data to the latest replayable step without an in-progress step", () => {
+    const trailSteps = applyOverlayShowToTrailSteps(
+      [
+        {
+          stepId: "step-1",
+          runId: "run-1",
+          kind: "search",
+          label: "Search demo page",
+          status: "completed",
+        },
+      ],
+      {
+        type: "overlay_show",
+        runId: "run-1",
+        overlayId: "overlay-1",
+        anchors: [markdownAnchor],
+        purpose: "attention",
+      },
+    );
+
+    expect(trailSteps[0]?.anchors).toEqual([markdownAnchor]);
   });
 });
 

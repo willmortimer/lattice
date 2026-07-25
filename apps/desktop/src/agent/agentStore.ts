@@ -21,6 +21,13 @@ export type ActiveOverlay = {
   commentary?: string;
 };
 
+export type TrailReplaySnapshot = {
+  anchors: WorkspaceAnchor[];
+  overlayId: string;
+  purpose: OverlayPurpose;
+  commentary?: string;
+};
+
 export type TrailStep = {
   stepId: string;
   runId: string;
@@ -29,6 +36,11 @@ export type TrailStep = {
   status: "in_progress" | "completed";
   durationMs?: number;
   summary?: string;
+  /** Snapshot for click-to-replay after overlays clear. */
+  anchors?: WorkspaceAnchor[];
+  overlayId?: string;
+  purpose?: OverlayPurpose;
+  commentary?: string;
 };
 
 export type AgentEvidence = {
@@ -112,6 +124,84 @@ function evidenceFromEvent(event: EvidenceAddedEvent): AgentEvidence {
   };
 }
 
+function replaySnapshotFromOverlay(event: OverlayShowEvent): TrailReplaySnapshot {
+  return {
+    anchors: event.anchors,
+    overlayId: event.overlayId,
+    purpose: event.purpose,
+    ...(event.commentary !== undefined ? { commentary: event.commentary } : {}),
+  };
+}
+
+function attachReplayToTrailStep(
+  step: TrailStep,
+  snapshot: TrailReplaySnapshot,
+): TrailStep {
+  return {
+    ...step,
+    anchors: snapshot.anchors,
+    overlayId: snapshot.overlayId,
+    purpose: snapshot.purpose,
+    ...(snapshot.commentary !== undefined ? { commentary: snapshot.commentary } : {}),
+  };
+}
+
+function isReplayableTrailKind(kind: AgentStepKind): boolean {
+  return kind === "navigation" || kind === "search" || kind === "tool";
+}
+
+export function applyOverlayShowToTrailSteps(
+  trailSteps: TrailStep[],
+  event: OverlayShowEvent,
+): TrailStep[] {
+  const snapshot = replaySnapshotFromOverlay(event);
+  let attachedInProgress = false;
+
+  const updated = trailSteps.map((step) => {
+    if (
+      step.runId === event.runId &&
+      step.status === "in_progress" &&
+      !attachedInProgress
+    ) {
+      attachedInProgress = true;
+      return attachReplayToTrailStep(step, snapshot);
+    }
+    return step;
+  });
+
+  if (attachedInProgress) {
+    for (let index = updated.length - 1; index >= 0; index -= 1) {
+      const step = updated[index]!;
+      if (
+        step.runId === event.runId &&
+        step.kind === "navigation" &&
+        step.status === "completed" &&
+        !step.anchors?.length
+      ) {
+        const next = [...updated];
+        next[index] = attachReplayToTrailStep(step, snapshot);
+        return next;
+      }
+    }
+    return updated;
+  }
+
+  for (let index = updated.length - 1; index >= 0; index -= 1) {
+    const step = updated[index]!;
+    if (
+      step.runId === event.runId &&
+      isReplayableTrailKind(step.kind) &&
+      !step.anchors?.length
+    ) {
+      const next = [...updated];
+      next[index] = attachReplayToTrailStep(step, snapshot);
+      return next;
+    }
+  }
+
+  return updated;
+}
+
 export function applySpatialAgentEvent(
   state: Pick<
     AgentSessionStore,
@@ -128,6 +218,7 @@ export function applySpatialAgentEvent(
           ...state.activeOverlays,
           [overlay.overlayId]: overlay,
         },
+        trailSteps: applyOverlayShowToTrailSteps(state.trailSteps, event),
       };
     }
     case "overlay_clear": {

@@ -38,6 +38,43 @@ impl Default for FakeAgentBackend {
     }
 }
 
+async fn emit_fake_spatial_sequence<F, Fut>(run_id: &str, send: &F)
+where
+    F: Fn(AgentEvent) -> Fut,
+    Fut: std::future::Future<Output = ()>,
+{
+    let step_id = "fake-spatial-step";
+    let overlay_id = "fake-spatial-overlay";
+    let started_at = std::time::Instant::now();
+
+    send(AgentEvent::StepStarted {
+        run_id: run_id.to_string(),
+        step_id: step_id.into(),
+        kind: "search".into(),
+        label: "Search demo page".into(),
+    })
+    .await;
+    send(AgentEvent::OverlayShow {
+        run_id: run_id.to_string(),
+        overlay_id: overlay_id.into(),
+        anchors: vec![serde_json::json!({
+            "kind": "markdown-block",
+            "resourceId": "fake-demo-page",
+            "blockId": "fake-demo-block",
+        })],
+        purpose: "attention".into(),
+        commentary: Some("Fake spatial fixture".into()),
+    })
+    .await;
+    send(AgentEvent::StepCompleted {
+        run_id: run_id.to_string(),
+        step_id: step_id.into(),
+        duration_ms: started_at.elapsed().as_millis() as u64,
+        summary: Some("Highlighted demo block".into()),
+    })
+    .await;
+}
+
 #[async_trait]
 impl AgentRuntimeBackend for FakeAgentBackend {
     async fn start_run(
@@ -66,6 +103,10 @@ impl AgentRuntimeBackend for FakeAgentBackend {
         }
 
         let run_id_task = run_id.clone();
+        let spatial_prompt = request
+            .prompt
+            .as_ref()
+            .is_some_and(|prompt| prompt.trim().eq_ignore_ascii_case("spatial-demo"));
         let active_map = Arc::clone(&self.active);
         tokio::spawn(async move {
             let send = |event: AgentEvent| {
@@ -104,6 +145,10 @@ impl AgentRuntimeBackend for FakeAgentBackend {
                     }),
                 })
                 .await;
+            }
+
+            if !cancel.load(Ordering::SeqCst) && spatial_prompt {
+                emit_fake_spatial_sequence(&run_id_task.0, &send).await;
             }
 
             if cancel.load(Ordering::SeqCst) {
@@ -216,6 +261,58 @@ mod tests {
             events.last(),
             Some(AgentEvent::RunCompleted { run_id }) if run_id == "run-1"
         ));
+    }
+
+    #[tokio::test]
+    async fn fake_spatial_prompt_emits_overlay_sequence() {
+        let backend = FakeAgentBackend::new();
+        let (tx, mut rx) = mpsc::channel(16);
+        backend
+            .start_run(
+                StartAgentRunRequest {
+                    thread_id: "thread-spatial".into(),
+                    run_id: AgentRunId::new("run-spatial"),
+                    provider: ProviderKind::Fake,
+                    model: "fake-model".into(),
+                    messages: None,
+                    prompt: Some("spatial-demo".into()),
+                    workspace_id: "ws-1".into(),
+                    workspace_root: None,
+                },
+                tx,
+            )
+            .await
+            .expect("start");
+
+        let events = collect_events_until_terminal(&mut rx, 24).await;
+        assert!(
+            events.iter().any(|event| {
+                matches!(
+                    event,
+                    AgentEvent::StepStarted { kind, label, .. }
+                        if kind == "search" && label == "Search demo page"
+                )
+            }),
+            "expected search step_started, got {events:?}"
+        );
+        assert!(
+            events.iter().any(|event| {
+                matches!(
+                    event,
+                    AgentEvent::OverlayShow { overlay_id, .. } if overlay_id == "fake-spatial-overlay"
+                )
+            }),
+            "expected overlay_show, got {events:?}"
+        );
+        assert!(
+            events.iter().any(|event| {
+                matches!(
+                    event,
+                    AgentEvent::StepCompleted { step_id, .. } if step_id == "fake-spatial-step"
+                )
+            }),
+            "expected step_completed, got {events:?}"
+        );
     }
 
     #[tokio::test]

@@ -85,7 +85,7 @@ flowchart TD
 | C4 | Desktop spatial store + event consumer | done | composer-2.5 |
 | C5 | Tiptap + Glide anchor adapters | done | composer-2.5 |
 | C6 | Overlay host + Guide/Quiet | done | composer-2.5 |
-| C7 | Trail replay + fixtures/tests | pending | composer-2.5 |
+| C7 | Trail replay + fixtures/tests | done | composer-2.5 |
 
 ---
 
