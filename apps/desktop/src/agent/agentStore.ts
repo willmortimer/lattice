@@ -1,14 +1,68 @@
+import {
+  agentEventSchema,
+  type AgentEvent,
+  type AgentStepKind,
+  type EvidenceAddedEvent,
+  type OverlayPurpose,
+  type OverlayShowEvent,
+  type WorkspaceAnchor,
+} from "@lattice/agent-protocol";
 import { create } from "zustand";
 
 import { isAgentProviderKind } from "./providerKind";
+
+export type AgentFollowMode = "guide" | "quiet";
+
+export type ActiveOverlay = {
+  overlayId: string;
+  runId: string;
+  anchors: WorkspaceAnchor[];
+  purpose: OverlayPurpose;
+  commentary?: string;
+};
+
+export type TrailStep = {
+  stepId: string;
+  runId: string;
+  kind: AgentStepKind;
+  label: string;
+  status: "in_progress" | "completed";
+  durationMs?: number;
+  summary?: string;
+};
+
+export type AgentEvidence = {
+  evidenceId: string;
+  runId: string;
+  resourceId: string;
+  path: string;
+  revision?: string;
+  excerpt: string;
+  anchor?: WorkspaceAnchor;
+  score?: number;
+};
+
+const MAX_TRAIL_LABELS = 20;
+const MAX_TRAIL_STEPS = 50;
+const MAX_EVIDENCE = 100;
+
+export function shouldRevealViewport(followMode: AgentFollowMode): boolean {
+  return followMode === "guide";
+}
 
 type AgentSessionStore = {
   threadIds: Record<string, string>;
   healthBackend: string | null;
   lastEventBackend: string | null;
   trailLabels: string[];
+  followMode: AgentFollowMode;
+  activeOverlays: Record<string, ActiveOverlay>;
+  trailSteps: TrailStep[];
+  evidence: AgentEvidence[];
   ensureThreadId: (workspaceRoot: string) => string;
   setHealthBackend: (backend: string | null) => void;
+  setFollowMode: (mode: AgentFollowMode) => void;
+  consumeEvent: (event: AgentEvent) => void;
   recordAgentEvent: (event: unknown) => void;
 };
 
@@ -35,11 +89,149 @@ function extractEventBackend(event: unknown): string | null {
   return null;
 }
 
-export const useAgentSessionStore = create<AgentSessionStore>((set, get) => ({
+function overlayFromShow(event: OverlayShowEvent): ActiveOverlay {
+  return {
+    overlayId: event.overlayId,
+    runId: event.runId,
+    anchors: event.anchors,
+    purpose: event.purpose,
+    ...(event.commentary !== undefined ? { commentary: event.commentary } : {}),
+  };
+}
+
+function evidenceFromEvent(event: EvidenceAddedEvent): AgentEvidence {
+  return {
+    evidenceId: event.evidenceId,
+    runId: event.runId,
+    resourceId: event.resourceId,
+    path: event.path,
+    excerpt: event.excerpt,
+    ...(event.revision !== undefined ? { revision: event.revision } : {}),
+    ...(event.anchor !== undefined ? { anchor: event.anchor } : {}),
+    ...(event.score !== undefined ? { score: event.score } : {}),
+  };
+}
+
+export function applySpatialAgentEvent(
+  state: Pick<
+    AgentSessionStore,
+    "activeOverlays" | "trailSteps" | "evidence" | "lastEventBackend"
+  >,
+  event: AgentEvent,
+): Pick<AgentSessionStore, "activeOverlays" | "trailSteps" | "evidence" | "lastEventBackend"> {
+  switch (event.type) {
+    case "overlay_show": {
+      const overlay = overlayFromShow(event);
+      return {
+        ...state,
+        activeOverlays: {
+          ...state.activeOverlays,
+          [overlay.overlayId]: overlay,
+        },
+      };
+    }
+    case "overlay_clear": {
+      if (event.overlayId === undefined) {
+        const nextOverlays = { ...state.activeOverlays };
+        for (const [overlayId, overlay] of Object.entries(nextOverlays)) {
+          if (overlay.runId === event.runId) {
+            delete nextOverlays[overlayId];
+          }
+        }
+        return { ...state, activeOverlays: nextOverlays };
+      }
+
+      const { [event.overlayId]: _removed, ...remaining } = state.activeOverlays;
+      return { ...state, activeOverlays: remaining };
+    }
+    case "step_started": {
+      const nextStep: TrailStep = {
+        stepId: event.stepId,
+        runId: event.runId,
+        kind: event.kind,
+        label: event.label,
+        status: "in_progress",
+      };
+      const withoutDuplicate = state.trailSteps.filter(
+        (step) => !(step.stepId === event.stepId && step.runId === event.runId),
+      );
+      return {
+        ...state,
+        trailSteps: [...withoutDuplicate, nextStep].slice(-MAX_TRAIL_STEPS),
+      };
+    }
+    case "step_completed": {
+      let found = false;
+      const trailSteps = state.trailSteps.map((step) => {
+        if (step.stepId === event.stepId && step.runId === event.runId) {
+          found = true;
+          return {
+            ...step,
+            status: "completed" as const,
+            durationMs: event.durationMs,
+            ...(event.summary !== undefined ? { summary: event.summary } : {}),
+          };
+        }
+        return step;
+      });
+
+      if (!found) {
+        return {
+          ...state,
+          trailSteps: [
+            ...trailSteps,
+            {
+              stepId: event.stepId,
+              runId: event.runId,
+              kind: "execution",
+              label: event.summary ?? event.stepId,
+              status: "completed" as const,
+              durationMs: event.durationMs,
+              ...(event.summary !== undefined ? { summary: event.summary } : {}),
+            },
+          ].slice(-MAX_TRAIL_STEPS),
+        };
+      }
+
+      return { ...state, trailSteps };
+    }
+    case "evidence_added": {
+      const entry = evidenceFromEvent(event);
+      const withoutDuplicate = state.evidence.filter(
+        (item) => !(item.evidenceId === entry.evidenceId && item.runId === entry.runId),
+      );
+      return {
+        ...state,
+        evidence: [...withoutDuplicate, entry].slice(-MAX_EVIDENCE),
+      };
+    }
+    case "run_started": {
+      const backend =
+        event.provider && isAgentProviderKind(event.provider)
+          ? event.provider.toLowerCase()
+          : state.lastEventBackend;
+      return backend === state.lastEventBackend
+        ? state
+        : { ...state, lastEventBackend: backend };
+    }
+    default:
+      return state;
+  }
+}
+
+export const initialAgentSessionState = {
   threadIds: {},
   healthBackend: null,
   lastEventBackend: null,
   trailLabels: [],
+  followMode: "guide" as const,
+  activeOverlays: {},
+  trailSteps: [],
+  evidence: [],
+};
+
+export const useAgentSessionStore = create<AgentSessionStore>((set, get) => ({
+  ...initialAgentSessionState,
   ensureThreadId: (workspaceRoot) => {
     const existing = get().threadIds[workspaceRoot];
     if (existing) {
@@ -52,12 +244,32 @@ export const useAgentSessionStore = create<AgentSessionStore>((set, get) => ({
     return threadId;
   },
   setHealthBackend: (backend) => set({ healthBackend: backend }),
+  setFollowMode: (mode) => set({ followMode: mode }),
+  consumeEvent: (event) => {
+    set((state) => applySpatialAgentEvent(state, event));
+  },
   recordAgentEvent: (event) => {
     const label = extractEventLabel(event);
     const backend = extractEventBackend(event);
-    set((state) => ({
-      trailLabels: label ? [...state.trailLabels.slice(-19), label] : state.trailLabels,
-      ...(backend ? { lastEventBackend: backend } : {}),
-    }));
+    const parsed = agentEventSchema.safeParse(event);
+
+    set((state) => {
+      let next = state;
+
+      if (parsed.success) {
+        next = { ...next, ...applySpatialAgentEvent(next, parsed.data) };
+      } else if (backend) {
+        next = { ...next, lastEventBackend: backend };
+      }
+
+      if (!label) {
+        return next;
+      }
+
+      return {
+        ...next,
+        trailLabels: [...next.trailLabels.slice(-(MAX_TRAIL_LABELS - 1)), label],
+      };
+    });
   },
 }));
