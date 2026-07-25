@@ -1,6 +1,8 @@
 ---
 title: Repository and connected roots
+export_policy: allow
 ---
+
 
 # Repository and connected roots
 

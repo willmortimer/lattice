@@ -1,6 +1,8 @@
 ---
 title: Hackathon demo script
+export_policy: allow
 ---
+
 
 # Hackathon demo script
 

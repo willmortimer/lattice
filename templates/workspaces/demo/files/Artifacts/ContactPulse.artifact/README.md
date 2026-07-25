@@ -1,3 +1,8 @@
+---
+title: Contact pulse
+export_policy: allow
+---
+
 # Contact pulse
 
 Sandboxed HTML artifact that reads a named `contactCount` BindingSpec against

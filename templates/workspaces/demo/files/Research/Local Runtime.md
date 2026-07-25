@@ -1,7 +1,9 @@
 ---
 title: Local Runtime
+export_policy: allow
 tags: [architecture, search, voice]
 ---
+
 
 # Local Runtime
 

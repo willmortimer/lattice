@@ -1,7 +1,9 @@
 ---
 title: Principles
+export_policy: allow
 tags: [product]
 ---
+
 
 # Principles
 

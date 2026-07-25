@@ -1,7 +1,9 @@
 ---
 title: Release Notes
+export_policy: allow
 tags: [product]
 ---
+
 
 # Release Notes
 

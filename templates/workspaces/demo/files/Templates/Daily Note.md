@@ -1,7 +1,9 @@
 ---
 title: "{{title}}"
+export_policy: allow
 date: {{date}}
 ---
+
 
 # {{date}}
 

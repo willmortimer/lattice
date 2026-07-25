@@ -1,6 +1,8 @@
 ---
 title: Lattice — Building Lattice
+export_policy: allow
 ---
+
 
 # Lattice — Building Lattice
 

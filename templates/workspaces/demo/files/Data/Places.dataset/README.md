@@ -1,3 +1,8 @@
+---
+title: Places
+export_policy: allow
+---
+
 # Places
 
 Sample geospatial `.dataset` for the First Look demo (~20 WGS84 points).

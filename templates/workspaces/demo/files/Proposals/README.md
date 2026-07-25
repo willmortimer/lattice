@@ -1,6 +1,8 @@
 ---
 title: Proposals
+export_policy: allow
 ---
+
 
 # Proposals
 

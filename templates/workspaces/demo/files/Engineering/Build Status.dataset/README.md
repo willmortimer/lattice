@@ -1,3 +1,8 @@
+---
+title: Build status
+export_policy: allow
+---
+
 # Build status
 
 Deterministic synthetic CI runs for the Lattice engineering demo.

@@ -1,7 +1,9 @@
 ---
 title: Market Notes
+export_policy: allow
 tags: [research]
 ---
+
 
 # Market Notes
 

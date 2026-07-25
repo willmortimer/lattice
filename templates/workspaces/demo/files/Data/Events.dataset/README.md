@@ -1,3 +1,8 @@
+---
+title: Events
+export_policy: allow
+---
+
 # Events
 
 Sample analytical `.dataset` for the First Look demo.

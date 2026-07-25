@@ -1,3 +1,8 @@
+---
+title: Orders
+export_policy: allow
+---
+
 # Orders
 
 Synthetic retail orders for the First Look analytics demo (~3 000 rows).

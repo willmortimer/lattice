@@ -1,7 +1,9 @@
 ---
 title: Competitor Analysis
+export_policy: allow
 tags: [research]
 ---
+
 
 # Competitor Analysis
 

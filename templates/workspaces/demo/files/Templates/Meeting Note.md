@@ -1,8 +1,10 @@
 ---
 title: "{{title}}"
+export_policy: allow
 date: {{date}}
 attendees: []
 ---
+
 
 # {{title}}
 

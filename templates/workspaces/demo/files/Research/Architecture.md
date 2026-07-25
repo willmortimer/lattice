@@ -1,7 +1,9 @@
 ---
 title: Architecture
+export_policy: allow
 tags: [diagram]
 ---
+
 
 # Architecture
 

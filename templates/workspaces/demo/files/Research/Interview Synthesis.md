@@ -1,7 +1,9 @@
 ---
 title: Interview Synthesis
+export_policy: allow
 tags: [research]
 ---
+
 
 # Interview Synthesis
 

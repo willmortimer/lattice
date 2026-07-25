@@ -1,7 +1,9 @@
 ---
 title: Sample capture
+export_policy: allow
 tags: [inbox]
 ---
+
 
 # Sample capture
 

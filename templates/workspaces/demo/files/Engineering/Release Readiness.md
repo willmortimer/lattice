@@ -1,6 +1,8 @@
 ---
 title: Release readiness
+export_policy: allow
 ---
+
 
 # Release readiness
 
