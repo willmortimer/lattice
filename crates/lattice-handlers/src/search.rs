@@ -78,6 +78,8 @@ pub struct SearchHitUi {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chunk_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub block_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub sensitivity: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub export_policy: Option<String>,
@@ -95,6 +97,7 @@ impl SearchHitUi {
             semantic_rank: None,
             heading_path: None,
             chunk_id: None,
+            block_id: None,
             sensitivity: None,
             export_policy: None,
         }
@@ -112,6 +115,7 @@ impl SearchHitUi {
             semantic_rank: hit.semantic_rank,
             heading_path: Some(hit.heading_path),
             chunk_id: Some(hit.chunk_id),
+            block_id: hit.block_id,
             sensitivity: Some(hit.sensitivity.as_str().to_string()),
             export_policy: Some(hit.export_policy.as_str().to_string()),
         }
