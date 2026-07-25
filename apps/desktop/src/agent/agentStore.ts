@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+import { isAgentProviderKind } from "./providerKind";
+
 type AgentSessionStore = {
   threadIds: Record<string, string>;
   healthBackend: string | null;
@@ -25,10 +27,10 @@ function extractEventBackend(event: unknown): string | null {
     return null;
   }
   if ("provider" in event && typeof event.provider === "string") {
-    return event.provider;
+    return isAgentProviderKind(event.provider) ? event.provider.toLowerCase() : null;
   }
   if ("backend" in event && typeof event.backend === "string") {
-    return event.backend;
+    return isAgentProviderKind(event.backend) ? event.backend.toLowerCase() : null;
   }
   return null;
 }

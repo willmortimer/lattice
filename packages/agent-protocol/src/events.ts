@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { uiMessageChunkSchema } from "./messages";
+import { providerKindSchema } from "./provider";
 import { PROTOCOL_VERSION } from "./version";
 
 const protocolVersionSchema = z.literal(PROTOCOL_VERSION);
@@ -14,6 +15,8 @@ export const runStartedEventSchema = z.object({
   type: z.literal("run_started"),
   runId: z.string(),
   threadId: z.string(),
+  /** Effective provider for this run (`pioneer` | `openai` | `fake`). */
+  provider: providerKindSchema.optional(),
 });
 
 export const messageChunkEventSchema = z.object({

@@ -45,17 +45,36 @@ function LatticeAgentRuntimeProvider({
 
   useEffect(() => {
     let cancelled = false;
-    void getAgentHealth()
-      .then((health) => {
-        if (!cancelled) {
-          setHealthBackend(health.backend);
+    const applyHealth = (backend: string | null) => {
+      if (!cancelled) {
+        setHealthBackend(backend);
+      }
+    };
+
+    const loadHealth = async () => {
+      const delaysMs = [0, 250, 750, 1500];
+      for (const delay of delaysMs) {
+        if (cancelled) {
+          return;
         }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setHealthBackend(null);
+        if (delay > 0) {
+          await new Promise((resolve) => setTimeout(resolve, delay));
         }
-      });
+        try {
+          const health = await getAgentHealth();
+          if (cancelled) {
+            return;
+          }
+          applyHealth(health.backend);
+          return;
+        } catch {
+          // Daemon/agent plane may not be ready on first paint; retry.
+        }
+      }
+      applyHealth(null);
+    };
+
+    void loadHealth();
     return () => {
       cancelled = true;
     };

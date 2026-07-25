@@ -11,7 +11,7 @@ use tracing::debug;
 
 use super::backend::{AgentEventSink, AgentRuntimeBackend};
 use super::protocol::{
-    AgentEvent, AgentRunHandle, AgentRunId, AgentRuntimeError, AgentRuntimeHealth,
+    AgentEvent, AgentRunHandle, AgentRunId, AgentRuntimeError, AgentRuntimeHealth, ProviderKind,
     StartAgentRunRequest,
 };
 
@@ -78,6 +78,7 @@ impl AgentRuntimeBackend for FakeAgentBackend {
             send(AgentEvent::RunStarted {
                 run_id: run_id_task.0.clone(),
                 thread_id: thread_id.clone(),
+                provider: Some(ProviderKind::Fake),
             })
             .await;
 

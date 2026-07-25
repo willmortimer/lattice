@@ -129,6 +129,8 @@ pub enum AgentEvent {
         run_id: String,
         #[serde(rename = "threadId")]
         thread_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        provider: Option<ProviderKind>,
     },
     #[serde(rename = "message_chunk")]
     MessageChunk {

@@ -80,6 +80,7 @@ describe("fake start_run", () => {
       type: "run_started",
       runId: "run-1",
       threadId: "thread-1",
+      provider: "fake",
     });
     const chunks = events.filter((e) => e.type === "message_chunk");
     expect(chunks.length).toBeGreaterThanOrEqual(2);

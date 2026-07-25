@@ -83,7 +83,7 @@ async function streamRun(
   const provider = resolveProvider(config, command.provider);
   const model = command.model || config.defaultModel;
 
-  sink({ type: "run_started", runId, threadId });
+  sink({ type: "run_started", runId, threadId, provider });
 
   try {
     const prompt = promptFromCommand(command);

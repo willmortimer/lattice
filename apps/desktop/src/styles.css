@@ -5929,6 +5929,11 @@ html[data-motion="always"] *::after {
   background: var(--lt-accent-wash);
 }
 
+.agent-provider-badge-unknown {
+  border-color: var(--lt-line-strong);
+  color: var(--lt-muted);
+}
+
 .agent-thread,
 .agent-thread-placeholder {
   display: flex;
