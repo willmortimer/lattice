@@ -134,6 +134,8 @@ async function streamRun(
       client: config.latticeClient,
       workspaceId: command.workspaceId,
       workspaceRoot: command.workspaceRoot,
+      runId,
+      emitEvent: sink,
     };
     if (!config.latticeClient) {
       logDiag(

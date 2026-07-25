@@ -2,16 +2,29 @@
  * OpenAI Agents SDK tools mirroring latticed MCP / localhost HTTP.
  */
 
+import { randomUUID } from "node:crypto";
+
+import {
+  MAX_OVERLAY_ANCHORS,
+  overlayPurposeSchema,
+  workspaceAnchorSchema,
+  type AgentEvent,
+  type OverlayPurpose,
+  type WorkspaceAnchor,
+} from "@lattice/agent-protocol";
 import { tool, type FunctionTool } from "@openai/agents";
 import { z } from "zod";
 
 import type { LatticeToolClient } from "./lattice-client.js";
+import type { EventSink } from "./runner.js";
 
 /** Per-run context injected via `run(..., { context })`. */
 export type LatticeRunContext = {
   client: LatticeToolClient | null;
   workspaceId?: string;
   workspaceRoot?: string;
+  runId?: string;
+  emitEvent?: EventSink;
 };
 
 type WorkspaceBinding = {
@@ -68,6 +81,120 @@ function withWorkspace(
 
 function asToolJson(value: unknown): string {
   return JSON.stringify(value);
+}
+
+function newSpatialId(prefix: string): string {
+  return `${prefix}-${randomUUID()}`;
+}
+
+function requireSpatialContext(
+  ctx: LatticeRunContext | undefined,
+): { runId: string; emitEvent: EventSink } {
+  const runId = ctx?.runId?.trim();
+  const emitEvent = ctx?.emitEvent;
+  if (!runId || !emitEvent) {
+    throw new Error(
+      "Spatial tools require an active agent run (runId and event sink missing)",
+    );
+  }
+  return { runId, emitEvent };
+}
+
+function parseAnchorJson(anchorJson: string): WorkspaceAnchor {
+  let value: unknown;
+  try {
+    value = JSON.parse(anchorJson);
+  } catch {
+    throw new Error("anchorJson must be a JSON object");
+  }
+  return workspaceAnchorSchema.parse(value);
+}
+
+function parseAnchorsJson(anchorsJson: string): WorkspaceAnchor[] {
+  let value: unknown;
+  try {
+    value = JSON.parse(anchorsJson);
+  } catch {
+    throw new Error("anchorsJson must be a JSON array");
+  }
+  if (!Array.isArray(value)) {
+    throw new Error("anchorsJson must be a JSON array");
+  }
+  if (value.length < 1) {
+    throw new Error("anchorsJson must contain at least one anchor");
+  }
+  if (value.length > MAX_OVERLAY_ANCHORS) {
+    throw new Error(`anchorsJson may contain at most ${MAX_OVERLAY_ANCHORS} anchors`);
+  }
+  return value.map((anchor, index) => {
+    try {
+      return workspaceAnchorSchema.parse(anchor);
+    } catch {
+      throw new Error(`anchorsJson[${index}] is not a valid workspace anchor`);
+    }
+  });
+}
+
+function emitNavigationStep(
+  runId: string,
+  emitEvent: EventSink,
+  label: string,
+): void {
+  const stepId = newSpatialId("step");
+  const startedAt = Date.now();
+  emitEvent({
+    type: "step_started",
+    runId,
+    stepId,
+    kind: "navigation",
+    label,
+  } satisfies AgentEvent);
+  emitEvent({
+    type: "step_completed",
+    runId,
+    stepId,
+    durationMs: Date.now() - startedAt,
+  } satisfies AgentEvent);
+}
+
+/** Emit step_started → overlay_show → step_completed on the agent event sink. */
+export function emitOverlayShowSequence(
+  runId: string,
+  emitEvent: EventSink,
+  params: {
+    anchors: WorkspaceAnchor[];
+    purpose: OverlayPurpose;
+    commentary?: string;
+    label: string;
+  },
+): { ok: true; overlayId: string } {
+  const overlayId = newSpatialId("overlay");
+  const stepId = newSpatialId("step");
+  const startedAt = Date.now();
+
+  emitEvent({
+    type: "step_started",
+    runId,
+    stepId,
+    kind: "tool",
+    label: params.label,
+  } satisfies AgentEvent);
+  emitEvent({
+    type: "overlay_show",
+    runId,
+    overlayId,
+    anchors: params.anchors,
+    purpose: params.purpose,
+    ...(params.commentary !== undefined ? { commentary: params.commentary } : {}),
+  } satisfies AgentEvent);
+  emitEvent({
+    type: "step_completed",
+    runId,
+    stepId,
+    durationMs: Date.now() - startedAt,
+  } satisfies AgentEvent);
+
+  return { ok: true, overlayId };
 }
 
 /** Strict-schema optional string (OpenAI requires nullable, not plain optional). */
@@ -396,6 +523,64 @@ export function createLatticeTools(): FunctionTool<LatticeRunContext, any, strin
     },
   });
 
+  const focusAnchor = tool({
+    name: "focus_anchor",
+    description:
+      "Request the shell to open and highlight a single workspace anchor (markdown block or dataset region). Does not mutate workspace content.",
+    parameters: z.object({
+      anchorJson: z
+        .string()
+        .describe(
+          "JSON object matching WorkspaceAnchor (markdown-block or dataset-region)",
+        ),
+      commentary: optStr.describe("Optional short label for the overlay"),
+    }),
+    execute: async (args, runContext) => {
+      const ctx = runCtx(runContext);
+      const { runId, emitEvent } = requireSpatialContext(ctx);
+      const anchor = parseAnchorJson(args.anchorJson);
+      const commentary = args.commentary?.trim() || undefined;
+
+      emitNavigationStep(runId, emitEvent, "Open anchored resource");
+      const result = emitOverlayShowSequence(runId, emitEvent, {
+        anchors: [anchor],
+        purpose: "attention",
+        commentary,
+        label: "Focus anchor",
+      });
+      return asToolJson(result);
+    },
+  });
+
+  const highlightAnchors = tool({
+    name: "highlight_anchors",
+    description:
+      "Highlight one or more workspace anchors without changing the active resource. Up to 20 anchors per call.",
+    parameters: z.object({
+      anchorsJson: z
+        .string()
+        .describe(
+          "JSON array of WorkspaceAnchor objects (markdown-block or dataset-region)",
+        ),
+      purpose: overlayPurposeSchema,
+      commentary: optStr.describe("Optional short label for the overlay"),
+    }),
+    execute: async (args, runContext) => {
+      const ctx = runCtx(runContext);
+      const { runId, emitEvent } = requireSpatialContext(ctx);
+      const anchors = parseAnchorsJson(args.anchorsJson);
+      const commentary = args.commentary?.trim() || undefined;
+
+      const result = emitOverlayShowSequence(runId, emitEvent, {
+        anchors,
+        purpose: args.purpose,
+        commentary,
+        label: "Highlight anchors",
+      });
+      return asToolJson(result);
+    },
+  });
+
   const proposeArtifact = tool({
     name: "propose_artifact",
     description: "Validate artifact.yaml and propose creating the manifest. Does not apply.",
@@ -420,6 +605,8 @@ export function createLatticeTools(): FunctionTool<LatticeRunContext, any, strin
 
   return [
     getCurrentContext,
+    focusAnchor,
+    highlightAnchors,
     search,
     read,
     related,
