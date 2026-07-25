@@ -1,4 +1,5 @@
 import { AgentHeader } from "../agent/AgentHeader";
+import { AgentOverlayHost } from "../agent/AgentOverlayHost";
 import { AgentPanelShell } from "../agent/AgentPanelShell";
 import { AgentThread } from "../agent/AgentThread";
 import { LatticeAgentProvider } from "../agent/LatticeAgentProvider";
@@ -566,6 +567,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
           )}
 
           <div className="workspace-content">
+            <AgentOverlayHost />
             <section className="content-pane">
               {activityArea === "home" && (
                 <HomeDashboard

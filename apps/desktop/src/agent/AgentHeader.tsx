@@ -2,6 +2,7 @@ import { Button, IconButton } from "@lattice/ui";
 import { Stop, X } from "@phosphor-icons/react";
 
 import { useAgentChatControls } from "./agentChatControls";
+import { AgentFollowControl } from "./AgentFollowControl";
 import { AgentProviderBadge } from "./AgentProviderBadge";
 
 export interface AgentHeaderProps {
@@ -17,6 +18,7 @@ export function AgentHeader({ onClose }: AgentHeaderProps) {
         <span className="agent-panel-eyebrow">Workspace agent</span>
         <strong>Agent</strong>
       </div>
+      <AgentFollowControl />
       <AgentProviderBadge />
       {controls?.isStreaming && (
         <Button variant="ghost" size="sm" onClick={controls.stop}>
