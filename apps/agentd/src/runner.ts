@@ -5,6 +5,7 @@ import { createWorkspaceAgent } from "./agent.js";
 import type { AgentdConfig } from "./config.js";
 import { resolveProvider } from "./config.js";
 import { streamFakeChunks } from "./fake-provider.js";
+import { emitFakeSpatialSequence, isFakeSpatialPrompt } from "./fake-spatial.js";
 import {
   emitEvent,
   logDiag,
@@ -123,6 +124,9 @@ async function streamRun(
           retryable: false,
         });
         return;
+      }
+      if (isFakeSpatialPrompt(prompt)) {
+        emitFakeSpatialSequence(runId, sink);
       }
       sink({ type: "run_completed", runId });
       return;

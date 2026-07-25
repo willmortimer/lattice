@@ -5998,6 +5998,123 @@ html[data-motion="always"] *::after {
   color: var(--lt-muted);
 }
 
+.agent-trail {
+  display: flex;
+  flex: 0 0 auto;
+  max-height: 160px;
+  flex-direction: column;
+  overflow: hidden;
+  border-bottom: 1px solid var(--lt-line);
+  background: color-mix(in oklch, var(--lt-bg) 90%, var(--lt-panel));
+}
+
+.agent-trail-header {
+  padding: 8px 12px 4px;
+}
+
+.agent-trail-eyebrow {
+  color: var(--lt-faint);
+  font-family: var(--lt-font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.agent-trail-list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0 8px 8px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.agent-trail-item {
+  margin: 0;
+}
+
+.agent-trail-step {
+  display: grid;
+  width: 100%;
+  align-items: center;
+  gap: 6px;
+  grid-template-columns: auto 1fr auto;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--lt-radius-sm);
+  background: transparent;
+  color: var(--lt-text-soft);
+  font-family: var(--lt-font-ui);
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 110ms ease,
+    border-color 110ms ease,
+    color 110ms ease;
+}
+
+.agent-trail-step:hover {
+  background: var(--lt-hover);
+  border-color: var(--lt-line);
+  color: var(--lt-text);
+}
+
+.agent-trail-step:focus-visible {
+  outline: 2px solid var(--lt-focus-ring);
+  outline-offset: 1px;
+}
+
+.agent-trail-step-active,
+.agent-trail-step-active:hover {
+  border-color: var(--lt-accent-deep);
+  background: var(--lt-accent-wash);
+  color: var(--lt-text);
+}
+
+.agent-trail-step-static {
+  cursor: default;
+}
+
+.agent-trail-step-static:hover {
+  background: transparent;
+  border-color: transparent;
+  color: var(--lt-text-soft);
+}
+
+.agent-trail-step-kind {
+  color: var(--lt-muted);
+  font-family: var(--lt-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.agent-trail-step-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-trail-step-status {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--lt-line-strong);
+}
+
+.agent-trail-step-status-in-progress {
+  background: var(--lt-accent);
+}
+
+.agent-trail-step-status-completed {
+  background: var(--lt-muted);
+}
+
 .agent-thread,
 .agent-thread-placeholder {
   display: flex;

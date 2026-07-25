@@ -1,6 +1,7 @@
 import { AgentHeader } from "../agent/AgentHeader";
 import { AgentOverlayHost } from "../agent/AgentOverlayHost";
 import { AgentPanelShell } from "../agent/AgentPanelShell";
+import { AgentTrail } from "../agent/AgentTrail";
 import { AgentThread } from "../agent/AgentThread";
 import { LatticeAgentProvider } from "../agent/LatticeAgentProvider";
 import { inBrowser } from "../demo";
@@ -746,6 +747,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
               <AgentPanelShell>
                 <LatticeAgentProvider workspaceRoot={inBrowser ? null : snapshot.root}>
                   <AgentHeader onClose={() => setAgentPanelOpen(false)} />
+                  <AgentTrail />
                   <AgentThread workspaceRoot={inBrowser ? null : snapshot.root} />
                 </LatticeAgentProvider>
               </AgentPanelShell>
