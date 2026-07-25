@@ -58,7 +58,7 @@ impl DaemonClient {
             Arc::new(Mutex::new(HashMap::new()));
         // Agent runs and index progress share this bus; keep headroom so a
         // burst cannot Lagged-drop the terminal agent event the UI waits on.
-        let (event_tx, _) = broadcast::channel(1024);
+        let (event_tx, _) = broadcast::channel(8192);
         spawn_reader(reader, Arc::clone(&pending), event_tx.clone());
 
         Ok(Self {
@@ -276,8 +276,14 @@ impl LatticeClient for DaemonClient {
                         }
                     }
                     Err(broadcast::error::RecvError::Closed) => break,
-                    Err(broadcast::error::RecvError::Lagged(_)) => {
-                        // Gap: surface as a transport error so callers can resync.
+                    Err(broadcast::error::RecvError::Lagged(_skipped)) => {
+                        // Index/resource floods share this bus. For agent-only
+                        // subscribers, keep listening through a lag burst so a
+                        // mid-tool IndexProgress spike cannot wedge the UI.
+                        // Non-agent subscribers still fail closed and resync.
+                        if filter.agent_events_only {
+                            continue;
+                        }
                         let _ = tx
                             .send(Err(ClientError::UnexpectedResponse(
                                 "event subscription lagged; resubscribe from last sequence".into(),
