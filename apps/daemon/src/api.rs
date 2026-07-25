@@ -888,18 +888,53 @@ pub fn api_propose_page(
         });
         format!("# {heading}\n")
     });
-    let summary = title
-        .map(|value| format!("Create page {path} ({value})"))
-        .unwrap_or_else(|| format!("Create page {path}"));
-    api_create_proposal(
+
+    let session = resolve_session(
         runtime,
-        CreateProposalParams {
-            workspace: params.workspace,
+        params.workspace.workspace_id.as_deref(),
+        params.workspace.root.as_deref(),
+    )?;
+    let root = session.root().to_string_lossy().into_owned();
+    let existing = match read_page(root, path.to_string()) {
+        Ok(page) => Some(page),
+        Err(err) if err.contains("not found") || err.contains("No such file") => None,
+        Err(err) => return Err(ApiError::BadRequest(err)),
+    };
+
+    let (summary, commands) = if let Some(page) = existing {
+        let summary = title
+            .map(|value| format!("Update page {path} ({value})"))
+            .unwrap_or_else(|| format!("Update page {path}"));
+        (
             summary,
-            commands: vec![Command::PageCreate {
+            vec![Command::PageUpdate {
+                path: PathBuf::from(path),
+                content,
+                base_revision: page.revision,
+            }],
+        )
+    } else {
+        let summary = title
+            .map(|value| format!("Create page {path} ({value})"))
+            .unwrap_or_else(|| format!("Create page {path}"));
+        (
+            summary,
+            vec![Command::PageCreate {
                 path: PathBuf::from(path),
                 content,
             }],
+        )
+    };
+
+    api_create_proposal(
+        runtime,
+        CreateProposalParams {
+            workspace: WorkspaceRefParams {
+                workspace_id: Some(session.workspace_id().to_string()),
+                root: params.workspace.root,
+            },
+            summary,
+            commands,
             affected_paths: vec![path.to_string()],
             warnings: Vec::new(),
             source_resource: None,
@@ -1176,6 +1211,7 @@ impl BacklinkKindStr for lattice_index::BacklinkKind {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lattice_commands::apply_proposal;
     use lattice_core::Workspace;
     use tempfile::TempDir;
 
@@ -1422,5 +1458,46 @@ mod tests {
         )
         .unwrap();
         assert_eq!(loaded.proposal.summary, created.proposal.summary);
+    }
+
+    #[test]
+    fn propose_page_updates_existing_path() {
+        let (dir, runtime) = fixture();
+        let root = dir.path().to_string_lossy().into_owned();
+        let before = read_page(root.clone(), "Notes.md".into()).unwrap();
+
+        let proposed = api_propose_page(
+            &runtime,
+            ProposePageParams {
+                workspace: WorkspaceRefParams {
+                    workspace_id: None,
+                    root: Some(root.clone()),
+                },
+                path: "Notes.md".into(),
+                content: Some("# Notes\n\nUpdated by proposal.\n".into()),
+                title: Some("Notes".into()),
+            },
+        )
+        .unwrap();
+
+        assert!(proposed.proposal.summary.starts_with("Update page"));
+        assert_eq!(proposed.proposal.commands.len(), 1);
+        match &proposed.proposal.commands[0] {
+            Command::PageUpdate {
+                path,
+                content,
+                base_revision,
+            } => {
+                assert_eq!(*path, PathBuf::from("Notes.md"));
+                assert!(content.contains("Updated by proposal"));
+                assert_eq!(*base_revision, before.revision);
+            }
+            other => panic!("expected PageUpdate, got {other:?}"),
+        }
+
+        let tx_id = apply_proposal(dir.path(), &proposed.proposal.id, &[0]).unwrap();
+        assert!(!tx_id.is_empty());
+        let after = read_page(root, "Notes.md".into()).unwrap();
+        assert!(after.content.contains("Updated by proposal"));
     }
 }

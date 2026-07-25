@@ -45,6 +45,8 @@ pub struct DaemonState {
     pub agent: Option<Arc<crate::agent::AgentController>>,
     connections: Option<Arc<ConnectionTracker>>,
     event_tx: broadcast::Sender<Event>,
+    /// Quiet bus for agent run chunks; pumped with priority over `event_tx`.
+    agent_event_tx: broadcast::Sender<Event>,
     next_event_seq: Arc<AtomicU64>,
 }
 
@@ -68,15 +70,17 @@ impl DaemonState {
         voice: Option<Arc<crate::voice_host::VoiceController>>,
         agent: Option<Arc<crate::agent::AgentController>>,
     ) -> Self {
-        // Shared fan-out for workspace + agent events. Sized to absorb index
-        // bursts without dropping a run_completed/run_failed the UI awaits.
-        let (event_tx, _) = broadcast::channel(1024);
+        // Shared fan-out for workspace index/resource/voice events.
+        let (event_tx, _) = broadcast::channel(8192);
+        // Quiet bus for agent run chunks so IndexProgress cannot Lagged-drop
+        // tool-output / run_completed frames mid-turn.
+        let (agent_event_tx, _) = broadcast::channel(1024);
         let next_event_seq = Arc::new(AtomicU64::new(1));
         if let Some(voice) = voice.as_ref() {
             voice.attach_event_fanout(event_tx.clone(), Arc::clone(&next_event_seq));
         }
         if let Some(agent) = agent.as_ref() {
-            agent.attach_event_fanout(event_tx.clone(), Arc::clone(&next_event_seq));
+            agent.attach_event_fanout(agent_event_tx.clone(), Arc::clone(&next_event_seq));
         }
         let state = Self {
             config: Arc::new(config),
@@ -87,6 +91,7 @@ impl DaemonState {
             agent,
             connections: None,
             event_tx,
+            agent_event_tx,
             next_event_seq,
         };
         state.spawn_event_bridge();
@@ -323,27 +328,37 @@ async fn serve_connection(stream: UnixStream, state: DaemonState) -> Result<()> 
 
     let writer = Arc::new(Mutex::new(writer));
     let mut event_rx = state.event_tx.subscribe();
+    let mut agent_event_rx = state.agent_event_tx.subscribe();
     let events_writer = Arc::clone(&writer);
     let event_pump = tokio::spawn(async move {
+        // Prefer agent chunks over IndexProgress so tool-output frames are not
+        // queued behind (or Lagged away by) workspace index floods.
         loop {
-            match event_rx.recv().await {
-                Ok(event) => {
-                    let envelope = event_envelope(format!("evt-{}", event.sequence), event);
-                    match encode_frame(&envelope) {
-                        Ok(framed) => {
-                            let mut guard = events_writer.lock().await;
-                            if guard.write_all(&framed).await.is_err() {
-                                break;
-                            }
-                            if guard.flush().await.is_err() {
-                                break;
-                            }
-                        }
-                        Err(_) => break,
+            let event = tokio::select! {
+                biased;
+                result = agent_event_rx.recv() => match result {
+                    Ok(event) => event,
+                    Err(broadcast::error::RecvError::Closed) => break,
+                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                },
+                result = event_rx.recv() => match result {
+                    Ok(event) => event,
+                    Err(broadcast::error::RecvError::Closed) => break,
+                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                },
+            };
+            let envelope = event_envelope(format!("evt-{}", event.sequence), event);
+            match encode_frame(&envelope) {
+                Ok(framed) => {
+                    let mut guard = events_writer.lock().await;
+                    if guard.write_all(&framed).await.is_err() {
+                        break;
+                    }
+                    if guard.flush().await.is_err() {
+                        break;
                     }
                 }
-                Err(broadcast::error::RecvError::Closed) => break,
-                Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(_) => break,
             }
         }
     });

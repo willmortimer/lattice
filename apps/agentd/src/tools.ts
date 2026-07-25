@@ -310,7 +310,7 @@ export function createLatticeTools(): FunctionTool<LatticeRunContext, any, strin
 
   const proposePage = tool({
     name: "propose_page",
-    description: "Propose creating a page. Does not write the page directly.",
+    description: "Propose creating or updating a page. Does not write the page directly.",
     parameters: z.object({
       workspaceId: optStr,
       root: optStr,

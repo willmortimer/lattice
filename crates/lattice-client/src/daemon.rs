@@ -8,7 +8,10 @@
 //!
 //! The daemon pushes sequenced events on the same connection after handshake
 //! (no separate Subscribe RPC). [`DaemonClient::subscribe`] yields those events
-//! from an in-process broadcast fed by the reader task.
+//! from in-process broadcasts fed by the reader task.
+//!
+//! Agent events are demuxed onto a dedicated bus so IndexProgress floods cannot
+//! Lagged-drop mid-run `tool-output-*` chunks the UI awaits.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -18,7 +21,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use bytes::BytesMut;
 use lattice_protocol::{
-    encode_frame, envelope, request_envelope, Event, FrameDecoder, Request, Response,
+    encode_frame, envelope, event, request_envelope, Event, FrameDecoder, Request, Response,
     PROTOCOL_VERSION,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -28,7 +31,7 @@ use tokio::sync::{broadcast, mpsc, oneshot, Mutex};
 
 use crate::client::LatticeClient;
 use crate::error::ClientError;
-use crate::events::{EventFilter, EventStream};
+use crate::events::{event_matches_filter, EventFilter, EventStream};
 use crate::handshake::{
     decode_handshake_frame, encode_handshake_frame, HandshakeRequest, HandshakeResponse,
 };
@@ -40,6 +43,7 @@ pub struct DaemonClient {
     writer: Mutex<OwnedWriteHalf>,
     pending: Arc<Mutex<HashMap<String, oneshot::Sender<Result<Response, ClientError>>>>>,
     event_tx: broadcast::Sender<Event>,
+    agent_event_tx: broadcast::Sender<Event>,
     next_request_id: AtomicU64,
 }
 
@@ -56,10 +60,16 @@ impl DaemonClient {
 
         let pending: Arc<Mutex<HashMap<String, oneshot::Sender<Result<Response, ClientError>>>>> =
             Arc::new(Mutex::new(HashMap::new()));
-        // Agent runs and index progress share this bus; keep headroom so a
-        // burst cannot Lagged-drop the terminal agent event the UI waits on.
+        // General bus absorbs IndexProgress / resource chatter.
         let (event_tx, _) = broadcast::channel(8192);
-        spawn_reader(reader, Arc::clone(&pending), event_tx.clone());
+        // Agent bus stays quiet so tool-output chunks are not Lagged away.
+        let (agent_event_tx, _) = broadcast::channel(1024);
+        spawn_reader(
+            reader,
+            Arc::clone(&pending),
+            event_tx.clone(),
+            agent_event_tx.clone(),
+        );
 
         Ok(Self {
             socket_path,
@@ -67,6 +77,7 @@ impl DaemonClient {
             writer: Mutex::new(writer),
             pending,
             event_tx,
+            agent_event_tx,
             next_request_id: AtomicU64::new(1),
         })
     }
@@ -91,6 +102,7 @@ fn spawn_reader(
     mut reader: OwnedReadHalf,
     pending: Arc<Mutex<HashMap<String, oneshot::Sender<Result<Response, ClientError>>>>>,
     event_tx: broadcast::Sender<Event>,
+    agent_event_tx: broadcast::Sender<Event>,
 ) {
     tokio::spawn(async move {
         let mut read_buf = BytesMut::new();
@@ -124,6 +136,10 @@ fn spawn_reader(
                     }
                 }
                 Some(envelope::Payload::Event(event)) => {
+                    let is_agent = matches!(event.body, Some(event::Body::AgentEvent(_)));
+                    if is_agent {
+                        let _ = agent_event_tx.send(event.clone());
+                    }
                     let _ = event_tx.send(event);
                 }
                 Some(envelope::Payload::Request(_)) | None => {}
@@ -237,15 +253,14 @@ fn try_decode_handshake(buf: &BytesMut) -> Result<Option<(HandshakeResponse, usi
 impl LatticeClient for DaemonClient {
     async fn request(&self, request: Request) -> Result<Response, ClientError> {
         let request_id = self.alloc_request_id();
-        let envelope = request_envelope(request_id.clone(), request);
-        let framed = encode_frame(&envelope)?;
-
         let (tx, rx) = oneshot::channel();
         {
             let mut pending = self.pending.lock().await;
-            pending.insert(request_id, tx);
+            pending.insert(request_id.clone(), tx);
         }
 
+        let envelope = request_envelope(request_id.clone(), request);
+        let framed = encode_frame(&envelope)?;
         {
             let mut writer = self.writer.lock().await;
             writer.write_all(&framed).await?;
@@ -262,13 +277,19 @@ impl LatticeClient for DaemonClient {
     }
 
     async fn subscribe(&self, filter: EventFilter) -> Result<EventStream, ClientError> {
-        let mut event_rx = self.event_tx.subscribe();
+        // Agent-only subscribers listen on the quiet demux bus so IndexProgress
+        // cannot Lagged-drop tool-output chunks mid-run.
+        let mut event_rx = if filter.agent_events_only {
+            self.agent_event_tx.subscribe()
+        } else {
+            self.event_tx.subscribe()
+        };
         let (tx, rx) = mpsc::channel(64);
         tokio::spawn(async move {
             loop {
                 match event_rx.recv().await {
                     Ok(event) => {
-                        if !crate::events::event_matches_filter(&event, &filter) {
+                        if !event_matches_filter(&event, &filter) {
                             continue;
                         }
                         if tx.send(Ok(event)).await.is_err() {
@@ -276,14 +297,9 @@ impl LatticeClient for DaemonClient {
                         }
                     }
                     Err(broadcast::error::RecvError::Closed) => break,
-                    Err(broadcast::error::RecvError::Lagged(_skipped)) => {
-                        // Index/resource floods share this bus. For agent-only
-                        // subscribers, keep listening through a lag burst so a
-                        // mid-tool IndexProgress spike cannot wedge the UI.
-                        // Non-agent subscribers still fail closed and resync.
-                        if filter.agent_events_only {
-                            continue;
-                        }
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        // Quiet agent bus should rarely lag; still fail closed so
+                        // the UI surfaces an error instead of an infinite TOOL wait.
                         let _ = tx
                             .send(Err(ClientError::UnexpectedResponse(
                                 "event subscription lagged; resubscribe from last sequence".into(),
