@@ -249,6 +249,7 @@ pub fn run() {
             agent::agent_start_run,
             agent::agent_cancel_run,
             cell::cell_status,
+            cell::cell_actian_smoke,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

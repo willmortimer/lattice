@@ -9,6 +9,7 @@
 
 mod agent;
 mod api;
+mod cell_actian_smoke;
 mod cell_vz;
 mod cell_vz_client;
 mod config;
@@ -81,6 +82,11 @@ pub use scheduler_api::{
 pub use server::{
     serve, serve_with_shutdown, serve_with_shutdown_and_controllers,
     serve_with_shutdown_and_semantic, DaemonState,
+};
+pub use cell_actian_smoke::{
+    run_cell_actian_smoke, ActianEndpoint, CellActianSmokeResult, CellActianSmokeStep,
+    DEFAULT_ACTIAN_PORT, DEFAULT_ACTIAN_URL, ENV_LATTICE_ACTIAN_URL, SMOKE_COLLECTION,
+    SMOKE_VECTOR_DIM,
 };
 pub use cell_vz::{
     resolve_celld_bin, resolve_cell_host_bin, CellVzController, CellVzProviderMode,

@@ -122,6 +122,7 @@ Apple Silicon; not required for normal desktop use. Set vars in `.env` (loaded b
 | `CELL_VZ_HELPER_SOCKET` | `.env` / shell | UDS path | `cell-host-macos --socket` (default `{Lattice run}/cell-host-macos.sock`) | No | Works today |
 | `LATTICE_CELL_DATA_DIR` | `.env` / shell | writable directory | `celld --data-dir` / state DB (default `~/Library/Application Support/Lattice/cell-lab`) | No | Works today |
 | `LATTICE_CELL_LISTEN` | `.env` / shell | `host:port` | `celld --listen` (default `127.0.0.1:18788`) | No | Works today |
+| `LATTICE_ACTIAN_URL` | `.env` / shell | `http://127.0.0.1:16574` or `grpc://host:port` | Actian VectorAI gRPC endpoint for lab smoke (`cell_actian_smoke`); default host relay on Apple VZ | No | Works today |
 
 Example (local Cell worktree binaries):
 
@@ -136,3 +137,27 @@ pnpm --filter @lattice/desktop tauri:dev
 Build/sign the helper first (`./scripts/vz-codesign-helper.sh` in the Cell repo).
 Missing binaries fail `latticed` start with an actionable message naming
 `LATTICE_CELL_HOST_BIN` / `LATTICE_CELLD_BIN`.
+
+### Actian VectorAI smoke (`CellActianSmoke`)
+
+Proves Lattice can reach Actian over the macOS host gRPC relay (`127.0.0.1:16574`
+→ guest `:6574`) without cutting over search/index. Steps: TCP connect, SDK
+health check, create ephemeral collection `lattice_smoke` (512-d cosine vectors),
+upsert two points, similarity search.
+
+| Variable | Purpose |
+| --- | --- |
+| `LATTICE_ACTIAN_URL` | gRPC dial URL (default `http://127.0.0.1:16574`) |
+
+Guest Actian must be started on demand (`touch /mnt/cell/data/actian-vectorai.request-start`
+via `cellctl exec`). Host relay requires rebuilt `cell-host-macos` + guest
+`actian-vsock-relay.service`. gRPC steps use the Python SDK when installed
+(`pip install actian-vectorai-client`); TCP-only failure is reported when the
+relay is down.
+
+```sh
+# From Settings → Performance → Run Actian smoke, or via daemon RPC:
+# CellActianSmoke request on the control-plane socket / Tauri cell_actian_smoke
+export LATTICE_ACTIAN_URL=http://127.0.0.1:16574
+pip install actian-vectorai-client   # optional; required for full smoke
+```

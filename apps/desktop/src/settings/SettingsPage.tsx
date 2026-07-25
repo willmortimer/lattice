@@ -36,6 +36,11 @@ import {
   type BackgroundScheduleStatus,
 } from "../lib/backgroundSchedules";
 import { cellStatusLabel, getCellStatus, type CellStatus } from "../lib/cellStatus";
+import {
+  cellActianSmokeLabel,
+  runCellActianSmoke,
+  type CellActianSmokeResult,
+} from "../lib/cellActianSmoke";
 import { HistoryRetentionSettings } from "./HistoryRetentionSettings";
 import type { AppSettings } from "./model";
 import { TOGGLEABLE_WORKSPACE_CAPABILITIES } from "./workspaceCapabilities";
@@ -151,6 +156,9 @@ export function SettingsPage({
   const [backgroundSchedulesError, setBackgroundSchedulesError] = useState<string | null>(null);
   const [cellStatus, setCellStatus] = useState<CellStatus | null>(null);
   const [cellStatusError, setCellStatusError] = useState<string | null>(null);
+  const [actianSmoke, setActianSmoke] = useState<CellActianSmokeResult | null>(null);
+  const [actianSmokeBusy, setActianSmokeBusy] = useState(false);
+  const [actianSmokeError, setActianSmokeError] = useState<string | null>(null);
 
   useEffect(() => {
     setQuickNoteDraft(workspace.defaults.quickNoteDirectory);
@@ -212,6 +220,23 @@ export function SettingsPage({
       window.clearInterval(timer);
     };
   }, [section]);
+
+  async function onRunActianSmoke() {
+    if (inBrowser || actianSmokeBusy) {
+      return;
+    }
+    setActianSmokeBusy(true);
+    setActianSmokeError(null);
+    try {
+      const result = await runCellActianSmoke();
+      setActianSmoke(result);
+    } catch (err: unknown) {
+      setActianSmoke(null);
+      setActianSmokeError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setActianSmokeBusy(false);
+    }
+  }
 
   function update<K extends Exclude<keyof AppSettings, "format" | "version">>(
     group: K,
@@ -648,6 +673,25 @@ export function SettingsPage({
                 {cellStatusError
                   ? `Cell VZ unavailable: ${cellStatusError}`
                   : cellStatusLabel(cellStatus)}
+              </p>
+            </SettingRow>
+            <SettingRow
+              title="Actian VectorAI smoke"
+              description="TCP + gRPC smoke against LATTICE_ACTIAN_URL (default 127.0.0.1:16574 host relay). Requires guest Actian started and cell-host-macos forward."
+            >
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={inBrowser || actianSmokeBusy}
+                onClick={() => void onRunActianSmoke()}
+              >
+                {actianSmokeBusy ? "Running smoke…" : "Run Actian smoke"}
+              </Button>
+              <p className="settings-copy" role="status">
+                {actianSmokeError
+                  ? `Actian smoke unavailable: ${actianSmokeError}`
+                  : cellActianSmokeLabel(actianSmoke)}
               </p>
             </SettingRow>
             <h2 className="settings-subsection">Revision history retention</h2>

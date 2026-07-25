@@ -14,7 +14,8 @@ use lattice_protocol::{
     CancelAgentRunResponse, DisableSemanticSearchRequest, DisableSemanticSearchResponse,
     EnableSemanticSearchRequest, EnableSemanticSearchResponse, Error as WireError, Event,
     FrameDecoder, GetAgentHealthRequest, GetAgentHealthResponse, GetCellStatusRequest,
-    GetCellStatusResponse, GetSemanticStatusRequest,
+    GetCellStatusResponse, CellActianSmokeRequest, CellActianSmokeResponse,
+    CellActianSmokeStep as WireCellActianSmokeStep, GetSemanticStatusRequest,
     GetSemanticStatusResponse, HealthRequest, HealthResponse, IndexProgress, OpenWorkspaceRequest,
     OpenWorkspaceResponse, PingRequest, PingResponse, Request, ResourceChanged, Response,
     SearchRequest, SearchResponse, SemanticStatus as WireSemanticStatus, StartAgentRunRequest,
@@ -486,6 +487,9 @@ async fn handle_request(
         Some(request::Body::GetCellStatus(GetCellStatusRequest {})) => {
             handle_get_cell_status(state)
         }
+        Some(request::Body::CellActianSmoke(CellActianSmokeRequest {})) => {
+            handle_cell_actian_smoke()
+        }
         Some(
             body @ (request::Body::PrepareModel(_)
             | request::Body::GetVoiceCapabilities(_)
@@ -811,6 +815,30 @@ fn handle_get_cell_status(
                 phase: status.phase,
                 services_json: status.services_json,
                 error: status.error,
+            })),
+        },
+        None,
+    ))
+}
+
+fn handle_cell_actian_smoke(
+) -> std::result::Result<(Response, Option<(String, lattice_protocol::WorkspaceLease)>), WireError>
+{
+    let result = crate::cell_actian_smoke::run_cell_actian_smoke();
+    Ok((
+        Response {
+            body: Some(response::Body::CellActianSmoke(CellActianSmokeResponse {
+                ok: result.ok,
+                steps: result
+                    .steps
+                    .into_iter()
+                    .map(|step| WireCellActianSmokeStep {
+                        name: step.name,
+                        ok: step.ok,
+                        detail: step.detail,
+                    })
+                    .collect(),
+                error: result.error,
             })),
         },
         None,

@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use lattice_client::{request, response, DaemonClient, LatticeClient, Request};
-use lattice_protocol::GetCellStatusRequest;
+use lattice_protocol::{CellActianSmokeRequest, GetCellStatusRequest};
 use serde::Serialize;
 use tauri::State;
 use tokio::sync::Mutex;
@@ -21,6 +21,7 @@ const ENV_CELL_VZ_IMAGES_DIR: &str = "CELL_VZ_IMAGES_DIR";
 const ENV_CELL_VZ_HELPER_SOCKET: &str = "CELL_VZ_HELPER_SOCKET";
 const ENV_CELL_DATA_DIR: &str = "LATTICE_CELL_DATA_DIR";
 const ENV_CELL_LISTEN: &str = "LATTICE_CELL_LISTEN";
+const ENV_LATTICE_ACTIAN_URL: &str = "LATTICE_ACTIAN_URL";
 
 fn env_truthy(name: &str) -> bool {
     matches!(
@@ -76,6 +77,24 @@ impl Default for CellInner {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CellActianSmokeStepDto {
+    pub name: String,
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CellActianSmokeDto {
+    pub ok: bool,
+    pub steps: Vec<CellActianSmokeStepDto>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CellStatusDto {
     pub up: bool,
     pub ping_ok: bool,
@@ -93,6 +112,7 @@ async fn ensure_daemon(inner: &mut CellInner) -> Result<Arc<DaemonClient>, Strin
     }
     let mut host_env = SpawnHostEnv::default();
     append_cell_vz_spawn_env(&mut host_env.extra_env);
+    forward_env_var(&mut host_env.extra_env, ENV_LATTICE_ACTIAN_URL);
     let (client, child) = daemon_session::connect_or_spawn(host_env).await?;
     inner.client = Some(Arc::clone(&client));
     inner._child = child;
@@ -129,6 +149,39 @@ pub async fn cell_status(state: State<'_, CellState>) -> Result<CellStatusDto, S
             })
         }
         other => Err(format!("unexpected GetCellStatus response: {other:?}")),
+    }
+}
+
+#[tauri::command]
+pub async fn cell_actian_smoke(state: State<'_, CellState>) -> Result<CellActianSmokeDto, String> {
+    let mut inner = state.inner.lock().await;
+    let client = ensure_daemon(&mut inner).await?;
+    drop(inner);
+
+    let responded = client
+        .request(Request {
+            deadline_unix_ms: None,
+            idempotency_key: None,
+            body: Some(request::Body::CellActianSmoke(CellActianSmokeRequest {})),
+        })
+        .await
+        .map_err(|err| format!("CellActianSmoke failed: {err}"))?;
+
+    match responded.body {
+        Some(response::Body::CellActianSmoke(resp)) => Ok(CellActianSmokeDto {
+            ok: resp.ok,
+            steps: resp
+                .steps
+                .into_iter()
+                .map(|step| CellActianSmokeStepDto {
+                    name: step.name,
+                    ok: step.ok,
+                    detail: step.detail,
+                })
+                .collect(),
+            error: resp.error,
+        }),
+        other => Err(format!("unexpected CellActianSmoke response: {other:?}")),
     }
 }
 

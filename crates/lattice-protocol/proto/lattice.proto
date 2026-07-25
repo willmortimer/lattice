@@ -52,6 +52,7 @@ message Request {
     GetAgentHealthRequest get_agent_health = 62;
     // Cell VZ lab plane (field numbers 70–79).
     GetCellStatusRequest get_cell_status = 70;
+    CellActianSmokeRequest cell_actian_smoke = 71;
   }
 }
 
@@ -79,6 +80,7 @@ message Response {
     CancelAgentRunResponse cancel_agent_run = 61;
     GetAgentHealthResponse get_agent_health = 62;
     GetCellStatusResponse get_cell_status = 70;
+    CellActianSmokeResponse cell_actian_smoke = 71;
   }
 }
 
@@ -586,6 +588,20 @@ message GetCellStatusResponse {
   // Optional guest service summary from the last successful Ping.
   optional string services_json = 4;
   optional string error = 5;
+}
+
+message CellActianSmokeRequest {}
+
+message CellActianSmokeStep {
+  string name = 1;
+  bool ok = 2;
+  optional string detail = 3;
+}
+
+message CellActianSmokeResponse {
+  bool ok = 1;
+  repeated CellActianSmokeStep steps = 2;
+  optional string error = 3;
 }
 
 message AgentEvent {

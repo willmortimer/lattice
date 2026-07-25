@@ -57,7 +57,8 @@ pub fn voice_request_from_proto(
         | Body::StartAgentRun(_)
         | Body::CancelAgentRun(_)
         | Body::GetAgentHealth(_)
-        | Body::GetCellStatus(_) => Ok(None),
+        | Body::GetCellStatus(_)
+        | Body::CellActianSmoke(_) => Ok(None),
     }
 }
 
