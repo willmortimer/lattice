@@ -152,6 +152,61 @@ pub enum AgentEvent {
     },
     #[serde(rename = "health")]
     Health { ok: bool },
+    #[serde(rename = "step_started")]
+    StepStarted {
+        #[serde(rename = "runId")]
+        run_id: String,
+        #[serde(rename = "stepId")]
+        step_id: String,
+        kind: String,
+        label: String,
+    },
+    #[serde(rename = "step_completed")]
+    StepCompleted {
+        #[serde(rename = "runId")]
+        run_id: String,
+        #[serde(rename = "stepId")]
+        step_id: String,
+        #[serde(rename = "durationMs")]
+        duration_ms: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        summary: Option<String>,
+    },
+    #[serde(rename = "evidence_added")]
+    EvidenceAdded {
+        #[serde(rename = "runId")]
+        run_id: String,
+        #[serde(rename = "evidenceId")]
+        evidence_id: String,
+        #[serde(rename = "resourceId")]
+        resource_id: String,
+        path: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        revision: Option<String>,
+        excerpt: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        anchor: Option<Value>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        score: Option<f64>,
+    },
+    #[serde(rename = "overlay_show")]
+    OverlayShow {
+        #[serde(rename = "runId")]
+        run_id: String,
+        #[serde(rename = "overlayId")]
+        overlay_id: String,
+        anchors: Vec<Value>,
+        purpose: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        commentary: Option<String>,
+    },
+    #[serde(rename = "overlay_clear")]
+    OverlayClear {
+        #[serde(rename = "runId")]
+        run_id: String,
+        #[serde(rename = "overlayId", default, skip_serializing_if = "Option::is_none")]
+        overlay_id: Option<String>,
+    },
 }
 
 impl AgentEvent {
@@ -175,7 +230,12 @@ impl AgentEvent {
             Self::RunStarted { run_id, .. }
             | Self::MessageChunk { run_id, .. }
             | Self::RunCompleted { run_id }
-            | Self::RunFailed { run_id, .. } => Some(run_id.as_str()),
+            | Self::RunFailed { run_id, .. }
+            | Self::StepStarted { run_id, .. }
+            | Self::StepCompleted { run_id, .. }
+            | Self::EvidenceAdded { run_id, .. }
+            | Self::OverlayShow { run_id, .. }
+            | Self::OverlayClear { run_id, .. } => Some(run_id.as_str()),
         }
     }
 
@@ -187,6 +247,11 @@ impl AgentEvent {
             Self::RunCompleted { .. } => "run_completed",
             Self::RunFailed { .. } => "run_failed",
             Self::Health { .. } => "health",
+            Self::StepStarted { .. } => "step_started",
+            Self::StepCompleted { .. } => "step_completed",
+            Self::EvidenceAdded { .. } => "evidence_added",
+            Self::OverlayShow { .. } => "overlay_show",
+            Self::OverlayClear { .. } => "overlay_clear",
         }
     }
 }
@@ -345,5 +410,24 @@ mod tests {
         let parsed = AgentEvent::from_line(&event.to_line().unwrap()).unwrap();
         assert_eq!(parsed, event);
         assert_eq!(parsed.event_type(), "message_chunk");
+    }
+
+    #[test]
+    fn event_round_trips_spatial_overlay_show() {
+        let event = AgentEvent::OverlayShow {
+            run_id: "r1".into(),
+            overlay_id: "ov-1".into(),
+            anchors: vec![serde_json::json!({
+                "kind": "markdown-block",
+                "resourceId": "page:notes",
+                "blockId": "blk-2"
+            })],
+            purpose: "attention".into(),
+            commentary: Some("Focus".into()),
+        };
+        let parsed = AgentEvent::from_line(&event.to_line().unwrap()).unwrap();
+        assert_eq!(parsed, event);
+        assert_eq!(parsed.event_type(), "overlay_show");
+        assert_eq!(parsed.run_id(), Some("r1"));
     }
 }
