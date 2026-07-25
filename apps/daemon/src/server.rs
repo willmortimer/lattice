@@ -165,7 +165,7 @@ pub async fn serve_with_shutdown(
     runtime: Arc<LatticeRuntime>,
     shutdown: oneshot::Receiver<()>,
 ) -> Result<()> {
-    serve_with_shutdown_and_controllers(config, runtime, None, None, None, shutdown).await
+    serve_with_shutdown_and_controllers(config, runtime, None, None, None, None, shutdown).await
 }
 
 /// Bind and serve with an optional semantic indexing controller.
@@ -175,16 +175,17 @@ pub async fn serve_with_shutdown_and_semantic(
     semantic: Option<Arc<crate::embed_host::SemanticController>>,
     shutdown: oneshot::Receiver<()>,
 ) -> Result<()> {
-    serve_with_shutdown_and_controllers(config, runtime, semantic, None, None, shutdown).await
+    serve_with_shutdown_and_controllers(config, runtime, semantic, None, None, None, shutdown).await
 }
 
-/// Bind and serve with optional semantic + voice + agent controllers.
+/// Bind and serve with optional semantic + voice + agent + cell VZ controllers.
 pub async fn serve_with_shutdown_and_controllers(
     config: DaemonConfig,
     runtime: Arc<LatticeRuntime>,
     semantic: Option<Arc<crate::embed_host::SemanticController>>,
     voice: Option<Arc<crate::voice_host::VoiceController>>,
     agent: Option<Arc<crate::agent::AgentController>>,
+    cell_vz: Option<Arc<crate::cell_vz::CellVzController>>,
     shutdown: oneshot::Receiver<()>,
 ) -> Result<()> {
     let socket_path = config.socket_path.clone();
@@ -259,6 +260,9 @@ pub async fn serve_with_shutdown_and_controllers(
     }
     if let Some(agent) = state.agent.as_ref() {
         agent.shutdown().await;
+    }
+    if let Some(cell_vz) = cell_vz.as_ref() {
+        cell_vz.shutdown();
     }
     state.runtime.shutdown_all_sessions();
     let _ = std::fs::remove_file(&socket_path);

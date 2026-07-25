@@ -9,6 +9,7 @@
 
 mod agent;
 mod api;
+mod cell_vz;
 mod config;
 mod dataset_api;
 mod embed_host;
@@ -79,6 +80,11 @@ pub use scheduler_api::{
 pub use server::{
     serve, serve_with_shutdown, serve_with_shutdown_and_controllers,
     serve_with_shutdown_and_semantic, DaemonState,
+};
+pub use cell_vz::{
+    resolve_celld_bin, resolve_cell_host_bin, CellVzController, CellVzProviderMode,
+    ENV_CELL_DATA_DIR, ENV_CELL_HOST_BIN, ENV_CELL_LISTEN, ENV_CELL_VZ, ENV_CELLD_BIN,
+    ENV_CELL_VZ_HELPER_SOCKET, ENV_CELL_VZ_IMAGES_DIR,
 };
 pub use spawn::{spawn_latticed, wait_for_ready, SpawnOptions, SpawnedDaemon};
 pub use voice_host::{

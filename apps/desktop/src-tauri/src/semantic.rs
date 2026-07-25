@@ -195,6 +195,8 @@ fn semantic_spawn_host_env() -> SpawnHostEnv {
         }
     }
 
+    crate::cell::append_cell_vz_spawn_env(&mut extra_env);
+
     SpawnHostEnv {
         extra_env,
         handshake_hint: Some(if pioneer_embeddings {

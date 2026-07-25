@@ -2,6 +2,7 @@ mod agent;
 mod app_menu;
 mod artifact;
 mod canvas;
+mod cell;
 mod commands;
 mod daemon_session;
 mod data;
