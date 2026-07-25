@@ -296,16 +296,14 @@ pub async fn agent_health(state: State<'_, AgentState>) -> Result<AgentHealthDto
 
     match responded.body {
         Some(response::Body::GetAgentHealth(resp)) => {
-            // Daemon reports transport backend (`fake` / `sidecar`); the badge
-            // expects a provider kind. Prefer the configured provider when the
-            // plane is live sidecar.
-            let backend = if resp.backend == "sidecar" {
-                std::env::var(ENV_AGENT_PROVIDER)
+            // Prefer an explicit provider kind. Older daemons may still report
+            // transport `sidecar` — map that via LATTICE_AGENT_PROVIDER.
+            let backend = match resp.backend.as_str() {
+                "sidecar" => std::env::var(ENV_AGENT_PROVIDER)
                     .ok()
                     .filter(|value| !value.is_empty())
-                    .unwrap_or(resp.backend)
-            } else {
-                resp.backend
+                    .unwrap_or(resp.backend),
+                other => other.to_string(),
             };
             Ok(AgentHealthDto {
                 ok: resp.ok,

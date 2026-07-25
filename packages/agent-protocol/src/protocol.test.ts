@@ -83,7 +83,7 @@ describe("commands", () => {
 describe("events", () => {
   const eventFixtures: AgentEvent[] = [
     { type: "hello_ack", protocolVersion: PROTOCOL_VERSION },
-    { type: "run_started", runId: "run-1", threadId: "thread-1" },
+    { type: "run_started", runId: "run-1", threadId: "thread-1", provider: "pioneer" },
     {
       type: "message_chunk",
       runId: "run-1",
