@@ -80,6 +80,12 @@ pub enum AgentCommand {
         messages: Option<Vec<Value>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         prompt: Option<String>,
+        /// Open daemon session id for Lattice HTTP tools.
+        #[serde(default, rename = "workspaceId", skip_serializing_if = "Option::is_none")]
+        workspace_id: Option<String>,
+        /// Absolute workspace root when no session id is available.
+        #[serde(default, rename = "workspaceRoot", skip_serializing_if = "Option::is_none")]
+        workspace_root: Option<String>,
     },
     #[serde(rename = "cancel_run")]
     CancelRun {
@@ -192,8 +198,10 @@ pub struct StartAgentRunRequest {
     pub model: String,
     pub messages: Option<Vec<Value>>,
     pub prompt: Option<String>,
-    /// Workspace id for event fan-out (not sent to agentd in Phase A).
+    /// Workspace id for event fan-out and Lattice HTTP tool binding.
     pub workspace_id: String,
+    /// Absolute workspace root passed through to agentd tools when set.
+    pub workspace_root: Option<String>,
 }
 
 impl StartAgentRunRequest {
@@ -217,6 +225,11 @@ impl StartAgentRunRequest {
     }
 
     pub fn to_command(&self) -> AgentCommand {
+        let workspace_id = if self.workspace_id.is_empty() {
+            None
+        } else {
+            Some(self.workspace_id.clone())
+        };
         AgentCommand::StartRun {
             thread_id: self.thread_id.clone(),
             run_id: self.run_id.0.clone(),
@@ -224,6 +237,8 @@ impl StartAgentRunRequest {
             model: self.model.clone(),
             messages: self.messages.clone(),
             prompt: self.prompt.clone(),
+            workspace_id,
+            workspace_root: self.workspace_root.clone(),
         }
     }
 }
@@ -312,6 +327,8 @@ mod tests {
                 "content": "hello"
             })]),
             prompt: None,
+            workspace_id: Some("ws-1".into()),
+            workspace_root: None,
         };
         let parsed = AgentCommand::from_line(&start.to_line().unwrap()).unwrap();
         assert_eq!(parsed, start);

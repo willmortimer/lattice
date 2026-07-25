@@ -95,6 +95,18 @@ async fn main() -> Result<()> {
         Some(cli.api_port)
     });
 
+    // Expose auth + API base URL to supervised agentd (Lattice HTTP tools).
+    // Never log token values.
+    std::env::set_var("LATTICE_AUTH_TOKEN", &config.auth_token);
+    if let Some(port) = config.api_port {
+        std::env::set_var(
+            "LATTICE_API_BASE_URL",
+            format!("http://127.0.0.1:{port}"),
+        );
+    } else {
+        std::env::remove_var("LATTICE_API_BASE_URL");
+    }
+
     let prefs = DaemonPreferences::load();
     let keep_services_running = cli.keep_services_running || prefs.keep_services_running;
     let idle_shutdown_timeout = cli

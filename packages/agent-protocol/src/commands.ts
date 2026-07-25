@@ -19,6 +19,10 @@ const startRunCommandBaseSchema = z.object({
   model: z.string(),
   messages: z.array(uiMessageSchema).optional(),
   prompt: z.string().optional(),
+  /** Open daemon session id — preferred workspace binding for Lattice tools. */
+  workspaceId: z.string().optional(),
+  /** Absolute workspace root — used when no session id is available. */
+  workspaceRoot: z.string().optional(),
 });
 
 export const startRunCommandSchema = startRunCommandBaseSchema.refine(

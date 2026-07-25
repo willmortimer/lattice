@@ -119,8 +119,11 @@ fn discover_agentd_bin() -> Option<String> {
             return Some(path);
         }
     }
+    // CARGO_MANIFEST_DIR is apps/desktop/src-tauri; canonicalize so latticed
+    // sees apps/agentd/... instead of a src-tauri/../../agentd/... string.
     let run_sh = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../agentd/scripts/run.sh");
+    let run_sh = std::fs::canonicalize(&run_sh).unwrap_or(run_sh);
     if run_sh.is_file() {
         return Some(run_sh.to_string_lossy().into());
     }
@@ -292,11 +295,24 @@ pub async fn agent_health(state: State<'_, AgentState>) -> Result<AgentHealthDto
         .map_err(|err| format!("GetAgentHealth failed: {err}"))?;
 
     match responded.body {
-        Some(response::Body::GetAgentHealth(resp)) => Ok(AgentHealthDto {
-            ok: resp.ok,
-            backend: resp.backend,
-            degraded: resp.degraded,
-        }),
+        Some(response::Body::GetAgentHealth(resp)) => {
+            // Daemon reports transport backend (`fake` / `sidecar`); the badge
+            // expects a provider kind. Prefer the configured provider when the
+            // plane is live sidecar.
+            let backend = if resp.backend == "sidecar" {
+                std::env::var(ENV_AGENT_PROVIDER)
+                    .ok()
+                    .filter(|value| !value.is_empty())
+                    .unwrap_or(resp.backend)
+            } else {
+                resp.backend
+            };
+            Ok(AgentHealthDto {
+                ok: resp.ok,
+                backend,
+                degraded: resp.degraded,
+            })
+        }
         other => Err(format!("unexpected GetAgentHealth response: {other:?}")),
     }
 }

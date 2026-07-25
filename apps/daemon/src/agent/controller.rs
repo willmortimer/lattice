@@ -211,6 +211,7 @@ mod tests {
                 messages: None,
                 prompt: Some("hello".into()),
                 workspace_id: "ws".into(),
+                workspace_root: None,
             })
             .await
             .expect("start_run");

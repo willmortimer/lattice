@@ -700,6 +700,7 @@ async fn handle_start_agent_run(
         messages,
         prompt: req.prompt,
         workspace_id: req.workspace_id,
+        workspace_root: None,
     };
     let handle = agent.start_run(start).await.map_err(agent_error_to_wire)?;
     Ok((

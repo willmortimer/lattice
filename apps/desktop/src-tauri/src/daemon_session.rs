@@ -136,8 +136,9 @@ fn spawn_latticed(
         .arg(socket)
         .arg("--auth-token")
         .arg(auth_token)
+        // Localhost HTTP API (127.0.0.1) for agentd Lattice tools / MCP parity.
         .arg("--api-port")
-        .arg("0")
+        .arg("18787")
         .arg("--keep-services-running");
 
     for (key, value) in &host_env.extra_env {

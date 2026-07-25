@@ -195,6 +195,7 @@ mod tests {
                     messages: None,
                     prompt: Some("hi".into()),
                     workspace_id: "ws-1".into(),
+                    workspace_root: None,
                 },
                 tx,
             )
@@ -230,6 +231,7 @@ mod tests {
                     messages: None,
                     prompt: Some("cancel me".into()),
                     workspace_id: "ws-1".into(),
+                    workspace_root: None,
                 },
                 tx,
             )

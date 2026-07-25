@@ -417,8 +417,14 @@ fn build_agentd_command(
         .stderr(Stdio::piped())
         .kill_on_drop(true);
 
-    // Pass through provider secrets at spawn only — never log values.
-    for key in ["PIONEER_API_KEY", "OPENAI_API_KEY"] {
+    // Pass through provider secrets and Lattice HTTP tool credentials at spawn
+    // only — never log values.
+    for key in [
+        "PIONEER_API_KEY",
+        "OPENAI_API_KEY",
+        "LATTICE_AUTH_TOKEN",
+        "LATTICE_API_BASE_URL",
+    ] {
         if let Ok(value) = std::env::var(key) {
             if !value.is_empty() {
                 cmd.env(key, value);
@@ -591,6 +597,7 @@ for raw in sys.stdin:
                     messages: None,
                     prompt: Some("hi".into()),
                     workspace_id: "ws".into(),
+                    workspace_root: None,
                 },
                 tx,
             )
