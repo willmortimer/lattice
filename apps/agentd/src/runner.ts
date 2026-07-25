@@ -191,13 +191,17 @@ export class RunManager {
 
   async start(command: StartRunCommand): Promise<void> {
     if (this.active !== null) {
-      this.sink({
-        type: "run_failed",
-        runId: command.runId,
-        message: `Another run is active (${this.active.runId})`,
-        retryable: false,
-      });
-      return;
+      // Preempt a stuck prior run so the UI cannot wedge on "another run is active".
+      logDiag(
+        `preempting active run ${this.active.runId} for ${command.runId}`,
+      );
+      this.active.abort.abort();
+      try {
+        await this.active.done;
+      } catch {
+        // Prior run failure is expected after abort.
+      }
+      this.active = null;
     }
 
     const abort = new AbortController();
@@ -208,6 +212,9 @@ export class RunManager {
       done: Promise.resolve(),
     };
     this.active = runState;
+    logDiag(
+      `start_run ${command.runId} provider=${command.provider} model=${command.model || this.config.defaultModel} workspaceId=${command.workspaceId ?? ""}`,
+    );
     const done = streamRun(
       this.config,
       command,
