@@ -46,7 +46,8 @@ pub fn run() {
         .manage(resource_links::ResourceCatalogState::default())
         .manage(voice::VoiceState::default())
         .manage(semantic::SemanticState::default())
-        .manage(agent::AgentState::default());
+        .manage(agent::AgentState::default())
+        .manage(cell::CellState::default());
 
     // Socket bridge for `@srsholmes/tauri-playwright` (WKWebView / WebView2 / WebKitGTK).
     // Only listen when explicitly enabled so normal debug runs stay quiet.
@@ -247,6 +248,7 @@ pub fn run() {
             agent::agent_health,
             agent::agent_start_run,
             agent::agent_cancel_run,
+            cell::cell_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

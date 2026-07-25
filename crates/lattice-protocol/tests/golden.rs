@@ -3,7 +3,8 @@ use lattice_protocol::{
     ApplyPageUpdateRequest, ApplyPageUpdateResponse, AudioGap, AudioSampleFormat,
     CancelAgentRunRequest, CancelAgentRunResponse, CancelVoiceSessionRequest,
     CancelVoiceSessionResponse, Event, FinalTranscript, FinalizationMode, FinishUtteranceRequest,
-    FinishUtteranceResponse, GetAgentHealthRequest, GetAgentHealthResponse, HealthRequest,
+    FinishUtteranceResponse, GetAgentHealthRequest, GetAgentHealthResponse, GetCellStatusRequest,
+    GetCellStatusResponse, HealthRequest,
     HealthResponse, IndexProgress, ModelState, ModelStatus, ModelStatusChanged,
     OpenWorkspaceRequest, OpenWorkspaceResponse, PartialTranscript, PingRequest,
     PrepareModelRequest, PrepareModelResponse, PushAudioChunkRequest, PushAudioChunkResponse,
@@ -634,6 +635,38 @@ fn get_agent_health_response() -> lattice_protocol::Envelope {
     )
 }
 
+fn get_cell_status_request() -> lattice_protocol::Envelope {
+    request_envelope(
+        "golden-cell-status",
+        Request {
+            deadline_unix_ms: None,
+            idempotency_key: None,
+            body: Some(lattice_protocol::request::Body::GetCellStatus(
+                GetCellStatusRequest {},
+            )),
+        },
+    )
+}
+
+fn get_cell_status_response() -> lattice_protocol::Envelope {
+    response_envelope(
+        "golden-cell-status-res",
+        Response {
+            body: Some(lattice_protocol::response::Body::GetCellStatus(
+                GetCellStatusResponse {
+                    up: true,
+                    ping_ok: true,
+                    phase: Some("ready".into()),
+                    services_json: Some(
+                        r#"{"service":"lattice.runtime.v1","method":"Ping","ok":true}"#.into(),
+                    ),
+                    error: None,
+                },
+            )),
+        },
+    )
+}
+
 fn agent_event() -> lattice_protocol::Envelope {
     event_envelope(
         "golden-agent-event",
@@ -899,6 +932,16 @@ fn golden_get_agent_health_response() {
 #[test]
 fn golden_agent_event() {
     assert_golden("agent_event.hex", &agent_event());
+}
+
+#[test]
+fn golden_get_cell_status_request() {
+    assert_golden("get_cell_status_request.hex", &get_cell_status_request());
+}
+
+#[test]
+fn golden_get_cell_status_response() {
+    assert_golden("get_cell_status_response.hex", &get_cell_status_response());
 }
 
 #[test]

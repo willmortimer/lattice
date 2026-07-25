@@ -35,6 +35,7 @@ import {
   setBackgroundSchedulesEnabled,
   type BackgroundScheduleStatus,
 } from "../lib/backgroundSchedules";
+import { cellStatusLabel, getCellStatus, type CellStatus } from "../lib/cellStatus";
 import { HistoryRetentionSettings } from "./HistoryRetentionSettings";
 import type { AppSettings } from "./model";
 import { TOGGLEABLE_WORKSPACE_CAPABILITIES } from "./workspaceCapabilities";
@@ -148,6 +149,8 @@ export function SettingsPage({
     null,
   );
   const [backgroundSchedulesError, setBackgroundSchedulesError] = useState<string | null>(null);
+  const [cellStatus, setCellStatus] = useState<CellStatus | null>(null);
+  const [cellStatusError, setCellStatusError] = useState<string | null>(null);
 
   useEffect(() => {
     setQuickNoteDraft(workspace.defaults.quickNoteDirectory);
@@ -181,6 +184,34 @@ export function SettingsPage({
       cancelled = true;
     };
   }, [workspace.root]);
+
+  useEffect(() => {
+    if (inBrowser || section !== "performance") {
+      return;
+    }
+    let cancelled = false;
+    const refresh = () => {
+      void getCellStatus()
+        .then((status) => {
+          if (!cancelled) {
+            setCellStatus(status);
+            setCellStatusError(null);
+          }
+        })
+        .catch((err: unknown) => {
+          if (!cancelled) {
+            setCellStatus(null);
+            setCellStatusError(err instanceof Error ? err.message : String(err));
+          }
+        });
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [section]);
 
   function update<K extends Exclude<keyof AppSettings, "format" | "version">>(
     group: K,
@@ -609,6 +640,16 @@ export function SettingsPage({
                 Last schedule error: {backgroundSchedules.lastError}
               </p>
             ) : null}
+            <SettingRow
+              title="Cell VZ runtime"
+              description="Apple VZ lab guest supervised by latticed when LATTICE_CELL_VZ=1. Refreshes while this section is open."
+            >
+              <p className="settings-copy" role="status">
+                {cellStatusError
+                  ? `Cell VZ unavailable: ${cellStatusError}`
+                  : cellStatusLabel(cellStatus)}
+              </p>
+            </SettingRow>
             <h2 className="settings-subsection">Revision history retention</h2>
             <HistoryRetentionSettings
               workspaceRoot={workspace.root || null}

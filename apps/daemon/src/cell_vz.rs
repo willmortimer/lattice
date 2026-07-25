@@ -13,6 +13,9 @@ use std::time::Duration;
 
 use tracing::{info, warn};
 
+use crate::cell_vz_client::{
+    observed_state_up, ping_payload_ok, CelldClient, CelldClientError, DEFAULT_CELL_ID,
+};
 use crate::config::default_run_dir;
 use crate::error::{Error, Result};
 
@@ -22,6 +25,10 @@ pub const ENV_CELL_VZ: &str = "LATTICE_CELL_VZ";
 pub const ENV_CELL_HOST_BIN: &str = "LATTICE_CELL_HOST_BIN";
 /// Optional path to `celld`.
 pub const ENV_CELLD_BIN: &str = "LATTICE_CELLD_BIN";
+/// Stable cell id for the supervised lattice-runtime guest.
+pub const ENV_CELL_ID: &str = "LATTICE_CELL_ID";
+/// Ping wait timeout for the background lattice loop (seconds).
+pub const ENV_CELL_PING_TIMEOUT_SECS: &str = "LATTICE_CELL_PING_TIMEOUT_SECS";
 /// Staged aarch64 CellOS artifacts (rootfs, kernel, initrd).
 pub const ENV_CELL_VZ_IMAGES_DIR: &str = "CELL_VZ_IMAGES_DIR";
 /// Unix socket served by `cell-host-macos`.
@@ -35,6 +42,30 @@ const DEFAULT_LISTEN: &str = "127.0.0.1:18788";
 const SOCKET_WAIT_TIMEOUT: Duration = Duration::from_secs(10);
 const CELLD_READY_TIMEOUT: Duration = Duration::from_secs(30);
 const READY_POLL: Duration = Duration::from_millis(50);
+const DEFAULT_PING_TIMEOUT: Duration = Duration::from_secs(300);
+const PING_RETRY: Duration = Duration::from_secs(1);
+
+/// Snapshot returned by [`CellVzController::status_snapshot`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CellVzStatus {
+    pub up: bool,
+    pub ping_ok: bool,
+    pub phase: Option<String>,
+    pub services_json: Option<String>,
+    pub error: Option<String>,
+}
+
+impl CellVzStatus {
+    pub fn gate_off(message: impl Into<String>) -> Self {
+        Self {
+            up: false,
+            ping_ok: false,
+            phase: None,
+            services_json: None,
+            error: Some(message.into()),
+        }
+    }
+}
 
 /// Resolved Cell VZ supervision configuration.
 #[derive(Debug, Clone)]
@@ -45,6 +76,8 @@ pub struct CellVzConfig {
     pub images_dir: PathBuf,
     pub data_dir: PathBuf,
     pub listen: SocketAddr,
+    pub cell_id: String,
+    pub ping_timeout: Duration,
 }
 
 /// How the daemon supervises Cell VZ children.
@@ -94,6 +127,15 @@ fn resolve_config() -> CellVzConfig {
         .unwrap_or_else(|| DEFAULT_LISTEN.to_string())
         .parse()
         .unwrap_or_else(|_| DEFAULT_LISTEN.parse().expect("default listen parses"));
+    let cell_id = std::env::var(ENV_CELL_ID)
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| DEFAULT_CELL_ID.to_string());
+    let ping_timeout = std::env::var(ENV_CELL_PING_TIMEOUT_SECS)
+        .ok()
+        .and_then(|raw| raw.parse::<u64>().ok())
+        .map(Duration::from_secs)
+        .unwrap_or(DEFAULT_PING_TIMEOUT);
 
     CellVzConfig {
         host_bin,
@@ -102,6 +144,8 @@ fn resolve_config() -> CellVzConfig {
         images_dir,
         data_dir,
         listen,
+        cell_id,
+        ping_timeout,
     }
 }
 
@@ -180,6 +224,8 @@ pub struct CellVzController {
     children: Mutex<Option<SupervisedChildren>>,
     stop: Arc<AtomicBool>,
     supervisor: Mutex<Option<JoinHandle<()>>>,
+    lattice_loop: Mutex<Option<JoinHandle<()>>>,
+    status: Mutex<CellVzStatus>,
     degraded: AtomicBool,
 }
 
@@ -216,10 +262,28 @@ impl CellVzController {
             })),
             stop: Arc::new(AtomicBool::new(false)),
             supervisor: Mutex::new(None),
+            lattice_loop: Mutex::new(None),
+            status: Mutex::new(CellVzStatus {
+                up: true,
+                ping_ok: false,
+                phase: Some("celld_ready".into()),
+                services_json: None,
+                error: None,
+            }),
             degraded: AtomicBool::new(false),
         });
         controller.spawn_supervisor();
+        controller.spawn_lattice_loop();
         Ok(controller)
+    }
+
+    /// Non-blocking status for Settings / `cell_status` polling.
+    pub fn status_snapshot(&self) -> CellVzStatus {
+        self.status.lock().expect("status poisoned").clone()
+    }
+
+    fn set_status(&self, next: CellVzStatus) {
+        *self.status.lock().expect("status poisoned") = next;
     }
 
     pub fn is_degraded(&self) -> bool {
@@ -237,6 +301,9 @@ impl CellVzController {
     pub fn shutdown(&self) {
         self.stop.store(true, Ordering::SeqCst);
         if let Some(join) = self.supervisor.lock().expect("supervisor poisoned").take() {
+            let _ = join.join();
+        }
+        if let Some(join) = self.lattice_loop.lock().expect("lattice loop poisoned").take() {
             let _ = join.join();
         }
         if let Some(mut children) = self.children.lock().expect("children poisoned").take() {
@@ -272,6 +339,132 @@ impl CellVzController {
             })
             .ok();
         *self.supervisor.lock().expect("supervisor poisoned") = join;
+    }
+
+    fn spawn_lattice_loop(self: &Arc<Self>) {
+        let stop = Arc::clone(&self.stop);
+        let controller = Arc::clone(self);
+        let join = thread::Builder::new()
+            .name("latticed-cell-vz-lattice-loop".into())
+            .spawn(move || controller.run_lattice_loop(&stop))
+            .ok();
+        *self.lattice_loop.lock().expect("lattice loop poisoned") = join;
+    }
+
+    fn run_lattice_loop(self: &Arc<Self>, stop: &AtomicBool) {
+        let client = CelldClient::new(self.config.listen, self.config.cell_id.clone());
+        if !has_vz_artifacts(&self.config.images_dir) {
+            self.set_status(CellVzStatus {
+                up: client.healthz_ok() && !self.is_degraded(),
+                ping_ok: false,
+                phase: Some("artifacts_missing".into()),
+                services_json: None,
+                error: Some(format!(
+                    "VZ artifacts missing under {} (need cellos.ext4 and vmlinux/Image)",
+                    self.config.images_dir.display()
+                )),
+            });
+            return;
+        }
+
+        self.set_status(CellVzStatus {
+            up: true,
+            ping_ok: false,
+            phase: Some("applying".into()),
+            services_json: None,
+            error: None,
+        });
+        if let Err(err) = client.apply_lattice_cell() {
+            self.fail_status("apply", err);
+            return;
+        }
+        if stop.load(Ordering::SeqCst) {
+            return;
+        }
+
+        self.set_status(CellVzStatus {
+            up: true,
+            ping_ok: false,
+            phase: Some("starting".into()),
+            services_json: None,
+            error: None,
+        });
+        match client.get_observed_state() {
+            Ok(Some(state)) if observed_state_up(&state) => {}
+            Ok(_) => {
+                if let Err(err) = client.start_cell() {
+                    self.fail_status("start", err);
+                    return;
+                }
+            }
+            Err(err) => {
+                if let Err(start_err) = client.start_cell() {
+                    self.fail_status("start", start_err);
+                    return;
+                }
+                warn!(error = %err, "GetCell before start failed; continuing after StartCell");
+            }
+        }
+        if stop.load(Ordering::SeqCst) {
+            return;
+        }
+
+        self.set_status(CellVzStatus {
+            up: true,
+            ping_ok: false,
+            phase: Some("pinging".into()),
+            services_json: None,
+            error: None,
+        });
+        let deadline = std::time::Instant::now() + self.config.ping_timeout;
+        while !stop.load(Ordering::SeqCst) && std::time::Instant::now() < deadline {
+            match client.invoke_lattice_ping() {
+                Ok(payload) if ping_payload_ok(&payload) => {
+                    let services_json = serde_json::to_string(&payload).ok();
+                    self.set_status(CellVzStatus {
+                        up: true,
+                        ping_ok: true,
+                        phase: Some("ready".into()),
+                        services_json,
+                        error: None,
+                    });
+                    info!(cell_id = %self.config.cell_id, "lattice.runtime.v1 Ping OK");
+                    return;
+                }
+                Ok(payload) => {
+                    warn!(?payload, "Ping returned unexpected payload");
+                }
+                Err(err) => {
+                    debug_ping_wait(&err);
+                }
+            }
+            thread::sleep(PING_RETRY);
+        }
+
+        if stop.load(Ordering::SeqCst) {
+            return;
+        }
+        self.set_status(CellVzStatus {
+            up: true,
+            ping_ok: false,
+            phase: Some("ping_timeout".into()),
+            services_json: None,
+            error: Some(format!(
+                "lattice.runtime.v1 Ping did not succeed within {}s",
+                self.config.ping_timeout.as_secs()
+            )),
+        });
+    }
+
+    fn fail_status(&self, phase: &str, err: CelldClientError) {
+        warn!(phase, error = %err, "cell VZ lattice loop step failed");
+        self.set_status(CellVzStatus {
+            up: !self.is_degraded(),
+            ping_ok: false,
+            phase: Some(phase.into()),
+            services_json: None,
+            error: Some(err.to_string()),
+        });
     }
 }
 
@@ -394,6 +587,19 @@ fn wait_for_celld(listen: &SocketAddr, timeout: Duration) -> Result<()> {
     )))
 }
 
+fn has_vz_artifacts(images_dir: &Path) -> bool {
+    let rootfs = images_dir.join("cellos.ext4");
+    if !rootfs.is_file() {
+        return false;
+    }
+    images_dir.join("vmlinux").is_file() || images_dir.join("Image").is_file()
+}
+
+fn debug_ping_wait(err: &CelldClientError) {
+    // Ping failures are expected while the guest boots; keep logs quiet.
+    let _ = err;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -415,6 +621,30 @@ mod tests {
         assert_eq!(config.listen.port(), 18788);
     }
 
+    #[test]
+    fn gate_off_status_shape() {
+        let status = CellVzStatus::gate_off("Cell VZ not enabled (set LATTICE_CELL_VZ=1)");
+        assert!(!status.up);
+        assert!(!status.ping_ok);
+        assert!(status.error.is_some());
+    }
+
+    #[test]
+    fn has_vz_artifacts_requires_rootfs_and_kernel() {
+        let dir = std::env::temp_dir().join(format!(
+            "cell-vz-artifacts-test-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("mkdir");
+        assert!(!has_vz_artifacts(&dir));
+        std::fs::write(dir.join("cellos.ext4"), b"x").expect("rootfs");
+        assert!(!has_vz_artifacts(&dir));
+        std::fs::write(dir.join("vmlinux"), b"k").expect("kernel");
+        assert!(has_vz_artifacts(&dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[tokio::test]
     async fn start_fails_fast_when_host_binary_missing() {
         let config = CellVzConfig {
@@ -424,6 +654,8 @@ mod tests {
             images_dir: default_images_dir(),
             data_dir: std::env::temp_dir().join("cell-vz-data-test"),
             listen: DEFAULT_LISTEN.parse().expect("listen"),
+            cell_id: DEFAULT_CELL_ID.to_string(),
+            ping_timeout: DEFAULT_PING_TIMEOUT,
         };
         match CellVzController::start(CellVzProviderMode::Supervised(config)).await {
             Err(err) => {

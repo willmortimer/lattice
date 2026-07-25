@@ -10,6 +10,7 @@
 mod agent;
 mod api;
 mod cell_vz;
+mod cell_vz_client;
 mod config;
 mod dataset_api;
 mod embed_host;
@@ -83,8 +84,8 @@ pub use server::{
 };
 pub use cell_vz::{
     resolve_celld_bin, resolve_cell_host_bin, CellVzController, CellVzProviderMode,
-    ENV_CELL_DATA_DIR, ENV_CELL_HOST_BIN, ENV_CELL_LISTEN, ENV_CELL_VZ, ENV_CELLD_BIN,
-    ENV_CELL_VZ_HELPER_SOCKET, ENV_CELL_VZ_IMAGES_DIR,
+    CellVzStatus, ENV_CELL_DATA_DIR, ENV_CELL_HOST_BIN, ENV_CELL_LISTEN, ENV_CELL_VZ,
+    ENV_CELLD_BIN, ENV_CELL_VZ_HELPER_SOCKET, ENV_CELL_VZ_IMAGES_DIR,
 };
 pub use spawn::{spawn_latticed, wait_for_ready, SpawnOptions, SpawnedDaemon};
 pub use voice_host::{

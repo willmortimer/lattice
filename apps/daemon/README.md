@@ -18,6 +18,7 @@ and [ADR 0044](../../docs/decisions/0044-embedded-agent-sidecar.md).
 | `StartAgentRun` | `StartAgentRunResponse` | Start a run; stream `AgentEvent` notifications |
 | `CancelAgentRun` | `CancelAgentRunResponse` | Cancel an in-flight run |
 | `GetAgentHealth` | `GetAgentHealthResponse` | Backend health (`fake` / `sidecar`, degraded) |
+| `GetCellStatus` | `GetCellStatusResponse` | Cell VZ lab plane (`up`, `ping_ok`, phase, error) |
 
 Sequenced `Event.body = AgentEvent` carries `run_id`, `event_type`, and
 `payload_json` (opaque JSON mirroring `@lattice/agent-protocol`).

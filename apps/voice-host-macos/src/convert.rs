@@ -56,7 +56,8 @@ pub fn voice_request_from_proto(
         | Body::GetSemanticStatus(_)
         | Body::StartAgentRun(_)
         | Body::CancelAgentRun(_)
-        | Body::GetAgentHealth(_) => Ok(None),
+        | Body::GetAgentHealth(_)
+        | Body::GetCellStatus(_) => Ok(None),
     }
 }
 
