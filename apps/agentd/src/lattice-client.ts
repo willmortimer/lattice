@@ -93,7 +93,7 @@ export class LatticeToolClient {
   }
 
   createProposal(body: Record<string, unknown>) {
-    return this.post("/v1/proposals", body);
+    return this.post("/v1/proposals/create", body);
   }
 
   listProposals(body: Record<string, unknown>) {

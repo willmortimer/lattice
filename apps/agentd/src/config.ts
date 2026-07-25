@@ -1,5 +1,7 @@
 import type { ProviderKind } from "@lattice/agent-protocol";
 
+import { latticeClientFromEnv, type LatticeToolClient } from "./lattice-client.js";
+
 export const PIONEER_BASE_URL = "https://api.pioneer.ai/v1";
 
 export type AgentdConfig = {
@@ -11,6 +13,8 @@ export type AgentdConfig = {
   defaultModel: string;
   pioneerApiKey: string | undefined;
   openaiApiKey: string | undefined;
+  /** Authenticated localhost API client for Lattice tools (null when unset). */
+  latticeClient: LatticeToolClient | null;
 };
 
 function parseProvider(raw: string | undefined): ProviderKind {
@@ -62,6 +66,7 @@ export function loadConfig(
     defaultModel,
     pioneerApiKey: env.PIONEER_API_KEY?.trim() || undefined,
     openaiApiKey: env.OPENAI_API_KEY?.trim() || undefined,
+    latticeClient: latticeClientFromEnv(env),
   };
 }
 

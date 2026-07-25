@@ -13,6 +13,7 @@ import {
   type UiMessageChunk,
 } from "./protocol.js";
 import { configureProvider } from "./provider.js";
+import type { LatticeRunContext } from "./tools.js";
 
 export type EventSink = (event: AgentEvent) => void;
 
@@ -109,9 +110,20 @@ async function streamRun(
 
     configureProvider(config, provider, model);
     const agent = createWorkspaceAgent(model);
+    const latticeContext: LatticeRunContext = {
+      client: config.latticeClient,
+      workspaceId: command.workspaceId,
+      workspaceRoot: command.workspaceRoot,
+    };
+    if (!config.latticeClient) {
+      logDiag(
+        "Lattice HTTP tools unavailable: set LATTICE_API_BASE_URL and LATTICE_AUTH_TOKEN",
+      );
+    }
     const streamed = await run(agent, prompt, {
       stream: true,
       signal: abort.signal,
+      context: latticeContext,
     });
     const uiStream = createAiSdkUiMessageStream(streamed) as ReadableStream<UiMessageChunk>;
     await emitUiStream(runId, uiStream, sink, abort.signal);

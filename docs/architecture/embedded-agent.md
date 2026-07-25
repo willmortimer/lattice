@@ -2256,6 +2256,12 @@ See also: [`apps/agentd/README.md`](../../apps/agentd/README.md), [`apps/daemon/
 4. Add proposal creation tools.
 5. Preserve desktop-only application.
 
+**Status (July 24 2026):** `apps/agentd` attaches MCP-parity tools via
+`LatticeToolClient` → `http://127.0.0.1:18787/v1/*`. Desktop-spawned
+`latticed` enables that API port and injects `LATTICE_AUTH_TOKEN` /
+`LATTICE_API_BASE_URL` into supervised `agentd`. Source/evidence UI cards
+remain Phase C.
+
 Success condition:
 
 > The agent can answer grounded workspace questions and create a reviewable proposal.

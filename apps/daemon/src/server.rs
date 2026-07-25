@@ -692,6 +692,11 @@ async fn handle_start_agent_run(
         }
     };
 
+    let workspace_root = state
+        .runtime
+        .get_session_by_id(&req.workspace_id)
+        .map(|session| session.root().display().to_string());
+
     let start = crate::agent::StartAgentRunRequest {
         thread_id: req.thread_id,
         run_id: crate::agent::AgentRunId::new(req.run_id.unwrap_or_default()),
@@ -700,7 +705,7 @@ async fn handle_start_agent_run(
         messages,
         prompt: req.prompt,
         workspace_id: req.workspace_id,
-        workspace_root: None,
+        workspace_root,
     };
     let handle = agent.start_run(start).await.map_err(agent_error_to_wire)?;
     Ok((

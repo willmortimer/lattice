@@ -34,6 +34,8 @@ describe("commands", () => {
       provider: "openai",
       model: "gpt-4.1",
       prompt: "Summarize the workspace.",
+      workspaceId: "ws-1",
+      workspaceRoot: "/tmp/demo",
     },
     {
       type: "start_run",

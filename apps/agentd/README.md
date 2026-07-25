@@ -1,6 +1,7 @@
 # `@lattice/agentd`
 
-Node 22 sidecar that runs the Lattice embedded agent (Phase A / EA2).
+Node 22 sidecar that runs the Lattice embedded agent (Phase B tools over
+latticed's authenticated localhost HTTP API — same semantics as `latticed mcp`).
 
 `latticed` supervises this process. Commands arrive as JSONL on **stdin**;
 lifecycle and UI message events leave as JSONL on **stdout**. Diagnostics go
@@ -30,10 +31,28 @@ Then send JSONL commands on stdin, for example:
 | `LATTICE_AGENTD_BIN` | Path to Node/tsx entry or packaged executable (see `scripts/run.sh`) |
 | `PIONEER_API_KEY` | Required for Pioneer (`https://api.pioneer.ai/v1`) |
 | `OPENAI_API_KEY` | Required for direct OpenAI fallback |
+| `LATTICE_API_BASE_URL` | Localhost API base (e.g. `http://127.0.0.1:18787`) for tools |
+| `LATTICE_AUTH_TOKEN` | Bearer token for the localhost API (same as daemon handshake) |
 
 `start_run.provider` selects the provider for that run. `LATTICE_AGENT_FAKE=1`
 always wins. Provider `fake` (or the force-fake env) streams deterministic
-text-delta chunks without calling a model API.
+text-delta chunks without calling a model API (and without tools).
+
+When `latticed` supervises `agentd`, it injects `LATTICE_AUTH_TOKEN` and
+`LATTICE_API_BASE_URL` from its config. Desktop-spawned daemons listen on
+`127.0.0.1:18787` by default.
+
+## Lattice tools (Phase B)
+
+Attached OpenAI Agents SDK tools mirror MCP names:
+
+`get_current_context`, `search`, `read`, `related`, `build_context`,
+`get_dataset_schema`, `profile_dataset`, `create_proposal`, `list_proposals`,
+`get_proposal`, `propose_page`, `propose_resource`, `propose_workflow`,
+`propose_interface`, `propose_artifact`.
+
+`start_run` may include `workspaceId` / `workspaceRoot`; tools default to that
+binding. There is **no** apply tool — proposals stay in the inbox.
 
 ## Scripts
 
@@ -51,32 +70,20 @@ Wire types live in `@lattice/agent-protocol` (`PROTOCOL_VERSION = 1`):
 - Events: `hello_ack`, `run_started`, `message_chunk`, `run_completed`,
   `run_failed`, `health`
 
-Phase A ships a single manager agent with **no tools**. Lattice HTTP tools,
-MCP, drafts, and desktop UI arrive in later EA tasks.
-
-## Desktop integration (fake path)
+## Desktop integration
 
 The Tauri shell does **not** spawn `agentd` directly. `latticed` supervises the
 sidecar (or uses an in-process fake backend). See
-[`docs/architecture/embedded-agent.md`](../../docs/architecture/embedded-agent.md#phase-a-verification).
+[`docs/architecture/embedded-agent.md`](../../docs/architecture/embedded-agent.md).
 
-**Default dev smoke (no Pioneer key):** when the desktop spawns `latticed` and
-`PIONEER_API_KEY` is unset, EA4 sets `LATTICE_AGENT_FAKE=1` — no Node process
-needed. Launch:
-
-```sh
-nxr desktop-dev
-# or: pnpm --filter @lattice/desktop tauri:dev:novoice
-```
-
-Open a workspace → Robot icon → send a prompt → streamed fake reply.
-
-**Supervised sidecar (Pioneer or explicit fake via Node):** set env before the
-desktop spawns `latticed`, then restart the app:
+**Pioneer + tools:**
 
 ```sh
 export LATTICE_AGENTD_BIN="$(pwd)/apps/agentd/scripts/run.sh"
-export LATTICE_AGENT_PROVIDER=pioneer   # or fake with LATTICE_AGENT_FAKE=1
-export LATTICE_AGENT_MODEL=your-model
-export PIONEER_API_KEY=…                # Pioneer only; never commit
+export LATTICE_AGENT_PROVIDER=pioneer
+export LATTICE_AGENT_MODEL=pioneer/auto
+export PIONEER_API_KEY=…                # never commit
+pnpm --filter @lattice/desktop tauri:dev:novoice
 ```
+
+Quit any stale `latticed` / Lattice.app first so spawn picks up agent + API env.
