@@ -342,6 +342,8 @@ html[data-platform="macos"] .startup-splash {
 .sidebar {
   width: 264px;
   flex-shrink: 0;
+  min-height: 0;
+  overflow: hidden;
   background: var(--lt-bg-raise);
   border-right: 1px solid var(--lt-line);
   display: flex;
@@ -376,6 +378,7 @@ html[data-platform="macos"] .startup-splash {
 
 .resource-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 8px;
   display: flex;
@@ -510,11 +513,13 @@ html[data-platform="macos"] .startup-splash {
   word-break: break-word;
 }
 
+/* Height comes from the spacer — do not flex:1 here. Absolute rows virtualize
+   against `.resource-list`; a flex-constrained box lets rows paint over siblings
+   (Connected roots / Proposals) when overflow escapes the scrollport. */
 .resource-tree-virtual {
   --resource-tree-row-height: 30px;
   width: 100%;
-  flex: 1;
-  min-height: 0;
+  flex-shrink: 0;
 }
 
 .resource-tree-virtual-spacer {
@@ -650,10 +655,12 @@ html[data-platform="macos"] .startup-splash {
 
 .sidebar-footer {
   display: flex;
+  flex-shrink: 0;
   flex-direction: column;
   gap: 8px;
   padding: 10px;
   border-top: 1px solid var(--lt-line);
+  background: var(--lt-bg-raise);
 }
 
 /* ============================================================================
@@ -2668,10 +2675,14 @@ html[data-page-width="full"] {
 
 .proposal-inbox {
   display: flex;
+  flex-shrink: 0;
   flex-direction: column;
   gap: 8px;
+  max-height: 42%;
+  overflow-y: auto;
   padding: 10px;
   border-top: 1px solid var(--lt-line);
+  background: var(--lt-bg-raise);
 }
 
 .proposal-inbox-head {
