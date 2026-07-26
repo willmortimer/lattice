@@ -1,14 +1,19 @@
 @import "@fontsource-variable/fraunces/index.css";
 @import "@fontsource-variable/space-grotesk/index.css";
 @import "@fontsource-variable/jetbrains-mono/index.css";
+@import "@fontsource-variable/literata/index.css";
+@import "@fontsource-variable/source-sans-3/index.css";
+@import "@fontsource-variable/newsreader/index.css";
+@import "@fontsource-variable/ibm-plex-sans/index.css";
 @import "./theme-tokens.css";
 
 /* ============================================================================
    Lattice desktop — design tokens + shell styles
    Same identity as the site (blue-slate ground, one warm-amber accent,
-   Fraunces / Space Grotesk / JetBrains Mono), tuned down for a working tool:
-   the serif appears only where the workspace itself speaks; mono carries
-   paths and kinds; everything else stays quiet.
+   Fraunces / Space Grotesk / JetBrains Mono by default; alternate font packs
+   load eagerly so Settings switching is instant), tuned down for a working
+   tool: the serif appears only where the workspace itself speaks; mono
+   carries paths and kinds; everything else stays quiet.
 
    Color/font/shape tokens live in theme-tokens.css (generated from
    themes/lattice-slate.theme.yaml). Components consume --lt-* only.
@@ -6254,7 +6259,7 @@ html[data-motion="always"] *::after {
   border-radius: 8px;
   color: var(--lt-text);
   background: var(--lt-bg);
-  font-family: var(--lt-font-sans);
+  font-family: var(--lt-font-ui);
   font-size: 12.5px;
   line-height: 1.45;
   overflow-y: auto;

@@ -23,9 +23,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
 
 const DEFAULT_THEME = join(ROOT, "themes", "lattice-slate.theme.yaml");
+const FONT_PACKS_DIR = join(ROOT, "themes", "font-packs");
 const OUT_DESKTOP = join(ROOT, "apps", "desktop", "src", "theme-tokens.css");
 const OUT_SITE = join(ROOT, "site", "src", "styles", "theme-tokens.css");
 const OUT_DESKTOP_TS = join(ROOT, "apps", "desktop", "src", "theme-tokens.ts");
+const DEFAULT_FONT_PACK_ID = "lattice";
+const FONT_PACK_SUFFIX = ".font-pack.yaml";
 
 // ---------------------------------------------------------------------------
 // Minimal YAML (maps + scalars only)
@@ -121,7 +124,7 @@ function requireKeys(obj, keys, label) {
 }
 
 function validateTheme(theme) {
-  requireKeys(theme, ["name", "id", "appearance", "palette", "roles", "fonts", "shape"], "theme");
+  requireKeys(theme, ["name", "id", "appearance", "palette", "roles", "font_pack", "shape"], "theme");
   if (theme.appearance !== "dark" && theme.appearance !== "light") {
     throw new Error(`appearance must be dark|light, got ${theme.appearance}`);
   }
@@ -131,7 +134,9 @@ function validateTheme(theme) {
   if (typeof theme.roles !== "object" || Array.isArray(theme.roles)) {
     throw new Error("roles must be a map");
   }
-  requireKeys(theme.fonts, ["display", "ui", "mono"], "fonts");
+  if (typeof theme.font_pack !== "string" || !theme.font_pack.trim()) {
+    throw new Error("font_pack must be a non-empty string");
+  }
   requireKeys(
     theme.shape,
     ["radius", "radius_sm", "radius_lg", "grid", "titlebar", "max_width"],
@@ -161,6 +166,37 @@ function validateTheme(theme) {
     }
     requireKeys(theme.terminal, TERMINAL_ANSI_KEYS, "terminal");
   }
+}
+
+function validateFontPack(pack) {
+  requireKeys(pack, ["name", "id", "fonts"], "font pack");
+  requireKeys(pack.fonts, ["display", "ui", "mono"], "fonts");
+}
+
+/** Load a font pack YAML by id from themes/font-packs/. */
+function loadFontPack(packId) {
+  const id = String(packId || DEFAULT_FONT_PACK_ID).trim() || DEFAULT_FONT_PACK_ID;
+  const packPath = join(FONT_PACKS_DIR, `${id}${FONT_PACK_SUFFIX}`);
+  let source;
+  try {
+    source = readFileSync(packPath, "utf8");
+  } catch {
+    throw new Error(`font pack not found: ${id} (${packPath})`);
+  }
+  const pack = parseThemeYaml(source);
+  validateFontPack(pack);
+  if (pack.id !== id) {
+    throw new Error(`font pack id ${pack.id} does not match filename id ${id}`);
+  }
+  return pack;
+}
+
+/** Resolve theme.font_pack into theme.fonts for emitCss / emitTs. */
+function attachResolvedFonts(theme) {
+  const pack = loadFontPack(theme.font_pack);
+  theme.fonts = pack.fonts;
+  theme.resolved_font_pack = pack.id;
+  return theme;
 }
 
 /** ANSI slots a `terminal:` block must provide when present. */
@@ -217,7 +253,8 @@ function emitCss(theme, sourcePath) {
   const lines = [
     `/* GENERATED from ${rel} — do not edit by hand.`,
     `   Recompile: pnpm compile-theme (or nix run .#compile-theme)`,
-    `   Theme: ${theme.name} (${theme.id}) */`,
+    `   Theme: ${theme.name} (${theme.id})`,
+    `   Font pack: ${theme.resolved_font_pack ?? theme.font_pack} */`,
     ``,
     `:root {`,
     `  color-scheme: ${theme.appearance};`,
@@ -364,6 +401,7 @@ function emitTs(theme, sourcePath) {
   return `/* GENERATED from ${rel} — do not edit by hand.
  * Recompile: node scripts/compile-theme.mjs
  * Theme: ${theme.name} (${theme.id})
+ * Font pack: ${theme.resolved_font_pack ?? theme.font_pack}
  *
  * Pixi/canvas cannot read CSS variables; these mirror --lt-* roles with
  * precomputed rgba washes that match the color-mix alphas in theme-tokens.css.
@@ -417,6 +455,7 @@ function main() {
   const source = readFileSync(themePath, "utf8");
   const theme = parseThemeYaml(source);
   validateTheme(theme);
+  attachResolvedFonts(theme);
   const css = emitCss(theme, themePath);
   const ts = emitTs(theme, themePath);
 

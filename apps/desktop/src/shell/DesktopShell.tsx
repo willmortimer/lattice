@@ -34,7 +34,7 @@ import { ResourceInspector } from "../shell/ResourceInspector";
 import { ResourceSurface } from "../shell/ResourceSurface";
 import { StartupSplash } from "../shell/StartupSplash";
 import { useStartupSplash } from "../shell/useStartupSplash";
-import { setAppearanceMode, setFixedTheme } from "../theme";
+import { setAppearanceMode, setFixedTheme, setFontPack } from "../theme";
 import { fileTitle } from "../controllers/useResourceController";
 import { isUnsaved, saveIndicatorText } from "../editor/saveState";
 import { searchResourceLinks } from "../lib/resourceLinks";
@@ -600,6 +600,11 @@ export function DesktopShell({ model }: DesktopShellProps) {
                   }
                   onFollowSystem={() =>
                     void setAppearanceMode("auto", snapshot.root)
+                      .then(applyThemeCatalog)
+                      .catch((err) => setError(String(err)))
+                  }
+                  onFontPackChange={(fontPack) =>
+                    void setFontPack(fontPack, snapshot.root)
                       .then(applyThemeCatalog)
                       .catch((err) => setError(String(err)))
                   }

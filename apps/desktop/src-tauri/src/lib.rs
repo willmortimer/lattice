@@ -186,6 +186,7 @@ pub fn run() {
             theme::get_resolved_theme,
             theme::set_theme,
             theme::set_appearance_mode,
+            theme::set_font_pack,
             theme::start_theme_watching,
             theme::stop_theme_watching,
             data::open_data_app,
