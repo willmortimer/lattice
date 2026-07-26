@@ -171,21 +171,46 @@ fn static_raster_assets(package_root: &Path) -> Result<BTreeMap<String, String>,
     let mut total = 0usize;
     for entry in WalkDir::new(package_root).follow_links(false) {
         let entry = entry.map_err(|err| err.to_string())?;
-        if !entry.file_type().is_file() { continue; }
-        let Some(mime) = raster_mime(entry.path()) else { continue; };
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let Some(mime) = raster_mime(entry.path()) else {
+            continue;
+        };
         if assets.len() / 2 >= MAX_ASSET_FILES {
             // Unreferenced images must not turn a safe document into a failed
             // preview. The host only rewrites assets actually referenced by it.
             break;
         }
         let canonical = entry.path().canonicalize().map_err(|err| err.to_string())?;
-        if !canonical.starts_with(package_root) { return Err("asset escapes artifact package".into()); }
+        if !canonical.starts_with(package_root) {
+            return Err("asset escapes artifact package".into());
+        }
+        let byte_len = std::fs::metadata(&canonical)
+            .map_err(|err| err.to_string())?
+            .len();
+        if byte_len > MAX_ASSET_BYTES as u64 {
+            return Err(format!(
+                "artifact asset {} exceeds the 8 MiB limit",
+                entry.path().display()
+            ));
+        }
+        total = total
+            .checked_add(byte_len as usize)
+            .ok_or_else(|| "artifact raster asset size overflow".to_string())?;
+        if total > MAX_TOTAL_BYTES {
+            return Err("artifact raster assets exceed the 32 MiB aggregate limit".into());
+        }
         let bytes = std::fs::read(&canonical).map_err(|err| err.to_string())?;
-        if bytes.len() > MAX_ASSET_BYTES { return Err(format!("artifact asset {} exceeds the 8 MiB limit", entry.path().display())); }
-        total += bytes.len();
-        if total > MAX_TOTAL_BYTES { return Err("artifact raster assets exceed the 32 MiB aggregate limit".into()); }
-        let rel = canonical.strip_prefix(package_root).map_err(|_| "asset escapes artifact package".to_string())?.to_string_lossy().replace('\\', "/");
-        let data = format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes));
+        let rel = canonical
+            .strip_prefix(package_root)
+            .map_err(|_| "asset escapes artifact package".to_string())?
+            .to_string_lossy()
+            .replace('\\', "/");
+        let data = format!(
+            "data:{mime};base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(bytes)
+        );
         assets.insert(rel.clone(), data.clone());
         assets.insert(format!("./{rel}"), data);
     }
@@ -249,11 +274,17 @@ pub fn artifact_read_entrypoint(
     if !canonical_entry.starts_with(&package_dir.canonicalize().map_err(|err| err.to_string())?) {
         return Err("entrypoint escapes artifact package".into());
     }
-    let html_bytes = std::fs::read(&canonical_entry).map_err(|err| err.to_string())?;
-    if manifest.profile == ArtifactProfile::Static && html_bytes.len() > 2 * 1024 * 1024 {
-        return Err("artifact entrypoint exceeds the 2 MiB static document limit".into());
+    if manifest.profile == ArtifactProfile::Static {
+        let byte_len = std::fs::metadata(&canonical_entry)
+            .map_err(|err| err.to_string())?
+            .len();
+        if byte_len > 2 * 1024 * 1024 {
+            return Err("artifact entrypoint exceeds the 2 MiB static document limit".into());
+        }
     }
-    let html = String::from_utf8(html_bytes).map_err(|_| "artifact entrypoint must be UTF-8".to_string())?;
+    let html_bytes = std::fs::read(&canonical_entry).map_err(|err| err.to_string())?;
+    let html = String::from_utf8(html_bytes)
+        .map_err(|_| "artifact entrypoint must be UTF-8".to_string())?;
     let package_root = package_dir.canonicalize().map_err(|err| err.to_string())?;
     let mut styles = Vec::new();
     if manifest.profile == ArtifactProfile::Static {
@@ -267,12 +298,20 @@ pub fn artifact_read_entrypoint(
             if !canonical.starts_with(&package_root) {
                 return Err("style escapes artifact package".into());
             }
-            let bytes = std::fs::read(&canonical).map_err(|err| err.to_string())?;
-            total += bytes.len();
+            let byte_len = std::fs::metadata(&canonical)
+                .map_err(|err| err.to_string())?
+                .len();
+            total = total
+                .checked_add(byte_len as usize)
+                .ok_or_else(|| "artifact stylesheet size overflow".to_string())?;
             if total > 1024 * 1024 {
                 return Err("artifact styles exceed the 1 MiB aggregate limit".into());
             }
-            styles.push(String::from_utf8(bytes).map_err(|_| "artifact styles must be UTF-8".to_string())?);
+            let bytes = std::fs::read(&canonical).map_err(|err| err.to_string())?;
+            styles.push(
+                String::from_utf8(bytes)
+                    .map_err(|_| "artifact styles must be UTF-8".to_string())?,
+            );
         }
     }
     let assets = if manifest.profile == ArtifactProfile::Static {

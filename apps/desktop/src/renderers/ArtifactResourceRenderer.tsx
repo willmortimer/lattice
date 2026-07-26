@@ -176,9 +176,19 @@ export function ArtifactResourceRenderer({
             <span
               className="surface-badge"
               data-tone={manifest.profile === "static" ? "success" : "warning"}
-              title={manifest.profile === "static" ? "Static documents have no scripts, host bridge, or network capability." : "Legacy interactive artifacts use an isolated postMessage bridge; network isolation is not claimed by this UI."}
+              title={
+                manifest.profile === "static"
+                  ? "Static documents have no scripts, host bridge, or network capability."
+                  : manifest.version === 1
+                    ? "Legacy interactive artifacts use an isolated postMessage bridge; network isolation is not claimed by this UI."
+                    : "This profile is recognized but its component/application runtime is not available."
+              }
             >
-              {manifest.profile === "static" ? "Script-free" : "Legacy bridge"}
+              {manifest.profile === "static"
+                ? "Script-free"
+                : manifest.version === 1
+                  ? "Legacy bridge"
+                  : "Runtime unavailable"}
             </span>
             {writePaths.length === 0 ? (
               <span
