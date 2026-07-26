@@ -45,7 +45,7 @@ mod workflow;
 
 pub use artifact::{
     is_safe_relative_path, resolve_manifest_path, ArtifactError, ArtifactFallback,
-    ArtifactManifest, ArtifactPermissions, ArtifactResult, ARTIFACT_FORMAT,
+    ArtifactManifest, ArtifactPermissions, ArtifactProfile, ArtifactResult, ARTIFACT_FORMAT,
     ARTIFACT_MANIFEST_FILENAME, SUPPORTED_VERSION as ARTIFACT_SUPPORTED_VERSION,
 };
 pub use command::{

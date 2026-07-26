@@ -14,7 +14,9 @@ Readable YAML/JSON composition over built-in components. Preferred for most AI-g
 
 ### Level 3: HTML artifact
 
-A focused sandboxed HTML/CSS/JavaScript package.
+A progressive HTML package. Version 2 starts with a script-free static
+HTML/CSS profile; future component and application profiles add explicit
+runtime capabilities.
 
 ### Level 4: Lattice App
 
@@ -54,12 +56,23 @@ fallback:
   file: ./README.md
 ```
 
-Artifacts run in isolated sandboxed iframes (`sandbox="allow-scripts"`, no
-`allow-same-origin`, no ambient Tauri). The host injects `--lt-*` theme tokens
-via postMessage, resolves only named read-only `BindingSpec` bindings declared
-in the manifest, and can open linked resources. Off-screen artifacts suspend
-via IntersectionObserver. Network is deny-by-default (`permissions.network`
-must be empty in v1).
+Version 2 static artifacts declare `profile: static`, an optional
+`ui: lattice-static@1`, and package-local `styles`. The host sanitizes their
+HTML, inlines theme values and CSS, injects a restrictive CSP, and renders it
+in a bare iframe sandbox: no scripts, host bridge, bindings, network or Tauri
+access. `lattice-static@1` provides CSS-only `lt-*` layout, card, callout,
+stat, badge, table, button and empty/degraded-state classes. CSS overrides are
+ordered and consume `--lt-*` tokens.
+
+Version 1 packages continue as **legacy interactive** artifacts using an
+isolated `allow-scripts` iframe and narrow postMessage bridge. They are not
+represented as having the static profile's network boundary. Version 2
+`component` and `application` manifests are recognized but intentionally show
+an unsupported-runtime fallback until their capability model ships.
+
+Ordinary `.html` files use the same script-free Preview plus Source. Package an
+artifact to declare external CSS, bindings, permissions, WASM, or publishing
+metadata.
 
 Desktop session kind `artifact` mounts `ArtifactResourceRenderer` on the
 `main` and `embed` renderer surfaces. Use `:::lattice-embed` with

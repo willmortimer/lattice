@@ -49,6 +49,7 @@ These records capture architecture choices that should not be silently reversed.
 - [ADR 0045: GitHub connected repos are read-only Extract mirrors](0045-github-connected-repos-are-readonly-extracts.md)
 - [ADR 0046: Optional Pioneer remote embeddings for Actian-ready vectors](0046-optional-pioneer-remote-embeddings.md)
 - [ADR 0047: Font packs own type stacks; themes reference them](0047-font-packs.md)
+- [ADR 0048: Static artifacts are script-free documents](0048-static-artifact-profile.md)
 - [ADR 0049: Use open Deck packages for portable presentations](0049-open-deck-packages.md)
 
 Voice subsystem ADRs (FluidAudio, provisional/final transcripts, capture ownership, commands) live under [`docs/voice/adr/`](../voice/adr/).

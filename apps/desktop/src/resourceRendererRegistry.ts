@@ -225,6 +225,7 @@ export function deriveResourceFormatId(resource: Resource): string {
   const extension = resource.path.split(".").pop()?.toLowerCase() ?? "";
   if (extension === "svg" || IMAGE_EXTENSIONS.has(extension)) return "file:image";
   if (extension === "pdf") return "file:pdf";
+  if (extension === "html" || extension === "htm") return "file:html";
   if (["txt", "md", "markdown", "log", "csv", "tsv"].includes(extension)) return "file:text";
   if (CODE_EXTENSIONS.has(extension)) return "file:code";
   if (extension === "json") return "file:json";

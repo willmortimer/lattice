@@ -98,6 +98,7 @@ describe("ResourceRendererRegistry", () => {
   it("maps csv and tsv to the text format id", () => {
     expect(deriveResourceFormatId({ path: "Data/sample.csv", kind: "file" })).toBe("file:text");
     expect(deriveResourceFormatId({ path: "Data/sample.tsv", kind: "file" })).toBe("file:text");
+    expect(deriveResourceFormatId({ path: "Reports/brief.html", kind: "file" })).toBe("file:html");
   });
 
   it("maps .vl.json to vega-lite even when stamped as file:json", () => {
