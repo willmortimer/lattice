@@ -3,7 +3,7 @@ import { ResourceRendererRegistry } from "../resourceRendererRegistry";
 import type { OpenResourceSession } from "../resourceSession";
 import { fileFallbackResourceRendererDefinition } from "./mediaResourceRendererRegistration";
 import type { ResourceRendererContext } from "./RendererContext";
-import { registerTextResourceRenderers, textResourceRendererDefinition } from "./textResourceRendererRegistration";
+import { htmlResourceRendererDefinition, registerTextResourceRenderers, textResourceRendererDefinition } from "./textResourceRendererRegistration";
 
 const fallback = { id: "fallback", kind: "*" as const, load: async () => () => null };
 
@@ -28,6 +28,9 @@ describe("registerTextResourceRenderers", () => {
     expect(registry.resolve({ kind: "file", path: "Data/sample.tsv" }).definition.id).toBe(textResourceRendererDefinition.id);
     expect(registry.resolve({ kind: "file", path: "archive.zip", formatId: "file:unknown" }).definition.id).toBe(
       fileFallbackResourceRendererDefinition.id,
+    );
+    expect(registry.resolve({ kind: "file", path: "Reports/brief.html", formatId: "file:html" }).definition.id).toBe(
+      htmlResourceRendererDefinition.id,
     );
   });
 });

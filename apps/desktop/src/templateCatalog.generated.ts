@@ -978,6 +978,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "Dashboards/Revenue by day.vl.json",
       "Dashboards/Revenue by channel.vl.json",
       "Artifacts/ContactPulse.artifact",
+      "Artifacts/ProjectBrief.artifact",
       "Automations/Contact intake.workflow.yaml",
       "Tasks/ContactIntakeHello.task",
       "Tasks/AgentFirstLook.task",

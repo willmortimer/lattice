@@ -48,5 +48,6 @@ These records capture architecture choices that should not be silently reversed.
 - [ADR 0044: Embedded agent sidecar (`agentd`)](0044-embedded-agent-sidecar.md)
 - [ADR 0045: GitHub connected repos are read-only Extract mirrors](0045-github-connected-repos-are-readonly-extracts.md)
 - [ADR 0046: Optional Pioneer remote embeddings for Actian-ready vectors](0046-optional-pioneer-remote-embeddings.md)
+- [ADR 0047: Static artifacts are script-free documents](0047-static-artifact-profile.md)
 
 Voice subsystem ADRs (FluidAudio, provisional/final transcripts, capture ownership, commands) live under [`docs/voice/adr/`](../voice/adr/).

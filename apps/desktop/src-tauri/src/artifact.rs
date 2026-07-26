@@ -3,8 +3,11 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use base64::Engine;
+use walkdir::WalkDir;
+
 use lattice_commands::{
-    is_safe_relative_path, resolve_manifest_path, ArtifactManifest, BindingSpec,
+    is_safe_relative_path, resolve_manifest_path, ArtifactManifest, ArtifactProfile, BindingSpec,
     ARTIFACT_MANIFEST_FILENAME,
 };
 use lattice_core::Workspace;
@@ -58,6 +61,10 @@ pub struct ArtifactManifestView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     pub entrypoint: String,
+    pub profile: ArtifactProfile,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ui: Option<String>,
+    pub styles: Vec<String>,
     pub bindings: BTreeMap<String, BindingSpec>,
     pub permissions: ArtifactPermissionsView,
     pub fallback: ArtifactFallbackView,
@@ -73,6 +80,10 @@ pub struct ArtifactEntrypointView {
     pub package_path: String,
     pub title: Option<String>,
     pub binding_names: Vec<String>,
+    /// Ordered, validated CSS overrides. Empty for legacy artifacts.
+    pub styles: Vec<String>,
+    /// Package-local raster images rewritten to data URLs by the static host.
+    pub assets: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -139,12 +150,57 @@ fn load_manifest_at(package: &Path) -> Result<ArtifactManifest, String> {
     ArtifactManifest::load(&manifest_path).map_err(|err| err.to_string())
 }
 
+fn raster_mime(path: &Path) -> Option<&'static str> {
+    match path.extension()?.to_str()?.to_ascii_lowercase().as_str() {
+        "png" => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "gif" => Some("image/gif"),
+        "webp" => Some("image/webp"),
+        "avif" => Some("image/avif"),
+        "bmp" => Some("image/bmp"),
+        "tif" | "tiff" => Some("image/tiff"),
+        _ => None,
+    }
+}
+
+fn static_raster_assets(package_root: &Path) -> Result<BTreeMap<String, String>, String> {
+    const MAX_ASSET_FILES: usize = 128;
+    const MAX_ASSET_BYTES: usize = 8 * 1024 * 1024;
+    const MAX_TOTAL_BYTES: usize = 32 * 1024 * 1024;
+    let mut assets = BTreeMap::new();
+    let mut total = 0usize;
+    for entry in WalkDir::new(package_root).follow_links(false) {
+        let entry = entry.map_err(|err| err.to_string())?;
+        if !entry.file_type().is_file() { continue; }
+        let Some(mime) = raster_mime(entry.path()) else { continue; };
+        if assets.len() / 2 >= MAX_ASSET_FILES {
+            // Unreferenced images must not turn a safe document into a failed
+            // preview. The host only rewrites assets actually referenced by it.
+            break;
+        }
+        let canonical = entry.path().canonicalize().map_err(|err| err.to_string())?;
+        if !canonical.starts_with(package_root) { return Err("asset escapes artifact package".into()); }
+        let bytes = std::fs::read(&canonical).map_err(|err| err.to_string())?;
+        if bytes.len() > MAX_ASSET_BYTES { return Err(format!("artifact asset {} exceeds the 8 MiB limit", entry.path().display())); }
+        total += bytes.len();
+        if total > MAX_TOTAL_BYTES { return Err("artifact raster assets exceed the 32 MiB aggregate limit".into()); }
+        let rel = canonical.strip_prefix(package_root).map_err(|_| "asset escapes artifact package".to_string())?.to_string_lossy().replace('\\', "/");
+        let data = format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes));
+        assets.insert(rel.clone(), data.clone());
+        assets.insert(format!("./{rel}"), data);
+    }
+    Ok(assets)
+}
+
 fn manifest_view(manifest: ArtifactManifest, package_path: String) -> ArtifactManifestView {
     ArtifactManifestView {
         format: manifest.format,
         version: manifest.version,
         title: manifest.title,
         entrypoint: manifest.entrypoint,
+        profile: manifest.profile,
+        ui: manifest.ui,
+        styles: manifest.styles,
         bindings: manifest.bindings,
         permissions: ArtifactPermissionsView {
             network: manifest.permissions.network,
@@ -193,7 +249,37 @@ pub fn artifact_read_entrypoint(
     if !canonical_entry.starts_with(&package_dir.canonicalize().map_err(|err| err.to_string())?) {
         return Err("entrypoint escapes artifact package".into());
     }
-    let html = std::fs::read_to_string(&canonical_entry).map_err(|err| err.to_string())?;
+    let html_bytes = std::fs::read(&canonical_entry).map_err(|err| err.to_string())?;
+    if manifest.profile == ArtifactProfile::Static && html_bytes.len() > 2 * 1024 * 1024 {
+        return Err("artifact entrypoint exceeds the 2 MiB static document limit".into());
+    }
+    let html = String::from_utf8(html_bytes).map_err(|_| "artifact entrypoint must be UTF-8".to_string())?;
+    let package_root = package_dir.canonicalize().map_err(|err| err.to_string())?;
+    let mut styles = Vec::new();
+    if manifest.profile == ArtifactProfile::Static {
+        let mut total = 0usize;
+        for style in &manifest.styles {
+            if !is_safe_relative_path(style) {
+                return Err("style path is not package-relative".into());
+            }
+            let candidate = package_dir.join(style);
+            let canonical = candidate.canonicalize().map_err(|err| err.to_string())?;
+            if !canonical.starts_with(&package_root) {
+                return Err("style escapes artifact package".into());
+            }
+            let bytes = std::fs::read(&canonical).map_err(|err| err.to_string())?;
+            total += bytes.len();
+            if total > 1024 * 1024 {
+                return Err("artifact styles exceed the 1 MiB aggregate limit".into());
+            }
+            styles.push(String::from_utf8(bytes).map_err(|_| "artifact styles must be UTF-8".to_string())?);
+        }
+    }
+    let assets = if manifest.profile == ArtifactProfile::Static {
+        static_raster_assets(&package_root)?
+    } else {
+        BTreeMap::new()
+    };
     let mut binding_names: Vec<String> = manifest.bindings.keys().cloned().collect();
     binding_names.sort();
     Ok(ArtifactEntrypointView {
@@ -202,6 +288,8 @@ pub fn artifact_read_entrypoint(
         package_path,
         title: manifest.title,
         binding_names,
+        styles,
+        assets,
     })
 }
 

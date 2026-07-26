@@ -112,9 +112,9 @@ function BindingRow({
 }
 
 /**
- * `.artifact/` surface: the sandboxed HTML stays the star; the header names
- * the trust boundary (no network, read-only workspace) and discloses what
- * data each binding can reach. The Manifest tab hand-edits `artifact.yaml`.
+ * `.artifact/` surface: v2 static profiles are script-free documents. v1
+ * packages remain explicitly labelled as legacy interactive surfaces so their
+ * bridge does not inherit claims made by the static sandbox.
  */
 export function ArtifactResourceRenderer({
   context,
@@ -168,17 +168,17 @@ export function ArtifactResourceRenderer({
         title={manifest.title ?? artifactNameFromPath(path)}
         subtitle={
           <>
-            Sandboxed HTML · <code>{manifest.entrypoint}</code>
+            {manifest.version === 1 ? "Legacy interactive HTML" : `${manifest.profile} artifact`} · <code>{manifest.entrypoint}</code>
           </>
         }
         meta={
           <>
             <span
               className="surface-badge"
-              data-tone="success"
-              title="Artifacts cannot reach the network — the sandbox denies every external request."
+              data-tone={manifest.profile === "static" ? "success" : "warning"}
+              title={manifest.profile === "static" ? "Static documents have no scripts, host bridge, or network capability." : "Legacy interactive artifacts use an isolated postMessage bridge; network isolation is not claimed by this UI."}
             >
-              No network
+              {manifest.profile === "static" ? "Script-free" : "Legacy bridge"}
             </span>
             {writePaths.length === 0 ? (
               <span
