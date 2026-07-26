@@ -12,8 +12,9 @@ Built-ins fall into three groups:
   midnight, copper, rosewood, graphite, solar flare, and tidepool (dark), and
   vellum, glacier, sandstone, orchid, meadow, porcelain, matcha, and limestone
   (light).
-- **Platform looks** — `cupertino` (macOS idiom: SF stacks, system blue),
-  `lattice-oled` (true `#000000` ground for AMOLED/OLED panels).
+- **Platform looks** — `cupertino` (macOS idiom: system blue, default
+  `font_pack: apple`), `lattice-oled` (true `#000000` ground for AMOLED/OLED
+  panels).
 - **Terminal-derived palettes** — `catppuccin-mocha`, `nord`,
   `github-dark`, `dracula`, `solarized-dark`, `tokyo-night`, `gruvbox-dark`,
   `one-dark`, `rose-pine-moon`, and `kanagawa-wave`. These carry a `terminal:`
@@ -61,11 +62,28 @@ Desktop and site `predev` / `prebuild` hooks run the compiler automatically.
 | `palette` | Raw named colors |
 | `roles` | Semantic tokens (`$paletteKey` refs or literals) |
 | `terminal` | Optional ANSI palette (see below) |
-| `fonts` | `display`, `ui`, `mono` stacks |
+| `font_pack` | Id of a pack under `themes/font-packs/` (see below) |
 | `shape` | radii, grid pitch, titlebar, max width |
 
 Components consume only `--lt-*` CSS variables (roles + derived washes).
 Themes must not inject arbitrary CSS.
+
+## Font packs
+
+Typography is orthogonal to color themes (ADR 0047). Packs live in
+`themes/font-packs/*.font-pack.yaml` (user packs:
+`~/Lattice/Settings/font-packs/`).
+
+| Pack | Display | UI | Mono |
+| --- | --- | --- | --- |
+| `lattice` | Fraunces | Space Grotesk | JetBrains Mono |
+| `apple` | SF Pro Display | SF Pro Text | SF Mono |
+| `atelier` | Literata | Source Sans 3 | JetBrains Mono |
+| `signal` | Newsreader | IBM Plex Sans | JetBrains Mono |
+
+Themes set `font_pack: <id>`. Appearance settings may override with
+`fontPack: theme | <id>` (Settings → Appearance). Resolution: appearance
+override → theme default → builtin `lattice`.
 
 ## Terminal palettes (`terminal:`)
 

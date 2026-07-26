@@ -1,4 +1,4 @@
-# ADR 0048: Use open Deck packages for portable presentations
+# ADR 0049: Use open Deck packages for portable presentations
 
 ## Status
 

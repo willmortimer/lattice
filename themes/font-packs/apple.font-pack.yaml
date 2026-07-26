@@ -1,0 +1,7 @@
+# Apple-native stacks (system faces only — no webfont bundle).
+name: Apple
+id: apple
+fonts:
+  display: '-apple-system, "SF Pro Display", "Helvetica Neue", system-ui, sans-serif'
+  ui: '-apple-system, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif'
+  mono: '"SF Mono", ui-monospace, Menlo, "JetBrains Mono", monospace'

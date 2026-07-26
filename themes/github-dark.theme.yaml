@@ -74,10 +74,7 @@ terminal:
   cursor_text: $canvas
   selection: "#388bfd66"
 
-fonts:
-  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
-  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
-  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+font_pack: lattice
 
 shape:
   radius: 6px

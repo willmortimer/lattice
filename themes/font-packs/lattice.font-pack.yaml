@@ -1,0 +1,7 @@
+# Default Lattice typography — editorial display, geometric UI, JetBrains mono.
+name: Lattice
+id: lattice
+fonts:
+  display: '"Fraunces Variable", "Fraunces", Georgia, serif'
+  ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'

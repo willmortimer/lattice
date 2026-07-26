@@ -7,23 +7,92 @@ import slateCss from "../theme-tokens.css?raw";
 
 import {
   detectSystemAppearance,
+  type FontPackSummaryPayload,
   type ResolvedThemePayload,
   type ThemeCatalogPayload,
 } from "./apply";
 
 const DEMO_PREFS_KEY = "lattice.theme.demoPrefs";
+const FOLLOW_THEME = "theme";
 
 interface DemoPrefs {
   mode: "fixed" | "auto";
   theme: string;
   pair: { dark: string; light: string };
+  /** `"theme"` follows the theme's default pack; otherwise a pack id. */
+  fontPack: string;
 }
 
 const DEFAULT_PREFS: DemoPrefs = {
   mode: "fixed",
   theme: "lattice-slate",
   pair: { dark: "lattice-slate", light: "lattice-paper" },
+  fontPack: FOLLOW_THEME,
 };
+
+const FONT_PACKS: Record<
+  string,
+  {
+    name: string;
+    fonts: { display: string; ui: string; mono: string };
+  }
+> = {
+  lattice: {
+    name: "Lattice",
+    fonts: {
+      display: '"Fraunces Variable", "Fraunces", Georgia, serif',
+      ui: '"Space Grotesk Variable", "Space Grotesk", system-ui, sans-serif',
+      mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace',
+    },
+  },
+  apple: {
+    name: "Apple",
+    fonts: {
+      display: '-apple-system, "SF Pro Display", "Helvetica Neue", system-ui, sans-serif',
+      ui: '-apple-system, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif',
+      mono: '"SF Mono", ui-monospace, Menlo, "JetBrains Mono", monospace',
+    },
+  },
+  atelier: {
+    name: "Atelier",
+    fonts: {
+      display: '"Literata Variable", "Literata", Georgia, serif',
+      ui: '"Source Sans 3 Variable", "Source Sans 3", system-ui, sans-serif',
+      mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace',
+    },
+  },
+  signal: {
+    name: "Signal",
+    fonts: {
+      display: '"Newsreader Variable", "Newsreader", Georgia, serif',
+      ui: '"IBM Plex Sans Variable", "IBM Plex Sans", system-ui, sans-serif',
+      mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace',
+    },
+  },
+};
+
+function themeDefaultFontPack(themeId: string): string {
+  return themeId === "cupertino" ? "apple" : "lattice";
+}
+
+function applyFontPack(
+  vars: Record<string, string>,
+  packId: string,
+): { vars: Record<string, string>; fontPack: string } {
+  const pack = FONT_PACKS[packId] ?? FONT_PACKS.lattice;
+  return {
+    fontPack: FONT_PACKS[packId] ? packId : "lattice",
+    vars: {
+      ...vars,
+      "--lt-font-display": pack.fonts.display,
+      "--lt-font-ui": pack.fonts.ui,
+      "--lt-font-mono": pack.fonts.mono,
+      "--l-font-display": "var(--lt-font-display)",
+      "--l-font-body": "var(--lt-font-ui)",
+      "--l-font-mono": "var(--lt-font-mono)",
+    },
+  };
+}
 
 /** Paper light tokens — kept in sync with themes/lattice-paper.theme.yaml roles. */
 const PAPER_VARS: Record<string, string> = {
@@ -560,10 +629,6 @@ const DEMO_THEMES: Record<
       "--lt-danger": "#d70015",
       "--lt-shadow": "#1d1d1f",
       "--lt-on-accent": "#ffffff",
-      "--lt-font-display":
-        '-apple-system, "SF Pro Display", "Helvetica Neue", system-ui, sans-serif',
-      "--lt-font-ui": '-apple-system, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif',
-      "--lt-font-mono": '"SF Mono", ui-monospace, Menlo, "JetBrains Mono", monospace',
       "--lt-radius": "10px",
       "--lt-radius-sm": "7px",
       "--lt-radius-lg": "16px",
@@ -1023,27 +1088,47 @@ function resolveId(prefs: DemoPrefs, system: "dark" | "light"): string {
   return prefs.theme;
 }
 
+function resolveFontPackId(prefs: DemoPrefs, themeId: string): string {
+  const trimmed = prefs.fontPack?.trim() || FOLLOW_THEME;
+  if (trimmed === FOLLOW_THEME) {
+    return themeDefaultFontPack(themeId);
+  }
+  return trimmed;
+}
+
 function buildResolved(
   id: string,
   prefs: DemoPrefs,
 ): ResolvedThemePayload {
   const theme = DEMO_THEMES[id] ?? DEMO_THEMES["lattice-slate"];
-  const vars = { ...theme.vars };
+  const packId = resolveFontPackId(prefs, id);
+  const applied = applyFontPack({ ...theme.vars }, packId);
   return {
     id,
     name: theme.name,
     appearance: theme.appearance,
     sourcePath: `builtin:${id}.theme.yaml`,
-    vars,
-    background: vars["--lt-bg"] ?? "#0a0d13",
+    fontPack: applied.fontPack,
+    vars: applied.vars,
+    background: applied.vars["--lt-bg"] ?? "#0a0d13",
     settings: {
       mode: prefs.mode,
       theme: prefs.theme,
       pair: { ...prefs.pair },
+      fontPack: prefs.fontPack || FOLLOW_THEME,
     },
     workspaceOverride: {},
     diagnostics: [],
   };
+}
+
+function fontPackSummaries(): FontPackSummaryPayload[] {
+  return Object.entries(FONT_PACKS).map(([id, pack]) => ({
+    id,
+    name: pack.name,
+    source: "builtin",
+    path: `builtin:${id}.font-pack.yaml`,
+  }));
 }
 
 export function demoCatalog(
@@ -1054,6 +1139,7 @@ export function demoCatalog(
   const id = resolveId(prefs, system);
   return {
     themes: builtins(),
+    fontPacks: fontPackSummaries(),
     diagnostics: [],
     resolved: buildResolved(id, prefs),
   };
@@ -1073,6 +1159,16 @@ export function demoSetAppearanceMode(
   system: "dark" | "light",
 ): ThemeCatalogPayload {
   const prefs = { ...readPrefs(), mode };
+  writePrefs(prefs);
+  return demoCatalog(system);
+}
+
+export function demoSetFontPack(
+  fontPack: string,
+  system: "dark" | "light",
+): ThemeCatalogPayload {
+  const trimmed = fontPack.trim() || FOLLOW_THEME;
+  const prefs = { ...readPrefs(), fontPack: trimmed };
   writePrefs(prefs);
   return demoCatalog(system);
 }

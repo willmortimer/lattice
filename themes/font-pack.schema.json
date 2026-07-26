@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lattice.dev/schemas/font-pack.schema.json",
+  "title": "Lattice font pack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "id", "fonts"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "fonts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["display", "ui", "mono"],
+      "properties": {
+        "display": { "type": "string", "minLength": 1 },
+        "ui": { "type": "string", "minLength": 1 },
+        "mono": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

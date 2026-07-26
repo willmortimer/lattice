@@ -1,6 +1,7 @@
 /* GENERATED from themes/lattice-slate.theme.yaml — do not edit by hand.
    Recompile: pnpm compile-theme (or nix run .#compile-theme)
-   Theme: Lattice Slate (lattice-slate) */
+   Theme: Lattice Slate (lattice-slate)
+   Font pack: lattice */
 
 :root {
   color-scheme: dark;

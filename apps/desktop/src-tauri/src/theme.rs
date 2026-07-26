@@ -5,9 +5,9 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use lattice_theme::{
-    discover_themes, load_appearance, load_appearance_with_diagnostics, resolve_active_theme,
-    save_appearance, AppearanceMode, ResolvedTheme, SystemAppearance, ThemeDiagnostic,
-    ThemeSummary,
+    discover_font_packs, discover_themes, load_appearance, load_appearance_with_diagnostics,
+    resolve_active_theme, save_appearance, AppearanceMode, FontPackSummary, ResolvedTheme,
+    SystemAppearance, ThemeDiagnostic, ThemeSummary, FONT_PACK_FOLLOW_THEME,
 };
 use notify::{RecommendedWatcher, RecursiveMode};
 use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, RecommendedCache};
@@ -23,6 +23,7 @@ pub struct ThemeWatchState(Mutex<Option<Debouncer<RecommendedWatcher, Recommende
 #[serde(rename_all = "camelCase")]
 pub struct ThemeCatalog {
     pub themes: Vec<ThemeSummary>,
+    pub font_packs: Vec<FontPackSummary>,
     pub diagnostics: Vec<ThemeDiagnostic>,
     pub resolved: ResolvedTheme,
 }
@@ -54,6 +55,8 @@ fn catalog(
     let (home, settings, appearance_diagnostics) =
         load_appearance_with_diagnostics().map_err(err_string)?;
     let (themes, mut diagnostics) = discover_themes(&home).map_err(err_string)?;
+    let (font_packs, pack_diagnostics) = discover_font_packs(&home).map_err(err_string)?;
+    diagnostics.extend(pack_diagnostics);
     diagnostics.extend(
         appearance_diagnostics
             .into_iter()
@@ -66,6 +69,7 @@ fn catalog(
         resolve_active_theme(&home, &settings, system, workspace_root).map_err(err_string)?;
     Ok(ThemeCatalog {
         themes,
+        font_packs,
         diagnostics,
         resolved,
     })
@@ -149,6 +153,29 @@ pub fn set_appearance_mode(
     Ok(catalog)
 }
 
+#[tauri::command]
+pub fn set_font_pack(
+    font_pack: String,
+    system: String,
+    workspace_root: Option<String>,
+    app: AppHandle,
+) -> Result<ThemeCatalog, String> {
+    let (_home, mut settings) = load_appearance().map_err(err_string)?;
+    let trimmed = font_pack.trim();
+    settings.font_pack = if trimmed.is_empty() {
+        FONT_PACK_FOLLOW_THEME.into()
+    } else {
+        trimmed.to_string()
+    };
+    save_appearance(&settings).map_err(err_string)?;
+    let catalog = catalog(
+        system_from_str(&system),
+        workspace_root.as_deref().map(Path::new),
+    )?;
+    let _ = app.emit(THEME_CHANGED_EVENT, &catalog.resolved);
+    Ok(catalog)
+}
+
 /// Start watching `~/Lattice/Settings` (appearance + user themes) and optional
 /// workspace `.lattice/`.
 #[tauri::command]
@@ -170,6 +197,8 @@ pub fn start_theme_watching(
     let settings_dir = home.settings.clone();
     let themes_dir = settings_dir.join("themes");
     let _ = std::fs::create_dir_all(&themes_dir);
+    let packs_dir = settings_dir.join("font-packs");
+    let _ = std::fs::create_dir_all(&packs_dir);
 
     let app_handle = app.clone();
     let mut debouncer = match new_debouncer(

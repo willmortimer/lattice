@@ -60,10 +60,18 @@ pub struct AppearanceSettings {
     pub theme: String,
     #[serde(default)]
     pub pair: ThemePair,
+    /// Active font pack id, or [`crate::font_pack::FONT_PACK_FOLLOW_THEME`]
+    /// (`"theme"`) to use the theme's default pack.
+    #[serde(default = "default_font_pack")]
+    pub font_pack: String,
 }
 
 fn default_theme_id() -> String {
     "lattice-slate".into()
+}
+
+fn default_font_pack() -> String {
+    crate::font_pack::FONT_PACK_FOLLOW_THEME.into()
 }
 
 impl Default for AppearanceSettings {
@@ -74,6 +82,7 @@ impl Default for AppearanceSettings {
             mode: AppearanceMode::Fixed,
             theme: default_theme_id(),
             pair: ThemePair::default(),
+            font_pack: default_font_pack(),
         }
     }
 }
@@ -137,6 +146,7 @@ pub fn load_appearance_with_diagnostics(
 ) -> Result<(LatticeHome, AppearanceSettings, Vec<SettingsDiagnostic>)> {
     let home = ensure_home()?;
     ensure_user_themes_dir(&home)?;
+    ensure_user_font_packs_dir(&home)?;
     let path = AppearanceSettings::path_in(&home);
     let (settings, diagnostics) = AppearanceSettings::load_from_with_diagnostics(&path)?;
     Ok((home, settings, diagnostics))
@@ -146,6 +156,7 @@ pub fn load_appearance_with_diagnostics(
 pub fn save_appearance(settings: &AppearanceSettings) -> Result<LatticeHome> {
     let home = ensure_home()?;
     ensure_user_themes_dir(&home)?;
+    ensure_user_font_packs_dir(&home)?;
     settings.save_to(&AppearanceSettings::path_in(&home))?;
     Ok(home)
 }
@@ -157,6 +168,17 @@ pub fn user_themes_dir(home: &LatticeHome) -> PathBuf {
 
 pub fn ensure_user_themes_dir(home: &LatticeHome) -> Result<PathBuf> {
     let dir = user_themes_dir(home);
+    std::fs::create_dir_all(&dir).map_err(|e| Error::io(&dir, e))?;
+    Ok(dir)
+}
+
+/// `~/Lattice/Settings/font-packs/` for user-authored font packs.
+pub fn user_font_packs_dir(home: &LatticeHome) -> PathBuf {
+    home.settings.join("font-packs")
+}
+
+pub fn ensure_user_font_packs_dir(home: &LatticeHome) -> Result<PathBuf> {
+    let dir = user_font_packs_dir(home);
     std::fs::create_dir_all(&dir).map_err(|e| Error::io(&dir, e))?;
     Ok(dir)
 }

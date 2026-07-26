@@ -11,6 +11,9 @@ use crate::appearance::{AppearanceMode, AppearanceSettings};
 use crate::discover::{load_theme_by_id, ThemeDiagnostic};
 use crate::document::Appearance;
 use crate::flatten::{apply_accent_override, flatten_theme};
+use crate::font_pack::{
+    load_font_pack_by_id, resolve_font_pack_id, DEFAULT_FONT_PACK_ID, FONT_PACK_FOLLOW_THEME,
+};
 use crate::override_file::{load_workspace_override, WorkspaceThemeOverride};
 use crate::{Error, Result};
 
@@ -30,6 +33,8 @@ pub struct ResolvedTheme {
     pub name: String,
     pub appearance: String,
     pub source_path: String,
+    /// Effective font pack id after appearance override.
+    pub font_pack: String,
     /// CSS custom properties (`--lt-*`, `--l-*`).
     pub vars: BTreeMap<String, String>,
     /// Solid window / first-paint ground color (`--lt-bg`).
@@ -88,7 +93,22 @@ pub fn resolve_active_theme(
         Err(err) => return Err(err),
     };
 
-    let mut vars = flatten_theme(&doc, &path)?;
+    let pack_id = resolve_font_pack_id(&settings.font_pack, &doc.font_pack);
+    let (pack, _pack_path) = match load_font_pack_by_id(home, &pack_id) {
+        Ok(pair) => pair,
+        Err(Error::FontPackNotFound(_)) => {
+            diagnostics.push(ThemeDiagnostic {
+                path: pack_path_hint(&pack_id),
+                message: format!(
+                    "font pack {pack_id:?} not found; falling back to {DEFAULT_FONT_PACK_ID}"
+                ),
+            });
+            load_font_pack_by_id(home, DEFAULT_FONT_PACK_ID)?
+        }
+        Err(err) => return Err(err),
+    };
+
+    let mut vars = flatten_theme(&doc, &pack.fonts, &path)?;
     if let Some(ref accent) = override_file.accent {
         if !accent.trim().is_empty() {
             apply_accent_override(&mut vars, accent.trim());
@@ -108,6 +128,7 @@ pub fn resolve_active_theme(
             Appearance::Light => "light".into(),
         },
         source_path: path_string(&path),
+        font_pack: pack.id,
         vars,
         background,
         settings: settings.clone(),
@@ -118,4 +139,12 @@ pub fn resolve_active_theme(
 
 fn path_string(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
+}
+
+fn pack_path_hint(id: &str) -> String {
+    if id == FONT_PACK_FOLLOW_THEME {
+        format!("font-pack:{DEFAULT_FONT_PACK_ID}")
+    } else {
+        format!("font-pack:{id}")
+    }
 }

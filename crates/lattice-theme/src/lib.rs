@@ -11,6 +11,7 @@ mod discover;
 mod document;
 mod error;
 mod flatten;
+mod font_pack;
 mod override_file;
 mod resolve;
 
@@ -26,6 +27,11 @@ pub use discover::{
 pub use document::{Appearance, ThemeDocument, TERMINAL_ANSI_KEYS, THEME_FILE_SUFFIX};
 pub use error::Error;
 pub use flatten::{apply_accent_override, flatten_theme};
+pub use font_pack::{
+    discover_font_packs, load_builtin_font_pack, load_font_pack_by_id, resolve_font_pack_id,
+    FontPackDocument, FontPackSource, FontPackSummary, ThemeFonts, BUILTIN_FONT_PACK_IDS,
+    DEFAULT_FONT_PACK_ID, FONT_PACK_FILE_SUFFIX, FONT_PACK_FOLLOW_THEME,
+};
 pub use override_file::{
     load_workspace_override, WorkspaceThemeOverride, WORKSPACE_THEME_FILENAME,
 };

@@ -7,10 +7,16 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::document::ThemeDocument;
+use crate::font_pack::ThemeFonts;
 use crate::Result;
 
-/// Flatten `theme` to a map of CSS custom property name → value.
-pub fn flatten_theme(theme: &ThemeDocument, path: &Path) -> Result<BTreeMap<String, String>> {
+/// Flatten `theme` (+ resolved font stacks) to a map of CSS custom property
+/// name → value.
+pub fn flatten_theme(
+    theme: &ThemeDocument,
+    fonts: &ThemeFonts,
+    path: &Path,
+) -> Result<BTreeMap<String, String>> {
     let roles = theme.resolved_roles(path)?;
     let role = |k: &str| -> Result<String> {
         roles.get(k).cloned().ok_or_else(|| {
@@ -117,9 +123,9 @@ pub fn flatten_theme(theme: &ThemeDocument, path: &Path) -> Result<BTreeMap<Stri
     }
 
     // Fonts / shape
-    vars.insert("--lt-font-display".into(), theme.fonts.display.clone());
-    vars.insert("--lt-font-ui".into(), theme.fonts.ui.clone());
-    vars.insert("--lt-font-mono".into(), theme.fonts.mono.clone());
+    vars.insert("--lt-font-display".into(), fonts.display.clone());
+    vars.insert("--lt-font-ui".into(), fonts.ui.clone());
+    vars.insert("--lt-font-mono".into(), fonts.mono.clone());
     vars.insert("--lt-radius".into(), theme.shape.radius.clone());
     vars.insert("--lt-radius-sm".into(), theme.shape.radius_sm.clone());
     vars.insert("--lt-radius-lg".into(), theme.shape.radius_lg.clone());
