@@ -1,12 +1,7 @@
-import { readResourceRange, type ResourceLocation } from "../../lib/resourceRuntime";
 import { PDF_RANGE_CHUNK_SIZE } from "./mediaLimits";
 
 export interface PdfRangeReader {
   read: (offset: number, length: number, signal: AbortSignal) => Promise<Uint8Array>;
-}
-
-export function createResourcePdfRangeReader(location: ResourceLocation): PdfRangeReader {
-  return { read: (offset, length, signal) => readResourceRange({ ...location, offset, length }, signal) };
 }
 
 export async function readPdfRangeInChunks(
@@ -20,6 +15,9 @@ export async function readPdfRangeInChunks(
     if (signal.aborted) throw new DOMException("PDF read was cancelled", "AbortError");
     const length = Math.min(PDF_RANGE_CHUNK_SIZE, end - offset);
     const chunk = await reader.read(offset, length, signal);
+    if (chunk.byteLength === 0) {
+      throw new Error("PDF range reader returned an empty chunk.");
+    }
     if (chunk.byteLength > length) throw new Error("PDF range reader returned more bytes than requested.");
     onChunk?.(offset, chunk);
   }
@@ -43,6 +41,7 @@ export function createPdfDataRangeTransport<T extends PdfDataRangeTransportLike>
   length: number,
   reader: PdfRangeReader,
   signal: AbortSignal,
+  onReadError?: (error: unknown) => void,
 ): T {
   const transport = new Constructor(length, null, false);
   const pending = new Map<string, Promise<void>>();
@@ -53,9 +52,10 @@ export function createPdfDataRangeTransport<T extends PdfDataRangeTransportLike>
       if (!signal.aborted) transport.onDataRange(offset, chunk);
     }).finally(() => pending.delete(key));
     pending.set(key, request);
-    void request.catch(() => {
+    void request.catch((error: unknown) => {
       // PDF.js will reject the loading task when its transport is aborted;
       // never publish partial data after a failed or stale request.
+      onReadError?.(error);
       transport.abort();
     });
   };
