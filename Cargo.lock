@@ -3440,6 +3440,7 @@ dependencies = [
  "lattice-kernel",
  "lattice-profile",
  "lattice-protocol",
+ "lattice-publish",
  "lattice-runtime",
  "lattice-storage",
  "lattice-terminal",
@@ -3608,6 +3609,7 @@ dependencies = [
 name = "lattice-publish"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "lattice-commands",
  "lattice-core",
  "lattice-data",

@@ -219,3 +219,18 @@ Exports never scrape the live DOM. Cross-filters and live DuckDB dashboards are
 out of scope for this snapshot path; DuckDB bindings export empty placeholders
 and their dataset packages are reported as unsupported for static closure.
 Cloudflare / Starlight docs-site pipelines remain separate (see above).
+## Deck publishing
+
+`lattice publish export --deck path/to/Review.deck --out exported-review`
+creates an offline `index.html` audience deck. It preserves slide order and
+`#slide-id` fragments, supplies keyboard Previous/Next/Home/End navigation,
+uses only fixed host-owned navigation code, and carries print CSS that emits
+one page per slide. The desktop HTML export command invokes the same Rust
+generator and atomically replaces the selected destination.
+
+Deck PDF export is deliberately platform-specific. The current desktop build
+returns a typed unavailable result outside macOS. On macOS it also returns an
+explicit unavailable result until the hidden WKWebView + `NSPrintOperation`
+bridge is linked; it does not claim success or write a placeholder PDF. That
+provider will use the same sanitized print document, zero margins, background
+graphics, an aspect-ratio paper size, and an atomic final write.

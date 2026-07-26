@@ -356,7 +356,7 @@ enum ThemeCommand {
 
 #[derive(Subcommand)]
 enum PublishCommand {
-    /// Export a page, interface, or artifact as offline HTML (+ snapshot data).
+    /// Export a page, interface, artifact, or Deck as offline HTML (+ snapshot data).
     Export {
         /// Output directory for the export.
         #[arg(long)]
@@ -370,6 +370,9 @@ enum PublishCommand {
         /// Path to a `*.artifact/` package (or its `artifact.yaml`).
         #[arg(long, group = "target")]
         artifact: Option<PathBuf>,
+        /// Path to a `*.deck/` package (or its `deck.yaml`).
+        #[arg(long, group = "target")]
+        deck: Option<PathBuf>,
         /// Path inside the workspace to discover from. Defaults to the current directory.
         path: Option<PathBuf>,
     },
@@ -893,8 +896,9 @@ fn run(command: Command) -> Result<ExitCode> {
                 page,
                 interface,
                 artifact,
+                deck,
                 path,
-            } => cmd_publish_export(out, page, interface, artifact, path),
+            } => cmd_publish_export(out, page, interface, artifact, deck, path),
         },
         Command::Templates { command } => match command {
             TemplatesCommand::List { json } => cmd_templates_list(json),
@@ -2413,15 +2417,17 @@ fn cmd_publish_export(
     page: Option<PathBuf>,
     interface: Option<PathBuf>,
     artifact: Option<PathBuf>,
+    deck: Option<PathBuf>,
     path: Option<PathBuf>,
 ) -> Result<ExitCode> {
     let start = cwd_or(path)?;
     let ws = Workspace::discover(&start)?;
-    let target = match (page, interface, artifact) {
-        (Some(page), None, None) => ExportTarget::Page(page),
-        (None, Some(interface), None) => ExportTarget::Interface(interface),
-        (None, None, Some(artifact)) => ExportTarget::Artifact(artifact),
-        _ => bail!("specify exactly one of --page, --interface, or --artifact"),
+    let target = match (page, interface, artifact, deck) {
+        (Some(page), None, None, None) => ExportTarget::Page(page),
+        (None, Some(interface), None, None) => ExportTarget::Interface(interface),
+        (None, None, Some(artifact), None) => ExportTarget::Artifact(artifact),
+        (None, None, None, Some(deck)) => ExportTarget::Deck(deck),
+        _ => bail!("specify exactly one of --page, --interface, --artifact, or --deck"),
     };
     let report = publish_export(ws.root(), &out, target)?;
     println!(

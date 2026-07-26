@@ -67,6 +67,7 @@ lattice-terminal.workspace = true
 lattice-kernel.workspace = true
 lattice-client.workspace = true
 lattice-protocol.workspace = true
+lattice-publish.workspace = true
 arrow.workspace = true
 notify.workspace = true
 notify-debouncer-full.workspace = true

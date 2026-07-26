@@ -23,6 +23,9 @@ pub enum Error {
     Artifact(#[from] lattice_commands::ArtifactError),
 
     #[error(transparent)]
+    Deck(#[from] lattice_commands::DeckError),
+
+    #[error(transparent)]
     Theme(#[from] lattice_theme::Error),
 
     #[error(transparent)]
