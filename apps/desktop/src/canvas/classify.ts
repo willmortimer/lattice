@@ -30,6 +30,8 @@ export function classifyPath(path: string): ResourceKind {
       return "ink";
     case "artifact":
       return "artifact";
+    case "deck":
+      return "deck";
     case "app":
       return "app";
     case "task":

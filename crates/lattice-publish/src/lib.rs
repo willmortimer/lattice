@@ -1,4 +1,4 @@
-//! Static HTML export for Lattice pages, interfaces, and artifacts.
+//! Static HTML export for Lattice pages, interfaces, artifacts, and Decks.
 //!
 //! Exports are self-contained offline snapshots: Markdown pages become HTML,
 //! interface dashboards freeze binding query results into JSON + an HTML shell,
@@ -16,7 +16,7 @@ mod theme;
 
 pub use deps::{CopiedDependency, DependencyKind, MissingDependency};
 pub use error::{Error, Result};
-pub use export::{export, ExportReport, ExportTarget};
+pub use export::{export, export_deck_html, ExportReport, ExportTarget};
 pub use markdown::{
     collect_markdown_local_refs, markdown_to_html, markdown_to_html_with_rewrites, MarkdownLocalRef,
 };

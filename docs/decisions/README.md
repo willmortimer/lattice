@@ -51,5 +51,6 @@ These records capture architecture choices that should not be silently reversed.
 - [ADR 0047: Font packs own type stacks; themes reference them](0047-font-packs.md)
 - [ADR 0048: Static artifacts are script-free documents](0048-static-artifact-profile.md)
 - [ADR 0049: App lock is session privacy via LocalAuthentication, not encryption](0049-app-lock-session-privacy-local-authentication.md)
+- [ADR 0050: Use open Deck packages for portable presentations](0050-open-deck-packages.md)
 
 Voice subsystem ADRs (FluidAudio, provisional/final transcripts, capture ownership, commands) live under [`docs/voice/adr/`](../voice/adr/).

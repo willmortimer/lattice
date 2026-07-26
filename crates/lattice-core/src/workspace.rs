@@ -181,6 +181,8 @@ mod tests {
         std::fs::write(root.join("CRM.data/app.yaml"), "").unwrap();
         std::fs::create_dir_all(root.join("Usage.dataset")).unwrap();
         std::fs::write(root.join("Usage.dataset/dataset.yaml"), "").unwrap();
+        std::fs::create_dir_all(root.join("Review.deck/slides")).unwrap();
+        std::fs::write(root.join("Review.deck/deck.yaml"), "format: lattice-deck\n").unwrap();
         std::fs::create_dir_all(root.join(".lattice/cache")).unwrap();
         std::fs::write(root.join(".lattice/index.sqlite"), []).unwrap();
 
@@ -205,8 +207,10 @@ mod tests {
         assert_eq!(kind_of("photo.png"), Some(ResourceKind::File));
         assert_eq!(kind_of("CRM.data"), Some(ResourceKind::DataApp));
         assert_eq!(kind_of("Usage.dataset"), Some(ResourceKind::Dataset));
+        assert_eq!(kind_of("Review.deck"), Some(ResourceKind::Deck));
         // package contents and hidden dirs are not resources
         assert_eq!(kind_of("CRM.data/app.yaml"), None);
+        assert_eq!(kind_of("Review.deck/deck.yaml"), None);
         assert!(resources
             .iter()
             .all(|r| !r.path.starts_with(OPERATIONAL_DIR)));

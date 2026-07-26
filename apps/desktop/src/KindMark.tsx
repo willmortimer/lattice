@@ -63,6 +63,13 @@ const MARKS: Record<ResourceKind, JSX.Element> = {
       <circle cx="4.5" cy="14" r="1.5" fill="currentColor" stroke="none" />
     </>
   ),
+  // A sequence of presentation frames.
+  deck: (
+    <>
+      <rect x="3.5" y="5" width="13" height="10" rx="1.5" />
+      <path d="M6.5 8.2h7M6.5 11h4.5" />
+    </>
+  ),
   // An application: a frame with a live node inside.
   app: (
     <>
@@ -137,6 +144,7 @@ export const KIND_LABELS: Record<ResourceKind, string> = {
   notebook: "Notebook",
   ink: "Ink",
   artifact: "Artifact",
+  deck: "Deck",
   app: "App",
   workflow: "Workflow",
   task: "Task",

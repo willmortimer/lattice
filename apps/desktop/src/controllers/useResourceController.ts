@@ -9,6 +9,7 @@ import { previewBatchLinkRepair, previewLinkRepair, type BatchLinkRepairPlan, ty
 import { applyPathRemaps, type PathRemap } from "../lib/pathRemap";
 import { moveResource, moveResources } from "../lib/resourceMutations";
 import { loadArtifactManifest } from "../lib/artifactRun";
+import { loadDeckSession } from "../lib/deckRun";
 import { loadDerivedManifest, loadDerivedStatus } from "../lib/derivedRun";
 import { loadTaskManifest } from "../lib/taskRun";
 import { loadWorkflow } from "../lib/workflowRun";
@@ -63,6 +64,7 @@ export interface ResourceController {
     syncTreeSelection?: boolean;
     viewName?: string;
     interfaceDef?: InterfaceSummary;
+    anchor?: string;
   }) => Promise<void>;
   applyTreeSelection: (detail: {
     paths: ReadonlySet<string>;
@@ -195,6 +197,7 @@ export function useResourceController(options: ResourceControllerOptions): Resou
       syncTreeSelection?: boolean;
       viewName?: string;
       interfaceDef?: InterfaceSummary;
+      anchor?: string;
     } = {},
   ) => {
     const workspace = snapshotRef.current ?? snapshot;
@@ -471,6 +474,29 @@ export function useResourceController(options: ResourceControllerOptions): Resou
           setSession(null);
           onError(String(error));
         }
+      } finally {
+        if (isCurrentLoad(ticket)) onBusy(false);
+      }
+      return;
+    }
+
+    if (resource.kind === "deck" && workspace) {
+      if (inBrowser) {
+        if (isCurrentLoad(ticket)) {
+          setSession({ kind: "deck", resource, initialSlideId: selectionOptions.anchor ?? null, deck: {
+            format: "lattice-deck", version: 1, id: "browser-demo", title: "Deck preview",
+            aspectRatio: "16:9", themeCss: "", start: "title", loop: false, durationMinutes: 20,
+            packagePath: resource.path, slides: [{ id: "title", source: "slides/title.html", html: "<main class=\"lt-document lt-stack\"><h1>Deck preview</h1><p>Open in the native app for the package source.</p></main>", notes: "Browser demo notes.", transition: { type: "fade", durationMs: 280 } }],
+          } });
+        }
+        return;
+      }
+      onBusy(true);
+      try {
+        const deck = await loadDeckSession(workspace.root, resource.path);
+        if (isCurrentLoad(ticket)) setSession({ kind: "deck", resource, deck, initialSlideId: selectionOptions.anchor ?? null });
+      } catch (error) {
+        if (isCurrentLoad(ticket)) { setSession(null); onError(String(error)); }
       } finally {
         if (isCurrentLoad(ticket)) onBusy(false);
       }

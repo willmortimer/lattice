@@ -118,6 +118,34 @@ capabilities:
   workspace_read: [../../Assets/**]
 ```
 
+## Deck
+
+```yaml
+format: lattice-deck
+version: 1
+id: quarterly-review
+title: Quarterly review
+aspect_ratio: 16:9
+theme:
+  stylesheet: ./theme.css
+slides:
+  - id: title
+    source: ./slides/001-title.html
+    notes: ./notes/001-title.md
+    transition:
+      type: fade
+      duration_ms: 280
+  - id: metrics
+    source: ./slides/002-metrics.html
+    transition:
+      type: push
+      direction: left
+presentation:
+  start: title
+  loop: false
+  duration_minutes: 20
+```
+
 ## Task
 
 ```yaml

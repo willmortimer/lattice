@@ -5,10 +5,13 @@ mod artifact;
 mod canvas;
 mod commands;
 mod daemon_session;
+mod deck;
 mod data;
+mod deck_export;
 mod dataset;
 mod dataset_sessions;
 mod derived;
+mod deck_views;
 mod github;
 mod gitlab;
 mod kernel;
@@ -226,6 +229,10 @@ pub fn run() {
             artifact::artifact_load_manifest,
             artifact::artifact_read_entrypoint,
             artifact::artifact_resolve_binding,
+            deck::deck_load_session,
+            deck_views::deck_materialize_viewbox,
+            deck_export::deck_export_html,
+            deck_export::deck_export_pdf,
             workflow::workflow_load,
             workflow::workflow_run,
             workflow::workflow_cancel,

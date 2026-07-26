@@ -46,6 +46,7 @@ The root manifest should remain small. Most metadata belongs beside the resource
 | Diagram | Mermaid, Graphviz DOT, SVG | rendered preview |
 | Chart | Vega-Lite/Vega | SVG/PNG/HTML preview |
 | Artifact | HTML/CSS/JS package | manifest, README, static preview |
+| Deck | semantic HTML slide package | `deck.yaml`, CSS theme, Markdown notes |
 | Lattice App | normal web source project | app manifest, build task, dist output |
 | Workflow | Lattice YAML or BPMN | DMN, forms, task references |
 | Documentation project | Markdown folder | docs manifest and generator adapters |
@@ -81,6 +82,39 @@ Every Lattice-owned format must have:
 - Conformance tests.
 - Human-readable documentation.
 - Security considerations.
+
+## Deck packages
+
+Decks are open `.deck/` directories. Version one keeps one semantic HTML file
+per slide, an optional package-local CSS theme, and optional Markdown speaker
+notes. `deck.yaml` is the navigation and presentation manifest; slide IDs are
+stable so deep links and future exports can target a slide without relying on
+its filename. Unsupported renderers can still open the HTML and Markdown
+sources directly.
+
+Deck v1 accepts only package-relative paths and validates referenced files
+after symlink resolution. This prevents a deck manifest from silently reading
+outside its own package. The static exporter applies the same containment
+contract, strips active HTML features (scripts, handlers, forms, nested
+frames, SVG, refresh metadata, and non-fragment navigation), inlines bounded
+package raster assets as data URLs, and excludes speaker notes from audience
+HTML and PDF output.
+
+### Static resource viewboxes
+
+Slides may contain a script-free `<lattice-view resource="Notes/Plan.md">`
+element. `resource` is a workspace-relative path, resolved with lexical and
+post-symlink containment checks. The host replaces it with a bounded static
+card before the slide enters the inert document assembler: pages and selected
+ordinary text files receive excerpts; packages, tasks, notebooks, PDFs, and
+other non-raster resources receive typed metadata cards; raster images may be
+inlined only up to 8 MiB each and 32 MiB for a deck assembly. No resource is
+embedded as a live renderer or frame.
+
+`mode="live"` is preserved in source for the future component sandbox, but
+currently renders a clear static-fallback card. Missing, escaped, oversized,
+or unpreviewable resources render degraded cards rather than silently loading
+anything from outside the workspace.
 
 ## Package pattern
 

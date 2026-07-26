@@ -1,0 +1,27 @@
+format: lattice-deck
+version: 1
+id: project-review
+title: Project review
+aspect_ratio: 16:9
+
+theme:
+  stylesheet: ./theme.css
+
+slides:
+  - id: title
+    source: ./slides/001-title.html
+    notes: ./notes/001-title.md
+    transition:
+      type: fade
+      duration_ms: 280
+  - id: progress
+    source: ./slides/002-progress.html
+    transition:
+      type: push
+      direction: left
+      duration_ms: 280
+
+presentation:
+  start: title
+  loop: false
+  duration_minutes: 15

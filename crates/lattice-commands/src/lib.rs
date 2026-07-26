@@ -28,6 +28,7 @@ mod artifact;
 mod canvas;
 mod command;
 mod contracts;
+mod deck;
 mod derived;
 mod engine;
 mod error;
@@ -58,6 +59,11 @@ pub use contracts::{
     ExecutionSummary, ProposalPreview, ProposalSource, ProposalSourceType, ProposalStatus,
     ResourceOutput, TransactionProposal, TransactionProposalSummary, CANCEL_OWNER_DAEMON,
     CANCEL_OWNER_DESKTOP, CANCEL_OWNER_NONE,
+};
+pub use deck::{
+    resolve_deck_manifest_path, DeckAspectRatio, DeckError, DeckManifest, DeckPresentation,
+    DeckResult, DeckSlide, DeckTheme, DeckTransition, DeckTransitionDirection, DeckTransitionType,
+    DECK_FORMAT, DECK_MANIFEST_FILENAME, DECK_SUPPORTED_VERSION, MAX_DECK_SLIDES,
 };
 pub use derived::{
     cleanup_abandoned_staging, derived_dir, hash_builder_package, hash_input_pattern, hash_inputs,

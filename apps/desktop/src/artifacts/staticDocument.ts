@@ -45,8 +45,7 @@ function themeCss(vars: Record<string, string> | undefined): string {
   return declarations ? `:root{${declarations}}` : "";
 }
 
-/** Returns an inert standalone document suitable only for `sandbox=""`. */
-export function assembleStaticDocument(input: {
+export interface StaticDocumentInput {
   html: string;
   title?: string | null;
   styles?: string[];
@@ -54,7 +53,10 @@ export function assembleStaticDocument(input: {
   assets?: Record<string, string>;
   themeVars?: Record<string, string>;
   includeVocabulary?: boolean;
-}): string {
+}
+
+/** Returns an inert standalone document suitable only for `sandbox=""`. */
+export function assembleStaticDocument(input: StaticDocumentInput): string {
   const clean = DOMPurify.sanitize(input.html, {
     WHOLE_DOCUMENT: true,
     FORBID_TAGS: BLOCKED_TAGS,

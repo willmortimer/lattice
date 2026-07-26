@@ -158,6 +158,7 @@ export function readCanvasPalette(): CanvasPalette {
       notebook: yellow,
       ink: magenta,
       artifact: orange,
+      deck: orange,
       app: blue,
       workflow: cyan,
       task: green,

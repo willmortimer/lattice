@@ -9,6 +9,7 @@ export type ResourceKind =
   | "notebook"
   | "ink"
   | "artifact"
+  | "deck"
   | "app"
   | "workflow"
   | "task"
