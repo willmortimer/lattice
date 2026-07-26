@@ -346,8 +346,10 @@ summaries per [canvas and composition](./08-canvas-and-composition.md).
 ## Artifacts and live embeds (Phase E1)
 
 `.artifact/` packages declare `format: lattice-artifact` in `artifact.yaml`
-with an HTML `entrypoint`, named `BindingSpec` bindings, deny-by-default
-`permissions.network: []`, and an optional `fallback`.
+with an HTML `entrypoint` and an optional `profile`. v2 `static` packages may
+declare ordered package-local CSS and `ui: lattice-static@1`; they are
+sanitized, CSP-protected and rendered with a bare script-free iframe. v1 is
+preserved as a labelled legacy interactive profile with its narrow bridge.
 
 Desktop:
 

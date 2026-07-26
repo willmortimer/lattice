@@ -449,6 +449,8 @@ export function useResourceController(options: ResourceControllerOptions): Resou
               version: 1,
               title: "Browser demo artifact",
               entrypoint: "./index.html",
+              profile: "component",
+              styles: [],
               bindings: {},
               permissions: { network: [], workspaceWrite: [] },
               fallback: { text: "Open in the native app to run sandboxed artifacts." },

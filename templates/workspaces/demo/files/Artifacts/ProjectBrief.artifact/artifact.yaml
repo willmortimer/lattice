@@ -1,0 +1,10 @@
+format: lattice-artifact
+version: 2
+profile: static
+ui: lattice-static@1
+title: Project brief
+entrypoint: ./index.html
+styles:
+  - ./brief.css
+fallback:
+  text: Open index.html as source when static preview is unavailable.

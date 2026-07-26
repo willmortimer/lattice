@@ -9,6 +9,9 @@ export interface ArtifactManifestDto {
   version: number;
   title?: string | null;
   entrypoint: string;
+  profile: "static" | "component" | "application";
+  ui?: string | null;
+  styles: string[];
   bindings: Record<string, BindingSpec>;
   permissions: {
     network: string[];
@@ -27,6 +30,8 @@ export interface ArtifactEntrypointDto {
   packagePath: string;
   title?: string | null;
   bindingNames: string[];
+  styles: string[];
+  assets: Record<string, string>;
 }
 
 /** Load and validate `artifact.yaml` for a workspace-relative `.artifact/` package. */
