@@ -1,0 +1,7 @@
+# Terminal-native — a wide mono carries display, Plex Sans keeps UI legible.
+name: Console
+id: console
+fonts:
+  display: '"Martian Mono Variable", "Martian Mono", ui-monospace, "SF Mono", Menlo, monospace'
+  ui: '"IBM Plex Sans Variable", "IBM Plex Sans", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'

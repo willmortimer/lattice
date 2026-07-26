@@ -1,0 +1,7 @@
+# Swiss-neutral, no serif anywhere — Inter Tight display over Inter UI.
+name: Foundry
+id: foundry
+fonts:
+  display: '"Inter Tight Variable", "Inter Tight", "Inter Variable", "Inter", system-ui, sans-serif'
+  ui: '"Inter Variable", "Inter", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'

@@ -17,9 +17,9 @@ Built-ins fall into three groups:
   panels).
 - **Terminal-derived palettes** — `catppuccin-mocha`, `nord`,
   `github-dark`, `dracula`, `solarized-dark`, `tokyo-night`, `gruvbox-dark`,
-  `one-dark`, `rose-pine-moon`, and `kanagawa-wave`. These carry a `terminal:`
-  block with an ANSI palette adapted from the corresponding terminal theme
-  (see below).
+  `one-dark`, `rose-pine-moon`, `kanagawa-wave`, `everforest-dark`, and
+  `ayu-dark`. These carry a `terminal:` block with an ANSI palette adapted
+  from the corresponding terminal theme (see below).
 
 ## Compile (site + static desktop tokens)
 

@@ -49,6 +49,24 @@ fn builtin_font_packs_parse() {
 }
 
 #[test]
+fn builtin_font_pack_ids_and_names_are_unique() {
+    let mut ids: Vec<&str> = BUILTIN_FONT_PACK_IDS.to_vec();
+    ids.sort_unstable();
+    let count = ids.len();
+    ids.dedup();
+    assert_eq!(ids.len(), count, "duplicate builtin font pack id");
+
+    let mut names: Vec<String> = BUILTIN_FONT_PACK_IDS
+        .iter()
+        .map(|id| load_builtin_font_pack(id).unwrap().name)
+        .collect();
+    names.sort();
+    let count = names.len();
+    names.dedup();
+    assert_eq!(names.len(), count, "duplicate builtin font pack name");
+}
+
+#[test]
 fn cupertino_defaults_to_apple_font_pack() {
     let doc = load_builtin("cupertino").unwrap();
     assert_eq!(doc.font_pack, "apple");
@@ -121,10 +139,9 @@ fn discover_font_packs_lists_builtins() {
     let home = ensure_lattice_home().unwrap();
     let (packs, diags) = discover_font_packs(&home).unwrap();
     assert!(diags.is_empty());
-    assert!(packs.iter().any(|p| p.id == "lattice"));
-    assert!(packs.iter().any(|p| p.id == "apple"));
-    assert!(packs.iter().any(|p| p.id == "atelier"));
-    assert!(packs.iter().any(|p| p.id == "signal"));
+    for id in BUILTIN_FONT_PACK_IDS {
+        assert!(packs.iter().any(|p| p.id == *id), "missing pack {id}");
+    }
     std::env::remove_var("LATTICE_HOME");
 }
 

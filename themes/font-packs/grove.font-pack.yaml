@@ -1,0 +1,7 @@
+# Warm humanist for low-contrast grounds — Petrona display, Nunito Sans UI.
+name: Grove
+id: grove
+fonts:
+  display: '"Petrona Variable", "Petrona", Georgia, serif'
+  ui: '"Nunito Sans Variable", "Nunito Sans", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'

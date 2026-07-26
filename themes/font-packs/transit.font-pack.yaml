@@ -1,0 +1,7 @@
+# Industrial signage — Archivo carries display and UI, Roboto Mono for code.
+name: Transit
+id: transit
+fonts:
+  display: '"Archivo Variable", "Archivo", system-ui, sans-serif'
+  ui: '"Archivo Variable", "Archivo", system-ui, sans-serif'
+  mono: '"Roboto Mono Variable", "Roboto Mono", ui-monospace, "SF Mono", Menlo, monospace'

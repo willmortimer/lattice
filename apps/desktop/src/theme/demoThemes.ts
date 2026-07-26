@@ -30,7 +30,7 @@ const DEFAULT_PREFS: DemoPrefs = {
   fontPack: FOLLOW_THEME,
 };
 
-const FONT_PACKS: Record<
+export const FONT_PACKS: Record<
   string,
   {
     name: string;
@@ -69,6 +69,114 @@ const FONT_PACKS: Record<
       mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace',
     },
   },
+  foundry: {
+    name: "Foundry",
+    fonts: {
+      display:
+        '"Inter Tight Variable", "Inter Tight", "Inter Variable", "Inter", system-ui, sans-serif',
+      ui: '"Inter Variable", "Inter", system-ui, sans-serif',
+      mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace',
+    },
+  },
+  console: {
+    name: "Console",
+    fonts: {
+      display: '"Martian Mono Variable", "Martian Mono", ui-monospace, "SF Mono", Menlo, monospace',
+      ui: '"IBM Plex Sans Variable", "IBM Plex Sans", system-ui, sans-serif',
+      mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace',
+    },
+  },
+  ledger: {
+    name: "Ledger",
+    fonts: {
+      display: '"Source Serif 4 Variable", "Source Serif 4", Georgia, serif',
+      ui: '"Source Sans 3 Variable", "Source Sans 3", system-ui, sans-serif',
+      mono: '"Source Code Pro Variable", "Source Code Pro", ui-monospace, "SF Mono", Menlo, monospace',
+    },
+  },
+  almanac: {
+    name: "Almanac",
+    fonts: {
+      display: '"EB Garamond Variable", "EB Garamond", Georgia, serif',
+      ui: '"Work Sans Variable", "Work Sans", system-ui, sans-serif',
+      mono: '"Fira Code Variable", "Fira Code", ui-monospace, "SF Mono", Menlo, monospace',
+    },
+  },
+  instrument: {
+    name: "Instrument",
+    fonts: {
+      display: '"Instrument Serif", Georgia, serif',
+      ui: '"Instrument Sans Variable", "Instrument Sans", system-ui, sans-serif',
+      mono: '"Geist Mono Variable", "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace',
+    },
+  },
+  meridian: {
+    name: "Meridian",
+    fonts: {
+      display: '"Geist Variable", "Geist", system-ui, sans-serif',
+      ui: '"Geist Variable", "Geist", system-ui, sans-serif',
+      mono: '"Geist Mono Variable", "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace',
+    },
+  },
+  bulletin: {
+    name: "Bulletin",
+    fonts: {
+      display: '"Bricolage Grotesque Variable", "Bricolage Grotesque", system-ui, sans-serif',
+      ui: '"Public Sans Variable", "Public Sans", system-ui, sans-serif',
+      mono: '"Azeret Mono Variable", "Azeret Mono", ui-monospace, "SF Mono", Menlo, monospace',
+    },
+  },
+  marquee: {
+    name: "Marquee",
+    fonts: {
+      display: '"Bodoni Moda Variable", "Bodoni Moda", Georgia, serif',
+      ui: '"Manrope Variable", "Manrope", system-ui, sans-serif',
+      mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace',
+    },
+  },
+  draft: {
+    name: "Draft",
+    fonts: {
+      display: '"Crimson Pro Variable", "Crimson Pro", Georgia, serif',
+      ui: '"Karla Variable", "Karla", system-ui, sans-serif',
+      mono: '"Red Hat Mono Variable", "Red Hat Mono", ui-monospace, "SF Mono", Menlo, monospace',
+    },
+  },
+  transit: {
+    name: "Transit",
+    fonts: {
+      display: '"Archivo Variable", "Archivo", system-ui, sans-serif',
+      ui: '"Archivo Variable", "Archivo", system-ui, sans-serif',
+      mono: '"Roboto Mono Variable", "Roboto Mono", ui-monospace, "SF Mono", Menlo, monospace',
+    },
+  },
+  legible: {
+    name: "Legible",
+    fonts: {
+      display:
+        '"Atkinson Hyperlegible Next Variable", "Atkinson Hyperlegible Next", system-ui, sans-serif',
+      ui: '"Atkinson Hyperlegible Next Variable", "Atkinson Hyperlegible Next", system-ui, sans-serif',
+      mono: '"Atkinson Hyperlegible Mono Variable", "Atkinson Hyperlegible Mono", ui-monospace, "SF Mono", Menlo, monospace',
+    },
+  },
+  teletype: {
+    name: "Teletype",
+    fonts: {
+      display:
+        '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace',
+      ui: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace',
+      mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace',
+    },
+  },
+  grove: {
+    name: "Grove",
+    fonts: {
+      display: '"Petrona Variable", "Petrona", Georgia, serif',
+      ui: '"Nunito Sans Variable", "Nunito Sans", system-ui, sans-serif',
+      mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace',
+    },
+  },
+};
 };
 
 function themeDefaultFontPack(themeId: string): string {
