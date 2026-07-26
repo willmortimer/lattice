@@ -95,8 +95,24 @@ sources directly.
 Deck v1 accepts only package-relative paths and validates referenced files
 after symlink resolution. This prevents a deck manifest from silently reading
 outside its own package. The initial resource core recognizes and validates
-decks; presentation UI, exports, remote controls, and viewbox composition are
+decks. Presentation UI, exports, remote controls, and viewbox composition are
 separate capabilities.
+
+### Static resource viewboxes
+
+Slides may contain a script-free `<lattice-view resource="Notes/Plan.md">`
+element. `resource` is a workspace-relative path, resolved with lexical and
+post-symlink containment checks. The host replaces it with a bounded static
+card before the slide enters the inert document assembler: pages and selected
+ordinary text files receive excerpts; packages, tasks, notebooks, PDFs, and
+other non-raster resources receive typed metadata cards; raster images may be
+inlined only up to 8 MiB each and 32 MiB for a deck assembly. No resource is
+embedded as a live renderer or frame.
+
+`mode="live"` is preserved in source for the future component sandbox, but
+currently renders a clear static-fallback card. Missing, escaped, oversized,
+or unpreviewable resources render degraded cards rather than silently loading
+anything from outside the workspace.
 
 ## Package pattern
 

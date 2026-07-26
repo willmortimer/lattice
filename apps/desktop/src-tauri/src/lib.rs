@@ -9,6 +9,7 @@ mod data;
 mod dataset;
 mod dataset_sessions;
 mod derived;
+mod deck_views;
 mod github;
 mod gitlab;
 mod kernel;
@@ -209,6 +210,7 @@ pub fn run() {
             artifact::artifact_read_entrypoint,
             artifact::artifact_resolve_binding,
             deck::deck_load_session,
+            deck_views::deck_materialize_viewbox,
             workflow::workflow_load,
             workflow::workflow_run,
             workflow::workflow_cancel,
