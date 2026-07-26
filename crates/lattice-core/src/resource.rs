@@ -24,6 +24,8 @@ pub enum ResourceKind {
     Ink,
     /// Sandboxed HTML/CSS/JS mini-application package (`.artifact/`).
     Artifact,
+    /// Portable semantic slide deck package (`.deck/`).
+    Deck,
     /// Full source-backed application package (`.app/`).
     App,
     /// Inspectable automation resource (`.workflow.yaml`).
@@ -49,6 +51,7 @@ impl ResourceKind {
                 | ResourceKind::Dataset
                 | ResourceKind::Ink
                 | ResourceKind::Artifact
+                | ResourceKind::Deck
                 | ResourceKind::App
                 | ResourceKind::Task
         )
@@ -61,6 +64,7 @@ impl ResourceKind {
             ResourceKind::Dataset => Some("dataset.yaml"),
             ResourceKind::Ink => Some("manifest.json"),
             ResourceKind::Artifact => Some("artifact.yaml"),
+            ResourceKind::Deck => Some("deck.yaml"),
             ResourceKind::App => Some("lattice-app.yaml"),
             ResourceKind::Task => Some("task.yaml"),
             _ => None,
@@ -77,6 +81,7 @@ impl ResourceKind {
                 Some("dataset") => ResourceKind::Dataset,
                 Some("ink") => ResourceKind::Ink,
                 Some("artifact") => ResourceKind::Artifact,
+                Some("deck") => ResourceKind::Deck,
                 Some("app") => ResourceKind::App,
                 Some("task") => ResourceKind::Task,
                 _ => ResourceKind::File,

@@ -107,16 +107,31 @@ pub fn resource_for_event(path: &Path) -> Option<Resource> {
     {
         return None;
     }
+    let kind = package_kind_for_path(path).unwrap_or_else(|| ResourceKind::classify(path, false));
     Some(Resource {
         path: path.to_path_buf(),
-        kind: ResourceKind::classify(path, false),
+        kind,
     })
+}
+
+fn package_kind_for_path(path: &Path) -> Option<ResourceKind> {
+    let name = path.file_name()?.to_str()?;
+    match name.rsplit_once('.').map(|(_, extension)| extension) {
+        Some("data") => Some(ResourceKind::DataApp),
+        Some("dataset") => Some(ResourceKind::Dataset),
+        Some("ink") => Some(ResourceKind::Ink),
+        Some("artifact") => Some(ResourceKind::Artifact),
+        Some("deck") => Some(ResourceKind::Deck),
+        Some("app") => Some(ResourceKind::App),
+        Some("task") => Some(ResourceKind::Task),
+        _ => None,
+    }
 }
 
 fn is_package_directory_name(name: &str) -> bool {
     matches!(
         name.rsplit_once('.').map(|(_, extension)| extension),
-        Some("data" | "dataset" | "ink" | "artifact" | "app" | "task")
+        Some("data" | "dataset" | "ink" | "artifact" | "deck" | "app" | "task")
     )
 }
 
@@ -227,6 +242,16 @@ mod tests {
             }
         );
         assert!(index.metadata(Path::new("renamed.txt")).unwrap().is_none());
+    }
+
+    #[test]
+    fn package_events_use_deck_kind_and_hide_children() {
+        let deck = resource_for_event(Path::new("Presentations/Review.deck")).unwrap();
+        assert_eq!(deck.kind, ResourceKind::Deck);
+        assert!(resource_for_event(Path::new("Presentations/Review.deck/deck.yaml")).is_none());
+        assert!(
+            resource_for_event(Path::new("Presentations/Review.deck/slides/title.html")).is_none()
+        );
     }
 
     #[test]

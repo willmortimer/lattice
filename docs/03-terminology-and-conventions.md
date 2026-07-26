@@ -29,7 +29,7 @@ conformance testing. It is not presented as a normal organizational template.
 
 ### Resource
 
-Any addressable item Lattice can inspect or render: page, dataset, view, canvas, notebook, ink drawing, artifact, app, workflow, task, file, query, form, or external connector target.
+Any addressable item Lattice can inspect or render: page, dataset, view, canvas, deck, notebook, ink drawing, artifact, app, workflow, task, file, query, form, or external connector target.
 
 ### Page
 
@@ -70,6 +70,11 @@ A package containing open typed stroke data, a portable preview, layers, coordin
 ### Artifact
 
 A sandboxed HTML/CSS/JavaScript mini-application, usually focused on one visualization, simulation, calculator, or interactive report.
+
+### Deck
+
+An open `.deck/` presentation package: a `deck.yaml` manifest, one semantic
+HTML source per slide, optional CSS theme, and optional Markdown speaker notes.
 
 ### Lattice App
 
@@ -148,6 +153,7 @@ Recommended package suffixes:
 Name.data/         mutable relational application
 Name.dataset/      analytical dataset
 Name.artifact/     HTML artifact
+Name.deck/         semantic presentation package
 Name.app/          full Lattice App
 Name.ink/          open ink package
 Name.task/         executable task package
@@ -161,6 +167,7 @@ Recommended manifest suffixes:
 *.workflow.yaml
 *.task.yaml
 *.artifact.yaml
+deck.yaml
 *.semantic-model.yaml
 *.lattice.yaml
 ```

@@ -46,6 +46,7 @@ The root manifest should remain small. Most metadata belongs beside the resource
 | Diagram | Mermaid, Graphviz DOT, SVG | rendered preview |
 | Chart | Vega-Lite/Vega | SVG/PNG/HTML preview |
 | Artifact | HTML/CSS/JS package | manifest, README, static preview |
+| Deck | semantic HTML slide package | `deck.yaml`, CSS theme, Markdown notes |
 | Lattice App | normal web source project | app manifest, build task, dist output |
 | Workflow | Lattice YAML or BPMN | DMN, forms, task references |
 | Documentation project | Markdown folder | docs manifest and generator adapters |
@@ -81,6 +82,21 @@ Every Lattice-owned format must have:
 - Conformance tests.
 - Human-readable documentation.
 - Security considerations.
+
+## Deck packages
+
+Decks are open `.deck/` directories. Version one keeps one semantic HTML file
+per slide, an optional package-local CSS theme, and optional Markdown speaker
+notes. `deck.yaml` is the navigation and presentation manifest; slide IDs are
+stable so deep links and future exports can target a slide without relying on
+its filename. Unsupported renderers can still open the HTML and Markdown
+sources directly.
+
+Deck v1 accepts only package-relative paths and validates referenced files
+after symlink resolution. This prevents a deck manifest from silently reading
+outside its own package. The initial resource core recognizes and validates
+decks; presentation UI, exports, remote controls, and viewbox composition are
+separate capabilities.
 
 ## Package pattern
 
