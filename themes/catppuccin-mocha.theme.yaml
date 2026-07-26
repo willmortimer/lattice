@@ -69,7 +69,7 @@ terminal:
   cursor_text: $base
   selection: "#585b7066"
 
-font_pack: lattice
+font_pack: meridian
 
 shape:
   radius: 9px

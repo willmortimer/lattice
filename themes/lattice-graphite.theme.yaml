@@ -35,7 +35,7 @@ roles:
   danger: $danger
   shadow: $ink_shadow
 
-font_pack: lattice
+font_pack: console
 
 shape:
   radius: 9px

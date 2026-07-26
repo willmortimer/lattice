@@ -64,7 +64,7 @@ terminal:
   cursor_text: $storm
   selection: "#33467c"
 
-font_pack: lattice
+font_pack: meridian
 
 shape:
   radius: 9px

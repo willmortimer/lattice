@@ -65,7 +65,7 @@ terminal:
   cursor_text: $nord0
   selection: $nord2
 
-font_pack: lattice
+font_pack: signal
 
 shape:
   radius: 9px

@@ -20,8 +20,10 @@ Components must not branch on theme or pack ids.
    (user packs: `~/Lattice/Settings/font-packs/`).
 2. Each pack defines `display`, `ui`, and `mono` CSS font-family stacks.
 3. Theme documents reference a default pack via required `font_pack: <id>`
-   instead of inlining stacks. Cupertino’s default is `apple`; others default
-   to `lattice`.
+   instead of inlining stacks. Each theme names the pack that suits its
+   palette — Cupertino takes `apple`, Everforest takes `grove`, Solarized Dark
+   takes `teletype`, and so on; `lattice-slate` / `lattice-paper` keep the
+   house `lattice` pack. Unassigned or unknown ids fall back to `lattice`.
 4. Appearance settings may override the active pack (`fontPack: theme | <id>`)
    for A/B testing without editing themes. Resolution order:
    appearance override → theme default → builtin `lattice`.

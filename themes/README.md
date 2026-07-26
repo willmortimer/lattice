@@ -82,10 +82,28 @@ Typography is orthogonal to color themes (ADR 0047). Packs live in
 | `apple` | SF Pro Display | SF Pro Text | SF Mono |
 | `atelier` | Literata | Source Sans 3 | JetBrains Mono |
 | `signal` | Newsreader | IBM Plex Sans | JetBrains Mono |
+| `foundry` | Inter Tight | Inter | JetBrains Mono |
+| `console` | Martian Mono | IBM Plex Sans | JetBrains Mono |
+| `ledger` | Source Serif 4 | Source Sans 3 | Source Code Pro |
+| `almanac` | EB Garamond | Work Sans | Fira Code |
+| `instrument` | Instrument Serif | Instrument Sans | Geist Mono |
+| `meridian` | Geist | Geist | Geist Mono |
+| `bulletin` | Bricolage Grotesque | Public Sans | Azeret Mono |
+| `marquee` | Bodoni Moda | Manrope | JetBrains Mono |
+| `draft` | Crimson Pro | Karla | Red Hat Mono |
+| `transit` | Archivo | Archivo | Roboto Mono |
+| `legible` | Atkinson Hyperlegible Next | Atkinson Hyperlegible Next | Atkinson Hyperlegible Mono |
+| `teletype` | JetBrains Mono | JetBrains Mono | JetBrains Mono |
+| `grove` | Petrona | Nunito Sans | JetBrains Mono |
 
-Themes set `font_pack: <id>`. Appearance settings may override with
+Every theme sets `font_pack: <id>` — its default typography, the way
+`cupertino` defaults to `apple`. Appearance settings may override with
 `fontPack: theme | <id>` (Settings → Appearance). Resolution: appearance
 override → theme default → builtin `lattice`.
+
+The browser demo mirrors these defaults in
+`apps/desktop/src/theme/demoThemes.ts`; `demoThemes.test.ts` fails if the
+mirror drifts from the YAML.
 
 ## Terminal palettes (`terminal:`)
 

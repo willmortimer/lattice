@@ -69,7 +69,7 @@ terminal:
   cursor_text: $bg
   selection: $current_line
 
-font_pack: lattice
+font_pack: bulletin
 
 shape:
   radius: 9px

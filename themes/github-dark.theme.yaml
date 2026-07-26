@@ -74,7 +74,7 @@ terminal:
   cursor_text: $canvas
   selection: "#388bfd66"
 
-font_pack: lattice
+font_pack: foundry
 
 shape:
   radius: 6px
