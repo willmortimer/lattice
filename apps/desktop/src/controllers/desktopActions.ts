@@ -61,6 +61,7 @@ export interface DesktopActionsOptions {
     recordHistory?: boolean;
     viewName?: string;
     interfaceDef?: InterfaceSummary;
+    anchor?: string;
   }) => Promise<void>;
   openCreatedResource: (resource: Resource, session: OpenResourceSession) => void;
   reconcilePathRemaps?: (remaps: { from: string; to: string }[]) => Promise<void>;
@@ -348,6 +349,13 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
   const handleOpenFile = useCallback((path: string, subpath?: string) => {
     const resource = snapshot?.resources.find((entry) => entry.path === path);
     if (!resource) return;
+    // Canvas composition uses `slides/<id>` for Deck targets. Keep the anchor
+    // all the way to the session rather than opening the package at its start.
+    const deckMatch = resource.kind === "deck" ? /^slides\/([A-Za-z0-9_-]+)$/.exec(subpath ?? "") : null;
+    if (deckMatch) {
+      void handleSelect(resource, { anchor: deckMatch[1] });
+      return;
+    }
     const viewName = viewNameFromCanvasSubpath(subpath);
     if (viewName) {
       void handleSelect(resource, { viewName });

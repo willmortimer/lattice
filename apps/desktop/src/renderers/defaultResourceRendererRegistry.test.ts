@@ -39,6 +39,7 @@ describe("createDefaultResourceRendererRegistry", () => {
     expect(registry.resolve({ kind: "artifact", path: "Artifacts/Pulse.artifact" }).definition.id).toBe(
       "artifact-sandbox",
     );
+    expect(registry.resolve({ kind: "deck", path: "Quarterly.deck" }).definition.id).toBe("deck-presenter");
     expect(
       registry.resolve({ kind: "artifact", path: "Artifacts/Pulse.artifact" }, [], undefined, "embed")
         .definition.id,
