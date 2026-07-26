@@ -3,6 +3,7 @@ import type { InterfaceSummary } from "./data/interfaces";
 import type { PageIO } from "./editor/pageIO";
 import type { ArtifactManifestDto } from "./lib/artifactRun";
 import type { DerivedManifestDto, DerivedStatusDto } from "./lib/derivedRun";
+import type { DeckSessionDto } from "./lib/deckRun";
 import type { ResourceEncoding, ResourceInspection } from "./lib/resourceRuntime";
 import type { TaskManifestDto } from "./lib/taskRun";
 import type { WorkflowManifestDto } from "./lib/workflowRun";
@@ -80,6 +81,13 @@ export type OpenResourceSession =
       kind: "artifact";
       resource: Resource;
       manifest: ArtifactManifestDto;
+    }
+  | {
+      kind: "deck";
+      resource: Resource;
+      deck: DeckSessionDto;
+      /** Preserved from a resource anchor such as `Quarterly.deck#summary`. */
+      initialSlideId?: string | null;
     }
   | {
       kind: "github-file";

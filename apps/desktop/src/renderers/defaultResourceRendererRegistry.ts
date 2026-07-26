@@ -98,6 +98,11 @@ export function createDefaultResourceRendererRegistry(): ResourceRendererRegistr
           signal,
         ),
     });
+  registry.register(
+    definition("deck-presenter", "deck", undefined, (signal) =>
+      lazyImport(() => import("./DeckResourceRenderer").then((module) => module.DeckResourceRenderer), signal),
+    ),
+  );
   registerMediaResourceRenderers(registry);
   registerChartResourceRenderers(registry);
   registerTextResourceRenderers(registry);

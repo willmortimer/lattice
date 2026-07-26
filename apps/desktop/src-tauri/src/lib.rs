@@ -4,6 +4,7 @@ mod artifact;
 mod canvas;
 mod commands;
 mod daemon_session;
+mod deck;
 mod data;
 mod dataset;
 mod dataset_sessions;
@@ -207,6 +208,7 @@ pub fn run() {
             artifact::artifact_load_manifest,
             artifact::artifact_read_entrypoint,
             artifact::artifact_resolve_binding,
+            deck::deck_load_session,
             workflow::workflow_load,
             workflow::workflow_run,
             workflow::workflow_cancel,
