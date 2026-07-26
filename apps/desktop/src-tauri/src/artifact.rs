@@ -316,10 +316,9 @@ pub fn artifact_read_entrypoint(
             if !canonical.starts_with(&package_root) {
                 return Err("style escapes artifact package".into());
             }
-            let remaining = 1024
-                * 1024usize
-                    .checked_sub(total)
-                    .ok_or_else(|| "artifact stylesheet size overflow".to_string())?;
+            let remaining = (1024 * 1024usize)
+                .checked_sub(total)
+                .ok_or_else(|| "artifact stylesheet size overflow".to_string())?;
             let bytes = read_bounded(
                 &canonical,
                 remaining,
