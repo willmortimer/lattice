@@ -35,14 +35,18 @@ pub enum DeviceFlowPollResult {
     Error(String),
 }
 
-/// Pluggable HTTP surface so tests can stub GitHub.
-pub trait GitHubAuthClient: Send + Sync {
+/// Pluggable HTTP surface for OAuth form posts (device flow + code exchange).
+pub trait OAuthHttpClient: Send + Sync {
     fn post_form(&self, url: &str, form: &[(&str, &str)]) -> Result<String>;
 }
 
-pub struct HttpGitHubAuthClient;
+/// Back-compat alias for GitHub device-flow call sites.
+pub trait GitHubAuthClient: OAuthHttpClient {}
+impl<T: OAuthHttpClient + ?Sized> GitHubAuthClient for T {}
 
-impl GitHubAuthClient for HttpGitHubAuthClient {
+pub struct HttpOAuthClient;
+
+impl OAuthHttpClient for HttpOAuthClient {
     fn post_form(&self, url: &str, form: &[(&str, &str)]) -> Result<String> {
         let body = ureq::post(url)
             .set("Accept", "application/json")
@@ -50,6 +54,16 @@ impl GitHubAuthClient for HttpGitHubAuthClient {
             .map_err(|err| Error::http(err.to_string()))?;
         body.into_string()
             .map_err(|err| Error::http(err.to_string()))
+    }
+}
+
+/// Back-compat unit client for GitHub device-flow call sites.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct HttpGitHubAuthClient;
+
+impl OAuthHttpClient for HttpGitHubAuthClient {
+    fn post_form(&self, url: &str, form: &[(&str, &str)]) -> Result<String> {
+        HttpOAuthClient.post_form(url, form)
     }
 }
 
@@ -161,7 +175,7 @@ mod tests {
         responses: Mutex<Vec<String>>,
     }
 
-    impl GitHubAuthClient for ScriptedClient {
+    impl OAuthHttpClient for ScriptedClient {
         fn post_form(&self, _url: &str, _form: &[(&str, &str)]) -> Result<String> {
             let mut guard = self.responses.lock().unwrap();
             if guard.is_empty() {

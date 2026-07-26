@@ -9,6 +9,7 @@ mod dataset;
 mod dataset_sessions;
 mod derived;
 mod github;
+mod gitlab;
 mod kernel;
 mod link_repair;
 mod profile;
@@ -34,6 +35,7 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(watcher::WatcherState::default())
         .manage(terminal::TerminalState::default())
@@ -67,6 +69,24 @@ pub fn run() {
         })
         .setup(|app| {
             tray::install_tray(app.handle())?;
+            // Custom scheme `lattice://oauth/callback` completes OAuth sessions.
+            use tauri_plugin_deep_link::DeepLinkExt;
+            #[cfg(desktop)]
+            {
+                let _ = app.deep_link().register("lattice");
+            }
+            let handle = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                for url in event.urls() {
+                    let url = url.as_str().to_string();
+                    if url.starts_with("lattice://oauth/") {
+                        let _ = lattice_handlers::oauth_ingest_callback(url);
+                        if let Some(main) = handle.get_webview_window("main") {
+                            let _ = main.set_focus();
+                        }
+                    }
+                }
+            });
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -134,11 +154,25 @@ pub fn run() {
             commands::create_workspace,
             commands::list_templates,
             commands::update_workspace_manifest,
+            github::github_oauth_begin,
+            github::github_oauth_finish,
+            github::github_list_repos,
+            github::github_connect_repo,
             github::github_list_bindings,
             github::github_refresh_repo,
             github::github_disconnect_repo,
             github::github_list_checkout_tree,
             github::github_read_checkout_file,
+            gitlab::gitlab_oauth_begin,
+            gitlab::gitlab_oauth_finish,
+            gitlab::gitlab_list_projects,
+            gitlab::gitlab_connect_repo,
+            gitlab::gitlab_list_bindings,
+            gitlab::gitlab_refresh_repo,
+            gitlab::gitlab_disconnect_repo,
+            gitlab::gitlab_list_checkout_tree,
+            gitlab::gitlab_read_checkout_file,
+            gitlab::oauth_ingest_callback,
             profile::get_profile_snapshot,
             profile::save_desktop_settings,
             profile::save_workspace_startup_settings,

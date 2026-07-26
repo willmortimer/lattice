@@ -1,8 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import type { ConnectedRepoSummary } from "./github";
+import type { ConnectedRepoSummary, GithubOAuthStartResult } from "./github";
 
-describe("github binding summary", () => {
+describe("github oauth + binding types", () => {
+  it("exposes browser OAuth start fields", () => {
+    const start: GithubOAuthStartResult = {
+      sessionId: "s1",
+      authorizeUrl: "https://github.com/login/oauth/authorize?client_id=x",
+      redirectUri: "http://127.0.0.1:17872/callback",
+    };
+    expect(start.redirectUri).toContain("17872");
+  });
+
   it("exposes read-only binding fields for the Connected tree", () => {
     const summary: ConnectedRepoSummary = {
       checkout_exists: true,

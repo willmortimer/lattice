@@ -11,7 +11,9 @@
 
 mod error;
 mod github;
+mod gitlab;
 mod home;
+mod oauth;
 mod page;
 mod path;
 mod search;
@@ -19,9 +21,16 @@ mod workspace;
 
 pub use error::{command_error_to_string, STALE_REVISION_PREFIX};
 pub use github::{
-    github_disconnect_repo, github_list_bindings, github_list_checkout_tree,
-    github_read_checkout_file, github_refresh_repo,
+    github_connect_repo, github_disconnect_repo, github_list_bindings, github_list_checkout_tree,
+    github_list_repos, github_oauth_begin, github_oauth_finish, github_read_checkout_file,
+    github_refresh_repo, GithubOAuthStartResult,
 };
+pub use gitlab::{
+    gitlab_connect_repo, gitlab_disconnect_repo, gitlab_list_bindings, gitlab_list_checkout_tree,
+    gitlab_list_projects, gitlab_oauth_begin, gitlab_oauth_begin_loopback, gitlab_oauth_finish,
+    gitlab_read_checkout_file, gitlab_refresh_repo, GitlabOAuthStartResult,
+};
+pub use oauth::oauth_ingest_callback;
 pub use home::{
     create_workspace, ensure_home, list_templates, LatticeHomeInfo, WorkspaceProvisionResult,
 };

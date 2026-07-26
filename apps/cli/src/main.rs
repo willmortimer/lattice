@@ -196,10 +196,15 @@ enum Command {
         #[command(subcommand)]
         command: WorkflowCommand,
     },
-    /// GitHub App connected repos (login/connect via CLI; desktop browses only).
+    /// GitHub App connected repos (CLI device flow; desktop browser OAuth).
     Github {
         #[command(subcommand)]
         command: GithubCommand,
+    },
+    /// GitLab OAuth connected repos (CLI loopback OAuth; desktop custom-scheme OAuth).
+    Gitlab {
+        #[command(subcommand)]
+        command: GitlabCommand,
     },
 }
 
@@ -281,6 +286,38 @@ enum GithubCommand {
     /// Disconnect and delete a connected extract.
     Disconnect {
         /// Binding id or `owner/name`.
+        target: String,
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum GitlabCommand {
+    /// Browser loopback login (`LATTICE_GITLAB_OAUTH_CLIENT_ID` + secret).
+    Login,
+    /// Shallow-clone a project into `.lattice/connectors/gitlab/` (read-only extract).
+    Connect {
+        /// Project as `group/project` (path with namespace).
+        project: String,
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+    /// List connected GitLab extracts for a workspace.
+    List {
+        #[arg(long)]
+        root: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Refresh a connected extract (`binding id` or `group/project`).
+    Refresh {
+        target: String,
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+    /// Disconnect and delete a connected extract.
+    Disconnect {
         target: String,
         #[arg(long)]
         root: Option<PathBuf>,
@@ -875,6 +912,13 @@ fn run(command: Command) -> Result<ExitCode> {
             GithubCommand::List { root, json } => cmd_github_list(root, json),
             GithubCommand::Refresh { target, root } => cmd_github_refresh(target, root),
             GithubCommand::Disconnect { target, root } => cmd_github_disconnect(target, root),
+        },
+        Command::Gitlab { command } => match command {
+            GitlabCommand::Login => cmd_gitlab_login(),
+            GitlabCommand::Connect { project, root } => cmd_gitlab_connect(project, root),
+            GitlabCommand::List { root, json } => cmd_gitlab_list(root, json),
+            GitlabCommand::Refresh { target, root } => cmd_gitlab_refresh(target, root),
+            GitlabCommand::Disconnect { target, root } => cmd_gitlab_disconnect(target, root),
         },
     }
 }
@@ -2751,6 +2795,172 @@ fn cmd_github_disconnect(target: String, root: Option<PathBuf>) -> Result<ExitCo
     let binding_id = resolve_github_binding_id(ws.root(), &target)?;
     let store = github_token_store();
     lattice_connectors::disconnect_repo(ws.root(), store.as_ref(), &binding_id)
+        .map_err(|err| anyhow::anyhow!("{err}"))?;
+    println!("disconnected {binding_id}");
+    Ok(ExitCode::SUCCESS)
+}
+
+fn gitlab_token_store() -> Box<dyn lattice_connectors::TokenStore> {
+    use lattice_connectors::TokenStore;
+    let keychain =
+        lattice_connectors::KeychainTokenStore::with_service(lattice_connectors::GITLAB_TOKEN_SERVICE);
+    let probe = "lattice.gitlab.cli.probe";
+    match keychain.set(
+        probe,
+        &lattice_connectors::TokenMaterial {
+            access_token: "probe".into(),
+            refresh_token: None,
+            expires_in: None,
+            token_type: None,
+        },
+    ) {
+        Ok(()) => {
+            let _ = keychain.delete(probe);
+            Box::new(keychain)
+        }
+        Err(_) => Box::new(lattice_connectors::MemoryTokenStore::new()),
+    }
+}
+
+fn gitlab_client_id() -> Result<String> {
+    std::env::var("LATTICE_GITLAB_OAUTH_CLIENT_ID")
+        .context("set LATTICE_GITLAB_OAUTH_CLIENT_ID to your GitLab OAuth application id")
+}
+
+fn gitlab_client_secret() -> Result<String> {
+    std::env::var("LATTICE_GITLAB_OAUTH_CLIENT_SECRET")
+        .context("set LATTICE_GITLAB_OAUTH_CLIENT_SECRET for GitLab OAuth")
+}
+
+fn resolve_gitlab_binding_id(root: &Path, target: &str) -> Result<String> {
+    if !target.contains('/') {
+        return Ok(target.to_string());
+    }
+    let bindings = lattice_connectors::list_gitlab_bindings(root)
+        .map_err(|err| anyhow::anyhow!("{err}"))?;
+    bindings
+        .into_iter()
+        .find(|b| b.binding.path_with_namespace == target)
+        .map(|b| b.binding.id)
+        .with_context(|| format!("no connected GitLab project matching {target}"))
+}
+
+fn cmd_gitlab_login() -> Result<ExitCode> {
+    use lattice_connectors::TokenStore;
+    let client_id = gitlab_client_id()?;
+    let client_secret = gitlab_client_secret()?;
+    let start = lattice_connectors::oauth_begin(&lattice_connectors::OAuthClientConfig {
+        provider_id: "gitlab".into(),
+        authorize_url: lattice_connectors::GITLAB_AUTHORIZE_URL.into(),
+        token_url: lattice_connectors::GITLAB_OAUTH_TOKEN_URL.into(),
+        client_id: client_id.clone(),
+        scopes: vec!["read_api".into(), "read_repository".into()],
+        redirect: lattice_connectors::OAuthRedirectMode::Loopback {
+            port: lattice_connectors::DEFAULT_OAUTH_LOOPBACK_PORT,
+        },
+    })
+    .map_err(|err| anyhow::anyhow!("{err}"))?;
+    println!("Open this URL in a browser:\n{}\n", start.authorize_url);
+    println!(
+        "Waiting for callback on {} …",
+        start.redirect_uri
+    );
+    let material = lattice_connectors::oauth_finish_http(
+        &start.session_id,
+        &client_id,
+        &client_secret,
+        std::time::Duration::from_secs(300),
+    )
+    .map_err(|err| anyhow::anyhow!("{err}"))?;
+    let store = gitlab_token_store();
+    store
+        .set(lattice_connectors::GITLAB_USER_TOKEN_KEY, &material)
+        .map_err(|err| anyhow::anyhow!("{err}"))?;
+    println!("Logged in. Token stored for `lattice gitlab connect`.");
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_gitlab_connect(project_spec: String, root: Option<PathBuf>) -> Result<ExitCode> {
+    use lattice_connectors::TokenStore;
+    let start = cwd_or(root)?;
+    let ws = Workspace::discover(&start)?;
+    let store = gitlab_token_store();
+    let material = store
+        .get(lattice_connectors::GITLAB_USER_TOKEN_KEY)
+        .map_err(|err| anyhow::anyhow!("{err}"))?
+        .context("not logged in; run `lattice gitlab login` first")?;
+    let summary = lattice_connectors::get_project(
+        &lattice_connectors::HttpGitLabApiClient,
+        &material.access_token,
+        &project_spec,
+    )
+    .map_err(|err| anyhow::anyhow!("{err}"))?;
+    let connected = lattice_connectors::connect_gitlab_repo(
+        ws.root(),
+        store.as_ref(),
+        lattice_connectors::ConnectGitLabRepoInput {
+            path_with_namespace: summary.path_with_namespace,
+            project_id: summary.id,
+            default_branch: summary.default_branch,
+            access_token: material.access_token,
+        },
+    )
+    .map_err(|err| anyhow::anyhow!("{err}"))?;
+    println!(
+        "connected {} -> {} (binding {})",
+        connected.binding.path_with_namespace,
+        connected.binding.extract.path,
+        connected.binding.id
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_gitlab_list(root: Option<PathBuf>, json: bool) -> Result<ExitCode> {
+    let start = cwd_or(root)?;
+    let ws = Workspace::discover(&start)?;
+    let bindings = lattice_connectors::list_gitlab_bindings(ws.root())
+        .map_err(|err| anyhow::anyhow!("{err}"))?;
+    if json {
+        println!("{}", serde_json::to_string_pretty(&bindings)?);
+    } else if bindings.is_empty() {
+        println!("(no connected GitLab projects)");
+    } else {
+        for item in bindings {
+            let stale = if item.stale { " stale" } else { "" };
+            println!(
+                "{}\t{}\t{}{}",
+                item.binding.id,
+                item.binding.path_with_namespace,
+                item.binding.extract.path,
+                stale
+            );
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_gitlab_refresh(target: String, root: Option<PathBuf>) -> Result<ExitCode> {
+    let start = cwd_or(root)?;
+    let ws = Workspace::discover(&start)?;
+    let binding_id = resolve_gitlab_binding_id(ws.root(), &target)?;
+    let store = gitlab_token_store();
+    let connected =
+        lattice_connectors::refresh_gitlab_repo(ws.root(), store.as_ref(), &binding_id)
+            .map_err(|err| anyhow::anyhow!("{err}"))?;
+    println!(
+        "refreshed {} ({})",
+        connected.binding.path_with_namespace,
+        connected.binding.head_sha.as_deref().unwrap_or("unknown")
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_gitlab_disconnect(target: String, root: Option<PathBuf>) -> Result<ExitCode> {
+    let start = cwd_or(root)?;
+    let ws = Workspace::discover(&start)?;
+    let binding_id = resolve_gitlab_binding_id(ws.root(), &target)?;
+    let store = gitlab_token_store();
+    lattice_connectors::disconnect_gitlab_repo(ws.root(), store.as_ref(), &binding_id)
         .map_err(|err| anyhow::anyhow!("{err}"))?;
     println!("disconnected {binding_id}");
     Ok(ExitCode::SUCCESS)
