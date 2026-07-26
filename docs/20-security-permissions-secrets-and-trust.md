@@ -169,6 +169,19 @@ OpenTelemetry spans must not include document bodies, SQL result values, secrets
 
 Local encryption policy is primarily delegated to platform storage, full-disk encryption, and optional encrypted workspace providers. Cloud sync may support end-to-end encrypted opaque blobs for personal mode, with managed team mode offering server-side indexing only when intentionally enabled.
 
+Optional **workspace encryption** (DEK wrapping, biometric-gated key access) remains an open design track; see [ADR 0038](decisions/0038-workspace-encryption-os-keychain-and-local-authentication.md).
+
+## App lock (session privacy)
+
+The desktop shell may enable **app lock** (Settings → Privacy) on macOS:
+
+- Touch ID or device password unlocks the session via LocalAuthentication in Rust.
+- While locked, the UI shows a privacy overlay and privileged Tauri IPC returns `app-locked`.
+- Files on disk stay ordinary workspace content; app lock is not at-rest encryption.
+- The same `request_user_presence` helper is the intended hook for future privileged-action approvals.
+
+See [ADR 0049](decisions/0049-app-lock-session-privacy-local-authentication.md).
+
 ## Audit
 
 Record:
