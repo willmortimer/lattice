@@ -202,7 +202,7 @@ class PdfJsRendererSession implements PdfRendererSession {
       this.detachExternalAbort();
       this.transport.abort();
       await this.loadingTask.destroy().catch(() => undefined);
-      this.document.cleanup();
+      await this.document.cleanup().catch(() => undefined);
       this.worker.destroy();
     })();
     return this.disposePromise;
