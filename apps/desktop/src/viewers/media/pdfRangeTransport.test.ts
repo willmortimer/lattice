@@ -31,4 +31,15 @@ describe("PDF range transport", () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(transport.ranges.map((range) => range.length)).toEqual([PDF_RANGE_CHUNK_SIZE, PDF_RANGE_CHUNK_SIZE, 1]);
   });
+
+  it("rejects empty reads instead of leaving the renderer waiting", async () => {
+    await expect(
+      readPdfRangeInChunks(
+        0,
+        32,
+        { read: async () => new Uint8Array() },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow("empty chunk");
+  });
 });

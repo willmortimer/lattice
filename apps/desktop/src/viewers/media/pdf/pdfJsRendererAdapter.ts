@@ -247,7 +247,16 @@ class PdfJsPageHandle implements PdfPageHandle {
       textLayer = new this.pdfjs.TextLayer({ textContentSource: textContent, container: options.textLayer, viewport });
       await textLayer.render();
       return { width: viewport.width / options.scale, height: viewport.height / options.scale };
-    })().finally(() => options.signal.removeEventListener("abort", cancelForAbort));
+    })().catch((error: unknown) => {
+      if (
+        options.signal.aborted ||
+        (error instanceof Error &&
+          (error.name === "RenderingCancelledException" || error.name === "AbortException"))
+      ) {
+        throw abortError();
+      }
+      throw normalizePdfJsError(error);
+    }).finally(() => options.signal.removeEventListener("abort", cancelForAbort));
     return {
       promise,
       cancel() {

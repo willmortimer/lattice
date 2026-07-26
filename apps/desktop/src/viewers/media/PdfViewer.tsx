@@ -356,17 +356,6 @@ function PdfPageView({ session, pageNumber, scale, onPageSize, onError }: PdfPag
 function pdfErrorState(error: unknown): Extract<PdfState, { status: "error" }> {
   if (error instanceof MediaLimitError) return { status: "error", code: "oversized", message: error.message };
   if (error instanceof PdfRendererError) return { status: "error", code: error.code, message: error.message };
-  const message = errorMessage(error);
-  const lower = message.toLocaleLowerCase();
-  if (lower.includes("password") || lower.includes("encrypted")) {
-    return { status: "error", code: "encrypted", message: "This PDF is encrypted and cannot be opened in the built-in viewer." };
-  }
-  if (lower.includes("worker") || lower.includes("fake worker")) {
-    return { status: "error", code: "worker", message: "The PDF worker could not start. Open the file externally or rebuild the desktop bundle." };
-  }
-  if (lower.includes("abort") || lower.includes("missing") || lower.includes("range")) {
-    return { status: "error", code: "missing", message: "The PDF could not be read from the workspace." };
-  }
   return { status: "error", code: "malformed", message: "This PDF is malformed or unsupported by the built-in viewer." };
 }
 
@@ -375,7 +364,7 @@ function errorMessage(error: unknown): string {
 }
 
 function isRenderCancellation(error: unknown): boolean {
-  return error instanceof Error && (error.name === "RenderingCancelledException" || error.name === "AbortException");
+  return error instanceof Error && error.name === "AbortError";
 }
 
 export type { PageSize };

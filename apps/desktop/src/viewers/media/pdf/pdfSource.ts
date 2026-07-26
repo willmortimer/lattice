@@ -7,6 +7,7 @@ import {
 import { assertEncodedLimit, MAX_PDF_ENCODED_BYTES } from "../mediaLimits";
 import { PDF_RANGE_CHUNK_SIZE } from "../mediaLimits";
 import type { PdfSource } from "./pdfRenderer";
+import { PdfRendererError } from "./pdfRenderer";
 
 export interface PdfSourceLoader {
   inspect(location: ResourceLocation, signal: AbortSignal): Promise<ResourceInspection>;
@@ -27,9 +28,17 @@ export async function openWorkspacePdfSource(
   signal: AbortSignal,
   loader: PdfSourceLoader = nativePdfSourceLoader,
 ): Promise<PdfSource> {
-  const inspection = await loader.inspect(location, signal);
+  let inspection: ResourceInspection;
+  try {
+    inspection = await loader.inspect(location, signal);
+  } catch (error: unknown) {
+    if (signal.aborted) throw error;
+    throw new PdfRendererError("missing", "The PDF could not be inspected in the workspace.");
+  }
   assertEncodedLimit(inspection.size, MAX_PDF_ENCODED_BYTES, "PDF");
-  if (inspection.isDirectory) throw new Error("A directory cannot be opened as a PDF.");
+  if (inspection.isDirectory) {
+    throw new PdfRendererError("missing", "A directory cannot be opened as a PDF.");
+  }
 
   return {
     id: `${location.root}:${location.path}:${inspection.revision}`,
