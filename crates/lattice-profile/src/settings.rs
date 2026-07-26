@@ -392,6 +392,8 @@ pub struct DesktopSettings {
     pub services: ServicesSettings,
     #[serde(default)]
     pub search: SearchSettings,
+    #[serde(default)]
+    pub privacy: PrivacySettings,
 }
 
 impl Default for DesktopSettings {
@@ -407,8 +409,35 @@ impl Default for DesktopSettings {
             diagnostics: DiagnosticSettings::default(),
             services: ServicesSettings::default(),
             search: SearchSettings::default(),
+            privacy: PrivacySettings::default(),
         }
     }
+}
+
+/// Session privacy controls (app lock). Not workspace encryption.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrivacySettings {
+    /// When true, the desktop session starts locked and requires device auth.
+    #[serde(default)]
+    pub app_lock_enabled: bool,
+    /// Auto-lock after the main window is unfocused for this many minutes.
+    /// `0` disables idle auto-lock (launch, manual, and sleep locks still apply).
+    #[serde(default = "default_idle_lock_minutes")]
+    pub idle_lock_minutes: u32,
+}
+
+impl Default for PrivacySettings {
+    fn default() -> Self {
+        Self {
+            app_lock_enabled: false,
+            idle_lock_minutes: default_idle_lock_minutes(),
+        }
+    }
+}
+
+fn default_idle_lock_minutes() -> u32 {
+    5
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -838,5 +867,35 @@ mod tests {
             .unwrap();
         assert_eq!(partial.value.editor.autosave_delay_ms, 1500);
         assert!(!partial.value.search.semantic_enabled);
+    }
+
+    #[test]
+    fn privacy_app_lock_defaults_and_round_trips() {
+        assert!(!DesktopSettings::default().privacy.app_lock_enabled);
+        assert_eq!(DesktopSettings::default().privacy.idle_lock_minutes, 5);
+
+        let directory = tempfile::tempdir().unwrap();
+        let store = SettingsStore::new(directory.path());
+        std::fs::write(
+            store.path(DESKTOP_SETTINGS_SPEC),
+            "format: lattice-desktop-settings\nversion: 1\nprivacy:\n  appLockEnabled: true\n  idleLockMinutes: 15\n",
+        )
+        .unwrap();
+        let loaded = store
+            .load::<DesktopSettings>(DESKTOP_SETTINGS_SPEC)
+            .unwrap();
+        assert!(loaded.value.privacy.app_lock_enabled);
+        assert_eq!(loaded.value.privacy.idle_lock_minutes, 15);
+
+        std::fs::write(
+            store.path(DESKTOP_SETTINGS_SPEC),
+            "format: lattice-desktop-settings\nversion: 1\neditor:\n  autosaveDelayMs: 1500\n",
+        )
+        .unwrap();
+        let partial = store
+            .load::<DesktopSettings>(DESKTOP_SETTINGS_SPEC)
+            .unwrap();
+        assert!(!partial.value.privacy.app_lock_enabled);
+        assert_eq!(partial.value.privacy.idle_lock_minutes, 5);
     }
 }

@@ -86,6 +86,10 @@ export interface DesktopSettings {
   search: {
     semanticEnabled: boolean;
   };
+  privacy: {
+    appLockEnabled: boolean;
+    idleLockMinutes: number;
+  };
 }
 
 export interface WorkspaceStartupSettings {
@@ -164,6 +168,10 @@ export function defaultDesktopSettings(): DesktopSettings {
     },
     search: {
       semanticEnabled: false,
+    },
+    privacy: {
+      appLockEnabled: false,
+      idleLockMinutes: 5,
     },
   };
 }
@@ -271,6 +279,10 @@ function normalizeProfile(profile: ProfileSnapshot): ProfileSnapshot {
         search: {
           ...desktopDefaults.search,
           ...profile.settings.desktop?.search,
+        },
+        privacy: {
+          ...desktopDefaults.privacy,
+          ...profile.settings.desktop?.privacy,
         },
       },
       workspaces: {
