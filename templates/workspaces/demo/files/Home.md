@@ -125,6 +125,7 @@ recently shipped surface:
 | `Data/Metrics.data` | Decimal metrics and multiple layouts |
 | `OKRs.data` | Objective board |
 | `Artifacts/ContactPulse.artifact` | Sandboxed interactive artifact |
+| `Artifacts/ProjectBrief.artifact` | Script-free static HTML/CSS artifact |
 | `Derived/ContactBrief.derived.yaml` | Lineage, stale detection and rebuild |
 | `Notebooks/CRM exploration.ipynb` | Notebook resource path |
 | `Resources/` | JSON, YAML, TypeScript, SQL, text and SVG |

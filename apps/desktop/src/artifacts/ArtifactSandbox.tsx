@@ -14,6 +14,7 @@ import {
   readThemeMirror,
   selectThemeMirrorEntry,
 } from "../theme/apply";
+import { assembleStaticDocument } from "./staticDocument";
 import "./artifactResource.css";
 
 export interface ArtifactSandboxProps {
@@ -36,7 +37,12 @@ function parseHeight(height: string | number | null | undefined): CSSProperties 
   return { height: trimmed };
 }
 
-function collectThemeMessage(): ArtifactHostToFrameMessage {
+type ArtifactThemeMessage = Extract<
+  ArtifactHostToFrameMessage,
+  { type: "lattice.artifact.theme" }
+>;
+
+function collectThemeMessage(): ArtifactThemeMessage {
   const mirror = readThemeMirror();
   if (mirror) {
     const entry = selectThemeMirrorEntry(mirror, detectSystemAppearance());
@@ -64,8 +70,8 @@ function collectThemeMessage(): ArtifactHostToFrameMessage {
 }
 
 /**
- * Sandboxed artifact iframe: no ambient Tauri, theme mirrored via postMessage,
- * named BindingSpec resolution only, suspends when off-screen.
+ * Artifact host. v1 keeps its legacy interactive bridge; v2 static profiles
+ * are assembled into an inert, script-free bare iframe with no bridge at all.
  */
 export function ArtifactSandbox({
   root,
@@ -118,7 +124,19 @@ export function ArtifactSandbox({
     void readArtifactEntrypoint(root, packagePath)
       .then((entrypoint) => {
         if (controller.signal.aborted) return;
-        setSrcDoc(entrypoint.html);
+        if (manifest.profile === "static") {
+          const theme = collectThemeMessage();
+          setSrcDoc(assembleStaticDocument({
+            html: entrypoint.html,
+            title: manifest.title,
+            styles: entrypoint.styles,
+            assets: entrypoint.assets,
+            themeVars: theme.vars,
+            includeVocabulary: manifest.ui !== null && manifest.ui !== undefined ? manifest.ui === "lattice-static@1" : true,
+          }));
+        } else {
+          setSrcDoc(entrypoint.html);
+        }
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted) return;
@@ -129,10 +147,24 @@ export function ArtifactSandbox({
         if (!controller.signal.aborted) setBusy(false);
       });
     return () => controller.abort();
-  }, [packagePath, root, visible, manifest.entrypoint, manifest.packagePath]);
+  }, [
+    packagePath,
+    root,
+    visible,
+    manifest.entrypoint,
+    manifest.packagePath,
+    manifest.profile,
+    manifest.title,
+    manifest.ui,
+  ]);
+
+  const isStatic = manifest.profile === "static";
+  const unsupported =
+    (manifest.profile === "component" && manifest.version >= 2) ||
+    manifest.profile === "application";
 
   useEffect(() => {
-    if (!srcDoc || !root) return;
+    if (!srcDoc || !root || isStatic || unsupported) return;
 
     const onMessage = (event: MessageEvent) => {
       if (frameRef.current && event.source !== frameRef.current.contentWindow) return;
@@ -181,9 +213,10 @@ export function ArtifactSandbox({
 
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [packagePath, root, srcDoc]);
+  }, [packagePath, root, srcDoc, isStatic, unsupported]);
 
   const handleLoad = () => {
+    if (isStatic || unsupported) return;
     const win = frameRef.current?.contentWindow;
     if (!win) return;
     const bindingNames = Object.keys(manifest.bindings).sort();
@@ -222,12 +255,19 @@ export function ArtifactSandbox({
           {manifest.fallback.text ? <p>{manifest.fallback.text}</p> : null}
         </div>
       ) : null}
-      {visible && srcDoc && !error ? (
+      {unsupported && !error ? (
+        <div className="artifact-sandbox-fallback" role="status">
+          <p className="artifact-sandbox-status">
+            This {manifest.profile} artifact is recognized but needs the future component/application runtime. Source and fallback remain available.
+          </p>
+        </div>
+      ) : null}
+      {visible && srcDoc && !error && !unsupported ? (
         <iframe
           ref={frameRef}
           className="artifact-sandbox-frame"
           title={manifest.title ?? "Artifact"}
-          sandbox="allow-scripts"
+          sandbox={isStatic ? "" : "allow-scripts"}
           srcDoc={srcDoc}
           onLoad={handleLoad}
         />

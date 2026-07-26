@@ -29,7 +29,21 @@ export const textResourceRendererDefinition: TextResourceRendererDefinition = {
   lifecycle: { inactive: "unmount", cache: "module" },
 };
 
-export const textResourceRendererDefinitions = [textResourceRendererDefinition] as const;
+export const htmlResourceRendererDefinition: TextResourceRendererDefinition = {
+  id: "html-static-preview",
+  formatIds: ["file:html"],
+  surfaces: ["main", "embed"],
+  load: (signal) => {
+    if (signal.aborted) return Promise.reject(new DOMException("HTML renderer load was cancelled", "AbortError"));
+    return import("./HtmlResourceRenderer").then((module) => {
+      if (signal.aborted) throw new DOMException("HTML renderer load was cancelled", "AbortError");
+      return module.HtmlResourceRenderer;
+    });
+  },
+  lifecycle: { inactive: "unmount", cache: "module" },
+};
+
+export const textResourceRendererDefinitions = [htmlResourceRendererDefinition, textResourceRendererDefinition] as const;
 
 /** Register text/code/JSON/YAML renderers ahead of the generic file fallback. */
 export function registerTextResourceRenderers(
