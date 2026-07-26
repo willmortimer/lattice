@@ -16,8 +16,13 @@
     "opener:default",
     {
       "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "vscode://file/*" }]
+      "allow": [
+        { "url": "vscode://file/*" },
+        { "url": "https://github.com/*" },
+        { "url": "https://gitlab.com/*" }
+      ]
     },
+    "deep-link:default",
     "global-shortcut:allow-is-registered",
     "global-shortcut:allow-register",
     "global-shortcut:allow-unregister",
