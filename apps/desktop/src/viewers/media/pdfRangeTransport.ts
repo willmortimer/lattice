@@ -43,6 +43,7 @@ export function createPdfDataRangeTransport<T extends PdfDataRangeTransportLike>
   length: number,
   reader: PdfRangeReader,
   signal: AbortSignal,
+  onReadError?: (error: unknown) => void,
 ): T {
   const transport = new Constructor(length, null, false);
   const pending = new Map<string, Promise<void>>();
@@ -53,9 +54,10 @@ export function createPdfDataRangeTransport<T extends PdfDataRangeTransportLike>
       if (!signal.aborted) transport.onDataRange(offset, chunk);
     }).finally(() => pending.delete(key));
     pending.set(key, request);
-    void request.catch(() => {
+    void request.catch((error: unknown) => {
       // PDF.js will reject the loading task when its transport is aborted;
       // never publish partial data after a failed or stale request.
+      onReadError?.(error);
       transport.abort();
     });
   };

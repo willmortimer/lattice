@@ -171,15 +171,17 @@ Cleanup expectations when a resource closes or a load is superseded:
 | Asset | Owner | Cleanup |
 |---|---|---|
 | Blob object URLs (images) | `createObjectUrlLease` | `revoke()` once; idempotent |
-| PDF.js worker and document | `PdfViewer` loading task | `loadingTask.destroy()`; worker terminated with document |
-| PDF range transport | `createPdfDataRangeTransport` | Owning task destroys transport; abort is side-effect free to avoid cancelling newer documents |
+| PDF.js worker and document | `PdfJsRendererSession` | idempotent `dispose()` calls `loadingTask.destroy()` and terminates the worker |
+| PDF page render | `PdfPageHandle` | eviction aborts and cancels render work before page cleanup |
+| PDF range transport | `createPdfDataRangeTransport` | owning adapter destroys the loading task; transport abort remains side-effect free to avoid cancelling newer documents |
 | Pixi canvas scene | `CanvasViewer` | `scene.destroy()` on unmount or resource change |
 | Structured parser worker | `TextViewer` / CodeMirror | `worker.terminate()` on dispose |
 | CodeMirror view | `TextCodeMirror` | `view.destroy()` on unmount |
 
 Blob URLs, workers, and GPU scenes must not leak across resource switches.
-Tests cover the object-URL lease, renderer-load cancellation, and load-gate
-supersession; integration smoke for PDF worker teardown remains manual.
+Tests cover the object-URL lease, renderer-load cancellation, PDF adapter
+source bounds, session disposal, page-render cancellation, and load-gate
+supersession; integration smoke for the PDF.js worker teardown remains manual.
 
 ## Notebook resources (Phase N3 + Phase-4 local)
 
