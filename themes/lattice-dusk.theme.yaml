@@ -1,0 +1,50 @@
+# Lattice Dusk — dim mid-tone dark.
+#
+# The house look at lower contrast: the other darks all sit at #06–#14 grounds
+# with near-white text, which is bright work in a dim room. Dusk raises the
+# ground and softens the ink for long sessions. Defaults to `atelier`.
+
+name: Lattice Dusk
+id: lattice-dusk
+appearance: dark
+
+palette:
+  ground: "#1e222a"
+  ground_raise: "#252a34"
+  panel: "#2c323d"
+  slate: "#8b98ad"
+  text: "#d6dbe4"
+  text_soft: "#aeb6c4"
+  muted: "#8a93a3"
+  faint: "#69717f"
+  accent: "#e0a458"
+  accent_bright: "#f3c68b"
+  accent_deep: "#b57f37"
+  danger: "#e88b7d"
+  ink_shadow: "#0b0d11"
+  on_accent: "#1e1509"
+
+roles:
+  bg: $ground
+  bg_raise: $ground_raise
+  panel: $panel
+  slate: $slate
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $accent
+  accent_bright: $accent_bright
+  accent_deep: $accent_deep
+  danger: $danger
+  shadow: $ink_shadow
+
+font_pack: atelier
+
+shape:
+  radius: 10px
+  radius_sm: 7px
+  radius_lg: 16px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px

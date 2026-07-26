@@ -1,0 +1,50 @@
+# Lattice Monochrome — no hue at all.
+#
+# The one built-in with a greyscale accent: signal comes from value, not color.
+# Danger stays red because that reading is semantic, not decorative. Defaults
+# to the `teletype` pack, which puts the whole shell in mono.
+
+name: Lattice Monochrome
+id: lattice-monochrome
+appearance: dark
+
+palette:
+  ground: "#0b0b0b"
+  ground_raise: "#121212"
+  panel: "#191919"
+  slate: "#9a9a9a"
+  text: "#ededed"
+  text_soft: "#c2c2c2"
+  muted: "#8f8f8f"
+  faint: "#616161"
+  accent: "#e4e4e4"
+  accent_bright: "#ffffff"
+  accent_deep: "#a8a8a8"
+  danger: "#ff6b5e"
+  ink_shadow: "#000000"
+  on_accent: "#0b0b0b"
+
+roles:
+  bg: $ground
+  bg_raise: $ground_raise
+  panel: $panel
+  slate: $slate
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $accent
+  accent_bright: $accent_bright
+  accent_deep: $accent_deep
+  danger: $danger
+  shadow: $ink_shadow
+
+font_pack: teletype
+
+shape:
+  radius: 4px
+  radius_sm: 2px
+  radius_lg: 8px
+  grid: 32px
+  titlebar: 38px
+  max_width: 1140px

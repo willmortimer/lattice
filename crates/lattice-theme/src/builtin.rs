@@ -94,6 +94,18 @@ const BUILTINS: &[(&str, &str)] = &[
         "lattice-limestone",
         include_str!("../../../themes/lattice-limestone.theme.yaml"),
     ),
+    (
+        "lattice-daylight",
+        include_str!("../../../themes/lattice-daylight.theme.yaml"),
+    ),
+    (
+        "lattice-dusk",
+        include_str!("../../../themes/lattice-dusk.theme.yaml"),
+    ),
+    (
+        "lattice-monochrome",
+        include_str!("../../../themes/lattice-monochrome.theme.yaml"),
+    ),
     // Platform looks
     (
         "cupertino",
@@ -141,6 +153,14 @@ const BUILTINS: &[(&str, &str)] = &[
         "kanagawa-wave",
         include_str!("../../../themes/kanagawa-wave.theme.yaml"),
     ),
+    (
+        "everforest-dark",
+        include_str!("../../../themes/everforest-dark.theme.yaml"),
+    ),
+    (
+        "ayu-dark",
+        include_str!("../../../themes/ayu-dark.theme.yaml"),
+    ),
 ];
 
 /// Ids of themes shipped with Lattice.
@@ -167,6 +187,9 @@ pub const BUILTIN_IDS: &[&str] = &[
     "lattice-solar-flare",
     "lattice-tidepool",
     "lattice-limestone",
+    "lattice-daylight",
+    "lattice-dusk",
+    "lattice-monochrome",
     "cupertino",
     "lattice-oled",
     "catppuccin-mocha",
@@ -179,6 +202,8 @@ pub const BUILTIN_IDS: &[&str] = &[
     "one-dark",
     "rose-pine-moon",
     "kanagawa-wave",
+    "everforest-dark",
+    "ayu-dark",
 ];
 
 /// Load a built-in theme by id.

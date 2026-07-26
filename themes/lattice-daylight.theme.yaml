@@ -1,0 +1,50 @@
+# Lattice Daylight — high-contrast light.
+#
+# Every other light built-in is tinted and soft; this one is the accessibility
+# corner: pure white ground, near-black ink, and a deep blue accent that clears
+# WCAG AA against both. Defaults to the `legible` font pack.
+
+name: Lattice Daylight
+id: lattice-daylight
+appearance: light
+
+palette:
+  ground: "#ffffff"
+  ground_raise: "#f1f3f7"
+  panel: "#ffffff"
+  slate: "#48536b"
+  text: "#0b0e14"
+  text_soft: "#252c3a"
+  muted: "#4a5162"
+  faint: "#6b7285"
+  accent: "#1d4ed8"
+  accent_bright: "#1233a8"
+  accent_deep: "#0d2578"
+  danger: "#a4161a"
+  ink_shadow: "#05070c"
+  on_accent: "#ffffff"
+
+roles:
+  bg: $ground
+  bg_raise: $ground_raise
+  panel: $panel
+  slate: $slate
+  text: $text
+  text_soft: $text_soft
+  muted: $muted
+  faint: $faint
+  accent: $accent
+  accent_bright: $accent_bright
+  accent_deep: $accent_deep
+  danger: $danger
+  shadow: $ink_shadow
+
+font_pack: legible
+
+shape:
+  radius: 6px
+  radius_sm: 4px
+  radius_lg: 10px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px

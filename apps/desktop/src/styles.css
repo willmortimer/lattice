@@ -5583,6 +5583,21 @@ html[data-motion="always"] *::after {
 .theme-swatch-kanagawa-wave {
   background: linear-gradient(135deg, #1f1f28 0 68%, #7e9cd8 68%);
 }
+.theme-swatch-lattice-daylight {
+  background: linear-gradient(135deg, #ffffff 0 68%, #1d4ed8 68%);
+}
+.theme-swatch-lattice-dusk {
+  background: linear-gradient(135deg, #1e222a 0 68%, #e0a458 68%);
+}
+.theme-swatch-lattice-monochrome {
+  background: linear-gradient(135deg, #0b0b0b 0 68%, #e4e4e4 68%);
+}
+.theme-swatch-everforest-dark {
+  background: linear-gradient(135deg, #2d353b 0 68%, #a7c080 68%);
+}
+.theme-swatch-ayu-dark {
+  background: linear-gradient(135deg, #0b0e14 0 68%, #ffb454 68%);
+}
 
 .inspector {
   width: 294px;

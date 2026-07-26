@@ -180,7 +180,7 @@ export const FONT_PACKS: Record<
 };
 
 function themeDefaultFontPack(themeId: string): string {
-  return themeId === "cupertino" ? "apple" : "lattice";
+  return THEME_DEFAULT_FONT_PACKS[themeId] ?? "lattice";
 }
 
 function applyFontPack(

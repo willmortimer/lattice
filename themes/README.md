@@ -9,9 +9,11 @@ Built-ins fall into three groups:
 
 - **Lattice originals** — `lattice-slate` (default dark), `lattice-paper`
   (default light), plus carbon, fjord, ultraviolet, blueprint, ember, moss,
-  midnight, copper, rosewood, graphite, solar flare, and tidepool (dark), and
-  vellum, glacier, sandstone, orchid, meadow, porcelain, matcha, and limestone
-  (light).
+  midnight, copper, rosewood, graphite, solar flare, tidepool, `lattice-dusk`
+  (dim mid-tone ground for long sessions), and `lattice-monochrome` (greyscale
+  accent — signal from value, not hue) (dark), and vellum, glacier, sandstone,
+  orchid, meadow, porcelain, matcha, limestone, and `lattice-daylight`
+  (high-contrast white ground) (light).
 - **Platform looks** — `cupertino` (macOS idiom: system blue, default
   `font_pack: apple`), `lattice-oled` (true `#000000` ground for AMOLED/OLED
   panels).
