@@ -42,6 +42,12 @@ import { hasTauri, invoke } from "../lib/ipc";
 import { listen } from "@tauri-apps/api/event";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import type { PaletteItem } from "../CommandPalette";
+import {
+  defaultAppLockStatus,
+  getAppLockStatus,
+  listenAppLock,
+  type AppLockStatus,
+} from "../lib/appLock";
 export function useDesktopController() {
   const {
     profile,
@@ -97,6 +103,7 @@ export function useDesktopController() {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [treeRenameRequest, setTreeRenameRequest] = useState<{ path: string; token: number } | null>(null);
+  const [appLock, setAppLock] = useState<AppLockStatus>(defaultAppLockStatus);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const pageEditorRef = useRef<PageEditorHandle>(null);
@@ -854,6 +861,32 @@ export function useDesktopController() {
     if (!hasTauri) return;
     let cancelled = false;
     let unlisten: (() => void) | undefined;
+    void getAppLockStatus()
+      .then((status) => {
+        if (!cancelled) setAppLock(status);
+      })
+      .catch(() => {
+        /* keep defaults until an event arrives */
+      });
+    void listenAppLock((status) => {
+      if (!cancelled) setAppLock(status);
+    }).then((fn) => {
+      if (cancelled) {
+        fn();
+        return;
+      }
+      unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasTauri) return;
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
     void listen<{ action: string }>("lattice-menu-action", (event) => {
       const action = event.payload.action;
       switch (action) {
@@ -963,7 +996,7 @@ export function useDesktopController() {
     setActivityArea, setInspectorOpen, setAgentPanelOpen, setDismissedNoticeCodes, setEditingTitle, setTitleDraft, setSidebarWidth,
     handleTreeCollapsedPathsChange,
     setLinkPicker,
-    setStatusToast, applyThemeCatalog, rememberWorkspace, clearRecents, resetSettings, handleGetStarted,
+    setStatusToast, applyThemeCatalog, rememberWorkspace, clearRecents, resetSettings, refreshProfile, handleGetStarted,
     handleOpenWorkspace, openRecent, handleCreateWorkspace, openNewWorkspaceDialog, pickWorkspaceFolder,
     handleNewPage, handleQuickNote, handleNewTable, handleImportCsv, handlePromoteWorkspaceCsv, handleUndo, handleSelect,
     applyTreeSelection: resourceController.applyTreeSelection,
@@ -979,5 +1012,7 @@ export function useDesktopController() {
     handleNotebookContentChange,
     handleRevisionChange,
     setSession,
+    appLock,
+    setAppLock,
   };
 }

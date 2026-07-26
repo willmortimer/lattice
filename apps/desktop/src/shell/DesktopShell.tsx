@@ -32,6 +32,7 @@ import { HomeDashboard } from "../shell/HomeDashboard";
 import { ResourceInspector } from "../shell/ResourceInspector";
 import { ResourceSurface } from "../shell/ResourceSurface";
 import { StartupSplash } from "../shell/StartupSplash";
+import { AppLockOverlay } from "../shell/AppLockOverlay";
 import { useStartupSplash } from "../shell/useStartupSplash";
 import { setAppearanceMode, setFixedTheme, setFontPack } from "../theme";
 import { fileTitle } from "../controllers/useResourceController";
@@ -83,7 +84,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
     recents, page, setSaveState, setLinkPicker, handleImportEditorAsset,
     setNewWorkspaceOpen, setSearchPaneOpen, setPaletteOpen, setActivityArea, setInspectorOpen, setAgentPanelOpen,
     setDismissedNoticeCodes, setEditingTitle, setTitleDraft, applyThemeCatalog,
-    clearRecents, resetSettings, handleGetStarted, handleOpenWorkspace, openRecent,
+    clearRecents, resetSettings, refreshProfile, handleGetStarted, handleOpenWorkspace, openRecent,
     handleCreateWorkspace, openNewWorkspaceDialog, pickWorkspaceFolder, handleNewPage, handleQuickNote,
     handleNewTable, handleImportCsv, handlePromoteWorkspaceCsv, handleSelect, applyTreeSelection, handleOpenExternally, handleOpenFile,
     handleKeepIncoming, handleKeepLocal, handleKeepBoth, handleTreeCollapsedPathsChange,
@@ -91,9 +92,12 @@ export function DesktopShell({ model }: DesktopShellProps) {
     handleNewFolderInFolder,
     treeRenameRequest,
     navigateHistory, closeTab, reorderTab, beginSidebarResize, commitTitle, updateWorkspaceSettings,
-    handleOpenWiki, openLinkTarget, handleNotebookContentChange, handleRevisionChange,
+    handleOpenWiki, openLinkTarget,     handleNotebookContentChange, handleRevisionChange,
     setSession,
+    appLock, setAppLock,
   } = model;
+
+  const sessionLocked = Boolean(appLock.enabled && appLock.locked);
 
   const splashVisible = useStartupSplash({
     enabled: startup.showStartupSplash !== false,
@@ -121,6 +125,17 @@ export function DesktopShell({ model }: DesktopShellProps) {
       <>
         <div className="native-titlebar" data-tauri-drag-region />
         <StartupSplash />
+      </>
+    );
+  }
+
+  if (sessionLocked) {
+    return (
+      <>
+        <div className="native-titlebar" data-tauri-drag-region />
+        <AppLockOverlay
+          onUnlocked={() => setAppLock((current) => ({ ...current, locked: false }))}
+        />
       </>
     );
   }
@@ -598,6 +613,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
                   onWorkspaceChange={(next) => void updateWorkspaceSettings(next)}
                   onClearRecents={clearRecents}
                   onReset={resetSettings}
+                  onRefreshProfile={refreshProfile}
                   onThemeChange={(themeId) =>
                     void setFixedTheme(themeId, snapshot.root)
                       .then(applyThemeCatalog)

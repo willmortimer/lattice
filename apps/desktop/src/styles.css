@@ -94,6 +94,58 @@ button {
   color: var(--lt-text);
 }
 
+.app-lock-overlay {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+  background: var(--lt-bg);
+  color: var(--lt-text);
+}
+
+.app-lock-overlay::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle at 0 0, var(--lt-node-dot) 1px, transparent 1.6px),
+    radial-gradient(460px 340px at 50% 40%, var(--lt-accent-wash), transparent 72%),
+    linear-gradient(var(--lt-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--lt-line) 1px, transparent 1px);
+  background-size:
+    34px 34px,
+    100% 100%,
+    34px 34px,
+    34px 34px;
+  background-position: center;
+  -webkit-mask-image: radial-gradient(ellipse 75% 65% at 50% 42%, #000 30%, transparent 100%);
+  mask-image: radial-gradient(ellipse 75% 65% at 50% 42%, #000 30%, transparent 100%);
+}
+
+.app-lock-overlay > * {
+  position: relative;
+}
+
+.app-lock-copy {
+  max-width: 28rem;
+  margin: 0;
+  color: var(--lt-text-soft);
+  font: 400 14px/1.45 var(--lt-font-ui);
+}
+
+.app-lock-error {
+  max-width: 28rem;
+  margin: 0;
+  color: var(--lt-danger, var(--lt-text-soft));
+  font: 400 13px/1.4 var(--lt-font-ui);
+}
+
 .fatal-error {
   display: grid;
   min-height: 100%;

@@ -5,6 +5,7 @@ import {
   Files,
   Gauge,
   Keyboard,
+  Lock,
   MagnifyingGlass,
   Microphone,
   Palette,
@@ -18,6 +19,7 @@ import { inBrowser } from "../demo";
 import type { ThemeCatalogPayload } from "../theme";
 import type { WorkspaceStartupSettings } from "../lib/profile";
 import type { PageWidth } from "../lib/pageWidth";
+import { enableAppLock, getAppLockStatus, type AppLockStatus } from "../lib/appLock";
 import { getVoiceStatus, listenVoiceEvents, prepareVoiceModel, type VoiceStatus } from "../lib/voice";
 import {
   disableSemanticSearch,
@@ -49,6 +51,7 @@ type SettingsSection =
   | "capabilities"
   | "search"
   | "voice"
+  | "privacy"
   | "performance"
   | "diagnostics";
 
@@ -68,6 +71,7 @@ interface SettingsPageProps {
   onThemeChange: (themeId: string) => void;
   onFollowSystem: () => void;
   onFontPackChange: (fontPack: string) => void;
+  onRefreshProfile?: () => void;
 }
 
 const SECTIONS = [
@@ -80,6 +84,7 @@ const SECTIONS = [
   { id: "capabilities" as const, label: "Enabled capabilities", icon: PuzzlePiece },
   { id: "search" as const, label: "Search", icon: MagnifyingGlass },
   { id: "voice" as const, label: "Voice dictation", icon: Microphone },
+  { id: "privacy" as const, label: "Privacy", icon: Lock },
   { id: "performance" as const, label: "Performance & lifecycle", icon: Gauge },
   { id: "diagnostics" as const, label: "Advanced diagnostics", icon: Pulse },
 ];
@@ -140,6 +145,7 @@ export function SettingsPage({
   onThemeChange,
   onFollowSystem,
   onFontPackChange,
+  onRefreshProfile,
 }: SettingsPageProps) {
   const [section, setSection] = useState<SettingsSection>("appearance");
   const [quickNoteDraft, setQuickNoteDraft] = useState(workspace.defaults.quickNoteDirectory);
@@ -541,6 +547,14 @@ export function SettingsPage({
 
         {section === "voice" && <VoiceDictationSettings />}
 
+        {section === "privacy" && (
+          <PrivacySettingsPanel
+            settings={settings}
+            onChange={onChange}
+            onRefreshProfile={onRefreshProfile}
+          />
+        )}
+
         {section === "performance" && (
           <>
             <h1>Performance and lifecycle</h1>
@@ -892,6 +906,130 @@ function SemanticSearchSettings({
             <div className="diagnostics-card" role="status">
               <strong>Details</strong>
               <span>{status.message}</span>
+            </div>
+          ) : null}
+        </>
+      )}
+    </>
+  );
+}
+
+function PrivacySettingsPanel({
+  settings,
+  onChange,
+  onRefreshProfile,
+}: {
+  settings: AppSettings;
+  onChange: (next: AppSettings) => void;
+  onRefreshProfile?: () => void;
+}) {
+  const [lockStatus, setLockStatus] = useState<AppLockStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const privacy = settings.privacy ?? { appLockEnabled: false, idleLockMinutes: 5 };
+
+  useEffect(() => {
+    if (inBrowser) return;
+    let cancelled = false;
+    void getAppLockStatus()
+      .then((status) => {
+        if (!cancelled) setLockStatus(status);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const platformSupported = lockStatus?.platformSupported ?? false;
+  const presenceAvailable = lockStatus?.presenceAvailable ?? false;
+
+  return (
+    <>
+      <h1>Privacy</h1>
+      <p className="settings-copy">
+        App lock hides the Lattice session and refuses privileged desktop commands until you
+        authenticate. It does not encrypt workspace files on disk — content remains inspectable
+        outside Lattice.
+      </p>
+      {inBrowser ? (
+        <div className="diagnostics-card">
+          <strong>Unavailable in browser demo</strong>
+          <span>App lock requires the native macOS desktop build with Touch ID or device password.</span>
+        </div>
+      ) : !platformSupported ? (
+        <div className="diagnostics-card">
+          <strong>macOS only</strong>
+          <span>App lock uses LocalAuthentication and is not available on this platform.</span>
+        </div>
+      ) : (
+        <>
+          <SettingRow
+            title="App lock"
+            description="Require Touch ID or your device password when Lattice launches, after idle, and from Lattice → Lock."
+          >
+            <Toggle
+              label="App lock"
+              checked={privacy.appLockEnabled}
+              onChange={(enabled) => {
+                if (!enabled) {
+                  onChange({
+                    ...settings,
+                    privacy: { ...privacy, appLockEnabled: false },
+                  });
+                  return;
+                }
+                setBusy(true);
+                setError(null);
+                void enableAppLock(privacy.idleLockMinutes)
+                  .then((status) => {
+                    setLockStatus(status);
+                    // Rust already persisted privacy settings; reload revision
+                    // instead of writing again through the debounced settings save.
+                    onRefreshProfile?.();
+                  })
+                  .catch((err: unknown) => {
+                    setError(err instanceof Error ? err.message : String(err));
+                  })
+                  .finally(() => setBusy(false));
+              }}
+            />
+          </SettingRow>
+          <SettingRow
+            title="Idle lock (minutes)"
+            description="Lock after the main window is unfocused for this many minutes. Use 0 to disable idle auto-lock (launch, manual Lock, and sleep still apply)."
+          >
+            <input
+              type="number"
+              min={0}
+              max={120}
+              value={privacy.idleLockMinutes}
+              disabled={busy}
+              onChange={(event) => {
+                const idleLockMinutes = Math.max(
+                  0,
+                  Math.min(120, Number(event.currentTarget.value) || 0),
+                );
+                onChange({
+                  ...settings,
+                  privacy: { ...privacy, idleLockMinutes },
+                });
+              }}
+            />
+          </SettingRow>
+          {!presenceAvailable ? (
+            <p className="settings-copy" role="status">
+              Device authentication is not available right now. Enroll Touch ID or set a
+              password in System Settings.
+            </p>
+          ) : null}
+          {busy ? <p className="settings-copy">Waiting for authentication…</p> : null}
+          {error ? (
+            <div className="diagnostics-card" role="alert">
+              <strong>App lock error</strong>
+              <span>{error}</span>
             </div>
           ) : null}
         </>
