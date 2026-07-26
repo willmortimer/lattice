@@ -1,0 +1,7 @@
+# Old-style editorial warmth — EB Garamond display, Work Sans UI, Fira mono.
+name: Almanac
+id: almanac
+fonts:
+  display: '"EB Garamond Variable", "EB Garamond", Georgia, serif'
+  ui: '"Work Sans Variable", "Work Sans", system-ui, sans-serif'
+  mono: '"Fira Code Variable", "Fira Code", ui-monospace, "SF Mono", Menlo, monospace'

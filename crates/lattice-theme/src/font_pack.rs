@@ -70,10 +70,80 @@ const BUILTIN_PACKS: &[(&str, &str)] = &[
         "signal",
         include_str!("../../../themes/font-packs/signal.font-pack.yaml"),
     ),
+    (
+        "foundry",
+        include_str!("../../../themes/font-packs/foundry.font-pack.yaml"),
+    ),
+    (
+        "console",
+        include_str!("../../../themes/font-packs/console.font-pack.yaml"),
+    ),
+    (
+        "ledger",
+        include_str!("../../../themes/font-packs/ledger.font-pack.yaml"),
+    ),
+    (
+        "almanac",
+        include_str!("../../../themes/font-packs/almanac.font-pack.yaml"),
+    ),
+    (
+        "instrument",
+        include_str!("../../../themes/font-packs/instrument.font-pack.yaml"),
+    ),
+    (
+        "meridian",
+        include_str!("../../../themes/font-packs/meridian.font-pack.yaml"),
+    ),
+    (
+        "bulletin",
+        include_str!("../../../themes/font-packs/bulletin.font-pack.yaml"),
+    ),
+    (
+        "marquee",
+        include_str!("../../../themes/font-packs/marquee.font-pack.yaml"),
+    ),
+    (
+        "draft",
+        include_str!("../../../themes/font-packs/draft.font-pack.yaml"),
+    ),
+    (
+        "transit",
+        include_str!("../../../themes/font-packs/transit.font-pack.yaml"),
+    ),
+    (
+        "legible",
+        include_str!("../../../themes/font-packs/legible.font-pack.yaml"),
+    ),
+    (
+        "teletype",
+        include_str!("../../../themes/font-packs/teletype.font-pack.yaml"),
+    ),
+    (
+        "grove",
+        include_str!("../../../themes/font-packs/grove.font-pack.yaml"),
+    ),
 ];
 
 /// Ids of font packs shipped with Lattice.
-pub const BUILTIN_FONT_PACK_IDS: &[&str] = &["lattice", "apple", "atelier", "signal"];
+pub const BUILTIN_FONT_PACK_IDS: &[&str] = &[
+    "lattice",
+    "apple",
+    "atelier",
+    "signal",
+    "foundry",
+    "console",
+    "ledger",
+    "almanac",
+    "instrument",
+    "meridian",
+    "bulletin",
+    "marquee",
+    "draft",
+    "transit",
+    "legible",
+    "teletype",
+    "grove",
+];
 
 /// Path used in errors for built-in packs.
 pub fn builtin_font_pack_path(id: &str) -> PathBuf {

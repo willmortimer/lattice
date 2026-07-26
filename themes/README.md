@@ -9,17 +9,19 @@ Built-ins fall into three groups:
 
 - **Lattice originals** — `lattice-slate` (default dark), `lattice-paper`
   (default light), plus carbon, fjord, ultraviolet, blueprint, ember, moss,
-  midnight, copper, rosewood, graphite, solar flare, and tidepool (dark), and
-  vellum, glacier, sandstone, orchid, meadow, porcelain, matcha, and limestone
-  (light).
+  midnight, copper, rosewood, graphite, solar flare, tidepool, `lattice-dusk`
+  (dim mid-tone ground for long sessions), and `lattice-monochrome` (greyscale
+  accent — signal from value, not hue) (dark), and vellum, glacier, sandstone,
+  orchid, meadow, porcelain, matcha, limestone, and `lattice-daylight`
+  (high-contrast white ground) (light).
 - **Platform looks** — `cupertino` (macOS idiom: system blue, default
   `font_pack: apple`), `lattice-oled` (true `#000000` ground for AMOLED/OLED
   panels).
 - **Terminal-derived palettes** — `catppuccin-mocha`, `nord`,
   `github-dark`, `dracula`, `solarized-dark`, `tokyo-night`, `gruvbox-dark`,
-  `one-dark`, `rose-pine-moon`, and `kanagawa-wave`. These carry a `terminal:`
-  block with an ANSI palette adapted from the corresponding terminal theme
-  (see below).
+  `one-dark`, `rose-pine-moon`, `kanagawa-wave`, `everforest-dark`, and
+  `ayu-dark`. These carry a `terminal:` block with an ANSI palette adapted
+  from the corresponding terminal theme (see below).
 
 ## Compile (site + static desktop tokens)
 
@@ -80,10 +82,28 @@ Typography is orthogonal to color themes (ADR 0047). Packs live in
 | `apple` | SF Pro Display | SF Pro Text | SF Mono |
 | `atelier` | Literata | Source Sans 3 | JetBrains Mono |
 | `signal` | Newsreader | IBM Plex Sans | JetBrains Mono |
+| `foundry` | Inter Tight | Inter | JetBrains Mono |
+| `console` | Martian Mono | IBM Plex Sans | JetBrains Mono |
+| `ledger` | Source Serif 4 | Source Sans 3 | Source Code Pro |
+| `almanac` | EB Garamond | Work Sans | Fira Code |
+| `instrument` | Instrument Serif | Instrument Sans | Geist Mono |
+| `meridian` | Geist | Geist | Geist Mono |
+| `bulletin` | Bricolage Grotesque | Public Sans | Azeret Mono |
+| `marquee` | Bodoni Moda | Manrope | JetBrains Mono |
+| `draft` | Crimson Pro | Karla | Red Hat Mono |
+| `transit` | Archivo | Archivo | Roboto Mono |
+| `legible` | Atkinson Hyperlegible Next | Atkinson Hyperlegible Next | Atkinson Hyperlegible Mono |
+| `teletype` | JetBrains Mono | JetBrains Mono | JetBrains Mono |
+| `grove` | Petrona | Nunito Sans | JetBrains Mono |
 
-Themes set `font_pack: <id>`. Appearance settings may override with
+Every theme sets `font_pack: <id>` — its default typography, the way
+`cupertino` defaults to `apple`. Appearance settings may override with
 `fontPack: theme | <id>` (Settings → Appearance). Resolution: appearance
 override → theme default → builtin `lattice`.
+
+The browser demo mirrors these defaults in
+`apps/desktop/src/theme/demoThemes.ts`; `demoThemes.test.ts` fails if the
+mirror drifts from the YAML.
 
 ## Terminal palettes (`terminal:`)
 

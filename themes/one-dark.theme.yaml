@@ -65,7 +65,7 @@ terminal:
   cursor_text: $bg
   selection: $overlay
 
-font_pack: lattice
+font_pack: console
 
 shape:
   radius: 8px

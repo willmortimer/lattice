@@ -1,0 +1,7 @@
+# Legibility-first — Atkinson Hyperlegible Next, drawn for low-vision reading.
+name: Legible
+id: legible
+fonts:
+  display: '"Atkinson Hyperlegible Next Variable", "Atkinson Hyperlegible Next", system-ui, sans-serif'
+  ui: '"Atkinson Hyperlegible Next Variable", "Atkinson Hyperlegible Next", system-ui, sans-serif'
+  mono: '"Atkinson Hyperlegible Mono Variable", "Atkinson Hyperlegible Mono", ui-monospace, "SF Mono", Menlo, monospace'

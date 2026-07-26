@@ -1,0 +1,7 @@
+# Warm manuscript reading — Crimson Pro display, Karla UI, Red Hat Mono code.
+name: Draft
+id: draft
+fonts:
+  display: '"Crimson Pro Variable", "Crimson Pro", Georgia, serif'
+  ui: '"Karla Variable", "Karla", system-ui, sans-serif'
+  mono: '"Red Hat Mono Variable", "Red Hat Mono", ui-monospace, "SF Mono", Menlo, monospace'

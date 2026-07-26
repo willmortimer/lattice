@@ -65,7 +65,7 @@ terminal:
   cursor_text: $base03
   selection: $base02
 
-font_pack: lattice
+font_pack: teletype
 
 shape:
   radius: 9px

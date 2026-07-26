@@ -1,0 +1,85 @@
+# Ayu Dark — adopted terminal-theme standard (MIT, github.com/ayu-theme).
+# Near-black ground with Ayu's signature warm orange accent, which sits close
+# to Lattice's own amber. The `terminal:` block carries Ayu's ANSI mapping.
+# Defaults to the `transit` pack.
+
+name: Ayu Dark
+id: ayu-dark
+appearance: dark
+
+palette:
+  bg: "#0b0e14"
+  bg_raise: "#0d1017"
+  panel: "#131721"
+  line: "#1c212b"
+  fg: "#bfbdb6"
+  fg_soft: "#9b9a94"
+  grey: "#787b80"
+  faint: "#565b66"
+  orange: "#ffb454"
+  orange_bright: "#ffd580"
+  orange_deep: "#e5892e"
+  red: "#f07178"
+  red_dim: "#ea6c73"
+  green: "#aad94c"
+  green_dim: "#91b362"
+  yellow: "#f9af4f"
+  blue: "#59c2ff"
+  blue_dim: "#53bdfa"
+  purple: "#d2a6ff"
+  cyan: "#95e6cb"
+  cyan_dim: "#90e1c6"
+  white: "#c7c7c7"
+  bright_white: "#f3f3f3"
+  ansi_black: "#01060e"
+  ansi_bright_black: "#686868"
+  ansi_magenta: "#fae994"
+  ansi_bright_magenta: "#ffee99"
+  ink: "#04070c"
+  on_accent: "#0b0e14"
+
+roles:
+  bg: $bg
+  bg_raise: $bg_raise
+  panel: $panel
+  slate: $grey
+  text: $fg
+  text_soft: $fg_soft
+  muted: $grey
+  faint: $faint
+  accent: $orange
+  accent_bright: $orange_bright
+  accent_deep: $orange_deep
+  danger: $red
+  shadow: $ink
+
+terminal:
+  black: $ansi_black
+  red: $red_dim
+  green: $green_dim
+  yellow: $yellow
+  blue: $blue_dim
+  magenta: $ansi_magenta
+  cyan: $cyan_dim
+  white: $white
+  bright_black: $ansi_bright_black
+  bright_red: $red
+  bright_green: $green
+  bright_yellow: $orange
+  bright_blue: $blue
+  bright_magenta: $ansi_bright_magenta
+  bright_cyan: $cyan
+  bright_white: $bright_white
+  cursor: $orange
+  cursor_text: $bg
+  selection: "#409fff2b"
+
+font_pack: transit
+
+shape:
+  radius: 8px
+  radius_sm: 5px
+  radius_lg: 13px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px

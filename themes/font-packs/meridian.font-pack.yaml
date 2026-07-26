@@ -1,0 +1,7 @@
+# Product-tight and quiet — Geist for both display and UI, Geist Mono for code.
+name: Meridian
+id: meridian
+fonts:
+  display: '"Geist Variable", "Geist", system-ui, sans-serif'
+  ui: '"Geist Variable", "Geist", system-ui, sans-serif'
+  mono: '"Geist Mono Variable", "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace'

@@ -61,7 +61,7 @@ terminal:
   cursor_text: $base
   selection: $highlight
 
-font_pack: lattice
+font_pack: draft
 
 shape:
   radius: 10px

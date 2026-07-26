@@ -1,0 +1,77 @@
+# Everforest Dark (medium) — adopted terminal-theme standard (MIT,
+# github.com/sainnhe/everforest). Low-saturation green-grey forest palette
+# with warm ivory text; the `terminal:` block carries Everforest's own ANSI
+# mapping. Defaults to the `grove` pack — a warm humanist match for the
+# low-contrast ground.
+
+name: Everforest Dark
+id: everforest-dark
+appearance: dark
+
+palette:
+  bg0: "#2d353b"
+  bg1: "#343f44"
+  bg2: "#3d484d"
+  bg3: "#475258"
+  fg: "#d3c6aa"
+  fg_soft: "#bcb195"
+  grey0: "#7a8478"
+  grey1: "#859289"
+  grey2: "#9da9a0"
+  red: "#e67e80"
+  orange: "#e69875"
+  yellow: "#dbbc7f"
+  green: "#a7c080"
+  green_bright: "#c3d9a0"
+  green_deep: "#83a05c"
+  aqua: "#83c092"
+  blue: "#7fbbb3"
+  purple: "#d699b6"
+  ink: "#1e2326"
+  on_accent: "#2d353b"
+
+roles:
+  bg: $bg0
+  bg_raise: $bg1
+  panel: $bg2
+  slate: $grey2
+  text: $fg
+  text_soft: $fg_soft
+  muted: $grey1
+  faint: $grey0
+  accent: $green
+  accent_bright: $green_bright
+  accent_deep: $green_deep
+  danger: $red
+  shadow: $ink
+
+terminal:
+  black: $bg1
+  red: $red
+  green: $green
+  yellow: $yellow
+  blue: $blue
+  magenta: $purple
+  cyan: $aqua
+  white: $fg
+  bright_black: $grey1
+  bright_red: $red
+  bright_green: $green
+  bright_yellow: $yellow
+  bright_blue: $blue
+  bright_magenta: $purple
+  bright_cyan: $aqua
+  bright_white: $fg
+  cursor: $fg
+  cursor_text: $bg0
+  selection: "#475258"
+
+font_pack: grove
+
+shape:
+  radius: 9px
+  radius_sm: 6px
+  radius_lg: 14px
+  grid: 34px
+  titlebar: 38px
+  max_width: 1140px

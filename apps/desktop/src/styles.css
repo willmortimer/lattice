@@ -5,6 +5,32 @@
 @import "@fontsource-variable/source-sans-3/index.css";
 @import "@fontsource-variable/newsreader/index.css";
 @import "@fontsource-variable/ibm-plex-sans/index.css";
+@import "@fontsource-variable/inter/index.css";
+@import "@fontsource-variable/inter-tight/index.css";
+@import "@fontsource-variable/martian-mono/index.css";
+@import "@fontsource-variable/source-serif-4/index.css";
+@import "@fontsource-variable/source-code-pro/index.css";
+@import "@fontsource-variable/eb-garamond/index.css";
+@import "@fontsource-variable/work-sans/index.css";
+@import "@fontsource-variable/fira-code/index.css";
+@import "@fontsource/instrument-serif/400.css";
+@import "@fontsource-variable/instrument-sans/index.css";
+@import "@fontsource-variable/geist/index.css";
+@import "@fontsource-variable/geist-mono/index.css";
+@import "@fontsource-variable/bricolage-grotesque/index.css";
+@import "@fontsource-variable/public-sans/index.css";
+@import "@fontsource-variable/azeret-mono/index.css";
+@import "@fontsource-variable/bodoni-moda/index.css";
+@import "@fontsource-variable/manrope/index.css";
+@import "@fontsource-variable/crimson-pro/index.css";
+@import "@fontsource-variable/karla/index.css";
+@import "@fontsource-variable/red-hat-mono/index.css";
+@import "@fontsource-variable/archivo/index.css";
+@import "@fontsource-variable/roboto-mono/index.css";
+@import "@fontsource-variable/atkinson-hyperlegible-next/index.css";
+@import "@fontsource-variable/atkinson-hyperlegible-mono/index.css";
+@import "@fontsource-variable/petrona/index.css";
+@import "@fontsource-variable/nunito-sans/index.css";
 @import "./theme-tokens.css";
 
 /* ============================================================================
@@ -5608,6 +5634,21 @@ html[data-motion="always"] *::after {
 }
 .theme-swatch-kanagawa-wave {
   background: linear-gradient(135deg, #1f1f28 0 68%, #7e9cd8 68%);
+}
+.theme-swatch-lattice-daylight {
+  background: linear-gradient(135deg, #ffffff 0 68%, #1d4ed8 68%);
+}
+.theme-swatch-lattice-dusk {
+  background: linear-gradient(135deg, #1e222a 0 68%, #e0a458 68%);
+}
+.theme-swatch-lattice-monochrome {
+  background: linear-gradient(135deg, #0b0b0b 0 68%, #e4e4e4 68%);
+}
+.theme-swatch-everforest-dark {
+  background: linear-gradient(135deg, #2d353b 0 68%, #a7c080 68%);
+}
+.theme-swatch-ayu-dark {
+  background: linear-gradient(135deg, #0b0e14 0 68%, #ffb454 68%);
 }
 
 .inspector {

@@ -1,0 +1,7 @@
+# Mono everywhere — the whole shell reads like a terminal. No new webfonts.
+name: Teletype
+id: teletype
+fonts:
+  display: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+  ui: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'

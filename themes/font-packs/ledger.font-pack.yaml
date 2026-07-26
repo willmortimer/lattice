@@ -1,0 +1,7 @@
+# Adobe Source superfamily end to end — one voice across display, UI, and code.
+name: Ledger
+id: ledger
+fonts:
+  display: '"Source Serif 4 Variable", "Source Serif 4", Georgia, serif'
+  ui: '"Source Sans 3 Variable", "Source Sans 3", system-ui, sans-serif'
+  mono: '"Source Code Pro Variable", "Source Code Pro", ui-monospace, "SF Mono", Menlo, monospace'

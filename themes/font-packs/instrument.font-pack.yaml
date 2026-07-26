@@ -1,0 +1,7 @@
+# High-contrast modern editorial — Instrument Serif over its sans companion.
+name: Instrument
+id: instrument
+fonts:
+  display: '"Instrument Serif", Georgia, serif'
+  ui: '"Instrument Sans Variable", "Instrument Sans", system-ui, sans-serif'
+  mono: '"Geist Mono Variable", "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace'

@@ -1,0 +1,7 @@
+# Poster-editorial — Bricolage Grotesque display against a plain civic UI sans.
+name: Bulletin
+id: bulletin
+fonts:
+  display: '"Bricolage Grotesque Variable", "Bricolage Grotesque", system-ui, sans-serif'
+  ui: '"Public Sans Variable", "Public Sans", system-ui, sans-serif'
+  mono: '"Azeret Mono Variable", "Azeret Mono", ui-monospace, "SF Mono", Menlo, monospace'
