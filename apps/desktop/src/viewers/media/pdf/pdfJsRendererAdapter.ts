@@ -155,7 +155,12 @@ class PdfJsRendererSession implements PdfRendererSession {
     if (!Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > this.pageCount) {
       throw new PdfRendererError("missing", "The requested PDF page does not exist.");
     }
-    const page = await this.document.getPage(pageNumber);
+    let page: PDFPageProxy;
+    try {
+      page = await this.document.getPage(pageNumber);
+    } catch (error: unknown) {
+      throw normalizePdfJsOperation(error, signal);
+    }
     if (signal.aborted) {
       page.cleanup();
       throw abortError();
@@ -167,7 +172,12 @@ class PdfJsRendererSession implements PdfRendererSession {
     const matches: number[] = [];
     for (let pageNumber = 1; pageNumber <= this.pageCount; pageNumber += 1) {
       if (signal.aborted) throw abortError();
-      const page = await this.document.getPage(pageNumber);
+      let page: PDFPageProxy;
+      try {
+        page = await this.document.getPage(pageNumber);
+      } catch (error: unknown) {
+        throw normalizePdfJsOperation(error, signal);
+      }
       try {
         if (signal.aborted) throw abortError();
         const content = await page.getTextContent();
@@ -176,6 +186,8 @@ class PdfJsRendererSession implements PdfRendererSession {
           .join(" ")
           .toLocaleLowerCase();
         if (text.includes(query.toLocaleLowerCase())) matches.push(pageNumber);
+      } catch (error: unknown) {
+        throw normalizePdfJsOperation(error, signal);
       } finally {
         page.cleanup();
       }
@@ -209,8 +221,12 @@ class PdfJsPageHandle implements PdfPageHandle {
   async getSize(signal: AbortSignal): Promise<PdfPageSize> {
     if (signal.aborted) throw abortError();
     this.assertActive();
-    const viewport = this.page.getViewport({ scale: 1 });
-    return { width: viewport.width, height: viewport.height };
+    try {
+      const viewport = this.page.getViewport({ scale: 1 });
+      return { width: viewport.width, height: viewport.height };
+    } catch (error: unknown) {
+      throw normalizePdfJsOperation(error, signal);
+    }
   }
 
   render(options: PdfPageRenderOptions): PdfPageRenderTask {
@@ -291,6 +307,17 @@ function normalizePdfJsError(error: unknown): Error {
     return new PdfRendererError("missing", "The PDF could not be read from the workspace.");
   }
   return new PdfRendererError("malformed", "This PDF is malformed or unsupported by the built-in viewer.");
+}
+
+function normalizePdfJsOperation(error: unknown, signal: AbortSignal): Error {
+  if (
+    signal.aborted ||
+    (error instanceof Error &&
+      (error.name === "RenderingCancelledException" || error.name === "AbortException"))
+  ) {
+    return abortError();
+  }
+  return normalizePdfJsError(error);
 }
 
 function abortError(): DOMException {
