@@ -13,7 +13,9 @@ use lattice_protocol::{
     response_envelope, ApplyPageUpdateRequest, ApplyPageUpdateResponse, CancelAgentRunRequest,
     CancelAgentRunResponse, DisableSemanticSearchRequest, DisableSemanticSearchResponse,
     EnableSemanticSearchRequest, EnableSemanticSearchResponse, Error as WireError, Event,
-    FrameDecoder, GetAgentHealthRequest, GetAgentHealthResponse, GetSemanticStatusRequest,
+    FrameDecoder, GetAgentHealthRequest, GetAgentHealthResponse, GetCellStatusRequest,
+    GetCellStatusResponse, CellActianSmokeRequest, CellActianSmokeResponse,
+    CellActianSmokeStep as WireCellActianSmokeStep, GetSemanticStatusRequest,
     GetSemanticStatusResponse, HealthRequest, HealthResponse, IndexProgress, OpenWorkspaceRequest,
     OpenWorkspaceResponse, PingRequest, PingResponse, Request, ResourceChanged, Response,
     SearchRequest, SearchResponse, SemanticStatus as WireSemanticStatus, StartAgentRunRequest,
@@ -43,6 +45,7 @@ pub struct DaemonState {
     pub semantic: Option<Arc<crate::embed_host::SemanticController>>,
     pub voice: Option<Arc<crate::voice_host::VoiceController>>,
     pub agent: Option<Arc<crate::agent::AgentController>>,
+    pub cell_vz: Option<Arc<crate::cell_vz::CellVzController>>,
     connections: Option<Arc<ConnectionTracker>>,
     event_tx: broadcast::Sender<Event>,
     /// Quiet bus for agent run chunks; pumped with priority over `event_tx`.
@@ -52,7 +55,7 @@ pub struct DaemonState {
 
 impl DaemonState {
     pub fn new(config: DaemonConfig, runtime: Arc<LatticeRuntime>) -> Self {
-        Self::new_with_controllers(config, runtime, None, None, None)
+        Self::new_with_controllers(config, runtime, None, None, None, None)
     }
 
     pub fn new_with_semantic(
@@ -60,7 +63,7 @@ impl DaemonState {
         runtime: Arc<LatticeRuntime>,
         semantic: Option<Arc<crate::embed_host::SemanticController>>,
     ) -> Self {
-        Self::new_with_controllers(config, runtime, semantic, None, None)
+        Self::new_with_controllers(config, runtime, semantic, None, None, None)
     }
 
     pub fn new_with_controllers(
@@ -69,6 +72,7 @@ impl DaemonState {
         semantic: Option<Arc<crate::embed_host::SemanticController>>,
         voice: Option<Arc<crate::voice_host::VoiceController>>,
         agent: Option<Arc<crate::agent::AgentController>>,
+        cell_vz: Option<Arc<crate::cell_vz::CellVzController>>,
     ) -> Self {
         // Shared fan-out for workspace index/resource/voice events.
         let (event_tx, _) = broadcast::channel(8192);
@@ -89,6 +93,7 @@ impl DaemonState {
             semantic,
             voice,
             agent,
+            cell_vz,
             connections: None,
             event_tx,
             agent_event_tx,
@@ -165,7 +170,7 @@ pub async fn serve_with_shutdown(
     runtime: Arc<LatticeRuntime>,
     shutdown: oneshot::Receiver<()>,
 ) -> Result<()> {
-    serve_with_shutdown_and_controllers(config, runtime, None, None, None, shutdown).await
+    serve_with_shutdown_and_controllers(config, runtime, None, None, None, None, shutdown).await
 }
 
 /// Bind and serve with an optional semantic indexing controller.
@@ -175,16 +180,17 @@ pub async fn serve_with_shutdown_and_semantic(
     semantic: Option<Arc<crate::embed_host::SemanticController>>,
     shutdown: oneshot::Receiver<()>,
 ) -> Result<()> {
-    serve_with_shutdown_and_controllers(config, runtime, semantic, None, None, shutdown).await
+    serve_with_shutdown_and_controllers(config, runtime, semantic, None, None, None, shutdown).await
 }
 
-/// Bind and serve with optional semantic + voice + agent controllers.
+/// Bind and serve with optional semantic + voice + agent + cell VZ controllers.
 pub async fn serve_with_shutdown_and_controllers(
     config: DaemonConfig,
     runtime: Arc<LatticeRuntime>,
     semantic: Option<Arc<crate::embed_host::SemanticController>>,
     voice: Option<Arc<crate::voice_host::VoiceController>>,
     agent: Option<Arc<crate::agent::AgentController>>,
+    cell_vz: Option<Arc<crate::cell_vz::CellVzController>>,
     shutdown: oneshot::Receiver<()>,
 ) -> Result<()> {
     let socket_path = config.socket_path.clone();
@@ -204,7 +210,7 @@ pub async fn serve_with_shutdown_and_controllers(
         config.idle_shutdown_timeout,
         idle_shutdown_tx,
     );
-    let state = DaemonState::new_with_controllers(config, runtime, semantic, voice, agent)
+    let state = DaemonState::new_with_controllers(config, runtime, semantic, voice, agent, cell_vz)
         .with_connections(Arc::clone(&connections));
     let schedule_runner = crate::schedule::spawn_schedule_runner_with_connections(
         Arc::clone(&state.runtime),
@@ -259,6 +265,9 @@ pub async fn serve_with_shutdown_and_controllers(
     }
     if let Some(agent) = state.agent.as_ref() {
         agent.shutdown().await;
+    }
+    if let Some(cell_vz) = state.cell_vz.as_ref() {
+        cell_vz.shutdown();
     }
     state.runtime.shutdown_all_sessions();
     let _ = std::fs::remove_file(&socket_path);
@@ -474,6 +483,12 @@ async fn handle_request(
         }
         Some(request::Body::GetAgentHealth(GetAgentHealthRequest {})) => {
             handle_get_agent_health(state).await
+        }
+        Some(request::Body::GetCellStatus(GetCellStatusRequest {})) => {
+            handle_get_cell_status(state)
+        }
+        Some(request::Body::CellActianSmoke(CellActianSmokeRequest {})) => {
+            handle_cell_actian_smoke()
         }
         Some(
             body @ (request::Body::PrepareModel(_)
@@ -776,6 +791,54 @@ async fn handle_get_agent_health(
                 ok: health.ok,
                 backend: health.backend,
                 degraded: health.degraded,
+            })),
+        },
+        None,
+    ))
+}
+
+fn handle_get_cell_status(
+    state: &DaemonState,
+) -> std::result::Result<(Response, Option<(String, lattice_protocol::WorkspaceLease)>), WireError>
+{
+    let status = match state.cell_vz.as_ref() {
+        Some(controller) => controller.status_snapshot(),
+        None => crate::cell_vz::CellVzStatus::gate_off(
+            "Cell VZ not enabled (set LATTICE_CELL_VZ=1 and restart latticed)",
+        ),
+    };
+    Ok((
+        Response {
+            body: Some(response::Body::GetCellStatus(GetCellStatusResponse {
+                up: status.up,
+                ping_ok: status.ping_ok,
+                phase: status.phase,
+                services_json: status.services_json,
+                error: status.error,
+            })),
+        },
+        None,
+    ))
+}
+
+fn handle_cell_actian_smoke(
+) -> std::result::Result<(Response, Option<(String, lattice_protocol::WorkspaceLease)>), WireError>
+{
+    let result = crate::cell_actian_smoke::run_cell_actian_smoke();
+    Ok((
+        Response {
+            body: Some(response::Body::CellActianSmoke(CellActianSmokeResponse {
+                ok: result.ok,
+                steps: result
+                    .steps
+                    .into_iter()
+                    .map(|step| WireCellActianSmokeStep {
+                        name: step.name,
+                        ok: step.ok,
+                        detail: step.detail,
+                    })
+                    .collect(),
+                error: result.error,
             })),
         },
         None,

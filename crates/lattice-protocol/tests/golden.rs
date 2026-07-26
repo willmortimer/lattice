@@ -3,7 +3,9 @@ use lattice_protocol::{
     ApplyPageUpdateRequest, ApplyPageUpdateResponse, AudioGap, AudioSampleFormat,
     CancelAgentRunRequest, CancelAgentRunResponse, CancelVoiceSessionRequest,
     CancelVoiceSessionResponse, Event, FinalTranscript, FinalizationMode, FinishUtteranceRequest,
-    FinishUtteranceResponse, GetAgentHealthRequest, GetAgentHealthResponse, HealthRequest,
+    FinishUtteranceResponse, GetAgentHealthRequest, GetAgentHealthResponse, GetCellStatusRequest,
+    GetCellStatusResponse, CellActianSmokeRequest, CellActianSmokeResponse, CellActianSmokeStep,
+    HealthRequest,
     HealthResponse, IndexProgress, ModelState, ModelStatus, ModelStatusChanged,
     OpenWorkspaceRequest, OpenWorkspaceResponse, PartialTranscript, PingRequest,
     PrepareModelRequest, PrepareModelResponse, PushAudioChunkRequest, PushAudioChunkResponse,
@@ -634,6 +636,77 @@ fn get_agent_health_response() -> lattice_protocol::Envelope {
     )
 }
 
+fn get_cell_status_request() -> lattice_protocol::Envelope {
+    request_envelope(
+        "golden-cell-status",
+        Request {
+            deadline_unix_ms: None,
+            idempotency_key: None,
+            body: Some(lattice_protocol::request::Body::GetCellStatus(
+                GetCellStatusRequest {},
+            )),
+        },
+    )
+}
+
+fn get_cell_status_response() -> lattice_protocol::Envelope {
+    response_envelope(
+        "golden-cell-status-res",
+        Response {
+            body: Some(lattice_protocol::response::Body::GetCellStatus(
+                GetCellStatusResponse {
+                    up: true,
+                    ping_ok: true,
+                    phase: Some("ready".into()),
+                    services_json: Some(
+                        r#"{"service":"lattice.runtime.v1","method":"Ping","ok":true}"#.into(),
+                    ),
+                    error: None,
+                },
+            )),
+        },
+    )
+}
+
+fn cell_actian_smoke_request() -> lattice_protocol::Envelope {
+    request_envelope(
+        "golden-cell-actian-smoke",
+        Request {
+            deadline_unix_ms: None,
+            idempotency_key: None,
+            body: Some(lattice_protocol::request::Body::CellActianSmoke(
+                CellActianSmokeRequest {},
+            )),
+        },
+    )
+}
+
+fn cell_actian_smoke_response() -> lattice_protocol::Envelope {
+    response_envelope(
+        "golden-cell-actian-smoke-res",
+        Response {
+            body: Some(lattice_protocol::response::Body::CellActianSmoke(
+                CellActianSmokeResponse {
+                    ok: true,
+                    steps: vec![
+                        CellActianSmokeStep {
+                            name: "tcp_connect".into(),
+                            ok: true,
+                            detail: Some("connected to 127.0.0.1:16574".into()),
+                        },
+                        CellActianSmokeStep {
+                            name: "search".into(),
+                            ok: true,
+                            detail: Some("1 hit(s), top id=1".into()),
+                        },
+                    ],
+                    error: None,
+                },
+            )),
+        },
+    )
+}
+
 fn agent_event() -> lattice_protocol::Envelope {
     event_envelope(
         "golden-agent-event",
@@ -899,6 +972,26 @@ fn golden_get_agent_health_response() {
 #[test]
 fn golden_agent_event() {
     assert_golden("agent_event.hex", &agent_event());
+}
+
+#[test]
+fn golden_get_cell_status_request() {
+    assert_golden("get_cell_status_request.hex", &get_cell_status_request());
+}
+
+#[test]
+fn golden_get_cell_status_response() {
+    assert_golden("get_cell_status_response.hex", &get_cell_status_response());
+}
+
+#[test]
+fn golden_cell_actian_smoke_request() {
+    assert_golden("cell_actian_smoke_request.hex", &cell_actian_smoke_request());
+}
+
+#[test]
+fn golden_cell_actian_smoke_response() {
+    assert_golden("cell_actian_smoke_response.hex", &cell_actian_smoke_response());
 }
 
 #[test]

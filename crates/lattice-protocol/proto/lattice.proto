@@ -50,6 +50,9 @@ message Request {
     StartAgentRunRequest start_agent_run = 60;
     CancelAgentRunRequest cancel_agent_run = 61;
     GetAgentHealthRequest get_agent_health = 62;
+    // Cell VZ lab plane (field numbers 70–79).
+    GetCellStatusRequest get_cell_status = 70;
+    CellActianSmokeRequest cell_actian_smoke = 71;
   }
 }
 
@@ -76,6 +79,8 @@ message Response {
     StartAgentRunResponse start_agent_run = 60;
     CancelAgentRunResponse cancel_agent_run = 61;
     GetAgentHealthResponse get_agent_health = 62;
+    GetCellStatusResponse get_cell_status = 70;
+    CellActianSmokeResponse cell_actian_smoke = 71;
   }
 }
 
@@ -571,6 +576,32 @@ message GetAgentHealthResponse {
   // fake | sidecar
   string backend = 2;
   bool degraded = 3;
+}
+
+message GetCellStatusRequest {}
+
+message GetCellStatusResponse {
+  bool up = 1;
+  bool ping_ok = 2;
+  // Optional phase label while booting (applying, starting, pinging, ready).
+  optional string phase = 3;
+  // Optional guest service summary from the last successful Ping.
+  optional string services_json = 4;
+  optional string error = 5;
+}
+
+message CellActianSmokeRequest {}
+
+message CellActianSmokeStep {
+  string name = 1;
+  bool ok = 2;
+  optional string detail = 3;
+}
+
+message CellActianSmokeResponse {
+  bool ok = 1;
+  repeated CellActianSmokeStep steps = 2;
+  optional string error = 3;
 }
 
 message AgentEvent {

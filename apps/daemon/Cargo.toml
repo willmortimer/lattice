@@ -42,6 +42,8 @@ tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-th
 tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+base64.workspace = true
 
 [dev-dependencies]
 http-body-util = "0.1"

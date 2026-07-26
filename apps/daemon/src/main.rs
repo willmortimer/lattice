@@ -5,8 +5,8 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use lattice_daemon::{
     default_socket_path, mcp, serve_with_shutdown_and_controllers, AgentController,
-    AgentProviderMode, DaemonConfig, DaemonPreferences, SemanticController, SemanticProviderMode,
-    VoiceController, VoiceProviderMode, DEFAULT_API_PORT,
+    AgentProviderMode, CellVzController, CellVzProviderMode, DaemonConfig, DaemonPreferences,
+    SemanticController, SemanticProviderMode, VoiceController, VoiceProviderMode, DEFAULT_API_PORT,
 };
 use lattice_runtime::LatticeRuntime;
 use tracing_subscriber::EnvFilter;
@@ -160,6 +160,17 @@ async fn main() -> Result<()> {
         }
         None => None,
     };
+    let cell_vz = match CellVzProviderMode::from_env() {
+        Some(mode) => {
+            tracing::info!("cell VZ lab supervision enabled via environment");
+            Some(
+                CellVzController::start(mode)
+                    .await
+                    .context("start cell VZ controller")?,
+            )
+        }
+        None => None,
+    };
 
     {
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -169,7 +180,7 @@ async fn main() -> Result<()> {
             }
             let _ = tx.send(());
         });
-        serve_with_shutdown_and_controllers(config, runtime, semantic, voice, agent, rx)
+        serve_with_shutdown_and_controllers(config, runtime, semantic, voice, agent, cell_vz, rx)
             .await
             .context("latticed serve failed")?;
     }
