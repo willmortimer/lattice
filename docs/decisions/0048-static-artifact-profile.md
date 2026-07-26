@@ -1,4 +1,4 @@
-# ADR 0047: Static artifacts are script-free documents
+# ADR 0048: Static artifacts are script-free documents
 
 ## Status
 

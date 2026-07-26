@@ -21,6 +21,9 @@ pub enum Error {
 
     #[error("theme not found: {0}")]
     ThemeNotFound(String),
+
+    #[error("font pack not found: {0}")]
+    FontPackNotFound(String),
 }
 
 impl Error {

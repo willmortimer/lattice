@@ -4,7 +4,7 @@
   "title": "Lattice theme",
   "type": "object",
   "additionalProperties": false,
-  "required": ["name", "id", "appearance", "palette", "roles", "fonts", "shape"],
+  "required": ["name", "id", "appearance", "palette", "roles", "font_pack", "shape"],
   "properties": {
     "name": { "type": "string", "minLength": 1 },
     "id": {
@@ -45,15 +45,10 @@
       ],
       "additionalProperties": { "type": "string", "minLength": 1 }
     },
-    "fonts": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["display", "ui", "mono"],
-      "properties": {
-        "display": { "type": "string" },
-        "ui": { "type": "string" },
-        "mono": { "type": "string" }
-      }
+    "font_pack": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Id of a font pack under themes/font-packs/ (or ~/Lattice/Settings/font-packs/)."
     },
     "shape": {
       "type": "object",

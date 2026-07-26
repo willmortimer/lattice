@@ -67,6 +67,7 @@ interface SettingsPageProps {
   onReset: () => void;
   onThemeChange: (themeId: string) => void;
   onFollowSystem: () => void;
+  onFontPackChange: (fontPack: string) => void;
 }
 
 const SECTIONS = [
@@ -138,6 +139,7 @@ export function SettingsPage({
   onReset,
   onThemeChange,
   onFollowSystem,
+  onFontPackChange,
 }: SettingsPageProps) {
   const [section, setSection] = useState<SettingsSection>("appearance");
   const [quickNoteDraft, setQuickNoteDraft] = useState(workspace.defaults.quickNoteDirectory);
@@ -250,6 +252,32 @@ export function SettingsPage({
             <Button variant="secondary" onClick={onFollowSystem}>
               Follow system appearance
             </Button>
+            <SettingRow
+              title="Font pack"
+              description="Typography stacks for display, UI, and mono. Follow theme uses each theme’s default pack (Cupertino → Apple)."
+            >
+              <select
+                aria-label="Font pack"
+                value={themeCatalog?.resolved.settings.fontPack ?? "theme"}
+                onChange={(event) => onFontPackChange(event.target.value)}
+              >
+                <option value="theme">Follow theme</option>
+                {(themeCatalog?.fontPacks ?? []).map((pack) => (
+                  <option key={pack.id} value={pack.id}>
+                    {pack.name}
+                    {themeCatalog?.resolved.fontPack === pack.id &&
+                    themeCatalog.resolved.settings.fontPack !== "theme"
+                      ? " (active)"
+                      : ""}
+                  </option>
+                ))}
+              </select>
+            </SettingRow>
+            {themeCatalog?.resolved.settings.fontPack === "theme" && (
+              <p className="settings-copy">
+                Active pack: <strong>{themeCatalog.resolved.fontPack}</strong> (from theme)
+              </p>
+            )}
           </>
         )}
 

@@ -9,6 +9,10 @@ use crate::builtin::load_builtin;
 use crate::discover::{check_theme_file, discover_themes, load_theme_by_id};
 use crate::document::builtin_path;
 use crate::flatten::flatten_theme;
+use crate::font_pack::{
+    discover_font_packs, load_builtin_font_pack, load_font_pack_by_id, resolve_font_pack_id,
+    BUILTIN_FONT_PACK_IDS, DEFAULT_FONT_PACK_ID, FONT_PACK_FOLLOW_THEME,
+};
 use crate::override_file::{load_workspace_override, WorkspaceThemeOverride};
 use crate::resolve::{resolve_active_theme, SystemAppearance};
 use lattice_core::ensure_lattice_home;
@@ -16,15 +20,138 @@ use lattice_core::ensure_lattice_home;
 /// `LATTICE_HOME` is process-global; serialize tests that mutate it.
 static HOME_LOCK: Mutex<()> = Mutex::new(());
 
+fn flatten_builtin(id: &str) -> std::collections::BTreeMap<String, String> {
+    let doc = load_builtin(id).unwrap();
+    let pack = load_builtin_font_pack(&doc.font_pack).unwrap();
+    flatten_theme(&doc, &pack.fonts, &builtin_path(id)).unwrap()
+}
+
 #[test]
 fn builtins_parse_and_flatten() {
     for id in crate::builtin::BUILTIN_IDS {
-        let doc = load_builtin(id).unwrap();
-        let vars = flatten_theme(&doc, &builtin_path(id)).unwrap();
+        let vars = flatten_builtin(id);
         assert!(vars.contains_key("--lt-bg"));
         assert!(vars.contains_key("--lt-accent"));
+        assert!(vars.contains_key("--lt-font-ui"));
         assert!(vars["--lt-accent-wash"].contains("color-mix"));
     }
+}
+
+#[test]
+fn builtin_font_packs_parse() {
+    for id in BUILTIN_FONT_PACK_IDS {
+        let pack = load_builtin_font_pack(id).unwrap();
+        assert_eq!(pack.id, *id);
+        assert!(!pack.fonts.display.is_empty());
+        assert!(!pack.fonts.ui.is_empty());
+        assert!(!pack.fonts.mono.is_empty());
+    }
+}
+
+#[test]
+fn cupertino_defaults_to_apple_font_pack() {
+    let doc = load_builtin("cupertino").unwrap();
+    assert_eq!(doc.font_pack, "apple");
+    let pack = load_builtin_font_pack(&doc.font_pack).unwrap();
+    assert!(pack.fonts.ui.contains("SF Pro Text") || pack.fonts.ui.contains("-apple-system"));
+}
+
+#[test]
+fn slate_defaults_to_lattice_font_pack() {
+    let doc = load_builtin("lattice-slate").unwrap();
+    assert_eq!(doc.font_pack, "lattice");
+    let vars = flatten_builtin("lattice-slate");
+    assert!(vars["--lt-font-display"].contains("Fraunces"));
+    assert!(vars["--lt-font-mono"].contains("JetBrains Mono"));
+}
+
+#[test]
+fn resolve_font_pack_id_follows_theme_or_override() {
+    assert_eq!(
+        resolve_font_pack_id(FONT_PACK_FOLLOW_THEME, "apple"),
+        "apple"
+    );
+    assert_eq!(resolve_font_pack_id("signal", "apple"), "signal");
+    assert_eq!(
+        resolve_font_pack_id("", ""),
+        DEFAULT_FONT_PACK_ID
+    );
+}
+
+#[test]
+fn appearance_font_pack_override_wins() {
+    let _guard = HOME_LOCK.lock().unwrap();
+    let dir = tempdir().unwrap();
+    std::env::set_var("LATTICE_HOME", dir.path());
+    let home = ensure_lattice_home().unwrap();
+    let settings = AppearanceSettings {
+        theme: "lattice-slate".into(),
+        font_pack: "atelier".into(),
+        ..Default::default()
+    };
+    let resolved =
+        resolve_active_theme(&home, &settings, SystemAppearance::Dark, None).unwrap();
+    assert_eq!(resolved.font_pack, "atelier");
+    assert!(resolved.vars["--lt-font-display"].contains("Literata"));
+    std::env::remove_var("LATTICE_HOME");
+}
+
+#[test]
+fn unknown_font_pack_falls_back_to_lattice() {
+    let _guard = HOME_LOCK.lock().unwrap();
+    let dir = tempdir().unwrap();
+    std::env::set_var("LATTICE_HOME", dir.path());
+    let home = ensure_lattice_home().unwrap();
+    let settings = AppearanceSettings {
+        font_pack: "does-not-exist".into(),
+        ..Default::default()
+    };
+    let resolved =
+        resolve_active_theme(&home, &settings, SystemAppearance::Dark, None).unwrap();
+    assert_eq!(resolved.font_pack, "lattice");
+    assert!(!resolved.diagnostics.is_empty());
+    std::env::remove_var("LATTICE_HOME");
+}
+
+#[test]
+fn discover_font_packs_lists_builtins() {
+    let _guard = HOME_LOCK.lock().unwrap();
+    let dir = tempdir().unwrap();
+    std::env::set_var("LATTICE_HOME", dir.path());
+    let home = ensure_lattice_home().unwrap();
+    let (packs, diags) = discover_font_packs(&home).unwrap();
+    assert!(diags.is_empty());
+    assert!(packs.iter().any(|p| p.id == "lattice"));
+    assert!(packs.iter().any(|p| p.id == "apple"));
+    assert!(packs.iter().any(|p| p.id == "atelier"));
+    assert!(packs.iter().any(|p| p.id == "signal"));
+    std::env::remove_var("LATTICE_HOME");
+}
+
+#[test]
+fn load_font_pack_by_id_user_override() {
+    let _guard = HOME_LOCK.lock().unwrap();
+    let dir = tempdir().unwrap();
+    std::env::set_var("LATTICE_HOME", dir.path());
+    let home = ensure_lattice_home().unwrap();
+    let packs_dir = home.settings.join("font-packs");
+    std::fs::create_dir_all(&packs_dir).unwrap();
+    std::fs::write(
+        packs_dir.join("lattice.font-pack.yaml"),
+        r##"
+name: Custom Lattice
+id: lattice
+fonts:
+  display: CustomDisplay
+  ui: CustomUi
+  mono: CustomMono
+"##,
+    )
+    .unwrap();
+    let (doc, _) = load_font_pack_by_id(&home, "lattice").unwrap();
+    assert_eq!(doc.name, "Custom Lattice");
+    assert_eq!(doc.fonts.ui, "CustomUi");
+    std::env::remove_var("LATTICE_HOME");
 }
 
 #[test]
@@ -43,16 +170,14 @@ fn terminal_palettes_flatten_ansi_palette() {
         "rose-pine-moon",
         "kanagawa-wave",
     ] {
-        let doc = load_builtin(id).unwrap();
-        let vars = flatten_theme(&doc, &builtin_path(id)).unwrap();
+        let vars = flatten_builtin(id);
         for key in crate::document::TERMINAL_ANSI_KEYS {
             let var = format!("--lt-term-{}", key.replace('_', "-"));
             assert!(vars.contains_key(&var), "{id} missing {var}");
         }
     }
     // Dracula ANSI green is canonical, not role-derived.
-    let doc = load_builtin("dracula").unwrap();
-    let vars = flatten_theme(&doc, &builtin_path("dracula")).unwrap();
+    let vars = flatten_builtin("dracula");
     assert_eq!(
         vars.get("--lt-term-green").map(String::as_str),
         Some("#50fa7b")
@@ -61,8 +186,7 @@ fn terminal_palettes_flatten_ansi_palette() {
 
 #[test]
 fn themes_without_terminal_block_emit_no_term_vars() {
-    let doc = load_builtin("lattice-slate").unwrap();
-    let vars = flatten_theme(&doc, &builtin_path("lattice-slate")).unwrap();
+    let vars = flatten_builtin("lattice-slate");
     assert!(!vars.keys().any(|k| k.starts_with("--lt-term-")));
 }
 
@@ -93,10 +217,7 @@ roles:
 terminal:
   black: "#000000"
   red: "#ff0000"
-fonts:
-  display: Serif
-  ui: Sans
-  mono: Mono
+font_pack: lattice
 shape:
   radius: 9px
   radius_sm: 6px
@@ -114,15 +235,13 @@ shape:
 
 #[test]
 fn oled_ground_is_true_black() {
-    let doc = load_builtin("lattice-oled").unwrap();
-    let vars = flatten_theme(&doc, &builtin_path("lattice-oled")).unwrap();
+    let vars = flatten_builtin("lattice-oled");
     assert_eq!(vars.get("--lt-bg").map(String::as_str), Some("#000000"));
 }
 
 #[test]
 fn slate_ground_matches_shipped_default() {
-    let doc = load_builtin("lattice-slate").unwrap();
-    let vars = flatten_theme(&doc, &builtin_path("lattice-slate")).unwrap();
+    let vars = flatten_builtin("lattice-slate");
     assert_eq!(vars.get("--lt-bg").map(String::as_str), Some("#0a0d13"));
 }
 
@@ -137,12 +256,14 @@ fn appearance_round_trip() {
             light: "lattice-paper".into(),
             ..Default::default()
         },
+        font_pack: "signal".into(),
         ..Default::default()
     };
     save_appearance(&settings).unwrap();
     let (_home, loaded) = crate::appearance::load_appearance().unwrap();
     assert_eq!(loaded.mode, AppearanceMode::Auto);
     assert_eq!(loaded.pair.light, "lattice-paper");
+    assert_eq!(loaded.font_pack, "signal");
     std::env::remove_var("LATTICE_HOME");
 }
 
@@ -175,6 +296,7 @@ fn legacy_appearance_is_upgraded_once_without_a_persistent_warning() {
         crate::appearance::load_appearance_with_diagnostics().unwrap();
 
     assert_eq!(settings.theme, "lattice-paper");
+    assert_eq!(settings.font_pack, FONT_PACK_FOLLOW_THEME);
     assert!(diagnostics.is_empty());
     let upgraded = std::fs::read_to_string(path).unwrap();
     assert!(upgraded.contains("format: lattice-appearance-settings"));
@@ -221,10 +343,7 @@ roles:
   accent_deep: $accent_deep
   danger: $danger
   shadow: $ink_shadow
-fonts:
-  display: Serif
-  ui: Sans
-  mono: Mono
+font_pack: lattice
 shape:
   radius: 9px
   radius_sm: 6px
@@ -294,10 +413,7 @@ roles:
   accent_deep: "#aa0000"
   danger: "#ff6666"
   shadow: "#000000"
-fonts:
-  display: Serif
-  ui: Sans
-  mono: Mono
+font_pack: lattice
 shape:
   radius: 9px
   radius_sm: 6px

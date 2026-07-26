@@ -8,9 +8,15 @@ import {
   type ResolvedThemePayload,
   type ThemeCatalogPayload,
 } from "./apply";
-import { demoCatalog, demoSetAppearanceMode, demoSetTheme } from "./demoThemes";
+import {
+  demoCatalog,
+  demoSetAppearanceMode,
+  demoSetFontPack,
+  demoSetTheme,
+} from "./demoThemes";
 
 export type {
+  FontPackSummaryPayload,
   ResolvedThemePayload,
   ThemeCatalogPayload,
   ThemeSummaryPayload,
@@ -68,6 +74,21 @@ export async function setAppearanceMode(
       system,
       workspaceRoot: workspaceArg(workspaceRoot),
     },
+  });
+}
+
+export async function setFontPack(
+  fontPack: string,
+  workspaceRoot?: string | null,
+): Promise<ThemeCatalogPayload> {
+  const system = detectSystemAppearance();
+  if (!hasTauri) {
+    return demoSetFontPack(fontPack, system);
+  }
+  return invoke<ThemeCatalogPayload>("set_font_pack", {
+    fontPack,
+    system,
+    workspaceRoot: workspaceArg(workspaceRoot),
   });
 }
 

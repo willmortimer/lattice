@@ -1,6 +1,7 @@
 /* GENERATED from themes/lattice-slate.theme.yaml — do not edit by hand.
  * Recompile: node scripts/compile-theme.mjs
  * Theme: Lattice Slate (lattice-slate)
+ * Font pack: lattice
  *
  * Pixi/canvas cannot read CSS variables; these mirror --lt-* roles with
  * precomputed rgba washes that match the color-mix alphas in theme-tokens.css.

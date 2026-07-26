@@ -1,6 +1,46 @@
-//! GitHub App connector Tauri commands (browse existing CLI-connected extracts).
+//! GitHub App connector Tauri commands.
+//!
+//! Desktop: browser OAuth (loopback) + Connected roots browse.
+//! CLI: device-flow login remains available via `lattice github`.
 
-use lattice_connectors::{CheckoutEntry, CheckoutFile, ConnectedRepoSummary};
+use lattice_connectors::{CheckoutEntry, CheckoutFile, ConnectedRepoSummary, GitHubRepoSummary};
+use lattice_handlers::GithubOAuthStartResult;
+
+#[tauri::command]
+pub fn github_oauth_begin() -> Result<GithubOAuthStartResult, String> {
+    lattice_handlers::github_oauth_begin()
+}
+
+#[tauri::command]
+pub fn github_oauth_finish(session_id: String) -> Result<String, String> {
+    lattice_handlers::github_oauth_finish(session_id)
+}
+
+#[tauri::command]
+pub fn github_list_repos(access_token: String) -> Result<Vec<GitHubRepoSummary>, String> {
+    lattice_handlers::github_list_repos(access_token)
+}
+
+#[tauri::command]
+pub fn github_connect_repo(
+    root: String,
+    access_token: String,
+    owner: String,
+    repo: String,
+    repo_id: u64,
+    default_branch: String,
+    installation_id: Option<u64>,
+) -> Result<ConnectedRepoSummary, String> {
+    lattice_handlers::github_connect_repo(
+        root,
+        access_token,
+        owner,
+        repo,
+        repo_id,
+        default_branch,
+        installation_id,
+    )
+}
 
 #[tauri::command]
 pub fn github_list_bindings(root: String) -> Result<Vec<ConnectedRepoSummary>, String> {

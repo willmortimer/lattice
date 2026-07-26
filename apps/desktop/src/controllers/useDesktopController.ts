@@ -28,7 +28,7 @@ import {
 } from "../lib/proposals";
 import { installNativeContextMenus, isEditableTarget } from "../lib/nativeMenus";
 import { QUICK_NOTE_SHORTCUT, showQuickNote } from "../quickNoteWindow";
-import { applyResolvedTheme, loadThemeCatalog, setAppearanceMode, setFixedTheme, startThemeWatch, type ThemeCatalogPayload, type ThemeSummaryPayload } from "../theme";
+import { applyResolvedTheme, loadThemeCatalog, setAppearanceMode, setFixedTheme, setFontPack, startThemeWatch, type ThemeCatalogPayload, type ThemeSummaryPayload } from "../theme";
 import type { Resource, WorkspaceSnapshot } from "../types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { matchesKeybinding, useAppSettings } from "../settings/model";
@@ -736,6 +736,45 @@ export function useDesktopController() {
             try {
               applyThemeCatalog(await setFixedTheme(theme.id, root));
               setStatusToast(`Theme: ${theme.name}`);
+            } catch (err) {
+              setError(String(err));
+            }
+          })();
+        },
+      });
+    }
+
+    actions.push({
+      id: "action:font-pack-follow-theme",
+      label: "Font pack: Follow theme",
+      hint:
+        themeCatalog?.resolved.settings.fontPack === "theme" ? "active" : "theme default",
+      run: () => {
+        void (async () => {
+          try {
+            applyThemeCatalog(await setFontPack("theme", root));
+            setStatusToast("Font pack follows theme");
+          } catch (err) {
+            setError(String(err));
+          }
+        })();
+      },
+    });
+
+    for (const pack of themeCatalog?.fontPacks ?? []) {
+      const active =
+        themeCatalog?.resolved.settings.fontPack === pack.id ||
+        (themeCatalog?.resolved.settings.fontPack === "theme" &&
+          themeCatalog.resolved.fontPack === pack.id);
+      actions.push({
+        id: `action:font-pack-${pack.id}`,
+        label: `Font pack: ${pack.name}`,
+        hint: active ? "active" : pack.source === "user" ? "user" : "builtin",
+        run: () => {
+          void (async () => {
+            try {
+              applyThemeCatalog(await setFontPack(pack.id, root));
+              setStatusToast(`Font pack: ${pack.name}`);
             } catch (err) {
               setError(String(err));
             }

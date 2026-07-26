@@ -8,8 +8,27 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Error, Result};
 
 pub const GITHUB_TOKEN_SERVICE: &str = "lattice.github";
-/// Keychain account for the CLI user access token from `lattice github login`.
+/// Keychain account for the CLI/desktop user access token from GitHub login.
 pub const GITHUB_USER_TOKEN_KEY: &str = "lattice.github.user";
+
+pub const GITLAB_TOKEN_SERVICE: &str = "lattice.gitlab";
+/// Keychain account for the CLI/desktop user access token from GitLab login.
+pub const GITLAB_USER_TOKEN_KEY: &str = "lattice.gitlab.user";
+
+/// Keychain service name for a connector provider id (`github`, `gitlab`, …).
+pub fn token_service_for(provider: &str) -> String {
+    format!("lattice.{provider}")
+}
+
+/// User-session keychain account for a connector provider.
+pub fn user_token_key_for(provider: &str) -> String {
+    format!("lattice.{provider}.user")
+}
+
+/// Per-binding keychain account.
+pub fn binding_token_key_for(provider: &str, binding_id: &str) -> String {
+    format!("lattice.{provider}.{binding_id}")
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TokenMaterial {
