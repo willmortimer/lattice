@@ -7,6 +7,9 @@ use lattice_profile::{
     WorkspaceStartupSettings, DESKTOP_SETTINGS_SPEC, WORKSPACE_SETTINGS_SPEC,
 };
 use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, State};
+
+use crate::app_lock::{self, AppLockState};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -142,6 +145,8 @@ pub fn get_profile_snapshot() -> Result<ProfileSnapshot, String> {
 
 #[tauri::command]
 pub fn save_desktop_settings(
+    app: AppHandle,
+    state: State<'_, AppLockState>,
     settings: DesktopSettings,
     expected_revision: Option<String>,
 ) -> Result<ProfileSnapshot, String> {
@@ -153,6 +158,9 @@ pub fn save_desktop_settings(
             expected_revision.as_deref(),
         )
         .map_err(err)?;
+    app_lock::sync_policy_from_settings(&state, &settings);
+    let status = state.status();
+    app_lock::emit_status(&app, &status);
     snapshot()
 }
 

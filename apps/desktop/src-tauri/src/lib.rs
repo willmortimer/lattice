@@ -1,4 +1,5 @@
 mod agent;
+mod app_lock;
 mod app_menu;
 mod artifact;
 mod canvas;
@@ -12,6 +13,7 @@ mod github;
 mod gitlab;
 mod kernel;
 mod link_repair;
+mod presence;
 mod profile;
 mod proposals;
 mod relationship;
@@ -47,7 +49,8 @@ pub fn run() {
         .manage(resource_links::ResourceCatalogState::default())
         .manage(voice::VoiceState::default())
         .manage(semantic::SemanticState::default())
-        .manage(agent::AgentState::default());
+        .manage(agent::AgentState::default())
+        .manage(app_lock::AppLockState::load_from_profile());
 
     // Socket bridge for `@srsholmes/tauri-playwright` (WKWebView / WebView2 / WebKitGTK).
     // Only listen when explicitly enabled so normal debug runs stay quiet.
@@ -69,6 +72,7 @@ pub fn run() {
         })
         .setup(|app| {
             tray::install_tray(app.handle())?;
+            app_lock::install_sleep_lock_observer(app.handle());
             // Custom scheme `lattice://oauth/callback` completes OAuth sessions.
             use tauri_plugin_deep_link::DeepLinkExt;
             #[cfg(desktop)]
@@ -87,27 +91,42 @@ pub fn run() {
                     }
                 }
             });
+            if let Some(state) = app.try_state::<app_lock::AppLockState>() {
+                app_lock::emit_status(app.handle(), &state.status());
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
             if window.label() != "main" {
                 return;
             }
-            let tauri::WindowEvent::CloseRequested { api, .. } = event else {
-                return;
-            };
-            if tray::should_hide_main_on_close(tray::keep_app_in_menu_bar(), tray::is_quitting()) {
-                let _ = window.hide();
-                api.prevent_close();
-                return;
-            }
-            // Preference off (or explicit Quit): exit the process so the hidden
-            // quick-note window cannot leave a tray-less orphan.
-            if !tray::is_quitting() {
-                tray::request_quit(window.app_handle());
+            match event {
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    if tray::should_hide_main_on_close(
+                        tray::keep_app_in_menu_bar(),
+                        tray::is_quitting(),
+                    ) {
+                        let _ = window.hide();
+                        api.prevent_close();
+                        return;
+                    }
+                    if !tray::is_quitting() {
+                        tray::request_quit(window.app_handle());
+                    }
+                }
+                tauri::WindowEvent::Focused(focused) => {
+                    let app = window.app_handle();
+                    let Some(state) = app.try_state::<app_lock::AppLockState>() else {
+                        return;
+                    };
+                    if let Some(delay) = state.note_focus(*focused) {
+                        app_lock::schedule_idle_check(app, delay);
+                    }
+                }
+                _ => {}
             }
         })
-        .invoke_handler(tauri::generate_handler![
+        .invoke_handler(app_lock::gated_invoke_handler(tauri::generate_handler![
             commands::open_workspace,
             commands::list_resources,
             commands::read_file,
@@ -281,7 +300,11 @@ pub fn run() {
             agent::agent_health,
             agent::agent_start_run,
             agent::agent_cancel_run,
-        ])
+            app_lock::app_lock_status,
+            app_lock::app_lock_lock,
+            app_lock::app_lock_unlock,
+            app_lock::app_lock_enable,
+        ]))
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

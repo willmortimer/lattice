@@ -445,6 +445,7 @@ mod tests {
                 kind: None,
             }],
             outputs: vec![],
+            execution: TaskExecutionView { idempotent: false },
         };
         let json = serde_json::to_value(&view).expect("serialize");
         assert_eq!(json["limits"]["timeoutSeconds"], 60);

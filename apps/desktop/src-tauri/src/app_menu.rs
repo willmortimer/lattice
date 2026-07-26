@@ -17,6 +17,7 @@ pub const MENU_ACTION_EVENT: &str = "lattice-menu-action";
 
 pub const ACTION_SHOW: &str = "app.show";
 pub const ACTION_SETTINGS: &str = "app.settings";
+pub const ACTION_LOCK: &str = "app.lock";
 pub const ACTION_SEARCH: &str = "app.search";
 pub const ACTION_COMMAND_PALETTE: &str = "app.command-palette";
 pub const ACTION_QUICK_NOTE: &str = "app.quick-note";
@@ -94,6 +95,10 @@ pub fn handle_action(app: &AppHandle, id: &str) {
         ACTION_SHOW => tray::show_main_window(app),
         ACTION_QUICK_NOTE => tray::show_quick_note(app),
         ACTION_QUIT => tray::request_quit(app),
+        ACTION_LOCK => {
+            crate::app_lock::lock_and_emit(app);
+            tray::show_main_window(app);
+        }
         ACTION_WORKFLOW_OPEN_LATEST => {
             if let Some((root, workflow_path)) = tray::latest_running_workflow(app) {
                 open_workflow_resource(app, &root, &workflow_path);
@@ -147,6 +152,7 @@ pub fn handle_action(app: &AppHandle, id: &str) {
 
 pub fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let settings = MenuItem::with_id(app, ACTION_SETTINGS, "Settings…", true, Some("CmdOrCtrl+,"))?;
+    let lock = MenuItem::with_id(app, ACTION_LOCK, "Lock", true, Some("CmdOrCtrl+Shift+L"))?;
     let search = MenuItem::with_id(
         app,
         ACTION_SEARCH,
@@ -233,6 +239,7 @@ pub fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
                 &about_item,
                 &app_sep1,
                 &settings,
+                &lock,
                 &app_sep2,
                 &services,
                 &app_sep3,
@@ -278,6 +285,7 @@ pub fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
                 &open_workspace,
                 &file_sep2,
                 &settings,
+                &lock,
                 &file_sep3,
                 &file_close,
                 &quit,
