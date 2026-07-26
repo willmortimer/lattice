@@ -141,20 +141,37 @@ Extract manifests record:
 - Output partition paths.
 - Refresh policy.
 
-### GitHub repository Extract
+### GitHub / GitLab repository Extract
 
-GitHub connected repos follow
-[ADR 0045](decisions/0045-github-connected-repos-are-readonly-extracts.md):
+Connected git forges follow
+[ADR 0045](decisions/0045-github-connected-repos-are-readonly-extracts.md).
 
-- Auth via a Lattice GitHub App (device flow) from the **CLI**
-  (`lattice github login` / `lattice github connect owner/repo`); tokens in the
-  OS keychain. Desktop browses Connected extracts only — it does not run
-  install/login UI.
-- Binding YAML under `.lattice/connectors/github/<binding_id>.yaml` with
-  `mode: read` and capabilities `list` / `read` / `snapshot`.
-- Shallow clone (`git clone --depth 1`) into
-  `.lattice/connectors/github/<binding_id>/checkout/`.
-- Desktop shows a separate Connected roots tree; files open read-only.
+Shared desktop OAuth: system-browser AuthPresenter + PKCE; redirect is either
+loopback `http://127.0.0.1:17872/callback` or custom scheme
+`lattice://oauth/callback`.
+
+**GitHub**
+
+- Desktop: loopback OAuth with `LATTICE_GITHUB_APP_CLIENT_ID` /
+  `LATTICE_GITHUB_APP_CLIENT_SECRET`.
+- CLI: device flow via `lattice github login` / `lattice github connect owner/repo`
+  (client id only).
+- Bindings under `.lattice/connectors/github/<binding_id>/`.
+
+**GitLab**
+
+- Desktop: custom-scheme OAuth with `LATTICE_GITLAB_OAUTH_CLIENT_ID` /
+  `LATTICE_GITLAB_OAUTH_CLIENT_SECRET` (scopes `read_api`, `read_repository`).
+- CLI: loopback authorize via `lattice gitlab login` /
+  `lattice gitlab connect group/project` (register both redirect URIs on the
+  GitLab OAuth app).
+- Bindings under `.lattice/connectors/gitlab/<binding_id>/`.
+
+Common behavior:
+
+- Binding YAML with `mode: read` and capabilities `list` / `read` / `snapshot`.
+- Shallow clone (`git clone --depth 1`) into `<binding>/checkout/`.
+- Desktop Connected roots: connect + browse; files open read-only.
 - Checkout is never opened as a nested Lattice workspace, even if it contains
   `lattice.yaml`.
 - Offline: serve the last extract and surface a stale/offline badge.

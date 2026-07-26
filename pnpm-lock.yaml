@@ -104,9 +104,21 @@ importers:
       '@fontsource-variable/fraunces':
         specifier: ^5.2.9
         version: 5.2.9
+      '@fontsource-variable/ibm-plex-sans':
+        specifier: ^5.2.8
+        version: 5.3.0
       '@fontsource-variable/jetbrains-mono':
         specifier: ^5.2.8
         version: 5.2.8
+      '@fontsource-variable/literata':
+        specifier: ^5.2.8
+        version: 5.3.0
+      '@fontsource-variable/newsreader':
+        specifier: ^5.2.8
+        version: 5.3.0
+      '@fontsource-variable/source-sans-3':
+        specifier: ^5.2.9
+        version: 5.3.0
       '@fontsource-variable/space-grotesk':
         specifier: ^5.2.10
         version: 5.2.10
@@ -308,9 +320,21 @@ importers:
       '@fontsource-variable/fraunces':
         specifier: ^5.2.9
         version: 5.2.9
+      '@fontsource-variable/ibm-plex-sans':
+        specifier: ^5.2.8
+        version: 5.3.0
       '@fontsource-variable/jetbrains-mono':
         specifier: ^5.2.8
         version: 5.2.8
+      '@fontsource-variable/literata':
+        specifier: ^5.2.8
+        version: 5.3.0
+      '@fontsource-variable/newsreader':
+        specifier: ^5.2.8
+        version: 5.3.0
+      '@fontsource-variable/source-sans-3':
+        specifier: ^5.2.9
+        version: 5.3.0
       '@fontsource-variable/space-grotesk':
         specifier: ^5.2.10
         version: 5.2.10
@@ -1176,8 +1200,20 @@ packages:
   '@fontsource-variable/fraunces@5.2.9':
     resolution: {integrity: sha512-Y6IjunlN9Ni723np+GIgAaKzCDBrPRrqNi01TZxHs5wtHYROWFM9W6yiT+/gGwSjWIRD18oX17kD/BRWekc/Lw==}
 
+  '@fontsource-variable/ibm-plex-sans@5.3.0':
+    resolution: {integrity: sha512-agG8tXFEo0hD9+J7npa4vbbWult52eMLVaQ6WQRlhs/iCAojrMAoejru85W9HTVXHfyUj96KM7gp/KGAS87XaQ==}
+
   '@fontsource-variable/jetbrains-mono@5.2.8':
     resolution: {integrity: sha512-WBA9elru6Jdp5df2mES55wuOO0WIrn3kpXnI4+W2ek5u3ZgLS9XS4gmIlcQhiZOWEKl95meYdvK7xI+ETLCq/Q==}
+
+  '@fontsource-variable/literata@5.3.0':
+    resolution: {integrity: sha512-1Jw7xvOcoGyB83lxB2nG4bfNbqtX2/TTbdh9sHAOmU064SvmSdulDtA5RBu5JYWf64fdaKX7xU+z3GO1T2bCHA==}
+
+  '@fontsource-variable/newsreader@5.3.0':
+    resolution: {integrity: sha512-rrzYi43qMpbzwuFtf9OkWH8sxAPVPcQQQEwXpPtwaKYeJ8yVg5aLs5kawmo1f2Q1t1M38TLmEKCkGVDsYwgdFw==}
+
+  '@fontsource-variable/source-sans-3@5.3.0':
+    resolution: {integrity: sha512-dpi0GZk7EQe2tYpg6Q0Fx0OmUgnuGu+0rHPgtXqtKhglYmJuP7jZ12Mu1uN+NfRaJRY1Emn8AQJEWzmoZ4wa9g==}
 
   '@fontsource-variable/space-grotesk@5.2.10':
     resolution: {integrity: sha512-yJQO/o35/hAP3CFnpdFTwQku2yzJOae2HIpBmqkOVoxhhXJaQP3g+b6Jrz7u+eI7A5ZdCIf88uMWpBJdFiGr5w==}
@@ -7258,7 +7294,15 @@ snapshots:
 
   '@fontsource-variable/fraunces@5.2.9': {}
 
+  '@fontsource-variable/ibm-plex-sans@5.3.0': {}
+
   '@fontsource-variable/jetbrains-mono@5.2.8': {}
+
+  '@fontsource-variable/literata@5.3.0': {}
+
+  '@fontsource-variable/newsreader@5.3.0': {}
+
+  '@fontsource-variable/source-sans-3@5.3.0': {}
 
   '@fontsource-variable/space-grotesk@5.2.10': {}
 

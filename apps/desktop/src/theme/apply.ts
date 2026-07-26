@@ -22,12 +22,14 @@ export interface ResolvedThemePayload {
   name: string;
   appearance: string;
   sourcePath: string;
+  fontPack: string;
   vars: Record<string, string>;
   background: string;
   settings: {
     mode: "fixed" | "auto" | string;
     theme: string;
     pair: { dark: string; light: string };
+    fontPack: string;
   };
   workspaceOverride: { theme?: string | null; accent?: string | null };
   diagnostics: Array<{ path: string; message: string }>;
@@ -41,8 +43,16 @@ export interface ThemeSummaryPayload {
   path: string;
 }
 
+export interface FontPackSummaryPayload {
+  id: string;
+  name: string;
+  source: "builtin" | "user" | string;
+  path: string;
+}
+
 export interface ThemeCatalogPayload {
   themes: ThemeSummaryPayload[];
+  fontPacks: FontPackSummaryPayload[];
   diagnostics: Array<{ path: string; message: string }>;
   resolved: ResolvedThemePayload;
 }

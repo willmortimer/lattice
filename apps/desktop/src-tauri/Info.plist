@@ -4,5 +4,16 @@
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Lattice uses the microphone for local, on-device voice dictation. Audio stays on this Mac and is not uploaded.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>dev.lattice.desktop.oauth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>lattice</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

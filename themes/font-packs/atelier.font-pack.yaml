@@ -1,0 +1,7 @@
+# Warmer editorial book feel — Literata display, Source Sans 3 UI.
+name: Atelier
+id: atelier
+fonts:
+  display: '"Literata Variable", "Literata", Georgia, serif'
+  ui: '"Source Sans 3 Variable", "Source Sans 3", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'

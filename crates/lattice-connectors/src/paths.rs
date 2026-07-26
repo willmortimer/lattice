@@ -1,29 +1,50 @@
-//! Paths under `.lattice/connectors/github/`.
+//! Paths under `.lattice/connectors/<provider>/`.
 
 use std::path::{Path, PathBuf};
 
 use lattice_core::OPERATIONAL_DIR;
 
-use crate::error::{path_display, Result, Error};
+use crate::error::{path_display, Error, Result};
+
+pub const GITHUB_PROVIDER: &str = "github";
+pub const GITLAB_PROVIDER: &str = "gitlab";
 
 /// Relative operational directory for GitHub connector state.
 pub const GITHUB_CONNECTOR_DIR: &str = "connectors/github";
+/// Relative operational directory for GitLab connector state.
+pub const GITLAB_CONNECTOR_DIR: &str = "connectors/gitlab";
 
-pub fn connectors_github_dir(workspace_root: &Path) -> PathBuf {
+pub fn connectors_provider_dir(workspace_root: &Path, provider: &str) -> PathBuf {
     workspace_root
         .join(OPERATIONAL_DIR)
         .join("connectors")
-        .join("github")
+        .join(provider)
+}
+
+pub fn connectors_github_dir(workspace_root: &Path) -> PathBuf {
+    connectors_provider_dir(workspace_root, GITHUB_PROVIDER)
+}
+
+pub fn connectors_gitlab_dir(workspace_root: &Path) -> PathBuf {
+    connectors_provider_dir(workspace_root, GITLAB_PROVIDER)
+}
+
+pub fn binding_yaml_path_for(workspace_root: &Path, provider: &str, binding_id: &str) -> PathBuf {
+    connectors_provider_dir(workspace_root, provider).join(format!("{binding_id}.yaml"))
 }
 
 pub fn binding_yaml_path(workspace_root: &Path, binding_id: &str) -> PathBuf {
-    connectors_github_dir(workspace_root).join(format!("{binding_id}.yaml"))
+    binding_yaml_path_for(workspace_root, GITHUB_PROVIDER, binding_id)
+}
+
+pub fn checkout_dir_for(workspace_root: &Path, provider: &str, binding_id: &str) -> PathBuf {
+    connectors_provider_dir(workspace_root, provider)
+        .join(binding_id)
+        .join("checkout")
 }
 
 pub fn checkout_dir(workspace_root: &Path, binding_id: &str) -> PathBuf {
-    connectors_github_dir(workspace_root)
-        .join(binding_id)
-        .join("checkout")
+    checkout_dir_for(workspace_root, GITHUB_PROVIDER, binding_id)
 }
 
 /// True when `rel` (workspace-relative) points at any connector extract or
@@ -44,7 +65,7 @@ pub fn is_under_operational_connectors(rel: &Path) -> bool {
     }
 }
 
-/// True when `rel` is inside a GitHub checkout extract.
+/// True when `rel` is inside a GitHub or GitLab checkout extract.
 pub fn is_connector_extract_path(rel: &Path) -> bool {
     let parts: Vec<_> = rel
         .components()
@@ -56,13 +77,14 @@ pub fn is_connector_extract_path(rel: &Path) -> bool {
     parts.len() >= 5
         && parts[0] == OPERATIONAL_DIR
         && parts[1] == "connectors"
-        && parts[2] == "github"
+        && (parts[2] == GITHUB_PROVIDER || parts[2] == GITLAB_PROVIDER)
         && parts[4] == "checkout"
 }
 
 /// Resolve a path inside a checkout, rejecting `..` and escapes.
-pub fn resolve_in_checkout(
+pub fn resolve_in_checkout_for(
     workspace_root: &Path,
+    provider: &str,
     binding_id: &str,
     rel_in_repo: &str,
 ) -> Result<PathBuf> {
@@ -75,7 +97,10 @@ pub fn resolve_in_checkout(
             "invalid binding id {binding_id:?}"
         )));
     }
-    let checkout = checkout_dir(workspace_root, binding_id);
+    if provider.contains('/') || provider.contains('\\') || provider.contains("..") {
+        return Err(Error::sandbox(format!("invalid provider {provider:?}")));
+    }
+    let checkout = checkout_dir_for(workspace_root, provider, binding_id);
     if !checkout.is_dir() {
         return Err(Error::NotFound(format!(
             "checkout missing for binding {binding_id}"
@@ -103,12 +128,9 @@ pub fn resolve_in_checkout(
             path_display(&checkout)
         ))
     })?;
-    // File may not exist yet for create attempts; canonicalize parent when needed.
     let canonical_candidate = if candidate.exists() {
         candidate.canonicalize().map_err(|err| {
-            Error::sandbox(format!(
-                "cannot resolve {rel_in_repo:?}: {err}"
-            ))
+            Error::sandbox(format!("cannot resolve {rel_in_repo:?}: {err}"))
         })?
     } else {
         let parent = candidate.parent().unwrap_or(&checkout);
@@ -129,8 +151,16 @@ pub fn resolve_in_checkout(
     Ok(canonical_candidate)
 }
 
-pub fn list_binding_ids(workspace_root: &Path) -> Result<Vec<String>> {
-    let dir = connectors_github_dir(workspace_root);
+pub fn resolve_in_checkout(
+    workspace_root: &Path,
+    binding_id: &str,
+    rel_in_repo: &str,
+) -> Result<PathBuf> {
+    resolve_in_checkout_for(workspace_root, GITHUB_PROVIDER, binding_id, rel_in_repo)
+}
+
+pub fn list_binding_ids_for(workspace_root: &Path, provider: &str) -> Result<Vec<String>> {
+    let dir = connectors_provider_dir(workspace_root, provider);
     if !dir.is_dir() {
         return Ok(Vec::new());
     }
@@ -149,6 +179,10 @@ pub fn list_binding_ids(workspace_root: &Path) -> Result<Vec<String>> {
     Ok(ids)
 }
 
+pub fn list_binding_ids(workspace_root: &Path) -> Result<Vec<String>> {
+    list_binding_ids_for(workspace_root, GITHUB_PROVIDER)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -159,6 +193,9 @@ mod tests {
     fn extract_path_detection() {
         assert!(is_connector_extract_path(Path::new(
             ".lattice/connectors/github/abc/checkout/README.md"
+        )));
+        assert!(is_connector_extract_path(Path::new(
+            ".lattice/connectors/gitlab/abc/checkout/README.md"
         )));
         assert!(is_under_operational_connectors(Path::new(
             ".lattice/connectors/github/abc.yaml"
@@ -187,7 +224,6 @@ mod tests {
         let checkout = checkout_dir(dir.path(), binding);
         std::fs::create_dir_all(&checkout).unwrap();
         std::fs::write(checkout.join("lattice.yaml"), "name: Nested\n").unwrap();
-        // Path helpers still treat this as an extract, never a workspace root.
         let rel = PathBuf::from(format!(
             "{OPERATIONAL_DIR}/connectors/github/{binding}/checkout/lattice.yaml"
         ));

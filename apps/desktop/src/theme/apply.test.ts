@@ -40,6 +40,7 @@ function payload(
   return {
     name: overrides.id,
     sourcePath: `builtin:${overrides.id}.theme.yaml`,
+    fontPack: "lattice",
     vars: {
       "--lt-bg": overrides.background,
       "--lt-accent": overrides.appearance === "light" ? "#0b57d0" : "#f5a623",
@@ -48,6 +49,7 @@ function payload(
       mode: "fixed",
       theme: overrides.id,
       pair: { dark: "lattice-slate", light: "lattice-paper" },
+      fontPack: "theme",
     },
     workspaceOverride: {},
     diagnostics: [],
@@ -123,6 +125,7 @@ describe("theme mirror", () => {
           mode: "auto",
           theme: "lattice-slate",
           pair: { dark: "lattice-slate", light: "lattice-paper" },
+          fontPack: "theme",
         },
       }),
       null,
@@ -137,6 +140,7 @@ describe("theme mirror", () => {
           mode: "auto",
           theme: "lattice-paper",
           pair: { dark: "lattice-slate", light: "lattice-paper" },
+          fontPack: "theme",
         },
       }),
       dark,

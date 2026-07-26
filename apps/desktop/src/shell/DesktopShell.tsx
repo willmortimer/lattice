@@ -13,9 +13,8 @@ import { ProposalInboxPanel } from "../ProposalInboxPanel";
 import { ProposalReviewModal } from "../ProposalReviewModal";
 import { batchWarnThresholdExceeded } from "../lib/linkRepair";
 import { hasTauri } from "../lib/ipc";
-import { ConnectedRoots } from "../ConnectedRoots";
+import { ConnectedRoots, readConnectedCheckoutFile } from "../ConnectedRoots";
 import { GithubFileViewer } from "../GithubFileViewer";
-import { githubReadCheckoutFile } from "../lib/github";
 import { NewWorkspaceDialog } from "../NewWorkspaceDialog";
 import { CommandPalette } from "../CommandPalette";
 import { ResourceTree } from "../ResourceTree";
@@ -34,7 +33,7 @@ import { ResourceInspector } from "../shell/ResourceInspector";
 import { ResourceSurface } from "../shell/ResourceSurface";
 import { StartupSplash } from "../shell/StartupSplash";
 import { useStartupSplash } from "../shell/useStartupSplash";
-import { setAppearanceMode, setFixedTheme } from "../theme";
+import { setAppearanceMode, setFixedTheme, setFontPack } from "../theme";
 import { fileTitle } from "../controllers/useResourceController";
 import { isUnsaved, saveIndicatorText } from "../editor/saveState";
 import { searchResourceLinks } from "../lib/resourceLinks";
@@ -344,8 +343,14 @@ export function DesktopShell({ model }: DesktopShellProps) {
                 workspaceRoot={snapshot.root}
                 onError={setError}
                 onOpenFile={(detail) => {
-                  void githubReadCheckoutFile(snapshot.root, detail.bindingId, detail.path)
+                  void readConnectedCheckoutFile(
+                    detail.provider,
+                    snapshot.root,
+                    detail.bindingId,
+                    detail.path,
+                  )
                     .then((file) => {
+                      const scheme = detail.provider === "github" ? "github" : "gitlab";
                       setSession({
                         kind: "github-file",
                         bindingId: detail.bindingId,
@@ -355,7 +360,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
                         content: file.content,
                         stale: detail.stale,
                         resource: {
-                          path: `github://${detail.owner}/${detail.repo}/${detail.path}`,
+                          path: `${scheme}://${detail.owner}/${detail.repo}/${detail.path}`,
                           kind: "file",
                         },
                       });
@@ -600,6 +605,11 @@ export function DesktopShell({ model }: DesktopShellProps) {
                   }
                   onFollowSystem={() =>
                     void setAppearanceMode("auto", snapshot.root)
+                      .then(applyThemeCatalog)
+                      .catch((err) => setError(String(err)))
+                  }
+                  onFontPackChange={(fontPack) =>
+                    void setFontPack(fontPack, snapshot.root)
                       .then(applyThemeCatalog)
                       .catch((err) => setError(String(err)))
                   }

@@ -36,10 +36,7 @@ roles:
   danger: $danger
   shadow: $ink_shadow
 
-fonts:
-  display: '-apple-system, "SF Pro Display", "Helvetica Neue", system-ui, sans-serif'
-  ui: '-apple-system, "SF Pro Text", "Helvetica Neue", system-ui, sans-serif'
-  mono: '"SF Mono", ui-monospace, Menlo, "JetBrains Mono", monospace'
+font_pack: apple
 
 shape:
   radius: 10px

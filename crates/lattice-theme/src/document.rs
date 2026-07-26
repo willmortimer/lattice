@@ -24,20 +24,14 @@ pub struct ThemeDocument {
     pub appearance: Appearance,
     pub palette: BTreeMap<String, String>,
     pub roles: BTreeMap<String, String>,
-    pub fonts: ThemeFonts,
+    /// Id of a font pack (`themes/font-packs/<id>.font-pack.yaml`).
+    pub font_pack: String,
     pub shape: ThemeShape,
     /// Optional ANSI terminal palette (adoption path for terminal theme
     /// standards like Catppuccin/Nord). When present, all 16 ANSI slots are
     /// required; `cursor`, `cursor_text`, and `selection` are optional.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub terminal: Option<BTreeMap<String, String>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ThemeFonts {
-    pub display: String,
-    pub ui: String,
-    pub mono: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -115,6 +109,15 @@ impl ThemeDocument {
         }
         if self.palette.is_empty() {
             return Err(Error::invalid(path, "palette must not be empty"));
+        }
+        if !is_valid_id(&self.font_pack) {
+            return Err(Error::invalid(
+                path,
+                format!(
+                    "font_pack must match [a-z][a-z0-9-]*, got {:?}",
+                    self.font_pack
+                ),
+            ));
         }
         for key in REQUIRED_ROLES {
             if !self.roles.contains_key(*key) {

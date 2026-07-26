@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use lattice_theme::{flatten_theme, load_builtin};
+use lattice_theme::{flatten_theme, load_builtin, load_builtin_font_pack};
 
 use crate::error::{Error, Result};
 
@@ -38,8 +38,9 @@ const EXTRA_TOKENS: &str = "\
 pub fn builtin_theme_vars(theme_id: Option<&str>) -> Result<BTreeMap<String, String>> {
     let id = theme_id.unwrap_or(DEFAULT_THEME_ID);
     let doc = load_builtin(id)?;
+    let pack = load_builtin_font_pack(&doc.font_pack).or_else(|_| load_builtin_font_pack("lattice"))?;
     let path_buf = std::path::PathBuf::from(format!("builtin:{id}.theme.yaml"));
-    flatten_theme(&doc, &path_buf).map_err(Error::from)
+    flatten_theme(&doc, &pack.fonts, &path_buf).map_err(Error::from)
 }
 
 /// Render a `:root { … }` block from theme variables.

@@ -78,10 +78,7 @@ roles:
 terminal:
   black: "#000"
   red: "#f00"
-fonts:
-  display: Serif
-  ui: Sans
-  mono: Mono
+font_pack: lattice
 shape:
   radius: 9px
   radius_sm: 6px
@@ -128,10 +125,7 @@ roles:
   accent_deep: "#a00"
   danger: "#f66"
   shadow: "#000"
-fonts:
-  display: Serif
-  ui: Sans
-  mono: Mono
+font_pack: lattice
 shape:
   radius: 9px
   radius_sm: 6px
@@ -150,4 +144,31 @@ shape:
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("resolves font_pack stacks into compiled tokens", () => {
+  const r = spawnSync(process.execPath, [COMPILE], {
+    cwd: ROOT,
+    encoding: "utf8",
+  });
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const css = readFileSync(join(ROOT, "apps/desktop/src/theme-tokens.css"), "utf8");
+  assert.match(css, /Font pack: lattice/);
+  assert.match(css, /Fraunces Variable/);
+  assert.match(css, /Space Grotesk Variable/);
+  assert.match(css, /JetBrains Mono Variable/);
+});
+
+test("cupertino theme resolves apple font pack", () => {
+  const r = spawnSync(
+    process.execPath,
+    [COMPILE, join(ROOT, "themes/cupertino.theme.yaml")],
+    { cwd: ROOT, encoding: "utf8" },
+  );
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const css = readFileSync(join(ROOT, "apps/desktop/src/theme-tokens.css"), "utf8");
+  assert.match(css, /Font pack: apple/);
+  assert.match(css, /SF Pro Text/);
+  const restore = spawnSync(process.execPath, [COMPILE], { cwd: ROOT, encoding: "utf8" });
+  assert.equal(restore.status, 0, restore.stderr || restore.stdout);
 });

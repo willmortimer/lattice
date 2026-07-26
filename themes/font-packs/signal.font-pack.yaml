@@ -1,0 +1,7 @@
+# Quieter UI with sharper display contrast — Newsreader + IBM Plex Sans.
+name: Signal
+id: signal
+fonts:
+  display: '"Newsreader Variable", "Newsreader", Georgia, serif'
+  ui: '"IBM Plex Sans Variable", "IBM Plex Sans", system-ui, sans-serif'
+  mono: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace'
