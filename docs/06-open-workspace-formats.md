@@ -94,9 +94,11 @@ sources directly.
 
 Deck v1 accepts only package-relative paths and validates referenced files
 after symlink resolution. This prevents a deck manifest from silently reading
-outside its own package. The initial resource core recognizes and validates
-decks; presentation UI, exports, remote controls, and viewbox composition are
-separate capabilities.
+outside its own package. The static exporter applies the same containment
+contract, strips active HTML features (scripts, handlers, forms, nested
+frames, SVG, refresh metadata, and non-fragment navigation), inlines bounded
+package raster assets as data URLs, and excludes speaker notes from audience
+HTML and PDF output.
 
 ## Package pattern
 

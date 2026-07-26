@@ -7,7 +7,7 @@ use lattice_data::{
     write_package_interface, BindingSpec, DataApp, InterfaceComponent, InterfaceComponentType,
     InterfaceDef, InterfaceLayout,
 };
-use lattice_publish::{export, ExportTarget};
+use lattice_publish::{export, export_deck_html, ExportTarget};
 use tempfile::tempdir;
 
 fn init_workspace(root: &Path) {
@@ -269,4 +269,84 @@ permissions:
     let snapshot = fs::read_to_string(out.join("snapshot.json")).unwrap();
     assert!(snapshot.contains("lattice-publish-artifact-snapshot"));
     assert!(snapshot.contains("\"value\": 1") || snapshot.contains("\"value\":1"));
+}
+
+fn write_deck(root: &Path) -> std::path::PathBuf {
+    let deck = root.join("Review.deck");
+    fs::create_dir_all(deck.join("slides")).unwrap();
+    fs::create_dir_all(deck.join("notes")).unwrap();
+    fs::write(deck.join("cover.png"), b"not-a-real-png-but-a-bounded-raster").unwrap();
+    fs::write(
+        deck.join("deck.yaml"),
+        r#"format: lattice-deck
+version: 1
+id: review
+title: Review
+aspect_ratio: 16:9
+theme:
+  stylesheet: ./theme.css
+slides:
+  - id: title
+    source: ./slides/001.html
+    notes: ./notes/001.md
+  - id: close
+    source: ./slides/002.html
+presentation:
+  start: title
+"#,
+    )
+    .unwrap();
+    fs::write(deck.join("theme.css"), ".hero { color: var(--lt-accent); }").unwrap();
+    fs::write(
+        deck.join("slides/001.html"),
+        r#"<section class="hero" onclick="alert(1)"><h1>Review</h1><script>bad()</script><img src="./cover.png"><iframe src="https://bad.example"></iframe><a href="https://bad.example">bad link</a></section>"#,
+    )
+    .unwrap();
+    fs::write(deck.join("slides/002.html"), "<h2>Close</h2>").unwrap();
+    fs::write(deck.join("notes/001.md"), "private speaker note").unwrap();
+    deck
+}
+
+#[test]
+fn exports_deck_in_order_with_fragments_and_sanitized_slides() {
+    let dir = tempdir().unwrap();
+    let root = dir.path().join("ws");
+    fs::create_dir_all(&root).unwrap();
+    init_workspace(&root);
+    write_deck(&root);
+
+    let report = export(&root, &dir.path().join("out-deck"), ExportTarget::Deck("Review.deck".into())).unwrap();
+    assert_eq!(report.kind, "deck");
+    let html = fs::read_to_string(report.primary_html).unwrap();
+    assert!(html.contains("id=\"title\""));
+    assert!(html.contains("id=\"close\""));
+    assert!(html.find("id=\"title\"").unwrap() < html.find("id=\"close\"").unwrap());
+    assert!(html.contains("location.hash"));
+    assert!(html.contains("break-after: page"));
+    assert!(html.contains("Content-Security-Policy"));
+    assert!(html.contains("data:image/png;base64,"));
+    assert!(!html.contains("bad()"));
+    assert!(!html.contains("onclick"));
+    assert!(!html.contains("<iframe"));
+    assert!(!html.contains("https://bad.example"));
+    assert!(!html.contains("private speaker note"));
+}
+
+#[test]
+fn deck_export_rejects_active_theme_css_and_writes_explicit_html_atomically() {
+    let dir = tempdir().unwrap();
+    let root = dir.path().join("ws");
+    fs::create_dir_all(&root).unwrap();
+    init_workspace(&root);
+    let deck = write_deck(&root);
+    fs::write(deck.join("theme.css"), "@import url(https://bad.example/theme.css);").unwrap();
+    let err = export(&root, &dir.path().join("out"), ExportTarget::Deck("Review.deck".into())).unwrap_err();
+    assert!(err.to_string().contains("theme CSS"));
+
+    fs::write(deck.join("theme.css"), ".hero { color: red; }").unwrap();
+    let destination = dir.path().join("saved/review.html");
+    let report = export_deck_html(&root, Path::new("Review.deck"), &destination).unwrap();
+    assert_eq!(report.primary_html, destination);
+    assert!(destination.is_file());
+    assert!(!destination.with_extension("lattice-export.tmp").exists());
 }

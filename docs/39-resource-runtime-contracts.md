@@ -403,3 +403,15 @@ Mixed-format fixtures live under `test/fixtures/resource-runtime/`. The Rust
 conformance test in `lattice-core` copies each fixture into a temporary
 workspace and asserts expected profiles, diagnostics, and capability flags.
 See [testing and conformance](./28-testing-conformance-and-benchmarks.md).
+## Deck runtime and export boundary
+
+Deck source remains a directory package rather than a generated binary. The
+runtime loads `deck.yaml` through `lattice-commands::DeckManifest`, which
+checks stable IDs, format version, slide count, extensions, and symlink-aware
+containment. Renderer and exporter both consume that validated contract.
+
+The static exporter treats authored slide HTML and theme CSS as untrusted
+input. It admits a small semantic HTML subset, bounded data images, and CSS
+without imports, URLs, or executable legacy features. Export navigation is a
+separate fixed host layer; it is the only script permitted by the portable
+document's CSP.
