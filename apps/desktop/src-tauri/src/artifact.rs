@@ -1,6 +1,7 @@
 //! Tauri wiring for `*.artifact/` packages (load manifest, entrypoint, bindings).
 
 use std::collections::BTreeMap;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use base64::Engine;
@@ -163,6 +164,21 @@ fn raster_mime(path: &Path) -> Option<&'static str> {
     }
 }
 
+fn read_bounded(path: &Path, max_bytes: usize, too_large: &str) -> Result<Vec<u8>, String> {
+    let file = std::fs::File::open(path).map_err(|err| err.to_string())?;
+    if file.metadata().map_err(|err| err.to_string())?.len() > max_bytes as u64 {
+        return Err(too_large.into());
+    }
+    let mut bytes = Vec::with_capacity(max_bytes.min(64 * 1024));
+    file.take(max_bytes as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|err| err.to_string())?;
+    if bytes.len() > max_bytes {
+        return Err(too_large.into());
+    }
+    Ok(bytes)
+}
+
 fn static_raster_assets(package_root: &Path) -> Result<BTreeMap<String, String>, String> {
     const MAX_ASSET_FILES: usize = 128;
     const MAX_ASSET_BYTES: usize = 8 * 1024 * 1024;
@@ -186,22 +202,24 @@ fn static_raster_assets(package_root: &Path) -> Result<BTreeMap<String, String>,
         if !canonical.starts_with(package_root) {
             return Err("asset escapes artifact package".into());
         }
-        let byte_len = std::fs::metadata(&canonical)
-            .map_err(|err| err.to_string())?
-            .len();
-        if byte_len > MAX_ASSET_BYTES as u64 {
-            return Err(format!(
+        let remaining = MAX_TOTAL_BYTES.saturating_sub(total);
+        let read_limit = MAX_ASSET_BYTES.min(remaining);
+        let too_large = if remaining < MAX_ASSET_BYTES {
+            "artifact raster assets exceed the 32 MiB aggregate limit".to_string()
+        } else {
+            format!(
                 "artifact asset {} exceeds the 8 MiB limit",
                 entry.path().display()
-            ));
-        }
+            )
+        };
+        let bytes = read_bounded(&canonical, read_limit, &too_large)?;
+        let byte_len = bytes.len();
         total = total
-            .checked_add(byte_len as usize)
+            .checked_add(byte_len)
             .ok_or_else(|| "artifact raster asset size overflow".to_string())?;
         if total > MAX_TOTAL_BYTES {
             return Err("artifact raster assets exceed the 32 MiB aggregate limit".into());
         }
-        let bytes = std::fs::read(&canonical).map_err(|err| err.to_string())?;
         let rel = canonical
             .strip_prefix(package_root)
             .map_err(|_| "asset escapes artifact package".to_string())?
@@ -274,15 +292,15 @@ pub fn artifact_read_entrypoint(
     if !canonical_entry.starts_with(&package_dir.canonicalize().map_err(|err| err.to_string())?) {
         return Err("entrypoint escapes artifact package".into());
     }
-    if manifest.profile == ArtifactProfile::Static {
-        let byte_len = std::fs::metadata(&canonical_entry)
-            .map_err(|err| err.to_string())?
-            .len();
-        if byte_len > 2 * 1024 * 1024 {
-            return Err("artifact entrypoint exceeds the 2 MiB static document limit".into());
-        }
-    }
-    let html_bytes = std::fs::read(&canonical_entry).map_err(|err| err.to_string())?;
+    let html_bytes = if manifest.profile == ArtifactProfile::Static {
+        read_bounded(
+            &canonical_entry,
+            2 * 1024 * 1024,
+            "artifact entrypoint exceeds the 2 MiB static document limit",
+        )?
+    } else {
+        std::fs::read(&canonical_entry).map_err(|err| err.to_string())?
+    };
     let html = String::from_utf8(html_bytes)
         .map_err(|_| "artifact entrypoint must be UTF-8".to_string())?;
     let package_root = package_dir.canonicalize().map_err(|err| err.to_string())?;
@@ -298,16 +316,18 @@ pub fn artifact_read_entrypoint(
             if !canonical.starts_with(&package_root) {
                 return Err("style escapes artifact package".into());
             }
-            let byte_len = std::fs::metadata(&canonical)
-                .map_err(|err| err.to_string())?
-                .len();
+            let remaining = 1024
+                * 1024usize
+                    .checked_sub(total)
+                    .ok_or_else(|| "artifact stylesheet size overflow".to_string())?;
+            let bytes = read_bounded(
+                &canonical,
+                remaining,
+                "artifact styles exceed the 1 MiB aggregate limit",
+            )?;
             total = total
-                .checked_add(byte_len as usize)
+                .checked_add(bytes.len())
                 .ok_or_else(|| "artifact stylesheet size overflow".to_string())?;
-            if total > 1024 * 1024 {
-                return Err("artifact styles exceed the 1 MiB aggregate limit".into());
-            }
-            let bytes = std::fs::read(&canonical).map_err(|err| err.to_string())?;
             styles.push(
                 String::from_utf8(bytes)
                     .map_err(|_| "artifact styles must be UTF-8".to_string())?,
