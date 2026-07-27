@@ -3,7 +3,6 @@ mod app_lock;
 mod app_menu;
 mod artifact;
 mod canvas;
-mod cell;
 mod commands;
 mod daemon_session;
 mod deck;
@@ -54,8 +53,7 @@ pub fn run() {
         .manage(voice::VoiceState::default())
         .manage(semantic::SemanticState::default())
         .manage(agent::AgentState::default())
-        .manage(app_lock::AppLockState::load_from_profile())
-        .manage(cell::CellState::default());
+        .manage(app_lock::AppLockState::load_from_profile());
 
     // Socket bridge for `@srsholmes/tauri-playwright` (WKWebView / WebView2 / WebKitGTK).
     // Only listen when explicitly enabled so normal debug runs stay quiet.
@@ -313,8 +311,6 @@ pub fn run() {
             app_lock::app_lock_lock,
             app_lock::app_lock_unlock,
             app_lock::app_lock_enable,
-            cell::cell_status,
-            cell::cell_actian_smoke,
         ]))
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

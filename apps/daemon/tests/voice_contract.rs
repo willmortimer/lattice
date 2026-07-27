@@ -92,7 +92,6 @@ async fn spawn_daemon_with_voice() -> ServerGuard {
         None,
         Some(Arc::clone(&voice)),
         None,
-        None,
         shutdown_rx,
     ));
 
@@ -347,7 +346,6 @@ async fn voice_unavailable_without_controller() {
     let join = tokio::spawn(serve_with_shutdown_and_controllers(
         config,
         runtime,
-        None,
         None,
         None,
         None,

@@ -168,8 +168,6 @@ pub fn agent_spawn_env() -> SpawnHostEnv {
         forward_env_var(&mut extra_env, key);
     }
 
-    crate::cell::append_cell_vz_spawn_env(&mut extra_env);
-
     SpawnHostEnv {
         extra_env,
         handshake_hint: Some(
