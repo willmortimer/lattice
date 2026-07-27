@@ -9,7 +9,7 @@
  * Writes:
  *   apps/desktop/src/theme-tokens.css
  *   apps/desktop/src/theme-tokens.ts  (Pixi/canvas mirror)
- *   site/src/styles/theme-tokens.css  (only if site/ exists; marketing site is in lattice-platform)
+ *   site/src/styles/theme-tokens.css  (only if site/ exists; marketing site is in lattice-ecosystem)
  *
  * Parser is intentionally tiny: themes are a constrained YAML subset
  * (scalars + one-level maps). No runtime deps — same spirit as generate-mark.
@@ -459,7 +459,7 @@ function main() {
   const css = emitCss(theme, themePath);
   const ts = emitTs(theme, themePath);
 
-  // Marketing site lives in private lattice-platform; only write site tokens
+  // Marketing site lives in private lattice-ecosystem; only write site tokens
   // when a local site/ checkout is present (e.g. temporary vendor layout).
   const outputs = [OUT_DESKTOP];
   if (existsSync(join(ROOT, "site"))) {

@@ -40,7 +40,7 @@ Writes:
 - `apps/desktop/src/theme-tokens.css`
 - `apps/desktop/src/theme-tokens.ts` (Pixi/canvas mirror)
 - `site/src/styles/theme-tokens.css` (only if a local `site/` tree exists;
-  marketing site tokens are maintained in private `lattice-platform`)
+  marketing site tokens are maintained in private `lattice-ecosystem`)
 
 Desktop `predev` / `prebuild` hooks run the compiler automatically.
 

@@ -39,7 +39,7 @@ facts.
 - `design/`: algorithmic visual-identity source and logo lab.
 - `docs/`: product, architecture, roadmap, and public ADRs.
 - Marketing site, cloud backend (`lattice-server`), and VPS infra live in the
-  private `lattice-platform` repository (not this tree).
+  private `lattice-ecosystem` repository (not this tree).
 
 ## Architectural invariants
 
@@ -86,7 +86,7 @@ facts.
 - Regenerate theme outputs with `pnpm compile-theme`; do not hand-edit:
   - `apps/desktop/src/theme-tokens.css`
   - `apps/desktop/src/theme-tokens.ts`
-  Marketing site tokens live in private `lattice-platform` (`site/src/styles/theme-tokens.css`).
+  Marketing site tokens live in private `lattice-ecosystem` (`site/src/styles/theme-tokens.css`).
 - Workspace template packages under `templates/workspaces/` are source files.
   Regenerate the embedded catalogs with `pnpm compile-templates`; do not
   hand-edit `crates/lattice-core/src/template_catalog.generated.rs`,

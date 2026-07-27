@@ -4,7 +4,7 @@ Encrypted secrets for the **public Lattice client** live under `secrets/` and ar
 **committed**. Ciphertext is safe to publish; only the age **private** key decrypts it.
 
 Cloudflare Pages deploy secrets moved to the private
-[`lattice-platform`](https://github.com/willmortimer/lattice-platform) repository.
+[`lattice-ecosystem`](https://github.com/willmortimer/lattice-ecosystem) repository.
 
 Do **not** gitignore `secrets/*.env`. Gitignore plaintext dumps and the age
 private key only (see root `.gitignore`).

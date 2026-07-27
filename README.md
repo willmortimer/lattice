@@ -13,7 +13,7 @@ Full product and architecture specification: [docs/00-overview.md](docs/00-overv
 ## Repository layout
 
 Public open-core **client** repository. Marketing site, cloud backend, and VPS
-infra live in the private `lattice-platform` company repo.
+infra live in the private `lattice-ecosystem` company repo.
 
 ```text
 lattice/

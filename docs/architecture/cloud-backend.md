@@ -4,10 +4,10 @@
 **See also:** [`cloud-backend-dag.md`](./cloud-backend-dag.md)
 
 The cloud backend source now lives in the private
-[`lattice-platform`](https://github.com/willmortimer/lattice-platform)
+[`lattice-ecosystem`](https://github.com/willmortimer/lattice-ecosystem)
 repository:
 
-| Path in lattice-platform | Role |
+| Path in lattice-ecosystem | Role |
 | --- | --- |
 | `crates/lattice-cloud` | Shared config, HTTP router, auth/storage/MCP modules |
 | `apps/server` | Thin `lattice-server` binary |

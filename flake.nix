@@ -59,10 +59,10 @@
             lint = "Run Clippy (-D warnings) and rustfmt --check";
             fmt = "Format all Rust sources";
             check = "CI gate: fmt, clippy, tests, desktop build";
-            site-dev = "Moved: marketing site lives in private lattice-platform";
-            site-build = "Moved: marketing site lives in private lattice-platform";
-            site-deploy = "Moved: marketing site lives in private lattice-platform";
-            docs-sync = "Moved: marketing site lives in private lattice-platform";
+            site-dev = "Moved: marketing site lives in private lattice-ecosystem";
+            site-build = "Moved: marketing site lives in private lattice-ecosystem";
+            site-deploy = "Moved: marketing site lives in private lattice-ecosystem";
+            docs-sync = "Moved: marketing site lives in private lattice-ecosystem";
             compile-theme = "Compile themes/*.theme.yaml into CSS/TS tokens";
             compile-templates = "Validate templates and regenerate embedded catalogs";
             prepare-first-look = "Seed First Look demo datasets and regenerate template catalogs";
@@ -97,20 +97,20 @@
               pnpm --filter @lattice/desktop build
             '';
             site-dev = ''
-              echo "Marketing site moved to private lattice-platform (site/)." >&2
-              echo "Open ../lattice-platform or vendor checkout and run pnpm --filter @lattice/site dev" >&2
+              echo "Marketing site moved to private lattice-ecosystem (site/)." >&2
+              echo "Open ../lattice-ecosystem or vendor checkout and run pnpm --filter @lattice/site dev" >&2
               exit 1
             '';
             site-build = ''
-              echo "Marketing site moved to private lattice-platform (site/)." >&2
+              echo "Marketing site moved to private lattice-ecosystem (site/)." >&2
               exit 1
             '';
             site-deploy = ''
-              echo "Site deploy moved to private lattice-platform." >&2
+              echo "Site deploy moved to private lattice-ecosystem." >&2
               exit 1
             '';
             docs-sync = ''
-              echo "docs-sync moved to private lattice-platform (site sync against vendor/lattice/docs)." >&2
+              echo "docs-sync moved to private lattice-ecosystem (site sync against vendor/lattice/docs)." >&2
               exit 1
             '';
             compile-theme = ''
@@ -673,18 +673,18 @@
               echo "lattice dev shell — rust $(rustc --version | cut -d' ' -f2), node $(node --version), pnpm $(pnpm --version)"
               echo "runner: nxr list | nxr <app> | nxr task <name> [-j N] | nxr graph <name>"
               echo "legacy: lattice-{test,lint,fmt,check,compile-*,desktop*} (also: nix run .#<app>)"
-              echo "site / Cloudflare: private lattice-platform repo"
+              echo "site / Cloudflare: private lattice-ecosystem repo"
             '';
           };
 
-          # Site / Cloudflare ops moved to private lattice-platform.
+          # Site / Cloudflare ops moved to private lattice-ecosystem.
           # Kept as a thin pointer so existing `nix develop .#ops` habit fails loudly.
           devShells.ops = pkgs.mkShell {
             packages = [ ];
             shellHook = ''
-              echo "Site and Cloudflare deploy moved to private lattice-platform."
-              echo "Checkout: https://github.com/willmortimer/lattice-platform"
-              echo "Local sibling path: ../lattice-platform"
+              echo "Site and Cloudflare deploy moved to private lattice-ecosystem."
+              echo "Checkout: https://github.com/willmortimer/lattice-ecosystem"
+              echo "Local sibling path: ../lattice-ecosystem"
               exit 1
             '';
           };

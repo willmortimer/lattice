@@ -70,8 +70,8 @@ derivation on Darwin).
 ## Ops shell / site publish
 
 Marketing site, Cloudflare Pages deploy, and related secrets moved to the
-private [`lattice-platform`](https://github.com/willmortimer/lattice-platform)
-repository (sibling checkout: `../lattice-platform`).
+private [`lattice-ecosystem`](https://github.com/willmortimer/lattice-ecosystem)
+repository (sibling checkout: `../lattice-ecosystem`).
 
 `nix develop .#ops` and `nix run .#site-*` in this public client now exit with
 a pointer to that repo.
@@ -112,7 +112,7 @@ Run them from the repo root (they use relative paths).
 | `lint` | clippy with `-D warnings` + `rustfmt --check` |
 | `fmt` | format all Rust code |
 | `check` | everything CI runs: fmt check, clippy, tests, `pnpm install --frozen-lockfile`, desktop UI build |
-| `site-dev` / `site-build` / `site-deploy` / `docs-sync` | **Moved** to private `lattice-platform` (stubs exit with a pointer) |
+| `site-dev` / `site-build` / `site-deploy` / `docs-sync` | **Moved** to private `lattice-ecosystem` (stubs exit with a pointer) |
 | `compile-theme` | compile `themes/*.theme.yaml` → desktop/site CSS (+ Pixi) tokens |
 | `compile-templates` | validate template packages → embedded Rust and browser catalogs |
 | `prepare-first-look` | seed First Look `Events` + `Places` datasets, regenerate catalogs, verify key paths |
@@ -207,7 +207,7 @@ See [environment.md](./environment.md) and [secrets/README.md](../../secrets/REA
 | **Desktop app (native, HMR)** | `nxr desktop-dev` | Tauri window ← Vite :5173 | Real Lattice shell with hot reload |
 | **Desktop app (native, no Vite)** | `nxr desktop` | Tauri window ← static `dist` | Real shell; rebuild UI with `pnpm --filter @lattice/desktop build` when needed |
 | **Desktop frontend only (browser)** | `nxr desktop-web` | <http://localhost:5173> | Same React UI, **demo fixture**, no filesystem |
-| **Marketing / docs site** | private `lattice-platform` | Astro (often :4321) | Moved out of this repo |
+| **Marketing / docs site** | private `lattice-ecosystem` | Astro (often :4321) | Moved out of this repo |
 | **Cell / Dev Container demo** | `./scripts/devcontainer/web` (+ `site`) | :5173 / :4321 on `0.0.0.0` | Same browser + site surfaces without Nix; see [devcontainer.md](./devcontainer.md) |
 
 ### Why `desktop-dev` also starts :5173

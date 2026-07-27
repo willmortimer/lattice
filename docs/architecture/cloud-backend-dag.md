@@ -1,7 +1,7 @@
 # Cloud backend hackathon DAG
 
 **Moved (2026-07-27):** implementation now lives in private
-[`lattice-platform`](https://github.com/willmortimer/lattice-platform)
+[`lattice-ecosystem`](https://github.com/willmortimer/lattice-ecosystem)
 (`apps/server`, `crates/lattice-cloud`, `infra/cloud`). This document remains
 as historical planning context for the public client.
 

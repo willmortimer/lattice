@@ -76,7 +76,7 @@ signing private key — expect a human-attended machine for the first staple.
 ## Site publish (Cloudflare Pages)
 
 Moved to private
-[`lattice-platform`](https://github.com/willmortimer/lattice-platform)
+[`lattice-ecosystem`](https://github.com/willmortimer/lattice-ecosystem)
 (`secrets/cloudflare.env`, site deploy workflow). Live site remains
 <https://lattice-dop.pages.dev/>.
 
