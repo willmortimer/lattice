@@ -58,11 +58,11 @@
             test = "Run cargo test --workspace";
             lint = "Run Clippy (-D warnings) and rustfmt --check";
             fmt = "Format all Rust sources";
-            check = "CI gate: fmt, clippy, tests, desktop + site builds";
-            site-dev = "Start the Astro marketing/docs site";
-            site-build = "Build the static marketing/docs site";
-            site-deploy = "Build the site and deploy to Cloudflare Pages (lattice-dop)";
-            docs-sync = "Regenerate site docs content from docs/";
+            check = "CI gate: fmt, clippy, tests, desktop build";
+            site-dev = "Moved: marketing site lives in private lattice-platform";
+            site-build = "Moved: marketing site lives in private lattice-platform";
+            site-deploy = "Moved: marketing site lives in private lattice-platform";
+            docs-sync = "Moved: marketing site lives in private lattice-platform";
             compile-theme = "Compile themes/*.theme.yaml into CSS/TS tokens";
             compile-templates = "Validate templates and regenerate embedded catalogs";
             prepare-first-look = "Seed First Look demo datasets and regenerate template catalogs";
@@ -95,35 +95,23 @@
               cargo test --workspace
               pnpm install --frozen-lockfile
               pnpm --filter @lattice/desktop build
-              pnpm --filter @lattice/site build
             '';
             site-dev = ''
-              pnpm install
-              exec pnpm --filter @lattice/site dev "$@"
+              echo "Marketing site moved to private lattice-platform (site/)." >&2
+              echo "Open ../lattice-platform or vendor checkout and run pnpm --filter @lattice/site dev" >&2
+              exit 1
             '';
             site-build = ''
-              pnpm install
-              exec pnpm --filter @lattice/site build "$@"
+              echo "Marketing site moved to private lattice-platform (site/)." >&2
+              exit 1
             '';
             site-deploy = ''
-              pnpm install
-              pnpm --filter @lattice/site build
-              # Cloudflare Pages project is "lattice"; public host is lattice-dop.pages.dev.
-              # Prefer CLOUDFLARE_API_TOKEN from sops (see secrets/README.md). Falls back
-              # to interactive `wrangler login` credentials in ~/.wrangler if unset.
-              if [ -z "''${CLOUDFLARE_API_TOKEN:-}" ]; then
-                echo "site-deploy: CLOUDFLARE_API_TOKEN unset — using wrangler OAuth store if present." >&2
-                echo "  sops path: sops exec-env secrets/cloudflare.env -- nix run .#site-deploy" >&2
-              fi
-              # Run from site/ so wrangler.toml (pages_build_output_dir = dist) applies.
-              cd site
-              exec wrangler pages deploy \
-                --project-name=lattice \
-                --commit-dirty=true \
-                "$@"
+              echo "Site deploy moved to private lattice-platform." >&2
+              exit 1
             '';
             docs-sync = ''
-              exec pnpm --filter @lattice/site sync-docs "$@"
+              echo "docs-sync moved to private lattice-platform (site sync against vendor/lattice/docs)." >&2
+              exit 1
             '';
             compile-theme = ''
               exec pnpm --filter @lattice/desktop compile-theme "$@"
@@ -571,12 +559,11 @@
               aliases = [ "ci" ];
             };
             validate = {
-              description = "Parallel validation (lint ∥ test ∥ desktop UI ∥ site)";
+              description = "Parallel validation (lint ∥ test ∥ desktop UI)";
               dependsOn = [
                 "lint"
                 "test"
                 "desktop-ui-build"
-                "site-build"
               ];
               app = "ok";
               category = "validation";
@@ -685,33 +672,20 @@
             shellHook = ''
               echo "lattice dev shell — rust $(rustc --version | cut -d' ' -f2), node $(node --version), pnpm $(pnpm --version)"
               echo "runner: nxr list | nxr <app> | nxr task <name> [-j N] | nxr graph <name>"
-              echo "legacy: lattice-{test,lint,fmt,check,site-*,compile-*,desktop*} (also: nix run .#<app>)"
-              echo "ops / Cloudflare: nix develop .#ops"
+              echo "legacy: lattice-{test,lint,fmt,check,compile-*,desktop*} (also: nix run .#<app>)"
+              echo "site / Cloudflare: private lattice-platform repo"
             '';
           };
 
-          # Lightweight Cloudflare/site shell only — not desktop-install / Apple
-          # notarization (those need the default Rust+Xcode toolchain).
-          # Activate with `nix develop .#ops` (does not replace direnv default).
-          # Auth: `wrangler login` stores OAuth under ~/.wrangler, or use
-          # CLOUDFLARE_API_TOKEN from sops. Prefer `nix run .#site-deploy` for
-          # normal deploys; use this shell for interactive wrangler.
-          # Tag-only CI: .github/workflows/site-deploy.yml
+          # Site / Cloudflare ops moved to private lattice-platform.
+          # Kept as a thin pointer so existing `nix develop .#ops` habit fails loudly.
           devShells.ops = pkgs.mkShell {
-            packages = siteToolchain ++ [
-              latticeScripts.site-build
-              latticeScripts.site-deploy
-              latticeScripts.docs-sync
-            ];
+            packages = [ ];
             shellHook = ''
-              echo "lattice ops shell — Cloudflare / site only (not desktop-install)"
-              echo "wrangler (npx wrangler@4), node $(node --version), pnpm $(pnpm --version)"
-              echo "secrets: sops/age — see secrets/README.md"
-              echo "auth: sops secrets/cloudflare.env   # or: wrangler login"
-              echo "deploy: nix run .#site-deploy"
-              echo "        sops exec-env secrets/cloudflare.env -- nix run .#site-deploy"
-              echo "CI: tag v* → .github/workflows/site-deploy.yml"
-              echo "live: https://lattice-dop.pages.dev/"
+              echo "Site and Cloudflare deploy moved to private lattice-platform."
+              echo "Checkout: https://github.com/willmortimer/lattice-platform"
+              echo "Local sibling path: ../lattice-platform"
+              exit 1
             '';
           };
         };

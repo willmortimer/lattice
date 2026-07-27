@@ -1,5 +1,10 @@
 # Cloud backend hackathon DAG
 
+**Moved (2026-07-27):** implementation now lives in private
+[`lattice-platform`](https://github.com/willmortimer/lattice-platform)
+(`apps/server`, `crates/lattice-cloud`, `infra/cloud`). This document remains
+as historical planning context for the public client.
+
 **Status:** CB0–CB3 merged into BASE (`08575c1`)  
 **BASE branch:** `feat/cloud-backend`  
 **BASE worktree:** `.worktrees/feat-cloud-backend`  

@@ -2,7 +2,6 @@ packages:
   - apps/desktop
   - apps/agentd
   - packages/*
-  - site
 allowBuilds:
   esbuild: true
   sharp: true

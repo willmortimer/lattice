@@ -9,13 +9,13 @@
  * Writes:
  *   apps/desktop/src/theme-tokens.css
  *   apps/desktop/src/theme-tokens.ts  (Pixi/canvas mirror)
- *   site/src/styles/theme-tokens.css
+ *   site/src/styles/theme-tokens.css  (only if site/ exists; marketing site is in lattice-platform)
  *
  * Parser is intentionally tiny: themes are a constrained YAML subset
  * (scalars + one-level maps). No runtime deps — same spirit as generate-mark.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -459,7 +459,13 @@ function main() {
   const css = emitCss(theme, themePath);
   const ts = emitTs(theme, themePath);
 
-  for (const out of [OUT_DESKTOP, OUT_SITE]) {
+  // Marketing site lives in private lattice-platform; only write site tokens
+  // when a local site/ checkout is present (e.g. temporary vendor layout).
+  const outputs = [OUT_DESKTOP];
+  if (existsSync(join(ROOT, "site"))) {
+    outputs.push(OUT_SITE);
+  }
+  for (const out of outputs) {
     mkdirSync(dirname(out), { recursive: true });
     writeFileSync(out, css, "utf8");
     console.log(`wrote ${out.slice(ROOT.length + 1)}`);

@@ -36,9 +36,10 @@ facts.
 - `crates/`: Rust domain crates for resources, storage, commands, indexing,
   data applications, and themes.
 - `themes/`: built-in YAML theme sources.
-- `site/`: Astro marketing site and Starlight documentation.
 - `design/`: algorithmic visual-identity source and logo lab.
-- `docs/`: product, architecture, roadmap, and ADRs.
+- `docs/`: product, architecture, roadmap, and public ADRs.
+- Marketing site, cloud backend (`lattice-server`), and VPS infra live in the
+  private `lattice-platform` repository (not this tree).
 
 ## Architectural invariants
 
@@ -85,7 +86,7 @@ facts.
 - Regenerate theme outputs with `pnpm compile-theme`; do not hand-edit:
   - `apps/desktop/src/theme-tokens.css`
   - `apps/desktop/src/theme-tokens.ts`
-  - `site/src/styles/theme-tokens.css`
+  Marketing site tokens live in private `lattice-platform` (`site/src/styles/theme-tokens.css`).
 - Workspace template packages under `templates/workspaces/` are source files.
   Regenerate the embedded catalogs with `pnpm compile-templates`; do not
   hand-edit `crates/lattice-core/src/template_catalog.generated.rs`,
@@ -111,7 +112,6 @@ equivalents — `nxr test`, `nxr task check`, …):
 nix run .#test
 nix run .#lint
 nix run .#check
-nix run .#site-build
 nix run .#desktop-build
 ```
 
@@ -121,7 +121,6 @@ Equivalent focused commands:
 cargo test --workspace
 pnpm --filter @lattice/desktop test
 pnpm --filter @lattice/desktop build
-pnpm --filter @lattice/site build
 pnpm compile-theme
 ```
 

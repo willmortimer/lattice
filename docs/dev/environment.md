@@ -75,29 +75,12 @@ signing private key — expect a human-attended machine for the first staple.
 
 ## Site publish (Cloudflare Pages)
 
-Live site: <https://lattice-dop.pages.dev/>. See [secrets/README.md](../../secrets/README.md)
-and [nix-workflows.md](./nix-workflows.md).
+Moved to private
+[`lattice-platform`](https://github.com/willmortimer/lattice-platform)
+(`secrets/cloudflare.env`, site deploy workflow). Live site remains
+<https://lattice-dop.pages.dev/>.
 
-| Variable | Where to set | Where to get it | What it does | Secret? | Status |
-| --- | --- | --- | --- | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | **sops** `secrets/cloudflare.env` (direnv decrypts) or CI secret | [Cloudflare API tokens](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/) — Account → Cloudflare Pages → Edit | Non-interactive auth for `nix run .#site-deploy` / wrangler | **Yes** | Preferred |
-| `CLOUDFLARE_ACCOUNT_ID` | same sops file (plaintext field) or CI | Cloudflare dashboard → account overview | Disambiguates account | No | Set in `secrets/cloudflare.env` |
-
-Do **not** put the API token or Apple passwords in `.env`. Encrypted
-`secrets/*.env` files are **tracked** in this public repo (ciphertext only);
-edit them with `sops secrets/<name>.env`.
-
-```sh
-# after rotating the token into sops + direnv reload:
-nix run .#site-deploy
-
-# one-shot:
-sops exec-env secrets/cloudflare.env -- nix run .#site-deploy
-```
-
-Tag-only CI (no deploy on every `main` push): push a `v*` tag, or run the
-**Site deploy** workflow manually. Set GitHub Actions secrets
-`CLOUDFLARE_API_TOKEN` and optional `CLOUDFLARE_ACCOUNT_ID`.
+Apple signing secrets in this repo are unchanged (`secrets/apple.env`).
 
 ## Rules
 

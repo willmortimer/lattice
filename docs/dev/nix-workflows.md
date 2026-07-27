@@ -67,88 +67,14 @@ from there (`nxr desktop-install`, `nxr desktop-release`).
 default environment (and so we avoid nixpkgs’ broken multi‑GiB wrangler
 derivation on Darwin).
 
-## Ops shell (Cloudflare / site publish)
+## Ops shell / site publish
 
-Separate from the heavy default shell. Activate only when debugging wrangler
-interactively:
+Marketing site, Cloudflare Pages deploy, and related secrets moved to the
+private [`lattice-platform`](https://github.com/willmortimer/lattice-platform)
+repository (sibling checkout: `../lattice-platform`).
 
-```sh
-nix develop .#ops
-```
-
-Provides: node 22, pnpm, **wrangler** (thin `npx wrangler@4` wrapper — not
-nixpkgs’ workers-sdk build), plus `lattice-site-build`, `lattice-site-deploy`,
-and `lattice-docs-sync`.
-
-direnv keeps loading `.#default` via `use flake`. Do **not** change `.envrc`
-for day-to-day work — open an ops shell in a second terminal when you need
-Cloudflare CLI (`whoami`, `login`, project list).
-
-For a normal deploy you do **not** need ops if the API token is loaded:
-
-```sh
-nix run .#site-deploy
-```
-
-### How `wrangler login` works with Nix
-
-The ops shell puts a small `wrangler` shim on `PATH` that runs
-`npx --yes wrangler@4`. OAuth tokens are **not** stored in the Nix store:
-
-1. Run `wrangler login` inside `nix develop .#ops` (needs a browser; interactive).
-2. Wrangler writes credentials under your home directory
-   (`~/Library/Preferences/.wrangler/` on macOS).
-3. Later `wrangler whoami` / `nix run .#site-deploy` reuse that login until it
-   expires.
-4. For CI or non-interactive shells, set `CLOUDFLARE_API_TOKEN` instead (see
-   [environment.md](./environment.md)).
-
-```sh
-nix develop .#ops
-wrangler login
-wrangler whoami
-# build + deploy to https://lattice-dop.pages.dev/
-lattice-site-deploy
-# or from any shell after login / with sops token:
-nix run .#site-deploy
-```
-
-`site-deploy` builds the site, then `cd site` and runs `wrangler pages deploy`
-so [`site/wrangler.toml`](../../site/wrangler.toml) (`pages_build_output_dir =
-dist`) applies.
-
-Prefer an API token via sops ([secrets/README.md](../../secrets/README.md)):
-
-```sh
-# direnv decrypts secrets/cloudflare.env into the environment
-nix run .#site-deploy
-
-# one-shot without direnv
-sops exec-env secrets/cloudflare.env -- nix run .#site-deploy
-```
-
-### Tag-only CI deploy
-
-Pushing to `main` does **not** deploy the site (avoids burning Actions minutes
-on high-frequency pushes). Creating a version tag does:
-
-```sh
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-Workflow: [`.github/workflows/site-deploy.yml`](../../.github/workflows/site-deploy.yml).
-Requires GitHub Actions secrets `CLOUDFLARE_API_TOKEN` and optional
-`CLOUDFLARE_ACCOUNT_ID` (same values as sops; CI does not use the age key).
-`workflow_dispatch` is also enabled for a manual one-off from the Actions UI.
-
-Desktop notarized releases can share the same tag trigger later; they are not
-wired yet.
-
-> We intentionally avoid `nixpkgs#wrangler`: it rebuilds the Cloudflare
-> workers-sdk monorepo (multi‑GiB) and has been failing on Darwin (`EBADF`
-> during tsup). The npm-published CLI is enough for Pages. First `wrangler`
-> invocation needs network to populate the npx cache; after that it is local.
+`nix develop .#ops` and `nix run .#site-*` in this public client now exit with
+a pointer to that repo.
 
 ## Runners
 
@@ -185,11 +111,8 @@ Run them from the repo root (they use relative paths).
 | `test` | `cargo test --workspace` |
 | `lint` | clippy with `-D warnings` + `rustfmt --check` |
 | `fmt` | format all Rust code |
-| `check` | everything CI runs: fmt check, clippy, tests, `pnpm install --frozen-lockfile`, desktop + site builds |
-| `site-dev` | Astro **marketing/docs** site (usually <http://localhost:4321>) |
-| `site-build` | static site build (syncs docs content first via `prebuild`) |
-| `site-deploy` | build + `wrangler pages deploy` to Cloudflare Pages (`lattice-dop`) |
-| `docs-sync` | regenerate `site/src/content/docs/` from `docs/` |
+| `check` | everything CI runs: fmt check, clippy, tests, `pnpm install --frozen-lockfile`, desktop UI build |
+| `site-dev` / `site-build` / `site-deploy` / `docs-sync` | **Moved** to private `lattice-platform` (stubs exit with a pointer) |
 | `compile-theme` | compile `themes/*.theme.yaml` → desktop/site CSS (+ Pixi) tokens |
 | `compile-templates` | validate template packages → embedded Rust and browser catalogs |
 | `prepare-first-look` | seed First Look `Events` + `Places` datasets, regenerate catalogs, verify key paths |
@@ -212,7 +135,7 @@ Tasks coordinate apps; they do not replace them. Useful graphs:
 | --- | --- |
 | `codegen` (alias `compile`) | `compile-theme` ∥ `compile-templates` |
 | `prepare-first-look` (alias `prep-demo`) | seed First Look datasets + `compile-templates` + path sanity check |
-| `validate` | `lint` ∥ `test` ∥ `desktop-ui-build` ∥ `site-build` |
+| `validate` | `lint` ∥ `test` ∥ `desktop-ui-build` |
 | `check` (alias `ci`) | monolithic `apps.check` (what CI should keep calling) |
 | `desktop-install` (alias `install`) | local signed macOS install |
 | `desktop-release` (alias `release`) | Developer ID notarize + DMG |
@@ -284,7 +207,7 @@ See [environment.md](./environment.md) and [secrets/README.md](../../secrets/REA
 | **Desktop app (native, HMR)** | `nxr desktop-dev` | Tauri window ← Vite :5173 | Real Lattice shell with hot reload |
 | **Desktop app (native, no Vite)** | `nxr desktop` | Tauri window ← static `dist` | Real shell; rebuild UI with `pnpm --filter @lattice/desktop build` when needed |
 | **Desktop frontend only (browser)** | `nxr desktop-web` | <http://localhost:5173> | Same React UI, **demo fixture**, no filesystem |
-| **Marketing / docs site** | `nxr site-dev` | Astro (often :4321) | Public site + Starlight docs |
+| **Marketing / docs site** | private `lattice-platform` | Astro (often :4321) | Moved out of this repo |
 | **Cell / Dev Container demo** | `./scripts/devcontainer/web` (+ `site`) | :5173 / :4321 on `0.0.0.0` | Same browser + site surfaces without Nix; see [devcontainer.md](./devcontainer.md) |
 
 ### Why `desktop-dev` also starts :5173

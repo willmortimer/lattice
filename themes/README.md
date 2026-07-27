@@ -39,9 +39,10 @@ Writes:
 
 - `apps/desktop/src/theme-tokens.css`
 - `apps/desktop/src/theme-tokens.ts` (Pixi/canvas mirror)
-- `site/src/styles/theme-tokens.css`
+- `site/src/styles/theme-tokens.css` (only if a local `site/` tree exists;
+  marketing site tokens are maintained in private `lattice-platform`)
 
-Desktop and site `predev` / `prebuild` hooks run the compiler automatically.
+Desktop `predev` / `prebuild` hooks run the compiler automatically.
 
 ## Runtime (desktop)
 

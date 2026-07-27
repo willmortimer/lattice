@@ -12,23 +12,24 @@ Full product and architecture specification: [docs/00-overview.md](docs/00-overv
 
 ## Repository layout
 
+Public open-core **client** repository. Marketing site, cloud backend, and VPS
+infra live in the private `lattice-platform` company repo.
+
 ```text
 lattice/
 ├── apps/
 │   ├── cli/              # `lattice` headless CLI
-│   └── desktop/          # Tauri 2 shell (React 19 + Vite + TypeScript)
-├── crates/
-│   ├── lattice-core/     # workspace model, manifest, watcher, home layout
-│   ├── lattice-storage/  # filesystem store + recovery journal
-│   ├── lattice-commands/ # semantic command / transaction engine
-│   ├── lattice-index/    # FTS5 search + backlinks
-│   ├── lattice-data/     # `.data` table packages (SQLite + views)
-│   └── lattice-theme/    # theme YAML, appearance settings, CSS flattening
-├── themes/               # built-in themes (Lattice Slate, Lattice Paper)
+│   ├── daemon/           # `latticed` Unix-domain control plane
+│   ├── agentd/           # embedded agent sidecar
+│   ├── desktop/          # Tauri 2 shell (React 19 + Vite + TypeScript)
+│   └── …                 # bridge, embed-host, voice-host-macos
+├── crates/               # Rust domain crates (resources, storage, commands, …)
+├── packages/             # shared TS/Python packages
+├── themes/               # built-in themes
+├── templates/            # workspace templates
 ├── scripts/              # compile-theme and related generators
-├── docs/                 # architecture specification and ADRs
+├── docs/                 # user/contributor architecture specification and ADRs
 ├── design/               # brand mark / visual identity notes
-├── site/                 # Astro marketing + Starlight docs
 └── flake.nix             # Nix dev shell, flake apps, and nxr tasks
 ```
 
@@ -38,7 +39,7 @@ Local desktop substrate is shipping: headless core + CLI, Tauri shell,
 pages/canvas/search/voice, SQLite data apps (views, forms, interfaces),
 DuckDB `.dataset` analytics (Perspective, Vega-Lite, Profile, Plan, MapLibre
 maps), notebooks (native `ipykernel` + Pyodide), tasks/workflows/proposals/
-artifacts, and the `latticed` daemon — plus the marketing/docs site. The
+artifacts, and the `latticed` daemon. The
 specification in `docs/` is intentionally broader than what is polished today —
 see [roadmap](docs/29-roadmap.md) for residual gaps and later phases.
 
@@ -61,7 +62,7 @@ Common tasks are flake apps. Prefer [nxr](https://github.com/willmortimer/nxr)
 Full guide: [docs/dev/nix-workflows.md](docs/dev/nix-workflows.md).
 Environment variables: [docs/dev/environment.md](docs/dev/environment.md).
 
-For a Linux Dev Container / DevCell cell (browser demo + docs site, no Tauri):
+For a Linux Dev Container / DevCell cell (browser demo UI, no Tauri):
 [docs/dev/devcontainer.md](docs/dev/devcontainer.md).
 
 ```sh
@@ -73,9 +74,6 @@ nxr task check            # everything CI would run (alias: nxr task ci)
 nxr task codegen -j 2     # theme ∥ templates
 nxr compile-theme         # themes/*.theme.yaml → CSS/TS tokens
 nxr compile-templates     # template packages → embedded catalogs
-nxr site-dev              # Astro marketing/docs site
-nxr site-build            # static site build
-nxr docs-sync             # regenerate site docs content from docs/
 nxr desktop-dev           # Tauri native window + Vite HMR on :5173
 nxr desktop-web           # browser-only demo UI
 nxr desktop               # native without Vite (reuses dist)
@@ -104,10 +102,7 @@ cargo run -p lattice-cli -- init my-workspace
 pnpm install
 pnpm --filter @lattice/desktop tauri dev
 
-# marketing/docs site
-pnpm --filter @lattice/site dev
-
-# theme tokens (also runs on desktop/site predev)
+# theme tokens (also runs on desktop predev)
 pnpm compile-theme
 ```
 
