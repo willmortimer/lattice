@@ -2,7 +2,10 @@
 
 ## Status
 
-Accepted.
+**Superseded** by [ADR 0051](0051-rust-embedded-agent-harness.md) (Rust harness).
+The process shape (sidecar supervised by `latticed`, proposals via semantic
+commands, desktop never holds provider keys) remains; the Node 22 runtime
+does not.
 
 ## Context
 
