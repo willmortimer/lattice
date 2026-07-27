@@ -14,7 +14,7 @@ private key only (see root `.gitignore`).
 | Path | Purpose |
 | --- | --- |
 | [`.sops.yaml`](../.sops.yaml) | Encryption rules + age recipient |
-| [`secrets/apple.env`](./apple.env) | Apple ID / app-specific password / team + signing identity |
+| [`secrets/apple.env`](./apple.env) | Apple ID, app-specific password, team id, signing identity (all encrypted) |
 | `~/.config/sops/age/keys.txt` | **Private** age key (never commit) |
 
 ## Apple Developer (signing / notarization)
