@@ -1,6 +1,21 @@
-# Architecture Decision Records
+# Architecture Decision Records (public open-client mirror)
 
-These records capture architecture choices that should not be silently reversed. They complement the thematic documents, which contain the complete design and roadmap.
+These ADRs bind the **public Lattice client** (desktop, `latticed`, formats,
+local agent protocol). They are safe for contributors and users to read.
+
+The **canonical full corpus** — including ecosystem, cloud, LatticeFS-cloud,
+Cells, and candid sequencing — lives in the private umbrella:
+
+`lattice-ecosystem/docs/decisions/`
+
+## Policy
+
+- New **product** decisions: land in the private corpus first, then copy here
+  when they bind shipped open-client behavior.
+- New **ecosystem / cloud / internal** decisions: private only.
+- Do not put fleet Cells, billing, or unevaluated infra ADRs in this tree.
+
+## Index (open client)
 
 - [ADR 0001: The native filesystem is canonical](0001-native-filesystem-is-canonical.md)
 - [ADR 0002: Use a storage abstraction without hiding real paths](0002-storage-abstraction-and-opfs-role.md)
@@ -53,4 +68,4 @@ These records capture architecture choices that should not be silently reversed.
 - [ADR 0049: App lock is session privacy via LocalAuthentication, not encryption](0049-app-lock-session-privacy-local-authentication.md)
 - [ADR 0050: Use open Deck packages for portable presentations](0050-open-deck-packages.md)
 
-Voice subsystem ADRs (FluidAudio, provisional/final transcripts, capture ownership, commands) live under [`docs/voice/adr/`](../voice/adr/).
+Voice subsystem ADRs: [`docs/voice/adr/`](../voice/adr/).
