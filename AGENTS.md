@@ -21,7 +21,9 @@ boundaries.
 
 For the embedded agent (`agentd` sidecar, assistant-ui chat shell, proposal
 workflow), read `docs/architecture/embedded-agent.md` and
-`docs/decisions/0044-embedded-agent-sidecar.md` before changing boundaries.
+`docs/decisions/0051-rust-embedded-agent-harness.md` (supersedes ADR 0044's
+Node runtime) before changing boundaries. Implementation is in flight on
+`feat/adr-0066-rust-agent-harness`; merge replaces Node `apps/agentd`.
 
 Use the ADRs in `docs/decisions/` for accepted decisions. New irreversible
 choices should receive an ADR rather than silently becoming implementation
@@ -31,7 +33,8 @@ facts.
 
 - `apps/cli/`: headless `lattice` CLI.
 - `apps/daemon/`: `latticed` Unix-domain daemon (control plane over LatticeRuntime).
-- `apps/agentd/`: Node 22 embedded agent sidecar (supervised by `latticed`; see `docs/architecture/embedded-agent.md`).
+- `apps/agentd/`: embedded agent sidecar supervised by `latticed` (Node today;
+  Rust harness per ADR 0051 on `feat/adr-0066-rust-agent-harness`).
 - `apps/desktop/`: Tauri 2 desktop shell using React, TypeScript, and Vite.
 - `crates/`: Rust domain crates for resources, storage, commands, indexing,
   data applications, and themes.
