@@ -1,0 +1,46 @@
+format: lattice-deck
+version: 1
+id: hackathon-pitch
+title: Lattice pitch
+aspect_ratio: 16:9
+
+theme:
+  stylesheet: ./theme.css
+
+slides:
+  - id: title
+    source: ./slides/001-title.html
+    notes: ./notes/001-title.md
+    transition:
+      type: fade
+      duration_ms: 320
+  - id: problem
+    source: ./slides/002-problem.html
+    notes: ./notes/002-problem.md
+    transition:
+      type: push
+      direction: left
+      duration_ms: 280
+  - id: product
+    source: ./slides/003-product.html
+    transition:
+      type: push
+      direction: left
+      duration_ms: 280
+  - id: traction
+    source: ./slides/004-traction.html
+    transition:
+      type: push
+      direction: left
+      duration_ms: 280
+  - id: ask
+    source: ./slides/005-ask.html
+    notes: ./notes/005-ask.md
+    transition:
+      type: fade
+      duration_ms: 320
+
+presentation:
+  start: title
+  loop: false
+  duration_minutes: 5

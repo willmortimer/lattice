@@ -113,6 +113,7 @@
     "CRM/Feedback.data",
     "Hackathon/Launch.data",
     "Hackathon/Demo Script.md",
+    "Hackathon/Pitch.deck",
     "Hackathon/Pitch.canvas",
     "Docs/Product Overview.md",
     "Engineering/Repository.md",
@@ -162,6 +163,16 @@
     "Engineering/Build Status.dataset/facts/year=2026/month=07/builds.parquet",
     "Engineering/Dashboards/Build duration by workflow.vl.json",
     "Hackathon/Demo Script.md",
+    "Hackathon/Pitch.deck/deck.yaml",
+    "Hackathon/Pitch.deck/theme.css",
+    "Hackathon/Pitch.deck/slides/001-title.html",
+    "Hackathon/Pitch.deck/slides/002-problem.html",
+    "Hackathon/Pitch.deck/slides/003-product.html",
+    "Hackathon/Pitch.deck/slides/004-traction.html",
+    "Hackathon/Pitch.deck/slides/005-ask.html",
+    "Hackathon/Pitch.deck/notes/001-title.md",
+    "Hackathon/Pitch.deck/notes/002-problem.md",
+    "Hackathon/Pitch.deck/notes/005-ask.md",
     "Hackathon/Pitch.canvas",
     "Operations/Runway.md",
     "CRM/Feedback Program.md",
@@ -1528,7 +1539,7 @@
           "priority": "Medium",
           "owner": "Product",
           "due": "2026-08-18",
-          "notes": "Hackathon/Pitch.canvas is the current honest fallback."
+          "notes": "Hackathon/Pitch.deck is the presenter-native close; Pitch.canvas remains the spatial storyboard."
         },
         {
           "name": "First Look company fixture",
@@ -1880,7 +1891,7 @@
           "status": "Ready",
           "due": "2026-07-25",
           "demo_risk": "Low",
-          "notes": "Use Hackathon/Pitch.canvas; do not claim a shipped .show format."
+          "notes": "Use Hackathon/Pitch.deck in presentation mode; keep Pitch.canvas for the spatial storyboard."
         }
       ],
       "extraTables": [

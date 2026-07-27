@@ -41,8 +41,10 @@ Open [[Home]] and say:
 
 ## Scene 4 — composition
 
-Open `Hackathon/Pitch.canvas`. The closing scene uses the same product, build,
-operations, CRM and documentation resources rather than copied screenshots.
+Open `Hackathon/Pitch.deck` in presentation mode for the scripted close. Static
+viewboxes on the product and traction slides point at [[Product/Vision]] and
+`Engineering/Build Status.dataset` without copying screenshots. For the spatial
+storyboard, open `Hackathon/Pitch.canvas`.
 
 ## Fallback language
 

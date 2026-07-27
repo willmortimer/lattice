@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Button, SurfaceHeader } from "@lattice/ui";
 
-import { assembleStaticDocument } from "../artifacts/staticDocument";
+import { assembleDeckStaticDocument } from "../deck/latticeView";
 import { createDeckPresentationSession, nearbySlideIndexes, resolveDeckSlideIndex } from "../presentation/presentationSession";
 import type { OpenResourceSession } from "../resourceSession";
 import type { ResourceRendererProps } from "../resourceRendererRegistry";
@@ -43,7 +43,43 @@ function elapsedLabel(milliseconds: number): string {
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-export function DeckResourceRenderer({ session }: ResourceRendererProps<ResourceRendererContext, OpenResourceSession>) {
+interface DeckSlideFrameProps {
+  slide: { id: string; html: string };
+  deck: { title: string; themeCss: string };
+  themeVars: Record<string, string>;
+  workspaceRoot: string | null;
+}
+
+function DeckSlideFrame({ slide, deck, themeVars, workspaceRoot }: DeckSlideFrameProps) {
+  const [srcDoc, setSrcDoc] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void assembleDeckStaticDocument({
+      html: slide.html,
+      title: `${deck.title} — ${slide.id}`,
+      styles: [deck.themeCss],
+      themeVars,
+      includeVocabulary: true,
+      root: workspaceRoot ?? "",
+    }).then((document) => {
+      if (!cancelled) setSrcDoc(document);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [deck.themeCss, deck.title, slide.html, slide.id, themeVars, workspaceRoot]);
+
+  return (
+    <iframe
+      title={`Slide: ${slide.id}`}
+      sandbox=""
+      srcDoc={srcDoc ?? undefined}
+    />
+  );
+}
+
+export function DeckResourceRenderer({ context, session }: ResourceRendererProps<ResourceRendererContext, OpenResourceSession>) {
   if (session.kind !== "deck") return null;
   const deck = session.deck;
   const presentation = useMemo(() => createDeckPresentationSession(deck, session.initialSlideId), [deck, session.initialSlideId]);
@@ -119,7 +155,7 @@ export function DeckResourceRenderer({ session }: ResourceRendererProps<Resource
     </div>}
     {overview ? <ol className="deck-overview" aria-label="Slide overview">{deck.slides.map((slide, slideIndex) => <li key={slide.id}><button type="button" onClick={() => { go(slideIndex); setOverview(false); }}><span>{slideIndex + 1}</span><strong>{slide.id}</strong><small>{slide.source}</small></button></li>)}</ol> : <div ref={stageRef} className="deck-stage" data-audience={audience || undefined} data-transition={transitionName} style={{ "--deck-transition-ms": `${duration}ms`, aspectRatio: deck.aspectRatio.replace(":", " / ") } as CSSProperties}>
       {deck.slides.map((slide, slideIndex) => mounted.has(slideIndex) ? <article key={slide.id} id={slide.id} className="deck-frame" data-current={slideIndex === index || undefined} aria-hidden={slideIndex !== index}>
-        <iframe title={`Slide ${slideIndex + 1}: ${slide.id}`} sandbox="" srcDoc={assembleStaticDocument({ html: slide.html, title: `${deck.title} — ${slide.id}`, styles: [deck.themeCss], themeVars, includeVocabulary: true })} />
+        <DeckSlideFrame slide={slide} deck={deck} themeVars={themeVars} workspaceRoot={context.workspaceRoot} />
       </article> : null)}
       {!target && <div className="deck-degraded">The requested slide is missing. Select another slide from Overview.</div>}
     </div>}
