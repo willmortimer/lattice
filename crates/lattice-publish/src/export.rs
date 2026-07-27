@@ -26,7 +26,7 @@ use crate::snapshot::{
     apply_chart_paths, freeze_artifact_bindings, freeze_interface, render_table_html, write_json,
     ArtifactSnapshot, InterfaceSnapshot,
 };
-use crate::theme::{builtin_theme_vars, shell_style_block};
+use crate::theme::{builtin_theme_vars, shell_style_block, theme_css};
 
 /// What to export from a workspace.
 #[derive(Debug, Clone)]
@@ -578,7 +578,9 @@ fn collect_deck_raster_assets(package: &Path) -> Result<BTreeMap<String, String>
         if !entry.file_type().is_file() || !is_raster_path(entry.path()) {
             continue;
         }
-        let metadata = entry.metadata().map_err(|source| Error::io(entry.path(), source))?;
+        let metadata = entry
+            .metadata()
+            .map_err(|source| Error::io(entry.path(), std::io::Error::other(source.to_string())))?;
         if metadata.len() > MAX_RASTER_ASSET_BYTES {
             return Err(Error::message(format!("deck raster asset {} exceeds the 8 MiB limit", entry.path().display())));
         }

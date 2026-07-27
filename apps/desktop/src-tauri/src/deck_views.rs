@@ -124,7 +124,7 @@ fn bounded_excerpt(path: &Path) -> Option<String> {
     file.take(MAX_EXCERPT_BYTES as u64)
         .read_to_end(&mut bytes)
         .ok()?;
-    let text = std::str::from_utf8(bytes).ok()?;
+    let text = std::str::from_utf8(&bytes).ok()?;
     let normalized = text
         .lines()
         .filter(|line| !line.trim().is_empty())
