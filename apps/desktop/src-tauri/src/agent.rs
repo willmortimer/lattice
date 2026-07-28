@@ -143,12 +143,17 @@ pub fn agent_spawn_env() -> SpawnHostEnv {
         .ok()
         .filter(|value| !value.is_empty())
         .is_some();
+    let openai_key_set = std::env::var(ENV_OPENAI_API_KEY)
+        .ok()
+        .filter(|value| !value.is_empty())
+        .is_some();
 
     let mut using_fake = false;
     if env_truthy(ENV_AGENT_FAKE) {
         extra_env.push((ENV_AGENT_FAKE.to_string(), "1".into()));
         using_fake = true;
-    } else if !pioneer_key_set {
+    } else if !pioneer_key_set && !openai_key_set {
+        // No live provider keys → in-process fake (skip sidecar).
         extra_env.push((ENV_AGENT_FAKE.to_string(), "1".into()));
         using_fake = true;
     }
@@ -463,15 +468,37 @@ mod tests {
     use super::*;
 
     #[test]
-    fn agent_spawn_env_defaults_fake_without_pioneer_key() {
+    fn agent_spawn_env_defaults_fake_without_provider_keys() {
         let _guard = EnvGuard::set(ENV_PIONEER_API_KEY, None);
+        let _openai = EnvGuard::set(ENV_OPENAI_API_KEY, None);
         let _fake_guard = EnvGuard::set(ENV_AGENT_FAKE, None);
         let env = agent_spawn_env();
         assert!(
             env.extra_env
                 .iter()
                 .any(|(key, value)| key == ENV_AGENT_FAKE && value == "1"),
-            "expected fake backend when Pioneer key is absent"
+            "expected fake backend when provider keys are absent"
+        );
+    }
+
+    #[test]
+    fn agent_spawn_env_uses_sidecar_when_openai_key_present() {
+        let _guard = EnvGuard::set(ENV_PIONEER_API_KEY, None);
+        let _openai = EnvGuard::set(ENV_OPENAI_API_KEY, Some("sk-test"));
+        let _fake_guard = EnvGuard::set(ENV_AGENT_FAKE, None);
+        let _bin = EnvGuard::set(ENV_AGENTD_BIN, Some("/tmp/lattice-agentd-test"));
+        let env = agent_spawn_env();
+        assert!(
+            !env.extra_env
+                .iter()
+                .any(|(key, value)| key == ENV_AGENT_FAKE && value == "1"),
+            "openai key should not force fake"
+        );
+        assert!(
+            env.extra_env
+                .iter()
+                .any(|(key, value)| key == ENV_AGENTD_BIN && value == "/tmp/lattice-agentd-test"),
+            "explicit LATTICE_AGENTD_BIN should be forwarded"
         );
     }
 

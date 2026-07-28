@@ -169,6 +169,14 @@
                 exit 1
               fi
 
+              # Support `nix run ./lattice#…` from ecosystem root (Cargo workspace is nested).
+              if [ -f ./lattice/Cargo.toml ] && [ -d ./lattice/apps/daemon ]; then
+                cd ./lattice
+              elif [ ! -f ./Cargo.toml ] || [ ! -d ./apps/daemon ]; then
+                echo "desktop-install: run from lattice repo root (or ecosystem root with ./lattice)" >&2
+                exit 1
+              fi
+
               : "''${APPLE_SIGNING_IDENTITY:?Set APPLE_SIGNING_IDENTITY (see .env.example / docs/dev/environment.md)}"
 
               if [ -z "''${APPLE_TEAM_ID:-}" ]; then
@@ -270,6 +278,14 @@
             desktop-release = ''
               if [ "$(uname -s)" != "Darwin" ]; then
                 echo "desktop-release: macOS only" >&2
+                exit 1
+              fi
+
+              # Support `nix run ./lattice#…` from ecosystem root (Cargo workspace is nested).
+              if [ -f ./lattice/Cargo.toml ] && [ -d ./lattice/apps/daemon ]; then
+                cd ./lattice
+              elif [ ! -f ./Cargo.toml ] || [ ! -d ./apps/daemon ]; then
+                echo "desktop-release: run from lattice repo root (or ecosystem root with ./lattice)" >&2
                 exit 1
               fi
 
