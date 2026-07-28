@@ -1,7 +1,9 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
+import { existsSync, lstatSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
-import { resolve } from "node:path";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { defineConfig, searchForWorkspaceRoot } from "vite";
+import react from "@vitejs/plugin-react";
 
 const require = createRequire(import.meta.url);
 
@@ -11,6 +13,66 @@ const require = createRequire(import.meta.url);
 const perspectiveDatagridCdn = require.resolve(
   "@finos/perspective-viewer-datagrid/dist/cdn/perspective-viewer-datagrid.js",
 );
+
+const repoRoot = resolve(__dirname, "../..");
+
+/**
+ * Vite's fs.allow defaults to the realpath workspace root. When this checkout
+ * is also reached via a symlink (e.g. ~/Developer/lattice → ecosystem/lattice),
+ * font/CSS request ids can use the symlink prefix and get 403'd — blank
+ * WebView typography / missing xterm.css. Allow both path forms.
+ */
+function viteFsAllow(): string[] {
+  const allow = new Set<string>([
+    searchForWorkspaceRoot(process.cwd()),
+    repoRoot,
+  ]);
+
+  const add = (path: string | undefined) => {
+    if (!path) return;
+    try {
+      if (existsSync(path)) allow.add(resolve(path));
+    } catch {
+      // ignore missing candidates
+    }
+  };
+
+  add(process.cwd());
+  try {
+    allow.add(realpathSync(repoRoot));
+  } catch {
+    // ignore
+  }
+  try {
+    allow.add(realpathSync(process.cwd()));
+  } catch {
+    // ignore
+  }
+
+  // Common local alias into this nested checkout.
+  add(join(homedir(), "Developer", "lattice"));
+
+  // If cwd walks through a symlink that realpaths to the repo, allow that prefix.
+  let dir = process.cwd();
+  for (let i = 0; i < 8; i++) {
+    try {
+      if (lstatSync(dir).isSymbolicLink()) {
+        const target = realpathSync(dir);
+        const realRepo = realpathSync(repoRoot);
+        if (target === realRepo || target.startsWith(`${realRepo}/`)) {
+          allow.add(dir);
+        }
+      }
+    } catch {
+      // ignore
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+
+  return [...allow];
+}
 
 // Tauri expects a fixed dev server port and a build that ignores its own
 // src-tauri directory. See https://v2.tauri.app/start/frontend/vite/
@@ -24,6 +86,9 @@ export default defineConfig(async () => ({
     host: true,
     port: 5173,
     strictPort: true,
+    fs: {
+      allow: viteFsAllow(),
+    },
   },
   envPrefix: ["VITE_", "TAURI_"],
   worker: {

@@ -8,8 +8,8 @@
  *
  *   ./scripts/exec-for-dev.sh --capture-yc
  */
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { mkdir, rename, writeFile } from "node:fs/promises";
+import { dirname, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { TauriPage } from "@srsholmes/tauri-playwright";
 import { waitForShellChrome } from "../perf/helpers";
@@ -144,12 +144,13 @@ test.describe("YC product capture (tauri native)", () => {
         await hideCaptureCursor(tauriPage);
 
         const recording = await tauriPage.stopRecording();
-        const clipRel = recording.video
-          ? `product/clips/${beat.id}.mp4`
-          : null;
+        // Playwright / tauri-plugin may emit .webm or .mp4; Remotion accepts both.
+        let clipRel: string | null = null;
         if (recording.video) {
-          const { rename } = await import("node:fs/promises");
-          await rename(recording.video, resolve(clipsDir, `${beat.id}.mp4`));
+          const ext = extname(recording.video).toLowerCase() || ".mp4";
+          const clipName = `${beat.id}${ext === ".webm" ? ".webm" : ".mp4"}`;
+          clipRel = `product/clips/${clipName}`;
+          await rename(recording.video, resolve(clipsDir, clipName));
         }
 
         manifestBeats.push({
