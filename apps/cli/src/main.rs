@@ -1,3 +1,4 @@
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -24,7 +25,8 @@ use lattice_datasets::{parse_partition_key_specs, Dataset, EventAnnotation};
 use lattice_duckdb::{DuckDbEngine, ScalarValue};
 use lattice_index::{Backlink, SearchHit, WorkspaceIndex};
 use latticefs_core::{
-    materialize_to_cloud, resource_stat_or_register, AuthorityMode, MaterializationState,
+    materialize_to_cloud, open_cloud_authoritative_bytes, resource_stat_or_register,
+    AuthorityMode, MaterializationState,
     ResourceStat,
 };
 use lattice_cloud_client::{
@@ -258,6 +260,13 @@ enum CloudCommand {
         /// Emit the resulting stat record as JSON.
         #[arg(long)]
         json: bool,
+    },
+    /// Fetch canonical bytes for a cloud-backed resource (fails on network/auth errors).
+    BlobOpen {
+        /// Workspace path of the cloud-backed file.
+        target: PathBuf,
+        /// Path inside the workspace to discover from. Defaults to the current directory.
+        path: Option<PathBuf>,
     },
 }
 
@@ -936,6 +945,7 @@ fn run(command: Command) -> Result<ExitCode> {
             CloudCommand::BlobRoundtrip { target, path, json } => {
                 cmd_cloud_blob_roundtrip(target, path, json)
             }
+            CloudCommand::BlobOpen { target, path } => cmd_cloud_blob_open(target, path),
         },
         Command::Theme { command } => match command {
             ThemeCommand::List { json } => cmd_theme_list(json),
@@ -2512,6 +2522,31 @@ fn cmd_cloud_blob_roundtrip(
         println!("cloud blob round-trip ok");
         print_resource_stat(&stat);
     }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_cloud_blob_open(target: PathBuf, path: Option<PathBuf>) -> Result<ExitCode> {
+    let start = cwd_or(path)?;
+    let ws = Workspace::discover(&start)?;
+    let rel = workspace_relative(&ws, &target)?;
+    let rel_key = rel.to_string_lossy().replace('\\', "/");
+
+    let store = KeychainCloudSessionStore::new();
+    let token = store
+        .load_token()
+        .map_err(|err| anyhow::anyhow!("load cloud session: {err}"))?
+        .ok_or_else(|| {
+            anyhow::anyhow!("not signed in to cloud; sign in via desktop Settings → Cloud account")
+        })?;
+
+    let api = default_client();
+    let blob_client = HttpCloudBlobClient::new(api, token);
+    let bytes = open_cloud_authoritative_bytes(ws.root(), &rel_key, &blob_client)
+        .map_err(|err| anyhow::anyhow!("{err}"))?;
+
+    io::stdout()
+        .write_all(&bytes)
+        .context("write cloud bytes to stdout")?;
     Ok(ExitCode::SUCCESS)
 }
 

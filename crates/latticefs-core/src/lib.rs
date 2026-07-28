@@ -11,11 +11,13 @@ mod stat;
 mod types;
 
 pub use cloud::{
-    roundtrip_verify_blob, CloudBlobClient, InMemoryCloudBlobClient,
+    fetch_cloud_blob, roundtrip_verify_blob, CloudBlobClient, InMemoryCloudBlobClient,
 };
 pub use error::{Error, Result};
 pub use registry::{NamespaceRegistry, OPERATIONAL_DIR, REGISTRY_FILENAME};
-pub use stat::{materialize_to_cloud, resource_stat, resource_stat_or_register};
+pub use stat::{
+    materialize_to_cloud, open_cloud_authoritative_bytes, resource_stat, resource_stat_or_register,
+};
 pub use types::{
     AuthorityMode, ContentHash, MaterializationState, NamespaceEntry, ResourceId, ResourceStat,
     ResourceVersionId,

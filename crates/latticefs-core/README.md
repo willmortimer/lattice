@@ -35,6 +35,8 @@ Default posture for ordinary local files:
 | [`NamespaceRegistry`](src/registry.rs) | Persisted path registry |
 | [`resource_stat`](src/stat.rs) | Inspect one path |
 | [`materialize_to_cloud`](src/stat.rs) | PUT→GET verify and set `authority: cloud` |
+| [`open_cloud_authoritative_bytes`](src/stat.rs) | GET cloud bytes; errors on failure (no local fallback) |
+| [`fetch_cloud_blob`](src/cloud.rs) | Low-level cloud GET with optional hash verify |
 | [`CloudBlobClient`](src/cloud.rs) | Authenticated blob PUT/GET trait |
 | [`InMemoryCloudBlobClient`](src/cloud.rs) | In-memory test double |
 | [`HttpCloudBlobClient`](../lattice-cloud-client/src/blob.rs) | Production HTTP impl (`lattice-cloud-client`) |

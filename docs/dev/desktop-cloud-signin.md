@@ -55,3 +55,22 @@ After a successful round-trip, open the resource in the desktop app and check **
 Properties → Authority**. It should show **Cloud** (from the registry
 `authority: cloud` written by `mark_cloud_backed`). Materialization is typically
 **Metadata only** until a later pin/cache path lands.
+
+## Cloud fetch failures (offline / auth)
+
+Cloud-backed resources (`authority: cloud`) must not silently use stale local file bytes
+when the cloud GET fails.
+
+- `lattice cloud blob-open <path>` fetches canonical bytes from cloud and writes them to stdout.
+  On network error, **401**, or **5xx**, the command exits non-zero with an explicit error
+  (for example `cloud blob error: cloud API error (401): invalid session`).
+- Failed upload round-trips (`lattice cloud blob-roundtrip`) do **not** mark the resource
+  as cloud-authoritative; authority stays `local`.
+- Inspect still shows registry metadata (`authority`, `materialization`); it does not
+  substitute local disk content when cloud is unreachable.
+
+```sh
+# After a successful blob-roundtrip, offline fetch fails visibly:
+lattice cloud blob-open notes/example.md
+# cloud blob error: cloud request failed: network unreachable
+```
