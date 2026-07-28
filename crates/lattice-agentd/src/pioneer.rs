@@ -52,7 +52,10 @@ pub struct PioneerRunOptions {
     pub run_id: String,
     pub thread_id: String,
     pub model: String,
+    /// Flattened fallback prompt (used when `messages` is empty).
     pub prompt: String,
+    /// OpenAI-style chat turns (user/assistant). When non-empty, preferred over `prompt`.
+    pub messages: Vec<serde_json::Value>,
     pub api_key: String,
     pub base_url: String,
     pub cancel: Arc<AtomicBool>,
@@ -92,6 +95,7 @@ pub async fn emit_pioneer_run(options: PioneerRunOptions, events: mpsc::Sender<A
         thread_id,
         model,
         prompt,
+        messages,
         api_key,
         base_url,
         cancel,
@@ -135,12 +139,17 @@ pub async fn emit_pioneer_run(options: PioneerRunOptions, events: mpsc::Sender<A
     }
 
     let model = normalize_model(&model);
+    let chat_messages = if messages.is_empty() {
+        vec![json!({ "role": "user", "content": prompt })]
+    } else {
+        messages
+    };
     let result = if lattice.is_some() {
         run_tool_loop(
             &api_key,
             &base_url,
             &model,
-            &prompt,
+            &chat_messages,
             &run_id,
             &cancel,
             &events,
@@ -152,11 +161,17 @@ pub async fn emit_pioneer_run(options: PioneerRunOptions, events: mpsc::Sender<A
         )
         .await
     } else {
+        let prompt_text = chat_messages
+            .iter()
+            .rev()
+            .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"))
+            .and_then(|m| m.get("content").and_then(|c| c.as_str()))
+            .unwrap_or(prompt.as_str());
         stream_chat_completions(
             &api_key,
             &base_url,
             &model,
-            &prompt,
+            prompt_text,
             &run_id,
             &cancel,
             &events,
@@ -201,7 +216,7 @@ async fn run_tool_loop(
     api_key: &str,
     base_url: &str,
     model: &str,
-    prompt: &str,
+    chat_messages: &[Value],
     run_id: &str,
     cancel: &AtomicBool,
     events: &mpsc::Sender<AgentEvent>,
@@ -215,15 +230,35 @@ async fn run_tool_loop(
 
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
     let tools = openai_tool_definitions();
-    let mut messages = vec![
-        json!({ "role": "system", "content": WORKSPACE_AGENT_INSTRUCTIONS }),
-        json!({ "role": "user", "content": prompt }),
-    ];
+    let system = format!(
+        "{}{}",
+        WORKSPACE_AGENT_INSTRUCTIONS,
+        tool_ctx.binding_instructions()
+    );
+    let mut messages = vec![json!({ "role": "system", "content": system })];
+    messages.extend(chat_messages.iter().cloned());
 
-    for _round in 0..MAX_TOOL_ROUNDS {
+    for round in 0..MAX_TOOL_ROUNDS {
         if cancel.load(Ordering::SeqCst) {
             return Err(PioneerError::Cancelled);
         }
+
+        // Non-streaming completions leave the UI silent for seconds; trail steps
+        // show that the run is alive while waiting on Pioneer / tools.
+        let think_id = format!("think-{round}");
+        let think_started = std::time::Instant::now();
+        emit_step_started(
+            run_id,
+            &think_id,
+            "model",
+            if round == 0 {
+                "Checking the workspace…"
+            } else {
+                "Continuing with tool results…"
+            },
+            events,
+        )
+        .await;
 
         let body = json!({
             "model": model,
@@ -234,6 +269,15 @@ async fn run_tool_loop(
         });
 
         let payload = post_chat_json(&client, &url, api_key, &body, cancel).await?;
+        emit_step_completed(
+            run_id,
+            &think_id,
+            think_started.elapsed().as_millis() as u64,
+            None,
+            events,
+        )
+        .await;
+
         if let Some(err) = payload.get("error") {
             let message = err
                 .get("message")
@@ -262,14 +306,14 @@ async fn run_tool_loop(
                 .get("content")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            emit_text_content(run_id, content, events).await;
+            emit_text_content_streamed(run_id, content, events).await;
             return Ok(());
         }
 
         // Keep the assistant turn (including tool_calls) in history.
         messages.push(message);
 
-        for call in &tool_calls {
+        for (tool_idx, call) in tool_calls.iter().enumerate() {
             if cancel.load(Ordering::SeqCst) {
                 return Err(PioneerError::Cancelled);
             }
@@ -285,7 +329,23 @@ async fn run_tool_loop(
                 .pointer("/function/arguments")
                 .and_then(|v| v.as_str())
                 .unwrap_or("{}");
+            let step_id = format!("tool-{round}-{tool_idx}");
+            let label = if name.is_empty() {
+                "Running tool…".to_string()
+            } else {
+                format!("Running `{name}`…")
+            };
+            let tool_started = std::time::Instant::now();
+            emit_step_started(run_id, &step_id, "tool", &label, events).await;
             let content = dispatch_tool(lattice, tool_ctx, name, arguments).await;
+            emit_step_completed(
+                run_id,
+                &step_id,
+                tool_started.elapsed().as_millis() as u64,
+                Some(name),
+                events,
+            )
+            .await;
             messages.push(json!({
                 "role": "tool",
                 "tool_call_id": call_id,
@@ -337,7 +397,49 @@ async fn post_chat_json(
     serde_json::from_str(&text).map_err(|err| PioneerError::Api(err.to_string()))
 }
 
-async fn emit_text_content(run_id: &str, content: &str, events: &mpsc::Sender<AgentEvent>) {
+async fn emit_step_started(
+    run_id: &str,
+    step_id: &str,
+    kind: &str,
+    label: &str,
+    events: &mpsc::Sender<AgentEvent>,
+) {
+    let _ = events
+        .send(AgentEvent::StepStarted {
+            run_id: run_id.to_string(),
+            step_id: step_id.to_string(),
+            kind: kind.to_string(),
+            label: label.to_string(),
+        })
+        .await;
+}
+
+async fn emit_step_completed(
+    run_id: &str,
+    step_id: &str,
+    duration_ms: u64,
+    summary: Option<&str>,
+    events: &mpsc::Sender<AgentEvent>,
+) {
+    let _ = events
+        .send(AgentEvent::StepCompleted {
+            run_id: run_id.to_string(),
+            step_id: step_id.to_string(),
+            duration_ms,
+            summary: summary.map(str::to_string),
+        })
+        .await;
+}
+
+/// Prefer ~48–96 byte deltas so assistant-ui paints during the final answer
+/// even though Pioneer tool rounds are non-streaming.
+const FINAL_TEXT_CHUNK_TARGET: usize = 72;
+
+async fn emit_text_content_streamed(
+    run_id: &str,
+    content: &str,
+    events: &mpsc::Sender<AgentEvent>,
+) {
     if content.is_empty() {
         return;
     }
@@ -348,22 +450,57 @@ async fn emit_text_content(run_id: &str, content: &str, events: &mpsc::Sender<Ag
             chunk: json!({ "type": "text-start", "id": id }),
         })
         .await;
-    let _ = events
-        .send(AgentEvent::MessageChunk {
-            run_id: run_id.to_string(),
-            chunk: json!({
-                "type": "text-delta",
-                "id": id,
-                "delta": content,
-            }),
-        })
-        .await;
+
+    for delta in chunk_text_for_stream(content, FINAL_TEXT_CHUNK_TARGET) {
+        let _ = events
+            .send(AgentEvent::MessageChunk {
+                run_id: run_id.to_string(),
+                chunk: json!({
+                    "type": "text-delta",
+                    "id": id,
+                    "delta": delta,
+                }),
+            })
+            .await;
+        // Let the JSONL / Tauri channel flush between deltas.
+        tokio::task::yield_now().await;
+    }
+
     let _ = events
         .send(AgentEvent::MessageChunk {
             run_id: run_id.to_string(),
             chunk: json!({ "type": "text-end", "id": id }),
         })
         .await;
+}
+
+fn chunk_text_for_stream(content: &str, target: usize) -> Vec<&str> {
+    if content.len() <= target {
+        return vec![content];
+    }
+    let mut out = Vec::new();
+    let mut start = 0;
+    let bytes = content.as_bytes();
+    while start < bytes.len() {
+        let mut end = (start + target).min(bytes.len());
+        if end < bytes.len() {
+            // Prefer breaking on whitespace so we don't split UTF-8 mid-word often.
+            if let Some(rel) = content[start..end].rfind(char::is_whitespace) {
+                end = start + rel + 1;
+            }
+            while end > start && !content.is_char_boundary(end) {
+                end -= 1;
+            }
+        }
+        if end <= start {
+            end = (start + 1..bytes.len() + 1)
+                .find(|&i| content.is_char_boundary(i))
+                .unwrap_or(bytes.len());
+        }
+        out.push(&content[start..end]);
+        start = end;
+    }
+    out
 }
 
 async fn stream_chat_completions(
@@ -543,5 +680,13 @@ mod tests {
         assert_eq!(normalize_model(""), DEFAULT_PIONEER_MODEL);
         assert_eq!(normalize_model("default"), DEFAULT_PIONEER_MODEL);
         assert_eq!(normalize_model("gpt-5.6-terra"), "gpt-5.6-terra");
+    }
+
+    #[test]
+    fn chunk_text_splits_long_answers() {
+        let text = "alpha beta gamma delta epsilon zeta eta theta";
+        let chunks = chunk_text_for_stream(text, 12);
+        assert!(chunks.len() > 1);
+        assert_eq!(chunks.concat(), text);
     }
 }

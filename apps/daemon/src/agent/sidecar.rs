@@ -454,7 +454,8 @@ async fn write_command(
 ///
 /// Values may be a direct executable or a launcher form such as
 /// `npx tsx apps/agentd/src/index.ts`. When unset, prefer the Rust
-/// `lattice-agentd` binary (release/debug/next to latticed), then Node `run.sh`.
+/// `lattice-agentd` binary (release/debug/next to latticed). Node
+/// `run.sh` only when `LATTICE_AGENTD_PREFER_NODE` is set.
 pub fn resolve_agentd_bin() -> Option<(PathBuf, Vec<String>)> {
     if let Ok(raw) = std::env::var(ENV_AGENTD_BIN) {
         if !raw.is_empty() {
@@ -470,33 +471,33 @@ pub fn resolve_agentd_bin() -> Option<(PathBuf, Vec<String>)> {
 }
 
 fn discover_default_agentd_bin() -> Option<(PathBuf, Vec<String>)> {
-    let prefer_node = env_truthy("LATTICE_AGENTD_PREFER_NODE");
-    if !prefer_node {
-        // Relative to latticed crate (apps/daemon) → workspace root.
-        let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-        for candidate in [
-            workspace_root.join("target/release/lattice-agentd"),
-            workspace_root.join("target/debug/lattice-agentd"),
-        ] {
-            let candidate = std::fs::canonicalize(&candidate).unwrap_or(candidate);
-            if candidate.is_file() {
-                return Some((candidate, Vec::new()));
-            }
+    // Relative to latticed crate (apps/daemon) → workspace root.
+    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for candidate in [
+        workspace_root.join("target/release/lattice-agentd"),
+        workspace_root.join("target/debug/lattice-agentd"),
+    ] {
+        let candidate = std::fs::canonicalize(&candidate).unwrap_or(candidate);
+        if candidate.is_file() {
+            return Some((candidate, Vec::new()));
         }
-        if let Ok(exe) = std::env::current_exe() {
-            if let Some(dir) = exe.parent() {
-                let sidecar = dir.join("lattice-agentd");
-                if sidecar.is_file() {
-                    return Some((sidecar, Vec::new()));
-                }
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let sidecar = dir.join("lattice-agentd");
+            if sidecar.is_file() {
+                return Some((sidecar, Vec::new()));
             }
         }
     }
 
-    let run_sh = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../agentd/scripts/run.sh");
-    let run_sh = std::fs::canonicalize(&run_sh).unwrap_or(run_sh);
-    if run_sh.is_file() {
-        return Some((run_sh, Vec::new()));
+    // Node is opt-in only (`LATTICE_AGENTD_PREFER_NODE=1` or explicit LATTICE_AGENTD_BIN).
+    if env_truthy("LATTICE_AGENTD_PREFER_NODE") {
+        let run_sh = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../agentd/scripts/run.sh");
+        let run_sh = std::fs::canonicalize(&run_sh).unwrap_or(run_sh);
+        if run_sh.is_file() {
+            return Some((run_sh, Vec::new()));
+        }
     }
     None
 }

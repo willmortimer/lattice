@@ -13,6 +13,7 @@ use crate::lattice_client;
 use crate::pioneer::{self, PioneerRunOptions};
 use crate::protocol::{AgentCommand, AgentEvent, ProviderKind, PROTOCOL_VERSION};
 use crate::responses::{self, OpenaiRunOptions};
+use crate::tools::chat_messages_from_start;
 
 /// Runtime knobs for the JSONL loop (chunk delay helps cancel tests).
 #[derive(Debug, Clone)]
@@ -175,9 +176,9 @@ where
                             let _ = run.join.await;
                         }
 
-                        let prompt_text =
-                            match prompt_from_start(prompt.as_deref(), messages.as_deref()) {
-                                Ok(text) => text,
+                        let chat_messages =
+                            match chat_messages_from_start(prompt.as_deref(), messages.as_deref()) {
+                                Ok(msgs) => msgs,
                                 Err(message) => {
                                     write_event(
                                         &mut writer,
@@ -191,6 +192,25 @@ where
                                     continue;
                                 }
                             };
+                        let prompt_text = chat_messages
+                            .iter()
+                            .rev()
+                            .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"))
+                            .and_then(|m| m.get("content").and_then(|c| c.as_str()))
+                            .unwrap_or("")
+                            .to_string();
+                        if prompt_text.is_empty() {
+                            write_event(
+                                &mut writer,
+                                &AgentEvent::RunFailed {
+                                    run_id: run_id.clone(),
+                                    message: "start_run requires a user message".into(),
+                                    retryable: false,
+                                },
+                            )
+                            .await?;
+                            continue;
+                        }
 
                         let cancel = Arc::new(AtomicBool::new(false));
                         let events = event_tx.clone();
@@ -258,6 +278,7 @@ where
                                             thread_id,
                                             model,
                                             prompt: prompt_text,
+                                            messages: chat_messages,
                                             api_key,
                                             base_url,
                                             cancel: cancel_for_task,
@@ -298,39 +319,6 @@ where
     writer.write_all(line.as_bytes()).await?;
     writer.flush().await?;
     Ok(())
-}
-
-fn prompt_from_start(
-    prompt: Option<&str>,
-    messages: Option<&[serde_json::Value]>,
-) -> Result<String, String> {
-    if let Some(prompt) = prompt {
-        if !prompt.is_empty() {
-            return Ok(prompt.to_string());
-        }
-    }
-    let Some(messages) = messages else {
-        return Err("start_run requires messages or prompt".into());
-    };
-    if messages.is_empty() {
-        return Err("start_run requires messages or prompt".into());
-    }
-    let mut parts = Vec::new();
-    for message in messages {
-        let role = message
-            .get("role")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown");
-        let content = message
-            .get("content")
-            .map(|v| match v {
-                serde_json::Value::String(s) => s.clone(),
-                other => other.to_string(),
-            })
-            .unwrap_or_else(|| message.to_string());
-        parts.push(format!("{role}: {content}"));
-    }
-    Ok(parts.join("\n"))
 }
 
 #[cfg(test)]

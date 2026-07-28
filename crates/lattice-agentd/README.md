@@ -2,8 +2,8 @@
 
 Rust sidecar that speaks the Phase A agent JSONL protocol over stdio
 ([ADR 0051](../../docs/decisions/0051-rust-embedded-agent-harness.md)). Desktop /
-`latticed` prefer this binary by default and fall back to Node
-`apps/agentd/scripts/run.sh` when it is missing.
+`latticed` prefer this binary by default. Node `apps/agentd` is **opt-in only**
+via `LATTICE_AGENTD_PREFER_NODE=1` or an explicit `LATTICE_AGENTD_BIN`.
 
 ## Protocol
 
@@ -14,14 +14,16 @@ One JSON object per line on stdin (commands) / stdout (events):
 | `hello` | `hello_ack` (`protocolVersion: 1`) |
 | `health` | `health` (`ok: true`) |
 | `start_run` (`provider: fake`) | `run_started` → `message_chunk`(s) → `run_completed` |
-| `start_run` (`provider: pioneer`) | Pioneer chat completions → `message_chunk`(s); tool loop when Lattice HTTP env is set |
+| `start_run` (`provider: pioneer`) | Pioneer chat completions → tool trail steps + streamed final `message_chunk`(s) when Lattice HTTP env is set |
 | `start_run` (`provider: openai`) | OpenAI Responses stream → `message_chunk`(s) |
 | `cancel_run` | stops in-flight run → `run_failed` (`Run cancelled`) |
 | `shutdown` | exits after cancelling any active run |
 
 Wire shapes match `apps/daemon/src/agent/protocol.rs` (camelCase fields,
 snake_case `type` discriminators). UI chunks use AI SDK shapes
-(`text-start` / `text-delta` / `text-end`).
+(`text-start` / `text-delta` / `text-end`). Tool rounds also emit
+`step_started` / `step_completed` so the trail shows progress while Pioneer
+tool calls are non-streaming.
 
 ## Build
 
@@ -40,9 +42,8 @@ When `LATTICE_AGENTD_BIN` is unset, discovery order is:
 1. `target/release/lattice-agentd`
 2. `target/debug/lattice-agentd`
 3. `lattice-agentd` next to the running `latticed` / app binary (packaged DMG)
-4. Node `apps/agentd/scripts/run.sh` (fallback)
 
-Force Node:
+Force Node (escape hatch only):
 
 ```sh
 export LATTICE_AGENTD_PREFER_NODE=1

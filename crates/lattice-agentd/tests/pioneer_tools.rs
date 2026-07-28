@@ -102,6 +102,7 @@ async fn pioneer_tool_loop_hits_search_then_completes() {
             thread_id: "t-tools".into(),
             model: "gpt-test".into(),
             prompt: "Search for Events".into(),
+            messages: Vec::new(),
             api_key: "pk-test".into(),
             base_url: format!("{}/v1", pioneer.uri()),
             cancel: Arc::new(std::sync::atomic::AtomicBool::new(false)),
@@ -136,8 +137,22 @@ async fn pioneer_tool_loop_hits_search_then_completes() {
     assert!(
         events
             .iter()
-            .any(|e| matches!(e, AgentEvent::MessageChunk { .. })),
-        "expected message_chunk text for final answer"
+            .any(|e| matches!(e, AgentEvent::StepStarted { kind, .. } if kind == "tool")),
+        "expected tool step_started while tools run"
+    );
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, AgentEvent::StepStarted { kind, .. } if kind == "model")),
+        "expected model step_started while waiting on Pioneer"
+    );
+    let delta_count = events
+        .iter()
+        .filter(|e| matches!(e, AgentEvent::MessageChunk { chunk, .. } if chunk.get("type").and_then(|t| t.as_str()) == Some("text-delta")))
+        .count();
+    assert!(
+        delta_count >= 1,
+        "expected streamed text-delta chunks, got {delta_count}"
     );
     let text: String = events
         .iter()

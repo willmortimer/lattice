@@ -126,7 +126,7 @@ fn discover_agentd_bin() -> Option<String> {
     }
 
     // Prefer the Rust sidecar (release, then debug, then next to this exe for packaged apps).
-    // Set LATTICE_AGENTD_PREFER_NODE=1 to skip straight to the Node fallback.
+    // Node is opt-in only via LATTICE_AGENTD_PREFER_NODE=1 (or explicit LATTICE_AGENTD_BIN).
     let prefer_node = matches!(
         std::env::var("LATTICE_AGENTD_PREFER_NODE").ok().as_deref(),
         Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("YES")
@@ -151,9 +151,9 @@ fn discover_agentd_bin() -> Option<String> {
                 }
             }
         }
+        return None;
     }
 
-    // Node fallback (dev / explicit prefer-node).
     let run_sh = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../agentd/scripts/run.sh");
     let run_sh = std::fs::canonicalize(&run_sh).unwrap_or(run_sh);
     if run_sh.is_file() {
