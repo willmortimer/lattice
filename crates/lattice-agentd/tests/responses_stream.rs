@@ -51,6 +51,9 @@ async fn wiremock_openai_run_streams_message_chunks() {
             api_key: "sk-test".into(),
             base_url: format!("{}/v1", server.uri()),
             cancel: Arc::new(AtomicBool::new(false)),
+            lattice: None,
+            workspace_id: None,
+            workspace_root: None,
         },
         tx,
     )
@@ -126,6 +129,9 @@ async fn wiremock_cancel_aborts_stream() {
                 api_key: "sk-test".into(),
                 base_url: format!("{}/v1", server.uri()),
                 cancel: cancel_flag,
+                lattice: None,
+                workspace_id: None,
+                workspace_root: None,
             },
             tx,
         )
@@ -169,6 +175,9 @@ async fn wiremock_http_error_surfaces_run_failed() {
             api_key: "sk-bad".into(),
             base_url: format!("{}/v1", server.uri()),
             cancel: Arc::new(AtomicBool::new(false)),
+            lattice: None,
+            workspace_id: None,
+            workspace_root: None,
         },
         tx,
     )

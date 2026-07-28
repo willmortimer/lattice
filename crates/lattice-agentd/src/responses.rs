@@ -4,8 +4,10 @@
 //! text deltas into AI SDK–style UI chunks (`text-start` / `text-delta` /
 //! `text-end`) carried by agent-protocol `message_chunk` events.
 //!
-//! No Wasmtime / tools in this slice — text streaming only.
+//! When a Lattice HTTP client is configured, runs a thin tool loop (max 8
+//! rounds) using Responses function tools; otherwise streams text-only.
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,13 +19,20 @@ use thiserror::Error;
 use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
+use crate::lattice_client::LatticeToolClient;
 use crate::protocol::{AgentEvent, ProviderKind};
+use crate::tools::{
+    dispatch_tool, openai_tool_definitions, ToolRunContext, WORKSPACE_AGENT_INSTRUCTIONS,
+};
 
 /// Default OpenAI API root (includes `/v1`).
 pub const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
 
 /// Default model when `start_run.model` is empty (matches Node agentd openai path).
 pub const DEFAULT_OPENAI_MODEL: &str = "gpt-4.1-mini";
+
+/// Max assistant→tool→assistant rounds when Lattice tools are enabled.
+pub const MAX_TOOL_ROUNDS: usize = 8;
 
 /// Errors from the OpenAI Responses client.
 #[derive(Debug, Error)]
@@ -40,6 +49,8 @@ pub enum ResponsesError {
     Transport(String),
     #[error("openai stream ended without completion")]
     Incomplete,
+    #[error("openai tool loop exceeded {0} rounds")]
+    ToolLoopExhausted(usize),
 }
 
 impl PartialEq for ResponsesError {
@@ -52,6 +63,7 @@ impl PartialEq for ResponsesError {
                 a == b && ab == bb
             }
             (Self::Api(a), Self::Api(b)) | (Self::Transport(a), Self::Transport(b)) => a == b,
+            (Self::ToolLoopExhausted(a), Self::ToolLoopExhausted(b)) => a == b,
             _ => false,
         }
     }
@@ -70,6 +82,10 @@ pub struct OpenaiRunOptions {
     /// API root including `/v1` (overridable for wiremock / proxies).
     pub base_url: String,
     pub cancel: Arc<AtomicBool>,
+    /// When set, enable Responses tool loop against latticed HTTP.
+    pub lattice: Option<LatticeToolClient>,
+    pub workspace_id: Option<String>,
+    pub workspace_root: Option<String>,
 }
 
 /// Resolve `OPENAI_API_KEY` from the process environment.
@@ -98,6 +114,32 @@ pub fn normalize_model(model: &str) -> String {
     }
 }
 
+/// Convert Chat Completions nested `tools` into Responses flat function tools.
+pub fn responses_tool_definitions() -> Vec<Value> {
+    openai_tool_definitions()
+        .into_iter()
+        .filter_map(|tool| {
+            let func = tool.get("function")?;
+            let name = func.get("name")?.as_str()?.to_string();
+            let description = func
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let parameters = func
+                .get("parameters")
+                .cloned()
+                .unwrap_or_else(|| json!({ "type": "object", "properties": {} }));
+            Some(json!({
+                "type": "function",
+                "name": name,
+                "description": description,
+                "parameters": parameters,
+            }))
+        })
+        .collect()
+}
+
 /// Emit `run_started` → streamed `message_chunk`(s) → `run_completed` / `run_failed`.
 pub async fn emit_openai_run(options: OpenaiRunOptions, events: mpsc::Sender<AgentEvent>) {
     let OpenaiRunOptions {
@@ -108,6 +150,9 @@ pub async fn emit_openai_run(options: OpenaiRunOptions, events: mpsc::Sender<Age
         api_key,
         base_url,
         cancel,
+        lattice,
+        workspace_id,
+        workspace_root,
     } = options;
 
     let send = |event: AgentEvent| {
@@ -144,17 +189,37 @@ pub async fn emit_openai_run(options: OpenaiRunOptions, events: mpsc::Sender<Age
         return;
     }
 
-    match stream_responses_to_events(
-        &api_key,
-        &base_url,
-        &normalize_model(&model),
-        &prompt,
-        &run_id,
-        &cancel,
-        &events,
-    )
-    .await
-    {
+    let model = normalize_model(&model);
+    let result = if lattice.is_some() {
+        run_tool_loop(
+            &api_key,
+            &base_url,
+            &model,
+            &prompt,
+            &run_id,
+            &cancel,
+            &events,
+            lattice.as_ref(),
+            &ToolRunContext {
+                workspace_id,
+                workspace_root,
+            },
+        )
+        .await
+    } else {
+        stream_responses_to_events(
+            &api_key,
+            &base_url,
+            &model,
+            &prompt,
+            &run_id,
+            &cancel,
+            &events,
+        )
+        .await
+    };
+
+    match result {
         Ok(()) => {
             if cancel.load(Ordering::SeqCst) {
                 send(AgentEvent::RunFailed {
@@ -185,6 +250,484 @@ pub async fn emit_openai_run(options: OpenaiRunOptions, events: mpsc::Sender<Age
             .await;
         }
     }
+}
+
+async fn run_tool_loop(
+    api_key: &str,
+    base_url: &str,
+    model: &str,
+    prompt: &str,
+    run_id: &str,
+    cancel: &AtomicBool,
+    events: &mpsc::Sender<AgentEvent>,
+    lattice: Option<&LatticeToolClient>,
+    tool_ctx: &ToolRunContext,
+) -> Result<(), ResponsesError> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(120))
+        .build()
+        .map_err(|err| ResponsesError::Transport(err.to_string()))?;
+
+    let url = format!("{}/responses", base_url.trim_end_matches('/'));
+    let tools = responses_tool_definitions();
+    let instructions = format!(
+        "{}{}",
+        WORKSPACE_AGENT_INSTRUCTIONS,
+        tool_ctx.binding_instructions()
+    );
+    let mut input: Vec<Value> = vec![json!({ "role": "user", "content": prompt })];
+
+    for round in 0..MAX_TOOL_ROUNDS {
+        if cancel.load(Ordering::SeqCst) {
+            return Err(ResponsesError::Cancelled);
+        }
+
+        let think_id = format!("think-{round}");
+        let think_started = std::time::Instant::now();
+        emit_step_started(
+            run_id,
+            &think_id,
+            "model",
+            if round == 0 {
+                "Checking the workspace…"
+            } else {
+                "Continuing with tool results…"
+            },
+            events,
+        )
+        .await;
+
+        let body = json!({
+            "model": model,
+            "instructions": instructions,
+            "input": input,
+            "tools": tools,
+            "tool_choice": "auto",
+            "stream": true,
+        });
+
+        let outcome =
+            stream_tool_round(&client, &url, api_key, &body, run_id, cancel, events).await?;
+        emit_step_completed(
+            run_id,
+            &think_id,
+            think_started.elapsed().as_millis() as u64,
+            None,
+            events,
+        )
+        .await;
+
+        match outcome {
+            StreamRoundOutcome::FinalAnswer => return Ok(()),
+            StreamRoundOutcome::ToolCalls { calls } => {
+                for call in &calls {
+                    input.push(json!({
+                        "type": "function_call",
+                        "id": call.id,
+                        "call_id": call.call_id,
+                        "name": call.name,
+                        "arguments": call.arguments,
+                    }));
+                }
+                for (tool_idx, call) in calls.iter().enumerate() {
+                    if cancel.load(Ordering::SeqCst) {
+                        return Err(ResponsesError::Cancelled);
+                    }
+                    let step_id = format!("tool-{round}-{tool_idx}");
+                    let label = if call.name.is_empty() {
+                        "Running tool…".to_string()
+                    } else {
+                        format!("Running `{}`…", call.name)
+                    };
+                    let tool_started = std::time::Instant::now();
+                    emit_step_started(run_id, &step_id, "tool", &label, events).await;
+                    let content =
+                        dispatch_tool(lattice, tool_ctx, &call.name, &call.arguments).await;
+                    emit_step_completed(
+                        run_id,
+                        &step_id,
+                        tool_started.elapsed().as_millis() as u64,
+                        Some(call.name.as_str()),
+                        events,
+                    )
+                    .await;
+                    input.push(json!({
+                        "type": "function_call_output",
+                        "call_id": call.call_id,
+                        "output": content,
+                    }));
+                }
+            }
+        }
+    }
+
+    Err(ResponsesError::ToolLoopExhausted(MAX_TOOL_ROUNDS))
+}
+
+#[derive(Debug, Clone)]
+struct AccumulatedFunctionCall {
+    id: String,
+    call_id: String,
+    name: String,
+    arguments: String,
+}
+
+#[derive(Debug)]
+enum StreamRoundOutcome {
+    FinalAnswer,
+    ToolCalls {
+        calls: Vec<AccumulatedFunctionCall>,
+    },
+}
+
+#[derive(Default)]
+struct FunctionCallBuilder {
+    id: Option<String>,
+    call_id: Option<String>,
+    name: Option<String>,
+    arguments: String,
+}
+
+impl FunctionCallBuilder {
+    fn finish(self) -> Option<AccumulatedFunctionCall> {
+        let call_id = self.call_id.filter(|s| !s.is_empty())?;
+        let id = self.id.filter(|s| !s.is_empty()).unwrap_or_else(|| call_id.clone());
+        let name = self.name.unwrap_or_default();
+        Some(AccumulatedFunctionCall {
+            id,
+            call_id,
+            name,
+            arguments: if self.arguments.is_empty() {
+                "{}".into()
+            } else {
+                self.arguments
+            },
+        })
+    }
+}
+
+fn apply_function_call_item(
+    by_index: &mut HashMap<usize, FunctionCallBuilder>,
+    by_item_id: &mut HashMap<String, usize>,
+    output_index: usize,
+    item: &Value,
+) {
+    let slot = by_index.entry(output_index).or_default();
+    if let Some(id) = item.get("id").and_then(|v| v.as_str()) {
+        if !id.is_empty() {
+            slot.id = Some(id.to_string());
+            by_item_id.insert(id.to_string(), output_index);
+        }
+    }
+    if let Some(call_id) = item.get("call_id").and_then(|v| v.as_str()) {
+        if !call_id.is_empty() {
+            slot.call_id = Some(call_id.to_string());
+        }
+    }
+    if let Some(name) = item.get("name").and_then(|v| v.as_str()) {
+        if !name.is_empty() {
+            slot.name = Some(name.to_string());
+        }
+    }
+    if let Some(args) = item.get("arguments").and_then(|v| v.as_str()) {
+        if !args.is_empty() {
+            slot.arguments = args.to_string();
+        }
+    }
+}
+
+async fn stream_tool_round(
+    client: &reqwest::Client,
+    url: &str,
+    api_key: &str,
+    body: &Value,
+    run_id: &str,
+    cancel: &AtomicBool,
+    events: &mpsc::Sender<AgentEvent>,
+) -> Result<StreamRoundOutcome, ResponsesError> {
+    let request = client
+        .post(url)
+        .header(AUTHORIZATION, format!("Bearer {api_key}"))
+        .header(CONTENT_TYPE, "application/json")
+        .json(body);
+
+    let response = tokio::select! {
+        biased;
+        _ = wait_cancelled(cancel) => return Err(ResponsesError::Cancelled),
+        result = request.send() => {
+            result.map_err(|err| ResponsesError::Transport(err.to_string()))?
+        }
+    };
+
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        return Err(ResponsesError::Http {
+            status: status.as_u16(),
+            body: truncate_for_event(&body, 512),
+        });
+    }
+
+    let mut byte_stream = response.bytes_stream();
+    let mut line_buf = String::new();
+    let mut mapper = UiChunkMapper::new(run_id.to_string());
+    let mut saw_completed = false;
+    let mut by_index: HashMap<usize, FunctionCallBuilder> = HashMap::new();
+    let mut by_item_id: HashMap<String, usize> = HashMap::new();
+    let mut ordered_indices: Vec<usize> = Vec::new();
+
+    loop {
+        if cancel.load(Ordering::SeqCst) {
+            return Err(ResponsesError::Cancelled);
+        }
+
+        let next = tokio::select! {
+            biased;
+            _ = wait_cancelled(cancel) => return Err(ResponsesError::Cancelled),
+            chunk = byte_stream.next() => chunk,
+        };
+
+        match next {
+            None => break,
+            Some(Err(err)) => {
+                if cancel.load(Ordering::SeqCst) {
+                    return Err(ResponsesError::Cancelled);
+                }
+                return Err(ResponsesError::Transport(err.to_string()));
+            }
+            Some(Ok(bytes)) => {
+                let text = String::from_utf8_lossy(&bytes);
+                line_buf.push_str(&text);
+                while let Some(idx) = line_buf.find('\n') {
+                    let mut line = line_buf[..idx].to_string();
+                    line_buf.drain(..=idx);
+                    if line.ends_with('\r') {
+                        line.pop();
+                    }
+                    if let Some(outcome) = handle_tool_sse_line(
+                        &line,
+                        &mut mapper,
+                        events,
+                        &mut by_index,
+                        &mut by_item_id,
+                        &mut ordered_indices,
+                    )
+                    .await?
+                    {
+                        match outcome {
+                            StreamOutcome::Completed => saw_completed = true,
+                            StreamOutcome::Failed(msg) => {
+                                return Err(ResponsesError::Api(msg));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if !line_buf.trim().is_empty() {
+        if let Some(outcome) = handle_tool_sse_line(
+            &line_buf,
+            &mut mapper,
+            events,
+            &mut by_index,
+            &mut by_item_id,
+            &mut ordered_indices,
+        )
+        .await?
+        {
+            match outcome {
+                StreamOutcome::Completed => saw_completed = true,
+                StreamOutcome::Failed(msg) => return Err(ResponsesError::Api(msg)),
+            }
+        }
+    }
+
+    let mut calls: Vec<AccumulatedFunctionCall> = ordered_indices
+        .into_iter()
+        .filter_map(|idx| by_index.remove(&idx))
+        .filter_map(FunctionCallBuilder::finish)
+        .collect();
+    // Include any builders that never got an ordered index (defensive).
+    let mut leftovers: Vec<(usize, FunctionCallBuilder)> = by_index.into_iter().collect();
+    leftovers.sort_by_key(|(idx, _)| *idx);
+    for (_, builder) in leftovers {
+        if let Some(call) = builder.finish() {
+            calls.push(call);
+        }
+    }
+
+    if !calls.is_empty() {
+        // Do not emit a partial text trail when the model chose tools.
+        return Ok(StreamRoundOutcome::ToolCalls { calls });
+    }
+
+    mapper.finish(events).await?;
+
+    if saw_completed {
+        Ok(StreamRoundOutcome::FinalAnswer)
+    } else if cancel.load(Ordering::SeqCst) {
+        Err(ResponsesError::Cancelled)
+    } else {
+        Err(ResponsesError::Incomplete)
+    }
+}
+
+async fn handle_tool_sse_line(
+    line: &str,
+    mapper: &mut UiChunkMapper,
+    events: &mpsc::Sender<AgentEvent>,
+    by_index: &mut HashMap<usize, FunctionCallBuilder>,
+    by_item_id: &mut HashMap<String, usize>,
+    ordered_indices: &mut Vec<usize>,
+) -> Result<Option<StreamOutcome>, ResponsesError> {
+    let trimmed = line.trim();
+    if trimmed.is_empty() || trimmed.starts_with(':') {
+        return Ok(None);
+    }
+    if trimmed.starts_with("event:") {
+        return Ok(None);
+    }
+    let data = if let Some(rest) = trimmed.strip_prefix("data:") {
+        rest.trim()
+    } else {
+        trimmed
+    };
+    if data.is_empty() || data == "[DONE]" {
+        return Ok(None);
+    }
+
+    let value: Value = match serde_json::from_str(data) {
+        Ok(v) => v,
+        Err(err) => {
+            warn!(error = %err, line = %data, "skipping unparseable SSE data");
+            return Ok(None);
+        }
+    };
+
+    let Some(event_type) = value.get("type").and_then(|v| v.as_str()) else {
+        return Ok(None);
+    };
+
+    match event_type {
+        "response.output_item.added" | "response.output_item.done" => {
+            let item = value.get("item").cloned().unwrap_or(Value::Null);
+            if item.get("type").and_then(|v| v.as_str()) == Some("function_call") {
+                let output_index = value
+                    .get("output_index")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as usize;
+                if !ordered_indices.contains(&output_index) {
+                    ordered_indices.push(output_index);
+                }
+                apply_function_call_item(by_index, by_item_id, output_index, &item);
+            }
+            Ok(None)
+        }
+        "response.function_call_arguments.delta" => {
+            let output_index = value
+                .get("output_index")
+                .and_then(|v| v.as_u64())
+                .map(|v| v as usize)
+                .or_else(|| {
+                    value
+                        .get("item_id")
+                        .and_then(|v| v.as_str())
+                        .and_then(|id| by_item_id.get(id).copied())
+                })
+                .unwrap_or(0);
+            if !ordered_indices.contains(&output_index) {
+                ordered_indices.push(output_index);
+            }
+            if let Some(item_id) = value.get("item_id").and_then(|v| v.as_str()) {
+                by_item_id.entry(item_id.to_string()).or_insert(output_index);
+                let slot = by_index.entry(output_index).or_default();
+                if slot.id.is_none() {
+                    slot.id = Some(item_id.to_string());
+                }
+            }
+            if let Some(delta) = value.get("delta").and_then(|v| v.as_str()) {
+                by_index
+                    .entry(output_index)
+                    .or_default()
+                    .arguments
+                    .push_str(delta);
+            }
+            Ok(None)
+        }
+        "response.function_call_arguments.done" => {
+            let output_index = value
+                .get("output_index")
+                .and_then(|v| v.as_u64())
+                .map(|v| v as usize)
+                .or_else(|| {
+                    value
+                        .get("item_id")
+                        .and_then(|v| v.as_str())
+                        .and_then(|id| by_item_id.get(id).copied())
+                })
+                .unwrap_or(0);
+            if let Some(args) = value.get("arguments").and_then(|v| v.as_str()) {
+                by_index.entry(output_index).or_default().arguments = args.to_string();
+            }
+            Ok(None)
+        }
+        "response.output_text.delta"
+        | "response.output_text.done"
+        | "response.completed"
+        | "response.failed"
+        | "error" => {
+            // Only stream assistant text when this round is not assembling tools.
+            if by_index.is_empty() {
+                mapper.apply(&value, events).await
+            } else if event_type == "response.completed" {
+                Ok(Some(StreamOutcome::Completed))
+            } else if event_type == "response.failed" || event_type == "error" {
+                mapper.apply(&value, events).await
+            } else {
+                Ok(None)
+            }
+        }
+        other => {
+            debug!(event_type = other, "ignoring Responses SSE event");
+            Ok(None)
+        }
+    }
+}
+
+async fn emit_step_started(
+    run_id: &str,
+    step_id: &str,
+    kind: &str,
+    label: &str,
+    events: &mpsc::Sender<AgentEvent>,
+) {
+    let _ = events
+        .send(AgentEvent::StepStarted {
+            run_id: run_id.to_string(),
+            step_id: step_id.to_string(),
+            kind: kind.to_string(),
+            label: label.to_string(),
+        })
+        .await;
+}
+
+async fn emit_step_completed(
+    run_id: &str,
+    step_id: &str,
+    duration_ms: u64,
+    summary: Option<&str>,
+    events: &mpsc::Sender<AgentEvent>,
+) {
+    let _ = events
+        .send(AgentEvent::StepCompleted {
+            run_id: run_id.to_string(),
+            step_id: step_id.to_string(),
+            duration_ms,
+            summary: summary.map(str::to_string),
+        })
+        .await;
 }
 
 async fn stream_responses_to_events(
@@ -574,6 +1117,9 @@ data: [DONE]
                 api_key: String::new(),
                 base_url: "http://127.0.0.1:9".into(),
                 cancel: Arc::new(AtomicBool::new(false)),
+                lattice: None,
+                workspace_id: None,
+                workspace_root: None,
             },
             tx,
         )
@@ -608,5 +1154,19 @@ data: [DONE]
     fn normalize_model_defaults() {
         assert_eq!(normalize_model(""), DEFAULT_OPENAI_MODEL);
         assert_eq!(normalize_model("  gpt-4o  "), "gpt-4o");
+    }
+
+    #[test]
+    fn responses_tools_are_flat_function_shape() {
+        let tools = responses_tool_definitions();
+        assert!(!tools.is_empty());
+        let search = tools
+            .iter()
+            .find(|t| t.get("name").and_then(|n| n.as_str()) == Some("search"))
+            .expect("search tool");
+        assert_eq!(search.get("type").and_then(|t| t.as_str()), Some("function"));
+        assert!(search.get("function").is_none());
+        assert!(search.get("parameters").is_some());
+        assert!(search.get("description").is_some());
     }
 }

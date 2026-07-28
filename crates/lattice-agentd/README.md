@@ -15,7 +15,7 @@ One JSON object per line on stdin (commands) / stdout (events):
 | `health` | `health` (`ok: true`) |
 | `start_run` (`provider: fake`) | `run_started` → `message_chunk`(s) → `run_completed` |
 | `start_run` (`provider: pioneer`) | Pioneer SSE chat completions → tool trail steps + live `message_chunk` streaming when Lattice HTTP env is set |
-| `start_run` (`provider: openai`) | OpenAI Responses stream → `message_chunk`(s) |
+| `start_run` (`provider: openai`) | OpenAI Responses stream → tool trail steps + live `message_chunk` streaming when Lattice HTTP env is set |
 | `cancel_run` | stops in-flight run → `run_failed` (`Run cancelled`) |
 | `shutdown` | exits after cancelling any active run |
 
@@ -114,7 +114,21 @@ printf '%s\n' \
 export LATTICE_AGENT_PROVIDER=openai
 export OPENAI_API_KEY=sk-...
 # optional: LATTICE_AGENT_MODEL=gpt-4.1-mini
+# optional: OPENAI_BASE_URL=https://api.openai.com/v1
 ```
+
+### Host tools (latticed HTTP)
+
+When `LATTICE_API_BASE_URL` and `LATTICE_AUTH_TOKEN` are set, OpenAI uses the
+Responses API with a Lattice tool loop (same tools as Pioneer: search / read /
+related / proposals / `run_wasi_guest` / …). Tool defs are mapped to Responses
+flat function shape (`type` / `name` / `description` / `parameters`). Max 8
+assistant→tool rounds; `step_started` / `step_completed` mark model and tool
+waits; final answers stream as AI SDK `text-*` chunks.
+
+`start_run` may include `workspaceId` / `workspaceRoot`; tools bind to that
+workspace when arguments omit them. Without the Lattice env pair, OpenAI falls
+back to text-only Responses streaming and prints a one-time stderr warning.
 
 ## Manual smoke (fake)
 

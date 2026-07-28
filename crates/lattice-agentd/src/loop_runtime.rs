@@ -53,7 +53,7 @@ fn warn_tools_unavailable_once() {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
         eprintln!(
-            "lattice-agentd: Lattice HTTP tools unavailable (set LATTICE_API_BASE_URL and LATTICE_AUTH_TOKEN); Pioneer chat-only"
+            "lattice-agentd: Lattice HTTP tools unavailable (set LATTICE_API_BASE_URL and LATTICE_AUTH_TOKEN); chat-only (no tool loop)"
         );
     });
 }
@@ -245,6 +245,13 @@ where
                                         .unwrap_or_default();
                                     let base_url = openai_base_url
                                         .unwrap_or_else(responses::base_url_from_env);
+                                    let lattice = lattice_client::lattice_client_from_config(
+                                        lattice_api_base_url.as_deref(),
+                                        lattice_auth_token.as_deref(),
+                                    );
+                                    if lattice.is_none() {
+                                        warn_tools_unavailable_once();
+                                    }
                                     responses::emit_openai_run(
                                         OpenaiRunOptions {
                                             run_id: run_id_task,
@@ -254,6 +261,9 @@ where
                                             api_key,
                                             base_url,
                                             cancel: cancel_for_task,
+                                            lattice,
+                                            workspace_id,
+                                            workspace_root,
                                         },
                                         events,
                                     )
