@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use kernelfs::{ExecutionManifest, InputMount, Mounts, WasmtimeLimits};
 use lattice_agentd::lattice_client::LatticeToolClient;
+use lattice_agentd::tools::{dispatch_tool, ToolRunContext};
 use lattice_agentd::wasi_host::{propose_output_drafts, run_wasi_guest, WorkspaceBinding};
 use serde_json::{json, Value};
 use wiremock::matchers::{method, path};
@@ -118,4 +119,67 @@ async fn wasi_guest_output_proposes_via_latticed() {
         .get("summary")
         .and_then(|v| v.as_str())
         .is_some_and(|s| s.contains("Reports/out.txt")));
+}
+
+#[tokio::test]
+async fn dispatch_run_wasi_guest_tool_proposes_outputs() {
+    let workspace = tempfile::tempdir().expect("workspace tempdir");
+    let wasm_dest = workspace.path().join("guests/copy_hello.wasm");
+    fs::create_dir_all(wasm_dest.parent().expect("wasm parent")).expect("wasm dir");
+    fs::write(&wasm_dest, copy_hello_wasm()).expect("write wasm");
+
+    let input_path = workspace.path().join("input/hello.txt");
+    fs::create_dir_all(input_path.parent().expect("input parent")).expect("input dir");
+    fs::write(&input_path, "hello from input").expect("write input");
+
+    let latticed = MockServer::start().await;
+    let bodies = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let capture = ProposeResourceCapture {
+        bodies: Arc::clone(&bodies),
+    };
+
+    Mock::given(method("POST"))
+        .and(path("/v1/proposals/propose_resource"))
+        .respond_with(capture)
+        .expect(1)
+        .mount(&latticed)
+        .await;
+
+    let client = LatticeToolClient::new(latticed.uri(), "test-token").expect("client");
+    let ctx = ToolRunContext {
+        workspace_id: Some("ws-dispatch".into()),
+        workspace_root: Some(workspace.path().to_string_lossy().into_owned()),
+    };
+
+    let args = json!({
+        "wasmPath": "guests/copy_hello.wasm",
+        "inputsJson": r#"[{"hostPath":"input/hello.txt","guestPath":"hello.txt"}]"#,
+        "outputProposalTarget": "Reports",
+        "runId": "run_dispatch_test",
+    })
+    .to_string();
+
+    let out = dispatch_tool(Some(&client), &ctx, "run_wasi_guest", &args).await;
+    let parsed: Value = serde_json::from_str(&out).expect("tool result json");
+    assert!(
+        parsed.get("error").is_none(),
+        "unexpected tool error: {parsed}"
+    );
+    assert_eq!(parsed["runId"], "run_dispatch_test");
+    assert_eq!(parsed["draftCount"], 1);
+    assert_eq!(
+        parsed["proposals"][0].get("proposalId").and_then(|v| v.as_str()),
+        Some("prop_test")
+    );
+    assert_eq!(
+        parsed["proposals"][0].get("path").and_then(|v| v.as_str()),
+        Some("Reports/out.txt")
+    );
+
+    let captured = bodies.lock().expect("lock bodies");
+    assert_eq!(captured.len(), 1);
+    assert_eq!(
+        captured[0].get("workspaceId").and_then(|v| v.as_str()),
+        Some("ws-dispatch")
+    );
 }

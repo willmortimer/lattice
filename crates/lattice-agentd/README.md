@@ -85,6 +85,19 @@ and pushes each draft via `POST /v1/proposals/propose_resource` (same body shape
 as the host `propose_resource` tool). Lattice search/read/related stay host HTTP
 tools — they are not exposed inside the guest.
 
+Pioneer exposes this path as the `run_wasi_guest` tool when `workspaceRoot` is
+bound on `start_run`:
+
+| Argument | Purpose |
+| --- | --- |
+| `wasmPath` | Workspace-relative `.wasm` module |
+| `inputsJson` | JSON array of `{hostPath,guestPath}` input mounts |
+| `outputProposalTarget` | Workspace prefix for proposed `/output` paths (e.g. `Reports`) |
+| `runId` | Optional run label (defaults to a timestamped id) |
+
+The tool returns proposal ids/paths only — it never applies. Human review stays
+in the Proposals inbox.
+
 Stdio smoke:
 
 ```sh
