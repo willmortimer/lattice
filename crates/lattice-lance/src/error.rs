@@ -16,6 +16,10 @@ pub enum LanceError {
     /// An underlying I/O failure occurred.
     #[error("io error at {path}: {message}")]
     Io { path: String, message: String },
+
+    /// An embedded LanceDB store operation failed.
+    #[error("store error: {message}")]
+    Store { message: String },
 }
 
 pub type Result<T> = std::result::Result<T, LanceError>;
