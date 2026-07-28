@@ -33,6 +33,7 @@ import { ResourceInspector } from "../shell/ResourceInspector";
 import { ResourceSurface } from "../shell/ResourceSurface";
 import { StartupSplash } from "../shell/StartupSplash";
 import { AppLockOverlay } from "../shell/AppLockOverlay";
+import { DemoDriverHost } from "../demo/DemoDriverHost";
 import { useStartupSplash } from "../shell/useStartupSplash";
 import { setAppearanceMode, setFixedTheme, setFontPack } from "../theme";
 import { fileTitle } from "../controllers/useResourceController";
@@ -891,6 +892,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
         />
       )}
       {statusToast && <div className="status-toast">{statusToast}</div>}
+      <DemoDriverHost />
     </div>
     </TooltipProvider>
   );

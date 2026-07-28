@@ -11,6 +11,8 @@
     "core:window:allow-show",
     "core:window:allow-hide",
     "core:window:allow-set-focus",
+    "core:window:allow-set-size",
+    "core:window:allow-center",
     "core:webview:allow-set-webview-background-color",
     "dialog:default",
     "opener:default",

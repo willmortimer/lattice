@@ -27,6 +27,10 @@ pub const LATTICE_DEV_RESET_DEMO_ENV: &str = "LATTICE_DEV_RESET_DEMO";
 /// overlays such as the YC `Hackathon/Pitch.deck` — never baked into the public
 /// demo template.
 pub const LATTICE_DEV_DEMO_OVERLAY_ENV: &str = "LATTICE_DEV_DEMO_OVERLAY";
+/// When set (`1`/`true`/`yes`), mount the in-app YC/demo driver (exec-for-dev only).
+pub const LATTICE_DEMO_DRIVER_ENV: &str = "LATTICE_DEMO_DRIVER";
+/// Absolute path to the shared scene script JSON (beats, stage, VO).
+pub const LATTICE_DEMO_SCENE_ENV: &str = "LATTICE_DEMO_SCENE";
 pub const LATTICE_HOME_NAME: &str = "Lattice";
 pub const DEFAULT_DEBUG_HOME_RELATIVE: &str = "target/dev-home";
 pub const WORKSPACES_DIR_NAME: &str = "Workspaces";
@@ -105,7 +109,7 @@ pub fn lattice_dev_demo_overlay_path() -> Option<PathBuf> {
     path.is_dir().then_some(path)
 }
 
-fn env_flag_enabled(name: &str) -> bool {
+pub fn env_flag_enabled(name: &str) -> bool {
     std::env::var(name)
         .map(|value| {
             matches!(

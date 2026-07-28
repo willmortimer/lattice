@@ -104,12 +104,16 @@ async function main() {
   }
 
   const overlay = process.env.LATTICE_DEV_DEMO_OVERLAY?.trim();
+  const scene = process.env.LATTICE_DEMO_SCENE?.trim();
   if (overlay) {
     console.error(`product-capture: LATTICE_DEV_DEMO_OVERLAY=${overlay}`);
   } else {
     console.error(
-      "product-capture: no LATTICE_DEV_DEMO_OVERLAY (Pitch.deck beat skipped; prefer ./scripts/exec-for-dev.sh --capture-yc)",
+      "product-capture: no LATTICE_DEV_DEMO_OVERLAY (overlay beats skipped; prefer ./scripts/exec-for-dev.sh --capture-yc)",
     );
+  }
+  if (scene) {
+    console.error(`product-capture: LATTICE_DEMO_SCENE=${scene}`);
   }
 
   if (!reused) {
@@ -123,8 +127,11 @@ async function main() {
         LATTICE_DEV_HOME: devHome,
         LATTICE_DEV_RESET_DEMO: process.env.LATTICE_DEV_RESET_DEMO ?? "1",
         TAURI_PLAYWRIGHT_SOCKET: socketPath,
-        // Private ecosystem overlay (Pitch.deck etc.) — set by exec-for-dev.
         ...(overlay ? { LATTICE_DEV_DEMO_OVERLAY: overlay } : {}),
+        ...(scene ? { LATTICE_DEMO_SCENE: scene } : {}),
+        ...(process.env.LATTICE_DEMO_DRIVER
+          ? { LATTICE_DEMO_DRIVER: process.env.LATTICE_DEMO_DRIVER }
+          : {}),
       },
     });
 

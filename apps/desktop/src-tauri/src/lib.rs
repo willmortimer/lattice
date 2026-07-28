@@ -8,6 +8,7 @@ mod commands;
 mod daemon_session;
 mod deck;
 mod data;
+mod demo_driver;
 mod deck_export;
 mod dataset;
 mod dataset_sessions;
@@ -178,6 +179,8 @@ pub fn run() {
             commands::create_workspace,
             commands::list_templates,
             commands::update_workspace_manifest,
+            demo_driver::get_demo_driver_config,
+            demo_driver::apply_demo_stage,
             github::github_oauth_begin,
             github::github_oauth_finish,
             github::github_list_repos,
