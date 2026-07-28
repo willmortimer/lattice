@@ -4,17 +4,17 @@
 //! guest `/output` files into `propose_resource` overlays for human accept/reject.
 
 use std::path::Path;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+use std::time::Duration;
 
 use kernelfs::{
-    collect_output_commit_plan, configure_store, configure_wasi_preopens, engine_with_limits,
-    materialize, ExecutionManifest, LatticeProposalAdapter, LatticeProposalDraft,
-    MaterializeError, WasmtimeLimits, WasiPreopenError, WasiPreopenSpec,
+    collect_output_commit_plan, materialize, materialize_with_options, run_wasi_guest as kernelfs_run,
+    ExecutionManifest, LatticeProposalAdapter, LatticeProposalDraft, MaterializeError,
+    MaterializeOptions, WasmtimeLimits, WasiRunError, WasiRunOptions,
 };
 use serde_json::{json, Value};
 use thiserror::Error;
-use wasmtime::{Linker, Module, Store};
-use wasmtime_wasi::preview1::{self, WasiP1Ctx};
-use wasmtime_wasi::WasiCtxBuilder;
 
 use crate::lattice_client::{LatticeApiError, LatticeToolClient};
 
@@ -24,15 +24,7 @@ pub enum WasiHostError {
     #[error(transparent)]
     Materialize(#[from] MaterializeError),
     #[error(transparent)]
-    Preopen(#[from] WasiPreopenError),
-    #[error("wasmtime: {0}")]
-    Wasmtime(String),
-}
-
-impl From<wasmtime::Error> for WasiHostError {
-    fn from(err: wasmtime::Error) -> Self {
-        Self::Wasmtime(err.to_string())
-    }
+    Run(#[from] WasiRunError),
 }
 
 /// Workspace binding for latticed proposal routes (`workspaceId` and/or `root`).
@@ -71,36 +63,66 @@ pub enum ProposeDraftsError {
     Api(#[from] LatticeApiError),
 }
 
+/// Options for [`run_wasi_guest`] beyond the KernelFS defaults.
+#[derive(Debug, Clone, Default)]
+pub struct WasiGuestHostOptions {
+    pub limits: WasmtimeLimits,
+    pub max_wall_time: Option<Duration>,
+    pub cancel: Option<Arc<AtomicBool>>,
+    /// When set, input host paths must canonicalize under these roots.
+    pub host_path_roots: Vec<std::path::PathBuf>,
+}
+
 /// Materialize KernelFS mounts, run the guest `_start` export, and collect Lattice drafts.
 ///
-/// Sync Wasmtime/WASI entrypoint — call from a blocking thread (or `spawn_blocking`)
-/// when invoked from an async runtime.
+/// Uses [`kernelfs::run_wasi_guest`] (epoch ticker + cancel + stdio). Call from
+/// `spawn_blocking` when invoked from an async runtime.
 pub fn run_wasi_guest(
     run_parent: &Path,
     manifest: &ExecutionManifest,
     wasm_bytes: &[u8],
     limits: &WasmtimeLimits,
 ) -> Result<Vec<LatticeProposalDraft>, WasiHostError> {
-    let run = materialize(run_parent, manifest)?;
-    let spec = WasiPreopenSpec::from_run_root(&run.root);
+    run_wasi_guest_with_options(
+        run_parent,
+        manifest,
+        wasm_bytes,
+        &WasiGuestHostOptions {
+            limits: limits.clone(),
+            ..Default::default()
+        },
+    )
+}
 
-    let engine = engine_with_limits(limits)?;
-    let module = Module::from_binary(&engine, wasm_bytes)?;
+/// Like [`run_wasi_guest`], with cancel / wall-time / host-path allowlist.
+pub fn run_wasi_guest_with_options(
+    run_parent: &Path,
+    manifest: &ExecutionManifest,
+    wasm_bytes: &[u8],
+    options: &WasiGuestHostOptions,
+) -> Result<Vec<LatticeProposalDraft>, WasiHostError> {
+    let run = if options.host_path_roots.is_empty() {
+        materialize(run_parent, manifest)?
+    } else {
+        materialize_with_options(
+            run_parent,
+            manifest,
+            &MaterializeOptions {
+                host_path_roots: &options.host_path_roots,
+            },
+        )?
+    };
 
-    let mut linker: Linker<WasiP1Ctx> = Linker::new(&engine);
-    preview1::add_to_linker_sync(&mut linker, |ctx| ctx)?;
-    let pre = linker.instantiate_pre(&module)?;
+    let mut run_opts = WasiRunOptions {
+        limits: options.limits.clone(),
+        cancel: options.cancel.clone(),
+        ..WasiRunOptions::default()
+    };
+    if options.max_wall_time.is_some() {
+        run_opts.max_wall_time = options.max_wall_time;
+    }
 
-    let mut builder = WasiCtxBuilder::new();
-    configure_wasi_preopens(&mut builder, &spec)?;
-    let wasi = builder.build_p1();
-
-    let mut store = Store::new(&engine, wasi);
-    configure_store(&mut store, limits)?;
-
-    let instance = pre.instantiate(&mut store)?;
-    let start = instance.get_typed_func::<(), ()>(&mut store, "_start")?;
-    start.call(&mut store, ())?;
+    let _result = kernelfs_run(&run.root, wasm_bytes, &run_opts)?;
 
     let plan = collect_output_commit_plan(&run.root, manifest)?;
     let adapter = LatticeProposalAdapter::from_manifest(manifest);

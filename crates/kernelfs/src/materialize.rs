@@ -46,10 +46,32 @@ pub enum MaterializeError {
     InvalidGuestPath { guest_path: String },
     #[error("input host path does not exist: {path}")]
     MissingHostPath { path: PathBuf },
+    #[error("input host path {path} is outside allowlisted roots {allowed:?}")]
+    HostPathNotAllowed {
+        path: PathBuf,
+        allowed: Vec<PathBuf>,
+    },
+}
+
+/// Options for [`materialize_with_options`].
+#[derive(Debug, Clone, Default)]
+pub struct MaterializeOptions<'a> {
+    /// When non-empty, each input `host_path` must canonicalize under one of
+    /// these roots (after symlink resolution). Empty / default = no host check.
+    pub host_path_roots: &'a [PathBuf],
 }
 
 /// Create `input/`, `work/`, `output/`, and `tmp/` under `parent` and hydrate inputs.
 pub fn materialize(parent: &Path, manifest: &ExecutionManifest) -> Result<RunDir, MaterializeError> {
+    materialize_with_options(parent, manifest, &MaterializeOptions::default())
+}
+
+/// Like [`materialize`], with optional host-path allowlisting.
+pub fn materialize_with_options(
+    parent: &Path,
+    manifest: &ExecutionManifest,
+    options: &MaterializeOptions<'_>,
+) -> Result<RunDir, MaterializeError> {
     let root = parent.join(&manifest.run_id);
     for subdir in ["input", "work", "output", "tmp"] {
         let path = root.join(subdir);
@@ -58,6 +80,8 @@ pub fn materialize(parent: &Path, manifest: &ExecutionManifest) -> Result<RunDir
             source,
         })?;
     }
+
+    let allowed_roots = canonicalize_roots(options.host_path_roots)?;
 
     let mut sources = Vec::new();
     for mount in &manifest.mounts.input {
@@ -75,6 +99,8 @@ pub fn materialize(parent: &Path, manifest: &ExecutionManifest) -> Result<RunDir
                 path: mount.host_path.clone(),
             });
         }
+
+        ensure_host_path_allowed(&mount.host_path, &allowed_roots)?;
 
         fs::copy(&mount.host_path, &dest).map_err(|source| MaterializeError::Io {
             path: dest.clone(),
@@ -97,6 +123,40 @@ pub fn materialize(parent: &Path, manifest: &ExecutionManifest) -> Result<RunDir
     };
 
     Ok(RunDir { root, hydration })
+}
+
+fn canonicalize_roots(roots: &[PathBuf]) -> Result<Vec<PathBuf>, MaterializeError> {
+    let mut out = Vec::with_capacity(roots.len());
+    for root in roots {
+        let canonical = fs::canonicalize(root).map_err(|source| MaterializeError::Io {
+            path: root.clone(),
+            source,
+        })?;
+        out.push(canonical);
+    }
+    Ok(out)
+}
+
+fn ensure_host_path_allowed(
+    host_path: &Path,
+    allowed_roots: &[PathBuf],
+) -> Result<(), MaterializeError> {
+    if allowed_roots.is_empty() {
+        return Ok(());
+    }
+    let canonical = fs::canonicalize(host_path).map_err(|source| MaterializeError::Io {
+        path: host_path.to_path_buf(),
+        source,
+    })?;
+    for root in allowed_roots {
+        if canonical.starts_with(root) {
+            return Ok(());
+        }
+    }
+    Err(MaterializeError::HostPathNotAllowed {
+        path: canonical,
+        allowed: allowed_roots.to_vec(),
+    })
 }
 
 fn hash_file(path: &Path) -> Result<String, MaterializeError> {

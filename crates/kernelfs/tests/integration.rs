@@ -1,16 +1,44 @@
 use std::fs;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 
 use kernelfs::{
     collect_output_commit_plan, configure_store, configure_wasi_preopens, engine_with_limits,
-    materialize, normalize_guest_path, ExecutionManifest, InputMount, LatticeProposalAdapter,
-    MaterializeError, Mounts, WasmtimeLimits, WasiPreopenSpec,
+    materialize, materialize_with_options, normalize_guest_path, run_wasi_guest, ExecutionManifest,
+    InputMount, LatticeProposalAdapter, MaterializeError, MaterializeOptions, Mounts,
+    WasmtimeLimits, WasiPreopenSpec, WasiRunError, WasiRunOptions,
 };
 use wasmtime::{Linker, Module, Store};
 use wasmtime_wasi::preview1::{self, WasiP1Ctx};
 use wasmtime_wasi::WasiCtxBuilder;
 
 fn copy_hello_wasm() -> &'static [u8] {
-  include_bytes!("../fixtures/copy_hello.wasm")
+    include_bytes!("../fixtures/copy_hello.wasm")
+}
+
+fn spin_forever_wasm() -> &'static [u8] {
+    include_bytes!("../fixtures/spin_forever.wasm")
+}
+
+fn stdio_exit_wasm() -> &'static [u8] {
+    include_bytes!("../fixtures/stdio_exit.wasm")
+}
+
+fn empty_run(temp: &tempfile::TempDir, run_id: &str) -> PathBuf {
+    let manifest = ExecutionManifest {
+        run_id: run_id.into(),
+        base_snapshot: "snap".into(),
+        mounts: Mounts {
+            input: Vec::new(),
+            output_proposal_target: None,
+            work_promote_paths: Vec::new(),
+        },
+        capabilities: Default::default(),
+    };
+    materialize(temp.path(), &manifest).expect("materialize").root
 }
 
 #[test]
@@ -227,4 +255,190 @@ fn wasi_preopen_spec_from_run_root() {
 
     let mut builder = WasiCtxBuilder::new();
     kernelfs::configure_wasi_preopens(&mut builder, &spec).expect("configure preopens");
+}
+
+#[test]
+fn run_wasi_guest_helper_copies_input_to_output() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let host_input = temp.path().join("fixture-input");
+    fs::create_dir_all(&host_input).expect("input dir");
+    fs::write(host_input.join("hello.txt"), "via helper").expect("write hello");
+
+    let manifest = ExecutionManifest {
+        run_id: "run_helper".into(),
+        base_snapshot: "snap".into(),
+        mounts: Mounts {
+            input: vec![InputMount {
+                host_path: host_input.join("hello.txt"),
+                guest_path: "hello.txt".into(),
+            }],
+            output_proposal_target: None,
+            work_promote_paths: Vec::new(),
+        },
+        capabilities: Default::default(),
+    };
+    let run = materialize(temp.path(), &manifest).expect("materialize");
+
+    let mut options = WasiRunOptions::default();
+    // copy_hello finishes immediately; disable wall budget so a slow CI tick cannot flake.
+    options.max_wall_time = None;
+    options.limits = WasmtimeLimits::fuel_only(50_000_000);
+
+    let result = run_wasi_guest(&run.root, copy_hello_wasm(), &options).expect("run");
+    assert_eq!(result.exit_code, 0);
+    assert_eq!(
+        fs::read(run.root.join("output/out.txt")).expect("out"),
+        b"via helper"
+    );
+}
+
+#[test]
+fn run_wasi_guest_captures_stdio_and_exit_code() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let root = empty_run(&temp, "run_stdio");
+
+    let mut options = WasiRunOptions::default();
+    options.max_wall_time = None;
+    options.limits = WasmtimeLimits::fuel_only(50_000_000);
+
+    let result = run_wasi_guest(&root, stdio_exit_wasm(), &options).expect("run");
+    assert_eq!(result.exit_code, 7);
+    assert!(
+        String::from_utf8_lossy(&result.stdout).contains("hello-stdout"),
+        "stdout={:?}",
+        String::from_utf8_lossy(&result.stdout)
+    );
+    assert!(
+        String::from_utf8_lossy(&result.stderr).contains("boom-from-stderr"),
+        "stderr={:?}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+}
+
+#[test]
+fn run_wasi_guest_cancels_runaway() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let root = empty_run(&temp, "run_cancel");
+
+    let cancel = Arc::new(AtomicBool::new(false));
+    let cancel_flag = cancel.clone();
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(30));
+        cancel_flag.store(true, Ordering::SeqCst);
+    });
+
+    let options = WasiRunOptions {
+        limits: WasmtimeLimits::epoch_only(1),
+        epoch_tick_interval: Duration::from_millis(5),
+        max_wall_time: None,
+        cancel: Some(cancel),
+        ..WasiRunOptions::default()
+    };
+
+    let err = run_wasi_guest(&root, spin_forever_wasm(), &options).unwrap_err();
+    assert!(
+        matches!(err, WasiRunError::Cancelled { .. }),
+        "expected Cancelled, got {err:?}"
+    );
+}
+
+#[test]
+fn run_wasi_guest_hits_epoch_wall_deadline() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let root = empty_run(&temp, "run_epoch");
+
+    let options = WasiRunOptions {
+        limits: WasmtimeLimits::epoch_only(1),
+        epoch_tick_interval: Duration::from_millis(5),
+        max_wall_time: Some(Duration::from_millis(40)),
+        cancel: None,
+        ..WasiRunOptions::default()
+    };
+
+    let err = run_wasi_guest(&root, spin_forever_wasm(), &options).unwrap_err();
+    assert!(
+        matches!(err, WasiRunError::EpochDeadline { .. }),
+        "expected EpochDeadline, got {err:?}"
+    );
+}
+
+#[test]
+fn run_wasi_guest_hits_fuel_limit() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let root = empty_run(&temp, "run_fuel");
+
+    let options = WasiRunOptions {
+        limits: WasmtimeLimits::fuel_only(1_000),
+        max_wall_time: None,
+        cancel: None,
+        ..WasiRunOptions::default()
+    };
+
+    let err = run_wasi_guest(&root, spin_forever_wasm(), &options).unwrap_err();
+    assert!(
+        matches!(err, WasiRunError::FuelExhausted { .. }),
+        "expected FuelExhausted, got {err:?}"
+    );
+}
+
+#[test]
+fn materialize_rejects_host_path_outside_allowlist() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let allowed = temp.path().join("allowed");
+    let outside = temp.path().join("outside");
+    fs::create_dir_all(&allowed).expect("allowed");
+    fs::create_dir_all(&outside).expect("outside");
+    fs::write(allowed.join("ok.txt"), "ok").expect("ok");
+    fs::write(outside.join("secret.txt"), "nope").expect("secret");
+
+    let manifest = ExecutionManifest {
+        run_id: "run_allow".into(),
+        base_snapshot: "snap".into(),
+        mounts: Mounts {
+            input: vec![InputMount {
+                host_path: outside.join("secret.txt"),
+                guest_path: "secret.txt".into(),
+            }],
+            output_proposal_target: None,
+            work_promote_paths: Vec::new(),
+        },
+        capabilities: Default::default(),
+    };
+
+    let opts = MaterializeOptions {
+        host_path_roots: &[allowed],
+    };
+    let err = materialize_with_options(temp.path(), &manifest, &opts).unwrap_err();
+    assert!(matches!(err, MaterializeError::HostPathNotAllowed { .. }));
+}
+
+#[test]
+fn materialize_allows_host_path_under_root() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let allowed = temp.path().join("workspace");
+    fs::create_dir_all(&allowed).expect("workspace");
+    fs::write(allowed.join("ok.txt"), "ok").expect("ok");
+
+    let manifest = ExecutionManifest {
+        run_id: "run_allow_ok".into(),
+        base_snapshot: "snap".into(),
+        mounts: Mounts {
+            input: vec![InputMount {
+                host_path: allowed.join("ok.txt"),
+                guest_path: "ok.txt".into(),
+            }],
+            output_proposal_target: None,
+            work_promote_paths: Vec::new(),
+        },
+        capabilities: Default::default(),
+    };
+
+    let opts = MaterializeOptions {
+        host_path_roots: &[allowed.clone()],
+    };
+    let run = materialize_with_options(temp.path(), &manifest, &opts).expect("materialize");
+    assert_eq!(
+        fs::read(run.root.join("input/ok.txt")).expect("read"),
+        b"ok"
+    );
 }

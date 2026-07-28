@@ -10,7 +10,9 @@ use kernelfs::{
 use serde_json::{json, Value};
 
 use crate::lattice_client::LatticeToolClient;
-use crate::wasi_host::{propose_output_drafts, run_wasi_guest, WorkspaceBinding};
+use crate::wasi_host::{
+    propose_output_drafts, run_wasi_guest_with_options, WorkspaceBinding, WasiGuestHostOptions,
+};
 
 /// Cap tool JSON returned to the model so long search/read payloads do not
 /// blow the next Pioneer round.
@@ -855,9 +857,19 @@ async fn dispatch_run_wasi_guest(
     let run_parent = tempfile::tempdir().map_err(|err| err.to_string())?;
     let run_parent_path = run_parent.path().to_path_buf();
     let limits = WasmtimeLimits::default();
+    let host_roots = vec![std::path::PathBuf::from(workspace_root)];
 
     let drafts = tokio::task::spawn_blocking(move || {
-        run_wasi_guest(&run_parent_path, &manifest, &wasm_bytes, &limits)
+        run_wasi_guest_with_options(
+            &run_parent_path,
+            &manifest,
+            &wasm_bytes,
+            &WasiGuestHostOptions {
+                limits,
+                host_path_roots: host_roots,
+                ..Default::default()
+            },
+        )
     })
     .await
     .map_err(|err| format!("wasi task join: {err}"))?

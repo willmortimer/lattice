@@ -1,6 +1,6 @@
 [package]
 name = "kernelfs"
-description = "KernelFS MVP: execution manifest, run-dir materialization, WASI preopens, output commit bridge"
+description = "KernelFS: execution manifest, run-dir materialization, WASI runner, output commit bridge"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
