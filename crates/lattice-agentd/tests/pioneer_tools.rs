@@ -1,4 +1,4 @@
-//! Pioneer tool loop: mock chat completions (tool_call → final) + latticed HTTP.
+//! Pioneer tool loop: mock SSE chat completions (tool_call → final) + latticed HTTP.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -25,9 +25,31 @@ impl Respond for ChatSequence {
             self.second.as_str()
         };
         ResponseTemplate::new(200)
-            .insert_header("content-type", "application/json")
+            .insert_header("content-type", "text/event-stream")
             .set_body_string(body)
     }
+}
+
+fn sse_tool_call_round() -> String {
+    [
+        r#"data: {"id":"chatcmpl-1","choices":[{"index":0,"delta":{"role":"assistant","content":null,"tool_calls":[{"index":0,"id":"call_search_1","type":"function","function":{"name":"search","arguments":""}}]},"finish_reason":null}]}"#,
+        r#"data: {"id":"chatcmpl-1","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"query\":\"Events\"}"}}]},"finish_reason":null}]}"#,
+        r#"data: {"id":"chatcmpl-1","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}"#,
+        "data: [DONE]",
+        "",
+    ]
+    .join("\n")
+}
+
+fn sse_final_answer_round() -> String {
+    [
+        r#"data: {"id":"chatcmpl-2","choices":[{"index":0,"delta":{"role":"assistant","content":"Found "},"finish_reason":null}]}"#,
+        r#"data: {"id":"chatcmpl-2","choices":[{"index":0,"delta":{"content":"Events in the workspace."},"finish_reason":null}]}"#,
+        r#"data: {"id":"chatcmpl-2","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}"#,
+        "data: [DONE]",
+        "",
+    ]
+    .join("\n")
 }
 
 #[tokio::test]
@@ -35,46 +57,12 @@ async fn pioneer_tool_loop_hits_search_then_completes() {
     let pioneer = MockServer::start().await;
     let latticed = MockServer::start().await;
 
-    let tool_call_response = json!({
-        "id": "chatcmpl-1",
-        "choices": [{
-            "index": 0,
-            "finish_reason": "tool_calls",
-            "message": {
-                "role": "assistant",
-                "content": null,
-                "tool_calls": [{
-                    "id": "call_search_1",
-                    "type": "function",
-                    "function": {
-                        "name": "search",
-                        "arguments": "{\"query\":\"Events\"}"
-                    }
-                }]
-            }
-        }]
-    })
-    .to_string();
-
-    let final_response = json!({
-        "id": "chatcmpl-2",
-        "choices": [{
-            "index": 0,
-            "finish_reason": "stop",
-            "message": {
-                "role": "assistant",
-                "content": "Found Events in the workspace."
-            }
-        }]
-    })
-    .to_string();
-
     Mock::given(method("POST"))
         .and(path("/v1/chat/completions"))
         .respond_with(ChatSequence {
             calls: AtomicUsize::new(0),
-            first: tool_call_response,
-            second: final_response,
+            first: sse_tool_call_round(),
+            second: sse_final_answer_round(),
         })
         .expect(2)
         .mount(&pioneer)
@@ -148,11 +136,17 @@ async fn pioneer_tool_loop_hits_search_then_completes() {
     );
     let delta_count = events
         .iter()
-        .filter(|e| matches!(e, AgentEvent::MessageChunk { chunk, .. } if chunk.get("type").and_then(|t| t.as_str()) == Some("text-delta")))
+        .filter(|e| {
+            matches!(
+                e,
+                AgentEvent::MessageChunk { chunk, .. }
+                    if chunk.get("type").and_then(|t| t.as_str()) == Some("text-delta")
+            )
+        })
         .count();
     assert!(
-        delta_count >= 1,
-        "expected streamed text-delta chunks, got {delta_count}"
+        delta_count >= 2,
+        "expected live streamed text-delta chunks, got {delta_count}"
     );
     let text: String = events
         .iter()

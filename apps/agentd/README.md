@@ -1,9 +1,15 @@
-# `@lattice/agentd`
+# `@lattice/agentd` (retained reference — not shipped)
 
-Node 22 sidecar that runs the Lattice embedded agent (Phase B tools over
+> **Status:** The production sidecar is Rust `crates/lattice-agentd`
+> (`lattice-agentd` binary), bundled by `desktop-install` / `desktop-release`.
+> This Node package is **kept in-tree for reference and local experiments only**.
+> It is not discovered by default and is not packaged into the Mac app.
+> Escape hatch: `LATTICE_AGENTD_BIN="$(pwd)/apps/agentd/scripts/run.sh"`.
+
+Node 22 sidecar that historically ran the Lattice embedded agent (Phase B tools over
 latticed's authenticated localhost HTTP API — same semantics as `latticed mcp`).
 
-`latticed` supervises this process. Commands arrive as JSONL on **stdin**;
+`latticed` can still supervise this process when pointed at it explicitly. Commands arrive as JSONL on **stdin**;
 lifecycle and UI message events leave as JSONL on **stdout**. Diagnostics go
 to **stderr** only.
 

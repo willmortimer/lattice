@@ -14,16 +14,16 @@ One JSON object per line on stdin (commands) / stdout (events):
 | `hello` | `hello_ack` (`protocolVersion: 1`) |
 | `health` | `health` (`ok: true`) |
 | `start_run` (`provider: fake`) | `run_started` → `message_chunk`(s) → `run_completed` |
-| `start_run` (`provider: pioneer`) | Pioneer chat completions → tool trail steps + streamed final `message_chunk`(s) when Lattice HTTP env is set |
+| `start_run` (`provider: pioneer`) | Pioneer SSE chat completions → tool trail steps + live `message_chunk` streaming when Lattice HTTP env is set |
 | `start_run` (`provider: openai`) | OpenAI Responses stream → `message_chunk`(s) |
 | `cancel_run` | stops in-flight run → `run_failed` (`Run cancelled`) |
 | `shutdown` | exits after cancelling any active run |
 
 Wire shapes match `apps/daemon/src/agent/protocol.rs` (camelCase fields,
 snake_case `type` discriminators). UI chunks use AI SDK shapes
-(`text-start` / `text-delta` / `text-end`). Tool rounds also emit
-`step_started` / `step_completed` so the trail shows progress while Pioneer
-tool calls are non-streaming.
+(`text-start` / `text-delta` / `text-end`). Pioneer tool rounds use SSE
+(`stream: true`) so final answers stream live; `step_started` /
+`step_completed` mark model/tool waits.
 
 ## Build
 

@@ -243,8 +243,6 @@ async fn run_tool_loop(
             return Err(PioneerError::Cancelled);
         }
 
-        // Non-streaming completions leave the UI silent for seconds; trail steps
-        // show that the run is alive while waiting on Pioneer / tools.
         let think_id = format!("think-{round}");
         let think_started = std::time::Instant::now();
         emit_step_started(
@@ -265,10 +263,10 @@ async fn run_tool_loop(
             "messages": messages,
             "tools": tools,
             "tool_choice": "auto",
-            "stream": false,
+            "stream": true,
         });
 
-        let payload = post_chat_json(&client, &url, api_key, &body, cancel).await?;
+        let outcome = stream_tool_round(&client, &url, api_key, &body, run_id, cancel, events).await?;
         emit_step_completed(
             run_id,
             &think_id,
@@ -278,92 +276,119 @@ async fn run_tool_loop(
         )
         .await;
 
-        if let Some(err) = payload.get("error") {
-            let message = err
-                .get("message")
-                .and_then(|v| v.as_str())
-                .unwrap_or("pioneer API error");
-            return Err(PioneerError::Api(message.to_string()));
-        }
-
-        let choice = payload
-            .pointer("/choices/0")
-            .cloned()
-            .ok_or_else(|| PioneerError::Api("missing choices[0]".into()))?;
-        let message = choice
-            .get("message")
-            .cloned()
-            .ok_or_else(|| PioneerError::Api("missing message".into()))?;
-
-        let tool_calls = message
-            .get("tool_calls")
-            .and_then(|v| v.as_array())
-            .cloned()
-            .unwrap_or_default();
-
-        if tool_calls.is_empty() {
-            let content = message
-                .get("content")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            emit_text_content_streamed(run_id, content, events).await;
-            return Ok(());
-        }
-
-        // Keep the assistant turn (including tool_calls) in history.
-        messages.push(message);
-
-        for (tool_idx, call) in tool_calls.iter().enumerate() {
-            if cancel.load(Ordering::SeqCst) {
-                return Err(PioneerError::Cancelled);
+        match outcome {
+            StreamRoundOutcome::FinalAnswer => return Ok(()),
+            StreamRoundOutcome::ToolCalls { message, calls } => {
+                messages.push(message);
+                for (tool_idx, call) in calls.iter().enumerate() {
+                    if cancel.load(Ordering::SeqCst) {
+                        return Err(PioneerError::Cancelled);
+                    }
+                    let step_id = format!("tool-{round}-{tool_idx}");
+                    let label = if call.name.is_empty() {
+                        "Running tool…".to_string()
+                    } else {
+                        format!("Running `{}`…", call.name)
+                    };
+                    let tool_started = std::time::Instant::now();
+                    emit_step_started(run_id, &step_id, "tool", &label, events).await;
+                    let content =
+                        dispatch_tool(lattice, tool_ctx, &call.name, &call.arguments).await;
+                    emit_step_completed(
+                        run_id,
+                        &step_id,
+                        tool_started.elapsed().as_millis() as u64,
+                        Some(call.name.as_str()),
+                        events,
+                    )
+                    .await;
+                    messages.push(json!({
+                        "role": "tool",
+                        "tool_call_id": call.id,
+                        "content": content,
+                    }));
+                }
             }
-            let call_id = call
-                .get("id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("call_unknown");
-            let name = call
-                .pointer("/function/name")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            let arguments = call
-                .pointer("/function/arguments")
-                .and_then(|v| v.as_str())
-                .unwrap_or("{}");
-            let step_id = format!("tool-{round}-{tool_idx}");
-            let label = if name.is_empty() {
-                "Running tool…".to_string()
-            } else {
-                format!("Running `{name}`…")
-            };
-            let tool_started = std::time::Instant::now();
-            emit_step_started(run_id, &step_id, "tool", &label, events).await;
-            let content = dispatch_tool(lattice, tool_ctx, name, arguments).await;
-            emit_step_completed(
-                run_id,
-                &step_id,
-                tool_started.elapsed().as_millis() as u64,
-                Some(name),
-                events,
-            )
-            .await;
-            messages.push(json!({
-                "role": "tool",
-                "tool_call_id": call_id,
-                "content": content,
-            }));
         }
     }
 
     Err(PioneerError::ToolLoopExhausted(MAX_TOOL_ROUNDS))
 }
 
-async fn post_chat_json(
+#[derive(Debug, Clone)]
+struct AccumulatedToolCall {
+    id: String,
+    name: String,
+    arguments: String,
+}
+
+#[derive(Debug)]
+enum StreamRoundOutcome {
+    FinalAnswer,
+    ToolCalls {
+        message: Value,
+        calls: Vec<AccumulatedToolCall>,
+    },
+}
+
+#[derive(Default)]
+struct ToolCallBuilder {
+    id: Option<String>,
+    name: Option<String>,
+    arguments: String,
+}
+
+impl ToolCallBuilder {
+    fn finish(self) -> Option<AccumulatedToolCall> {
+        let id = self.id.filter(|s| !s.is_empty())?;
+        let name = self.name.unwrap_or_default();
+        Some(AccumulatedToolCall {
+            id,
+            name,
+            arguments: if self.arguments.is_empty() {
+                "{}".into()
+            } else {
+                self.arguments
+            },
+        })
+    }
+}
+
+fn apply_tool_call_delta(builders: &mut Vec<ToolCallBuilder>, delta_calls: &[Value]) {
+    for call in delta_calls {
+        let index = call.get("index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+        while builders.len() <= index {
+            builders.push(ToolCallBuilder::default());
+        }
+        let slot = &mut builders[index];
+        if let Some(id) = call.get("id").and_then(|v| v.as_str()) {
+            if !id.is_empty() {
+                slot.id = Some(id.to_string());
+            }
+        }
+        if let Some(name) = call.pointer("/function/name").and_then(|v| v.as_str()) {
+            if !name.is_empty() {
+                slot.name = Some(match slot.name.take() {
+                    Some(existing) => existing + name,
+                    None => name.to_string(),
+                });
+            }
+        }
+        if let Some(args) = call.pointer("/function/arguments").and_then(|v| v.as_str()) {
+            slot.arguments.push_str(args);
+        }
+    }
+}
+
+async fn stream_tool_round(
     client: &reqwest::Client,
     url: &str,
     api_key: &str,
     body: &Value,
+    run_id: &str,
     cancel: &AtomicBool,
-) -> Result<Value, PioneerError> {
+    events: &mpsc::Sender<AgentEvent>,
+) -> Result<StreamRoundOutcome, PioneerError> {
     let mut headers = HeaderMap::new();
     headers.insert(
         AUTHORIZATION,
@@ -384,17 +409,164 @@ async fn post_chat_json(
     };
 
     let status = response.status();
-    let text = response
-        .text()
-        .await
-        .map_err(|err| PioneerError::Transport(err.to_string()))?;
     if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
         return Err(PioneerError::Http {
             status: status.as_u16(),
-            body: truncate(&text, 512),
+            body: truncate(&body, 512),
         });
     }
-    serde_json::from_str(&text).map_err(|err| PioneerError::Api(err.to_string()))
+
+    let mut stream = response.bytes_stream();
+    let mut buffer = String::new();
+    let mut saw_done = false;
+    let mut finish_reason: Option<String> = None;
+    let mut tool_builders: Vec<ToolCallBuilder> = Vec::new();
+    let mut text_id: Option<String> = None;
+    let mut assistant_content = String::new();
+
+    while let Some(chunk) = tokio::select! {
+        biased;
+        _ = wait_cancelled(cancel) => return Err(PioneerError::Cancelled),
+        item = stream.next() => item,
+    } {
+        let chunk = chunk.map_err(|err| PioneerError::Transport(err.to_string()))?;
+        buffer.push_str(&String::from_utf8_lossy(&chunk));
+
+        while let Some(boundary) = buffer.find('\n') {
+            let mut line = buffer[..boundary].to_string();
+            buffer.drain(..=boundary);
+            if line.ends_with('\r') {
+                line.pop();
+            }
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            let Some(data) = line.strip_prefix("data:") else {
+                continue;
+            };
+            let data = data.trim();
+            if data.is_empty() {
+                continue;
+            }
+            if data == "[DONE]" {
+                saw_done = true;
+                break;
+            }
+
+            let payload: Value = match serde_json::from_str(data) {
+                Ok(value) => value,
+                Err(err) => {
+                    warn!(error = %err, "pioneer tool SSE JSON parse failed");
+                    continue;
+                }
+            };
+            if let Some(err) = payload.get("error") {
+                let message = err
+                    .get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("pioneer API error");
+                return Err(PioneerError::Api(message.to_string()));
+            }
+
+            if let Some(reason) = payload
+                .pointer("/choices/0/finish_reason")
+                .and_then(|v| v.as_str())
+            {
+                if !reason.is_empty() && reason != "null" {
+                    finish_reason = Some(reason.to_string());
+                }
+            }
+
+            let delta = payload.pointer("/choices/0/delta").cloned().unwrap_or(Value::Null);
+
+            if let Some(calls) = delta.get("tool_calls").and_then(|v| v.as_array()) {
+                apply_tool_call_delta(&mut tool_builders, calls);
+            }
+
+            let content_delta = delta.get("content").and_then(|v| v.as_str()).unwrap_or("");
+            if !content_delta.is_empty() {
+                assistant_content.push_str(content_delta);
+                // Only stream live text when we are not assembling tool calls.
+                if tool_builders.is_empty() {
+                    if text_id.is_none() {
+                        let id = format!("{run_id}-text");
+                        text_id = Some(id.clone());
+                        let _ = events
+                            .send(AgentEvent::MessageChunk {
+                                run_id: run_id.to_string(),
+                                chunk: json!({ "type": "text-start", "id": id }),
+                            })
+                            .await;
+                    }
+                    if let Some(id) = text_id.as_ref() {
+                        let _ = events
+                            .send(AgentEvent::MessageChunk {
+                                run_id: run_id.to_string(),
+                                chunk: json!({
+                                    "type": "text-delta",
+                                    "id": id,
+                                    "delta": content_delta,
+                                }),
+                            })
+                            .await;
+                    }
+                }
+            }
+        }
+        if saw_done {
+            break;
+        }
+    }
+
+    if cancel.load(Ordering::SeqCst) {
+        return Err(PioneerError::Cancelled);
+    }
+    if !saw_done && finish_reason.is_none() && tool_builders.is_empty() && assistant_content.is_empty()
+    {
+        return Err(PioneerError::Incomplete);
+    }
+
+    let calls: Vec<AccumulatedToolCall> = tool_builders
+        .into_iter()
+        .filter_map(ToolCallBuilder::finish)
+        .collect();
+
+    let wants_tools = finish_reason.as_deref() == Some("tool_calls") || !calls.is_empty();
+    if wants_tools && !calls.is_empty() {
+        let message = json!({
+            "role": "assistant",
+            "content": if assistant_content.is_empty() {
+                Value::Null
+            } else {
+                Value::String(assistant_content)
+            },
+            "tool_calls": calls.iter().map(|c| json!({
+                "id": c.id,
+                "type": "function",
+                "function": {
+                    "name": c.name,
+                    "arguments": c.arguments,
+                }
+            })).collect::<Vec<_>>(),
+        });
+        return Ok(StreamRoundOutcome::ToolCalls { message, calls });
+    }
+
+    if let Some(id) = text_id {
+        let _ = events
+            .send(AgentEvent::MessageChunk {
+                run_id: run_id.to_string(),
+                chunk: json!({ "type": "text-end", "id": id }),
+            })
+            .await;
+    } else if !assistant_content.is_empty() {
+        // Content arrived without being streamed (e.g. after tool-call confusion).
+        emit_text_content_streamed(run_id, &assistant_content, events).await;
+    }
+
+    Ok(StreamRoundOutcome::FinalAnswer)
 }
 
 async fn emit_step_started(
@@ -688,5 +860,30 @@ mod tests {
         let chunks = chunk_text_for_stream(text, 12);
         assert!(chunks.len() > 1);
         assert_eq!(chunks.concat(), text);
+    }
+
+    #[test]
+    fn tool_call_deltas_accumulate_by_index() {
+        let mut builders = Vec::new();
+        apply_tool_call_delta(
+            &mut builders,
+            &[json!({
+                "index": 0,
+                "id": "call_1",
+                "type": "function",
+                "function": { "name": "search", "arguments": "" }
+            })],
+        );
+        apply_tool_call_delta(
+            &mut builders,
+            &[json!({
+                "index": 0,
+                "function": { "arguments": "{\"query\":\"x\"}" }
+            })],
+        );
+        let call = builders.pop().unwrap().finish().unwrap();
+        assert_eq!(call.id, "call_1");
+        assert_eq!(call.name, "search");
+        assert_eq!(call.arguments, "{\"query\":\"x\"}");
     }
 }

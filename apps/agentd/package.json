@@ -1,6 +1,7 @@
 {
   "name": "@lattice/agentd",
   "version": "0.1.0",
+  "description": "Retained Node agentd reference — not shipped; use crates/lattice-agentd",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "type": "module",
