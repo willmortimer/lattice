@@ -466,12 +466,20 @@ pub async fn agent_cancel_run(run_id: String, state: State<'_, AgentState>) -> R
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, OnceLock};
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
 
     #[test]
     fn agent_spawn_env_defaults_fake_without_provider_keys() {
+        let _lock = env_lock().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let _guard = EnvGuard::set(ENV_PIONEER_API_KEY, None);
         let _openai = EnvGuard::set(ENV_OPENAI_API_KEY, None);
         let _fake_guard = EnvGuard::set(ENV_AGENT_FAKE, None);
+        let _bin = EnvGuard::set(ENV_AGENTD_BIN, None);
         let env = agent_spawn_env();
         assert!(
             env.extra_env
@@ -483,6 +491,7 @@ mod tests {
 
     #[test]
     fn agent_spawn_env_uses_sidecar_when_openai_key_present() {
+        let _lock = env_lock().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         let _guard = EnvGuard::set(ENV_PIONEER_API_KEY, None);
         let _openai = EnvGuard::set(ENV_OPENAI_API_KEY, Some("sk-test"));
         let _fake_guard = EnvGuard::set(ENV_AGENT_FAKE, None);
