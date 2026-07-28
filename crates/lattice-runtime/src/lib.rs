@@ -157,10 +157,12 @@ impl LatticeRuntime {
             }
         }
 
-        let session = Arc::new(WorkspaceSession::open_with_vector_backend(
-            &canonical,
-            vector_backend,
-        )?);
+        let session = Arc::new(match vector_backend {
+            None => WorkspaceSession::open(&canonical)?,
+            Some(backend) => {
+                WorkspaceSession::open_with_vector_backend(&canonical, Some(backend))?
+            }
+        });
         let workspace_id = session.workspace_id().to_string();
 
         if start_watcher {
