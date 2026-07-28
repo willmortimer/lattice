@@ -30,7 +30,7 @@ use latticefs_core::{
     ResourceStat,
 };
 use lattice_cloud_client::{
-    default_client, HttpCloudBlobClient, KeychainCloudSessionStore,
+    default_client, CloudSessionStore, HttpCloudBlobClient, KeychainCloudSessionStore,
 };
 use lattice_publish::{export as publish_export, ExportTarget};
 use lattice_storage::{NativeWorkspaceStore, RecoveryJournal, WorkspaceStore};
