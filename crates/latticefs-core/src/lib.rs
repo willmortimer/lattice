@@ -10,10 +10,12 @@ mod registry;
 mod stat;
 mod types;
 
-pub use cloud::MockCloudBlobClient;
+pub use cloud::{
+    roundtrip_verify_blob, CloudBlobClient, InMemoryCloudBlobClient,
+};
 pub use error::{Error, Result};
 pub use registry::{NamespaceRegistry, OPERATIONAL_DIR, REGISTRY_FILENAME};
-pub use stat::{resource_stat, resource_stat_or_register};
+pub use stat::{materialize_to_cloud, resource_stat, resource_stat_or_register};
 pub use types::{
     AuthorityMode, ContentHash, MaterializationState, NamespaceEntry, ResourceId, ResourceStat,
     ResourceVersionId,

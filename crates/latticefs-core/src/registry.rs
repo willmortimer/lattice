@@ -169,6 +169,20 @@ impl NamespaceRegistry {
         Ok(hash)
     }
 
+    /// Record that canonical bytes for `path` live in cloud after a verified upload.
+    pub fn mark_cloud_backed(&mut self, path: &str, content_hash: ContentHash) -> Result<()> {
+        let key = normalize_path_key(path)?;
+        let record = self
+            .document
+            .entries
+            .get_mut(&key)
+            .ok_or_else(|| Error::ResourceNotFound { path: key.clone() })?;
+        record.authority = AuthorityMode::Cloud;
+        record.materialization = MaterializationState::MetadataOnly;
+        record.content_hash = Some(content_hash);
+        Ok(())
+    }
+
     pub fn entries(&self) -> impl Iterator<Item = NamespaceEntry> + '_ {
         self.document.entries.iter().map(|(path, record)| NamespaceEntry {
             path: path.clone(),

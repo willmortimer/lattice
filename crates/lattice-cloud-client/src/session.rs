@@ -180,6 +180,18 @@ mod tests {
         ) -> Result<CloudHttpResponse> {
             Err(CloudError::Http("unused".into()))
         }
+
+        fn request_bytes(
+            &self,
+            _base_url: &str,
+            _method: &str,
+            _path: &str,
+            _body: Option<&[u8]>,
+            _bearer: Option<&str>,
+            _headers: &[(&str, &str)],
+        ) -> Result<crate::client::CloudHttpBytesResponse> {
+            Err(CloudError::Http("unused".into()))
+        }
     }
 
     #[test]
