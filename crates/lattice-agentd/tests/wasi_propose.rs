@@ -17,6 +17,14 @@ fn copy_hello_wasm() -> &'static [u8] {
     include_bytes!("../../kernelfs/fixtures/copy_hello.wasm")
 }
 
+fn ensure_seatbelt_runner() {
+    // Prefer the package helper built alongside integration tests.
+    std::env::set_var(
+        lattice_agentd::seatbelt::SEATBELT_BIN_ENV,
+        env!("CARGO_BIN_EXE_lattice-wasi-seatbelt"),
+    );
+}
+
 struct ProposeResourceCapture {
     bodies: Arc<std::sync::Mutex<Vec<Value>>>,
 }
@@ -39,6 +47,7 @@ impl Respond for ProposeResourceCapture {
 
 #[tokio::test]
 async fn wasi_guest_output_proposes_via_latticed() {
+    ensure_seatbelt_runner();
     let temp = tempfile::tempdir().expect("tempdir");
     let host_input = temp.path().join("fixture-input");
     fs::create_dir_all(&host_input).expect("input dir");
@@ -131,6 +140,7 @@ async fn wasi_guest_output_proposes_via_latticed() {
 
 #[tokio::test]
 async fn dispatch_run_wasi_guest_tool_proposes_outputs() {
+    ensure_seatbelt_runner();
     let workspace = tempfile::tempdir().expect("workspace tempdir");
     let wasm_dest = workspace.path().join("Tools/guests/copy_hello.wasm");
     fs::create_dir_all(wasm_dest.parent().expect("wasm parent")).expect("wasm dir");
@@ -228,5 +238,62 @@ fn run_wasi_guest_tool_schema_documents_presets() {
         .pointer("/function/parameters/required")
         .and_then(|v| v.as_array())
         .expect("required");
-    assert!(required.iter().any(|v| v.as_str() == Some("outputProposalTarget")));
+    assert!(required
+        .iter()
+        .any(|v| v.as_str() == Some("outputProposalTarget")));
+}
+
+#[cfg(target_os = "macos")]
+#[tokio::test]
+async fn macos_seatbelt_writes_profile_and_runs_guest() {
+    ensure_seatbelt_runner();
+    std::env::set_var(lattice_agentd::seatbelt::SEATBELT_ENV, "1");
+
+    let temp = tempfile::tempdir().expect("tempdir");
+    let host_input = temp.path().join("fixture-input");
+    fs::create_dir_all(&host_input).expect("input dir");
+    fs::write(host_input.join("hello.txt"), "hello from input").expect("write hello");
+
+    let manifest = ExecutionManifest {
+        run_id: "run_seatbelt".into(),
+        base_snapshot: "snap".into(),
+        mounts: Mounts {
+            input: vec![InputMount {
+                host_path: host_input.join("hello.txt"),
+                guest_path: "hello.txt".into(),
+            }],
+            output_proposal_target: Some("Reports".into()),
+            work_promote_paths: Vec::new(),
+        },
+        capabilities: Default::default(),
+    };
+
+    let run_parent = temp.path().to_path_buf();
+    let host_roots = vec![temp.path().to_path_buf()];
+    let result = tokio::task::spawn_blocking(move || {
+        run_wasi_guest_with_options(
+            &run_parent,
+            &manifest,
+            copy_hello_wasm(),
+            &WasiGuestHostOptions {
+                limits: WasmtimeLimits::default(),
+                host_path_roots: host_roots,
+                ..Default::default()
+            },
+        )
+    })
+    .await
+    .expect("join")
+    .expect("seatbelt wasi");
+
+    assert_eq!(result.drafts.len(), 1);
+    let profile = temp.path().join("run_seatbelt/.host/seatbelt.sb");
+    assert!(
+        profile.is_file(),
+        "expected Seatbelt profile at {}",
+        profile.display()
+    );
+    let profile_text = fs::read_to_string(&profile).expect("read profile");
+    assert!(profile_text.contains("(deny network*)"));
+    assert!(profile_text.contains("lattice-wasi-seatbelt"));
 }

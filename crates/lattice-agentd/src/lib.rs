@@ -10,6 +10,7 @@ pub mod loop_runtime;
 pub mod pioneer;
 pub mod protocol;
 pub mod responses;
+pub mod seatbelt;
 pub mod tools;
 pub mod wasi_host;
 

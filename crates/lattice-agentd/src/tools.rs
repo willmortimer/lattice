@@ -895,6 +895,13 @@ async fn dispatch_run_wasi_guest(
                 "wasmPath": wasm_path_rel,
             }));
         }
+        Err(WasiHostError::Seatbelt(crate::seatbelt::SeatbeltError::Guest(err))) => {
+            return Ok(json!({
+                "error": wasi_run_error_json(&err),
+                "runId": run_id,
+                "wasmPath": wasm_path_rel,
+            }));
+        }
         Err(err) => return Err(err.to_string()),
     };
 

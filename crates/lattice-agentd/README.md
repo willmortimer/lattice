@@ -108,6 +108,32 @@ Cancel / fuel / epoch failures return structured tool JSON
 proposals include `sourceResource` (`wasi://{runId}/{wasmPath}`) and summaries
 with input content hashes.
 
+### macOS Seatbelt
+
+On macOS, Wasmtime runs in a `sandbox-exec` child (`lattice-wasi-seatbelt`) under
+a Seatbelt profile that **denies network** and blocks writes under `/Users`,
+`/Volumes`, `/etc`, and `/var/root` while allowing the KernelFS run directory.
+(A hard deny-default profile currently aborts dyld/Wasmtime; tighten further as
+Apple sandbox filter coverage improves.) The parent process keeps Lattice HTTP
+and proposal authority. Cancel kills the child.
+
+| Env | Purpose |
+| --- | --- |
+| `LATTICE_WASI_SEATBELT` | `1`/`true` force on; `0`/`false` disable (default: on for macOS) |
+| `LATTICE_WASI_SEATBELT_BIN` | Path to `lattice-wasi-seatbelt` (default: sibling of `lattice-agentd`) |
+
+Non-macOS builds keep in-process Wasmtime. Forcing Seatbelt on Linux returns a
+clear unsupported-platform error (unless the runner is missing, which falls
+back in-process with a warning for incomplete installs/tests).
+
+Manual smoke:
+
+```sh
+cargo build -p lattice-agentd --bin lattice-wasi-seatbelt
+export LATTICE_WASI_SEATBELT_BIN=./target/debug/lattice-wasi-seatbelt
+# then exercise run_wasi_guest; confirm run_root/.host/seatbelt.sb exists after a run
+```
+
 The tool returns proposal ids/paths only — it never applies. Human review stays
 in the Proposals inbox.
 

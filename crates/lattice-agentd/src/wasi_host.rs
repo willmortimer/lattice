@@ -18,6 +18,7 @@ use serde_json::{json, Value};
 use thiserror::Error;
 
 use crate::lattice_client::{LatticeApiError, LatticeToolClient};
+use crate::seatbelt::{self, SeatbeltError};
 
 /// Max characters of stdout/stderr tails embedded in structured tool errors.
 pub const WASI_STDIO_TAIL_CHARS: usize = 2_000;
@@ -29,6 +30,8 @@ pub enum WasiHostError {
     Materialize(#[from] MaterializeError),
     #[error(transparent)]
     Run(#[from] WasiRunError),
+    #[error(transparent)]
+    Seatbelt(#[from] SeatbeltError),
 }
 
 /// Workspace binding for latticed proposal routes (`workspaceId` and/or `root`).
@@ -231,7 +234,33 @@ pub fn run_wasi_guest_with_options(
         run_opts.max_wall_time = options.max_wall_time;
     }
 
-    let run = kernelfs_run(&run_dir.root, wasm_bytes, &run_opts)?;
+    let run = if seatbelt::seatbelt_enabled() {
+        match seatbelt::run_wasi_in_seatbelt(&run_dir.root, wasm_bytes, &run_opts) {
+            Ok(result) => result,
+            Err(SeatbeltError::Guest(err)) => return Err(WasiHostError::Run(err)),
+            Err(SeatbeltError::Cancelled) => {
+                return Err(WasiHostError::Run(WasiRunError::Cancelled {
+                    stdout: Vec::new(),
+                    stderr: Vec::new(),
+                }));
+            }
+            Err(SeatbeltError::RunnerMissing) => {
+                // Incomplete install / unit tests without the helper: keep running
+                // in-process so Linux CI and local debug still work, but warn.
+                tracing::warn!(
+                    target: "lattice_agentd",
+                    "Seatbelt enabled but lattice-wasi-seatbelt missing; falling back to in-process Wasmtime"
+                );
+                kernelfs_run(&run_dir.root, wasm_bytes, &run_opts)?
+            }
+            Err(SeatbeltError::UnsupportedPlatform) => {
+                return Err(WasiHostError::Seatbelt(SeatbeltError::UnsupportedPlatform));
+            }
+            Err(err) => return Err(WasiHostError::Seatbelt(err)),
+        }
+    } else {
+        kernelfs_run(&run_dir.root, wasm_bytes, &run_opts)?
+    };
 
     let plan = collect_output_commit_plan(&run_dir.root, manifest)?;
     let adapter = LatticeProposalAdapter::from_manifest(manifest);
