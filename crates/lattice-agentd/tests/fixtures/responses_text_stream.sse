@@ -1,0 +1,11 @@
+data: {"type":"response.created","response":{"id":"resp_fix"}}
+
+data: {"type":"response.output_text.delta","item_id":"msg_fix","output_index":0,"content_index":0,"delta":"Hello ","sequence_number":1}
+
+data: {"type":"response.output_text.delta","item_id":"msg_fix","output_index":0,"content_index":0,"delta":"Lattice","sequence_number":2}
+
+data: {"type":"response.output_text.done","item_id":"msg_fix","output_index":0,"content_index":0,"text":"Hello Lattice","sequence_number":3}
+
+data: {"type":"response.completed","response":{"id":"resp_fix","status":"completed"}}
+
+data: [DONE]

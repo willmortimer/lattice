@@ -11,3 +11,4 @@ pub mod responses;
 
 pub use loop_runtime::{run_jsonl_loop, LoopConfig};
 pub use protocol::{AgentCommand, AgentEvent, ProviderKind, PROTOCOL_VERSION};
+pub use responses::{emit_openai_run, OpenaiRunOptions, ResponsesError};

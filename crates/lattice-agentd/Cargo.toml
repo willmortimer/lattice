@@ -17,6 +17,12 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "rustls-tls",
+    "stream",
+] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
@@ -41,3 +47,4 @@ tokio = { workspace = true, features = [
     "sync",
     "time",
 ] }
+wiremock = "0.6"

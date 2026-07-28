@@ -10,12 +10,16 @@ use tracing::{debug, warn};
 
 use crate::fake::{emit_fake_run, FakeRunOptions};
 use crate::protocol::{AgentCommand, AgentEvent, ProviderKind, PROTOCOL_VERSION};
-use crate::responses;
+use crate::responses::{self, OpenaiRunOptions};
 
 /// Runtime knobs for the JSONL loop (chunk delay helps cancel tests).
 #[derive(Debug, Clone)]
 pub struct LoopConfig {
     pub chunk_delay: Duration,
+    /// Override `OPENAI_API_KEY` (tests). `None` reads the process environment.
+    pub openai_api_key: Option<String>,
+    /// Override Responses API base URL including `/v1` (wiremock / proxies).
+    pub openai_base_url: Option<String>,
 }
 
 impl Default for LoopConfig {
@@ -23,6 +27,8 @@ impl Default for LoopConfig {
         Self {
             // Small delay so cancel_run can interrupt an in-flight fake stream.
             chunk_delay: Duration::from_millis(5),
+            openai_api_key: None,
+            openai_base_url: None,
         }
     }
 }
@@ -165,6 +171,8 @@ where
                         let cancel = Arc::new(AtomicBool::new(false));
                         let events = event_tx.clone();
                         let chunk_delay = config.chunk_delay;
+                        let openai_api_key = config.openai_api_key.clone();
+                        let openai_base_url = config.openai_base_url.clone();
                         let cancel_for_task = Arc::clone(&cancel);
                         let run_id_task = run_id.clone();
 
@@ -184,27 +192,24 @@ where
                                     .await;
                                 }
                                 ProviderKind::Openai => {
-                                    let _ = events
-                                        .send(AgentEvent::RunStarted {
-                                            run_id: run_id_task.clone(),
-                                            thread_id,
-                                            provider: Some(ProviderKind::Openai),
-                                        })
-                                        .await;
-                                    let message = match responses::start_responses_stream(
-                                        &model,
-                                        &prompt_text,
-                                    ) {
-                                        Ok(_) => unreachable!("stub never returns Ok"),
-                                        Err(err) => err.to_string(),
-                                    };
-                                    let _ = events
-                                        .send(AgentEvent::RunFailed {
+                                    let api_key = openai_api_key
+                                        .or_else(responses::api_key_from_env)
+                                        .unwrap_or_default();
+                                    let base_url = openai_base_url
+                                        .unwrap_or_else(responses::base_url_from_env);
+                                    responses::emit_openai_run(
+                                        OpenaiRunOptions {
                                             run_id: run_id_task,
-                                            message,
-                                            retryable: false,
-                                        })
-                                        .await;
+                                            thread_id,
+                                            model,
+                                            prompt: prompt_text,
+                                            api_key,
+                                            base_url,
+                                            cancel: cancel_for_task,
+                                        },
+                                        events,
+                                    )
+                                    .await;
                                 }
                                 ProviderKind::Pioneer => {
                                     let _ = events
@@ -292,17 +297,23 @@ mod tests {
     use tokio::io::BufReader;
 
     async fn drive(input: &str) -> String {
-        let reader = BufReader::new(input.as_bytes());
-        let mut stdout = Vec::new();
-        run_jsonl_loop(
-            reader,
-            &mut stdout,
+        drive_with(
+            input,
             LoopConfig {
                 chunk_delay: Duration::ZERO,
+                openai_api_key: Some(String::new()),
+                openai_base_url: None,
             },
         )
         .await
-        .expect("loop");
+    }
+
+    async fn drive_with(input: &str, config: LoopConfig) -> String {
+        let reader = BufReader::new(input.as_bytes());
+        let mut stdout = Vec::new();
+        run_jsonl_loop(reader, &mut stdout, config)
+            .await
+            .expect("loop");
         String::from_utf8(stdout).expect("utf8")
     }
 
@@ -349,16 +360,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn openai_provider_fails_without_network() {
+    async fn openai_provider_fails_without_api_key() {
         let input = concat!(
             r#"{"type":"start_run","threadId":"t1","runId":"r-oai","provider":"openai","model":"gpt","prompt":"hi"}"#,
             "\n",
         );
         let out = drive(input).await;
         assert!(
-            out.contains("not implemented"),
-            "expected not-implemented failure, got {out}"
+            out.contains("OPENAI_API_KEY"),
+            "expected missing-key failure, got {out}"
         );
         assert!(out.contains("run_failed"));
+        assert!(out.contains("run_started"));
     }
 }
