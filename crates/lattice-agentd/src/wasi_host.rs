@@ -9,10 +9,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use kernelfs::{
-    collect_output_commit_plan, materialize, materialize_with_options, run_wasi_guest as kernelfs_run,
-    ExecutionManifest, HydrationRecord, LatticeProposalAdapter, LatticeProposalDraft,
-    MaterializeError, MaterializeOptions, WasmtimeLimits, WasiRunError, WasiRunOptions,
-    WasiRunResult,
+    collect_output_commit_plan, materialize_with_options, run_wasi_guest as kernelfs_run,
+    ExecutionManifest, HostPathPolicy, HydrationRecord, LatticeProposalAdapter,
+    LatticeProposalDraft, MaterializeError, MaterializeOptions, WasmtimeLimits, WasiRunError,
+    WasiRunOptions, WasiRunResult,
 };
 use serde_json::{json, Value};
 use thiserror::Error;
@@ -213,17 +213,13 @@ pub fn run_wasi_guest_with_options(
     wasm_bytes: &[u8],
     options: &WasiGuestHostOptions,
 ) -> Result<WasiGuestRunResult, WasiHostError> {
-    let run_dir = if options.host_path_roots.is_empty() {
-        materialize(run_parent, manifest)?
-    } else {
-        materialize_with_options(
-            run_parent,
-            manifest,
-            &MaterializeOptions {
-                host_path_roots: &options.host_path_roots,
-            },
-        )?
-    };
+    let run_dir = materialize_with_options(
+        run_parent,
+        manifest,
+        &MaterializeOptions {
+            host_path_policy: HostPathPolicy::AllowRoots(&options.host_path_roots),
+        },
+    )?;
 
     let mut run_opts = WasiRunOptions {
         limits: options.limits.clone(),
