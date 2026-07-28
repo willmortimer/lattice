@@ -23,6 +23,7 @@ mod error;
 mod journal;
 mod revision;
 mod store;
+mod workspace_id;
 mod writer;
 
 pub use atomic::atomic_write_file;
@@ -32,6 +33,7 @@ pub use revision::{sha256_reader, ResourceRevision};
 pub use store::{
     MemoryWorkspaceStore, NativeWorkspaceStore, ResourceEntry, ResourceMetadata, WorkspaceStore,
 };
+pub use workspace_id::WorkspaceId;
 pub use writer::BufferedWriter;
 
 pub type Result<T> = std::result::Result<T, Error>;

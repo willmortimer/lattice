@@ -16,8 +16,8 @@ pub use manifest::{
     UnsupportedCapabilities,
 };
 pub use materialize::{
-    materialize, materialize_with_options, normalize_guest_path, HydrationRecord, HydrationSource,
-    MaterializeError, MaterializeOptions, RunDir,
+    materialize, materialize_with_options, normalize_guest_path, HostPathPolicy, HydrationRecord,
+    HydrationSource, MaterializeError, MaterializeOptions, RunDir,
 };
 pub use output_bridge::{
     classify_content, collect_output_commit_plan, lattice_proposal_drafts, ContentKind,

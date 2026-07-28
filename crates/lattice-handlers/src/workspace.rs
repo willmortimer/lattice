@@ -87,7 +87,7 @@ pub(crate) fn snapshot_from_parts(
     Ok(WorkspaceSnapshot {
         root: workspace.root().to_string_lossy().into_owned(),
         title: manifest.title.clone(),
-        id: manifest.id.clone(),
+        id: manifest.id.to_string(),
         resources,
         capabilities: manifest.capabilities.enabled.clone(),
         defaults: manifest.defaults.clone(),
@@ -155,6 +155,6 @@ mod tests {
                 .unwrap();
         assert_eq!(runtime.session_count(), 1);
         let session = runtime.get_session_by_id(&snapshot.id).unwrap();
-        assert_eq!(session.workspace_id(), snapshot.id);
+        assert_eq!(session.workspace_id().as_str(), snapshot.id);
     }
 }

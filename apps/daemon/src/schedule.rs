@@ -196,7 +196,7 @@ impl ScheduleRunner {
             .get_session(root)
             .ok()
             .flatten()
-            .map(|session| session.workspace_id().to_string());
+            .map(|session| session.workspace_id().clone());
 
         if let Some(entry) = registry.get_mut(root) {
             entry.schedule_workflows = workflows;

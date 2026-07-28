@@ -837,7 +837,7 @@ impl WorkspaceIndex {
 
     fn workspace_id(&self) -> Result<String> {
         let workspace = Workspace::open(&self.workspace_root)?;
-        Ok(workspace.manifest().id.clone())
+        Ok(workspace.manifest().id.to_string())
     }
 
     fn remove_stale(&self, keep_paths: &[String]) -> Result<(usize, usize)> {

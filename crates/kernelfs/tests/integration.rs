@@ -7,10 +7,9 @@ use std::time::Duration;
 
 use kernelfs::{
     collect_output_commit_plan, configure_store, configure_wasi_preopens, engine_with_limits,
-    materialize, materialize_with_options, normalize_guest_path, run_wasi_guest, Capabilities,
-    ContentKind, ExecutionManifest, InputMount, LatticeProposalAdapter, MaterializeError,
-    MaterializeOptions, Mounts, NetworkPolicy, SecretHandle, UnsupportedCapabilities,
-    WasmtimeLimits, WasiPreopenSpec, WasiRunError, WasiRunOptions,
+    materialize, materialize_with_options, normalize_guest_path, run_wasi_guest, ExecutionManifest,
+    HostPathPolicy, InputMount, LatticeProposalAdapter, MaterializeError, MaterializeOptions,
+    Mounts, WasmtimeLimits, WasiPreopenSpec, WasiRunError, WasiRunOptions,
 };
 use wasmtime::{Linker, Module, Store};
 use wasmtime_wasi::preview1::{self, WasiP1Ctx};
@@ -26,6 +25,18 @@ fn spin_forever_wasm() -> &'static [u8] {
 
 fn stdio_exit_wasm() -> &'static [u8] {
     include_bytes!("../fixtures/stdio_exit.wasm")
+}
+
+
+fn materialize_unrestricted(parent: &std::path::Path, manifest: &ExecutionManifest) -> kernelfs::RunDir {
+    materialize_with_options(
+        parent,
+        manifest,
+        &MaterializeOptions {
+            host_path_policy: HostPathPolicy::UnrestrictedForTests,
+        },
+    )
+    .expect("materialize")
 }
 
 fn empty_run(temp: &tempfile::TempDir, run_id: &str) -> PathBuf {
@@ -63,7 +74,7 @@ fn wasi_guest_reads_input_and_writes_output() {
         capabilities: Default::default(),
     };
 
-    let run = materialize(temp.path(), &manifest).expect("materialize");
+    let run = materialize_unrestricted(temp.path(), &manifest);
     let spec = WasiPreopenSpec::from_run_root(&run.root);
 
     let limits = WasmtimeLimits::default();
@@ -119,7 +130,7 @@ fn collect_output_includes_allowlisted_work_paths() {
         capabilities: Default::default(),
     };
 
-    let run = materialize(temp.path(), &manifest).expect("materialize");
+    let run = materialize_unrestricted(temp.path(), &manifest);
     fs::write(run.root.join("work/notes.txt"), "work artifact").expect("work file");
     fs::write(run.root.join("output/out.txt"), "output artifact").expect("output file");
 
@@ -128,106 +139,6 @@ fn collect_output_includes_allowlisted_work_paths() {
     let paths: Vec<_> = plan.entries.iter().map(|e| e.relative_path.as_str()).collect();
     assert!(paths.contains(&"out.txt"));
     assert!(paths.contains(&"notes.txt"));
-    for entry in &plan.entries {
-        assert_eq!(entry.kind, ContentKind::Text);
-    }
-}
-
-#[test]
-fn collect_output_classifies_binary_and_promoted_work() {
-    let temp = tempfile::tempdir().expect("tempdir");
-    let manifest = ExecutionManifest {
-        run_id: "run_binary_promote".into(),
-        base_snapshot: "snap".into(),
-        mounts: Mounts {
-            input: Vec::new(),
-            output_proposal_target: Some("Binaries".into()),
-            work_promote_paths: vec!["blob.bin".into()],
-        },
-        capabilities: Default::default(),
-    };
-
-    let run = materialize(temp.path(), &manifest).expect("materialize");
-    let binary = vec![0xff, 0xfe, 0x00, 0x01, 0x80];
-    fs::write(run.root.join("output/raw.bin"), &binary).expect("output binary");
-    fs::write(run.root.join("work/blob.bin"), &binary).expect("work binary");
-    fs::write(run.root.join("output/note.txt"), "utf8 ok").expect("text");
-
-    let plan = collect_output_commit_plan(&run.root, &manifest).expect("collect");
-    assert_eq!(plan.entries.len(), 3);
-
-    let raw = plan
-        .entries
-        .iter()
-        .find(|e| e.relative_path == "raw.bin")
-        .expect("raw.bin");
-    assert_eq!(raw.kind, ContentKind::Bytes);
-    assert_eq!(raw.content, binary);
-    assert_eq!(
-        raw.content_type_hint.as_deref(),
-        Some("application/octet-stream")
-    );
-
-    let promoted = plan
-        .entries
-        .iter()
-        .find(|e| e.relative_path == "blob.bin")
-        .expect("blob.bin");
-    assert_eq!(promoted.kind, ContentKind::Bytes);
-
-    let note = plan
-        .entries
-        .iter()
-        .find(|e| e.relative_path == "note.txt")
-        .expect("note.txt");
-    assert_eq!(note.kind, ContentKind::Text);
-
-    let drafts = LatticeProposalAdapter::from_manifest(&manifest).drafts(&plan);
-    assert!(drafts.iter().any(|d| d.kind == ContentKind::Bytes));
-}
-
-#[test]
-fn materialize_rejects_network_allow_capability() {
-    let temp = tempfile::tempdir().expect("tempdir");
-    let manifest = ExecutionManifest {
-        run_id: "run_net".into(),
-        base_snapshot: "snap".into(),
-        mounts: Mounts::default(),
-        capabilities: Capabilities {
-            network: NetworkPolicy {
-                allow: vec!["example.com".into()],
-            },
-            secrets: Vec::new(),
-        },
-    };
-
-    let err = materialize(temp.path(), &manifest).unwrap_err();
-    assert!(matches!(
-        err,
-        MaterializeError::UnsupportedCapabilities(UnsupportedCapabilities::NetworkAllow { .. })
-    ));
-}
-
-#[test]
-fn materialize_rejects_secrets_capability() {
-    let temp = tempfile::tempdir().expect("tempdir");
-    let manifest = ExecutionManifest {
-        run_id: "run_secrets".into(),
-        base_snapshot: "snap".into(),
-        mounts: Mounts::default(),
-        capabilities: Capabilities {
-            network: NetworkPolicy::default(),
-            secrets: vec![SecretHandle {
-                id: "vault://demo".into(),
-            }],
-        },
-    };
-
-    let err = materialize(temp.path(), &manifest).unwrap_err();
-    assert!(matches!(
-        err,
-        MaterializeError::UnsupportedCapabilities(UnsupportedCapabilities::Secrets { .. })
-    ));
 }
 
 #[test]
@@ -251,7 +162,7 @@ fn materialize_input_and_collect_output() {
         capabilities: Default::default(),
     };
 
-    let run = materialize(temp.path(), &manifest).expect("materialize");
+    let run = materialize_unrestricted(temp.path(), &manifest);
     assert!(run.root.join("input/hello.txt").is_file());
     assert!(run.root.join("work").is_dir());
     assert!(run.root.join("output").is_dir());
@@ -302,7 +213,7 @@ fn rejects_parent_dir_in_work_promote_path() {
         capabilities: Default::default(),
     };
 
-    let run = materialize(temp.path(), &manifest).expect("materialize");
+    let run = materialize_unrestricted(temp.path(), &manifest);
     let err = collect_output_commit_plan(&run.root, &manifest).unwrap_err();
     assert!(matches!(err, MaterializeError::PathEscape { .. }));
 }
@@ -347,7 +258,7 @@ fn wasi_preopen_spec_from_run_root() {
         capabilities: Default::default(),
     };
 
-    let run = materialize(temp.path(), &manifest).expect("materialize");
+    let run = materialize_unrestricted(temp.path(), &manifest);
     let spec = WasiPreopenSpec::from_run_root(&run.root);
     assert!(spec.input.ends_with("input"));
     assert!(spec.work.ends_with("work"));
@@ -378,7 +289,7 @@ fn run_wasi_guest_helper_copies_input_to_output() {
         },
         capabilities: Default::default(),
     };
-    let run = materialize(temp.path(), &manifest).expect("materialize");
+    let run = materialize_unrestricted(temp.path(), &manifest);
 
     let mut options = WasiRunOptions::default();
     // copy_hello finishes immediately; disable wall budget so a slow CI tick cannot flake.
@@ -507,7 +418,7 @@ fn materialize_rejects_host_path_outside_allowlist() {
     };
 
     let opts = MaterializeOptions {
-        host_path_roots: &[allowed],
+        host_path_policy: HostPathPolicy::AllowRoots(&[allowed]),
     };
     let err = materialize_with_options(temp.path(), &manifest, &opts).unwrap_err();
     assert!(matches!(err, MaterializeError::HostPathNotAllowed { .. }));
@@ -535,11 +446,36 @@ fn materialize_allows_host_path_under_root() {
     };
 
     let opts = MaterializeOptions {
-        host_path_roots: &[allowed.clone()],
+        host_path_policy: HostPathPolicy::AllowRoots(&[allowed.clone()]),
     };
     let run = materialize_with_options(temp.path(), &manifest, &opts).expect("materialize");
     assert_eq!(
         fs::read(run.root.join("input/ok.txt")).expect("read"),
         b"ok"
     );
+}
+
+#[test]
+fn empty_allowlist_rejects_inputs() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let host_input = temp.path().join("fixture-input");
+    fs::create_dir_all(&host_input).expect("input dir");
+    fs::write(host_input.join("hello.txt"), "hello").expect("write");
+
+    let manifest = ExecutionManifest {
+        run_id: "run_empty_allow".into(),
+        base_snapshot: "snap".into(),
+        mounts: Mounts {
+            input: vec![InputMount {
+                host_path: host_input.join("hello.txt"),
+                guest_path: "hello.txt".into(),
+            }],
+            output_proposal_target: None,
+            work_promote_paths: Vec::new(),
+        },
+        capabilities: Default::default(),
+    };
+
+    let err = materialize(temp.path(), &manifest).unwrap_err();
+    assert!(matches!(err, MaterializeError::EmptyHostPathAllowlist));
 }

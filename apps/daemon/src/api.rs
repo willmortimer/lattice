@@ -1176,7 +1176,7 @@ pub fn api_get_dataset_schema(
     )?;
     crate::dataset_api::get_dataset_schema(
         session.root(),
-        session.workspace_id(),
+        session.workspace_id().as_str(),
         path,
         params.sql.as_deref(),
     )
@@ -1197,7 +1197,7 @@ pub fn api_profile_dataset(
     )?;
     crate::dataset_api::profile_dataset(
         session.root(),
-        session.workspace_id(),
+        session.workspace_id().as_str(),
         path,
         params.sql.as_deref(),
         params.max_sample_rows,

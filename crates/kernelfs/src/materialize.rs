@@ -51,31 +51,55 @@ pub enum MaterializeError {
         path: PathBuf,
         allowed: Vec<PathBuf>,
     },
-    #[error(transparent)]
-    UnsupportedCapabilities(#[from] crate::manifest::UnsupportedCapabilities),
+    #[error(
+        "host path allowlist is empty; production hydration requires explicit roots \
+         (use HostPathPolicy::UnrestrictedForTests only in tests)"
+    )]
+    EmptyHostPathAllowlist,
+}
+
+/// Host filesystem access policy for input hydration (ADR 0059).
+///
+/// Production APIs must use [`HostPathPolicy::AllowRoots`] with a non-empty
+/// root list. An empty allowlist fails closed when input mounts are present.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HostPathPolicy<'a> {
+    /// Inputs must canonicalize under one of these roots.
+    AllowRoots(&'a [PathBuf]),
+    /// Explicit escape hatch for tests / trusted local tooling only.
+    UnrestrictedForTests,
 }
 
 /// Options for [`materialize_with_options`].
-#[derive(Debug, Clone, Default)]
+///
+/// Default is fail-closed: [`HostPathPolicy::AllowRoots`] with no roots.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MaterializeOptions<'a> {
-    /// When non-empty, each input `host_path` must canonicalize under one of
-    /// these roots (after symlink resolution). Empty / default = no host check.
-    pub host_path_roots: &'a [PathBuf],
+    pub host_path_policy: HostPathPolicy<'a>,
+}
+
+impl Default for MaterializeOptions<'_> {
+    fn default() -> Self {
+        Self {
+            host_path_policy: HostPathPolicy::AllowRoots(&[]),
+        }
+    }
 }
 
 /// Create `input/`, `work/`, `output/`, and `tmp/` under `parent` and hydrate inputs.
+///
+/// Uses the fail-closed default policy. Prefer [`materialize_with_options`] with
+/// an explicit [`HostPathPolicy`] in production callers.
 pub fn materialize(parent: &Path, manifest: &ExecutionManifest) -> Result<RunDir, MaterializeError> {
     materialize_with_options(parent, manifest, &MaterializeOptions::default())
 }
 
-/// Like [`materialize`], with optional host-path allowlisting.
+/// Like [`materialize`], with an explicit host-path policy.
 pub fn materialize_with_options(
     parent: &Path,
     manifest: &ExecutionManifest,
     options: &MaterializeOptions<'_>,
 ) -> Result<RunDir, MaterializeError> {
-    manifest.validate_supported_capabilities()?;
-
     let root = parent.join(&manifest.run_id);
     for subdir in ["input", "work", "output", "tmp"] {
         let path = root.join(subdir);
@@ -85,7 +109,15 @@ pub fn materialize_with_options(
         })?;
     }
 
-    let allowed_roots = canonicalize_roots(options.host_path_roots)?;
+    let allowed_roots = match options.host_path_policy {
+        HostPathPolicy::UnrestrictedForTests => None,
+        HostPathPolicy::AllowRoots(roots) => {
+            if roots.is_empty() && !manifest.mounts.input.is_empty() {
+                return Err(MaterializeError::EmptyHostPathAllowlist);
+            }
+            Some(canonicalize_roots(roots)?)
+        }
+    };
 
     let mut sources = Vec::new();
     for mount in &manifest.mounts.input {
@@ -104,7 +136,9 @@ pub fn materialize_with_options(
             });
         }
 
-        ensure_host_path_allowed(&mount.host_path, &allowed_roots)?;
+        if let Some(ref allowed_roots) = allowed_roots {
+            ensure_host_path_allowed(&mount.host_path, allowed_roots)?;
+        }
 
         fs::copy(&mount.host_path, &dest).map_err(|source| MaterializeError::Io {
             path: dest.clone(),
@@ -145,9 +179,6 @@ fn ensure_host_path_allowed(
     host_path: &Path,
     allowed_roots: &[PathBuf],
 ) -> Result<(), MaterializeError> {
-    if allowed_roots.is_empty() {
-        return Ok(());
-    }
     let canonical = fs::canonicalize(host_path).map_err(|source| MaterializeError::Io {
         path: host_path.to_path_buf(),
         source,

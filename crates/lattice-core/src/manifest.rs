@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use lattice_storage::atomic_write_file;
+use lattice_storage::{atomic_write_file, WorkspaceId};
 
 use crate::{Error, Result};
 
@@ -30,7 +30,7 @@ pub const SUPPORTED_VERSION: u32 = 1;
 pub struct WorkspaceManifest {
     pub format: String,
     pub version: u32,
-    pub id: String,
+    pub id: WorkspaceId,
     pub title: String,
     /// Built-in template id used to provision this workspace, when known.
     #[serde(
@@ -113,7 +113,7 @@ impl WorkspaceManifest {
         WorkspaceManifest {
             format: WORKSPACE_FORMAT.to_string(),
             version: SUPPORTED_VERSION,
-            id: uuid::Uuid::now_v7().to_string(),
+            id: WorkspaceId::new(),
             title: title.into(),
             source_template: None,
             capabilities: Capabilities::default(),
@@ -158,6 +158,12 @@ impl WorkspaceManifest {
             return Err(invalid(format!(
                 "manifest version {} is newer than supported version {SUPPORTED_VERSION}",
                 self.version
+            )));
+        }
+        if self.id.as_str().parse::<uuid::Uuid>().is_err() {
+            return Err(invalid(format!(
+                "manifest id {:?} is not a valid UUID WorkspaceId",
+                self.id.as_str()
             )));
         }
         Ok(())

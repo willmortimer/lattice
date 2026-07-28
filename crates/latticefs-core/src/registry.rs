@@ -13,11 +13,15 @@ use crate::types::{
 pub const OPERATIONAL_DIR: &str = ".lattice";
 pub const REGISTRY_FILENAME: &str = "resource-registry.json";
 
-/// Persisted metadata for one registered resource.
+/// Persisted metadata for one registered resource (portable LatticeFS control fields).
+///
+/// Device materialization is derived at read time and is not written back (ADR 0068).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct ResourceRecord {
     resource_id: ResourceId,
     authority: AuthorityMode,
+    /// Accepted from older registries; never serialized going forward.
+    #[serde(default, skip_serializing)]
     materialization: MaterializationState,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     content_hash: Option<ContentHash>,
@@ -138,7 +142,7 @@ impl NamespaceRegistry {
             resource_id: record.resource_id,
             path: key,
             authority: record.authority,
-            materialization: record.materialization,
+            materialization: derive_materialization(record.authority),
             content_hash: record.content_hash.clone(),
             version_id: record.version_id,
         })
@@ -191,6 +195,13 @@ impl NamespaceRegistry {
     }
 }
 
+fn derive_materialization(authority: AuthorityMode) -> MaterializationState {
+    match authority {
+        AuthorityMode::Local | AuthorityMode::ImmutableImport => MaterializationState::Pinned,
+        AuthorityMode::Cloud | AuthorityMode::External => MaterializationState::MetadataOnly,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -233,5 +244,35 @@ mod tests {
         let err = registry.rename("a.md", "b.md").unwrap_err();
         assert!(matches!(err, Error::RenameDestinationExists { .. }));
         assert!(registry.resource_stat("a.md").is_ok());
+    }
+
+    #[test]
+    fn portable_registry_omits_materialization_field() {
+        let dir = tempdir().unwrap();
+        {
+            let mut registry = NamespaceRegistry::open(dir.path()).unwrap();
+            registry.ensure_local_file("doc.md").unwrap();
+            registry.save().unwrap();
+        }
+        let raw = fs::read_to_string(NamespaceRegistry::registry_path(dir.path())).unwrap();
+        assert!(!raw.contains("materialization"), "portable registry must not serialize materialization: {raw}");
+        let registry = NamespaceRegistry::open(dir.path()).unwrap();
+        assert_eq!(registry.resource_stat("doc.md").unwrap().materialization, MaterializationState::Pinned);
+    }
+
+    #[test]
+    fn legacy_materialization_field_is_ignored_on_load() {
+        let dir = tempdir().unwrap();
+        let registry_path = NamespaceRegistry::registry_path(dir.path());
+        fs::create_dir_all(registry_path.parent().unwrap()).unwrap();
+        let resource_id = ResourceId::new();
+        fs::write(&registry_path, format!(r#"{{"version":1,"entries":{{"legacy.md":{{"resource_id":"{resource_id}","authority":"cloud","materialization":"cached"}}}}}}"#)).unwrap();
+        let registry = NamespaceRegistry::open(dir.path()).unwrap();
+        let stat = registry.resource_stat("legacy.md").unwrap();
+        assert_eq!(stat.resource_id, resource_id);
+        assert_eq!(stat.authority, AuthorityMode::Cloud);
+        assert_eq!(stat.materialization, MaterializationState::MetadataOnly);
+        registry.save().unwrap();
+        assert!(!fs::read_to_string(registry_path).unwrap().contains("materialization"));
     }
 }

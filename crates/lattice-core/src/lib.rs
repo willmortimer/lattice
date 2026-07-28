@@ -44,6 +44,7 @@ pub use links::{
 pub use manifest::{
     Capabilities, DirectoryMeta, WorkspaceDefaults, WorkspaceManifest, WORKSPACE_MANIFEST_FILENAME,
 };
+pub use lattice_storage::WorkspaceId;
 pub use resource::{Resource, ResourceKind};
 pub use resource_runtime::{
     inspect_resource, read_resource_range, read_text_window, BuiltinFormatRegistry,

@@ -4,6 +4,7 @@ mod state;
 
 use std::path::{Path, PathBuf};
 
+pub use lattice_storage::WorkspaceId;
 pub use scheduler::{
     default_scheduler_registry_path, KnownWorkspaceEntry, KnownWorkspaceRegistry,
     LATTICE_SCHEDULER_REGISTRY_ENV, SCHEDULER_DIR_NAME, WORKSPACES_REGISTRY_FILENAME,

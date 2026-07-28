@@ -10,6 +10,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use lattice_storage::WorkspaceId;
+
 use crate::{Error, Result};
 
 /// Environment override for the registry JSON path (tests).
@@ -46,7 +48,7 @@ pub struct KnownWorkspaceEntry {
     pub root: String,
     /// Stable workspace id when known from a prior open/scan.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub workspace_id: Option<String>,
+    pub workspace_id: Option<WorkspaceId>,
     /// When false, the workspace stays registered but schedules do not fire.
     pub enabled: bool,
     /// Relative workflow paths last discovered with `type: schedule`.

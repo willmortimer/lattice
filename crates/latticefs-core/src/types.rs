@@ -119,6 +119,9 @@ pub enum AuthorityMode {
 }
 
 /// Whether bytes are present locally and how they are retained.
+///
+/// Device-local operational state for Inspect/CLI. Not portable LatticeFS
+/// control metadata (ADR 0057 / ADR 0068).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MaterializationState {
@@ -126,6 +129,12 @@ pub enum MaterializationState {
     Cached,
     Pinned,
     Evicted,
+}
+
+impl Default for MaterializationState {
+    fn default() -> Self {
+        Self::Pinned
+    }
 }
 
 /// One path binding in the workspace namespace.

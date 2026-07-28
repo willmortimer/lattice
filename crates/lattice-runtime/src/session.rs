@@ -70,7 +70,7 @@ impl WorkspaceSession {
         &self.workspace
     }
 
-    pub fn workspace_id(&self) -> &str {
+    pub fn workspace_id(&self) -> &lattice_core::WorkspaceId {
         &self.workspace.manifest().id
     }
 
