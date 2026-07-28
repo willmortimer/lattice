@@ -1,0 +1,17 @@
+[package]
+name = "lattice-cloud-client"
+description = "Minimal lattice-server HTTP client for desktop bearer auth (ADR 0067)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+lattice-connectors.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+ureq.workspace = true
+
+[dev-dependencies]

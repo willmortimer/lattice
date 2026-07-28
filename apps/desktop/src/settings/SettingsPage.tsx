@@ -1,6 +1,7 @@
 import { Button } from "@lattice/ui";
 import {
   CursorText,
+  Cloud,
   Database,
   Files,
   Gauge,
@@ -21,6 +22,12 @@ import type { WorkspaceStartupSettings } from "../lib/profile";
 import type { PageWidth } from "../lib/pageWidth";
 import { enableAppLock, getAppLockStatus, type AppLockStatus } from "../lib/appLock";
 import { getVoiceStatus, listenVoiceEvents, prepareVoiceModel, type VoiceStatus } from "../lib/voice";
+import {
+  cloudSignIn,
+  cloudSignOut,
+  getCloudSessionStatus,
+  type CloudSessionStatus,
+} from "../lib/cloud";
 import {
   disableSemanticSearch,
   enableSemanticSearch,
@@ -43,6 +50,7 @@ import { TOGGLEABLE_WORKSPACE_CAPABILITIES } from "./workspaceCapabilities";
 
 type SettingsSection =
   | "appearance"
+  | "cloud"
   | "editor"
   | "files"
   | "workspaces"
@@ -76,6 +84,7 @@ interface SettingsPageProps {
 
 const SECTIONS = [
   { id: "appearance" as const, label: "Appearance", icon: Palette },
+  { id: "cloud" as const, label: "Cloud account", icon: Cloud },
   { id: "editor" as const, label: "Editor behavior", icon: CursorText },
   { id: "files" as const, label: "Files, links & autosave", icon: Files },
   { id: "workspaces" as const, label: "Workspaces & startup", icon: Rocket },
@@ -286,6 +295,8 @@ export function SettingsPage({
             )}
           </>
         )}
+
+        {section === "cloud" && <CloudAccountSettings />}
 
         {section === "editor" && (
           <>
@@ -1029,6 +1040,137 @@ function PrivacySettingsPanel({
           {error ? (
             <div className="diagnostics-card" role="alert">
               <strong>App lock error</strong>
+              <span>{error}</span>
+            </div>
+          ) : null}
+        </>
+      )}
+    </>
+  );
+}
+
+function CloudAccountSettings() {
+  const [status, setStatus] = useState<CloudSessionStatus | null>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (inBrowser) return;
+    let cancelled = false;
+    void getCloudSessionStatus()
+      .then((next) => {
+        if (!cancelled) {
+          setStatus(next);
+          if (next.user?.email) setEmail(next.user.email);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleSignIn() {
+    if (inBrowser) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await cloudSignIn(email.trim(), password);
+      setStatus(next);
+      setPassword("");
+      if (next.error) setError(next.error);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSignOut() {
+    if (inBrowser) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await cloudSignOut();
+      setStatus(next);
+      setPassword("");
+      if (next.error) setError(next.error);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const statusText = status
+    ? status.signedIn
+      ? status.user?.email ?? status.user?.display_name ?? "Signed in"
+      : "Not signed in"
+    : "Checking…";
+
+  return (
+    <>
+      <h1>Cloud account</h1>
+      <p className="settings-copy">
+        Optional lattice-server sign-in for cloud sync features. Credentials stay in the OS
+        keychain; the bearer token never reaches browser storage.
+      </p>
+      {inBrowser ? (
+        <div className="diagnostics-card">
+          <strong>Unavailable in browser demo</strong>
+          <span>Cloud sign-in requires the native desktop shell.</span>
+        </div>
+      ) : (
+        <>
+          <SettingRow
+            title="Server"
+            description="Resolved lattice-server origin for this desktop build."
+          >
+            <span>{status?.cloudUrl ?? "https://cloud.lattice-notes.com"}</span>
+          </SettingRow>
+          <SettingRow title="Status" description="Current cloud session for this device.">
+            <span>{busy ? "Updating…" : statusText}</span>
+          </SettingRow>
+          {!status?.signedIn ? (
+            <>
+              <SettingRow title="Email" description="Account email for password login.">
+                <input
+                  type="email"
+                  autoComplete="username"
+                  value={email}
+                  disabled={busy}
+                  onChange={(event) => setEmail(event.currentTarget.value)}
+                />
+              </SettingRow>
+              <SettingRow title="Password" description="Password for your lattice-server account.">
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  disabled={busy}
+                  onChange={(event) => setPassword(event.currentTarget.value)}
+                />
+              </SettingRow>
+              <Button
+                size="sm"
+                disabled={busy || !email.trim() || !password}
+                onClick={() => void handleSignIn()}
+              >
+                {busy ? "Signing in…" : "Sign in"}
+              </Button>
+            </>
+          ) : (
+            <Button size="sm" variant="secondary" disabled={busy} onClick={() => void handleSignOut()}>
+              {busy ? "Signing out…" : "Sign out"}
+            </Button>
+          )}
+          {error ? (
+            <div className="diagnostics-card" role="alert">
+              <strong>Cloud sign-in error</strong>
               <span>{error}</span>
             </div>
           ) : null}

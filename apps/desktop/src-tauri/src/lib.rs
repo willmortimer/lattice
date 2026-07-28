@@ -3,6 +3,7 @@ mod app_lock;
 mod app_menu;
 mod artifact;
 mod canvas;
+mod cloud;
 mod commands;
 mod daemon_session;
 mod deck;
@@ -313,6 +314,9 @@ pub fn run() {
             app_lock::app_lock_lock,
             app_lock::app_lock_unlock,
             app_lock::app_lock_enable,
+            cloud::cloud_session_status,
+            cloud::cloud_sign_in,
+            cloud::cloud_sign_out,
         ]))
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -3671,6 +3671,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-cloud-client"
+version = "0.1.0"
+dependencies = [
+ "lattice-connectors",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "ureq",
+]
+
+[[package]]
 name = "lattice-commands"
 version = "0.1.0"
 dependencies = [
@@ -3812,6 +3823,7 @@ dependencies = [
  "lattice-audio",
  "lattice-audio-macos",
  "lattice-client",
+ "lattice-cloud-client",
  "lattice-commands",
  "lattice-connectors",
  "lattice-core",
@@ -3921,6 +3933,7 @@ dependencies = [
 name = "lattice-handlers"
 version = "0.1.0"
 dependencies = [
+ "lattice-cloud-client",
  "lattice-commands",
  "lattice-connectors",
  "lattice-core",
@@ -3929,6 +3942,7 @@ dependencies = [
  "lattice-runtime",
  "lattice-storage",
  "serde",
+ "serde_json",
  "serde_yaml",
  "tempfile",
 ]

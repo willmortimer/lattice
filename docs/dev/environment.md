@@ -27,6 +27,7 @@ dev shell (`use flake`) and, when present, a gitignored `.env` via
 | `LATTICE_GITHUB_APP_CLIENT_SECRET` | `.env` / shell | GitHub App client secret | Required for **desktop** browser OAuth token exchange. Not needed for CLI device flow. Do not commit. | **Yes** | Works today (desktop) |
 | `LATTICE_GITLAB_OAUTH_CLIENT_ID` | `.env` / shell | GitLab OAuth application id | GitLab Extract connect ([ADR 0045](../decisions/0045-github-connected-repos-are-readonly-extracts.md)): desktop `lattice://oauth/callback` + CLI loopback. Scopes `read_api` + `read_repository`. | No | Works today |
 | `LATTICE_GITLAB_OAUTH_CLIENT_SECRET` | `.env` / shell | GitLab OAuth secret | Required for GitLab authorization-code exchange (desktop + CLI). Do not commit. | **Yes** | Works today |
+| `LATTICE_CLOUD_URL` | `.env` / shell | lattice-server origin (default `https://cloud.lattice-notes.com`) | Desktop cloud bearer auth; see [desktop-cloud-signin.md](desktop-cloud-signin.md) | No | Works today |
 | `RUST_BACKTRACE` | your shell | n/a (`1` or `full`) | Backtraces on Rust panics in CLI/desktop dev | No | Works today (std behavior) |
 | `RUST_LOG` | your shell | n/a (e.g. `debug`) | Log-level filter | No | **Not yet wired** — takes effect once tracing/env-logger lands (observability workstream) |
 
