@@ -1,8 +1,9 @@
-//! Pioneer OpenAI-compatible Chat Completions streaming.
+//! Pioneer OpenAI-compatible Chat Completions streaming + host tool loop.
 //!
 //! Matches Node `apps/agentd` pioneer path: `https://api.pioneer.ai/v1` +
-//! `PIONEER_API_KEY`, chat completions SSE (not Responses). Maps deltas into
-//! the same AI SDK UI chunks as the OpenAI Responses client.
+//! `PIONEER_API_KEY`, chat completions (not Responses). When a Lattice HTTP
+//! client is configured, runs a thin tool loop (max 8 rounds); otherwise
+//! streams chat-only text into AI SDK UI chunks.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -15,11 +16,18 @@ use thiserror::Error;
 use tokio::sync::mpsc;
 use tracing::warn;
 
+use crate::lattice_client::LatticeToolClient;
 use crate::protocol::{AgentEvent, ProviderKind};
+use crate::tools::{
+    dispatch_tool, openai_tool_definitions, ToolRunContext, WORKSPACE_AGENT_INSTRUCTIONS,
+};
 
 pub const DEFAULT_PIONEER_BASE_URL: &str = "https://api.pioneer.ai/v1";
 /// Cheap default for local testing (Pioneer catalog).
 pub const DEFAULT_PIONEER_MODEL: &str = "gpt-5.6-luna";
+
+/// Max assistant→tool→assistant rounds when Lattice tools are enabled.
+pub const MAX_TOOL_ROUNDS: usize = 8;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum PioneerError {
@@ -35,6 +43,8 @@ pub enum PioneerError {
     Transport(String),
     #[error("pioneer stream ended without completion")]
     Incomplete,
+    #[error("pioneer tool loop exceeded {0} rounds")]
+    ToolLoopExhausted(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -46,6 +56,10 @@ pub struct PioneerRunOptions {
     pub api_key: String,
     pub base_url: String,
     pub cancel: Arc<AtomicBool>,
+    /// When set, enable Chat Completions tool loop against latticed HTTP.
+    pub lattice: Option<LatticeToolClient>,
+    pub workspace_id: Option<String>,
+    pub workspace_root: Option<String>,
 }
 
 pub fn api_key_from_env() -> Option<String> {
@@ -81,6 +95,9 @@ pub async fn emit_pioneer_run(options: PioneerRunOptions, events: mpsc::Sender<A
         api_key,
         base_url,
         cancel,
+        lattice,
+        workspace_id,
+        workspace_root,
     } = options;
 
     let send = |event: AgentEvent| {
@@ -117,17 +134,37 @@ pub async fn emit_pioneer_run(options: PioneerRunOptions, events: mpsc::Sender<A
         return;
     }
 
-    match stream_chat_completions(
-        &api_key,
-        &base_url,
-        &normalize_model(&model),
-        &prompt,
-        &run_id,
-        &cancel,
-        &events,
-    )
-    .await
-    {
+    let model = normalize_model(&model);
+    let result = if lattice.is_some() {
+        run_tool_loop(
+            &api_key,
+            &base_url,
+            &model,
+            &prompt,
+            &run_id,
+            &cancel,
+            &events,
+            lattice.as_ref(),
+            &ToolRunContext {
+                workspace_id,
+                workspace_root,
+            },
+        )
+        .await
+    } else {
+        stream_chat_completions(
+            &api_key,
+            &base_url,
+            &model,
+            &prompt,
+            &run_id,
+            &cancel,
+            &events,
+        )
+        .await
+    };
+
+    match result {
         Ok(()) => {
             if cancel.load(Ordering::SeqCst) {
                 send(AgentEvent::RunFailed {
@@ -158,6 +195,175 @@ pub async fn emit_pioneer_run(options: PioneerRunOptions, events: mpsc::Sender<A
             .await;
         }
     }
+}
+
+async fn run_tool_loop(
+    api_key: &str,
+    base_url: &str,
+    model: &str,
+    prompt: &str,
+    run_id: &str,
+    cancel: &AtomicBool,
+    events: &mpsc::Sender<AgentEvent>,
+    lattice: Option<&LatticeToolClient>,
+    tool_ctx: &ToolRunContext,
+) -> Result<(), PioneerError> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(120))
+        .build()
+        .map_err(|err| PioneerError::Transport(err.to_string()))?;
+
+    let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+    let tools = openai_tool_definitions();
+    let mut messages = vec![
+        json!({ "role": "system", "content": WORKSPACE_AGENT_INSTRUCTIONS }),
+        json!({ "role": "user", "content": prompt }),
+    ];
+
+    for _round in 0..MAX_TOOL_ROUNDS {
+        if cancel.load(Ordering::SeqCst) {
+            return Err(PioneerError::Cancelled);
+        }
+
+        let body = json!({
+            "model": model,
+            "messages": messages,
+            "tools": tools,
+            "tool_choice": "auto",
+            "stream": false,
+        });
+
+        let payload = post_chat_json(&client, &url, api_key, &body, cancel).await?;
+        if let Some(err) = payload.get("error") {
+            let message = err
+                .get("message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("pioneer API error");
+            return Err(PioneerError::Api(message.to_string()));
+        }
+
+        let choice = payload
+            .pointer("/choices/0")
+            .cloned()
+            .ok_or_else(|| PioneerError::Api("missing choices[0]".into()))?;
+        let message = choice
+            .get("message")
+            .cloned()
+            .ok_or_else(|| PioneerError::Api("missing message".into()))?;
+
+        let tool_calls = message
+            .get("tool_calls")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+
+        if tool_calls.is_empty() {
+            let content = message
+                .get("content")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            emit_text_content(run_id, content, events).await;
+            return Ok(());
+        }
+
+        // Keep the assistant turn (including tool_calls) in history.
+        messages.push(message);
+
+        for call in &tool_calls {
+            if cancel.load(Ordering::SeqCst) {
+                return Err(PioneerError::Cancelled);
+            }
+            let call_id = call
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("call_unknown");
+            let name = call
+                .pointer("/function/name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let arguments = call
+                .pointer("/function/arguments")
+                .and_then(|v| v.as_str())
+                .unwrap_or("{}");
+            let content = dispatch_tool(lattice, tool_ctx, name, arguments).await;
+            messages.push(json!({
+                "role": "tool",
+                "tool_call_id": call_id,
+                "content": content,
+            }));
+        }
+    }
+
+    Err(PioneerError::ToolLoopExhausted(MAX_TOOL_ROUNDS))
+}
+
+async fn post_chat_json(
+    client: &reqwest::Client,
+    url: &str,
+    api_key: &str,
+    body: &Value,
+    cancel: &AtomicBool,
+) -> Result<Value, PioneerError> {
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        AUTHORIZATION,
+        HeaderValue::from_str(&format!("Bearer {api_key}"))
+            .map_err(|err| PioneerError::Transport(err.to_string()))?,
+    );
+    if let Ok(value) = HeaderValue::from_str(api_key) {
+        headers.insert("X-API-Key", value);
+    }
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+
+    let response = tokio::select! {
+        biased;
+        _ = wait_cancelled(cancel) => return Err(PioneerError::Cancelled),
+        result = client.post(url).headers(headers).json(body).send() => {
+            result.map_err(|err| PioneerError::Transport(err.to_string()))?
+        }
+    };
+
+    let status = response.status();
+    let text = response
+        .text()
+        .await
+        .map_err(|err| PioneerError::Transport(err.to_string()))?;
+    if !status.is_success() {
+        return Err(PioneerError::Http {
+            status: status.as_u16(),
+            body: truncate(&text, 512),
+        });
+    }
+    serde_json::from_str(&text).map_err(|err| PioneerError::Api(err.to_string()))
+}
+
+async fn emit_text_content(run_id: &str, content: &str, events: &mpsc::Sender<AgentEvent>) {
+    if content.is_empty() {
+        return;
+    }
+    let id = format!("{run_id}-text");
+    let _ = events
+        .send(AgentEvent::MessageChunk {
+            run_id: run_id.to_string(),
+            chunk: json!({ "type": "text-start", "id": id }),
+        })
+        .await;
+    let _ = events
+        .send(AgentEvent::MessageChunk {
+            run_id: run_id.to_string(),
+            chunk: json!({
+                "type": "text-delta",
+                "id": id,
+                "delta": content,
+            }),
+        })
+        .await;
+    let _ = events
+        .send(AgentEvent::MessageChunk {
+            run_id: run_id.to_string(),
+            chunk: json!({ "type": "text-end", "id": id }),
+        })
+        .await;
 }
 
 async fn stream_chat_completions(
