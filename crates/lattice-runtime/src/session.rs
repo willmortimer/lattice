@@ -6,7 +6,7 @@ use std::time::Duration;
 use lattice_commands::CommandEngine;
 use lattice_core::{ResourceCatalog, Workspace};
 use lattice_embedding::EmbeddingProvider;
-use lattice_index::{Backlink, ChunkSearchHit, SearchHit, WorkspaceIndex};
+use lattice_index::{Backlink, ChunkSearchHit, SearchHit, VectorBackend, WorkspaceIndex};
 
 use crate::events::SharedEventBus;
 use crate::idempotency::IdempotencyCache;
@@ -40,9 +40,20 @@ pub struct WorkspaceSession {
 
 impl WorkspaceSession {
     pub(crate) fn open(canonical_root: &Path) -> Result<Self> {
+        Self::open_with_vector_backend(canonical_root, None)
+    }
+
+    /// Open a session with an explicit vector backend (tests) or env default (`None`).
+    pub(crate) fn open_with_vector_backend(
+        canonical_root: &Path,
+        vector_backend: Option<VectorBackend>,
+    ) -> Result<Self> {
         let workspace = Workspace::open(canonical_root)?;
         let command_engine = CommandEngine::open(canonical_root)?;
-        let index = WorkspaceIndex::open(canonical_root)?;
+        let index = match vector_backend {
+            Some(backend) => WorkspaceIndex::open_with_backend(canonical_root, backend)?,
+            None => WorkspaceIndex::open(canonical_root)?,
+        };
         let catalog = match workspace.scan() {
             Ok(resources) => Some(ResourceCatalog::new(&resources)),
             Err(_) => None,

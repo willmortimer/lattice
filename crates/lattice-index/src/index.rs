@@ -218,11 +218,43 @@ impl WorkspaceIndex {
 
     pub fn remove_resource(&self, path: &Path) -> Result<()> {
         let rel = normalize_workspace_path(path)?;
-        let conn = self.conn.lock().unwrap();
-        conn.execute(
-            "DELETE FROM resources WHERE path = ?1",
-            params![path_key(&rel)],
-        )?;
+        let path_key = path_key(&rel);
+        let chunk_ids: Vec<String> = {
+            let conn = self.conn.lock().unwrap();
+            let mut stmt = conn.prepare(
+                "SELECT c.chunk_id FROM search_chunks c
+                 JOIN resources r ON r.id = c.resource_id
+                 WHERE r.path = ?1",
+            )?;
+            let rows = stmt.query_map(params![path_key], |row| row.get(0))?;
+            rows.collect::<std::result::Result<Vec<_>, _>>()?
+        };
+
+        {
+            let conn = self.conn.lock().unwrap();
+            conn.execute("DELETE FROM resources WHERE path = ?1", params![path_key])?;
+            // chunk_vectors / chunk_embedding_state have no FK cascade from search_chunks.
+            for chunk_id in &chunk_ids {
+                conn.execute(
+                    "DELETE FROM chunk_vectors WHERE chunk_id = ?1",
+                    params![chunk_id],
+                )?;
+                conn.execute(
+                    "DELETE FROM chunk_embedding_state WHERE chunk_id = ?1",
+                    params![chunk_id],
+                )?;
+            }
+        }
+
+        if let Some(store) = &self.lance_store {
+            if !chunk_ids.is_empty() {
+                block_on_embed(async {
+                    remove_lance_vectors(store, &chunk_ids)
+                        .await
+                        .map_err(Error::from)
+                })?;
+            }
+        }
         Ok(())
     }
 

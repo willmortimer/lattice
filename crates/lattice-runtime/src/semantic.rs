@@ -598,6 +598,8 @@ mod tests {
     use lattice_embedding::{
         DistanceMetric, EmbeddingSpecification, FakeEmbeddingProvider, PoolingStrategy,
     };
+    use lattice_index::VectorBackend;
+    use lattice_lance::search_elements_dataset_path;
     use std::time::{Duration, Instant};
 
     fn init_workspace() -> tempfile::TempDir {
@@ -742,6 +744,64 @@ mod tests {
         let hits =
             hybrid_search_with_session_semantic(&session, "unique-semantic-token-xyz", 10).unwrap();
         assert!(hits.iter().any(|hit| hit.resource_uri.ends_with("New.md")));
+
+        runtime.close_session(dir.path()).unwrap();
+    }
+
+    #[test]
+    fn lance_backend_session_hybrid_search_embeds_and_returns_semantic_ranks() {
+        let dir = init_workspace();
+        std::fs::write(
+            dir.path().join("Seed.md"),
+            "# Seed\n\nlance-distinctive-capability-token for hybrid search.\n",
+        )
+        .unwrap();
+
+        let runtime = LatticeRuntime::new();
+        let session = runtime
+            .open_workspace_session_with_vector_backend(dir.path(), VectorBackend::Lance)
+            .unwrap();
+        session.rebuild_index().unwrap();
+
+        session
+            .start_semantic_indexing(
+                Arc::clone(runtime.events()),
+                SemanticWorkerConfig::new(fake_provider()),
+            )
+            .unwrap();
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            if let Some(ns) = session.semantic_namespace_id() {
+                let states = session
+                    .index()
+                    .chunk_embedding_states_for_namespace(ns)
+                    .unwrap();
+                if states.iter().any(|s| s.status.as_str() == "ready") {
+                    break;
+                }
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+
+        let hits = hybrid_search_with_session_semantic(
+            &session,
+            "lance-distinctive-capability-token",
+            10,
+        )
+        .unwrap();
+        assert!(!hits.is_empty());
+        assert!(
+            hits.iter().any(|hit| hit.semantic_rank.is_some()),
+            "expected semantic ranks from Lance backend: {hits:?}"
+        );
+
+        let lance_dataset = search_elements_dataset_path(dir.path());
+        assert!(
+            lance_dataset.is_dir(),
+            "expected Lance dataset at {}",
+            lance_dataset.display()
+        );
 
         runtime.close_session(dir.path()).unwrap();
     }

@@ -6082,6 +6082,7 @@ dependencies = [
  "lattice-core",
  "lattice-embedding",
  "lattice-index",
+ "lattice-lance",
  "libc",
  "serde",
  "serde_json",

@@ -93,7 +93,17 @@ impl LatticeRuntime {
     /// Prefer [`Self::open_workspace_session_for_write`] when the caller will
     /// mutate the workspace.
     pub fn open_workspace_session(&self, root: impl AsRef<Path>) -> Result<Arc<WorkspaceSession>> {
-        self.open_or_get_session(root.as_ref(), false)
+        self.open_or_get_session(root.as_ref(), false, None)
+    }
+
+    /// Open a session with an explicit vector backend (integration tests only).
+    #[cfg(test)]
+    pub(crate) fn open_workspace_session_with_vector_backend(
+        &self,
+        root: impl AsRef<Path>,
+        vector_backend: lattice_index::VectorBackend,
+    ) -> Result<Arc<WorkspaceSession>> {
+        self.open_or_get_session(root.as_ref(), false, Some(vector_backend))
     }
 
     /// Open a warm session and acquire the workspace write lease for `claim`.
@@ -107,7 +117,7 @@ impl LatticeRuntime {
         claim: &LeaseClaim,
     ) -> Result<(Arc<WorkspaceSession>, WorkspaceLeaseFile)> {
         let lease = acquire_workspace_lease(root.as_ref(), claim)?;
-        let session = self.open_or_get_session(root.as_ref(), true)?;
+        let session = self.open_or_get_session(root.as_ref(), true, None)?;
         session.set_write_lease(claim.clone());
         Ok((session, lease))
     }
@@ -121,6 +131,7 @@ impl LatticeRuntime {
         &self,
         root: &Path,
         start_watcher: bool,
+        vector_backend: Option<lattice_index::VectorBackend>,
     ) -> Result<Arc<WorkspaceSession>> {
         let canonical = canonicalize_root(root)?;
         {
@@ -146,7 +157,10 @@ impl LatticeRuntime {
             }
         }
 
-        let session = Arc::new(WorkspaceSession::open(&canonical)?);
+        let session = Arc::new(WorkspaceSession::open_with_vector_backend(
+            &canonical,
+            vector_backend,
+        )?);
         let workspace_id = session.workspace_id().to_string();
 
         if start_watcher {
