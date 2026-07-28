@@ -51,6 +51,8 @@ pub enum MaterializeError {
         path: PathBuf,
         allowed: Vec<PathBuf>,
     },
+    #[error(transparent)]
+    UnsupportedCapabilities(#[from] crate::manifest::UnsupportedCapabilities),
 }
 
 /// Options for [`materialize_with_options`].
@@ -72,6 +74,8 @@ pub fn materialize_with_options(
     manifest: &ExecutionManifest,
     options: &MaterializeOptions<'_>,
 ) -> Result<RunDir, MaterializeError> {
+    manifest.validate_supported_capabilities()?;
+
     let root = parent.join(&manifest.run_id);
     for subdir in ["input", "work", "output", "tmp"] {
         let path = root.join(subdir);

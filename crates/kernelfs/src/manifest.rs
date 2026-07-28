@@ -49,6 +49,11 @@ pub struct InputMount {
 }
 
 /// Deny-by-default capability projection for the run.
+///
+/// Preview1 `_start` guests currently support **preopens + fuel/epoch only**.
+/// Non-empty [`NetworkPolicy::allow`] or any [`SecretHandle`] must be rejected
+/// at materialize/run entry via [`ExecutionManifest::validate_supported_capabilities`]
+/// (fail closed until WASI-HTTP / secret injection exist).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Capabilities {
     #[serde(default)]
@@ -105,4 +110,42 @@ impl ExecutionManifest {
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string_pretty(self)
     }
+
+    /// Fail closed when the manifest requests unimplemented capabilities.
+    ///
+    /// Supported today: empty `network.allow`, empty `secrets`, plus preopens and
+    /// fuel/epoch limits applied by the WASI runner (not expressed in this struct).
+    pub fn validate_supported_capabilities(&self) -> Result<(), UnsupportedCapabilities> {
+        if !self.capabilities.network.allow.is_empty() {
+            return Err(UnsupportedCapabilities::NetworkAllow {
+                hosts: self.capabilities.network.allow.clone(),
+            });
+        }
+        if !self.capabilities.secrets.is_empty() {
+            return Err(UnsupportedCapabilities::Secrets {
+                ids: self
+                    .capabilities
+                    .secrets
+                    .iter()
+                    .map(|handle| handle.id.clone())
+                    .collect(),
+            });
+        }
+        Ok(())
+    }
+}
+
+/// Manifest requested capabilities that KernelFS does not implement yet.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum UnsupportedCapabilities {
+    #[error(
+        "capabilities.network.allow is not implemented (requested {hosts:?}); \
+         preview1 guests only get preopens + fuel/epoch"
+    )]
+    NetworkAllow { hosts: Vec<String> },
+    #[error(
+        "capabilities.secrets is not implemented (requested ids {ids:?}); \
+         preview1 guests only get preopens + fuel/epoch"
+    )]
+    Secrets { ids: Vec<String> },
 }

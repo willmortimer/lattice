@@ -13,14 +13,15 @@ mod wasi_runtime;
 
 pub use manifest::{
     Capabilities, ExecutionManifest, InputMount, Mounts, NetworkPolicy, SecretHandle,
+    UnsupportedCapabilities,
 };
 pub use materialize::{
     materialize, materialize_with_options, normalize_guest_path, HydrationRecord, HydrationSource,
     MaterializeError, MaterializeOptions, RunDir,
 };
 pub use output_bridge::{
-    collect_output_commit_plan, lattice_proposal_drafts, LatticeProposalAdapter,
-    LatticeProposalDraft, OutputCommitEntry, OutputCommitPlan,
+    classify_content, collect_output_commit_plan, lattice_proposal_drafts, ContentKind,
+    LatticeProposalAdapter, LatticeProposalDraft, OutputCommitEntry, OutputCommitPlan,
 };
 pub use wasi_preopens::{configure_wasi_preopens, WasiPreopenError, WasiPreopenSpec};
 pub use wasi_run::{

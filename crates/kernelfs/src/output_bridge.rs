@@ -2,10 +2,12 @@
 //!
 //! Lattice wiring (host responsibility):
 //! 1. `collect_output_commit_plan` after Wasmtime returns.
-//! 2. `LatticeProposalAdapter::drafts` → one draft per output file.
-//! 3. For each draft, call `lattice_commands::propose_helpers::propose_resource`
+//! 2. Inspect [`OutputCommitEntry::kind`] (`text` vs `bytes`); map only what the
+//!    host propose API supports (UTF-8 `propose_resource` vs binary blob APIs).
+//! 3. `LatticeProposalAdapter::drafts` → one draft per entry (payload retained as bytes).
+//! 4. For each draft, call `lattice_commands::propose_helpers::propose_resource`
 //!    (or `api_propose_resource` / `create_proposal` via `latticed`).
-//! 4. Surface drafts in the existing accept/reject proposal UI — no silent writes.
+//! 5. Surface drafts in the existing accept/reject proposal UI — no silent writes.
 
 use std::fs;
 use std::io::Read;
@@ -16,7 +18,18 @@ use sha2::{Digest, Sha256};
 use crate::manifest::ExecutionManifest;
 use crate::materialize::{normalize_guest_path, MaterializeError};
 
-/// Plan describing proposed workspace writes from a completed run's `/output`.
+/// How a collected artifact should be interpreted by hosts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContentKind {
+    /// Valid UTF-8 text (typical for `propose_resource`).
+    Text,
+    /// Opaque bytes; hosts must use a binary-capable propose path.
+    Bytes,
+}
+
+/// Plan describing proposed workspace writes from a completed run's `/output`
+/// and any allowlisted [`Mounts::work_promote_paths`](crate::Mounts::work_promote_paths).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct OutputCommitPlan {
     pub run_id: String,
@@ -24,12 +37,16 @@ pub struct OutputCommitPlan {
     pub entries: Vec<OutputCommitEntry>,
 }
 
-/// One file produced under `/output` during execution.
+/// One file produced under `/output` or promoted from `/work`.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct OutputCommitEntry {
     pub relative_path: String,
     pub content: Vec<u8>,
     pub sha256: String,
+    /// Classified from payload bytes (UTF-8 → [`ContentKind::Text`]).
+    pub kind: ContentKind,
+    /// Optional MIME-ish hint for hosts (e.g. `text/plain`, `application/octet-stream`).
+    pub content_type_hint: Option<String>,
 }
 
 /// Lattice-facing draft before `propose_resource` / `create_proposal`.
@@ -38,6 +55,7 @@ pub struct LatticeProposalDraft {
     pub summary: String,
     pub resource_path: String,
     pub content: Vec<u8>,
+    pub kind: ContentKind,
 }
 
 /// Adapter that maps [`OutputCommitPlan`] entries to Lattice proposal drafts.
@@ -68,7 +86,8 @@ impl LatticeProposalAdapter {
     }
 }
 
-/// Walk `run_root/output` and collect file payloads for proposal bridging.
+/// Walk `run_root/output` and collect file payloads for proposal bridging,
+/// including allowlisted `/work` promotions from the manifest.
 pub fn collect_output_commit_plan(
     run_root: &Path,
     manifest: &ExecutionManifest,
@@ -85,6 +104,43 @@ pub fn collect_output_commit_plan(
         proposal_target_prefix: manifest.mounts.output_proposal_target.clone(),
         entries,
     })
+}
+
+/// Classify payload bytes for host propose mapping.
+pub fn classify_content(content: &[u8]) -> ContentKind {
+    if std::str::from_utf8(content).is_ok() {
+        ContentKind::Text
+    } else {
+        ContentKind::Bytes
+    }
+}
+
+fn content_type_hint_for(kind: ContentKind, relative_path: &str) -> Option<String> {
+    match kind {
+        ContentKind::Text => {
+            if relative_path.ends_with(".json") {
+                Some("application/json".into())
+            } else if relative_path.ends_with(".md") {
+                Some("text/markdown".into())
+            } else {
+                Some("text/plain".into())
+            }
+        }
+        ContentKind::Bytes => Some("application/octet-stream".into()),
+    }
+}
+
+fn push_entry(entries: &mut Vec<OutputCommitEntry>, relative_path: String, content: Vec<u8>) {
+    let kind = classify_content(&content);
+    let content_type_hint = content_type_hint_for(kind, &relative_path);
+    let sha256 = hex::encode(Sha256::digest(&content));
+    entries.push(OutputCommitEntry {
+        relative_path,
+        content,
+        sha256,
+        kind,
+        content_type_hint,
+    });
 }
 
 fn collect_work_promotions(
@@ -121,12 +177,7 @@ fn collect_work_promotions(
                 source,
             })?;
 
-        let sha256 = hex::encode(Sha256::digest(&content));
-        entries.push(OutputCommitEntry {
-            relative_path,
-            content,
-            sha256,
-        });
+        push_entry(entries, relative_path, content);
     }
 
     Ok(())
@@ -179,12 +230,11 @@ fn walk_output(
                 source,
             })?;
 
-        let sha256 = hex::encode(Sha256::digest(&content));
-        entries.push(OutputCommitEntry {
-            relative_path: rel.to_string_lossy().replace('\\', "/"),
+        push_entry(
+            entries,
+            rel.to_string_lossy().replace('\\', "/"),
             content,
-            sha256,
-        });
+        );
     }
 
     Ok(())
@@ -229,7 +279,7 @@ fn join_proposal_path(prefix: &str, relative: &str) -> String {
     }
 }
 
-/// Map plan entries to Lattice proposal drafts (UTF-8 text resources).
+/// Map plan entries to Lattice proposal drafts (hosts decide how to propose by `kind`).
 pub fn lattice_proposal_drafts(
     plan: &OutputCommitPlan,
     proposal_target_prefix: &str,
@@ -243,6 +293,7 @@ pub fn lattice_proposal_drafts(
                 summary: format!("Create resource {resource_path} from KernelFS run {}", plan.run_id),
                 resource_path,
                 content: entry.content.clone(),
+                kind: entry.kind,
             }
         })
         .collect()
