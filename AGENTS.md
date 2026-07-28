@@ -108,18 +108,33 @@ Tauri) use `.devcontainer/` and `scripts/devcontainer/` — see
 `docs/dev/devcontainer.md`.
 Nix remains the source of truth for the native desktop shell.
 
-Prefer the documented Nix entry points (or [nxr](https://github.com/willmortimer/nxr)
-equivalents — `nxr task ci`, `nxr graph ci`, …):
+Prefer [nxr](https://github.com/willmortimer/nxr) (pinned `v3.1.3`) as the
+command plane. Flake apps stay authoritative leaves; `nxr task` orchestrates.
 
 ```sh
-nxr task ci -j 8
-nix run .#test
-nix run .#lint
-nix run .#check          # monolithic escape hatch; prefer `nxr task ci`
-nix run .#desktop-build
+direnv allow                    # boring .envrc — secrets via nxr contexts
+
+nxr list
+nxr list --namespace client
+nxr list --category validation
+
+nxr task ci -j 8                # authoritative CI DAG (alias: ci-fast)
+nxr task validate -j 8          # faster subset
+nxr task codegen -j 2
+nxr graph ci
+nxr task --affected --base origin/main -j 8
+
+nxr up desktop-web              # local process preview
+nxr desktop-dev                 # Tauri + Vite
+nxr task desktop-install        # context: apple-development
+nxr task desktop-release        # context: apple-release (confirm)
+
+nix run .#check                 # monolithic escape hatch; prefer nxr task ci
 ```
 
-Equivalent focused commands:
+Secrets: `nxr context list` / `apple-*` / `agent-*` — not via `.envrc`.
+
+Equivalent focused commands when debugging a single leaf:
 
 ```sh
 cargo test --workspace
