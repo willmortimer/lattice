@@ -5,10 +5,8 @@
 # PIONEER_API_KEY / OPENAI_API_KEY without a manual `with-secrets` prefix.
 # NXR contexts still use provider=env — they only forward keys already present.
 #
-# When the ecosystem checkout is available, also point
-# LATTICE_DEV_DEMO_OVERLAY at demos/hackathon-pitch so private First Look
-# material (e.g. Hackathon/Pitch.deck) is merged after seed — not shipped in
-# the public lattice demo template.
+# Private demo overlays, First Look reset knobs, and other ecosystem-only
+# runtime config belong in lattice-ecosystem `scripts/exec-for-dev.sh` — not here.
 set -euo pipefail
 
 lattice_root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -18,29 +16,13 @@ if [[ $# -lt 1 ]]; then
   exit 2
 fi
 
-resolve_ecosystem_root() {
-  if [[ -n "${LATTICE_ECOSYSTEM_ROOT:-}" ]]; then
-    printf '%s\n' "$LATTICE_ECOSYSTEM_ROOT"
-    return 0
-  fi
-  if [[ -f "$lattice_root/../secrets/ai.env" || -d "$lattice_root/../demos/hackathon-pitch" ]]; then
-    (cd "$lattice_root/.." && pwd)
-    return 0
-  fi
-  return 1
-}
-
-eco=""
-if eco="$(resolve_ecosystem_root)"; then
-  overlay="${LATTICE_DEV_DEMO_OVERLAY:-$eco/demos/hackathon-pitch}"
-  if [[ -z "${LATTICE_DEV_DEMO_OVERLAY:-}" && -d "$overlay" ]]; then
-    export LATTICE_DEV_DEMO_OVERLAY="$overlay"
-    echo "exec-with-ai-env: private demo overlay $LATTICE_DEV_DEMO_OVERLAY" >&2
-  fi
-fi
-
 if [[ -n "${OPENAI_API_KEY:-}" || -n "${PIONEER_API_KEY:-}" ]]; then
   exec "$@"
+fi
+
+eco="${LATTICE_ECOSYSTEM_ROOT:-}"
+if [[ -z "$eco" && -f "$lattice_root/../secrets/ai.env" ]]; then
+  eco="$(cd "$lattice_root/.." && pwd)"
 fi
 
 if [[ -z "$eco" || ! -f "$eco/secrets/ai.env" ]]; then

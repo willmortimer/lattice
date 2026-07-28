@@ -45,9 +45,10 @@ Open `Hackathon/Pitch.canvas`. Press **Present** (or `P`) to rehearse ordered
 camera scenes from `Pitch.canvas.presentation.json`. Advance with arrow keys;
 `Esc` exits.
 
-When developing from the private ecosystem checkout, `desktop-dev` can merge a
-local `Hackathon/Pitch.deck` overlay for a presenter-native close — that package
-is not part of the public First Look template.
+When developing from the private ecosystem checkout, `scripts/exec-for-dev.sh`
+(or umbrella `nxr desktop-dev`) can merge a local `Hackathon/Pitch.deck` overlay
+for a presenter-native close — that package is not part of the public First Look
+template.
 
 ## Fallback language
 
