@@ -147,6 +147,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "Brief.md",
       "Plan.md",
       "Milestones.canvas",
+      "Outputs/Project Review.deck",
       "Decisions/0001 Example decision.md",
       "Decisions/",
       "Meetings/",
@@ -155,7 +156,8 @@ export const GENERATED_TEMPLATE_CATALOG = [
     "capabilities": [
       "pages",
       "canvas",
-      "sqlite"
+      "sqlite",
+      "deck"
     ],
     "workspaceDefaults": {
       "quickNoteDirectory": "Working",
@@ -960,6 +962,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "CRM/Feedback.data",
       "Hackathon/Launch.data",
       "Hackathon/Demo Script.md",
+      "Hackathon/Pitch.deck",
       "Hackathon/Pitch.canvas",
       "Docs/Product Overview.md",
       "Engineering/Repository.md",
@@ -2319,7 +2322,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "priority": "Medium",
             "owner": "Product",
             "due": "2026-08-18",
-            "notes": "Hackathon/Pitch.canvas is the current honest fallback."
+            "notes": "Hackathon/Pitch.deck is the presenter-native close; Pitch.canvas remains the spatial storyboard."
           },
           {
             "name": "First Look company fixture",
@@ -2671,7 +2674,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "status": "Ready",
             "due": "2026-07-25",
             "demo_risk": "Low",
-            "notes": "Use Hackathon/Pitch.canvas; do not claim a shipped .show format."
+            "notes": "Use Hackathon/Pitch.deck in presentation mode; keep Pitch.canvas for the spatial storyboard."
           }
         ],
         "extraTables": [
