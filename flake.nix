@@ -3,8 +3,10 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    nxr.url = "github:willmortimer/nxr";
+    # Pin releases — do not track nxr main from consumer flakes.
+    nxr.url = "github:willmortimer/nxr/v3.1.3";
     flake-parts.follows = "nxr/flake-parts";
+    flake-schemas.url = "github:DeterminateSystems/flake-schemas";
   };
 
   outputs =
@@ -56,9 +58,16 @@
 
           descriptions = {
             test = "Run cargo test --workspace";
-            lint = "Run Clippy (-D warnings) and rustfmt --check";
+            rust-test = "Run cargo test --workspace";
+            rust-fmt-check = "cargo fmt --all --check";
+            rust-clippy = "cargo clippy --workspace --all-targets -D warnings";
+            lint = "Clippy + rustfmt check (compat; prefer rust-clippy ∥ rust-fmt-check)";
             fmt = "Format all Rust sources";
-            check = "CI gate: fmt, clippy, tests, desktop build";
+            check = "Monolithic escape hatch: fmt, clippy, tests, desktop build";
+            desktop-ui-test = "Vitest for the desktop frontend";
+            generated-theme-check = "Compile themes and fail on git drift";
+            generated-template-check = "Compile templates and fail on git drift";
+            flake-check = "nix flake check";
             site-dev = "Moved: marketing site lives in private lattice-ecosystem";
             site-build = "Moved: marketing site lives in private lattice-ecosystem";
             site-deploy = "Moved: marketing site lives in private lattice-ecosystem";
@@ -75,12 +84,23 @@
             desktop-ui-build = "Build the desktop Vite frontend only";
             desktop-install = "macOS: signed .app with voice → /Applications (Apple Development)";
             desktop-release = "macOS: Developer ID sign + notarytool + staple + DMG";
+            latticed = "Build and run local latticed (debug)";
+            agentd = "Build and run local lattice-agentd (debug)";
             ok = "No-op success (nxr task DAG join)";
           };
 
           scripts = {
             test = ''
               exec cargo test --workspace "$@"
+            '';
+            rust-test = ''
+              exec cargo test --workspace "$@"
+            '';
+            rust-fmt-check = ''
+              exec cargo fmt --all --check "$@"
+            '';
+            rust-clippy = ''
+              exec cargo clippy --workspace --all-targets -- -D warnings "$@"
             '';
             lint = ''
               cargo clippy --workspace --all-targets -- -D warnings
@@ -89,12 +109,35 @@
             fmt = ''
               exec cargo fmt --all "$@"
             '';
+            # Escape hatch — prefer `nxr task ci` (parallel DAG).
             check = ''
               cargo fmt --all --check
               cargo clippy --workspace --all-targets -- -D warnings
               cargo test --workspace
               pnpm install --frozen-lockfile
               pnpm --filter @lattice/desktop build
+            '';
+            desktop-ui-test = ''
+              pnpm install --frozen-lockfile
+              exec pnpm --filter @lattice/desktop test "$@"
+            '';
+            generated-theme-check = ''
+              pnpm install --frozen-lockfile
+              pnpm --filter @lattice/desktop compile-theme
+              git diff --exit-code -- \
+                apps/desktop/src/theme-tokens.css \
+                apps/desktop/src/theme-tokens.ts
+            '';
+            generated-template-check = ''
+              pnpm install --frozen-lockfile
+              pnpm compile-templates
+              git diff --exit-code -- \
+                crates/lattice-core/src/template_catalog.generated.rs \
+                apps/desktop/src/templateCatalog.generated.ts \
+                apps/desktop/src/demoWorkspace.generated.ts
+            '';
+            flake-check = ''
+              exec nix flake check -L "$@"
             '';
             site-dev = ''
               echo "Marketing site moved to private lattice-ecosystem (site/)." >&2
@@ -128,7 +171,7 @@
             '';
             desktop-web = ''
               pnpm install
-              exec pnpm --filter @lattice/desktop dev "$@"
+              exec pnpm --filter @lattice/desktop dev -- --host 127.0.0.1 --port 5173 "$@"
             '';
             desktop-perf = ''
               pnpm install
@@ -162,6 +205,14 @@
             desktop-ui-build = ''
               pnpm install --frozen-lockfile
               exec pnpm --filter @lattice/desktop build "$@"
+            '';
+            latticed = ''
+              cargo build -p lattice-daemon --bin latticed
+              exec target/debug/latticed "$@"
+            '';
+            agentd = ''
+              cargo build -p lattice-agentd --bin lattice-agentd
+              exec target/debug/lattice-agentd "$@"
             '';
             desktop-install = ''
               if [ "$(uname -s)" != "Darwin" ]; then
@@ -518,6 +569,18 @@
               siteToolchain
             else if builtins.elem name siteScriptNames then
               siteNodeToolchain
+            else if name == "flake-check" then
+              toolchain ++ [
+                pkgs.nix
+                pkgs.git
+              ]
+            else if
+              builtins.elem name [
+                "generated-theme-check"
+                "generated-template-check"
+              ]
+            then
+              toolchain ++ [ pkgs.git ]
             else
               toolchain;
 
@@ -546,6 +609,131 @@
             ];
           };
 
+          # Secrets are delivered only to tasks that declare a context — not via .envrc.
+          nxr.contexts = {
+            agent-openai = {
+              environment = {
+                mode = "inherit";
+                unset = [
+                  "PIONEER_API_KEY"
+                  "APPLE_ID"
+                  "APPLE_PASSWORD"
+                  "APPLE_TEAM_ID"
+                  "APPLE_SIGNING_IDENTITY"
+                  "CLOUDFLARE_API_TOKEN"
+                ];
+              };
+              secrets = {
+                OPENAI_API_KEY = {
+                  ref = "OPENAI_API_KEY";
+                  provider = "env";
+                  delivery = "env";
+                };
+              };
+            };
+            agent-pioneer = {
+              environment = {
+                mode = "inherit";
+                unset = [
+                  "OPENAI_API_KEY"
+                  "APPLE_ID"
+                  "APPLE_PASSWORD"
+                  "APPLE_TEAM_ID"
+                  "APPLE_SIGNING_IDENTITY"
+                  "CLOUDFLARE_API_TOKEN"
+                ];
+              };
+              secrets = {
+                PIONEER_API_KEY = {
+                  ref = "PIONEER_API_KEY";
+                  provider = "env";
+                  delivery = "env";
+                };
+              };
+            };
+            apple-development = {
+              environment = {
+                mode = "inherit";
+              };
+              secrets = {
+                APPLE_SIGNING_IDENTITY = {
+                  ref = "APPLE_SIGNING_IDENTITY";
+                  provider = "env";
+                  delivery = "env";
+                };
+                APPLE_TEAM_ID = {
+                  ref = "APPLE_TEAM_ID";
+                  provider = "env";
+                  delivery = "env";
+                };
+              };
+            };
+            apple-release = {
+              environment = {
+                mode = "clean";
+                keep = [
+                  "HOME"
+                  "PATH"
+                  "TMPDIR"
+                  "SSH_AUTH_SOCK"
+                  "USER"
+                  "LANG"
+                  "TERM"
+                  "NIX_SSL_CERT_FILE"
+                  "SSL_CERT_FILE"
+                  "DEVELOPER_DIR"
+                  "SDKROOT"
+                  "LATTICE_RELEASE_VALIDATE_ONLY"
+                  "LATTICE_INSTALL_DIR"
+                ];
+              };
+              secrets = {
+                APPLE_ID = {
+                  ref = "APPLE_ID";
+                  provider = "env";
+                  delivery = "env";
+                };
+                APPLE_PASSWORD = {
+                  ref = "APPLE_PASSWORD";
+                  provider = "env";
+                  delivery = "env";
+                };
+                APPLE_TEAM_ID = {
+                  ref = "APPLE_TEAM_ID";
+                  provider = "env";
+                  delivery = "env";
+                };
+                APPLE_SIGNING_IDENTITY = {
+                  ref = "APPLE_SIGNING_IDENTITY";
+                  provider = "env";
+                  delivery = "env";
+                };
+              };
+              confirm = true;
+            };
+          };
+
+          nxr.processes = {
+            desktop-web = {
+              app = "desktop-web";
+              readiness = {
+                http = {
+                  url = "http://127.0.0.1:5173";
+                };
+              };
+              restart = "on-failure";
+            };
+            latticed = {
+              app = "latticed";
+              restart = "on-failure";
+            };
+            agentd = {
+              app = "agentd";
+              dependsOn = [ "latticed" ];
+              restart = "on-failure";
+            };
+          };
+
           nxr.apps = lib.mapAttrs (name: script: {
             description = descriptions.${name};
             runtimeInputs = runtimeInputsFor name;
@@ -554,133 +742,382 @@
 
           # Orchestration around flake apps. Leaf apps stay authoritative;
           # `nxr task` / `nxr graph` use this metadata.
-          nxr.tasks = {
-            test = {
-              description = "Run cargo tests";
-              app = "test";
-              category = "validation";
-            };
-            lint = {
-              description = "Clippy + rustfmt check";
-              app = "lint";
-              category = "validation";
-            };
-            fmt = {
-              description = "Format Rust sources";
-              app = "fmt";
-              category = "dev";
-            };
-            check = {
-              description = "Monolithic CI gate";
-              app = "check";
-              category = "validation";
-              aliases = [ "ci" ];
-            };
-            validate = {
-              description = "Parallel validation (lint ∥ test ∥ desktop UI)";
-              dependsOn = [
-                "lint"
-                "test"
-                "desktop-ui-build"
+          # `paths` = affected ownership; `inputs.paths` = workspace-cache identity.
+          nxr.tasks =
+            let
+              rustPaths = [
+                "Cargo.toml"
+                "Cargo.lock"
+                "apps/**/*.rs"
+                "crates/**/*.rs"
               ];
-              app = "ok";
-              category = "validation";
-            };
-            compile-theme = {
-              description = "Compile theme tokens";
-              app = "compile-theme";
-              category = "codegen";
-            };
-            compile-templates = {
-              description = "Compile workspace templates";
-              app = "compile-templates";
-              category = "codegen";
-            };
-            prepare-first-look = {
-              description = "Seed First Look demo datasets and regenerate catalogs";
-              app = "prepare-first-look";
-              category = "dev";
-              aliases = [ "prep-demo" ];
-            };
-            codegen = {
-              description = "Compile theme tokens and workspace templates";
-              dependsOn = [
-                "compile-theme"
-                "compile-templates"
+              desktopUiPaths = [
+                "apps/desktop/**"
+                "packages/**"
+                "pnpm-lock.yaml"
+                "package.json"
+                "pnpm-workspace.yaml"
               ];
-              app = "ok";
-              category = "codegen";
-              aliases = [ "compile" ];
+              cargoLock = {
+                cpu = 2;
+                memory = "4GiB";
+                exclusive = [ "cargo-target" ];
+              };
+              pnpmLock = {
+                exclusive = [ "pnpm-store" ];
+              };
+            in
+            {
+              test = {
+                description = "Run cargo tests";
+                app = "test";
+                category = "validation";
+                paths = rustPaths;
+                resources = cargoLock;
+              };
+              rust-test = {
+                description = "Run cargo tests";
+                app = "rust-test";
+                category = "validation";
+                paths = rustPaths;
+                resources = cargoLock;
+              };
+              rust-fmt-check = {
+                description = "cargo fmt --check";
+                app = "rust-fmt-check";
+                category = "validation";
+                paths = rustPaths;
+              };
+              rust-clippy = {
+                description = "cargo clippy -D warnings";
+                app = "rust-clippy";
+                category = "validation";
+                paths = rustPaths;
+                resources = cargoLock;
+              };
+              lint = {
+                description = "Clippy + rustfmt check (compat)";
+                app = "lint";
+                category = "validation";
+                paths = rustPaths;
+                resources = cargoLock;
+              };
+              fmt = {
+                description = "Format Rust sources";
+                app = "fmt";
+                category = "development";
+                paths = rustPaths;
+              };
+              # Escape hatch — prefer `nxr task ci`.
+              check = {
+                description = "Monolithic CI gate (escape hatch)";
+                app = "check";
+                category = "validation";
+              };
+              ci = {
+                description = "Authoritative CI DAG (parallel leaves)";
+                app = "ok";
+                dependsOn = [
+                  "rust-fmt-check"
+                  "rust-clippy"
+                  "rust-test"
+                  "desktop-ui-test"
+                  "desktop-ui-build"
+                  "generated-theme-check"
+                  "generated-template-check"
+                  "flake-check"
+                ];
+                category = "validation";
+                aliases = [ "ci-fast" ];
+              };
+              validate = {
+                description = "Fast parallel validation (lint ∥ test ∥ desktop UI)";
+                dependsOn = [
+                  "rust-clippy"
+                  "rust-fmt-check"
+                  "rust-test"
+                  "desktop-ui-build"
+                ];
+                app = "ok";
+                category = "validation";
+              };
+              desktop-ui-test = {
+                description = "Desktop Vitest";
+                app = "desktop-ui-test";
+                category = "validation";
+                paths = desktopUiPaths;
+                resources = {
+                  cpu = 2;
+                  memory = "2GiB";
+                  exclusive = [ "pnpm-store" ];
+                };
+              };
+              generated-theme-check = {
+                description = "Theme tokens match committed outputs";
+                app = "generated-theme-check";
+                category = "validation";
+                paths = [
+                  "themes/**"
+                  "scripts/compile-theme.mjs"
+                  "apps/desktop/src/theme-tokens.css"
+                  "apps/desktop/src/theme-tokens.ts"
+                ];
+                resources = {
+                  exclusive = [
+                    "pnpm-store"
+                    "theme-generated"
+                  ];
+                };
+              };
+              generated-template-check = {
+                description = "Template catalogs match committed outputs";
+                app = "generated-template-check";
+                category = "validation";
+                paths = [
+                  "templates/**"
+                  "apps/desktop/src/templateCatalog.generated.ts"
+                  "apps/desktop/src/demoWorkspace.generated.ts"
+                  "crates/lattice-core/src/template_catalog.generated.rs"
+                ];
+                resources = {
+                  exclusive = [
+                    "pnpm-store"
+                    "template-generated"
+                  ];
+                };
+              };
+              flake-check = {
+                description = "nix flake check";
+                app = "flake-check";
+                category = "validation";
+                paths = [
+                  "flake.nix"
+                  "flake.lock"
+                ];
+              };
+              compile-theme = {
+                description = "Compile theme tokens";
+                app = "compile-theme";
+                category = "codegen";
+                paths = [
+                  "themes/**"
+                  "scripts/compile-theme.mjs"
+                ];
+                inputs = {
+                  paths = [
+                    "themes/**"
+                    "scripts/compile-theme.mjs"
+                    "package.json"
+                    "pnpm-lock.yaml"
+                    "apps/desktop/package.json"
+                  ];
+                };
+                outputs = [
+                  {
+                    path = "apps/desktop/src/theme-tokens.css";
+                    mode = "verify-only";
+                  }
+                  {
+                    path = "apps/desktop/src/theme-tokens.ts";
+                    mode = "verify-only";
+                  }
+                ];
+                cache = {
+                  mode = "local";
+                  version = "1";
+                };
+                resources = {
+                  exclusive = [
+                    "pnpm-store"
+                    "theme-generated"
+                  ];
+                };
+              };
+              compile-templates = {
+                description = "Compile workspace templates";
+                app = "compile-templates";
+                category = "codegen";
+                paths = [ "templates/**" ];
+                inputs = {
+                  paths = [
+                    "templates/**"
+                    "package.json"
+                    "pnpm-lock.yaml"
+                  ];
+                };
+                outputs = [
+                  {
+                    path = "crates/lattice-core/src/template_catalog.generated.rs";
+                    mode = "verify-only";
+                  }
+                  {
+                    path = "apps/desktop/src/templateCatalog.generated.ts";
+                    mode = "verify-only";
+                  }
+                  {
+                    path = "apps/desktop/src/demoWorkspace.generated.ts";
+                    mode = "verify-only";
+                  }
+                ];
+                cache = {
+                  mode = "local";
+                  version = "1";
+                };
+                resources = {
+                  exclusive = [
+                    "pnpm-store"
+                    "template-generated"
+                  ];
+                };
+              };
+              prepare-first-look = {
+                description = "Seed First Look demo datasets and regenerate catalogs";
+                app = "prepare-first-look";
+                category = "development";
+                aliases = [ "prep-demo" ];
+              };
+              codegen = {
+                description = "Compile theme tokens and workspace templates";
+                dependsOn = [
+                  "compile-theme"
+                  "compile-templates"
+                ];
+                app = "ok";
+                category = "codegen";
+                aliases = [ "compile" ];
+              };
+              docs-sync = {
+                description = "Sync docs/ into the site";
+                app = "docs-sync";
+                category = "site";
+              };
+              site-dev = {
+                description = "Astro marketing/docs site (dev)";
+                app = "site-dev";
+                category = "site";
+              };
+              site-build = {
+                description = "Build marketing/docs site";
+                app = "site-build";
+                category = "site";
+              };
+              site-deploy = {
+                description = "Deploy marketing/docs site to Cloudflare Pages";
+                app = "site-deploy";
+                category = "site";
+                aliases = [ "deploy-site" ];
+              };
+              desktop-dev = {
+                description = "Tauri + Vite HMR";
+                app = "desktop-dev";
+                category = "development";
+                resources = {
+                  exclusive = [
+                    "cargo-target"
+                    "pnpm-store"
+                  ];
+                };
+              };
+              desktop-web = {
+                description = "Browser-only demo UI";
+                app = "desktop-web";
+                category = "development";
+                resources = pnpmLock;
+              };
+              desktop = {
+                description = "Native without Vite";
+                app = "desktop";
+                category = "development";
+              };
+              desktop-build = {
+                description = "Unbundled release binary";
+                app = "desktop-build";
+                category = "development";
+                resources = {
+                  cpu = 4;
+                  memory = "8GiB";
+                  exclusive = [
+                    "cargo-target"
+                    "pnpm-store"
+                  ];
+                };
+              };
+              desktop-ui-build = {
+                description = "Build desktop frontend (Vite)";
+                app = "desktop-ui-build";
+                category = "validation";
+                paths = desktopUiPaths;
+                resources = {
+                  cpu = 2;
+                  memory = "4GiB";
+                  exclusive = [ "pnpm-store" ];
+                };
+              };
+              desktop-install = {
+                description = "Sign and install Lattice.app locally (macOS)";
+                app = "desktop-install";
+                category = "release";
+                aliases = [ "install" ];
+                context = "apple-development";
+                resources = {
+                  cpu = 4;
+                  memory = "8GiB";
+                  exclusive = [
+                    "cargo-target"
+                    "pnpm-store"
+                    "xcode-derived-data"
+                    "apple-keychain"
+                  ];
+                };
+              };
+              desktop-release = {
+                description = "Developer ID notarize + DMG (macOS)";
+                app = "desktop-release";
+                category = "release";
+                aliases = [ "release" ];
+                context = "apple-release";
+                resources = {
+                  cpu = 4;
+                  memory = "8GiB";
+                  network = true;
+                  exclusive = [
+                    "cargo-target"
+                    "pnpm-store"
+                    "xcode-derived-data"
+                    "apple-keychain"
+                    "apple-notary"
+                  ];
+                };
+              };
+              desktop-perf = {
+                description = "Browser perf harness";
+                app = "desktop-perf";
+                category = "validation";
+                resources = pnpmLock;
+              };
+              desktop-perf-tauri = {
+                description = "Tauri WebView perf harness";
+                app = "desktop-perf-tauri";
+                category = "validation";
+              };
+              latticed = {
+                description = "Run local latticed";
+                app = "latticed";
+                category = "development";
+                resources = {
+                  exclusive = [ "cargo-target" ];
+                };
+              };
+              agentd = {
+                description = "Run local lattice-agentd";
+                app = "agentd";
+                category = "development";
+                context = "agent-pioneer";
+                resources = {
+                  exclusive = [ "cargo-target" ];
+                };
+              };
             };
-            docs-sync = {
-              description = "Sync docs/ into the site";
-              app = "docs-sync";
-              category = "site";
-            };
-            site-dev = {
-              description = "Astro marketing/docs site (dev)";
-              app = "site-dev";
-              category = "site";
-            };
-            site-build = {
-              description = "Build marketing/docs site";
-              app = "site-build";
-              category = "site";
-            };
-            site-deploy = {
-              description = "Deploy marketing/docs site to Cloudflare Pages";
-              app = "site-deploy";
-              category = "site";
-              aliases = [ "deploy-site" ];
-            };
-            desktop-dev = {
-              description = "Tauri + Vite HMR";
-              app = "desktop-dev";
-              category = "desktop";
-            };
-            desktop-web = {
-              description = "Browser-only demo UI";
-              app = "desktop-web";
-              category = "desktop";
-            };
-            desktop = {
-              description = "Native without Vite";
-              app = "desktop";
-              category = "desktop";
-            };
-            desktop-build = {
-              description = "Unbundled release binary";
-              app = "desktop-build";
-              category = "desktop";
-            };
-            desktop-ui-build = {
-              description = "Build desktop frontend (Vite)";
-              app = "desktop-ui-build";
-              category = "validation";
-            };
-            desktop-install = {
-              description = "Sign and install Lattice.app locally (macOS)";
-              app = "desktop-install";
-              category = "desktop";
-              aliases = [ "install" ];
-            };
-            desktop-release = {
-              description = "Developer ID notarize + DMG (macOS)";
-              app = "desktop-release";
-              category = "desktop";
-              aliases = [ "release" ];
-            };
-            desktop-perf = {
-              description = "Browser perf harness";
-              app = "desktop-perf";
-              category = "desktop";
-            };
-            desktop-perf-tauri = {
-              description = "Tauri WebView perf harness";
-              app = "desktop-perf-tauri";
-              category = "desktop";
-            };
-          };
 
           # Day-to-day app development (Rust, desktop, site local preview).
           # direnv `use flake` loads this shell.
@@ -689,8 +1126,9 @@
             packages = toolchain ++ lib.attrValues defaultLatticeScripts;
             shellHook = ''
               echo "lattice dev shell — rust $(rustc --version | cut -d' ' -f2), node $(node --version), pnpm $(pnpm --version)"
-              echo "runner: nxr list | nxr <app> | nxr task <name> [-j N] | nxr graph <name>"
+              echo "runner: nxr list | nxr task ci [-j N] | nxr graph ci | nxr up desktop-web"
               echo "legacy: lattice-{test,lint,fmt,check,compile-*,desktop*} (also: nix run .#<app>)"
+              echo "secrets: nxr contexts (agent-*, apple-*); .envrc stays boring"
               echo "site / Cloudflare: private lattice-ecosystem repo"
             '';
           };

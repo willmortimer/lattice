@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "projects": {
+    "client": {
+      "description": "Public Lattice desktop / daemon / CLI",
+      "apps": [
+        "test",
+        "rust-test",
+        "rust-fmt-check",
+        "rust-clippy",
+        "lint",
+        "fmt",
+        "check",
+        "desktop-ui-test",
+        "desktop-ui-build",
+        "desktop-dev",
+        "desktop-web",
+        "desktop",
+        "desktop-build",
+        "desktop-install",
+        "desktop-release",
+        "desktop-perf",
+        "desktop-perf-tauri",
+        "latticed",
+        "agentd",
+        "compile-theme",
+        "compile-templates",
+        "prepare-first-look",
+        "generated-theme-check",
+        "generated-template-check",
+        "flake-check",
+        "ok"
+      ],
+      "tasks": [
+        "ci",
+        "validate",
+        "codegen",
+        "rust-test",
+        "rust-fmt-check",
+        "rust-clippy",
+        "desktop-ui-test",
+        "desktop-ui-build",
+        "desktop-release",
+        "desktop-install",
+        "compile-theme",
+        "compile-templates"
+      ]
+    },
+    "codegen": {
+      "description": "Generated theme / template catalogs",
+      "apps": ["compile-theme", "compile-templates", "generated-theme-check", "generated-template-check"],
+      "tasks": ["codegen", "compile-theme", "compile-templates", "generated-theme-check", "generated-template-check"]
+    },
+    "release": {
+      "description": "macOS install and notarized release",
+      "apps": ["desktop-install", "desktop-release"],
+      "tasks": ["desktop-install", "desktop-release"]
+    }
+  }
+}

@@ -109,12 +109,13 @@ Tauri) use `.devcontainer/` and `scripts/devcontainer/` — see
 Nix remains the source of truth for the native desktop shell.
 
 Prefer the documented Nix entry points (or [nxr](https://github.com/willmortimer/nxr)
-equivalents — `nxr test`, `nxr task check`, …):
+equivalents — `nxr task ci`, `nxr graph ci`, …):
 
 ```sh
+nxr task ci -j 8
 nix run .#test
 nix run .#lint
-nix run .#check
+nix run .#check          # monolithic escape hatch; prefer `nxr task ci`
 nix run .#desktop-build
 ```
 

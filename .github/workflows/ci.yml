@@ -1,0 +1,41 @@
+name: Client CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: lattice-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: NXR task ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: DeterminateSystems/determinate-nix-action@v3
+
+      # Public repo: FlakeHub Cache OIDC is unavailable for fork PRs.
+      - uses: DeterminateSystems/flakehub-cache-action@main
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+
+      - uses: DeterminateSystems/flake-checker-action@main
+
+      - name: Run affected CI graph
+        run: |
+          set -euo pipefail
+          BASE="origin/${{ github.base_ref || 'main' }}"
+          if git rev-parse --verify "$BASE" >/dev/null 2>&1; then
+            nix run .#nxr -- task --affected --base "$BASE" -j 4
+          else
+            nix run .#nxr -- task ci -j 4
+          fi
