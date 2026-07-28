@@ -116,6 +116,7 @@ Run them from the repo root (they use relative paths).
 | `lint` | clippy with `-D warnings` + `rustfmt --check` |
 | `fmt` | format all Rust code |
 | `check` | everything CI runs: fmt check, clippy, tests, `pnpm install --frozen-lockfile`, desktop UI build |
+| `js-deps` | Bootstrap `pnpm install` and refresh the js-deps stamp (NXR task dependency for JS leaves) |
 | `site-dev` / `site-build` / `site-deploy` / `docs-sync` | **Moved** to private `lattice-ecosystem` (stubs exit with a pointer) |
 | `compile-theme` | compile `themes/*.theme.yaml` → desktop/site CSS (+ Pixi) tokens |
 | `compile-templates` | validate template packages → embedded Rust and browser catalogs |
@@ -131,12 +132,32 @@ Run them from the repo root (they use relative paths).
 | `desktop-release` | macOS: same `.app` build + sidecars as install, **Developer ID** codesign, `notarytool` submit, staple, `hdiutil` DMG under `target/release/bundle/dmg/` |
 | `ok` | no-op success (join node for nxr task DAGs) |
 
+### JS dependencies (stamp cache)
+
+Hot desktop launches (`desktop-dev`, `desktop-web`, `desktop`) and other JS
+leaves call `scripts/ensure-js-deps.sh` instead of unconditional `pnpm install`.
+The script hashes `pnpm-lock.yaml`, root/workspace `package.json` files,
+`apps/desktop/package.json`, `packages/*/package.json`, and the active `pnpm`
+version into `node_modules/.lattice-js-deps.stamp`. When the stamp matches and
+`node_modules` exists, install is skipped.
+
+Bootstrap or force a fresh install after lockfile or workspace changes:
+
+```sh
+nxr task js-deps          # NXR DAG dependency for validation/codegen tasks
+nix run .#js-deps         # same leaf, always installs + refreshes stamp
+```
+
+`--dev` mode (hot launches) uses `pnpm install --prefer-offline` without
+`--frozen-lockfile`; bootstrap and CI leaves use frozen lockfile installs.
+
 ### Notable tasks (orchestration)
 
 Tasks coordinate apps; they do not replace them. Useful graphs:
 
 | Task | What it runs |
 | --- | --- |
+| `js-deps` | Bootstrap pnpm install + refresh js-deps stamp |
 | `codegen` (alias `compile`) | `compile-theme` ∥ `compile-templates` |
 | `prepare-first-look` (alias `prep-demo`) | seed First Look datasets + `compile-templates` + path sanity check |
 | `validate` | `lint` ∥ `test` ∥ `desktop-ui-build` |
