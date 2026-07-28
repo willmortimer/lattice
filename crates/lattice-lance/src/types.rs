@@ -6,6 +6,9 @@ pub const DEFAULT_ELEMENT_KIND: &str = "chunk";
 /// Stable identifier for the workspace search-elements dataset.
 pub const SEARCH_ELEMENTS_DATASET_ID: &str = "search-elements";
 
+/// Pipeline identity for search-elements vector projection writes.
+pub const SEARCH_ELEMENTS_PIPELINE_VERSION: &str = "search-elements-v1";
+
 /// Reference to a multimodal dataset within a workspace workload.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DatasetRef {
@@ -132,6 +135,18 @@ pub struct DatasetSnapshot {
     pub dataset_id: String,
     /// Lance dataset version placeholder until T2 wires real metadata.
     pub lance_version: u64,
+    pub created_at_ms: i64,
+}
+
+/// Fingerprinted snapshot tying Lance vectors to source chunk identities.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DerivedDatasetSnapshot {
+    pub dataset_id: String,
+    pub lance_version: u64,
+    pub namespace_key: String,
+    /// Stable fingerprint of source chunk identities+hashes at snapshot time.
+    pub source_fingerprint: String,
+    pub pipeline_version: String,
     pub created_at_ms: i64,
 }
 

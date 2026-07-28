@@ -3,7 +3,7 @@ use rusqlite::Connection;
 use crate::error::Result;
 
 pub(crate) const INDEX_FILENAME: &str = "index.sqlite";
-pub(crate) const SCHEMA_VERSION: i64 = 5;
+pub(crate) const SCHEMA_VERSION: i64 = 6;
 
 pub(crate) fn init_schema(conn: &Connection) -> Result<()> {
     conn.execute_batch(
@@ -122,7 +122,16 @@ pub(crate) fn init_schema(conn: &Connection) -> Result<()> {
             PRIMARY KEY (namespace_id, chunk_id)
         );
         CREATE INDEX IF NOT EXISTS chunk_vectors_namespace_idx
-            ON chunk_vectors(namespace_id);",
+            ON chunk_vectors(namespace_id);
+        CREATE TABLE IF NOT EXISTS derived_dataset_snapshots (
+            dataset_id          TEXT NOT NULL,
+            namespace_key       TEXT NOT NULL,
+            lance_version       INTEGER NOT NULL,
+            source_fingerprint  TEXT NOT NULL,
+            pipeline_version    TEXT NOT NULL,
+            created_at_ms       INTEGER NOT NULL,
+            PRIMARY KEY (dataset_id, namespace_key)
+        );",
     )?;
 
     // v0 databases predate generic metadata and source spans. Use additive
@@ -430,5 +439,60 @@ mod tests {
         assert!(table_columns(&conn, "chunk_vectors")
             .iter()
             .any(|column| column == "blob"));
+    }
+
+    #[test]
+    fn migrates_v5_index_schema_to_derived_snapshots() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE resources (id INTEGER PRIMARY KEY, path TEXT UNIQUE,
+                kind TEXT NOT NULL DEFAULT 'page', format_profile TEXT NOT NULL DEFAULT 'markdown',
+                mime TEXT, size INTEGER NOT NULL DEFAULT 0, revision TEXT, encoding TEXT,
+                parser_status TEXT NOT NULL DEFAULT 'metadata-only', text_truncated INTEGER NOT NULL DEFAULT 0,
+                title TEXT NOT NULL DEFAULT '', headings TEXT NOT NULL DEFAULT '',
+                body TEXT NOT NULL DEFAULT '', content_hash TEXT);
+             CREATE VIRTUAL TABLE resources_fts USING fts5(title, headings, body,
+                content='resources', content_rowid='id');
+             CREATE TABLE search_chunks (
+                id INTEGER PRIMARY KEY, chunk_id TEXT NOT NULL UNIQUE, resource_id INTEGER NOT NULL,
+                block_id TEXT, ordinal INTEGER NOT NULL, heading_path_json TEXT NOT NULL,
+                source_start_byte INTEGER NOT NULL, source_end_byte INTEGER NOT NULL,
+                text TEXT NOT NULL, content_hash TEXT NOT NULL, chunker_version TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT '', heading_path TEXT NOT NULL DEFAULT '',
+                tags TEXT NOT NULL DEFAULT '', sensitivity TEXT NOT NULL DEFAULT 'workspace',
+                export_policy TEXT NOT NULL DEFAULT 'ask', created_at_ms INTEGER NOT NULL,
+                updated_at_ms INTEGER NOT NULL);
+             CREATE VIRTUAL TABLE search_chunks_fts USING fts5(
+                title, heading_path, text, tags, content='search_chunks', content_rowid='id');
+             CREATE TABLE embedding_namespaces (
+                id INTEGER PRIMARY KEY, namespace_key TEXT NOT NULL UNIQUE,
+                provider_id TEXT NOT NULL, model_id TEXT NOT NULL, model_revision TEXT NOT NULL,
+                artifact_sha256 TEXT NOT NULL, dimensions INTEGER NOT NULL,
+                native_dimensions INTEGER NOT NULL, distance_metric TEXT NOT NULL,
+                pooling TEXT NOT NULL, normalized INTEGER NOT NULL,
+                instruction_version TEXT NOT NULL, chunker_version TEXT NOT NULL,
+                created_at_ms INTEGER NOT NULL);
+             CREATE TABLE chunk_embedding_state (
+                chunk_id TEXT NOT NULL, namespace_id INTEGER NOT NULL,
+                embedding_input_hash TEXT NOT NULL, status TEXT NOT NULL,
+                last_error TEXT, indexed_at_ms INTEGER,
+                PRIMARY KEY (chunk_id, namespace_id));
+             CREATE TABLE chunk_vectors (
+                namespace_id INTEGER NOT NULL, chunk_id TEXT NOT NULL,
+                dims INTEGER NOT NULL, blob BLOB NOT NULL,
+                PRIMARY KEY (namespace_id, chunk_id));
+             PRAGMA user_version = 5;",
+        )
+        .unwrap();
+
+        init_schema(&conn).unwrap();
+
+        let version: i64 = conn
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+        assert!(table_columns(&conn, "derived_dataset_snapshots")
+            .iter()
+            .any(|column| column == "source_fingerprint"));
     }
 }

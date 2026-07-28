@@ -277,7 +277,7 @@ impl SessionSemanticWorker {
     }
 
     /// Map worker flags + optional pending count into the Settings-facing status.
-    pub fn status(&self, pending_chunks: Option<u64>) -> SemanticStatus {
+    pub fn status(&self, pending_chunks: Option<u64>, vectors_behind: bool) -> SemanticStatus {
         map_worker_status(
             self.shared.stop.load(Ordering::SeqCst),
             self.shared.degraded.load(Ordering::SeqCst),
@@ -288,6 +288,7 @@ impl SessionSemanticWorker {
                 .expect("semantic error poisoned")
                 .clone(),
             pending_chunks,
+            vectors_behind,
         )
     }
 }
@@ -299,6 +300,7 @@ pub fn map_worker_status(
     phase: impl Into<MappedWorkerPhase>,
     last_error: Option<String>,
     pending_chunks: Option<u64>,
+    vectors_behind: bool,
 ) -> SemanticStatus {
     let phase = phase.into();
     if stopped {
@@ -325,16 +327,27 @@ pub fn map_worker_status(
             message: None,
             progress_percent: None,
         },
-        MappedWorkerPhase::Idle => SemanticStatus {
-            state: if pending_chunks.unwrap_or(0) > 0 {
-                SemanticStatusState::Indexing
+        MappedWorkerPhase::Idle => {
+            if vectors_behind && pending_chunks.unwrap_or(0) == 0 {
+                SemanticStatus {
+                    state: SemanticStatusState::Indexing,
+                    pending_chunks,
+                    message: Some("vectors behind workspace".into()),
+                    progress_percent: None,
+                }
             } else {
-                SemanticStatusState::Ready
-            },
-            pending_chunks,
-            message: None,
-            progress_percent: None,
-        },
+                SemanticStatus {
+                    state: if pending_chunks.unwrap_or(0) > 0 {
+                        SemanticStatusState::Indexing
+                    } else {
+                        SemanticStatusState::Ready
+                    },
+                    pending_chunks,
+                    message: None,
+                    progress_percent: None,
+                }
+            }
+        }
         MappedWorkerPhase::Failed => SemanticStatus {
             state: SemanticStatusState::Failed,
             pending_chunks,
@@ -598,8 +611,8 @@ mod tests {
     use lattice_embedding::{
         DistanceMetric, EmbeddingSpecification, FakeEmbeddingProvider, PoolingStrategy,
     };
-    use lattice_index::VectorBackend;
     use lattice_lance::search_elements_dataset_path;
+    use rusqlite::Connection;
     use std::time::{Duration, Instant};
 
     fn init_workspace() -> tempfile::TempDir {
@@ -749,7 +762,7 @@ mod tests {
     }
 
     #[test]
-    fn lance_backend_session_hybrid_search_embeds_and_returns_semantic_ranks() {
+    fn lance_session_hybrid_search_embeds_and_returns_semantic_ranks() {
         let dir = init_workspace();
         std::fs::write(
             dir.path().join("Seed.md"),
@@ -758,9 +771,7 @@ mod tests {
         .unwrap();
 
         let runtime = LatticeRuntime::new();
-        let session = runtime
-            .open_workspace_session_with_vector_backend(dir.path(), VectorBackend::Lance)
-            .unwrap();
+        let session = runtime.open_workspace_session(dir.path()).unwrap();
         session.rebuild_index().unwrap();
 
         session
@@ -969,35 +980,46 @@ mod tests {
     #[test]
     fn map_worker_status_covers_lifecycle_and_degrade() {
         assert_eq!(
-            map_worker_status(true, false, MappedWorkerPhase::Idle, None, None).state,
+            map_worker_status(true, false, MappedWorkerPhase::Idle, None, None, false).state,
             SemanticStatusState::Stopped
         );
         assert_eq!(
-            map_worker_status(false, true, MappedWorkerPhase::Idle, None, Some(3)).state,
+            map_worker_status(false, true, MappedWorkerPhase::Idle, None, Some(3), false).state,
             SemanticStatusState::Degraded
         );
         assert_eq!(
-            map_worker_status(false, false, MappedWorkerPhase::Preparing, None, None).state,
+            map_worker_status(false, false, MappedWorkerPhase::Preparing, None, None, false).state,
             SemanticStatusState::Preparing
         );
         assert_eq!(
-            map_worker_status(false, false, MappedWorkerPhase::Indexing, None, Some(2)).state,
+            map_worker_status(false, false, MappedWorkerPhase::Indexing, None, Some(2), false).state,
             SemanticStatusState::Indexing
         );
         assert_eq!(
-            map_worker_status(false, false, MappedWorkerPhase::Idle, None, Some(0)).state,
+            map_worker_status(false, false, MappedWorkerPhase::Idle, None, Some(0), false).state,
             SemanticStatusState::Ready
         );
         assert_eq!(
-            map_worker_status(false, false, MappedWorkerPhase::Idle, None, Some(4)).state,
+            map_worker_status(false, false, MappedWorkerPhase::Idle, None, Some(4), false).state,
             SemanticStatusState::Indexing
         );
+        let behind = map_worker_status(
+            false,
+            false,
+            MappedWorkerPhase::Idle,
+            None,
+            Some(0),
+            true,
+        );
+        assert_eq!(behind.state, SemanticStatusState::Indexing);
+        assert_eq!(behind.message.as_deref(), Some("vectors behind workspace"));
         let failed = map_worker_status(
             false,
             false,
             MappedWorkerPhase::Failed,
             Some("boom".into()),
             None,
+            false,
         );
         assert_eq!(failed.state, SemanticStatusState::Failed);
         assert_eq!(failed.message.as_deref(), Some("boom"));
@@ -1005,6 +1027,42 @@ mod tests {
         assert_eq!(downloading.state, SemanticStatusState::Downloading);
         assert_eq!(downloading.progress_percent, Some(42));
         assert_eq!(downloading.message.as_deref(), Some("Downloading 42%"));
+    }
+
+    #[test]
+    fn semantic_status_reports_vectors_behind_workspace_when_stale() {
+        let dir = init_workspace();
+        std::fs::write(dir.path().join("Doc.md"), "# Doc\n\noriginal content\n").unwrap();
+        let runtime = LatticeRuntime::new();
+        let session = runtime.open_workspace_session(dir.path()).unwrap();
+        session.rebuild_index().unwrap();
+        session
+            .start_semantic_indexing(
+                Arc::clone(runtime.events()),
+                SemanticWorkerConfig::new(fake_provider()),
+            )
+            .unwrap();
+
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            if matches!(
+                session.semantic_status().state,
+                SemanticStatusState::Ready
+            ) {
+                break;
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+
+        let conn = Connection::open(dir.path().join(".lattice/index.sqlite")).unwrap();
+        conn.execute("DELETE FROM derived_dataset_snapshots", [])
+            .unwrap();
+
+        let status = session.semantic_status();
+        assert_eq!(status.state, SemanticStatusState::Indexing);
+        assert_eq!(status.message.as_deref(), Some("vectors behind workspace"));
+
+        runtime.close_session(dir.path()).unwrap();
     }
 
     #[test]

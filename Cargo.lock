@@ -6084,6 +6084,7 @@ dependencies = [
  "lattice-index",
  "lattice-lance",
  "libc",
+ "rusqlite",
  "serde",
  "serde_json",
  "tempfile",

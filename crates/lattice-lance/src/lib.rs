@@ -21,6 +21,7 @@ pub use paths::{
 pub use store::{MultimodalStore, UnsupportedStore};
 pub use sync::block_on;
 pub use types::{
-    Commit, DatasetRef, DatasetSnapshot, SearchElementBatch, SearchElementRow, SearchHit,
-    SearchRequest, SearchResults, DEFAULT_ELEMENT_KIND, SEARCH_ELEMENTS_DATASET_ID,
+    Commit, DatasetRef, DatasetSnapshot, DerivedDatasetSnapshot, SearchElementBatch,
+    SearchElementRow, SearchHit, SearchRequest, SearchResults, DEFAULT_ELEMENT_KIND,
+    SEARCH_ELEMENTS_DATASET_ID, SEARCH_ELEMENTS_PIPELINE_VERSION,
 };

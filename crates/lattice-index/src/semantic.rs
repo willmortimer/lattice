@@ -1,4 +1,4 @@
-//! Semantic chunk retrieval over the vector index (SQLite or Lance).
+//! Semantic chunk retrieval over the Lance search-elements dataset.
 
 use lattice_lance::EmbeddedLanceStore;
 use rusqlite::Connection;
@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 
 use crate::embedding::EmbeddingNamespace;
 use crate::error::{Error, Result};
-use crate::vector::{search_lance_vectors, search_vectors, VectorCandidate};
+use crate::vector::{search_lance_vectors, VectorCandidate};
 
 /// Versioned document embedding input format identity.
 ///
@@ -19,17 +19,6 @@ pub struct SemanticHit {
     pub chunk_id: String,
     pub rank: u32,
     pub score: f32,
-}
-
-/// Exact-scan semantic search for one query vector within a namespace (SQLite).
-pub(crate) fn search_semantic(
-    conn: &Connection,
-    namespace: &EmbeddingNamespace,
-    query: &[f32],
-    limit: usize,
-) -> Result<Vec<SemanticHit>> {
-    let candidates = search_vectors(conn, namespace, query, limit).map_err(Error::from)?;
-    Ok(rank_candidates(candidates))
 }
 
 /// Semantic search via the Lance search-elements dataset.

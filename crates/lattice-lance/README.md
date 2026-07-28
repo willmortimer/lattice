@@ -62,10 +62,10 @@ let hits = store
 
 No environment variables are required for local embedded usage.
 
-`lattice-index` reads [`LATTICE_VECTOR_BACKEND`](../../lattice-index/src/vector_backend.rs)
-when opening a workspace index: unset or `sqlite` keeps vectors in SQLite BLOBs;
-`lance` routes embed upsert and semantic search through this store while FTS5
-remains in SQLite.
+`lattice-index` always routes semantic vector upsert and search through this
+store. SQLite retains FTS5 chunk tables, embedding namespaces, and hybrid RRF
+fusion. Deleting `.lattice/index/search-elements.lance` on desktop-dev is safe:
+reinstall or re-embed rebuilds vectors from chunk state.
 
 Synchronous callers can use [`block_on`] when already running inside a Tokio
 runtime.

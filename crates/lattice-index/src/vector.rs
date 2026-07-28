@@ -1,13 +1,11 @@
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 
 use lattice_embedding::{DistanceMetric, EmbeddingSpecification};
 use lattice_lance::{
     DatasetRef, EmbeddedLanceStore, MultimodalStore, SearchElementBatch, SearchElementRow,
     SearchRequest,
 };
-use rusqlite::{params, Connection};
+use rusqlite::Connection;
 use thiserror::Error;
 
 use crate::embedding::EmbeddingNamespace;
@@ -46,25 +44,6 @@ pub enum VectorIndexError {
     Lance(String),
 }
 
-/// Provider-neutral vector storage and exact nearest-neighbor search.
-pub trait VectorIndex: Send + Sync {
-    fn upsert(
-        &self,
-        namespace: &EmbeddingNamespace,
-        chunk_id: &str,
-        vector: &[f32],
-    ) -> Result<(), VectorIndexError>;
-
-    fn remove(&self, namespace_id: i64, chunk_id: &str) -> Result<(), VectorIndexError>;
-
-    fn search(
-        &self,
-        namespace: &EmbeddingNamespace,
-        query: &[f32],
-        limit: usize,
-    ) -> Result<Vec<VectorCandidate>, VectorIndexError>;
-}
-
 /// Chunk metadata used when upserting Lance search-element rows.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ChunkVectorEnrichment {
@@ -72,74 +51,9 @@ pub(crate) struct ChunkVectorEnrichment {
     pub ordinal: i64,
     pub text: String,
     pub content_hash: String,
+    pub resource_version_id: Option<String>,
     pub source_start_byte: u64,
     pub source_end_byte: u64,
-}
-
-/// LanceDB-backed [`VectorIndex`] over [`EmbeddedLanceStore`].
-pub struct LanceVectorIndex {
-    store: Arc<EmbeddedLanceStore>,
-    workspace_id: String,
-}
-
-impl LanceVectorIndex {
-    pub fn new(store: Arc<EmbeddedLanceStore>, workspace_id: impl Into<String>) -> Self {
-        Self {
-            store,
-            workspace_id: workspace_id.into(),
-        }
-    }
-
-    pub fn store(&self) -> &Arc<EmbeddedLanceStore> {
-        &self.store
-    }
-}
-
-impl VectorIndex for LanceVectorIndex {
-    fn upsert(
-        &self,
-        namespace: &EmbeddingNamespace,
-        chunk_id: &str,
-        vector: &[f32],
-    ) -> Result<(), VectorIndexError> {
-        let enrichment = ChunkVectorEnrichment {
-            resource_id: 0,
-            ordinal: 0,
-            text: String::new(),
-            content_hash: String::new(),
-            source_start_byte: 0,
-            source_end_byte: 0,
-        };
-        block_on_vector(upsert_lance_vector(
-            &self.store,
-            namespace,
-            chunk_id,
-            vector,
-            &enrichment,
-            &self.workspace_id,
-        ))
-    }
-
-    fn remove(&self, _namespace_id: i64, chunk_id: &str) -> Result<(), VectorIndexError> {
-        block_on_vector(remove_lance_vectors(
-            &self.store,
-            &[chunk_id.to_string()],
-        ))
-    }
-
-    fn search(
-        &self,
-        namespace: &EmbeddingNamespace,
-        query: &[f32],
-        limit: usize,
-    ) -> Result<Vec<VectorCandidate>, VectorIndexError> {
-        block_on_vector(search_lance_vectors(
-            &self.store,
-            namespace,
-            query,
-            limit,
-        ))
-    }
 }
 
 /// Upsert one enriched vector row into the Lance search-elements dataset.
@@ -163,7 +77,7 @@ pub(crate) async fn upsert_lance_vector(
         element_id: chunk_id.to_string(),
         workspace_id: workspace_id.to_string(),
         resource_id: enrichment.resource_id.to_string(),
-        resource_version_id: None,
+        resource_version_id: enrichment.resource_version_id.clone(),
         element_kind: lattice_lance::DEFAULT_ELEMENT_KIND.to_string(),
         ordinal: enrichment.ordinal,
         text: enrichment.text.clone(),
@@ -251,10 +165,11 @@ pub(crate) fn load_chunk_vector_enrichment(
         .collect::<Vec<_>>()
         .join(", ");
     let sql = format!(
-        "SELECT chunk_id, resource_id, ordinal, text, content_hash,
-                source_start_byte, source_end_byte
-         FROM search_chunks
-         WHERE chunk_id IN ({placeholders})"
+        "SELECT c.chunk_id, c.resource_id, c.ordinal, c.text, c.content_hash,
+                c.source_start_byte, c.source_end_byte, r.revision, r.content_hash
+         FROM search_chunks c
+         JOIN resources r ON r.id = c.resource_id
+         WHERE c.chunk_id IN ({placeholders})"
     );
     let mut stmt = conn.prepare(&sql)?;
     let params_list: Vec<&dyn rusqlite::types::ToSql> = chunk_ids
@@ -262,13 +177,21 @@ pub(crate) fn load_chunk_vector_enrichment(
         .map(|id| id as &dyn rusqlite::types::ToSql)
         .collect();
     let rows = stmt.query_map(params_list.as_slice(), |row| {
+        let chunk_content_hash: String = row.get(4)?;
+        let resource_revision: Option<String> = row.get(7)?;
+        let resource_content_hash: Option<String> = row.get(8)?;
         Ok((
             row.get::<_, String>(0)?,
             ChunkVectorEnrichment {
                 resource_id: row.get(1)?,
                 ordinal: row.get(2)?,
                 text: row.get(3)?,
-                content_hash: row.get(4)?,
+                content_hash: chunk_content_hash.clone(),
+                resource_version_id: resource_version_id(
+                    resource_revision,
+                    resource_content_hash,
+                    &chunk_content_hash,
+                ),
                 source_start_byte: row.get::<_, i64>(5)? as u64,
                 source_end_byte: row.get::<_, i64>(6)? as u64,
             },
@@ -282,27 +205,30 @@ pub(crate) fn load_chunk_vector_enrichment(
     Ok(out)
 }
 
-fn map_lance_error(err: lattice_lance::LanceError) -> VectorIndexError {
-    VectorIndexError::Lance(err.to_string())
-}
-
-fn block_on_vector<F, T>(future: F) -> Result<T, VectorIndexError>
-where
-    F: std::future::Future<Output = Result<T, VectorIndexError>>,
-{
-    if let Ok(handle) = tokio::runtime::Handle::try_current() {
-        match handle.runtime_flavor() {
-            tokio::runtime::RuntimeFlavor::MultiThread => {
-                return tokio::task::block_in_place(|| handle.block_on(future));
-            }
-            _ => return futures_executor::block_on(future),
+fn resource_version_id(
+    revision: Option<String>,
+    resource_content_hash: Option<String>,
+    chunk_content_hash: &str,
+) -> Option<String> {
+    if let Some(revision) = revision {
+        if !revision.is_empty() {
+            return Some(revision);
         }
     }
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|err| VectorIndexError::Lance(err.to_string()))?
-        .block_on(future)
+    if let Some(hash) = resource_content_hash {
+        if !hash.is_empty() {
+            return Some(hash);
+        }
+    }
+    if !chunk_content_hash.is_empty() {
+        Some(chunk_content_hash.to_string())
+    } else {
+        None
+    }
+}
+
+fn map_lance_error(err: lattice_lance::LanceError) -> VectorIndexError {
+    VectorIndexError::Lance(err.to_string())
 }
 
 fn current_time_ms() -> i64 {
@@ -310,155 +236,6 @@ fn current_time_ms() -> i64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_millis() as i64)
         .unwrap_or(0)
-}
-
-/// Exact-scan BLOB backend that opens the workspace index DB per call.
-///
-/// Prefer [`upsert_vector`] / [`search_vectors`] when a connection is already held.
-pub struct SqliteExactScanVectorIndex {
-    db_path: PathBuf,
-    lock: Mutex<()>,
-}
-
-impl SqliteExactScanVectorIndex {
-    pub fn open(db_path: impl AsRef<Path>) -> Self {
-        Self {
-            db_path: db_path.as_ref().to_path_buf(),
-            lock: Mutex::new(()),
-        }
-    }
-
-    fn with_conn<T>(
-        &self,
-        f: impl FnOnce(&Connection) -> Result<T, VectorIndexError>,
-    ) -> Result<T, VectorIndexError> {
-        let _guard = self.lock.lock().unwrap_or_else(|err| err.into_inner());
-        let conn = Connection::open(&self.db_path)?;
-        conn.pragma_update(None, "foreign_keys", "ON")?;
-        f(&conn)
-    }
-}
-
-impl VectorIndex for SqliteExactScanVectorIndex {
-    fn upsert(
-        &self,
-        namespace: &EmbeddingNamespace,
-        chunk_id: &str,
-        vector: &[f32],
-    ) -> Result<(), VectorIndexError> {
-        self.with_conn(|conn| upsert_vector(conn, namespace, chunk_id, vector))
-    }
-
-    fn remove(&self, namespace_id: i64, chunk_id: &str) -> Result<(), VectorIndexError> {
-        self.with_conn(|conn| remove_vector(conn, namespace_id, chunk_id))
-    }
-
-    fn search(
-        &self,
-        namespace: &EmbeddingNamespace,
-        query: &[f32],
-        limit: usize,
-    ) -> Result<Vec<VectorCandidate>, VectorIndexError> {
-        self.with_conn(|conn| search_vectors(conn, namespace, query, limit))
-    }
-}
-
-/// Upsert one normalized vector BLOB for a chunk within a namespace.
-pub fn upsert_vector(
-    conn: &Connection,
-    namespace: &EmbeddingNamespace,
-    chunk_id: &str,
-    vector: &[f32],
-) -> Result<(), VectorIndexError> {
-    ensure_supported_distance(&namespace.specification)?;
-    validate_dims(&namespace.specification, vector)?;
-    let mut values = vector.to_vec();
-    if namespace.specification.normalized {
-        normalize_l2(&mut values);
-    }
-    let blob = encode_f32_le(&values);
-    conn.execute(
-        "INSERT INTO chunk_vectors (namespace_id, chunk_id, dims, blob)
-         VALUES (?1, ?2, ?3, ?4)
-         ON CONFLICT(namespace_id, chunk_id) DO UPDATE SET
-            dims = excluded.dims,
-            blob = excluded.blob",
-        params![namespace.id, chunk_id, values.len() as i64, blob],
-    )?;
-    Ok(())
-}
-
-/// Remove one stored vector.
-pub fn remove_vector(
-    conn: &Connection,
-    namespace_id: i64,
-    chunk_id: &str,
-) -> Result<(), VectorIndexError> {
-    conn.execute(
-        "DELETE FROM chunk_vectors WHERE namespace_id = ?1 AND chunk_id = ?2",
-        params![namespace_id, chunk_id],
-    )?;
-    Ok(())
-}
-
-/// Exact-scan ranking over stored BLOBs joined to live chunks.
-///
-/// V1 supports:
-/// - `Cosine` with `normalized=true` (scored via dot product of L2-normalized vectors)
-/// - `Dot` (dot product; optional store-time L2 normalize when `normalized=true`)
-///
-/// `L2` and unnormalized `Cosine` return [`VectorIndexError::UnsupportedDistance`].
-pub fn search_vectors(
-    conn: &Connection,
-    namespace: &EmbeddingNamespace,
-    query: &[f32],
-    limit: usize,
-) -> Result<Vec<VectorCandidate>, VectorIndexError> {
-    if limit == 0 {
-        return Ok(Vec::new());
-    }
-    ensure_supported_distance(&namespace.specification)?;
-    validate_dims(&namespace.specification, query)?;
-    let mut query_vec = query.to_vec();
-    if namespace.specification.normalized {
-        normalize_l2(&mut query_vec);
-    }
-
-    let mut stmt = conn.prepare(
-        "SELECT v.chunk_id, v.dims, v.blob
-         FROM chunk_vectors v
-         JOIN search_chunks c ON c.chunk_id = v.chunk_id
-         WHERE v.namespace_id = ?1",
-    )?;
-    let rows = stmt.query_map(params![namespace.id], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, i64>(1)? as usize,
-            row.get::<_, Vec<u8>>(2)?,
-        ))
-    })?;
-
-    let mut candidates = Vec::new();
-    for row in rows {
-        let (chunk_id, dims, blob) = row?;
-        let stored = decode_f32_le(&blob, dims).ok_or(VectorIndexError::DimensionMismatch {
-            expected: dims as u32,
-            actual: (blob.len() / 4) as u32,
-        })?;
-        if stored.len() != query_vec.len() {
-            continue;
-        }
-        let score = dot_product(&query_vec, &stored);
-        candidates.push(VectorCandidate { chunk_id, score });
-    }
-    candidates.sort_by(|a, b| {
-        b.score
-            .partial_cmp(&a.score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| a.chunk_id.cmp(&b.chunk_id))
-    });
-    candidates.truncate(limit);
-    Ok(candidates)
 }
 
 /// V1 exact-scan only implements cosine-via-normalized-dot and raw/normalized dot.
@@ -485,25 +262,6 @@ fn validate_dims(spec: &EmbeddingSpecification, vector: &[f32]) -> Result<(), Ve
     Ok(())
 }
 
-fn encode_f32_le(values: &[f32]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(values.len() * 4);
-    for value in values {
-        out.extend_from_slice(&value.to_le_bytes());
-    }
-    out
-}
-
-fn decode_f32_le(blob: &[u8], dims: usize) -> Option<Vec<f32>> {
-    if blob.len() != dims * 4 {
-        return None;
-    }
-    let mut values = Vec::with_capacity(dims);
-    for chunk in blob.chunks_exact(4) {
-        values.push(f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
-    }
-    Some(values)
-}
-
 fn normalize_l2(values: &mut [f32]) {
     let norm = values.iter().map(|value| value * value).sum::<f32>().sqrt();
     if norm > 0.0 {
@@ -513,18 +271,202 @@ fn normalize_l2(values: &mut [f32]) {
     }
 }
 
-fn dot_product(a: &[f32], b: &[f32]) -> f32 {
-    a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
-}
-
 #[cfg(test)]
-mod tests {
+mod sqlite_exact_scan {
+    use std::path::{Path, PathBuf};
+    use std::sync::Mutex;
+
+    use rusqlite::{params, Connection};
+
     use super::*;
+    use crate::embedding::register_embedding_namespace;
     use crate::schema::init_schema;
-    use lattice_embedding::{DistanceMetric, PoolingStrategy};
+    use lattice_embedding::{PoolingStrategy, DistanceMetric};
+
+    /// Provider-neutral vector storage and exact nearest-neighbor search.
+    pub trait VectorIndex: Send + Sync {
+        fn upsert(
+            &self,
+            namespace: &EmbeddingNamespace,
+            chunk_id: &str,
+            vector: &[f32],
+        ) -> Result<(), VectorIndexError>;
+
+        fn remove(&self, namespace_id: i64, chunk_id: &str) -> Result<(), VectorIndexError>;
+
+        fn search(
+            &self,
+            namespace: &EmbeddingNamespace,
+            query: &[f32],
+            limit: usize,
+        ) -> Result<Vec<VectorCandidate>, VectorIndexError>;
+    }
+
+    /// Exact-scan BLOB backend that opens the workspace index DB per call.
+    pub struct SqliteExactScanVectorIndex {
+        db_path: PathBuf,
+        lock: Mutex<()>,
+    }
+
+    impl SqliteExactScanVectorIndex {
+        pub fn open(db_path: impl AsRef<Path>) -> Self {
+            Self {
+                db_path: db_path.as_ref().to_path_buf(),
+                lock: Mutex::new(()),
+            }
+        }
+
+        fn with_conn<T>(
+            &self,
+            f: impl FnOnce(&Connection) -> Result<T, VectorIndexError>,
+        ) -> Result<T, VectorIndexError> {
+            let _guard = self.lock.lock().unwrap_or_else(|err| err.into_inner());
+            let conn = Connection::open(&self.db_path)?;
+            conn.pragma_update(None, "foreign_keys", "ON")?;
+            f(&conn)
+        }
+    }
+
+    impl VectorIndex for SqliteExactScanVectorIndex {
+        fn upsert(
+            &self,
+            namespace: &EmbeddingNamespace,
+            chunk_id: &str,
+            vector: &[f32],
+        ) -> Result<(), VectorIndexError> {
+            self.with_conn(|conn| upsert_vector(conn, namespace, chunk_id, vector))
+        }
+
+        fn remove(&self, namespace_id: i64, chunk_id: &str) -> Result<(), VectorIndexError> {
+            self.with_conn(|conn| remove_vector(conn, namespace_id, chunk_id))
+        }
+
+        fn search(
+            &self,
+            namespace: &EmbeddingNamespace,
+            query: &[f32],
+            limit: usize,
+        ) -> Result<Vec<VectorCandidate>, VectorIndexError> {
+            self.with_conn(|conn| search_vectors(conn, namespace, query, limit))
+        }
+    }
+
+    /// Upsert one normalized vector BLOB for a chunk within a namespace.
+    pub fn upsert_vector(
+        conn: &Connection,
+        namespace: &EmbeddingNamespace,
+        chunk_id: &str,
+        vector: &[f32],
+    ) -> Result<(), VectorIndexError> {
+        ensure_supported_distance(&namespace.specification)?;
+        validate_dims(&namespace.specification, vector)?;
+        let mut values = vector.to_vec();
+        if namespace.specification.normalized {
+            normalize_l2(&mut values);
+        }
+        let blob = encode_f32_le(&values);
+        conn.execute(
+            "INSERT INTO chunk_vectors (namespace_id, chunk_id, dims, blob)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(namespace_id, chunk_id) DO UPDATE SET
+                dims = excluded.dims,
+                blob = excluded.blob",
+            params![namespace.id, chunk_id, values.len() as i64, blob],
+        )?;
+        Ok(())
+    }
+
+    /// Remove one stored vector.
+    pub fn remove_vector(
+        conn: &Connection,
+        namespace_id: i64,
+        chunk_id: &str,
+    ) -> Result<(), VectorIndexError> {
+        conn.execute(
+            "DELETE FROM chunk_vectors WHERE namespace_id = ?1 AND chunk_id = ?2",
+            params![namespace_id, chunk_id],
+        )?;
+        Ok(())
+    }
+
+    /// Exact-scan ranking over stored BLOBs joined to live chunks.
+    pub fn search_vectors(
+        conn: &Connection,
+        namespace: &EmbeddingNamespace,
+        query: &[f32],
+        limit: usize,
+    ) -> Result<Vec<VectorCandidate>, VectorIndexError> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        ensure_supported_distance(&namespace.specification)?;
+        validate_dims(&namespace.specification, query)?;
+        let mut query_vec = query.to_vec();
+        if namespace.specification.normalized {
+            normalize_l2(&mut query_vec);
+        }
+
+        let mut stmt = conn.prepare(
+            "SELECT v.chunk_id, v.dims, v.blob
+             FROM chunk_vectors v
+             JOIN search_chunks c ON c.chunk_id = v.chunk_id
+             WHERE v.namespace_id = ?1",
+        )?;
+        let rows = stmt.query_map(params![namespace.id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)? as usize,
+                row.get::<_, Vec<u8>>(2)?,
+            ))
+        })?;
+
+        let mut candidates = Vec::new();
+        for row in rows {
+            let (chunk_id, dims, blob) = row?;
+            let stored = decode_f32_le(&blob, dims).ok_or(VectorIndexError::DimensionMismatch {
+                expected: dims as u32,
+                actual: (blob.len() / 4) as u32,
+            })?;
+            if stored.len() != query_vec.len() {
+                continue;
+            }
+            let score = dot_product(&query_vec, &stored);
+            candidates.push(VectorCandidate { chunk_id, score });
+        }
+        candidates.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.chunk_id.cmp(&b.chunk_id))
+        });
+        candidates.truncate(limit);
+        Ok(candidates)
+    }
+
+    fn encode_f32_le(values: &[f32]) -> Vec<u8> {
+        let mut out = Vec::with_capacity(values.len() * 4);
+        for value in values {
+            out.extend_from_slice(&value.to_le_bytes());
+        }
+        out
+    }
+
+    fn decode_f32_le(blob: &[u8], dims: usize) -> Option<Vec<f32>> {
+        if blob.len() != dims * 4 {
+            return None;
+        }
+        let mut values = Vec::with_capacity(dims);
+        for chunk in blob.chunks_exact(4) {
+            values.push(f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
+        }
+        Some(values)
+    }
+
+    fn dot_product(a: &[f32], b: &[f32]) -> f32 {
+        a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
+    }
 
     fn sample_namespace(conn: &Connection, dims: u32) -> EmbeddingNamespace {
-        use crate::embedding::register_embedding_namespace;
         let spec = EmbeddingSpecification {
             provider_id: "fake".into(),
             model_id: "fake-model".into(),
@@ -542,8 +484,8 @@ mod tests {
 
     fn insert_chunk(conn: &Connection, chunk_id: &str, text: &str) {
         conn.execute(
-            "INSERT INTO resources (path, title, body, content_hash)
-             VALUES ('notes.md', 'Notes', 'body', 'sha256:r')",
+            "INSERT INTO resources (path, title, body, content_hash, revision)
+             VALUES ('notes.md', 'Notes', 'body', 'sha256:r', 'rev-42')",
             [],
         )
         .ok();
@@ -560,6 +502,18 @@ mod tests {
             params![chunk_id, resource_id, text],
         )
         .unwrap();
+    }
+
+    #[test]
+    fn enrichment_sets_resource_version_id_from_revision() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_schema(&conn).unwrap();
+        insert_chunk(&conn, "chunk-a", "alpha");
+        let enrichments = load_chunk_vector_enrichment(&conn, &["chunk-a"]).unwrap();
+        let enrichment = enrichments.get("chunk-a").unwrap();
+        assert_eq!(enrichment.resource_version_id.as_deref(), Some("rev-42"));
+        assert_eq!(enrichment.ordinal, 0);
+        assert_eq!(enrichment.content_hash, "sha256:c");
     }
 
     #[test]
@@ -621,32 +575,5 @@ mod tests {
         let hits = search_vectors(&conn, &namespace, &[2.0, 0.0, 0.0, 0.0], 1).unwrap();
         assert_eq!(hits[0].chunk_id, "chunk-a");
         assert!((hits[0].score - 4.0).abs() < 1e-5);
-    }
-
-    /// Exact BLOB-scan scale probe (P2). Ignored in CI; run with:
-    /// `cargo test -p lattice-index exact_scan_scale -- --ignored --nocapture`
-    #[test]
-    #[ignore = "scale probe; run manually when measuring vector scan budgets"]
-    fn exact_scan_scale_probe() {
-        use std::time::Instant;
-
-        for n in [10_000usize, 50_000, 100_000] {
-            let conn = Connection::open_in_memory().unwrap();
-            init_schema(&conn).unwrap();
-            let namespace = sample_namespace(&conn, 8);
-            let query = vec![0.125f32; 8];
-            for i in 0..n {
-                let chunk_id = format!("chunk-{i}");
-                insert_chunk(&conn, &chunk_id, "scale");
-                let mut values = query.clone();
-                values[0] += (i % 17) as f32 * 0.001;
-                upsert_vector(&conn, &namespace, &chunk_id, &values).unwrap();
-            }
-            let started = Instant::now();
-            let hits = search_vectors(&conn, &namespace, &query, 10).unwrap();
-            let elapsed = started.elapsed();
-            assert_eq!(hits.len(), 10);
-            eprintln!("exact_scan n={n} elapsed={elapsed:?}");
-        }
     }
 }
