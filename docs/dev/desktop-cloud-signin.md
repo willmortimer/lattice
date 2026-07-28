@@ -50,3 +50,8 @@ lattice resource stat notes/example.md
 Use a **new** `ResourceId` on each live PUT (the server is write-once per id). The CLI
 registers the workspace path first, so re-running against the same file after a successful
 upload will return **409** from the server unless you use a fresh registry entry.
+
+After a successful round-trip, open the resource in the desktop app and check **Inspect →
+Properties → Authority**. It should show **Cloud** (from the registry
+`authority: cloud` written by `mark_cloud_backed`). Materialization is typically
+**Metadata only** until a later pin/cache path lands.
