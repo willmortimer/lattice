@@ -1,9 +1,9 @@
 # lattice-agentd
 
-Opt-in Rust sidecar that speaks the Phase A agent JSONL protocol over stdio
-([ADR 0051](../../docs/decisions/0051-rust-embedded-agent-harness.md)). This is
-the scaffold for replacing Node `apps/agentd`; it does **not** change default
-daemon/desktop discovery.
+Rust sidecar that speaks the Phase A agent JSONL protocol over stdio
+([ADR 0051](../../docs/decisions/0051-rust-embedded-agent-harness.md)). Desktop /
+`latticed` prefer this binary by default and fall back to Node
+`apps/agentd/scripts/run.sh` when it is missing.
 
 ## Protocol
 
@@ -14,11 +14,10 @@ One JSON object per line on stdin (commands) / stdout (events):
 | `hello` | `hello_ack` (`protocolVersion: 1`) |
 | `health` | `health` (`ok: true`) |
 | `start_run` (`provider: fake`) | `run_started` → `message_chunk`(s) → `run_completed` |
-| `start_run` (`provider: openai`) | Responses stream → `message_chunk`(s) → `run_completed` / `run_failed` |
+| `start_run` (`provider: pioneer`) | Pioneer chat completions SSE → `message_chunk`(s) |
+| `start_run` (`provider: openai`) | OpenAI Responses stream → `message_chunk`(s) |
 | `cancel_run` | stops in-flight run → `run_failed` (`Run cancelled`) |
 | `shutdown` | exits after cancelling any active run |
-
-`provider: pioneer` currently fails with a clear `run_failed` (no network).
 
 Wire shapes match `apps/daemon/src/agent/protocol.rs` (camelCase fields,
 snake_case `type` discriminators). UI chunks use AI SDK shapes
@@ -28,59 +27,65 @@ snake_case `type` discriminators). UI chunks use AI SDK shapes
 
 ```sh
 cargo build -p lattice-agentd
+# or release (what desktop-release bundles):
+cargo build --release -p lattice-agentd
 ```
 
-Binary: `target/debug/lattice-agentd` (or `target/release/lattice-agentd`).
+Binary: `target/debug/lattice-agentd` or `target/release/lattice-agentd`.
 
-## Opt in via `LATTICE_AGENTD_BIN`
+## Discovery (default)
 
-Default discovery still points at Node `apps/agentd`. To exercise this binary
-from `latticed` / desktop:
+When `LATTICE_AGENTD_BIN` is unset, discovery order is:
+
+1. `target/release/lattice-agentd`
+2. `target/debug/lattice-agentd`
+3. `lattice-agentd` next to the running `latticed` / app binary (packaged DMG)
+4. Node `apps/agentd/scripts/run.sh` (fallback)
+
+Force Node:
+
+```sh
+export LATTICE_AGENTD_PREFER_NODE=1
+# or:
+export LATTICE_AGENTD_BIN="$(pwd)/apps/agentd/scripts/run.sh"
+```
+
+## Pioneer (default provider)
 
 ```sh
 cargo build -p lattice-agentd
-export LATTICE_AGENTD_BIN="$(pwd)/target/debug/lattice-agentd"
-# optional: force fake provider end-to-end
-export LATTICE_AGENT_PROVIDER=fake
+unset LATTICE_AGENT_FAKE
+export LATTICE_AGENT_PROVIDER=pioneer
+export LATTICE_AGENT_MODEL=gpt-5.6-luna   # or gpt-5.6-terra
+export PIONEER_API_KEY=…                  # injected by latticed at spawn
 ```
 
-Unset `LATTICE_AGENTD_BIN` (and leave discovery alone) to keep the Node path.
-
-## OpenAI Responses (`provider: openai`)
-
-Requires `OPENAI_API_KEY` in the agentd environment (latticed injects it at
-spawn when present). Missing key → immediate `run_failed` with a clear message
-(no hang / no network).
-
-```sh
-cargo build -p lattice-agentd
-export LATTICE_AGENTD_BIN="$(pwd)/target/debug/lattice-agentd"
-export LATTICE_AGENT_PROVIDER=openai
-export OPENAI_API_KEY=sk-...
-# optional overrides
-# export LATTICE_AGENT_MODEL=gpt-4.1-mini
-# export OPENAI_BASE_URL=https://api.openai.com/v1
-```
-
-Then start a run from desktop chat (or stdio) with `provider: openai`. Streamed
-Responses `response.output_text.delta` events become `message_chunk` events.
-
-Stdio smoke (expects a live key):
+Stdio smoke:
 
 ```sh
 printf '%s\n' \
   '{"type":"hello","protocolVersion":1}' \
-  '{"type":"start_run","threadId":"t1","runId":"r1","provider":"openai","model":"gpt-4.1-mini","prompt":"Say hi in one word"}' \
+  '{"type":"start_run","threadId":"t1","runId":"r1","provider":"pioneer","model":"gpt-5.6-luna","prompt":"Say hi in one word"}' \
   '{"type":"shutdown"}' \
   | ./target/debug/lattice-agentd
+```
+
+## OpenAI Responses
+
+```sh
+export LATTICE_AGENT_PROVIDER=openai
+export OPENAI_API_KEY=sk-...
+# optional: LATTICE_AGENT_MODEL=gpt-4.1-mini
 ```
 
 ## Manual smoke (fake)
 
 ```sh
-cargo build -p lattice-agentd
-printf '%s\n' '{"type":"hello","protocolVersion":1}' | ./target/debug/lattice-agentd
-# → {"type":"hello_ack","protocolVersion":1}
+printf '%s\n' \
+  '{"type":"hello","protocolVersion":1}' \
+  '{"type":"start_run","threadId":"t1","runId":"r1","provider":"fake","prompt":"hi"}' \
+  '{"type":"shutdown"}' \
+  | ./target/debug/lattice-agentd
 ```
 
 ## Tests
@@ -88,10 +93,3 @@ printf '%s\n' '{"type":"hello","protocolVersion":1}' | ./target/debug/lattice-ag
 ```sh
 cargo test -p lattice-agentd
 ```
-
-OpenAI coverage uses recorded SSE fixtures + wiremock (no live network).
-
-## Non-goals (this slice)
-
-No Wasmtime sandbox, Seatbelt, Pioneer provider, Lattice tool bridge, or
-deletion of `apps/agentd`.

@@ -191,15 +191,16 @@
               # Settings → Voice reports Unavailable (Cargo default features are empty).
               pnpm --filter @lattice/desktop exec tauri build --bundles app --features voice-embedded
 
-              # Thin-client sidecars (semantic + voice) must sit beside lattice-desktop.
-              echo "desktop-install: building latticed / lattice-embed-host / lattice-voice-host"
+              # Thin-client sidecars (semantic + voice + agent) must sit beside lattice-desktop.
+              echo "desktop-install: building latticed / lattice-agentd / lattice-embed-host / lattice-voice-host"
               cargo build --release -p lattice-daemon --bin latticed
+              cargo build --release -p lattice-agentd --bin lattice-agentd
               cargo build --release -p lattice-embed-host --bin lattice-embed-host --features llama-cpp
               cargo build --release -p lattice-voice-host --bin lattice-voice-host --features fluidaudio || \
                 cargo build --release -p lattice-voice-host --bin lattice-voice-host
 
               echo "desktop-install: verifying production sidecars"
-              for bin in latticed lattice-embed-host lattice-voice-host; do
+              for bin in latticed lattice-agentd lattice-embed-host lattice-voice-host; do
                 if [ ! -f "target/release/$bin" ]; then
                   echo "desktop-install: missing target/release/$bin after build" >&2
                   exit 1
@@ -245,9 +246,9 @@
                 fi
               done
 
-              # Semantic search + voice thin-clients expect latticed (and embed-host)
+              # Semantic search + voice + agent thin-clients expect sidecars
               # as MacOS siblings of the app binary (see docs/search/…).
-              for bin in latticed lattice-embed-host lattice-voice-host; do
+              for bin in latticed lattice-agentd lattice-embed-host lattice-voice-host; do
                 src="target/release/$bin"
                 if [ ! -f "$src" ]; then
                   echo "desktop-install: missing $src (required production sidecar)" >&2
@@ -342,14 +343,15 @@
               # Same voice + sidecar path as desktop-install.
               pnpm --filter @lattice/desktop exec tauri build --bundles app --features voice-embedded
 
-              echo "desktop-release: building latticed / lattice-embed-host / lattice-voice-host"
+              echo "desktop-release: building latticed / lattice-agentd / lattice-embed-host / lattice-voice-host"
               cargo build --release -p lattice-daemon --bin latticed
+              cargo build --release -p lattice-agentd --bin lattice-agentd
               cargo build --release -p lattice-embed-host --bin lattice-embed-host --features llama-cpp
               cargo build --release -p lattice-voice-host --bin lattice-voice-host --features fluidaudio || \
                 cargo build --release -p lattice-voice-host --bin lattice-voice-host
 
               echo "desktop-release: verifying production sidecars"
-              for bin in latticed lattice-embed-host lattice-voice-host; do
+              for bin in latticed lattice-agentd lattice-embed-host lattice-voice-host; do
                 if [ ! -f "target/release/$bin" ]; then
                   echo "desktop-release: missing target/release/$bin after build" >&2
                   exit 1
@@ -390,7 +392,7 @@
                 fi
               done
 
-              for bin in latticed lattice-embed-host lattice-voice-host; do
+              for bin in latticed lattice-agentd lattice-embed-host lattice-voice-host; do
                 src="target/release/$bin"
                 if [ ! -f "$src" ]; then
                   echo "desktop-release: missing $src (required production sidecar)" >&2

@@ -124,10 +124,37 @@ fn discover_agentd_bin() -> Option<String> {
             return Some(path);
         }
     }
-    // CARGO_MANIFEST_DIR is apps/desktop/src-tauri; canonicalize so latticed
-    // sees apps/agentd/... instead of a src-tauri/../../agentd/... string.
-    let run_sh = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../agentd/scripts/run.sh");
+
+    // Prefer the Rust sidecar (release, then debug, then next to this exe for packaged apps).
+    // Set LATTICE_AGENTD_PREFER_NODE=1 to skip straight to the Node fallback.
+    let prefer_node = matches!(
+        std::env::var("LATTICE_AGENTD_PREFER_NODE").ok().as_deref(),
+        Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("YES")
+    );
+
+    if !prefer_node {
+        let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        for candidate in [
+            workspace_root.join("target/release/lattice-agentd"),
+            workspace_root.join("target/debug/lattice-agentd"),
+        ] {
+            let candidate = std::fs::canonicalize(&candidate).unwrap_or(candidate);
+            if candidate.is_file() {
+                return Some(candidate.to_string_lossy().into());
+            }
+        }
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(dir) = exe.parent() {
+                let sidecar = dir.join("lattice-agentd");
+                if sidecar.is_file() {
+                    return Some(sidecar.to_string_lossy().into());
+                }
+            }
+        }
+    }
+
+    // Node fallback (dev / explicit prefer-node).
+    let run_sh = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../agentd/scripts/run.sh");
     let run_sh = std::fs::canonicalize(&run_sh).unwrap_or(run_sh);
     if run_sh.is_file() {
         return Some(run_sh.to_string_lossy().into());

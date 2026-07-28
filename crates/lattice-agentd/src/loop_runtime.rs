@@ -9,6 +9,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
 use crate::fake::{emit_fake_run, FakeRunOptions};
+use crate::pioneer::{self, PioneerRunOptions};
 use crate::protocol::{AgentCommand, AgentEvent, ProviderKind, PROTOCOL_VERSION};
 use crate::responses::{self, OpenaiRunOptions};
 
@@ -20,6 +21,10 @@ pub struct LoopConfig {
     pub openai_api_key: Option<String>,
     /// Override Responses API base URL including `/v1` (wiremock / proxies).
     pub openai_base_url: Option<String>,
+    /// Override `PIONEER_API_KEY` (tests).
+    pub pioneer_api_key: Option<String>,
+    /// Override Pioneer base URL including `/v1`.
+    pub pioneer_base_url: Option<String>,
 }
 
 impl Default for LoopConfig {
@@ -29,6 +34,8 @@ impl Default for LoopConfig {
             chunk_delay: Duration::from_millis(5),
             openai_api_key: None,
             openai_base_url: None,
+            pioneer_api_key: None,
+            pioneer_base_url: None,
         }
     }
 }
@@ -173,6 +180,8 @@ where
                         let chunk_delay = config.chunk_delay;
                         let openai_api_key = config.openai_api_key.clone();
                         let openai_base_url = config.openai_base_url.clone();
+                        let pioneer_api_key = config.pioneer_api_key.clone();
+                        let pioneer_base_url = config.pioneer_base_url.clone();
                         let cancel_for_task = Arc::clone(&cancel);
                         let run_id_task = run_id.clone();
 
@@ -212,20 +221,24 @@ where
                                     .await;
                                 }
                                 ProviderKind::Pioneer => {
-                                    let _ = events
-                                        .send(AgentEvent::RunStarted {
-                                            run_id: run_id_task.clone(),
-                                            thread_id,
-                                            provider: Some(ProviderKind::Pioneer),
-                                        })
-                                        .await;
-                                    let _ = events
-                                        .send(AgentEvent::RunFailed {
+                                    let api_key = pioneer_api_key
+                                        .or_else(pioneer::api_key_from_env)
+                                        .unwrap_or_default();
+                                    let base_url = pioneer_base_url
+                                        .unwrap_or_else(pioneer::base_url_from_env);
+                                    pioneer::emit_pioneer_run(
+                                        PioneerRunOptions {
                                             run_id: run_id_task,
-                                            message: "pioneer provider is not implemented in lattice-agentd (use provider fake)".into(),
-                                            retryable: false,
-                                        })
-                                        .await;
+                                            thread_id,
+                                            model,
+                                            prompt: prompt_text,
+                                            api_key,
+                                            base_url,
+                                            cancel: cancel_for_task,
+                                        },
+                                        events,
+                                    )
+                                    .await;
                                 }
                             }
                         });
@@ -303,6 +316,8 @@ mod tests {
                 chunk_delay: Duration::ZERO,
                 openai_api_key: Some(String::new()),
                 openai_base_url: None,
+                pioneer_api_key: Some(String::new()),
+                pioneer_base_url: None,
             },
         )
         .await

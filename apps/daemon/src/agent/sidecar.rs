@@ -453,17 +453,52 @@ async fn write_command(
 /// Resolve `LATTICE_AGENTD_BIN` into `(executable, trailing args)`.
 ///
 /// Values may be a direct executable or a launcher form such as
-/// `npx tsx apps/agentd/src/index.ts`.
+/// `npx tsx apps/agentd/src/index.ts`. When unset, prefer the Rust
+/// `lattice-agentd` binary (release/debug/next to latticed), then Node `run.sh`.
 pub fn resolve_agentd_bin() -> Option<(PathBuf, Vec<String>)> {
-    let raw = std::env::var(ENV_AGENTD_BIN)
-        .ok()
-        .filter(|s| !s.is_empty())?;
-    let mut parts = shell_split(&raw);
-    if parts.is_empty() {
-        return None;
+    if let Ok(raw) = std::env::var(ENV_AGENTD_BIN) {
+        if !raw.is_empty() {
+            let mut parts = shell_split(&raw);
+            if parts.is_empty() {
+                return None;
+            }
+            let binary = PathBuf::from(parts.remove(0));
+            return Some((binary, parts));
+        }
     }
-    let binary = PathBuf::from(parts.remove(0));
-    Some((binary, parts))
+    discover_default_agentd_bin()
+}
+
+fn discover_default_agentd_bin() -> Option<(PathBuf, Vec<String>)> {
+    let prefer_node = env_truthy("LATTICE_AGENTD_PREFER_NODE");
+    if !prefer_node {
+        // Relative to latticed crate (apps/daemon) → workspace root.
+        let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        for candidate in [
+            workspace_root.join("target/release/lattice-agentd"),
+            workspace_root.join("target/debug/lattice-agentd"),
+        ] {
+            let candidate = std::fs::canonicalize(&candidate).unwrap_or(candidate);
+            if candidate.is_file() {
+                return Some((candidate, Vec::new()));
+            }
+        }
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(dir) = exe.parent() {
+                let sidecar = dir.join("lattice-agentd");
+                if sidecar.is_file() {
+                    return Some((sidecar, Vec::new()));
+                }
+            }
+        }
+    }
+
+    let run_sh = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../agentd/scripts/run.sh");
+    let run_sh = std::fs::canonicalize(&run_sh).unwrap_or(run_sh);
+    if run_sh.is_file() {
+        return Some((run_sh, Vec::new()));
+    }
+    None
 }
 
 fn shell_split(input: &str) -> Vec<String> {
@@ -490,7 +525,7 @@ pub fn default_model_from_env() -> String {
     std::env::var(ENV_AGENT_MODEL)
         .ok()
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "default".into())
+        .unwrap_or_else(|| "gpt-5.6-luna".into())
 }
 
 #[cfg(test)]
