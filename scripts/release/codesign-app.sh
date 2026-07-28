@@ -8,11 +8,18 @@ lattice_release_prefer_xcode
 : "${APPLE_SIGNING_IDENTITY:?Set APPLE_SIGNING_IDENTITY}"
 app_src="$(lattice_release_app_path)"
 macos_dir="$app_src/Contents/MacOS"
+entitlements="$(cd "$(dirname "$0")/../.." && pwd)/apps/desktop/src-tauri/Entitlements.plist"
+if [ ! -f "$entitlements" ]; then
+  echo "codesign-app: missing entitlements: $entitlements" >&2
+  exit 1
+fi
 
-echo "codesign-app: Developer ID, hardened runtime → $app_src"
+echo "codesign-app: Developer ID, hardened runtime + entitlements → $app_src"
+echo "codesign-app: entitlements=$entitlements"
 sign_bin() {
   local path="$1"
   if ! codesign --force --options runtime --timestamp \
+    --entitlements "$entitlements" \
     --sign "$APPLE_SIGNING_IDENTITY" "$path"; then
     echo "codesign-app: codesign failed: $path" >&2
     echo "  identity: $APPLE_SIGNING_IDENTITY" >&2

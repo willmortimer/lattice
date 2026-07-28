@@ -173,7 +173,8 @@ copy `libLatticeVoiceBridge.dylib` / `libLatticeAudioBridge.dylib` into the
 It mirrors the `desktop-install` sidecar bundling, then:
 
 1. Validates required Apple env **before** the long Tauri/Cargo build
-2. Codesigns with **Developer ID Application** + hardened runtime
+2. Codesigns with **Developer ID Application** + hardened runtime +
+   `apps/desktop/src-tauri/Entitlements.plist`
 3. Submits via `xcrun notarytool` (`APPLE_ID` / `APPLE_PASSWORD` / `APPLE_TEAM_ID`)
 4. Staples the notarization ticket onto `Lattice.app`
 5. Builds `target/release/bundle/dmg/Lattice-<version>.dmg` with `hdiutil`

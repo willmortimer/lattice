@@ -10,6 +10,10 @@ use std::fmt;
 pub enum PresenceReason {
     UnlockApp,
     EnableAppLock,
+    /// Approve / apply an agent or external transaction proposal.
+    ApproveProposal,
+    /// Apply link-repair mutations after a rename.
+    ApplyLinkRepair,
 }
 
 impl PresenceReason {
@@ -17,6 +21,8 @@ impl PresenceReason {
         match self {
             Self::UnlockApp => "unlock Lattice",
             Self::EnableAppLock => "enable app lock",
+            Self::ApproveProposal => "approve changes in Lattice",
+            Self::ApplyLinkRepair => "apply link repairs in Lattice",
         }
     }
 }
@@ -58,6 +64,27 @@ impl std::error::Error for PresenceError {}
 /// Prompt for device owner authentication (Touch ID with password fallback on macOS).
 pub fn request_user_presence(reason: PresenceReason) -> Result<(), PresenceError> {
     request_user_presence_with_reason(reason.as_localized())
+}
+
+/// Require presence for a privileged mutation (approve / apply).
+///
+/// - macOS: fail closed on cancel / failure / unavailable biometrics.
+/// - Other platforms: allow until a presence backend exists ([`PresenceError::Unsupported`]).
+/// - Automated runs: skip when `LATTICE_SKIP_PRESENCE=1` or the `e2e-testing` feature is on.
+pub fn require_approval_presence(reason: PresenceReason) -> Result<(), String> {
+    if std::env::var_os("LATTICE_SKIP_PRESENCE").is_some() {
+        return Ok(());
+    }
+    #[cfg(feature = "e2e-testing")]
+    {
+        let _ = reason;
+        return Ok(());
+    }
+    match request_user_presence(reason) {
+        Ok(()) => Ok(()),
+        Err(PresenceError::Unsupported) => Ok(()),
+        Err(err) => Err(format!("{}: {err}", err.code())),
+    }
 }
 
 pub fn request_user_presence_with_reason(reason: &str) -> Result<(), PresenceError> {
@@ -169,6 +196,8 @@ mod tests {
     fn presence_reason_copy_is_nonempty() {
         assert!(!PresenceReason::UnlockApp.as_localized().is_empty());
         assert!(!PresenceReason::EnableAppLock.as_localized().is_empty());
+        assert!(!PresenceReason::ApproveProposal.as_localized().is_empty());
+        assert!(!PresenceReason::ApplyLinkRepair.as_localized().is_empty());
     }
 
     #[test]

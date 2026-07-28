@@ -333,7 +333,15 @@
               done
 
               # Ensure the identity we expect is on the bundle (Tauri may already have signed).
-              if ! codesign --force --deep --sign "$APPLE_SIGNING_IDENTITY" "$app_src"; then
+              # Match desktop-release: hardened runtime + Entitlements.plist (App Group, etc.).
+              entitlements="$PWD/apps/desktop/src-tauri/Entitlements.plist"
+              if [ ! -f "$entitlements" ]; then
+                echo "desktop-install: missing entitlements: $entitlements" >&2
+                exit 1
+              fi
+              if ! codesign --force --deep --options runtime --timestamp \
+                --entitlements "$entitlements" \
+                --sign "$APPLE_SIGNING_IDENTITY" "$app_src"; then
                 echo "desktop-install: codesign failed for identity: $APPLE_SIGNING_IDENTITY" >&2
                 exit 1
               fi

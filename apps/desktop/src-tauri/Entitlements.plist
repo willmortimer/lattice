@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Developer ID / brew / DMG entitlements for Lattice.app (dev.lattice.desktop).
+
+  App Sandbox stays off so workspaces can be ordinary folders outside the
+  container. Portal capabilities must stay in sync: Associated Domains, Push,
+  Sign In with Apple, App Group group.dev.lattice.shared.
+
+  Hardened-runtime JIT exceptions are required for WKWebView (and any sidecar
+  that JIT-compiles) once codesign uses --options runtime.
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+
+	<!-- WKWebView / V8-style JIT under hardened runtime -->
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
+	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+	<true/>
+
+	<!-- Shared container + keychain access across app + future appexes/helpers -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.dev.lattice.shared</string>
+	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)dev.lattice.desktop</string>
+		<string>$(AppIdentifierPrefix)group.dev.lattice.shared</string>
+	</array>
+
+	<!-- Universal Links + passkeys (host AASA on these hosts) -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:lattice-notes.com</string>
+		<string>applinks:app.lattice-notes.com</string>
+		<string>webcredentials:lattice-notes.com</string>
+	</array>
+
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
+
+	<!-- production for notarized/Developer ID; switch to development only for
+	     Apple Development push debugging if APNs rejects the token environment -->
+	<key>aps-environment</key>
+	<string>production</string>
+</dict>
+</plist>

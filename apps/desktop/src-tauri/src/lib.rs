@@ -8,6 +8,7 @@ mod commands;
 mod daemon_session;
 mod deck;
 mod data;
+mod deep_link;
 mod demo_driver;
 mod deck_export;
 mod dataset;
@@ -36,7 +37,7 @@ mod voice;
 mod watcher;
 mod workflow;
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -79,7 +80,7 @@ pub fn run() {
         .setup(|app| {
             tray::install_tray(app.handle())?;
             app_lock::install_sleep_lock_observer(app.handle());
-            // Custom scheme `lattice://oauth/callback` completes OAuth sessions.
+            // Custom scheme + Universal Links: oauth callback and open-resource.
             use tauri_plugin_deep_link::DeepLinkExt;
             #[cfg(desktop)]
             {
@@ -89,11 +90,22 @@ pub fn run() {
             app.deep_link().on_open_url(move |event| {
                 for url in event.urls() {
                     let url = url.as_str().to_string();
-                    if url.starts_with("lattice://oauth/") {
-                        let _ = lattice_handlers::oauth_ingest_callback(url);
-                        if let Some(main) = handle.get_webview_window("main") {
-                            let _ = main.set_focus();
+                    match deep_link::classify_deep_link(&url) {
+                        Some(deep_link::DeepLinkAction::OAuthCallback(callback)) => {
+                            let _ = lattice_handlers::oauth_ingest_callback(callback);
+                            if let Some(main) = handle.get_webview_window("main") {
+                                let _ = main.set_focus();
+                            }
                         }
+                        Some(deep_link::DeepLinkAction::OpenResource(payload)) => {
+                            let _ = handle.emit("open-resource", &payload);
+                            if let Some(main) = handle.get_webview_window("main") {
+                                let _ = main.unminimize();
+                                let _ = main.show();
+                                let _ = main.set_focus();
+                            }
+                        }
+                        None => {}
                     }
                 }
             });

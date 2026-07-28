@@ -55,6 +55,11 @@ the webview the only reader of ciphertext. True Secure Enclave-resident keys
 may be adopted later for key wrapping where entitlements and code signing
 allow; they are not required for the first encryption provider.
 
+Credential storage uses the OS keychain via `keyring` with platform backends
+(`apple-native` / `windows-native` / `linux-native`). Shared App Group access
+groups, `SecAccessControl` biometry ACLs, and SE-backed approval signatures are
+follow-on work beyond this ADR's first provider.
+
 ## Consequences
 
 - Secret handling stays in trusted Rust code with no community plugin as the

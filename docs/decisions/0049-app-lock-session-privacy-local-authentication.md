@@ -39,6 +39,11 @@ Keep this surface separate from ADR 0038. Encryption, if pursued later, still
 owns DEK lifecycle and storage paths; it may call the same presence helper for
 unlock UX but is not implied by enabling app lock.
 
+Privileged desktop applies (`apply_proposal_cmd`, link-repair apply commands)
+call `require_approval_presence` with a distinct reason. That is still
+LocalAuthentication only — not Secure Enclave signatures (future) and not
+Keychain ACLs on credential items (future SecItem work).
+
 ## Consequences
 
 - Secret handling for presence stays in Rust; no community biometric Tauri

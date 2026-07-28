@@ -12,6 +12,7 @@ use lattice_commands::{
 use serde::Deserialize;
 
 use crate::commands::command_error_to_string;
+use crate::presence::{require_approval_presence, PresenceReason};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -78,6 +79,7 @@ pub fn apply_proposal_cmd(
     proposal_id: String,
     selected_command_indices: Vec<usize>,
 ) -> Result<String, String> {
+    require_approval_presence(PresenceReason::ApproveProposal)?;
     apply_proposal(Path::new(&root), &proposal_id, &selected_command_indices)
         .map_err(command_error_to_string)
 }

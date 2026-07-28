@@ -17,7 +17,12 @@ uuid.workspace = true
 ureq.workspace = true
 # Cross-platform OS credential store (MIT/Apache-2.0). Optional at runtime:
 # MemoryTokenStore is used in tests; KeychainTokenStore when available.
-keyring = "3"
+# keyring 3 defaults to an in-memory mock unless a platform backend is enabled.
+keyring = { version = "3", features = [
+    "apple-native",
+    "windows-native",
+    "linux-native",
+] }
 walkdir.workspace = true
 sha2.workspace = true
 

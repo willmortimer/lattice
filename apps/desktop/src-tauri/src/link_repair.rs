@@ -17,6 +17,7 @@ use serde::Deserialize;
 use tauri::State;
 
 use crate::commands::command_error_to_string;
+use crate::presence::{require_approval_presence, PresenceReason};
 use crate::resource_links::ResourceCatalogState;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -116,6 +117,7 @@ pub fn apply_link_repair(
     plan: LinkRepairPlan,
     catalog_state: State<ResourceCatalogState>,
 ) -> Result<(), String> {
+    require_approval_presence(PresenceReason::ApplyLinkRepair)?;
     catalog_state.refresh(&root)?;
     let store = NativeWorkspaceStore::new(Path::new(&root));
     let summary = link_repair_transaction_summary(
@@ -148,6 +150,7 @@ pub fn apply_batch_link_repair(
     plan: BatchLinkRepairPlan,
     catalog_state: State<ResourceCatalogState>,
 ) -> Result<(), String> {
+    require_approval_presence(PresenceReason::ApplyLinkRepair)?;
     catalog_state.refresh(&root)?;
     if moves.len() < 2 {
         return Err("Batch link repair requires at least two path changes.".into());
@@ -179,6 +182,7 @@ pub fn apply_link_repair_proposal(
     accepted_candidate_ids: Vec<String>,
     catalog_state: State<ResourceCatalogState>,
 ) -> Result<(), String> {
+    require_approval_presence(PresenceReason::ApplyLinkRepair)?;
     catalog_state.refresh(&root)?;
     let plan = load_link_repair_proposal(Path::new(&root), &proposal_id)
         .map_err(command_error_to_string)?;
