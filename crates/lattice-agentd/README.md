@@ -14,7 +14,7 @@ One JSON object per line on stdin (commands) / stdout (events):
 | `hello` | `hello_ack` (`protocolVersion: 1`) |
 | `health` | `health` (`ok: true`) |
 | `start_run` (`provider: fake`) | `run_started` → `message_chunk`(s) → `run_completed` |
-| `start_run` (`provider: pioneer`) | Pioneer chat completions SSE → `message_chunk`(s) |
+| `start_run` (`provider: pioneer`) | Pioneer chat completions → `message_chunk`(s); tool loop when Lattice HTTP env is set |
 | `start_run` (`provider: openai`) | OpenAI Responses stream → `message_chunk`(s) |
 | `cancel_run` | stops in-flight run → `run_failed` (`Run cancelled`) |
 | `shutdown` | exits after cancelling any active run |
@@ -59,6 +59,22 @@ export LATTICE_AGENT_PROVIDER=pioneer
 export LATTICE_AGENT_MODEL=gpt-5.6-luna   # or gpt-5.6-terra
 export PIONEER_API_KEY=…                  # injected by latticed at spawn
 ```
+
+### Host tools (latticed HTTP)
+
+When both are set, Pioneer uses Chat Completions with a Lattice tool loop
+(search / read / related / proposals / …) against the daemon localhost API
+(same routes as Node `apps/agentd`). `latticed` injects these when it
+supervises the sidecar:
+
+| Env | Purpose |
+| --- | --- |
+| `LATTICE_API_BASE_URL` | Daemon HTTP base (e.g. `http://127.0.0.1:18787`) |
+| `LATTICE_AUTH_TOKEN` | Bearer token (same as daemon handshake) |
+
+`start_run` may include `workspaceId` / `workspaceRoot`; tools bind to that
+workspace when arguments omit them. Without the Lattice env pair, Pioneer
+falls back to chat-only streaming and prints a one-time stderr warning.
 
 Stdio smoke:
 

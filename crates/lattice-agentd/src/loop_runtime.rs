@@ -9,6 +9,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
 use crate::fake::{emit_fake_run, FakeRunOptions};
+use crate::lattice_client;
 use crate::pioneer::{self, PioneerRunOptions};
 use crate::protocol::{AgentCommand, AgentEvent, ProviderKind, PROTOCOL_VERSION};
 use crate::responses::{self, OpenaiRunOptions};
@@ -25,6 +26,10 @@ pub struct LoopConfig {
     pub pioneer_api_key: Option<String>,
     /// Override Pioneer base URL including `/v1`.
     pub pioneer_base_url: Option<String>,
+    /// Override `LATTICE_API_BASE_URL` (tests / tool loop).
+    pub lattice_api_base_url: Option<String>,
+    /// Override `LATTICE_AUTH_TOKEN` (tests / tool loop).
+    pub lattice_auth_token: Option<String>,
 }
 
 impl Default for LoopConfig {
@@ -36,8 +41,20 @@ impl Default for LoopConfig {
             openai_base_url: None,
             pioneer_api_key: None,
             pioneer_base_url: None,
+            lattice_api_base_url: None,
+            lattice_auth_token: None,
         }
     }
+}
+
+fn warn_tools_unavailable_once() {
+    use std::sync::Once;
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        eprintln!(
+            "lattice-agentd: Lattice HTTP tools unavailable (set LATTICE_API_BASE_URL and LATTICE_AUTH_TOKEN); Pioneer chat-only"
+        );
+    });
 }
 
 struct ActiveRun {
@@ -149,8 +166,8 @@ where
                         model,
                         messages,
                         prompt,
-                        workspace_id: _,
-                        workspace_root: _,
+                        workspace_id,
+                        workspace_root,
                     } => {
                         // Only one in-flight run for Phase A (matches Node agentd).
                         if let Some(run) = active.take() {
@@ -182,6 +199,8 @@ where
                         let openai_base_url = config.openai_base_url.clone();
                         let pioneer_api_key = config.pioneer_api_key.clone();
                         let pioneer_base_url = config.pioneer_base_url.clone();
+                        let lattice_api_base_url = config.lattice_api_base_url.clone();
+                        let lattice_auth_token = config.lattice_auth_token.clone();
                         let cancel_for_task = Arc::clone(&cancel);
                         let run_id_task = run_id.clone();
 
@@ -226,6 +245,13 @@ where
                                         .unwrap_or_default();
                                     let base_url = pioneer_base_url
                                         .unwrap_or_else(pioneer::base_url_from_env);
+                                    let lattice = lattice_client::lattice_client_from_config(
+                                        lattice_api_base_url.as_deref(),
+                                        lattice_auth_token.as_deref(),
+                                    );
+                                    if lattice.is_none() {
+                                        warn_tools_unavailable_once();
+                                    }
                                     pioneer::emit_pioneer_run(
                                         PioneerRunOptions {
                                             run_id: run_id_task,
@@ -235,6 +261,9 @@ where
                                             api_key,
                                             base_url,
                                             cancel: cancel_for_task,
+                                            lattice,
+                                            workspace_id,
+                                            workspace_root,
                                         },
                                         events,
                                     )
@@ -318,6 +347,8 @@ mod tests {
                 openai_base_url: None,
                 pioneer_api_key: Some(String::new()),
                 pioneer_base_url: None,
+                lattice_api_base_url: None,
+                lattice_auth_token: None,
             },
         )
         .await
