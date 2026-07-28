@@ -10,7 +10,11 @@ import { defineConfig, devices } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: ["**/perf/**/*.spec.ts", "**/data/**/*.spec.ts"],
+  testMatch: [
+    "**/perf/**/*.spec.ts",
+    "**/data/**/*.spec.ts",
+    "**/capture/**/*.spec.ts",
+  ],
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
@@ -30,11 +34,16 @@ export default defineConfig({
     },
     {
       name: "tauri",
-      testMatch: ["**/*.tauri.perf.spec.ts", "**/*.tauri.spec.ts"],
+      testMatch: [
+        "**/*.tauri.perf.spec.ts",
+        "**/*.tauri.spec.ts",
+        "**/*.capture.tauri.spec.ts",
+      ],
       use: {
         // @ts-expect-error custom fixture option from @srsholmes/tauri-playwright
         mode: "tauri",
         // Playwright browser traces capture a blank page in Tauri mode.
+        // Native stills/video use tauriPage.screenshot / startRecording instead.
         trace: "off",
         screenshot: "off",
       },
