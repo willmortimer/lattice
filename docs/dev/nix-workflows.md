@@ -42,9 +42,13 @@ nix profile install .#nxr
 nix develop        # or just cd in, with direnv
 ```
 
-Provides: rustc, cargo, rustfmt, clippy, rust-analyzer, node 22, pnpm,
+Provides: rustc, cargo, rustfmt, clippy, sccache, rust-analyzer, node 22, pnpm,
 pkg-config, **nxr** (plus Tauri's GTK/WebKit stack on Linux). macOS app
 bundling additionally needs Xcode Command Line Tools / Xcode (outside nix).
+
+The shell sets `RUSTC_WRAPPER=sccache` and a Lattice-specific `SCCACHE_DIR`.
+Run `sccache --show-stats` after builds to inspect cache hits. CI on Linux
+should set `SCCACHE_DIR` explicitly when the default XDG path is unsuitable.
 
 Session-local nxr completion is enabled via `nxr.shellIntegration` (no global
 dotfile writes). After `direnv allow`, `nxr` should tab-complete in zsh/bash
