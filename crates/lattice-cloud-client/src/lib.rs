@@ -1,14 +1,16 @@
 //! Minimal lattice-server client for desktop bearer auth (ADR 0067).
 
+mod blob;
 mod client;
 mod config;
 mod error;
 mod session;
 mod types;
 
+pub use blob::HttpCloudBlobClient;
 pub use client::{
-    CloudApiClient, CloudHttpClient, CloudHttpResponse, DefaultCloudApiClient, HttpCloudClient,
-    default_client,
+    BlobPutResponse, CloudApiClient, CloudHttpBytesResponse, CloudHttpClient, CloudHttpResponse,
+    DefaultCloudApiClient, HttpCloudClient, default_client,
 };
 pub use config::{DEFAULT_CLOUD_URL, cloud_url};
 pub use error::{CloudError, Result};

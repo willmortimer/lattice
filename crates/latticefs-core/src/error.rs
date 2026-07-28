@@ -25,6 +25,21 @@ pub enum Error {
     #[error("invalid content hash: {value}")]
     InvalidContentHash { value: String },
 
+    #[error("cloud blob error: {message}")]
+    CloudBlob { message: String },
+
+    #[error("blob not found for resource: {resource_id}")]
+    BlobNotFound { resource_id: String },
+
+    #[error("blob already exists for resource: {resource_id}")]
+    BlobAlreadyExists { resource_id: String },
+
+    #[error("blob hash mismatch: expected {expected}, got {actual}")]
+    BlobHashMismatch {
+        expected: crate::types::ContentHash,
+        actual: crate::types::ContentHash,
+    },
+
     #[error(transparent)]
     Io(#[from] std::io::Error),
 

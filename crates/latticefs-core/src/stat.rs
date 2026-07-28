@@ -1,6 +1,7 @@
 use std::path::Path;
 
-use crate::error::Result;
+use crate::cloud::{roundtrip_verify_blob, CloudBlobClient};
+use crate::error::{Error, Result};
 use crate::registry::NamespaceRegistry;
 use crate::types::ResourceStat;
 
@@ -24,10 +25,30 @@ pub fn resource_stat_or_register(workspace_root: &Path, path: &str) -> Result<Re
     }
 }
 
+/// PUT → GET verify against cloud, then record [`AuthorityMode::Cloud`] in the registry.
+pub fn materialize_to_cloud(
+    workspace_root: &Path,
+    path: &str,
+    data: &[u8],
+    client: &dyn CloudBlobClient,
+) -> Result<ResourceStat> {
+    let mut registry = NamespaceRegistry::open(workspace_root)?;
+    let resource_id = match registry.resource_stat(path) {
+        Ok(stat) => stat.resource_id,
+        Err(Error::ResourceNotFound { .. }) => registry.ensure_local_file(path)?,
+        Err(err) => return Err(err),
+    };
+    let hash = roundtrip_verify_blob(client, resource_id, data)?;
+    registry.mark_cloud_backed(path, hash)?;
+    registry.save()?;
+    registry.resource_stat(path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::AuthorityMode;
+    use crate::cloud::InMemoryCloudBlobClient;
+    use crate::types::{AuthorityMode, ContentHash};
     use tempfile::tempdir;
 
     #[test]
@@ -52,5 +73,17 @@ mod tests {
             .unwrap()
             .resource_stat("notes/a.md")
             .is_ok());
+    }
+
+    #[test]
+    fn materialize_to_cloud_sets_authority() {
+        let dir = tempdir().unwrap();
+        let client = InMemoryCloudBlobClient::new();
+        let data = b"cloud-canonical-bytes";
+        let stat = materialize_to_cloud(dir.path(), "notes/a.md", data, &client).unwrap();
+        assert_eq!(stat.authority, AuthorityMode::Cloud);
+        assert_eq!(stat.content_hash, Some(ContentHash::from_bytes(data).unwrap()));
+        let reopened = resource_stat(dir.path(), "notes/a.md").unwrap();
+        assert_eq!(reopened.authority, AuthorityMode::Cloud);
     }
 }

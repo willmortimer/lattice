@@ -23,7 +23,13 @@ use lattice_data::{
 use lattice_datasets::{parse_partition_key_specs, Dataset, EventAnnotation};
 use lattice_duckdb::{DuckDbEngine, ScalarValue};
 use lattice_index::{Backlink, SearchHit, WorkspaceIndex};
-use latticefs_core::{resource_stat_or_register, AuthorityMode, MaterializationState, ResourceStat};
+use latticefs_core::{
+    materialize_to_cloud, resource_stat_or_register, AuthorityMode, MaterializationState,
+    ResourceStat,
+};
+use lattice_cloud_client::{
+    default_client, HttpCloudBlobClient, KeychainCloudSessionStore,
+};
 use lattice_publish::{export as publish_export, ExportTarget};
 use lattice_storage::{NativeWorkspaceStore, RecoveryJournal, WorkspaceStore};
 use lattice_theme::{
@@ -212,6 +218,11 @@ enum Command {
         #[command(subcommand)]
         command: GitlabCommand,
     },
+    /// Lattice cloud account APIs (bearer session from OS keychain).
+    Cloud {
+        #[command(subcommand)]
+        command: CloudCommand,
+    },
 }
 
 #[derive(Subcommand)]
@@ -231,6 +242,20 @@ enum ResourceCommand {
         /// Path inside the workspace to discover from. Defaults to the current directory.
         path: Option<PathBuf>,
         /// Emit the stat record as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum CloudCommand {
+    /// Upload a workspace file to cloud, verify GET round-trip, and mark authority cloud.
+    BlobRoundtrip {
+        /// Workspace path of the file to upload.
+        target: PathBuf,
+        /// Path inside the workspace to discover from. Defaults to the current directory.
+        path: Option<PathBuf>,
+        /// Emit the resulting stat record as JSON.
         #[arg(long)]
         json: bool,
     },
@@ -906,6 +931,11 @@ fn run(command: Command) -> Result<ExitCode> {
         Command::Backlinks { target, path, json } => cmd_backlinks(target, path, json),
         Command::Resource { command } => match command {
             ResourceCommand::Stat { target, path, json } => cmd_resource_stat(target, path, json),
+        },
+        Command::Cloud { command } => match command {
+            CloudCommand::BlobRoundtrip { target, path, json } => {
+                cmd_cloud_blob_roundtrip(target, path, json)
+            }
         },
         Command::Theme { command } => match command {
             ThemeCommand::List { json } => cmd_theme_list(json),
@@ -2445,6 +2475,41 @@ fn cmd_resource_stat(target: PathBuf, path: Option<PathBuf>, json: bool) -> Resu
     if json {
         print_json(&stat)?;
     } else {
+        print_resource_stat(&stat);
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_cloud_blob_roundtrip(
+    target: PathBuf,
+    path: Option<PathBuf>,
+    json: bool,
+) -> Result<ExitCode> {
+    let start = cwd_or(path)?;
+    let ws = Workspace::discover(&start)?;
+    let rel = workspace_relative(&ws, &target)?;
+    let rel_key = rel.to_string_lossy().replace('\\', "/");
+    let file_path = ws.root().join(&rel);
+    let data = std::fs::read(&file_path)
+        .with_context(|| format!("read {}", file_path.display()))?;
+
+    let store = KeychainCloudSessionStore::new();
+    let token = store
+        .load_token()
+        .map_err(|err| anyhow::anyhow!("load cloud session: {err}"))?
+        .ok_or_else(|| {
+            anyhow::anyhow!("not signed in to cloud; sign in via desktop Settings → Cloud account")
+        })?;
+
+    let api = default_client();
+    let blob_client = HttpCloudBlobClient::new(api, token);
+    let stat = materialize_to_cloud(ws.root(), &rel_key, &data, &blob_client)
+        .map_err(|err| anyhow::anyhow!("{err}"))?;
+
+    if json {
+        print_json(&stat)?;
+    } else {
+        println!("cloud blob round-trip ok");
         print_resource_stat(&stat);
     }
     Ok(ExitCode::SUCCESS)

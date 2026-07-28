@@ -30,6 +30,23 @@ After password auth is enabled on the VPS:
 ## Tests
 
 ```sh
-cargo test -p lattice-cloud-client -p lattice-handlers
+cargo test -p lattice-cloud-client -p lattice-handlers -p latticefs-core
 cargo check -p lattice-desktop
 ```
+
+## Blob round-trip smoke (live VPS)
+
+Requires a signed-in cloud session (desktop Settings → Cloud account, or any process
+that stores the bearer in keychain `lattice.cloud` / `lattice.cloud.user`).
+
+```sh
+export LATTICE_CLOUD_URL=https://cloud.lattice-notes.com   # optional; this is the default
+cd /path/to/workspace
+lattice cloud blob-roundtrip notes/example.md
+lattice resource stat notes/example.md
+# authority should be `cloud`, content_hash set
+```
+
+Use a **new** `ResourceId` on each live PUT (the server is write-once per id). The CLI
+registers the workspace path first, so re-running against the same file after a successful
+upload will return **409** from the server unless you use a fresh registry entry.

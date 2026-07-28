@@ -3636,6 +3636,7 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "clap",
+ "lattice-cloud-client",
  "lattice-commands",
  "lattice-connectors",
  "lattice-core",
@@ -3675,6 +3676,7 @@ name = "lattice-cloud-client"
 version = "0.1.0"
 dependencies = [
  "lattice-connectors",
+ "latticefs-core",
  "serde",
  "serde_json",
  "thiserror 2.0.18",

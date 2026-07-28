@@ -1,14 +1,32 @@
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
+use latticefs_core::{ContentHash, ResourceId};
+
 use crate::config::cloud_url;
 use crate::error::{CloudError, Result};
 use crate::types::{AuthTokenResponse, MeResponse};
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+pub struct BlobPutResponse {
+    pub resource_id: String,
+    pub object_key: String,
+    pub size: u64,
+    pub content_hash: String,
+    pub created_at: u64,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CloudHttpResponse {
     pub status: u16,
     pub body: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CloudHttpBytesResponse {
+    pub status: u16,
+    pub body: Vec<u8>,
+    pub content_hash: Option<String>,
 }
 
 /// Pluggable HTTP surface for unit tests and the production ureq client.
@@ -21,6 +39,16 @@ pub trait CloudHttpClient: Send + Sync {
         body: Option<&Value>,
         bearer: Option<&str>,
     ) -> Result<CloudHttpResponse>;
+
+    fn request_bytes(
+        &self,
+        base_url: &str,
+        method: &str,
+        path: &str,
+        body: Option<&[u8]>,
+        bearer: Option<&str>,
+        headers: &[(&str, &str)],
+    ) -> Result<CloudHttpBytesResponse>;
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -64,6 +92,50 @@ impl CloudHttpClient for HttpCloudClient {
         Ok(CloudHttpResponse {
             status,
             body: response_body,
+        })
+    }
+
+    fn request_bytes(
+        &self,
+        base_url: &str,
+        method: &str,
+        path: &str,
+        body: Option<&[u8]>,
+        bearer: Option<&str>,
+        headers: &[(&str, &str)],
+    ) -> Result<CloudHttpBytesResponse> {
+        let url = format!("{base_url}{path}");
+        let mut request = match method {
+            "GET" => ureq::get(&url),
+            "PUT" => ureq::put(&url),
+            other => {
+                return Err(CloudError::Http(format!("unsupported method {other}")));
+            }
+        };
+        if let Some(token) = bearer {
+            request = request.set("Authorization", &format!("Bearer {token}"));
+        }
+        for (name, value) in headers {
+            request = request.set(*name, *value);
+        }
+        let response = if let Some(payload) = body {
+            request.send_bytes(payload)
+        } else {
+            request.call()
+        }
+        .map_err(|err| CloudError::Http(err.to_string()))?;
+        let status = response.status();
+        let content_hash = response
+            .header("X-Lattice-Content-Hash")
+            .map(str::to_string);
+        let mut reader = response.into_reader();
+        let mut response_body = Vec::new();
+        std::io::Read::read_to_end(&mut reader, &mut response_body)
+            .map_err(|err| CloudError::Http(err.to_string()))?;
+        Ok(CloudHttpBytesResponse {
+            status,
+            body: response_body,
+            content_hash,
         })
     }
 }
@@ -132,6 +204,65 @@ impl<C: CloudHttpClient> CloudApiClient<C> {
         self.get_json("/v1/me", Some(bearer))
     }
 
+    pub fn put_blob(
+        &self,
+        bearer: &str,
+        resource_id: ResourceId,
+        data: &[u8],
+    ) -> Result<ContentHash> {
+        let hash = ContentHash::from_bytes(data).map_err(|err| CloudError::Http(err.to_string()))?;
+        let hash_hex = content_hash_hex(&hash);
+        let path = format!("/v1/blobs/{resource_id}");
+        let response = self.http.request_bytes(
+            &self.base_url,
+            "PUT",
+            &path,
+            Some(data),
+            Some(bearer),
+            &[
+                ("Content-Type", "application/octet-stream"),
+                ("X-Lattice-Content-Hash", hash_hex),
+            ],
+        )?;
+        if response.status == 201 {
+            let body = std::str::from_utf8(&response.body)
+                .map_err(|err| CloudError::InvalidResponse(err.to_string()))?;
+            let metadata: BlobPutResponse = serde_json::from_str(body)
+                .map_err(|err| CloudError::InvalidResponse(err.to_string()))?;
+            return ContentHash::new(format!("sha256:{}", metadata.content_hash))
+                .map_err(|err| CloudError::InvalidResponse(err.to_string()));
+        }
+        Err(bytes_api_error(response))
+    }
+
+    pub fn get_blob(&self, bearer: &str, resource_id: ResourceId) -> Result<Vec<u8>> {
+        let path = format!("/v1/blobs/{resource_id}");
+        let response = self.http.request_bytes(
+            &self.base_url,
+            "GET",
+            &path,
+            None,
+            Some(bearer),
+            &[],
+        )?;
+        if response.status == 200 {
+            if let Some(header_hash) = response.content_hash.as_deref() {
+                let body_hash = ContentHash::from_bytes(&response.body)
+                    .map_err(|err| CloudError::InvalidResponse(err.to_string()))?;
+                let expected = ContentHash::new(format!("sha256:{header_hash}"))
+                    .map_err(|err| CloudError::InvalidResponse(err.to_string()))?;
+                if body_hash != expected {
+                    return Err(CloudError::InvalidResponse(format!(
+                        "response hash mismatch: header {header_hash}, body {}",
+                        content_hash_hex(&body_hash)
+                    )));
+                }
+            }
+            return Ok(response.body);
+        }
+        Err(bytes_api_error(response))
+    }
+
     fn post_json<T: DeserializeOwned>(
         &self,
         path: &str,
@@ -187,6 +318,38 @@ fn api_error(status: u16, body: &str) -> CloudError {
     CloudError::Api { status, message }
 }
 
+fn content_hash_hex(hash: &ContentHash) -> &str {
+    hash.as_str()
+        .strip_prefix("sha256:")
+        .unwrap_or(hash.as_str())
+}
+
+fn bytes_api_error(response: CloudHttpBytesResponse) -> CloudError {
+    let message = std::str::from_utf8(&response.body)
+        .ok()
+        .and_then(|body| {
+            serde_json::from_str::<Value>(body)
+                .ok()
+                .and_then(|value| {
+                    value
+                        .get("error")
+                        .and_then(|error| error.as_str())
+                        .map(str::to_string)
+                })
+        })
+        .unwrap_or_else(|| {
+            if response.body.is_empty() {
+                format!("HTTP {}", response.status)
+            } else {
+                String::from_utf8_lossy(&response.body).into_owned()
+            }
+        });
+    CloudError::Api {
+        status: response.status,
+        message,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -197,6 +360,7 @@ mod tests {
     #[derive(Default, Clone)]
     struct FakeCloudHttp {
         responses: Arc<Mutex<HashMap<String, CloudHttpResponse>>>,
+        bytes_responses: Arc<Mutex<HashMap<String, CloudHttpBytesResponse>>>,
     }
 
     impl FakeCloudHttp {
@@ -228,6 +392,31 @@ mod tests {
                 return Ok(response);
             }
             Err(CloudError::Http(format!("no fake response for {key}")))
+        }
+
+        fn request_bytes(
+            &self,
+            _base_url: &str,
+            method: &str,
+            path: &str,
+            _body: Option<&[u8]>,
+            bearer: Option<&str>,
+            _headers: &[(&str, &str)],
+        ) -> Result<CloudHttpBytesResponse> {
+            let key = format!("{method} {path}");
+            if bearer != Some("good-token") {
+                return Ok(CloudHttpBytesResponse {
+                    status: 401,
+                    body: br#"{"error":"invalid session"}"#.to_vec(),
+                    content_hash: None,
+                });
+            }
+            self.bytes_responses
+                .lock()
+                .unwrap()
+                .get(&key)
+                .cloned()
+                .ok_or_else(|| CloudError::Http(format!("no fake bytes response for {key}")))
         }
     }
 
