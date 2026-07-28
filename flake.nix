@@ -264,15 +264,16 @@
               pnpm --filter @lattice/desktop exec tauri build --bundles app --features voice-embedded
 
               # Thin-client sidecars (semantic + voice + agent) must sit beside lattice-desktop.
-              echo "desktop-install: building latticed / lattice-agentd / lattice-embed-host / lattice-voice-host"
+              echo "desktop-install: building latticed / lattice-agentd / lattice-wasi-seatbelt / lattice-embed-host / lattice-voice-host"
               cargo build --release -p lattice-daemon --bin latticed
               cargo build --release -p lattice-agentd --bin lattice-agentd
+              cargo build --release -p lattice-agentd --bin lattice-wasi-seatbelt
               cargo build --release -p lattice-embed-host --bin lattice-embed-host --features llama-cpp
               cargo build --release -p lattice-voice-host --bin lattice-voice-host --features fluidaudio || \
                 cargo build --release -p lattice-voice-host --bin lattice-voice-host
 
               echo "desktop-install: verifying production sidecars"
-              for bin in latticed lattice-agentd lattice-embed-host lattice-voice-host; do
+              for bin in latticed lattice-agentd lattice-wasi-seatbelt lattice-embed-host lattice-voice-host; do
                 if [ ! -f "target/release/$bin" ]; then
                   echo "desktop-install: missing target/release/$bin after build" >&2
                   exit 1
@@ -320,7 +321,7 @@
 
               # Semantic search + voice + agent thin-clients expect sidecars
               # as MacOS siblings of the app binary (see docs/search/…).
-              for bin in latticed lattice-agentd lattice-embed-host lattice-voice-host; do
+              for bin in latticed lattice-agentd lattice-wasi-seatbelt lattice-embed-host lattice-voice-host; do
                 src="target/release/$bin"
                 if [ ! -f "$src" ]; then
                   echo "desktop-install: missing $src (required production sidecar)" >&2
@@ -357,6 +358,7 @@
             '';
             build-agentd = ''
               exec bash scripts/release/build-sidecar.sh lattice-agentd lattice-agentd
+              exec bash scripts/release/build-sidecar.sh lattice-agentd lattice-wasi-seatbelt
             '';
             build-embed-host = ''
               exec bash scripts/release/build-sidecar.sh lattice-embed-host lattice-embed-host llama-cpp

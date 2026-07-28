@@ -17,7 +17,7 @@ for dylib in libLatticeVoiceBridge.dylib libLatticeAudioBridge.dylib; do
   fi
 done
 
-for bin in latticed lattice-agentd lattice-embed-host lattice-voice-host; do
+for bin in latticed lattice-agentd lattice-wasi-seatbelt lattice-embed-host lattice-voice-host; do
   src="target/release/$bin"
   if [ ! -f "$src" ]; then
     echo "assemble-app: missing $src (required production sidecar)" >&2

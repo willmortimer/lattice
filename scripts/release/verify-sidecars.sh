@@ -4,7 +4,7 @@ set -euo pipefail
 source "$(cd "$(dirname "$0")" && pwd)/_common.sh"
 lattice_release_ensure_root
 
-for bin in latticed lattice-agentd lattice-embed-host lattice-voice-host; do
+for bin in latticed lattice-agentd lattice-wasi-seatbelt lattice-embed-host lattice-voice-host; do
   if [ ! -f "target/release/$bin" ]; then
     echo "verify-sidecars: missing target/release/$bin after build" >&2
     exit 1
