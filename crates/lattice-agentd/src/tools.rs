@@ -602,7 +602,8 @@ async fn dispatch_tool_inner(
     match name {
         "search" => {
             let query = string_arg(&args, "query").ok_or_else(|| "query is required".to_string())?;
-            let mut body = json!({ "query": query, "mode": "fts" });
+            // Prefer daemon hybrid ranking (FTS + semantic fusion) over FTS-only.
+            let mut body = json!({ "query": query, "mode": "hybrid" });
             if let Some(limit) = args.get("limit").and_then(|v| v.as_i64()) {
                 body["limit"] = json!(limit);
             }
