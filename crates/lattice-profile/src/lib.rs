@@ -22,6 +22,11 @@ pub const LATTICE_HOME_ENV: &str = "LATTICE_HOME";
 pub const LATTICE_FORCE_PROD_HOME_ENV: &str = "LATTICE_FORCE_PROD_HOME";
 /// When set (`1`/`true`/`yes`), wipe and re-seed First Look on each desktop-dev launch.
 pub const LATTICE_DEV_RESET_DEMO_ENV: &str = "LATTICE_DEV_RESET_DEMO";
+/// Optional directory whose contents are merged into the First Look workspace
+/// after seed/reset (workspace-relative paths). Used by private ecosystem
+/// overlays such as the YC `Hackathon/Pitch.deck` — never baked into the public
+/// demo template.
+pub const LATTICE_DEV_DEMO_OVERLAY_ENV: &str = "LATTICE_DEV_DEMO_OVERLAY";
 pub const LATTICE_HOME_NAME: &str = "Lattice";
 pub const DEFAULT_DEBUG_HOME_RELATIVE: &str = "target/dev-home";
 pub const WORKSPACES_DIR_NAME: &str = "Workspaces";
@@ -87,6 +92,17 @@ pub fn lattice_force_prod_home_enabled() -> bool {
 /// When true, wipe and re-seed the First Look demo workspace on startup.
 pub fn lattice_dev_reset_demo_enabled() -> bool {
     env_flag_enabled(LATTICE_DEV_RESET_DEMO_ENV)
+}
+
+/// Private demo overlay directory from [`LATTICE_DEV_DEMO_OVERLAY_ENV`], if set
+/// to an existing directory.
+pub fn lattice_dev_demo_overlay_path() -> Option<PathBuf> {
+    let raw = std::env::var_os(LATTICE_DEV_DEMO_OVERLAY_ENV)?;
+    if raw.is_empty() {
+        return None;
+    }
+    let path = PathBuf::from(raw);
+    path.is_dir().then_some(path)
 }
 
 fn env_flag_enabled(name: &str) -> bool {

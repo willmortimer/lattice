@@ -3,10 +3,11 @@
 use std::path::{Path, PathBuf};
 
 pub use lattice_profile::{
-    default_debug_home_path, lattice_dev_home_enabled, lattice_dev_reset_demo_enabled,
-    lattice_force_prod_home_enabled, lattice_home_path, LatticeHome, DEFAULT_DEBUG_HOME_RELATIVE,
-    DEFAULT_WORKSPACE_NAME, LATTICE_DEV_HOME_ENV, LATTICE_FORCE_PROD_HOME_ENV, LATTICE_HOME_ENV,
-    LATTICE_HOME_NAME, SETTINGS_DIR_NAME, STATE_DIR_NAME, WORKSPACES_DIR_NAME,
+    default_debug_home_path, lattice_dev_demo_overlay_path, lattice_dev_home_enabled,
+    lattice_dev_reset_demo_enabled, lattice_force_prod_home_enabled, lattice_home_path, LatticeHome,
+    DEFAULT_DEBUG_HOME_RELATIVE, DEFAULT_WORKSPACE_NAME, LATTICE_DEV_DEMO_OVERLAY_ENV,
+    LATTICE_DEV_HOME_ENV, LATTICE_FORCE_PROD_HOME_ENV, LATTICE_HOME_ENV, LATTICE_HOME_NAME,
+    SETTINGS_DIR_NAME, STATE_DIR_NAME, WORKSPACES_DIR_NAME,
 };
 
 use crate::template::{
@@ -79,11 +80,17 @@ pub fn initialize_lattice_home() -> Result<(LatticeHome, WorkspaceProvisionOutco
 /// When [`lattice_dev_reset_demo_enabled`] is true (`LATTICE_DEV_RESET_DEMO`),
 /// any existing First Look workspace is removed and re-provisioned from the
 /// current `demo` template so desktop-dev always reflects template changes.
+///
+/// When `LATTICE_DEV_DEMO_OVERLAY` points at a directory, its contents are
+/// merged into the First Look workspace after seed (or on every ensure when the
+/// workspace already exists). Private ecosystem material such as
+/// `Hackathon/Pitch.deck` uses this path instead of the public demo template.
 pub fn initialize_dev_lattice_home() -> Result<(LatticeHome, WorkspaceProvisionOutcome)> {
     let home = ensure_lattice_home()?;
     if lattice_dev_reset_demo_enabled() {
         remove_first_look_workspaces(&home)?;
     } else if let Ok(path) = effective_default_workspace(&home) {
+        apply_dev_demo_overlay(&path)?;
         return Ok((
             home,
             WorkspaceProvisionOutcome {
@@ -101,6 +108,7 @@ pub fn initialize_dev_lattice_home() -> Result<(LatticeHome, WorkspaceProvisionO
         template_id: DEV_TEMPLATE_ID.into(),
         mode: WorkspaceCreationMode::NewDirectory,
     })?;
+    apply_dev_demo_overlay(outcome.workspace.root())?;
     match home.set_default_workspace(outcome.workspace.root()) {
         Ok(_) => outcome.default_workspace_status = DefaultWorkspaceStatus::Updated,
         Err(error) => {
@@ -115,6 +123,31 @@ pub fn initialize_dev_lattice_home() -> Result<(LatticeHome, WorkspaceProvisionO
         }
     }
     Ok((home, outcome))
+}
+
+fn apply_dev_demo_overlay(workspace_root: &Path) -> Result<()> {
+    let Some(overlay) = lattice_dev_demo_overlay_path() else {
+        return Ok(());
+    };
+    copy_dir_merge(&overlay, workspace_root).map_err(|source| Error::io(workspace_root, source))
+}
+
+fn copy_dir_merge(src: &Path, dst: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let to = dst.join(entry.file_name());
+        if file_type.is_dir() {
+            copy_dir_merge(&entry.path(), &to)?;
+        } else if file_type.is_file() {
+            if let Some(parent) = to.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::copy(entry.path(), &to)?;
+        }
+    }
+    Ok(())
 }
 
 fn remove_first_look_workspaces(home: &LatticeHome) -> Result<()> {
@@ -226,7 +259,7 @@ fn profile_error(error: lattice_profile::Error) -> Error {
 mod tests {
     use super::*;
     use crate::ResourceKind;
-    use lattice_profile::LATTICE_DEV_RESET_DEMO_ENV;
+    use lattice_profile::{LATTICE_DEV_DEMO_OVERLAY_ENV, LATTICE_DEV_RESET_DEMO_ENV};
     use std::sync::{Mutex, OnceLock};
 
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
@@ -363,6 +396,32 @@ mod tests {
         assert!(second.workspace.root().join("CRM.data").is_dir());
         assert!(second.workspace.root().join("Home.md").is_file());
         std::env::remove_var(LATTICE_DEV_RESET_DEMO_ENV);
+        std::env::remove_var(LATTICE_DEV_HOME_ENV);
+    }
+
+    #[test]
+    fn dev_demo_overlay_merges_private_files_into_first_look() {
+        let _guard = env_lock();
+        let directory = tempfile::tempdir().unwrap();
+        let overlay = tempfile::tempdir().unwrap();
+        let deck = overlay.path().join("Hackathon/Pitch.deck");
+        std::fs::create_dir_all(&deck).unwrap();
+        std::fs::write(deck.join("deck.yaml"), "format: lattice-deck\n").unwrap();
+        std::env::set_var(LATTICE_DEV_HOME_ENV, directory.path());
+        std::env::set_var(LATTICE_DEV_DEMO_OVERLAY_ENV, overlay.path());
+        std::env::set_var(LATTICE_DEV_RESET_DEMO_ENV, "1");
+        let (_home, outcome) = initialize_dev_lattice_home().unwrap();
+        let seeded = outcome
+            .workspace
+            .root()
+            .join("Hackathon/Pitch.deck/deck.yaml");
+        assert!(seeded.is_file());
+        assert_eq!(
+            std::fs::read_to_string(&seeded).unwrap(),
+            "format: lattice-deck\n"
+        );
+        std::env::remove_var(LATTICE_DEV_RESET_DEMO_ENV);
+        std::env::remove_var(LATTICE_DEV_DEMO_OVERLAY_ENV);
         std::env::remove_var(LATTICE_DEV_HOME_ENV);
     }
 

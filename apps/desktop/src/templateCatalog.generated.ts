@@ -962,7 +962,6 @@ export const GENERATED_TEMPLATE_CATALOG = [
       "CRM/Feedback.data",
       "Hackathon/Launch.data",
       "Hackathon/Demo Script.md",
-      "Hackathon/Pitch.deck",
       "Hackathon/Pitch.canvas",
       "Docs/Product Overview.md",
       "Engineering/Repository.md",
@@ -2322,7 +2321,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "priority": "Medium",
             "owner": "Product",
             "due": "2026-08-18",
-            "notes": "Hackathon/Pitch.deck is the presenter-native close; Pitch.canvas remains the spatial storyboard."
+            "notes": "Hackathon/Pitch.canvas is the spatial storyboard close for the public demo."
           },
           {
             "name": "First Look company fixture",
@@ -2674,7 +2673,7 @@ export const GENERATED_TEMPLATE_CATALOG = [
             "status": "Ready",
             "due": "2026-07-25",
             "demo_risk": "Low",
-            "notes": "Use Hackathon/Pitch.deck in presentation mode; keep Pitch.canvas for the spatial storyboard."
+            "notes": "Use Hackathon/Pitch.canvas presentation mode for the public demo close."
           }
         ],
         "extraTables": [

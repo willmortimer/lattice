@@ -41,13 +41,13 @@ Open [[Home]] and say:
 
 ## Scene 4 — composition
 
-Open `Hackathon/Pitch.deck` in presentation mode for the scripted close. Static
-viewboxes on the product and traction slides point at [[Product/Vision]] and
-`Engineering/Build Status.dataset` without copying screenshots.
+Open `Hackathon/Pitch.canvas`. Press **Present** (or `P`) to rehearse ordered
+camera scenes from `Pitch.canvas.presentation.json`. Advance with arrow keys;
+`Esc` exits.
 
-For the spatial storyboard, open `Hackathon/Pitch.canvas`. Press **Present**
-(or `P`) to rehearse ordered camera scenes from
-`Pitch.canvas.presentation.json`. Advance with arrow keys; `Esc` exits.
+When developing from the private ecosystem checkout, `desktop-dev` can merge a
+local `Hackathon/Pitch.deck` overlay for a presenter-native close — that package
+is not part of the public First Look template.
 
 ## Fallback language
 
