@@ -1092,11 +1092,16 @@
           devShells.default = pkgs.mkShell {
             packages = toolchain ++ lib.attrValues defaultLatticeScripts;
             shellHook = ''
-              export RUSTC_WRAPPER="''${RUSTC_WRAPPER:-sccache}"
+              export RUSTC_WRAPPER="${RUSTC_WRAPPER:-sccache}"
               if [ "$(uname -s)" = "Darwin" ]; then
-                export SCCACHE_DIR="''${SCCACHE_DIR:-''$HOME/Library/Caches/Lattice/sccache}"
+                export SCCACHE_DIR="${SCCACHE_DIR:-$HOME/Library/Caches/Lattice/sccache}"
               else
-                export SCCACHE_DIR="''${SCCACHE_DIR:-''${XDG_CACHE_HOME:-''$HOME/.cache}/lattice/sccache}"
+                export SCCACHE_DIR="${SCCACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/lattice/sccache}"
+              fi
+              if [ "''${NXR_AUTO_DAEMON:-1}" != "0" ] && command -v nxr >/dev/null 2>&1; then
+                nxr daemon status --json >/dev/null 2>&1 ||
+                  nxr daemon start >/dev/null 2>&1 ||
+                  true
               fi
               echo "lattice dev shell — rust $(rustc --version | cut -d' ' -f2), node $(node --version), pnpm $(pnpm --version)"
               echo "runner: nxr list | nxr task ci [-j N] | nxr graph ci | nxr up desktop-web"
