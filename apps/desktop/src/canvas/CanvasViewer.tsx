@@ -16,15 +16,29 @@ import {
 import { CanvasParseError, parseCanvas, type CanvasData } from "./types";
 import { CanvasScene } from "./scene";
 import { LATTICE_RESOURCE_MIME, readResourceDragPayload } from "../lib/resourceDrag";
+import { readTextWindow } from "../lib/resourceRuntime";
+import {
+  canvasPresentationSidecarPath,
+  createCanvasPresentationSession,
+  extractEmbeddedCanvasPresentation,
+  parseCanvasPresentationManifest,
+  resolveCanvasSceneIndex,
+  resolveCanvasScenes,
+  type CanvasPresentationManifest,
+  type CanvasSceneSpec,
+} from "../presentation/presentationSession";
 import type { Resource } from "../types";
 
 const OUTLINE_OPEN_KEY = "lattice.canvas.outlineOpen";
 const DEFAULT_NOTE_WIDTH = 200;
 const DEFAULT_NOTE_HEIGHT = 140;
+const PRESENT_CAMERA_MS = 480;
+const SIDECAR_READ_BYTES = 256_000;
 
 interface CanvasViewerProps {
   json: unknown;
   canvasPath: string;
+  workspaceRoot?: string;
   resources?: readonly Resource[];
   onOpenFile: (path: string, subpath?: string) => void;
   adapter?: CanvasAdapter;
@@ -60,10 +74,25 @@ function fileLabel(path: string): string {
   return path.split("/").pop() ?? path;
 }
 
+function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(
+    () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
+  );
+  useEffect(() => {
+    const query = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    if (!query) return;
+    const change = () => setReduced(query.matches);
+    query.addEventListener("change", change);
+    return () => query.removeEventListener("change", change);
+  }, []);
+  return reduced;
+}
+
 /** Pixi owns the scene hot loop; the DOM outline remains the accessible action surface. */
 export function CanvasViewer({
   json,
   canvasPath,
+  workspaceRoot,
   resources = [],
   onOpenFile,
   adapter,
@@ -72,6 +101,7 @@ export function CanvasViewer({
   onError,
 }: CanvasViewerProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const surfaceRef = useRef<HTMLDivElement | null>(null);
   const onOpenFileRef = useRef(onOpenFile);
   const adapterRef = useRef(adapter);
   const revisionRef = useRef(baseRevision);
@@ -81,6 +111,9 @@ export function CanvasViewer({
   const fitNextLoadRef = useRef(true);
   const connectModeRef = useRef(false);
   const connectFromIdRef = useRef<string | null>(null);
+  const presentingRef = useRef(false);
+  const sceneIndexRef = useRef(0);
+  const scenesRef = useRef<CanvasSceneSpec[]>([]);
   onOpenFileRef.current = onOpenFile;
   adapterRef.current = adapter;
   onRevisionChangeRef.current = onRevisionChange;
@@ -99,14 +132,65 @@ export function CanvasViewer({
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [textEdit, setTextEdit] = useState<{ id: string; text: string } | null>(null);
   const [zoomPct, setZoomPct] = useState(100);
+  const [manifest, setManifest] = useState<CanvasPresentationManifest | null>(() =>
+    extractEmbeddedCanvasPresentation(json),
+  );
+  const [presenting, setPresenting] = useState(false);
+  const [sceneIndex, setSceneIndex] = useState(0);
+  const reducedMotion = useReducedMotion();
 
   connectModeRef.current = connectMode;
   connectFromIdRef.current = connectFromId;
   dataRef.current = data;
+  presentingRef.current = presenting;
+  sceneIndexRef.current = sceneIndex;
 
   useEffect(() => {
     revisionRef.current = baseRevision;
   }, [baseRevision]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const embedded = extractEmbeddedCanvasPresentation(json);
+    if (!workspaceRoot) {
+      setManifest(embedded);
+      return;
+    }
+    const sidecarPath = canvasPresentationSidecarPath(canvasPath);
+    void readTextWindow({
+      root: workspaceRoot,
+      path: sidecarPath,
+      offset: 0,
+      length: SIDECAR_READ_BYTES,
+    })
+      .then((window) => {
+        if (cancelled) return;
+        setManifest(parseCanvasPresentationManifest(JSON.parse(window.content)));
+      })
+      .catch(() => {
+        if (!cancelled) setManifest(embedded);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceRoot, canvasPath, json]);
+
+  const scenes = useMemo(
+    () => resolveCanvasScenes(manifest, data?.nodes ?? []),
+    [manifest, data],
+  );
+  scenesRef.current = scenes;
+
+  const presentation = useMemo(
+    () =>
+      createCanvasPresentationSession(
+        canvasPath,
+        manifest?.title ?? fileLabel(canvasPath),
+        scenes,
+        { start: manifest?.start },
+      ),
+    [canvasPath, manifest, scenes],
+  );
 
   const reportError = (message: string) => {
     setErrorMessage(message);
@@ -144,7 +228,100 @@ export function CanvasViewer({
     setSelectedEdgeId(null);
     setConnectFromId(null);
     setTextEdit(null);
+    setPresenting(false);
+    setSceneIndex(0);
   }, [parsed.data]);
+
+  const frameScene = (index: number, animate: boolean) => {
+    const scene = scenesRef.current[index];
+    const pixi = sceneRef.current;
+    if (!scene || !pixi) return;
+    const durationMs = animate && !reducedMotion ? PRESENT_CAMERA_MS : 0;
+    if (scene.viewport) {
+      void pixi.frameBounds(scene.viewport, {
+        padding: scene.viewport.padding ?? 48,
+        durationMs,
+      });
+    } else if (scene.nodeIds?.length) {
+      void pixi.frameNodes(scene.nodeIds, { durationMs });
+      const focus = scene.nodeIds[0];
+      if (focus) pixi.selectNode(focus);
+    }
+  };
+
+  const goToScene = (next: number, animate: boolean) => {
+    const count = scenesRef.current.length;
+    if (count === 0) return;
+    const index = Math.max(0, Math.min(count - 1, next));
+    setSceneIndex(index);
+    sceneIndexRef.current = index;
+    frameScene(index, animate);
+  };
+
+  const exitPresent = () => {
+    setPresenting(false);
+    presentingRef.current = false;
+    if (document.fullscreenElement && document.fullscreenElement === surfaceRef.current) {
+      void document.exitFullscreen();
+    }
+  };
+
+  const enterPresent = () => {
+    setPlaceOpen(false);
+    setConnectMode(false);
+    setConnectFromId(null);
+    setTextEdit(null);
+    setPresenting(true);
+    presentingRef.current = true;
+    const initial = resolveCanvasSceneIndex(presentation.orderedIds, presentation.initialId);
+    setSceneIndex(initial);
+    sceneIndexRef.current = initial;
+    // Wait a frame so fullscreen layout can resize the Pixi host first.
+    requestAnimationFrame(() => {
+      frameScene(initial, false);
+      void surfaceRef.current?.requestFullscreen?.().catch(() => {
+        // Fullscreen may be blocked; present mode still works in-pane.
+      });
+      requestAnimationFrame(() => frameScene(initial, false));
+    });
+  };
+
+  useEffect(() => {
+    const onFullscreen = () => {
+      if (!presentingRef.current) return;
+      if (document.fullscreenElement !== surfaceRef.current) {
+        setPresenting(false);
+        presentingRef.current = false;
+      }
+    };
+    document.addEventListener("fullscreenchange", onFullscreen);
+    return () => document.removeEventListener("fullscreenchange", onFullscreen);
+  }, []);
+
+  useEffect(() => {
+    if (!presenting) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
+      if (["ArrowRight", "ArrowDown", "PageDown", " ", "Enter"].includes(event.key)) {
+        event.preventDefault();
+        goToScene(sceneIndexRef.current + 1, true);
+      } else if (["ArrowLeft", "ArrowUp", "PageUp", "Backspace"].includes(event.key)) {
+        event.preventDefault();
+        goToScene(sceneIndexRef.current - 1, true);
+      } else if (event.key === "Home") {
+        event.preventDefault();
+        goToScene(0, true);
+      } else if (event.key === "End") {
+        event.preventDefault();
+        goToScene(scenesRef.current.length - 1, true);
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        exitPresent();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [presenting, reducedMotion, presentation.orderedIds]);
 
   const dropWorldPoint = (clientX: number, clientY: number) => {
     const world = sceneRef.current?.clientToWorld(clientX, clientY);
@@ -498,9 +675,11 @@ export function CanvasViewer({
 
   return (
     <div
-      className={`canvas-surface${outlineOpen ? "" : " is-outline-collapsed"}`}
+      ref={surfaceRef}
+      className={`canvas-surface${outlineOpen && !presenting ? "" : " is-outline-collapsed"}${presenting ? " is-presenting" : ""}`}
       tabIndex={0}
       onDragOver={(event) => {
+        if (presenting) return;
         if (
           event.dataTransfer?.types.includes(LATTICE_RESOURCE_MIME) ||
           (event.dataTransfer?.files?.length ?? 0) > 0
@@ -510,6 +689,7 @@ export function CanvasViewer({
         }
       }}
       onDrop={(event) => {
+        if (presenting) return;
         const payload = readResourceDragPayload(event.dataTransfer);
         if (payload) {
           event.preventDefault();
@@ -524,6 +704,7 @@ export function CanvasViewer({
         }
       }}
       onKeyDown={(event) => {
+        if (presenting) return;
         if (textEdit) {
           if (event.key === "Escape") {
             setTextEdit(null);
@@ -544,6 +725,17 @@ export function CanvasViewer({
             return;
           }
         }
+        if (
+          !event.metaKey &&
+          !event.ctrlKey &&
+          !event.altKey &&
+          (event.key === "p" || event.key === "P") &&
+          scenes.length > 0
+        ) {
+          event.preventDefault();
+          enterPresent();
+          return;
+        }
         if (connectMode) return;
         const delta = keyboardMoveDelta(event.key, event.shiftKey);
         if (delta && sceneRef.current?.moveSelectedBy(delta.x, delta.y)) event.preventDefault();
@@ -553,6 +745,7 @@ export function CanvasViewer({
       }}
     >
       <div className="canvas-main">
+        {!presenting && (
         <div className="canvas-toolbar" aria-label="Canvas editing actions">
           <button
             type="button"
@@ -603,6 +796,14 @@ export function CanvasViewer({
           >
             Outline
           </button>
+          <button
+            type="button"
+            disabled={scenes.length === 0}
+            title="Present (P)"
+            onClick={() => enterPresent()}
+          >
+            Present
+          </button>
           <span className="canvas-toolbar-hint">
             {connectMode
               ? connectFromId
@@ -610,7 +811,7 @@ export function CanvasViewer({
                 : "Click the first node to connect"
               : selectedEdgeId
                 ? "Press Delete to remove the selected edge"
-                : "Drag ports to connect · SE corner to resize · drop resources under pan/zoom"}
+                : "Drag ports to connect · SE corner to resize · drop resources under pan/zoom · P to present"}
           </span>
           <button
             type="button"
@@ -645,7 +846,30 @@ export function CanvasViewer({
             Fit
           </button>
         </div>
-        {placeOpen && (
+        )}
+        {presenting && (
+          <div className="canvas-present-chrome" role="toolbar" aria-label="Presentation controls">
+            <button type="button" onClick={() => goToScene(sceneIndex - 1, true)} disabled={sceneIndex <= 0}>
+              Previous
+            </button>
+            <output aria-live="polite">
+              {sceneIndex + 1} / {scenes.length}
+              {scenes[sceneIndex]?.title ? ` · ${scenes[sceneIndex]?.title}` : scenes[sceneIndex]?.id ? ` · ${scenes[sceneIndex]?.id}` : ""}
+            </output>
+            <button
+              type="button"
+              onClick={() => goToScene(sceneIndex + 1, true)}
+              disabled={sceneIndex >= scenes.length - 1}
+            >
+              Next
+            </button>
+            <button type="button" onClick={() => exitPresent()}>
+              Exit
+            </button>
+            <span className="canvas-toolbar-hint">← → to advance · Esc to exit</span>
+          </div>
+        )}
+        {placeOpen && !presenting && (
           <div className="canvas-place-panel" role="dialog" aria-label="Place resource on canvas">
             <input
               className="canvas-place-filter"
@@ -671,7 +895,7 @@ export function CanvasViewer({
             </ul>
           </div>
         )}
-        {textEdit && (
+        {textEdit && !presenting && (
           <div className="canvas-text-editor" role="dialog" aria-label="Edit sticky note">
             <textarea
               value={textEdit.text}
@@ -696,7 +920,7 @@ export function CanvasViewer({
         {errorMessage && <p className="canvas-conflict" role="alert">{errorMessage}</p>}
         <div ref={hostRef} className="canvas-viewer" />
       </div>
-      {outlineOpen && (
+      {outlineOpen && !presenting && (
         <CanvasOutline
           nodes={data.nodes}
           selectedId={selectedId}

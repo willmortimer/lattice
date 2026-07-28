@@ -43,8 +43,11 @@ Open [[Home]] and say:
 
 Open `Hackathon/Pitch.deck` in presentation mode for the scripted close. Static
 viewboxes on the product and traction slides point at [[Product/Vision]] and
-`Engineering/Build Status.dataset` without copying screenshots. For the spatial
-storyboard, open `Hackathon/Pitch.canvas`.
+`Engineering/Build Status.dataset` without copying screenshots.
+
+For the spatial storyboard, open `Hackathon/Pitch.canvas`. Press **Present**
+(or `P`) to rehearse ordered camera scenes from
+`Pitch.canvas.presentation.json`. Advance with arrow keys; `Esc` exits.
 
 ## Fallback language
 

@@ -178,6 +178,37 @@ Canvas-level state may include:
 
 Canonical shared state and user-local session state must be distinguished.
 
+### Presentation rehearsal (canvas sequencer)
+
+Without inventing a `.show` format, ordered camera scenes for a canvas live in a
+sibling sidecar:
+
+```text
+Hackathon/Pitch.canvas
+Hackathon/Pitch.canvas.presentation.json
+```
+
+```json
+{
+  "title": "Hackathon pitch",
+  "start": "overview",
+  "scenes": [
+    { "id": "overview", "title": "Workspace map", "nodeIds": ["thesis", "product"] },
+    { "id": "thesis", "nodeIds": ["thesis"] },
+    { "id": "bookmark", "viewport": { "x": 0, "y": 0, "width": 800, "height": 600 } }
+  ]
+}
+```
+
+Alternatively, embed the same object under `metadata.presentation` (or top-level
+`presentation`) on the canvas JSON — parsers that only read `nodes`/`edges`
+ignore it. If neither source exists, Present falls back to one scene per
+non-group node in document order.
+
+Desktop Present mode (toolbar **Present** or `P`) fullscreen-rehearses the
+sequence with keyboard next/prev and animated camera framing (`Esc` exits).
+Respects `prefers-reduced-motion` by cutting instead of tweening.
+
 ## Interfaces
 
 Airtable-like interfaces are specialized canvases with:

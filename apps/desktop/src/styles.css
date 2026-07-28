@@ -1415,6 +1415,58 @@ html[data-page-width="full"] {
   font: 11px var(--lt-font-mono);
 }
 
+.canvas-present-chrome {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--lt-line);
+  background: color-mix(in srgb, var(--lt-panel) 88%, transparent);
+}
+
+.canvas-present-chrome button {
+  padding: 5px 8px;
+  border: 1px solid var(--lt-line);
+  border-radius: 5px;
+  color: var(--lt-text-soft);
+  background: var(--lt-bg-raise);
+  cursor: pointer;
+}
+
+.canvas-present-chrome button:hover,
+.canvas-present-chrome button:focus-visible {
+  border-color: var(--lt-accent);
+  color: var(--lt-text);
+}
+
+.canvas-present-chrome button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.canvas-present-chrome output {
+  font: 12px var(--lt-font-mono);
+  color: var(--lt-text-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.canvas-surface.is-presenting {
+  grid-template-columns: minmax(0, 1fr);
+  background: var(--lt-bg);
+}
+
+.canvas-surface.is-presenting:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+}
+
+.canvas-surface.is-presenting .canvas-viewer {
+  background: #000;
+}
+
 .canvas-text-editor {
   flex-shrink: 0;
   display: grid;

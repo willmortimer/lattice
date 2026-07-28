@@ -1,0 +1,50 @@
+{
+  "title": "Hackathon pitch",
+  "start": "overview",
+  "scenes": [
+    {
+      "id": "overview",
+      "title": "Workspace map",
+      "nodeIds": [
+        "thesis",
+        "product",
+        "engineering",
+        "builds",
+        "operations",
+        "feedback",
+        "docs",
+        "governed"
+      ]
+    },
+    {
+      "id": "thesis",
+      "title": "Thesis",
+      "nodeIds": ["thesis"]
+    },
+    {
+      "id": "product",
+      "title": "Product pulse",
+      "nodeIds": ["product"]
+    },
+    {
+      "id": "delivery",
+      "title": "Engineering delivery",
+      "nodeIds": ["engineering", "builds"]
+    },
+    {
+      "id": "ops-crm",
+      "title": "Ops and CRM",
+      "nodeIds": ["operations", "feedback"]
+    },
+    {
+      "id": "docs",
+      "title": "Docs",
+      "nodeIds": ["docs"]
+    },
+    {
+      "id": "governed",
+      "title": "Governed loop",
+      "nodeIds": ["governed"]
+    }
+  ]
+}

@@ -15,6 +15,7 @@ export function CanvasResourceRenderer({
       key={session.resource.path}
       json={session.json}
       canvasPath={session.resource.path}
+      workspaceRoot={context.workspaceRoot ?? undefined}
       resources={context.resources}
       adapter={adapter}
       baseRevision={session.revision}

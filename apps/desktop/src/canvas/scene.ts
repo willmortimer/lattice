@@ -170,6 +170,9 @@ export class CanvasScene {
   /** Lifecycle guards: React StrictMode can destroy() before init resolves. */
   private initialized = false;
   private destroyed = false;
+  /** Active camera tween; cancelled by a newer tween, user pan/zoom, or destroy. */
+  private cameraTween: { raf: number; token: number } | null = null;
+  private cameraTweenToken = 0;
 
   readonly ready: Promise<void>;
 
@@ -297,8 +300,60 @@ export class CanvasScene {
     if (this.data?.nodes.length) {
       this.pendingFit = false;
       this.needsInitialFit = false;
+      this.cancelCameraTween();
       this.fitToContent(this.data.nodes);
     }
+  }
+
+  /**
+   * Frame a world-space bounds (presentation scenes). When `durationMs` is 0
+   * (or reduced motion), the camera jumps; otherwise it eases pan+zoom.
+   */
+  frameBounds(
+    bounds: { x: number; y: number; width: number; height: number },
+    options: { padding?: number; durationMs?: number } = {},
+  ): Promise<void> {
+    if (!this.initialized || this.destroyed) return Promise.resolve();
+    const padding = options.padding ?? 48;
+    const target = this.cameraForBounds({
+      x: bounds.x - padding,
+      y: bounds.y - padding,
+      width: Math.max(1, bounds.width + padding * 2),
+      height: Math.max(1, bounds.height + padding * 2),
+    });
+    return this.animateCameraTo(target, options.durationMs ?? 0);
+  }
+
+  /** Frame the union of the given node ids (missing ids are skipped). */
+  frameNodes(
+    nodeIds: readonly string[],
+    options: { padding?: number; durationMs?: number } = {},
+  ): Promise<void> {
+    if (!this.data) return Promise.resolve();
+    const byId = new Map(this.data.nodes.map((node) => [node.id, node]));
+    const nodes = nodeIds.map((id) => byId.get(id)).filter((node): node is CanvasNode => node != null);
+    if (nodes.length === 0) return Promise.resolve();
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const node of nodes) {
+      minX = Math.min(minX, node.x);
+      minY = Math.min(minY, node.y);
+      maxX = Math.max(maxX, node.x + node.width);
+      maxY = Math.max(maxY, node.y + node.height);
+    }
+    return this.frameBounds(
+      { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
+      options,
+    );
+  }
+
+  cancelCameraTween() {
+    if (!this.cameraTween) return;
+    cancelAnimationFrame(this.cameraTween.raf);
+    this.cameraTweenToken += 1;
+    this.cameraTween = null;
   }
 
   /** Convert a browser client point into canvas world coordinates (pan/zoom aware). */
@@ -315,6 +370,7 @@ export class CanvasScene {
   /** Zoom about the viewport center (toolbar −/+/reset). */
   setZoom(next: number) {
     if (!this.initialized || this.destroyed) return;
+    this.cancelCameraTween();
     const scale = clamp(next, MIN_SCALE, MAX_SCALE);
     const old = this.world.scale.x;
     if (scale === old) return;
@@ -1205,18 +1261,76 @@ export class CanvasScene {
       maxX = Math.max(maxX, n.x + n.width);
       maxY = Math.max(maxY, n.y + n.height);
     }
-    const boxW = Math.max(1, maxX - minX);
-    const boxH = Math.max(1, maxY - minY);
+    const camera = this.cameraForBounds({
+      x: minX,
+      y: minY,
+      width: Math.max(1, maxX - minX),
+      height: Math.max(1, maxY - minY),
+    });
+    this.applyCamera(camera);
+  }
+
+  private cameraForBounds(bounds: { x: number; y: number; width: number; height: number }): {
+    x: number;
+    y: number;
+    scale: number;
+  } {
+    const boxW = Math.max(1, bounds.width);
+    const boxH = Math.max(1, bounds.height);
     const screenW = this.app.screen.width || this.host.clientWidth || 800;
     const screenH = this.app.screen.height || this.host.clientHeight || 600;
-
     const scale = clamp(Math.min(screenW / boxW, screenH / boxH) * 0.88, MIN_SCALE, MAX_SCALE);
-    this.world.scale.set(scale);
-    this.world.position.set(
-      screenW / 2 - (minX + boxW / 2) * scale,
-      screenH / 2 - (minY + boxH / 2) * scale,
-    );
+    return {
+      scale,
+      x: screenW / 2 - (bounds.x + boxW / 2) * scale,
+      y: screenH / 2 - (bounds.y + boxH / 2) * scale,
+    };
+  }
+
+  private applyCamera(camera: { x: number; y: number; scale: number }) {
+    this.world.scale.set(camera.scale);
+    this.world.position.set(camera.x, camera.y);
     this.syncCamera();
+  }
+
+  private animateCameraTo(
+    target: { x: number; y: number; scale: number },
+    durationMs: number,
+  ): Promise<void> {
+    this.cancelCameraTween();
+    if (durationMs <= 0 || !Number.isFinite(durationMs)) {
+      this.applyCamera(target);
+      return Promise.resolve();
+    }
+    const from = {
+      x: this.world.position.x,
+      y: this.world.position.y,
+      scale: this.world.scale.x,
+    };
+    const token = ++this.cameraTweenToken;
+    const started = performance.now();
+    return new Promise((resolve) => {
+      const step = (now: number) => {
+        if (this.destroyed || this.cameraTweenToken !== token) {
+          resolve();
+          return;
+        }
+        const t = clamp((now - started) / durationMs, 0, 1);
+        const e = easeInOutCubic(t);
+        this.applyCamera({
+          x: from.x + (target.x - from.x) * e,
+          y: from.y + (target.y - from.y) * e,
+          scale: from.scale + (target.scale - from.scale) * e,
+        });
+        if (t >= 1) {
+          this.cameraTween = null;
+          resolve();
+          return;
+        }
+        this.cameraTween = { token, raf: requestAnimationFrame(step) };
+      };
+      this.cameraTween = { token, raf: requestAnimationFrame(step) };
+    });
   }
 
   private onStagePointerDown = (e: FederatedPointerEvent) => {
@@ -1228,6 +1342,7 @@ export class CanvasScene {
     if (e.target !== this.app.stage) return;
     this.selectNode(null);
     this.selectEdge(null);
+    this.cancelCameraTween();
     this.panning = true;
     this.panStart = { x: e.global.x, y: e.global.y };
     this.panOrigin = { x: this.world.position.x, y: this.world.position.y };
@@ -1320,6 +1435,7 @@ export class CanvasScene {
 
   private onWheel = (e: WheelEvent) => {
     e.preventDefault();
+    this.cancelCameraTween();
     const rect = this.app.canvas.getBoundingClientRect();
     const cursorX = e.clientX - rect.left;
     const cursorY = e.clientY - rect.top;
@@ -1342,6 +1458,7 @@ export class CanvasScene {
   destroy() {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.cancelCameraTween();
     this.cancelLink();
     this.zoomListeners.clear();
     this.resizeObserver?.disconnect();
@@ -1375,6 +1492,10 @@ function portLocal(node: Pick<CanvasNode, "width" | "height">, side: Side): { x:
 
 function clamp(v: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, v));
+}
+
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
 }
 
 /**
