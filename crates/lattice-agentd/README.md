@@ -79,21 +79,34 @@ falls back to chat-only streaming and prints a one-time stderr warning.
 
 ### KernelFS WASI → proposals
 
-Sandboxed WASI guests write under KernelFS `/output`. The host helper in
-`wasi_host` materializes the run dir, runs `_start`, collects proposal drafts,
-and pushes each draft via `POST /v1/proposals/propose_resource` (same body shape
-as the host `propose_resource` tool). Lattice search/read/related stay host HTTP
-tools — they are not exposed inside the guest.
+Sandboxed WASI guests write under KernelFS `/output` (and optional
+`workPromotePaths` under `/work`). The host helper in `wasi_host` materializes
+the run dir, runs `_start`, collects proposal drafts, and pushes each draft via
+`POST /v1/proposals/propose_resource` (same body shape as the host
+`propose_resource` tool). Lattice search/read/related stay host HTTP tools —
+they are not exposed inside the guest.
+
+Convention: place guest modules under **`Tools/guests/`** in the First Look
+workspace (for example `Tools/guests/copy_hello.wasm`, the kernelfs
+`copy_hello` fixture that copies `/input/hello.txt` → `/output/out.txt`).
 
 Pioneer exposes this path as the `run_wasi_guest` tool when `workspaceRoot` is
 bound on `start_run`:
 
 | Argument | Purpose |
 | --- | --- |
-| `wasmPath` | Workspace-relative `.wasm` module |
-| `inputsJson` | JSON array of `{hostPath,guestPath}` input mounts |
-| `outputProposalTarget` | Workspace prefix for proposed `/output` paths (e.g. `Reports`) |
+| `preset` | Named recipe (`copy_hello` → `Tools/guests/copy_hello.wasm`) |
+| `wasmPath` | Workspace-relative `.wasm` (required unless preset supplies it) |
+| `resourcePaths` | Workspace-relative files mounted under `/input` (guest path = basename) |
+| `inputsJson` | JSON array of `{hostPath,guestPath}` when guest paths must differ |
+| `workPromotePaths` | Guest-relative `/work` paths to promote alongside `/output` |
+| `outputProposalTarget` | Workspace prefix for proposed paths (e.g. `Reports`) |
 | `runId` | Optional run label (defaults to a timestamped id) |
+
+Cancel / fuel / epoch failures return structured tool JSON
+(`error.kind`, `stdoutTail`, `stderrTail`) instead of opaque strings. Successful
+proposals include `sourceResource` (`wasi://{runId}/{wasmPath}`) and summaries
+with input content hashes.
 
 The tool returns proposal ids/paths only — it never applies. Human review stays
 in the Proposals inbox.

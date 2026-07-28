@@ -10,13 +10,17 @@ use std::time::Duration;
 
 use kernelfs::{
     collect_output_commit_plan, materialize, materialize_with_options, run_wasi_guest as kernelfs_run,
-    ExecutionManifest, LatticeProposalAdapter, LatticeProposalDraft, MaterializeError,
-    MaterializeOptions, WasmtimeLimits, WasiRunError, WasiRunOptions,
+    ExecutionManifest, HydrationRecord, LatticeProposalAdapter, LatticeProposalDraft,
+    MaterializeError, MaterializeOptions, WasmtimeLimits, WasiRunError, WasiRunOptions,
+    WasiRunResult,
 };
 use serde_json::{json, Value};
 use thiserror::Error;
 
 use crate::lattice_client::{LatticeApiError, LatticeToolClient};
+
+/// Max characters of stdout/stderr tails embedded in structured tool errors.
+pub const WASI_STDIO_TAIL_CHARS: usize = 2_000;
 
 /// Errors from materializing a run dir and executing a WASI guest.
 #[derive(Debug, Error)]
@@ -73,6 +77,111 @@ pub struct WasiGuestHostOptions {
     pub host_path_roots: Vec<std::path::PathBuf>,
 }
 
+/// Provenance attached to proposed WASI `/output` drafts.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WasiProposalProvenance {
+    pub run_id: String,
+    pub wasm_path: String,
+    pub output_proposal_target: String,
+    /// Guest path → input content sha256 (from hydration).
+    pub input_hashes: Vec<(String, String)>,
+}
+
+impl WasiProposalProvenance {
+    pub fn source_resource(&self) -> String {
+        format!("wasi://{}/{}", self.run_id, self.wasm_path.trim_start_matches('/'))
+    }
+
+    pub fn enrich_summary(&self, base: &str) -> String {
+        let inputs = self
+            .input_hashes
+            .iter()
+            .map(|(guest, hash)| format!("{guest}@{hash}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!(
+            "{base} [wasi runId={} wasm={} target={} inputs=[{}]]",
+            self.run_id, self.wasm_path, self.output_proposal_target, inputs
+        )
+    }
+}
+
+/// Result of a successful KernelFS WASI host run.
+#[derive(Debug, Clone)]
+pub struct WasiGuestRunResult {
+    pub drafts: Vec<LatticeProposalDraft>,
+    pub hydration: HydrationRecord,
+    pub run: WasiRunResult,
+}
+
+/// Map [`WasiRunError`] into structured tool JSON (`kind` + stdio tails).
+pub fn wasi_run_error_json(err: &WasiRunError) -> Value {
+    match err {
+        WasiRunError::FuelExhausted { stdout, stderr } => json!({
+            "kind": "fuel_exhausted",
+            "message": err.to_string(),
+            "stdoutTail": stdio_tail(stdout),
+            "stderrTail": stdio_tail(stderr),
+        }),
+        WasiRunError::EpochDeadline { stdout, stderr } => json!({
+            "kind": "epoch_deadline",
+            "message": err.to_string(),
+            "stdoutTail": stdio_tail(stdout),
+            "stderrTail": stdio_tail(stderr),
+        }),
+        WasiRunError::Cancelled { stdout, stderr } => json!({
+            "kind": "cancelled",
+            "message": err.to_string(),
+            "stdoutTail": stdio_tail(stdout),
+            "stderrTail": stdio_tail(stderr),
+        }),
+        WasiRunError::MissingStart => json!({
+            "kind": "missing_start",
+            "message": err.to_string(),
+            "stdoutTail": "",
+            "stderrTail": "",
+        }),
+        WasiRunError::Trap {
+            message,
+            stdout,
+            stderr,
+        } => json!({
+            "kind": "trap",
+            "message": message,
+            "stdoutTail": stdio_tail(stdout),
+            "stderrTail": stdio_tail(stderr),
+        }),
+        WasiRunError::Engine(inner) => json!({
+            "kind": "engine",
+            "message": inner.to_string(),
+            "stdoutTail": "",
+            "stderrTail": "",
+        }),
+        WasiRunError::Preopen(inner) => json!({
+            "kind": "preopen",
+            "message": inner.to_string(),
+            "stdoutTail": "",
+            "stderrTail": "",
+        }),
+    }
+}
+
+fn stdio_tail(bytes: &[u8]) -> String {
+    let text = String::from_utf8_lossy(bytes);
+    if text.chars().count() <= WASI_STDIO_TAIL_CHARS {
+        return text.into_owned();
+    }
+    let truncated: String = text
+        .chars()
+        .rev()
+        .take(WASI_STDIO_TAIL_CHARS)
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect();
+    format!("…{truncated}")
+}
+
 /// Materialize KernelFS mounts, run the guest `_start` export, and collect Lattice drafts.
 ///
 /// Uses [`kernelfs::run_wasi_guest`] (epoch ticker + cancel + stdio). Call from
@@ -82,7 +191,7 @@ pub fn run_wasi_guest(
     manifest: &ExecutionManifest,
     wasm_bytes: &[u8],
     limits: &WasmtimeLimits,
-) -> Result<Vec<LatticeProposalDraft>, WasiHostError> {
+) -> Result<WasiGuestRunResult, WasiHostError> {
     run_wasi_guest_with_options(
         run_parent,
         manifest,
@@ -100,8 +209,8 @@ pub fn run_wasi_guest_with_options(
     manifest: &ExecutionManifest,
     wasm_bytes: &[u8],
     options: &WasiGuestHostOptions,
-) -> Result<Vec<LatticeProposalDraft>, WasiHostError> {
-    let run = if options.host_path_roots.is_empty() {
+) -> Result<WasiGuestRunResult, WasiHostError> {
+    let run_dir = if options.host_path_roots.is_empty() {
         materialize(run_parent, manifest)?
     } else {
         materialize_with_options(
@@ -122,11 +231,15 @@ pub fn run_wasi_guest_with_options(
         run_opts.max_wall_time = options.max_wall_time;
     }
 
-    let _result = kernelfs_run(&run.root, wasm_bytes, &run_opts)?;
+    let run = kernelfs_run(&run_dir.root, wasm_bytes, &run_opts)?;
 
-    let plan = collect_output_commit_plan(&run.root, manifest)?;
+    let plan = collect_output_commit_plan(&run_dir.root, manifest)?;
     let adapter = LatticeProposalAdapter::from_manifest(manifest);
-    Ok(adapter.drafts(&plan))
+    Ok(WasiGuestRunResult {
+        drafts: adapter.drafts(&plan),
+        hydration: run_dir.hydration,
+        run,
+    })
 }
 
 /// Push each draft via `POST /v1/proposals/propose_resource` (Node/latticed body shape).
@@ -134,6 +247,16 @@ pub async fn propose_output_drafts(
     client: &LatticeToolClient,
     workspace: &WorkspaceBinding,
     drafts: &[LatticeProposalDraft],
+) -> Result<Vec<Value>, ProposeDraftsError> {
+    propose_output_drafts_with_provenance(client, workspace, drafts, None).await
+}
+
+/// Like [`propose_output_drafts`], with optional WASI provenance on each body.
+pub async fn propose_output_drafts_with_provenance(
+    client: &LatticeToolClient,
+    workspace: &WorkspaceBinding,
+    drafts: &[LatticeProposalDraft],
+    provenance: Option<&WasiProposalProvenance>,
 ) -> Result<Vec<Value>, ProposeDraftsError> {
     if !workspace.is_bound() {
         return Err(ProposeDraftsError::MissingWorkspace);
@@ -147,11 +270,19 @@ pub async fn propose_output_drafts(
             }
         })?;
 
+        let summary = match provenance {
+            Some(prov) => prov.enrich_summary(&draft.summary),
+            None => draft.summary.clone(),
+        };
+
         let mut body = json!({
             "path": draft.resource_path,
             "content": content,
-            "summary": draft.summary,
+            "summary": summary,
         });
+        if let Some(prov) = provenance {
+            body["sourceResource"] = Value::String(prov.source_resource());
+        }
         if let Some(id) = workspace
             .workspace_id
             .as_ref()
@@ -166,4 +297,39 @@ pub async fn propose_output_drafts(
         results.push(client.propose_resource(body).await?);
     }
     Ok(results)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn maps_fuel_exhausted_to_structured_json() {
+        let err = WasiRunError::FuelExhausted {
+            stdout: b"out".to_vec(),
+            stderr: b"err".to_vec(),
+        };
+        let value = wasi_run_error_json(&err);
+        assert_eq!(value["kind"], "fuel_exhausted");
+        assert_eq!(value["stdoutTail"], "out");
+        assert_eq!(value["stderrTail"], "err");
+    }
+
+    #[test]
+    fn provenance_source_resource_and_summary() {
+        let prov = WasiProposalProvenance {
+            run_id: "run_1".into(),
+            wasm_path: "Tools/guests/copy_hello.wasm".into(),
+            output_proposal_target: "Reports".into(),
+            input_hashes: vec![("hello.txt".into(), "abc".into())],
+        };
+        assert_eq!(
+            prov.source_resource(),
+            "wasi://run_1/Tools/guests/copy_hello.wasm"
+        );
+        let summary = prov.enrich_summary("Create resource Reports/out.txt");
+        assert!(summary.contains("runId=run_1"));
+        assert!(summary.contains("hello.txt@abc"));
+        assert!(summary.contains("target=Reports"));
+    }
 }

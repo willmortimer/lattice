@@ -5,8 +5,10 @@ use std::sync::Arc;
 
 use kernelfs::{ExecutionManifest, InputMount, Mounts, WasmtimeLimits};
 use lattice_agentd::lattice_client::LatticeToolClient;
-use lattice_agentd::tools::{dispatch_tool, ToolRunContext};
-use lattice_agentd::wasi_host::{propose_output_drafts, run_wasi_guest, WorkspaceBinding};
+use lattice_agentd::tools::{dispatch_tool, openai_tool_definitions, ToolRunContext};
+use lattice_agentd::wasi_host::{
+    propose_output_drafts, run_wasi_guest_with_options, WasiGuestHostOptions, WorkspaceBinding,
+};
 use serde_json::{json, Value};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
@@ -57,18 +59,24 @@ async fn wasi_guest_output_proposes_via_latticed() {
     };
 
     let run_parent = temp.path().to_path_buf();
-    let drafts = tokio::task::spawn_blocking(move || {
-        run_wasi_guest(
+    let host_roots = vec![temp.path().to_path_buf()];
+    let result = tokio::task::spawn_blocking(move || {
+        run_wasi_guest_with_options(
             &run_parent,
             &manifest,
             copy_hello_wasm(),
-            &WasmtimeLimits::default(),
+            &WasiGuestHostOptions {
+                limits: WasmtimeLimits::default(),
+                host_path_roots: host_roots,
+                ..Default::default()
+            },
         )
     })
     .await
     .expect("join wasi")
     .expect("run wasi guest");
 
+    let drafts = result.drafts;
     assert_eq!(drafts.len(), 1);
     assert_eq!(drafts[0].resource_path, "Reports/out.txt");
     assert_eq!(drafts[0].content, b"hello from input");
@@ -124,7 +132,7 @@ async fn wasi_guest_output_proposes_via_latticed() {
 #[tokio::test]
 async fn dispatch_run_wasi_guest_tool_proposes_outputs() {
     let workspace = tempfile::tempdir().expect("workspace tempdir");
-    let wasm_dest = workspace.path().join("guests/copy_hello.wasm");
+    let wasm_dest = workspace.path().join("Tools/guests/copy_hello.wasm");
     fs::create_dir_all(wasm_dest.parent().expect("wasm parent")).expect("wasm dir");
     fs::write(&wasm_dest, copy_hello_wasm()).expect("write wasm");
 
@@ -152,8 +160,8 @@ async fn dispatch_run_wasi_guest_tool_proposes_outputs() {
     };
 
     let args = json!({
-        "wasmPath": "guests/copy_hello.wasm",
-        "inputsJson": r#"[{"hostPath":"input/hello.txt","guestPath":"hello.txt"}]"#,
+        "preset": "copy_hello",
+        "resourcePaths": ["input/hello.txt"],
         "outputProposalTarget": "Reports",
         "runId": "run_dispatch_test",
     })
@@ -167,6 +175,10 @@ async fn dispatch_run_wasi_guest_tool_proposes_outputs() {
     );
     assert_eq!(parsed["runId"], "run_dispatch_test");
     assert_eq!(parsed["draftCount"], 1);
+    assert_eq!(
+        parsed["sourceResource"].as_str(),
+        Some("wasi://run_dispatch_test/Tools/guests/copy_hello.wasm")
+    );
     assert_eq!(
         parsed["proposals"][0].get("proposalId").and_then(|v| v.as_str()),
         Some("prop_test")
@@ -182,4 +194,39 @@ async fn dispatch_run_wasi_guest_tool_proposes_outputs() {
         captured[0].get("workspaceId").and_then(|v| v.as_str()),
         Some("ws-dispatch")
     );
+    assert_eq!(
+        captured[0].get("sourceResource").and_then(|v| v.as_str()),
+        Some("wasi://run_dispatch_test/Tools/guests/copy_hello.wasm")
+    );
+    let summary = captured[0]
+        .get("summary")
+        .and_then(|v| v.as_str())
+        .expect("summary");
+    assert!(summary.contains("runId=run_dispatch_test"));
+    assert!(summary.contains("target=Reports"));
+    assert!(summary.contains("hello.txt@"));
+}
+
+#[test]
+fn run_wasi_guest_tool_schema_documents_presets() {
+    let tools = openai_tool_definitions();
+    let wasi = tools
+        .iter()
+        .find(|tool| {
+            tool.pointer("/function/name")
+                .and_then(|v| v.as_str())
+                == Some("run_wasi_guest")
+        })
+        .expect("run_wasi_guest tool");
+    let props = wasi
+        .pointer("/function/parameters/properties")
+        .expect("properties");
+    assert!(props.get("preset").is_some());
+    assert!(props.get("resourcePaths").is_some());
+    assert!(props.get("workPromotePaths").is_some());
+    let required = wasi
+        .pointer("/function/parameters/required")
+        .and_then(|v| v.as_array())
+        .expect("required");
+    assert!(required.iter().any(|v| v.as_str() == Some("outputProposalTarget")));
 }

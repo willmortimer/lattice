@@ -20,6 +20,7 @@ pub use protocol::{AgentCommand, AgentEvent, ProviderKind, PROTOCOL_VERSION};
 pub use responses::{emit_openai_run, OpenaiRunOptions, ResponsesError};
 pub use tools::{openai_tool_definitions, ToolRunContext, WORKSPACE_AGENT_INSTRUCTIONS};
 pub use wasi_host::{
-    propose_output_drafts, run_wasi_guest, run_wasi_guest_with_options, WorkspaceBinding,
-    WasiGuestHostOptions, WasiHostError,
+    propose_output_drafts, propose_output_drafts_with_provenance, run_wasi_guest,
+    run_wasi_guest_with_options, wasi_run_error_json, WorkspaceBinding, WasiGuestHostOptions,
+    WasiGuestRunResult, WasiHostError, WasiProposalProvenance,
 };
