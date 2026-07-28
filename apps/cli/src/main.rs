@@ -23,6 +23,7 @@ use lattice_data::{
 use lattice_datasets::{parse_partition_key_specs, Dataset, EventAnnotation};
 use lattice_duckdb::{DuckDbEngine, ScalarValue};
 use lattice_index::{Backlink, SearchHit, WorkspaceIndex};
+use latticefs_core::{resource_stat_or_register, AuthorityMode, MaterializationState, ResourceStat};
 use lattice_publish::{export as publish_export, ExportTarget};
 use lattice_storage::{NativeWorkspaceStore, RecoveryJournal, WorkspaceStore};
 use lattice_theme::{
@@ -171,6 +172,11 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// LatticeFS resource identity and materialization.
+    Resource {
+        #[command(subcommand)]
+        command: ResourceCommand,
+    },
     /// Themes and appearance settings.
     Theme {
         #[command(subcommand)]
@@ -214,6 +220,20 @@ enum HomeCommand {
     Ensure,
     /// Print the Lattice home paths.
     Path,
+}
+
+#[derive(Subcommand)]
+enum ResourceCommand {
+    /// Show authority and materialization for a workspace file.
+    Stat {
+        /// Workspace path of the resource.
+        target: PathBuf,
+        /// Path inside the workspace to discover from. Defaults to the current directory.
+        path: Option<PathBuf>,
+        /// Emit the stat record as JSON.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -884,6 +904,9 @@ fn run(command: Command) -> Result<ExitCode> {
             json,
         } => cmd_search(query, path, limit, json),
         Command::Backlinks { target, path, json } => cmd_backlinks(target, path, json),
+        Command::Resource { command } => match command {
+            ResourceCommand::Stat { target, path, json } => cmd_resource_stat(target, path, json),
+        },
         Command::Theme { command } => match command {
             ThemeCommand::List { json } => cmd_theme_list(json),
             ThemeCommand::Check { path } => cmd_theme_check(path),
@@ -2410,6 +2433,53 @@ fn cmd_backlinks(target: PathBuf, path: Option<PathBuf>, json: bool) -> Result<E
         }
     }
     Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_resource_stat(target: PathBuf, path: Option<PathBuf>, json: bool) -> Result<ExitCode> {
+    let start = cwd_or(path)?;
+    let ws = Workspace::discover(&start)?;
+    let rel = workspace_relative(&ws, &target)?;
+    let rel_key = rel.to_string_lossy().replace('\\', "/");
+    let stat = resource_stat_or_register(ws.root(), &rel_key)
+        .map_err(|err| anyhow::anyhow!("{err}"))?;
+    if json {
+        print_json(&stat)?;
+    } else {
+        print_resource_stat(&stat);
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn print_resource_stat(stat: &ResourceStat) {
+    println!("resource_id: {}", stat.resource_id);
+    println!("path: {}", stat.path);
+    println!("authority: {}", format_authority_mode(stat.authority));
+    println!(
+        "materialization: {}",
+        format_materialization_state(stat.materialization)
+    );
+    match &stat.content_hash {
+        Some(hash) => println!("content_hash: {hash}"),
+        None => println!("content_hash: (none)"),
+    }
+}
+
+fn format_authority_mode(mode: AuthorityMode) -> &'static str {
+    match mode {
+        AuthorityMode::Local => "local",
+        AuthorityMode::Cloud => "cloud",
+        AuthorityMode::External => "external",
+        AuthorityMode::ImmutableImport => "immutable_import",
+    }
+}
+
+fn format_materialization_state(state: MaterializationState) -> &'static str {
+    match state {
+        MaterializationState::MetadataOnly => "metadata_only",
+        MaterializationState::Cached => "cached",
+        MaterializationState::Pinned => "pinned",
+        MaterializationState::Evicted => "evicted",
+    }
 }
 
 fn cmd_publish_export(

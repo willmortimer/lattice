@@ -21,6 +21,7 @@ lattice-index.workspace = true
 lattice-theme.workspace = true
 lattice-publish.workspace = true
 lattice-connectors.workspace = true
+latticefs-core.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 serde.workspace = true

@@ -13,7 +13,7 @@ mod types;
 pub use cloud::MockCloudBlobClient;
 pub use error::{Error, Result};
 pub use registry::{NamespaceRegistry, OPERATIONAL_DIR, REGISTRY_FILENAME};
-pub use stat::resource_stat;
+pub use stat::{resource_stat, resource_stat_or_register};
 pub use types::{
     AuthorityMode, ContentHash, MaterializationState, NamespaceEntry, ResourceId, ResourceStat,
     ResourceVersionId,

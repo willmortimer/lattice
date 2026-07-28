@@ -63,6 +63,7 @@ lattice-arrow-transport.workspace = true
 lattice-handlers.workspace = true
 lattice-connectors.workspace = true
 lattice-runtime.workspace = true
+latticefs-core.workspace = true
 lattice-terminal.workspace = true
 lattice-kernel.workspace = true
 lattice-client.workspace = true

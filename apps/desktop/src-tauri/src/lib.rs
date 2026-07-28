@@ -21,6 +21,7 @@ mod profile;
 mod proposals;
 mod relationship;
 mod resource_links;
+mod resource_stat;
 mod revisions;
 mod scheduler;
 mod search;
@@ -210,6 +211,7 @@ pub fn run() {
             resource_links::resolve_resource_link,
             search::search_workspace,
             search::get_backlinks,
+            resource_stat::get_resource_stat,
             search::rebuild_index,
             relationship::list_relationship_edges_cmd,
             watcher::start_watching,

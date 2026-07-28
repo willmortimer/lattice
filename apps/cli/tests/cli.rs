@@ -496,6 +496,49 @@ fn task_run_hello_fixture_when_uv_available() {
 }
 
 #[test]
+fn resource_stat_registers_local_file_and_reports_authority() {
+    let dir = tempfile::tempdir().unwrap();
+    init_blank(dir.path()).success();
+    fs::write(dir.path().join("Notes.md"), "# Notes\n").unwrap();
+
+    lattice()
+        .current_dir(dir.path())
+        .arg("resource")
+        .arg("stat")
+        .arg("Notes.md")
+        .assert()
+        .success()
+        .stdout(predicates_contains("authority: local"))
+        .stdout(predicates_contains("materialization: pinned"))
+        .stdout(predicates_contains("path: Notes.md"));
+
+    assert!(dir.path().join(".lattice/resource-registry.json").is_file());
+}
+
+#[test]
+fn resource_stat_json_emits_object() {
+    let dir = tempfile::tempdir().unwrap();
+    init_blank(dir.path()).success();
+    fs::write(dir.path().join("Notes.md"), "# Notes\n").unwrap();
+
+    let output = lattice()
+        .current_dir(dir.path())
+        .arg("resource")
+        .arg("stat")
+        .arg("Notes.md")
+        .arg("--json")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let value: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(value["path"], "Notes.md");
+    assert_eq!(value["authority"], "local");
+    assert_eq!(value["materialization"], "pinned");
+    assert!(value["resource_id"].is_string());
+}
+
+#[test]
 fn publish_export_page_writes_html() {
     let dir = tempfile::tempdir().unwrap();
     init_blank(dir.path()).success();

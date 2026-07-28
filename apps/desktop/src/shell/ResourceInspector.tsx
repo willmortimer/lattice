@@ -1,6 +1,12 @@
 import { IconButton } from "@lattice/ui";
 import { invoke } from "../lib/ipc";
 import {
+  formatAuthority,
+  formatMaterialization,
+  getResourceStat,
+  type ResourceStat,
+} from "../lib/resourceStat";
+import {
   listRelationshipEdges,
   RELATIONSHIP_MODE_PRESETS,
   type RelationshipEdge,
@@ -77,6 +83,7 @@ export function ResourceInspector({
   const [backlinks, setBacklinks] = useState<Backlink[]>([]);
   const [graphEdges, setGraphEdges] = useState<RelationshipEdge[]>([]);
   const [graphMode, setGraphMode] = useState<RelationshipMode>("all");
+  const [resourceStat, setResourceStat] = useState<ResourceStat | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -89,6 +96,13 @@ export function ResourceInspector({
     let cancelled = false;
     setLoading(true);
     const tasks: Promise<void>[] = [];
+    if (section === "properties" && resource) {
+      tasks.push(
+        getResourceStat(root, resource.path).then((stat) => {
+          if (!cancelled) setResourceStat(stat);
+        }),
+      );
+    }
     if (section === "history" && !resource) {
       tasks.push(
         invoke<HistoryItem[]>("list_history", { root, limit: 30 }).then((items) => {
@@ -118,6 +132,7 @@ export function ResourceInspector({
     void Promise.all(tasks)
       .catch(() => {
         if (!cancelled) {
+          if (section === "properties") setResourceStat(null);
           if (section === "history") setHistory([]);
           if (section === "links") setBacklinks([]);
           if (section === "graph") setGraphEdges([]);
@@ -162,6 +177,16 @@ export function ResourceInspector({
             <div><dt>Path</dt><dd>{resource?.path ?? "—"}</dd></div>
             <div><dt>Format</dt><dd>{resource?.formatId ?? "—"}</dd></div>
             <div><dt>Canonical state</dt><dd>{resource ? "Workspace file" : "Directory"}</dd></div>
+            {resource && resourceStat && (
+              <>
+                <div><dt>Resource ID</dt><dd><code>{resourceStat.resource_id}</code></dd></div>
+                <div><dt>Authority</dt><dd>{formatAuthority(resourceStat.authority)}</dd></div>
+                <div><dt>Materialization</dt><dd>{formatMaterialization(resourceStat.materialization)}</dd></div>
+                {resourceStat.content_hash && (
+                  <div><dt>Content hash</dt><dd><code>{resourceStat.content_hash}</code></dd></div>
+                )}
+              </>
+            )}
           </dl>
         )}
         {!loading && section === "links" && (
