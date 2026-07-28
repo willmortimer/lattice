@@ -3981,6 +3981,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-lance"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "lattice-core",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "lattice-profile"
 version = "0.1.0"
 dependencies = [

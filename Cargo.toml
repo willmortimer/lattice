@@ -12,6 +12,7 @@ members = [
     "crates/latticefs-core",
     "crates/lattice-commands",
     "crates/lattice-index",
+    "crates/lattice-lance",
     "crates/lattice-embedding",
     "crates/lattice-data",
     "crates/lattice-datasets",
@@ -50,6 +51,7 @@ lattice-storage = { path = "crates/lattice-storage" }
 latticefs-core = { path = "crates/latticefs-core" }
 lattice-commands = { path = "crates/lattice-commands" }
 lattice-index = { path = "crates/lattice-index" }
+lattice-lance = { path = "crates/lattice-lance" }
 lattice-embedding = { path = "crates/lattice-embedding" }
 lattice-embed-host = { path = "apps/embed-host" }
 lattice-voice-host = { path = "apps/voice-host-macos" }
