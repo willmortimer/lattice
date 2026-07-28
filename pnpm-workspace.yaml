@@ -5,6 +5,10 @@ packages:
 allowBuilds:
   esbuild: true
   sharp: true
+# Explicit + strict: fail resolution rather than falling back to young packages.
+# pnpm 11 defaults age to 1440 non-strict; we want enforcement.
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
 minimumReleaseAgeExclude:
   - '@tiptap/core@3.28.0'
   - '@tiptap/extension-blockquote@3.28.0'

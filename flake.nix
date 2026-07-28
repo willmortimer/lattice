@@ -64,6 +64,7 @@
             lint = "Clippy + rustfmt check (compat; prefer rust-clippy ∥ rust-fmt-check)";
             fmt = "Format all Rust sources";
             check = "Monolithic escape hatch: fmt, clippy, tests, desktop build";
+            js-deps = "pnpm install --frozen-lockfile --prefer-offline";
             desktop-ui-test = "Vitest for the desktop frontend";
             generated-theme-check = "Compile themes and fail on git drift";
             generated-template-check = "Compile templates and fail on git drift";
@@ -123,22 +124,33 @@
               cargo fmt --all --check
               cargo clippy --workspace --all-targets -- -D warnings
               cargo test --workspace
-              pnpm install --frozen-lockfile
+              pnpm install --frozen-lockfile --prefer-offline
               pnpm --filter @lattice/desktop build
             '';
+            # Single install for NXR graphs. Leaf validation apps assume node_modules.
+            js-deps = ''
+              exec pnpm install --frozen-lockfile --prefer-offline "$@"
+            '';
+            # Direct `nix run` installs only if js-deps / prior install is missing.
             desktop-ui-test = ''
-              pnpm install --frozen-lockfile
+              if [ ! -d node_modules ]; then
+                pnpm install --frozen-lockfile --prefer-offline
+              fi
               exec pnpm --filter @lattice/desktop test "$@"
             '';
             generated-theme-check = ''
-              pnpm install --frozen-lockfile
+              if [ ! -d node_modules ]; then
+                pnpm install --frozen-lockfile --prefer-offline
+              fi
               pnpm --filter @lattice/desktop compile-theme
               git diff --exit-code -- \
                 apps/desktop/src/theme-tokens.css \
                 apps/desktop/src/theme-tokens.ts
             '';
             generated-template-check = ''
-              pnpm install --frozen-lockfile
+              if [ ! -d node_modules ]; then
+                pnpm install --frozen-lockfile --prefer-offline
+              fi
               pnpm compile-templates
               git diff --exit-code -- \
                 crates/lattice-core/src/template_catalog.generated.rs \
@@ -150,33 +162,47 @@
             '';
 
             compile-theme = ''
+              if [ ! -d node_modules ]; then
+                pnpm install --frozen-lockfile --prefer-offline
+              fi
               exec pnpm --filter @lattice/desktop compile-theme "$@"
             '';
             compile-templates = ''
+              if [ ! -d node_modules ]; then
+                pnpm install --frozen-lockfile --prefer-offline
+              fi
               exec pnpm compile-templates "$@"
             '';
             prepare-first-look = ''
               exec bash scripts/prepare-first-look.sh "$@"
             '';
             desktop-dev = ''
-              pnpm install
-              exec pnpm --filter @lattice/desktop tauri:dev "$@"
+              pnpm install --prefer-offline
+              # Auto-load ecosystem secrets/ai.env when keys are missing so Tauri
+              # does not silently fall back to LATTICE_AGENT_FAKE=1.
+              exec bash scripts/exec-with-ai-env.sh \
+                pnpm --filter @lattice/desktop tauri:dev "$@"
             '';
             desktop-web = ''
-              pnpm install
-              exec pnpm --filter @lattice/desktop dev -- --host 127.0.0.1 --port 5173 "$@"
+              pnpm install --prefer-offline
+              exec bash scripts/exec-with-ai-env.sh \
+                pnpm --filter @lattice/desktop dev -- --host 127.0.0.1 --port 5173 "$@"
             '';
             desktop-perf = ''
-              pnpm install
+              if [ ! -d node_modules ]; then
+                pnpm install --frozen-lockfile --prefer-offline
+              fi
               pnpm --filter @lattice/desktop exec playwright install chromium
               exec pnpm --filter @lattice/desktop test:perf "$@"
             '';
             desktop-perf-tauri = ''
-              pnpm install
+              if [ ! -d node_modules ]; then
+                pnpm install --frozen-lockfile --prefer-offline
+              fi
               exec pnpm --filter @lattice/desktop test:perf:tauri "$@"
             '';
             desktop = ''
-              pnpm install
+              pnpm install --prefer-offline
               if [ ! -f apps/desktop/dist/index.html ]; then
                 echo "lattice-desktop: building frontend into apps/desktop/dist…"
                 pnpm --filter @lattice/desktop build
@@ -186,7 +212,7 @@
               exec pnpm --filter @lattice/desktop exec tauri dev --config '{"build":{"beforeDevCommand":""}}' "$@"
             '';
             desktop-build = ''
-              pnpm install
+              pnpm install --frozen-lockfile --prefer-offline
               # Match desktop-dev on macOS so release binaries include voice capture.
               # Linux CI stays featureless (no Swift FluidAudio bridges).
               if [ "$(uname -s)" = "Darwin" ]; then
@@ -196,7 +222,9 @@
               fi
             '';
             desktop-ui-build = ''
-              pnpm install --frozen-lockfile
+              if [ ! -d node_modules ]; then
+                pnpm install --frozen-lockfile --prefer-offline
+              fi
               exec pnpm --filter @lattice/desktop build "$@"
             '';
             latticed = ''
@@ -227,7 +255,7 @@
                 echo "desktop-install: warning: APPLE_TEAM_ID unset (ok for local Apple Development; needed later for notarization)" >&2
               fi
 
-              pnpm install
+              pnpm install --frozen-lockfile --prefer-offline
               # Keep the Nix apple-sdk DEVELOPER_DIR/SDKROOT for the Cargo build.
               # Overriding to Xcode.app here mixes Xcode's MacOSX.sdk headers with
               # Nix libcxx and breaks libduckdb-sys (uint8_t / intmax_t / _CTYPE_*).
@@ -560,7 +588,7 @@
                 exclusive = [ "cargo-target" ];
               };
               pnpmLock = {
-                exclusive = [ "pnpm-store" ];
+                exclusive = [ "pnpm-install" ];
               };
             in
             {
@@ -610,6 +638,22 @@
                 app = "check";
                 category = "validation";
               };
+              js-deps = {
+                description = "Frozen pnpm install (shared by JS leaves)";
+                app = "js-deps";
+                category = "development";
+                paths = [
+                  "package.json"
+                  "pnpm-lock.yaml"
+                  "pnpm-workspace.yaml"
+                  "apps/desktop/package.json"
+                  "apps/agentd/package.json"
+                  "packages/**/package.json"
+                ];
+                resources = {
+                  exclusive = [ "pnpm-install" ];
+                };
+              };
               ci = {
                 description = "Authoritative CI DAG (parallel leaves)";
                 app = "ok";
@@ -640,17 +684,22 @@
               desktop-ui-test = {
                 description = "Desktop Vitest";
                 app = "desktop-ui-test";
+                dependsOn = [
+                  "js-deps"
+                ];
                 category = "validation";
                 paths = desktopUiPaths;
                 resources = {
                   cpu = 2;
                   memory = "2GiB";
-                  exclusive = [ "pnpm-store" ];
                 };
               };
               generated-theme-check = {
                 description = "Theme tokens match committed outputs";
                 app = "generated-theme-check";
+                dependsOn = [
+                  "js-deps"
+                ];
                 category = "validation";
                 paths = [
                   "themes/**"
@@ -660,7 +709,6 @@
                 ];
                 resources = {
                   exclusive = [
-                    "pnpm-store"
                     "theme-generated"
                   ];
                 };
@@ -668,6 +716,9 @@
               generated-template-check = {
                 description = "Template catalogs match committed outputs";
                 app = "generated-template-check";
+                dependsOn = [
+                  "js-deps"
+                ];
                 category = "validation";
                 paths = [
                   "templates/**"
@@ -677,7 +728,6 @@
                 ];
                 resources = {
                   exclusive = [
-                    "pnpm-store"
                     "template-generated"
                   ];
                 };
@@ -694,6 +744,9 @@
               compile-theme = {
                 description = "Compile theme tokens";
                 app = "compile-theme";
+                dependsOn = [
+                  "js-deps"
+                ];
                 category = "codegen";
                 paths = [
                   "themes/**"
@@ -726,7 +779,6 @@
                 };
                 resources = {
                   exclusive = [
-                    "pnpm-store"
                     "theme-generated"
                   ];
                 };
@@ -734,6 +786,9 @@
               compile-templates = {
                 description = "Compile workspace templates";
                 app = "compile-templates";
+                dependsOn = [
+                  "js-deps"
+                ];
                 category = "codegen";
                 paths = [ "templates/**" ];
                 inputs = {
@@ -765,7 +820,6 @@
                 };
                 resources = {
                   exclusive = [
-                    "pnpm-store"
                     "template-generated"
                   ];
                 };
@@ -794,7 +848,7 @@
                 resources = {
                   exclusive = [
                     "cargo-target"
-                    "pnpm-store"
+                    "pnpm-install"
                   ];
                 };
               };
@@ -818,19 +872,21 @@
                   memory = "8GiB";
                   exclusive = [
                     "cargo-target"
-                    "pnpm-store"
+                    "pnpm-install"
                   ];
                 };
               };
               desktop-ui-build = {
                 description = "Build desktop frontend (Vite)";
                 app = "desktop-ui-build";
+                dependsOn = [
+                  "js-deps"
+                ];
                 category = "validation";
                 paths = desktopUiPaths;
                 resources = {
                   cpu = 2;
                   memory = "4GiB";
-                  exclusive = [ "pnpm-store" ];
                 };
               };
               desktop-install = {
@@ -844,7 +900,7 @@
                   memory = "8GiB";
                   exclusive = [
                     "cargo-target"
-                    "pnpm-store"
+                    "pnpm-install"
                     "xcode-derived-data"
                     "apple-keychain"
                   ];
@@ -862,13 +918,15 @@
                 description = "Tauri app bundle (voice-embedded)";
                 app = "desktop-tauri-bundle";
                 category = "release";
-                dependsOn = [ "release-env-validate" ];
+                dependsOn = [
+                  "js-deps"
+                  "release-env-validate"
+                ];
                 resources = {
                   cpu = 4;
                   memory = "8GiB";
                   exclusive = [
                     "cargo-target"
-                    "pnpm-store"
                     "xcode-derived-data"
                   ];
                 };
@@ -988,12 +1046,17 @@
               desktop-perf = {
                 description = "Browser perf harness";
                 app = "desktop-perf";
+                dependsOn = [
+                  "js-deps"
+                ];
                 category = "validation";
-                resources = pnpmLock;
               };
               desktop-perf-tauri = {
                 description = "Tauri WebView perf harness";
                 app = "desktop-perf-tauri";
+                dependsOn = [
+                  "js-deps"
+                ];
                 category = "validation";
               };
               latticed = {

@@ -4,7 +4,9 @@ set -euo pipefail
 source "$(cd "$(dirname "$0")" && pwd)/_common.sh"
 lattice_release_ensure_root
 
-pnpm install
+if [ ! -d node_modules ]; then
+  pnpm install --frozen-lockfile --prefer-offline
+fi
 # Keep Nix apple-sdk DEVELOPER_DIR/SDKROOT for the Cargo/Tauri build.
 pnpm --filter @lattice/desktop exec tauri build --bundles app --features voice-embedded
 echo "desktop-tauri-bundle: ok → $(lattice_release_app_path)"
