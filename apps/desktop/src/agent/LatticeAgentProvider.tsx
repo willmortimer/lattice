@@ -21,7 +21,7 @@ function LatticeAgentRuntimeProvider({
 }) {
   const ensureThreadId = useAgentSessionStore((state) => state.ensureThreadId);
   const recordAgentEvent = useAgentSessionStore((state) => state.recordAgentEvent);
-  const setHealthBackend = useAgentSessionStore((state) => state.setHealthBackend);
+  const setHealthSnapshot = useAgentSessionStore((state) => state.setHealthSnapshot);
 
   const threadId = useMemo(() => ensureThreadId(workspaceRoot), [ensureThreadId, workspaceRoot]);
 
@@ -31,6 +31,13 @@ function LatticeAgentRuntimeProvider({
         workspaceRoot,
         threadId,
         onAgentEvent: recordAgentEvent,
+        resolveRunOptions: () => {
+          const state = useAgentSessionStore.getState();
+          return {
+            provider: state.selectedProvider ?? undefined,
+            model: state.selectedModel ?? undefined,
+          };
+        },
       }),
     [workspaceRoot, threadId, recordAgentEvent],
   );
@@ -45,9 +52,14 @@ function LatticeAgentRuntimeProvider({
 
   useEffect(() => {
     let cancelled = false;
-    const applyHealth = (backend: string | null) => {
+    const applyHealth = (snapshot: {
+      backend: string | null;
+      model?: string | null;
+      ok?: boolean | null;
+      degraded?: boolean | null;
+    }) => {
       if (!cancelled) {
-        setHealthBackend(backend);
+        setHealthSnapshot(snapshot);
       }
     };
 
@@ -65,20 +77,25 @@ function LatticeAgentRuntimeProvider({
           if (cancelled) {
             return;
           }
-          applyHealth(health.backend);
+          applyHealth({
+            backend: health.backend,
+            model: health.model ?? null,
+            ok: health.ok,
+            degraded: health.degraded,
+          });
           return;
         } catch {
           // Daemon/agent plane may not be ready on first paint; retry.
         }
       }
-      applyHealth(null);
+      applyHealth({ backend: null, model: null, ok: null, degraded: null });
     };
 
     void loadHealth();
     return () => {
       cancelled = true;
     };
-  }, [workspaceRoot, setHealthBackend]);
+  }, [workspaceRoot, setHealthSnapshot]);
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>

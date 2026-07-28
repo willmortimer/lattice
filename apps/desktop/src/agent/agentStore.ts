@@ -10,6 +10,60 @@ import {
 import { create } from "zustand";
 
 import { isAgentProviderKind } from "./providerKind";
+import {
+  DEFAULT_OPENAI_MODEL,
+  defaultModelForProvider,
+  type SelectableAgentProvider,
+} from "./modelCatalog";
+
+const SELECTION_STORAGE_KEY = "lattice.agent.selection.v1";
+
+function readStoredSelection(): {
+  selectedProvider: SelectableAgentProvider | null;
+  selectedModel: string | null;
+} {
+  if (typeof sessionStorage === "undefined") {
+    return { selectedProvider: null, selectedModel: null };
+  }
+  try {
+    const raw = sessionStorage.getItem(SELECTION_STORAGE_KEY);
+    if (!raw) {
+      return { selectedProvider: null, selectedModel: null };
+    }
+    const parsed = JSON.parse(raw) as {
+      selectedProvider?: string;
+      selectedModel?: string;
+    };
+    const provider =
+      parsed.selectedProvider === "openai" || parsed.selectedProvider === "pioneer"
+        ? parsed.selectedProvider
+        : null;
+    const model =
+      typeof parsed.selectedModel === "string" && parsed.selectedModel.trim()
+        ? parsed.selectedModel.trim()
+        : null;
+    return { selectedProvider: provider, selectedModel: model };
+  } catch {
+    return { selectedProvider: null, selectedModel: null };
+  }
+}
+
+function persistSelection(
+  selectedProvider: SelectableAgentProvider | null,
+  selectedModel: string | null,
+): void {
+  if (typeof sessionStorage === "undefined") {
+    return;
+  }
+  try {
+    sessionStorage.setItem(
+      SELECTION_STORAGE_KEY,
+      JSON.stringify({ selectedProvider, selectedModel }),
+    );
+  } catch {
+    // Ignore quota / private mode failures.
+  }
+}
 
 export type AgentFollowMode = "guide" | "quiet";
 
@@ -65,7 +119,12 @@ export function shouldRevealViewport(followMode: AgentFollowMode): boolean {
 type AgentSessionStore = {
   threadIds: Record<string, string>;
   healthBackend: string | null;
+  healthModel: string | null;
+  healthOk: boolean | null;
+  healthDegraded: boolean | null;
   lastEventBackend: string | null;
+  selectedProvider: SelectableAgentProvider | null;
+  selectedModel: string | null;
   trailLabels: string[];
   followMode: AgentFollowMode;
   activeOverlays: Record<string, ActiveOverlay>;
@@ -73,6 +132,14 @@ type AgentSessionStore = {
   evidence: AgentEvidence[];
   ensureThreadId: (workspaceRoot: string) => string;
   setHealthBackend: (backend: string | null) => void;
+  setHealthSnapshot: (snapshot: {
+    backend: string | null;
+    model?: string | null;
+    ok?: boolean | null;
+    degraded?: boolean | null;
+  }) => void;
+  setSelectedProvider: (provider: SelectableAgentProvider) => void;
+  setSelectedModel: (model: string) => void;
   setFollowMode: (mode: AgentFollowMode) => void;
   consumeEvent: (event: AgentEvent) => void;
   recordAgentEvent: (event: unknown) => void;
@@ -310,13 +377,17 @@ export function applySpatialAgentEvent(
 
 export const initialAgentSessionState = {
   threadIds: {},
-  healthBackend: null,
-  lastEventBackend: null,
-  trailLabels: [],
+  healthBackend: null as string | null,
+  healthModel: null as string | null,
+  healthOk: null as boolean | null,
+  healthDegraded: null as boolean | null,
+  lastEventBackend: null as string | null,
+  ...readStoredSelection(),
+  trailLabels: [] as string[],
   followMode: "guide" as const,
   activeOverlays: {},
-  trailSteps: [],
-  evidence: [],
+  trailSteps: [] as TrailStep[],
+  evidence: [] as AgentEvidence[],
 };
 
 export const useAgentSessionStore = create<AgentSessionStore>((set, get) => ({
@@ -333,6 +404,47 @@ export const useAgentSessionStore = create<AgentSessionStore>((set, get) => ({
     return threadId;
   },
   setHealthBackend: (backend) => set({ healthBackend: backend }),
+  setHealthSnapshot: (snapshot) =>
+    set((state) => {
+      const backend = snapshot.backend;
+      const model =
+        snapshot.model === undefined
+          ? state.healthModel
+          : snapshot.model && snapshot.model.trim()
+            ? snapshot.model.trim()
+            : null;
+      const nextProvider =
+        state.selectedProvider ??
+        (backend === "openai" || backend === "pioneer" ? backend : null);
+      const nextModel =
+        state.selectedModel ??
+        model ??
+        (nextProvider ? defaultModelForProvider(nextProvider) : DEFAULT_OPENAI_MODEL);
+      if (nextProvider !== state.selectedProvider || nextModel !== state.selectedModel) {
+        persistSelection(nextProvider, nextModel);
+      }
+      return {
+        healthBackend: backend,
+        healthModel: model,
+        healthOk: snapshot.ok === undefined ? state.healthOk : snapshot.ok,
+        healthDegraded:
+          snapshot.degraded === undefined ? state.healthDegraded : snapshot.degraded,
+        selectedProvider: nextProvider,
+        selectedModel: nextModel,
+      };
+    }),
+  setSelectedProvider: (provider) =>
+    set((state) => {
+      const model = defaultModelForProvider(provider);
+      persistSelection(provider, model);
+      return { selectedProvider: provider, selectedModel: model };
+    }),
+  setSelectedModel: (model) =>
+    set((state) => {
+      const trimmed = model.trim();
+      persistSelection(state.selectedProvider, trimmed);
+      return { selectedModel: trimmed };
+    }),
   setFollowMode: (mode) => set({ followMode: mode }),
   consumeEvent: (event) => {
     set((state) => applySpatialAgentEvent(state, event));

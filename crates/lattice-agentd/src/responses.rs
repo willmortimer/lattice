@@ -29,7 +29,7 @@ use crate::tools::{
 pub const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
 
 /// Default model when `start_run.model` is empty (matches Node agentd openai path).
-pub const DEFAULT_OPENAI_MODEL: &str = "gpt-4.1-mini";
+pub const DEFAULT_OPENAI_MODEL: &str = "gpt-5-nano";
 
 /// Max assistant→tool→assistant rounds when Lattice tools are enabled.
 pub const MAX_TOOL_ROUNDS: usize = 8;

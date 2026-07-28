@@ -519,14 +519,35 @@ pub fn default_provider_from_env() -> ProviderKind {
         .ok()
         .as_deref()
         .and_then(ProviderKind::parse)
-        .unwrap_or(ProviderKind::Pioneer)
+        .unwrap_or_else(|| {
+            // Prefer OpenAI when only that key is present (desktop-dev injects both often).
+            if std::env::var("OPENAI_API_KEY")
+                .ok()
+                .filter(|s| !s.is_empty())
+                .is_some()
+                && std::env::var("PIONEER_API_KEY")
+                    .ok()
+                    .filter(|s| !s.is_empty())
+                    .is_none()
+            {
+                ProviderKind::Openai
+            } else {
+                ProviderKind::Pioneer
+            }
+        })
 }
 
 pub fn default_model_from_env() -> String {
-    std::env::var(ENV_AGENT_MODEL)
+    if let Some(model) = std::env::var(ENV_AGENT_MODEL)
         .ok()
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "gpt-5.6-luna".into())
+    {
+        return model;
+    }
+    match default_provider_from_env() {
+        ProviderKind::Openai => "gpt-5-nano".into(),
+        ProviderKind::Pioneer | ProviderKind::Fake => "gpt-5.6-luna".into(),
+    }
 }
 
 #[cfg(test)]

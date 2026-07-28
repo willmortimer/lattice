@@ -53,7 +53,7 @@ fi
 
 if [[ -z "${LATTICE_AGENT_MODEL:-}" ]]; then
   case "${LATTICE_AGENT_PROVIDER:-}" in
-    openai) export LATTICE_AGENT_MODEL=gpt-5.4-nano ;;
+    openai) export LATTICE_AGENT_MODEL=gpt-5-nano ;;
     pioneer) export LATTICE_AGENT_MODEL=gpt-5.6-luna ;;
   esac
 fi

@@ -7,6 +7,7 @@ export type AgentHealth = {
   ok: boolean;
   backend: string;
   degraded: boolean;
+  model?: string;
 };
 
 export type AgentStartRunArgs = {
@@ -57,6 +58,8 @@ export type TauriAgentChatTransportOptions = {
   threadId: string;
   provider?: string;
   model?: string;
+  /** Resolve provider/model at send time (UI selectors). */
+  resolveRunOptions?: () => { provider?: string; model?: string };
   onAgentEvent?: AgentEventHandler;
 };
 
@@ -149,12 +152,13 @@ export class TauriAgentChatTransport implements ChatTransport<UIMessage> {
 
         void (async () => {
           try {
+            const resolved = this.options.resolveRunOptions?.() ?? {};
             const result = await startAgentRun(
               {
                 workspaceRoot: this.options.workspaceRoot,
                 threadId,
-                provider: this.options.provider,
-                model: this.options.model,
+                provider: resolved.provider ?? this.options.provider,
+                model: resolved.model ?? this.options.model,
                 messagesJson,
               },
               (message) => {

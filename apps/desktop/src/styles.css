@@ -6159,6 +6159,49 @@ html[data-motion="always"] *::after {
   font-size: 9.5px;
   letter-spacing: 0.03em;
   text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.agent-runtime-controls {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.agent-runtime-field {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.agent-runtime-field-label {
+  color: var(--lt-faint);
+  font-family: var(--lt-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.agent-runtime-select {
+  max-width: 148px;
+  padding: 2px 6px;
+  border: 1px solid var(--lt-line);
+  border-radius: 6px;
+  background: var(--lt-surface);
+  color: var(--lt-text);
+  font-family: var(--lt-font-mono);
+  font-size: 10px;
+}
+
+.agent-runtime-hint {
+  color: var(--lt-faint);
+  font-family: var(--lt-font-mono);
+  font-size: 9.5px;
 }
 
 .agent-provider-badge-fake {

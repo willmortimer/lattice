@@ -52,6 +52,9 @@ pub struct AgentHealthDto {
     pub ok: bool,
     pub backend: String,
     pub degraded: bool,
+    /// Effective default model from `LATTICE_AGENT_MODEL` (empty when unset).
+    #[serde(default)]
+    pub model: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -346,6 +349,10 @@ pub async fn agent_health(state: State<'_, AgentState>) -> Result<AgentHealthDto
                 ok: resp.ok,
                 backend,
                 degraded: resp.degraded,
+                model: std::env::var(ENV_AGENT_MODEL)
+                    .ok()
+                    .filter(|value| !value.is_empty())
+                    .unwrap_or_default(),
             })
         }
         other => Err(format!("unexpected GetAgentHealth response: {other:?}")),

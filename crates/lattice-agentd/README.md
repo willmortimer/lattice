@@ -113,8 +113,8 @@ printf '%s\n' \
 ```sh
 export LATTICE_AGENT_PROVIDER=openai
 export OPENAI_API_KEY=sk-...
-# optional: LATTICE_AGENT_MODEL=gpt-4.1-mini
-# optional: OPENAI_BASE_URL=https://api.openai.com/v1
+# optional: LATTICE_AGENT_MODEL=gpt-5-nano
+# Prefer ecosystem sops + `nxr desktop-dev` (auto-injects secrets/ai.env).
 ```
 
 ### Host tools (latticed HTTP)

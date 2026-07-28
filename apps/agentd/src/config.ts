@@ -62,7 +62,7 @@ export function loadConfig(
       ? "fake-model"
       : defaultProvider === "pioneer"
         ? "MiniMaxAI/MiniMax-M3"
-        : "gpt-4.1-mini");
+        : "gpt-5-nano");
 
   return {
     forceFake,
