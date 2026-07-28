@@ -434,7 +434,7 @@ export const useAgentSessionStore = create<AgentSessionStore>((set, get) => ({
       };
     }),
   setSelectedProvider: (provider) =>
-    set((state) => {
+    set(() => {
       const model = defaultModelForProvider(provider);
       persistSelection(provider, model);
       return { selectedProvider: provider, selectedModel: model };
