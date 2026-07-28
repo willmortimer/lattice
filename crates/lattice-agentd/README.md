@@ -76,6 +76,14 @@ supervises the sidecar:
 workspace when arguments omit them. Without the Lattice env pair, Pioneer
 falls back to chat-only streaming and prints a one-time stderr warning.
 
+### KernelFS WASI → proposals
+
+Sandboxed WASI guests write under KernelFS `/output`. The host helper in
+`wasi_host` materializes the run dir, runs `_start`, collects proposal drafts,
+and pushes each draft via `POST /v1/proposals/propose_resource` (same body shape
+as the host `propose_resource` tool). Lattice search/read/related stay host HTTP
+tools — they are not exposed inside the guest.
+
 Stdio smoke:
 
 ```sh
