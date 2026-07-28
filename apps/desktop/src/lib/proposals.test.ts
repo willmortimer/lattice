@@ -5,7 +5,9 @@ import {
   commandSummaryLabel,
   defaultAcceptedCommandIndices,
   detailExcerpt,
+  detailExcerptDisplay,
   filterProposalSummaries,
+  formatTextDiffExcerpt,
   pathsFromSelectedCommands,
   previewCommandLabel,
   proposalStatusLabel,
@@ -86,6 +88,63 @@ describe("detailExcerpt", () => {
       }),
     ).toBe("format: lattice-interface");
     expect(detailExcerpt(undefined)).toBeNull();
+  });
+});
+
+describe("formatTextDiffExcerpt", () => {
+  it("returns after-only when before is missing or blank", () => {
+    expect(formatTextDiffExcerpt(undefined, "# After")).toBe("# After");
+    expect(formatTextDiffExcerpt("   ", "# After")).toBe("# After");
+  });
+
+  it("returns after when before and after are identical", () => {
+    expect(formatTextDiffExcerpt("# Same", "# Same")).toBe("# Same");
+  });
+
+  it("formats a compact unified hunk when both differ", () => {
+    expect(formatTextDiffExcerpt("line one\nline two", "line one\nline three")).toBe(
+      "- line one\n- line two\n+ line one\n+ line three",
+    );
+  });
+});
+
+describe("detailExcerptDisplay", () => {
+  it("surfaces before and after for text-diff details", () => {
+    expect(
+      detailExcerptDisplay({
+        kind: "text-diff",
+        path: "Notes/A.md",
+        beforeExcerpt: "# Before",
+        afterExcerpt: "# After",
+        truncated: false,
+      }),
+    ).toEqual({ mode: "diff", before: "# Before", after: "# After" });
+  });
+
+  it("omits blank before excerpts", () => {
+    expect(
+      detailExcerptDisplay({
+        kind: "text-diff",
+        path: "Notes/A.md",
+        beforeExcerpt: "  ",
+        afterExcerpt: "# After",
+        truncated: false,
+      }),
+    ).toEqual({ mode: "diff", before: null, after: "# After" });
+  });
+});
+
+describe("detailExcerpt text-diff", () => {
+  it("uses unified diff formatting when before and after differ", () => {
+    expect(
+      detailExcerpt({
+        kind: "text-diff",
+        path: "Notes/A.md",
+        beforeExcerpt: "old",
+        afterExcerpt: "new",
+        truncated: false,
+      }),
+    ).toBe("- old\n+ new");
   });
 });
 

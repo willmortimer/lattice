@@ -12,13 +12,36 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   defaultAcceptedCommandIndices,
-  detailExcerpt,
+  detailExcerptDisplay,
   previewCommandLabel,
   previewProposal,
   type CommandPreview,
+  type CommandPreviewDetail,
+  type DetailExcerptDisplay,
   type ProposalPreview,
   type TransactionProposal,
 } from "./lib/proposals";
+
+function ProposalDetailExcerpt({ detail }: { detail: CommandPreviewDetail | undefined }) {
+  const display: DetailExcerptDisplay | null = detailExcerptDisplay(detail);
+  if (!display) return null;
+  if (display.mode === "plain") {
+    return <pre className="proposal-command-excerpt">{display.text}</pre>;
+  }
+  if (display.before) {
+    return (
+      <div className="proposal-text-diff" role="group" aria-label="Text change preview">
+        <pre className="proposal-command-excerpt proposal-diff-before" aria-label="Before">
+          {display.before}
+        </pre>
+        <pre className="proposal-command-excerpt proposal-diff-after" aria-label="After">
+          {display.after}
+        </pre>
+      </div>
+    );
+  }
+  return <pre className="proposal-command-excerpt">{display.after}</pre>;
+}
 
 export interface ProposalReviewModalProps {
   proposal: TransactionProposal;
@@ -137,7 +160,6 @@ export function ProposalReviewModal({
             {proposal.commands.map((command, index) => {
               const checked = selected.has(index);
               const commandPreview = previewByIndex.get(index);
-              const excerpt = detailExcerpt(commandPreview?.detail);
               const needsPredecessor = preview?.missingPredecessors.includes(index) ?? false;
               const rowWarnings = commandPreview?.warnings ?? [];
               return (
@@ -159,7 +181,9 @@ export function ProposalReviewModal({
                       {commandPreview?.commandType ? ` · ${commandPreview.commandType}` : ""}
                       {needsPredecessor ? " · required predecessor" : ""}
                     </small>
-                    {excerpt && <pre className="proposal-command-excerpt">{excerpt}</pre>}
+                    {commandPreview?.detail && (
+                      <ProposalDetailExcerpt detail={commandPreview.detail} />
+                    )}
                     {rowWarnings.map((warning) => (
                       <small key={warning} className="proposal-command-warning">
                         {warning}

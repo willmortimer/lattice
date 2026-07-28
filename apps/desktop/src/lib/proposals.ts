@@ -128,26 +128,60 @@ export function previewCommandLabel(
   return commandSummaryLabel(command, index);
 }
 
-export function detailExcerpt(detail: CommandPreviewDetail | undefined): string | null {
+export type DetailExcerptDisplay =
+  | { mode: "plain"; text: string }
+  | { mode: "diff"; before: string | null; after: string };
+
+/** Compact unified `-`/`+` hunk for text-diff previews. */
+export function formatTextDiffExcerpt(
+  beforeExcerpt: string | undefined,
+  afterExcerpt: string,
+): string {
+  const before = beforeExcerpt?.trim();
+  if (!before) return afterExcerpt;
+  if (before === afterExcerpt) return afterExcerpt;
+
+  const lines: string[] = [];
+  for (const line of before.split("\n")) {
+    lines.push(`- ${line}`);
+  }
+  for (const line of afterExcerpt.split("\n")) {
+    lines.push(`+ ${line}`);
+  }
+  return lines.join("\n");
+}
+
+export function detailExcerptDisplay(
+  detail: CommandPreviewDetail | undefined,
+): DetailExcerptDisplay | null {
   if (!detail) return null;
   switch (detail.kind) {
     case "text-create":
-      return detail.contentExcerpt;
-    case "text-diff":
-      return detail.afterExcerpt;
+      return { mode: "plain", text: detail.contentExcerpt };
+    case "text-diff": {
+      const before = detail.beforeExcerpt?.trim() ? detail.beforeExcerpt : null;
+      return { mode: "diff", before, after: detail.afterExcerpt };
+    }
     case "workflow-summary":
     case "interface-summary":
     case "artifact-summary":
-      return detail.excerpt;
+      return { mode: "plain", text: detail.excerpt };
     case "record-change":
-      return detail.fieldSummary || null;
+      return detail.fieldSummary ? { mode: "plain", text: detail.fieldSummary } : null;
     case "file-op":
-      return detail.paths.join(" → ");
+      return { mode: "plain", text: detail.paths.join(" → ") };
     default: {
       const _exhaustive: never = detail;
       return _exhaustive;
     }
   }
+}
+
+export function detailExcerpt(detail: CommandPreviewDetail | undefined): string | null {
+  const display = detailExcerptDisplay(detail);
+  if (!display) return null;
+  if (display.mode === "plain") return display.text;
+  return formatTextDiffExcerpt(display.before ?? undefined, display.after);
 }
 
 export async function createProposal(

@@ -3112,6 +3112,29 @@ html[data-page-width="full"] {
   border-radius: var(--lt-radius-sm);
 }
 
+.proposal-text-diff {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.proposal-text-diff .proposal-command-excerpt {
+  margin: 0;
+}
+
+.proposal-diff-before {
+  color: var(--lt-danger);
+  background: color-mix(in srgb, var(--lt-danger) 8%, var(--lt-surface) 92%);
+  border-left: 2px solid color-mix(in srgb, var(--lt-danger) 45%, transparent);
+}
+
+.proposal-diff-after {
+  color: var(--lt-success, #2f8f5b);
+  background: color-mix(in srgb, var(--lt-success, #2f8f5b) 8%, var(--lt-surface) 92%);
+  border-left: 2px solid color-mix(in srgb, var(--lt-success, #2f8f5b) 45%, transparent);
+}
+
 @media (max-width: 680px) {
   .modal-backdrop {
     padding: 12px;
