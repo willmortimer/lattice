@@ -68,10 +68,6 @@
             generated-theme-check = "Compile themes and fail on git drift";
             generated-template-check = "Compile templates and fail on git drift";
             flake-check = "nix flake check";
-            site-dev = "Moved: marketing site lives in private lattice-ecosystem";
-            site-build = "Moved: marketing site lives in private lattice-ecosystem";
-            site-deploy = "Moved: marketing site lives in private lattice-ecosystem";
-            docs-sync = "Moved: marketing site lives in private lattice-ecosystem";
             compile-theme = "Compile themes/*.theme.yaml into CSS/TS tokens";
             compile-templates = "Validate templates and regenerate embedded catalogs";
             prepare-first-look = "Seed First Look demo datasets and regenerate template catalogs";
@@ -83,7 +79,20 @@
             desktop-build = "Release binary, unbundled (tauri build --no-bundle)";
             desktop-ui-build = "Build the desktop Vite frontend only";
             desktop-install = "macOS: signed .app with voice → /Applications (Apple Development)";
-            desktop-release = "macOS: Developer ID sign + notarytool + staple + DMG";
+            desktop-release = "macOS release DAG join (env → build → sign → notary → dmg)";
+            release-env-validate = "Validate Apple Developer ID + notarytool env";
+            desktop-tauri-bundle = "Tauri app bundle with voice-embedded";
+            build-latticed = "Release-build latticed sidecar";
+            build-agentd = "Release-build lattice-agentd sidecar";
+            build-embed-host = "Release-build lattice-embed-host (llama-cpp)";
+            build-voice-host = "Release-build lattice-voice-host";
+            verify-sidecars = "Verify release sidecar binaries + embed backends";
+            assemble-app = "Copy sidecars/dylibs into Lattice.app";
+            codesign-app = "Developer ID codesign (hardened runtime)";
+            notarize-app = "Submit Lattice.app to Apple notarytool";
+            staple-app = "Staple notarization ticket onto Lattice.app";
+            build-dmg = "Build UDZO DMG from stapled app";
+            verify-gatekeeper = "spctl + codesign verify Gatekeeper path";
             latticed = "Build and run local latticed (debug)";
             agentd = "Build and run local lattice-agentd (debug)";
             ok = "No-op success (nxr task DAG join)";
@@ -139,23 +148,7 @@
             flake-check = ''
               exec nix flake check -L "$@"
             '';
-            site-dev = ''
-              echo "Marketing site moved to private lattice-ecosystem (site/)." >&2
-              echo "Open ../lattice-ecosystem or vendor checkout and run pnpm --filter @lattice/site dev" >&2
-              exit 1
-            '';
-            site-build = ''
-              echo "Marketing site moved to private lattice-ecosystem (site/)." >&2
-              exit 1
-            '';
-            site-deploy = ''
-              echo "Site deploy moved to private lattice-ecosystem." >&2
-              exit 1
-            '';
-            docs-sync = ''
-              echo "docs-sync moved to private lattice-ecosystem (site sync against vendor/lattice/docs)." >&2
-              exit 1
-            '';
+
             compile-theme = ''
               exec pnpm --filter @lattice/desktop compile-theme "$@"
             '';
@@ -323,253 +316,62 @@
               codesign -dv --verbose=2 "$dest" || true
               echo "desktop-install: done. Open with: open \"$dest\""
             '';
-            # Distribution packet: Developer ID Application + notarytool + stapler + DMG.
-            # Requires paid Apple Developer Program + Keychain identity. Validate env
-            # before the long Tauri/Cargo build (set LATTICE_RELEASE_VALIDATE_ONLY=1 to
-            # stop after checks). Secrets: sops secrets/apple.env — never commit plaintext.
+            # Distribution DAG leaves live under scripts/release/.
+            # `nxr task desktop-release` orchestrates; apple-release context only on sign/notary.
+            release-env-validate = ''
+              exec bash scripts/release/env-validate.sh "$@"
+            '';
+            desktop-tauri-bundle = ''
+              exec bash scripts/release/tauri-bundle.sh "$@"
+            '';
+            build-latticed = ''
+              exec bash scripts/release/build-sidecar.sh lattice-daemon latticed
+            '';
+            build-agentd = ''
+              exec bash scripts/release/build-sidecar.sh lattice-agentd lattice-agentd
+            '';
+            build-embed-host = ''
+              exec bash scripts/release/build-sidecar.sh lattice-embed-host lattice-embed-host llama-cpp
+            '';
+            build-voice-host = ''
+              exec bash scripts/release/build-sidecar.sh lattice-voice-host lattice-voice-host fluidaudio
+            '';
+            verify-sidecars = ''
+              exec bash scripts/release/verify-sidecars.sh "$@"
+            '';
+            assemble-app = ''
+              exec bash scripts/release/assemble-app.sh "$@"
+            '';
+            codesign-app = ''
+              exec bash scripts/release/codesign-app.sh "$@"
+            '';
+            notarize-app = ''
+              exec bash scripts/release/notarize-app.sh "$@"
+            '';
+            staple-app = ''
+              exec bash scripts/release/staple-app.sh "$@"
+            '';
+            build-dmg = ''
+              exec bash scripts/release/build-dmg.sh "$@"
+            '';
+            verify-gatekeeper = ''
+              exec bash scripts/release/verify-gatekeeper.sh "$@"
+            '';
+            # Thin pointer kept so `nix run .#desktop-release` still works; prefer the task DAG.
             desktop-release = ''
-              if [ "$(uname -s)" != "Darwin" ]; then
-                echo "desktop-release: macOS only" >&2
-                exit 1
-              fi
-
-              # Support `nix run ./lattice#…` from ecosystem root (Cargo workspace is nested).
-              if [ -f ./lattice/Cargo.toml ] && [ -d ./lattice/apps/daemon ]; then
-                cd ./lattice
-              elif [ ! -f ./Cargo.toml ] || [ ! -d ./apps/daemon ]; then
-                echo "desktop-release: run from lattice repo root (or ecosystem root with ./lattice)" >&2
-                exit 1
-              fi
-
-              missing=0
-              require_env() {
-                local name="$1"
-                if [ -z "''${!name:-}" ]; then
-                  echo "desktop-release: missing required env: $name" >&2
-                  missing=1
-                fi
-              }
-              require_env APPLE_SIGNING_IDENTITY
-              require_env APPLE_ID
-              require_env APPLE_PASSWORD
-              require_env APPLE_TEAM_ID
-              if [ "$missing" -ne 0 ]; then
-                echo "desktop-release: load Apple secrets first, e.g.:" >&2
-                echo "  sops exec-env secrets/apple.env -- nix run .#desktop-release" >&2
-                echo "  # or: sops secrets/apple.env && direnv reload" >&2
-                echo "See docs/dev/environment.md and docs/dev/nix-workflows.md." >&2
-                exit 1
-              fi
-
-              case "$APPLE_SIGNING_IDENTITY" in
-                *"Developer ID Application"*) ;;
-                *"Apple Development"*)
-                  echo "desktop-release: APPLE_SIGNING_IDENTITY looks like Apple Development." >&2
-                  echo "  Notarization needs a Developer ID Application certificate from a" >&2
-                  echo "  paid Apple Developer Program membership (security find-identity -v -p codesigning)." >&2
-                  exit 1
-                  ;;
-                *)
-                  echo "desktop-release: warning: identity is not 'Developer ID Application: …'" >&2
-                  echo "  continuing with: $APPLE_SIGNING_IDENTITY" >&2
-                  ;;
-              esac
-
-              if [ "''${LATTICE_RELEASE_VALIDATE_ONLY:-}" = "1" ] || [ "''${LATTICE_RELEASE_VALIDATE_ONLY:-}" = "true" ]; then
-                echo "desktop-release: env OK (LATTICE_RELEASE_VALIDATE_ONLY). Skipping build."
-                exit 0
-              fi
-
-              if ! command -v xcrun >/dev/null 2>&1; then
-                echo "desktop-release: xcrun not found (need Xcode or CLT for notarytool/stapler)" >&2
-                exit 1
-              fi
-              if ! xcrun --find notarytool >/dev/null 2>&1; then
-                echo "desktop-release: notarytool missing — install full Xcode Command Line Tools" >&2
-                exit 1
-              fi
-
-              pnpm install
-              # Keep the Nix apple-sdk DEVELOPER_DIR/SDKROOT for the Cargo build.
-              # Same voice + sidecar path as desktop-install.
-              pnpm --filter @lattice/desktop exec tauri build --bundles app --features voice-embedded
-
-              echo "desktop-release: building latticed / lattice-agentd / lattice-embed-host / lattice-voice-host"
-              cargo build --release -p lattice-daemon --bin latticed
-              cargo build --release -p lattice-agentd --bin lattice-agentd
-              cargo build --release -p lattice-embed-host --bin lattice-embed-host --features llama-cpp
-              cargo build --release -p lattice-voice-host --bin lattice-voice-host --features fluidaudio || \
-                cargo build --release -p lattice-voice-host --bin lattice-voice-host
-
-              echo "desktop-release: verifying production sidecars"
-              for bin in latticed lattice-agentd lattice-embed-host lattice-voice-host; do
-                if [ ! -f "target/release/$bin" ]; then
-                  echo "desktop-release: missing target/release/$bin after build" >&2
-                  exit 1
-                fi
-              done
-              backends="$(target/release/lattice-embed-host backends || true)"
-              echo "desktop-release: lattice-embed-host backends:"$'\n'"$backends"
-              if ! printf '%s\n' "$backends" | grep -qx 'llama-cpp'; then
-                echo "desktop-release: lattice-embed-host must list llama-cpp (build with --features llama-cpp)" >&2
-                exit 1
-              fi
-
-              if [ -d /Applications/Xcode.app/Contents/Developer ]; then
-                export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
-              elif [ -d /Library/Developer/CommandLineTools ]; then
-                export DEVELOPER_DIR=/Library/Developer/CommandLineTools
-              fi
-
-              app_src="target/release/bundle/macos/Lattice.app"
-              if [ ! -d "$app_src" ]; then
-                alt_src="apps/desktop/src-tauri/target/release/bundle/macos/Lattice.app"
-                if [ -d "$alt_src" ]; then
-                  app_src="$alt_src"
-                else
-                  echo "desktop-release: missing bundle at $app_src (also checked $alt_src)" >&2
-                  exit 1
-                fi
-              fi
-
-              macos_dir="$app_src/Contents/MacOS"
-              for dylib in libLatticeVoiceBridge.dylib libLatticeAudioBridge.dylib; do
-                src="target/release/$dylib"
-                if [ -f "$src" ]; then
-                  cp -f "$src" "$macos_dir/$dylib"
-                  echo "desktop-release: bundled $dylib"
-                else
-                  echo "desktop-release: warning: missing $src (voice may fail at runtime)" >&2
-                fi
-              done
-
-              for bin in latticed lattice-agentd lattice-embed-host lattice-voice-host; do
-                src="target/release/$bin"
-                if [ ! -f "$src" ]; then
-                  echo "desktop-release: missing $src (required production sidecar)" >&2
-                  exit 1
-                fi
-                cp -f "$src" "$macos_dir/$bin"
-                chmod +x "$macos_dir/$bin"
-                echo "desktop-release: bundled $bin"
-              done
-
-              # Hardened runtime + timestamp required for notarization. Sign nested
-              # Mach-O first, then the .app (inside-out; avoid relying on --deep alone).
-              echo "desktop-release: codesign (Developer ID, hardened runtime)"
-              sign_bin() {
-                local path="$1"
-                if ! codesign --force --options runtime --timestamp \
-                  --sign "$APPLE_SIGNING_IDENTITY" "$path"; then
-                  echo "desktop-release: codesign failed: $path" >&2
-                  echo "  identity: $APPLE_SIGNING_IDENTITY" >&2
-                  exit 1
-                fi
-              }
-              for path in "$macos_dir"/*; do
-                if [ -f "$path" ] || [ -L "$path" ]; then
-                  sign_bin "$path"
-                fi
-              done
-              if [ -d "$app_src/Contents/Frameworks" ]; then
-                find "$app_src/Contents/Frameworks" -type f \( -perm -111 -o -name '*.dylib' -o -name '*.so' \) -print0 |
-                  while IFS= read -r -d $'\0' path; do
-                    sign_bin "$path"
-                  done
-              fi
-              sign_bin "$app_src"
-              codesign --verify --deep --strict --verbose=2 "$app_src"
-
-              version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_src/Contents/Info.plist" 2>/dev/null || echo "0.0.0")"
-              out_dir="''${LATTICE_RELEASE_DIR:-target/release/bundle/dmg}"
-              mkdir -p "$out_dir"
-              zip_path="$out_dir/Lattice-$version-notarize.zip"
-              dmg_path="$out_dir/Lattice-$version.dmg"
-
-              echo "desktop-release: packing for notarytool → $zip_path"
-              rm -f "$zip_path"
-              ditto -c -k --keepParent "$app_src" "$zip_path"
-
-              echo "desktop-release: submitting to Apple notary service (this can take several minutes)"
-              if ! xcrun notarytool submit "$zip_path" \
-                --apple-id "$APPLE_ID" \
-                --password "$APPLE_PASSWORD" \
-                --team-id "$APPLE_TEAM_ID" \
-                --wait; then
-                echo "desktop-release: notarytool submit failed." >&2
-                echo "  Check APPLE_ID / APPLE_PASSWORD (app-specific) / APPLE_TEAM_ID and Keychain access." >&2
-                echo "  Inspect: xcrun notarytool history (same Apple env as this run)." >&2
-                exit 1
-              fi
-
-              echo "desktop-release: stapling ticket onto Lattice.app"
-              if ! xcrun stapler staple "$app_src"; then
-                echo "desktop-release: stapler failed for $app_src" >&2
-                exit 1
-              fi
-              xcrun stapler validate "$app_src"
-
-              echo "desktop-release: building DMG → $dmg_path"
-              rm -f "$dmg_path"
-              hdiutil create \
-                -volname "Lattice" \
-                -srcfolder "$app_src" \
-                -ov \
-                -format UDZO \
-                "$dmg_path"
-
-              # Optional second staple on the DMG is unnecessary when the app ticket
-              # is already attached; Gatekeeper reads the stapled app inside.
-              rm -f "$zip_path"
-              echo "desktop-release: done."
-              echo "  app: $app_src"
-              echo "  dmg: $dmg_path"
-              echo "  verify: spctl -a -vv --type execute \"$app_src\""
+              echo "desktop-release: use the NXR DAG (secrets only on sign/notary):" >&2
+              echo "  nxr task desktop-release" >&2
+              echo "  # validate only: LATTICE_RELEASE_VALIDATE_ONLY=1 nxr task release-env-validate" >&2
+              exec nix run .#nxr -- task desktop-release "$@"
             '';
             ok = ''
               true
             '';
           };
 
-          # Site scripts only need Node. Wrangler comes from a thin npx wrapper —
-          # nixpkgs#wrangler builds the workers-sdk monorepo (~GiB) and currently
-          # fails on Darwin (EBADF during tsup). Published npm CLI is enough for
-          # Pages deploy + `wrangler login`.
-          siteNodeToolchain = with pkgs; [
-            nodejs_22
-            pnpm
-          ];
-
-          # sops + age for decrypting secrets/ when deploying from the ops shell.
-          secretsToolchain = with pkgs; [
-            sops
-            age
-          ];
-
-          wrangler = pkgs.writeShellApplication {
-            name = "wrangler";
-            runtimeInputs = [ pkgs.nodejs_22 ];
-            text = ''
-              exec npx --yes wrangler@4 "$@"
-            '';
-          };
-
-          siteToolchain = siteNodeToolchain ++ [ wrangler ] ++ secretsToolchain;
-
-          siteScriptNames = [
-            "site-dev"
-            "site-build"
-            "site-deploy"
-            "docs-sync"
-          ];
-
           runtimeInputsFor =
             name:
-            if name == "site-deploy" then
-              siteToolchain
-            else if builtins.elem name siteScriptNames then
-              siteNodeToolchain
-            else if name == "flake-check" then
+            if name == "flake-check" then
               toolchain ++ [
                 pkgs.nix
                 pkgs.git
@@ -593,20 +395,14 @@
             }
           ) scripts;
 
-          # Keep wrangler out of the default direnv shell; only ops + site-deploy pull it.
-          defaultLatticeScripts = builtins.removeAttrs latticeScripts [ "site-deploy" ];
+          defaultLatticeScripts = latticeScripts;
         in
         {
           packages.nxr = nxr.packages.${system}.nxr;
-          packages.wrangler = wrangler;
 
           nxr.shellIntegration = {
             enable = true;
-            # `default` = day-to-day Rust/desktop; `ops` = site publish / Cloudflare.
-            devShells = [
-              "default"
-              "ops"
-            ];
+            devShells = [ "default" ];
           };
 
           # Secrets are delivered only to tasks that declare a context — not via .envrc.
@@ -922,6 +718,8 @@
                     mode = "verify-only";
                   }
                 ];
+                # Local CAS only — never enable cache on secret-bearing contexts until
+                # NXR disables caching by default when context secrets are present.
                 cache = {
                   mode = "local";
                   version = "1";
@@ -959,6 +757,8 @@
                     mode = "verify-only";
                   }
                 ];
+                # Local CAS only — never enable cache on secret-bearing contexts until
+                # NXR disables caching by default when context secrets are present.
                 cache = {
                   mode = "local";
                   version = "1";
@@ -986,27 +786,7 @@
                 category = "codegen";
                 aliases = [ "compile" ];
               };
-              docs-sync = {
-                description = "Sync docs/ into the site";
-                app = "docs-sync";
-                category = "site";
-              };
-              site-dev = {
-                description = "Astro marketing/docs site (dev)";
-                app = "site-dev";
-                category = "site";
-              };
-              site-build = {
-                description = "Build marketing/docs site";
-                app = "site-build";
-                category = "site";
-              };
-              site-deploy = {
-                description = "Deploy marketing/docs site to Cloudflare Pages";
-                app = "site-deploy";
-                category = "site";
-                aliases = [ "deploy-site" ];
-              };
+
               desktop-dev = {
                 description = "Tauri + Vite HMR";
                 app = "desktop-dev";
@@ -1070,25 +850,141 @@
                   ];
                 };
               };
-              desktop-release = {
-                description = "Developer ID notarize + DMG (macOS)";
-                app = "desktop-release";
+
+              # Release DAG: compile without Apple secrets; sign/notary use apple-release.
+              release-env-validate = {
+                description = "Validate Apple Developer ID + notarytool env";
+                app = "release-env-validate";
                 category = "release";
-                aliases = [ "release" ];
                 context = "apple-release";
+              };
+              desktop-tauri-bundle = {
+                description = "Tauri app bundle (voice-embedded)";
+                app = "desktop-tauri-bundle";
+                category = "release";
+                dependsOn = [ "release-env-validate" ];
                 resources = {
                   cpu = 4;
                   memory = "8GiB";
-                  network = true;
                   exclusive = [
                     "cargo-target"
                     "pnpm-store"
                     "xcode-derived-data"
+                  ];
+                };
+              };
+              build-latticed = {
+                description = "Release-build latticed";
+                app = "build-latticed";
+                category = "release";
+                dependsOn = [ "release-env-validate" ];
+                resources = {
+                  exclusive = [ "cargo-target" ];
+                };
+              };
+              build-agentd = {
+                description = "Release-build lattice-agentd";
+                app = "build-agentd";
+                category = "release";
+                dependsOn = [ "release-env-validate" ];
+                resources = {
+                  exclusive = [ "cargo-target" ];
+                };
+              };
+              build-embed-host = {
+                description = "Release-build lattice-embed-host";
+                app = "build-embed-host";
+                category = "release";
+                dependsOn = [ "release-env-validate" ];
+                resources = {
+                  exclusive = [ "cargo-target" ];
+                };
+              };
+              build-voice-host = {
+                description = "Release-build lattice-voice-host";
+                app = "build-voice-host";
+                category = "release";
+                dependsOn = [ "release-env-validate" ];
+                resources = {
+                  exclusive = [ "cargo-target" ];
+                };
+              };
+              verify-sidecars = {
+                description = "Verify release sidecars";
+                app = "verify-sidecars";
+                category = "release";
+                dependsOn = [
+                  "build-latticed"
+                  "build-agentd"
+                  "build-embed-host"
+                  "build-voice-host"
+                ];
+              };
+              assemble-app = {
+                description = "Assemble sidecars into Lattice.app";
+                app = "assemble-app";
+                category = "release";
+                dependsOn = [
+                  "desktop-tauri-bundle"
+                  "verify-sidecars"
+                ];
+              };
+              codesign-app = {
+                description = "Developer ID codesign (hardened runtime)";
+                app = "codesign-app";
+                category = "release";
+                dependsOn = [ "assemble-app" ];
+                context = "apple-release";
+                resources = {
+                  exclusive = [
+                    "apple-keychain"
+                    "xcode-derived-data"
+                  ];
+                };
+              };
+              notarize-app = {
+                description = "Apple notarytool submit --wait";
+                app = "notarize-app";
+                category = "release";
+                dependsOn = [ "codesign-app" ];
+                context = "apple-release";
+                resources = {
+                  network = true;
+                  exclusive = [
                     "apple-keychain"
                     "apple-notary"
                   ];
                 };
               };
+              staple-app = {
+                description = "Staple notarization ticket";
+                app = "staple-app";
+                category = "release";
+                dependsOn = [ "notarize-app" ];
+                resources = {
+                  exclusive = [ "apple-notary" ];
+                };
+              };
+              build-dmg = {
+                description = "Build UDZO DMG";
+                app = "build-dmg";
+                category = "release";
+                dependsOn = [ "staple-app" ];
+              };
+              verify-gatekeeper = {
+                description = "Gatekeeper / codesign verify";
+                app = "verify-gatekeeper";
+                category = "release";
+                dependsOn = [ "build-dmg" ];
+              };
+              desktop-release = {
+                description = "Notarized macOS DMG DAG";
+                app = "ok";
+                dependsOn = [ "verify-gatekeeper" ];
+                category = "release";
+                aliases = [ "release" ];
+              };
+
               desktop-perf = {
                 description = "Browser perf harness";
                 app = "desktop-perf";
@@ -1118,30 +1014,15 @@
                 };
               };
             };
-
-          # Day-to-day app development (Rust, desktop, site local preview).
-          # direnv `use flake` loads this shell.
-          # site-deploy / wrangler stay in .#ops so default reload stays light.
+          # Day-to-day Rust/desktop. Site/Cloudflare live in private lattice-ecosystem.
           devShells.default = pkgs.mkShell {
             packages = toolchain ++ lib.attrValues defaultLatticeScripts;
             shellHook = ''
               echo "lattice dev shell — rust $(rustc --version | cut -d' ' -f2), node $(node --version), pnpm $(pnpm --version)"
               echo "runner: nxr list | nxr task ci [-j N] | nxr graph ci | nxr up desktop-web"
-              echo "legacy: lattice-{test,lint,fmt,check,compile-*,desktop*} (also: nix run .#<app>)"
+              echo "release: nxr graph desktop-release | nxr task desktop-release"
               echo "secrets: nxr contexts (agent-*, apple-*); .envrc stays boring"
-              echo "site / Cloudflare: private lattice-ecosystem repo"
-            '';
-          };
-
-          # Site / Cloudflare ops moved to private lattice-ecosystem.
-          # Kept as a thin pointer so existing `nix develop .#ops` habit fails loudly.
-          devShells.ops = pkgs.mkShell {
-            packages = [ ];
-            shellHook = ''
-              echo "Site and Cloudflare deploy moved to private lattice-ecosystem."
-              echo "Checkout: https://github.com/willmortimer/lattice-ecosystem"
-              echo "Local sibling path: ../lattice-ecosystem"
-              exit 1
+              echo "site / Cloudflare: private lattice-ecosystem (not this flake)"
             '';
           };
         };

@@ -52,9 +52,42 @@
       "tasks": ["codegen", "compile-theme", "compile-templates", "generated-theme-check", "generated-template-check"]
     },
     "release": {
-      "description": "macOS install and notarized release",
-      "apps": ["desktop-install", "desktop-release"],
-      "tasks": ["desktop-install", "desktop-release"]
+      "description": "macOS install and notarized release DAG",
+      "apps": [
+        "desktop-install",
+        "release-env-validate",
+        "desktop-tauri-bundle",
+        "build-latticed",
+        "build-agentd",
+        "build-embed-host",
+        "build-voice-host",
+        "verify-sidecars",
+        "assemble-app",
+        "codesign-app",
+        "notarize-app",
+        "staple-app",
+        "build-dmg",
+        "verify-gatekeeper",
+        "desktop-release",
+        "ok"
+      ],
+      "tasks": [
+        "desktop-install",
+        "release-env-validate",
+        "desktop-tauri-bundle",
+        "build-latticed",
+        "build-agentd",
+        "build-embed-host",
+        "build-voice-host",
+        "verify-sidecars",
+        "assemble-app",
+        "codesign-app",
+        "notarize-app",
+        "staple-app",
+        "build-dmg",
+        "verify-gatekeeper",
+        "desktop-release"
+      ]
     }
   }
 }

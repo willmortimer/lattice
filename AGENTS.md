@@ -128,7 +128,10 @@ nxr task --affected --base origin/main -j 8
 nxr up desktop-web              # local process preview
 nxr desktop-dev                 # Tauri + Vite
 nxr task desktop-install        # context: apple-development
-nxr task desktop-release        # context: apple-release (confirm)
+nxr task desktop-release        # DAG: build∥sidecars → sign → notary → dmg
+nxr graph desktop-release
+# env only (no build):
+LATTICE_RELEASE_VALIDATE_ONLY=1 nxr task release-env-validate
 
 nix run .#check                 # monolithic escape hatch; prefer nxr task ci
 ```
