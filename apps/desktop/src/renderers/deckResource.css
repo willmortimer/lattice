@@ -1,5 +1,252 @@
-.deck-resource { min-height: 100%; display: grid; gap: .75rem; padding: .9rem; color: var(--lt-text); }
-.deck-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; font-size: .9rem; }.deck-toolbar select { max-width: 14rem; }
-.deck-stage { position: relative; width: min(100%, 1100px); max-height: calc(100vh - 11rem); margin: auto; overflow: hidden; background: var(--lt-bg-raise, #171b22); box-shadow: 0 12px 42px color-mix(in srgb, var(--lt-text) 20%, transparent); }.deck-stage:fullscreen { width: 100vw; height: 100vh; max-height: none; background: #000; }.deck-frame { position: absolute; inset: 0; display: none; background: var(--lt-panel); }.deck-frame[data-current] { display: block; animation: deck-fade var(--deck-transition-ms, 0ms) ease both; }.deck-stage[data-transition^="push"] .deck-frame[data-current] { animation-name: deck-push; }.deck-frame iframe { width: 100%; height: 100%; border: 0; background: var(--lt-panel); }.deck-degraded { display: grid; place-items: center; height: 100%; padding: 2rem; background: var(--lt-panel); }
-.deck-overview { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: .75rem; list-style: none; padding: 0; margin: 0; }.deck-overview button { width: 100%; min-height: 8rem; text-align: left; display: grid; gap: .4rem; border: 1px solid var(--lt-border); border-radius: var(--lt-radius); background: var(--lt-panel); color: inherit; padding: .8rem; }.deck-overview small { color: var(--lt-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.deck-notes { max-width: 72rem; margin: auto; width: 100%; border-top: 1px solid var(--lt-border); }.deck-notes pre { white-space: pre-wrap; font: inherit; }
-@keyframes deck-fade { from { opacity: .35; } to { opacity: 1; } } @keyframes deck-push { from { transform: translateX(4%); opacity: .45; } to { transform: translateX(0); opacity: 1; } } @media (prefers-reduced-motion: reduce) { .deck-frame[data-current] { animation: none !important; } }
+.deck-resource {
+  min-height: 100%;
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  color: var(--lt-text);
+}
+
+.deck-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.9rem;
+}
+
+.deck-toolbar select {
+  max-width: 14rem;
+}
+
+.deck-stage {
+  position: relative;
+  width: min(100%, 1100px);
+  max-height: calc(100vh - 11rem);
+  margin: auto;
+  overflow: hidden;
+  background: var(--lt-bg-raise, #171b22);
+  box-shadow: 0 12px 42px color-mix(in srgb, var(--lt-text) 20%, transparent);
+}
+
+.deck-stage:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  max-height: none;
+  background: #000;
+}
+
+.deck-frame {
+  position: absolute;
+  inset: 0;
+  display: none;
+  background: var(--lt-panel);
+}
+
+.deck-frame[data-current] {
+  display: block;
+  animation: deck-fade var(--deck-transition-ms, 0ms) ease both;
+}
+
+.deck-stage[data-transition="cut"] .deck-frame[data-current] {
+  animation: none;
+}
+
+.deck-stage[data-transition="fade"] .deck-frame[data-current] {
+  animation-name: deck-fade;
+}
+
+.deck-stage[data-transition="push-left"] .deck-frame[data-current] {
+  animation-name: deck-push-left;
+}
+
+.deck-stage[data-transition="push-right"] .deck-frame[data-current] {
+  animation-name: deck-push-right;
+}
+
+.deck-stage[data-transition="push-up"] .deck-frame[data-current] {
+  animation-name: deck-push-up;
+}
+
+.deck-stage[data-transition="push-down"] .deck-frame[data-current] {
+  animation-name: deck-push-down;
+}
+
+.deck-frame iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--lt-panel);
+}
+
+.deck-degraded {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 2rem;
+  background: var(--lt-panel);
+}
+
+.deck-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: 0.75rem;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.deck-overview button {
+  width: 100%;
+  text-align: left;
+  display: grid;
+  gap: 0.35rem;
+  border: 1px solid var(--lt-border);
+  border-radius: var(--lt-radius);
+  background: var(--lt-panel);
+  color: inherit;
+  padding: 0.65rem;
+  cursor: pointer;
+}
+
+.deck-overview button:hover,
+.deck-overview button:focus-visible {
+  border-color: color-mix(in srgb, var(--lt-accent, #6b8cae) 55%, var(--lt-border));
+}
+
+.deck-overview-index {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--lt-text-muted);
+}
+
+.deck-overview-thumb {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: calc(var(--lt-radius, 6px) - 2px);
+  background: var(--lt-bg-raise, #171b22);
+  pointer-events: none;
+}
+
+.deck-overview-thumb-scale {
+  width: 400%;
+  height: 400%;
+  transform: scale(0.25);
+  transform-origin: top left;
+}
+
+.deck-overview-thumb-scale iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--lt-panel);
+}
+
+.deck-overview-title {
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.deck-overview-id {
+  font-size: 0.75rem;
+  color: var(--lt-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.deck-overview small {
+  color: var(--lt-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deck-notes {
+  max-width: 72rem;
+  margin: auto;
+  width: 100%;
+  border-top: 1px solid var(--lt-border);
+  padding-top: 0.75rem;
+}
+
+.deck-notes h2 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.deck-notes-body {
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.deck-notes-body > :first-child {
+  margin-top: 0;
+}
+
+.deck-notes-body > :last-child {
+  margin-bottom: 0;
+}
+
+.deck-notes-empty {
+  margin: 0;
+  color: var(--lt-text-muted);
+}
+
+@keyframes deck-fade {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes deck-push-left {
+  from {
+    transform: translateX(6%);
+    opacity: 0.45;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes deck-push-right {
+  from {
+    transform: translateX(-6%);
+    opacity: 0.45;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes deck-push-up {
+  from {
+    transform: translateY(6%);
+    opacity: 0.45;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes deck-push-down {
+  from {
+    transform: translateY(-6%);
+    opacity: 0.45;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .deck-frame[data-current] {
+    animation: none !important;
+  }
+}

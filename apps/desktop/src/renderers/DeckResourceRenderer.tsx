@@ -6,6 +6,7 @@ import { createDeckPresentationSession, nearbySlideIndexes, resolveDeckSlideInde
 import type { OpenResourceSession } from "../resourceSession";
 import type { ResourceRendererProps } from "../resourceRendererRegistry";
 import type { ResourceRendererContext } from "./RendererContext";
+import { deckTransitionAttr, humanizeSlideId, renderDeckNotesHtml } from "./deckPresenter";
 import "./deckResource.css";
 
 const DEFAULT_TRANSITION_MS = 280;
@@ -18,12 +19,6 @@ function systemThemeVars(): Record<string, string> {
     if (name.startsWith("--lt-")) result[name] = root.style.getPropertyValue(name).trim();
   }
   return result;
-}
-
-function markdownText(notes?: string | null): string {
-  // Notes are intentionally text-only here. No authored Markdown HTML crosses
-  // into the presentation host before the notes renderer earns that authority.
-  return (notes ?? "").replace(/^#{1,6}\s+/gm, "").replace(/[`*_>#]/g, "").trim();
 }
 
 function useReducedMotion(): boolean {
@@ -127,10 +122,11 @@ export function DeckResourceRenderer({ context, session }: ResourceRendererProps
   }, [deck.loop, deck.slides.length, index]);
   const themeVars = systemThemeVars();
   const transition = reducedMotion ? { type: "cut" as const } : (target?.transition ?? { type: "cut" as const });
-  const transitionName = transition.type === "push" ? `push-${transition.direction ?? "left"}` : transition.type;
+  const transitionName = deckTransitionAttr(target?.transition, reducedMotion);
   const duration = transition.durationMs ?? transition.duration_ms ?? (transition.type === "cut" ? 0 : DEFAULT_TRANSITION_MS);
   const mounted = new Set(nearbySlideIndexes(index, deck.slides.length));
   const remaining = deck.durationMinutes ? Math.max(0, deck.durationMinutes * 60_000 - elapsed) : null;
+  const notesHtml = useMemo(() => renderDeckNotesHtml(target?.notes), [target?.notes]);
 
   const toggleTimer = () => {
     if (running) { setElapsedBase(elapsed); startedAt.current = null; setRunning(false); }
@@ -144,7 +140,7 @@ export function DeckResourceRenderer({ context, session }: ResourceRendererProps
     {!audience && <SurfaceHeader title={deck.title} />}
     {!audience && <div className="deck-toolbar" role="toolbar" aria-label="Presentation controls">
       <Button onClick={() => go(index - 1)} disabled={!deck.loop && index === 0}>Previous</Button>
-      <label>Slide <select aria-label="Select slide" value={target?.id ?? ""} onChange={(event) => go(deck.slides.findIndex((slide) => slide.id === event.target.value))}>{deck.slides.map((slide, slideIndex) => <option value={slide.id} key={slide.id}>{slideIndex + 1}. {slide.id}</option>)}</select></label>
+      <label>Slide <select aria-label="Select slide" value={target?.id ?? ""} onChange={(event) => go(deck.slides.findIndex((slide) => slide.id === event.target.value))}>{deck.slides.map((slide, slideIndex) => <option value={slide.id} key={slide.id}>{slideIndex + 1}. {humanizeSlideId(slide.id)}</option>)}</select></label>
       <Button onClick={() => go(index + 1)} disabled={!deck.loop && index === deck.slides.length - 1}>Next</Button>
       <Button onClick={() => setOverview((value) => !value)}>{overview ? "Stage" : "Overview"}</Button>
       <Button onClick={() => setNotesOpen((value) => !value)}>{notesOpen ? "Hide notes" : "Notes"}</Button>
@@ -153,12 +149,70 @@ export function DeckResourceRenderer({ context, session }: ResourceRendererProps
       {remaining !== null && <output aria-label="Remaining time">{elapsedLabel(remaining)} remaining</output>}
       <Button onClick={toggleFullscreen}>{audience ? "Exit fullscreen" : "Fullscreen"}</Button>
     </div>}
-    {overview ? <ol className="deck-overview" aria-label="Slide overview">{deck.slides.map((slide, slideIndex) => <li key={slide.id}><button type="button" onClick={() => { go(slideIndex); setOverview(false); }}><span>{slideIndex + 1}</span><strong>{slide.id}</strong><small>{slide.source}</small></button></li>)}</ol> : <div ref={stageRef} className="deck-stage" data-audience={audience || undefined} data-transition={transitionName} style={{ "--deck-transition-ms": `${duration}ms`, aspectRatio: deck.aspectRatio.replace(":", " / ") } as CSSProperties}>
-      {deck.slides.map((slide, slideIndex) => mounted.has(slideIndex) ? <article key={slide.id} id={slide.id} className="deck-frame" data-current={slideIndex === index || undefined} aria-hidden={slideIndex !== index}>
-        <DeckSlideFrame slide={slide} deck={deck} themeVars={themeVars} workspaceRoot={context.workspaceRoot} />
-      </article> : null)}
-      {!target && <div className="deck-degraded">The requested slide is missing. Select another slide from Overview.</div>}
-    </div>}
-    {notesOpen && !overview && <aside className="deck-notes" aria-label="Speaker notes"><h2>Notes — {target?.id ?? "missing"}</h2><pre>{markdownText(target?.notes) || "No speaker notes for this slide."}</pre></aside>}
+    {overview ? (
+      <ol className="deck-overview" aria-label="Slide overview">
+        {deck.slides.map((slide, slideIndex) => (
+          <li key={slide.id}>
+            <button
+              type="button"
+              onClick={() => {
+                go(slideIndex);
+                setOverview(false);
+              }}
+            >
+              <span className="deck-overview-index">Slide {slideIndex + 1}</span>
+              <div className="deck-overview-thumb" aria-hidden="true">
+                <div className="deck-overview-thumb-scale">
+                  <DeckSlideFrame slide={slide} deck={deck} themeVars={themeVars} workspaceRoot={context.workspaceRoot} />
+                </div>
+              </div>
+              <strong className="deck-overview-title">{humanizeSlideId(slide.id)}</strong>
+              <code className="deck-overview-id">{slide.id}</code>
+              <small title={slide.source}>{slide.source}</small>
+            </button>
+          </li>
+        ))}
+      </ol>
+    ) : (
+      <div
+        ref={stageRef}
+        className="deck-stage"
+        data-audience={audience || undefined}
+        data-transition={transitionName}
+        style={{ "--deck-transition-ms": `${duration}ms`, aspectRatio: deck.aspectRatio.replace(":", " / ") } as CSSProperties}
+      >
+        {deck.slides.map((slide, slideIndex) =>
+          mounted.has(slideIndex) ? (
+            <article
+              key={slide.id}
+              id={slide.id}
+              className="deck-frame"
+              data-current={slideIndex === index || undefined}
+              aria-hidden={slideIndex !== index}
+            >
+              <DeckSlideFrame slide={slide} deck={deck} themeVars={themeVars} workspaceRoot={context.workspaceRoot} />
+            </article>
+          ) : null,
+        )}
+        {!target && <div className="deck-degraded">The requested slide is missing. Select another slide from Overview.</div>}
+      </div>
+    )}
+    {notesOpen && !overview && (
+      <aside className="deck-notes" aria-label="Speaker notes">
+        <h2>
+          Notes — {target ? humanizeSlideId(target.id) : "missing"}
+          {target ? <span className="deck-overview-id"> ({target.id})</span> : null}
+        </h2>
+        {notesHtml ? (
+          <div
+            className="deck-notes-body markdown-body"
+            // Notes HTML comes from CommonMark with html disabled (raw tags escaped).
+            dangerouslySetInnerHTML={{ __html: notesHtml }}
+          />
+        ) : (
+          <p className="deck-notes-empty">No speaker notes for this slide.</p>
+        )}
+      </aside>
+    )}
   </section>;
 }
