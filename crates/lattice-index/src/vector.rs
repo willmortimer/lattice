@@ -1,7 +1,12 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use lattice_embedding::{DistanceMetric, EmbeddingSpecification};
+use lattice_lance::{
+    DatasetRef, EmbeddedLanceStore, MultimodalStore, SearchElementBatch, SearchElementRow,
+    SearchRequest,
+};
 use rusqlite::{params, Connection};
 use thiserror::Error;
 
@@ -36,6 +41,9 @@ pub enum VectorIndexError {
 
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("lance backend error: {0}")]
+    Lance(String),
 }
 
 /// Provider-neutral vector storage and exact nearest-neighbor search.
@@ -55,6 +63,253 @@ pub trait VectorIndex: Send + Sync {
         query: &[f32],
         limit: usize,
     ) -> Result<Vec<VectorCandidate>, VectorIndexError>;
+}
+
+/// Chunk metadata used when upserting Lance search-element rows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ChunkVectorEnrichment {
+    pub resource_id: i64,
+    pub ordinal: i64,
+    pub text: String,
+    pub content_hash: String,
+    pub source_start_byte: u64,
+    pub source_end_byte: u64,
+}
+
+/// LanceDB-backed [`VectorIndex`] over [`EmbeddedLanceStore`].
+pub struct LanceVectorIndex {
+    store: Arc<EmbeddedLanceStore>,
+    workspace_id: String,
+}
+
+impl LanceVectorIndex {
+    pub fn new(store: Arc<EmbeddedLanceStore>, workspace_id: impl Into<String>) -> Self {
+        Self {
+            store,
+            workspace_id: workspace_id.into(),
+        }
+    }
+
+    pub fn store(&self) -> &Arc<EmbeddedLanceStore> {
+        &self.store
+    }
+}
+
+impl VectorIndex for LanceVectorIndex {
+    fn upsert(
+        &self,
+        namespace: &EmbeddingNamespace,
+        chunk_id: &str,
+        vector: &[f32],
+    ) -> Result<(), VectorIndexError> {
+        let enrichment = ChunkVectorEnrichment {
+            resource_id: 0,
+            ordinal: 0,
+            text: String::new(),
+            content_hash: String::new(),
+            source_start_byte: 0,
+            source_end_byte: 0,
+        };
+        block_on_vector(upsert_lance_vector(
+            &self.store,
+            namespace,
+            chunk_id,
+            vector,
+            &enrichment,
+            &self.workspace_id,
+        ))
+    }
+
+    fn remove(&self, _namespace_id: i64, chunk_id: &str) -> Result<(), VectorIndexError> {
+        block_on_vector(remove_lance_vectors(
+            &self.store,
+            &[chunk_id.to_string()],
+        ))
+    }
+
+    fn search(
+        &self,
+        namespace: &EmbeddingNamespace,
+        query: &[f32],
+        limit: usize,
+    ) -> Result<Vec<VectorCandidate>, VectorIndexError> {
+        block_on_vector(search_lance_vectors(
+            &self.store,
+            namespace,
+            query,
+            limit,
+        ))
+    }
+}
+
+/// Upsert one enriched vector row into the Lance search-elements dataset.
+pub(crate) async fn upsert_lance_vector(
+    store: &EmbeddedLanceStore,
+    namespace: &EmbeddingNamespace,
+    chunk_id: &str,
+    vector: &[f32],
+    enrichment: &ChunkVectorEnrichment,
+    workspace_id: &str,
+) -> Result<(), VectorIndexError> {
+    ensure_supported_distance(&namespace.specification)?;
+    validate_dims(&namespace.specification, vector)?;
+    let mut values = vector.to_vec();
+    if namespace.specification.normalized {
+        normalize_l2(&mut values);
+    }
+    let dims = values.len() as u32;
+    let now = current_time_ms();
+    let row = SearchElementRow {
+        element_id: chunk_id.to_string(),
+        workspace_id: workspace_id.to_string(),
+        resource_id: enrichment.resource_id.to_string(),
+        resource_version_id: None,
+        element_kind: lattice_lance::DEFAULT_ELEMENT_KIND.to_string(),
+        ordinal: enrichment.ordinal,
+        text: enrichment.text.clone(),
+        embedding: values,
+        source_start_byte: enrichment.source_start_byte,
+        source_end_byte: enrichment.source_end_byte,
+        content_hash: enrichment.content_hash.clone(),
+        embedding_model: namespace.specification.model_id.clone(),
+        embedding_version: namespace.specification.model_revision.clone(),
+        namespace_key: namespace.namespace_key.clone(),
+        dims,
+        created_at_ms: now,
+    };
+    store
+        .append(
+            &DatasetRef::search_elements(),
+            SearchElementBatch::new(vec![row]),
+        )
+        .await
+        .map_err(map_lance_error)
+        .map(|_| ())
+}
+
+/// Vector search against the Lance search-elements dataset.
+pub(crate) async fn search_lance_vectors(
+    store: &EmbeddedLanceStore,
+    namespace: &EmbeddingNamespace,
+    query: &[f32],
+    limit: usize,
+) -> Result<Vec<VectorCandidate>, VectorIndexError> {
+    if limit == 0 {
+        return Ok(Vec::new());
+    }
+    ensure_supported_distance(&namespace.specification)?;
+    validate_dims(&namespace.specification, query)?;
+    let mut query_vec = query.to_vec();
+    if namespace.specification.normalized {
+        normalize_l2(&mut query_vec);
+    }
+    let results = store
+        .search(SearchRequest {
+            namespace_key: namespace.namespace_key.clone(),
+            query_vector: query_vec,
+            limit,
+        })
+        .await
+        .map_err(map_lance_error)?;
+    Ok(results
+        .hits
+        .into_iter()
+        .map(|hit| VectorCandidate {
+            chunk_id: hit.element_id,
+            score: hit.score,
+        })
+        .collect())
+}
+
+/// Remove vectors for the given chunk ids from the Lance dataset.
+pub(crate) async fn remove_lance_vectors(
+    store: &EmbeddedLanceStore,
+    chunk_ids: &[String],
+) -> Result<(), VectorIndexError> {
+    if chunk_ids.is_empty() {
+        return Ok(());
+    }
+    store
+        .remove(&DatasetRef::search_elements(), chunk_ids)
+        .await
+        .map(|_| ())
+        .map_err(map_lance_error)
+}
+
+/// Load chunk metadata for Lance vector upserts.
+pub(crate) fn load_chunk_vector_enrichment(
+    conn: &Connection,
+    chunk_ids: &[&str],
+) -> Result<HashMap<String, ChunkVectorEnrichment>, VectorIndexError> {
+    if chunk_ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let placeholders = chunk_ids
+        .iter()
+        .enumerate()
+        .map(|(index, _)| format!("?{}", index + 1))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!(
+        "SELECT chunk_id, resource_id, ordinal, text, content_hash,
+                source_start_byte, source_end_byte
+         FROM search_chunks
+         WHERE chunk_id IN ({placeholders})"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let params_list: Vec<&dyn rusqlite::types::ToSql> = chunk_ids
+        .iter()
+        .map(|id| id as &dyn rusqlite::types::ToSql)
+        .collect();
+    let rows = stmt.query_map(params_list.as_slice(), |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            ChunkVectorEnrichment {
+                resource_id: row.get(1)?,
+                ordinal: row.get(2)?,
+                text: row.get(3)?,
+                content_hash: row.get(4)?,
+                source_start_byte: row.get::<_, i64>(5)? as u64,
+                source_end_byte: row.get::<_, i64>(6)? as u64,
+            },
+        ))
+    })?;
+    let mut out = HashMap::with_capacity(chunk_ids.len());
+    for row in rows {
+        let (chunk_id, enrichment) = row?;
+        out.insert(chunk_id, enrichment);
+    }
+    Ok(out)
+}
+
+fn map_lance_error(err: lattice_lance::LanceError) -> VectorIndexError {
+    VectorIndexError::Lance(err.to_string())
+}
+
+fn block_on_vector<F, T>(future: F) -> Result<T, VectorIndexError>
+where
+    F: std::future::Future<Output = Result<T, VectorIndexError>>,
+{
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        match handle.runtime_flavor() {
+            tokio::runtime::RuntimeFlavor::MultiThread => {
+                return tokio::task::block_in_place(|| handle.block_on(future));
+            }
+            _ => return futures_executor::block_on(future),
+        }
+    }
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|err| VectorIndexError::Lance(err.to_string()))?
+        .block_on(future)
+}
+
+fn current_time_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as i64)
+        .unwrap_or(0)
 }
 
 /// Exact-scan BLOB backend that opens the workspace index DB per call.

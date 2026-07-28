@@ -3,6 +3,10 @@
 //! The index lives at `<workspace>/.lattice/index.sqlite` and is fully
 //! rebuildable from generic resources on disk. Text extraction is deliberately
 //! bounded; binary resources retain searchable names and runtime metadata.
+//!
+//! Semantic vectors default to SQLite BLOB exact-scan. Set
+//! [`vector_backend::ENV_VECTOR_BACKEND`] to `lance` to store vectors in the
+//! embedded LanceDB search-elements dataset instead.
 
 mod catalog;
 mod chunks;
@@ -20,6 +24,7 @@ mod schema;
 mod semantic;
 mod types;
 mod vector;
+mod vector_backend;
 
 pub use chunks::{chunk_resource, SearchChunkDraft, CHUNKER_VERSION};
 pub use embedding::{default_chunker_version, ChunkEmbeddingState, EmbeddingNamespace};
@@ -45,6 +50,9 @@ pub use semantic::{
     embedding_input_hash, format_document_embedding_input, DOC_EMBEDDING_INPUT_VERSION,
 };
 pub use vector::{
-    remove_vector, search_vectors, upsert_vector, SqliteExactScanVectorIndex, VectorCandidate,
-    VectorIndex, VectorIndexError,
+    remove_vector, search_vectors, upsert_vector, LanceVectorIndex, SqliteExactScanVectorIndex,
+    VectorCandidate, VectorIndex, VectorIndexError,
+};
+pub use vector_backend::{
+    vector_backend_from_env, VectorBackend, VectorBackendParseError, ENV_VECTOR_BACKEND,
 };

@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::sync::{atomic::AtomicBool, Mutex};
+use std::sync::{atomic::AtomicBool, Arc, Mutex};
 use std::time::Duration;
 
 use lattice_core::{
@@ -10,6 +10,7 @@ use lattice_embedding::{
     ChunkEmbeddingStatus, EmbedDocumentRequest, EmbedQueryRequest, EmbeddingProvider,
     EmbeddingSpecification,
 };
+use lattice_lance::EmbeddedLanceStore;
 use rusqlite::types::ToSql;
 use rusqlite::{params, Connection, OptionalExtension};
 
@@ -35,8 +36,13 @@ use crate::record::{
 use crate::schema::{init_schema, INDEX_FILENAME};
 use crate::semantic::{
     embedding_input_hash, list_chunks_for_embedding, load_chunk_rows, search_semantic,
+    search_semantic_lance,
 };
-use crate::vector::upsert_vector;
+use crate::vector::{
+    load_chunk_vector_enrichment, remove_lance_vectors, upsert_lance_vector, upsert_vector,
+    ChunkVectorEnrichment, VectorIndexError,
+};
+use crate::vector_backend::{vector_backend_from_env, VectorBackend};
 
 pub use crate::record::MAX_INDEX_TEXT_BYTES;
 pub use crate::types::{
@@ -48,12 +54,25 @@ pub use crate::types::{
 pub struct WorkspaceIndex {
     workspace_root: PathBuf,
     conn: Mutex<Connection>,
+    vector_backend: VectorBackend,
+    lance_store: Option<Arc<EmbeddedLanceStore>>,
+    workspace_id: String,
 }
 
 impl WorkspaceIndex {
     /// Open (or create) the index under `workspace_root/.lattice/index.sqlite`.
     /// Existing v0 page-only databases are migrated in place.
+    ///
+    /// Vector storage backend is selected via [`crate::ENV_VECTOR_BACKEND`]
+    /// (default: SQLite exact-scan).
     pub fn open(workspace_root: &Path) -> Result<Self> {
+        Self::open_with_backend(workspace_root, vector_backend_from_env().map_err(|err| {
+            Error::Embedding(lattice_embedding::EmbeddingError::provider(err.to_string()))
+        })?)
+    }
+
+    /// Open with an explicit vector backend (used by tests to avoid env races).
+    pub fn open_with_backend(workspace_root: &Path, vector_backend: VectorBackend) -> Result<Self> {
         let lattice_dir = workspace_root.join(lattice_core::OPERATIONAL_DIR);
         std::fs::create_dir_all(&lattice_dir).map_err(|e| Error::io(&lattice_dir, e))?;
         let db_path = lattice_dir.join(INDEX_FILENAME);
@@ -62,10 +81,36 @@ impl WorkspaceIndex {
         conn.pragma_update(None, "foreign_keys", "ON")?;
         conn.busy_timeout(Duration::from_secs(5))?;
         init_schema(&conn)?;
+
+        let workspace = Workspace::open(workspace_root)?;
+        let workspace_id = workspace.manifest().id.to_string();
+
+        let lance_store = match vector_backend {
+            VectorBackend::Sqlite => None,
+            VectorBackend::Lance => {
+                let store = block_on_embed(async {
+                    EmbeddedLanceStore::open(workspace_root)
+                        .await
+                        .map_err(|err| {
+                            Error::Vector(VectorIndexError::Lance(err.to_string()))
+                        })
+                })?;
+                Some(Arc::new(store))
+            }
+        };
+
         Ok(Self {
             workspace_root: workspace_root.to_path_buf(),
             conn: Mutex::new(conn),
+            vector_backend,
+            lance_store,
+            workspace_id,
         })
+    }
+
+    /// Active vector storage backend for this index.
+    pub fn vector_backend(&self) -> VectorBackend {
+        self.vector_backend
     }
 
     pub fn workspace_root(&self) -> &Path {
@@ -295,10 +340,21 @@ impl WorkspaceIndex {
             })
             .await?;
 
-        let semantic = {
-            let conn = Connection::open(&db_path)?;
-            conn.pragma_update(None, "foreign_keys", "ON")?;
-            search_semantic(&conn, &namespace, &query_vector.values, candidate_limit)?
+        let semantic = match self.vector_backend {
+            VectorBackend::Sqlite => {
+                let conn = Connection::open(&db_path)?;
+                conn.pragma_update(None, "foreign_keys", "ON")?;
+                search_semantic(&conn, &namespace, &query_vector.values, candidate_limit)?
+            }
+            VectorBackend::Lance => {
+                let store = self.lance_store.as_ref().ok_or_else(|| {
+                    Error::Vector(crate::vector::VectorIndexError::Lance(
+                        "lance backend selected but store is not open".into(),
+                    ))
+                })?;
+                search_semantic_lance(store, &namespace, &query_vector.values, candidate_limit)
+                    .await?
+            }
         };
 
         let lexical = lexical_handle.join().expect("lexical search thread")?;
@@ -439,8 +495,44 @@ impl WorkspaceIndex {
 
             let conn = self.conn.lock().unwrap();
             let now = current_time_ms();
+            let chunk_ids: Vec<&str> = batch.iter().map(|(chunk, _, _)| chunk.chunk_id.as_str()).collect();
+            let enrichments = if self.vector_backend == VectorBackend::Lance {
+                load_chunk_vector_enrichment(&conn, &chunk_ids).map_err(Error::from)?
+            } else {
+                std::collections::HashMap::new()
+            };
             for ((chunk, hash, _), vector) in batch.iter().zip(vectors.into_iter()) {
-                match upsert_vector(&conn, &namespace, &chunk.chunk_id, &vector.values) {
+                let upsert_result = if self.vector_backend == VectorBackend::Lance {
+                    let store = self.lance_store.as_ref().ok_or_else(|| {
+                        Error::Vector(crate::vector::VectorIndexError::Lance(
+                            "lance backend selected but store is not open".into(),
+                        ))
+                    })?;
+                    let enrichment = enrichments.get(&chunk.chunk_id).cloned().unwrap_or(
+                        ChunkVectorEnrichment {
+                            resource_id: 0,
+                            ordinal: 0,
+                            text: chunk.text.clone(),
+                            content_hash: String::new(),
+                            source_start_byte: 0,
+                            source_end_byte: 0,
+                        },
+                    );
+                    upsert_lance_vector(
+                        store,
+                        &namespace,
+                        &chunk.chunk_id,
+                        &vector.values,
+                        &enrichment,
+                        &self.workspace_id,
+                    )
+                    .await
+                    .map_err(Error::from)
+                } else {
+                    upsert_vector(&conn, &namespace, &chunk.chunk_id, &vector.values)
+                        .map_err(Error::from)
+                };
+                match upsert_result {
                     Ok(()) => {
                         embedding::upsert_chunk_embedding_state(
                             &conn,
@@ -818,9 +910,9 @@ impl WorkspaceIndex {
                 ],
             )?;
         }
-        persist_search_chunks(
+        let removed_chunk_ids = persist_search_chunks(
             &tx,
-            &self.workspace_id()?,
+            &self.workspace_id,
             resource_id,
             &metadata.path,
             metadata.profile,
@@ -832,12 +924,17 @@ impl WorkspaceIndex {
             &export_policy,
         )?;
         tx.commit()?;
+        drop(conn);
+        if let Some(store) = &self.lance_store {
+            if !removed_chunk_ids.is_empty() {
+                block_on_embed(async {
+                    remove_lance_vectors(store, &removed_chunk_ids)
+                        .await
+                        .map_err(Error::from)
+                })?;
+            }
+        }
         Ok(())
-    }
-
-    fn workspace_id(&self) -> Result<String> {
-        let workspace = Workspace::open(&self.workspace_root)?;
-        Ok(workspace.manifest().id.to_string())
     }
 
     fn remove_stale(&self, keep_paths: &[String]) -> Result<(usize, usize)> {
@@ -899,7 +996,7 @@ fn persist_search_chunks(
     chunk_text_base_byte: usize,
     sensitivity: &str,
     export_policy: &str,
-) -> Result<()> {
+) -> Result<Vec<String>> {
     let old_chunk_ids: std::collections::HashSet<String> = {
         let mut stmt = tx.prepare("SELECT chunk_id FROM search_chunks WHERE resource_id = ?1")?;
         let rows = stmt.query_map(params![resource_id], |row| row.get(0))?;
@@ -919,7 +1016,11 @@ fn persist_search_chunks(
         drafts.iter().map(|draft| draft.chunk_id.clone()).collect();
 
     // chunk_vectors / chunk_embedding_state have no FK cascade from search_chunks.
-    for chunk_id in old_chunk_ids.difference(&new_chunk_ids) {
+    let removed_chunk_ids: Vec<String> = old_chunk_ids
+        .difference(&new_chunk_ids)
+        .cloned()
+        .collect();
+    for chunk_id in &removed_chunk_ids {
         tx.execute(
             "DELETE FROM chunk_vectors WHERE chunk_id = ?1",
             params![chunk_id],
@@ -935,7 +1036,7 @@ fn persist_search_chunks(
         params![resource_id],
     )?;
     if drafts.is_empty() {
-        return Ok(());
+        return Ok(removed_chunk_ids);
     }
     let now_ms = current_time_ms();
     let tag_text = tags.join(" ");
@@ -970,7 +1071,7 @@ fn persist_search_chunks(
             ],
         )?;
     }
-    Ok(())
+    Ok(removed_chunk_ids)
 }
 
 fn current_time_ms() -> i64 {
@@ -1022,6 +1123,7 @@ pub fn upsert_page(index: &WorkspaceIndex, path: &Path, content: &str) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::vector_backend::VectorBackend;
     use lattice_core::{
         LinkRepairSource, LinkRepairStatus, MarkdownLinkKind, ResourceFormatProfile,
     };
@@ -1602,5 +1704,65 @@ mod tests {
                 .unwrap();
             assert_eq!(vectors, 1, "kept chunk should retain its vector");
         }
+    }
+
+    #[test]
+    fn lance_backend_hybrid_search_fuses_lexical_and_semantic() {
+        use lattice_embedding::{DistanceMetric, FakeEmbeddingProvider, PoolingStrategy};
+
+        let dir = TempDir::new().unwrap();
+        sample_workspace(dir.path());
+        let index =
+            WorkspaceIndex::open_with_backend(dir.path(), VectorBackend::Lance).unwrap();
+        index.rebuild(dir.path()).unwrap();
+
+        let spec = EmbeddingSpecification {
+            provider_id: "fake".into(),
+            model_id: "fake-model".into(),
+            model_revision: "rev-1".into(),
+            artifact_sha256: "sha256:artifact".into(),
+            dimensions: 16,
+            native_dimensions: 16,
+            distance: DistanceMetric::Cosine,
+            pooling: PoolingStrategy::Last,
+            normalized: true,
+            instruction_version: "test-v1".into(),
+        };
+        let namespace = index
+            .register_embedding_namespace(&spec, CHUNKER_VERSION)
+            .unwrap();
+        let provider = FakeEmbeddingProvider::new(spec);
+        let stats = index
+            .embed_pending_chunks(namespace.id, &provider, 8)
+            .unwrap();
+        assert!(stats.embedded > 0);
+        assert_eq!(stats.failed, 0);
+
+        let hits = index
+            .hybrid_search("welcome", 10, Some(&provider), Some(namespace.id))
+            .unwrap();
+        assert!(!hits.is_empty());
+        assert!(hits.iter().any(|hit| {
+            hit.resource_uri == "lattice://resource/Notes/Home.md"
+                && (hit.lexical_rank.is_some() || hit.semantic_rank.is_some())
+        }));
+        assert!(hits.iter().any(|hit| hit.fused_score > 0.0));
+    }
+
+    #[test]
+    fn lance_backend_hybrid_search_fts_only_without_provider() {
+        let dir = TempDir::new().unwrap();
+        sample_workspace(dir.path());
+        let index =
+            WorkspaceIndex::open_with_backend(dir.path(), VectorBackend::Lance).unwrap();
+        index.rebuild(dir.path()).unwrap();
+
+        let hits = index.hybrid_search("welcome", 10, None, None).unwrap();
+        assert!(!hits.is_empty());
+        assert!(hits
+            .iter()
+            .any(|hit| hit.resource_uri == "lattice://resource/Notes/Home.md"));
+        assert!(hits.iter().all(|hit| hit.lexical_rank.is_some()));
+        assert!(hits.iter().all(|hit| hit.semantic_rank.is_none()));
     }
 }
