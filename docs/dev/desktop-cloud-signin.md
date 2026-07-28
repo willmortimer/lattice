@@ -50,3 +50,22 @@ lattice resource stat notes/example.md
 Use a **new** `ResourceId` on each live PUT (the server is write-once per id). The CLI
 registers the workspace path first, so re-running against the same file after a successful
 upload will return **409** from the server unless you use a fresh registry entry.
+
+## Cloud fetch failures (offline / auth)
+
+Cloud-backed resources (`authority: cloud`) must not silently use stale local file bytes
+when the cloud GET fails.
+
+- `lattice cloud blob-open <path>` fetches canonical bytes from cloud and writes them to stdout.
+  On network error, **401**, or **5xx**, the command exits non-zero with an explicit error
+  (for example `cloud blob error: cloud API error (401): invalid session`).
+- Failed upload round-trips (`lattice cloud blob-roundtrip`) do **not** mark the resource
+  as cloud-authoritative; authority stays `local`.
+- Inspect still shows registry metadata (`authority`, `materialization`); it does not
+  substitute local disk content when cloud is unreachable.
+
+```sh
+# After a successful blob-roundtrip, offline fetch fails visibly:
+lattice cloud blob-open notes/example.md
+# cloud blob error: cloud request failed: network unreachable
+```

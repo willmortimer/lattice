@@ -170,4 +170,77 @@ mod tests {
         let hash = roundtrip_verify_blob(&blob_client, resource_id, data).unwrap();
         assert_eq!(hash, ContentHash::from_bytes(data).unwrap());
     }
+
+    #[derive(Default)]
+    struct OfflineBlobHttp {
+        fail: bool,
+    }
+
+    impl CloudHttpClient for OfflineBlobHttp {
+        fn request(
+            &self,
+            _base_url: &str,
+            _method: &str,
+            _path: &str,
+            _body: Option<&serde_json::Value>,
+            _bearer: Option<&str>,
+        ) -> crate::Result<CloudHttpResponse> {
+            Err(CloudError::Http("network unreachable".into()))
+        }
+
+        fn request_bytes(
+            &self,
+            _base_url: &str,
+            _method: &str,
+            _path: &str,
+            _body: Option<&[u8]>,
+            _bearer: Option<&str>,
+            _headers: &[(&str, &str)],
+        ) -> crate::Result<CloudHttpBytesResponse> {
+            if self.fail {
+                return Err(CloudError::Http("network unreachable".into()));
+            }
+            Ok(CloudHttpBytesResponse {
+                status: 503,
+                body: br#"{"error":"service unavailable"}"#.to_vec(),
+                content_hash: None,
+            })
+        }
+    }
+
+    #[test]
+    fn http_blob_get_surfaces_network_error() {
+        let http = OfflineBlobHttp { fail: true };
+        let client = CloudApiClient::with_base_url(http, "https://cloud.test");
+        let blob_client = HttpCloudBlobClient::new(client, "good-token");
+        let err = blob_client
+            .get_blob(ResourceId::new())
+            .unwrap_err();
+        assert!(matches!(err, FsError::CloudBlob { .. }));
+        assert!(err.to_string().contains("network unreachable"));
+    }
+
+    #[test]
+    fn http_blob_get_surfaces_api_error_not_ok() {
+        let http = OfflineBlobHttp::default();
+        let client = CloudApiClient::with_base_url(http, "https://cloud.test");
+        let blob_client = HttpCloudBlobClient::new(client, "good-token");
+        let err = blob_client
+            .get_blob(ResourceId::new())
+            .unwrap_err();
+        assert!(matches!(err, FsError::CloudBlob { .. }));
+        assert!(err.to_string().contains("503"));
+    }
+
+    #[test]
+    fn http_blob_get_surfaces_unauthorized() {
+        let http = BlobFakeHttp::default();
+        let client = CloudApiClient::with_base_url(http, "https://cloud.test");
+        let blob_client = HttpCloudBlobClient::new(client, "bad-token");
+        let err = blob_client
+            .get_blob(ResourceId::new())
+            .unwrap_err();
+        assert!(matches!(err, FsError::CloudBlob { .. }));
+        assert!(err.to_string().contains("401"));
+    }
 }

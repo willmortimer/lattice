@@ -28,6 +28,9 @@ pub enum Error {
     #[error("cloud blob error: {message}")]
     CloudBlob { message: String },
 
+    #[error("resource is not cloud-authoritative: {path}")]
+    NotCloudAuthoritative { path: String },
+
     #[error("blob not found for resource: {resource_id}")]
     BlobNotFound { resource_id: String },
 
