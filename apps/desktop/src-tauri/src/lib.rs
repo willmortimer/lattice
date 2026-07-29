@@ -1,6 +1,7 @@
 mod agent;
 mod app_lock;
 mod app_menu;
+mod approval_signer;
 mod artifact;
 mod canvas;
 mod cloud;
@@ -29,6 +30,7 @@ mod revisions;
 mod scheduler;
 mod search;
 mod semantic;
+mod spotlight;
 mod task;
 mod terminal;
 mod theme;
@@ -332,7 +334,41 @@ pub fn run() {
             cloud::cloud_session_status,
             cloud::cloud_sign_in,
             cloud::cloud_sign_out,
+            spotlight::spotlight_index_workspace,
         ]))
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::Opened { urls } = event {
+                for url in urls {
+                    if let Ok(path) = url.to_file_path() {
+                        if let Some(payload) = open_payload_for_file(&path) {
+                            let _ = app.emit("open-resource", &payload);
+                            if let Some(main) = app.get_webview_window("main") {
+                                let _ = main.unminimize();
+                                let _ = main.show();
+                                let _ = main.set_focus();
+                            }
+                        }
+                    }
+                }
+            }
+        });
+}
+
+fn open_payload_for_file(path: &std::path::Path) -> Option<deep_link::OpenResourcePayload> {
+    let file = path.canonicalize().ok()?;
+    let mut root = None;
+    for ancestor in file.ancestors() {
+        if ancestor.join(".lattice").is_dir() {
+            root = Some(ancestor.to_path_buf());
+            break;
+        }
+    }
+    let root = root?;
+    let relative = file.strip_prefix(&root).ok()?;
+    Some(deep_link::OpenResourcePayload {
+        root: root.display().to_string(),
+        path: relative.to_string_lossy().replace('\\', "/"),
+    })
 }

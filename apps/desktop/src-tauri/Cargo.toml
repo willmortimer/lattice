@@ -86,6 +86,10 @@ bytes = { workspace = true, optional = true }
 base64.workspace = true
 walkdir.workspace = true
 url = "2"
+sha2 = "0.10"
+hex = "0.4"
+p256 = { version = "0.13", default-features = false, features = ["ecdsa", "pem", "std"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"
@@ -98,6 +102,7 @@ objc2-foundation = { version = "0.3", features = [
 ] }
 objc2-local-authentication = "0.3"
 objc2-app-kit = { version = "0.3", features = ["NSWorkspace"] }
+lattice-approval-macos = { workspace = true, features = ["link-bridge"] }
 
 [dev-dependencies]
 tempfile = "3"

@@ -92,10 +92,42 @@ fn query_value(parsed: &url::Url, key: &str) -> Option<String> {
 }
 
 fn path_from_segments(parsed: &url::Url) -> String {
-    parsed
-        .path_segments()
-        .map(|segments| segments.collect::<Vec<_>>().join("/"))
-        .unwrap_or_default()
+    // Prefer path segments so `lattice://resource/Notes/Hello.md` works.
+    // Fall back to decoding the raw path for a single percent-encoded segment.
+    if let Some(segments) = parsed.path_segments() {
+        let joined = segments.collect::<Vec<_>>().join("/");
+        if !joined.is_empty() && !joined.contains('%') {
+            return joined;
+        }
+    }
+    percent_decode(parsed.path().trim_start_matches('/'))
+}
+
+fn percent_decode(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let (Some(hi), Some(lo)) = (hex_nibble(bytes[i + 1]), hex_nibble(bytes[i + 2])) {
+                out.push((hi << 4) | lo);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+fn hex_nibble(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -125,9 +157,18 @@ mod tests {
 
     #[test]
     fn classifies_lattice_resource_host() {
-        let url = "lattice://resource/Notes%2FHello.md?root=/tmp/ws";
+        let nested = "lattice://resource/Notes/Hello.md?root=/tmp/ws";
         assert_eq!(
-            classify_deep_link(url),
+            classify_deep_link(nested),
+            Some(DeepLinkAction::OpenResource(OpenResourcePayload {
+                root: "/tmp/ws".into(),
+                path: "Notes/Hello.md".into(),
+            }))
+        );
+
+        let encoded = "lattice://resource/Notes%2FHello.md?root=/tmp/ws";
+        assert_eq!(
+            classify_deep_link(encoded),
             Some(DeepLinkAction::OpenResource(OpenResourcePayload {
                 root: "/tmp/ws".into(),
                 path: "Notes/Hello.md".into(),

@@ -2,13 +2,18 @@
 
 pub const DEFAULT_CLOUD_URL: &str = "https://cloud.lattice-notes.com";
 
+/// Compile-time channel default (internal DMG); falls back to [`DEFAULT_CLOUD_URL`].
+fn compiled_default_cloud_url() -> &'static str {
+    option_env!("LATTICE_CLOUD_URL_DEFAULT").unwrap_or(DEFAULT_CLOUD_URL)
+}
+
 /// Resolved lattice-server origin without a trailing slash.
 pub fn cloud_url() -> String {
     std::env::var("LATTICE_CLOUD_URL")
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| DEFAULT_CLOUD_URL.to_string())
+        .unwrap_or_else(|| compiled_default_cloud_url().to_string())
         .trim_end_matches('/')
         .to_string()
 }
@@ -20,7 +25,7 @@ mod tests {
     #[test]
     fn default_cloud_url_when_unset() {
         let _guard = EnvGuard::unset("LATTICE_CLOUD_URL");
-        assert_eq!(cloud_url(), DEFAULT_CLOUD_URL);
+        assert_eq!(cloud_url(), compiled_default_cloud_url().to_string());
     }
 
     #[test]

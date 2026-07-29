@@ -1,0 +1,16 @@
+[package]
+name = "lattice-approval-macos"
+description = "Secure Enclave approval signing bridge (CryptoKit Swift dylib)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[features]
+default = []
+link-bridge = []
+
+[build-dependencies]
+
+[dependencies]

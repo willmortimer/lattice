@@ -10,9 +10,9 @@ use std::time::Duration;
 
 use lattice_connectors::{
     connect_gitlab_repo, disconnect_gitlab_repo, list_gitlab_bindings, list_gitlab_checkout_tree,
-    list_gitlab_projects_for_token, oauth_begin, oauth_finish_http, read_gitlab_checkout_file,
-    refresh_gitlab_repo, CheckoutEntry, CheckoutFile, ConnectGitLabRepoInput,
-    ConnectedGitLabRepoSummary, GitLabProjectSummary, HttpGitLabApiClient, KeychainTokenStore,
+    list_gitlab_projects_for_token, oauth_begin, oauth_finish_http, production_token_store,
+    read_gitlab_checkout_file, refresh_gitlab_repo, CheckoutEntry, CheckoutFile,
+    ConnectGitLabRepoInput, ConnectedGitLabRepoSummary, GitLabProjectSummary, HttpGitLabApiClient,
     MemoryTokenStore, OAuthClientConfig, OAuthRedirectMode, OAuthSessionStart, TokenMaterial,
     TokenStore, GITLAB_AUTHORIZE_URL, GITLAB_OAUTH_TOKEN_URL, GITLAB_TOKEN_SERVICE,
     GITLAB_USER_TOKEN_KEY, DEFAULT_OAUTH_LOOPBACK_PORT,
@@ -20,12 +20,12 @@ use lattice_connectors::{
 use serde::{Deserialize, Serialize};
 
 fn token_store() -> &'static dyn TokenStore {
-    static KEYCHAIN: OnceLock<KeychainTokenStore> = OnceLock::new();
+    static STORE: OnceLock<Box<dyn TokenStore>> = OnceLock::new();
     static MEMORY: OnceLock<MemoryTokenStore> = OnceLock::new();
     static USE_MEMORY: OnceLock<bool> = OnceLock::new();
 
     let use_memory = *USE_MEMORY.get_or_init(|| {
-        let store = KeychainTokenStore::with_service(GITLAB_TOKEN_SERVICE);
+        let store = production_token_store(GITLAB_TOKEN_SERVICE);
         let probe_key = "lattice.gitlab.probe";
         match store.set(
             probe_key,
@@ -46,7 +46,9 @@ fn token_store() -> &'static dyn TokenStore {
     if use_memory {
         MEMORY.get_or_init(MemoryTokenStore::new)
     } else {
-        KEYCHAIN.get_or_init(|| KeychainTokenStore::with_service(GITLAB_TOKEN_SERVICE))
+        STORE
+            .get_or_init(|| production_token_store(GITLAB_TOKEN_SERVICE))
+            .as_ref()
     }
 }
 

@@ -8,7 +8,10 @@ lattice_release_prefer_xcode
 : "${APPLE_SIGNING_IDENTITY:?Set APPLE_SIGNING_IDENTITY}"
 app_src="$(lattice_release_app_path)"
 macos_dir="$app_src/Contents/MacOS"
-entitlements="$(cd "$(dirname "$0")/../.." && pwd)/apps/desktop/src-tauri/Entitlements.plist"
+plugins_dir="$app_src/Contents/PlugIns"
+root="$(cd "$(dirname "$0")/../.." && pwd)"
+entitlements="$root/apps/desktop/src-tauri/Entitlements.plist"
+ql_entitlements="$root/apps/desktop/macos/LatticeQuickLook/LatticeQuickLook.entitlements"
 if [ ! -f "$entitlements" ]; then
   echo "codesign-app: missing entitlements: $entitlements" >&2
   exit 1
@@ -16,16 +19,34 @@ fi
 
 echo "codesign-app: Developer ID, hardened runtime + entitlements → $app_src"
 echo "codesign-app: entitlements=$entitlements"
+
 sign_bin() {
   local path="$1"
+  local ents="${2:-$entitlements}"
   if ! codesign --force --options runtime --timestamp \
-    --entitlements "$entitlements" \
+    --entitlements "$ents" \
     --sign "$APPLE_SIGNING_IDENTITY" "$path"; then
     echo "codesign-app: codesign failed: $path" >&2
     echo "  identity: $APPLE_SIGNING_IDENTITY" >&2
     exit 1
   fi
 }
+
+# Nested PlugIns first (Quick Look appex uses its own entitlements).
+if [ -d "$plugins_dir" ]; then
+  find "$plugins_dir" -name '*.appex' -print0 |
+    while IFS= read -r -d '' appex; do
+      exe="$appex/Contents/MacOS"
+      if [ -d "$exe" ]; then
+        find "$exe" -type f -print0 |
+          while IFS= read -r -d '' bin; do
+            sign_bin "$bin" "$ql_entitlements"
+          done
+      fi
+      sign_bin "$appex" "$ql_entitlements"
+      echo "codesign-app: signed appex $(basename "$appex")"
+    done
+fi
 
 for path in "$macos_dir"/*; do
   if [ -f "$path" ] || [ -L "$path" ]; then

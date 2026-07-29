@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use lattice_connectors::{KeychainTokenStore, TokenMaterial, TokenStore};
+use lattice_connectors::{production_token_store, TokenMaterial, TokenStore};
 
 use crate::client::{CloudApiClient, CloudHttpClient};
 use crate::config::cloud_url;
@@ -46,13 +46,13 @@ impl CloudSessionStore for MemoryCloudSessionStore {
 }
 
 pub struct KeychainCloudSessionStore {
-    store: KeychainTokenStore,
+    store: Box<dyn TokenStore>,
 }
 
 impl KeychainCloudSessionStore {
     pub fn new() -> Self {
         Self {
-            store: KeychainTokenStore::with_service(CLOUD_TOKEN_SERVICE),
+            store: production_token_store(CLOUD_TOKEN_SERVICE),
         }
     }
 }

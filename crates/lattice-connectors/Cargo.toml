@@ -23,6 +23,10 @@ keyring = { version = "3", features = [
     "windows-native",
     "linux-native",
 ] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = { version = "3", features = ["OSX_10_15"] }
+security-framework-sys = "2"
 walkdir.workspace = true
 sha2.workspace = true
 

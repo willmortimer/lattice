@@ -82,6 +82,7 @@
             desktop-ui-build = "Build the desktop Vite frontend only";
             desktop-install = "macOS: signed .app with voice → /Applications (Apple Development)";
             desktop-release = "macOS release DAG join (env → build → sign → notary → dmg)";
+            desktop-release-internal = "Internal channel app (bundle id dev.lattice.desktop.dev)";
             release-env-validate = "Validate Apple Developer ID + notarytool env";
             desktop-tauri-bundle = "Tauri app bundle with voice-embedded";
             build-latticed = "Release-build latticed sidecar";
@@ -310,15 +311,24 @@
 
               # Swift bridges use @loader_path; copy dylibs next to the Mach-O in the bundle.
               macos_dir="$app_src/Contents/MacOS"
-              for dylib in libLatticeVoiceBridge.dylib libLatticeAudioBridge.dylib; do
+              for dylib in libLatticeVoiceBridge.dylib libLatticeAudioBridge.dylib libLatticeApprovalBridge.dylib; do
                 src="target/release/$dylib"
                 if [ -f "$src" ]; then
                   cp -f "$src" "$macos_dir/$dylib"
                   echo "desktop-install: bundled $dylib"
                 else
-                  echo "desktop-install: warning: missing $src (voice may fail at runtime)" >&2
+                  echo "desktop-install: warning: missing $src" >&2
                 fi
               done
+
+              # Quick Look appex (best-effort; requires Xcode).
+              appex_out="$PWD/target/macos/LatticeQuickLook.appex"
+              if bash scripts/macos/build-quicklook-appex.sh "$appex_out"; then
+                mkdir -p "$app_src/Contents/PlugIns"
+                rm -rf "$app_src/Contents/PlugIns/LatticeQuickLook.appex"
+                cp -R "$appex_out" "$app_src/Contents/PlugIns/LatticeQuickLook.appex"
+                echo "desktop-install: bundled LatticeQuickLook.appex"
+              fi
 
               # Semantic search + voice + agent thin-clients expect sidecars
               # as MacOS siblings of the app binary (see docs/search/…).
@@ -402,6 +412,9 @@
               echo "  nxr task desktop-release" >&2
               echo "  # validate only: LATTICE_RELEASE_VALIDATE_ONLY=1 nxr task release-env-validate" >&2
               exec nix run .#nxr -- task desktop-release "$@"
+            '';
+            desktop-release-internal = ''
+              exec bash scripts/release/build-internal-channel.sh "$@"
             '';
             ok = ''
               true
@@ -545,6 +558,68 @@
                 };
               };
               confirm = true;
+            };
+
+            # Local AI + local lattice-server (no provider keys baked in).
+            # Load AI keys via exec-with-ai-env / sops; Finder launches need a
+            # baked channel (see desktop-release-internal), not shell export.
+            dev-local-ai = {
+              environment = {
+                mode = "inherit";
+                set = {
+                  LATTICE_CLOUD_URL = "http://127.0.0.1:8788";
+                  LATTICE_AI_POLICY = "local";
+                };
+                unset = [
+                  "APPLE_ID"
+                  "APPLE_PASSWORD"
+                  "APPLE_TEAM_ID"
+                  "APPLE_SIGNING_IDENTITY"
+                  "CLOUDFLARE_API_TOKEN"
+                ];
+              };
+              secrets = {
+                PIONEER_API_KEY = {
+                  ref = "PIONEER_API_KEY";
+                  provider = "env";
+                  delivery = "env";
+                };
+                OPENAI_API_KEY = {
+                  ref = "OPENAI_API_KEY";
+                  provider = "env";
+                  delivery = "env";
+                };
+              };
+            };
+
+            # Production cloud URL + AI keys from env (still not baked into DMG).
+            dev-cloud-ai = {
+              environment = {
+                mode = "inherit";
+                set = {
+                  LATTICE_CLOUD_URL = "https://cloud.lattice-notes.com";
+                  LATTICE_AI_POLICY = "cloud";
+                };
+                unset = [
+                  "APPLE_ID"
+                  "APPLE_PASSWORD"
+                  "APPLE_TEAM_ID"
+                  "APPLE_SIGNING_IDENTITY"
+                  "CLOUDFLARE_API_TOKEN"
+                ];
+              };
+              secrets = {
+                PIONEER_API_KEY = {
+                  ref = "PIONEER_API_KEY";
+                  provider = "env";
+                  delivery = "env";
+                };
+                OPENAI_API_KEY = {
+                  ref = "OPENAI_API_KEY";
+                  provider = "env";
+                  delivery = "env";
+                };
+              };
             };
           };
 
@@ -1054,6 +1129,23 @@
                 aliases = [ "release" ];
               };
 
+              # Side-by-side internal channel (bundle id dev.lattice.desktop.dev).
+              # Reuses apple-release Developer ID context; live notarize is optional.
+              desktop-release-internal = {
+                description = "Internal-channel app build (staging cloud URL baked via env)";
+                app = "desktop-release-internal";
+                category = "release";
+                context = "apple-release";
+                dependsOn = [ "js-deps" ];
+                resources = {
+                  exclusive = [
+                    "apple-keychain"
+                    "xcode-derived-data"
+                    "cargo-target"
+                  ];
+                };
+              };
+
               desktop-perf = {
                 description = "Browser perf harness";
                 app = "desktop-perf";
@@ -1092,11 +1184,11 @@
           devShells.default = pkgs.mkShell {
             packages = toolchain ++ lib.attrValues defaultLatticeScripts;
             shellHook = ''
-              export RUSTC_WRAPPER="${RUSTC_WRAPPER:-sccache}"
+              export RUSTC_WRAPPER="''${RUSTC_WRAPPER:-sccache}"
               if [ "$(uname -s)" = "Darwin" ]; then
-                export SCCACHE_DIR="${SCCACHE_DIR:-$HOME/Library/Caches/Lattice/sccache}"
+                export SCCACHE_DIR="''${SCCACHE_DIR:-''$HOME/Library/Caches/Lattice/sccache}"
               else
-                export SCCACHE_DIR="${SCCACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/lattice/sccache}"
+                export SCCACHE_DIR="''${SCCACHE_DIR:-''${XDG_CACHE_HOME:-''$HOME/.cache}/lattice/sccache}"
               fi
               if [ "''${NXR_AUTO_DAEMON:-1}" != "0" ] && command -v nxr >/dev/null 2>&1; then
                 nxr daemon status --json >/dev/null 2>&1 ||
@@ -1105,8 +1197,8 @@
               fi
               echo "lattice dev shell — rust $(rustc --version | cut -d' ' -f2), node $(node --version), pnpm $(pnpm --version)"
               echo "runner: nxr list | nxr task ci [-j N] | nxr graph ci | nxr up desktop-web"
-              echo "release: nxr graph desktop-release | nxr task desktop-release"
-              echo "secrets: nxr contexts (agent-*, apple-*); .envrc stays boring"
+              echo "release: nxr graph desktop-release | nxr task desktop-release-internal"
+              echo "contexts: nxr context list (dev-local-ai, dev-cloud-ai, agent-*, apple-*)"
               echo "site / Cloudflare: private lattice-ecosystem (not this flake)"
             '';
           };

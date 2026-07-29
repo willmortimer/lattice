@@ -7,6 +7,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 
+#[cfg(target_os = "macos")]
+mod secitem_macos;
+#[cfg(target_os = "macos")]
+pub use secitem_macos::{
+    AppGroupSecItemTokenStore, MigratingAppGroupTokenStore, LATTICE_APP_GROUP,
+    LATTICE_KEYCHAIN_ACCESS_GROUP,
+};
+
 pub const GITHUB_TOKEN_SERVICE: &str = "lattice.github";
 /// Keychain account for the CLI/desktop user access token from GitHub login.
 pub const GITHUB_USER_TOKEN_KEY: &str = "lattice.github.user";
@@ -45,6 +53,20 @@ pub trait TokenStore: Send + Sync {
     fn set(&self, key: &str, material: &TokenMaterial) -> Result<()>;
     fn get(&self, key: &str) -> Result<Option<TokenMaterial>>;
     fn delete(&self, key: &str) -> Result<()>;
+}
+
+/// Preferred production store: App Group SecItem on macOS (with legacy migrate),
+/// plain keyring elsewhere / when entitlements are missing.
+pub fn production_token_store(service: impl Into<String>) -> Box<dyn TokenStore> {
+    let service = service.into();
+    #[cfg(target_os = "macos")]
+    {
+        Box::new(MigratingAppGroupTokenStore::with_service(service))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Box::new(KeychainTokenStore::with_service(service))
+    }
 }
 
 /// In-memory store for unit tests and environments without a keychain.

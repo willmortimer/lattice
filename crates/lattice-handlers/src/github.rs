@@ -9,20 +9,20 @@ use std::time::Duration;
 
 use lattice_connectors::{
     connect_repo, disconnect_repo, list_bindings, list_checkout_tree, list_repos_for_token,
-    oauth_loopback_begin, oauth_loopback_finish_http, read_checkout_file, refresh_repo,
-    CheckoutEntry, CheckoutFile, ConnectRepoInput, ConnectedRepoSummary, GitHubRepoSummary,
-    HttpGitHubApiClient, KeychainTokenStore, MemoryTokenStore, OAuthLoopbackStart, TokenMaterial,
-    TokenStore, GITHUB_USER_TOKEN_KEY,
+    oauth_loopback_begin, oauth_loopback_finish_http, production_token_store, read_checkout_file,
+    refresh_repo, CheckoutEntry, CheckoutFile, ConnectRepoInput, ConnectedRepoSummary,
+    GitHubRepoSummary, HttpGitHubApiClient, MemoryTokenStore, OAuthLoopbackStart, TokenMaterial,
+    TokenStore, GITHUB_TOKEN_SERVICE, GITHUB_USER_TOKEN_KEY,
 };
 use serde::{Deserialize, Serialize};
 
 fn token_store() -> &'static dyn TokenStore {
-    static KEYCHAIN: OnceLock<KeychainTokenStore> = OnceLock::new();
+    static STORE: OnceLock<Box<dyn TokenStore>> = OnceLock::new();
     static MEMORY: OnceLock<MemoryTokenStore> = OnceLock::new();
     static USE_MEMORY: OnceLock<bool> = OnceLock::new();
 
     let use_memory = *USE_MEMORY.get_or_init(|| {
-        let store = KeychainTokenStore::new();
+        let store = production_token_store(GITHUB_TOKEN_SERVICE);
         let probe_key = "lattice.github.probe";
         match store.set(
             probe_key,
@@ -43,7 +43,9 @@ fn token_store() -> &'static dyn TokenStore {
     if use_memory {
         MEMORY.get_or_init(MemoryTokenStore::new)
     } else {
-        KEYCHAIN.get_or_init(KeychainTokenStore::new)
+        STORE
+            .get_or_init(|| production_token_store(GITHUB_TOKEN_SERVICE))
+            .as_ref()
     }
 }
 

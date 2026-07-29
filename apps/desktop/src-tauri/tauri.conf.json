@@ -86,6 +86,26 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "fileAssociations": [
+      {
+        "ext": ["md", "markdown", "mdown"],
+        "name": "Markdown Document",
+        "role": "Editor",
+        "mimeType": "text/markdown"
+      },
+      {
+        "ext": ["ipynb"],
+        "name": "Lattice Notebook",
+        "role": "Editor",
+        "mimeType": "application/x-ipynb+json"
+      },
+      {
+        "ext": ["csv", "tsv"],
+        "name": "CSV Table",
+        "role": "Viewer",
+        "mimeType": "text/csv"
+      }
+    ],
     "macOS": {
       "entitlements": "./Entitlements.plist",
       "hardenedRuntime": true
