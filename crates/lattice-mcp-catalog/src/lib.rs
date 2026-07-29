@@ -10,8 +10,42 @@
 //!
 //! This crate is intentionally inert: it has no I/O, no transport, and no
 //! dispatcher trait. It only describes tool names, schemas, and routing.
+//! Relay request/response types are shared JSON shapes for the outbound
+//! device tunnel (not MCP itself).
 
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+
+/// Gateway → device tool invocation over the Lattice Relay Protocol.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RelayRequest {
+    pub request_id: String,
+    pub workspace_id: String,
+    pub tool_name: String,
+    pub arguments: Value,
+    pub deadline_ms: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idempotency_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trace_context: Option<Value>,
+}
+
+/// Device → gateway result for a [`RelayRequest`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RelayResponse {
+    pub request_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<RelayError>,
+}
+
+/// Structured relay failure (distinct from MCP JSON-RPC errors).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RelayError {
+    pub code: String,
+    pub message: String,
+}
 
 /// Hybrid/FTS search over an open workspace.
 pub const TOOL_WORKSPACE_SEARCH: &str = "workspace.search";
@@ -532,5 +566,30 @@ mod tests {
                 assert!(t["inputSchema"].is_object());
             }
         }
+    }
+
+    #[test]
+    fn relay_request_response_round_trip_json() {
+        let req = RelayRequest {
+            request_id: "req-1".into(),
+            workspace_id: "ws-1".into(),
+            tool_name: TOOL_WORKSPACE_READ.into(),
+            arguments: json!({ "path": "Notes.md" }),
+            deadline_ms: 5_000,
+            idempotency_key: None,
+            trace_context: None,
+        };
+        let raw = serde_json::to_string(&req).unwrap();
+        let parsed: RelayRequest = serde_json::from_str(&raw).unwrap();
+        assert_eq!(parsed, req);
+
+        let resp = RelayResponse {
+            request_id: "req-1".into(),
+            result: Some(json!({ "ok": true })),
+            error: None,
+        };
+        let raw = serde_json::to_string(&resp).unwrap();
+        let parsed: RelayResponse = serde_json::from_str(&raw).unwrap();
+        assert_eq!(parsed, resp);
     }
 }
