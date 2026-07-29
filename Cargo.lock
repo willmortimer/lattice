@@ -6179,6 +6179,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-mcp-catalog"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "lattice-profile"
 version = "0.1.0"
 dependencies = [
