@@ -26,6 +26,7 @@ use crate::api::{
     ProposeResourceParams, ProposeYamlParams, ReadParams, RelatedParams, SearchParams,
 };
 use crate::config::DaemonConfig;
+use crate::mcp;
 use crate::scheduler_api::{
     api_scheduler_list, api_scheduler_register, api_scheduler_set_enabled,
     api_scheduler_unregister, SchedulerSetEnabledParams, SchedulerWorkspaceParams,
@@ -414,10 +415,42 @@ async fn route_scheduler_list(State(state): State<HttpState>, headers: HeaderMap
     }
 }
 
+async fn route_mcp(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    body: bytes::Bytes,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    // MCP dispatch opens workspaces synchronously and can block; keep it off
+    // the Tokio worker to avoid runtime deadlocks under oneshot/integration tests.
+    let runtime = state.daemon.runtime.clone();
+    let (status, json_body) = tokio::task::spawn_blocking(move || {
+        mcp::handle_http(runtime.as_ref(), &headers, &body)
+    })
+    .await
+    .unwrap_or_else(|err| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Some(serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": null,
+                "error": { "code": -32603, "message": format!("mcp worker join error: {err}") }
+            })),
+        )
+    });
+    match json_body {
+        Some(value) => (status, Json(value)).into_response(),
+        None => status.into_response(),
+    }
+}
+
 /// Build the localhost API router (no CORS — not a browser demo surface).
 pub fn router(daemon: DaemonState) -> Router {
     Router::new()
         .route("/health", get(health))
+        .route("/mcp", post(route_mcp))
         .route("/v1/search", post(route_search))
         .route("/v1/read", post(route_read))
         .route("/v1/related", post(route_related))

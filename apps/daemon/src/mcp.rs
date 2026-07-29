@@ -1,14 +1,20 @@
-//! Minimal MCP JSON-RPC stdio adapter over the governed context API.
+//! MCP JSON-RPC adapter over the governed context API (stdio + loopback HTTP).
 //!
-//! Exposes read tools (`search`, `read`, `related`, `build_context`,
-//! `get_dataset_schema`, `profile_dataset`) and proposal tools
-//! (`create_proposal`, `list_proposals`, `get_proposal`, `propose_page`,
-//! `propose_resource`, `propose_workflow`, `propose_interface`,
-//! `propose_artifact`). Writes create reviewable proposals only — no apply.
+//! Exposes canonical `workspace.*` tools from [`lattice_mcp_catalog`] and maps
+//! them to the existing `api_*` handlers. Writes create reviewable proposals
+//! only — no apply.
 
 use std::io::{self, BufRead, Write};
-use std::sync::Arc;
 
+use axum::http::{HeaderMap, StatusCode};
+use lattice_mcp_catalog::{
+    local_tools, TOOL_WORKSPACE_BUILD_CONTEXT, TOOL_WORKSPACE_DATASET_GET_SCHEMA,
+    TOOL_WORKSPACE_DATASET_PROFILE, TOOL_WORKSPACE_PROPOSAL_CREATE, TOOL_WORKSPACE_PROPOSAL_GET,
+    TOOL_WORKSPACE_PROPOSAL_LIST, TOOL_WORKSPACE_PROPOSAL_PROPOSE_ARTIFACT,
+    TOOL_WORKSPACE_PROPOSAL_PROPOSE_INTERFACE, TOOL_WORKSPACE_PROPOSAL_PROPOSE_PAGE,
+    TOOL_WORKSPACE_PROPOSAL_PROPOSE_RESOURCE, TOOL_WORKSPACE_PROPOSAL_PROPOSE_WORKFLOW,
+    TOOL_WORKSPACE_READ, TOOL_WORKSPACE_RELATED, TOOL_WORKSPACE_SEARCH,
+};
 use lattice_runtime::LatticeRuntime;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -22,19 +28,24 @@ use crate::api::{
     ProposeYamlParams, ReadParams, RelatedParams, SearchParams,
 };
 
-const PROTOCOL_VERSION: &str = "2024-11-05";
+pub const PROTOCOL_VERSION_LEGACY: &str = "2024-11-05";
+pub const PROTOCOL_VERSION_MODERN: &str = "2026-07-28";
 const SERVER_NAME: &str = "lattice";
 const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
+const HEADER_PROTOCOL_VERSION: &str = "mcp-protocol-version";
+const HEADER_MCP_METHOD: &str = "mcp-method";
+const HEADER_MCP_NAME: &str = "mcp-name";
+const ERR_HEADER_MISMATCH: i32 = -32020;
 
 #[derive(Debug, Deserialize)]
-struct JsonRpcRequest {
+pub struct JsonRpcRequest {
     #[serde(default = "default_jsonrpc")]
     #[allow(dead_code)]
     jsonrpc: String,
-    id: Option<Value>,
-    method: String,
+    pub id: Option<Value>,
+    pub method: String,
     #[serde(default)]
-    params: Value,
+    pub params: Value,
 }
 
 fn default_jsonrpc() -> String {
@@ -42,7 +53,7 @@ fn default_jsonrpc() -> String {
 }
 
 /// Run the MCP stdio loop until stdin closes.
-pub fn serve_stdio(runtime: Arc<LatticeRuntime>, auth_token: &str) -> io::Result<()> {
+pub fn serve_stdio(runtime: std::sync::Arc<LatticeRuntime>, auth_token: &str) -> io::Result<()> {
     // Optional token gate: when LATTICE_AUTH_TOKEN is set in the environment,
     // the process was already authenticated by the launcher; we still accept
     // an explicit match for defense in depth when callers pass --auth-token.
@@ -75,7 +86,7 @@ pub fn serve_stdio(runtime: Arc<LatticeRuntime>, auth_token: &str) -> io::Result
 
         // Notifications have no id and get no response.
         let is_notification = request.id.is_none();
-        let response = dispatch(&runtime, &request);
+        let response = dispatch(runtime.as_ref(), &request);
         if !is_notification {
             if let Some(resp) = response {
                 write_message(&mut stdout, &resp)?;
@@ -85,19 +96,115 @@ pub fn serve_stdio(runtime: Arc<LatticeRuntime>, auth_token: &str) -> io::Result
     Ok(())
 }
 
+/// Handle a single MCP JSON-RPC request over loopback HTTP.
+pub fn handle_http(
+    runtime: &LatticeRuntime,
+    headers: &HeaderMap,
+    body: &[u8],
+) -> (StatusCode, Option<Value>) {
+    let request: JsonRpcRequest = match serde_json::from_slice(body) {
+        Ok(req) => req,
+        Err(err) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Some(json!({
+                    "jsonrpc": "2.0",
+                    "id": null,
+                    "error": { "code": -32700, "message": format!("parse error: {err}") }
+                })),
+            );
+        }
+    };
+
+    let protocol_version = header_value(headers, HEADER_PROTOCOL_VERSION);
+    if protocol_version.as_deref() == Some(PROTOCOL_VERSION_MODERN) {
+        if let Some(err_resp) = validate_modern_headers(headers, &request) {
+            return (StatusCode::BAD_REQUEST, Some(err_resp));
+        }
+    }
+
+    match dispatch(runtime, &request) {
+        Some(resp) => (StatusCode::OK, Some(resp)),
+        None => (StatusCode::NO_CONTENT, None),
+    }
+}
+
+fn header_value(headers: &HeaderMap, name: &str) -> Option<String> {
+    headers
+        .get(name)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+fn validate_modern_headers(headers: &HeaderMap, request: &JsonRpcRequest) -> Option<Value> {
+    let mcp_method = header_value(headers, HEADER_MCP_METHOD);
+    let body_method = request.method.as_str();
+
+    match mcp_method {
+        Some(ref header) if header == body_method => {}
+        Some(header) => {
+            return Some(header_mismatch_error(
+                request.id.clone(),
+                format!("Mcp-Method header {header:?} does not match body method {body_method:?}"),
+            ));
+        }
+        None => {
+            return Some(header_mismatch_error(
+                request.id.clone(),
+                "missing required Mcp-Method header".into(),
+            ));
+        }
+    }
+
+    if body_method == "tools/call" {
+        let body_name = request
+            .params
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        match header_value(headers, HEADER_MCP_NAME) {
+            Some(ref header) if header == body_name => {}
+            Some(header) => {
+                return Some(header_mismatch_error(
+                    request.id.clone(),
+                    format!("Mcp-Name header {header:?} does not match params.name {body_name:?}"),
+                ));
+            }
+            None => {
+                return Some(header_mismatch_error(
+                    request.id.clone(),
+                    "missing required Mcp-Name header for tools/call".into(),
+                ));
+            }
+        }
+    }
+
+    None
+}
+
+fn header_mismatch_error(id: Option<Value>, message: String) -> Value {
+    error(
+        id.unwrap_or(Value::Null),
+        ERR_HEADER_MISMATCH,
+        message,
+    )
+}
+
 fn write_message(out: &mut impl Write, value: &Value) -> io::Result<()> {
     serde_json::to_writer(&mut *out, value)?;
     out.write_all(b"\n")?;
     out.flush()
 }
 
-fn dispatch(runtime: &LatticeRuntime, request: &JsonRpcRequest) -> Option<Value> {
+/// Shared JSON-RPC dispatch for stdio and HTTP transports.
+pub fn dispatch(runtime: &LatticeRuntime, request: &JsonRpcRequest) -> Option<Value> {
     let id = request.id.clone().unwrap_or(Value::Null);
     match request.method.as_str() {
         "initialize" => Some(ok(
             id,
             json!({
-                "protocolVersion": PROTOCOL_VERSION,
+                "protocolVersion": PROTOCOL_VERSION_LEGACY,
                 "capabilities": { "tools": {} },
                 "serverInfo": {
                     "name": SERVER_NAME,
@@ -105,222 +212,27 @@ fn dispatch(runtime: &LatticeRuntime, request: &JsonRpcRequest) -> Option<Value>
                 },
             }),
         )),
+        "server/discover" => Some(ok(id, discover_result())),
         "notifications/initialized" | "initialized" => None,
         "ping" => Some(ok(id, json!({}))),
-        "tools/list" => Some(ok(id, json!({ "tools": tool_descriptors() }))),
+        "tools/list" => Some(ok(id, local_tools())),
         "tools/call" => Some(handle_tools_call(runtime, id, &request.params)),
         other => Some(error(id, -32601, format!("method not found: {other}"))),
     }
 }
 
-fn tool_descriptors() -> Value {
-    json!([
-        {
-            "name": "search",
-            "description": "Hybrid or FTS search over an open Lattice workspace. Returns provenance and export-policy flags; ask/deny excerpts are redacted.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string", "description": "Workspace path when no session id is known" },
-                    "query": { "type": "string" },
-                    "limit": { "type": "integer" },
-                    "mode": { "type": "string", "enum": ["hybrid", "fts"] }
-                },
-                "required": ["query"]
+fn discover_result() -> Value {
+    json!({
+        "resultType": "complete",
+        "supportedVersions": [PROTOCOL_VERSION_MODERN, PROTOCOL_VERSION_LEGACY],
+        "capabilities": { "tools": {} },
+        "_meta": {
+            "io.modelcontextprotocol/serverInfo": {
+                "name": SERVER_NAME,
+                "version": SERVER_VERSION,
             }
         },
-        {
-            "name": "read",
-            "description": "Read a bounded byte range from a workspace page/resource.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "path": { "type": "string" },
-                    "startByte": { "type": "integer" },
-                    "endByte": { "type": "integer" },
-                    "maxBytes": { "type": "integer" }
-                },
-                "required": ["path"]
-            }
-        },
-        {
-            "name": "related",
-            "description": "Find related resources via backlinks and FTS.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "path": { "type": "string" },
-                    "limit": { "type": "integer" }
-                },
-                "required": ["path"]
-            }
-        },
-        {
-            "name": "build_context",
-            "description": "Assemble bounded context excerpts for a query. Respects export_policy (ask/deny omitted or flagged).",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "query": { "type": "string" },
-                    "limit": { "type": "integer" },
-                    "maxBytes": { "type": "integer" }
-                },
-                "required": ["query"]
-            }
-        },
-        {
-            "name": "get_dataset_schema",
-            "description": "Return column names/types for a .dataset package via a bounded LIMIT 0 describe. Does not mutate the workspace.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "path": { "type": "string", "description": "Workspace-relative .dataset path" },
-                    "sql": { "type": "string", "description": "Optional DuckDB relation SQL; defaults to facts/**/*.parquet" }
-                },
-                "required": ["path"]
-            }
-        },
-        {
-            "name": "profile_dataset",
-            "description": "Bounded DuckDB SUMMARIZE profile for a .dataset package (optional sample-row cap). Read-only.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "path": { "type": "string" },
-                    "sql": { "type": "string" },
-                    "maxSampleRows": { "type": "integer" }
-                },
-                "required": ["path"]
-            }
-        },
-        {
-            "name": "create_proposal",
-            "description": "Create a reviewable transaction proposal from semantic commands. Does not apply mutations.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "summary": { "type": "string" },
-                    "commands": { "type": "array", "items": { "type": "object" } },
-                    "affectedPaths": { "type": "array", "items": { "type": "string" } },
-                    "warnings": { "type": "array", "items": { "type": "string" } },
-                    "sourceResource": { "type": "string" }
-                },
-                "required": ["summary", "commands"]
-            }
-        },
-        {
-            "name": "list_proposals",
-            "description": "List pending transaction proposals in the workspace inbox.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" }
-                }
-            }
-        },
-        {
-            "name": "get_proposal",
-            "description": "Load one pending transaction proposal by id.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "proposalId": { "type": "string" }
-                },
-                "required": ["proposalId"]
-            }
-        },
-        {
-            "name": "propose_page",
-            "description": "Typed helper to propose creating a page. Does not write the page directly.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "path": { "type": "string" },
-                    "content": { "type": "string" },
-                    "title": { "type": "string" }
-                },
-                "required": ["path"]
-            }
-        },
-        {
-            "name": "propose_resource",
-            "description": "Propose creating a text resource via resource-create. Does not apply.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "path": { "type": "string" },
-                    "content": { "type": "string" },
-                    "summary": { "type": "string" }
-                },
-                "required": ["path", "content"]
-            }
-        },
-        {
-            "name": "propose_workflow",
-            "description": "Validate workflow YAML and propose creating the workflow file. Does not apply.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "path": { "type": "string" },
-                    "content": { "type": "string" },
-                    "summary": { "type": "string" }
-                },
-                "required": ["path", "content"]
-            }
-        },
-        {
-            "name": "propose_interface",
-            "description": "Validate interface YAML and propose creating the interface file. Does not apply.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "path": { "type": "string" },
-                    "content": { "type": "string" },
-                    "summary": { "type": "string" }
-                },
-                "required": ["path", "content"]
-            }
-        },
-        {
-            "name": "propose_artifact",
-            "description": "Validate artifact.yaml and propose creating the manifest. Does not apply.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "path": { "type": "string" },
-                    "content": { "type": "string" },
-                    "summary": { "type": "string" }
-                },
-                "required": ["path", "content"]
-            }
-        }
-    ])
+    })
 }
 
 fn handle_tools_call(runtime: &LatticeRuntime, id: Value, params: &Value) -> Value {
@@ -330,23 +242,23 @@ fn handle_tools_call(runtime: &LatticeRuntime, id: Value, params: &Value) -> Val
         .cloned()
         .unwrap_or_else(|| json!({}));
 
-    let result = match name {
-        "search" => call_search(runtime, arguments),
-        "read" => call_read(runtime, arguments),
-        "related" => call_related(runtime, arguments),
-        "build_context" => call_build_context(runtime, arguments),
-        "get_dataset_schema" => call_get_dataset_schema(runtime, arguments),
-        "profile_dataset" => call_profile_dataset(runtime, arguments),
-        "create_proposal" => call_create_proposal(runtime, arguments),
-        "list_proposals" => call_list_proposals(runtime, arguments),
-        "get_proposal" => call_get_proposal(runtime, arguments),
-        "propose_page" => call_propose_page(runtime, arguments),
-        "propose_resource" => call_propose_resource(runtime, arguments),
-        "propose_workflow" => call_propose_workflow(runtime, arguments),
-        "propose_interface" => call_propose_interface(runtime, arguments),
-        "propose_artifact" => call_propose_artifact(runtime, arguments),
-        other => {
-            return error(id, -32602, format!("unknown tool: {other}"));
+    let result = match resolve_tool(name) {
+        Some(ToolKind::Search) => call_search(runtime, arguments),
+        Some(ToolKind::Read) => call_read(runtime, arguments),
+        Some(ToolKind::Related) => call_related(runtime, arguments),
+        Some(ToolKind::BuildContext) => call_build_context(runtime, arguments),
+        Some(ToolKind::DatasetGetSchema) => call_get_dataset_schema(runtime, arguments),
+        Some(ToolKind::DatasetProfile) => call_profile_dataset(runtime, arguments),
+        Some(ToolKind::ProposalCreate) => call_create_proposal(runtime, arguments),
+        Some(ToolKind::ProposalList) => call_list_proposals(runtime, arguments),
+        Some(ToolKind::ProposalGet) => call_get_proposal(runtime, arguments),
+        Some(ToolKind::ProposePage) => call_propose_page(runtime, arguments),
+        Some(ToolKind::ProposeResource) => call_propose_resource(runtime, arguments),
+        Some(ToolKind::ProposeWorkflow) => call_propose_workflow(runtime, arguments),
+        Some(ToolKind::ProposeInterface) => call_propose_interface(runtime, arguments),
+        Some(ToolKind::ProposeArtifact) => call_propose_artifact(runtime, arguments),
+        None => {
+            return error(id, -32602, format!("unknown tool: {name}"));
         }
     };
 
@@ -366,6 +278,44 @@ fn handle_tools_call(runtime: &LatticeRuntime, id: Value, params: &Value) -> Val
                 "isError": true
             }),
         ),
+    }
+}
+
+#[derive(Clone, Copy)]
+enum ToolKind {
+    Search,
+    Read,
+    Related,
+    BuildContext,
+    DatasetGetSchema,
+    DatasetProfile,
+    ProposalCreate,
+    ProposalList,
+    ProposalGet,
+    ProposePage,
+    ProposeResource,
+    ProposeWorkflow,
+    ProposeInterface,
+    ProposeArtifact,
+}
+
+fn resolve_tool(name: &str) -> Option<ToolKind> {
+    match name {
+        TOOL_WORKSPACE_SEARCH | "search" => Some(ToolKind::Search),
+        TOOL_WORKSPACE_READ | "read" => Some(ToolKind::Read),
+        TOOL_WORKSPACE_RELATED | "related" => Some(ToolKind::Related),
+        TOOL_WORKSPACE_BUILD_CONTEXT | "build_context" => Some(ToolKind::BuildContext),
+        TOOL_WORKSPACE_DATASET_GET_SCHEMA | "get_dataset_schema" => Some(ToolKind::DatasetGetSchema),
+        TOOL_WORKSPACE_DATASET_PROFILE | "profile_dataset" => Some(ToolKind::DatasetProfile),
+        TOOL_WORKSPACE_PROPOSAL_CREATE | "create_proposal" => Some(ToolKind::ProposalCreate),
+        TOOL_WORKSPACE_PROPOSAL_LIST | "list_proposals" => Some(ToolKind::ProposalList),
+        TOOL_WORKSPACE_PROPOSAL_GET | "get_proposal" => Some(ToolKind::ProposalGet),
+        TOOL_WORKSPACE_PROPOSAL_PROPOSE_PAGE | "propose_page" => Some(ToolKind::ProposePage),
+        TOOL_WORKSPACE_PROPOSAL_PROPOSE_RESOURCE | "propose_resource" => Some(ToolKind::ProposeResource),
+        TOOL_WORKSPACE_PROPOSAL_PROPOSE_WORKFLOW | "propose_workflow" => Some(ToolKind::ProposeWorkflow),
+        TOOL_WORKSPACE_PROPOSAL_PROPOSE_INTERFACE | "propose_interface" => Some(ToolKind::ProposeInterface),
+        TOOL_WORKSPACE_PROPOSAL_PROPOSE_ARTIFACT | "propose_artifact" => Some(ToolKind::ProposeArtifact),
+        _ => None,
     }
 }
 
@@ -479,32 +429,46 @@ fn error(id: Value, code: i32, message: String) -> Value {
 mod tests {
     use super::*;
     use lattice_core::Workspace;
+    use lattice_mcp_catalog::TOOL_WORKSPACE_SEARCH;
     use tempfile::TempDir;
 
+    fn tool_names() -> Vec<String> {
+        local_tools()["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|t| t["name"].as_str().map(str::to_string))
+            .collect()
+    }
+
     #[test]
-    fn tools_list_includes_inspect_and_propose_helpers() {
-        let tools = tool_descriptors();
-        let arr = tools.as_array().unwrap();
-        assert_eq!(arr.len(), 14);
-        let names: Vec<&str> = arr.iter().filter_map(|t| t["name"].as_str()).collect();
+    fn tools_list_uses_catalog_workspace_names() {
+        let names = tool_names();
+        assert_eq!(names.len(), 14);
+        assert_eq!(names[0], TOOL_WORKSPACE_SEARCH);
+        assert!(names.iter().all(|n| n.starts_with("workspace.")));
+    }
+
+    #[test]
+    fn server_discover_lists_supported_versions() {
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(json!("discover-1")),
+            method: "server/discover".into(),
+            params: json!({}),
+        };
+        let runtime = LatticeRuntime::new();
+        let resp = dispatch(&runtime, &req).unwrap();
+        let versions = resp["result"]["supportedVersions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(versions, vec![PROTOCOL_VERSION_MODERN, PROTOCOL_VERSION_LEGACY]);
         assert_eq!(
-            names,
-            [
-                "search",
-                "read",
-                "related",
-                "build_context",
-                "get_dataset_schema",
-                "profile_dataset",
-                "create_proposal",
-                "list_proposals",
-                "get_proposal",
-                "propose_page",
-                "propose_resource",
-                "propose_workflow",
-                "propose_interface",
-                "propose_artifact"
-            ]
+            resp["result"]["_meta"]["io.modelcontextprotocol/serverInfo"]["name"],
+            SERVER_NAME
         );
     }
 
@@ -520,7 +484,7 @@ mod tests {
             id: Some(json!(1)),
             method: "tools/call".into(),
             params: json!({
-                "name": "search",
+                "name": TOOL_WORKSPACE_SEARCH,
                 "arguments": {
                     "root": root,
                     "query": "searchable-mcp-token",
@@ -545,7 +509,7 @@ mod tests {
             id: Some(json!(2)),
             method: "tools/call".into(),
             params: json!({
-                "name": "propose_page",
+                "name": lattice_mcp_catalog::TOOL_WORKSPACE_PROPOSAL_PROPOSE_PAGE,
                 "arguments": {
                     "root": root,
                     "path": "Pages/MCP.md",
@@ -566,7 +530,7 @@ mod tests {
             id: Some(json!(3)),
             method: "tools/call".into(),
             params: json!({
-                "name": "list_proposals",
+                "name": lattice_mcp_catalog::TOOL_WORKSPACE_PROPOSAL_LIST,
                 "arguments": { "root": root }
             }),
         };
@@ -583,7 +547,7 @@ mod tests {
             id: Some(json!(4)),
             method: "tools/call".into(),
             params: json!({
-                "name": "get_proposal",
+                "name": lattice_mcp_catalog::TOOL_WORKSPACE_PROPOSAL_GET,
                 "arguments": {
                     "root": root,
                     "proposalId": proposal_id
@@ -614,7 +578,7 @@ mod tests {
             id: Some(json!(10)),
             method: "tools/call".into(),
             params: json!({
-                "name": "get_dataset_schema",
+                "name": TOOL_WORKSPACE_DATASET_GET_SCHEMA,
                 "arguments": { "root": root, "path": "Facts.dataset" }
             }),
         };
@@ -642,7 +606,7 @@ steps:
             id: Some(json!(11)),
             method: "tools/call".into(),
             params: json!({
-                "name": "propose_workflow",
+                "name": lattice_mcp_catalog::TOOL_WORKSPACE_PROPOSAL_PROPOSE_WORKFLOW,
                 "arguments": {
                     "root": root,
                     "path": "Automations/Demo.workflow.yaml",
@@ -657,5 +621,25 @@ steps:
             wf_resp["result"]["structuredContent"]["proposal"]["commands"][0]["type"],
             "resource-create"
         );
+    }
+
+    #[test]
+    fn modern_http_header_validation_rejects_method_mismatch() {
+        let runtime = LatticeRuntime::new();
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HEADER_PROTOCOL_VERSION,
+            PROTOCOL_VERSION_MODERN.parse().unwrap(),
+        );
+        headers.insert(HEADER_MCP_METHOD, "tools/list".parse().unwrap());
+        let body = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": { "name": TOOL_WORKSPACE_SEARCH, "arguments": {} }
+        });
+        let (status, resp) = handle_http(&runtime, &headers, body.to_string().as_bytes());
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(resp.unwrap()["error"]["code"], ERR_HEADER_MISMATCH);
     }
 }
