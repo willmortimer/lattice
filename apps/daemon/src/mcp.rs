@@ -41,7 +41,7 @@ const ERR_HEADER_MISMATCH: i32 = -32020;
 pub struct JsonRpcRequest {
     #[serde(default = "default_jsonrpc")]
     #[allow(dead_code)]
-    jsonrpc: String,
+    pub jsonrpc: String,
     pub id: Option<Value>,
     pub method: String,
     #[serde(default)]
