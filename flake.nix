@@ -4,7 +4,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     # Pin releases — do not track nxr main from consumer flakes.
-    nxr.url = "github:willmortimer/nxr/v3.2.0";
+    nxr.url = "github:willmortimer/nxr/v3.4.0";
     flake-parts.follows = "nxr/flake-parts";
     flake-schemas.url = "github:DeterminateSystems/flake-schemas";
   };

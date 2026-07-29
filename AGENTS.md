@@ -114,7 +114,7 @@ Tauri) use `.devcontainer/` and `scripts/devcontainer/` — see
 `docs/dev/devcontainer.md`.
 Nix remains the source of truth for the native desktop shell.
 
-Prefer [nxr](https://github.com/willmortimer/nxr) (pinned `v3.2.0`) as the
+Prefer [nxr](https://github.com/willmortimer/nxr) (pinned `v3.4.0`) as the
 command plane. Flake apps stay authoritative leaves; `nxr task` orchestrates.
 
 ```sh
