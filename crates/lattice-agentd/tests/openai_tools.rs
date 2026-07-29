@@ -6,7 +6,7 @@ use std::sync::Arc;
 use lattice_agentd::lattice_client::LatticeToolClient;
 use lattice_agentd::protocol::{AgentEvent, ProviderKind};
 use lattice_agentd::responses::{emit_openai_run, OpenaiRunOptions};
-use serde_json::json;
+use serde_json::{json, Value};
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
@@ -33,10 +33,12 @@ impl Respond for ResponsesSequence {
 fn sse_function_call_round() -> String {
     [
         r#"data: {"type":"response.created","response":{"id":"resp_tools_1"}}"#,
-        r#"data: {"type":"response.output_item.added","response_id":"resp_tools_1","output_index":0,"item":{"type":"function_call","id":"fc_search_1","call_id":"call_search_1","name":"search","arguments":""}}"#,
-        r#"data: {"type":"response.function_call_arguments.delta","response_id":"resp_tools_1","item_id":"fc_search_1","output_index":0,"delta":"{\"query\":\"Events\"}"}"#,
-        r#"data: {"type":"response.function_call_arguments.done","response_id":"resp_tools_1","item_id":"fc_search_1","output_index":0,"arguments":"{\"query\":\"Events\"}"}"#,
-        r#"data: {"type":"response.output_item.done","response_id":"resp_tools_1","output_index":0,"item":{"type":"function_call","id":"fc_search_1","call_id":"call_search_1","name":"search","arguments":"{\"query\":\"Events\"}"}}"#,
+        r#"data: {"type":"response.output_item.added","response_id":"resp_tools_1","output_index":0,"item":{"type":"reasoning","id":"rs_tools_1","summary":[]}}"#,
+        r#"data: {"type":"response.output_item.done","response_id":"resp_tools_1","output_index":0,"item":{"type":"reasoning","id":"rs_tools_1","summary":[]}}"#,
+        r#"data: {"type":"response.output_item.added","response_id":"resp_tools_1","output_index":1,"item":{"type":"function_call","id":"fc_search_1","call_id":"call_search_1","name":"search","arguments":""}}"#,
+        r#"data: {"type":"response.function_call_arguments.delta","response_id":"resp_tools_1","item_id":"fc_search_1","output_index":1,"delta":"{\"query\":\"Events\"}"}"#,
+        r#"data: {"type":"response.function_call_arguments.done","response_id":"resp_tools_1","item_id":"fc_search_1","output_index":1,"arguments":"{\"query\":\"Events\"}"}"#,
+        r#"data: {"type":"response.output_item.done","response_id":"resp_tools_1","output_index":1,"item":{"type":"function_call","id":"fc_search_1","call_id":"call_search_1","name":"search","arguments":"{\"query\":\"Events\"}"}}"#,
         r#"data: {"type":"response.completed","response":{"id":"resp_tools_1","status":"completed"}}"#,
         "data: [DONE]",
         "",
@@ -57,11 +59,11 @@ fn sse_final_answer_round() -> String {
     .join("\n")
 }
 
-#[tokio::test]
-async fn openai_tool_loop_hits_search_then_completes() {
-    let openai = MockServer::start().await;
-    let latticed = MockServer::start().await;
-
+async fn run_tool_loop_against(
+    openai: &MockServer,
+    latticed: &MockServer,
+    run_id: &str,
+) -> Vec<AgentEvent> {
     Mock::given(method("POST"))
         .and(path("/v1/responses"))
         .respond_with(ResponsesSequence {
@@ -70,7 +72,7 @@ async fn openai_tool_loop_hits_search_then_completes() {
             second: sse_final_answer_round(),
         })
         .expect(2)
-        .mount(&openai)
+        .mount(openai)
         .await;
 
     Mock::given(method("POST"))
@@ -83,17 +85,16 @@ async fn openai_tool_loop_hits_search_then_completes() {
                 })),
         )
         .expect(1)
-        .mount(&latticed)
+        .mount(latticed)
         .await;
 
     let lattice = LatticeToolClient::new(latticed.uri(), "test-token").expect("client");
-
     let (tx, mut rx) = tokio::sync::mpsc::channel(64);
     emit_openai_run(
         OpenaiRunOptions {
-            run_id: "r-oai-tools".into(),
-            thread_id: "t-oai-tools".into(),
-            model: "gpt-test".into(),
+            run_id: run_id.into(),
+            thread_id: format!("t-{run_id}"),
+            model: "gpt-5-nano".into(),
             prompt: "Search for Events".into(),
             api_key: "sk-test".into(),
             base_url: format!("{}/v1", openai.uri()),
@@ -117,6 +118,14 @@ async fn openai_tool_loop_hits_search_then_completes() {
             break;
         }
     }
+    events
+}
+
+#[tokio::test]
+async fn openai_tool_loop_hits_search_then_completes() {
+    let openai = MockServer::start().await;
+    let latticed = MockServer::start().await;
+    let events = run_tool_loop_against(&openai, &latticed, "r-oai-tools").await;
 
     assert!(matches!(
         events.first(),
@@ -176,4 +185,52 @@ async fn openai_tool_loop_hits_search_then_completes() {
         events.last(),
         Some(AgentEvent::RunCompleted { run_id }) if run_id == "r-oai-tools"
     ));
+}
+
+#[tokio::test]
+async fn openai_tool_continuation_uses_previous_response_id() {
+    let openai = MockServer::start().await;
+    let latticed = MockServer::start().await;
+    let events = run_tool_loop_against(&openai, &latticed, "r-oai-prev").await;
+    assert!(matches!(
+        events.last(),
+        Some(AgentEvent::RunCompleted { run_id }) if run_id == "r-oai-prev"
+    ));
+
+    let requests = openai
+        .received_requests()
+        .await
+        .expect("mock received requests");
+    assert_eq!(requests.len(), 2, "expected two Responses rounds");
+
+    let first: Value = serde_json::from_slice(&requests[0].body).expect("first body");
+    assert!(first.get("previous_response_id").is_none());
+    assert_eq!(
+        first.pointer("/input/0/role").and_then(|v| v.as_str()),
+        Some("user")
+    );
+
+    let second: Value = serde_json::from_slice(&requests[1].body).expect("second body");
+    assert_eq!(
+        second
+            .get("previous_response_id")
+            .and_then(|v| v.as_str()),
+        Some("resp_tools_1"),
+        "tool continuation must reference the prior response so reasoning items stay paired"
+    );
+    let input = second
+        .get("input")
+        .and_then(|v| v.as_array())
+        .expect("continuation input array");
+    assert!(
+        !input.is_empty()
+            && input.iter().all(|item| {
+                item.get("type").and_then(|t| t.as_str()) == Some("function_call_output")
+            }),
+        "continuation input must be function_call_output only, got {input:?}"
+    );
+    assert_eq!(
+        input[0].get("call_id").and_then(|v| v.as_str()),
+        Some("call_search_1")
+    );
 }

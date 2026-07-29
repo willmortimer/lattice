@@ -6,6 +6,10 @@
 //!
 //! When a Lattice HTTP client is configured, runs a thin tool loop (max 8
 //! rounds) using Responses function tools; otherwise streams text-only.
+//!
+//! Tool continuations use `previous_response_id` and send only
+//! `function_call_output` items. Re-sending bare `function_call` items without
+//! their paired `reasoning` items fails on gpt-5 / o-series models with HTTP 400.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -275,7 +279,11 @@ async fn run_tool_loop(
         WORKSPACE_AGENT_INSTRUCTIONS,
         tool_ctx.binding_instructions()
     );
+    // First round: user message. Later rounds: function_call_output only, with
+    // previous_response_id so the API keeps reasoning items that pair with
+    // function_call (required for gpt-5 / o-series reasoning models).
     let mut input: Vec<Value> = vec![json!({ "role": "user", "content": prompt })];
+    let mut previous_response_id: Option<String> = None;
 
     for round in 0..MAX_TOOL_ROUNDS {
         if cancel.load(Ordering::SeqCst) {
@@ -297,7 +305,7 @@ async fn run_tool_loop(
         )
         .await;
 
-        let body = json!({
+        let mut body = json!({
             "model": model,
             "instructions": instructions,
             "input": input,
@@ -305,6 +313,9 @@ async fn run_tool_loop(
             "tool_choice": "auto",
             "stream": true,
         });
+        if let Some(prev) = previous_response_id.as_ref() {
+            body["previous_response_id"] = json!(prev);
+        }
 
         let outcome =
             stream_tool_round(&client, &url, api_key, &body, run_id, cancel, events).await?;
@@ -318,17 +329,38 @@ async fn run_tool_loop(
         .await;
 
         match outcome {
-            StreamRoundOutcome::FinalAnswer => return Ok(()),
-            StreamRoundOutcome::ToolCalls { calls } => {
-                for call in &calls {
-                    input.push(json!({
-                        "type": "function_call",
-                        "id": call.id,
-                        "call_id": call.call_id,
-                        "name": call.name,
-                        "arguments": call.arguments,
-                    }));
+            StreamRoundOutcome::FinalAnswer { .. } => return Ok(()),
+            StreamRoundOutcome::ToolCalls {
+                response_id,
+                calls,
+                echoed_items,
+            } => {
+                if let Some(id) = response_id {
+                    previous_response_id = Some(id);
                 }
+
+                // When previous_response_id is available, only send tool outputs
+                // on the next turn. Otherwise echo reasoning + function_call
+                // items so reasoning models still accept the continuation.
+                let mut next_input = Vec::new();
+                if previous_response_id.is_none() {
+                    next_input.extend(echoed_items);
+                    let has_function_call = next_input.iter().any(|item| {
+                        item.get("type").and_then(|t| t.as_str()) == Some("function_call")
+                    });
+                    if !has_function_call {
+                        for call in &calls {
+                            next_input.push(json!({
+                                "type": "function_call",
+                                "id": call.id,
+                                "call_id": call.call_id,
+                                "name": call.name,
+                                "arguments": call.arguments,
+                            }));
+                        }
+                    }
+                }
+
                 for (tool_idx, call) in calls.iter().enumerate() {
                     if cancel.load(Ordering::SeqCst) {
                         return Err(ResponsesError::Cancelled);
@@ -351,12 +383,13 @@ async fn run_tool_loop(
                         events,
                     )
                     .await;
-                    input.push(json!({
+                    next_input.push(json!({
                         "type": "function_call_output",
                         "call_id": call.call_id,
                         "output": content,
                     }));
                 }
+                input = next_input;
             }
         }
     }
@@ -374,9 +407,16 @@ struct AccumulatedFunctionCall {
 
 #[derive(Debug)]
 enum StreamRoundOutcome {
-    FinalAnswer,
+    FinalAnswer {
+        #[allow(dead_code)]
+        response_id: Option<String>,
+    },
     ToolCalls {
+        response_id: Option<String>,
         calls: Vec<AccumulatedFunctionCall>,
+        /// Reasoning + function_call items in output order (fallback when
+        /// `previous_response_id` is unavailable).
+        echoed_items: Vec<Value>,
     },
 }
 
@@ -475,6 +515,9 @@ async fn stream_tool_round(
     let mut by_index: HashMap<usize, FunctionCallBuilder> = HashMap::new();
     let mut by_item_id: HashMap<String, usize> = HashMap::new();
     let mut ordered_indices: Vec<usize> = Vec::new();
+    let mut response_id: Option<String> = None;
+    let mut echoed_by_index: HashMap<usize, Value> = HashMap::new();
+    let mut echoed_order: Vec<usize> = Vec::new();
 
     loop {
         if cancel.load(Ordering::SeqCst) {
@@ -511,6 +554,9 @@ async fn stream_tool_round(
                         &mut by_index,
                         &mut by_item_id,
                         &mut ordered_indices,
+                        &mut response_id,
+                        &mut echoed_by_index,
+                        &mut echoed_order,
                     )
                     .await?
                     {
@@ -534,6 +580,9 @@ async fn stream_tool_round(
             &mut by_index,
             &mut by_item_id,
             &mut ordered_indices,
+            &mut response_id,
+            &mut echoed_by_index,
+            &mut echoed_order,
         )
         .await?
         {
@@ -558,20 +607,54 @@ async fn stream_tool_round(
         }
     }
 
+    let echoed_items: Vec<Value> = echoed_order
+        .into_iter()
+        .filter_map(|idx| echoed_by_index.remove(&idx))
+        .collect();
+
     if !calls.is_empty() {
         // Do not emit a partial text trail when the model chose tools.
-        return Ok(StreamRoundOutcome::ToolCalls { calls });
+        return Ok(StreamRoundOutcome::ToolCalls {
+            response_id,
+            calls,
+            echoed_items,
+        });
     }
 
     mapper.finish(events).await?;
 
     if saw_completed {
-        Ok(StreamRoundOutcome::FinalAnswer)
+        Ok(StreamRoundOutcome::FinalAnswer { response_id })
     } else if cancel.load(Ordering::SeqCst) {
         Err(ResponsesError::Cancelled)
     } else {
         Err(ResponsesError::Incomplete)
     }
+}
+
+fn capture_response_id(value: &Value, response_id: &mut Option<String>) {
+    if response_id.is_some() {
+        return;
+    }
+    if let Some(id) = value
+        .pointer("/response/id")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+    {
+        *response_id = Some(id.to_string());
+    }
+}
+
+fn remember_echoed_item(
+    echoed_by_index: &mut HashMap<usize, Value>,
+    echoed_order: &mut Vec<usize>,
+    output_index: usize,
+    item: Value,
+) {
+    if !echoed_order.contains(&output_index) {
+        echoed_order.push(output_index);
+    }
+    echoed_by_index.insert(output_index, item);
 }
 
 async fn handle_tool_sse_line(
@@ -581,6 +664,9 @@ async fn handle_tool_sse_line(
     by_index: &mut HashMap<usize, FunctionCallBuilder>,
     by_item_id: &mut HashMap<String, usize>,
     ordered_indices: &mut Vec<usize>,
+    response_id: &mut Option<String>,
+    echoed_by_index: &mut HashMap<usize, Value>,
+    echoed_order: &mut Vec<usize>,
 ) -> Result<Option<StreamOutcome>, ResponsesError> {
     let trimmed = line.trim();
     if trimmed.is_empty() || trimmed.starts_with(':') {
@@ -611,17 +697,38 @@ async fn handle_tool_sse_line(
     };
 
     match event_type {
+        "response.created" | "response.in_progress" => {
+            capture_response_id(&value, response_id);
+            Ok(None)
+        }
         "response.output_item.added" | "response.output_item.done" => {
+            capture_response_id(&value, response_id);
             let item = value.get("item").cloned().unwrap_or(Value::Null);
-            if item.get("type").and_then(|v| v.as_str()) == Some("function_call") {
-                let output_index = value
-                    .get("output_index")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0) as usize;
-                if !ordered_indices.contains(&output_index) {
-                    ordered_indices.push(output_index);
+            let item_type = item.get("type").and_then(|v| v.as_str()).unwrap_or("");
+            let output_index = value
+                .get("output_index")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as usize;
+            match item_type {
+                "function_call" => {
+                    if !ordered_indices.contains(&output_index) {
+                        ordered_indices.push(output_index);
+                    }
+                    apply_function_call_item(by_index, by_item_id, output_index, &item);
+                    // Prefer the completed item payload when available.
+                    if event_type == "response.output_item.done" {
+                        remember_echoed_item(echoed_by_index, echoed_order, output_index, item);
+                    }
                 }
-                apply_function_call_item(by_index, by_item_id, output_index, &item);
+                "reasoning" => {
+                    // Reasoning models emit rs_* items that must precede their
+                    // paired function_call when previous_response_id is absent.
+                    if event_type == "response.output_item.done" || !echoed_by_index.contains_key(&output_index)
+                    {
+                        remember_echoed_item(echoed_by_index, echoed_order, output_index, item);
+                    }
+                }
+                _ => {}
             }
             Ok(None)
         }
@@ -678,6 +785,9 @@ async fn handle_tool_sse_line(
         | "response.completed"
         | "response.failed"
         | "error" => {
+            if event_type == "response.completed" {
+                capture_response_id(&value, response_id);
+            }
             // Only stream assistant text when this round is not assembling tools.
             if by_index.is_empty() {
                 mapper.apply(&value, events).await
