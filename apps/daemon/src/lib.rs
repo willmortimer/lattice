@@ -9,6 +9,7 @@
 
 mod agent;
 mod api;
+mod cloud_relay;
 mod config;
 mod dataset_api;
 mod embed_host;
@@ -48,6 +49,7 @@ pub use config::{
     default_run_dir, default_socket_path, DaemonConfig, DEFAULT_API_PORT,
     DEFAULT_IDLE_SHUTDOWN_TIMEOUT,
 };
+pub use cloud_relay::{spawn_cloud_relay, CloudRelayConfig};
 pub use embed_host::{
     resolve_embed_host_bin, ProviderIdentity, SemanticController, SemanticProviderMode,
     ENV_EMBED_HOST_BACKEND, ENV_EMBED_HOST_BIN, ENV_EMBED_HOST_SOCKET, ENV_SEMANTIC_FAKE,
