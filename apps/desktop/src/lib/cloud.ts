@@ -23,6 +23,10 @@ export async function cloudSignIn(email: string, password: string): Promise<Clou
   return invoke<CloudSessionStatus>("cloud_sign_in", { email, password });
 }
 
+export async function cloudSignInApple(): Promise<CloudSessionStatus> {
+  return invoke<CloudSessionStatus>("cloud_sign_in_apple");
+}
+
 export async function cloudSignOut(): Promise<CloudSessionStatus> {
   return invoke<CloudSessionStatus>("cloud_sign_out");
 }

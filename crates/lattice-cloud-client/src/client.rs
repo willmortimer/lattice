@@ -172,6 +172,21 @@ impl<C: CloudHttpClient> CloudApiClient<C> {
         self.post_json("/v1/auth/password/login", Some(&body), None)
     }
 
+    /// Native or web Sign in with Apple identity token → lattice-server session.
+    pub fn apple_oauth(
+        &self,
+        id_token: &str,
+        nonce: Option<&str>,
+        user: Option<&str>,
+    ) -> Result<AuthTokenResponse> {
+        let body = serde_json::json!({
+            "id_token": id_token,
+            "nonce": nonce,
+            "user": user,
+        });
+        self.post_json("/v1/auth/oauth/apple", Some(&body), None)
+    }
+
     pub fn password_register(
         &self,
         email: &str,

@@ -1,0 +1,138 @@
+//! Build glue for Sign in with Apple Swift bridge.
+
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+fn main() {
+    println!("cargo::rustc-check-cfg=cfg(link_bridge)");
+    println!("cargo:rerun-if-env-changed=LATTICE_APPLE_SIGNIN_BRIDGE_LIB");
+    println!("cargo:rerun-if-changed=swift/Package.swift");
+    println!("cargo:rerun-if-changed=include/lattice_apple_signin_bridge.h");
+
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    if target_os != "macos" {
+        return;
+    }
+
+    if !should_link_bridge() {
+        println!(
+            "cargo:warning=LatticeAppleSignInBridge not linked (enable `link-bridge` feature)"
+        );
+        return;
+    }
+
+    let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let swift_dir = manifest_dir.join("swift");
+    let default_products = [
+        swift_dir.join(".build/arm64-apple-macosx/release"),
+        swift_dir.join(".build/release"),
+        swift_dir.join(".build/x86_64-apple-macosx/release"),
+    ];
+
+    for products in &default_products {
+        if let Some(lib_dir) = resolve_lib_dir(products) {
+            emit_link(&lib_dir);
+            return;
+        }
+    }
+
+    if try_swift_build(&swift_dir) {
+        for products in &default_products {
+            if let Some(lib_dir) = resolve_lib_dir(products) {
+                emit_link(&lib_dir);
+                return;
+            }
+        }
+    }
+
+    println!(
+        "cargo:warning=LatticeAppleSignInBridge not linked. Build with: \
+         cd crates/lattice-apple-signin-macos/swift && swift build -c release"
+    );
+}
+
+fn resolve_lib_dir(default_products: &Path) -> Option<PathBuf> {
+    if let Ok(lib_dir) = std::env::var("LATTICE_APPLE_SIGNIN_BRIDGE_LIB") {
+        if !lib_dir.is_empty() && dylib_exists(Path::new(&lib_dir)) {
+            return Some(PathBuf::from(lib_dir));
+        }
+    }
+    if dylib_exists(default_products) {
+        return Some(default_products.to_path_buf());
+    }
+    None
+}
+
+fn dylib_exists(dir: &Path) -> bool {
+    dir.join("libLatticeAppleSignInBridge.dylib").is_file()
+}
+
+fn should_link_bridge() -> bool {
+    std::env::var("CARGO_FEATURE_LINK_BRIDGE").is_ok()
+}
+
+fn emit_link(lib_dir: &Path) {
+    let lib_dir = lib_dir
+        .canonicalize()
+        .unwrap_or_else(|_| lib_dir.to_path_buf());
+    let dylib = lib_dir.join("libLatticeAppleSignInBridge.dylib");
+
+    if let Some(profile_dir) = profile_target_dir() {
+        let dest = profile_dir.join("libLatticeAppleSignInBridge.dylib");
+        let _ = std::fs::copy(&dylib, &dest);
+        let deps = profile_dir
+            .join("deps")
+            .join("libLatticeAppleSignInBridge.dylib");
+        let _ = std::fs::copy(&dylib, deps);
+    }
+
+    println!("cargo:rustc-cfg=link_bridge");
+    println!("cargo:rustc-link-search=native={}", lib_dir.display());
+    println!("cargo:rustc-link-lib=dylib=LatticeAppleSignInBridge");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib_dir.display());
+    println!(
+        "cargo:warning=Linking LatticeAppleSignInBridge from {}",
+        lib_dir.display()
+    );
+}
+
+fn profile_target_dir() -> Option<PathBuf> {
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").ok()?);
+    let profile = std::env::var("PROFILE").unwrap_or_else(|_| "debug".into());
+    let mut dir = out_dir;
+    while let Some(parent) = dir.parent() {
+        if dir.file_name().is_some_and(|name| name == profile.as_str()) {
+            return Some(dir);
+        }
+        dir = parent.to_path_buf();
+    }
+    None
+}
+
+fn try_swift_build(swift_dir: &Path) -> bool {
+    if !swift_dir.join("Package.swift").is_file() {
+        return false;
+    }
+    let swift = if Path::new("/usr/bin/swift").is_file() {
+        "/usr/bin/swift"
+    } else {
+        "swift"
+    };
+    let mut command = Command::new(swift);
+    command
+        .arg("build")
+        .arg("-c")
+        .arg("release")
+        .current_dir(swift_dir);
+    if Path::new("/Applications/Xcode.app/Contents/Developer").is_dir() {
+        command.env(
+            "DEVELOPER_DIR",
+            "/Applications/Xcode.app/Contents/Developer",
+        );
+        command.env(
+            "SDKROOT",
+            "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
+        );
+    }
+    matches!(command.status(), Ok(status) if status.success())
+}

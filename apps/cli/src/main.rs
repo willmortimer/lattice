@@ -31,6 +31,7 @@ use latticefs_core::{
 };
 use lattice_cloud_client::{
     default_client, CloudSessionStore, HttpCloudBlobClient, KeychainCloudSessionStore,
+    resolve_cloud_bearer,
 };
 use lattice_publish::{export as publish_export, ExportTarget};
 use lattice_storage::{NativeWorkspaceStore, RecoveryJournal, WorkspaceStore};
@@ -2504,12 +2505,7 @@ fn cmd_cloud_blob_roundtrip(
         .with_context(|| format!("read {}", file_path.display()))?;
 
     let store = KeychainCloudSessionStore::new();
-    let token = store
-        .load_token()
-        .map_err(|err| anyhow::anyhow!("load cloud session: {err}"))?
-        .ok_or_else(|| {
-            anyhow::anyhow!("not signed in to cloud; sign in via desktop Settings → Cloud account")
-        })?;
+    let token = resolve_cloud_bearer(&store).map_err(|err| anyhow::anyhow!("{err}"))?;
 
     let api = default_client();
     let blob_client = HttpCloudBlobClient::new(api, token);
@@ -2532,12 +2528,7 @@ fn cmd_cloud_blob_open(target: PathBuf, path: Option<PathBuf>) -> Result<ExitCod
     let rel_key = rel.to_string_lossy().replace('\\', "/");
 
     let store = KeychainCloudSessionStore::new();
-    let token = store
-        .load_token()
-        .map_err(|err| anyhow::anyhow!("load cloud session: {err}"))?
-        .ok_or_else(|| {
-            anyhow::anyhow!("not signed in to cloud; sign in via desktop Settings → Cloud account")
-        })?;
+    let token = resolve_cloud_bearer(&store).map_err(|err| anyhow::anyhow!("{err}"))?;
 
     let api = default_client();
     let blob_client = HttpCloudBlobClient::new(api, token);

@@ -12,10 +12,11 @@ pub use client::{
     BlobPutResponse, CloudApiClient, CloudHttpBytesResponse, CloudHttpClient, CloudHttpResponse,
     DefaultCloudApiClient, HttpCloudClient, default_client,
 };
-pub use config::{DEFAULT_CLOUD_URL, cloud_url};
+pub use config::{CLOUD_TOKEN_ENV, DEFAULT_CLOUD_URL, cloud_token_from_env, cloud_url};
 pub use error::{CloudError, Result};
 pub use session::{
     CLOUD_TOKEN_SERVICE, CLOUD_USER_TOKEN_KEY, CloudSessionStore, KeychainCloudSessionStore,
-    MemoryCloudSessionStore, cloud_session_status, resolved_cloud_url, sign_in, sign_out,
+    MemoryCloudSessionStore, cloud_session_status, resolve_cloud_bearer, resolved_cloud_url,
+    sign_in, sign_in_with_apple, sign_out,
 };
 pub use types::{AuthTokenResponse, CloudSessionStatus, CloudUser, MeResponse};

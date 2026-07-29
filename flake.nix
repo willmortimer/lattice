@@ -270,6 +270,11 @@
               cargo build --release -p lattice-daemon --bin latticed
               cargo build --release -p lattice-agentd --bin lattice-agentd
               cargo build --release -p lattice-agentd --bin lattice-wasi-seatbelt
+              # Align llama-cpp cmake with Nix apple-sdk (avoids MTLResidencySetDescriptor
+              # link failures when cmake picks Xcode 26.x headers).
+              # Runtime path relative to repo cwd; not a writeShellApplication input.
+              # shellcheck disable=SC1091
+              . scripts/macos/llama-cpp-nix-sdk.sh
               cargo build --release -p lattice-embed-host --bin lattice-embed-host --features llama-cpp
               cargo build --release -p lattice-voice-host --bin lattice-voice-host --features fluidaudio || \
                 cargo build --release -p lattice-voice-host --bin lattice-voice-host
@@ -311,7 +316,7 @@
 
               # Swift bridges use @loader_path; copy dylibs next to the Mach-O in the bundle.
               macos_dir="$app_src/Contents/MacOS"
-              for dylib in libLatticeVoiceBridge.dylib libLatticeAudioBridge.dylib libLatticeApprovalBridge.dylib; do
+              for dylib in libLatticeVoiceBridge.dylib libLatticeAudioBridge.dylib libLatticeApprovalBridge.dylib libLatticeAppleSignInBridge.dylib; do
                 src="target/release/$dylib"
                 if [ -f "$src" ]; then
                   cp -f "$src" "$macos_dir/$dylib"
@@ -344,17 +349,15 @@
               done
 
               # Ensure the identity we expect is on the bundle (Tauri may already have signed).
-              # Match desktop-release: hardened runtime + Entitlements.plist (App Group, etc.).
-              entitlements="$PWD/apps/desktop/src-tauri/Entitlements.plist"
-              if [ ! -f "$entitlements" ]; then
-                echo "desktop-install: missing entitlements: $entitlements" >&2
-                exit 1
-              fi
-              if ! codesign --force --deep --options runtime --timestamp \
-                --entitlements "$entitlements" \
-                --sign "$APPLE_SIGNING_IDENTITY" "$app_src"; then
-                echo "desktop-install: codesign failed for identity: $APPLE_SIGNING_IDENTITY" >&2
-                exit 1
+              # Match desktop-release: per-binary hardened runtime + entitlements, then
+              # notarize + staple. Re-signing after Tauri's notarize invalidates the ticket;
+              # Gatekeeper then SIGKILLs CLI/Finder launches (spctl: Unnotarized Developer ID).
+              bash scripts/release/codesign-app.sh
+              if [ -n "''${APPLE_ID:-}" ] && [ -n "''${APPLE_PASSWORD:-}" ] && [ -n "''${APPLE_TEAM_ID:-}" ]; then
+                bash scripts/release/notarize-app.sh
+                bash scripts/release/staple-app.sh
+              else
+                echo "desktop-install: warning: APPLE_ID/PASSWORD/TEAM_ID unset — skipping notarize; Gatekeeper may kill the app" >&2
               fi
 
               dest="''${LATTICE_INSTALL_DIR:-/Applications}/Lattice.app"
@@ -362,7 +365,12 @@
               rm -rf "$dest"
               ditto "$app_src" "$dest"
               codesign -dv --verbose=2 "$dest" || true
+              if command -v spctl >/dev/null 2>&1; then
+                spctl --assess --verbose=4 --type execute "$dest" || true
+              fi
               echo "desktop-install: done. Open with: open \"$dest\""
+              echo "desktop-install: for OpenAI agent env, do not use Finder/open alone — from ecosystem root:"
+              echo "  ./scripts/exec-for-dev.sh -- \"$dest/Contents/MacOS/lattice-desktop\""
             '';
             # Distribution DAG leaves live under scripts/release/.
             # `nxr task desktop-release` orchestrates; apple-release context only on sign/notary.

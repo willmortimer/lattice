@@ -24,6 +24,7 @@ import { enableAppLock, getAppLockStatus, type AppLockStatus } from "../lib/appL
 import { getVoiceStatus, listenVoiceEvents, prepareVoiceModel, type VoiceStatus } from "../lib/voice";
 import {
   cloudSignIn,
+  cloudSignInApple,
   cloudSignOut,
   getCloudSessionStatus,
   type CloudSessionStatus,
@@ -1090,6 +1091,22 @@ function CloudAccountSettings() {
     }
   }
 
+  async function handleAppleSignIn() {
+    if (inBrowser) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await cloudSignInApple();
+      setStatus(next);
+      if (next.user?.email) setEmail(next.user.email);
+      if (next.error) setError(next.error);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleSignOut() {
     if (inBrowser) return;
     setBusy(true);
@@ -1137,6 +1154,11 @@ function CloudAccountSettings() {
           </SettingRow>
           {!status?.signedIn ? (
             <>
+              <SettingRow title="Apple" description="Same Sign in with Apple account as the web app.">
+                <Button size="sm" disabled={busy} onClick={() => void handleAppleSignIn()}>
+                  {busy ? "Signing in…" : "Sign in with Apple"}
+                </Button>
+              </SettingRow>
               <SettingRow title="Email" description="Account email for password login.">
                 <input
                   type="email"
@@ -1160,7 +1182,7 @@ function CloudAccountSettings() {
                 disabled={busy || !email.trim() || !password}
                 onClick={() => void handleSignIn()}
               >
-                {busy ? "Signing in…" : "Sign in"}
+                {busy ? "Signing in…" : "Sign in with password"}
               </Button>
             </>
           ) : (

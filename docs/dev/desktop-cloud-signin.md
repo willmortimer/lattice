@@ -8,12 +8,13 @@ the opaque token in the OS keychain (`lattice.cloud` / `lattice.cloud.user`).
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `LATTICE_CLOUD_URL` | `https://cloud.lattice-notes.com` | lattice-server origin (no trailing slash) |
+| `LATTICE_CLOUD_TOKEN` | _(unset)_ | CLI escape hatch bearer when keychain ACL blocks unsigned tools |
 
 Contract: desktop uses API bearer auth (ADR 0067); browser uses Next cookie BFF.
 
 ## Settings UI
 
-Settings → **Cloud account**: email/password sign-in, sign-out, and session status.
+Settings → **Cloud account**: Sign in with Apple (native), email/password, sign-out, and session status.
 Rust owns HTTP (`lattice-cloud-client`); React invokes Tauri commands only.
 
 ## Manual smoke (live VPS)

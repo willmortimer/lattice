@@ -9,6 +9,7 @@
 //! compatibility. Prefer the `*_with_runtime` / `*_with_session` variants when
 //! the host already holds an explicit runtime handle.
 
+mod authoritative;
 mod cloud;
 mod error;
 mod github;
@@ -20,7 +21,8 @@ mod path;
 mod search;
 mod workspace;
 
-pub use cloud::{cloud_session_status_cmd, cloud_sign_in, cloud_sign_out};
+pub use authoritative::{read_authoritative_bytes, read_authoritative_string};
+pub use cloud::{cloud_session_status_cmd, cloud_sign_in, cloud_sign_in_apple, cloud_sign_out};
 pub use error::{command_error_to_string, STALE_REVISION_PREFIX};
 pub use github::{
     github_connect_repo, github_disconnect_repo, github_list_bindings, github_list_checkout_tree,

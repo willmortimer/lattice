@@ -13,6 +13,11 @@ pub fn cloud_sign_in(email: String, password: String) -> Result<CloudSessionStat
 }
 
 #[tauri::command]
+pub fn cloud_sign_in_apple() -> Result<CloudSessionStatus, String> {
+    lattice_handlers::cloud_sign_in_apple()
+}
+
+#[tauri::command]
 pub fn cloud_sign_out() -> Result<CloudSessionStatus, String> {
     lattice_handlers::cloud_sign_out()
 }

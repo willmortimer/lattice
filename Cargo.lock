@@ -5756,6 +5756,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-apple-signin-macos"
+version = "0.1.0"
+
+[[package]]
 name = "lattice-approval-macos"
 version = "0.1.0"
 
@@ -6007,6 +6011,7 @@ dependencies = [
  "bytes",
  "dirs 6.0.0",
  "hex",
+ "lattice-apple-signin-macos",
  "lattice-approval-macos",
  "lattice-arrow-transport",
  "lattice-audio",
@@ -6126,6 +6131,9 @@ dependencies = [
 name = "lattice-handlers"
 version = "0.1.0"
 dependencies = [
+ "getrandom 0.3.4",
+ "hex",
+ "lattice-apple-signin-macos",
  "lattice-cloud-client",
  "lattice-commands",
  "lattice-connectors",
@@ -6134,6 +6142,7 @@ dependencies = [
  "lattice-index",
  "lattice-runtime",
  "lattice-storage",
+ "latticefs-core",
  "serde",
  "serde_json",
  "serde_yaml",

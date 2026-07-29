@@ -333,6 +333,7 @@ pub fn run() {
             app_lock::app_lock_enable,
             cloud::cloud_session_status,
             cloud::cloud_sign_in,
+            cloud::cloud_sign_in_apple,
             cloud::cloud_sign_out,
             spotlight::spotlight_index_workspace,
         ]))

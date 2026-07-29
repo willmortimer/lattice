@@ -103,6 +103,7 @@ objc2-foundation = { version = "0.3", features = [
 objc2-local-authentication = "0.3"
 objc2-app-kit = { version = "0.3", features = ["NSWorkspace"] }
 lattice-approval-macos = { workspace = true, features = ["link-bridge"] }
+lattice-apple-signin-macos = { workspace = true, features = ["link-bridge"] }
 
 [dev-dependencies]
 tempfile = "3"

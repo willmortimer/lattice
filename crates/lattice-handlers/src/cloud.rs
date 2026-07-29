@@ -5,7 +5,7 @@ use std::sync::OnceLock;
 use lattice_cloud_client::{
     CloudApiClient, CloudSessionStatus, CloudSessionStore, HttpCloudClient,
     KeychainCloudSessionStore, MemoryCloudSessionStore, cloud_session_status, default_client,
-    sign_in, sign_out,
+    sign_in, sign_in_with_apple, sign_out,
 };
 
 fn session_store() -> &'static dyn CloudSessionStore {
@@ -50,6 +50,33 @@ pub fn cloud_sign_in(email: String, password: String) -> Result<CloudSessionStat
         &password,
     )
     .map_err(map_err)
+}
+
+/// Native Sign in with Apple: obtain identity token on macOS, then mint a bearer session.
+pub fn cloud_sign_in_apple() -> Result<CloudSessionStatus, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let nonce = random_nonce();
+        let id_token = lattice_apple_signin_macos::request_identity_token(Some(&nonce))?;
+        return sign_in_with_apple(
+            &api_client(),
+            session_store(),
+            &id_token,
+            Some(&nonce),
+            None,
+        )
+        .map_err(map_err);
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("Sign in with Apple is only available on macOS".into())
+    }
+}
+
+fn random_nonce() -> String {
+    let mut bytes = [0u8; 16];
+    getrandom::fill(&mut bytes).expect("CSPRNG for SIWA nonce");
+    format!("lattice-desktop-{}", hex::encode(bytes))
 }
 
 pub fn cloud_sign_out() -> Result<CloudSessionStatus, String> {
@@ -100,6 +127,20 @@ mod tests {
                 return Ok(response);
             }
             Err(CloudError::Http(format!("no fake response for {key}")))
+        }
+
+        fn request_bytes(
+            &self,
+            _base_url: &str,
+            method: &str,
+            path: &str,
+            _body: Option<&[u8]>,
+            _bearer: Option<&str>,
+            _headers: &[(&str, &str)],
+        ) -> Result<lattice_cloud_client::CloudHttpBytesResponse, CloudError> {
+            Err(CloudError::Http(format!(
+                "no fake bytes response for {method} {path}"
+            )))
         }
     }
 

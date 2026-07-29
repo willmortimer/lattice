@@ -24,6 +24,23 @@
 | Quick Look appex sources + scripted build | `apps/desktop/macos/LatticeQuickLook/` + `scripts/macos/build-quicklook-appex.sh` → embedded by `assemble-app` / `desktop-install` |
 | SE approval CryptoKit bridge | `crates/lattice-approval-macos` (`libLatticeApprovalBridge.dylib`) wired into `ApprovalSigner` |
 
+## Developer ID launch killers (AMFI SIGKILL)
+
+Binary-search under Developer ID + hardened runtime (empty/JIT/app-group
+alive; these die with exit 137 / Gatekeeper posix 163):
+
+| Entitlement | Ship now? |
+| --- | --- |
+| `com.apple.security.cs.allow-jit` / `allow-unsigned-executable-memory` | Yes (WKWebView) |
+| `com.apple.security.application-groups` → `group.dev.lattice.shared` | Yes |
+| `com.apple.developer.applesignin` | **Yes** (Mac App ID SIWA enabled; keep APS/domains/keychain groups off) |
+| `keychain-access-groups` | **No** — kills launch; default SecItem/keyring still works; CLI uses `LATTICE_CLOUD_TOKEN` |
+| `com.apple.developer.associated-domains` | **No** until App ID + notarized re-verify |
+| `aps-environment` | **No** until App ID + notarized re-verify |
+
+Re-add restricted keys only after portal capabilities match and a signed
+build survives: direct binary launch for ≥3s, then `open -a Lattice`.
+
 ## App Store Connect API
 
 Notarization secrets (`APPLE_ID` / app-specific password / team id) are **not**

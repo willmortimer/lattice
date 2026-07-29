@@ -1,6 +1,8 @@
-//! Cloud API base URL resolution.
+//! Cloud API base URL + bearer env resolution.
 
 pub const DEFAULT_CLOUD_URL: &str = "https://cloud.lattice-notes.com";
+/// Escape hatch for CLI / smoke when keychain ACL blocks unsigned tools.
+pub const CLOUD_TOKEN_ENV: &str = "LATTICE_CLOUD_TOKEN";
 
 /// Compile-time channel default (internal DMG); falls back to [`DEFAULT_CLOUD_URL`].
 fn compiled_default_cloud_url() -> &'static str {
@@ -18,6 +20,14 @@ pub fn cloud_url() -> String {
         .to_string()
 }
 
+/// Non-empty `LATTICE_CLOUD_TOKEN` when set (not written to keychain).
+pub fn cloud_token_from_env() -> Option<String> {
+    std::env::var(CLOUD_TOKEN_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -32,6 +42,18 @@ mod tests {
     fn trims_trailing_slash() {
         let _guard = EnvGuard::set("LATTICE_CLOUD_URL", "https://example.com/");
         assert_eq!(cloud_url(), "https://example.com");
+    }
+
+    #[test]
+    fn cloud_token_from_env_reads_nonempty() {
+        let _guard = EnvGuard::set(CLOUD_TOKEN_ENV, "  bearer-tok  ");
+        assert_eq!(cloud_token_from_env().as_deref(), Some("bearer-tok"));
+    }
+
+    #[test]
+    fn cloud_token_from_env_ignores_blank() {
+        let _guard = EnvGuard::set(CLOUD_TOKEN_ENV, "   ");
+        assert_eq!(cloud_token_from_env(), None);
     }
 
     struct EnvGuard {

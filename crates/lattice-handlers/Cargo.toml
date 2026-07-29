@@ -15,9 +15,15 @@ lattice-runtime.workspace = true
 lattice-embedding.workspace = true
 lattice-connectors.workspace = true
 lattice-cloud-client.workspace = true
+latticefs-core.workspace = true
 serde.workspace = true
 serde_yaml.workspace = true
+getrandom = "0.3"
+hex.workspace = true
 
 [dev-dependencies]
 tempfile = "3"
 serde_json.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+lattice-apple-signin-macos = { workspace = true }

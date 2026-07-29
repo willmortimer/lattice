@@ -37,8 +37,8 @@ pub fn list_resources(root: String) -> Result<Vec<lattice_core::Resource>, Strin
 /// `..` traversal and absolute-path escapes (including through symlinks).
 #[tauri::command]
 pub fn read_file(root: String, rel_path: String) -> Result<String, String> {
-    let (_, canonical_candidate) = resolve_within_root(&root, &rel_path)?;
-    std::fs::read_to_string(&canonical_candidate).map_err(|err| err.to_string())
+    let _ = resolve_within_root(&root, &rel_path)?;
+    lattice_handlers::read_authoritative_string(&root, &rel_path)
 }
 
 /// Read a binary resource through the same workspace containment check used
@@ -47,8 +47,8 @@ pub fn read_file(root: String, rel_path: String) -> Result<String, String> {
 /// asset protocol to the webview.
 #[tauri::command]
 pub fn read_binary_file(root: String, rel_path: String) -> Result<Vec<u8>, String> {
-    let (_, canonical_candidate) = resolve_within_root(&root, &rel_path)?;
-    std::fs::read(&canonical_candidate).map_err(|err| err.to_string())
+    let _ = resolve_within_root(&root, &rel_path)?;
+    lattice_handlers::read_authoritative_bytes(&root, &rel_path)
 }
 
 /// Inspect a native resource without mutating it. Format recognition is

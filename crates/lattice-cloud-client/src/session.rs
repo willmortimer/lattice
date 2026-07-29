@@ -134,6 +134,36 @@ pub fn sign_in<C: CloudHttpClient>(
     ))
 }
 
+/// Complete Sign in with Apple using a native (or web) identity token.
+pub fn sign_in_with_apple<C: CloudHttpClient>(
+    client: &CloudApiClient<C>,
+    store: &dyn CloudSessionStore,
+    id_token: &str,
+    nonce: Option<&str>,
+    user: Option<&str>,
+) -> Result<CloudSessionStatus> {
+    let response = client.apple_oauth(id_token, nonce, user)?;
+    store.save_token(&response.token)?;
+    Ok(CloudSessionStatus::signed_in(
+        client.base_url().to_string(),
+        response.user,
+    ))
+}
+
+/// Bearer for cloud API calls: `LATTICE_CLOUD_TOKEN` wins, else keychain/session store.
+pub fn resolve_cloud_bearer(store: &dyn CloudSessionStore) -> Result<String> {
+    if let Some(token) = crate::config::cloud_token_from_env() {
+        return Ok(token);
+    }
+    store.load_token()?.ok_or_else(|| {
+        CloudError::Credentials(
+            "not signed in to cloud; sign in via desktop Settings → Cloud account, \
+             or set LATTICE_CLOUD_TOKEN"
+                .into(),
+        )
+    })
+}
+
 pub fn sign_out<C: CloudHttpClient>(
     client: &CloudApiClient<C>,
     store: &dyn CloudSessionStore,

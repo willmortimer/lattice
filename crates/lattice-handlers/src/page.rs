@@ -17,8 +17,8 @@ pub struct PageContent {
 }
 
 pub fn read_page(root: String, rel_path: String) -> Result<PageContent, String> {
-    let (canonical_root, canonical_candidate) = resolve_within_root(&root, &rel_path)?;
-    let content = std::fs::read_to_string(&canonical_candidate).map_err(|err| err.to_string())?;
+    let (canonical_root, _) = resolve_within_root(&root, &rel_path)?;
+    let content = crate::read_authoritative_string(&root, &rel_path)?;
 
     let store = NativeWorkspaceStore::new(&canonical_root);
     let revision = store

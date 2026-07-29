@@ -1,0 +1,16 @@
+[package]
+name = "lattice-apple-signin-macos"
+description = "Sign in with Apple (AuthenticationServices) Swift bridge for Lattice desktop"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[features]
+default = []
+link-bridge = []
+
+[build-dependencies]
+
+[dependencies]

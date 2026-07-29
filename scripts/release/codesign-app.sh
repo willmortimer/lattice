@@ -20,6 +20,23 @@ fi
 echo "codesign-app: Developer ID, hardened runtime + entitlements → $app_src"
 echo "codesign-app: entitlements=$entitlements"
 
+# Nix-shell builds link libiconv from the store; rewrite before signing or
+# Gatekeeper SIGKILLs the notarized app (posix spawn 163).
+bash "$root/scripts/macos/rewrite-nix-libiconv.sh" "$app_src"
+
+# Sidecars/dylibs only need a non-sandboxed hardened-runtime baseline.
+sidecar_entitlements="$(mktemp -t lattice-sidecar-ents.XXXXXX.plist)"
+cleanup_ents() { rm -f "$sidecar_entitlements"; }
+trap cleanup_ents EXIT
+cat >"$sidecar_entitlements" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+</dict></plist>
+EOF
+
 sign_bin() {
   local path="$1"
   local ents="${2:-$entitlements}"
@@ -50,15 +67,20 @@ fi
 
 for path in "$macos_dir"/*; do
   if [ -f "$path" ] || [ -L "$path" ]; then
-    sign_bin "$path"
+    base="$(basename "$path")"
+    if [ "$base" = "lattice-desktop" ]; then
+      sign_bin "$path" "$entitlements"
+    else
+      sign_bin "$path" "$sidecar_entitlements"
+    fi
   fi
 done
 if [ -d "$app_src/Contents/Frameworks" ]; then
   find "$app_src/Contents/Frameworks" -type f \( -perm -111 -o -name '*.dylib' -o -name '*.so' \) -print0 |
     while IFS= read -r -d '' path; do
-      sign_bin "$path"
+      sign_bin "$path" "$sidecar_entitlements"
     done
 fi
-sign_bin "$app_src"
+sign_bin "$app_src" "$entitlements"
 codesign --verify --deep --strict --verbose=2 "$app_src"
 echo "codesign-app: ok"
