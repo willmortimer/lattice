@@ -14,7 +14,10 @@ use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
 fn copy_hello_wasm() -> &'static [u8] {
-    include_bytes!("../../kernelfs/fixtures/copy_hello.wasm")
+    include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../../kernelfs/crates/kernelfs/fixtures/copy_hello.wasm"
+))
 }
 
 fn ensure_seatbelt_runner() {

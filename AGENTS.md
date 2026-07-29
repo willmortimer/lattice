@@ -26,6 +26,11 @@ Node runtime) before changing boundaries. **Shipped path:** Rust
 `crates/lattice-agentd`. `apps/agentd` (Node) is retained for reference only
 and is not packaged.
 
+KernelFS (WASI materialize / run / output bridge) is **private**:
+`willmortimer/kernelfs`, checked out as sibling `../kernelfs` in the ecosystem
+umbrella (or cloned by CI with `KERNELFS_READ_TOKEN`). Do not re-add a public
+`crates/kernelfs` copy.
+
 Use the ADRs in `docs/decisions/` for accepted decisions. New irreversible
 choices should receive an ADR rather than silently becoming implementation
 facts.

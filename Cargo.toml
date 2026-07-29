@@ -35,7 +35,6 @@ members = [
     "crates/lattice-cloud-client",
     "crates/lattice-approval-macos",
     "crates/lattice-agentd",
-    "crates/kernelfs",
     "apps/desktop/src-tauri",
 ]
 
@@ -76,7 +75,7 @@ lattice-client = { path = "crates/lattice-client" }
 lattice-connectors = { path = "crates/lattice-connectors" }
 lattice-cloud-client = { path = "crates/lattice-cloud-client" }
 lattice-approval-macos = { path = "crates/lattice-approval-macos" }
-kernelfs = { path = "crates/kernelfs" }
+kernelfs = { path = "../kernelfs/crates/kernelfs" }
 lattice-daemon = { path = "apps/daemon" }
 prost = "0.14"
 prost-build = "0.14"

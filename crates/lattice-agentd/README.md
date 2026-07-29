@@ -87,8 +87,9 @@ the run dir, runs `_start`, collects proposal drafts, and pushes each draft via
 they are not exposed inside the guest.
 
 Convention: place guest modules under **`Tools/guests/`** in the First Look
-workspace (for example `Tools/guests/copy_hello.wasm`, the kernelfs
-`copy_hello` fixture that copies `/input/hello.txt` → `/output/out.txt`).
+workspace (for example `Tools/guests/copy_hello.wasm`, matching the private
+`kernelfs` `copy_hello` fixture that copies `/input/hello.txt` →
+`/output/out.txt`).
 
 Pioneer exposes this path as the `run_wasi_guest` tool when `workspaceRoot` is
 bound on `start_run`:
