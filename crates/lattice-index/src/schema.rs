@@ -3,7 +3,7 @@ use rusqlite::Connection;
 use crate::error::Result;
 
 pub(crate) const INDEX_FILENAME: &str = "index.sqlite";
-pub(crate) const SCHEMA_VERSION: i64 = 6;
+pub(crate) const SCHEMA_VERSION: i64 = 7;
 
 pub(crate) fn init_schema(conn: &Connection) -> Result<()> {
     conn.execute_batch(
@@ -113,16 +113,6 @@ pub(crate) fn init_schema(conn: &Connection) -> Result<()> {
         );
         CREATE INDEX IF NOT EXISTS chunk_embedding_state_namespace_idx
             ON chunk_embedding_state(namespace_id);
-        CREATE TABLE IF NOT EXISTS chunk_vectors (
-            namespace_id INTEGER NOT NULL
-                          REFERENCES embedding_namespaces(id) ON DELETE CASCADE,
-            chunk_id    TEXT NOT NULL,
-            dims        INTEGER NOT NULL,
-            blob        BLOB NOT NULL,
-            PRIMARY KEY (namespace_id, chunk_id)
-        );
-        CREATE INDEX IF NOT EXISTS chunk_vectors_namespace_idx
-            ON chunk_vectors(namespace_id);
         CREATE TABLE IF NOT EXISTS derived_dataset_snapshots (
             dataset_id          TEXT NOT NULL,
             namespace_key       TEXT NOT NULL,
@@ -165,6 +155,9 @@ pub(crate) fn init_schema(conn: &Connection) -> Result<()> {
             kind = COALESCE(kind, 'page'), format_profile = COALESCE(format_profile, 'markdown')",
         [],
     )?;
+    // Vectors live in Lance (`search-elements.lance`). Drop the legacy SQLite
+    // BLOB table if an older workspace index still has it.
+    conn.execute_batch("DROP TABLE IF EXISTS chunk_vectors;")?;
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
 
     conn.execute_batch(
@@ -391,7 +384,7 @@ mod tests {
     }
 
     #[test]
-    fn migrates_v4_index_schema_to_chunk_vectors() {
+    fn migrates_v4_index_schema_and_drops_legacy_chunk_vectors() {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(
             "CREATE TABLE resources (id INTEGER PRIMARY KEY, path TEXT UNIQUE,
@@ -426,6 +419,10 @@ mod tests {
                 embedding_input_hash TEXT NOT NULL, status TEXT NOT NULL,
                 last_error TEXT, indexed_at_ms INTEGER,
                 PRIMARY KEY (chunk_id, namespace_id));
+             CREATE TABLE chunk_vectors (
+                namespace_id INTEGER NOT NULL, chunk_id TEXT NOT NULL,
+                dims INTEGER NOT NULL, blob BLOB NOT NULL,
+                PRIMARY KEY (namespace_id, chunk_id));
              PRAGMA user_version = 4;",
         )
         .unwrap();
@@ -436,9 +433,18 @@ mod tests {
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
         assert_eq!(version, SCHEMA_VERSION);
-        assert!(table_columns(&conn, "chunk_vectors")
+        let chunk_vectors: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type = 'table' AND name = 'chunk_vectors'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(chunk_vectors, 0);
+        assert!(table_columns(&conn, "derived_dataset_snapshots")
             .iter()
-            .any(|column| column == "blob"));
+            .any(|column| column == "source_fingerprint"));
     }
 
     #[test]
@@ -494,5 +500,14 @@ mod tests {
         assert!(table_columns(&conn, "derived_dataset_snapshots")
             .iter()
             .any(|column| column == "source_fingerprint"));
+        let chunk_vectors: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type = 'table' AND name = 'chunk_vectors'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(chunk_vectors, 0);
     }
 }

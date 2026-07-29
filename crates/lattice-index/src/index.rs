@@ -210,12 +210,8 @@ impl WorkspaceIndex {
         {
             let conn = self.conn.lock().unwrap();
             conn.execute("DELETE FROM resources WHERE path = ?1", params![path_key])?;
-            // chunk_vectors / chunk_embedding_state have no FK cascade from search_chunks.
+            // chunk_embedding_state has no FK cascade from search_chunks.
             for chunk_id in &chunk_ids {
-                conn.execute(
-                    "DELETE FROM chunk_vectors WHERE chunk_id = ?1",
-                    params![chunk_id],
-                )?;
                 conn.execute(
                     "DELETE FROM chunk_embedding_state WHERE chunk_id = ?1",
                     params![chunk_id],
@@ -1029,16 +1025,12 @@ fn persist_search_chunks(
     let new_chunk_ids: std::collections::HashSet<String> =
         drafts.iter().map(|draft| draft.chunk_id.clone()).collect();
 
-    // chunk_vectors / chunk_embedding_state have no FK cascade from search_chunks.
+    // chunk_embedding_state has no FK cascade from search_chunks.
     let removed_chunk_ids: Vec<String> = old_chunk_ids
         .difference(&new_chunk_ids)
         .cloned()
         .collect();
     for chunk_id in &removed_chunk_ids {
-        tx.execute(
-            "DELETE FROM chunk_vectors WHERE chunk_id = ?1",
-            params![chunk_id],
-        )?;
         tx.execute(
             "DELETE FROM chunk_embedding_state WHERE chunk_id = ?1",
             params![chunk_id],
