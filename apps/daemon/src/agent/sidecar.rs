@@ -20,7 +20,7 @@ use super::protocol::{
     ProviderKind, StartAgentRunRequest, PROTOCOL_VERSION,
 };
 
-/// Path to the Node/tsx entry or packaged `agentd` executable.
+/// Path to the `lattice-agentd` executable (optional override).
 pub const ENV_AGENTD_BIN: &str = "LATTICE_AGENTD_BIN";
 /// Prefer the in-process fake backend (tests / CI).
 pub const ENV_AGENT_FAKE: &str = "LATTICE_AGENT_FAKE";
@@ -452,10 +452,8 @@ async fn write_command(
 
 /// Resolve `LATTICE_AGENTD_BIN` into `(executable, trailing args)`.
 ///
-/// Values may be a direct executable or a launcher form such as
-/// `npx tsx apps/agentd/src/index.ts`. When unset, prefer the Rust
-/// `lattice-agentd` binary (release/debug/next to latticed). Node
-/// `run.sh` only when `LATTICE_AGENTD_PREFER_NODE` is set.
+/// When unset, auto-discover the Rust `lattice-agentd` binary
+/// (release/debug/next to `latticed`).
 pub fn resolve_agentd_bin() -> Option<(PathBuf, Vec<String>)> {
     if let Ok(raw) = std::env::var(ENV_AGENTD_BIN) {
         if !raw.is_empty() {
@@ -488,15 +486,6 @@ fn discover_default_agentd_bin() -> Option<(PathBuf, Vec<String>)> {
             if sidecar.is_file() {
                 return Some((sidecar, Vec::new()));
             }
-        }
-    }
-
-    // Node is opt-in only (`LATTICE_AGENTD_PREFER_NODE=1` or explicit LATTICE_AGENTD_BIN).
-    if env_truthy("LATTICE_AGENTD_PREFER_NODE") {
-        let run_sh = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../agentd/scripts/run.sh");
-        let run_sh = std::fs::canonicalize(&run_sh).unwrap_or(run_sh);
-        if run_sh.is_file() {
-            return Some((run_sh, Vec::new()));
         }
     }
     None

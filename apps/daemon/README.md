@@ -6,7 +6,7 @@ authenticated **localhost-only** HTTP / MCP context API.
 
 ## Embedded agent (Phase A / EA3)
 
-`latticed` supervises the Node `agentd` sidecar (or an in-process fake backend).
+`latticed` supervises the Rust `lattice-agentd` sidecar (or an in-process fake backend).
 Desktop / Tauri must **not** spawn `agentd` directly — see
 [`docs/architecture/embedded-agent.md`](../../docs/architecture/embedded-agent.md)
 and [ADR 0044](../../docs/decisions/0044-embedded-agent-sidecar.md).
@@ -32,21 +32,21 @@ path, known risks):
 
 | Variable | Purpose |
 | --- | --- |
-| `LATTICE_AGENT_FAKE=1` | In-process `FakeAgentBackend` (tests / CI; no Node) |
-| `LATTICE_AGENTD_BIN` | Path to Node/tsx entry or packaged `agentd` executable |
+| `LATTICE_AGENT_FAKE=1` | In-process `FakeAgentBackend` (tests / CI) |
+| `LATTICE_AGENTD_BIN` | Path to `lattice-agentd` executable (optional override) |
 | `LATTICE_AGENT_PROVIDER` | `pioneer` / `openai` / `fake` (passed through to sidecar) |
 | `LATTICE_AGENT_MODEL` | Model id passed through to sidecar |
 | `PIONEER_API_KEY` / `OPENAI_API_KEY` | Injected at `agentd` spawn only (never logged) |
 
 ```sh
-# Fake backend for daemon tests / local smoke without Node
+# Fake backend for daemon tests / local smoke
 LATTICE_AGENT_FAKE=1 \
   cargo run -p lattice-daemon -- --auth-token dev-token --api-port 0
 
-# Supervised sidecar (requires agentd from EA2)
-LATTICE_AGENTD_BIN="npx tsx apps/agentd/src/index.ts" \
-  LATTICE_AGENT_PROVIDER=pioneer \
-  LATTICE_AGENT_MODEL=MiniMaxAI/MiniMax-M3 \
+# Supervised Rust sidecar (build lattice-agentd first)
+cargo build -p lattice-agentd
+LATTICE_AGENT_PROVIDER=pioneer \
+  LATTICE_AGENT_MODEL=gpt-5.6-luna \
   PIONEER_API_KEY=… \
   cargo run -p lattice-daemon -- --auth-token dev-token --api-port 0
 ```

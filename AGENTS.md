@@ -23,8 +23,7 @@ For the embedded agent (`agentd` sidecar, assistant-ui chat shell, proposal
 workflow), read `docs/architecture/embedded-agent.md` and
 `docs/decisions/0051-rust-embedded-agent-harness.md` (supersedes ADR 0044's
 Node runtime) before changing boundaries. **Shipped path:** Rust
-`crates/lattice-agentd`. `apps/agentd` (Node) is retained for reference only
-and is not packaged.
+`crates/lattice-agentd` / `lattice-agentd`.
 
 KernelFS (WASI materialize / run / output bridge) is **private**:
 `willmortimer/kernelfs`, checked out as sibling `../kernelfs` in the ecosystem
@@ -39,8 +38,6 @@ facts.
 
 - `apps/cli/`: headless `lattice` CLI.
 - `apps/daemon/`: `latticed` Unix-domain daemon (control plane over LatticeRuntime).
-- `apps/agentd/`: **retained Node reference** (not shipped). Production sidecar is
-  `crates/lattice-agentd` / `lattice-agentd`.
 - `apps/desktop/`: Tauri 2 desktop shell using React, TypeScript, and Vite.
 - `crates/`: Rust domain crates for resources, storage, commands, indexing,
   data applications, and themes.

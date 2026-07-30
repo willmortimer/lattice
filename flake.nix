@@ -741,7 +741,6 @@
                   "pnpm-lock.yaml"
                   "pnpm-workspace.yaml"
                   "apps/desktop/package.json"
-                  "apps/agentd/package.json"
                   "packages/**/package.json"
                 ];
                 resources = {

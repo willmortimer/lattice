@@ -1,8 +1,7 @@
 //! Opt-in Rust `lattice-agentd` sidecar (ADR 0051 / 0066).
 //!
-//! Speaks the same Phase A JSONL protocol as Node `apps/agentd`. Desktop /
-//! latticed prefer this binary by default. Node is opt-in via
-//! `LATTICE_AGENTD_PREFER_NODE` or explicit `LATTICE_AGENTD_BIN`.
+//! Speaks the Phase A JSONL agent protocol over stdio. Desktop / latticed
+//! auto-discover this binary; override with `LATTICE_AGENTD_BIN`.
 
 pub mod cell_host;
 pub mod fake;

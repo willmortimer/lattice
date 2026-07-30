@@ -1,6 +1,6 @@
 //! Pioneer OpenAI-compatible Chat Completions streaming + host tool loop.
 //!
-//! Matches Node `apps/agentd` pioneer path: `https://api.pioneer.ai/v1` +
+//! Pioneer provider: `https://api.pioneer.ai/v1` + Chat Completions SSE.
 //! `PIONEER_API_KEY`, chat completions (not Responses). When a Lattice HTTP
 //! client is configured, runs a thin tool loop (max 8 rounds); otherwise
 //! streams chat-only text into AI SDK UI chunks.
