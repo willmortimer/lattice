@@ -16,6 +16,9 @@ use serde::Serialize;
 use tokio::sync::oneshot;
 use tracing::{info, warn};
 
+use crate::agent_memory_api::{
+    api_delete_memory, api_recall, api_remember, DeleteMemoryParams, RecallParams, RememberParams,
+};
 use crate::api::{
     api_build_context, api_cancel_job, api_create_proposal, api_get_dataset_schema, api_get_job,
     api_get_proposal, api_list_active_jobs, api_list_proposals, api_list_recent_jobs,
@@ -124,6 +127,48 @@ async fn route_search(
         return resp;
     }
     match api_search(&state.daemon.runtime, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_agent_memory_remember(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<RememberParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_remember(&state.daemon.runtime, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_agent_memory_recall(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<RecallParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_recall(&state.daemon.runtime, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_agent_memory_delete(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<DeleteMemoryParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_delete_memory(&state.daemon.runtime, body) {
         Ok(value) => (StatusCode::OK, Json(value)).into_response(),
         Err(err) => err.into_response(),
     }
@@ -452,6 +497,9 @@ pub fn router(daemon: DaemonState) -> Router {
         .route("/health", get(health))
         .route("/mcp", post(route_mcp))
         .route("/v1/search", post(route_search))
+        .route("/v1/agent_memory/remember", post(route_agent_memory_remember))
+        .route("/v1/agent_memory/recall", post(route_agent_memory_recall))
+        .route("/v1/agent_memory/delete", post(route_agent_memory_delete))
         .route("/v1/read", post(route_read))
         .route("/v1/related", post(route_related))
         .route("/v1/build_context", post(route_build_context))

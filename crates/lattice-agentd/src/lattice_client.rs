@@ -120,6 +120,16 @@ impl LatticeToolClient {
         self.post("/v1/search", body).await
     }
 
+    /// Store a workspace-local agent memory row via latticed (not Lance directly).
+    pub async fn remember(&self, body: Value) -> Result<Value, LatticeApiError> {
+        self.post("/v1/agent_memory/remember", body).await
+    }
+
+    /// Recall workspace-local agent memories via latticed (not Lance directly).
+    pub async fn recall(&self, body: Value) -> Result<Value, LatticeApiError> {
+        self.post("/v1/agent_memory/recall", body).await
+    }
+
     pub async fn read(&self, body: Value) -> Result<Value, LatticeApiError> {
         self.post("/v1/read", body).await
     }
