@@ -795,17 +795,17 @@ const AI_MODE_OPTIONS: Array<{
 }> = [
   {
     id: "local",
-    label: "Local",
+    label: "On-device",
     description: "Apple-native and on-device models. No cloud API key required.",
   },
   {
     id: "byoOpenai",
-    label: "BYO OpenAI",
+    label: "BYO",
     description: "Use your own OpenAI API key from the OS keychain.",
   },
   {
     id: "account",
-    label: "Account",
+    label: "Lattice paid",
     description: "Lattice-mediated OpenAI via your cloud account (coming soon).",
   },
 ];
@@ -944,7 +944,7 @@ function AiSettingsPanel({
 
       {ai.mode === "local" ? (
         <div className="diagnostics-card" role="status">
-          <strong>Local mode</strong>
+          <strong>On-device mode</strong>
           <span>
             Prefer on-device inference. Agent and embedding paths follow local providers when
             available; no OpenAI key is required.
@@ -1012,10 +1012,10 @@ function AiSettingsPanel({
 
       {ai.mode === "account" ? (
         <div className="diagnostics-card" role="status">
-          <strong>Account mode</strong>
+          <strong>Lattice paid mode</strong>
           <span>
             Lattice-mediated OpenAI (project key via your cloud account) is coming soon. Sign in
-            under Cloud account when you are ready; this mode is not Pioneer-first.
+            under Cloud account when you are ready; Pioneer is not part of this product path.
           </span>
           <div className="ai-account-actions">
             <Button size="sm" variant="secondary" onClick={onOpenCloud}>

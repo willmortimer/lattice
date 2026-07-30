@@ -75,7 +75,7 @@ function AgentThreadView({ accountAiDisabled }: { accountAiDisabled: boolean }) 
           <div className="agent-thread-empty">
             <p>
               {accountAiDisabled
-                ? "Lattice Account AI is coming soon. Switch to Local or BYO OpenAI in Settings → AI."
+                ? "Lattice paid AI is coming soon. Switch to On-device or BYO in Settings → AI."
                 : "Ask the agent about this workspace."}
             </p>
           </div>

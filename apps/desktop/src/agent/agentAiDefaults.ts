@@ -6,7 +6,7 @@ export type AgentAiDefaults = {
   /** Preferred provider for live runs; null defers to health / fake backend. */
   provider: SelectableAgentProvider | null;
   model: string | null;
-  /** Lattice Account AI is not runnable yet. */
+  /** Lattice paid AI is not runnable yet. */
   accountAiDisabled: boolean;
 };
 

@@ -34,10 +34,10 @@ export function AgentProviderBadge() {
     return (
       <div className="agent-runtime-controls" aria-label="Agent runtime">
         <span className="agent-provider-badge agent-provider-badge-unknown">
-          Lattice Account · Coming soon
+          Lattice paid · Coming soon
         </span>
         <span className="agent-runtime-hint">
-          Cloud AI is not available yet. Switch to Local or BYO OpenAI in Settings → AI.
+          Cloud AI is not available yet. Switch to On-device or BYO in Settings → AI.
         </span>
       </div>
     );
