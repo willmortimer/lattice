@@ -3,7 +3,7 @@
 //! Manual smoke: build/run desktop with `--features capture`, grant Screen Recording
 //! in System Settings, then press **⌘⇧2** or choose **Screen Clip** from the menu/tray.
 
-mod shelf;
+pub mod shelf;
 
 use std::path::Path;
 
@@ -26,7 +26,7 @@ pub const CAPTURE_INGESTED_EVENT: &str = "capture-ingested";
 pub const CAPTURE_CANCELLED_EVENT: &str = "capture-cancelled";
 pub const CAPTURE_ERROR_EVENT: &str = "capture-error";
 
-pub use shelf::{CaptureShelfState, CAPTURE_SHELF_UPDATED_EVENT};
+pub use shelf::{show_shelf_window, CaptureShelfState, CAPTURE_SHELF_UPDATED_EVENT};
 
 const CAPTURE_CANCELLED: &str = "__capture_cancelled__";
 

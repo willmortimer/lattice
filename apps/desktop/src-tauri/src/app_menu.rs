@@ -104,7 +104,7 @@ pub fn handle_action(app: &AppHandle, id: &str) {
         }
         ACTION_CAPTURE_SHELF => {
             #[cfg(feature = "capture")]
-            crate::capture::shelf::show_shelf_window(app);
+            crate::capture::show_shelf_window(app);
         }
         ACTION_QUIT => tray::request_quit(app),
         ACTION_LOCK => {
