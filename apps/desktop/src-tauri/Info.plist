@@ -4,6 +4,8 @@
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Lattice uses the microphone for local, on-device voice dictation. Audio stays on this Mac and is not uploaded.</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>Lattice captures the screen to save clips into your local workspace Capture Inbox. Pixels stay on this device.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

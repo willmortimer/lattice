@@ -1,4 +1,5 @@
 import AppKit
+import CoreGraphics
 import Foundation
 import ScreenCaptureKit
 
@@ -11,38 +12,51 @@ enum ScreenCaptureSession {
         let pngData: Data
     }
 
-    static func enumerateDisplays() async throws -> [SCDisplay] {
-        let content = try await SCShareableContent.excludingDesktopWindows(
-            false,
-            onScreenWindowsOnly: true
-        )
-        return content.displays
+    /// Sendable display metadata (SCDisplay itself is not Sendable).
+    struct DisplayInfo: Sendable {
+        let displayID: UInt32
+        let width: UInt32
+        let height: UInt32
     }
 
-    static func captureDisplay(displayId: CGDirectDisplayID) async throws -> CapturedPng {
+    static func enumerateDisplays() async throws -> [DisplayInfo] {
         let content = try await SCShareableContent.excludingDesktopWindows(
             false,
             onScreenWindowsOnly: true
         )
-        guard let display = content.displays.first(where: { $0.displayID == displayId }) else {
+        return content.displays.map { display in
+            DisplayInfo(
+                displayID: UInt32(display.displayID),
+                width: UInt32(display.width),
+                height: UInt32(display.height)
+            )
+        }
+    }
+
+    static func captureDisplay(displayId: UInt32) async throws -> CapturedPng {
+        let content = try await SCShareableContent.excludingDesktopWindows(
+            false,
+            onScreenWindowsOnly: true
+        )
+        guard let display = content.displays.first(where: { $0.displayID == CGDirectDisplayID(displayId) }) else {
             throw BridgeFailure.notFound("Display \(displayId) not found")
         }
         return try await capture(filter: SCContentFilter(display: display, excludingWindows: []))
     }
 
     static func captureRegion(
-        displayId: CGDirectDisplayID,
+        displayId: UInt32,
         region: CGRect
     ) async throws -> CapturedPng {
         let content = try await SCShareableContent.excludingDesktopWindows(
             false,
             onScreenWindowsOnly: true
         )
-        guard let display = content.displays.first(where: { $0.displayID == displayId }) else {
+        guard let display = content.displays.first(where: { $0.displayID == CGDirectDisplayID(displayId) }) else {
             throw BridgeFailure.notFound("Display \(displayId) not found")
         }
         let filter = SCContentFilter(display: display, excludingWindows: [])
-        var configuration = SCStreamConfiguration()
+        let configuration = SCStreamConfiguration()
         configuration.sourceRect = region
         configuration.width = Int(region.width)
         configuration.height = Int(region.height)
@@ -51,15 +65,14 @@ enum ScreenCaptureSession {
 
     private static func capture(
         filter: SCContentFilter,
-        configuration: SCStreamConfiguration? = nil
+        configuration: SCStreamConfiguration = SCStreamConfiguration()
     ) async throws -> CapturedPng {
-        let image = try await SCScreenshotManager.captureImage(
+        let cgImage = try await SCScreenshotManager.captureImage(
             contentFilter: filter,
             configuration: configuration
         )
-        guard let tiff = image.tiffRepresentation,
-              let bitmap = NSBitmapImageRep(data: tiff),
-              let png = bitmap.representation(using: .png, properties: [:])
+        let bitmap = NSBitmapImageRep(cgImage: cgImage)
+        guard let png = bitmap.representation(using: NSBitmapImageRep.FileType.png, properties: [:])
         else {
             throw BridgeFailure.internalError("Failed to encode screenshot as PNG")
         }

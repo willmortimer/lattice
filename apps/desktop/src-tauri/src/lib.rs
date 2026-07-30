@@ -5,6 +5,8 @@ mod app_menu;
 mod approval_signer;
 mod artifact;
 mod canvas;
+#[cfg(feature = "capture")]
+mod capture;
 mod cloud;
 mod commands;
 mod daemon_session;
@@ -83,6 +85,10 @@ pub fn run() {
         .setup(|app| {
             tray::install_tray(app.handle())?;
             app_lock::install_sleep_lock_observer(app.handle());
+            #[cfg(feature = "capture")]
+            if let Err(err) = capture::install_global_shortcut(app.handle()) {
+                eprintln!("lattice: screen clip shortcut unavailable: {err}");
+            }
             // Custom scheme + Universal Links: oauth callback and open-resource.
             use tauri_plugin_deep_link::DeepLinkExt;
             #[cfg(desktop)]

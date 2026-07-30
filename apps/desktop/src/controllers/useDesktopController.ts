@@ -28,6 +28,7 @@ import {
 } from "../lib/proposals";
 import { installNativeContextMenus, isEditableTarget } from "../lib/nativeMenus";
 import { QUICK_NOTE_SHORTCUT, showQuickNote } from "../quickNoteWindow";
+import { CAPTURE_INGESTED_EVENT, type CaptureIngestedPayload } from "../screenClip";
 import { applyResolvedTheme, loadThemeCatalog, setAppearanceMode, setFixedTheme, setFontPack, startThemeWatch, type ThemeCatalogPayload, type ThemeSummaryPayload } from "../theme";
 import type { Resource, WorkspaceSnapshot } from "../types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -690,6 +691,20 @@ export function useDesktopController() {
     return () => {
       void unregister(QUICK_NOTE_SHORTCUT);
     };
+  }, []);
+
+  useEffect(() => {
+    if (!hasTauri) return;
+    let unlisten: (() => void) | undefined;
+    void listen<CaptureIngestedPayload>(CAPTURE_INGESTED_EVENT, (event) => {
+      setStatusToast(`Saved screen clip to ${event.payload.pagePath}`);
+      window.setTimeout(() => setStatusToast(null), 3200);
+    }).then((stop) => {
+      unlisten = stop;
+    });
+    return () => unlisten?.();
+    // Listener uses event payload only; install once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const paletteItems = useMemo<PaletteItem[]>(() => {
