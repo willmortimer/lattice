@@ -140,7 +140,11 @@ async fn route_agent_memory_remember(
     if let Err(resp) = require_auth(&state, &headers) {
         return resp;
     }
-    match api_remember(&state.daemon.runtime, body) {
+    match api_remember(
+        &state.daemon.runtime,
+        state.daemon.semantic.as_deref(),
+        body,
+    ) {
         Ok(value) => (StatusCode::OK, Json(value)).into_response(),
         Err(err) => err.into_response(),
     }
@@ -154,7 +158,11 @@ async fn route_agent_memory_recall(
     if let Err(resp) = require_auth(&state, &headers) {
         return resp;
     }
-    match api_recall(&state.daemon.runtime, body) {
+    match api_recall(
+        &state.daemon.runtime,
+        state.daemon.semantic.as_deref(),
+        body,
+    ) {
         Ok(value) => (StatusCode::OK, Json(value)).into_response(),
         Err(err) => err.into_response(),
     }

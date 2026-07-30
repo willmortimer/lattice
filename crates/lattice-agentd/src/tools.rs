@@ -132,7 +132,7 @@ pub fn openai_tool_definitions() -> Vec<Value> {
         ),
         function_tool(
             "remember",
-            "Store a workspace-local agent memory via latticed (Lance-backed). Use for durable facts/preferences the agent should recall later. Workspace-local only; user consent/retention policy is not enforced yet.",
+            "Store a workspace-local agent memory via latticed (Lance-backed). Use for durable facts/preferences the agent should recall later. latticed embeds vectors server-side when the workspace semantic provider is available; do not pass embeddings. Workspace-local only; user consent/retention policy is not enforced yet.",
             json!({
                 "type": "object",
                 "properties": {
@@ -155,7 +155,7 @@ pub fn openai_tool_definitions() -> Vec<Value> {
         ),
         function_tool(
             "recall",
-            "Recall workspace-local agent memories via latticed (Lance-backed). Matches query text against stored memories.",
+            "Recall workspace-local agent memories via latticed (Lance-backed). latticed embeds the query and uses semantic vector recall when the workspace embedding provider is available; otherwise matches query text against stored memories.",
             json!({
                 "type": "object",
                 "properties": {
@@ -1190,6 +1190,43 @@ mod tests {
         assert!(
             desc.contains("Hybrid"),
             "search description should mention hybrid: {desc}"
+        );
+    }
+
+    #[test]
+    fn remember_recall_descriptions_mention_server_side_embedding() {
+        let defs = openai_tool_definitions();
+        let remember = defs
+            .iter()
+            .find(|tool| {
+                tool.pointer("/function/name")
+                    .and_then(|value| value.as_str())
+                    == Some("remember")
+            })
+            .expect("remember tool");
+        let recall = defs
+            .iter()
+            .find(|tool| {
+                tool.pointer("/function/name")
+                    .and_then(|value| value.as_str())
+                    == Some("recall")
+            })
+            .expect("recall tool");
+        let remember_desc = remember
+            .pointer("/function/description")
+            .and_then(|value| value.as_str())
+            .expect("remember description");
+        let recall_desc = recall
+            .pointer("/function/description")
+            .and_then(|value| value.as_str())
+            .expect("recall description");
+        assert!(
+            remember_desc.contains("embeds vectors server-side"),
+            "remember description should mention server-side embedding: {remember_desc}"
+        );
+        assert!(
+            recall_desc.contains("semantic vector recall"),
+            "recall description should mention vector recall: {recall_desc}"
         );
     }
 

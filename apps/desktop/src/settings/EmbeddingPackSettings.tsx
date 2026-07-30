@@ -184,8 +184,8 @@ export function EmbeddingPackSettings({
       <p className="settings-copy">
         Optional local embedding pack for semantic search. Mode is{" "}
         {embeddingModeLabel(embeddingMode).toLowerCase()}; passive embedding is{" "}
-        {passiveEmbeddingEnabled ? "on" : "off"} (change under Embedding defaults above). Search
-        still owns the semantic search toggle.
+        {passiveEmbeddingEnabled ? "on" : "off"} (change under Embedding defaults above). Pack
+        catalog and feature toggles are managed under Packs / Features.
       </p>
       {inBrowser ? (
         <div className="diagnostics-card">
