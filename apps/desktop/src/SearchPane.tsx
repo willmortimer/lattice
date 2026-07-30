@@ -2,9 +2,18 @@ import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { invoke } from "./lib/ipc";
 import {
+  enableSemanticSearch,
+  getSemanticStatus,
+  listenSemanticEvents,
+  type SemanticStatus,
+} from "./lib/semantic";
+import {
+  formatSearchHitScore,
   looksFtsOnlyWhileSemanticEnabled,
+  SEARCH_VECTORS_BEHIND_BANNER,
   searchHitBadgeKind,
   searchHitBadgeLabel,
+  shouldShowVectorsBehindBanner,
 } from "./lib/searchHitBadge";
 
 import { KindMark } from "./KindMark";
@@ -43,11 +52,72 @@ export function SearchPane({
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [semanticStatus, setSemanticStatus] = useState<SemanticStatus | null>(null);
+  const [refreshingVectors, setRefreshingVectors] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (!root || !semanticEnabled) {
+      setSemanticStatus(null);
+      return;
+    }
+
+    let cancelled = false;
+    void getSemanticStatus(root)
+      .then((status) => {
+        if (!cancelled) setSemanticStatus(status);
+      })
+      .catch(() => {
+        /* keep last status */
+      });
+
+    let unlisten: (() => void) | undefined;
+    void listenSemanticEvents((event) => {
+      if (event.type !== "status") return;
+      setSemanticStatus({
+        state: event.state,
+        pendingChunks: event.pendingChunks,
+        message: event.message,
+        progressPercent: event.progressPercent,
+        providerId: event.providerId,
+        modelId: event.modelId,
+        dimensions: event.dimensions,
+      });
+    }).then((fn) => {
+      unlisten = fn;
+    });
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [root, semanticEnabled]);
+
+  useEffect(() => {
+    if (!root || !semanticEnabled) return;
+    if (
+      !semanticStatus ||
+      (semanticStatus.state !== "downloading" &&
+        semanticStatus.state !== "preparing" &&
+        semanticStatus.state !== "indexing")
+    ) {
+      return;
+    }
+
+    const id = window.setInterval(() => {
+      void getSemanticStatus(root)
+        .then((next) => setSemanticStatus(next))
+        .catch(() => {
+          /* keep last status */
+        });
+    }, 750);
+
+    return () => window.clearInterval(id);
+  }, [root, semanticEnabled, semanticStatus?.state]);
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -95,6 +165,15 @@ export function SearchPane({
 
   const showIndexingHint =
     Boolean(root) && looksFtsOnlyWhileSemanticEnabled(semanticEnabled, hits);
+  const showVectorsBehindBanner = shouldShowVectorsBehindBanner(semanticEnabled, semanticStatus);
+
+  function handleRefreshVectors() {
+    if (!root || refreshingVectors) return;
+    setRefreshingVectors(true);
+    void enableSemanticSearch(root)
+      .then((next) => setSemanticStatus(next))
+      .finally(() => setRefreshingVectors(false));
+  }
 
   function onKeyDown(event: KeyboardEvent) {
     if (event.key === "Escape") {
@@ -120,8 +199,21 @@ export function SearchPane({
           onChange={(event) => setQuery(event.target.value)}
           aria-label="Search query"
         />
-        {showIndexingHint && (
-          <p className="search-pane-indexing-hint" role="status">
+        {showVectorsBehindBanner && (
+          <p className="search-pane-status-hint" role="status">
+            {SEARCH_VECTORS_BEHIND_BANNER}{" "}
+            <button
+              type="button"
+              className="search-pane-status-action"
+              disabled={refreshingVectors}
+              onClick={handleRefreshVectors}
+            >
+              {refreshingVectors ? "Refreshing…" : "Refresh vectors"}
+            </button>
+          </p>
+        )}
+        {showIndexingHint && !showVectorsBehindBanner && (
+          <p className="search-pane-status-hint" role="status">
             Semantic index still preparing — keyword matches only for now.
           </p>
         )}
@@ -132,6 +224,7 @@ export function SearchPane({
           )}
           {hits.map((hit, index) => {
             const badgeKind = searchHitBadgeKind(hit);
+            const scoreLabel = formatSearchHitScore(hit);
             return (
               <button
                 key={searchHitKey(hit, index)}
@@ -142,9 +235,21 @@ export function SearchPane({
                 <span className="search-hit-body">
                   <span className="search-hit-title-row">
                     <span className="palette-item-label">{hit.title || hit.path}</span>
-                    {badgeKind && (
-                      <span className="search-hit-badge" aria-label={`${searchHitBadgeLabel(badgeKind)} match`}>
-                        {searchHitBadgeLabel(badgeKind)}
+                    {(badgeKind || scoreLabel) && (
+                      <span className="search-hit-match-meta">
+                        {badgeKind && (
+                          <span
+                            className="search-hit-badge"
+                            aria-label={`${searchHitBadgeLabel(badgeKind)} match`}
+                          >
+                            {searchHitBadgeLabel(badgeKind)}
+                          </span>
+                        )}
+                        {scoreLabel && (
+                          <span className="search-hit-score" aria-label={`Fusion ${scoreLabel}`}>
+                            {scoreLabel}
+                          </span>
+                        )}
                       </span>
                     )}
                   </span>
