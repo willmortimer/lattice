@@ -9,6 +9,7 @@
 mod bridge;
 mod error;
 mod ffi;
+mod offline_redecode;
 mod provider;
 
 /// ABI version expected from `lattice_voice_bridge_abi_version()`.

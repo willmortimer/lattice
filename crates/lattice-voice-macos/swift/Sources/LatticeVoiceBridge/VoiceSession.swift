@@ -7,21 +7,9 @@ import os
 /// One utterance stream against a prepared Unified engine.
 ///
 /// Streaming partials fire during `pushAudio`; `finishUtterance` runs
-/// `StreamingUnifiedAsrManager.finish()` and emits one authoritative final
-/// (`StreamingFlush`).
-///
-/// Endpoint policy: Unified has no `setEouCallback`. This session runs a
-/// Lattice energy VAD (silence debounce + max utterance) and emits
-/// `SPEECH_STARTED` / `ENDPOINT`. When a future path uses
-/// `StreamingEouAsrManager`, wire `setEouCallback` / `eouDebounceMs` and emit
-/// `ENDPOINT` with reason `provider_eou` (error_code=2).
-///
-/// TODO(voice-v11): Buffer float samples for the full utterance and, when
-/// `LATTICE_VOICE_INDEPENDENT_FINAL=1` is adopted after eval wins, call
-/// FluidAudio offline (`UnifiedAsrManager`) or TDT v2 (`AsrManager`) over that
-/// buffer. Rust already buffers PCM in `FluidAudioSpeechSession`; report
-/// `IndependentOfflineRedecode` / `SameFamilyOfflineRedecode` only when that
-/// second decode actually runs (ADR 0007).
+/// `StreamingUnifiedAsrManager.finish()` and emits one streaming-flush final.
+/// Rust may then re-decode buffered PCM with Parakeet TDT v2 for
+/// `IndependentOfflineRedecode` (ADR 0007).
 final class VoiceSession: @unchecked Sendable {
     let id: UInt64
     private let engine: VoiceEngine

@@ -102,8 +102,17 @@ pub(crate) unsafe extern "C" fn bridge_event_callback(
 /// Engine/session operations used by the provider (native or mock).
 pub(crate) trait VoiceBridgeBackend: Send + Sync {
     fn abi_version(&self) -> u32;
+    fn offline_redecode_implemented(&self) -> bool;
     fn engine_create(&self, model_cache_dir: Option<&Path>) -> BridgeResult<LatticeVoiceEngine>;
     fn engine_prepare(&self, engine: LatticeVoiceEngine) -> BridgeResult<()>;
+    fn engine_prepare_final_model(&self, engine: LatticeVoiceEngine) -> BridgeResult<()>;
+    fn engine_unload_final_model(&self, engine: LatticeVoiceEngine);
+    fn engine_redecode_offline(
+        &self,
+        engine: LatticeVoiceEngine,
+        samples: &[f32],
+        sample_rate_hz: u32,
+    ) -> BridgeResult<String>;
     fn engine_destroy(&self, engine: LatticeVoiceEngine);
     fn session_start(
         &self,
@@ -137,6 +146,10 @@ impl VoiceBridgeBackend for NativeBridge {
         unsafe { crate::ffi::lattice_voice_bridge_abi_version() }
     }
 
+    fn offline_redecode_implemented(&self) -> bool {
+        true
+    }
+
     fn engine_create(&self, model_cache_dir: Option<&Path>) -> BridgeResult<LatticeVoiceEngine> {
         let c_path =
             model_cache_dir.and_then(|path| CString::new(path.to_string_lossy().as_ref()).ok());
@@ -156,6 +169,46 @@ impl VoiceBridgeBackend for NativeBridge {
     fn engine_prepare(&self, engine: LatticeVoiceEngine) -> BridgeResult<()> {
         let status = unsafe { crate::ffi::lattice_voice_engine_prepare(engine) };
         map_status(status, "lattice_voice_engine_prepare")
+    }
+
+    fn engine_prepare_final_model(&self, engine: LatticeVoiceEngine) -> BridgeResult<()> {
+        let status = unsafe { crate::ffi::lattice_voice_engine_prepare_final_model(engine) };
+        map_status(status, "lattice_voice_engine_prepare_final_model")
+    }
+
+    fn engine_unload_final_model(&self, engine: LatticeVoiceEngine) {
+        unsafe { crate::ffi::lattice_voice_engine_unload_final_model(engine) }
+    }
+
+    fn engine_redecode_offline(
+        &self,
+        engine: LatticeVoiceEngine,
+        samples: &[f32],
+        sample_rate_hz: u32,
+    ) -> BridgeResult<String> {
+        const MAX_TRANSCRIPT_BYTES: usize = 65_536;
+        let mut buffer = vec![0_i8; MAX_TRANSCRIPT_BYTES];
+        let mut out_len = 0_usize;
+        let status = unsafe {
+            crate::ffi::lattice_voice_engine_redecode_offline(
+                engine,
+                samples.as_ptr(),
+                samples.len(),
+                sample_rate_hz,
+                buffer.as_mut_ptr(),
+                buffer.len(),
+                &mut out_len,
+            )
+        };
+        map_status(status, "lattice_voice_engine_redecode_offline")?;
+        let bytes = &buffer[..out_len.min(buffer.len().saturating_sub(1))];
+        String::from_utf8(
+            bytes
+                .iter()
+                .map(|byte| *byte as u8)
+                .collect::<Vec<_>>(),
+        )
+        .map_err(|err| SpeechError::provider(format!("offline transcript is not UTF-8: {err}")))
     }
 
     fn engine_destroy(&self, engine: LatticeVoiceEngine) {
@@ -338,6 +391,10 @@ impl VoiceBridgeBackend for MockBridge {
         self.abi_version
     }
 
+    fn offline_redecode_implemented(&self) -> bool {
+        false
+    }
+
     fn engine_create(&self, _model_cache_dir: Option<&Path>) -> BridgeResult<LatticeVoiceEngine> {
         let mut engines = self
             .engines
@@ -366,6 +423,25 @@ impl VoiceBridgeBackend for MockBridge {
         }
         entry.prepared = true;
         Ok(())
+    }
+
+    fn engine_prepare_final_model(&self, _engine: LatticeVoiceEngine) -> BridgeResult<()> {
+        Err(SpeechError::provider(
+            "mock bridge does not implement offline redecode",
+        ))
+    }
+
+    fn engine_unload_final_model(&self, _engine: LatticeVoiceEngine) {}
+
+    fn engine_redecode_offline(
+        &self,
+        _engine: LatticeVoiceEngine,
+        _samples: &[f32],
+        _sample_rate_hz: u32,
+    ) -> BridgeResult<String> {
+        Err(SpeechError::provider(
+            "mock bridge does not implement offline redecode",
+        ))
     }
 
     fn engine_destroy(&self, engine: LatticeVoiceEngine) {
