@@ -35,6 +35,41 @@ cargo test -p lattice-cell-client
 cargo test -p lattice-agentd --test cell_propose
 ```
 
+## Firecracker dogfood script
+
+`scripts/cell-firecracker-dogfood.sh` exercises the full loop (hydrate → run →
+collect → `propose_resource`) and asserts **≥1** reviewable proposal.
+
+| Mode | Command | Requires |
+| --- | --- | --- |
+| CI / default | `scripts/cell-firecracker-dogfood.sh` or `--dry-run` | Rust toolchain only (mocked celld + latticed via `cell_propose` tests) |
+| Lab / live | `scripts/cell-firecracker-dogfood.sh --live` | Running celld (`CELLD_BASE_URL`), latticed (`LATTICE_API_BASE_URL`, `LATTICE_AUTH_TOKEN`), Firecracker guest media |
+
+**Dry-run (no live celld):**
+
+```sh
+scripts/cell-firecracker-dogfood.sh --dry-run
+```
+
+**Live Firecracker lab** — start celld with `--backend=firecracker` and
+`lattice-runtime` profile (see Cell `scripts/lattice-cell-loop.sh` for guest
+kernel/rootfs env: `CELL_FC_KERNEL`, `CELL_FC_ROOTFS`, jailer/vsock vars), then:
+
+```sh
+export CELLD_BASE_URL=http://127.0.0.1:8080
+export LATTICE_API_BASE_URL=http://127.0.0.1:18787
+export LATTICE_AUTH_TOKEN=…
+scripts/cell-firecracker-dogfood.sh --live \
+  --workspace /path/to/workspace \
+  --hydrate input/hello.txt
+```
+
+Live mode runs `cell-firecracker-dogfood` (same path as agentd
+`run_cell_task` / `run_cell_task_and_propose`). Default guest argv copies
+`input/hello.txt` to `/output/out.txt` and proposes under `Reports/`.
+Override with `--` and guest `argv`, or set `CELL_DOGFOOD_WORKSPACE` instead of
+`--workspace`.
+
 ## agentd tool: `run_cell_task`
 
 When `CELLD_BASE_URL` is set, Rust `lattice-agentd` registers an extra host
