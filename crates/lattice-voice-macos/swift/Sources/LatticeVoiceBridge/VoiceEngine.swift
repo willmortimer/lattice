@@ -154,8 +154,9 @@ final class VoiceEngine: @unchecked Sendable {
 
         let result = try await asr.transcribe(samples, decoderState: &decoderState)
 
+        let updatedDecoderState = decoderState
         lock.withLock {
-            tdtDecoderState = decoderState
+            tdtDecoderState = updatedDecoderState
         }
 
         return result.text
