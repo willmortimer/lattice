@@ -5,7 +5,8 @@
 use std::path::PathBuf;
 
 use kernelfs::{
-    normalize_guest_path, ExecutionManifest, InputMount, Mounts, WasmtimeLimits,
+    normalize_guest_path, Capabilities, ExecutionManifest, InputMount, Mounts, SecretHandle,
+    SecretHandleEntry, WasmtimeLimits,
 };
 use lattice_cell_client::{
     celld_configured, require_celld_base_url, CelldClient, HttpCelldClient, HydrateFile,
@@ -15,6 +16,7 @@ use serde_json::{json, Value};
 
 use crate::cell_host::{run_cell_task_and_propose, CellProposalProvenance};
 use crate::lattice_client::LatticeToolClient;
+use crate::secret_handles::secret_handles_for_run;
 use crate::wasi_host::{
     propose_output_drafts_with_provenance, run_wasi_guest_with_options, wasi_run_error_json,
     DraftProvenance, WorkspaceBinding, WasiGuestHostOptions, WasiHostError, WasiProposalProvenance,
@@ -451,6 +453,10 @@ fn base_openai_tool_definitions() -> Vec<Value> {
                         "description": "Workspace-relative prefix for proposed output paths (e.g. Reports)"
                     },
                     "runId": opt_str(),
+                    "secretHandlesJson": {
+                        "type": "string",
+                        "description": "JSON array of {id,hostPath} or env LATTICE_WASI_SECRET_HANDLES (id=/path pairs). Maps manifest secret handles to host files under /run/secrets/<id>. Deny-by-default when unset."
+                    },
                 },
                 "required": ["outputProposalTarget"],
                 "additionalProperties": false,
@@ -520,6 +526,21 @@ fn resolve_workspace_path(root: &str, rel_path: &str) -> Result<PathBuf, String>
         return Err(format!("{rel_path:?} escapes the workspace root"));
     }
     Ok(canonical_candidate)
+}
+
+fn resolve_secret_handle_allowlist(
+    workspace_root: &str,
+    args: &Value,
+) -> Result<Vec<SecretHandleEntry>, String> {
+    let mut entries = secret_handles_for_run(args)?;
+    for entry in &mut entries {
+        if entry.host_path.is_absolute() {
+            continue;
+        }
+        let rel = entry.host_path.to_string_lossy();
+        entry.host_path = resolve_workspace_path(workspace_root, rel.as_ref())?;
+    }
+    Ok(entries)
 }
 
 fn truncate_str(text: &str, max_chars: usize) -> String {
@@ -983,6 +1004,21 @@ async fn dispatch_run_wasi_guest(
         )
     });
 
+    let secret_handle_allowlist = resolve_secret_handle_allowlist(workspace_root, args)?;
+    let capabilities = if secret_handle_allowlist.is_empty() {
+        Default::default()
+    } else {
+        Capabilities {
+            secrets: secret_handle_allowlist
+                .iter()
+                .map(|entry| SecretHandle {
+                    id: entry.id.clone(),
+                })
+                .collect(),
+            ..Default::default()
+        }
+    };
+
     let manifest = ExecutionManifest {
         run_id: run_id.clone(),
         base_snapshot: "agentd".into(),
@@ -991,7 +1027,7 @@ async fn dispatch_run_wasi_guest(
             output_proposal_target: Some(output_proposal_target.clone()),
             work_promote_paths,
         },
-        capabilities: Default::default(),
+        capabilities,
     };
 
     let run_parent = tempfile::tempdir().map_err(|err| err.to_string())?;
@@ -1007,6 +1043,7 @@ async fn dispatch_run_wasi_guest(
             &WasiGuestHostOptions {
                 limits,
                 host_path_roots: host_roots,
+                secret_handle_allowlist,
                 ..Default::default()
             },
         )

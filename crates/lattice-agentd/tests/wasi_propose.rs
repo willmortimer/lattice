@@ -4,7 +4,8 @@ use std::fs;
 use std::sync::Arc;
 
 use kernelfs::{
-    ContentKind, ExecutionManifest, InputMount, LatticeProposalDraft, Mounts, WasmtimeLimits,
+    Capabilities, ContentKind, ExecutionManifest, InputMount, LatticeProposalDraft, Mounts,
+    SecretHandle, SecretHandleEntry, WasmtimeLimits,
 };
 use base64::Engine;
 use lattice_agentd::lattice_client::LatticeToolClient;
@@ -291,6 +292,7 @@ fn run_wasi_guest_tool_schema_documents_presets() {
     assert!(props.get("preset").is_some());
     assert!(props.get("resourcePaths").is_some());
     assert!(props.get("workPromotePaths").is_some());
+    assert!(props.get("secretHandlesJson").is_some());
     let required = wasi
         .pointer("/function/parameters/required")
         .and_then(|v| v.as_array())
@@ -298,6 +300,117 @@ fn run_wasi_guest_tool_schema_documents_presets() {
     assert!(required
         .iter()
         .any(|v| v.as_str() == Some("outputProposalTarget")));
+}
+
+#[tokio::test]
+async fn secret_handles_deny_by_default() {
+    ensure_seatbelt_runner();
+    let temp = tempfile::tempdir().expect("tempdir");
+    let secret_file = temp.path().join("api-key.txt");
+    fs::write(&secret_file, "super-secret").expect("write secret");
+
+    let manifest = ExecutionManifest {
+        run_id: "run_secret_deny".into(),
+        base_snapshot: "snap".into(),
+        mounts: Default::default(),
+        capabilities: Capabilities {
+            secrets: vec![SecretHandle {
+                id: "api-key".into(),
+            }],
+            ..Default::default()
+        },
+    };
+
+    let run_parent = temp.path().to_path_buf();
+    let host_roots = vec![temp.path().to_path_buf()];
+    let err = tokio::task::spawn_blocking(move || {
+        run_wasi_guest_with_options(
+            &run_parent,
+            &manifest,
+            copy_hello_wasm(),
+            &WasiGuestHostOptions {
+                limits: WasmtimeLimits::default(),
+                host_path_roots: host_roots,
+                ..Default::default()
+            },
+        )
+    })
+    .await
+    .expect("join")
+    .expect_err("secret without allowlist should fail");
+
+    assert!(
+        matches!(err, lattice_agentd::WasiHostError::Materialize(_)),
+        "expected materialize failure, got {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn secret_handles_materialize_when_allowlisted() {
+    ensure_seatbelt_runner();
+    let temp = tempfile::tempdir().expect("tempdir");
+    let host_input = temp.path().join("fixture-input");
+    fs::create_dir_all(&host_input).expect("input dir");
+    fs::write(host_input.join("hello.txt"), "hello from input").expect("write hello");
+
+    let secret_file = temp.path().join("api-key.txt");
+    fs::write(&secret_file, "super-secret").expect("write secret");
+
+    let manifest = ExecutionManifest {
+        run_id: "run_secret_ok".into(),
+        base_snapshot: "snap".into(),
+        mounts: Mounts {
+            input: vec![InputMount {
+                host_path: host_input.join("hello.txt"),
+                guest_path: "hello.txt".into(),
+            }],
+            output_proposal_target: Some("Reports".into()),
+            work_promote_paths: Vec::new(),
+        },
+        capabilities: Capabilities {
+            secrets: vec![SecretHandle {
+                id: "api-key".into(),
+            }],
+            ..Default::default()
+        },
+    };
+
+    let run_parent = temp.path().to_path_buf();
+    let host_roots = vec![temp.path().to_path_buf()];
+    let allowlist = vec![SecretHandleEntry {
+        id: "api-key".into(),
+        host_path: secret_file,
+    }];
+    let result = tokio::task::spawn_blocking(move || {
+        run_wasi_guest_with_options(
+            &run_parent,
+            &manifest,
+            copy_hello_wasm(),
+            &WasiGuestHostOptions {
+                limits: WasmtimeLimits::default(),
+                host_path_roots: host_roots,
+                secret_handle_allowlist: allowlist,
+                ..Default::default()
+            },
+        )
+    })
+    .await
+    .expect("join")
+    .expect("allowlisted secret should run");
+
+    assert_eq!(result.drafts.len(), 1);
+    let secret_path = temp
+        .path()
+        .join("run_secret_ok/run/secrets/api-key");
+    assert!(
+        secret_path.is_file(),
+        "expected secret at {}",
+        secret_path.display()
+    );
+    assert_eq!(
+        fs::read(&secret_path).expect("read secret"),
+        b"super-secret"
+    );
 }
 
 #[cfg(target_os = "macos")]

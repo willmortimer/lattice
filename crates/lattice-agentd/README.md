@@ -103,6 +103,7 @@ bound on `start_run`:
 | `workPromotePaths` | Guest-relative `/work` paths to promote alongside `/output` |
 | `outputProposalTarget` | Workspace prefix for proposed paths (e.g. `Reports`) |
 | `runId` | Optional run label (defaults to a timestamped id) |
+| `secretHandlesJson` | Optional id → host path allowlist (see `LATTICE_WASI_SECRET_HANDLES`) |
 
 Cancel / fuel / epoch failures return structured tool JSON
 (`error.kind`, `stdoutTail`, `stderrTail`) instead of opaque strings. Successful
@@ -122,6 +123,19 @@ and proposal authority. Cancel kills the child.
 | --- | --- |
 | `LATTICE_WASI_SEATBELT` | `1`/`true` force on; `0`/`false` disable (default: on for macOS) |
 | `LATTICE_WASI_SEATBELT_BIN` | Path to `lattice-wasi-seatbelt` (default: sibling of `lattice-agentd`) |
+
+### Secret handles (KernelFS)
+
+Manifest secret handles are **deny-by-default**. To copy host files into
+`/run/secrets/<id>` for a WASI guest, set an explicit id → host path allowlist:
+
+| Env | Purpose |
+| --- | --- |
+| `LATTICE_WASI_SECRET_HANDLES` | JSON `[{"id":"api-key","hostPath":"/path"}]` or `id=/path,id2=/path2` |
+
+Per-run tool arg `secretHandlesJson` uses the same format (workspace-relative
+`hostPath` values are resolved under `workspaceRoot`). Network allowlists remain
+unsupported; ambient egress is not enabled.
 
 Non-macOS builds keep in-process Wasmtime. Forcing Seatbelt on Linux returns a
 clear unsupported-platform error (unless the runner is missing, which falls
