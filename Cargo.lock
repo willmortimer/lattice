@@ -5882,6 +5882,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-cell-client"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "ureq",
+ "walkdir",
+]
+
+[[package]]
 name = "lattice-cli"
 version = "0.1.0"
 dependencies = [
