@@ -4,6 +4,7 @@ import {
   applyOverlayShowToTrailSteps,
   applySpatialAgentEvent,
   initialAgentSessionState,
+  isAgentComposerDisabled,
   shouldRevealViewport,
   useAgentSessionStore,
 } from "./agentStore";
@@ -23,6 +24,9 @@ function resetStore() {
     setHealthBackend: useAgentSessionStore.getState().setHealthBackend,
     setHealthSnapshot: useAgentSessionStore.getState().setHealthSnapshot,
     applyProfileAiDefaults: useAgentSessionStore.getState().applyProfileAiDefaults,
+    setByoOpenaiKeyPresent: useAgentSessionStore.getState().setByoOpenaiKeyPresent,
+    setSelectedProvider: useAgentSessionStore.getState().setSelectedProvider,
+    setSelectedModel: useAgentSessionStore.getState().setSelectedModel,
     setFollowMode: useAgentSessionStore.getState().setFollowMode,
     consumeEvent: useAgentSessionStore.getState().consumeEvent,
     recordAgentEvent: useAgentSessionStore.getState().recordAgentEvent,
@@ -349,5 +353,27 @@ describe("useAgentSessionStore", () => {
     expect(state.accountAiDisabled).toBe(true);
     expect(state.selectedProvider).toBeNull();
     expect(state.selectedModel).toBeNull();
+  });
+
+  it("isAgentComposerDisabled blocks BYO without key", () => {
+    const ai = {
+      ...defaultDesktopSettings().ai,
+      mode: "byoOpenai" as const,
+    };
+    useAgentSessionStore.getState().applyProfileAiDefaults(resolveAgentDefaultsFromAiSettings(ai));
+    useAgentSessionStore.getState().setByoOpenaiKeyPresent(false);
+
+    expect(
+      isAgentComposerDisabled({
+        accountAiDisabled: false,
+        aiMode: "byoOpenai",
+        byoOpenaiKeyPresent: false,
+      }),
+    ).toBe(true);
+
+    useAgentSessionStore.getState().setByoOpenaiKeyPresent(true);
+    expect(
+      isAgentComposerDisabled(useAgentSessionStore.getState()),
+    ).toBe(false);
   });
 });

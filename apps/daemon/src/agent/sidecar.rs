@@ -503,27 +503,34 @@ pub fn env_truthy(name: &str) -> bool {
     )
 }
 
-pub fn default_provider_from_env() -> ProviderKind {
-    std::env::var(ENV_AGENT_PROVIDER)
+fn openai_key_present() -> bool {
+    std::env::var("OPENAI_API_KEY")
         .ok()
-        .as_deref()
-        .and_then(ProviderKind::parse)
-        .unwrap_or_else(|| {
-            // Prefer OpenAI whenever OPENAI_API_KEY is set. Do not pick Pioneer over
-            // OpenAI when both keys are present (desktop-dev / secrets/ai.env often
-            // injects both). Fake/local paths are selected separately.
-            if std::env::var("OPENAI_API_KEY")
-                .ok()
-                .filter(|s| !s.is_empty())
-                .is_some()
-            {
-                ProviderKind::Openai
-            } else {
-                // Pioneer remains available only via explicit LATTICE_AGENT_PROVIDER
-                // or when solely PIONEER_API_KEY is set (non-primary / dogfood).
-                ProviderKind::Pioneer
+        .filter(|s| !s.is_empty())
+        .is_some()
+}
+
+pub fn default_provider_from_env() -> ProviderKind {
+    // Prefer OpenAI whenever OPENAI_API_KEY is set. Do not pick Pioneer over
+    // OpenAI when both keys are present (desktop-dev / secrets/ai.env often
+    // injects both). Fake/local paths are selected separately. Pioneer remains
+    // available via explicit LATTICE_AGENT_PROVIDER or sole PIONEER_API_KEY.
+    if let Ok(raw) = std::env::var(ENV_AGENT_PROVIDER) {
+        if !raw.is_empty() {
+            if let Some(kind) = ProviderKind::parse(&raw) {
+                return kind;
             }
-        })
+            if raw.eq_ignore_ascii_case("openai") {
+                return ProviderKind::Openai;
+            }
+        }
+    }
+
+    if openai_key_present() {
+        ProviderKind::Openai
+    } else {
+        ProviderKind::Pioneer
+    }
 }
 
 pub fn default_model_from_env() -> String {
@@ -543,7 +550,59 @@ pub fn default_model_from_env() -> String {
 mod tests {
     use super::*;
     use std::process::{Command as StdCommand, Stdio};
+    use std::sync::{Mutex, OnceLock};
     use std::time::Duration;
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    struct EnvGuard {
+        key: String,
+        previous: Option<String>,
+    }
+
+    impl EnvGuard {
+        fn set(key: &str, value: Option<&str>) -> Self {
+            let previous = std::env::var(key).ok();
+            match value {
+                Some(value) => std::env::set_var(key, value),
+                None => std::env::remove_var(key),
+            }
+            Self {
+                key: key.to_string(),
+                previous,
+            }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match &self.previous {
+                Some(value) => std::env::set_var(&self.key, value),
+                None => std::env::remove_var(&self.key),
+            }
+        }
+    }
+
+    #[test]
+    fn default_provider_from_env_honors_explicit_openai() {
+        let _lock = env_lock().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _provider = EnvGuard::set(ENV_AGENT_PROVIDER, Some("openai"));
+        let _openai = EnvGuard::set("OPENAI_API_KEY", None);
+        let _pioneer = EnvGuard::set("PIONEER_API_KEY", Some("pioneer-test"));
+        assert_eq!(default_provider_from_env(), ProviderKind::Openai);
+    }
+
+    #[test]
+    fn default_provider_from_env_prefers_openai_when_both_keys_present() {
+        let _lock = env_lock().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _provider = EnvGuard::set(ENV_AGENT_PROVIDER, None);
+        let _openai = EnvGuard::set("OPENAI_API_KEY", Some("sk-test"));
+        let _pioneer = EnvGuard::set("PIONEER_API_KEY", Some("pioneer-test"));
+        assert_eq!(default_provider_from_env(), ProviderKind::Openai);
+    }
 
     async fn collect_events_until_terminal(
         rx: &mut mpsc::Receiver<AgentEvent>,
@@ -662,48 +721,6 @@ for raw in sys.stdin:
         ));
 
         backend.shutdown().await;
-    }
-
-    fn env_lock() -> &'static std::sync::Mutex<()> {
-        static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
-        LOCK.get_or_init(|| std::sync::Mutex::new(()))
-    }
-
-    struct EnvGuard {
-        key: String,
-        previous: Option<String>,
-    }
-
-    impl EnvGuard {
-        fn set(key: &str, value: Option<&str>) -> Self {
-            let previous = std::env::var(key).ok();
-            match value {
-                Some(value) => std::env::set_var(key, value),
-                None => std::env::remove_var(key),
-            }
-            Self {
-                key: key.to_string(),
-                previous,
-            }
-        }
-    }
-
-    impl Drop for EnvGuard {
-        fn drop(&mut self) {
-            match &self.previous {
-                Some(value) => std::env::set_var(&self.key, value),
-                None => std::env::remove_var(&self.key),
-            }
-        }
-    }
-
-    #[test]
-    fn default_provider_prefers_openai_when_both_keys_set() {
-        let _lock = env_lock().lock().unwrap_or_else(|p| p.into_inner());
-        let _provider = EnvGuard::set(ENV_AGENT_PROVIDER, None);
-        let _openai = EnvGuard::set("OPENAI_API_KEY", Some("sk-test"));
-        let _pioneer = EnvGuard::set("PIONEER_API_KEY", Some("pioneer-test"));
-        assert_eq!(default_provider_from_env(), ProviderKind::Openai);
     }
 
     #[test]

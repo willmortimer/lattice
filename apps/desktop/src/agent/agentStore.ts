@@ -117,6 +117,22 @@ export function shouldRevealViewport(followMode: AgentFollowMode): boolean {
   return followMode === "guide";
 }
 
+/** True when the agent composer must not accept or start runs. */
+export function isAgentComposerDisabled(
+  state: Pick<
+    AgentSessionStore,
+    "accountAiDisabled" | "aiMode" | "byoOpenaiKeyPresent"
+  >,
+): boolean {
+  if (state.accountAiDisabled) {
+    return true;
+  }
+  if (state.aiMode === "byoOpenai") {
+    return state.byoOpenaiKeyPresent !== true;
+  }
+  return false;
+}
+
 function resolveProviderFromProfileAndHealth(
   state: Pick<AgentSessionStore, "selectedProvider" | "accountAiDisabled" | "aiMode">,
   backend: string | null,
@@ -162,6 +178,8 @@ type AgentSessionStore = {
   lastEventBackend: string | null;
   aiMode: AiMode | null;
   accountAiDisabled: boolean;
+  /** `null` until BYO key presence is checked; only meaningful when `aiMode === "byoOpenai"`. */
+  byoOpenaiKeyPresent: boolean | null;
   selectedProvider: SelectableAgentProvider | null;
   selectedModel: string | null;
   trailLabels: string[];
@@ -178,6 +196,7 @@ type AgentSessionStore = {
     degraded?: boolean | null;
   }) => void;
   applyProfileAiDefaults: (defaults: AgentAiDefaults) => void;
+  setByoOpenaiKeyPresent: (present: boolean | null) => void;
   setSelectedProvider: (provider: SelectableAgentProvider) => void;
   setSelectedModel: (model: string) => void;
   setFollowMode: (mode: AgentFollowMode) => void;
@@ -424,6 +443,7 @@ export const initialAgentSessionState = {
   lastEventBackend: null as string | null,
   aiMode: null as AiMode | null,
   accountAiDisabled: false,
+  byoOpenaiKeyPresent: null as boolean | null,
   ...readStoredSelection(),
   trailLabels: [] as string[],
   followMode: "guide" as const,
@@ -478,6 +498,7 @@ export const useAgentSessionStore = create<AgentSessionStore>((set, get) => ({
       const base = {
         aiMode: defaults.aiMode,
         accountAiDisabled: defaults.accountAiDisabled,
+        byoOpenaiKeyPresent: null,
       };
       if (hasStoredSelection) {
         return base;
@@ -494,6 +515,7 @@ export const useAgentSessionStore = create<AgentSessionStore>((set, get) => ({
         selectedModel: model,
       };
     }),
+  setByoOpenaiKeyPresent: (present) => set({ byoOpenaiKeyPresent: present }),
   setSelectedProvider: (provider) =>
     set(() => {
       const model = defaultModelForProvider(provider);

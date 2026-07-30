@@ -5,9 +5,10 @@ import { useEffect, useMemo, type ReactNode } from "react";
 
 import { getAgentHealth, TauriAgentChatTransport } from "../lib/agent";
 import { loadProfile } from "../lib/profile";
+import { hasOpenaiApiKey } from "../lib/openaiKey";
 import { resolveAgentDefaultsFromAiSettings } from "./agentAiDefaults";
 import { AgentChatControlsProvider } from "./agentChatControls";
-import { useAgentSessionStore } from "./agentStore";
+import { isAgentComposerDisabled, useAgentSessionStore } from "./agentStore";
 
 export type LatticeAgentProviderProps = {
   workspaceRoot: string | null;
@@ -25,6 +26,8 @@ function LatticeAgentRuntimeProvider({
   const recordAgentEvent = useAgentSessionStore((state) => state.recordAgentEvent);
   const setHealthSnapshot = useAgentSessionStore((state) => state.setHealthSnapshot);
   const applyProfileAiDefaults = useAgentSessionStore((state) => state.applyProfileAiDefaults);
+  const setByoOpenaiKeyPresent = useAgentSessionStore((state) => state.setByoOpenaiKeyPresent);
+  const aiMode = useAgentSessionStore((state) => state.aiMode);
 
   const threadId = useMemo(() => ensureThreadId(workspaceRoot), [ensureThreadId, workspaceRoot]);
 
@@ -46,6 +49,32 @@ function LatticeAgentRuntimeProvider({
     };
   }, [applyProfileAiDefaults]);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (aiMode !== "byoOpenai") {
+      setByoOpenaiKeyPresent(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void hasOpenaiApiKey()
+      .then((present) => {
+        if (!cancelled) {
+          setByoOpenaiKeyPresent(present);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setByoOpenaiKeyPresent(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [aiMode, setByoOpenaiKeyPresent]);
+
   const transport = useMemo(
     () =>
       new TauriAgentChatTransport({
@@ -54,7 +83,7 @@ function LatticeAgentRuntimeProvider({
         onAgentEvent: recordAgentEvent,
         resolveRunOptions: () => {
           const state = useAgentSessionStore.getState();
-          if (state.accountAiDisabled) {
+          if (isAgentComposerDisabled(state)) {
             return {};
           }
           return {
