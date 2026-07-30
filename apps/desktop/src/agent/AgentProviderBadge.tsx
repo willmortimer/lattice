@@ -20,6 +20,8 @@ export function AgentProviderBadge() {
   const lastEventBackend = useAgentSessionStore((state) => state.lastEventBackend);
   const selectedProvider = useAgentSessionStore((state) => state.selectedProvider);
   const selectedModel = useAgentSessionStore((state) => state.selectedModel);
+  const aiMode = useAgentSessionStore((state) => state.aiMode);
+  const accountAiDisabled = useAgentSessionStore((state) => state.accountAiDisabled);
   const setSelectedProvider = useAgentSessionStore((state) => state.setSelectedProvider);
   const setSelectedModel = useAgentSessionStore((state) => state.setSelectedModel);
 
@@ -28,9 +30,24 @@ export function AgentProviderBadge() {
     [healthBackend, lastEventBackend],
   );
 
+  if (accountAiDisabled) {
+    return (
+      <div className="agent-runtime-controls" aria-label="Agent runtime">
+        <span className="agent-provider-badge agent-provider-badge-unknown">
+          Lattice Account · Coming soon
+        </span>
+        <span className="agent-runtime-hint">
+          Cloud AI is not available yet. Switch to Local or BYO OpenAI in Settings → AI.
+        </span>
+      </div>
+    );
+  }
+
   const live = kind !== "fake" && kind !== "unknown";
   const providerValue: SelectableAgentProvider =
     selectedProvider ?? (isSelectableProvider(kind) ? kind : "openai");
+  const providerOptions: SelectableAgentProvider[] =
+    aiMode === "byoOpenai" ? ["openai"] : ["openai", "pioneer"];
   const modelOptions = modelsForProvider(providerValue);
   const modelValue =
     selectedModel ?? healthModel ?? defaultModelForProvider(providerValue);
@@ -43,6 +60,11 @@ export function AgentProviderBadge() {
         : healthOk === false
           ? "Down"
           : "Live";
+
+  const offlineHint =
+    aiMode === "byoOpenai"
+      ? "Add your OpenAI API key in Settings → AI"
+      : "Launch with secrets/ai.env via nxr desktop-dev";
 
   return (
     <div className="agent-runtime-controls" aria-label="Agent runtime">
@@ -61,8 +83,11 @@ export function AgentProviderBadge() {
                 setSelectedProvider(event.target.value as SelectableAgentProvider)
               }
             >
-              <option value="openai">OpenAI</option>
-              <option value="pioneer">Pioneer</option>
+              {providerOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option === "openai" ? "OpenAI" : "Pioneer"}
+                </option>
+              ))}
             </select>
           </label>
           <label className="agent-runtime-field">
@@ -85,7 +110,7 @@ export function AgentProviderBadge() {
           </label>
         </>
       ) : (
-        <span className="agent-runtime-hint" title="Launch with secrets/ai.env via nxr desktop-dev">
+        <span className="agent-runtime-hint" title={offlineHint}>
           No live keys — fake backend
         </span>
       )}

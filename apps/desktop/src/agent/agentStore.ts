@@ -9,12 +9,13 @@ import {
 } from "@lattice/agent-protocol";
 import { create } from "zustand";
 
-import { isAgentProviderKind } from "./providerKind";
+import type { AiMode } from "../lib/profile";
+import type { AgentAiDefaults } from "./agentAiDefaults";
 import {
-  DEFAULT_OPENAI_MODEL,
   defaultModelForProvider,
   type SelectableAgentProvider,
 } from "./modelCatalog";
+import { isAgentProviderKind } from "./providerKind";
 
 const SELECTION_STORAGE_KEY = "lattice.agent.selection.v1";
 
@@ -116,6 +117,42 @@ export function shouldRevealViewport(followMode: AgentFollowMode): boolean {
   return followMode === "guide";
 }
 
+function resolveProviderFromProfileAndHealth(
+  state: Pick<AgentSessionStore, "selectedProvider" | "accountAiDisabled" | "aiMode">,
+  backend: string | null,
+): SelectableAgentProvider | null {
+  if (state.selectedProvider) {
+    return state.selectedProvider;
+  }
+  if (state.accountAiDisabled) {
+    return null;
+  }
+  if (state.aiMode === "byoOpenai") {
+    return "openai";
+  }
+  if (backend === "openai" || backend === "pioneer") {
+    return backend;
+  }
+  return null;
+}
+
+function resolveModelFromProfileAndHealth(
+  state: Pick<AgentSessionStore, "selectedModel" | "accountAiDisabled">,
+  healthModel: string | null,
+  provider: SelectableAgentProvider | null,
+): string | null {
+  if (state.selectedModel) {
+    return state.selectedModel;
+  }
+  if (state.accountAiDisabled) {
+    return null;
+  }
+  if (healthModel) {
+    return healthModel;
+  }
+  return provider ? defaultModelForProvider(provider) : null;
+}
+
 type AgentSessionStore = {
   threadIds: Record<string, string>;
   healthBackend: string | null;
@@ -123,6 +160,8 @@ type AgentSessionStore = {
   healthOk: boolean | null;
   healthDegraded: boolean | null;
   lastEventBackend: string | null;
+  aiMode: AiMode | null;
+  accountAiDisabled: boolean;
   selectedProvider: SelectableAgentProvider | null;
   selectedModel: string | null;
   trailLabels: string[];
@@ -138,6 +177,7 @@ type AgentSessionStore = {
     ok?: boolean | null;
     degraded?: boolean | null;
   }) => void;
+  applyProfileAiDefaults: (defaults: AgentAiDefaults) => void;
   setSelectedProvider: (provider: SelectableAgentProvider) => void;
   setSelectedModel: (model: string) => void;
   setFollowMode: (mode: AgentFollowMode) => void;
@@ -382,6 +422,8 @@ export const initialAgentSessionState = {
   healthOk: null as boolean | null,
   healthDegraded: null as boolean | null,
   lastEventBackend: null as string | null,
+  aiMode: null as AiMode | null,
+  accountAiDisabled: false,
   ...readStoredSelection(),
   trailLabels: [] as string[],
   followMode: "guide" as const,
@@ -413,13 +455,8 @@ export const useAgentSessionStore = create<AgentSessionStore>((set, get) => ({
           : snapshot.model && snapshot.model.trim()
             ? snapshot.model.trim()
             : null;
-      const nextProvider =
-        state.selectedProvider ??
-        (backend === "openai" || backend === "pioneer" ? backend : null);
-      const nextModel =
-        state.selectedModel ??
-        model ??
-        (nextProvider ? defaultModelForProvider(nextProvider) : DEFAULT_OPENAI_MODEL);
+      const nextProvider = resolveProviderFromProfileAndHealth(state, backend);
+      const nextModel = resolveModelFromProfileAndHealth(state, model, nextProvider);
       if (nextProvider !== state.selectedProvider || nextModel !== state.selectedModel) {
         persistSelection(nextProvider, nextModel);
       }
@@ -431,6 +468,30 @@ export const useAgentSessionStore = create<AgentSessionStore>((set, get) => ({
           snapshot.degraded === undefined ? state.healthDegraded : snapshot.degraded,
         selectedProvider: nextProvider,
         selectedModel: nextModel,
+      };
+    }),
+  applyProfileAiDefaults: (defaults) =>
+    set(() => {
+      const stored = readStoredSelection();
+      const hasStoredSelection =
+        stored.selectedProvider !== null || stored.selectedModel !== null;
+      const base = {
+        aiMode: defaults.aiMode,
+        accountAiDisabled: defaults.accountAiDisabled,
+      };
+      if (hasStoredSelection) {
+        return base;
+      }
+      const provider = defaults.provider;
+      const model =
+        defaults.model ?? (provider ? defaultModelForProvider(provider) : null);
+      if (provider && model) {
+        persistSelection(provider, model);
+      }
+      return {
+        ...base,
+        selectedProvider: provider,
+        selectedModel: model,
       };
     }),
   setSelectedProvider: (provider) =>
