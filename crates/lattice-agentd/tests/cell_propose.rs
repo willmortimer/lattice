@@ -249,6 +249,97 @@ async fn cell_output_map_proposes_via_latticed() {
     );
 }
 
+#[tokio::test]
+async fn cell_binary_output_proposes_via_content_base64() {
+    let binary = vec![0xff_u8, 0xfe, 0x00, 0x01, 0x80];
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&binary);
+
+    let http = MockCelldHttp::new();
+    http.push_unary(
+        CELL_APPLY,
+        json!({
+            "cell": {"id": "cell_bin", "observedState": "OBSERVED_STATE_READY"},
+            "operation": {"operationId": "op_apply", "state": "OPERATION_STATE_SUCCEEDED"}
+        }),
+    );
+    http.push_unary(
+        CELL_START,
+        json!({
+            "operation": {"operationId": "op_start", "state": "OPERATION_STATE_SUCCEEDED"}
+        }),
+    );
+    http.push_invoke_payload(json!({
+        "state": "hydrated",
+        "file_count": 0,
+        "projection_id": "proj_bin"
+    }));
+    http.push_invoke_payload(json!({
+        "state": "completed",
+        "exit_code": 0,
+        "projection_id": "proj_bin"
+    }));
+    http.push_invoke_payload(json!({
+        "state": "collected",
+        "file_count": 1,
+        "files": [{
+            "path": "output/raw.bin",
+            "sha256": "dead",
+            "bytes": 5,
+            "content_base64": encoded
+        }]
+    }));
+
+    let celld = CelldClient::new("http://celld.test", http);
+    let latticed = MockServer::start().await;
+    let bodies = Arc::new(Mutex::new(Vec::new()));
+    let capture = ProposeResourceCapture {
+        bodies: Arc::clone(&bodies),
+    };
+    Mock::given(method("POST"))
+        .and(path("/v1/proposals/propose_resource"))
+        .respond_with(capture)
+        .expect(1)
+        .mount(&latticed)
+        .await;
+
+    let lattice = LatticeToolClient::new(latticed.uri(), "test-token").expect("client");
+    let provenance = CellProposalProvenance {
+        cell_id: "cell_bin".into(),
+        projection_id: "proj_bin".into(),
+        task_id: "proj_bin".into(),
+        output_proposal_target: "Reports".into(),
+    };
+
+    run_cell_task_and_propose(
+        &celld,
+        &lattice,
+        &WorkspaceBinding::new(Some("ws-bin".into()), None),
+        &ProjectionRunRequest {
+            cell_id: "cell_bin".into(),
+            projection_id: "proj_bin".into(),
+            plan: KernelFSHydrationPlan::from_role_paths("/tmp/in", None, "/tmp/out"),
+            argv: vec!["/bin/true".into()],
+            ..ProjectionRunRequest::default()
+        },
+        "Reports",
+        &provenance,
+    )
+    .await
+    .expect("run and propose binary");
+
+    let captured = bodies.lock().expect("lock");
+    assert_eq!(captured.len(), 1);
+    assert_eq!(
+        captured[0].get("path").and_then(|v| v.as_str()),
+        Some("Reports/raw.bin")
+    );
+    assert!(captured[0].get("content").is_none());
+    assert_eq!(
+        captured[0].get("contentBase64").and_then(|v| v.as_str()),
+        Some(encoded.as_str())
+    );
+}
+
 #[test]
 fn output_map_to_drafts_strips_output_prefix() {
     use lattice_cell_client::OutputFile;

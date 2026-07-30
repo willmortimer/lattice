@@ -54,7 +54,8 @@ Direct calls return a clear error naming the env var.
 Collected mirror paths like `output/out.txt` are mapped to workspace proposal
 paths under `outputProposalTarget` (e.g. `Reports/out.txt`). Provenance uses
 `sourceResource` `cell://{cellId}/{projectionId}` — same propose/overlay path
-as WASI `run_wasi_guest`.
+as WASI `run_wasi_guest`. Non-UTF-8 collected bytes use `contentBase64` on
+`propose_resource` (via shared `propose_output_drafts*` / `ContentKind::Bytes`).
 
 Implementation: `crates/lattice-agentd/src/cell_host.rs` +
 `crates/lattice-agentd/src/tools.rs` (`dispatch_run_cell_task`).

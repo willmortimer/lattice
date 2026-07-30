@@ -150,6 +150,24 @@ mod tests {
     }
 
     #[test]
+    fn maps_binary_collected_output_as_bytes_kind() {
+        let mut files = OutputFileMap::new();
+        files.insert(
+            "output/data.bin".into(),
+            OutputFile {
+                path: "output/data.bin".into(),
+                sha256: "dead".into(),
+                bytes: 4,
+                content: vec![0x00, 0x01, 0xfe, 0xff],
+            },
+        );
+        let drafts = output_map_to_drafts(&files, "Artifacts", "proj_bin");
+        assert_eq!(drafts.len(), 1);
+        assert_eq!(drafts[0].resource_path, "Artifacts/data.bin");
+        assert_eq!(drafts[0].kind, ContentKind::Bytes);
+    }
+
+    #[test]
     fn cell_provenance_source_resource() {
         let prov = CellProposalProvenance {
             cell_id: "cell_demo".into(),

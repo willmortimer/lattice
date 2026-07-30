@@ -10,12 +10,14 @@ use std::time::Duration;
 
 use kernelfs::{
     collect_output_commit_plan, materialize_with_options, run_wasi_guest as kernelfs_run,
-    ExecutionManifest, HostPathPolicy, HydrationRecord, LatticeProposalAdapter,
+    ContentKind, ExecutionManifest, HostPathPolicy, HydrationRecord, LatticeProposalAdapter,
     LatticeProposalDraft, MaterializeError, MaterializeOptions, SecretHandlePolicy,
     WasmtimeLimits, WasiRunError, WasiRunOptions, WasiRunResult,
 };
 use serde_json::{json, Value};
 use thiserror::Error;
+
+use base64::Engine;
 
 use crate::lattice_client::{LatticeApiError, LatticeToolClient};
 use crate::seatbelt::{self, SeatbeltError};
@@ -297,22 +299,30 @@ pub async fn propose_output_drafts_with_provenance<P: DraftProvenance + Sync>(
 
     let mut results = Vec::with_capacity(drafts.len());
     for draft in drafts {
-        let content = std::str::from_utf8(&draft.content).map_err(|_| {
-            ProposeDraftsError::NonUtf8Content {
-                path: draft.resource_path.clone(),
-            }
-        })?;
-
         let summary = match provenance {
             Some(prov) => prov.enrich_summary(&draft.summary),
             None => draft.summary.clone(),
         };
 
-        let mut body = json!({
-            "path": draft.resource_path,
-            "content": content,
-            "summary": summary,
-        });
+        let mut body = match draft.kind {
+            ContentKind::Text => {
+                let content = std::str::from_utf8(&draft.content).map_err(|_| {
+                    ProposeDraftsError::NonUtf8Content {
+                        path: draft.resource_path.clone(),
+                    }
+                })?;
+                json!({
+                    "path": draft.resource_path,
+                    "content": content,
+                    "summary": summary,
+                })
+            }
+            ContentKind::Bytes => json!({
+                "path": draft.resource_path,
+                "contentBase64": base64::engine::general_purpose::STANDARD.encode(&draft.content),
+                "summary": summary,
+            }),
+        };
         if let Some(prov) = provenance {
             body["sourceResource"] = Value::String(prov.source_resource());
         }

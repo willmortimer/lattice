@@ -21,6 +21,7 @@ path = "src/bin/lattice_wasi_seatbelt.rs"
 
 [dependencies]
 anyhow.workspace = true
+base64.workspace = true
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 kernelfs.workspace = true
 lattice-cell-client.workspace = true
