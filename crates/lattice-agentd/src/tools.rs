@@ -112,7 +112,7 @@ pub fn openai_tool_definitions() -> Vec<Value> {
         ),
         function_tool(
             "search",
-            "FTS search over the open workspace. Use for locating pages/paths by topic. Returns paths, excerpts, scores.",
+            "Hybrid or FTS search over the open Lattice workspace. Use for locating pages/paths by topic. Returns paths, excerpts, scores.",
             json!({
                 "type": "object",
                 "properties": {
@@ -1107,6 +1107,27 @@ pub fn chat_messages_from_start(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn search_tool_description_mentions_hybrid() {
+        let defs = openai_tool_definitions();
+        let search = defs
+            .iter()
+            .find(|t| {
+                t.pointer("/function/name")
+                    .and_then(|v| v.as_str())
+                    == Some("search")
+            })
+            .expect("search tool");
+        let desc = search
+            .pointer("/function/description")
+            .and_then(|v| v.as_str())
+            .expect("search description");
+        assert!(
+            desc.contains("Hybrid"),
+            "search description should mention hybrid: {desc}"
+        );
+    }
 
     #[test]
     fn tool_defs_include_core_names() {

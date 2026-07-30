@@ -7,6 +7,8 @@ import {
   shouldRevealViewport,
   useAgentSessionStore,
 } from "./agentStore";
+import { resolveAgentDefaultsFromAiSettings } from "./agentAiDefaults";
+import { defaultDesktopSettings } from "../lib/profile";
 
 const markdownAnchor = {
   kind: "markdown-block" as const,
@@ -19,6 +21,8 @@ function resetStore() {
     ...initialAgentSessionState,
     ensureThreadId: useAgentSessionStore.getState().ensureThreadId,
     setHealthBackend: useAgentSessionStore.getState().setHealthBackend,
+    setHealthSnapshot: useAgentSessionStore.getState().setHealthSnapshot,
+    applyProfileAiDefaults: useAgentSessionStore.getState().applyProfileAiDefaults,
     setFollowMode: useAgentSessionStore.getState().setFollowMode,
     consumeEvent: useAgentSessionStore.getState().consumeEvent,
     recordAgentEvent: useAgentSessionStore.getState().recordAgentEvent,
@@ -312,5 +316,38 @@ describe("useAgentSessionStore", () => {
 
     expect(useAgentSessionStore.getState().activeOverlays).toEqual({});
     expect(useAgentSessionStore.getState().trailLabels).toEqual(["overlay_show"]);
+  });
+
+  it("applyProfileAiDefaults maps BYO OpenAI to openai provider", () => {
+    const ai = {
+      ...defaultDesktopSettings().ai,
+      mode: "byoOpenai" as const,
+      preferredModel: "gpt-4o-mini",
+    };
+    useAgentSessionStore.getState().applyProfileAiDefaults(resolveAgentDefaultsFromAiSettings(ai));
+
+    const state = useAgentSessionStore.getState();
+    expect(state.aiMode).toBe("byoOpenai");
+    expect(state.selectedProvider).toBe("openai");
+    expect(state.selectedModel).toBe("gpt-4o-mini");
+  });
+
+  it("setHealthSnapshot does not default to pioneer in account mode", () => {
+    const ai = {
+      ...defaultDesktopSettings().ai,
+      mode: "account" as const,
+    };
+    useAgentSessionStore.getState().applyProfileAiDefaults(resolveAgentDefaultsFromAiSettings(ai));
+    useAgentSessionStore.getState().setHealthSnapshot({
+      backend: "pioneer",
+      model: "gpt-5.6-luna",
+      ok: true,
+      degraded: false,
+    });
+
+    const state = useAgentSessionStore.getState();
+    expect(state.accountAiDisabled).toBe(true);
+    expect(state.selectedProvider).toBeNull();
+    expect(state.selectedModel).toBeNull();
   });
 });

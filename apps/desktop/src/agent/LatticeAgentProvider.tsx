@@ -4,6 +4,8 @@ import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk";
 import { useEffect, useMemo, type ReactNode } from "react";
 
 import { getAgentHealth, TauriAgentChatTransport } from "../lib/agent";
+import { loadProfile } from "../lib/profile";
+import { resolveAgentDefaultsFromAiSettings } from "./agentAiDefaults";
 import { AgentChatControlsProvider } from "./agentChatControls";
 import { useAgentSessionStore } from "./agentStore";
 
@@ -22,8 +24,27 @@ function LatticeAgentRuntimeProvider({
   const ensureThreadId = useAgentSessionStore((state) => state.ensureThreadId);
   const recordAgentEvent = useAgentSessionStore((state) => state.recordAgentEvent);
   const setHealthSnapshot = useAgentSessionStore((state) => state.setHealthSnapshot);
+  const applyProfileAiDefaults = useAgentSessionStore((state) => state.applyProfileAiDefaults);
 
   const threadId = useMemo(() => ensureThreadId(workspaceRoot), [ensureThreadId, workspaceRoot]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadProfile()
+      .then((profile) => {
+        if (!cancelled) {
+          applyProfileAiDefaults(
+            resolveAgentDefaultsFromAiSettings(profile.settings.desktop.ai),
+          );
+        }
+      })
+      .catch(() => {
+        // Profile load failure should not block the agent shell.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [applyProfileAiDefaults]);
 
   const transport = useMemo(
     () =>
@@ -33,6 +54,9 @@ function LatticeAgentRuntimeProvider({
         onAgentEvent: recordAgentEvent,
         resolveRunOptions: () => {
           const state = useAgentSessionStore.getState();
+          if (state.accountAiDisabled) {
+            return {};
+          }
           return {
             provider: state.selectedProvider ?? undefined,
             model: state.selectedModel ?? undefined,
