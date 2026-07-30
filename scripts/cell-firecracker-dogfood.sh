@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Firecracker dogfood: CELLD_BASE_URL → hydrate/run/collect → ≥1 Lattice proposal.
+# Firecracker / OCI dogfood: CELLD_BASE_URL → hydrate/run/collect → ≥1 Lattice proposal.
 # Default (--dry-run): mocked celld + latticed; no live celld required (CI-safe).
 set -euo pipefail
 
@@ -8,10 +8,11 @@ cd "$root"
 
 usage() {
   cat <<'EOF'
-usage: scripts/cell-firecracker-dogfood.sh [--dry-run | --live] [live options]
+usage: scripts/cell-firecracker-dogfood.sh [--dry-run | --live] [options]
 
-End-to-end Lattice ↔ celld (Firecracker / lattice-runtime) dogfood loop with
-propose_resource for collected /output files.
+End-to-end Lattice ↔ celld (lattice-runtime) dogfood loop with propose_resource
+for collected /output files. Default lane is Firecracker microVM; use
+--execution-mode=oci for Mac ivisor-interim OCI (see docs/dev/celld-client.md).
 
 Modes:
   --dry-run (default)  Run mocked integration tests (no celld or latticed).
@@ -23,6 +24,9 @@ Live options (passed to cell-firecracker-dogfood binary):
   --projection-id ID   Projection id (default: proj_dogfood)
   --output-target DIR  Proposal path prefix (default: Reports)
   --hydrate REL        Workspace-relative file to hydrate under input/ (repeatable)
+  --execution-mode MODE  oci (EXECUTION_MODE_OCI) or empty/microvm (default)
+  --oci-bundle-path PATH OCI bundle directory (required for live OCI)
+  --allow-network      Set with_network_deny_all(false) on hydration plan
   --                  Remaining args become guest argv (default: copy input → output)
 
 Live environment (required):
@@ -40,8 +44,9 @@ Firecracker lab (celld guest media — see cell/scripts/lattice-cell-loop.sh):
   CELL_FC_VSOCK_UDS_ROOT / DEVCELL_FC_VSOCK_UDS_ROOT
   CELL_FC_SLICE_TMPDIR / DEVCELL_FC_SLICE_TMPDIR
 
-Start celld with --backend=firecracker and lattice-runtime profile before --live.
-Cell repo: scripts/lattice-cell-loop.sh documents a full apply/start/invoke loop.
+Start celld with --backend=firecracker (microVM) or --backend=vz (Mac OCI) and
+lattice-runtime profile before --live. Cell repo: scripts/lattice-cell-loop.sh
+documents a full apply/start/invoke loop; Mac OCI: docs/10-macos-local-backend.md.
 
 Examples:
   scripts/cell-firecracker-dogfood.sh
@@ -49,6 +54,8 @@ Examples:
   export CELLD_BASE_URL=http://127.0.0.1:8080
   export LATTICE_API_BASE_URL=http://127.0.0.1:18787 LATTICE_AUTH_TOKEN=...
   scripts/cell-firecracker-dogfood.sh --live --workspace /path/to/ws --hydrate input/hello.txt
+  scripts/cell-firecracker-dogfood.sh --live --execution-mode=oci \
+    --oci-bundle-path /tmp/cell-oci-bundles/cell_oci01 --workspace /path/to/ws
 EOF
 }
 
@@ -68,6 +75,53 @@ while [[ $# -gt 0 ]]; do
     -h | --help)
       usage
       exit 0
+      ;;
+    --execution-mode)
+      if [[ "$mode" != "live" ]]; then
+        echo "unknown argument (use --live first): $1" >&2
+        usage >&2
+        exit 2
+      fi
+      shift
+      live_args+=("--execution-mode" "${1:-}")
+      shift
+      ;;
+    --execution-mode=*)
+      if [[ "$mode" != "live" ]]; then
+        echo "unknown argument (use --live first): $1" >&2
+        usage >&2
+        exit 2
+      fi
+      live_args+=("--execution-mode" "${1#*=}")
+      shift
+      ;;
+    --oci-bundle-path)
+      if [[ "$mode" != "live" ]]; then
+        echo "unknown argument (use --live first): $1" >&2
+        usage >&2
+        exit 2
+      fi
+      shift
+      live_args+=("--oci-bundle-path" "${1:-}")
+      shift
+      ;;
+    --oci-bundle-path=*)
+      if [[ "$mode" != "live" ]]; then
+        echo "unknown argument (use --live first): $1" >&2
+        usage >&2
+        exit 2
+      fi
+      live_args+=("--oci-bundle-path" "${1#*=}")
+      shift
+      ;;
+    --allow-network)
+      if [[ "$mode" != "live" ]]; then
+        echo "unknown argument (use --live first): $1" >&2
+        usage >&2
+        exit 2
+      fi
+      live_args+=("--allow-network")
+      shift
       ;;
     *)
       if [[ "$mode" != "live" ]]; then
