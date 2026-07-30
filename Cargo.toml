@@ -29,6 +29,8 @@ members = [
     "crates/lattice-voice-macos",
     "crates/lattice-audio",
     "crates/lattice-audio-macos",
+    "crates/lattice-capture-core",
+    "crates/lattice-capture-macos",
     "crates/lattice-protocol",
     "crates/lattice-client",
     "crates/lattice-connectors",
@@ -72,6 +74,8 @@ lattice-voice = { path = "crates/lattice-voice" }
 lattice-voice-macos = { path = "crates/lattice-voice-macos" }
 lattice-audio = { path = "crates/lattice-audio" }
 lattice-audio-macos = { path = "crates/lattice-audio-macos" }
+lattice-capture-core = { path = "crates/lattice-capture-core" }
+lattice-capture-macos = { path = "crates/lattice-capture-macos" }
 lattice-protocol = { path = "crates/lattice-protocol" }
 lattice-client = { path = "crates/lattice-client" }
 lattice-connectors = { path = "crates/lattice-connectors" }

@@ -1,0 +1,28 @@
+[package]
+name = "lattice-capture-macos"
+description = "macOS ScreenCaptureKit capture bridge (C ABI + Swift) for Lattice clipper"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "lattice_capture_macos"
+path = "src/lib.rs"
+
+[features]
+default = []
+# Links `libLatticeCaptureBridge.dylib` (set automatically by build.rs when found/built).
+link-bridge = []
+# Live ScreenCaptureKit integration test (requires linked bridge + screen recording permission).
+live-capture = ["link-bridge"]
+
+[dependencies]
+lattice-capture-core.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+lattice-capture-core.workspace = true
+
+[package.metadata.docs.rs]
+targets = ["aarch64-apple-darwin"]

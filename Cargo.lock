@@ -5814,6 +5814,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-capture-core"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "lattice-capture-macos"
+version = "0.1.0"
+dependencies = [
+ "lattice-capture-core",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "lattice-cli"
 version = "0.1.0"
 dependencies = [
