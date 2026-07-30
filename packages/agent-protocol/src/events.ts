@@ -16,7 +16,7 @@ export const runStartedEventSchema = z.object({
   type: z.literal("run_started"),
   runId: z.string(),
   threadId: z.string(),
-  /** Effective provider for this run (`pioneer` | `openai` | `fake`). */
+  /** Effective provider for this run (`pioneer` | `openai` | `local` | `fake`). */
   provider: providerKindSchema.optional(),
 });
 

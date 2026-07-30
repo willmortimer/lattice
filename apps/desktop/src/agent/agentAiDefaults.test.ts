@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { defaultDesktopSettings } from "../lib/profile";
-import { DEFAULT_OPENAI_MODEL } from "./modelCatalog";
+import { DEFAULT_OPENAI_MODEL, DEFAULT_LOCAL_MODEL } from "./modelCatalog";
 import { resolveAgentDefaultsFromAiSettings } from "./agentAiDefaults";
 
 describe("resolveAgentDefaultsFromAiSettings", () => {
@@ -30,7 +30,7 @@ describe("resolveAgentDefaultsFromAiSettings", () => {
     expect(resolveAgentDefaultsFromAiSettings(ai).model).toBe(DEFAULT_OPENAI_MODEL);
   });
 
-  it("defers provider for local mode", () => {
+  it("maps local mode to on-device provider", () => {
     const ai = {
       ...defaultDesktopSettings().ai,
       mode: "local" as const,
@@ -39,10 +39,20 @@ describe("resolveAgentDefaultsFromAiSettings", () => {
 
     expect(resolveAgentDefaultsFromAiSettings(ai)).toEqual({
       aiMode: "local",
-      provider: null,
+      provider: "local",
       model: "local-qwen",
       accountAiDisabled: false,
     });
+  });
+
+  it("uses default local model when on-device has no preference", () => {
+    const ai = {
+      ...defaultDesktopSettings().ai,
+      mode: "local" as const,
+      preferredModel: null,
+    };
+
+    expect(resolveAgentDefaultsFromAiSettings(ai).model).toBe(DEFAULT_LOCAL_MODEL);
   });
 
   it("disables account mode without defaulting to Pioneer", () => {

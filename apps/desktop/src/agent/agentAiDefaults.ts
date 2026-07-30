@@ -1,5 +1,5 @@
 import type { AiMode, DesktopSettings } from "../lib/profile";
-import { DEFAULT_OPENAI_MODEL, type SelectableAgentProvider } from "./modelCatalog";
+import { DEFAULT_OPENAI_MODEL, DEFAULT_LOCAL_MODEL, type SelectableAgentProvider } from "./modelCatalog";
 
 export type AgentAiDefaults = {
   aiMode: AiMode;
@@ -37,8 +37,8 @@ export function resolveAgentDefaultsFromAiSettings(
     case "local":
       return {
         aiMode: "local",
-        provider: null,
-        model: preferredModel,
+        provider: "local",
+        model: preferredModel ?? DEFAULT_LOCAL_MODEL,
         accountAiDisabled: false,
       };
     default: {

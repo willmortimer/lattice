@@ -5,6 +5,7 @@
 
 pub mod cell_host;
 pub mod fake;
+pub mod local;
 pub mod lattice_client;
 pub mod loop_runtime;
 pub mod pioneer;
@@ -15,6 +16,7 @@ pub mod tools;
 pub mod wasi_host;
 
 pub use lattice_client::{lattice_client_from_env, LatticeToolClient};
+pub use local::{emit_local_run, LocalRunOptions};
 pub use loop_runtime::{run_jsonl_loop, LoopConfig};
 pub use pioneer::{emit_pioneer_run, PioneerRunOptions};
 pub use protocol::{AgentCommand, AgentEvent, ProviderKind, PROTOCOL_VERSION};

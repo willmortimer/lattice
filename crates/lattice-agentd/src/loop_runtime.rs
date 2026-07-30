@@ -10,6 +10,7 @@ use tracing::{debug, warn};
 
 use crate::fake::{emit_fake_run, FakeRunOptions};
 use crate::lattice_client;
+use crate::local::{self, LocalRunOptions};
 use crate::pioneer::{self, PioneerRunOptions};
 use crate::protocol::{AgentCommand, AgentEvent, ProviderKind, PROTOCOL_VERSION};
 use crate::responses::{self, OpenaiRunOptions};
@@ -31,6 +32,10 @@ pub struct LoopConfig {
     pub lattice_api_base_url: Option<String>,
     /// Override `LATTICE_AUTH_TOKEN` (tests / tool loop).
     pub lattice_auth_token: Option<String>,
+    /// Override `LATTICE_LOCAL_LLM_BASE_URL` (tests / wiremock).
+    pub local_base_url: Option<String>,
+    /// Override `LATTICE_LOCAL_LLM_API_KEY` (tests).
+    pub local_api_key: Option<String>,
 }
 
 impl Default for LoopConfig {
@@ -44,6 +49,8 @@ impl Default for LoopConfig {
             pioneer_base_url: None,
             lattice_api_base_url: None,
             lattice_auth_token: None,
+            local_base_url: None,
+            local_api_key: None,
         }
     }
 }
@@ -221,6 +228,8 @@ where
                         let pioneer_base_url = config.pioneer_base_url.clone();
                         let lattice_api_base_url = config.lattice_api_base_url.clone();
                         let lattice_auth_token = config.lattice_auth_token.clone();
+                        let local_base_url = config.local_base_url.clone();
+                        let local_api_key = config.local_api_key.clone();
                         let cancel_for_task = Arc::clone(&cancel);
                         let run_id_task = run_id.clone();
 
@@ -300,6 +309,36 @@ where
                                     )
                                     .await;
                                 }
+                                ProviderKind::Local => {
+                                    let base_url = local_base_url
+                                        .or_else(local::base_url_from_env)
+                                        .unwrap_or_default();
+                                    let api_key = local_api_key.or_else(local::api_key_from_env);
+                                    let lattice = lattice_client::lattice_client_from_config(
+                                        lattice_api_base_url.as_deref(),
+                                        lattice_auth_token.as_deref(),
+                                    );
+                                    if lattice.is_none() {
+                                        warn_tools_unavailable_once();
+                                    }
+                                    local::emit_local_run(
+                                        LocalRunOptions {
+                                            run_id: run_id_task,
+                                            thread_id,
+                                            model,
+                                            prompt: prompt_text,
+                                            messages: chat_messages,
+                                            base_url,
+                                            api_key,
+                                            cancel: cancel_for_task,
+                                            lattice,
+                                            workspace_id,
+                                            workspace_root,
+                                        },
+                                        events,
+                                    )
+                                    .await;
+                                }
                             }
                         });
 
@@ -347,6 +386,8 @@ mod tests {
                 pioneer_base_url: None,
                 lattice_api_base_url: None,
                 lattice_auth_token: None,
+                local_base_url: None,
+                local_api_key: None,
             },
         )
         .await
@@ -401,6 +442,21 @@ mod tests {
         assert!(events
             .iter()
             .any(|e| matches!(e, AgentEvent::RunCompleted { run_id } if run_id == "r1")));
+    }
+
+    #[tokio::test]
+    async fn local_provider_fails_without_base_url() {
+        let input = concat!(
+            r#"{"type":"start_run","threadId":"t1","runId":"r-local","provider":"local","model":"qwen","prompt":"hi"}"#,
+            "\n",
+        );
+        let out = drive(input).await;
+        assert!(
+            out.contains("LATTICE_LOCAL_LLM_BASE_URL"),
+            "expected missing-base-url failure, got {out}"
+        );
+        assert!(out.contains("run_failed"));
+        assert!(out.contains("run_started"));
     }
 
     #[tokio::test]

@@ -28,6 +28,12 @@ pub const ENV_AGENT_FAKE: &str = "LATTICE_AGENT_FAKE";
 pub const ENV_AGENT_PROVIDER: &str = "LATTICE_AGENT_PROVIDER";
 /// Model id passed through to agentd.
 pub const ENV_AGENT_MODEL: &str = "LATTICE_AGENT_MODEL";
+/// Local OpenAI-compatible LLM base URL including `/v1`.
+pub const ENV_LOCAL_LLM_BASE_URL: &str = "LATTICE_LOCAL_LLM_BASE_URL";
+/// Optional API key for the local LLM endpoint.
+pub const ENV_LOCAL_LLM_API_KEY: &str = "LATTICE_LOCAL_LLM_API_KEY";
+/// Optional default model id for the local LLM endpoint.
+pub const ENV_LOCAL_LLM_MODEL: &str = "LATTICE_LOCAL_LLM_MODEL";
 
 const MAX_RESTARTS: u32 = 5;
 const INITIAL_BACKOFF_MS: u64 = 200;
@@ -424,6 +430,9 @@ fn build_agentd_command(
         "OPENAI_API_KEY",
         "LATTICE_AUTH_TOKEN",
         "LATTICE_API_BASE_URL",
+        ENV_LOCAL_LLM_BASE_URL,
+        ENV_LOCAL_LLM_API_KEY,
+        ENV_LOCAL_LLM_MODEL,
     ] {
         if let Ok(value) = std::env::var(key) {
             if !value.is_empty() {
@@ -510,6 +519,13 @@ fn openai_key_present() -> bool {
         .is_some()
 }
 
+pub fn local_llm_configured() -> bool {
+    std::env::var(ENV_LOCAL_LLM_BASE_URL)
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .is_some()
+}
+
 pub fn default_provider_from_env() -> ProviderKind {
     // Prefer OpenAI whenever OPENAI_API_KEY is set. Do not pick Pioneer over
     // OpenAI when both keys are present (desktop-dev / secrets/ai.env often
@@ -542,6 +558,10 @@ pub fn default_model_from_env() -> String {
     }
     match default_provider_from_env() {
         ProviderKind::Openai => "gpt-5-nano".into(),
+        ProviderKind::Local => std::env::var(ENV_LOCAL_LLM_MODEL)
+            .ok()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "local".into()),
         ProviderKind::Pioneer | ProviderKind::Fake => "gpt-5.6-luna".into(),
     }
 }

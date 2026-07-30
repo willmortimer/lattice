@@ -368,12 +368,32 @@ describe("useAgentSessionStore", () => {
         accountAiDisabled: false,
         aiMode: "byoOpenai",
         byoOpenaiKeyPresent: false,
+        healthOk: true,
       }),
     ).toBe(true);
 
     useAgentSessionStore.getState().setByoOpenaiKeyPresent(true);
     expect(
       isAgentComposerDisabled(useAgentSessionStore.getState()),
+    ).toBe(false);
+  });
+
+  it("isAgentComposerDisabled blocks on-device when health is not ok", () => {
+    expect(
+      isAgentComposerDisabled({
+        accountAiDisabled: false,
+        aiMode: "local",
+        byoOpenaiKeyPresent: null,
+        healthOk: false,
+      }),
+    ).toBe(true);
+    expect(
+      isAgentComposerDisabled({
+        accountAiDisabled: false,
+        aiMode: "local",
+        byoOpenaiKeyPresent: null,
+        healthOk: true,
+      }),
     ).toBe(false);
   });
 });
