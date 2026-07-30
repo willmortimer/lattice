@@ -330,6 +330,7 @@ permissions:
                     resource: None,
                     execution_id: None,
                     step_id: None,
+                    hydration_inputs: Vec::new(),
                 },
             )
             .unwrap();

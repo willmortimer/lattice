@@ -145,6 +145,108 @@ async fn wasi_guest_output_proposes_via_latticed() {
         .is_some_and(|s| s.contains("Reports/out.txt")));
 }
 
+/// SHA-256 of fixture payload `hello from input` (KernelFS copy_hello input).
+const HELLO_FROM_INPUT_SHA256: &str =
+    "0f328ae687eb8fd2acfa3a910bb6722eff43f8a7dbd08e53e572ae37a0c5d7a5";
+
+#[tokio::test]
+async fn wasi_propose_includes_hydration_digest_with_known_hash() {
+    ensure_seatbelt_runner();
+    let temp = tempfile::tempdir().expect("tempdir");
+    let host_input = temp.path().join("fixture-input");
+    fs::create_dir_all(&host_input).expect("input dir");
+    fs::write(host_input.join("hello.txt"), "hello from input").expect("write hello");
+
+    let manifest = ExecutionManifest {
+        run_id: "run_prov_hash".into(),
+        base_snapshot: "snap_1".into(),
+        mounts: Mounts {
+            input: vec![InputMount {
+                host_path: host_input.join("hello.txt"),
+                guest_path: "hello.txt".into(),
+            }],
+            output_proposal_target: Some("Reports".into()),
+            work_promote_paths: Vec::new(),
+        },
+        capabilities: Default::default(),
+    };
+
+    let run_parent = temp.path().to_path_buf();
+    let host_roots = vec![temp.path().to_path_buf()];
+    let result = tokio::task::spawn_blocking(move || {
+        run_wasi_guest_with_options(
+            &run_parent,
+            &manifest,
+            copy_hello_wasm(),
+            &WasiGuestHostOptions {
+                limits: WasmtimeLimits::default(),
+                host_path_roots: host_roots,
+                ..Default::default()
+            },
+        )
+    })
+    .await
+    .expect("join wasi")
+    .expect("run wasi guest");
+
+    assert_eq!(result.hydration.sources.len(), 1);
+    assert_eq!(result.hydration.sources[0].guest_path, "hello.txt");
+    assert_eq!(
+        result.hydration.sources[0].sha256, HELLO_FROM_INPUT_SHA256,
+        "hydration sha256 must match fixture"
+    );
+
+    let mut resource_ids = std::collections::BTreeMap::new();
+    resource_ids.insert("hello.txt".into(), "res-fixture-1".into());
+    let provenance = lattice_agentd::WasiProposalProvenance {
+        run_id: "run_prov_hash".into(),
+        wasm_path: "Tools/guests/copy_hello.wasm".into(),
+        output_proposal_target: "Reports".into(),
+        hydration_inputs: lattice_agentd::hydration_inputs_from_record(
+            &result.hydration,
+            &resource_ids,
+        ),
+    };
+
+    let latticed = MockServer::start().await;
+    let bodies = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let capture = ProposeResourceCapture {
+        bodies: Arc::clone(&bodies),
+    };
+
+    Mock::given(method("POST"))
+        .and(path("/v1/proposals/propose_resource"))
+        .respond_with(capture)
+        .expect(1)
+        .mount(&latticed)
+        .await;
+
+    let client = LatticeToolClient::new(latticed.uri(), "test-token").expect("client");
+    lattice_agentd::propose_output_drafts_with_provenance(
+        &client,
+        &WorkspaceBinding::new(Some("ws-prov".into()), None),
+        &result.drafts,
+        Some(&provenance),
+    )
+    .await
+    .expect("propose with provenance");
+
+    let captured = bodies.lock().expect("lock bodies");
+    assert_eq!(captured.len(), 1);
+    assert_eq!(
+        captured[0].get("sourceResource").and_then(|v| v.as_str()),
+        Some("wasi://run_prov_hash/Tools/guests/copy_hello.wasm")
+    );
+    let inputs = captured[0]
+        .get("hydrationInputs")
+        .and_then(|v| v.as_array())
+        .expect("hydrationInputs array");
+    assert_eq!(inputs.len(), 1);
+    assert_eq!(inputs[0]["path"], "hello.txt");
+    assert_eq!(inputs[0]["contentHash"], HELLO_FROM_INPUT_SHA256);
+    assert_eq!(inputs[0]["resourceId"], "res-fixture-1");
+}
+
 #[tokio::test]
 async fn binary_output_draft_proposes_via_content_base64() {
     let binary = vec![0xff_u8, 0xfe, 0x00, 0x01, 0x80];

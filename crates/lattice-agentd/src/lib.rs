@@ -24,7 +24,8 @@ pub use responses::{emit_openai_run, OpenaiRunOptions, ResponsesError};
 pub use tools::{openai_tool_definitions, ToolRunContext, WORKSPACE_AGENT_INSTRUCTIONS};
 pub use secret_handles::{parse_secret_handle_allowlist, secret_handles_from_env, SECRET_HANDLES_ENV};
 pub use wasi_host::{
-    propose_output_drafts, propose_output_drafts_with_provenance, run_wasi_guest,
-    run_wasi_guest_with_options, wasi_run_error_json, DraftProvenance, WorkspaceBinding,
-    WasiGuestHostOptions, WasiGuestRunResult, WasiHostError, WasiProposalProvenance,
+    hydration_inputs_from_record, propose_output_drafts, propose_output_drafts_with_provenance,
+    run_wasi_guest, run_wasi_guest_with_options, wasi_run_error_json, DraftProvenance,
+    HydrationInputDigest, WorkspaceBinding, WasiGuestHostOptions, WasiGuestRunResult, WasiHostError,
+    WasiProposalProvenance,
 };

@@ -106,6 +106,19 @@ pub enum ProposalSourceType {
     External,
 }
 
+/// One KernelFS hydration input carried into proposal provenance (LatticeFS accept lineage).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HydrationInputDigest {
+    /// Guest-relative input path (KernelFS `/input/...` basename or relative path).
+    pub path: String,
+    /// SHA-256 hex digest of the hydrated input bytes.
+    pub content_hash: String,
+    /// Optional LatticeFS [`ResourceId`] string when the caller supplies one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource_id: Option<String>,
+}
+
 /// Where a proposal was produced and which resource anchors it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -120,6 +133,9 @@ pub struct ProposalSource {
     /// Workflow step id within that execution (paired with [`Self::execution_id`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub step_id: Option<String>,
+    /// KernelFS hydration inputs (path + content hash) for LatticeFS accept lineage.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hydration_inputs: Vec<HydrationInputDigest>,
 }
 
 impl ProposalSource {
@@ -361,6 +377,7 @@ mod tests {
             resource: Some("Automations/Demo.workflow.yaml".into()),
             execution_id: Some("exec-1".into()),
             step_id: Some("propose".into()),
+            hydration_inputs: Vec::new(),
         };
         assert_eq!(source.idempotency_key().as_deref(), Some("exec-1:propose"));
         assert!(ProposalSource {
@@ -368,6 +385,7 @@ mod tests {
             resource: None,
             execution_id: None,
             step_id: None,
+            hydration_inputs: Vec::new(),
         }
         .idempotency_key()
         .is_none());
@@ -382,6 +400,7 @@ mod tests {
                 resource: Some("tasks/hello.task".into()),
                 execution_id: None,
                 step_id: None,
+                hydration_inputs: Vec::new(),
             },
             summary: "Create welcome page".into(),
             commands: vec![Command::PageCreate {
@@ -420,6 +439,30 @@ mod tests {
         let proposal: TransactionProposal = serde_json::from_str(json).unwrap();
         assert_eq!(proposal.status, ProposalStatus::Pending);
         assert_eq!(proposal.summary().command_count, 0);
+    }
+
+    #[test]
+    fn proposal_source_hydration_inputs_round_trip() {
+        let source = ProposalSource {
+            source_type: ProposalSourceType::External,
+            resource: Some("wasi://run_1/guest.wasm".into()),
+            execution_id: None,
+            step_id: None,
+            hydration_inputs: vec![HydrationInputDigest {
+                path: "hello.txt".into(),
+                content_hash: "0f328ae687eb8fd2acfa3a910bb6722eff43f8a7dbd08e53e572ae37a0c5d7a5"
+                    .into(),
+                resource_id: Some("res-1".into()),
+            }],
+        };
+        let json = serde_json::to_string(&source).unwrap();
+        assert!(json.contains("\"hydrationInputs\""));
+        assert!(json.contains("\"contentHash\""));
+        assert!(json.contains("\"resourceId\""));
+        assert_eq!(
+            serde_json::from_str::<ProposalSource>(&json).unwrap(),
+            source
+        );
     }
 
     #[test]

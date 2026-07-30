@@ -107,8 +107,12 @@ bound on `start_run`:
 
 Cancel / fuel / epoch failures return structured tool JSON
 (`error.kind`, `stdoutTail`, `stderrTail`) instead of opaque strings. Successful
-proposals include `sourceResource` (`wasi://{runId}/{wasmPath}`) and summaries
-with input content hashes.
+proposals include `sourceResource` (`wasi://{runId}/{wasmPath}`), structured
+`hydrationInputs` digests (`path` + `contentHash` + optional `resourceId`), and
+summaries with input content hashes.
+
+Optional tool arg `inputResourceIds` maps guest input paths to LatticeFS
+ResourceId strings when the caller already knows them.
 
 ### macOS Seatbelt
 

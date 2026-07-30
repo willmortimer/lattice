@@ -212,6 +212,7 @@ async fn cell_output_map_proposes_via_latticed() {
         projection_id: "proj_demo".into(),
         task_id: "proj_demo".into(),
         output_proposal_target: "Reports".into(),
+        hydration_inputs: Vec::new(),
     };
 
     let (_run, proposals) = run_cell_task_and_propose(
@@ -308,6 +309,7 @@ async fn cell_binary_output_proposes_via_content_base64() {
         projection_id: "proj_bin".into(),
         task_id: "proj_bin".into(),
         output_proposal_target: "Reports".into(),
+        hydration_inputs: Vec::new(),
     };
 
     run_cell_task_and_propose(

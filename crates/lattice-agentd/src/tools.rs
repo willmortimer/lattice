@@ -14,12 +14,15 @@ use lattice_cell_client::{
 };
 use serde_json::{json, Value};
 
-use crate::cell_host::{run_cell_task_and_propose, CellProposalProvenance};
+use crate::cell_host::{
+    hydration_inputs_from_files, run_cell_task_and_propose, CellProposalProvenance,
+};
 use crate::lattice_client::LatticeToolClient;
 use crate::secret_handles::secret_handles_for_run;
 use crate::wasi_host::{
-    propose_output_drafts_with_provenance, run_wasi_guest_with_options, wasi_run_error_json,
-    DraftProvenance, WorkspaceBinding, WasiGuestHostOptions, WasiHostError, WasiProposalProvenance,
+    hydration_inputs_from_record, propose_output_drafts_with_provenance, run_wasi_guest_with_options,
+    wasi_run_error_json, DraftProvenance, WorkspaceBinding, WasiGuestHostOptions, WasiHostError,
+    WasiProposalProvenance,
 };
 
 /// Cap tool JSON returned to the model so long search/read payloads do not
@@ -150,6 +153,11 @@ fn run_cell_task_tool_definition() -> Value {
                     "description": "Cell profile name (default lattice-runtime)"
                 },
                 "taskId": opt_str(),
+                "inputResourceIds": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" },
+                    "description": "Optional map of guest input path → LatticeFS ResourceId for proposal provenance"
+                },
             },
             "required": ["cellId", "projectionId", "argv", "outputProposalTarget"],
             "additionalProperties": false,
@@ -456,6 +464,11 @@ fn base_openai_tool_definitions() -> Vec<Value> {
                     "secretHandlesJson": {
                         "type": "string",
                         "description": "JSON array of {id,hostPath} or env LATTICE_WASI_SECRET_HANDLES (id=/path pairs). Maps manifest secret handles to host files under /run/secrets/<id>. Deny-by-default when unset."
+                    },
+                    "inputResourceIds": {
+                        "type": "object",
+                        "additionalProperties": { "type": "string" },
+                        "description": "Optional map of guest input path → LatticeFS ResourceId for proposal provenance"
                     },
                 },
                 "required": ["outputProposalTarget"],
@@ -1070,16 +1083,12 @@ async fn dispatch_run_wasi_guest(
         Err(err) => return Err(err.to_string()),
     };
 
+    let resource_ids = input_resource_ids_arg(args);
     let provenance = WasiProposalProvenance {
         run_id: run_id.clone(),
         wasm_path: wasm_path_rel.clone(),
         output_proposal_target: output_proposal_target.clone(),
-        input_hashes: guest_result
-            .hydration
-            .sources
-            .iter()
-            .map(|source| (source.guest_path.clone(), source.sha256.clone()))
-            .collect(),
+        hydration_inputs: hydration_inputs_from_record(&guest_result.hydration, &resource_ids),
     };
 
     let workspace = WorkspaceBinding::new(ctx.workspace_id.clone(), ctx.workspace_root.clone());
@@ -1106,6 +1115,7 @@ async fn dispatch_run_wasi_guest(
         "wasmPath": wasm_path_rel,
         "outputProposalTarget": output_proposal_target,
         "sourceResource": provenance.source_resource(),
+        "hydrationInputs": provenance.hydration_inputs,
         "exitCode": guest_result.run.exit_code,
         "draftCount": guest_result.drafts.len(),
         "proposals": proposal_summaries,
@@ -1160,11 +1170,13 @@ async fn dispatch_run_cell_task(
         ..ProjectionRunRequest::default()
     };
 
+    let resource_ids = input_resource_ids_arg(args);
     let provenance = CellProposalProvenance {
         cell_id: cell_id.clone(),
         projection_id: projection_id.clone(),
         task_id,
         output_proposal_target: output_proposal_target.clone(),
+        hydration_inputs: hydration_inputs_from_files(&request.hydrate_files, &resource_ids),
     };
 
     let workspace = WorkspaceBinding::new(ctx.workspace_id.clone(), ctx.workspace_root.clone());
@@ -1203,6 +1215,7 @@ async fn dispatch_run_cell_task(
         "projectionId": projection_id,
         "outputProposalTarget": output_proposal_target,
         "sourceResource": provenance.source_resource(),
+        "hydrationInputs": provenance.hydration_inputs,
         "exitCode": run_result.run.exit_code,
         "draftCount": drafts.len(),
         "proposals": proposal_summaries,
@@ -1243,6 +1256,22 @@ fn string_array_arg(args: &Value, key: &str) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+fn input_resource_ids_arg(args: &Value) -> std::collections::BTreeMap<String, String> {
+    let Some(Value::Object(map)) = args.get("inputResourceIds") else {
+        return std::collections::BTreeMap::new();
+    };
+    map.iter()
+        .filter_map(|(key, value)| {
+            let id = value.as_str()?.trim();
+            if key.trim().is_empty() || id.is_empty() {
+                None
+            } else {
+                Some((key.clone(), id.to_string()))
+            }
+        })
+        .collect()
 }
 
 fn resolve_wasi_input_mounts(

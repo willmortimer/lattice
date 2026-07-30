@@ -56,9 +56,9 @@ pub use command::{
 };
 pub use contracts::{
     BindingSpec, CommandPreview, CommandPreviewDetail, ExecutionResult, ExecutionStatus,
-    ExecutionSummary, ProposalPreview, ProposalSource, ProposalSourceType, ProposalStatus,
-    ResourceOutput, TransactionProposal, TransactionProposalSummary, CANCEL_OWNER_DAEMON,
-    CANCEL_OWNER_DESKTOP, CANCEL_OWNER_NONE,
+    ExecutionSummary, HydrationInputDigest, ProposalPreview, ProposalSource, ProposalSourceType,
+    ProposalStatus, ResourceOutput, TransactionProposal, TransactionProposalSummary,
+    CANCEL_OWNER_DAEMON, CANCEL_OWNER_DESKTOP, CANCEL_OWNER_NONE,
 };
 pub use deck::{
     resolve_deck_manifest_path, DeckAspectRatio, DeckError, DeckManifest, DeckPresentation,

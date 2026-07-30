@@ -43,6 +43,7 @@ pub fn create_proposal_cmd(
                 resource: proposal.source_resource,
                 execution_id: None,
                 step_id: None,
+                hydration_inputs: Vec::new(),
             },
             summary: proposal.summary,
             commands: proposal.commands,
@@ -97,7 +98,8 @@ pub fn preview_proposal_cmd(
     proposal_id: String,
     selected_command_indices: Vec<usize>,
 ) -> Result<ProposalPreview, String> {
-    let proposal = load_proposal(Path::new(&root), &proposal_id).map_err(command_error_to_string)?;
+    let proposal =
+        load_proposal(Path::new(&root), &proposal_id).map_err(command_error_to_string)?;
     preview_proposal(Path::new(&root), &proposal, &selected_command_indices)
         .map_err(command_error_to_string)
 }
@@ -109,7 +111,8 @@ pub fn validate_proposal_subset_cmd(
     proposal_id: String,
     selected_command_indices: Vec<usize>,
 ) -> Result<(), String> {
-    let proposal = load_proposal(Path::new(&root), &proposal_id).map_err(command_error_to_string)?;
+    let proposal =
+        load_proposal(Path::new(&root), &proposal_id).map_err(command_error_to_string)?;
     validate_proposal_subset(Path::new(&root), &proposal, &selected_command_indices)
         .map_err(command_error_to_string)
 }

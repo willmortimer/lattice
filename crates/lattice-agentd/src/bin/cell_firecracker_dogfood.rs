@@ -75,6 +75,10 @@ async fn run() -> Result<(), String> {
         projection_id: cli.projection_id.clone(),
         task_id: cli.projection_id.clone(),
         output_proposal_target: cli.output_target.clone(),
+        hydration_inputs: lattice_agentd::cell_host::hydration_inputs_from_files(
+            &request.hydrate_files,
+            &std::collections::BTreeMap::new(),
+        ),
     };
 
     let workspace = WorkspaceBinding::new(None, Some(workspace_root.clone()));

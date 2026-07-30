@@ -3,6 +3,7 @@
 //! Lattice search/read/related stay host HTTP tools. This path only bridges sandboxed
 //! guest `/output` files into `propose_resource` overlays for human accept/reject.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -14,6 +15,7 @@ use kernelfs::{
     LatticeProposalDraft, MaterializeError, MaterializeOptions, SecretHandleEntry,
     SecretHandlePolicy, WasmtimeLimits, WasiRunError, WasiRunOptions, WasiRunResult,
 };
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use thiserror::Error;
 
@@ -88,6 +90,36 @@ pub struct WasiGuestHostOptions {
 pub trait DraftProvenance {
     fn source_resource(&self) -> String;
     fn enrich_summary(&self, base: &str) -> String;
+    /// Structured hydration digests persisted on the propose body / proposal source.
+    fn hydration_inputs(&self) -> &[HydrationInputDigest] {
+        &[]
+    }
+}
+
+/// One hydration input digest for LatticeFS accept lineage (mirrors lattice-commands).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HydrationInputDigest {
+    pub path: String,
+    pub content_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource_id: Option<String>,
+}
+
+/// Build digests from a KernelFS [`HydrationRecord`], attaching optional ResourceIds by guest path.
+pub fn hydration_inputs_from_record(
+    record: &HydrationRecord,
+    resource_ids: &BTreeMap<String, String>,
+) -> Vec<HydrationInputDigest> {
+    record
+        .sources
+        .iter()
+        .map(|source| HydrationInputDigest {
+            path: source.guest_path.clone(),
+            content_hash: source.sha256.clone(),
+            resource_id: resource_ids.get(&source.guest_path).cloned(),
+        })
+        .collect()
 }
 
 /// Provenance attached to proposed WASI `/output` drafts.
@@ -96,8 +128,8 @@ pub struct WasiProposalProvenance {
     pub run_id: String,
     pub wasm_path: String,
     pub output_proposal_target: String,
-    /// Guest path → input content sha256 (from hydration).
-    pub input_hashes: Vec<(String, String)>,
+    /// Guest path + content hash (+ optional ResourceId) from KernelFS hydration.
+    pub hydration_inputs: Vec<HydrationInputDigest>,
 }
 
 impl DraftProvenance for WasiProposalProvenance {
@@ -107,15 +139,19 @@ impl DraftProvenance for WasiProposalProvenance {
 
     fn enrich_summary(&self, base: &str) -> String {
         let inputs = self
-            .input_hashes
+            .hydration_inputs
             .iter()
-            .map(|(guest, hash)| format!("{guest}@{hash}"))
+            .map(|digest| format!("{}@{}", digest.path, digest.content_hash))
             .collect::<Vec<_>>()
             .join(", ");
         format!(
             "{base} [wasi runId={} wasm={} target={} inputs=[{}]]",
             self.run_id, self.wasm_path, self.output_proposal_target, inputs
         )
+    }
+
+    fn hydration_inputs(&self) -> &[HydrationInputDigest] {
+        &self.hydration_inputs
     }
 }
 
@@ -332,6 +368,11 @@ pub async fn propose_output_drafts_with_provenance<P: DraftProvenance + Sync>(
         };
         if let Some(prov) = provenance {
             body["sourceResource"] = Value::String(prov.source_resource());
+            let digests = prov.hydration_inputs();
+            if !digests.is_empty() {
+                body["hydrationInputs"] =
+                    serde_json::to_value(digests).unwrap_or_else(|_| Value::Array(Vec::new()));
+            }
         }
         if let Some(id) = workspace
             .workspace_id
@@ -403,7 +444,11 @@ mod tests {
             run_id: "run_1".into(),
             wasm_path: "Tools/guests/copy_hello.wasm".into(),
             output_proposal_target: "Reports".into(),
-            input_hashes: vec![("hello.txt".into(), "abc".into())],
+            hydration_inputs: vec![HydrationInputDigest {
+                path: "hello.txt".into(),
+                content_hash: "abc".into(),
+                resource_id: Some("rid-1".into()),
+            }],
         };
         assert_eq!(
             prov.source_resource(),
@@ -413,5 +458,27 @@ mod tests {
         assert!(summary.contains("runId=run_1"));
         assert!(summary.contains("hello.txt@abc"));
         assert!(summary.contains("target=Reports"));
+        assert_eq!(prov.hydration_inputs()[0].resource_id.as_deref(), Some("rid-1"));
+    }
+
+    #[test]
+    fn hydration_inputs_from_record_attaches_optional_resource_id() {
+        let record = HydrationRecord {
+            run_id: "run_x".into(),
+            base_snapshot: "snap".into(),
+            root: std::path::PathBuf::from("/tmp/run_x"),
+            sources: vec![kernelfs::HydrationSource {
+                guest_path: "hello.txt".into(),
+                host_path: std::path::PathBuf::from("/tmp/hello.txt"),
+                sha256: "deadbeef".into(),
+            }],
+        };
+        let mut ids = BTreeMap::new();
+        ids.insert("hello.txt".into(), "res-42".into());
+        let digests = hydration_inputs_from_record(&record, &ids);
+        assert_eq!(digests.len(), 1);
+        assert_eq!(digests[0].path, "hello.txt");
+        assert_eq!(digests[0].content_hash, "deadbeef");
+        assert_eq!(digests[0].resource_id.as_deref(), Some("res-42"));
     }
 }

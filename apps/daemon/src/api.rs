@@ -759,6 +759,9 @@ pub struct CreateProposalParams {
     pub warnings: Vec<String>,
     #[serde(default)]
     pub source_resource: Option<String>,
+    /// KernelFS hydration digests for LatticeFS accept lineage.
+    #[serde(default)]
+    pub hydration_inputs: Vec<lattice_commands::HydrationInputDigest>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -826,6 +829,7 @@ pub fn api_create_proposal(
                 resource: params.source_resource,
                 execution_id: None,
                 step_id: None,
+                hydration_inputs: params.hydration_inputs,
             },
             summary: params.summary,
             commands: params.commands,
@@ -948,6 +952,7 @@ pub fn api_propose_page(
             affected_paths: vec![path.to_string()],
             warnings: Vec::new(),
             source_resource: None,
+            hydration_inputs: Vec::new(),
         },
     )
 }
@@ -966,6 +971,11 @@ pub struct ProposeResourceParams {
     pub content_base64: Option<String>,
     #[serde(default)]
     pub summary: Option<String>,
+    #[serde(default)]
+    pub source_resource: Option<String>,
+    /// KernelFS hydration digests (path + content hash; optional resourceId).
+    #[serde(default)]
+    pub hydration_inputs: Vec<lattice_commands::HydrationInputDigest>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -984,6 +994,8 @@ fn api_from_propose_bundle(
     workspace: WorkspaceRefParams,
     mut bundle: lattice_commands::ProposeBundle,
     summary_override: Option<String>,
+    source_resource: Option<String>,
+    hydration_inputs: Vec<lattice_commands::HydrationInputDigest>,
 ) -> Result<ProposalResponse, ApiError> {
     if let Some(summary) = summary_override.filter(|value| !value.trim().is_empty()) {
         bundle.summary = summary;
@@ -996,7 +1008,8 @@ fn api_from_propose_bundle(
             commands: bundle.commands,
             affected_paths: bundle.affected_paths,
             warnings: bundle.warnings,
-            source_resource: None,
+            source_resource,
+            hydration_inputs,
         },
     )
 }
@@ -1035,7 +1048,14 @@ pub fn api_propose_resource(
         let content = params.content.unwrap_or_default();
         propose_resource(&params.path, &content).map_err(command_error_to_api)?
     };
-    api_from_propose_bundle(runtime, params.workspace, bundle, params.summary)
+    api_from_propose_bundle(
+        runtime,
+        params.workspace,
+        bundle,
+        params.summary,
+        params.source_resource,
+        params.hydration_inputs,
+    )
 }
 
 pub fn api_propose_workflow(
@@ -1043,7 +1063,14 @@ pub fn api_propose_workflow(
     params: ProposeYamlParams,
 ) -> Result<ProposalResponse, ApiError> {
     let bundle = propose_workflow(&params.path, &params.content).map_err(command_error_to_api)?;
-    api_from_propose_bundle(runtime, params.workspace, bundle, params.summary)
+    api_from_propose_bundle(
+        runtime,
+        params.workspace,
+        bundle,
+        params.summary,
+        None,
+        Vec::new(),
+    )
 }
 
 pub fn api_propose_interface(
@@ -1051,7 +1078,14 @@ pub fn api_propose_interface(
     params: ProposeYamlParams,
 ) -> Result<ProposalResponse, ApiError> {
     let bundle = propose_interface(&params.path, &params.content).map_err(command_error_to_api)?;
-    api_from_propose_bundle(runtime, params.workspace, bundle, params.summary)
+    api_from_propose_bundle(
+        runtime,
+        params.workspace,
+        bundle,
+        params.summary,
+        None,
+        Vec::new(),
+    )
 }
 
 pub fn api_propose_artifact(
@@ -1059,7 +1093,14 @@ pub fn api_propose_artifact(
     params: ProposeYamlParams,
 ) -> Result<ProposalResponse, ApiError> {
     let bundle = propose_artifact(&params.path, &params.content).map_err(command_error_to_api)?;
-    api_from_propose_bundle(runtime, params.workspace, bundle, params.summary)
+    api_from_propose_bundle(
+        runtime,
+        params.workspace,
+        bundle,
+        params.summary,
+        None,
+        Vec::new(),
+    )
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1593,6 +1634,8 @@ mod tests {
                 content: Some("hello\n".into()),
                 content_base64: None,
                 summary: None,
+                source_resource: None,
+                hydration_inputs: Vec::new(),
             },
         )
         .unwrap();
@@ -1604,6 +1647,41 @@ mod tests {
             }
             other => panic!("expected ResourceCreate, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn propose_resource_persists_hydration_inputs() {
+        let (dir, runtime) = fixture();
+        let root = dir.path().to_string_lossy().into_owned();
+        let digest = lattice_commands::HydrationInputDigest {
+            path: "hello.txt".into(),
+            content_hash: "0f328ae687eb8fd2acfa3a910bb6722eff43f8a7dbd08e53e572ae37a0c5d7a5"
+                .into(),
+            resource_id: Some("res-fixture-1".into()),
+        };
+
+        let proposed = api_propose_resource(
+            &runtime,
+            ProposeResourceParams {
+                workspace: WorkspaceRefParams {
+                    workspace_id: None,
+                    root: Some(root),
+                },
+                path: "Reports/out.txt".into(),
+                content: Some("hello from input".into()),
+                content_base64: None,
+                summary: Some("Create from WASI".into()),
+                source_resource: Some("wasi://run_prov/Tools/guests/copy_hello.wasm".into()),
+                hydration_inputs: vec![digest.clone()],
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            proposed.proposal.source.resource.as_deref(),
+            Some("wasi://run_prov/Tools/guests/copy_hello.wasm")
+        );
+        assert_eq!(proposed.proposal.source.hydration_inputs, vec![digest]);
     }
 
     #[test]
@@ -1624,6 +1702,8 @@ mod tests {
                 content: None,
                 content_base64: Some(encoded),
                 summary: None,
+                source_resource: None,
+                hydration_inputs: Vec::new(),
             },
         )
         .unwrap();

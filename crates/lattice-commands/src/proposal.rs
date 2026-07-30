@@ -175,8 +175,14 @@ pub fn list_proposal_summaries(workspace_root: &Path) -> Result<Vec<TransactionP
         summaries.push(proposal.summary());
     }
     summaries.sort_by(|left, right| {
-        let left_key = left.resolved_at.as_deref().unwrap_or(left.created_at.as_str());
-        let right_key = right.resolved_at.as_deref().unwrap_or(right.created_at.as_str());
+        let left_key = left
+            .resolved_at
+            .as_deref()
+            .unwrap_or(left.created_at.as_str());
+        let right_key = right
+            .resolved_at
+            .as_deref()
+            .unwrap_or(right.created_at.as_str());
         right_key.cmp(left_key)
     });
     Ok(summaries)
@@ -929,6 +935,7 @@ mod tests {
                 resource: Some("tasks/demo.task".into()),
                 execution_id: None,
                 step_id: None,
+                hydration_inputs: Vec::new(),
             },
             summary: format!("Create {path}"),
             commands: vec![Command::PageCreate {
@@ -983,6 +990,7 @@ mod tests {
                 resource: None,
                 execution_id: None,
                 step_id: None,
+                hydration_inputs: Vec::new(),
             },
             summary: "Create two pages".into(),
             commands: vec![
@@ -1012,7 +1020,10 @@ mod tests {
         let archived = list_proposal_summaries(dir.path()).unwrap();
         assert_eq!(archived.len(), 1);
         assert_eq!(archived[0].status, ProposalStatus::Accepted);
-        assert_eq!(archived[0].applied_transaction_id.as_deref(), Some(tx_id.as_str()));
+        assert_eq!(
+            archived[0].applied_transaction_id.as_deref(),
+            Some(tx_id.as_str())
+        );
 
         let mut engine = CommandEngine::open(dir.path()).unwrap();
         let undone = engine.undo().unwrap().expect("undo");
@@ -1040,10 +1051,13 @@ mod tests {
     #[test]
     fn list_includes_pending_accepted_and_rejected() {
         let dir = workspace();
-        let pending = create_proposal(dir.path(), demo_proposal("pending", "Notes/Pending.md")).unwrap();
-        let rejected = create_proposal(dir.path(), demo_proposal("rejected", "Notes/Rejected.md")).unwrap();
+        let pending =
+            create_proposal(dir.path(), demo_proposal("pending", "Notes/Pending.md")).unwrap();
+        let rejected =
+            create_proposal(dir.path(), demo_proposal("rejected", "Notes/Rejected.md")).unwrap();
         dismiss_proposal(dir.path(), &rejected.id).unwrap();
-        let accepted = create_proposal(dir.path(), demo_proposal("accepted", "Notes/Accepted.md")).unwrap();
+        let accepted =
+            create_proposal(dir.path(), demo_proposal("accepted", "Notes/Accepted.md")).unwrap();
         apply_proposal(dir.path(), &accepted.id, &[0]).unwrap();
 
         let listed = list_proposal_summaries(dir.path()).unwrap();
@@ -1124,6 +1138,7 @@ mod tests {
                 resource: None,
                 execution_id: None,
                 step_id: None,
+                hydration_inputs: Vec::new(),
             },
             summary: "Create then update".into(),
             commands: vec![
@@ -1173,6 +1188,7 @@ mod tests {
                 resource: None,
                 execution_id: None,
                 step_id: None,
+                hydration_inputs: Vec::new(),
             },
             summary: "Two creates same path".into(),
             commands: vec![
@@ -1263,6 +1279,7 @@ components:
                 resource: Some("Tasks/AgentFirstLook.task".into()),
                 execution_id: None,
                 step_id: None,
+                hydration_inputs: Vec::new(),
             },
             summary: "Create interface".into(),
             commands: vec![Command::ResourceCreate {
@@ -1297,5 +1314,31 @@ components:
             }
             other => panic!("expected InterfaceSummary, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn create_proposal_persists_hydration_inputs() {
+        let dir = workspace();
+        let digest = crate::HydrationInputDigest {
+            path: "hello.txt".into(),
+            content_hash: "0f328ae687eb8fd2acfa3a910bb6722eff43f8a7dbd08e53e572ae37a0c5d7a5"
+                .into(),
+            resource_id: Some("res-1".into()),
+        };
+        let mut proposal = demo_proposal("", "Reports/out.txt");
+        proposal.source.resource = Some("wasi://run_1/guest.wasm".into());
+        proposal.source.hydration_inputs = vec![digest.clone()];
+        let stored = create_proposal(dir.path(), proposal).unwrap();
+        let loaded = load_proposal(dir.path(), &stored.id).unwrap();
+        assert_eq!(loaded.source.hydration_inputs, vec![digest]);
+        let raw = std::fs::read_to_string(
+            dir.path()
+                .join(".lattice/proposals")
+                .join(format!("{}.json", stored.id)),
+        )
+        .unwrap();
+        assert!(raw.contains("hydrationInputs"));
+        assert!(raw.contains("contentHash"));
+        assert!(raw.contains("0f328ae687eb8fd2acfa3a910bb6722eff43f8a7dbd08e53e572ae37a0c5d7a5"));
     }
 }
