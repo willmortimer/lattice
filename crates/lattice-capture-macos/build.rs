@@ -148,10 +148,18 @@ fn try_swift_build(swift_dir: &Path) -> bool {
             "DEVELOPER_DIR",
             "/Applications/Xcode.app/Contents/Developer",
         );
-        command.env(
-            "SDKROOT",
-            "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk",
-        );
+        // Prefer xcrun-resolved SDKROOT; a bare MacOSX.sdk path can break newer Xcode.
+        if let Ok(output) = Command::new("xcrun")
+            .args(["--sdk", "macosx", "--show-sdk-path"])
+            .output()
+        {
+            if output.status.success() {
+                let sdk = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !sdk.is_empty() && Path::new(&sdk).is_dir() {
+                    command.env("SDKROOT", sdk);
+                }
+            }
+        }
     }
 
     match command.status() {

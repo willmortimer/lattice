@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import LatticeCaptureBridgeC
 
@@ -59,9 +60,7 @@ public func lattice_capture_capture_display(
         }
         if #available(macOS 14.0, *) {
             let captured = try runCaptureBlocking {
-                try await ScreenCaptureSession.captureDisplay(
-                    displayId: CGDirectDisplayID(displayId)
-                )
+                try await ScreenCaptureSession.captureDisplay(displayId: displayId)
             }
             try writeImage(captured, into: outImage)
             return BridgeErrorCode.ok.rawValue
@@ -89,7 +88,7 @@ public func lattice_capture_capture_region(
             )
             let captured = try runCaptureBlocking {
                 try await ScreenCaptureSession.captureRegion(
-                    displayId: CGDirectDisplayID(displayId),
+                    displayId: displayId,
                     region: rect
                 )
             }

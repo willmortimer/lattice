@@ -2,14 +2,16 @@
 
 #![cfg_attr(not(link_bridge), allow(dead_code))]
 
-use lattice_capture_core::CaptureError;
-
 use crate::error::BridgeResult;
+#[cfg(not(link_bridge))]
+use lattice_capture_core::CaptureError;
 #[cfg(link_bridge)]
 use crate::error::{ensure_abi_version, map_status};
 #[cfg(link_bridge)]
 use crate::ffi;
-use crate::ffi::{BridgeImage, LatticeCaptureDisplayInfo, LatticeCaptureRegion};
+use crate::ffi::{
+    BridgeImage, LatticeCaptureDisplayInfo, LatticeCaptureImageOut, LatticeCaptureRegion,
+};
 #[cfg(link_bridge)]
 use crate::LATTICE_CAPTURE_BRIDGE_ABI_VERSION;
 
