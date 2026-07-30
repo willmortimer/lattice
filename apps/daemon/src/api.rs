@@ -32,13 +32,14 @@ pub enum ApiError {
     NotFound(String),
     Forbidden(String),
     Internal(String),
+    WorkspaceNotRegistered(String),
 }
 
 impl ApiError {
     pub fn status_code(&self) -> u16 {
         match self {
             Self::BadRequest(_) => 400,
-            Self::NotFound(_) => 404,
+            Self::NotFound(_) | Self::WorkspaceNotRegistered(_) => 404,
             Self::Forbidden(_) => 403,
             Self::Internal(_) => 500,
         }
@@ -50,12 +51,17 @@ impl ApiError {
             Self::NotFound(_) => "not_found",
             Self::Forbidden(_) => "forbidden",
             Self::Internal(_) => "internal",
+            Self::WorkspaceNotRegistered(_) => "workspace_not_registered",
         }
     }
 
     pub fn message(&self) -> &str {
         match self {
-            Self::BadRequest(m) | Self::NotFound(m) | Self::Forbidden(m) | Self::Internal(m) => m,
+            Self::BadRequest(m)
+            | Self::NotFound(m)
+            | Self::Forbidden(m)
+            | Self::Internal(m)
+            | Self::WorkspaceNotRegistered(m) => m,
         }
     }
 }
@@ -77,9 +83,19 @@ pub fn resolve_session(
     root: Option<&str>,
 ) -> Result<Arc<WorkspaceSession>, ApiError> {
     if let Some(id) = workspace_id.filter(|s| !s.is_empty()) {
-        return runtime
-            .get_session_by_id(id)
-            .ok_or_else(|| ApiError::NotFound(format!("workspace session not found for id {id}")));
+        if let Some(session) = runtime.get_session_by_id(id) {
+            return Ok(session);
+        }
+        let registry = crate::workspace_registry::WorkspaceRegistry::load_default()
+            .map_err(|err| ApiError::Internal(err.to_string()))?;
+        if let Some(root) = registry.resolve_root(id) {
+            return runtime
+                .open_workspace_session(root)
+                .map_err(|err| ApiError::BadRequest(err.to_string()));
+        }
+        return Err(ApiError::WorkspaceNotRegistered(format!(
+            "workspace not registered: {id}"
+        )));
     }
     let root = root
         .filter(|s| !s.is_empty())
@@ -1513,7 +1529,7 @@ mod tests {
     }
 
     #[test]
-    fn missing_workspace_is_not_found() {
+    fn missing_workspace_is_not_registered() {
         let runtime = LatticeRuntime::new();
         let err = api_search(
             &runtime,
@@ -1527,6 +1543,7 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(err.status_code(), 404);
+        assert_eq!(err.code(), "workspace_not_registered");
     }
 
     #[test]

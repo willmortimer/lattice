@@ -28,6 +28,7 @@ mod scheduler_api;
 mod server;
 mod spawn;
 mod voice_host;
+mod workspace_registry;
 
 pub use agent::{
     resolve_agentd_bin, AgentCommand, AgentController, AgentEvent, AgentEventSink,

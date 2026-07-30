@@ -823,6 +823,14 @@ fn handle_open_workspace(
 
     let wire_lease = lease_to_wire(&lease_file);
     let workspace_id = session.workspace_id().to_string();
+    if let Err(err) = crate::workspace_registry::register_workspace(&workspace_id, session.root())
+    {
+        warn!(
+            %workspace_id,
+            root = %session.root().display(),
+            "failed to persist workspace registry entry: {err}"
+        );
+    }
     Ok((
         Response {
             body: Some(response::Body::OpenWorkspace(OpenWorkspaceResponse {
