@@ -195,6 +195,11 @@ fn semantic_spawn_host_env() -> SpawnHostEnv {
         }
     }
 
+    const ENV_OPENAI_API_KEY: &str = "OPENAI_API_KEY";
+    if let Some(key) = crate::ai::resolve_openai_api_key_for_spawn() {
+        extra_env.push((ENV_OPENAI_API_KEY.to_string(), key));
+    }
+
     SpawnHostEnv {
         extra_env,
         handshake_hint: Some(if pioneer_embeddings {

@@ -1,4 +1,5 @@
 mod agent;
+mod ai;
 mod app_lock;
 mod app_menu;
 mod approval_signer;
@@ -327,6 +328,9 @@ pub fn run() {
             agent::agent_health,
             agent::agent_start_run,
             agent::agent_cancel_run,
+            ai::set_openai_api_key,
+            ai::clear_openai_api_key,
+            ai::has_openai_api_key,
             app_lock::app_lock_status,
             app_lock::app_lock_lock,
             app_lock::app_lock_unlock,
