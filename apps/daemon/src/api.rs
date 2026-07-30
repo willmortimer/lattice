@@ -3,13 +3,14 @@
 //! Read surface: search, bounded read, related, and build_context.
 //! Write surface: proposal create/list/get only — no apply on MCP/HTTP.
 
+use base64::Engine;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use lattice_commands::{
     create_proposal, list_proposal_summaries, load_proposal, propose_artifact, propose_interface,
-    propose_resource, propose_workflow, Command, ProposalSource, ProposalSourceType,
-    TransactionProposal, TransactionProposalSummary,
+    propose_resource, propose_resource_bytes, propose_workflow, Command, ProposalSource,
+    ProposalSourceType, TransactionProposal, TransactionProposalSummary,
 };
 use lattice_handlers::{get_backlinks_with_session, read_page, search_workspace_with_session};
 use lattice_index::{parse_page, ExportPolicy, HybridSearchHit, Sensitivity};
@@ -957,7 +958,12 @@ pub struct ProposeResourceParams {
     #[serde(flatten)]
     pub workspace: WorkspaceRefParams,
     pub path: String,
-    pub content: String,
+    /// UTF-8 text payload for [`propose_resource`].
+    #[serde(default)]
+    pub content: Option<String>,
+    /// Base64-encoded bytes for binary [`Command::ResourceCreate`] proposals.
+    #[serde(default)]
+    pub content_base64: Option<String>,
     #[serde(default)]
     pub summary: Option<String>,
 }
@@ -999,7 +1005,36 @@ pub fn api_propose_resource(
     runtime: &LatticeRuntime,
     params: ProposeResourceParams,
 ) -> Result<ProposalResponse, ApiError> {
-    let bundle = propose_resource(&params.path, &params.content).map_err(command_error_to_api)?;
+    let has_text = params
+        .content
+        .as_ref()
+        .is_some_and(|value| !value.is_empty() || params.content_base64.is_none());
+    let has_base64 = params
+        .content_base64
+        .as_ref()
+        .is_some_and(|value| !value.trim().is_empty());
+
+    if has_text && has_base64 {
+        return Err(ApiError::BadRequest(
+            "provide either content or contentBase64, not both".into(),
+        ));
+    }
+    if !has_text && !has_base64 {
+        return Err(ApiError::BadRequest(
+            "content or contentBase64 is required".into(),
+        ));
+    }
+
+    let bundle = if has_base64 {
+        let encoded = params.content_base64.as_deref().unwrap_or_default();
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(encoded.trim())
+            .map_err(|err| ApiError::BadRequest(format!("invalid contentBase64: {err}")))?;
+        propose_resource_bytes(&params.path, &bytes).map_err(command_error_to_api)?
+    } else {
+        let content = params.content.unwrap_or_default();
+        propose_resource(&params.path, &content).map_err(command_error_to_api)?
+    };
     api_from_propose_bundle(runtime, params.workspace, bundle, params.summary)
 }
 
@@ -1540,5 +1575,65 @@ mod tests {
         assert!(!tx_id.is_empty());
         let after = read_page(root, "Notes.md".into()).unwrap();
         assert!(after.content.contains("Updated by proposal"));
+    }
+
+    #[test]
+    fn propose_resource_accepts_text_content() {
+        let (dir, runtime) = fixture();
+        let root = dir.path().to_string_lossy().into_owned();
+
+        let proposed = api_propose_resource(
+            &runtime,
+            ProposeResourceParams {
+                workspace: WorkspaceRefParams {
+                    workspace_id: None,
+                    root: Some(root),
+                },
+                path: "Assets/note.txt".into(),
+                content: Some("hello\n".into()),
+                content_base64: None,
+                summary: None,
+            },
+        )
+        .unwrap();
+
+        match &proposed.proposal.commands[0] {
+            Command::ResourceCreate { path, content } => {
+                assert_eq!(*path, PathBuf::from("Assets/note.txt"));
+                assert_eq!(content, b"hello\n");
+            }
+            other => panic!("expected ResourceCreate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn propose_resource_accepts_content_base64() {
+        let (dir, runtime) = fixture();
+        let root = dir.path().to_string_lossy().into_owned();
+        let binary = [0xff_u8, 0xfe, 0x00, 0x01, 0x80];
+        let encoded = base64::engine::general_purpose::STANDARD.encode(binary);
+
+        let proposed = api_propose_resource(
+            &runtime,
+            ProposeResourceParams {
+                workspace: WorkspaceRefParams {
+                    workspace_id: None,
+                    root: Some(root),
+                },
+                path: "Assets/raw.bin".into(),
+                content: None,
+                content_base64: Some(encoded),
+                summary: None,
+            },
+        )
+        .unwrap();
+
+        match &proposed.proposal.commands[0] {
+            Command::ResourceCreate { path, content } => {
+                assert_eq!(*path, PathBuf::from("Assets/raw.bin"));
+                assert_eq!(content, &binary);
+            }
+            other => panic!("expected ResourceCreate, got {other:?}"),
+        }
     }
 }

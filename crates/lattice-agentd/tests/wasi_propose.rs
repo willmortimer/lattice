@@ -3,7 +3,10 @@
 use std::fs;
 use std::sync::Arc;
 
-use kernelfs::{ExecutionManifest, InputMount, Mounts, WasmtimeLimits};
+use kernelfs::{
+    ContentKind, ExecutionManifest, InputMount, LatticeProposalDraft, Mounts, WasmtimeLimits,
+};
+use base64::Engine;
 use lattice_agentd::lattice_client::LatticeToolClient;
 use lattice_agentd::tools::{dispatch_tool, openai_tool_definitions, ToolRunContext};
 use lattice_agentd::wasi_host::{
@@ -139,6 +142,57 @@ async fn wasi_guest_output_proposes_via_latticed() {
         .get("summary")
         .and_then(|v| v.as_str())
         .is_some_and(|s| s.contains("Reports/out.txt")));
+}
+
+#[tokio::test]
+async fn binary_output_draft_proposes_via_content_base64() {
+    let binary = vec![0xff_u8, 0xfe, 0x00, 0x01, 0x80];
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&binary);
+    let drafts = vec![LatticeProposalDraft {
+        summary: "Create resource Reports/raw.bin from KernelFS run run_bin".into(),
+        resource_path: "Reports/raw.bin".into(),
+        content: binary.clone(),
+        kind: ContentKind::Bytes,
+    }];
+
+    let latticed = MockServer::start().await;
+    let bodies = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let capture = ProposeResourceCapture {
+        bodies: Arc::clone(&bodies),
+    };
+
+    Mock::given(method("POST"))
+        .and(path("/v1/proposals/propose_resource"))
+        .respond_with(capture)
+        .expect(1)
+        .mount(&latticed)
+        .await;
+
+    let client = LatticeToolClient::new(latticed.uri(), "test-token").expect("client");
+    let responses = propose_output_drafts(
+        &client,
+        &WorkspaceBinding::new(Some("ws-bin".into()), None),
+        &drafts,
+    )
+    .await
+    .expect("propose binary draft");
+
+    assert_eq!(responses.len(), 1);
+    let captured = bodies.lock().expect("lock bodies");
+    assert_eq!(captured.len(), 1);
+    assert_eq!(
+        captured[0].get("workspaceId").and_then(|v| v.as_str()),
+        Some("ws-bin")
+    );
+    assert_eq!(
+        captured[0].get("path").and_then(|v| v.as_str()),
+        Some("Reports/raw.bin")
+    );
+    assert!(captured[0].get("content").is_none());
+    assert_eq!(
+        captured[0].get("contentBase64").and_then(|v| v.as_str()),
+        Some(encoded.as_str())
+    );
 }
 
 #[tokio::test]

@@ -90,7 +90,7 @@ pub use proposal::{
 };
 pub use propose_helpers::{
     normalize_proposal_rel_path, propose_artifact, propose_interface, propose_resource,
-    propose_workflow, ProposeBundle,
+    propose_resource_bytes, propose_workflow, ProposeBundle,
 };
 pub use relationship::{list_relationship_edges, RelationshipEdge, RelationshipKind};
 pub use revisions::{

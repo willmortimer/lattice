@@ -100,11 +100,19 @@ fn looks_like_suffix(path: &Path, suffix: &str) -> bool {
 
 /// Propose creating an arbitrary text resource via [`Command::ResourceCreate`].
 pub fn propose_resource(path: &str, content: &str) -> Result<ProposeBundle> {
+    propose_resource_bytes(path, content.as_bytes())
+}
+
+/// Propose creating a resource with opaque bytes via [`Command::ResourceCreate`].
+pub fn propose_resource_bytes(path: &str, content: &[u8]) -> Result<ProposeBundle> {
     let rel = normalize_proposal_rel_path(path)?;
     let display = path_string(&rel);
     Ok(ProposeBundle {
         summary: format!("Create resource {display}"),
-        commands: vec![resource_create(rel, content)],
+        commands: vec![Command::ResourceCreate {
+            path: rel,
+            content: content.to_vec(),
+        }],
         affected_paths: vec![display],
         warnings: Vec::new(),
     })
@@ -240,6 +248,19 @@ permissions:
             Command::ResourceCreate { path, content } => {
                 assert_eq!(path, Path::new("Notes/raw.txt"));
                 assert_eq!(content, b"hello\n");
+            }
+            other => panic!("expected ResourceCreate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn propose_resource_bytes_accepts_opaque_payload() {
+        let binary = [0xff_u8, 0xfe, 0x00, 0x01, 0x80];
+        let bundle = propose_resource_bytes("Assets/raw.bin", &binary).unwrap();
+        match &bundle.commands[0] {
+            Command::ResourceCreate { path, content } => {
+                assert_eq!(path, Path::new("Assets/raw.bin"));
+                assert_eq!(content, &binary);
             }
             other => panic!("expected ResourceCreate, got {other:?}"),
         }
