@@ -1,0 +1,16 @@
+{
+  "type": "hello",
+  "protocol_version": 2,
+  "device_id": "device-golden",
+  "connection_id": "conn-golden-1",
+  "workspaces": [
+    {
+      "workspace_id": "ws-alpha",
+      "remote_access": true
+    },
+    {
+      "workspace_id": "ws-beta"
+    }
+  ],
+  "catalog_hash": "sha256:goldenfixture"
+}

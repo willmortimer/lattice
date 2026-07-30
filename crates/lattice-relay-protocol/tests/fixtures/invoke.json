@@ -1,0 +1,10 @@
+{
+  "type": "invoke",
+  "request_id": "req-golden-42",
+  "workspace_id": "ws-alpha",
+  "tool_name": "workspace.read",
+  "arguments": { "path": "Notes.md" },
+  "deadline_ms": 5000,
+  "idempotency_key": "idem-golden",
+  "cancel_token": "cancel-golden"
+}

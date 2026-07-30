@@ -1,0 +1,8 @@
+{
+  "type": "result",
+  "request_id": "req-golden-42",
+  "error": {
+    "code": "deadline_exceeded",
+    "message": "invoke timed out"
+  }
+}

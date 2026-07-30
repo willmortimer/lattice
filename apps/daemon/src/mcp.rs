@@ -460,6 +460,28 @@ steps:
     }
 
     #[test]
+    fn tools_call_unknown_tool_fails_closed() {
+        let runtime = LatticeRuntime::new();
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".into(),
+            id: Some(json!(99)),
+            method: "tools/call".into(),
+            params: json!({
+                "name": "workspace.nonexistent",
+                "arguments": {}
+            }),
+        };
+        let resp = dispatch(&runtime, &req).unwrap();
+        assert_eq!(resp["error"]["code"], -32602);
+        assert!(
+            resp["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("unknown tool")
+        );
+    }
+
+    #[test]
     fn modern_http_header_validation_rejects_method_mismatch() {
         let runtime = LatticeRuntime::new();
         let mut headers = HeaderMap::new();
