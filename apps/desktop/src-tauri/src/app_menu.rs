@@ -21,6 +21,7 @@ pub const ACTION_LOCK: &str = "app.lock";
 pub const ACTION_SEARCH: &str = "app.search";
 pub const ACTION_COMMAND_PALETTE: &str = "app.command-palette";
 pub const ACTION_QUICK_NOTE: &str = "app.quick-note";
+pub const ACTION_SCREEN_CLIP: &str = "app.screen-clip";
 pub const ACTION_NEW_PAGE: &str = "app.new-page";
 pub const ACTION_NEW_TABLE: &str = "app.new-table";
 pub const ACTION_NEW_WORKSPACE: &str = "app.new-workspace";
@@ -94,6 +95,12 @@ pub fn handle_action(app: &AppHandle, id: &str) {
     match id {
         ACTION_SHOW => tray::show_main_window(app),
         ACTION_QUICK_NOTE => tray::show_quick_note(app),
+        ACTION_SCREEN_CLIP => {
+            #[cfg(feature = "capture")]
+            crate::capture::start_screen_clip(app);
+            #[cfg(not(feature = "capture"))]
+            eprintln!("lattice: screen clip requires the capture feature");
+        }
         ACTION_QUIT => tray::request_quit(app),
         ACTION_LOCK => {
             crate::app_lock::lock_and_emit(app);
@@ -173,6 +180,13 @@ pub fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         "Quick Note",
         true,
         Some("CmdOrCtrl+N"),
+    )?;
+    let screen_clip = MenuItem::with_id(
+        app,
+        ACTION_SCREEN_CLIP,
+        "Screen Clip",
+        true,
+        Some("CmdOrCtrl+Shift+2"),
     )?;
     let new_page = MenuItem::with_id(
         app,
@@ -260,6 +274,7 @@ pub fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         &[
             &new_page,
             &quick_note,
+            &screen_clip,
             &new_table,
             &file_sep1,
             &new_workspace,
@@ -279,6 +294,7 @@ pub fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             &[
                 &new_page,
                 &quick_note,
+                &screen_clip,
                 &new_table,
                 &file_sep1,
                 &new_workspace,
@@ -416,6 +432,13 @@ pub fn build_tray_menu(
         true,
         Some("CmdOrCtrl+N"),
     )?;
+    let screen_clip = MenuItem::with_id(
+        app,
+        ACTION_SCREEN_CLIP,
+        "Screen Clip",
+        true,
+        Some("CmdOrCtrl+Shift+2"),
+    )?;
     let new_page = MenuItem::with_id(
         app,
         ACTION_NEW_PAGE,
@@ -509,6 +532,7 @@ pub fn build_tray_menu(
     let mut items: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = vec![
         &show,
         &quick_note,
+        &screen_clip,
         &new_page,
         &sep1,
         &search,
