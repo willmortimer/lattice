@@ -25,6 +25,7 @@ pub mod jobs;
 mod lease;
 pub mod mcp;
 mod preferences;
+mod tool_executor;
 mod schedule;
 mod scheduler_api;
 mod server;
@@ -106,6 +107,7 @@ pub use server::{
     serve_with_shutdown_and_semantic, DaemonState,
 };
 pub use spawn::{spawn_latticed, wait_for_ready, SpawnOptions, SpawnedDaemon};
+pub use tool_executor::{execute as execute_workspace_tool, ToolCall, ToolError};
 pub use voice_host::{
     resolve_voice_host_bin, VoiceController, VoiceProviderMode, ENV_VOICE_FAKE, ENV_VOICE_HOST_BIN,
     ENV_VOICE_HOST_SOCKET, ENV_VOICE_MODEL_CACHE,

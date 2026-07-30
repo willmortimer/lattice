@@ -7,26 +7,12 @@
 use std::io::{self, BufRead, Write};
 
 use axum::http::{HeaderMap, StatusCode};
-use lattice_mcp_catalog::{
-    local_tools, TOOL_WORKSPACE_BUILD_CONTEXT, TOOL_WORKSPACE_DATASET_GET_SCHEMA,
-    TOOL_WORKSPACE_DATASET_PROFILE, TOOL_WORKSPACE_PROPOSAL_CREATE, TOOL_WORKSPACE_PROPOSAL_GET,
-    TOOL_WORKSPACE_PROPOSAL_LIST, TOOL_WORKSPACE_PROPOSAL_PROPOSE_ARTIFACT,
-    TOOL_WORKSPACE_PROPOSAL_PROPOSE_INTERFACE, TOOL_WORKSPACE_PROPOSAL_PROPOSE_PAGE,
-    TOOL_WORKSPACE_PROPOSAL_PROPOSE_RESOURCE, TOOL_WORKSPACE_PROPOSAL_PROPOSE_WORKFLOW,
-    TOOL_WORKSPACE_READ, TOOL_WORKSPACE_RELATED, TOOL_WORKSPACE_SEARCH,
-};
+use lattice_mcp_catalog::local_tools;
 use lattice_runtime::LatticeRuntime;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::api::{
-    api_build_context, api_create_proposal, api_get_dataset_schema, api_get_proposal,
-    api_list_proposals, api_profile_dataset, api_propose_artifact, api_propose_interface,
-    api_propose_page, api_propose_resource, api_propose_workflow, api_read, api_related,
-    api_search, ApiError, BuildContextParams, CreateProposalParams, DatasetInspectParams,
-    GetProposalParams, ListProposalsParams, ProposePageParams, ProposeResourceParams,
-    ProposeYamlParams, ReadParams, RelatedParams, SearchParams,
-};
+use crate::tool_executor::{execute, ToolCall, ToolError};
 
 pub const PROTOCOL_VERSION_LEGACY: &str = "2024-11-05";
 pub const PROTOCOL_VERSION_MODERN: &str = "2026-07-28";
@@ -242,27 +228,12 @@ fn handle_tools_call(runtime: &LatticeRuntime, id: Value, params: &Value) -> Val
         .cloned()
         .unwrap_or_else(|| json!({}));
 
-    let result = match resolve_tool(name) {
-        Some(ToolKind::Search) => call_search(runtime, arguments),
-        Some(ToolKind::Read) => call_read(runtime, arguments),
-        Some(ToolKind::Related) => call_related(runtime, arguments),
-        Some(ToolKind::BuildContext) => call_build_context(runtime, arguments),
-        Some(ToolKind::DatasetGetSchema) => call_get_dataset_schema(runtime, arguments),
-        Some(ToolKind::DatasetProfile) => call_profile_dataset(runtime, arguments),
-        Some(ToolKind::ProposalCreate) => call_create_proposal(runtime, arguments),
-        Some(ToolKind::ProposalList) => call_list_proposals(runtime, arguments),
-        Some(ToolKind::ProposalGet) => call_get_proposal(runtime, arguments),
-        Some(ToolKind::ProposePage) => call_propose_page(runtime, arguments),
-        Some(ToolKind::ProposeResource) => call_propose_resource(runtime, arguments),
-        Some(ToolKind::ProposeWorkflow) => call_propose_workflow(runtime, arguments),
-        Some(ToolKind::ProposeInterface) => call_propose_interface(runtime, arguments),
-        Some(ToolKind::ProposeArtifact) => call_propose_artifact(runtime, arguments),
-        None => {
-            return error(id, -32602, format!("unknown tool: {name}"));
-        }
+    let call = ToolCall {
+        name: name.to_string(),
+        arguments,
     };
 
-    match result {
+    match execute(runtime, call) {
         Ok(value) => ok(
             id,
             json!({
@@ -271,6 +242,7 @@ fn handle_tools_call(runtime: &LatticeRuntime, id: Value, params: &Value) -> Val
                 "isError": false
             }),
         ),
+        Err(ToolError::UnknownTool { name }) => error(id, -32602, format!("unknown tool: {name}")),
         Err(err) => ok(
             id,
             json!({
@@ -279,142 +251,6 @@ fn handle_tools_call(runtime: &LatticeRuntime, id: Value, params: &Value) -> Val
             }),
         ),
     }
-}
-
-#[derive(Clone, Copy)]
-enum ToolKind {
-    Search,
-    Read,
-    Related,
-    BuildContext,
-    DatasetGetSchema,
-    DatasetProfile,
-    ProposalCreate,
-    ProposalList,
-    ProposalGet,
-    ProposePage,
-    ProposeResource,
-    ProposeWorkflow,
-    ProposeInterface,
-    ProposeArtifact,
-}
-
-fn resolve_tool(name: &str) -> Option<ToolKind> {
-    match name {
-        TOOL_WORKSPACE_SEARCH | "search" => Some(ToolKind::Search),
-        TOOL_WORKSPACE_READ | "read" => Some(ToolKind::Read),
-        TOOL_WORKSPACE_RELATED | "related" => Some(ToolKind::Related),
-        TOOL_WORKSPACE_BUILD_CONTEXT | "build_context" => Some(ToolKind::BuildContext),
-        TOOL_WORKSPACE_DATASET_GET_SCHEMA | "get_dataset_schema" => Some(ToolKind::DatasetGetSchema),
-        TOOL_WORKSPACE_DATASET_PROFILE | "profile_dataset" => Some(ToolKind::DatasetProfile),
-        TOOL_WORKSPACE_PROPOSAL_CREATE | "create_proposal" => Some(ToolKind::ProposalCreate),
-        TOOL_WORKSPACE_PROPOSAL_LIST | "list_proposals" => Some(ToolKind::ProposalList),
-        TOOL_WORKSPACE_PROPOSAL_GET | "get_proposal" => Some(ToolKind::ProposalGet),
-        TOOL_WORKSPACE_PROPOSAL_PROPOSE_PAGE | "propose_page" => Some(ToolKind::ProposePage),
-        TOOL_WORKSPACE_PROPOSAL_PROPOSE_RESOURCE | "propose_resource" => Some(ToolKind::ProposeResource),
-        TOOL_WORKSPACE_PROPOSAL_PROPOSE_WORKFLOW | "propose_workflow" => Some(ToolKind::ProposeWorkflow),
-        TOOL_WORKSPACE_PROPOSAL_PROPOSE_INTERFACE | "propose_interface" => Some(ToolKind::ProposeInterface),
-        TOOL_WORKSPACE_PROPOSAL_PROPOSE_ARTIFACT | "propose_artifact" => Some(ToolKind::ProposeArtifact),
-        _ => None,
-    }
-}
-
-fn call_search(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
-    let params: SearchParams =
-        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
-    let response = api_search(runtime, params)?;
-    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
-}
-
-fn call_read(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
-    let params: ReadParams =
-        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
-    let response = api_read(runtime, params)?;
-    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
-}
-
-fn call_related(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
-    let params: RelatedParams =
-        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
-    let response = api_related(runtime, params)?;
-    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
-}
-
-fn call_build_context(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
-    let params: BuildContextParams =
-        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
-    let response = api_build_context(runtime, params)?;
-    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
-}
-
-fn call_get_dataset_schema(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
-    let params: DatasetInspectParams =
-        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
-    let response = api_get_dataset_schema(runtime, params)?;
-    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
-}
-
-fn call_profile_dataset(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
-    let params: DatasetInspectParams =
-        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
-    let response = api_profile_dataset(runtime, params)?;
-    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
-}
-
-fn call_create_proposal(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
-    let params: CreateProposalParams =
-        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
-    let response = api_create_proposal(runtime, params)?;
-    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
-}
-
-fn call_list_proposals(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
-    let params: ListProposalsParams =
-        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
-    let response = api_list_proposals(runtime, params)?;
-    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
-}
-
-fn call_get_proposal(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
-    let params: GetProposalParams =
-        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
-    let response = api_get_proposal(runtime, params)?;
-    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
-}
-
-fn call_propose_page(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
-    let params: ProposePageParams =
-        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
-    let response = api_propose_page(runtime, params)?;
-    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
-}
-
-fn call_propose_resource(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
-    let params: ProposeResourceParams =
-        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
-    let response = api_propose_resource(runtime, params)?;
-    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
-}
-
-fn call_propose_workflow(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
-    let params: ProposeYamlParams =
-        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
-    let response = api_propose_workflow(runtime, params)?;
-    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
-}
-
-fn call_propose_interface(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
-    let params: ProposeYamlParams =
-        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
-    let response = api_propose_interface(runtime, params)?;
-    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
-}
-
-fn call_propose_artifact(runtime: &LatticeRuntime, args: Value) -> Result<Value, ApiError> {
-    let params: ProposeYamlParams =
-        serde_json::from_value(args).map_err(|e| ApiError::BadRequest(e.to_string()))?;
-    let response = api_propose_artifact(runtime, params)?;
-    serde_json::to_value(response).map_err(|e| ApiError::Internal(e.to_string()))
 }
 
 fn ok(id: Value, result: Value) -> Value {
@@ -429,7 +265,7 @@ fn error(id: Value, code: i32, message: String) -> Value {
 mod tests {
     use super::*;
     use lattice_core::Workspace;
-    use lattice_mcp_catalog::TOOL_WORKSPACE_SEARCH;
+    use lattice_mcp_catalog::{TOOL_WORKSPACE_DATASET_GET_SCHEMA, TOOL_WORKSPACE_SEARCH};
     use tempfile::TempDir;
 
     fn tool_names() -> Vec<String> {
