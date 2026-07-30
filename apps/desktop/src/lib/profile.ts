@@ -39,6 +39,9 @@ export interface ProfileNotice {
   path: string | null;
 }
 
+export type AiMode = "local" | "byoOpenai" | "account";
+export type EmbeddingMode = "followAi" | "local" | "remote";
+
 export interface DesktopSettings {
   format: string;
   version: number;
@@ -85,6 +88,12 @@ export interface DesktopSettings {
   };
   search: {
     semanticEnabled: boolean;
+  };
+  ai: {
+    mode: AiMode;
+    embeddingMode: EmbeddingMode;
+    passiveEmbeddingEnabled: boolean;
+    preferredModel: string | null;
   };
   privacy: {
     appLockEnabled: boolean;
@@ -168,6 +177,12 @@ export function defaultDesktopSettings(): DesktopSettings {
     },
     search: {
       semanticEnabled: false,
+    },
+    ai: {
+      mode: "local",
+      embeddingMode: "followAi",
+      passiveEmbeddingEnabled: false,
+      preferredModel: null,
     },
     privacy: {
       appLockEnabled: false,
@@ -279,6 +294,10 @@ function normalizeProfile(profile: ProfileSnapshot): ProfileSnapshot {
         search: {
           ...desktopDefaults.search,
           ...profile.settings.desktop?.search,
+        },
+        ai: {
+          ...desktopDefaults.ai,
+          ...profile.settings.desktop?.ai,
         },
         privacy: {
           ...desktopDefaults.privacy,

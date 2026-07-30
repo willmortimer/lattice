@@ -4,6 +4,7 @@ mod blob;
 mod client;
 mod config;
 mod error;
+mod openai_key;
 mod session;
 mod types;
 
@@ -14,6 +15,10 @@ pub use client::{
 };
 pub use config::{CLOUD_TOKEN_ENV, DEFAULT_CLOUD_URL, cloud_token_from_env, cloud_url};
 pub use error::{CloudError, Result};
+pub use openai_key::{
+    KeychainOpenAiKeyStore, MemoryOpenAiKeyStore, OpenAiKeyStore, OPENAI_KEY_ACCOUNT,
+    OPENAI_KEY_SERVICE,
+};
 pub use session::{
     CLOUD_TOKEN_SERVICE, CLOUD_USER_TOKEN_KEY, CloudSessionStore, KeychainCloudSessionStore,
     MemoryCloudSessionStore, cloud_session_status, resolve_cloud_bearer, resolved_cloud_url,
