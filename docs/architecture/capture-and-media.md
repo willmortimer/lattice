@@ -35,6 +35,9 @@ hot paths and Lattice UI exclusion.
 - Global shortcut / menu entry invoking native session (not WebView overlay).
 - Recording API stub returning project-bundle shape (no recorder impl).
 
+**Manual smoke:** [capture-smoke.md](../dev/capture-smoke.md) (build, permissions,
+⌘⇧2, clipboard + inbox, cancel, multi-monitor). CI runs unit tests only.
+
 **Out of scope for R1:** markup editor, browser tab capture, real recording,
 Mediabunny, agent capture tools, media preview shell maturity.
 

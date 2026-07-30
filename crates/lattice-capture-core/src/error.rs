@@ -38,3 +38,36 @@ impl CaptureError {
         Self::Internal(message.into())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn helper_constructors_set_expected_variants() {
+        assert!(matches!(
+            CaptureError::provider("sck"),
+            CaptureError::Provider(message) if message == "sck"
+        ));
+        assert!(matches!(
+            CaptureError::invalid_argument("bad region"),
+            CaptureError::InvalidArgument(message) if message == "bad region"
+        ));
+        assert!(matches!(
+            CaptureError::not_found("display 9"),
+            CaptureError::NotFound(message) if message == "display 9"
+        ));
+    }
+
+    #[test]
+    fn cancelled_and_permission_denied_are_user_actionable() {
+        assert_eq!(
+            CaptureError::Cancelled.to_string(),
+            "capture cancelled by user"
+        );
+        assert_eq!(
+            CaptureError::PermissionDenied.to_string(),
+            "screen recording permission denied"
+        );
+    }
+}
