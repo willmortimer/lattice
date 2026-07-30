@@ -1,0 +1,12 @@
+[package]
+name = "lattice-relay-protocol"
+description = "Versioned JSON frame types for the Lattice Relay Protocol"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
