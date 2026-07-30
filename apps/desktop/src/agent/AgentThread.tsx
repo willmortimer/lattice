@@ -67,7 +67,15 @@ function AgentAssistantMessage() {
   );
 }
 
-function AgentThreadView({ accountAiDisabled }: { accountAiDisabled: boolean }) {
+function AgentThreadView({
+  accountAiDisabled,
+  byoOpenaiKeyMissing,
+}: {
+  accountAiDisabled: boolean;
+  byoOpenaiKeyMissing: boolean;
+}) {
+  const composerDisabled = accountAiDisabled || byoOpenaiKeyMissing;
+
   return (
     <ThreadPrimitive.Root className="agent-thread">
       <ThreadPrimitive.Viewport className="agent-thread-viewport">
@@ -75,8 +83,10 @@ function AgentThreadView({ accountAiDisabled }: { accountAiDisabled: boolean }) 
           <div className="agent-thread-empty">
             <p>
               {accountAiDisabled
-                ? "Lattice Account AI is coming soon. Switch to Local or BYO OpenAI in Settings → AI."
-                : "Ask the agent about this workspace."}
+                ? "Sign in under Settings → Cloud account to use Lattice paid AI."
+                : byoOpenaiKeyMissing
+                  ? "Add your OpenAI API key in Settings → AI to use the agent in BYO mode."
+                  : "Ask the agent about this workspace."}
             </p>
           </div>
         </ThreadPrimitive.Empty>
@@ -86,7 +96,7 @@ function AgentThreadView({ accountAiDisabled }: { accountAiDisabled: boolean }) 
             AssistantMessage: AgentAssistantMessage,
           }}
         />
-        {!accountAiDisabled ? (
+        {!composerDisabled ? (
           <ThreadPrimitive.ViewportFooter className="agent-thread-footer">
             <ComposerPrimitive.Root className="agent-composer">
               <ComposerPrimitive.Input
@@ -108,7 +118,14 @@ function AgentThreadView({ accountAiDisabled }: { accountAiDisabled: boolean }) 
 }
 
 export function AgentThread({ workspaceRoot }: AgentThreadProps) {
-  const accountAiDisabled = useAgentSessionStore((state) => state.accountAiDisabled);
+  const session = useAgentSessionStore((state) => ({
+    accountAiDisabled: state.accountAiDisabled,
+    aiMode: state.aiMode,
+    byoOpenaiKeyPresent: state.byoOpenaiKeyPresent,
+  }));
+  const byoOpenaiKeyMissing =
+    session.aiMode === "byoOpenai" && session.byoOpenaiKeyPresent === false;
+
   if (!workspaceRoot?.trim()) {
     return (
       <div className="agent-thread-placeholder" role="status">
@@ -117,5 +134,10 @@ export function AgentThread({ workspaceRoot }: AgentThreadProps) {
     );
   }
 
-  return <AgentThreadView accountAiDisabled={accountAiDisabled} />;
+  return (
+    <AgentThreadView
+      accountAiDisabled={session.accountAiDisabled}
+      byoOpenaiKeyMissing={byoOpenaiKeyMissing}
+    />
+  );
 }

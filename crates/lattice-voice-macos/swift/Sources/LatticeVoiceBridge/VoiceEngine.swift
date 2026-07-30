@@ -2,21 +2,23 @@ import FluidAudio
 import Foundation
 import os
 
-/// Owns the loaded Unified streaming checkpoint (`parakeet-unified-320ms`).
-/// Dual-path finals use `StreamingUnifiedAsrManager.finish()` from this manager;
-/// the optional offline Unified encoder is intentionally not loaded for M1.
+/// Owns the loaded Unified streaming checkpoint (`parakeet-unified-320ms`) and
+/// an optional Parakeet TDT v2 offline final model (`parakeet-tdt-0.6b-v2-coreml`).
 ///
-/// TODO(voice-v11): Lazy-load TDT v2 / Unified offline for independent final
-/// when eval adopts it; unload after idle via `FinalModelMemoryPolicy` hooks.
-/// Do not report `IndependentOfflineRedecode` until that path re-decodes
-/// buffered utterance PCM.
+/// Streaming partials use Unified only. On endpoint/finish, Rust may call
+/// `redecodeOffline` over buffered utterance PCM for `IndependentOfflineRedecode`.
 final class VoiceEngine: @unchecked Sendable {
+    static let tdtModelSubdir = "parakeet-tdt-0.6b-v2"
+
     let id: UInt64
     let modelsRoot: URL
     private let lock = OSAllocatedUnfairLock()
     private var manager: StreamingUnifiedAsrManager?
     private var prepared = false
     private var destroyed = false
+    private var tdtAsr: AsrManager?
+    private var tdtDecoderState: TdtDecoderState?
+    private var finalModelPrepared = false
 
     init(id: UInt64, modelsRoot: URL) {
         self.id = id
@@ -79,7 +81,91 @@ final class VoiceEngine: @unchecked Sendable {
             destroyed = true
             manager = nil
             prepared = false
+            unloadFinalModelLocked()
         }
+    }
+
+    /// Lazy-load TDT v2 for independent offline finals. Idempotent.
+    func prepareFinalModel() async throws {
+        let alreadyReady = lock.withLock { finalModelPrepared && !destroyed }
+        if alreadyReady {
+            return
+        }
+
+        try lock.withLock { () throws in
+            if destroyed {
+                throw BridgeFailure.session("Engine was destroyed")
+            }
+            if !prepared {
+                throw BridgeFailure.notPrepared
+            }
+        }
+
+        let v2Dir = modelsRoot.appendingPathComponent(Self.tdtModelSubdir, isDirectory: true)
+        let asrModels = try await AsrModels.downloadAndLoad(to: v2Dir, version: .v2)
+        let asr = AsrManager(config: .default)
+        try await asr.loadModels(asrModels)
+        let layerCount = await asr.decoderLayerCount
+        let decoderState = TdtDecoderState.make(decoderLayers: layerCount)
+
+        try lock.withLock { () throws in
+            if destroyed {
+                throw BridgeFailure.session("Engine was destroyed during TDT prepare")
+            }
+            tdtAsr = asr
+            tdtDecoderState = decoderState
+            finalModelPrepared = true
+        }
+    }
+
+    func unloadFinalModel() {
+        lock.withLock { unloadFinalModelLocked() }
+    }
+
+    /// Re-decode full-utterance PCM with Parakeet TDT v2 (independent final).
+    func redecodeOffline(samples: [Float], sampleRateHz: UInt32) async throws -> String {
+        guard sampleRateHz == 16_000 else {
+            throw BridgeFailure.unsupported("offline redecode requires 16 kHz mono PCM")
+        }
+        if samples.isEmpty {
+            throw BridgeFailure.invalidArgument("offline redecode requires non-empty samples")
+        }
+
+        if !lock.withLock({ finalModelPrepared && !destroyed }) {
+            try await prepareFinalModel()
+        }
+
+        let asr = try lock.withLock { () throws -> AsrManager in
+            if destroyed {
+                throw BridgeFailure.session("Engine was destroyed")
+            }
+            guard let asr = tdtAsr else {
+                throw BridgeFailure.notPrepared
+            }
+            return asr
+        }
+
+        var decoderState = try lock.withLock { () throws -> TdtDecoderState in
+            guard let state = tdtDecoderState else {
+                throw BridgeFailure.notPrepared
+            }
+            return state
+        }
+
+        let result = try await asr.transcribe(samples, decoderState: &decoderState)
+
+        let updatedDecoderState = decoderState
+        lock.withLock {
+            tdtDecoderState = updatedDecoderState
+        }
+
+        return result.text
+    }
+
+    private func unloadFinalModelLocked() {
+        tdtAsr = nil
+        tdtDecoderState = nil
+        finalModelPrepared = false
     }
 }
 

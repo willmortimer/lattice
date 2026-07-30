@@ -20,7 +20,7 @@ use super::protocol::{
     ProviderKind, StartAgentRunRequest, PROTOCOL_VERSION,
 };
 
-/// Path to the Node/tsx entry or packaged `agentd` executable.
+/// Path to the `lattice-agentd` executable (optional override).
 pub const ENV_AGENTD_BIN: &str = "LATTICE_AGENTD_BIN";
 /// Prefer the in-process fake backend (tests / CI).
 pub const ENV_AGENT_FAKE: &str = "LATTICE_AGENT_FAKE";
@@ -28,6 +28,12 @@ pub const ENV_AGENT_FAKE: &str = "LATTICE_AGENT_FAKE";
 pub const ENV_AGENT_PROVIDER: &str = "LATTICE_AGENT_PROVIDER";
 /// Model id passed through to agentd.
 pub const ENV_AGENT_MODEL: &str = "LATTICE_AGENT_MODEL";
+/// Local OpenAI-compatible LLM base URL including `/v1`.
+pub const ENV_LOCAL_LLM_BASE_URL: &str = "LATTICE_LOCAL_LLM_BASE_URL";
+/// Optional API key for the local LLM endpoint.
+pub const ENV_LOCAL_LLM_API_KEY: &str = "LATTICE_LOCAL_LLM_API_KEY";
+/// Optional default model id for the local LLM endpoint.
+pub const ENV_LOCAL_LLM_MODEL: &str = "LATTICE_LOCAL_LLM_MODEL";
 
 const MAX_RESTARTS: u32 = 5;
 const INITIAL_BACKOFF_MS: u64 = 200;
@@ -422,8 +428,12 @@ fn build_agentd_command(
     for key in [
         "PIONEER_API_KEY",
         "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
         "LATTICE_AUTH_TOKEN",
         "LATTICE_API_BASE_URL",
+        ENV_LOCAL_LLM_BASE_URL,
+        ENV_LOCAL_LLM_API_KEY,
+        ENV_LOCAL_LLM_MODEL,
     ] {
         if let Ok(value) = std::env::var(key) {
             if !value.is_empty() {
@@ -452,10 +462,8 @@ async fn write_command(
 
 /// Resolve `LATTICE_AGENTD_BIN` into `(executable, trailing args)`.
 ///
-/// Values may be a direct executable or a launcher form such as
-/// `npx tsx apps/agentd/src/index.ts`. When unset, prefer the Rust
-/// `lattice-agentd` binary (release/debug/next to latticed). Node
-/// `run.sh` only when `LATTICE_AGENTD_PREFER_NODE` is set.
+/// When unset, auto-discover the Rust `lattice-agentd` binary
+/// (release/debug/next to `latticed`).
 pub fn resolve_agentd_bin() -> Option<(PathBuf, Vec<String>)> {
     if let Ok(raw) = std::env::var(ENV_AGENTD_BIN) {
         if !raw.is_empty() {
@@ -490,15 +498,6 @@ fn discover_default_agentd_bin() -> Option<(PathBuf, Vec<String>)> {
             }
         }
     }
-
-    // Node is opt-in only (`LATTICE_AGENTD_PREFER_NODE=1` or explicit LATTICE_AGENTD_BIN).
-    if env_truthy("LATTICE_AGENTD_PREFER_NODE") {
-        let run_sh = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../agentd/scripts/run.sh");
-        let run_sh = std::fs::canonicalize(&run_sh).unwrap_or(run_sh);
-        if run_sh.is_file() {
-            return Some((run_sh, Vec::new()));
-        }
-    }
     None
 }
 
@@ -514,27 +513,41 @@ pub fn env_truthy(name: &str) -> bool {
     )
 }
 
-pub fn default_provider_from_env() -> ProviderKind {
-    std::env::var(ENV_AGENT_PROVIDER)
+fn openai_key_present() -> bool {
+    std::env::var("OPENAI_API_KEY")
         .ok()
-        .as_deref()
-        .and_then(ProviderKind::parse)
-        .unwrap_or_else(|| {
-            // Prefer OpenAI when only that key is present (desktop-dev injects both often).
-            if std::env::var("OPENAI_API_KEY")
-                .ok()
-                .filter(|s| !s.is_empty())
-                .is_some()
-                && std::env::var("PIONEER_API_KEY")
-                    .ok()
-                    .filter(|s| !s.is_empty())
-                    .is_none()
-            {
-                ProviderKind::Openai
-            } else {
-                ProviderKind::Pioneer
+        .filter(|s| !s.is_empty())
+        .is_some()
+}
+
+pub fn local_llm_configured() -> bool {
+    std::env::var(ENV_LOCAL_LLM_BASE_URL)
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .is_some()
+}
+
+pub fn default_provider_from_env() -> ProviderKind {
+    // Prefer OpenAI whenever OPENAI_API_KEY is set. Do not pick Pioneer over
+    // OpenAI when both keys are present (desktop-dev / secrets/ai.env often
+    // injects both). Fake/local paths are selected separately. Pioneer remains
+    // available via explicit LATTICE_AGENT_PROVIDER or sole PIONEER_API_KEY.
+    if let Ok(raw) = std::env::var(ENV_AGENT_PROVIDER) {
+        if !raw.is_empty() {
+            if let Some(kind) = ProviderKind::parse(&raw) {
+                return kind;
             }
-        })
+            if raw.eq_ignore_ascii_case("openai") {
+                return ProviderKind::Openai;
+            }
+        }
+    }
+
+    if openai_key_present() {
+        ProviderKind::Openai
+    } else {
+        ProviderKind::Pioneer
+    }
 }
 
 pub fn default_model_from_env() -> String {
@@ -546,6 +559,10 @@ pub fn default_model_from_env() -> String {
     }
     match default_provider_from_env() {
         ProviderKind::Openai => "gpt-5-nano".into(),
+        ProviderKind::Local => std::env::var(ENV_LOCAL_LLM_MODEL)
+            .ok()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "local".into()),
         ProviderKind::Pioneer | ProviderKind::Fake => "gpt-5.6-luna".into(),
     }
 }
@@ -554,7 +571,59 @@ pub fn default_model_from_env() -> String {
 mod tests {
     use super::*;
     use std::process::{Command as StdCommand, Stdio};
+    use std::sync::{Mutex, OnceLock};
     use std::time::Duration;
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    struct EnvGuard {
+        key: String,
+        previous: Option<String>,
+    }
+
+    impl EnvGuard {
+        fn set(key: &str, value: Option<&str>) -> Self {
+            let previous = std::env::var(key).ok();
+            match value {
+                Some(value) => std::env::set_var(key, value),
+                None => std::env::remove_var(key),
+            }
+            Self {
+                key: key.to_string(),
+                previous,
+            }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match &self.previous {
+                Some(value) => std::env::set_var(&self.key, value),
+                None => std::env::remove_var(&self.key),
+            }
+        }
+    }
+
+    #[test]
+    fn default_provider_from_env_honors_explicit_openai() {
+        let _lock = env_lock().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _provider = EnvGuard::set(ENV_AGENT_PROVIDER, Some("openai"));
+        let _openai = EnvGuard::set("OPENAI_API_KEY", None);
+        let _pioneer = EnvGuard::set("PIONEER_API_KEY", Some("pioneer-test"));
+        assert_eq!(default_provider_from_env(), ProviderKind::Openai);
+    }
+
+    #[test]
+    fn default_provider_from_env_prefers_openai_when_both_keys_present() {
+        let _lock = env_lock().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _provider = EnvGuard::set(ENV_AGENT_PROVIDER, None);
+        let _openai = EnvGuard::set("OPENAI_API_KEY", Some("sk-test"));
+        let _pioneer = EnvGuard::set("PIONEER_API_KEY", Some("pioneer-test"));
+        assert_eq!(default_provider_from_env(), ProviderKind::Openai);
+    }
 
     async fn collect_events_until_terminal(
         rx: &mut mpsc::Receiver<AgentEvent>,
@@ -673,5 +742,32 @@ for raw in sys.stdin:
         ));
 
         backend.shutdown().await;
+    }
+
+    #[test]
+    fn default_provider_uses_openai_when_only_openai_key_set() {
+        let _lock = env_lock().lock().unwrap_or_else(|p| p.into_inner());
+        let _provider = EnvGuard::set(ENV_AGENT_PROVIDER, None);
+        let _openai = EnvGuard::set("OPENAI_API_KEY", Some("sk-test"));
+        let _pioneer = EnvGuard::set("PIONEER_API_KEY", None);
+        assert_eq!(default_provider_from_env(), ProviderKind::Openai);
+    }
+
+    #[test]
+    fn default_provider_falls_back_to_pioneer_without_openai() {
+        let _lock = env_lock().lock().unwrap_or_else(|p| p.into_inner());
+        let _provider = EnvGuard::set(ENV_AGENT_PROVIDER, None);
+        let _openai = EnvGuard::set("OPENAI_API_KEY", None);
+        let _pioneer = EnvGuard::set("PIONEER_API_KEY", Some("pioneer-test"));
+        assert_eq!(default_provider_from_env(), ProviderKind::Pioneer);
+    }
+
+    #[test]
+    fn default_provider_respects_explicit_env_override() {
+        let _lock = env_lock().lock().unwrap_or_else(|p| p.into_inner());
+        let _provider = EnvGuard::set(ENV_AGENT_PROVIDER, Some("pioneer"));
+        let _openai = EnvGuard::set("OPENAI_API_KEY", Some("sk-test"));
+        let _pioneer = EnvGuard::set("PIONEER_API_KEY", Some("pioneer-test"));
+        assert_eq!(default_provider_from_env(), ProviderKind::Pioneer);
     }
 }

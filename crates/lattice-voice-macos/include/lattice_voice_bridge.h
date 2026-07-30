@@ -92,6 +92,30 @@ int32_t lattice_voice_engine_prepare(lattice_voice_engine_t engine);
 void lattice_voice_engine_destroy(lattice_voice_engine_t engine);
 
 /**
+ * Lazy-load Parakeet TDT v2 (`parakeet-tdt-0.6b-v2-coreml`) for offline finals.
+ * Idempotent when the final model is already resident.
+ */
+int32_t lattice_voice_engine_prepare_final_model(lattice_voice_engine_t engine);
+
+/** Release the optional TDT final model (memory policy hook). */
+void lattice_voice_engine_unload_final_model(lattice_voice_engine_t engine);
+
+/**
+ * Re-decode Float32 LE mono @ `sample_rate_hz` (must be 16000) with TDT v2.
+ * On success writes UTF-8 into `out_text` (NUL-terminated) and sets
+ * `out_text_len` to the byte length excluding the terminator.
+ */
+int32_t lattice_voice_engine_redecode_offline(
+    lattice_voice_engine_t engine,
+    const float *samples,
+    size_t sample_count,
+    uint32_t sample_rate_hz,
+    char *out_text,
+    size_t out_text_capacity,
+    size_t *out_text_len
+);
+
+/**
  * Start a session on a prepared engine.
  * Callbacks may arrive on background threads; never from the Tokio executor.
  */

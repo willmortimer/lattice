@@ -2,8 +2,7 @@
 
 Rust sidecar that speaks the Phase A agent JSONL protocol over stdio
 ([ADR 0051](../../docs/decisions/0051-rust-embedded-agent-harness.md)). Desktop /
-`latticed` prefer this binary by default. Node `apps/agentd` is **opt-in only**
-via `LATTICE_AGENTD_PREFER_NODE=1` or an explicit `LATTICE_AGENTD_BIN`.
+`latticed` auto-discover and supervise this binary.
 
 ## Protocol
 
@@ -43,12 +42,10 @@ When `LATTICE_AGENTD_BIN` is unset, discovery order is:
 2. `target/debug/lattice-agentd`
 3. `lattice-agentd` next to the running `latticed` / app binary (packaged DMG)
 
-Force Node (escape hatch only):
+Override discovery explicitly:
 
 ```sh
-export LATTICE_AGENTD_PREFER_NODE=1
-# or:
-export LATTICE_AGENTD_BIN="$(pwd)/apps/agentd/scripts/run.sh"
+export LATTICE_AGENTD_BIN="$(pwd)/target/debug/lattice-agentd"
 ```
 
 ## Pioneer (default provider)
@@ -64,9 +61,8 @@ export PIONEER_API_KEY=…                  # injected by latticed at spawn
 ### Host tools (latticed HTTP)
 
 When both are set, Pioneer uses Chat Completions with a Lattice tool loop
-(search / read / related / proposals / …) against the daemon localhost API
-(same routes as Node `apps/agentd`). `latticed` injects these when it
-supervises the sidecar:
+(search / read / related / proposals / …) against the daemon localhost API.
+`latticed` injects these when it supervises the sidecar:
 
 | Env | Purpose |
 | --- | --- |

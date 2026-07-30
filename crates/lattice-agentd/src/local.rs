@@ -1,9 +1,7 @@
-//! Pioneer OpenAI-compatible Chat Completions streaming + host tool loop.
+//! On-device local LLM via an OpenAI-compatible Chat Completions endpoint.
 //!
-//! Pioneer provider: `https://api.pioneer.ai/v1` + Chat Completions SSE.
-//! `PIONEER_API_KEY`, chat completions (not Responses). When a Lattice HTTP
-//! client is configured, runs a thin tool loop (max 8 rounds); otherwise
-//! streams chat-only text into AI SDK UI chunks.
+//! Configure with `LATTICE_LOCAL_LLM_BASE_URL` (e.g. `http://127.0.0.1:8080/v1`).
+//! Optional: `LATTICE_LOCAL_LLM_MODEL`, `LATTICE_LOCAL_LLM_API_KEY`.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -22,82 +20,87 @@ use crate::tools::{
     dispatch_tool, openai_tool_definitions, ToolRunContext, WORKSPACE_AGENT_INSTRUCTIONS,
 };
 
-pub const DEFAULT_PIONEER_BASE_URL: &str = "https://api.pioneer.ai/v1";
-/// Cheap default for local testing (Pioneer catalog).
-pub const DEFAULT_PIONEER_MODEL: &str = "gpt-5.6-luna";
+pub const DEFAULT_LOCAL_MODEL: &str = "local";
 
 /// Max assistant→tool→assistant rounds when Lattice tools are enabled.
 pub const MAX_TOOL_ROUNDS: usize = 8;
 
 #[derive(Debug, Error, PartialEq, Eq)]
-pub enum PioneerError {
-    #[error("PIONEER_API_KEY is required for provider=pioneer")]
-    MissingApiKey,
+pub enum LocalError {
+    #[error("LATTICE_LOCAL_LLM_BASE_URL is required for provider=local")]
+    MissingBaseUrl,
     #[error("Run cancelled")]
     Cancelled,
-    #[error("pioneer HTTP {status}: {body}")]
+    #[error("local LLM HTTP {status}: {body}")]
     Http { status: u16, body: String },
-    #[error("pioneer API error: {0}")]
+    #[error("local LLM API error: {0}")]
     Api(String),
-    #[error("pioneer transport error: {0}")]
+    #[error("local LLM transport error: {0}")]
     Transport(String),
-    #[error("pioneer stream ended without completion")]
+    #[error("local LLM stream ended without completion")]
     Incomplete,
-    #[error("pioneer tool loop exceeded {0} rounds")]
+    #[error("local LLM tool loop exceeded {0} rounds")]
     ToolLoopExhausted(usize),
 }
 
 #[derive(Debug, Clone)]
-pub struct PioneerRunOptions {
+pub struct LocalRunOptions {
     pub run_id: String,
     pub thread_id: String,
     pub model: String,
-    /// Flattened fallback prompt (used when `messages` is empty).
     pub prompt: String,
-    /// OpenAI-style chat turns (user/assistant). When non-empty, preferred over `prompt`.
-    pub messages: Vec<serde_json::Value>,
-    pub api_key: String,
+    pub messages: Vec<Value>,
     pub base_url: String,
+    pub api_key: Option<String>,
     pub cancel: Arc<AtomicBool>,
-    /// When set, enable Chat Completions tool loop against latticed HTTP.
     pub lattice: Option<LatticeToolClient>,
     pub workspace_id: Option<String>,
     pub workspace_root: Option<String>,
 }
 
+pub fn base_url_from_env() -> Option<String> {
+    std::env::var("LATTICE_LOCAL_LLM_BASE_URL")
+        .ok()
+        .map(|u| u.trim().trim_end_matches('/').to_string())
+        .filter(|u| !u.is_empty())
+}
+
 pub fn api_key_from_env() -> Option<String> {
-    std::env::var("PIONEER_API_KEY")
+    std::env::var("LATTICE_LOCAL_LLM_API_KEY")
         .ok()
         .map(|k| k.trim().to_string())
         .filter(|k| !k.is_empty())
 }
 
-pub fn base_url_from_env() -> String {
-    std::env::var("PIONEER_BASE_URL")
+pub fn model_from_env() -> Option<String> {
+    std::env::var("LATTICE_LOCAL_LLM_MODEL")
         .ok()
-        .map(|u| u.trim().trim_end_matches('/').to_string())
-        .filter(|u| !u.is_empty())
-        .unwrap_or_else(|| DEFAULT_PIONEER_BASE_URL.to_string())
+        .map(|m| m.trim().to_string())
+        .filter(|m| !m.is_empty())
+}
+
+pub fn is_configured() -> bool {
+    base_url_from_env().is_some()
 }
 
 pub fn normalize_model(model: &str) -> String {
     let trimmed = model.trim();
-    if trimmed.is_empty() || trimmed == "default" {
-        DEFAULT_PIONEER_MODEL.to_string()
+    if trimmed.is_empty() {
+        model_from_env().unwrap_or_else(|| DEFAULT_LOCAL_MODEL.to_string())
     } else {
         trimmed.to_string()
     }
 }
 
-pub async fn emit_pioneer_run(options: PioneerRunOptions, events: mpsc::Sender<AgentEvent>) {
-    let PioneerRunOptions {
+pub async fn emit_local_run(options: LocalRunOptions, events: mpsc::Sender<AgentEvent>) {
+    let LocalRunOptions {
         run_id,
         thread_id,
         model,
         prompt,
         messages,
-        api_key,
         base_url,
+        api_key,
         cancel,
         lattice,
         workspace_id,
@@ -114,14 +117,14 @@ pub async fn emit_pioneer_run(options: PioneerRunOptions, events: mpsc::Sender<A
     send(AgentEvent::RunStarted {
         run_id: run_id.clone(),
         thread_id,
-        provider: Some(ProviderKind::Pioneer),
+        provider: Some(ProviderKind::Local),
     })
     .await;
 
-    if api_key.trim().is_empty() {
+    if base_url.trim().is_empty() {
         send(AgentEvent::RunFailed {
             run_id,
-            message: PioneerError::MissingApiKey.to_string(),
+            message: LocalError::MissingBaseUrl.to_string(),
             retryable: false,
         })
         .await;
@@ -131,7 +134,7 @@ pub async fn emit_pioneer_run(options: PioneerRunOptions, events: mpsc::Sender<A
     if cancel.load(Ordering::SeqCst) {
         send(AgentEvent::RunFailed {
             run_id,
-            message: PioneerError::Cancelled.to_string(),
+            message: LocalError::Cancelled.to_string(),
             retryable: false,
         })
         .await;
@@ -146,7 +149,7 @@ pub async fn emit_pioneer_run(options: PioneerRunOptions, events: mpsc::Sender<A
     };
     let result = if lattice.is_some() {
         run_tool_loop(
-            &api_key,
+            api_key.as_deref(),
             &base_url,
             &model,
             &chat_messages,
@@ -168,7 +171,7 @@ pub async fn emit_pioneer_run(options: PioneerRunOptions, events: mpsc::Sender<A
             .and_then(|m| m.get("content").and_then(|c| c.as_str()))
             .unwrap_or(prompt.as_str());
         stream_chat_completions(
-            &api_key,
+            api_key.as_deref(),
             &base_url,
             &model,
             prompt_text,
@@ -184,7 +187,7 @@ pub async fn emit_pioneer_run(options: PioneerRunOptions, events: mpsc::Sender<A
             if cancel.load(Ordering::SeqCst) {
                 send(AgentEvent::RunFailed {
                     run_id,
-                    message: PioneerError::Cancelled.to_string(),
+                    message: LocalError::Cancelled.to_string(),
                     retryable: false,
                 })
                 .await;
@@ -192,16 +195,16 @@ pub async fn emit_pioneer_run(options: PioneerRunOptions, events: mpsc::Sender<A
                 send(AgentEvent::RunCompleted { run_id }).await;
             }
         }
-        Err(PioneerError::Cancelled) => {
+        Err(LocalError::Cancelled) => {
             send(AgentEvent::RunFailed {
                 run_id,
-                message: PioneerError::Cancelled.to_string(),
+                message: LocalError::Cancelled.to_string(),
                 retryable: false,
             })
             .await;
         }
         Err(err) => {
-            let retryable = matches!(err, PioneerError::Transport(_) | PioneerError::Http { .. });
+            let retryable = matches!(err, LocalError::Transport(_) | LocalError::Http { .. });
             send(AgentEvent::RunFailed {
                 run_id,
                 message: err.to_string(),
@@ -212,8 +215,21 @@ pub async fn emit_pioneer_run(options: PioneerRunOptions, events: mpsc::Sender<A
     }
 }
 
+fn request_headers(api_key: Option<&str>) -> Result<HeaderMap, LocalError> {
+    let mut headers = HeaderMap::new();
+    if let Some(key) = api_key.filter(|k| !k.is_empty()) {
+        headers.insert(
+            AUTHORIZATION,
+            HeaderValue::from_str(&format!("Bearer {key}"))
+                .map_err(|err| LocalError::Transport(err.to_string()))?,
+        );
+    }
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+    Ok(headers)
+}
+
 async fn run_tool_loop(
-    api_key: &str,
+    api_key: Option<&str>,
     base_url: &str,
     model: &str,
     chat_messages: &[Value],
@@ -222,11 +238,11 @@ async fn run_tool_loop(
     events: &mpsc::Sender<AgentEvent>,
     lattice: Option<&LatticeToolClient>,
     tool_ctx: &ToolRunContext,
-) -> Result<(), PioneerError> {
+) -> Result<(), LocalError> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(120))
         .build()
-        .map_err(|err| PioneerError::Transport(err.to_string()))?;
+        .map_err(|err| LocalError::Transport(err.to_string()))?;
 
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
     let tools = openai_tool_definitions();
@@ -240,7 +256,7 @@ async fn run_tool_loop(
 
     for round in 0..MAX_TOOL_ROUNDS {
         if cancel.load(Ordering::SeqCst) {
-            return Err(PioneerError::Cancelled);
+            return Err(LocalError::Cancelled);
         }
 
         let think_id = format!("think-{round}");
@@ -266,7 +282,8 @@ async fn run_tool_loop(
             "stream": true,
         });
 
-        let outcome = stream_tool_round(&client, &url, api_key, &body, run_id, cancel, events).await?;
+        let outcome =
+            stream_tool_round(&client, &url, api_key, &body, run_id, cancel, events).await?;
         emit_step_completed(
             run_id,
             &think_id,
@@ -282,7 +299,7 @@ async fn run_tool_loop(
                 messages.push(message);
                 for (tool_idx, call) in calls.iter().enumerate() {
                     if cancel.load(Ordering::SeqCst) {
-                        return Err(PioneerError::Cancelled);
+                        return Err(LocalError::Cancelled);
                     }
                     let step_id = format!("tool-{round}-{tool_idx}");
                     let label = if call.name.is_empty() {
@@ -312,7 +329,7 @@ async fn run_tool_loop(
         }
     }
 
-    Err(PioneerError::ToolLoopExhausted(MAX_TOOL_ROUNDS))
+    Err(LocalError::ToolLoopExhausted(MAX_TOOL_ROUNDS))
 }
 
 #[derive(Debug, Clone)]
@@ -383,35 +400,25 @@ fn apply_tool_call_delta(builders: &mut Vec<ToolCallBuilder>, delta_calls: &[Val
 async fn stream_tool_round(
     client: &reqwest::Client,
     url: &str,
-    api_key: &str,
+    api_key: Option<&str>,
     body: &Value,
     run_id: &str,
     cancel: &AtomicBool,
     events: &mpsc::Sender<AgentEvent>,
-) -> Result<StreamRoundOutcome, PioneerError> {
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        AUTHORIZATION,
-        HeaderValue::from_str(&format!("Bearer {api_key}"))
-            .map_err(|err| PioneerError::Transport(err.to_string()))?,
-    );
-    if let Ok(value) = HeaderValue::from_str(api_key) {
-        headers.insert("X-API-Key", value);
-    }
-    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-
+) -> Result<StreamRoundOutcome, LocalError> {
+    let headers = request_headers(api_key)?;
     let response = tokio::select! {
         biased;
-        _ = wait_cancelled(cancel) => return Err(PioneerError::Cancelled),
+        _ = wait_cancelled(cancel) => return Err(LocalError::Cancelled),
         result = client.post(url).headers(headers).json(body).send() => {
-            result.map_err(|err| PioneerError::Transport(err.to_string()))?
+            result.map_err(|err| LocalError::Transport(err.to_string()))?
         }
     };
 
     let status = response.status();
     if !status.is_success() {
         let body = response.text().await.unwrap_or_default();
-        return Err(PioneerError::Http {
+        return Err(LocalError::Http {
             status: status.as_u16(),
             body: truncate(&body, 512),
         });
@@ -427,10 +434,10 @@ async fn stream_tool_round(
 
     while let Some(chunk) = tokio::select! {
         biased;
-        _ = wait_cancelled(cancel) => return Err(PioneerError::Cancelled),
+        _ = wait_cancelled(cancel) => return Err(LocalError::Cancelled),
         item = stream.next() => item,
     } {
-        let chunk = chunk.map_err(|err| PioneerError::Transport(err.to_string()))?;
+        let chunk = chunk.map_err(|err| LocalError::Transport(err.to_string()))?;
         buffer.push_str(&String::from_utf8_lossy(&chunk));
 
         while let Some(boundary) = buffer.find('\n') {
@@ -458,7 +465,7 @@ async fn stream_tool_round(
             let payload: Value = match serde_json::from_str(data) {
                 Ok(value) => value,
                 Err(err) => {
-                    warn!(error = %err, "pioneer tool SSE JSON parse failed");
+                    warn!(error = %err, "local LLM tool SSE JSON parse failed");
                     continue;
                 }
             };
@@ -466,8 +473,8 @@ async fn stream_tool_round(
                 let message = err
                     .get("message")
                     .and_then(|v| v.as_str())
-                    .unwrap_or("pioneer API error");
-                return Err(PioneerError::Api(message.to_string()));
+                    .unwrap_or("local LLM API error");
+                return Err(LocalError::Api(message.to_string()));
             }
 
             if let Some(reason) = payload
@@ -480,38 +487,34 @@ async fn stream_tool_round(
             }
 
             let delta = payload.pointer("/choices/0/delta").cloned().unwrap_or(Value::Null);
-
             if let Some(calls) = delta.get("tool_calls").and_then(|v| v.as_array()) {
                 apply_tool_call_delta(&mut tool_builders, calls);
             }
 
             let content_delta = delta.get("content").and_then(|v| v.as_str()).unwrap_or("");
-            if !content_delta.is_empty() {
+            if !content_delta.is_empty() && tool_builders.is_empty() {
                 assistant_content.push_str(content_delta);
-                // Only stream live text when we are not assembling tool calls.
-                if tool_builders.is_empty() {
-                    if text_id.is_none() {
-                        let id = format!("{run_id}-text");
-                        text_id = Some(id.clone());
-                        let _ = events
-                            .send(AgentEvent::MessageChunk {
-                                run_id: run_id.to_string(),
-                                chunk: json!({ "type": "text-start", "id": id }),
-                            })
-                            .await;
-                    }
-                    if let Some(id) = text_id.as_ref() {
-                        let _ = events
-                            .send(AgentEvent::MessageChunk {
-                                run_id: run_id.to_string(),
-                                chunk: json!({
-                                    "type": "text-delta",
-                                    "id": id,
-                                    "delta": content_delta,
-                                }),
-                            })
-                            .await;
-                    }
+                if text_id.is_none() {
+                    let id = format!("{run_id}-text");
+                    text_id = Some(id.clone());
+                    let _ = events
+                        .send(AgentEvent::MessageChunk {
+                            run_id: run_id.to_string(),
+                            chunk: json!({ "type": "text-start", "id": id }),
+                        })
+                        .await;
+                }
+                if let Some(id) = text_id.as_ref() {
+                    let _ = events
+                        .send(AgentEvent::MessageChunk {
+                            run_id: run_id.to_string(),
+                            chunk: json!({
+                                "type": "text-delta",
+                                "id": id,
+                                "delta": content_delta,
+                            }),
+                        })
+                        .await;
                 }
             }
         }
@@ -521,11 +524,14 @@ async fn stream_tool_round(
     }
 
     if cancel.load(Ordering::SeqCst) {
-        return Err(PioneerError::Cancelled);
+        return Err(LocalError::Cancelled);
     }
-    if !saw_done && finish_reason.is_none() && tool_builders.is_empty() && assistant_content.is_empty()
+    if !saw_done
+        && finish_reason.is_none()
+        && tool_builders.is_empty()
+        && assistant_content.is_empty()
     {
-        return Err(PioneerError::Incomplete);
+        return Err(LocalError::Incomplete);
     }
 
     let calls: Vec<AccumulatedToolCall> = tool_builders
@@ -562,132 +568,25 @@ async fn stream_tool_round(
             })
             .await;
     } else if !assistant_content.is_empty() {
-        // Content arrived without being streamed (e.g. after tool-call confusion).
         emit_text_content_streamed(run_id, &assistant_content, events).await;
     }
 
     Ok(StreamRoundOutcome::FinalAnswer)
 }
 
-async fn emit_step_started(
-    run_id: &str,
-    step_id: &str,
-    kind: &str,
-    label: &str,
-    events: &mpsc::Sender<AgentEvent>,
-) {
-    let _ = events
-        .send(AgentEvent::StepStarted {
-            run_id: run_id.to_string(),
-            step_id: step_id.to_string(),
-            kind: kind.to_string(),
-            label: label.to_string(),
-        })
-        .await;
-}
-
-async fn emit_step_completed(
-    run_id: &str,
-    step_id: &str,
-    duration_ms: u64,
-    summary: Option<&str>,
-    events: &mpsc::Sender<AgentEvent>,
-) {
-    let _ = events
-        .send(AgentEvent::StepCompleted {
-            run_id: run_id.to_string(),
-            step_id: step_id.to_string(),
-            duration_ms,
-            summary: summary.map(str::to_string),
-        })
-        .await;
-}
-
-/// Prefer ~48–96 byte deltas so assistant-ui paints during the final answer
-/// even though Pioneer tool rounds are non-streaming.
-const FINAL_TEXT_CHUNK_TARGET: usize = 72;
-
-async fn emit_text_content_streamed(
-    run_id: &str,
-    content: &str,
-    events: &mpsc::Sender<AgentEvent>,
-) {
-    if content.is_empty() {
-        return;
-    }
-    let id = format!("{run_id}-text");
-    let _ = events
-        .send(AgentEvent::MessageChunk {
-            run_id: run_id.to_string(),
-            chunk: json!({ "type": "text-start", "id": id }),
-        })
-        .await;
-
-    for delta in chunk_text_for_stream(content, FINAL_TEXT_CHUNK_TARGET) {
-        let _ = events
-            .send(AgentEvent::MessageChunk {
-                run_id: run_id.to_string(),
-                chunk: json!({
-                    "type": "text-delta",
-                    "id": id,
-                    "delta": delta,
-                }),
-            })
-            .await;
-        // Let the JSONL / Tauri channel flush between deltas.
-        tokio::task::yield_now().await;
-    }
-
-    let _ = events
-        .send(AgentEvent::MessageChunk {
-            run_id: run_id.to_string(),
-            chunk: json!({ "type": "text-end", "id": id }),
-        })
-        .await;
-}
-
-fn chunk_text_for_stream(content: &str, target: usize) -> Vec<&str> {
-    if content.len() <= target {
-        return vec![content];
-    }
-    let mut out = Vec::new();
-    let mut start = 0;
-    let bytes = content.as_bytes();
-    while start < bytes.len() {
-        let mut end = (start + target).min(bytes.len());
-        if end < bytes.len() {
-            // Prefer breaking on whitespace so we don't split UTF-8 mid-word often.
-            if let Some(rel) = content[start..end].rfind(char::is_whitespace) {
-                end = start + rel + 1;
-            }
-            while end > start && !content.is_char_boundary(end) {
-                end -= 1;
-            }
-        }
-        if end <= start {
-            end = (start + 1..bytes.len() + 1)
-                .find(|&i| content.is_char_boundary(i))
-                .unwrap_or(bytes.len());
-        }
-        out.push(&content[start..end]);
-        start = end;
-    }
-    out
-}
-
 async fn stream_chat_completions(
-    api_key: &str,
+    api_key: Option<&str>,
     base_url: &str,
     model: &str,
     prompt: &str,
     run_id: &str,
     cancel: &AtomicBool,
     events: &mpsc::Sender<AgentEvent>,
-) -> Result<(), PioneerError> {
+) -> Result<(), LocalError> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(120))
         .build()
-        .map_err(|err| PioneerError::Transport(err.to_string()))?;
+        .map_err(|err| LocalError::Transport(err.to_string()))?;
 
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
     let body = json!({
@@ -695,31 +594,20 @@ async fn stream_chat_completions(
         "messages": [{"role": "user", "content": prompt}],
         "stream": true,
     });
-
-    let mut headers = HeaderMap::new();
-    headers.insert(
-        AUTHORIZATION,
-        HeaderValue::from_str(&format!("Bearer {api_key}"))
-            .map_err(|err| PioneerError::Transport(err.to_string()))?,
-    );
-    // Pioneer curl examples use X-API-Key; send both for compatibility.
-    if let Ok(value) = HeaderValue::from_str(api_key) {
-        headers.insert("X-API-Key", value);
-    }
-    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+    let headers = request_headers(api_key)?;
 
     let response = tokio::select! {
         biased;
-        _ = wait_cancelled(cancel) => return Err(PioneerError::Cancelled),
+        _ = wait_cancelled(cancel) => return Err(LocalError::Cancelled),
         result = client.post(&url).headers(headers).json(&body).send() => {
-            result.map_err(|err| PioneerError::Transport(err.to_string()))?
+            result.map_err(|err| LocalError::Transport(err.to_string()))?
         }
     };
 
     let status = response.status();
     if !status.is_success() {
         let body = response.text().await.unwrap_or_default();
-        return Err(PioneerError::Http {
+        return Err(LocalError::Http {
             status: status.as_u16(),
             body: truncate(&body, 512),
         });
@@ -732,10 +620,10 @@ async fn stream_chat_completions(
 
     while let Some(chunk) = tokio::select! {
         biased;
-        _ = wait_cancelled(cancel) => return Err(PioneerError::Cancelled),
+        _ = wait_cancelled(cancel) => return Err(LocalError::Cancelled),
         item = stream.next() => item,
     } {
-        let chunk = chunk.map_err(|err| PioneerError::Transport(err.to_string()))?;
+        let chunk = chunk.map_err(|err| LocalError::Transport(err.to_string()))?;
         buffer.push_str(&String::from_utf8_lossy(&chunk));
 
         while let Some(boundary) = buffer.find('\n') {
@@ -763,7 +651,7 @@ async fn stream_chat_completions(
             let payload: Value = match serde_json::from_str(data) {
                 Ok(value) => value,
                 Err(err) => {
-                    warn!(error = %err, "pioneer SSE JSON parse failed");
+                    warn!(error = %err, "local LLM SSE JSON parse failed");
                     continue;
                 }
             };
@@ -771,8 +659,8 @@ async fn stream_chat_completions(
                 let message = err
                     .get("message")
                     .and_then(|v| v.as_str())
-                    .unwrap_or("pioneer API error");
-                return Err(PioneerError::Api(message.to_string()));
+                    .unwrap_or("local LLM API error");
+                return Err(LocalError::Api(message.to_string()));
             }
 
             let delta = payload
@@ -820,13 +708,79 @@ async fn stream_chat_completions(
             .await;
         Ok(())
     } else if saw_done {
-        // Empty completion is still a successful run.
         Ok(())
     } else if cancel.load(Ordering::SeqCst) {
-        Err(PioneerError::Cancelled)
+        Err(LocalError::Cancelled)
     } else {
-        Err(PioneerError::Incomplete)
+        Err(LocalError::Incomplete)
     }
+}
+
+async fn emit_step_started(
+    run_id: &str,
+    step_id: &str,
+    kind: &str,
+    label: &str,
+    events: &mpsc::Sender<AgentEvent>,
+) {
+    let _ = events
+        .send(AgentEvent::StepStarted {
+            run_id: run_id.to_string(),
+            step_id: step_id.to_string(),
+            kind: kind.to_string(),
+            label: label.to_string(),
+        })
+        .await;
+}
+
+async fn emit_step_completed(
+    run_id: &str,
+    step_id: &str,
+    duration_ms: u64,
+    summary: Option<&str>,
+    events: &mpsc::Sender<AgentEvent>,
+) {
+    let _ = events
+        .send(AgentEvent::StepCompleted {
+            run_id: run_id.to_string(),
+            step_id: step_id.to_string(),
+            duration_ms,
+            summary: summary.map(str::to_string),
+        })
+        .await;
+}
+
+async fn emit_text_content_streamed(
+    run_id: &str,
+    content: &str,
+    events: &mpsc::Sender<AgentEvent>,
+) {
+    if content.is_empty() {
+        return;
+    }
+    let id = format!("{run_id}-text");
+    let _ = events
+        .send(AgentEvent::MessageChunk {
+            run_id: run_id.to_string(),
+            chunk: json!({ "type": "text-start", "id": id }),
+        })
+        .await;
+    let _ = events
+        .send(AgentEvent::MessageChunk {
+            run_id: run_id.to_string(),
+            chunk: json!({
+                "type": "text-delta",
+                "id": id,
+                "delta": content,
+            }),
+        })
+        .await;
+    let _ = events
+        .send(AgentEvent::MessageChunk {
+            run_id: run_id.to_string(),
+            chunk: json!({ "type": "text-end", "id": id }),
+        })
+        .await;
 }
 
 async fn wait_cancelled(cancel: &AtomicBool) {
@@ -848,18 +802,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn normalize_model_defaults_luna() {
-        assert_eq!(normalize_model(""), DEFAULT_PIONEER_MODEL);
-        assert_eq!(normalize_model("default"), DEFAULT_PIONEER_MODEL);
-        assert_eq!(normalize_model("gpt-5.6-terra"), "gpt-5.6-terra");
-    }
-
-    #[test]
-    fn chunk_text_splits_long_answers() {
-        let text = "alpha beta gamma delta epsilon zeta eta theta";
-        let chunks = chunk_text_for_stream(text, 12);
-        assert!(chunks.len() > 1);
-        assert_eq!(chunks.concat(), text);
+    fn normalize_model_defaults_local() {
+        assert_eq!(normalize_model(""), DEFAULT_LOCAL_MODEL);
+        assert_eq!(normalize_model("qwen2.5"), "qwen2.5");
     }
 
     #[test]

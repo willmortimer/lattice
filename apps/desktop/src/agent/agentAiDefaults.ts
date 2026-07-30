@@ -1,18 +1,24 @@
 import type { AiMode, DesktopSettings } from "../lib/profile";
-import { DEFAULT_OPENAI_MODEL, type SelectableAgentProvider } from "./modelCatalog";
+import { DEFAULT_OPENAI_MODEL, DEFAULT_LOCAL_MODEL, type SelectableAgentProvider } from "./modelCatalog";
 
 export type AgentAiDefaults = {
   aiMode: AiMode;
   /** Preferred provider for live runs; null defers to health / fake backend. */
   provider: SelectableAgentProvider | null;
   model: string | null;
-  /** Lattice Account AI is not runnable yet. */
+  /** Lattice paid AI requires a signed-in cloud session. */
   accountAiDisabled: boolean;
+};
+
+export type ResolveAgentDefaultsOptions = {
+  /** When true, Lattice paid mode is runnable (cloud session present). */
+  cloudSignedIn?: boolean;
 };
 
 /** Map profile `ai` settings to agent panel defaults (no secrets). */
 export function resolveAgentDefaultsFromAiSettings(
   ai: DesktopSettings["ai"],
+  options?: ResolveAgentDefaultsOptions,
 ): AgentAiDefaults {
   const preferredModel =
     typeof ai.preferredModel === "string" && ai.preferredModel.trim()
@@ -27,18 +33,20 @@ export function resolveAgentDefaultsFromAiSettings(
         model: preferredModel ?? DEFAULT_OPENAI_MODEL,
         accountAiDisabled: false,
       };
-    case "account":
+    case "account": {
+      const cloudSignedIn = options?.cloudSignedIn === true;
       return {
         aiMode: "account",
-        provider: null,
-        model: preferredModel,
-        accountAiDisabled: true,
+        provider: cloudSignedIn ? "openai" : null,
+        model: cloudSignedIn ? (preferredModel ?? DEFAULT_OPENAI_MODEL) : preferredModel,
+        accountAiDisabled: !cloudSignedIn,
       };
+    }
     case "local":
       return {
         aiMode: "local",
-        provider: null,
-        model: preferredModel,
+        provider: "local",
+        model: preferredModel ?? DEFAULT_LOCAL_MODEL,
         accountAiDisabled: false,
       };
     default: {

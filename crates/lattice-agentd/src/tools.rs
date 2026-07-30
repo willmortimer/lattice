@@ -1,6 +1,6 @@
 //! OpenAI-compatible Lattice workspace tools + dispatch to latticed HTTP.
 //!
-//! Mirrors Node `apps/agentd/src/tools.ts` (HTTP tools only; no spatial overlays).
+//! Lattice HTTP tool dispatch for the agent sidecar (HTTP tools only; no spatial overlays).
 
 use std::path::PathBuf;
 

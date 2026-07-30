@@ -87,11 +87,9 @@ pub trait OfflineRedecodeBackend: Send + Sync {
     fn redecode(&self, audio: &FrozenUtteranceAudio) -> Result<String, SpeechError>;
 }
 
-/// Production stub: offline / TDT re-decode is not wired through the bridge yet.
+/// Production offline re-decode via FluidAudio Parakeet TDT v2 in `lattice-voice-macos`.
 ///
-/// TODO(voice-v11): Call FluidAudio `AsrManager` (TDT v2) or Unified offline
-/// encoder from `lattice-voice-macos` once eval adopts IndependentOfflineRedecode.
-/// Until then this backend never claims offline finalization modes.
+/// When the Swift bridge is not linked (CI mock path), use this stub instead.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct UnimplementedOfflineRedecode;
 

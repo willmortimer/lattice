@@ -4,10 +4,12 @@ import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk";
 import { useEffect, useMemo, type ReactNode } from "react";
 
 import { getAgentHealth, TauriAgentChatTransport } from "../lib/agent";
+import { getCloudSessionStatus } from "../lib/cloud";
 import { loadProfile } from "../lib/profile";
+import { hasOpenaiApiKey } from "../lib/openaiKey";
 import { resolveAgentDefaultsFromAiSettings } from "./agentAiDefaults";
 import { AgentChatControlsProvider } from "./agentChatControls";
-import { useAgentSessionStore } from "./agentStore";
+import { isAgentComposerDisabled, useAgentSessionStore } from "./agentStore";
 
 export type LatticeAgentProviderProps = {
   workspaceRoot: string | null;
@@ -25,26 +27,62 @@ function LatticeAgentRuntimeProvider({
   const recordAgentEvent = useAgentSessionStore((state) => state.recordAgentEvent);
   const setHealthSnapshot = useAgentSessionStore((state) => state.setHealthSnapshot);
   const applyProfileAiDefaults = useAgentSessionStore((state) => state.applyProfileAiDefaults);
+  const setByoOpenaiKeyPresent = useAgentSessionStore((state) => state.setByoOpenaiKeyPresent);
+  const aiMode = useAgentSessionStore((state) => state.aiMode);
 
   const threadId = useMemo(() => ensureThreadId(workspaceRoot), [ensureThreadId, workspaceRoot]);
 
   useEffect(() => {
     let cancelled = false;
-    void loadProfile()
-      .then((profile) => {
-        if (!cancelled) {
-          applyProfileAiDefaults(
-            resolveAgentDefaultsFromAiSettings(profile.settings.desktop.ai),
-          );
+    const applyDefaults = async () => {
+      try {
+        const [profile, cloudStatus] = await Promise.all([
+          loadProfile(),
+          getCloudSessionStatus().catch(() => null),
+        ]);
+        if (cancelled) {
+          return;
         }
-      })
-      .catch(() => {
+        applyProfileAiDefaults(
+          resolveAgentDefaultsFromAiSettings(profile.settings.desktop.ai, {
+            cloudSignedIn: cloudStatus?.signedIn === true,
+          }),
+        );
+      } catch {
         // Profile load failure should not block the agent shell.
-      });
+      }
+    };
+    void applyDefaults();
     return () => {
       cancelled = true;
     };
   }, [applyProfileAiDefaults]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (aiMode !== "byoOpenai") {
+      setByoOpenaiKeyPresent(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void hasOpenaiApiKey()
+      .then((present) => {
+        if (!cancelled) {
+          setByoOpenaiKeyPresent(present);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setByoOpenaiKeyPresent(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [aiMode, setByoOpenaiKeyPresent]);
 
   const transport = useMemo(
     () =>
@@ -54,7 +92,7 @@ function LatticeAgentRuntimeProvider({
         onAgentEvent: recordAgentEvent,
         resolveRunOptions: () => {
           const state = useAgentSessionStore.getState();
-          if (state.accountAiDisabled) {
+          if (isAgentComposerDisabled(state)) {
             return {};
           }
           return {

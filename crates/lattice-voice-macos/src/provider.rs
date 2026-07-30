@@ -9,9 +9,9 @@ use async_trait::async_trait;
 use lattice_voice::{
     commit_final_transcript, AudioChunk, AudioSampleFormat, FinalModelMemoryPolicy,
     FinalTranscript, FinalizationMode, IndependentFinalPolicy, ModelState, ModelStatus,
-    PartialTranscriptPayload, PrepareModelRequest, SpeechCapabilities, SpeechError,
-    SpeechEventSender, SpeechProvider, SpeechSession, SpeechSessionConfig, StableTranscriptPayload,
-    UnimplementedOfflineRedecode, UtteranceAudioBuffer, VoiceEvent,
+    OfflineRedecodeBackend, PartialTranscriptPayload, PrepareModelRequest, SpeechCapabilities,
+    SpeechError, SpeechEventSender, SpeechProvider, SpeechSession, SpeechSessionConfig,
+    StableTranscriptPayload, UtteranceAudioBuffer, VoiceEvent,
 };
 use tokio::task::JoinHandle;
 
@@ -19,6 +19,7 @@ use crate::bridge::{
     bridge_event_callback, new_backend, CallbackContext, CallbackContextPtr, OwnedBridgeEvent,
     VoiceBridgeBackend,
 };
+use crate::offline_redecode::TdtOfflineRedecode;
 use crate::error::ensure_abi_version;
 use crate::ffi::{LatticeVoiceEngine, LatticeVoiceEventKind, LatticeVoiceSession};
 use crate::LATTICE_VOICE_BRIDGE_ABI_VERSION;
@@ -35,17 +36,17 @@ struct SessionSharedState {
 
 /// macOS FluidAudio Unified provider (Parakeet 320 ms streaming tier).
 ///
-/// Production finals are [`FinalizationMode::StreamingFlush`]. Full-utterance
-/// PCM is buffered for a future independent/TDT path gated by
-/// `LATTICE_VOICE_INDEPENDENT_FINAL=1`. Offline re-decode is not wired through
-/// the Swift bridge yet ([`UnimplementedOfflineRedecode`]).
+/// Provisional partials use Unified streaming. Finals run
+/// `StreamingUnifiedAsrManager.finish()` then optional Parakeet TDT v2 offline
+/// re-decode when policy allows ([`FinalizationMode::IndependentOfflineRedecode`]).
 pub struct FluidAudioSpeechProvider {
     backend: Arc<dyn VoiceBridgeBackend>,
     model_cache_dir: PathBuf,
-    engine: Mutex<Option<LatticeVoiceEngine>>,
+    engine: Arc<Mutex<Option<LatticeVoiceEngine>>>,
     prepared: AtomicBool,
-    /// Optional final-model residency (lazy load / idle unload stubs).
+    /// Optional final-model residency (lazy load / idle unload).
     final_model_memory: Mutex<FinalModelMemoryPolicy>,
+    offline: Arc<dyn OfflineRedecodeBackend>,
 }
 
 impl FluidAudioSpeechProvider {
@@ -65,34 +66,23 @@ impl FluidAudioSpeechProvider {
         backend: Arc<dyn VoiceBridgeBackend>,
         model_cache_dir: PathBuf,
     ) -> Self {
+        let engine = Arc::new(Mutex::new(None));
+        let offline: Arc<dyn OfflineRedecodeBackend> = Arc::new(TdtOfflineRedecode::new(
+            Arc::clone(&backend),
+            Arc::clone(&engine),
+        ));
         Self {
             backend,
             model_cache_dir,
-            engine: Mutex::new(None),
+            engine,
             prepared: AtomicBool::new(false),
             final_model_memory: Mutex::new(FinalModelMemoryPolicy::default()),
+            offline,
         }
     }
 
-    /// Stub hook: request lazy load of an optional final model when independent
-    /// final is enabled. No-op until FluidAudio offline/TDT is bridged.
-    pub fn request_final_model_load(&self) -> lattice_voice::FinalModelLoadAction {
-        self.final_model_memory
-            .lock()
-            .map(|mut policy| policy.request_load())
-            .unwrap_or(lattice_voice::FinalModelLoadAction::LoadInProgress)
-    }
-
-    /// Stub hook: unload the optional final model after idle.
-    pub fn maybe_unload_final_model_idle(&self) -> bool {
-        let Ok(mut policy) = self.final_model_memory.lock() else {
-            return false;
-        };
-        policy.maybe_unload_idle(std::time::Instant::now())
-    }
-
-    fn capabilities_inner() -> SpeechCapabilities {
-        SpeechCapabilities {
+    fn capabilities_inner(&self) -> SpeechCapabilities {
+        let mut capabilities = SpeechCapabilities {
             streaming: true,
             partial_transcripts: true,
             finalization_mode: FinalizationMode::StreamingFlush,
@@ -103,7 +93,50 @@ impl FluidAudioSpeechProvider {
             // Wired via Swift energy VAD (+ EOU callback when using StreamingEouAsrManager).
             endpoint_detection: true,
             supported_languages: vec!["en".into()],
+        };
+        if self.offline.is_implemented() {
+            capabilities.finalization_mode = self.offline.finalization_mode();
         }
+        capabilities
+    }
+
+    /// Lazy-load Parakeet TDT v2 for independent offline finals.
+    pub fn request_final_model_load(&self) -> lattice_voice::FinalModelLoadAction {
+        let mut policy = match self.final_model_memory.lock() {
+            Ok(policy) => policy,
+            Err(_) => return lattice_voice::FinalModelLoadAction::LoadInProgress,
+        };
+        let action = policy.request_load();
+        if action != lattice_voice::FinalModelLoadAction::StartLazyLoad {
+            return action;
+        }
+
+        let engine = match self.ensure_engine() {
+            Ok(engine) => engine,
+            Err(_) => return lattice_voice::FinalModelLoadAction::LoadInProgress,
+        };
+        match self.backend.engine_prepare_final_model(engine) {
+            Ok(()) => {
+                policy.mark_ready(std::time::Instant::now());
+                lattice_voice::FinalModelLoadAction::AlreadyReady
+            }
+            Err(_) => lattice_voice::FinalModelLoadAction::LoadInProgress,
+        }
+    }
+
+    /// Unload the optional TDT final model after idle.
+    pub fn maybe_unload_final_model_idle(&self) -> bool {
+        let Ok(mut policy) = self.final_model_memory.lock() else {
+            return false;
+        };
+        if !policy.maybe_unload_idle(std::time::Instant::now()) {
+            return false;
+        }
+        if let Ok(engine) = self.ensure_engine() {
+            self.backend.engine_unload_final_model(engine);
+        }
+        policy.mark_cold();
+        true
     }
 
     fn ensure_engine(&self) -> Result<LatticeVoiceEngine, SpeechError> {
@@ -141,7 +174,7 @@ impl Drop for FluidAudioSpeechProvider {
 #[async_trait]
 impl SpeechProvider for FluidAudioSpeechProvider {
     fn capabilities(&self) -> SpeechCapabilities {
-        Self::capabilities_inner()
+        self.capabilities_inner()
     }
 
     async fn prepare(&self, request: PrepareModelRequest) -> Result<ModelStatus, SpeechError> {
@@ -198,13 +231,14 @@ impl SpeechProvider for FluidAudioSpeechProvider {
         let dispatcher = spawn_event_dispatcher(
             config.session_id.clone(),
             utterance_id.clone(),
-            events,
+            events.clone(),
             event_rx,
             cancelled.clone(),
             Arc::clone(&shared),
         );
 
-        let policy = IndependentFinalPolicy::from_env_and_capabilities(&Self::capabilities_inner());
+        let policy =
+            IndependentFinalPolicy::from_env_and_capabilities(&self.capabilities_inner());
         if policy.should_attempt() {
             let _ = self.request_final_model_load();
         }
@@ -218,9 +252,11 @@ impl SpeechProvider for FluidAudioSpeechProvider {
             cancelled,
             shared,
             dispatcher: Some(dispatcher),
+            events,
             next_sequence: 0,
             utterance_audio: UtteranceAudioBuffer::new(),
             policy,
+            offline: Arc::clone(&self.offline),
         }))
     }
 }
@@ -234,10 +270,12 @@ struct FluidAudioSpeechSession {
     cancelled: Arc<AtomicBool>,
     shared: Arc<Mutex<SessionSharedState>>,
     dispatcher: Option<JoinHandle<()>>,
+    events: SpeechEventSender,
     next_sequence: u64,
     /// Full utterance PCM for optional offline re-decode (ADR 0007).
     utterance_audio: UtteranceAudioBuffer,
     policy: IndependentFinalPolicy,
+    offline: Arc<dyn OfflineRedecodeBackend>,
 }
 
 impl FluidAudioSpeechSession {
@@ -352,7 +390,7 @@ impl SpeechSession for FluidAudioSpeechSession {
             session_id: self.config.session_id.clone(),
             utterance_id: self.utterance_id.clone(),
             replaces_revision: revision,
-            text: final_text,
+            text: final_text.clone(),
             raw_text: None,
             corrections: Vec::new(),
             finalization_mode: FinalizationMode::StreamingFlush,
@@ -360,15 +398,22 @@ impl SpeechSession for FluidAudioSpeechSession {
             processing_ms,
         };
 
-        // Optional second path: only replaces the committed final when a real
-        // offline backend is implemented. Stub keeps StreamingFlush (honest).
+        // Optional second path: TDT v2 offline re-decode over buffered PCM.
         let frozen = std::mem::take(&mut self.utterance_audio).freeze();
-        Ok(commit_final_transcript(
+        let committed = commit_final_transcript(
             streaming_flush,
             self.policy,
-            &UnimplementedOfflineRedecode,
+            self.offline.as_ref(),
             &frozen,
-        ))
+        );
+
+        if committed.finalization_mode != FinalizationMode::StreamingFlush
+            || committed.text != final_text
+        {
+            let _ = self.events.send(VoiceEvent::FinalTranscript(committed.clone()));
+        }
+
+        Ok(committed)
     }
 
     async fn cancel(mut self: Box<Self>) -> Result<(), SpeechError> {
@@ -553,12 +598,107 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn capabilities_report_streaming_flush() {
+    async fn capabilities_report_streaming_flush_without_offline_backend() {
         let bridge = Arc::new(MockBridge::new(LATTICE_VOICE_BRIDGE_ABI_VERSION));
         let provider = FluidAudioSpeechProvider::with_backend(bridge, PathBuf::new());
         assert_eq!(
             provider.capabilities().finalization_mode,
             FinalizationMode::StreamingFlush
+        );
+    }
+
+    #[tokio::test]
+    async fn capabilities_report_independent_when_offline_implemented() {
+        struct OfflineReadyBridge(MockBridge);
+
+        impl VoiceBridgeBackend for OfflineReadyBridge {
+            fn abi_version(&self) -> u32 {
+                self.0.abi_version()
+            }
+
+            fn offline_redecode_implemented(&self) -> bool {
+                true
+            }
+
+            fn engine_create(
+                &self,
+                model_cache_dir: Option<&std::path::Path>,
+            ) -> crate::error::BridgeResult<LatticeVoiceEngine> {
+                self.0.engine_create(model_cache_dir)
+            }
+
+            fn engine_prepare(
+                &self,
+                engine: LatticeVoiceEngine,
+            ) -> crate::error::BridgeResult<()> {
+                self.0.engine_prepare(engine)
+            }
+
+            fn engine_prepare_final_model(
+                &self,
+                _engine: LatticeVoiceEngine,
+            ) -> crate::error::BridgeResult<()> {
+                Ok(())
+            }
+
+            fn engine_unload_final_model(&self, _engine: LatticeVoiceEngine) {}
+
+            fn engine_redecode_offline(
+                &self,
+                _engine: LatticeVoiceEngine,
+                _samples: &[f32],
+                _sample_rate_hz: u32,
+            ) -> crate::error::BridgeResult<String> {
+                Ok("tdt final".into())
+            }
+
+            fn engine_destroy(&self, engine: LatticeVoiceEngine) {
+                self.0.engine_destroy(engine)
+            }
+
+            fn session_start(
+                &self,
+                engine: LatticeVoiceEngine,
+                callback: crate::ffi::LatticeVoiceEventCallback,
+                context: *mut std::ffi::c_void,
+            ) -> crate::error::BridgeResult<LatticeVoiceSession> {
+                self.0.session_start(engine, callback, context)
+            }
+
+            fn session_push_audio(
+                &self,
+                session: LatticeVoiceSession,
+                samples: &[f32],
+            ) -> crate::error::BridgeResult<()> {
+                self.0.session_push_audio(session, samples)
+            }
+
+            fn session_finish_utterance(
+                &self,
+                session: LatticeVoiceSession,
+            ) -> crate::error::BridgeResult<()> {
+                self.0.session_finish_utterance(session)
+            }
+
+            fn session_cancel(
+                &self,
+                session: LatticeVoiceSession,
+            ) -> crate::error::BridgeResult<()> {
+                self.0.session_cancel(session)
+            }
+
+            fn session_destroy(&self, session: LatticeVoiceSession) {
+                self.0.session_destroy(session)
+            }
+        }
+
+        let bridge = Arc::new(OfflineReadyBridge(MockBridge::new(
+            LATTICE_VOICE_BRIDGE_ABI_VERSION,
+        )));
+        let provider = FluidAudioSpeechProvider::with_backend(bridge, PathBuf::new());
+        assert_eq!(
+            provider.capabilities().finalization_mode,
+            FinalizationMode::IndependentOfflineRedecode
         );
     }
 
@@ -691,9 +831,19 @@ mod tests {
     async fn final_model_memory_hooks_are_callable() {
         let bridge = Arc::new(MockBridge::new(LATTICE_VOICE_BRIDGE_ABI_VERSION));
         let provider = FluidAudioSpeechProvider::with_backend(bridge, PathBuf::new());
+        provider
+            .prepare(PrepareModelRequest {
+                model_id: DEFAULT_MODEL_ID.into(),
+                warm: true,
+            })
+            .await
+            .unwrap();
         let action = provider.request_final_model_load();
-        assert_eq!(action, lattice_voice::FinalModelLoadAction::StartLazyLoad);
-        // Idle unload is a no-op until mark_ready; stub must not panic.
+        // Mock bridge does not implement TDT prepare; policy stays in-flight.
+        assert_eq!(
+            action,
+            lattice_voice::FinalModelLoadAction::LoadInProgress
+        );
         assert!(!provider.maybe_unload_final_model_idle());
     }
 
@@ -725,12 +875,131 @@ mod tests {
             .unwrap();
 
         let final_transcript = session.finish_utterance().await.unwrap();
-        // Buffer retained frames through finish; production mode stays flush
-        // (offline/TDT not bridged — UnimplementedOfflineRedecode).
+        // Buffer retained frames through finish; mock bridge has no TDT path.
         assert_eq!(
             final_transcript.finalization_mode,
             FinalizationMode::StreamingFlush
         );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn mock_provider_commits_independent_when_offline_backend_ready() {
+        struct OfflineReadyBridge(MockBridge);
+
+        impl VoiceBridgeBackend for OfflineReadyBridge {
+            fn abi_version(&self) -> u32 {
+                self.0.abi_version()
+            }
+
+            fn offline_redecode_implemented(&self) -> bool {
+                true
+            }
+
+            fn engine_create(
+                &self,
+                model_cache_dir: Option<&std::path::Path>,
+            ) -> crate::error::BridgeResult<LatticeVoiceEngine> {
+                self.0.engine_create(model_cache_dir)
+            }
+
+            fn engine_prepare(
+                &self,
+                engine: LatticeVoiceEngine,
+            ) -> crate::error::BridgeResult<()> {
+                self.0.engine_prepare(engine)
+            }
+
+            fn engine_prepare_final_model(
+                &self,
+                _engine: LatticeVoiceEngine,
+            ) -> crate::error::BridgeResult<()> {
+                Ok(())
+            }
+
+            fn engine_unload_final_model(&self, _engine: LatticeVoiceEngine) {}
+
+            fn engine_redecode_offline(
+                &self,
+                _engine: LatticeVoiceEngine,
+                _samples: &[f32],
+                _sample_rate_hz: u32,
+            ) -> crate::error::BridgeResult<String> {
+                Ok("tdt offline final".into())
+            }
+
+            fn engine_destroy(&self, engine: LatticeVoiceEngine) {
+                self.0.engine_destroy(engine)
+            }
+
+            fn session_start(
+                &self,
+                engine: LatticeVoiceEngine,
+                callback: crate::ffi::LatticeVoiceEventCallback,
+                context: *mut std::ffi::c_void,
+            ) -> crate::error::BridgeResult<LatticeVoiceSession> {
+                self.0.session_start(engine, callback, context)
+            }
+
+            fn session_push_audio(
+                &self,
+                session: LatticeVoiceSession,
+                samples: &[f32],
+            ) -> crate::error::BridgeResult<()> {
+                self.0.session_push_audio(session, samples)
+            }
+
+            fn session_finish_utterance(
+                &self,
+                session: LatticeVoiceSession,
+            ) -> crate::error::BridgeResult<()> {
+                self.0.session_finish_utterance(session)
+            }
+
+            fn session_cancel(
+                &self,
+                session: LatticeVoiceSession,
+            ) -> crate::error::BridgeResult<()> {
+                self.0.session_cancel(session)
+            }
+
+            fn session_destroy(&self, session: LatticeVoiceSession) {
+                self.0.session_destroy(session)
+            }
+        }
+
+        let bridge = Arc::new(OfflineReadyBridge(MockBridge::new(
+            LATTICE_VOICE_BRIDGE_ABI_VERSION,
+        )));
+        let provider = FluidAudioSpeechProvider::with_backend(bridge, PathBuf::new());
+        provider
+            .prepare(PrepareModelRequest {
+                model_id: DEFAULT_MODEL_ID.into(),
+                warm: true,
+            })
+            .await
+            .unwrap();
+
+        let (events, _rx) = SpeechEventSender::pair();
+        let mut session = provider
+            .start_session(sample_config(), events)
+            .await
+            .unwrap();
+
+        session
+            .push_audio(f32_chunk("voice_test", 0, &[0.0, 0.1]))
+            .await
+            .unwrap();
+        session
+            .push_audio(f32_chunk("voice_test", 1, &[0.2, 0.3]))
+            .await
+            .unwrap();
+
+        let final_transcript = session.finish_utterance().await.unwrap();
+        assert_eq!(
+            final_transcript.finalization_mode,
+            FinalizationMode::IndependentOfflineRedecode
+        );
+        assert_eq!(final_transcript.text, "tdt offline final");
     }
 
     #[tokio::test]

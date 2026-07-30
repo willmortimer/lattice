@@ -4,6 +4,7 @@ import {
   applyOverlayShowToTrailSteps,
   applySpatialAgentEvent,
   initialAgentSessionState,
+  isAgentComposerDisabled,
   shouldRevealViewport,
   useAgentSessionStore,
 } from "./agentStore";
@@ -23,6 +24,9 @@ function resetStore() {
     setHealthBackend: useAgentSessionStore.getState().setHealthBackend,
     setHealthSnapshot: useAgentSessionStore.getState().setHealthSnapshot,
     applyProfileAiDefaults: useAgentSessionStore.getState().applyProfileAiDefaults,
+    setByoOpenaiKeyPresent: useAgentSessionStore.getState().setByoOpenaiKeyPresent,
+    setSelectedProvider: useAgentSessionStore.getState().setSelectedProvider,
+    setSelectedModel: useAgentSessionStore.getState().setSelectedModel,
     setFollowMode: useAgentSessionStore.getState().setFollowMode,
     consumeEvent: useAgentSessionStore.getState().consumeEvent,
     recordAgentEvent: useAgentSessionStore.getState().recordAgentEvent,
@@ -332,7 +336,30 @@ describe("useAgentSessionStore", () => {
     expect(state.selectedModel).toBe("gpt-4o-mini");
   });
 
-  it("setHealthSnapshot does not default to pioneer in account mode", () => {
+  it("setHealthSnapshot enables openai provider for signed-in account mode", () => {
+    const ai = {
+      ...defaultDesktopSettings().ai,
+      mode: "account" as const,
+    };
+    useAgentSessionStore
+      .getState()
+      .applyProfileAiDefaults(
+        resolveAgentDefaultsFromAiSettings(ai, { cloudSignedIn: true }),
+      );
+    useAgentSessionStore.getState().setHealthSnapshot({
+      backend: "openai",
+      model: "gpt-5-nano",
+      ok: true,
+      degraded: false,
+    });
+
+    const state = useAgentSessionStore.getState();
+    expect(state.accountAiDisabled).toBe(false);
+    expect(state.selectedProvider).toBe("openai");
+    expect(state.selectedModel).toBe("gpt-5-nano");
+  });
+
+  it("setHealthSnapshot does not default to pioneer in signed-out account mode", () => {
     const ai = {
       ...defaultDesktopSettings().ai,
       mode: "account" as const,
@@ -349,5 +376,47 @@ describe("useAgentSessionStore", () => {
     expect(state.accountAiDisabled).toBe(true);
     expect(state.selectedProvider).toBeNull();
     expect(state.selectedModel).toBeNull();
+  });
+
+  it("isAgentComposerDisabled blocks BYO without key", () => {
+    const ai = {
+      ...defaultDesktopSettings().ai,
+      mode: "byoOpenai" as const,
+    };
+    useAgentSessionStore.getState().applyProfileAiDefaults(resolveAgentDefaultsFromAiSettings(ai));
+    useAgentSessionStore.getState().setByoOpenaiKeyPresent(false);
+
+    expect(
+      isAgentComposerDisabled({
+        accountAiDisabled: false,
+        aiMode: "byoOpenai",
+        byoOpenaiKeyPresent: false,
+        healthOk: true,
+      }),
+    ).toBe(true);
+
+    useAgentSessionStore.getState().setByoOpenaiKeyPresent(true);
+    expect(
+      isAgentComposerDisabled(useAgentSessionStore.getState()),
+    ).toBe(false);
+  });
+
+  it("isAgentComposerDisabled blocks on-device when health is not ok", () => {
+    expect(
+      isAgentComposerDisabled({
+        accountAiDisabled: false,
+        aiMode: "local",
+        byoOpenaiKeyPresent: null,
+        healthOk: false,
+      }),
+    ).toBe(true);
+    expect(
+      isAgentComposerDisabled({
+        accountAiDisabled: false,
+        aiMode: "local",
+        byoOpenaiKeyPresent: null,
+        healthOk: true,
+      }),
+    ).toBe(false);
   });
 });

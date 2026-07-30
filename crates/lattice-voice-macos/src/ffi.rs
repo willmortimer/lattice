@@ -58,6 +58,20 @@ extern "C" {
 
     pub fn lattice_voice_engine_destroy(engine: LatticeVoiceEngine);
 
+    pub fn lattice_voice_engine_prepare_final_model(engine: LatticeVoiceEngine) -> i32;
+
+    pub fn lattice_voice_engine_unload_final_model(engine: LatticeVoiceEngine);
+
+    pub fn lattice_voice_engine_redecode_offline(
+        engine: LatticeVoiceEngine,
+        samples: *const c_float,
+        sample_count: usize,
+        sample_rate_hz: u32,
+        out_text: *mut c_char,
+        out_text_capacity: usize,
+        out_text_len: *mut usize,
+    ) -> i32;
+
     pub fn lattice_voice_session_start(
         engine: LatticeVoiceEngine,
         callback: LatticeVoiceEventCallback,

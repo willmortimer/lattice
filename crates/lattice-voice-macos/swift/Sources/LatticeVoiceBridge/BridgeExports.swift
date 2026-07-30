@@ -52,6 +52,78 @@ public func lattice_voice_engine_destroy(engine: UInt64) {
     }
 }
 
+@_cdecl("lattice_voice_engine_prepare_final_model")
+public func lattice_voice_engine_prepare_final_model(engine: UInt64) -> Int32 {
+    bridgeCatch {
+        guard let voiceEngine = EngineRegistry.get(engine) else {
+            throw BridgeFailure.invalidArgument("Unknown engine handle")
+        }
+        try runBlocking {
+            try await voiceEngine.prepareFinalModel()
+        }
+        return BridgeErrorCode.ok.rawValue
+    }
+}
+
+@_cdecl("lattice_voice_engine_unload_final_model")
+public func lattice_voice_engine_unload_final_model(engine: UInt64) {
+    if let voiceEngine = EngineRegistry.get(engine) {
+        voiceEngine.unloadFinalModel()
+    }
+}
+
+@_cdecl("lattice_voice_engine_redecode_offline")
+public func lattice_voice_engine_redecode_offline(
+    engine: UInt64,
+    samples: UnsafePointer<Float>?,
+    sample_count: Int,
+    sample_rate_hz: UInt32,
+    out_text: UnsafeMutablePointer<CChar>?,
+    out_text_capacity: Int,
+    out_text_len: UnsafeMutablePointer<Int>?
+) -> Int32 {
+    bridgeCatch {
+        guard sample_count >= 0 else {
+            throw BridgeFailure.invalidArgument("sample_count must be non-negative")
+        }
+        if sample_count == 0 {
+            throw BridgeFailure.invalidArgument("sample_count must be positive")
+        }
+        guard let samples else {
+            throw BridgeFailure.invalidArgument("samples is null")
+        }
+        guard let out_text else {
+            throw BridgeFailure.invalidArgument("out_text is null")
+        }
+        guard let out_text_len else {
+            throw BridgeFailure.invalidArgument("out_text_len is null")
+        }
+        guard out_text_capacity > 0 else {
+            throw BridgeFailure.invalidArgument("out_text_capacity must be positive")
+        }
+        guard let voiceEngine = EngineRegistry.get(engine) else {
+            throw BridgeFailure.invalidArgument("Unknown engine handle")
+        }
+
+        let owned = Array(UnsafeBufferPointer(start: samples, count: sample_count))
+        let transcript = try runBlocking {
+            try await voiceEngine.redecodeOffline(samples: owned, sampleRateHz: sample_rate_hz)
+        }
+
+        let utf8 = Array(transcript.utf8)
+        let required = utf8.count + 1
+        if required > out_text_capacity {
+            throw BridgeFailure.session("out_text buffer too small for offline transcript")
+        }
+        for (index, byte) in utf8.enumerated() {
+            out_text[index] = CChar(bitPattern: byte)
+        }
+        out_text[utf8.count] = 0
+        out_text_len.pointee = utf8.count
+        return BridgeErrorCode.ok.rawValue
+    }
+}
+
 @_cdecl("lattice_voice_session_start")
 public func lattice_voice_session_start(
     engine: UInt64,

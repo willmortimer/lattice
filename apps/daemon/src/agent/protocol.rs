@@ -16,6 +16,7 @@ pub const PROTOCOL_VERSION: u32 = 1;
 pub enum ProviderKind {
     Pioneer,
     Openai,
+    Local,
     Fake,
 }
 
@@ -24,6 +25,7 @@ impl ProviderKind {
         match self {
             Self::Pioneer => "pioneer",
             Self::Openai => "openai",
+            Self::Local => "local",
             Self::Fake => "fake",
         }
     }
@@ -32,6 +34,7 @@ impl ProviderKind {
         match value {
             "pioneer" => Some(Self::Pioneer),
             "openai" => Some(Self::Openai),
+            "local" => Some(Self::Local),
             "fake" => Some(Self::Fake),
             _ => None,
         }
