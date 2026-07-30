@@ -8,6 +8,7 @@
 //! optional MCP stdio adapter for governed search/read/context and proposal tools.
 
 mod agent;
+mod agent_memory_api;
 mod api;
 mod cloud_relay;
 mod config;
@@ -33,8 +34,11 @@ pub use agent::{
     ENV_AGENTD_BIN, ENV_AGENT_FAKE, ENV_AGENT_MODEL, ENV_AGENT_PROVIDER,
     PROTOCOL_VERSION as AGENT_PROTOCOL_VERSION,
 };
+pub use agent_memory_api::{
+    api_delete_memory, api_recall, api_remember, AgentMemoryHitDto, DeleteMemoryParams,
+    DeleteMemoryResponse, RecallParams, RecallResponse, RememberParams, RememberResponse,
+};
 pub use api::{
-    api_build_context, api_cancel_job, api_create_proposal, api_get_dataset_schema, api_get_job,
     api_get_proposal, api_list_active_jobs, api_list_proposals, api_list_recent_jobs,
     api_profile_dataset, api_propose_artifact, api_propose_interface, api_propose_page,
     api_propose_resource, api_propose_workflow, api_read, api_related, api_search, ApiError,

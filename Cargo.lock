@@ -5948,6 +5948,7 @@ dependencies = [
  "lattice-embedding",
  "lattice-handlers",
  "lattice-index",
+ "lattice-lance",
  "lattice-mcp-catalog",
  "lattice-profile",
  "lattice-protocol",
