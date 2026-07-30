@@ -12,15 +12,21 @@ import {
   Palette,
   Pulse,
   PuzzlePiece,
+  Robot,
   Rocket,
 } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 
 import { inBrowser } from "../demo";
 import type { ThemeCatalogPayload } from "../theme";
-import type { WorkspaceStartupSettings } from "../lib/profile";
+import type { AiMode, EmbeddingMode, WorkspaceStartupSettings } from "../lib/profile";
 import type { PageWidth } from "../lib/pageWidth";
 import { enableAppLock, getAppLockStatus, type AppLockStatus } from "../lib/appLock";
+import {
+  clearOpenaiApiKey,
+  hasOpenaiApiKey,
+  setOpenaiApiKey,
+} from "../lib/openaiKey";
 import {
   getVoiceStatus,
   listenVoiceEvents,
@@ -53,6 +59,7 @@ import {
   setBackgroundSchedulesEnabled,
   type BackgroundScheduleStatus,
 } from "../lib/backgroundSchedules";
+import { EmbeddingPackSettings } from "./EmbeddingPackSettings";
 import { HistoryRetentionSettings } from "./HistoryRetentionSettings";
 import type { AppSettings } from "./model";
 import { TOGGLEABLE_WORKSPACE_CAPABILITIES } from "./workspaceCapabilities";
@@ -66,6 +73,7 @@ type SettingsSection =
   | "keybindings"
   | "data"
   | "capabilities"
+  | "ai"
   | "search"
   | "voice"
   | "privacy"
@@ -100,6 +108,7 @@ const SECTIONS = [
   { id: "keybindings" as const, label: "Keybindings", icon: Keyboard },
   { id: "data" as const, label: "Data defaults", icon: Database },
   { id: "capabilities" as const, label: "Enabled capabilities", icon: PuzzlePiece },
+  { id: "ai" as const, label: "AI", icon: Robot },
   { id: "search" as const, label: "Search", icon: MagnifyingGlass },
   { id: "voice" as const, label: "Voice dictation", icon: Microphone },
   { id: "privacy" as const, label: "Privacy", icon: Lock },
@@ -557,6 +566,15 @@ export function SettingsPage({
           </>
         )}
 
+        {section === "ai" && (
+          <AiSettingsPanel
+            ai={settings.ai}
+            onChange={(patch) => update("ai", patch)}
+            onOpenCloud={() => setSection("cloud")}
+            onOpenVoice={() => setSection("voice")}
+          />
+        )}
+
         {section === "search" && (
           <SemanticSearchSettings
             workspaceRoot={workspace.root || null}
@@ -723,6 +741,290 @@ export function SettingsPage({
         )}
       </section>
     </div>
+  );
+}
+
+const AI_MODE_OPTIONS: Array<{
+  id: AiMode;
+  label: string;
+  description: string;
+}> = [
+  {
+    id: "local",
+    label: "Local",
+    description: "Apple-native and on-device models. No cloud API key required.",
+  },
+  {
+    id: "byoOpenai",
+    label: "BYO OpenAI",
+    description: "Use your own OpenAI API key from the OS keychain.",
+  },
+  {
+    id: "account",
+    label: "Account",
+    description: "Lattice-mediated OpenAI via your cloud account (coming soon).",
+  },
+];
+
+function AiSettingsPanel({
+  ai,
+  onChange,
+  onOpenCloud,
+  onOpenVoice,
+}: {
+  ai: AppSettings["ai"];
+  onChange: (patch: Partial<AppSettings["ai"]>) => void;
+  onOpenCloud: () => void;
+  onOpenVoice: () => void;
+}) {
+  const [hasKey, setHasKey] = useState(false);
+  const [keyDraft, setKeyDraft] = useState("");
+  const [keyBusy, setKeyBusy] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
+  const [preferredModelDraft, setPreferredModelDraft] = useState(ai.preferredModel ?? "");
+  const [cloudStatus, setCloudStatus] = useState<CloudSessionStatus | null>(null);
+
+  useEffect(() => {
+    setPreferredModelDraft(ai.preferredModel ?? "");
+  }, [ai.preferredModel]);
+
+  useEffect(() => {
+    if (inBrowser) {
+      setHasKey(false);
+      return;
+    }
+    let cancelled = false;
+    void hasOpenaiApiKey()
+      .then((present) => {
+        if (!cancelled) setHasKey(present);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setKeyError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (inBrowser || ai.mode !== "account") return;
+    let cancelled = false;
+    void getCloudSessionStatus()
+      .then((next) => {
+        if (!cancelled) setCloudStatus(next);
+      })
+      .catch(() => {
+        if (!cancelled) setCloudStatus(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ai.mode]);
+
+  async function handleSaveKey() {
+    if (inBrowser) return;
+    const trimmed = keyDraft.trim();
+    if (!trimmed) return;
+    setKeyBusy(true);
+    setKeyError(null);
+    try {
+      await setOpenaiApiKey(trimmed);
+      setHasKey(true);
+      setKeyDraft("");
+    } catch (err: unknown) {
+      setKeyError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setKeyBusy(false);
+    }
+  }
+
+  async function handleClearKey() {
+    if (inBrowser) return;
+    setKeyBusy(true);
+    setKeyError(null);
+    try {
+      await clearOpenaiApiKey();
+      setHasKey(false);
+      setKeyDraft("");
+    } catch (err: unknown) {
+      setKeyError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setKeyBusy(false);
+    }
+  }
+
+  function commitPreferredModel() {
+    const trimmed = preferredModelDraft.trim();
+    onChange({ preferredModel: trimmed.length > 0 ? trimmed : null });
+  }
+
+  return (
+    <>
+      <h1>AI</h1>
+      <p className="settings-copy">
+        Choose how the agent and related features reach a model. Optional packs for voice and
+        embeddings live below; Search still owns the semantic search toggle.
+      </p>
+
+      <div className="ai-mode-choices" role="radiogroup" aria-label="AI mode">
+        {AI_MODE_OPTIONS.map((option) => {
+          const active = ai.mode === option.id;
+          return (
+            <button
+              type="button"
+              key={option.id}
+              role="radio"
+              aria-checked={active}
+              className={`ai-mode-choice${active ? " ai-mode-choice-active" : ""}`}
+              onClick={() => onChange({ mode: option.id })}
+            >
+              <span className="ai-mode-choice-indicator" aria-hidden="true" />
+              <span>
+                <strong>{option.label}</strong>
+                <span>{option.description}</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {ai.mode === "local" ? (
+        <div className="diagnostics-card" role="status">
+          <strong>Local mode</strong>
+          <span>
+            Prefer on-device inference. Agent and embedding paths follow local providers when
+            available; no OpenAI key is required.
+          </span>
+        </div>
+      ) : null}
+
+      {ai.mode === "byoOpenai" ? (
+        <>
+          <SettingRow
+            title="OpenAI API key"
+            description="Stored in the OS keychain. Lattice only checks whether a key is present — the secret is never shown."
+          >
+            <span>{hasKey ? "Key on file" : "No key stored"}</span>
+          </SettingRow>
+          {inBrowser ? (
+            <div className="diagnostics-card">
+              <strong>Unavailable in browser demo</strong>
+              <span>Keychain storage requires the native desktop shell.</span>
+            </div>
+          ) : (
+            <>
+              <SettingRow
+                title={hasKey ? "Replace key" : "Set key"}
+                description="Paste an OpenAI API key, then save. Clearing removes it from the keychain."
+              >
+                <div className="ai-key-row">
+                  <input
+                    type="password"
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder="sk-…"
+                    value={keyDraft}
+                    disabled={keyBusy}
+                    aria-label="OpenAI API key"
+                    onChange={(event) => setKeyDraft(event.currentTarget.value)}
+                  />
+                  <Button
+                    size="sm"
+                    disabled={keyBusy || !keyDraft.trim()}
+                    onClick={() => void handleSaveKey()}
+                  >
+                    {keyBusy ? "Saving…" : "Save key"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={keyBusy || !hasKey}
+                    onClick={() => void handleClearKey()}
+                  >
+                    Clear key
+                  </Button>
+                </div>
+              </SettingRow>
+              {keyError ? (
+                <div className="diagnostics-card" role="alert">
+                  <strong>OpenAI key error</strong>
+                  <span>{keyError}</span>
+                </div>
+              ) : null}
+            </>
+          )}
+        </>
+      ) : null}
+
+      {ai.mode === "account" ? (
+        <div className="diagnostics-card" role="status">
+          <strong>Account mode</strong>
+          <span>
+            Lattice-mediated OpenAI (project key via your cloud account) is coming soon. Sign in
+            under Cloud account when you are ready; this mode is not Pioneer-first.
+          </span>
+          <div className="ai-account-actions">
+            <Button size="sm" variant="secondary" onClick={onOpenCloud}>
+              {cloudStatus?.signedIn ? "Open Cloud account" : "Sign in to Cloud"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      <h2 className="settings-subsection">Model preference</h2>
+      <SettingRow
+        title="Preferred model"
+        description="Optional model id hint for the agent (for example gpt-4o-mini). Leave blank to use the runtime default."
+      >
+        <input
+          value={preferredModelDraft}
+          placeholder="Runtime default"
+          aria-label="Preferred model"
+          onChange={(event) => setPreferredModelDraft(event.currentTarget.value)}
+          onBlur={() => commitPreferredModel()}
+        />
+      </SettingRow>
+
+      <h2 className="settings-subsection">Embedding defaults</h2>
+      <SettingRow
+        title="Embedding mode"
+        description="Follow AI uses the same provider family as the AI mode. Local and remote override that choice."
+      >
+        <select
+          aria-label="Embedding mode"
+          value={ai.embeddingMode}
+          onChange={(event) =>
+            onChange({ embeddingMode: event.currentTarget.value as EmbeddingMode })
+          }
+        >
+          <option value="followAi">Follow AI mode</option>
+          <option value="local">Local</option>
+          <option value="remote">Remote</option>
+        </select>
+      </SettingRow>
+      <SettingRow
+        title="Passive embedding"
+        description="Allow background embedding when the workspace is idle. Pack download and Lance freshness land with Embeddings below."
+      >
+        <Toggle
+          label="Passive embedding"
+          checked={ai.passiveEmbeddingEnabled}
+          onChange={(passiveEmbeddingEnabled) => onChange({ passiveEmbeddingEnabled })}
+        />
+      </SettingRow>
+
+      <EmbeddingPackSettings />
+
+      <h2 className="settings-subsection">Optional packs</h2>
+      <SettingRow
+        title="Voice dictation"
+        description="On-device speech-to-text pack. Full download and status controls stay under Voice dictation."
+      >
+        <Button size="sm" variant="secondary" onClick={onOpenVoice}>
+          Open Voice settings
+        </Button>
+      </SettingRow>
+    </>
   );
 }
 
