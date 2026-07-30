@@ -4,9 +4,9 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use lattice_daemon::{
-    default_socket_path, mcp, spawn_cloud_relay, CloudRelayConfig, serve_with_shutdown_and_controllers,
-    AgentController, AgentProviderMode, DaemonConfig, DaemonPreferences, SemanticController,
-    SemanticProviderMode, VoiceController, VoiceProviderMode, DEFAULT_API_PORT,
+    default_socket_path, mcp, serve_with_shutdown_and_controllers, AgentController,
+    AgentProviderMode, DaemonConfig, DaemonPreferences, SemanticController, SemanticProviderMode,
+    VoiceController, VoiceProviderMode, DEFAULT_API_PORT,
 };
 use lattice_runtime::LatticeRuntime;
 use tracing_subscriber::EnvFilter;
@@ -129,14 +129,6 @@ async fn main() -> Result<()> {
     }
 
     let runtime = Arc::new(LatticeRuntime::new());
-    if let Some(relay) = CloudRelayConfig::from_env() {
-        tracing::info!(
-            cloud_url = %relay.cloud_url,
-            device_id = %relay.device_id,
-            "cloud device relay enabled via environment"
-        );
-        spawn_cloud_relay(Arc::clone(&runtime), relay);
-    }
     // Always own a semantic controller so EnableSemanticSearch works without env
     // gates. Discovers/spawns lattice-embed-host by default; Fake only via
     // LATTICE_SEMANTIC_FAKE; Unavailable when the host binary cannot be found.

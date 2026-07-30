@@ -33,6 +33,7 @@ lattice-handlers.workspace = true
 lattice-index.workspace = true
 lattice-lance.workspace = true
 lattice-mcp-catalog.workspace = true
+lattice-relay-protocol.workspace = true
 lattice-profile.workspace = true
 lattice-protocol.workspace = true
 lattice-runtime.workspace = true
@@ -48,6 +49,7 @@ tracing-subscriber.workspace = true
 uuid.workspace = true
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 tokio-tungstenite = { version = "0.26", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+tokio-util = { workspace = true }
 
 [dev-dependencies]
 http-body-util = "0.1"

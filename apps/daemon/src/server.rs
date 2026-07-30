@@ -29,6 +29,7 @@ use tokio::net::{UnixListener, UnixStream};
 use tokio::sync::{broadcast, oneshot, Mutex};
 use tracing::{debug, info, warn};
 
+use crate::cloud_relay::{spawn_cloud_relay, CloudRelayConfig};
 use crate::config::DaemonConfig;
 use crate::error::{Error, Result};
 use crate::idle::ConnectionTracker;
@@ -206,6 +207,18 @@ pub async fn serve_with_shutdown_and_controllers(
     );
     if let Ok(registry) = crate::workspace_registry::WorkspaceRegistry::load_default() {
         crate::workspace_registry::sync_remote_access_lease(&connections, &registry).await;
+    }
+    if let Some(relay) = CloudRelayConfig::from_env() {
+        info!(
+            cloud_url = %relay.cloud_url,
+            device_id = %relay.device_id,
+            "cloud device relay enabled via environment"
+        );
+        spawn_cloud_relay(
+            Arc::clone(&runtime),
+            relay,
+            Some(Arc::clone(&connections)),
+        );
     }
     let state = DaemonState::new_with_controllers(config, runtime, semantic, voice, agent)
         .with_connections(Arc::clone(&connections));
