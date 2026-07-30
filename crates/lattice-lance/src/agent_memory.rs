@@ -32,10 +32,14 @@ use crate::error::{LanceError, Result};
 use crate::paths::{agent_memory_dataset_path, search_elements_index_dir, AGENT_MEMORY_TABLE};
 use crate::types::Commit;
 
-/// Fixed embedding width for the Lance table schema.
+/// Fixed embedding width for the Lance table schema (Qwen3 / Pioneer 512-d).
 ///
 /// Text-only rows store zeros with `dims = 0`; vector recall ignores them.
-pub const AGENT_MEMORY_EMBEDDING_WIDTH: u32 = 384;
+///
+/// Tables created at the old 384-d width are incompatible. Delete
+/// `{workspace}/.lattice/index/agent-memory.lance` once and let remember
+/// recreate the dataset.
+pub const AGENT_MEMORY_EMBEDDING_WIDTH: u32 = 512;
 
 /// Stable dataset identifier for agent memory.
 pub const AGENT_MEMORY_DATASET_ID: &str = "agent-memory";
@@ -135,7 +139,10 @@ impl AgentMemoryStore {
             .map_err(map_lance_error)?;
 
         let table = match db.open_table(AGENT_MEMORY_TABLE).execute().await {
-            Ok(table) => Some(table),
+            Ok(table) => {
+                validate_agent_memory_table_schema(&table).await?;
+                Some(table)
+            }
             Err(LanceDbError::TableNotFound { .. }) => None,
             Err(err) => return Err(map_lance_error(err)),
         };
@@ -250,6 +257,7 @@ impl AgentMemoryStore {
 
         match self.db.open_table(AGENT_MEMORY_TABLE).execute().await {
             Ok(table) => {
+                validate_agent_memory_table_schema(&table).await?;
                 *guard = Some(table.clone());
                 Ok(Some(table))
             }
@@ -404,6 +412,32 @@ impl AgentMemoryStore {
             .map_err(map_lance_error)?;
         record_batches_to_rows(batches)
     }
+}
+
+async fn validate_agent_memory_table_schema(table: &Table) -> Result<()> {
+    let schema = table.schema().await.map_err(map_lance_error)?;
+    let field = schema
+        .field_with_name(COL_EMBEDDING)
+        .map_err(|err| store_error(err.to_string()))?;
+    match field.data_type() {
+        DataType::FixedSizeList(_, width) => {
+            if *width as u32 != AGENT_MEMORY_EMBEDDING_WIDTH {
+                return Err(LanceError::Store {
+                    message: format!(
+                        "agent-memory embedding width {width} does not match required \
+                         {AGENT_MEMORY_EMBEDDING_WIDTH}; delete the workspace \
+                         `.lattice/index/agent-memory.lance` directory and recreate"
+                    ),
+                });
+            }
+        }
+        other => {
+            return Err(LanceError::Store {
+                message: format!("agent-memory embedding column has unexpected type {other:?}"),
+            });
+        }
+    }
+    Ok(())
 }
 
 fn agent_memory_schema() -> Arc<Schema> {
@@ -589,6 +623,11 @@ mod tests {
         let mut values = vec![0.0_f32; AGENT_MEMORY_EMBEDDING_WIDTH as usize];
         values[index] = 1.0;
         values
+    }
+
+    #[test]
+    fn embedding_width_matches_workspace_models() {
+        assert_eq!(AGENT_MEMORY_EMBEDDING_WIDTH, 512);
     }
 
     #[tokio::test]
