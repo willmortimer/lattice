@@ -6,8 +6,11 @@
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
+
+use crate::idle::ConnectionTracker;
 
 /// Environment override for the registry JSON path (tests).
 pub const LATTICE_WORKSPACE_REGISTRY_PATH_ENV: &str = "LATTICE_WORKSPACE_REGISTRY_PATH";
@@ -199,6 +202,15 @@ pub fn register_workspace(workspace_id: &str, root: &Path) -> Result<()> {
     registry.save_default()
 }
 
+/// Sync the connection tracker's remote-access lease from registry state.
+///
+/// Relay client lifecycle hooks (H6) should call this after mutating remote access.
+pub async fn sync_remote_access_lease(tracker: &Arc<ConnectionTracker>, registry: &WorkspaceRegistry) {
+    tracker
+        .set_remote_access_lease(registry.remote_access_any())
+        .await;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -306,5 +318,41 @@ mod tests {
         let loaded = WorkspaceRegistry::load_or_default(&path).expect("load");
         assert!(loaded.remote_access_any());
         assert_eq!(loaded.list().len(), 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn remote_access_registry_sync_blocks_idle_shutdown() {
+        use std::time::Duration as StdDuration;
+        use tokio::sync::oneshot;
+        use tokio::time::{sleep, Duration as TokioDuration};
+
+        let _guard = env_lock();
+        let (_dir, path) = registry_fixture();
+        let workspace_dir = TempDir::new().expect("workspace tempdir");
+        let (root, workspace_id) = init_workspace(&workspace_dir);
+
+        let mut registry = WorkspaceRegistry::default();
+        registry.register(&workspace_id, &root);
+        registry.set_remote_access(&workspace_id, true);
+        registry.save(&path).expect("save");
+
+        let loaded = WorkspaceRegistry::load_or_default(&path).expect("load");
+        let (tx, mut rx) = oneshot::channel();
+        let tracker = ConnectionTracker::new(false, StdDuration::from_millis(50), tx);
+        sync_remote_access_lease(&tracker, &loaded).await;
+        assert!(tracker.remote_access_lease_held());
+
+        tracker.on_connect().await;
+        drop(tracker.guard());
+        sleep(TokioDuration::from_millis(150)).await;
+        assert!(rx.try_recv().is_err(), "remote access lease should block idle shutdown");
+
+        let mut released = loaded;
+        released.set_remote_access(&workspace_id, false);
+        sync_remote_access_lease(&tracker, &released).await;
+        tokio::time::timeout(TokioDuration::from_secs(2), &mut rx)
+            .await
+            .expect("idle shutdown after remote access disabled")
+            .expect("channel open");
     }
 }

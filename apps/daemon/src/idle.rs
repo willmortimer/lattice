@@ -2,6 +2,8 @@
 //!
 //! A scheduler lease (from the known-workspace registry) also blocks idle
 //! shutdown so closed-desktop interval schedules can keep `latticed` alive.
+//! A remote-access lease (from the workspace-id registry) blocks idle shutdown
+//! while relay/MCP remote access is enabled for any workspace.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -16,6 +18,8 @@ pub struct ConnectionTracker {
     keep_services_running: bool,
     /// When true, at least one registered workspace holds a scheduler lease.
     scheduler_lease: AtomicBool,
+    /// When true, at least one workspace has remote MCP/relay access enabled.
+    remote_access_lease: AtomicBool,
     idle_timeout: Duration,
     idle_task: Mutex<Option<JoinHandle<()>>>,
     shutdown: Mutex<Option<oneshot::Sender<()>>>,
@@ -31,6 +35,7 @@ impl ConnectionTracker {
             active: AtomicUsize::new(0),
             keep_services_running,
             scheduler_lease: AtomicBool::new(false),
+            remote_access_lease: AtomicBool::new(false),
             idle_timeout,
             idle_task: Mutex::new(None),
             shutdown: Mutex::new(Some(shutdown)),
@@ -64,10 +69,32 @@ impl ConnectionTracker {
         self.scheduler_lease.load(Ordering::SeqCst)
     }
 
+    /// Update whether the workspace registry holds a remote-access lease.
+    ///
+    /// When the lease becomes active, any pending idle shutdown timer is cancelled.
+    /// When it clears and no clients remain (and keep-running is off), idle shutdown
+    /// is scheduled.
+    pub async fn set_remote_access_lease(self: &Arc<Self>, held: bool) {
+        let previous = self.remote_access_lease.swap(held, Ordering::SeqCst);
+        if held {
+            self.cancel_idle_timer().await;
+            return;
+        }
+        if previous && self.active.load(Ordering::SeqCst) == 0 && !self.keep_services_running {
+            self.schedule_idle_shutdown().await;
+        }
+    }
+
+    /// Whether a remote-access lease is currently held.
+    pub fn remote_access_lease_held(&self) -> bool {
+        self.remote_access_lease.load(Ordering::SeqCst)
+    }
+
     fn should_idle_shutdown(&self) -> bool {
         self.active.load(Ordering::SeqCst) == 0
             && !self.keep_services_running
             && !self.scheduler_lease.load(Ordering::SeqCst)
+            && !self.remote_access_lease.load(Ordering::SeqCst)
     }
 
     /// RAII guard that decrements the active count on drop.
@@ -168,6 +195,34 @@ mod tests {
         tokio::time::timeout(TokioDuration::from_secs(2), &mut rx)
             .await
             .expect("idle shutdown after lease release")
+            .expect("channel open");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn remote_access_lease_skips_idle_shutdown() {
+        let (tx, mut rx) = oneshot::channel();
+        let tracker = ConnectionTracker::new(false, Duration::from_millis(50), tx);
+        tracker.set_remote_access_lease(true).await;
+        tracker.on_connect().await;
+        drop(tracker.guard());
+        sleep(TokioDuration::from_millis(150)).await;
+        assert!(rx.try_recv().is_err());
+        assert!(tracker.remote_access_lease_held());
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn releasing_remote_access_lease_allows_idle_shutdown() {
+        let (tx, mut rx) = oneshot::channel();
+        let tracker = ConnectionTracker::new(false, Duration::from_millis(50), tx);
+        tracker.set_remote_access_lease(true).await;
+        tracker.on_connect().await;
+        drop(tracker.guard());
+        sleep(TokioDuration::from_millis(80)).await;
+        assert!(rx.try_recv().is_err());
+        tracker.set_remote_access_lease(false).await;
+        tokio::time::timeout(TokioDuration::from_secs(2), &mut rx)
+            .await
+            .expect("idle shutdown after remote access lease release")
             .expect("channel open");
     }
 

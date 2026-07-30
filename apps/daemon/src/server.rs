@@ -204,6 +204,9 @@ pub async fn serve_with_shutdown_and_controllers(
         config.idle_shutdown_timeout,
         idle_shutdown_tx,
     );
+    if let Ok(registry) = crate::workspace_registry::WorkspaceRegistry::load_default() {
+        crate::workspace_registry::sync_remote_access_lease(&connections, &registry).await;
+    }
     let state = DaemonState::new_with_controllers(config, runtime, semantic, voice, agent)
         .with_connections(Arc::clone(&connections));
     let schedule_runner = crate::schedule::spawn_schedule_runner_with_connections(

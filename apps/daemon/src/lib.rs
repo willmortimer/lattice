@@ -28,6 +28,7 @@ mod scheduler_api;
 mod server;
 mod spawn;
 mod voice_host;
+mod workspace_api;
 mod workspace_registry;
 
 pub use agent::{
@@ -98,4 +99,11 @@ pub use spawn::{spawn_latticed, wait_for_ready, SpawnOptions, SpawnedDaemon};
 pub use voice_host::{
     resolve_voice_host_bin, VoiceController, VoiceProviderMode, ENV_VOICE_FAKE, ENV_VOICE_HOST_BIN,
     ENV_VOICE_HOST_SOCKET, ENV_VOICE_MODEL_CACHE,
+};
+pub use workspace_api::{
+    api_workspace_set_remote_access, WorkspaceRemoteAccessParams, WorkspaceRemoteAccessResponse,
+};
+pub use workspace_registry::{
+    default_workspace_registry_path, register_workspace, sync_remote_access_lease,
+    WorkspaceRegistry, WorkspaceRegistryRecord,
 };
