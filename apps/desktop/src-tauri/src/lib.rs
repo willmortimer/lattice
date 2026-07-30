@@ -64,6 +64,9 @@ pub fn run() {
         .manage(agent::AgentState::default())
         .manage(app_lock::AppLockState::load_from_profile());
 
+    #[cfg(feature = "capture")]
+    let builder = builder.manage(capture::CaptureShelfState::default());
+
     // Socket bridge for `@srsholmes/tauri-playwright` (WKWebView / WebView2 / WebKitGTK).
     // Only listen when explicitly enabled so normal debug runs stay quiet.
     #[cfg(feature = "e2e-testing")]
@@ -346,6 +349,8 @@ pub fn run() {
             cloud::cloud_sign_in_apple,
             cloud::cloud_sign_out,
             spotlight::spotlight_index_workspace,
+            #[cfg(feature = "capture")]
+            capture::shelf::capture_shelf_snapshot,
         ]))
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

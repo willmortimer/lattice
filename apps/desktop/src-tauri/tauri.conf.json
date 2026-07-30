@@ -39,6 +39,22 @@
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "backgroundColor": "#0a0d13"
+      },
+      {
+        "label": "capture-shelf",
+        "title": "Capture Shelf",
+        "url": "capture-shelf.html",
+        "width": 280,
+        "height": 360,
+        "visible": false,
+        "alwaysOnTop": true,
+        "resizable": false,
+        "skipTaskbar": true,
+        "decorations": false,
+        "focus": false,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "backgroundColor": "#0a0d13"
       }
     ],
     "security": {

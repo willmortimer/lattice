@@ -22,6 +22,7 @@ pub const ACTION_SEARCH: &str = "app.search";
 pub const ACTION_COMMAND_PALETTE: &str = "app.command-palette";
 pub const ACTION_QUICK_NOTE: &str = "app.quick-note";
 pub const ACTION_SCREEN_CLIP: &str = "app.screen-clip";
+pub const ACTION_CAPTURE_SHELF: &str = "app.capture-shelf";
 pub const ACTION_NEW_PAGE: &str = "app.new-page";
 pub const ACTION_NEW_TABLE: &str = "app.new-table";
 pub const ACTION_NEW_WORKSPACE: &str = "app.new-workspace";
@@ -100,6 +101,10 @@ pub fn handle_action(app: &AppHandle, id: &str) {
             crate::capture::start_screen_clip(app);
             #[cfg(not(feature = "capture"))]
             eprintln!("lattice: screen clip requires the capture feature");
+        }
+        ACTION_CAPTURE_SHELF => {
+            #[cfg(feature = "capture")]
+            crate::capture::shelf::show_shelf_window(app);
         }
         ACTION_QUIT => tray::request_quit(app),
         ACTION_LOCK => {
@@ -439,6 +444,11 @@ pub fn build_tray_menu(
         true,
         Some("CmdOrCtrl+Shift+2"),
     )?;
+    #[cfg(feature = "capture")]
+    let capture_shelf = {
+        let label = capture_shelf_menu_label(app);
+        MenuItem::with_id(app, ACTION_CAPTURE_SHELF, &label, true, None::<&str>)?
+    };
     let new_page = MenuItem::with_id(
         app,
         ACTION_NEW_PAGE,
@@ -533,17 +543,37 @@ pub fn build_tray_menu(
         &show,
         &quick_note,
         &screen_clip,
-        &new_page,
+    ];
+    #[cfg(feature = "capture")]
+    items.push(&capture_shelf);
+    items.extend([
+        &new_page as &dyn tauri::menu::IsMenuItem<tauri::Wry>,
         &sep1,
         &search,
         &settings,
         &open_workspace,
-    ];
+    ]);
     items.extend(job_refs);
     items.push(&sep2);
     items.push(&quit);
 
     Menu::with_items(app, &items)
+}
+
+#[cfg(feature = "capture")]
+fn capture_shelf_menu_label(app: &AppHandle) -> String {
+    let Some(state) = app.try_state::<crate::capture::CaptureShelfState>() else {
+        return "Capture Shelf".to_string();
+    };
+    let snapshot = state.snapshot();
+    if snapshot.count == 0 {
+        return "Capture Shelf".to_string();
+    }
+    if let Some(title) = snapshot.latest_title {
+        format!("Capture Shelf ({}) — {title}", snapshot.count)
+    } else {
+        format!("Capture Shelf ({})", snapshot.count)
+    }
 }
 
 #[cfg(test)]

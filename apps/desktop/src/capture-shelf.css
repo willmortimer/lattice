@@ -1,0 +1,61 @@
+.capture-shelf {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 100vh;
+  padding: 0.85rem 0.9rem 1rem;
+  background: var(--surface-0, #0a0d13);
+  color: var(--text-primary, #e8edf7);
+  font: 13px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.capture-shelf__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.capture-shelf__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.capture-shelf__count {
+  color: var(--text-muted, #9aa7bd);
+  font-size: 0.8rem;
+}
+
+.capture-shelf__empty {
+  margin: 0;
+  color: var(--text-muted, #9aa7bd);
+}
+
+.capture-shelf__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.capture-shelf__item {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.55rem;
+  padding: 0.55rem 0.65rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.capture-shelf__item-title {
+  margin: 0;
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.capture-shelf__item-meta {
+  margin: 0.2rem 0 0;
+  color: var(--text-muted, #9aa7bd);
+  font-size: 0.75rem;
+}
