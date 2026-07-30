@@ -1,6 +1,6 @@
 //! Typed client for latticed's authenticated localhost HTTP API.
 //!
-//! Mirrors Node `apps/agentd/src/lattice-client.ts`.
+//! HTTP client for Lattice daemon localhost API (search, read, proposals, …).
 
 use std::time::Duration;
 

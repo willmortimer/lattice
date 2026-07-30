@@ -129,38 +129,23 @@ fn discover_agentd_bin() -> Option<String> {
     }
 
     // Prefer the Rust sidecar (release, then debug, then next to this exe for packaged apps).
-    // Node is opt-in only via LATTICE_AGENTD_PREFER_NODE=1 (or explicit LATTICE_AGENTD_BIN).
-    let prefer_node = matches!(
-        std::env::var("LATTICE_AGENTD_PREFER_NODE").ok().as_deref(),
-        Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("YES")
-    );
-
-    if !prefer_node {
-        let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
-        for candidate in [
-            workspace_root.join("target/release/lattice-agentd"),
-            workspace_root.join("target/debug/lattice-agentd"),
-        ] {
-            let candidate = std::fs::canonicalize(&candidate).unwrap_or(candidate);
-            if candidate.is_file() {
-                return Some(candidate.to_string_lossy().into());
-            }
+    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    for candidate in [
+        workspace_root.join("target/release/lattice-agentd"),
+        workspace_root.join("target/debug/lattice-agentd"),
+    ] {
+        let candidate = std::fs::canonicalize(&candidate).unwrap_or(candidate);
+        if candidate.is_file() {
+            return Some(candidate.to_string_lossy().into());
         }
-        if let Ok(exe) = std::env::current_exe() {
-            if let Some(dir) = exe.parent() {
-                let sidecar = dir.join("lattice-agentd");
-                if sidecar.is_file() {
-                    return Some(sidecar.to_string_lossy().into());
-                }
-            }
-        }
-        return None;
     }
-
-    let run_sh = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../agentd/scripts/run.sh");
-    let run_sh = std::fs::canonicalize(&run_sh).unwrap_or(run_sh);
-    if run_sh.is_file() {
-        return Some(run_sh.to_string_lossy().into());
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let sidecar = dir.join("lattice-agentd");
+            if sidecar.is_file() {
+                return Some(sidecar.to_string_lossy().into());
+            }
+        }
     }
     None
 }
