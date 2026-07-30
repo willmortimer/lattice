@@ -143,7 +143,7 @@ function resolveProviderFromProfileAndHealth(
   if (state.accountAiDisabled) {
     return null;
   }
-  if (state.aiMode === "byoOpenai") {
+  if (state.aiMode === "byoOpenai" || state.aiMode === "account") {
     return "openai";
   }
   if (backend === "openai" || backend === "pioneer") {

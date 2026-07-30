@@ -4,6 +4,7 @@ import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk";
 import { useEffect, useMemo, type ReactNode } from "react";
 
 import { getAgentHealth, TauriAgentChatTransport } from "../lib/agent";
+import { getCloudSessionStatus } from "../lib/cloud";
 import { loadProfile } from "../lib/profile";
 import { hasOpenaiApiKey } from "../lib/openaiKey";
 import { resolveAgentDefaultsFromAiSettings } from "./agentAiDefaults";
@@ -33,17 +34,25 @@ function LatticeAgentRuntimeProvider({
 
   useEffect(() => {
     let cancelled = false;
-    void loadProfile()
-      .then((profile) => {
-        if (!cancelled) {
-          applyProfileAiDefaults(
-            resolveAgentDefaultsFromAiSettings(profile.settings.desktop.ai),
-          );
+    const applyDefaults = async () => {
+      try {
+        const [profile, cloudStatus] = await Promise.all([
+          loadProfile(),
+          getCloudSessionStatus().catch(() => null),
+        ]);
+        if (cancelled) {
+          return;
         }
-      })
-      .catch(() => {
+        applyProfileAiDefaults(
+          resolveAgentDefaultsFromAiSettings(profile.settings.desktop.ai, {
+            cloudSignedIn: cloudStatus?.signedIn === true,
+          }),
+        );
+      } catch {
         // Profile load failure should not block the agent shell.
-      });
+      }
+    };
+    void applyDefaults();
     return () => {
       cancelled = true;
     };

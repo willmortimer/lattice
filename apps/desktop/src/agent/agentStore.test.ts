@@ -336,7 +336,30 @@ describe("useAgentSessionStore", () => {
     expect(state.selectedModel).toBe("gpt-4o-mini");
   });
 
-  it("setHealthSnapshot does not default to pioneer in account mode", () => {
+  it("setHealthSnapshot enables openai provider for signed-in account mode", () => {
+    const ai = {
+      ...defaultDesktopSettings().ai,
+      mode: "account" as const,
+    };
+    useAgentSessionStore
+      .getState()
+      .applyProfileAiDefaults(
+        resolveAgentDefaultsFromAiSettings(ai, { cloudSignedIn: true }),
+      );
+    useAgentSessionStore.getState().setHealthSnapshot({
+      backend: "openai",
+      model: "gpt-5-nano",
+      ok: true,
+      degraded: false,
+    });
+
+    const state = useAgentSessionStore.getState();
+    expect(state.accountAiDisabled).toBe(false);
+    expect(state.selectedProvider).toBe("openai");
+    expect(state.selectedModel).toBe("gpt-5-nano");
+  });
+
+  it("setHealthSnapshot does not default to pioneer in signed-out account mode", () => {
     const ai = {
       ...defaultDesktopSettings().ai,
       mode: "account" as const,

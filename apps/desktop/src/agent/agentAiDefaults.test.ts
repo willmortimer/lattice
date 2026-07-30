@@ -45,17 +45,49 @@ describe("resolveAgentDefaultsFromAiSettings", () => {
     });
   });
 
-  it("disables account mode without defaulting to Pioneer", () => {
+  it("enables account mode when cloud session is signed in", () => {
+    const ai = {
+      ...defaultDesktopSettings().ai,
+      mode: "account" as const,
+      preferredModel: "gpt-4o-mini",
+    };
+
+    expect(
+      resolveAgentDefaultsFromAiSettings(ai, { cloudSignedIn: true }),
+    ).toEqual({
+      aiMode: "account",
+      provider: "openai",
+      model: "gpt-4o-mini",
+      accountAiDisabled: false,
+    });
+  });
+
+  it("disables account mode when cloud session is signed out", () => {
     const ai = {
       ...defaultDesktopSettings().ai,
       mode: "account" as const,
       preferredModel: "gpt-5.6-luna",
     };
 
-    expect(resolveAgentDefaultsFromAiSettings(ai)).toEqual({
+    expect(resolveAgentDefaultsFromAiSettings(ai, { cloudSignedIn: false })).toEqual({
       aiMode: "account",
       provider: null,
       model: "gpt-5.6-luna",
+      accountAiDisabled: true,
+    });
+  });
+
+  it("defaults account mode to disabled without cloudSignedIn option", () => {
+    const ai = {
+      ...defaultDesktopSettings().ai,
+      mode: "account" as const,
+      preferredModel: null,
+    };
+
+    expect(resolveAgentDefaultsFromAiSettings(ai)).toEqual({
+      aiMode: "account",
+      provider: null,
+      model: null,
       accountAiDisabled: true,
     });
   });

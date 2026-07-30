@@ -155,12 +155,24 @@ pub fn agent_spawn_env() -> SpawnHostEnv {
     let mut extra_env = Vec::new();
     let desktop_ai = crate::ai::load_desktop_ai_settings();
 
+    let account_credentials = crate::ai::resolve_account_ai_for_spawn();
+    let account_ai_active = account_credentials.is_some();
+
     let pioneer_key_set = std::env::var(ENV_PIONEER_API_KEY)
         .ok()
         .filter(|value| !value.is_empty())
         .is_some();
-    let resolved_openai_key = crate::ai::resolve_openai_api_key_for_spawn();
-    let openai_key_set = resolved_openai_key.is_some();
+    let resolved_openai_key = if account_ai_active {
+        None
+    } else {
+        crate::ai::resolve_openai_api_key_for_spawn()
+    };
+    let openai_key_set = account_ai_active
+        || resolved_openai_key.is_some()
+        || std::env::var(ENV_OPENAI_API_KEY)
+            .ok()
+            .filter(|value| !value.is_empty())
+            .is_some();
 
     let using_fake = crate::ai::should_use_fake_agent_backend(
         &desktop_ai,
@@ -178,18 +190,26 @@ pub fn agent_spawn_env() -> SpawnHostEnv {
         }
     }
 
-    if let Some(key) = resolved_openai_key {
+    if let Some(credentials) = account_credentials {
+        extra_env.extend(crate::ai::account_ai_spawn_env(&credentials));
+    } else if let Some(key) = resolved_openai_key {
         extra_env.push((ENV_OPENAI_API_KEY.to_string(), key));
     }
 
-    if let Some(provider) = crate::ai::agent_provider_for_profile(&desktop_ai) {
-        extra_env.push((ENV_AGENT_PROVIDER.to_string(), provider.into()));
+    if account_ai_active {
+        // Provider + OPENAI_* already set by account_ai_spawn_env.
+        for key in [ENV_PIONEER_API_KEY, ENV_AGENT_MODEL] {
+            forward_env_var(&mut extra_env, key);
+        }
     } else {
-        forward_env_var(&mut extra_env, ENV_AGENT_PROVIDER);
-    }
-
-    for key in [ENV_PIONEER_API_KEY, ENV_AGENT_MODEL] {
-        forward_env_var(&mut extra_env, key);
+        if let Some(provider) = crate::ai::agent_provider_for_profile(&desktop_ai) {
+            extra_env.push((ENV_AGENT_PROVIDER.to_string(), provider.into()));
+        } else {
+            forward_env_var(&mut extra_env, ENV_AGENT_PROVIDER);
+        }
+        for key in [ENV_PIONEER_API_KEY, ENV_AGENT_MODEL] {
+            forward_env_var(&mut extra_env, key);
+        }
     }
 
     SpawnHostEnv {

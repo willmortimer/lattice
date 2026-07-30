@@ -83,7 +83,7 @@ function AgentThreadView({
           <div className="agent-thread-empty">
             <p>
               {accountAiDisabled
-                ? "Lattice paid AI is coming soon. Switch to On-device or BYO in Settings → AI."
+                ? "Sign in under Settings → Cloud account to use Lattice paid AI."
                 : byoOpenaiKeyMissing
                   ? "Add your OpenAI API key in Settings → AI to use the agent in BYO mode."
                   : "Ask the agent about this workspace."}
