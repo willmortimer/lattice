@@ -8,6 +8,12 @@ pub const SEARCH_ELEMENTS_TABLE: &str = "search-elements";
 /// Filename for the workspace search-elements Lance dataset directory.
 pub const SEARCH_ELEMENTS_DATASET: &str = "search-elements.lance";
 
+/// LanceDB table name for workspace agent memory rows.
+pub const AGENT_MEMORY_TABLE: &str = "agent-memory";
+
+/// Filename for the workspace agent-memory Lance dataset directory.
+pub const AGENT_MEMORY_DATASET: &str = "agent-memory.lance";
+
 const INDEX_DIR: &str = "index";
 
 /// Resolve the workspace-local LanceDB index directory.
@@ -26,6 +32,14 @@ pub fn search_elements_dataset_path(workspace_root: &Path) -> PathBuf {
     search_elements_index_dir(workspace_root).join(SEARCH_ELEMENTS_DATASET)
 }
 
+/// Resolve the workspace-local path to the agent-memory Lance dataset.
+///
+/// Returns `{workspace_root}/.lattice/index/agent-memory.lance`, the on-disk
+/// Lance dataset directory for table [`AGENT_MEMORY_TABLE`].
+pub fn agent_memory_dataset_path(workspace_root: &Path) -> PathBuf {
+    search_elements_index_dir(workspace_root).join(AGENT_MEMORY_DATASET)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -37,6 +51,16 @@ mod tests {
         assert_eq!(
             path,
             PathBuf::from("/tmp/my-workspace/.lattice/index/search-elements.lance")
+        );
+    }
+
+    #[test]
+    fn agent_memory_dataset_path_under_lattice_index() {
+        let workspace = PathBuf::from("/tmp/my-workspace");
+        let path = agent_memory_dataset_path(&workspace);
+        assert_eq!(
+            path,
+            PathBuf::from("/tmp/my-workspace/.lattice/index/agent-memory.lance")
         );
     }
 }

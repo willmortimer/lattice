@@ -393,6 +393,8 @@ pub struct DesktopSettings {
     #[serde(default)]
     pub search: SearchSettings,
     #[serde(default)]
+    pub ai: AiSettings,
+    #[serde(default)]
     pub privacy: PrivacySettings,
 }
 
@@ -409,7 +411,62 @@ impl Default for DesktopSettings {
             diagnostics: DiagnosticSettings::default(),
             services: ServicesSettings::default(),
             search: SearchSettings::default(),
+            ai: AiSettings::default(),
             privacy: PrivacySettings::default(),
+        }
+    }
+}
+
+/// Desktop AI mode (Settings → AI). Account is a stub until cloud OpenAI proxy lands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AiMode {
+    Local,
+    ByoOpenai,
+    Account,
+}
+
+impl Default for AiMode {
+    fn default() -> Self {
+        Self::Local
+    }
+}
+
+/// Embedding provider selection relative to [`AiMode`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EmbeddingMode {
+    FollowAi,
+    Local,
+    Remote,
+}
+
+impl Default for EmbeddingMode {
+    fn default() -> Self {
+        Self::FollowAi
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiSettings {
+    #[serde(default)]
+    pub mode: AiMode,
+    #[serde(default)]
+    pub embedding_mode: EmbeddingMode,
+    #[serde(default)]
+    pub passive_embedding_enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preferred_model: Option<String>,
+}
+
+impl Default for AiSettings {
+    fn default() -> Self {
+        Self {
+            mode: AiMode::default(),
+            embedding_mode: EmbeddingMode::default(),
+            passive_embedding_enabled: false,
+            preferred_model: None,
         }
     }
 }
@@ -867,6 +924,72 @@ mod tests {
             .unwrap();
         assert_eq!(partial.value.editor.autosave_delay_ms, 1500);
         assert!(!partial.value.search.semantic_enabled);
+    }
+
+    #[test]
+    fn ai_settings_defaults_and_round_trips() {
+        assert_eq!(DesktopSettings::default().ai.mode, AiMode::Local);
+        assert_eq!(
+            DesktopSettings::default().ai.embedding_mode,
+            EmbeddingMode::FollowAi
+        );
+        assert!(!DesktopSettings::default().ai.passive_embedding_enabled);
+        assert!(DesktopSettings::default().ai.preferred_model.is_none());
+
+        let directory = tempfile::tempdir().unwrap();
+        let store = SettingsStore::new(directory.path());
+        std::fs::write(
+            store.path(DESKTOP_SETTINGS_SPEC),
+            "format: lattice-desktop-settings\nversion: 1\nai:\n  mode: byoOpenai\n  embeddingMode: remote\n  passiveEmbeddingEnabled: true\n  preferredModel: gpt-4o-mini\n",
+        )
+        .unwrap();
+        let loaded = store
+            .load::<DesktopSettings>(DESKTOP_SETTINGS_SPEC)
+            .unwrap();
+        assert_eq!(loaded.value.ai.mode, AiMode::ByoOpenai);
+        assert_eq!(loaded.value.ai.embedding_mode, EmbeddingMode::Remote);
+        assert!(loaded.value.ai.passive_embedding_enabled);
+        assert_eq!(
+            loaded.value.ai.preferred_model.as_deref(),
+            Some("gpt-4o-mini")
+        );
+
+        // Older documents without `ai:` keep defaults.
+        std::fs::write(
+            store.path(DESKTOP_SETTINGS_SPEC),
+            "format: lattice-desktop-settings\nversion: 1\nsearch:\n  semanticEnabled: true\n",
+        )
+        .unwrap();
+        let partial = store
+            .load::<DesktopSettings>(DESKTOP_SETTINGS_SPEC)
+            .unwrap();
+        assert!(partial.value.search.semantic_enabled);
+        assert_eq!(partial.value.ai.mode, AiMode::Local);
+        assert_eq!(partial.value.ai.embedding_mode, EmbeddingMode::FollowAi);
+        assert!(!partial.value.ai.passive_embedding_enabled);
+    }
+
+    #[test]
+    fn ai_settings_yaml_round_trip_preserves_camel_case() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = SettingsStore::new(directory.path());
+        let mut settings = DesktopSettings::default();
+        settings.ai.mode = AiMode::Account;
+        settings.ai.embedding_mode = EmbeddingMode::FollowAi;
+        settings.ai.passive_embedding_enabled = true;
+        settings.ai.preferred_model = Some("gpt-4.1".into());
+        store
+            .save(DESKTOP_SETTINGS_SPEC, &settings, None)
+            .unwrap();
+        let materialized = std::fs::read_to_string(store.path(DESKTOP_SETTINGS_SPEC)).unwrap();
+        assert!(materialized.contains("mode: account"));
+        assert!(materialized.contains("embeddingMode: followAi"));
+        assert!(materialized.contains("passiveEmbeddingEnabled: true"));
+        assert!(materialized.contains("preferredModel: gpt-4.1"));
+        let loaded = store
+            .load::<DesktopSettings>(DESKTOP_SETTINGS_SPEC)
+            .unwrap();
+        assert_eq!(loaded.value.ai, settings.ai);
     }
 
     #[test]

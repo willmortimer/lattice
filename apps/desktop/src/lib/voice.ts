@@ -15,6 +15,29 @@ export type VoiceStatus = {
   message: string | null;
 };
 
+/** Confirm-dialog copy for first-time FluidAudio / Parakeet Unified pack download. */
+export const VOICE_MODEL_CONFIRM =
+  "Voice dictation downloads Parakeet Unified (English Core ML, ~608 MB, CC-BY-4.0). The model stays on this Mac and is never uploaded. Continue?";
+
+/** Settings status row label for the optional voice recognition pack. */
+export function voiceStatusLabel(
+  status: VoiceStatus | null,
+  options?: { busy?: boolean; error?: string | null },
+): string {
+  if (options?.error) return "Failed";
+  if (!status) return "Checking…";
+  if (!status.available) return "Unavailable";
+  if (status.preparing || options?.busy) return "Preparing…";
+  if (status.prepared) return "Ready";
+  return "Not prepared";
+}
+
+/** Compact provider line for Settings (FluidAudio · Parakeet Unified). */
+export function voicePackProviderLabel(status: VoiceStatus | null): string | null {
+  if (!status?.available) return null;
+  return "FluidAudio · Parakeet Unified";
+}
+
 export type VoiceSessionStart = {
   sessionId: string;
 };

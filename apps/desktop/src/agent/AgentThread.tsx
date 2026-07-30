@@ -7,6 +7,8 @@ import {
 } from "@assistant-ui/react";
 import { Button } from "@lattice/ui";
 
+import { useAgentSessionStore } from "./agentStore";
+
 export interface AgentThreadProps {
   workspaceRoot: string | null;
 }
@@ -65,13 +67,17 @@ function AgentAssistantMessage() {
   );
 }
 
-function AgentThreadView() {
+function AgentThreadView({ accountAiDisabled }: { accountAiDisabled: boolean }) {
   return (
     <ThreadPrimitive.Root className="agent-thread">
       <ThreadPrimitive.Viewport className="agent-thread-viewport">
         <ThreadPrimitive.Empty>
           <div className="agent-thread-empty">
-            <p>Ask the agent about this workspace.</p>
+            <p>
+              {accountAiDisabled
+                ? "Lattice Account AI is coming soon. Switch to Local or BYO OpenAI in Settings → AI."
+                : "Ask the agent about this workspace."}
+            </p>
           </div>
         </ThreadPrimitive.Empty>
         <ThreadPrimitive.Messages
@@ -80,26 +86,29 @@ function AgentThreadView() {
             AssistantMessage: AgentAssistantMessage,
           }}
         />
-        <ThreadPrimitive.ViewportFooter className="agent-thread-footer">
-          <ComposerPrimitive.Root className="agent-composer">
-            <ComposerPrimitive.Input
-              className="agent-composer-input"
-              placeholder="Message the agent…"
-              rows={3}
-            />
-            <ComposerPrimitive.Send asChild>
-              <Button variant="primary" size="sm" className="agent-composer-send">
-                Send
-              </Button>
-            </ComposerPrimitive.Send>
-          </ComposerPrimitive.Root>
-        </ThreadPrimitive.ViewportFooter>
+        {!accountAiDisabled ? (
+          <ThreadPrimitive.ViewportFooter className="agent-thread-footer">
+            <ComposerPrimitive.Root className="agent-composer">
+              <ComposerPrimitive.Input
+                className="agent-composer-input"
+                placeholder="Message the agent…"
+                rows={3}
+              />
+              <ComposerPrimitive.Send asChild>
+                <Button variant="primary" size="sm" className="agent-composer-send">
+                  Send
+                </Button>
+              </ComposerPrimitive.Send>
+            </ComposerPrimitive.Root>
+          </ThreadPrimitive.ViewportFooter>
+        ) : null}
       </ThreadPrimitive.Viewport>
     </ThreadPrimitive.Root>
   );
 }
 
 export function AgentThread({ workspaceRoot }: AgentThreadProps) {
+  const accountAiDisabled = useAgentSessionStore((state) => state.accountAiDisabled);
   if (!workspaceRoot?.trim()) {
     return (
       <div className="agent-thread-placeholder" role="status">
@@ -108,5 +117,5 @@ export function AgentThread({ workspaceRoot }: AgentThreadProps) {
     );
   }
 
-  return <AgentThreadView />;
+  return <AgentThreadView accountAiDisabled={accountAiDisabled} />;
 }

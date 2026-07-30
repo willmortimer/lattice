@@ -173,10 +173,8 @@ pub fn agent_spawn_env() -> SpawnHostEnv {
         .ok()
         .filter(|value| !value.is_empty())
         .is_some();
-    let openai_key_set = std::env::var(ENV_OPENAI_API_KEY)
-        .ok()
-        .filter(|value| !value.is_empty())
-        .is_some();
+    let resolved_openai_key = crate::ai::resolve_openai_api_key_for_spawn();
+    let openai_key_set = resolved_openai_key.is_some();
 
     let mut using_fake = false;
     if env_truthy(ENV_AGENT_FAKE) {
@@ -194,12 +192,11 @@ pub fn agent_spawn_env() -> SpawnHostEnv {
         }
     }
 
-    for key in [
-        ENV_PIONEER_API_KEY,
-        ENV_OPENAI_API_KEY,
-        ENV_AGENT_PROVIDER,
-        ENV_AGENT_MODEL,
-    ] {
+    if let Some(key) = resolved_openai_key {
+        extra_env.push((ENV_OPENAI_API_KEY.to_string(), key));
+    }
+
+    for key in [ENV_PIONEER_API_KEY, ENV_AGENT_PROVIDER, ENV_AGENT_MODEL] {
         forward_env_var(&mut extra_env, key);
     }
 
