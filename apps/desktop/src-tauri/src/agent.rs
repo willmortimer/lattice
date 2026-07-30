@@ -168,6 +168,7 @@ fn discover_agentd_bin() -> Option<String> {
 /// Spawn env for latticed when the agent plane is first enabled from the desktop.
 pub fn agent_spawn_env() -> SpawnHostEnv {
     let mut extra_env = Vec::new();
+    let desktop_ai = crate::ai::load_desktop_ai_settings();
 
     let pioneer_key_set = std::env::var(ENV_PIONEER_API_KEY)
         .ok()
@@ -176,14 +177,14 @@ pub fn agent_spawn_env() -> SpawnHostEnv {
     let resolved_openai_key = crate::ai::resolve_openai_api_key_for_spawn();
     let openai_key_set = resolved_openai_key.is_some();
 
-    let mut using_fake = false;
-    if env_truthy(ENV_AGENT_FAKE) {
+    let using_fake = crate::ai::should_use_fake_agent_backend(
+        &desktop_ai,
+        env_truthy(ENV_AGENT_FAKE),
+        pioneer_key_set,
+        openai_key_set,
+    );
+    if using_fake {
         extra_env.push((ENV_AGENT_FAKE.to_string(), "1".into()));
-        using_fake = true;
-    } else if !pioneer_key_set && !openai_key_set {
-        // No live provider keys → in-process fake (skip sidecar).
-        extra_env.push((ENV_AGENT_FAKE.to_string(), "1".into()));
-        using_fake = true;
     }
 
     if !using_fake {
@@ -196,7 +197,13 @@ pub fn agent_spawn_env() -> SpawnHostEnv {
         extra_env.push((ENV_OPENAI_API_KEY.to_string(), key));
     }
 
-    for key in [ENV_PIONEER_API_KEY, ENV_AGENT_PROVIDER, ENV_AGENT_MODEL] {
+    if let Some(provider) = crate::ai::agent_provider_for_profile(&desktop_ai) {
+        extra_env.push((ENV_AGENT_PROVIDER.to_string(), provider.into()));
+    } else {
+        forward_env_var(&mut extra_env, ENV_AGENT_PROVIDER);
+    }
+
+    for key in [ENV_PIONEER_API_KEY, ENV_AGENT_MODEL] {
         forward_env_var(&mut extra_env, key);
     }
 
@@ -518,6 +525,27 @@ mod tests {
                 .any(|(key, value)| key == ENV_AGENT_FAKE && value == "1"),
             "expected fake backend when provider keys are absent"
         );
+    }
+
+    #[test]
+    fn agent_spawn_env_forces_openai_provider_for_byo_profile() {
+        let _lock = env_lock().lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _guard = EnvGuard::set(ENV_PIONEER_API_KEY, Some("pioneer-test"));
+        let _openai = EnvGuard::set(ENV_OPENAI_API_KEY, None);
+        let _fake_guard = EnvGuard::set(ENV_AGENT_FAKE, None);
+        let _bin = EnvGuard::set(ENV_AGENTD_BIN, Some("/tmp/lattice-agentd-test"));
+        let _provider = EnvGuard::set(ENV_AGENT_PROVIDER, None);
+
+        let mut settings = crate::ai::load_desktop_ai_settings();
+        settings.mode = lattice_profile::AiMode::ByoOpenai;
+        let provider = crate::ai::agent_provider_for_profile(&settings);
+        assert_eq!(provider, Some("openai"));
+        assert!(!crate::ai::should_use_fake_agent_backend(
+            &settings,
+            false,
+            true,
+            false
+        ));
     }
 
     #[test]

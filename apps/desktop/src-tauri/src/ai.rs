@@ -7,7 +7,7 @@ use lattice_cloud_client::{
     OPENAI_KEY_SERVICE,
 };
 use lattice_profile::{
-    ensure_profile_layout, AiMode, DesktopSettings, DESKTOP_SETTINGS_SPEC,
+    ensure_profile_layout, AiMode, AiSettings, DesktopSettings, DESKTOP_SETTINGS_SPEC,
 };
 
 const ENV_OPENAI_API_KEY: &str = "OPENAI_API_KEY";
@@ -48,6 +48,32 @@ pub fn load_desktop_ai_settings() -> lattice_profile::AiSettings {
         })
         .map(|loaded| loaded.value.ai)
         .unwrap_or_default()
+}
+
+/// When desktop AI mode is BYO OpenAI, agent spawn must pin the OpenAI provider.
+pub fn agent_provider_for_profile(settings: &AiSettings) -> Option<&'static str> {
+    if settings.mode == AiMode::ByoOpenai {
+        Some("openai")
+    } else {
+        None
+    }
+}
+
+/// Whether spawn should use the in-process fake backend instead of the sidecar.
+pub fn should_use_fake_agent_backend(
+    settings: &AiSettings,
+    fake_env: bool,
+    pioneer_key_set: bool,
+    openai_key_set: bool,
+) -> bool {
+    if fake_env {
+        return true;
+    }
+    if settings.mode == AiMode::ByoOpenai {
+        // BYO must not silently fake when the keychain key is missing.
+        return false;
+    }
+    !pioneer_key_set && !openai_key_set
 }
 
 /// Resolve `OPENAI_API_KEY` for daemon/agent spawn when BYO mode is active.
@@ -98,5 +124,26 @@ mod tests {
     fn openai_key_constants_match_keychain_layout() {
         assert_eq!(OPENAI_KEY_SERVICE, "lattice.ai.openai");
         assert_eq!(OPENAI_KEY_ACCOUNT, "api-key");
+    }
+
+    #[test]
+    fn agent_provider_for_profile_forces_openai_for_byo() {
+        let mut settings = AiSettings::default();
+        settings.mode = AiMode::ByoOpenai;
+        assert_eq!(agent_provider_for_profile(&settings), Some("openai"));
+
+        settings.mode = AiMode::Local;
+        assert_eq!(agent_provider_for_profile(&settings), None);
+    }
+
+    #[test]
+    fn should_use_fake_agent_backend_skips_fake_for_byo_without_key() {
+        let mut settings = AiSettings::default();
+        settings.mode = AiMode::ByoOpenai;
+        assert!(!should_use_fake_agent_backend(&settings, false, false, false));
+
+        settings.mode = AiMode::Local;
+        assert!(should_use_fake_agent_backend(&settings, false, false, false));
+        assert!(!should_use_fake_agent_backend(&settings, false, false, true));
     }
 }
