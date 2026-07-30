@@ -3,7 +3,7 @@
 use std::sync::OnceLock;
 
 use lattice_cloud_client::{
-    CloudApiClient, CloudSessionStatus, CloudSessionStore, HttpCloudClient,
+    resolve_cloud_bearer, CloudApiClient, CloudSessionStatus, CloudSessionStore, HttpCloudClient,
     KeychainCloudSessionStore, MemoryCloudSessionStore, cloud_session_status, default_client,
     sign_in, sign_in_with_apple, sign_out,
 };
@@ -40,6 +40,11 @@ fn map_err(err: impl std::fmt::Display) -> String {
 
 pub fn cloud_session_status_cmd() -> Result<CloudSessionStatus, String> {
     cloud_session_status(&api_client(), session_store()).map_err(map_err)
+}
+
+/// Bearer for agent spawn when Lattice paid mode is active (never log the return value).
+pub fn resolve_cloud_bearer_cmd() -> Result<String, String> {
+    resolve_cloud_bearer(session_store()).map_err(map_err)
 }
 
 pub fn cloud_sign_in(email: String, password: String) -> Result<CloudSessionStatus, String> {

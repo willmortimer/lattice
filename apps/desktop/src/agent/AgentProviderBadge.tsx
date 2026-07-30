@@ -34,10 +34,10 @@ export function AgentProviderBadge() {
     return (
       <div className="agent-runtime-controls" aria-label="Agent runtime">
         <span className="agent-provider-badge agent-provider-badge-unknown">
-          Lattice paid · Coming soon
+          Lattice paid · Sign in required
         </span>
         <span className="agent-runtime-hint">
-          Cloud AI is not available yet. Switch to On-device or BYO in Settings → AI.
+          Sign in under Settings → Cloud account to use Lattice-mediated OpenAI.
         </span>
       </div>
     );
@@ -47,7 +47,7 @@ export function AgentProviderBadge() {
   const providerValue: SelectableAgentProvider =
     selectedProvider ?? (isSelectableProvider(kind) ? kind : "openai");
   const providerOptions: SelectableAgentProvider[] =
-    aiMode === "byoOpenai" ? ["openai"] : ["openai", "pioneer"];
+    aiMode === "byoOpenai" || aiMode === "account" ? ["openai"] : ["openai", "pioneer"];
   const modelOptions = modelsForProvider(providerValue);
   const modelValue =
     selectedModel ?? healthModel ?? defaultModelForProvider(providerValue);
@@ -64,7 +64,9 @@ export function AgentProviderBadge() {
   const offlineHint =
     aiMode === "byoOpenai"
       ? "Add your OpenAI API key in Settings → AI"
-      : "Launch with secrets/ai.env via nxr desktop-dev";
+      : aiMode === "account"
+        ? "Sign in under Settings → Cloud account"
+        : "Launch with secrets/ai.env via nxr desktop-dev";
 
   return (
     <div className="agent-runtime-controls" aria-label="Agent runtime">

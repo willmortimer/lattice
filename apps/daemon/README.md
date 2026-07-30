@@ -37,6 +37,7 @@ path, known risks):
 | `LATTICE_AGENT_PROVIDER` | `pioneer` / `openai` / `fake` (passed through to sidecar) |
 | `LATTICE_AGENT_MODEL` | Model id passed through to sidecar |
 | `PIONEER_API_KEY` / `OPENAI_API_KEY` | Injected at `agentd` spawn only (never logged) |
+| `OPENAI_BASE_URL` | OpenAI Responses API origin; Lattice paid uses `{cloud}/v1/ai` |
 
 ```sh
 # Fake backend for daemon tests / local smoke

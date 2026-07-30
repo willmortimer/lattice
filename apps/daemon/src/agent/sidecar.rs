@@ -422,6 +422,7 @@ fn build_agentd_command(
     for key in [
         "PIONEER_API_KEY",
         "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
         "LATTICE_AUTH_TOKEN",
         "LATTICE_API_BASE_URL",
     ] {

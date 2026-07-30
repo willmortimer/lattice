@@ -28,6 +28,11 @@ pub fn cloud_token_from_env() -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+/// Lattice-server OpenAI Responses proxy base (`POST {base}/responses`).
+pub fn cloud_ai_responses_base_url() -> String {
+    format!("{}/v1/ai", cloud_url())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -54,6 +59,12 @@ mod tests {
     fn cloud_token_from_env_ignores_blank() {
         let _guard = EnvGuard::set(CLOUD_TOKEN_ENV, "   ");
         assert_eq!(cloud_token_from_env(), None);
+    }
+
+    #[test]
+    fn cloud_ai_responses_base_url_joins_v1_ai() {
+        let _guard = EnvGuard::set("LATTICE_CLOUD_URL", "https://cloud.test/");
+        assert_eq!(cloud_ai_responses_base_url(), "https://cloud.test/v1/ai");
     }
 
     struct EnvGuard {

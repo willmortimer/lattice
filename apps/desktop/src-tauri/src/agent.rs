@@ -154,12 +154,24 @@ fn discover_agentd_bin() -> Option<String> {
 pub fn agent_spawn_env() -> SpawnHostEnv {
     let mut extra_env = Vec::new();
 
+    let account_credentials = crate::ai::resolve_account_ai_for_spawn();
+    let account_ai_active = account_credentials.is_some();
+
     let pioneer_key_set = std::env::var(ENV_PIONEER_API_KEY)
         .ok()
         .filter(|value| !value.is_empty())
         .is_some();
-    let resolved_openai_key = crate::ai::resolve_openai_api_key_for_spawn();
-    let openai_key_set = resolved_openai_key.is_some();
+    let resolved_openai_key = if account_ai_active {
+        None
+    } else {
+        crate::ai::resolve_openai_api_key_for_spawn()
+    };
+    let openai_key_set = account_ai_active
+        || resolved_openai_key.is_some()
+        || std::env::var(ENV_OPENAI_API_KEY)
+            .ok()
+            .filter(|value| !value.is_empty())
+            .is_some();
 
     let mut using_fake = false;
     if env_truthy(ENV_AGENT_FAKE) {
@@ -177,11 +189,18 @@ pub fn agent_spawn_env() -> SpawnHostEnv {
         }
     }
 
-    if let Some(key) = resolved_openai_key {
+    if let Some(credentials) = account_credentials {
+        extra_env.extend(crate::ai::account_ai_spawn_env(&credentials));
+    } else if let Some(key) = resolved_openai_key {
         extra_env.push((ENV_OPENAI_API_KEY.to_string(), key));
     }
 
-    for key in [ENV_PIONEER_API_KEY, ENV_AGENT_PROVIDER, ENV_AGENT_MODEL] {
+    let forward_keys: &[&str] = if account_ai_active {
+        &[ENV_PIONEER_API_KEY, ENV_AGENT_MODEL]
+    } else {
+        &[ENV_PIONEER_API_KEY, ENV_AGENT_PROVIDER, ENV_AGENT_MODEL]
+    };
+    for key in forward_keys {
         forward_env_var(&mut extra_env, key);
     }
 
