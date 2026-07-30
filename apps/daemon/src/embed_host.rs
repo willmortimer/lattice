@@ -6,8 +6,8 @@
 //! bounded exponential backoff and reconnect the provider.
 //!
 //! Production default discovers/spawns `lattice-embed-host`. In-process Fake is
-//! only selected when `LATTICE_SEMANTIC_FAKE=1`. When
-//! `LATTICE_EMBEDDING_PROVIDER=pioneer`, embeddings use Pioneer
+//! only selected when `LATTICE_SEMANTIC_FAKE=1`. Pioneer is non-product: only when
+//! `LATTICE_EMBEDDING_PROVIDER=pioneer` is set explicitly do embeddings use Pioneer
 //! `/v1/embeddings` in-process (no GGUF). When the host binary cannot be found
 //! and Pioneer is not selected, the controller starts in
 //! [`SemanticProviderMode::Unavailable`] so FTS still works and enable reports
