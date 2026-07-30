@@ -62,7 +62,8 @@ collect → `propose_resource`) and asserts **≥1** reviewable proposal.
 | Mode | Command | Requires |
 | --- | --- | --- |
 | CI / default | `scripts/cell-firecracker-dogfood.sh` or `--dry-run` | Rust toolchain only (mocked celld + latticed via `cell_propose` tests) |
-| Lab / live | `scripts/cell-firecracker-dogfood.sh --live` | Running celld (`CELLD_BASE_URL`), latticed (`LATTICE_API_BASE_URL`, `LATTICE_AUTH_TOKEN`), Firecracker guest media |
+| Lab / live (microVM) | `scripts/cell-firecracker-dogfood.sh --live` | Running celld (`CELLD_BASE_URL`), latticed (`LATTICE_API_BASE_URL`, `LATTICE_AUTH_TOKEN`), Firecracker guest media |
+| Lab / live (OCI, Mac) | `… --live --execution-mode=oci --oci-bundle-path PATH` | `celld --backend=vz` + ivisor-interim env, VirtioFS CellOS image, OCI bundle (see § Mac OCI dogfood) |
 
 **Dry-run (no live celld):**
 
@@ -88,6 +89,60 @@ Live mode runs `cell-firecracker-dogfood` (same path as agentd
 `input/hello.txt` to `/output/out.txt` and proposes under `Reports/`.
 Override with `--` and guest `argv`, or set `CELL_DOGFOOD_WORKSPACE` instead of
 `--workspace`.
+
+### Mac OCI dogfood (VirtioFS + ivisor-interim)
+
+After staging a VirtioFS-capable aarch64 CellOS image (Cell
+[`virtiofs-cellos-image.md`](https://github.com/willmortimer/cell/blob/main/docs/virtiofs-cellos-image.md)
+checklist) and starting `celld --backend=vz` with ivisor-interim enabled, the
+same dogfood script can exercise the OCI execution lane instead of Firecracker
+microVM.
+
+**Prerequisites (Cell repo, Apple Silicon lab):**
+
+1. Staged `cellos-lattice-artifacts` under `~/.cell/images/cellos-aarch64` (or
+   `CELL_VZ_IMAGES_DIR`) with guest `virtiofs`/`fuse` — see Cell
+   `docs/virtiofs-cellos-image.md`.
+2. `cell-host-macos` running (`CELL_VZ_HELPER_SOCKET`).
+3. `celld --backend=vz --http-dev` with OCI ivisor-interim:
+   `CELL_OCI_IVISOR_INTERIM=1`, staged bundle root (`CELL_OCI_BUNDLE_ROOT`), and
+   ivisor workspace (`CELL_OCI_IVISOR_WORKSPACE`). Full runbook: Cell
+   `docs/10-macos-local-backend.md` § OCI mode smoke.
+4. A prepared OCI bundle on the host (e.g. `examples/oci-busybox.cell.yaml` in
+   Cell). Pass its path via `--oci-bundle-path` or `CellSpec.oci_bundle_path`.
+
+**Network egress on OCI:** `KernelFSHydrationPlan` defaults to
+`network_deny_all: true`, which maps to `egress: none` on microVM Apply. OCI
+backends reject that at Apply. With `execution_mode: oci`, `lattice-cell-client`
+**omits** network attachments when deny-all is still true (stderr warning) — you
+do not need to change the plan for a basic OCI dogfood run. Call
+`with_network_deny_all(false)` (or `--allow-network` on the dogfood binary) only
+when OCI egress is explicitly acceptable.
+
+**Live OCI example:**
+
+```sh
+export CELLD_BASE_URL=http://127.0.0.1:8080
+export LATTICE_API_BASE_URL=http://127.0.0.1:18787
+export LATTICE_AUTH_TOKEN=…
+export CELL_OCI_IVISOR_INTERIM=1
+export CELL_OCI_BUNDLE_ROOT=/tmp/cell-oci-bundles
+export CELL_OCI_IVISOR_WORKSPACE=/tmp/cell-ivisor-interim
+
+scripts/cell-firecracker-dogfood.sh --live \
+  --execution-mode=oci \
+  --oci-bundle-path /tmp/cell-oci-bundles/cell_oci01 \
+  --workspace /path/to/workspace \
+  --hydrate input/hello.txt
+```
+
+`--execution-mode=oci` sets `ProjectionRunRequest.execution_mode` to
+`EXECUTION_MODE_OCI`. Agent mount paths under the worker `agent-share` tree are
+remapped to VirtioFS guest paths at OCI Start (Cell
+`docs/28-oci-agent-mount-contract.md`).
+
+**Dry-run** (`--dry-run`) stays microVM-only — it runs mocked `cell_propose`
+tests and does not require celld or an OCI bundle.
 
 ## agentd tool: `run_cell_task`
 

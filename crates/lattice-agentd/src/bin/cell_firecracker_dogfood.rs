@@ -1,4 +1,4 @@
-//! One-shot Firecracker dogfood: celld hydrate → run → collect → propose_resource.
+//! One-shot celld dogfood: hydrate → run → collect → propose_resource.
 //!
 //! Invoked by `scripts/cell-firecracker-dogfood.sh --live`. Requires `CELLD_BASE_URL`,
 //! `LATTICE_API_BASE_URL`, and `LATTICE_AUTH_TOKEN`.
@@ -9,8 +9,8 @@ use lattice_agentd::cell_host::{run_cell_task_and_propose, CellProposalProvenanc
 use lattice_agentd::lattice_client::lattice_client_from_env;
 use lattice_agentd::wasi_host::WorkspaceBinding;
 use lattice_cell_client::{
-    require_celld_base_url, CelldClient, HttpCelldClient, HydrateFile, KernelFSHydrationPlan,
-    ProjectionRunRequest,
+    is_oci_execution_mode, require_celld_base_url, CelldClient, HttpCelldClient, HydrateFile,
+    KernelFSHydrationPlan, ProjectionRunRequest, EXECUTION_MODE_OCI,
 };
 use serde_json::json;
 use tempfile::TempDir;
@@ -33,6 +33,9 @@ struct Cli {
     output_target: String,
     hydrate_paths: Vec<String>,
     argv: Vec<String>,
+    execution_mode: String,
+    oci_bundle_path: String,
+    allow_network: bool,
 }
 
 #[tokio::main]
@@ -60,13 +63,28 @@ async fn run() -> Result<(), String> {
     std::fs::create_dir_all(&input_host).map_err(|err| err.to_string())?;
     std::fs::create_dir_all(&output_host).map_err(|err| err.to_string())?;
 
+    let mut plan = KernelFSHydrationPlan::from_role_paths(input_host, None, output_host);
+    if cli.allow_network {
+        plan = plan.with_network_deny_all(false);
+    }
+
+    let execution_mode = normalize_execution_mode(&cli.execution_mode)?;
+    if is_oci_execution_mode(&execution_mode) && cli.oci_bundle_path.trim().is_empty() {
+        return Err(
+            "--oci-bundle-path is required when --execution-mode=oci (live Mac OCI dogfood)"
+                .into(),
+        );
+    }
+
     let request = ProjectionRunRequest {
         cell_id: cli.cell_id.clone(),
         projection_id: cli.projection_id.clone(),
-        plan: KernelFSHydrationPlan::from_role_paths(input_host, None, output_host),
+        plan,
         hydrate_files,
         argv: cli.argv.clone(),
         task_id: cli.projection_id.clone(),
+        execution_mode,
+        oci_bundle_path: cli.oci_bundle_path.clone(),
         ..ProjectionRunRequest::default()
     };
 
@@ -152,6 +170,17 @@ fn parse_cli(args: Vec<String>) -> Result<Cli, String> {
                 }
                 cli.hydrate_paths.push(path);
             }
+            "--execution-mode" => {
+                index += 1;
+                cli.execution_mode = next_value(&args, &mut index, "--execution-mode")?;
+            }
+            "--oci-bundle-path" => {
+                index += 1;
+                cli.oci_bundle_path = next_value(&args, &mut index, "--oci-bundle-path")?;
+            }
+            "--allow-network" => {
+                cli.allow_network = true;
+            }
             "--" => {
                 cli.argv = args[index + 1..].to_vec();
                 if cli.argv.is_empty() {
@@ -222,4 +251,17 @@ fn load_hydrate_files(workspace_root: &str, hydrate_paths: &[String]) -> Result<
         files.push(HydrateFile::text(format!("input/{guest_name}"), content));
     }
     Ok(files)
+}
+
+fn normalize_execution_mode(raw: &str) -> Result<String, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("microvm") {
+        return Ok(String::new());
+    }
+    if is_oci_execution_mode(trimmed) {
+        return Ok(EXECUTION_MODE_OCI.to_string());
+    }
+    Err(format!(
+        "unsupported --execution-mode {raw:?} (use oci or leave empty for microVM)"
+    ))
 }
