@@ -12,6 +12,7 @@ pub mod pioneer;
 pub mod protocol;
 pub mod responses;
 pub mod seatbelt;
+pub mod secret_handles;
 pub mod tools;
 pub mod wasi_host;
 
@@ -21,6 +22,7 @@ pub use pioneer::{emit_pioneer_run, PioneerRunOptions};
 pub use protocol::{AgentCommand, AgentEvent, ProviderKind, PROTOCOL_VERSION};
 pub use responses::{emit_openai_run, OpenaiRunOptions, ResponsesError};
 pub use tools::{openai_tool_definitions, ToolRunContext, WORKSPACE_AGENT_INSTRUCTIONS};
+pub use secret_handles::{parse_secret_handle_allowlist, secret_handles_from_env, SECRET_HANDLES_ENV};
 pub use wasi_host::{
     propose_output_drafts, propose_output_drafts_with_provenance, run_wasi_guest,
     run_wasi_guest_with_options, wasi_run_error_json, DraftProvenance, WorkspaceBinding,

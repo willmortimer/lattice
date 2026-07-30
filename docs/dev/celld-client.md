@@ -29,6 +29,25 @@ KernelFS role paths → KernelFSHydrationPlan
 Roles are KernelFS only: `input` / `work` / `output` (guest mounts `/input`,
 `/work`, `/output`). Do not invent parallel mount vocabulary.
 
+### Network egress (microVM vs OCI)
+
+`KernelFSHydrationPlan` defaults to `network_deny_all: true`, which maps to
+`networks[].egress: none` on Apply. That policy is **enforced on Linux
+Firecracker** (guest launched without a NIC) and is the right default for
+microVM / Firecracker dogfood.
+
+OCI backends (`execution_mode: oci` / `EXECUTION_MODE_OCI`) **reject**
+`egress: none` at Apply. The client never silently sends deny-all networks to
+OCI:
+
+- Unset `execution_mode` (microVM): deny-all networks are attached as today.
+- `execution_mode: oci`: network attachments are **omitted** when
+  `network_deny_all` is true (stderr warning). Call
+  `with_network_deny_all(false)` explicitly when OCI egress is acceptable.
+
+Set `ProjectionRunRequest.execution_mode` to `EXECUTION_MODE_OCI` (or `"oci"`)
+for OCI cells. Optional `oci_bundle_path` is forwarded to `CellSpec`.
+
 ```sh
 export CELLD_BASE_URL=http://127.0.0.1:8080
 cargo test -p lattice-cell-client

@@ -11,8 +11,8 @@ use std::time::Duration;
 use kernelfs::{
     collect_output_commit_plan, materialize_with_options, run_wasi_guest as kernelfs_run,
     ContentKind, ExecutionManifest, HostPathPolicy, HydrationRecord, LatticeProposalAdapter,
-    LatticeProposalDraft, MaterializeError, MaterializeOptions, SecretHandlePolicy,
-    WasmtimeLimits, WasiRunError, WasiRunOptions, WasiRunResult,
+    LatticeProposalDraft, MaterializeError, MaterializeOptions, SecretHandleEntry,
+    SecretHandlePolicy, WasmtimeLimits, WasiRunError, WasiRunOptions, WasiRunResult,
 };
 use serde_json::{json, Value};
 use thiserror::Error;
@@ -80,6 +80,8 @@ pub struct WasiGuestHostOptions {
     pub cancel: Option<Arc<AtomicBool>>,
     /// When set, input host paths must canonicalize under these roots.
     pub host_path_roots: Vec<std::path::PathBuf>,
+    /// Host paths allowed for manifest secret handles (`/run/secrets/<id>`).
+    pub secret_handle_allowlist: Vec<SecretHandleEntry>,
 }
 
 /// Provenance attached to proposed KernelFS output drafts.
@@ -221,12 +223,17 @@ pub fn run_wasi_guest_with_options(
     wasm_bytes: &[u8],
     options: &WasiGuestHostOptions,
 ) -> Result<WasiGuestRunResult, WasiHostError> {
+    let secret_handle_policy = if options.secret_handle_allowlist.is_empty() {
+        SecretHandlePolicy::DenyAll
+    } else {
+        SecretHandlePolicy::AllowHandles(&options.secret_handle_allowlist)
+    };
     let run_dir = materialize_with_options(
         run_parent,
         manifest,
         &MaterializeOptions {
             host_path_policy: HostPathPolicy::AllowRoots(&options.host_path_roots),
-            secret_handle_policy: SecretHandlePolicy::DenyAll,
+            secret_handle_policy,
         },
     )?;
 
@@ -345,6 +352,38 @@ pub async fn propose_output_drafts_with_provenance<P: DraftProvenance + Sync>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kernelfs::{Capabilities, SecretHandle};
+
+    #[test]
+    fn deny_all_when_secret_allowlist_empty() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let secret = temp.path().join("api-key.txt");
+        std::fs::write(&secret, b"secret").expect("write secret");
+        let manifest = ExecutionManifest {
+            run_id: "run_secret_deny".into(),
+            base_snapshot: "snap".into(),
+            mounts: Default::default(),
+            capabilities: Capabilities {
+                secrets: vec![SecretHandle {
+                    id: "api-key".into(),
+                }],
+                ..Default::default()
+            },
+        };
+        let err = materialize_with_options(
+            temp.path(),
+            &manifest,
+            &MaterializeOptions {
+                host_path_policy: HostPathPolicy::UnrestrictedForTests,
+                secret_handle_policy: SecretHandlePolicy::DenyAll,
+            },
+        )
+        .expect_err("deny by default");
+        assert!(matches!(
+            err,
+            MaterializeError::SecretHandleNotAllowed { .. }
+        ));
+    }
 
     #[test]
     fn maps_fuel_exhausted_to_structured_json() {
