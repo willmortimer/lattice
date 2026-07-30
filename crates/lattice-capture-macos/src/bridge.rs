@@ -9,9 +9,9 @@ use lattice_capture_core::CaptureError;
 use crate::error::{ensure_abi_version, map_status};
 #[cfg(link_bridge)]
 use crate::ffi;
-use crate::ffi::{
-    BridgeImage, LatticeCaptureDisplayInfo, LatticeCaptureImageOut, LatticeCaptureRegion,
-};
+use crate::ffi::{BridgeImage, LatticeCaptureDisplayInfo, LatticeCaptureRegion};
+#[cfg(link_bridge)]
+use crate::ffi::LatticeCaptureImageOut;
 #[cfg(link_bridge)]
 use crate::LATTICE_CAPTURE_BRIDGE_ABI_VERSION;
 

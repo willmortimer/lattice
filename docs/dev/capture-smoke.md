@@ -4,7 +4,7 @@ Manual verification for macOS still capture (ScreenCaptureKit → clipboard +
 Capture Inbox). Automated tests cover path helpers, ingest validation, and event
 constants only — **CI does not run interactive ScreenCaptureKit overlays**.
 
-Related: [capture and media roadmap §R1](../architecture/capture-and-media.md#r1--screenshot-foundation-featclipper-t1--in-scope).
+Related: [capture and media roadmap §R1](../architecture/capture-and-media.md).
 
 ## Build
 
