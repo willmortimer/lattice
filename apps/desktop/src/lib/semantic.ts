@@ -36,6 +36,13 @@ export type SemanticUiEvent = {
 export const SEMANTIC_MODEL_CONFIRM =
   "Semantic search downloads Qwen3-Embedding-0.6B (Q8, ~640 MB, Apache-2.0). The model stays on this Mac and is never uploaded. Continue?";
 
+/** Runtime message when Lance vectors lag the workspace snapshot (maps to indexing). */
+export const VECTORS_BEHIND_MESSAGE = "vectors behind workspace";
+
+/** Short explanation for the vectors-behind diagnostics card. */
+export const VECTORS_BEHIND_EXPLANATION =
+  "Workspace content changed since the last embedding pass. Keyword search still works; refresh to catch vectors up.";
+
 export async function getSemanticStatus(root: string): Promise<SemanticStatus> {
   return invoke<SemanticStatus>("semantic_status", { root });
 }
@@ -71,11 +78,25 @@ export function isSemanticStatusState(value: string): value is SemanticStatusSta
   }
 }
 
+/** True when runtime reports Lance vectors lagging the workspace (generic Indexing otherwise). */
+export function isVectorsBehindStatus(status: {
+  state: SemanticStatusState | string;
+  message?: string | null;
+  pendingChunks?: number | null;
+}): boolean {
+  if (status.state !== "indexing") return false;
+  const message = status.message?.trim().toLowerCase() ?? "";
+  if (!message.includes(VECTORS_BEHIND_MESSAGE)) return false;
+  // Runtime only emits this when pending is empty; tolerate null pending.
+  return (status.pendingChunks ?? 0) === 0;
+}
+
 /** Settings / status row label for a semantic lifecycle state. */
 export function semanticStatusLabel(
   state: SemanticStatusState | string,
   pendingChunks: number | null | undefined,
   progressPercent?: number | null,
+  message?: string | null,
 ): string {
   if (!isSemanticStatusState(state)) {
     return `Unknown (${state})`;
@@ -88,6 +109,9 @@ export function semanticStatusLabel(
     case "preparing":
       return "Preparing…";
     case "indexing":
+      if (isVectorsBehindStatus({ state, message, pendingChunks })) {
+        return "Vectors behind workspace";
+      }
       return pendingChunks != null && pendingChunks > 0
         ? `Indexing (${pendingChunks} pending)`
         : "Indexing…";
@@ -115,4 +139,10 @@ export function semanticProviderLabel(status: {
   if (status.modelId) parts.push(status.modelId);
   if (status.dimensions != null) parts.push(`${status.dimensions}-d`);
   return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+/** True when the local embedding pack is present or actively preparing (not stopped). */
+export function isSemanticPackPrepared(status: SemanticStatus | null): boolean {
+  if (!status) return false;
+  return status.state !== "stopped" && status.state !== "failed";
 }

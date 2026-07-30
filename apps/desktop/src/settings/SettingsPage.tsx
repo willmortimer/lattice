@@ -47,10 +47,12 @@ import {
   disableSemanticSearch,
   enableSemanticSearch,
   getSemanticStatus,
+  isVectorsBehindStatus,
   listenSemanticEvents,
   SEMANTIC_MODEL_CONFIRM,
   semanticProviderLabel,
   semanticStatusLabel,
+  VECTORS_BEHIND_EXPLANATION,
   type SemanticStatus,
 } from "../lib/semantic";
 import type { WorkspaceSnapshot } from "../types";
@@ -569,6 +571,9 @@ export function SettingsPage({
         {section === "ai" && (
           <AiSettingsPanel
             ai={settings.ai}
+            workspaceRoot={workspace.root || null}
+            semanticEnabled={settings.search.semanticEnabled}
+            onSemanticEnabledChange={(semanticEnabled) => update("search", { semanticEnabled })}
             onChange={(patch) => update("ai", patch)}
             onOpenCloud={() => setSection("cloud")}
             onOpenVoice={() => setSection("voice")}
@@ -580,6 +585,7 @@ export function SettingsPage({
             workspaceRoot={workspace.root || null}
             semanticEnabled={settings.search.semanticEnabled}
             onSemanticEnabledChange={(semanticEnabled) => update("search", { semanticEnabled })}
+            onOpenAi={() => setSection("ai")}
           />
         )}
 
@@ -768,11 +774,17 @@ const AI_MODE_OPTIONS: Array<{
 
 function AiSettingsPanel({
   ai,
+  workspaceRoot,
+  semanticEnabled,
+  onSemanticEnabledChange,
   onChange,
   onOpenCloud,
   onOpenVoice,
 }: {
   ai: AppSettings["ai"];
+  workspaceRoot: string | null;
+  semanticEnabled: boolean;
+  onSemanticEnabledChange: (semanticEnabled: boolean) => void;
   onChange: (patch: Partial<AppSettings["ai"]>) => void;
   onOpenCloud: () => void;
   onOpenVoice: () => void;
@@ -1004,7 +1016,7 @@ function AiSettingsPanel({
       </SettingRow>
       <SettingRow
         title="Passive embedding"
-        description="Allow background embedding when the workspace is idle. Pack download and Lance freshness land with Embeddings below."
+        description="Allow background embedding when the workspace is idle. Pack download and vector freshness are under Embeddings below."
       >
         <Toggle
           label="Passive embedding"
@@ -1013,7 +1025,13 @@ function AiSettingsPanel({
         />
       </SettingRow>
 
-      <EmbeddingPackSettings />
+      <EmbeddingPackSettings
+        workspaceRoot={workspaceRoot}
+        semanticEnabled={semanticEnabled}
+        onSemanticEnabledChange={onSemanticEnabledChange}
+        embeddingMode={ai.embeddingMode}
+        passiveEmbeddingEnabled={ai.passiveEmbeddingEnabled}
+      />
 
       <h2 className="settings-subsection">Optional packs</h2>
       <SettingRow
@@ -1032,10 +1050,12 @@ function SemanticSearchSettings({
   workspaceRoot,
   semanticEnabled,
   onSemanticEnabledChange,
+  onOpenAi,
 }: {
   workspaceRoot: string | null;
   semanticEnabled: boolean;
   onSemanticEnabledChange: (semanticEnabled: boolean) => void;
+  onOpenAi: () => void;
 }) {
   const [status, setStatus] = useState<SemanticStatus | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1168,18 +1188,25 @@ function SemanticSearchSettings({
   }
 
   const statusText = status
-    ? semanticStatusLabel(status.state, status.pendingChunks, status.progressPercent)
+    ? semanticStatusLabel(
+        status.state,
+        status.pendingChunks,
+        status.progressPercent,
+        status.message,
+      )
     : semanticEnabled
       ? "Preparing…"
       : "Not prepared";
   const providerText = status ? semanticProviderLabel(status) : null;
+  const vectorsBehind = status != null && isVectorsBehindStatus(status);
 
   return (
     <>
       <h1>Search</h1>
       <p className="settings-copy">
         Keyword search is always available. Semantic search uses a local embedding model to find
-        related passages by meaning, not just exact words.
+        related passages by meaning, not just exact words. Pack download and vector freshness live
+        under AI → Embeddings.
       </p>
       {inBrowser ? (
         <div className="diagnostics-card">
@@ -1218,6 +1245,20 @@ function SemanticSearchSettings({
               )}
             </span>
           </SettingRow>
+          <SettingRow
+            title="Embedding pack"
+            description="Download, provider status, and Lance freshness controls."
+          >
+            <Button size="sm" variant="secondary" onClick={onOpenAi}>
+              Open AI → Embeddings
+            </Button>
+          </SettingRow>
+          {vectorsBehind ? (
+            <div className="diagnostics-card" role="status">
+              <strong>Vectors behind workspace</strong>
+              <span>{VECTORS_BEHIND_EXPLANATION}</span>
+            </div>
+          ) : null}
           {error ? (
             <div className="diagnostics-card" role="alert">
               <strong>Semantic search error</strong>
