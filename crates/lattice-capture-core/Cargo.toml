@@ -1,0 +1,12 @@
+[package]
+name = "lattice-capture-core"
+description = "Provider-neutral screen capture types and CaptureBackend trait for Lattice"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+
+[dev-dependencies]

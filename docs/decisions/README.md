@@ -68,5 +68,7 @@ Cells, and candid sequencing — lives in the private umbrella:
 - [ADR 0049: App lock is session privacy via LocalAuthentication, not encryption](0049-app-lock-session-privacy-local-authentication.md)
 - [ADR 0050: Use open Deck packages for portable presentations](0050-open-deck-packages.md)
 - [ADR 0051: Rust embedded agent harness replaces Node `agentd`](0051-rust-embedded-agent-harness.md)
+- [ADR 0052: Universal capture engine with native hot paths](0052-universal-capture-engine.md)
+- [ADR 0053: Lattice media asset model](0053-lattice-media-asset-model.md)
 
 Voice subsystem ADRs: [`docs/voice/adr/`](../voice/adr/).

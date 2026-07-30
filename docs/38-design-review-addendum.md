@@ -348,6 +348,12 @@ Early capture surfaces include:
 - Email-to-inbox connector.
 - Clipboard and file-drop inbox.
 
+Contracts for universal capture, Capture Inbox semantics, and the Lattice media
+asset model are locked in [ADR 0052](decisions/0052-universal-capture-engine.md),
+[ADR 0053](decisions/0053-lattice-media-asset-model.md), and the
+[capture and media roadmap](architecture/capture-and-media.md) (train R1 on
+`feat/clipper-t1`).
+
 A lightweight share component may create portable inbox packages without loading the complete workspace runtime.
 
 ### 8.3 Define deletion and dangling references
