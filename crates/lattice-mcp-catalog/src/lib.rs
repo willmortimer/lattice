@@ -13,8 +13,10 @@
 //! Relay request/response types are shared JSON shapes for the outbound
 //! device tunnel (not MCP itself).
 
+use std::sync::LazyLock;
+
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 /// Gateway → device tool invocation over the Lattice Relay Protocol.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -94,36 +96,96 @@ pub enum ExecutionTarget {
     Device,
 }
 
-/// Names that always execute in the cloud, independent of the prefix rule
-/// below (kept explicit so the mapping doesn't rely solely on string shape).
-const CLOUD_TOOL_NAMES: &[&str] = &[
-    TOOL_WORKSPACE_SHARE,
-    TOOL_WORKSPACE_PUBLISH,
-    TOOL_WORKSPACE_BACKUP_LIST,
-    TOOL_WORKSPACE_BACKUP_PUT,
-];
+/// Whether a tool parameter appears in local-only, remote-only, or both schemas.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ParamVisibility {
+    /// Included in both local and remote tool schemas.
+    All,
+    /// Included only in local (device) tool schemas (e.g. filesystem `root`).
+    LocalOnly,
+    /// Included only in remote (gateway) tool schemas.
+    RemoteOnly,
+}
 
-/// Namespace prefixes reserved for cloud-owned tools, so future additions
-/// under `workspace.backup.*` / `workspace.share.*` / `workspace.publish.*`
-/// route to the cloud without touching this table.
-const CLOUD_TOOL_PREFIXES: &[&str] = &["workspace.backup.", "workspace.share.", "workspace.publish."];
+/// One input parameter for a [`ToolSpec`].
+#[derive(Debug, Clone)]
+pub struct ToolParam {
+    pub name: String,
+    pub visibility: ParamVisibility,
+    pub schema: Value,
+}
 
-/// Determine which runtime must execute a `tools/call` for `name`.
-///
-/// Cloud-owned tools (`workspace.share`, `workspace.publish`,
-/// `workspace.backup_list`, `workspace.backup_put`, and any
-/// `workspace.backup.*` / `workspace.share.*` / `workspace.publish.*`
-/// namespace) resolve to [`ExecutionTarget::Cloud`]. Everything else
-/// (search/read/proposal/dataset tools) resolves to [`ExecutionTarget::Device`].
-pub fn execution_target(name: &str) -> ExecutionTarget {
-    if CLOUD_TOOL_NAMES.contains(&name) || CLOUD_TOOL_PREFIXES.iter().any(|p| name.starts_with(p)) {
-        ExecutionTarget::Cloud
-    } else {
-        ExecutionTarget::Device
+/// Canonical definition of one MCP tool: routing, description, and parameters.
+#[derive(Debug, Clone)]
+pub struct ToolSpec {
+    pub name: &'static str,
+    pub description: &'static str,
+    pub target: ExecutionTarget,
+    pub params: Vec<ToolParam>,
+    pub required: Vec<String>,
+}
+
+impl ToolSpec {
+    /// Build an MCP `inputSchema` for the local (device) tool surface.
+    pub fn local_input_schema(&self) -> Value {
+        build_input_schema(&self.params, &self.required, |visibility| {
+            matches!(
+                visibility,
+                ParamVisibility::All | ParamVisibility::LocalOnly
+            )
+        })
+    }
+
+    /// Build an MCP `inputSchema` for the remote (gateway) tool surface.
+    pub fn remote_input_schema(&self) -> Value {
+        build_input_schema(&self.params, &self.required, |visibility| {
+            matches!(
+                visibility,
+                ParamVisibility::All | ParamVisibility::RemoteOnly
+            )
+        })
+    }
+
+    fn local_descriptor(&self) -> Value {
+        tool_descriptor(self.name, self.description, self.local_input_schema())
+    }
+
+    fn remote_descriptor(&self) -> Value {
+        tool_descriptor(self.name, self.description, self.remote_input_schema())
     }
 }
 
-fn tool(name: &'static str, description: &'static str, input_schema: Value) -> Value {
+fn build_input_schema(
+    params: &[ToolParam],
+    required: &[String],
+    include: impl Fn(ParamVisibility) -> bool,
+) -> Value {
+    let mut properties = Map::new();
+    for param in params {
+        if include(param.visibility) {
+            properties.insert(param.name.clone(), param.schema.clone());
+        }
+    }
+
+    let required: Vec<&str> = required
+        .iter()
+        .map(String::as_str)
+        .filter(|name| properties.contains_key(*name))
+        .collect();
+
+    let mut schema = json!({
+        "type": "object",
+        "properties": Value::Object(properties),
+    });
+
+    if !required.is_empty() {
+        schema["required"] = json!(required);
+    }
+
+    schema
+}
+
+fn tool_descriptor(name: &str, description: &str, input_schema: Value) -> Value {
     json!({
         "name": name,
         "description": description,
@@ -131,278 +193,386 @@ fn tool(name: &'static str, description: &'static str, input_schema: Value) -> V
     })
 }
 
-/// Local (device-executed) tool descriptors, in canonical, deterministic
-/// order. This is the order used by both [`local_tools`] and the local
-/// prefix of [`remote_tools`].
-fn local_tool_descriptors() -> Vec<Value> {
+fn string_param(name: &str, visibility: ParamVisibility) -> ToolParam {
+    ToolParam {
+        name: name.to_string(),
+        visibility,
+        schema: json!({ "type": "string" }),
+    }
+}
+
+fn workspace_id_param() -> ToolParam {
+    string_param("workspaceId", ParamVisibility::All)
+}
+
+fn root_param() -> ToolParam {
+    string_param("root", ParamVisibility::LocalOnly)
+}
+
+fn root_search_param() -> ToolParam {
+    ToolParam {
+        name: "root".to_string(),
+        visibility: ParamVisibility::LocalOnly,
+        schema: json!({
+            "type": "string",
+            "description": "Workspace path when no session id is known"
+        }),
+    }
+}
+
+fn build_tool_specs() -> Vec<ToolSpec> {
     vec![
-        tool(
-            TOOL_WORKSPACE_SEARCH,
-            "Hybrid or FTS search over an open Lattice workspace. Returns provenance and export-policy flags; ask/deny excerpts are redacted.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string", "description": "Workspace path when no session id is known" },
-                    "query": { "type": "string" },
-                    "limit": { "type": "integer" },
-                    "mode": { "type": "string", "enum": ["hybrid", "fts"] }
+        ToolSpec {
+            name: TOOL_WORKSPACE_SEARCH,
+            description: "Hybrid or FTS search over an open Lattice workspace. Returns provenance and export-policy flags; ask/deny excerpts are redacted.",
+            target: ExecutionTarget::Device,
+            params: vec![
+                workspace_id_param(),
+                root_search_param(),
+                string_param("query", ParamVisibility::All),
+                ToolParam {
+                    name: "limit".to_string(),
+                    visibility: ParamVisibility::All,
+                    schema: json!({ "type": "integer" }),
                 },
-                "required": ["query"]
-            }),
-        ),
-        tool(
-            TOOL_WORKSPACE_READ,
-            "Read a bounded byte range from a workspace page/resource.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "path": { "type": "string" },
-                    "startByte": { "type": "integer" },
-                    "endByte": { "type": "integer" },
-                    "maxBytes": { "type": "integer" }
+                ToolParam {
+                    name: "mode".to_string(),
+                    visibility: ParamVisibility::All,
+                    schema: json!({ "type": "string", "enum": ["hybrid", "fts"] }),
                 },
-                "required": ["path"]
-            }),
-        ),
-        tool(
-            TOOL_WORKSPACE_RELATED,
-            "Find related resources via backlinks and FTS.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "path": { "type": "string" },
-                    "limit": { "type": "integer" }
+            ],
+            required: vec!["query".to_string()],
+        },
+        ToolSpec {
+            name: TOOL_WORKSPACE_READ,
+            description: "Read a bounded byte range from a workspace page/resource.",
+            target: ExecutionTarget::Device,
+            params: vec![
+                workspace_id_param(),
+                root_param(),
+                string_param("path", ParamVisibility::All),
+                ToolParam {
+                    name: "startByte".to_string(),
+                    visibility: ParamVisibility::All,
+                    schema: json!({ "type": "integer" }),
                 },
-                "required": ["path"]
-            }),
-        ),
-        tool(
-            TOOL_WORKSPACE_BUILD_CONTEXT,
-            "Assemble bounded context excerpts for a query. Respects export_policy (ask/deny omitted or flagged).",
-            json!({
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "query": { "type": "string" },
-                    "limit": { "type": "integer" },
-                    "maxBytes": { "type": "integer" }
+                ToolParam {
+                    name: "endByte".to_string(),
+                    visibility: ParamVisibility::All,
+                    schema: json!({ "type": "integer" }),
                 },
-                "required": ["query"]
-            }),
-        ),
-        tool(
-            TOOL_WORKSPACE_DATASET_GET_SCHEMA,
-            "Return column names/types for a .dataset package via a bounded LIMIT 0 describe. Does not mutate the workspace.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "path": { "type": "string", "description": "Workspace-relative .dataset path" },
-                    "sql": { "type": "string", "description": "Optional DuckDB relation SQL; defaults to facts/**/*.parquet" }
+                ToolParam {
+                    name: "maxBytes".to_string(),
+                    visibility: ParamVisibility::All,
+                    schema: json!({ "type": "integer" }),
                 },
-                "required": ["path"]
-            }),
-        ),
-        tool(
-            TOOL_WORKSPACE_DATASET_PROFILE,
-            "Bounded DuckDB SUMMARIZE profile for a .dataset package (optional sample-row cap). Read-only.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "path": { "type": "string" },
-                    "sql": { "type": "string" },
-                    "maxSampleRows": { "type": "integer" }
+            ],
+            required: vec!["path".to_string()],
+        },
+        ToolSpec {
+            name: TOOL_WORKSPACE_RELATED,
+            description: "Find related resources via backlinks and FTS.",
+            target: ExecutionTarget::Device,
+            params: vec![
+                workspace_id_param(),
+                root_param(),
+                string_param("path", ParamVisibility::All),
+                ToolParam {
+                    name: "limit".to_string(),
+                    visibility: ParamVisibility::All,
+                    schema: json!({ "type": "integer" }),
                 },
-                "required": ["path"]
-            }),
-        ),
-        tool(
-            TOOL_WORKSPACE_PROPOSAL_CREATE,
-            "Create a reviewable transaction proposal from semantic commands. Does not apply mutations.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "summary": { "type": "string" },
-                    "commands": { "type": "array", "items": { "type": "object" } },
-                    "affectedPaths": { "type": "array", "items": { "type": "string" } },
-                    "warnings": { "type": "array", "items": { "type": "string" } },
-                    "sourceResource": { "type": "string" }
+            ],
+            required: vec!["path".to_string()],
+        },
+        ToolSpec {
+            name: TOOL_WORKSPACE_BUILD_CONTEXT,
+            description: "Assemble bounded context excerpts for a query. Respects export_policy (ask/deny omitted or flagged).",
+            target: ExecutionTarget::Device,
+            params: vec![
+                workspace_id_param(),
+                root_param(),
+                string_param("query", ParamVisibility::All),
+                ToolParam {
+                    name: "limit".to_string(),
+                    visibility: ParamVisibility::All,
+                    schema: json!({ "type": "integer" }),
                 },
-                "required": ["summary", "commands"]
-            }),
-        ),
-        tool(
-            TOOL_WORKSPACE_PROPOSAL_LIST,
-            "List pending transaction proposals in the workspace inbox.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" }
-                }
-            }),
-        ),
-        tool(
-            TOOL_WORKSPACE_PROPOSAL_GET,
-            "Load one pending transaction proposal by id.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "proposalId": { "type": "string" }
+                ToolParam {
+                    name: "maxBytes".to_string(),
+                    visibility: ParamVisibility::All,
+                    schema: json!({ "type": "integer" }),
                 },
-                "required": ["proposalId"]
-            }),
-        ),
-        tool(
-            TOOL_WORKSPACE_PROPOSAL_PROPOSE_PAGE,
-            "Typed helper to propose creating a page. Does not write the page directly.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "path": { "type": "string" },
-                    "content": { "type": "string" },
-                    "title": { "type": "string" }
+            ],
+            required: vec!["query".to_string()],
+        },
+        ToolSpec {
+            name: TOOL_WORKSPACE_DATASET_GET_SCHEMA,
+            description: "Return column names/types for a .dataset package via a bounded LIMIT 0 describe. Does not mutate the workspace.",
+            target: ExecutionTarget::Device,
+            params: vec![
+                workspace_id_param(),
+                root_param(),
+                ToolParam {
+                    name: "path".to_string(),
+                    visibility: ParamVisibility::All,
+                    schema: json!({
+                        "type": "string",
+                        "description": "Workspace-relative .dataset path"
+                    }),
                 },
-                "required": ["path"]
-            }),
-        ),
-        tool(
-            TOOL_WORKSPACE_PROPOSAL_PROPOSE_RESOURCE,
-            "Propose creating a text resource via resource-create. Does not apply.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "path": { "type": "string" },
-                    "content": { "type": "string" },
-                    "summary": { "type": "string" }
+                ToolParam {
+                    name: "sql".to_string(),
+                    visibility: ParamVisibility::All,
+                    schema: json!({
+                        "type": "string",
+                        "description": "Optional DuckDB relation SQL; defaults to facts/**/*.parquet"
+                    }),
                 },
-                "required": ["path", "content"]
-            }),
-        ),
-        tool(
-            TOOL_WORKSPACE_PROPOSAL_PROPOSE_WORKFLOW,
-            "Validate workflow YAML and propose creating the workflow file. Does not apply.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "path": { "type": "string" },
-                    "content": { "type": "string" },
-                    "summary": { "type": "string" }
+            ],
+            required: vec!["path".to_string()],
+        },
+        ToolSpec {
+            name: TOOL_WORKSPACE_DATASET_PROFILE,
+            description: "Bounded DuckDB SUMMARIZE profile for a .dataset package (optional sample-row cap). Read-only.",
+            target: ExecutionTarget::Device,
+            params: vec![
+                workspace_id_param(),
+                root_param(),
+                string_param("path", ParamVisibility::All),
+                string_param("sql", ParamVisibility::All),
+                ToolParam {
+                    name: "maxSampleRows".to_string(),
+                    visibility: ParamVisibility::All,
+                    schema: json!({ "type": "integer" }),
                 },
-                "required": ["path", "content"]
-            }),
-        ),
-        tool(
-            TOOL_WORKSPACE_PROPOSAL_PROPOSE_INTERFACE,
-            "Validate interface YAML and propose creating the interface file. Does not apply.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "path": { "type": "string" },
-                    "content": { "type": "string" },
-                    "summary": { "type": "string" }
+            ],
+            required: vec!["path".to_string()],
+        },
+        ToolSpec {
+            name: TOOL_WORKSPACE_PROPOSAL_CREATE,
+            description: "Create a reviewable transaction proposal from semantic commands. Does not apply mutations.",
+            target: ExecutionTarget::Device,
+            params: vec![
+                workspace_id_param(),
+                root_param(),
+                string_param("summary", ParamVisibility::All),
+                ToolParam {
+                    name: "commands".to_string(),
+                    visibility: ParamVisibility::All,
+                    schema: json!({ "type": "array", "items": { "type": "object" } }),
                 },
-                "required": ["path", "content"]
-            }),
-        ),
-        tool(
-            TOOL_WORKSPACE_PROPOSAL_PROPOSE_ARTIFACT,
-            "Validate artifact.yaml and propose creating the manifest. Does not apply.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "root": { "type": "string" },
-                    "path": { "type": "string" },
-                    "content": { "type": "string" },
-                    "summary": { "type": "string" }
+                ToolParam {
+                    name: "affectedPaths".to_string(),
+                    visibility: ParamVisibility::All,
+                    schema: json!({ "type": "array", "items": { "type": "string" } }),
                 },
-                "required": ["path", "content"]
-            }),
-        ),
+                ToolParam {
+                    name: "warnings".to_string(),
+                    visibility: ParamVisibility::All,
+                    schema: json!({ "type": "array", "items": { "type": "string" } }),
+                },
+                string_param("sourceResource", ParamVisibility::All),
+            ],
+            required: vec!["summary".to_string(), "commands".to_string()],
+        },
+        ToolSpec {
+            name: TOOL_WORKSPACE_PROPOSAL_LIST,
+            description: "List pending transaction proposals in the workspace inbox.",
+            target: ExecutionTarget::Device,
+            params: vec![workspace_id_param(), root_param()],
+            required: vec![],
+        },
+        ToolSpec {
+            name: TOOL_WORKSPACE_PROPOSAL_GET,
+            description: "Load one pending transaction proposal by id.",
+            target: ExecutionTarget::Device,
+            params: vec![
+                workspace_id_param(),
+                root_param(),
+                string_param("proposalId", ParamVisibility::All),
+            ],
+            required: vec!["proposalId".to_string()],
+        },
+        ToolSpec {
+            name: TOOL_WORKSPACE_PROPOSAL_PROPOSE_PAGE,
+            description: "Typed helper to propose creating a page. Does not write the page directly.",
+            target: ExecutionTarget::Device,
+            params: vec![
+                workspace_id_param(),
+                root_param(),
+                string_param("path", ParamVisibility::All),
+                string_param("content", ParamVisibility::All),
+                string_param("title", ParamVisibility::All),
+            ],
+            required: vec!["path".to_string()],
+        },
+        ToolSpec {
+            name: TOOL_WORKSPACE_PROPOSAL_PROPOSE_RESOURCE,
+            description: "Propose creating a text resource via resource-create. Does not apply.",
+            target: ExecutionTarget::Device,
+            params: vec![
+                workspace_id_param(),
+                root_param(),
+                string_param("path", ParamVisibility::All),
+                string_param("content", ParamVisibility::All),
+                string_param("summary", ParamVisibility::All),
+            ],
+            required: vec!["path".to_string(), "content".to_string()],
+        },
+        ToolSpec {
+            name: TOOL_WORKSPACE_PROPOSAL_PROPOSE_WORKFLOW,
+            description: "Validate workflow YAML and propose creating the workflow file. Does not apply.",
+            target: ExecutionTarget::Device,
+            params: vec![
+                workspace_id_param(),
+                root_param(),
+                string_param("path", ParamVisibility::All),
+                string_param("content", ParamVisibility::All),
+                string_param("summary", ParamVisibility::All),
+            ],
+            required: vec!["path".to_string(), "content".to_string()],
+        },
+        ToolSpec {
+            name: TOOL_WORKSPACE_PROPOSAL_PROPOSE_INTERFACE,
+            description: "Validate interface YAML and propose creating the interface file. Does not apply.",
+            target: ExecutionTarget::Device,
+            params: vec![
+                workspace_id_param(),
+                root_param(),
+                string_param("path", ParamVisibility::All),
+                string_param("content", ParamVisibility::All),
+                string_param("summary", ParamVisibility::All),
+            ],
+            required: vec!["path".to_string(), "content".to_string()],
+        },
+        ToolSpec {
+            name: TOOL_WORKSPACE_PROPOSAL_PROPOSE_ARTIFACT,
+            description: "Validate artifact.yaml and propose creating the manifest. Does not apply.",
+            target: ExecutionTarget::Device,
+            params: vec![
+                workspace_id_param(),
+                root_param(),
+                string_param("path", ParamVisibility::All),
+                string_param("content", ParamVisibility::All),
+                string_param("summary", ParamVisibility::All),
+            ],
+            required: vec!["path".to_string(), "content".to_string()],
+        },
+        ToolSpec {
+            name: TOOL_WORKSPACE_SHARE,
+            description: "Create a read-only share token for a cloud workspace.",
+            target: ExecutionTarget::Cloud,
+            params: vec![
+                workspace_id_param(),
+                ToolParam {
+                    name: "permission".to_string(),
+                    visibility: ParamVisibility::All,
+                    schema: json!({ "type": "string", "enum": ["read"] }),
+                },
+                ToolParam {
+                    name: "expiresAt".to_string(),
+                    visibility: ParamVisibility::All,
+                    schema: json!({
+                        "type": "string",
+                        "description": "RFC3339 timestamp"
+                    }),
+                },
+            ],
+            required: vec!["workspaceId".to_string()],
+        },
+        ToolSpec {
+            name: TOOL_WORKSPACE_PUBLISH,
+            description: "Publish a static HTML or text snapshot for a workspace.",
+            target: ExecutionTarget::Cloud,
+            params: vec![
+                workspace_id_param(),
+                ToolParam {
+                    name: "content".to_string(),
+                    visibility: ParamVisibility::All,
+                    schema: json!({
+                        "type": "string",
+                        "description": "UTF-8 body (text/html or text/plain)"
+                    }),
+                },
+                ToolParam {
+                    name: "contentBase64".to_string(),
+                    visibility: ParamVisibility::All,
+                    schema: json!({
+                        "type": "string",
+                        "description": "Alternative base64-encoded body"
+                    }),
+                },
+                string_param("contentType", ParamVisibility::All),
+                string_param("slug", ParamVisibility::All),
+            ],
+            required: vec!["workspaceId".to_string()],
+        },
+        ToolSpec {
+            name: TOOL_WORKSPACE_BACKUP_LIST,
+            description: "List opaque backup metadata for a workspace (no ciphertext).",
+            target: ExecutionTarget::Cloud,
+            params: vec![workspace_id_param()],
+            required: vec!["workspaceId".to_string()],
+        },
+        ToolSpec {
+            name: TOOL_WORKSPACE_BACKUP_PUT,
+            description: "Store an opaque client-encrypted backup blob (base64 ciphertext).",
+            target: ExecutionTarget::Cloud,
+            params: vec![
+                workspace_id_param(),
+                string_param("contentBase64", ParamVisibility::All),
+                ToolParam {
+                    name: "contentHash".to_string(),
+                    visibility: ParamVisibility::All,
+                    schema: json!({
+                        "type": "string",
+                        "description": "SHA-256 hex of decoded ciphertext"
+                    }),
+                },
+                string_param("deviceId", ParamVisibility::All),
+            ],
+            required: vec![
+                "workspaceId".to_string(),
+                "contentBase64".to_string(),
+                "contentHash".to_string(),
+            ],
+        },
     ]
 }
 
-/// Cloud-only tool descriptors, in canonical, deterministic order. These are
-/// appended after local tools in [`remote_tools`] and are absent from
-/// [`local_tools`].
-fn cloud_tool_descriptors() -> Vec<Value> {
-    vec![
-        tool(
-            TOOL_WORKSPACE_SHARE,
-            "Create a read-only share token for a cloud workspace.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "permission": { "type": "string", "enum": ["read"] },
-                    "expiresAt": { "type": "string", "description": "RFC3339 timestamp" }
-                },
-                "required": ["workspaceId"]
-            }),
-        ),
-        tool(
-            TOOL_WORKSPACE_PUBLISH,
-            "Publish a static HTML or text snapshot for a workspace.",
-            json!({
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "content": { "type": "string", "description": "UTF-8 body (text/html or text/plain)" },
-                    "contentBase64": { "type": "string", "description": "Alternative base64-encoded body" },
-                    "contentType": { "type": "string" },
-                    "slug": { "type": "string" }
-                },
-                "required": ["workspaceId"]
-            }),
-        ),
-        tool(
-            TOOL_WORKSPACE_BACKUP_LIST,
-            "List opaque backup metadata for a workspace (no ciphertext).",
-            json!({
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" }
-                },
-                "required": ["workspaceId"]
-            }),
-        ),
-        tool(
-            TOOL_WORKSPACE_BACKUP_PUT,
-            "Store an opaque client-encrypted backup blob (base64 ciphertext).",
-            json!({
-                "type": "object",
-                "properties": {
-                    "workspaceId": { "type": "string" },
-                    "contentBase64": { "type": "string" },
-                    "contentHash": { "type": "string", "description": "SHA-256 hex of decoded ciphertext" },
-                    "deviceId": { "type": "string" }
-                },
-                "required": ["workspaceId", "contentBase64", "contentHash"]
-            }),
-        ),
-    ]
+static TOOL_SPECS: LazyLock<Box<[ToolSpec]>> = LazyLock::new(|| build_tool_specs().into_boxed_slice());
+
+fn all_tool_specs() -> &'static [ToolSpec] {
+    &TOOL_SPECS
+}
+
+/// Namespace prefixes reserved for cloud-owned tools, so future additions
+/// under `workspace.backup.*` / `workspace.share.*` / `workspace.publish.*`
+/// route to the cloud without touching the catalog table.
+const CLOUD_TOOL_PREFIXES: &[&str] = &["workspace.backup.", "workspace.share.", "workspace.publish."];
+
+/// Look up the canonical [`ToolSpec`] for a known tool name.
+///
+/// Returns [`None`] for unknown names (fail closed).
+pub fn tool_spec(name: &str) -> Option<&'static ToolSpec> {
+    all_tool_specs().iter().find(|spec| spec.name == name)
+}
+
+/// Determine which runtime must execute a `tools/call` for `name`.
+///
+/// Known tools resolve via [`tool_spec`]. Names under cloud-owned prefixes
+/// (`workspace.backup.*`, `workspace.share.*`, `workspace.publish.*`) also
+/// resolve to [`ExecutionTarget::Cloud`] even when not yet cataloged.
+/// Unknown names return [`None`] (fail closed).
+pub fn execution_target(name: &str) -> Option<ExecutionTarget> {
+    if let Some(spec) = tool_spec(name) {
+        return Some(spec.target);
+    }
+    if CLOUD_TOOL_PREFIXES.iter().any(|prefix| name.starts_with(prefix)) {
+        return Some(ExecutionTarget::Cloud);
+    }
+    None
 }
 
 /// `tools/list`-shaped payload for the local-only (device-executed) tool
@@ -410,15 +580,23 @@ fn cloud_tool_descriptors() -> Vec<Value> {
 /// across calls. Callers that want cache metadata (e.g. `ttlMs`) should wrap
 /// this value themselves; this crate stays transport-agnostic.
 pub fn local_tools() -> Value {
-    json!({ "tools": local_tool_descriptors() })
+    let tools: Vec<Value> = all_tool_specs()
+        .iter()
+        .filter(|spec| spec.target == ExecutionTarget::Device)
+        .map(ToolSpec::local_descriptor)
+        .collect();
+    json!({ "tools": tools })
 }
 
 /// `tools/list`-shaped payload for a gateway that can reach both the device
 /// and the cloud: local tools first (in [`local_tools`] order), then
-/// cloud-only tools, both in deterministic order.
+/// cloud-only tools, both in deterministic order. Device tool schemas omit
+/// local-only parameters such as `root`.
 pub fn remote_tools() -> Value {
-    let mut tools = local_tool_descriptors();
-    tools.extend(cloud_tool_descriptors());
+    let tools: Vec<Value> = all_tool_specs()
+        .iter()
+        .map(ToolSpec::remote_descriptor)
+        .collect();
     json!({ "tools": tools })
 }
 
@@ -433,6 +611,34 @@ mod tests {
             .iter()
             .map(|t| t["name"].as_str().expect("name string").to_string())
             .collect()
+    }
+
+    fn schema_property_keys(tool: &Value) -> Vec<String> {
+        tool["inputSchema"]["properties"]
+            .as_object()
+            .expect("properties object")
+            .keys()
+            .cloned()
+            .collect()
+    }
+
+    fn collect_root_keys(value: &Value, keys: &mut Vec<String>) {
+        match value {
+            Value::Object(map) => {
+                for (key, child) in map {
+                    if key == "root" {
+                        keys.push(key.clone());
+                    }
+                    collect_root_keys(child, keys);
+                }
+            }
+            Value::Array(items) => {
+                for item in items {
+                    collect_root_keys(item, keys);
+                }
+            }
+            _ => {}
+        }
     }
 
     #[test]
@@ -517,16 +723,35 @@ mod tests {
     }
 
     #[test]
+    fn tool_spec_returns_none_for_unknown_names() {
+        assert!(tool_spec("workspace.unknown").is_none());
+        assert!(tool_spec("search").is_none());
+    }
+
+    #[test]
+    fn tool_spec_returns_spec_for_known_names() {
+        let spec = tool_spec(TOOL_WORKSPACE_SEARCH).expect("search spec");
+        assert_eq!(spec.name, TOOL_WORKSPACE_SEARCH);
+        assert_eq!(spec.target, ExecutionTarget::Device);
+    }
+
+    #[test]
     fn execution_target_maps_cloud_tools_to_cloud() {
-        assert_eq!(execution_target(TOOL_WORKSPACE_SHARE), ExecutionTarget::Cloud);
-        assert_eq!(execution_target(TOOL_WORKSPACE_PUBLISH), ExecutionTarget::Cloud);
+        assert_eq!(
+            execution_target(TOOL_WORKSPACE_SHARE),
+            Some(ExecutionTarget::Cloud)
+        );
+        assert_eq!(
+            execution_target(TOOL_WORKSPACE_PUBLISH),
+            Some(ExecutionTarget::Cloud)
+        );
         assert_eq!(
             execution_target(TOOL_WORKSPACE_BACKUP_LIST),
-            ExecutionTarget::Cloud
+            Some(ExecutionTarget::Cloud)
         );
         assert_eq!(
             execution_target(TOOL_WORKSPACE_BACKUP_PUT),
-            ExecutionTarget::Cloud
+            Some(ExecutionTarget::Cloud)
         );
     }
 
@@ -534,27 +759,78 @@ mod tests {
     fn execution_target_maps_cloud_prefixes_to_cloud() {
         assert_eq!(
             execution_target("workspace.backup.delete"),
-            ExecutionTarget::Cloud
+            Some(ExecutionTarget::Cloud)
         );
         assert_eq!(
             execution_target("workspace.share.revoke"),
-            ExecutionTarget::Cloud
+            Some(ExecutionTarget::Cloud)
         );
         assert_eq!(
             execution_target("workspace.publish.unpublish"),
-            ExecutionTarget::Cloud
+            Some(ExecutionTarget::Cloud)
         );
     }
 
     #[test]
+    fn execution_target_returns_none_for_unknown_names() {
+        assert_eq!(execution_target("workspace.unknown"), None);
+        assert_eq!(execution_target("search"), None);
+    }
+
+    #[test]
     fn execution_target_maps_device_tools_to_device() {
-        assert_eq!(execution_target(TOOL_WORKSPACE_SEARCH), ExecutionTarget::Device);
-        assert_eq!(execution_target(TOOL_WORKSPACE_READ), ExecutionTarget::Device);
+        assert_eq!(
+            execution_target(TOOL_WORKSPACE_SEARCH),
+            Some(ExecutionTarget::Device)
+        );
+        assert_eq!(
+            execution_target(TOOL_WORKSPACE_READ),
+            Some(ExecutionTarget::Device)
+        );
         assert_eq!(
             execution_target(TOOL_WORKSPACE_PROPOSAL_CREATE),
-            ExecutionTarget::Device
+            Some(ExecutionTarget::Device)
         );
-        assert_eq!(execution_target("workspace.unknown"), ExecutionTarget::Device);
+    }
+
+    #[test]
+    fn local_device_tools_include_root_parameter() {
+        let tools = local_tools();
+        for tool in tools["tools"].as_array().unwrap() {
+            let keys = schema_property_keys(tool);
+            assert!(
+                keys.contains(&"root".to_string()),
+                "local tool {} missing root parameter",
+                tool["name"]
+            );
+            assert!(keys.contains(&"workspaceId".to_string()));
+        }
+    }
+
+    #[test]
+    fn remote_device_tools_omit_root_parameter() {
+        let tools = remote_tools();
+        for tool in tools["tools"].as_array().unwrap() {
+            let name = tool["name"].as_str().unwrap();
+            if tool_spec(name).is_some_and(|spec| spec.target == ExecutionTarget::Device) {
+                let keys = schema_property_keys(tool);
+                assert!(
+                    !keys.contains(&"root".to_string()),
+                    "remote tool {name} must not expose root"
+                );
+                assert!(keys.contains(&"workspaceId".to_string()));
+            }
+        }
+    }
+
+    #[test]
+    fn remote_tools_json_contains_no_root_property_keys() {
+        let mut root_keys = Vec::new();
+        collect_root_keys(&remote_tools(), &mut root_keys);
+        assert!(
+            root_keys.is_empty(),
+            "remote_tools must not contain root property keys, found: {root_keys:?}"
+        );
     }
 
     #[test]
