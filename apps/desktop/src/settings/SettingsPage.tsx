@@ -9,11 +9,14 @@ import {
   Lock,
   MagnifyingGlass,
   Microphone,
+  Package,
   Palette,
+  Plugs,
   Pulse,
   PuzzlePiece,
   Robot,
   Rocket,
+  SquaresFour,
 } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 
@@ -62,8 +65,11 @@ import {
   type BackgroundScheduleStatus,
 } from "../lib/backgroundSchedules";
 import { EmbeddingPackSettings } from "./EmbeddingPackSettings";
+import { FeaturesSettings } from "./FeaturesSettings";
 import { HistoryRetentionSettings } from "./HistoryRetentionSettings";
 import type { AppSettings } from "./model";
+import { PacksSettings } from "./PacksSettings";
+import { PluginsSettings } from "./PluginsSettings";
 import { TOGGLEABLE_WORKSPACE_CAPABILITIES } from "./workspaceCapabilities";
 
 type SettingsSection =
@@ -75,6 +81,9 @@ type SettingsSection =
   | "keybindings"
   | "data"
   | "capabilities"
+  | "features"
+  | "packs"
+  | "plugins"
   | "ai"
   | "search"
   | "voice"
@@ -110,6 +119,9 @@ const SECTIONS = [
   { id: "keybindings" as const, label: "Keybindings", icon: Keyboard },
   { id: "data" as const, label: "Data defaults", icon: Database },
   { id: "capabilities" as const, label: "Enabled capabilities", icon: PuzzlePiece },
+  { id: "features" as const, label: "Features", icon: SquaresFour },
+  { id: "packs" as const, label: "Packs", icon: Package },
+  { id: "plugins" as const, label: "Plugins", icon: Plugs },
   { id: "ai" as const, label: "AI", icon: Robot },
   { id: "search" as const, label: "Search", icon: MagnifyingGlass },
   { id: "voice" as const, label: "Voice dictation", icon: Microphone },
@@ -543,7 +555,8 @@ export function SettingsPage({
             <h1>Enabled capabilities</h1>
             <p className="settings-copy">
               These switches control bundled shell surfaces. Canonical formats remain readable
-              even when an optional renderer is hidden.
+              even when an optional renderer is hidden. Semantic search and voice packs live under
+              Features and Packs.
             </p>
             {TOGGLEABLE_WORKSPACE_CAPABILITIES.map(({ key, title, description }) => (
               <SettingRow key={key} title={title} description={description}>
@@ -568,6 +581,25 @@ export function SettingsPage({
           </>
         )}
 
+        {section === "features" && (
+          <FeaturesSettings
+            workspaceRoot={workspace.root || null}
+            semanticEnabled={settings.search.semanticEnabled}
+            onSemanticEnabledChange={(semanticEnabled) => update("search", { semanticEnabled })}
+            onOpenPacks={() => setSection("packs")}
+            onOpenCapabilities={() => setSection("capabilities")}
+          />
+        )}
+
+        {section === "packs" && (
+          <PacksSettings
+            workspaceRoot={workspace.root || null}
+            onSemanticEnabledChange={(semanticEnabled) => update("search", { semanticEnabled })}
+          />
+        )}
+
+        {section === "plugins" && <PluginsSettings />}
+
         {section === "ai" && (
           <AiSettingsPanel
             ai={settings.ai}
@@ -577,6 +609,8 @@ export function SettingsPage({
             onChange={(patch) => update("ai", patch)}
             onOpenCloud={() => setSection("cloud")}
             onOpenVoice={() => setSection("voice")}
+            onOpenPacks={() => setSection("packs")}
+            onOpenFeatures={() => setSection("features")}
           />
         )}
 
@@ -586,10 +620,14 @@ export function SettingsPage({
             semanticEnabled={settings.search.semanticEnabled}
             onSemanticEnabledChange={(semanticEnabled) => update("search", { semanticEnabled })}
             onOpenAi={() => setSection("ai")}
+            onOpenFeatures={() => setSection("features")}
+            onOpenPacks={() => setSection("packs")}
           />
         )}
 
-        {section === "voice" && <VoiceDictationSettings />}
+        {section === "voice" && (
+          <VoiceDictationSettings onOpenPacks={() => setSection("packs")} />
+        )}
 
         {section === "privacy" && (
           <PrivacySettingsPanel
@@ -780,6 +818,8 @@ function AiSettingsPanel({
   onChange,
   onOpenCloud,
   onOpenVoice,
+  onOpenPacks,
+  onOpenFeatures,
 }: {
   ai: AppSettings["ai"];
   workspaceRoot: string | null;
@@ -788,6 +828,8 @@ function AiSettingsPanel({
   onChange: (patch: Partial<AppSettings["ai"]>) => void;
   onOpenCloud: () => void;
   onOpenVoice: () => void;
+  onOpenPacks: () => void;
+  onOpenFeatures: () => void;
 }) {
   const [hasKey, setHasKey] = useState(false);
   const [keyDraft, setKeyDraft] = useState("");
@@ -874,8 +916,8 @@ function AiSettingsPanel({
     <>
       <h1>AI</h1>
       <p className="settings-copy">
-        Choose how the agent and related features reach a model. Optional packs for voice and
-        embeddings live below; Search still owns the semantic search toggle.
+        Choose how the agent and related features reach a model. Embedding and voice downloads are
+        managed under Packs; feature toggles under Features.
       </p>
 
       <div className="ai-mode-choices" role="radiogroup" aria-label="AI mode">
@@ -1034,13 +1076,22 @@ function AiSettingsPanel({
       />
 
       <h2 className="settings-subsection">Optional packs</h2>
+      <p className="settings-copy">Managed under Packs and Features.</p>
       <SettingRow
-        title="Voice dictation"
-        description="On-device speech-to-text pack. Full download and status controls stay under Voice dictation."
+        title="Embedding & voice packs"
+        description="Download status, clear, and feature enablement live in the Packs and Features panels."
       >
-        <Button size="sm" variant="secondary" onClick={onOpenVoice}>
-          Open Voice settings
-        </Button>
+        <div className="history-retention-actions">
+          <Button size="sm" variant="secondary" onClick={onOpenPacks}>
+            Open Packs
+          </Button>
+          <Button size="sm" variant="secondary" onClick={onOpenFeatures}>
+            Open Features
+          </Button>
+          <Button size="sm" variant="secondary" onClick={onOpenVoice}>
+            Voice details
+          </Button>
+        </div>
       </SettingRow>
     </>
   );
@@ -1051,11 +1102,15 @@ function SemanticSearchSettings({
   semanticEnabled,
   onSemanticEnabledChange,
   onOpenAi,
+  onOpenFeatures,
+  onOpenPacks,
 }: {
   workspaceRoot: string | null;
   semanticEnabled: boolean;
   onSemanticEnabledChange: (semanticEnabled: boolean) => void;
   onOpenAi: () => void;
+  onOpenFeatures: () => void;
+  onOpenPacks: () => void;
 }) {
   const [status, setStatus] = useState<SemanticStatus | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1205,8 +1260,8 @@ function SemanticSearchSettings({
       <h1>Search</h1>
       <p className="settings-copy">
         Keyword search is always available. Semantic search uses a local embedding model to find
-        related passages by meaning, not just exact words. Pack download and vector freshness live
-        under AI → Embeddings.
+        related passages by meaning, not just exact words. Managed under Features; pack download
+        under Packs.
       </p>
       {inBrowser ? (
         <div className="diagnostics-card">
@@ -1247,11 +1302,19 @@ function SemanticSearchSettings({
           </SettingRow>
           <SettingRow
             title="Embedding pack"
-            description="Download, provider status, and Lance freshness controls."
+            description="Download, clear, and feature toggle. Vector freshness also appears under AI → Embeddings."
           >
-            <Button size="sm" variant="secondary" onClick={onOpenAi}>
-              Open AI → Embeddings
-            </Button>
+            <div className="history-retention-actions">
+              <Button size="sm" variant="secondary" onClick={onOpenFeatures}>
+                Open Features
+              </Button>
+              <Button size="sm" variant="secondary" onClick={onOpenPacks}>
+                Open Packs
+              </Button>
+              <Button size="sm" variant="secondary" onClick={onOpenAi}>
+                AI → Embeddings
+              </Button>
+            </div>
           </SettingRow>
           {vectorsBehind ? (
             <div className="diagnostics-card" role="status">
@@ -1553,7 +1616,7 @@ function CloudAccountSettings() {
   );
 }
 
-function VoiceDictationSettings() {
+function VoiceDictationSettings({ onOpenPacks }: { onOpenPacks: () => void }) {
   const [status, setStatus] = useState<VoiceStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1658,7 +1721,7 @@ function VoiceDictationSettings() {
       <p className="settings-copy">
         Optional on-device speech-to-text. Download a local recognition pack once, then hold the
         microphone in the page header to dictate. Audio stays on this Mac; provisional text never
-        enters document storage.
+        enters document storage. Managed under Packs.
       </p>
       {inBrowser ? (
         <div className="diagnostics-card">
@@ -1679,13 +1742,18 @@ function VoiceDictationSettings() {
             title="Voice pack"
             description="Download Parakeet Unified (~608 MB) for local dictation. First prepare may take several minutes."
           >
-            <Button
-              size="sm"
-              disabled={busy || status?.prepared === true || status == null}
-              onClick={() => void handleDownloadPack()}
-            >
-              {downloadLabel}
-            </Button>
+            <div className="history-retention-actions">
+              <Button
+                size="sm"
+                disabled={busy || status?.prepared === true || status == null}
+                onClick={() => void handleDownloadPack()}
+              >
+                {downloadLabel}
+              </Button>
+              <Button size="sm" variant="secondary" onClick={onOpenPacks}>
+                Open Packs
+              </Button>
+            </div>
           </SettingRow>
           <SettingRow
             title="Pack status"
