@@ -21,7 +21,15 @@ import type { ThemeCatalogPayload } from "../theme";
 import type { WorkspaceStartupSettings } from "../lib/profile";
 import type { PageWidth } from "../lib/pageWidth";
 import { enableAppLock, getAppLockStatus, type AppLockStatus } from "../lib/appLock";
-import { getVoiceStatus, listenVoiceEvents, prepareVoiceModel, type VoiceStatus } from "../lib/voice";
+import {
+  getVoiceStatus,
+  listenVoiceEvents,
+  prepareVoiceModel,
+  VOICE_MODEL_CONFIRM,
+  voicePackProviderLabel,
+  voiceStatusLabel,
+  type VoiceStatus,
+} from "../lib/voice";
 import {
   cloudSignIn,
   cloudSignInApple,
@@ -1232,6 +1240,7 @@ function VoiceDictationSettings() {
       if (event.type === "status") {
         if (event.state === "preparing") {
           setBusy(true);
+          setError(null);
           setStatus((prev) =>
             prev
               ? { ...prev, preparing: true, message: event.message }
@@ -1248,6 +1257,7 @@ function VoiceDictationSettings() {
         }
         if (event.state === "ready") {
           setBusy(false);
+          setError(null);
           setStatus((prev) =>
             prev
               ? { ...prev, prepared: true, preparing: false, message: event.message }
@@ -1278,66 +1288,88 @@ function VoiceDictationSettings() {
     };
   }, []);
 
-  const engineLabel = (() => {
-    if (!status) return "Checking…";
-    if (!status.available) return "Unavailable";
-    if (status.preparing || busy) return "Preparing…";
-    if (status.prepared) return "Ready";
-    return "Available (not prepared)";
-  })();
+  function handleDownloadPack() {
+    if (status?.prepared || busy || status?.available === false) return;
+    const accepted = window.confirm(VOICE_MODEL_CONFIRM);
+    if (!accepted) return;
+    setBusy(true);
+    setError(null);
+    void prepareVoiceModel()
+      .then((next) => setStatus(next))
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setBusy(false));
+  }
+
+  const statusText = voiceStatusLabel(status, { busy, error });
+  const providerText = voicePackProviderLabel(status);
+  const packUnavailable = status != null && !status.available;
+  const downloadLabel = busy
+    ? "Downloading…"
+    : status?.prepared
+      ? "Downloaded"
+      : "Download pack";
 
   return (
     <>
       <h1>Voice dictation</h1>
-      <p>
-        Local, on-device speech-to-text via FluidAudio / Parakeet Unified. Hold the microphone
-        button in the page header to dictate. Provisional text never enters document storage.
+      <p className="settings-copy">
+        Optional on-device speech-to-text. Download a local recognition pack once, then hold the
+        microphone in the page header to dictate. Audio stays on this Mac; provisional text never
+        enters document storage.
       </p>
       {inBrowser ? (
         <div className="diagnostics-card">
           <strong>Unavailable in browser demo</strong>
           <span>Voice requires the native macOS desktop build with the FluidAudio bridge.</span>
         </div>
+      ) : packUnavailable ? (
+        <div className="diagnostics-card" role="status">
+          <strong>Voice pack unavailable</strong>
+          <span>
+            {status.message?.trim() ||
+              "Local recognition requires the native macOS desktop build with the FluidAudio bridge."}
+          </span>
+        </div>
       ) : (
         <>
           <SettingRow
-            title="Engine status"
-            description="Availability of the local recognition runtime on this Mac."
-          >
-            <span>{engineLabel}</span>
-          </SettingRow>
-          <SettingRow
-            title="Prepare model"
-            description="Download and warm Parakeet Unified (~first run may take several minutes)."
+            title="Voice pack"
+            description="Download Parakeet Unified (~608 MB) for local dictation. First prepare may take several minutes."
           >
             <Button
               size="sm"
-              disabled={busy || status?.available === false || status?.prepared === true}
-              onClick={() => {
-                setBusy(true);
-                setError(null);
-                void prepareVoiceModel()
-                  .then((next) => setStatus(next))
-                  .catch((err: unknown) =>
-                    setError(err instanceof Error ? err.message : String(err)),
-                  )
-                  .finally(() => setBusy(false));
-              }}
+              disabled={busy || status?.prepared === true || status == null}
+              onClick={() => void handleDownloadPack()}
             >
-              {busy ? "Preparing…" : status?.prepared ? "Prepared" : "Prepare now"}
+              {downloadLabel}
             </Button>
           </SettingRow>
-          {status?.message && (
-            <div className="diagnostics-card">
-              <span>{status.message}</span>
-            </div>
-          )}
-          {error && (
+          <SettingRow
+            title="Pack status"
+            description="Whether the FluidAudio recognition pack is ready on this Mac."
+          >
+            <span>
+              {statusText}
+              {providerText ? (
+                <>
+                  <br />
+                  <span className="settings-copy">Provider: {providerText}</span>
+                </>
+              ) : null}
+            </span>
+          </SettingRow>
+          {error ? (
             <div className="diagnostics-card" role="alert">
-              <strong>Voice error</strong>
+              <strong>Voice pack error</strong>
               <span>{error}</span>
             </div>
-          )}
+          ) : null}
+          {status?.message && (busy || status.preparing || error) ? (
+            <div className="diagnostics-card" role="status">
+              <strong>Details</strong>
+              <span>{status.message}</span>
+            </div>
+          ) : null}
         </>
       )}
     </>
