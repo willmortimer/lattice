@@ -223,4 +223,66 @@ mod tests {
         assert!(!ts.contains('.'));
         assert!(ts.ends_with('Z'));
     }
+
+    #[test]
+    fn capture_page_path_normalizes_directory() {
+        let now = SystemTime::UNIX_EPOCH;
+        assert!(capture_page_path("Inbox", now).starts_with("Inbox/"));
+        assert!(capture_page_path("Inbox", now).ends_with(".md"));
+        assert!(capture_page_path("  Capture/Quick  ", now).starts_with("Capture/Quick/"));
+        assert!(capture_page_path("", now).starts_with("Inbox/"));
+    }
+
+    #[test]
+    fn rejects_oversized_capture_bytes() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let oversized = vec![0xFF; MAX_INBOX_CAPTURE_BYTES + 1];
+        let err = create_inbox_capture(
+            root,
+            oversized,
+            "capture.webp".to_string(),
+            None,
+        )
+        .unwrap_err();
+        assert!(err.contains("8 MiB"));
+    }
+
+    #[test]
+    fn rejects_invalid_capture_filenames() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let bytes = vec![0x89, 0x50, 0x4E, 0x47];
+
+        for file_name in ["", ".", "..", "foo/bar.webp", "../capture.webp"] {
+            let err = create_inbox_capture(
+                root.clone(),
+                bytes.clone(),
+                file_name.to_string(),
+                None,
+            )
+            .unwrap_err();
+            assert!(
+                err.contains("invalid") || err.contains("path separators"),
+                "unexpected error for {file_name:?}: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn resolve_collision_free_asset_path_renames_existing_file() {
+        let dir = init_workspace();
+        let root = dir.path();
+        let page_dir = Path::new("Inbox/2026-07-15T20-32-05-123Z");
+        let assets_dir = root.join(page_dir).join("assets");
+        std::fs::create_dir_all(&assets_dir).unwrap();
+        std::fs::write(assets_dir.join("capture.webp"), b"existing").unwrap();
+
+        let resolved =
+            resolve_collision_free_asset_path(root, page_dir, "capture.webp").unwrap();
+        assert_eq!(
+            resolved,
+            PathBuf::from("Inbox/2026-07-15T20-32-05-123Z/assets/capture 2.webp")
+        );
+    }
 }
