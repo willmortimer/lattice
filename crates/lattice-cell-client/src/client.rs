@@ -14,7 +14,7 @@ use crate::connect::{
 use crate::error::{CellClientError, Result};
 use crate::hydrate::{
     cell_spec_network_attachments, cell_spec_volume_attachments, hydrate_files_under_role,
-    KernelFSHydrationPlan, KernelFSRole,
+    oci_suppresses_network_deny_all, KernelFSHydrationPlan, KernelFSRole,
 };
 use crate::types::{
     ApplyCellRequest, ApplyCellResponse, CellSpec, CollectOutputRequest, CollectOutputResponse,
@@ -65,6 +65,9 @@ pub struct ProjectionRunRequest {
     pub resources: ResourceSpec,
     pub advertise_services: Vec<String>,
     pub allow_recreate: bool,
+    /// Proto enum name, e.g. [`crate::EXECUTION_MODE_OCI`]. Empty = microVM / celld backend default.
+    pub execution_mode: String,
+    pub oci_bundle_path: String,
 }
 
 impl Default for ProjectionRunRequest {
@@ -86,6 +89,8 @@ impl Default for ProjectionRunRequest {
                 .map(|s| (*s).to_string())
                 .collect(),
             allow_recreate: false,
+            execution_mode: String::new(),
+            oci_bundle_path: String::new(),
         }
     }
 }
@@ -266,7 +271,16 @@ impl<H: CelldHttpClient> CelldClient<H> {
         advertise_services: &[String],
         idempotency_key: &str,
         allow_recreate: bool,
+        execution_mode: &str,
+        oci_bundle_path: &str,
     ) -> Result<(ApplyCellResponse, StartCellResponse)> {
+        if oci_suppresses_network_deny_all(plan, execution_mode) {
+            eprintln!(
+                "lattice-cell-client: omitting networks[].egress=none for execution_mode=oci \
+                 (OCI providers reject deny-all egress); use microVM for enforced deny-all or \
+                 with_network_deny_all(false) when OCI egress is acceptable"
+            );
+        }
         let spec = CellSpec {
             id: cell_id.to_string(),
             display_name: cell_id.to_string(),
@@ -276,10 +290,10 @@ impl<H: CelldHttpClient> CelldClient<H> {
             }),
             resources: Some(resources),
             volumes: cell_spec_volume_attachments(plan),
-            networks: cell_spec_network_attachments(plan),
+            networks: cell_spec_network_attachments(plan, execution_mode),
             advertise_services: advertise_services.to_vec(),
-            execution_mode: String::new(),
-            oci_bundle_path: String::new(),
+            execution_mode: execution_mode.to_string(),
+            oci_bundle_path: oci_bundle_path.to_string(),
         };
         let apply = self.apply_cell(&ApplyCellRequest {
             idempotency_key: idempotency_key.to_string(),
@@ -338,6 +352,8 @@ impl<H: CelldHttpClient> CelldClient<H> {
             &request.advertise_services,
             &request.idempotency_key,
             request.allow_recreate,
+            &request.execution_mode,
+            &request.oci_bundle_path,
         )?;
 
         let hydrate = self.hydrate_projection(

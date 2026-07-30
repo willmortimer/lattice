@@ -22,6 +22,9 @@ pub const DEFAULT_WORK_MOUNT: &str = "/work";
 /// Default guest mount for output.
 pub const DEFAULT_OUTPUT_MOUNT: &str = "/output";
 
+/// Proto JSON enum name for OCI execution lane (`CellSpec.execution_mode`).
+pub const EXECUTION_MODE_OCI: &str = "EXECUTION_MODE_OCI";
+
 /// Canonical KernelFS mount roles (kernelfs-core / cell docs/27).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum KernelFSRole {
@@ -212,9 +215,33 @@ pub fn cell_spec_volume_attachments(plan: &KernelFSHydrationPlan) -> Vec<VolumeA
     out
 }
 
+/// True when `execution_mode` selects the OCI provider lane.
+pub fn is_oci_execution_mode(execution_mode: &str) -> bool {
+    let trimmed = execution_mode.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    trimmed.eq_ignore_ascii_case("oci") || trimmed.eq_ignore_ascii_case(EXECUTION_MODE_OCI)
+}
+
+/// True when OCI execution suppresses a deny-all network attachment.
+pub fn oci_suppresses_network_deny_all(
+    plan: &KernelFSHydrationPlan,
+    execution_mode: &str,
+) -> bool {
+    plan.network_deny_all && is_oci_execution_mode(execution_mode)
+}
+
 /// Map deny-all network policy to CellSpec `networks[]`.
-pub fn cell_spec_network_attachments(plan: &KernelFSHydrationPlan) -> Vec<NetworkAttachment> {
-    if !plan.network_deny_all {
+///
+/// MicroVM / Firecracker dogfood keeps the KernelFS default (`network_deny_all:
+/// true` → `egress: none`). OCI backends reject `egress: none` at Apply, so this
+/// omits network attachments when `execution_mode` is OCI even if deny-all is set.
+pub fn cell_spec_network_attachments(
+    plan: &KernelFSHydrationPlan,
+    execution_mode: &str,
+) -> Vec<NetworkAttachment> {
+    if !plan.network_deny_all || is_oci_execution_mode(execution_mode) {
         return Vec::new();
     }
     vec![NetworkAttachment {
@@ -338,20 +365,49 @@ mod tests {
     }
 
     #[test]
-    fn network_deny_all() {
-        let nets = cell_spec_network_attachments(&KernelFSHydrationPlan {
-            network_deny_all: true,
-            ..Default::default()
-        });
+    fn network_deny_all_microvm() {
+        let plan = KernelFSHydrationPlan::from_role_paths("/tmp/in", None, "/tmp/out");
+        assert!(plan.network_deny_all);
+        let nets = cell_spec_network_attachments(&plan, "");
         assert_eq!(nets.len(), 1);
         assert_eq!(nets[0].name, "default");
         assert_eq!(nets[0].egress, "none");
+        assert!(!oci_suppresses_network_deny_all(&plan, ""));
+    }
+
+    #[test]
+    fn network_deny_all_oci_omits_egress_none() {
+        let plan = KernelFSHydrationPlan {
+            network_deny_all: true,
+            ..Default::default()
+        };
+        for mode in ["oci", "EXECUTION_MODE_OCI", " Oci "] {
+            let nets = cell_spec_network_attachments(&plan, mode);
+            assert!(nets.is_empty(), "mode {mode:?} must not emit egress=none");
+            assert!(oci_suppresses_network_deny_all(&plan, mode));
+        }
     }
 
     #[test]
     fn network_allow_empty() {
-        let nets = cell_spec_network_attachments(&KernelFSHydrationPlan::default());
+        let nets = cell_spec_network_attachments(&KernelFSHydrationPlan::default(), "");
         assert!(nets.is_empty());
+    }
+
+    #[test]
+    fn apply_cell_spec_oci_serializes_without_egress_none() {
+        let plan = KernelFSHydrationPlan::from_role_paths("/tmp/in", None, "/tmp/out");
+        let spec = crate::types::CellSpec {
+            id: "cell_oci".into(),
+            display_name: "cell_oci".into(),
+            volumes: cell_spec_volume_attachments(&plan),
+            networks: cell_spec_network_attachments(&plan, EXECUTION_MODE_OCI),
+            execution_mode: EXECUTION_MODE_OCI.to_string(),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&spec).unwrap();
+        assert!(!json.contains("egress"));
+        assert!(json.contains("EXECUTION_MODE_OCI"));
     }
 
     #[test]
