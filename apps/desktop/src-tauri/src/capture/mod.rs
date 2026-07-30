@@ -3,6 +3,8 @@
 //! Manual smoke: build/run desktop with `--features capture`, grant Screen Recording
 //! in System Settings, then press **⌘⇧2** or choose **Screen Clip** from the menu/tray.
 
+mod shelf;
+
 use std::path::Path;
 
 use arboard::Clipboard;
@@ -23,6 +25,8 @@ pub const SCREEN_CLIP_SHORTCUT: &str = "CommandOrControl+Shift+2";
 pub const CAPTURE_INGESTED_EVENT: &str = "capture-ingested";
 pub const CAPTURE_CANCELLED_EVENT: &str = "capture-cancelled";
 pub const CAPTURE_ERROR_EVENT: &str = "capture-error";
+
+pub use shelf::{CaptureShelfState, CAPTURE_SHELF_UPDATED_EVENT};
 
 const CAPTURE_CANCELLED: &str = "__capture_cancelled__";
 
@@ -86,15 +90,17 @@ fn run_screen_clip_inner(app: &AppHandle) -> Result<(), String> {
     let png_bytes = png_bytes_from_capture(captured)?;
     let (storage_name, storage_bytes) = encode_storage_image(&png_bytes)?;
     let result = create_inbox_capture(root.clone(), storage_bytes, storage_name, Some(inbox_directory))?;
+    let page_path = result.page_path.clone();
     copy_png_to_clipboard(&png_bytes)?;
     let _ = app.emit(
         CAPTURE_INGESTED_EVENT,
         CaptureIngestedPayload {
-            page_path: result.page_path,
+            page_path: page_path.clone(),
             asset_path: result.asset_path,
             root,
         },
     );
+    shelf::on_ingested(app, page_path);
     Ok(())
 }
 

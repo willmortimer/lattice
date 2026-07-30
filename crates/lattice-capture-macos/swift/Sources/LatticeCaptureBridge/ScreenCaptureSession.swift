@@ -34,33 +34,63 @@ enum ScreenCaptureSession {
     }
 
     static func captureDisplay(displayId: UInt32) async throws -> CapturedPng {
-        let content = try await SCShareableContent.excludingDesktopWindows(
-            false,
-            onScreenWindowsOnly: true
-        )
+        let content = try await loadShareableContent()
         guard let display = content.displays.first(where: { $0.displayID == CGDirectDisplayID(displayId) }) else {
             throw BridgeFailure.notFound("Display \(displayId) not found")
         }
-        return try await capture(filter: SCContentFilter(display: display, excludingWindows: []))
+        return try await capture(filter: contentFilter(display: display, content: content))
     }
 
     static func captureRegion(
         displayId: UInt32,
         region: CGRect
     ) async throws -> CapturedPng {
-        let content = try await SCShareableContent.excludingDesktopWindows(
-            false,
-            onScreenWindowsOnly: true
-        )
+        let content = try await loadShareableContent()
         guard let display = content.displays.first(where: { $0.displayID == CGDirectDisplayID(displayId) }) else {
             throw BridgeFailure.notFound("Display \(displayId) not found")
         }
-        let filter = SCContentFilter(display: display, excludingWindows: [])
+        let filter = contentFilter(display: display, content: content)
         let configuration = SCStreamConfiguration()
         configuration.sourceRect = region
         configuration.width = Int(region.width)
         configuration.height = Int(region.height)
         return try await capture(filter: filter, configuration: configuration)
+    }
+
+    private static func loadShareableContent() async throws -> SCShareableContent {
+        try await SCShareableContent.excludingDesktopWindows(
+            false,
+            onScreenWindowsOnly: true
+        )
+    }
+
+    /// Exclude Lattice overlay/shelf windows from ScreenCaptureKit captures.
+    private static func latticeExcludedApplications(
+        from content: SCShareableContent
+    ) -> [SCRunningApplication] {
+        let bundleId = Bundle.main.bundleIdentifier
+        let pid = ProcessInfo.processInfo.processIdentifier
+        return content.applications.filter { app in
+            if let bundleId, app.bundleIdentifier == bundleId {
+                return true
+            }
+            return app.processID == pid
+        }
+    }
+
+    private static func contentFilter(
+        display: SCDisplay,
+        content: SCShareableContent
+    ) -> SCContentFilter {
+        let excluding = latticeExcludedApplications(from: content)
+        if excluding.isEmpty {
+            return SCContentFilter(display: display, excludingWindows: [])
+        }
+        return SCContentFilter(
+            display: display,
+            excludingApplications: excluding,
+            exceptingWindows: []
+        )
     }
 
     private static func capture(
