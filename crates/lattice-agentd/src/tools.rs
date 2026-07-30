@@ -7,12 +7,17 @@ use std::path::PathBuf;
 use kernelfs::{
     normalize_guest_path, ExecutionManifest, InputMount, Mounts, WasmtimeLimits,
 };
+use lattice_cell_client::{
+    celld_configured, require_celld_base_url, CelldClient, HttpCelldClient, HydrateFile,
+    KernelFSHydrationPlan, ProjectionRunRequest,
+};
 use serde_json::{json, Value};
 
+use crate::cell_host::{run_cell_task_and_propose, CellProposalProvenance};
 use crate::lattice_client::LatticeToolClient;
 use crate::wasi_host::{
     propose_output_drafts_with_provenance, run_wasi_guest_with_options, wasi_run_error_json,
-    WorkspaceBinding, WasiGuestHostOptions, WasiHostError, WasiProposalProvenance,
+    DraftProvenance, WorkspaceBinding, WasiGuestHostOptions, WasiHostError, WasiProposalProvenance,
 };
 
 /// Cap tool JSON returned to the model so long search/read payloads do not
@@ -43,10 +48,11 @@ Tool use:
 8. Never claim a workspace change was applied. You may only create proposals (`propose_*`, `create_proposal`); the user reviews and applies them in the Proposals inbox. There is no apply tool.
 9. Use `propose_page` to create or edit pages via proposals — pass the path and new content to update an existing page.
 10. Use `run_wasi_guest` only for sandboxed guest WASM that should write `/output` artifacts as proposals. Prefer preset `copy_hello` (expects `Tools/guests/copy_hello.wasm`) or pass `resourcePaths` instead of raw `inputsJson`. It requires `workspaceRoot` and does not apply changes.
-11. Keep proposals narrow, validated, reviewable, and reversible.
-12. Never request, reveal, or place secrets in model-visible content.
-13. If a tool errors, explain briefly and continue with what you know.
-14. Omit workspaceId/root tool arguments — the host injects them.";
+11. When `CELLD_BASE_URL` is configured, use `run_cell_task` to hydrate → run → collect on celld and propose collected `/output` files. Requires `workspaceRoot`. Does not apply.
+12. Keep proposals narrow, validated, reviewable, and reversible.
+13. Never request, reveal, or place secrets in model-visible content.
+14. If a tool errors, explain briefly and continue with what you know.
+15. Omit workspaceId/root tool arguments — the host injects them.";
 
 /// Per-run workspace binding for tool dispatch.
 #[derive(Debug, Clone, Default)]
@@ -101,6 +107,55 @@ fn function_tool(name: &str, description: &str, parameters: Value) -> Value {
 /// Workspace binding fields are omitted from schemas on purpose — the host
 /// injects them from `start_run` so models stop wasting a turn on context.
 pub fn openai_tool_definitions() -> Vec<Value> {
+    let mut tools = base_openai_tool_definitions();
+    if celld_configured() {
+        tools.push(run_cell_task_tool_definition());
+    }
+    tools
+}
+
+fn run_cell_task_tool_definition() -> Value {
+    function_tool(
+        "run_cell_task",
+        "Run a celld guest projection (hydrate → run → collect) and propose collected /output files via propose_resource. Requires CELLD_BASE_URL and workspaceRoot. Does not apply.",
+        json!({
+            "type": "object",
+            "properties": {
+                "cellId": {
+                    "type": "string",
+                    "description": "Target celld cell id"
+                },
+                "projectionId": {
+                    "type": "string",
+                    "description": "KernelFS projection id for hydrate/run/collect"
+                },
+                "argv": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Guest argv for lattice.runtime.v1 RunTask"
+                },
+                "outputProposalTarget": {
+                    "type": "string",
+                    "description": "Workspace-relative prefix for proposed output paths (e.g. Reports)"
+                },
+                "hydrateResourcePaths": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Workspace-relative files to hydrate under input/ (basename guest path)"
+                },
+                "profile": {
+                    "type": "string",
+                    "description": "Cell profile name (default lattice-runtime)"
+                },
+                "taskId": opt_str(),
+            },
+            "required": ["cellId", "projectionId", "argv", "outputProposalTarget"],
+            "additionalProperties": false,
+        }),
+    )
+}
+
+fn base_openai_tool_definitions() -> Vec<Value> {
     vec![
         function_tool(
             "get_current_context",
@@ -652,7 +707,15 @@ async fn dispatch_tool_inner(
             "workspaceId": ctx.workspace_id,
             "workspaceRoot": ctx.workspace_root,
             "latticeApiConfigured": client.is_some(),
+            "celldConfigured": celld_configured(),
         }));
+    }
+
+    if name == "run_cell_task" && !celld_configured() {
+        return Err(format!(
+            "run_cell_task requires {} to be set",
+            lattice_cell_client::CELLD_BASE_URL_ENV
+        ));
     }
 
     let client = client.ok_or_else(|| {
@@ -860,6 +923,7 @@ async fn dispatch_tool_inner(
         "run_wasi_guest" => {
             dispatch_run_wasi_guest(client, ctx, &args).await
         }
+        "run_cell_task" => dispatch_run_cell_task(client, ctx, &args).await,
         other => Err(format!("unknown tool: {other}")),
     }
 }
@@ -1009,6 +1073,126 @@ async fn dispatch_run_wasi_guest(
         "draftCount": guest_result.drafts.len(),
         "proposals": proposal_summaries,
     }))
+}
+
+async fn dispatch_run_cell_task(
+    client: &LatticeToolClient,
+    ctx: &ToolRunContext,
+    args: &Value,
+) -> Result<Value, String> {
+    let workspace_root = ctx
+        .workspace_root
+        .as_deref()
+        .filter(|s| !s.trim().is_empty())
+        .ok_or_else(|| {
+            "workspaceRoot is required for run_cell_task (set via start_run workspaceRoot)"
+                .to_string()
+        })?;
+
+    let cell_id = string_arg(args, "cellId").ok_or_else(|| "cellId is required".to_string())?;
+    let projection_id = string_arg(args, "projectionId")
+        .ok_or_else(|| "projectionId is required".to_string())?;
+    let output_proposal_target = string_arg(args, "outputProposalTarget")
+        .ok_or_else(|| "outputProposalTarget is required".to_string())?;
+    let argv = string_array_arg(args, "argv");
+    if argv.is_empty() {
+        return Err("argv is required (non-empty string array)".into());
+    }
+    let profile = string_arg(args, "profile").unwrap_or_else(|| "lattice-runtime".into());
+    let task_id = string_arg(args, "taskId").unwrap_or_else(|| projection_id.clone());
+
+    let base_url = require_celld_base_url().map_err(|err| err.to_string())?;
+    let celld = CelldClient::new(base_url, HttpCelldClient);
+
+    let hydrate_files = hydrate_files_from_workspace(workspace_root, args)?;
+
+    let plan_parent = tempfile::tempdir().map_err(|err| err.to_string())?;
+    let input_host = plan_parent.path().join("input");
+    let output_host = plan_parent.path().join("output");
+    std::fs::create_dir_all(&input_host).map_err(|err| err.to_string())?;
+    std::fs::create_dir_all(&output_host).map_err(|err| err.to_string())?;
+
+    let request = ProjectionRunRequest {
+        cell_id: cell_id.clone(),
+        projection_id: projection_id.clone(),
+        profile,
+        plan: KernelFSHydrationPlan::from_role_paths(input_host, None, output_host),
+        hydrate_files,
+        argv,
+        task_id: task_id.clone(),
+        ..ProjectionRunRequest::default()
+    };
+
+    let provenance = CellProposalProvenance {
+        cell_id: cell_id.clone(),
+        projection_id: projection_id.clone(),
+        task_id,
+        output_proposal_target: output_proposal_target.clone(),
+    };
+
+    let workspace = WorkspaceBinding::new(ctx.workspace_id.clone(), ctx.workspace_root.clone());
+    let (run_result, proposals) = run_cell_task_and_propose(
+        &celld,
+        client,
+        &workspace,
+        &request,
+        &output_proposal_target,
+        &provenance,
+    )
+    .await
+    .map_err(|err| err.to_string())?;
+
+    let drafts = crate::cell_host::output_map_to_drafts(
+        &run_result.output_files,
+        &output_proposal_target,
+        &run_result.projection_id,
+    );
+
+    let proposal_summaries: Vec<Value> = proposals
+        .iter()
+        .enumerate()
+        .map(|(index, proposal)| {
+            json!({
+                "index": index,
+                "path": drafts.get(index).map(|draft| draft.resource_path.clone()),
+                "proposalId": proposal.get("proposalId"),
+                "status": proposal.get("status"),
+            })
+        })
+        .collect();
+
+    Ok(json!({
+        "cellId": cell_id,
+        "projectionId": projection_id,
+        "outputProposalTarget": output_proposal_target,
+        "sourceResource": provenance.source_resource(),
+        "exitCode": run_result.run.exit_code,
+        "draftCount": drafts.len(),
+        "proposals": proposal_summaries,
+    }))
+}
+
+fn hydrate_files_from_workspace(workspace_root: &str, args: &Value) -> Result<Vec<HydrateFile>, String> {
+    let resource_paths = string_array_arg(args, "hydrateResourcePaths");
+    if resource_paths.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut files = Vec::with_capacity(resource_paths.len());
+    for host_path_rel in resource_paths {
+        let host_abs = resolve_workspace_path(workspace_root, &host_path_rel)?;
+        let guest_name = std::path::Path::new(&host_path_rel)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| format!("hydrateResourcePaths entry {host_path_rel:?} has no file name"))?
+            .to_string();
+        let guest_path = format!("input/{guest_name}");
+        normalize_guest_path(&guest_name).map_err(|err| err.to_string())?;
+        let content = std::fs::read_to_string(&host_abs)
+            .map_err(|err| format!("cannot read hydrate file {host_path_rel:?}: {err}"))?;
+        files.push(HydrateFile::text(guest_path, content));
+    }
+    Ok(files)
 }
 
 fn string_array_arg(args: &Value, key: &str) -> Vec<String> {

@@ -4,6 +4,7 @@
 //! latticed prefer this binary by default. Node is opt-in via
 //! `LATTICE_AGENTD_PREFER_NODE` or explicit `LATTICE_AGENTD_BIN`.
 
+pub mod cell_host;
 pub mod fake;
 pub mod lattice_client;
 pub mod loop_runtime;
@@ -22,6 +23,6 @@ pub use responses::{emit_openai_run, OpenaiRunOptions, ResponsesError};
 pub use tools::{openai_tool_definitions, ToolRunContext, WORKSPACE_AGENT_INSTRUCTIONS};
 pub use wasi_host::{
     propose_output_drafts, propose_output_drafts_with_provenance, run_wasi_guest,
-    run_wasi_guest_with_options, wasi_run_error_json, WorkspaceBinding, WasiGuestHostOptions,
-    WasiGuestRunResult, WasiHostError, WasiProposalProvenance,
+    run_wasi_guest_with_options, wasi_run_error_json, DraftProvenance, WorkspaceBinding,
+    WasiGuestHostOptions, WasiGuestRunResult, WasiHostError, WasiProposalProvenance,
 };

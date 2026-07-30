@@ -11,8 +11,8 @@ use std::time::Duration;
 use kernelfs::{
     collect_output_commit_plan, materialize_with_options, run_wasi_guest as kernelfs_run,
     ExecutionManifest, HostPathPolicy, HydrationRecord, LatticeProposalAdapter,
-    LatticeProposalDraft, MaterializeError, MaterializeOptions, WasmtimeLimits, WasiRunError,
-    WasiRunOptions, WasiRunResult,
+    LatticeProposalDraft, MaterializeError, MaterializeOptions, SecretHandlePolicy,
+    WasmtimeLimits, WasiRunError, WasiRunOptions, WasiRunResult,
 };
 use serde_json::{json, Value};
 use thiserror::Error;
@@ -80,6 +80,12 @@ pub struct WasiGuestHostOptions {
     pub host_path_roots: Vec<std::path::PathBuf>,
 }
 
+/// Provenance attached to proposed KernelFS output drafts.
+pub trait DraftProvenance {
+    fn source_resource(&self) -> String;
+    fn enrich_summary(&self, base: &str) -> String;
+}
+
 /// Provenance attached to proposed WASI `/output` drafts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WasiProposalProvenance {
@@ -90,12 +96,12 @@ pub struct WasiProposalProvenance {
     pub input_hashes: Vec<(String, String)>,
 }
 
-impl WasiProposalProvenance {
-    pub fn source_resource(&self) -> String {
+impl DraftProvenance for WasiProposalProvenance {
+    fn source_resource(&self) -> String {
         format!("wasi://{}/{}", self.run_id, self.wasm_path.trim_start_matches('/'))
     }
 
-    pub fn enrich_summary(&self, base: &str) -> String {
+    fn enrich_summary(&self, base: &str) -> String {
         let inputs = self
             .input_hashes
             .iter()
@@ -218,6 +224,7 @@ pub fn run_wasi_guest_with_options(
         manifest,
         &MaterializeOptions {
             host_path_policy: HostPathPolicy::AllowRoots(&options.host_path_roots),
+            secret_handle_policy: SecretHandlePolicy::DenyAll,
         },
     )?;
 
@@ -273,15 +280,16 @@ pub async fn propose_output_drafts(
     workspace: &WorkspaceBinding,
     drafts: &[LatticeProposalDraft],
 ) -> Result<Vec<Value>, ProposeDraftsError> {
-    propose_output_drafts_with_provenance(client, workspace, drafts, None).await
+    propose_output_drafts_with_provenance::<WasiProposalProvenance>(client, workspace, drafts, None)
+        .await
 }
 
-/// Like [`propose_output_drafts`], with optional WASI provenance on each body.
-pub async fn propose_output_drafts_with_provenance(
+/// Like [`propose_output_drafts`], with optional provenance on each body.
+pub async fn propose_output_drafts_with_provenance<P: DraftProvenance + Sync>(
     client: &LatticeToolClient,
     workspace: &WorkspaceBinding,
     drafts: &[LatticeProposalDraft],
-    provenance: Option<&WasiProposalProvenance>,
+    provenance: Option<&P>,
 ) -> Result<Vec<Value>, ProposeDraftsError> {
     if !workspace.is_bound() {
         return Err(ProposeDraftsError::MissingWorkspace);

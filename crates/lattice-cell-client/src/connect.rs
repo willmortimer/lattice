@@ -73,7 +73,6 @@ pub fn decode_connect_stream(body: &[u8]) -> Result<Vec<serde_json::Value>> {
 }
 
 /// Encode a single Connect stream envelope (uncompressed message).
-#[cfg(test)]
 pub fn encode_connect_message(message: &serde_json::Value) -> Result<Vec<u8>> {
     let payload = serde_json::to_vec(message)?;
     let mut out = Vec::with_capacity(5 + payload.len());

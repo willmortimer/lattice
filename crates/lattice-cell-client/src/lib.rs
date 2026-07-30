@@ -5,7 +5,7 @@
 
 mod client;
 mod config;
-mod connect;
+pub mod connect;
 mod error;
 mod hydrate;
 mod types;

@@ -23,6 +23,7 @@ path = "src/bin/lattice_wasi_seatbelt.rs"
 anyhow.workspace = true
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 kernelfs.workspace = true
+lattice-cell-client.workspace = true
 reqwest = { version = "0.12", default-features = false, features = [
     "json",
     "rustls-tls",
@@ -46,6 +47,7 @@ wasmtime.workspace = true
 wasmtime-wasi.workspace = true
 
 [dev-dependencies]
+base64.workspace = true
 tempfile = "3"
 tokio = { workspace = true, features = [
     "io-std",
