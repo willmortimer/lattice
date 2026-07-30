@@ -66,7 +66,7 @@ back to the primary display without user interaction.
 ```sh
 cargo test -p lattice-capture-core
 cargo test -p lattice-handlers capture::
-pnpm --filter @lattice/desktop test apps/desktop/src/screenClip.test.ts
+pnpm --filter @lattice/desktop test src/screenClip.test.ts
 ```
 
 These tests validate destination/source/plan types, inbox ingest limits,
