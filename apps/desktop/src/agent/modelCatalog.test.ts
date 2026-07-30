@@ -8,11 +8,12 @@ import {
 } from "./modelCatalog";
 
 describe("modelCatalog", () => {
-  it("defaults openai to gpt-5-nano and pioneer to luna", () => {
+  it("defaults openai to gpt-5-nano, pioneer to luna, local to local", () => {
     expect(DEFAULT_OPENAI_MODEL).toBe("gpt-5-nano");
     expect(DEFAULT_PIONEER_MODEL).toBe("gpt-5.6-luna");
     expect(defaultModelForProvider("openai")).toBe("gpt-5-nano");
     expect(defaultModelForProvider("pioneer")).toBe("gpt-5.6-luna");
+    expect(defaultModelForProvider("local")).toBe("local");
   });
 
   it("matches the OpenAI project allowlist for chat models", () => {

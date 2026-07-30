@@ -36,7 +36,9 @@ function readStoredSelection(): {
       selectedModel?: string;
     };
     const provider =
-      parsed.selectedProvider === "openai" || parsed.selectedProvider === "pioneer"
+      parsed.selectedProvider === "openai" ||
+      parsed.selectedProvider === "pioneer" ||
+      parsed.selectedProvider === "local"
         ? parsed.selectedProvider
         : null;
     const model =
@@ -121,7 +123,7 @@ export function shouldRevealViewport(followMode: AgentFollowMode): boolean {
 export function isAgentComposerDisabled(
   state: Pick<
     AgentSessionStore,
-    "accountAiDisabled" | "aiMode" | "byoOpenaiKeyPresent"
+    "accountAiDisabled" | "aiMode" | "byoOpenaiKeyPresent" | "healthOk"
   >,
 ): boolean {
   if (state.accountAiDisabled) {
@@ -129,6 +131,9 @@ export function isAgentComposerDisabled(
   }
   if (state.aiMode === "byoOpenai") {
     return state.byoOpenaiKeyPresent !== true;
+  }
+  if (state.aiMode === "local") {
+    return state.healthOk === false;
   }
   return false;
 }
@@ -146,7 +151,10 @@ function resolveProviderFromProfileAndHealth(
   if (state.aiMode === "byoOpenai" || state.aiMode === "account") {
     return "openai";
   }
-  if (backend === "openai" || backend === "pioneer") {
+  if (state.aiMode === "local") {
+    return "local";
+  }
+  if (backend === "openai" || backend === "pioneer" || backend === "local") {
     return backend;
   }
   return null;

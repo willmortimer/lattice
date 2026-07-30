@@ -681,7 +681,7 @@ async fn handle_start_agent_run(
         crate::agent::ProviderKind::parse(&req.provider).ok_or_else(|| WireError {
             code: "agent_invalid_request".into(),
             message: format!(
-                "unknown provider {:?}; expected pioneer|openai|fake",
+                "unknown provider {:?}; expected pioneer|openai|local|fake",
                 req.provider
             ),
             details: None,

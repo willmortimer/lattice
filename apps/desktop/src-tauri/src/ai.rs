@@ -61,10 +61,10 @@ pub fn load_desktop_ai_settings() -> lattice_profile::AiSettings {
 
 /// When desktop AI mode is BYO OpenAI, agent spawn must pin the OpenAI provider.
 pub fn agent_provider_for_profile(settings: &AiSettings) -> Option<&'static str> {
-    if settings.mode == AiMode::ByoOpenai {
-        Some("openai")
-    } else {
-        None
+    match settings.mode {
+        AiMode::ByoOpenai => Some("openai"),
+        AiMode::Local => Some("local"),
+        AiMode::Account => None,
     }
 }
 
@@ -80,6 +80,10 @@ pub fn should_use_fake_agent_backend(
     }
     if settings.mode == AiMode::ByoOpenai {
         // BYO must not silently fake when the keychain key is missing.
+        return false;
+    }
+    if settings.mode == AiMode::Local {
+        // On-device must not silently fake; missing endpoint fails in health/run.
         return false;
     }
     !pioneer_key_set && !openai_key_set
@@ -177,6 +181,9 @@ mod tests {
         assert_eq!(agent_provider_for_profile(&settings), Some("openai"));
 
         settings.mode = AiMode::Local;
+        assert_eq!(agent_provider_for_profile(&settings), Some("local"));
+
+        settings.mode = AiMode::Account;
         assert_eq!(agent_provider_for_profile(&settings), None);
     }
 
@@ -187,6 +194,10 @@ mod tests {
         assert!(!should_use_fake_agent_backend(&settings, false, false, false));
 
         settings.mode = AiMode::Local;
+        assert!(!should_use_fake_agent_backend(&settings, false, false, false));
+        assert!(!should_use_fake_agent_backend(&settings, false, false, true));
+
+        settings.mode = AiMode::Account;
         assert!(should_use_fake_agent_backend(&settings, false, false, false));
         assert!(!should_use_fake_agent_backend(&settings, false, false, true));
     }

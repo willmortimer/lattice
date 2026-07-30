@@ -1,6 +1,6 @@
-export type AgentProviderKind = "fake" | "pioneer" | "openai" | "unknown";
+export type AgentProviderKind = "fake" | "pioneer" | "openai" | "local" | "unknown";
 
-const PROVIDER_KINDS = new Set<string>(["fake", "pioneer", "openai"]);
+const PROVIDER_KINDS = new Set<string>(["fake", "pioneer", "openai", "local"]);
 
 /**
  * Resolve the badge provider kind.
@@ -41,6 +41,8 @@ export function agentProviderLabel(kind: AgentProviderKind): string {
       return "Pioneer";
     case "openai":
       return "OpenAI";
+    case "local":
+      return "On-device";
     case "unknown":
       return "Unknown";
     default: {

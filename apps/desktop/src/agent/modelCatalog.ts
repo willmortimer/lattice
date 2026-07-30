@@ -1,6 +1,6 @@
 /** Catalog of selectable agent models per provider (UI + docs). */
 
-export type SelectableAgentProvider = "openai" | "pioneer";
+export type SelectableAgentProvider = "openai" | "pioneer" | "local";
 
 export type AgentModelOption = {
   id: string;
@@ -24,6 +24,11 @@ export const PIONEER_MODEL_OPTIONS: readonly AgentModelOption[] = [
   { id: "gpt-5.6-sol", label: "gpt-5.6-sol" },
 ] as const;
 
+export const LOCAL_MODEL_OPTIONS: readonly AgentModelOption[] = [
+  { id: "local", label: "local (server default)" },
+  { id: "qwen2.5", label: "qwen2.5" },
+] as const;
+
 /** Allowed embedding models (not shown in chat selector). */
 export const OPENAI_EMBEDDING_MODELS = [
   "text-embedding-3-small",
@@ -33,6 +38,7 @@ export const OPENAI_EMBEDDING_MODELS = [
 
 export const DEFAULT_OPENAI_MODEL = "gpt-5-nano";
 export const DEFAULT_PIONEER_MODEL = "gpt-5.6-luna";
+export const DEFAULT_LOCAL_MODEL = "local";
 
 export function modelsForProvider(provider: SelectableAgentProvider): readonly AgentModelOption[] {
   switch (provider) {
@@ -40,6 +46,8 @@ export function modelsForProvider(provider: SelectableAgentProvider): readonly A
       return OPENAI_MODEL_OPTIONS;
     case "pioneer":
       return PIONEER_MODEL_OPTIONS;
+    case "local":
+      return LOCAL_MODEL_OPTIONS;
     default: {
       const _exhaustive: never = provider;
       return _exhaustive;
@@ -53,6 +61,8 @@ export function defaultModelForProvider(provider: SelectableAgentProvider): stri
       return DEFAULT_OPENAI_MODEL;
     case "pioneer":
       return DEFAULT_PIONEER_MODEL;
+    case "local":
+      return DEFAULT_LOCAL_MODEL;
     default: {
       const _exhaustive: never = provider;
       return _exhaustive;

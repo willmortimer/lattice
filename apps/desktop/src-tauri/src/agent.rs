@@ -22,6 +22,9 @@ const ENV_AGENT_FAKE: &str = "LATTICE_AGENT_FAKE";
 const ENV_AGENTD_BIN: &str = "LATTICE_AGENTD_BIN";
 const ENV_AGENT_PROVIDER: &str = "LATTICE_AGENT_PROVIDER";
 const ENV_AGENT_MODEL: &str = "LATTICE_AGENT_MODEL";
+const ENV_LOCAL_LLM_BASE_URL: &str = "LATTICE_LOCAL_LLM_BASE_URL";
+const ENV_LOCAL_LLM_API_KEY: &str = "LATTICE_LOCAL_LLM_API_KEY";
+const ENV_LOCAL_LLM_MODEL: &str = "LATTICE_LOCAL_LLM_MODEL";
 const ENV_PIONEER_API_KEY: &str = "PIONEER_API_KEY";
 const ENV_OPENAI_API_KEY: &str = "OPENAI_API_KEY";
 
@@ -198,7 +201,13 @@ pub fn agent_spawn_env() -> SpawnHostEnv {
 
     if account_ai_active {
         // Provider + OPENAI_* already set by account_ai_spawn_env.
-        for key in [ENV_PIONEER_API_KEY, ENV_AGENT_MODEL] {
+        for key in [
+            ENV_PIONEER_API_KEY,
+            ENV_AGENT_MODEL,
+            ENV_LOCAL_LLM_BASE_URL,
+            ENV_LOCAL_LLM_API_KEY,
+            ENV_LOCAL_LLM_MODEL,
+        ] {
             forward_env_var(&mut extra_env, key);
         }
     } else {
@@ -207,7 +216,13 @@ pub fn agent_spawn_env() -> SpawnHostEnv {
         } else {
             forward_env_var(&mut extra_env, ENV_AGENT_PROVIDER);
         }
-        for key in [ENV_PIONEER_API_KEY, ENV_AGENT_MODEL] {
+        for key in [
+            ENV_PIONEER_API_KEY,
+            ENV_AGENT_MODEL,
+            ENV_LOCAL_LLM_BASE_URL,
+            ENV_LOCAL_LLM_API_KEY,
+            ENV_LOCAL_LLM_MODEL,
+        ] {
             forward_env_var(&mut extra_env, key);
         }
     }

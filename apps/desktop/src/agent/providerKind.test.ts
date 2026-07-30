@@ -40,6 +40,7 @@ describe("agentProviderLabel", () => {
     expect(agentProviderLabel("fake")).toBe("Fake");
     expect(agentProviderLabel("pioneer")).toBe("Pioneer");
     expect(agentProviderLabel("openai")).toBe("OpenAI");
+    expect(agentProviderLabel("local")).toBe("On-device");
     expect(agentProviderLabel("unknown")).toBe("Unknown");
   });
 });
