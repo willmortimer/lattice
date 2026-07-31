@@ -251,12 +251,45 @@ OCI mode calls `export_oci_roles_under_agent_share` with `run_id = taskId`
 
 The tool is **absent** from the model tool list when `CELLD_BASE_URL` is unset.
 Collected mirror paths like `output/out.txt` map to workspace proposal paths
-under `outputProposalTarget`. Provenance: `sourceResource`
-`cell://{cellId}/{projectionId}` with structured `hydrationInputs` digests.
+under `outputProposalTarget`. See **Provenance** below for propose → accept →
+inspect lineage.
 
 Implementation: `crates/lattice-agentd/src/cell_host.rs`,
 `crates/lattice-agentd/src/kernelfs_export.rs`,
 `crates/lattice-agentd/src/tools.rs` (`dispatch_run_cell_task`).
+
+## Provenance (propose → accept → inspect)
+
+**Propose (review):** `run_cell_task` / dogfood attach `sourceResource`
+`cell://{cellId}/{projectionId}` and structured `hydrationInputs` digests (input
+path, `contentHash`, optional `resourceId`) to each `propose_resource` draft.
+Review surfaces those digests before accept.
+
+**Accept (registry):** Accepting a proposal applies the transaction, then
+`lattice-commands` calls `latticefs_core::attach_accept_hydration_lineage` for
+each touched path. That mints a [`ResourceVersionId`](../crates/latticefs-core/README.md)
+in `.lattice/resource-registry.json` — even when the proposal carried no
+`hydrationInputs` (ordinary accepts still get a version stub). When digests were
+present on the proposal, they are copied into the registry record as
+`hydration_inputs`.
+
+**Inspect (read-back):** After accept, lineage is visible without reopening the
+proposal archive:
+
+| Surface | Fields |
+| --- | --- |
+| Desktop **Inspect → Properties** | `Version ID`, `Hydration inputs` (when non-empty) |
+| CLI `lattice resource stat <path>` | `version_id`, `hydration_inputs` |
+
+```sh
+lattice resource stat Reports/out.txt
+# version_id: <uuid>
+# hydration_inputs:
+#   - path=input/hello.txt contentHash=sha256:…
+```
+
+Registry API: [`resource_stat`](../crates/latticefs-core/README.md) /
+[`attach_accept_hydration_lineage`](../crates/latticefs-core/src/stat.rs).
 
 ## Non-goals
 
@@ -275,4 +308,5 @@ Implementation: `crates/lattice-agentd/src/cell_host.rs`,
 - Cell [`docs/10-macos-local-backend.md`](https://github.com/willmortimer/cell/blob/main/docs/10-macos-local-backend.md) — VZ backend + lattice profile
 - Cell [`docs/lattice-runtime.md`](https://github.com/willmortimer/cell/blob/main/docs/lattice-runtime.md) / [`mirror-broker.md`](https://github.com/willmortimer/cell/blob/main/docs/mirror-broker.md) — guest invoke JSON
 - `crates/lattice-agentd/README.md` — Pioneer tools, WASI guests, OCI export note
+- `crates/latticefs-core/README.md` — `ResourceVersionId`, accept lineage, `resource stat`
 - ADR 0063 — governed propose/overlay (no silent canonical writes)
