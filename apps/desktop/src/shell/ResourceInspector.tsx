@@ -185,6 +185,31 @@ export function ResourceInspector({
                 {resourceStat.content_hash && (
                   <div><dt>Content hash</dt><dd><code>{resourceStat.content_hash}</code></dd></div>
                 )}
+                {resourceStat.version_id && (
+                  <div><dt>Version ID</dt><dd><code>{resourceStat.version_id}</code></dd></div>
+                )}
+                {resourceStat.hydration_inputs && resourceStat.hydration_inputs.length > 0 && (
+                  <div>
+                    <dt>Hydration inputs</dt>
+                    <dd>
+                      <ul className="inspector-hydration-list">
+                        {resourceStat.hydration_inputs.map((digest) => (
+                          <li key={`${digest.path}:${digest.contentHash}:${digest.resourceId ?? ""}`}>
+                            <code>{digest.path}</code>
+                            {" @ "}
+                            <code>{digest.contentHash}</code>
+                            {digest.resourceId ? (
+                              <>
+                                {" "}
+                                (<code>{digest.resourceId}</code>)
+                              </>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </dd>
+                  </div>
+                )}
               </>
             )}
           </dl>

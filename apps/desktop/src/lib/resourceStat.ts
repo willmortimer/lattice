@@ -8,6 +8,12 @@ export type MaterializationState =
   | "pinned"
   | "evicted";
 
+export interface HydrationInputDigest {
+  path: string;
+  contentHash: string;
+  resourceId?: string | null;
+}
+
 export interface ResourceStat {
   resource_id: string;
   path: string;
@@ -15,6 +21,7 @@ export interface ResourceStat {
   materialization: MaterializationState;
   content_hash: string | null;
   version_id: string | null;
+  hydration_inputs?: HydrationInputDigest[];
 }
 
 const AUTHORITY_LABELS: Record<AuthorityMode, string> = {

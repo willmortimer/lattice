@@ -32,8 +32,10 @@ Default posture for ordinary local files:
 | [`ResourceId`](src/types.rs) | Stable identity, independent of path |
 | [`NamespaceEntry`](src/types.rs) | Path → resource binding |
 | [`ResourceStat`](src/types.rs) | Authority + materialization snapshot |
+| [`HydrationInputDigest`](src/types.rs) | Accept-lineage input path + content hash |
 | [`NamespaceRegistry`](src/registry.rs) | Persisted path registry |
 | [`resource_stat`](src/stat.rs) | Inspect one path |
+| [`attach_accept_hydration_lineage`](src/stat.rs) | On proposal accept: mint version + store digests |
 | [`materialize_to_cloud`](src/stat.rs) | PUT→GET verify and set `authority: cloud` |
 | [`open_cloud_authoritative_bytes`](src/stat.rs) | GET cloud bytes; errors on failure (no local fallback) |
 | [`fetch_cloud_blob`](src/cloud.rs) | Low-level cloud GET with optional hash verify |

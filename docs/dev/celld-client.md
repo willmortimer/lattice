@@ -166,6 +166,13 @@ paths under `outputProposalTarget` (e.g. `Reports/out.txt`). Provenance uses
 as WASI `run_wasi_guest`. Non-UTF-8 collected bytes use `contentBase64` on
 `propose_resource` (via shared `propose_output_drafts*` / `ContentKind::Bytes`).
 
+Structured `hydrationInputs` (`path` + `contentHash` + optional `resourceId`)
+persist on the proposal source. When the user accepts/applies the proposal,
+LatticeFS mints a `ResourceVersionId` for each accepted path and copies those
+digests onto the resource registry entry. Inspect surfaces them via
+`lattice resource stat` / `--json` (`hydration_inputs`) and the desktop Inspect
+properties panel.
+
 Implementation: `crates/lattice-agentd/src/cell_host.rs` +
 `crates/lattice-agentd/src/tools.rs` (`dispatch_run_cell_task`).
 

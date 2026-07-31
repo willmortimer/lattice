@@ -2553,6 +2553,27 @@ fn print_resource_stat(stat: &ResourceStat) {
         Some(hash) => println!("content_hash: {hash}"),
         None => println!("content_hash: (none)"),
     }
+    match &stat.version_id {
+        Some(version_id) => println!("version_id: {version_id}"),
+        None => println!("version_id: (none)"),
+    }
+    if stat.hydration_inputs.is_empty() {
+        println!("hydration_inputs: (none)");
+    } else {
+        println!("hydration_inputs:");
+        for digest in &stat.hydration_inputs {
+            match &digest.resource_id {
+                Some(resource_id) => println!(
+                    "  - path={} contentHash={} resourceId={}",
+                    digest.path, digest.content_hash, resource_id
+                ),
+                None => println!(
+                    "  - path={} contentHash={}",
+                    digest.path, digest.content_hash
+                ),
+            }
+        }
+    }
 }
 
 fn format_authority_mode(mode: AuthorityMode) -> &'static str {

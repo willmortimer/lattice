@@ -343,11 +343,52 @@ pub fn apply_proposal(
     let tx = build_proposal_transaction(&proposal, selected_indices)?;
     let mut engine = CommandEngine::open(workspace_root)?;
     let receipt = engine.apply(tx)?;
+    attach_proposal_hydration_lineage(workspace_root, &proposal, selected_indices)?;
     proposal.status = ProposalStatus::Accepted;
     proposal.resolved_at = Some(proposal_now_iso());
     proposal.applied_transaction_id = Some(receipt.transaction_id.clone());
     archive_proposal(workspace_root, proposal)?;
     Ok(receipt.transaction_id)
+}
+
+/// Persist KernelFS hydration digests onto LatticeFS version stubs for accepted paths.
+fn attach_proposal_hydration_lineage(
+    workspace_root: &Path,
+    proposal: &TransactionProposal,
+    selected_indices: &[usize],
+) -> Result<()> {
+    if proposal.source.hydration_inputs.is_empty() {
+        return Ok(());
+    }
+    let mut paths = BTreeSet::new();
+    for &index in selected_indices {
+        let Some(command) = proposal.commands.get(index) else {
+            continue;
+        };
+        for path in command.touched_paths() {
+            paths.insert(path_display(&path));
+        }
+    }
+    if paths.is_empty() {
+        return Ok(());
+    }
+    let digests: Vec<latticefs_core::HydrationInputDigest> = proposal
+        .source
+        .hydration_inputs
+        .iter()
+        .map(|digest| latticefs_core::HydrationInputDigest {
+            path: digest.path.clone(),
+            content_hash: digest.content_hash.clone(),
+            resource_id: digest.resource_id.clone(),
+        })
+        .collect();
+    let path_list: Vec<String> = paths.into_iter().collect();
+    latticefs_core::attach_accept_hydration_lineage(workspace_root, &path_list, &digests).map_err(
+        |err| Error::InvalidResourceTarget {
+            path: PathBuf::from(".lattice/resource-registry.json"),
+            reason: format!("failed to attach hydration lineage on accept: {err}"),
+        },
+    )
 }
 
 fn path_display(path: &Path) -> String {
@@ -1340,5 +1381,28 @@ components:
         assert!(raw.contains("hydrationInputs"));
         assert!(raw.contains("contentHash"));
         assert!(raw.contains("0f328ae687eb8fd2acfa3a910bb6722eff43f8a7dbd08e53e572ae37a0c5d7a5"));
+    }
+
+    #[test]
+    fn apply_proposal_attaches_hydration_inputs_to_resource_stat() {
+        let dir = workspace();
+        let digest = crate::HydrationInputDigest {
+            path: "hello.txt".into(),
+            content_hash: "0f328ae687eb8fd2acfa3a910bb6722eff43f8a7dbd08e53e572ae37a0c5d7a5"
+                .into(),
+            resource_id: Some("res-1".into()),
+        };
+        let mut proposal = demo_proposal("hydrate-accept", "Reports/out.txt");
+        proposal.source.resource = Some("wasi://run_1/guest.wasm".into());
+        proposal.source.hydration_inputs = vec![digest.clone()];
+        let stored = create_proposal(dir.path(), proposal).unwrap();
+        apply_proposal(dir.path(), &stored.id, &[0]).unwrap();
+
+        let stat = latticefs_core::resource_stat(dir.path(), "Reports/out.txt").unwrap();
+        assert!(stat.version_id.is_some());
+        assert_eq!(stat.hydration_inputs.len(), 1);
+        assert_eq!(stat.hydration_inputs[0].path, digest.path);
+        assert_eq!(stat.hydration_inputs[0].content_hash, digest.content_hash);
+        assert_eq!(stat.hydration_inputs[0].resource_id, digest.resource_id);
     }
 }

@@ -5962,6 +5962,7 @@ dependencies = [
  "lattice-datasets",
  "lattice-env",
  "lattice-storage",
+ "latticefs-core",
  "libc",
  "rusqlite",
  "serde",
