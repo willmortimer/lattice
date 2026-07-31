@@ -114,7 +114,10 @@ media is wrong.
 (`application/connect+json`). Raw JSON under that content type makes celld
 reject the call with
 `protocol error: promised N bytes in enveloped message` (often N≈576939372 from
-misreading `{"cel…` as a length). Unary Apply/Start stay `application/json`.
+misreading `{"cel…` as a length). The request is a single data envelope
+(flags=0); HTTP body EOF ends the stream — do not append a zero-length
+end-stream frame (connect-go fails with `unexpected end of JSON input`). Unary
+Apply/Start stay `application/json`.
 
 KernelFS role **host** directories for OCI live must sit under the ivisor worker
 `agent-share` tree (same contract as Cell live-bind):

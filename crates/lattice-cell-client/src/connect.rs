@@ -72,16 +72,17 @@ pub fn decode_connect_stream(body: &[u8]) -> Result<Vec<serde_json::Value>> {
     Ok(out)
 }
 
-/// Encode a single Connect stream envelope (uncompressed message).
+/// Encode a single Connect data envelope (uncompressed message) for client requests.
+///
+/// Server-streaming RPCs send one request message; HTTP body EOF ends the request
+/// stream. Do not append an end-stream frame (connect-go rejects zero-length
+/// end-stream JSON).
 pub fn encode_connect_message(message: &serde_json::Value) -> Result<Vec<u8>> {
     let payload = serde_json::to_vec(message)?;
     let mut out = Vec::with_capacity(5 + payload.len());
     out.push(0);
     out.extend_from_slice(&(payload.len() as u32).to_be_bytes());
     out.extend_from_slice(&payload);
-    // end-stream empty trailer
-    out.push(0x02);
-    out.extend_from_slice(&0u32.to_be_bytes());
     Ok(out)
 }
 
@@ -96,6 +97,27 @@ mod tests {
         let msgs = decode_connect_stream(&encoded).unwrap();
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0]["done"], true);
+    }
+
+    #[test]
+    fn invoke_request_has_no_zero_length_end_stream() {
+        let encoded = encode_connect_message(&json!({
+            "cellId": "cell_dogfood",
+            "service": "lattice.runtime.v1",
+            "method": "RunTask",
+            "payload": "e30=",
+            "contentType": "application/json",
+        }))
+        .unwrap();
+        assert!(encoded.len() >= 5);
+        assert_eq!(encoded[0], 0, "data envelope must use flags=0");
+        let data_len =
+            u32::from_be_bytes([encoded[1], encoded[2], encoded[3], encoded[4]]) as usize;
+        assert_eq!(
+            encoded.len(),
+            5 + data_len,
+            "must not append zero-length end-stream trailer"
+        );
     }
 
     #[test]

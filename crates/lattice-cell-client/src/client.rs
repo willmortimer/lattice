@@ -595,10 +595,10 @@ mod tests {
                 body.first()
             );
             let req_len = u32::from_be_bytes([body[1], body[2], body[3], body[4]]) as usize;
-            assert!(
-                body.len() >= 5 + req_len,
-                "Connect envelope length {req_len} exceeds body {}",
-                body.len()
+            assert_eq!(
+                body.len(),
+                5 + req_len,
+                "Invoke request must be a single data envelope (no end-stream trailer)"
             );
             let req: Value = serde_json::from_slice(&body[5..5 + req_len])?;
             assert_eq!(req["cellId"], "cell_demo");
