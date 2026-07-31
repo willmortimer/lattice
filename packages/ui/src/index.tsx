@@ -37,30 +37,34 @@ export function Button({
 
 export function IconButton({
   label,
-  tooltip = label,
+  tooltip,
   className,
   ...props
 }: Omit<ButtonProps, "children"> & {
   label: string;
-  tooltip?: string;
+  /** Pass `false` to skip the tooltip portal (prefer for dense virtualized rows). */
+  tooltip?: string | false;
   children: ReactNode;
 }) {
+  const button = (
+    <Button
+      aria-label={label}
+      className={classes("ltui-icon-button", className)}
+      variant="ghost"
+      size="sm"
+      {...props}
+    />
+  );
+  if (tooltip === false) {
+    return button;
+  }
+  const tip = tooltip ?? label;
   return (
     <Tooltip.Root>
-      <Tooltip.Trigger
-        render={
-          <Button
-            aria-label={label}
-            className={classes("ltui-icon-button", className)}
-            variant="ghost"
-            size="sm"
-            {...props}
-          />
-        }
-      />
+      <Tooltip.Trigger render={button} />
       <Tooltip.Portal>
         <Tooltip.Positioner sideOffset={7}>
-          <Tooltip.Popup className="ltui-tooltip">{tooltip}</Tooltip.Popup>
+          <Tooltip.Popup className="ltui-tooltip">{tip}</Tooltip.Popup>
         </Tooltip.Positioner>
       </Tooltip.Portal>
     </Tooltip.Root>

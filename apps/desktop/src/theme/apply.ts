@@ -1,5 +1,7 @@
 /** Theme apply + persistence for the desktop shell. */
 
+import { ensureFontPackLoaded } from "./fontPacks";
+
 export const THEME_MIRROR_KEY = "lattice.theme.mirror";
 
 export interface ThemeMirrorEntry {
@@ -48,6 +50,11 @@ export interface FontPackSummaryPayload {
   name: string;
   source: "builtin" | "user" | string;
   path: string;
+  fonts: {
+    display: string;
+    ui: string;
+    mono: string;
+  };
 }
 
 export interface ThemeCatalogPayload {
@@ -127,6 +134,8 @@ export function applyResolvedTheme(resolved: ResolvedThemePayload): void {
 
   persistThemeMirror(buildThemeMirror(resolved, readThemeMirror()));
   void syncNativeWindowBackground(resolved.background);
+  // Load alternate pack CSS after tokens apply so first paint is not blocked.
+  void ensureFontPackLoaded(resolved.settings.fontPack || resolved.fontPack);
 }
 
 export function persistThemeMirror(mirror: ThemeMirror): void {

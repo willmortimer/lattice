@@ -6,6 +6,10 @@ export type SaveState =
   | { status: "conflict"; message: string }
   | { status: "error"; message: string };
 
+/** Stable identity for dirty transitions — avoid allocating a new object per keystroke. */
+export const DIRTY_SAVE_STATE: SaveState = { status: "dirty" };
+export const IDLE_SAVE_STATE: SaveState = { status: "idle" };
+
 /** Whether `state` represents an edit not yet durably saved. */
 export function isUnsaved(state: SaveState): boolean {
   return state.status !== "idle" && state.status !== "saved";

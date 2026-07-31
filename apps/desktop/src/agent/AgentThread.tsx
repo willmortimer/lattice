@@ -143,14 +143,13 @@ function AgentThreadView({
 }
 
 export function AgentThread({ workspaceRoot }: AgentThreadProps) {
-  const session = useAgentSessionStore((state) => ({
-    accountAiDisabled: state.accountAiDisabled,
-    accountAiBlockReason: state.accountAiBlockReason,
-    aiMode: state.aiMode,
-    byoOpenaiKeyPresent: state.byoOpenaiKeyPresent,
-  }));
-  const byoOpenaiKeyMissing =
-    session.aiMode === "byoOpenai" && session.byoOpenaiKeyPresent === false;
+  // Primitive selectors only — returning a fresh object from the selector trips
+  // React useSyncExternalStore (#185 maximum update depth).
+  const accountAiDisabled = useAgentSessionStore((state) => state.accountAiDisabled);
+  const accountAiBlockReason = useAgentSessionStore((state) => state.accountAiBlockReason);
+  const aiMode = useAgentSessionStore((state) => state.aiMode);
+  const byoOpenaiKeyPresent = useAgentSessionStore((state) => state.byoOpenaiKeyPresent);
+  const byoOpenaiKeyMissing = aiMode === "byoOpenai" && byoOpenaiKeyPresent === false;
 
   if (!workspaceRoot?.trim()) {
     return (
@@ -162,8 +161,8 @@ export function AgentThread({ workspaceRoot }: AgentThreadProps) {
 
   return (
     <AgentThreadView
-      accountAiDisabled={session.accountAiDisabled}
-      accountAiBlockReason={session.accountAiBlockReason}
+      accountAiDisabled={accountAiDisabled}
+      accountAiBlockReason={accountAiBlockReason}
       byoOpenaiKeyMissing={byoOpenaiKeyMissing}
     />
   );

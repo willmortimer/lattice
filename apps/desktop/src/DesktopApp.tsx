@@ -1,4 +1,15 @@
 import { DesktopShell } from "./shell/DesktopShell";
+import { DesktopUiStoreProvider } from "./shell/desktopUiStore";
 import { useDesktopController } from "./controllers/useDesktopController";
-export default function DesktopApp() { return <DesktopShell model={useDesktopController()} />; }
 
+function DesktopAppInner() {
+  return <DesktopShell model={useDesktopController()} />;
+}
+
+export default function DesktopApp() {
+  return (
+    <DesktopUiStoreProvider>
+      <DesktopAppInner />
+    </DesktopUiStoreProvider>
+  );
+}

@@ -84,6 +84,7 @@ function useResourceListScroll() {
   const scrollParentRef = useRef<HTMLElement | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
+  const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -94,12 +95,20 @@ function useResourceListScroll() {
 
     scrollParentRef.current = parent;
 
-    const sync = () => {
+    const syncNow = () => {
       setScrollTop(parent.scrollTop);
       setViewportHeight(parent.clientHeight);
     };
 
-    sync();
+    const sync = () => {
+      if (rafRef.current !== null) return;
+      rafRef.current = window.requestAnimationFrame(() => {
+        rafRef.current = null;
+        syncNow();
+      });
+    };
+
+    syncNow();
     parent.addEventListener("scroll", sync, { passive: true });
     const observer = new ResizeObserver(sync);
     observer.observe(parent);
@@ -107,6 +116,10 @@ function useResourceListScroll() {
     return () => {
       parent.removeEventListener("scroll", sync);
       observer.disconnect();
+      if (rafRef.current !== null) {
+        window.cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
       if (scrollParentRef.current === parent) scrollParentRef.current = null;
     };
   }, []);

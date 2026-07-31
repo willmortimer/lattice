@@ -1,43 +1,17 @@
-import { AgentHeader } from "../agent/AgentHeader";
-import { AgentOverlayHost } from "../agent/AgentOverlayHost";
-import { AgentPanelShell } from "../agent/AgentPanelShell";
-import { AgentTrail } from "../agent/AgentTrail";
-import { AgentThread } from "../agent/AgentThread";
-import { LatticeAgentProvider } from "../agent/LatticeAgentProvider";
-import { inBrowser } from "../demo";
-import { demoSearch } from "../demo";
-import { TabularImportReviewDialog } from "../data/CsvImportReviewDialog";
-import { LinkRepairReviewModal } from "../LinkRepairReviewModal";
-import { ProposalApplyToast } from "../ProposalApplyToast";
-import { ProposalInboxPanel } from "../ProposalInboxPanel";
-import { ProposalReviewModal } from "../ProposalReviewModal";
-import { batchWarnThresholdExceeded } from "../lib/linkRepair";
-import { hasTauri } from "../lib/ipc";
-import { ConnectedRoots, readConnectedCheckoutFile } from "../ConnectedRoots";
-import { GithubFileViewer } from "../GithubFileViewer";
-import { NewWorkspaceDialog } from "../NewWorkspaceDialog";
-import { CommandPalette } from "../CommandPalette";
-import { ResourceTree } from "../ResourceTree";
-import { SearchPane } from "../SearchPane";
-import { KindMark } from "../KindMark";
-import { QUICK_NOTE_SHORTCUT } from "../quickNoteWindow";
-import { directoryPurposesFromCatalog } from "../lib/templates";
-import { newFolderParentPath } from "../lib/treeOps";
-import { SettingsPage } from "../settings/SettingsPage";
-import { TerminalPanel } from "../terminal/TerminalPanel";
 import { BrandMark } from "../shell/BrandMark";
 import { DictationControls } from "../shell/DictationControls";
 import { voiceHintsFromPage } from "../lib/voice";
 import { HomeDashboard } from "../shell/HomeDashboard";
 import { ResourceInspector } from "../shell/ResourceInspector";
 import { ResourceSurface } from "../shell/ResourceSurface";
+import { SaveStatusIndicator, TabUnsavedDot } from "../shell/SaveStatusIndicator";
 import { StartupSplash } from "../shell/StartupSplash";
 import { AppLockOverlay } from "../shell/AppLockOverlay";
 import { DemoDriverHost } from "../demo/DemoDriverHost";
 import { useStartupSplash } from "../shell/useStartupSplash";
+import { useRendererServices } from "../shell/useRendererServices";
 import { setAppearanceMode, setFixedTheme, setFontPack } from "../theme";
 import { fileTitle } from "../controllers/useResourceController";
-import { isUnsaved, saveIndicatorText } from "../editor/saveState";
 import { searchResourceLinks } from "../lib/resourceLinks";
 import { Button, DialogBackdrop, DialogPopup, DialogPortal, DialogRoot, DialogTitle, IconButton, MenuItem, MenuPopup, MenuPortal, MenuPositioner, MenuRoot, MenuSeparator, MenuTrigger, TooltipProvider } from "@lattice/ui";
 import {
@@ -62,8 +36,61 @@ import {
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import type { useDesktopController } from "../controllers/useDesktopController";
+import { inBrowser } from "../demo";
+import { demoSearch } from "../demo";
+import { TabularImportReviewDialog } from "../data/CsvImportReviewDialog";
+import { LinkRepairReviewModal } from "../LinkRepairReviewModal";
+import { ProposalApplyToast } from "../ProposalApplyToast";
+import { ProposalInboxPanel } from "../ProposalInboxPanel";
+import { ProposalReviewModal } from "../ProposalReviewModal";
+import { batchWarnThresholdExceeded } from "../lib/linkRepair";
+import { hasTauri } from "../lib/ipc";
+import { readConnectedCheckoutFile } from "../ConnectedRoots";
+import { GithubFileViewer } from "../GithubFileViewer";
+import { NewWorkspaceDialog } from "../NewWorkspaceDialog";
+import { ResourceTree } from "../ResourceTree";
+import { KindMark } from "../KindMark";
+import { QUICK_NOTE_SHORTCUT } from "../quickNoteWindow";
+import { directoryPurposesFromCatalog } from "../lib/templates";
+import { newFolderParentPath } from "../lib/treeOps";
+
+const SettingsPage = lazy(() =>
+  import("../settings/SettingsPage").then((module) => ({ default: module.SettingsPage })),
+);
+const TerminalPanel = lazy(() =>
+  import("../terminal/TerminalPanel").then((module) => ({ default: module.TerminalPanel })),
+);
+const SearchPane = lazy(() =>
+  import("../SearchPane").then((module) => ({ default: module.SearchPane })),
+);
+const AgentPanelShell = lazy(() =>
+  import("../agent/AgentPanelShell").then((module) => ({ default: module.AgentPanelShell })),
+);
+const LatticeAgentProvider = lazy(() =>
+  import("../agent/LatticeAgentProvider").then((module) => ({
+    default: module.LatticeAgentProvider,
+  })),
+);
+const AgentThread = lazy(() =>
+  import("../agent/AgentThread").then((module) => ({ default: module.AgentThread })),
+);
+const AgentHeader = lazy(() =>
+  import("../agent/AgentHeader").then((module) => ({ default: module.AgentHeader })),
+);
+const AgentTrail = lazy(() =>
+  import("../agent/AgentTrail").then((module) => ({ default: module.AgentTrail })),
+);
+const AgentOverlayHost = lazy(() =>
+  import("../agent/AgentOverlayHost").then((module) => ({ default: module.AgentOverlayHost })),
+);
+const ConnectedRoots = lazy(() =>
+  import("../ConnectedRoots").then((module) => ({ default: module.ConnectedRoots })),
+);
+const CommandPalette = lazy(() =>
+  import("../CommandPalette").then((module) => ({ default: module.CommandPalette })),
+);
 
 export interface DesktopShellProps { model: ReturnType<typeof useDesktopController>; }
 
@@ -71,7 +98,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [browserActiveFolderPath, setBrowserActiveFolderPath] = useState<string | null>(null);
   const {
-    profile, profileReady, settings, startup, snapshot, selected, selectedPaths, session, error, busy, saveState,
+    profile, profileReady, settings, startup, snapshot, selected, selectedPaths, session, error, busy,
     externalConflict, reloadToken, newWorkspaceOpen, workspacesDir, templates, statusToast,
     profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth,
     treeCollapsedPaths, revealPath, linkPicker, csvImportReview,
@@ -82,7 +109,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
     openProposalResourcePath, dismissProposalApplyOutcome,
     openTabs, navigation, inspectorOpen, agentPanelOpen, editingTitle, titleDraft, assetRoot,
     wikiTargets, pageEditorRef, paletteItems, hasCapability, setSettings, setStartup, setError,
-    recents, page, setSaveState, setLinkPicker, handleImportEditorAsset,
+    recents, page, setLinkPicker, handleImportEditorAsset,
     setNewWorkspaceOpen, setSearchPaneOpen, setPaletteOpen, setActivityArea, setInspectorOpen, setAgentPanelOpen,
     setDismissedNoticeCodes, setEditingTitle, setTitleDraft, applyThemeCatalog,
     clearRecents, resetSettings, refreshProfile, handleGetStarted, handleOpenWorkspace, openRecent,
@@ -120,6 +147,44 @@ export function DesktopShell({ model }: DesktopShellProps) {
     () => newFolderParentPath(selected, { activeFolderPath: browserActiveFolderPath }),
     [browserActiveFolderPath, selected],
   );
+
+  const rendererContext = useRendererServices({
+    assetRoot,
+    workspaceRoot: inBrowser || !snapshot ? null : snapshot.root,
+    resources: snapshot?.resources ?? [],
+    settings,
+    pageEditorRef,
+    wikiTargets,
+    conflict: externalConflict,
+    reloadToken,
+    handlers: {
+      onRevisionChange: handleRevisionChange,
+      onNotebookContentChange: handleNotebookContentChange,
+      onOpenWiki: handleOpenWiki,
+      onCreateTable: handleNewTable,
+      onSearchWiki: !inBrowser && snapshot
+        ? (query) => searchResourceLinks(snapshot.root, query, 20)
+        : undefined,
+      onImportAsset: inBrowser ? undefined : handleImportEditorAsset,
+      onKeepIncoming: () => void handleKeepIncoming(),
+      onKeepLocal: () => void handleKeepLocal(),
+      onKeepBoth: () => void handleKeepBoth(),
+      onOpenFile: handleOpenFile,
+      onOpenProposal: (proposalId) => void openProposalReview(proposalId),
+      onOpenExternally: inBrowser
+        ? undefined
+        : (resource) => void handleOpenExternally(resource),
+      onPromoteWorkspaceCsv: inBrowser
+        ? undefined
+        : (resource) => void handlePromoteWorkspaceCsv(resource),
+      onPageWidthChange: (pageWidth) =>
+        setSettings((current) => ({
+          ...current,
+          editor: { ...current.editor, pageWidth },
+        })),
+      openInspectorOnWiki: settings.editor.linkClickBehavior === "inspect",
+    },
+  });
 
   if (splashVisible) {
     return (
@@ -355,38 +420,40 @@ export function DesktopShell({ model }: DesktopShellProps) {
               onActiveFolderChange={inBrowser ? setBrowserActiveFolderPath : undefined}
             />
             {!inBrowser && (
-              <ConnectedRoots
-                workspaceRoot={snapshot.root}
-                onError={setError}
-                onOpenFile={(detail) => {
-                  void readConnectedCheckoutFile(
-                    detail.provider,
-                    snapshot.root,
-                    detail.bindingId,
-                    detail.path,
-                  )
-                    .then((file) => {
-                      const scheme = detail.provider === "github" ? "github" : "gitlab";
-                      setSession({
-                        kind: "github-file",
-                        bindingId: detail.bindingId,
-                        owner: detail.owner,
-                        repo: detail.repo,
-                        path: detail.path,
-                        content: file.content,
-                        stale: detail.stale,
-                        resource: {
-                          path: `${scheme}://${detail.owner}/${detail.repo}/${detail.path}`,
-                          kind: "file",
-                        },
-                      });
-                      setActivityArea("files");
-                    })
-                    .catch((error) =>
-                      setError(error instanceof Error ? error.message : String(error)),
-                    );
-                }}
-              />
+              <Suspense fallback={null}>
+                <ConnectedRoots
+                  workspaceRoot={snapshot.root}
+                  onError={setError}
+                  onOpenFile={(detail) => {
+                    void readConnectedCheckoutFile(
+                      detail.provider,
+                      snapshot.root,
+                      detail.bindingId,
+                      detail.path,
+                    )
+                      .then((file) => {
+                        const scheme = detail.provider === "github" ? "github" : "gitlab";
+                        setSession({
+                          kind: "github-file",
+                          bindingId: detail.bindingId,
+                          owner: detail.owner,
+                          repo: detail.repo,
+                          path: detail.path,
+                          content: file.content,
+                          stale: detail.stale,
+                          resource: {
+                            path: `${scheme}://${detail.owner}/${detail.repo}/${detail.path}`,
+                            kind: "file",
+                          },
+                        });
+                        setActivityArea("files");
+                      })
+                      .catch((error) =>
+                        setError(error instanceof Error ? error.message : String(error)),
+                      );
+                  }}
+                />
+              </Suspense>
             )}
           </nav>
           {hasTauri && (
@@ -478,9 +545,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
             </div>
             <div className="header-actions">
               {selected?.kind === "page" && page && (
-                <span className={`save-state save-state-${saveState.status}`}>
-                  {externalConflict ? "Conflict" : saveIndicatorText(saveState) || "Saved"}
-                </span>
+                <SaveStatusIndicator externalConflict={Boolean(externalConflict)} />
               )}
               {selected?.kind === "page" && page && !inBrowser && (
                 <DictationControls
@@ -567,7 +632,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
                 >
                   <KindMark kind={tab.kind} size={12} />
                   <span>{fileTitle(tab.path)}</span>
-                  {tab.path === selected?.path && isUnsaved(saveState) && <i />}
+                  {tab.path === selected?.path && <TabUnsavedDot active />}
                   <span
                     className="tab-close"
                     role="button"
@@ -589,7 +654,9 @@ export function DesktopShell({ model }: DesktopShellProps) {
           )}
 
           <div className="workspace-content">
-            <AgentOverlayHost />
+            <Suspense fallback={null}>
+              <AgentOverlayHost />
+            </Suspense>
             <section className="content-pane">
               {activityArea === "home" && (
                 <HomeDashboard
@@ -604,33 +671,35 @@ export function DesktopShell({ model }: DesktopShellProps) {
               )}
 
               {activityArea === "settings" && (
-                <SettingsPage
-                  settings={settings}
-                  startup={startup}
-                  workspace={snapshot}
-                  themeCatalog={themeCatalog}
-                  onChange={setSettings}
-                  onStartupChange={setStartup}
-                  onWorkspaceChange={(next) => void updateWorkspaceSettings(next)}
-                  onClearRecents={clearRecents}
-                  onReset={resetSettings}
-                  onRefreshProfile={refreshProfile}
-                  onThemeChange={(themeId) =>
-                    void setFixedTheme(themeId, snapshot.root)
-                      .then(applyThemeCatalog)
-                      .catch((err) => setError(String(err)))
-                  }
-                  onFollowSystem={() =>
-                    void setAppearanceMode("auto", snapshot.root)
-                      .then(applyThemeCatalog)
-                      .catch((err) => setError(String(err)))
-                  }
-                  onFontPackChange={(fontPack) =>
-                    void setFontPack(fontPack, snapshot.root)
-                      .then(applyThemeCatalog)
-                      .catch((err) => setError(String(err)))
-                  }
-                />
+                <Suspense fallback={<div className="surface-loading">Loading settings…</div>}>
+                  <SettingsPage
+                    settings={settings}
+                    startup={startup}
+                    workspace={snapshot}
+                    themeCatalog={themeCatalog}
+                    onChange={setSettings}
+                    onStartupChange={setStartup}
+                    onWorkspaceChange={(next) => void updateWorkspaceSettings(next)}
+                    onClearRecents={clearRecents}
+                    onReset={resetSettings}
+                    onRefreshProfile={refreshProfile}
+                    onThemeChange={(themeId) =>
+                      void setFixedTheme(themeId, snapshot.root)
+                        .then(applyThemeCatalog)
+                        .catch((err) => setError(String(err)))
+                    }
+                    onFollowSystem={() =>
+                      void setAppearanceMode("auto", snapshot.root)
+                        .then(applyThemeCatalog)
+                        .catch((err) => setError(String(err)))
+                    }
+                    onFontPackChange={(fontPack) =>
+                      void setFontPack(fontPack, snapshot.root)
+                        .then(applyThemeCatalog)
+                        .catch((err) => setError(String(err)))
+                    }
+                  />
+                </Suspense>
               )}
 
               {activityArea !== "home" && activityArea !== "settings" && (
@@ -639,41 +708,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
                     <ResourceSurface
                       session={session}
                       capabilities={snapshot.capabilities}
-                      context={{
-                        assetRoot,
-                        workspaceRoot: inBrowser ? null : snapshot.root,
-                        resources: snapshot.resources,
-                        settings,
-                        pageEditorRef,
-                        wikiTargets,
-                        conflict: externalConflict,
-                        reloadToken,
-                        callbacks: {
-                          onSaveStateChange: setSaveState,
-                          onRevisionChange: handleRevisionChange,
-                          onNotebookContentChange: handleNotebookContentChange,
-                          onOpenWiki: (target) => {
-                            void handleOpenWiki(target);
-                            if (settings.editor.linkClickBehavior === "inspect") setInspectorOpen(true);
-                          },
-                          onCreateTable: handleNewTable,
-                          onSearchWiki: !inBrowser
-                            ? (query) => searchResourceLinks(snapshot.root, query, 20)
-                            : undefined,
-                          onImportAsset: inBrowser ? undefined : handleImportEditorAsset,
-                          onKeepIncoming: () => void handleKeepIncoming(),
-                          onKeepLocal: () => void handleKeepLocal(),
-                          onKeepBoth: () => void handleKeepBoth(),
-                          onOpenFile: handleOpenFile,
-                          onOpenProposal: (proposalId) => void openProposalReview(proposalId),
-                          onOpenExternally: inBrowser ? undefined : (resource) => void handleOpenExternally(resource),
-                          onPromoteWorkspaceCsv: inBrowser ? undefined : (resource) => void handlePromoteWorkspaceCsv(resource),
-                          onPageWidthChange: (pageWidth) => setSettings((current) => ({
-                            ...current,
-                            editor: { ...current.editor, pageWidth },
-                          })),
-                        },
-                      }}
+                      context={rendererContext}
                     />
                   </div>
                 ) : (
@@ -692,41 +727,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
                       <ResourceSurface
                         session={session}
                         capabilities={snapshot.capabilities}
-                        context={{
-                          assetRoot,
-                          workspaceRoot: inBrowser ? null : snapshot.root,
-                          resources: snapshot.resources,
-                          settings,
-                          pageEditorRef,
-                          wikiTargets,
-                          conflict: externalConflict,
-                          reloadToken,
-                          callbacks: {
-                            onSaveStateChange: setSaveState,
-                            onRevisionChange: handleRevisionChange,
-                            onNotebookContentChange: handleNotebookContentChange,
-                            onOpenWiki: (target) => {
-                              void handleOpenWiki(target);
-                              if (settings.editor.linkClickBehavior === "inspect") setInspectorOpen(true);
-                            },
-                            onCreateTable: handleNewTable,
-                            onSearchWiki: !inBrowser
-                              ? (query) => searchResourceLinks(snapshot.root, query, 20)
-                              : undefined,
-                            onImportAsset: inBrowser ? undefined : handleImportEditorAsset,
-                            onKeepIncoming: () => void handleKeepIncoming(),
-                            onKeepLocal: () => void handleKeepLocal(),
-                            onKeepBoth: () => void handleKeepBoth(),
-                            onOpenFile: handleOpenFile,
-                            onOpenProposal: (proposalId) => void openProposalReview(proposalId),
-                            onOpenExternally: inBrowser ? undefined : (resource) => void handleOpenExternally(resource),
-                            onPromoteWorkspaceCsv: inBrowser ? undefined : (resource) => void handlePromoteWorkspaceCsv(resource),
-                            onPageWidthChange: (pageWidth) => setSettings((current) => ({
-                              ...current,
-                              editor: { ...current.editor, pageWidth },
-                            })),
-                          },
-                        }}
+                        context={rendererContext}
                       />
                     )}
                       </>
@@ -771,42 +772,50 @@ export function DesktopShell({ model }: DesktopShellProps) {
             )}
 
             {agentPanelOpen && (
-              <AgentPanelShell>
-                <LatticeAgentProvider workspaceRoot={inBrowser ? null : snapshot.root}>
-                  <AgentHeader
-                    onClose={() => setAgentPanelOpen(false)}
-                    workspaceRoot={inBrowser ? null : snapshot.root}
-                  />
-                  <AgentTrail />
-                  <AgentThread workspaceRoot={inBrowser ? null : snapshot.root} />
-                </LatticeAgentProvider>
-              </AgentPanelShell>
+              <Suspense fallback={<div className="surface-loading">Loading agent…</div>}>
+                <AgentPanelShell>
+                  <LatticeAgentProvider workspaceRoot={inBrowser ? null : snapshot.root}>
+                    <AgentHeader
+                      onClose={() => setAgentPanelOpen(false)}
+                      workspaceRoot={inBrowser ? null : snapshot.root}
+                    />
+                    <AgentTrail />
+                    <AgentThread workspaceRoot={inBrowser ? null : snapshot.root} />
+                  </LatticeAgentProvider>
+                </AgentPanelShell>
+              </Suspense>
             )}
           </div>
 
           {terminalOpen && (
-            <TerminalPanel
-              workspaceRoot={inBrowser ? null : snapshot.root}
-              hasTerminalCapability={hasCapability("terminal")}
-              onClose={() => setTerminalOpen(false)}
-            />
+            <Suspense fallback={null}>
+              <TerminalPanel
+                workspaceRoot={inBrowser ? null : snapshot.root}
+                hasTerminalCapability={hasCapability("terminal")}
+                onClose={() => setTerminalOpen(false)}
+              />
+            </Suspense>
           )}
         </main>
 
       {paletteOpen && (
-        <CommandPalette items={paletteItems} onClose={() => setPaletteOpen(false)} />
+        <Suspense fallback={null}>
+          <CommandPalette items={paletteItems} onClose={() => setPaletteOpen(false)} />
+        </Suspense>
       )}
       {searchPaneOpen && (
-        <SearchPane
-          root={assetRoot}
-          semanticEnabled={settings.search.semanticEnabled}
-          demoSearch={inBrowser ? demoSearch : () => []}
-          onOpenFile={(path) => {
-            setSearchPaneOpen(false);
-            handleOpenFile(path);
-          }}
-          onClose={() => setSearchPaneOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <SearchPane
+            root={assetRoot}
+            semanticEnabled={settings.search.semanticEnabled}
+            demoSearch={inBrowser ? demoSearch : () => []}
+            onOpenFile={(path) => {
+              setSearchPaneOpen(false);
+              handleOpenFile(path);
+            }}
+            onClose={() => setSearchPaneOpen(false)}
+          />
+        </Suspense>
       )}
       {linkRepairReview && (
         <LinkRepairReviewModal

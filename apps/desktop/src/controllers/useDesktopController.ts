@@ -1,5 +1,6 @@
 import { demoSnapshot, demoStartEmpty, inBrowser } from "../demo";
 import type { SaveState } from "../editor/saveState";
+import { IDLE_SAVE_STATE } from "../editor/saveState";
 import type { PageEditorHandle } from "../editor/PageEditor";
 import { saveResourceTreeCollapsed, saveSidebarWidth, type DesktopSession } from "../lib/profile";
 import {
@@ -49,6 +50,7 @@ import {
   listenAppLock,
   type AppLockStatus,
 } from "../lib/appLock";
+import { useDesktopUiStore, useDesktopUiStoreApi } from "../shell/desktopUiStore";
 export function useDesktopController() {
   const {
     profile,
@@ -66,19 +68,32 @@ export function useDesktopController() {
     refreshProfile,
     resetSettings,
   } = useAppSettings();
+  const uiStore = useDesktopUiStoreApi();
+  const setSaveState = useCallback(
+    (state: SaveState | ((prev: SaveState) => SaveState)) => {
+      uiStore.getState().setSaveState(state);
+    },
+    [uiStore],
+  );
+  const sidebarWidth = useDesktopUiStore((state) => state.sidebarWidth);
+  const setSidebarWidth = useDesktopUiStore((state) => state.setSidebarWidth);
+  const inspectorOpen = useDesktopUiStore((state) => state.inspectorOpen);
+  const setInspectorOpen = useDesktopUiStore((state) => state.setInspectorOpen);
+  const agentPanelOpen = useDesktopUiStore((state) => state.agentPanelOpen);
+  const setAgentPanelOpen = useDesktopUiStore((state) => state.setAgentPanelOpen);
+  const paletteOpen = useDesktopUiStore((state) => state.paletteOpen);
+  const setPaletteOpen = useDesktopUiStore((state) => state.setPaletteOpen);
+  const searchPaneOpen = useDesktopUiStore((state) => state.searchPaneOpen);
+  const setSearchPaneOpen = useDesktopUiStore((state) => state.setSearchPaneOpen);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [saveState, setSaveState] = useState<SaveState>({ status: "idle" });
   const [newWorkspaceOpen, setNewWorkspaceOpen] = useState(false);
   const [statusToast, setStatusToast] = useState<string | null>(null);
   const [runtimeNotice, setRuntimeNotice] = useState<{
     code: string; title: string; message: string; path: string | null;
   } | null>(null);
   const [dismissedNoticeCodes, setDismissedNoticeCodes] = useState<string[]>([]);
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  const [searchPaneOpen, setSearchPaneOpen] = useState(false);
   const [themeCatalog, setThemeCatalog] = useState<ThemeCatalogPayload | null>(null);
-  const [sidebarWidth, setSidebarWidth] = useState(272);
   const [resourceTreeCollapsedByWorkspace, setResourceTreeCollapsedByWorkspace] =
     useState<ResourceTreeCollapseState>({});
   const [revealPath, setRevealPath] = useState<string | null>(null);
@@ -99,8 +114,6 @@ export function useDesktopController() {
   const proposalResolverRef = useRef<
     ((result: "accepted" | "rejected" | "cancelled") => void) | null
   >(null);
-  const [inspectorOpen, setInspectorOpen] = useState(false);
-  const [agentPanelOpen, setAgentPanelOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [treeRenameRequest, setTreeRenameRequest] = useState<{ path: string; token: number } | null>(null);
@@ -112,8 +125,12 @@ export function useDesktopController() {
   const resourceSelectRef = useRef<(resource: Resource, options?: { recordHistory?: boolean }) => Promise<void>>(async () => undefined);
   const resourceClearRef = useRef<() => void>(() => undefined);
   const selectedRef = useRef<Resource | null>(null);
-  const saveStateRef = useRef(saveState);
-  saveStateRef.current = saveState;
+  const saveStateRef = useRef(uiStore.getState().saveState);
+  useEffect(() => {
+    return uiStore.subscribe((state) => {
+      saveStateRef.current = state.saveState;
+    });
+  }, [uiStore]);
   const workspaceSnapshotRef = useRef<WorkspaceSnapshot | null>(inBrowser && !demoStartEmpty ? demoSnapshot : null);
   const reconciliationRef = useRef<ResourceReconciliationController>({
     externalConflict: null,
@@ -168,17 +185,17 @@ export function useDesktopController() {
 
   const onAdopt = useCallback(async () => {
     resourceResetRef.current();
-    setSaveState({ status: "idle" });
+    setSaveState(IDLE_SAVE_STATE);
     reconciliationRef.current.clearConflict();
     setRuntimeNotice(null);
     resetNavigation();
-  }, [resetNavigation]);
+  }, [resetNavigation, setSaveState]);
 
   const onWorkspaceUnavailable = useCallback(async (root: string) => {
     resourceResetRef.current();
     resetNavigation();
     reconciliationRef.current.clearConflict();
-    setSaveState({ status: "idle" });
+    setSaveState(IDLE_SAVE_STATE);
     setRuntimeNotice({
       code: "open-workspace-unavailable",
       title: "Workspace unavailable",
@@ -186,7 +203,7 @@ export function useDesktopController() {
         "The open workspace was moved or deleted outside Lattice. It was closed without recreating any content; create a workspace or open its new location.",
       path: root,
     });
-  }, [resetNavigation]);
+  }, [resetNavigation, setSaveState]);
 
   const getSession = useCallback((): Omit<DesktopSession, "root"> => {
     const current = getNavigationSessionState();
@@ -436,7 +453,7 @@ export function useDesktopController() {
     onReplaceTab: navigationController.replaceTab,
     onReplaceHistoryPath: navigationController.replacePath,
     refreshResources,
-    onPageReady: () => setSaveState({ status: "idle" }),
+    onPageReady: () => setSaveState(IDLE_SAVE_STATE),
     onLinkRepairReview,
   });
   resourceResetRef.current = resourceController.resetResources;
@@ -542,7 +559,7 @@ export function useDesktopController() {
     clearSelectionIf: resourceController.clearSelectionIf,
     removeTabs: navigationController.removeTabs,
     onError: setError,
-    setSaveStateIdle: () => setSaveState({ status: "idle" }),
+    setSaveStateIdle: () => setSaveState(IDLE_SAVE_STATE),
     onExternalLinkRepairProposal: (proposalId, from, to) => {
       void openExternalLinkRepairProposal(proposalId, from, to);
     },
@@ -551,7 +568,7 @@ export function useDesktopController() {
   const { externalConflict, handleKeepIncoming, handleKeepLocal, handleKeepBoth } = reconciliationController;
   const actions = useDesktopActionsController({
     snapshot, snapshotRef, setSnapshot, selected, pageRef, wikiTargets,
-    setError, setBusy, setStatusToast, setSaveStateIdle: () => setSaveState({ status: "idle" }),
+    setError, setBusy, setStatusToast, setSaveStateIdle: () => setSaveState(IDLE_SAVE_STATE),
     setActivityArea: (area) => navigationController.setActivityArea(area),
     setRevealPath, setLinkPicker, refreshResources, handleSelect,
     openCreatedResource: resourceController.openCreatedResource,
@@ -996,7 +1013,7 @@ export function useDesktopController() {
   }, [settings.keybindings]);
 
   return {
-    profile, profileReady, settings, startup, snapshot, snapshotRef, selected, selectedPaths, session, error, busy, saveState,
+    profile, profileReady, settings, startup, snapshot, snapshotRef, selected, selectedPaths, session, error, busy,
     externalConflict, reloadToken, newWorkspaceOpen, workspacesDir, templates, statusToast, runtimeNotice,
     profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth, treeCollapsedPaths, revealPath, linkPicker,
     csvImportReview, handleCancelCsvImport, handleConfirmCsvImport, handleCsvImportColumnTypeChange,

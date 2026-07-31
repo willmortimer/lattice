@@ -60,5 +60,9 @@ export function ResourceSurface({
   }
 
   const Renderer = component;
-  return <Renderer context={{ ...context, missingCapabilities: resolution.missingCapabilities }} session={session} />;
+  const renderContext = useMemo(
+    () => ({ ...context, missingCapabilities: resolution.missingCapabilities }),
+    [context, resolution.missingCapabilities],
+  );
+  return <Renderer context={renderContext} session={session} />;
 }

@@ -19,6 +19,7 @@ mod home;
 mod oauth;
 mod page;
 mod path;
+mod quick_note;
 mod search;
 mod workspace;
 
@@ -44,6 +45,7 @@ pub use home::{
     create_workspace, ensure_home, list_templates, LatticeHomeInfo, WorkspaceProvisionResult,
 };
 pub use page::{apply_page_update, create_page, read_page, PageContent};
+pub use quick_note::{prepare_quick_note, prepare_quick_note_with_runtime, prepare_quick_note_with_session, QuickNotePrepared};
 pub use path::{join_within_root, resolve_within_root, validate_workspace_relative};
 pub use search::{
     disable_semantic_search, disable_semantic_search_with_runtime,

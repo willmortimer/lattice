@@ -24,9 +24,22 @@ refresh or index rebuild before painting chrome — those run in the background
 (`refresh_resource_catalog` / `rebuild_index`). Theme catalog load also starts
 after snapshot adopt and should not gate the chrome selectors above.
 
+Default CI budgets (overridable via env):
+
+| Metric | Default |
+| --- | --- |
+| Cold shell | 5000 ms (`LATTICE_PERF_SHELL_COLD_MS`) |
+| Warm shell | 1500 ms (`LATTICE_PERF_SHELL_WARM_MS`) |
+| Page open | 2500 ms (`LATTICE_PERF_PAGE_OPEN_MS`) |
+| Page scroll | 1000 ms (`LATTICE_PERF_PAGE_SCROLL_MS`) |
+
+Documented product target remains warm shell in 300–500 ms on representative
+hardware (`documentedTargets.shellWarmMs`).
+
 When profiling regressions, prefer First Look tree virtualization, theme
-resolve IPC, and `ensure_home` / `open_workspace` scan cost over expanding the
-Playwright harness itself.
+resolve IPC, font-pack CSS (only the active pack loads at startup), and
+`ensure_home` / `open_workspace` / `prepare_quick_note` scan cost over expanding
+the Playwright harness itself.
 
 ## Run — browser
 

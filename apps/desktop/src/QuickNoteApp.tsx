@@ -6,12 +6,12 @@ import { openPath, openUrl } from "@tauri-apps/plugin-opener";
 import { ArrowSquareOut, ArrowUpRight, FileText, X } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { createNativePageIO } from "./editor/pageIO";
-import { createPage, resolveQuickNoteTemplatePath } from "./lib/pages";
+import { createNativePageIO, StaleRevisionError } from "./editor/pageIO";
+import { createSerializedSaveController } from "./editor/serializedSave";
+import { prepareQuickNote } from "./lib/pages";
 import { mergeDictationPlainText } from "./lib/mergeDictationPlainText";
 import { loadProfile } from "./lib/profile";
 import { deleteResource } from "./lib/resourceMutations";
-import { quickNotePath } from "./lib/timestamp";
 import { voiceHintsFromPage } from "./lib/voice";
 import {
   QuickNoteDictation,
@@ -22,7 +22,6 @@ import {
   detectSystemAppearance,
   type ThemeCatalogPayload,
 } from "./theme/apply";
-import type { Resource } from "./types";
 
 interface QuickNotePage {
   root: string;
@@ -34,25 +33,33 @@ interface OpenPayload {
   root: string | null;
 }
 
+type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
+
 export function QuickNoteApp() {
   const [page, setPage] = useState<QuickNotePage | null>(null);
   const [draft, setDraft] = useState("");
-  const [saveState, setSaveState] = useState<"idle" | "dirty" | "saving" | "saved" | "error">(
-    "idle",
-  );
+  const [saveState, setSaveState] = useState<SaveState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [provisionalText, setProvisionalText] = useState<string | null>(null);
   const [dictationAnchor, setDictationAnchor] = useState(0);
   const creatingRef = useRef(false);
-  const revisionRef = useRef<string | null>(null);
   const autosaveDelayRef = useRef(800);
-  const saveTimerRef = useRef<number | null>(null);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const userEditedRef = useRef(false);
   const initialDraftRef = useRef("");
   const dictationRef = useRef<QuickNoteDictationHandle | null>(null);
   const pendingRootRef = useRef<string | null | undefined>(undefined);
+  const saveControllerRef = useRef<ReturnType<
+    typeof createSerializedSaveController<string | null>
+  > | null>(null);
+
+  const disposeSaveController = useCallback(() => {
+    saveControllerRef.current?.dispose();
+    saveControllerRef.current = null;
+  }, []);
 
   const prepare = useCallback(async (requestedRoot?: string | null): Promise<boolean> => {
     if (creatingRef.current) return false;
@@ -74,40 +81,52 @@ export function QuickNoteApp() {
     setLoading(true);
     setError(null);
     try {
-      const workspace = await invoke<{
-        title: string;
-        defaults: { quickNoteDirectory: string; templateDirectory?: string | null };
-        resources: Resource[];
-      }>("open_workspace", { path: root });
-      const path = quickNotePath(new Date(), workspace.defaults.quickNoteDirectory);
-      const templatePath = resolveQuickNoteTemplatePath(
-        workspace.defaults.templateDirectory,
-        workspace.resources.map((resource) => resource.path),
-      );
-      const title = new Date().toISOString().slice(0, 10);
-      await createPage({
-        root,
-        relPath: path,
-        content: "",
-        templatePath,
-        title,
-      });
-      const io = createNativePageIO(root, path);
-      const loaded = await io.load();
+      const prepared = await prepareQuickNote(root);
       const catalog = await invoke<ThemeCatalogPayload>("list_themes", {
         system: detectSystemAppearance(),
         workspaceRoot: root,
       });
       applyResolvedTheme(catalog.resolved);
-      setPage({
-        root,
-        workspaceTitle: workspace.title,
-        path,
+
+      disposeSaveController();
+      const io = createNativePageIO(prepared.root, prepared.path);
+      saveControllerRef.current = createSerializedSaveController<string | null>({
+        initialRevision: prepared.revision,
+        save: async (baseRevision) => io.save(draftRef.current, baseRevision),
+        onStatus: (status) => {
+          switch (status) {
+            case "idle":
+              setSaveState("idle");
+              break;
+            case "dirty":
+              setSaveState("dirty");
+              break;
+            case "saving":
+              setSaveState("saving");
+              break;
+            case "saved":
+              setSaveState("saved");
+              break;
+            case "conflict":
+            case "error":
+              setSaveState("error");
+              break;
+            default:
+              status satisfies never;
+          }
+        },
+        isConflict: (err) => err instanceof StaleRevisionError,
+        savedIndicatorMs: 1200,
       });
-      setDraft(loaded.raw);
-      initialDraftRef.current = loaded.raw;
+
+      setPage({
+        root: prepared.root,
+        workspaceTitle: prepared.workspaceTitle,
+        path: prepared.path,
+      });
+      setDraft(prepared.content);
+      initialDraftRef.current = prepared.content;
       userEditedRef.current = false;
-      revisionRef.current = loaded.revision;
       setSaveState("idle");
       return true;
     } catch (err) {
@@ -117,53 +136,28 @@ export function QuickNoteApp() {
       creatingRef.current = false;
       setLoading(false);
     }
-  }, [page]);
-
-  const saveDraft = useCallback(
-    async (raw: string) => {
-      if (!page) return;
-      setSaveState("saving");
-      try {
-        const revision = await createNativePageIO(page.root, page.path).save(
-          raw,
-          revisionRef.current,
-        );
-        revisionRef.current = revision;
-        setSaveState("saved");
-        window.setTimeout(() => setSaveState((state) => (state === "saved" ? "idle" : state)), 1200);
-      } catch (err) {
-        setSaveState("error");
-        setError(String(err));
-      }
-    },
-    [page],
-  );
+  }, [disposeSaveController, page]);
 
   function updateDraft(value: string) {
     userEditedRef.current = true;
+    draftRef.current = value;
     setDraft(value);
-    setSaveState("dirty");
-    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = window.setTimeout(
-      () => void saveDraft(value),
-      autosaveDelayRef.current,
-    );
+    saveControllerRef.current?.markDirty(autosaveDelayRef.current);
   }
 
   useEffect(
     () => () => {
-      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+      disposeSaveController();
     },
-    [],
+    [disposeSaveController],
   );
 
   async function flushDraft() {
-    if (!page || (saveState !== "dirty" && saveState !== "error")) return;
-    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-    await saveDraft(draft);
+    await saveControllerRef.current?.flush();
   }
 
   const resetNoteState = useCallback(() => {
+    disposeSaveController();
     setPage(null);
     setDraft("");
     initialDraftRef.current = "";
@@ -172,7 +166,7 @@ export function QuickNoteApp() {
     setDictationAnchor(0);
     setSaveState("idle");
     setError(null);
-  }, []);
+  }, [disposeSaveController]);
 
   const discardEmptyDictationNote = useCallback(async () => {
     if (!page) {
@@ -191,7 +185,7 @@ export function QuickNoteApp() {
   const commitDictationFinal = useCallback(
     async (text: string, anchor: number) => {
       if (!page) return;
-      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+      saveControllerRef.current?.clearTimer();
 
       const trimmedFinal = text.trim();
       if (!trimmedFinal && !userEditedRef.current && draft.trim() === initialDraftRef.current.trim()) {
@@ -201,11 +195,13 @@ export function QuickNoteApp() {
       }
 
       const merged = mergeDictationPlainText(draft, text, anchor);
+      draftRef.current = merged;
       setDraft(merged);
       setProvisionalText(null);
-      await saveDraft(merged);
+      saveControllerRef.current?.markDirty(0);
+      await flushDraft();
     },
-    [discardEmptyDictationNote, draft, page, saveDraft],
+    [discardEmptyDictationNote, draft, page],
   );
 
   const ensurePageReady = useCallback(async () => {
@@ -389,8 +385,8 @@ export function QuickNoteApp() {
                 onKeyDown={(event) => {
                   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
                     event.preventDefault();
-                    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
-                    void saveDraft(draft);
+                    saveControllerRef.current?.clearTimer();
+                    void flushDraft();
                   }
                 }}
               />

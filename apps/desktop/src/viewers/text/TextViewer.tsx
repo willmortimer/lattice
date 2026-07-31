@@ -4,6 +4,7 @@ import { loadTextResource } from "../../controllers/resourceLoad";
 import type { OpenResourceSession } from "../../resourceSession";
 import type { Resource } from "../../types";
 import type { SaveState } from "../../editor/saveState";
+import { DIRTY_SAVE_STATE } from "../../editor/saveState";
 import { CsvTablePreview } from "./CsvTablePreview";
 import { canShowCsvPreview, parseCsvPreview, type CsvPreviewResult } from "./csvPreview";
 import { StructuredTree } from "./StructuredTree";
@@ -112,7 +113,10 @@ export function TextViewer({ session, root, onSaveStateChange, onRevisionChange,
     setContent(next);
     setDirty(true);
     setSaveError(null);
-    report(onSaveStateChange, { status: "dirty" });
+    // Only emit dirty once; further keystrokes stay local to CodeMirror/React here.
+    if (!dirty) {
+      report(onSaveStateChange, DIRTY_SAVE_STATE);
+    }
   };
 
   const save = async () => {

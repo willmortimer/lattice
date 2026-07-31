@@ -11,6 +11,17 @@ export interface CreatePageInput {
   title?: string | null;
 }
 
+/** Lean Quick Note bootstrap payload (Tauri-only; no full resource scan). */
+export interface QuickNotePrepared {
+  root: string;
+  workspaceTitle: string;
+  path: string;
+  content: string;
+  revision: string;
+  quickNoteDirectory: string;
+  templatePath?: string | null;
+}
+
 /**
  * Create a page through the semantic command core.
  *
@@ -25,6 +36,14 @@ export async function createPage(input: CreatePageInput): Promise<string> {
     templatePath: input.templatePath ?? null,
     title: input.title ?? null,
   });
+}
+
+/**
+ * Open a workspace session, create a Quick Note page, and return its initial
+ * content without listing the full resource catalog (Tauri-only).
+ */
+export async function prepareQuickNote(root: string): Promise<QuickNotePrepared> {
+  return invoke<QuickNotePrepared>("prepare_quick_note", { root });
 }
 
 /**

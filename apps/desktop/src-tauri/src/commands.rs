@@ -158,6 +158,12 @@ pub fn create_page(
     lattice_handlers::create_page(root, rel_path, content, template_path, title)
 }
 
+/// Prepare a Quick Note page without scanning the full workspace resource catalog.
+#[tauri::command]
+pub fn prepare_quick_note(root: String) -> Result<lattice_handlers::QuickNotePrepared, String> {
+    lattice_handlers::prepare_quick_note(root)
+}
+
 /// Import a pasted or dropped editor asset beside its containing page.
 ///
 /// Assets are stored in an `assets/` directory relative to the page, receive

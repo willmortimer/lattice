@@ -170,6 +170,7 @@ pub fn run() {
             commands::apply_page_update,
             commands::apply_resource_update,
             commands::create_page,
+            commands::prepare_quick_note,
             commands::create_asset,
             commands::rename_resource,
             commands::delete_resource,

@@ -217,7 +217,9 @@ export function DataTableView({
   const [busy, setBusy] = useState(false);
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
   const [theme, setTheme] = useState<Partial<Theme>>(() => gridTheme());
+  const visibleCellCountRef = useRef(0);
   const [visibleCellCount, setVisibleCellCount] = useState(0);
+  const visibleStatsRafRef = useRef<number | null>(null);
   const [detailRowId, setDetailRowId] = useState<string | null>(null);
   const [gridSelection, setGridSelection] = useState<GridSelection | undefined>(undefined);
   const [formPanelOpen, setFormPanelOpen] = useState(false);
@@ -1596,8 +1598,17 @@ export function DataTableView({
                 const id = column.id;
                 if (id) setColumnWidths((current) => ({ ...current, [id]: newSize }));
               }}
-              onVisibleRegionChanged={(range) =>
-                setVisibleCellCount(range.width * range.height)
+              onVisibleRegionChanged={
+                showRendererStats
+                  ? (range) => {
+                      visibleCellCountRef.current = range.width * range.height;
+                      if (visibleStatsRafRef.current !== null) return;
+                      visibleStatsRafRef.current = window.requestAnimationFrame(() => {
+                        visibleStatsRafRef.current = null;
+                        setVisibleCellCount(visibleCellCountRef.current);
+                      });
+                    }
+                  : undefined
               }
               theme={theme}
             />

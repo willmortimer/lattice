@@ -4,7 +4,8 @@
  * Doc targets (docs/23-frontend-rendering-and-performance.md):
  *   warm shell visible in 300–500 ms on representative hardware.
  *
- * CI defaults are intentionally generous; tighten locally with env vars.
+ * CI defaults are tighter than the original smoke budgets but still allow
+ * CI variance; profile locally with env overrides toward documentedTargets.
  */
 export interface PerfBudgets {
   /** First navigation to visible workspace chrome. */
@@ -32,12 +33,13 @@ function readBudget(name: string, fallback: number): number {
   return parsed;
 }
 
-/** CI-friendly defaults; override per machine when profiling locally. */
+/** CI-friendly defaults; override per machine when profiling locally.
+ * Tightened toward docs/23 targets while remaining CI-stable. */
 export const perfBudgets: PerfBudgets = {
-  shellColdMs: readBudget("LATTICE_PERF_SHELL_COLD_MS", 8_000),
-  shellWarmMs: readBudget("LATTICE_PERF_SHELL_WARM_MS", 3_000),
-  pageOpenMs: readBudget("LATTICE_PERF_PAGE_OPEN_MS", 4_000),
-  pageScrollMs: readBudget("LATTICE_PERF_PAGE_SCROLL_MS", 2_000),
+  shellColdMs: readBudget("LATTICE_PERF_SHELL_COLD_MS", 5_000),
+  shellWarmMs: readBudget("LATTICE_PERF_SHELL_WARM_MS", 1_500),
+  pageOpenMs: readBudget("LATTICE_PERF_PAGE_OPEN_MS", 2_500),
+  pageScrollMs: readBudget("LATTICE_PERF_PAGE_SCROLL_MS", 1_000),
 };
 
 export interface NavigationMetrics {

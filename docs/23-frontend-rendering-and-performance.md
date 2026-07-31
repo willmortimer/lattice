@@ -26,13 +26,16 @@ React coordinates; it does not mediate per-frame or per-keystroke internals.
 
 - Local React state for ephemeral shell UI.
 - Fine-grained external store for resource summaries and cross-surface state.
+- Per-window Zustand vanilla store (`desktopUiStore`) for shell chrome and
+  save-status indicators — not documents, Pixi scenes, or transcripts.
 - ProseMirror transactions for pages.
 - Imperative scene graph for canvas.
 - Rust core for canonical resource state.
 - Arrow buffers for tabular results.
 - Typed semantic events between surfaces.
 
-TanStack Store or a small custom signal store is a candidate. Avoid one giant global Redux-style object.
+Zustand is the React-facing control-state layer. Avoid one giant global
+Redux-style object and avoid lifting per-keystroke editor state into the shell.
 
 ## Quick-note performance
 

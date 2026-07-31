@@ -50,7 +50,8 @@ import { PageSourceEditor } from "./PageSourceEditor";
 import { handleEditorLinkClick } from "./linkClick";
 import { applyModeSwitch, bodyForPersistence, type PageMode } from "./pageDraft";
 import { StaleRevisionError, type PageIO } from "./pageIO";
-import { type SaveState } from "./saveState";
+import { createSerializedSaveController, type SerializedSaveController } from "./serializedSave";
+import { DIRTY_SAVE_STATE, IDLE_SAVE_STATE, type SaveState } from "./saveState";
 import { KindMark } from "../KindMark";
 import type { PageWidth } from "../lib/pageWidth";
 import type { ResourceLinkTarget } from "../lib/resourceLinks";
@@ -58,6 +59,27 @@ export { isUnsaved, saveIndicatorText, type SaveState } from "./saveState";
 
 /** How long the "Saved" indicator lingers before fading back to idle. */
 const SAVED_INDICATOR_MS = 1500;
+
+function sameToolbar(
+  previous: FloatingToolbarState | null,
+  next: FloatingToolbarState | null,
+): boolean {
+  if (previous === next) return true;
+  if (!previous || !next) return false;
+  return previous.left === next.left && previous.top === next.top;
+}
+
+function sameSlashMenu(previous: SlashMenuState | null, next: SlashMenuState | null): boolean {
+  if (previous === next) return true;
+  if (!previous || !next) return false;
+  return (
+    previous.from === next.from &&
+    previous.to === next.to &&
+    previous.query === next.query &&
+    previous.left === next.left &&
+    previous.top === next.top
+  );
+}
 
 interface SlashMenuState {
   from: number;
@@ -194,13 +216,23 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
   const onImportAssetRef = useRef(onImportAsset);
   onImportAssetRef.current = onImportAsset;
 
-  const updateEditorMenus = useCallback(
+  const menuRafRef = useRef<number | null>(null);
+  const slashMenuRef = useRef<SlashMenuState | null>(null);
+  const wikiMenuRef = useRef<WikiMenuState | null>(null);
+  const selectionToolbarRef = useRef<FloatingToolbarState | null>(null);
+  const blockToolbarRef = useRef<FloatingToolbarState | null>(null);
+  slashMenuRef.current = slashMenu;
+  wikiMenuRef.current = wikiMenu;
+  selectionToolbarRef.current = selectionToolbar;
+  blockToolbarRef.current = blockToolbar;
+
+  const applyEditorMenus = useCallback(
     (currentEditor: Editor) => {
       if (!currentEditor.isEditable || mode !== "edit") {
-        setSlashMenu(null);
-        setWikiMenu(null);
-        setSelectionToolbar(null);
-        setBlockToolbar(null);
+        if (slashMenuRef.current) setSlashMenu(null);
+        if (wikiMenuRef.current) setWikiMenu(null);
+        if (selectionToolbarRef.current) setSelectionToolbar(null);
+        if (blockToolbarRef.current) setBlockToolbar(null);
         return;
       }
 
@@ -208,26 +240,32 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
       if (selectionFrom !== selectionTo) {
         const start = currentEditor.view.coordsAtPos(selectionFrom);
         const end = currentEditor.view.coordsAtPos(selectionTo);
-        setSelectionToolbar({
+        const nextSelection = {
           left: (start.left + end.right) / 2,
           top: Math.min(start.top, end.top) - 8,
-        });
-        setBlockToolbar(null);
-        setSlashMenu(null);
-        setWikiMenu(null);
+        };
+        if (!sameToolbar(selectionToolbarRef.current, nextSelection)) {
+          setSelectionToolbar(nextSelection);
+        }
+        if (blockToolbarRef.current) setBlockToolbar(null);
+        if (slashMenuRef.current) setSlashMenu(null);
+        if (wikiMenuRef.current) setWikiMenu(null);
         return;
       }
 
-      setSelectionToolbar(null);
+      if (selectionToolbarRef.current) setSelectionToolbar(null);
       const blockCoordinates = currentEditor.view.coordsAtPos($from.start());
-      setBlockToolbar({
+      const nextBlock = {
         left: blockCoordinates.left - 8,
         top: blockCoordinates.top,
-      });
+      };
+      if (!sameToolbar(blockToolbarRef.current, nextBlock)) {
+        setBlockToolbar(nextBlock);
+      }
 
       if (!$from.parent.isTextblock) {
-        setSlashMenu(null);
-        setWikiMenu(null);
+        if (slashMenuRef.current) setSlashMenu(null);
+        if (wikiMenuRef.current) setWikiMenu(null);
         return;
       }
       const before = $from.parent.textBetween(0, $from.parentOffset, undefined, "\ufffc");
@@ -237,41 +275,61 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
         const query = wikiMatch[1] ?? "";
         const from = $from.pos - query.length - 2;
         const coordinates = currentEditor.view.coordsAtPos($from.pos);
-        setWikiIndex(0);
-        setWikiMenu({
+        const nextWiki = {
           from,
           to: $from.pos,
           query,
           left: coordinates.left,
           top: coordinates.bottom + 6,
-        });
-        setSlashMenu(null);
+        };
+        if (!sameSlashMenu(wikiMenuRef.current, nextWiki)) {
+          setWikiIndex(0);
+          setWikiMenu(nextWiki);
+        }
+        if (slashMenuRef.current) setSlashMenu(null);
         return;
       }
-      setWikiMenu(null);
+      if (wikiMenuRef.current) setWikiMenu(null);
 
       if (!slashCommands) {
-        setSlashMenu(null);
+        if (slashMenuRef.current) setSlashMenu(null);
         return;
       }
       const match = before.match(/(?:^|\s)\/([a-z0-9-]*)$/i);
       if (!match) {
-        setSlashMenu(null);
+        if (slashMenuRef.current) setSlashMenu(null);
         return;
       }
       const query = match[1] ?? "";
       const from = $from.pos - query.length - 1;
       const coordinates = currentEditor.view.coordsAtPos($from.pos);
-      setSlashIndex(0);
-      setSlashMenu({
+      const nextSlash = {
         from,
         to: $from.pos,
         query,
         left: coordinates.left,
         top: coordinates.bottom + 6,
-      });
+      };
+      if (!sameSlashMenu(slashMenuRef.current, nextSlash)) {
+        setSlashIndex(0);
+        setSlashMenu(nextSlash);
+      }
     },
     [mode, slashCommands],
+  );
+
+  /** Selection/cursor path: coalesce geometry reads to one frame. */
+  const scheduleEditorMenus = useCallback(
+    (currentEditor: Editor) => {
+      if (menuRafRef.current !== null) {
+        window.cancelAnimationFrame(menuRafRef.current);
+      }
+      menuRafRef.current = window.requestAnimationFrame(() => {
+        menuRafRef.current = null;
+        applyEditorMenus(currentEditor);
+      });
+    },
+    [applyEditorMenus],
   );
 
   const importFilesIntoView = useCallback(
@@ -303,16 +361,20 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     [],
   );
 
-  // Notify the parent as an effect (not from inside the state updater above)
-  // so this never fires while React is still rendering `PageEditor` itself.
+  // Notify the parent only when semantic status changes — not on every
+  // keystroke once already dirty.
+  const previousReportedStatusRef = useRef<SaveState["status"] | null>(null);
   useEffect(() => {
+    if (previousReportedStatusRef.current === saveState.status) {
+      return;
+    }
+    previousReportedStatusRef.current = saveState.status;
     onSaveStateChange?.(saveState);
-  }, [saveState, onSaveStateChange]);
+  }, [onSaveStateChange, saveState]);
 
   const revisionRef = useRef(revision);
-  const savingRef = useRef(false);
-  const autosaveTimer = useRef<number | null>(null);
-  const savedIndicatorTimer = useRef<number | null>(null);
+  const autosaveDelayRef = useRef(autosaveDelayMs);
+  autosaveDelayRef.current = autosaveDelayMs;
 
   const onRevisionChangeRef = useRef(onRevisionChange);
   onRevisionChangeRef.current = onRevisionChange;
@@ -328,6 +390,61 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
   modeRef.current = mode;
   const draftBodyRef = useRef(draftBody);
   draftBodyRef.current = draftBody;
+  const editorRef = useRef<Editor | null>(null);
+  const frontmatterRef = useRef(frontmatter);
+  frontmatterRef.current = frontmatter;
+  const ioRef = useRef(io);
+  ioRef.current = io;
+
+  const saveControllerRef = useRef<SerializedSaveController<string | null> | null>(null);
+  if (!saveControllerRef.current) {
+    saveControllerRef.current = createSerializedSaveController<string | null>({
+      initialRevision: revision,
+      save: async (baseRevision) => {
+        const body = bodyForPersistence(
+          modeRef.current,
+          draftBodyRef.current,
+          editorRef.current?.getJSON() ?? null,
+        );
+        const fullRaw = joinFrontmatter(frontmatterRef.current, body);
+        return ioRef.current.save(fullRaw, baseRevision);
+      },
+      onStatus: (status, message) => {
+        switch (status) {
+          case "idle":
+            setSaveState(IDLE_SAVE_STATE);
+            break;
+          case "dirty":
+            setSaveState((prev) =>
+              prev.status === "conflict" || prev.status === "dirty" ? prev : DIRTY_SAVE_STATE,
+            );
+            break;
+          case "saving":
+            setSaveState({ status: "saving" });
+            break;
+          case "saved":
+            setSaveState({ status: "saved" });
+            break;
+          case "conflict":
+            setSaveState({ status: "conflict", message: message ?? "Conflict" });
+            break;
+          case "error":
+            setSaveState({ status: "error", message: message ?? "Save failed" });
+            break;
+          default:
+            status satisfies never;
+        }
+      },
+      onRevision: (next) => setRevision(next),
+      isConflict: (error) => error instanceof StaleRevisionError,
+      savedIndicatorMs: SAVED_INDICATOR_MS,
+    });
+  }
+  const saveController = saveControllerRef.current;
+
+  const markDocumentDirty = useCallback(() => {
+    saveController.markDirty(autosaveDelayRef.current);
+  }, [saveController]);
 
   // The initial revision (on mount) is a "revision change" too — the parent
   // must learn it even though nothing was saved or reloaded yet.
@@ -338,6 +455,16 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     // `revision` prop in place.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(
+    () => () => {
+      saveController.dispose();
+      if (menuRafRef.current !== null) {
+        window.cancelAnimationFrame(menuRafRef.current);
+      }
+    },
+    [saveController],
+  );
 
   const editor = useEditor({
     extensions: liveEditorExtensions,
@@ -435,12 +562,13 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
       },
     },
     onUpdate: ({ editor: currentEditor }) => {
-      setSaveState((prev) => (prev.status === "conflict" ? prev : { status: "dirty" }));
-      scheduleAutosave();
-      updateEditorMenus(currentEditor);
+      // Document path: dirty + autosave only. Floating menus wait for selection.
+      markDocumentDirty();
+      scheduleEditorMenus(currentEditor);
     },
-    onSelectionUpdate: ({ editor: currentEditor }) => updateEditorMenus(currentEditor),
+    onSelectionUpdate: ({ editor: currentEditor }) => scheduleEditorMenus(currentEditor),
   });
+  editorRef.current = editor;
 
   useEffect(() => {
     editorContainerRef.current
@@ -484,58 +612,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     [editor, frontmatter],
   );
 
-  const clearAutosaveTimer = useCallback(() => {
-    if (autosaveTimer.current !== null) {
-      window.clearTimeout(autosaveTimer.current);
-      autosaveTimer.current = null;
-    }
-  }, []);
-
-  const performSave = useCallback(async () => {
-    if (savingRef.current) return;
-    // A conflict must be resolved (Reload / Keep editing) before further
-    // saves are attempted — otherwise we'd just refetch the same conflict.
-    if (saveState.status === "conflict") return;
-
-    clearAutosaveTimer();
-    savingRef.current = true;
-    setSaveState({ status: "saving" });
-
-    const body = bodyForPersistence(
-      modeRef.current,
-      draftBodyRef.current,
-      editor?.getJSON() ?? null,
-    );
-    const fullRaw = joinFrontmatter(frontmatter, body);
-
-    try {
-      const nextRevision = await io.save(fullRaw, revisionRef.current);
-      setRevision(nextRevision);
-      setSaveState({ status: "saved" });
-      if (savedIndicatorTimer.current !== null) window.clearTimeout(savedIndicatorTimer.current);
-      savedIndicatorTimer.current = window.setTimeout(() => {
-        setSaveState((prev) => (prev.status === "saved" ? { status: "idle" } : prev));
-      }, SAVED_INDICATOR_MS);
-    } catch (err) {
-      if (err instanceof StaleRevisionError) {
-        setSaveState({ status: "conflict", message: err.message });
-      } else {
-        setSaveState({ status: "error", message: err instanceof Error ? err.message : String(err) });
-      }
-    } finally {
-      savingRef.current = false;
-    }
-  }, [editor, frontmatter, io, saveState.status, clearAutosaveTimer, setRevision]);
-
-  const performSaveRef = useRef(performSave);
-  performSaveRef.current = performSave;
-
-  function scheduleAutosave() {
-    clearAutosaveTimer();
-    autosaveTimer.current = window.setTimeout(() => {
-      void performSaveRef.current();
-    }, autosaveDelayMs);
-  }
+  const flushSave = useCallback(() => saveController.flush(), [saveController]);
 
   const requestModeChange = useCallback(
     (targetMode: PageMode) => {
@@ -571,9 +648,8 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     draftBodyRef.current = nextBody;
     setDraftBody(nextBody);
     setSourceParseError(null);
-    setSaveState((prev) => (prev.status === "conflict" ? prev : { status: "dirty" }));
-    scheduleAutosave();
-  }, []);
+    markDocumentDirty();
+  }, [markDocumentDirty]);
 
   const filteredSlashCommands = useMemo(() => {
     const query = slashMenu?.query.toLowerCase() ?? "";
@@ -642,7 +718,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
         case "table":
           chain.run();
           setSlashMenu(null);
-          await performSaveRef.current();
+          await flushSave();
           await onCreateTableRef.current?.();
           return;
         case "markdown-table":
@@ -654,7 +730,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
       }
       setSlashMenu(null);
     },
-    [editor, slashMenu],
+    [editor, flushSave, slashMenu],
   );
 
   const insertWikiTarget = useCallback(
@@ -807,22 +883,15 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     function onKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
-        void performSaveRef.current();
+        void saveControllerRef.current?.flush();
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  useEffect(() => {
-    return () => {
-      clearAutosaveTimer();
-      if (savedIndicatorTimer.current !== null) window.clearTimeout(savedIndicatorTimer.current);
-    };
-  }, [clearAutosaveTimer]);
-
   async function handleReload() {
-    clearAutosaveTimer();
+    saveController.clearTimer();
     const snapshot = await io.load();
     setRevision(snapshot.revision);
     const reloaded = splitFrontmatter(snapshot.raw);
@@ -834,12 +903,13 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     modeRef.current = "edit";
     editor.commands.clearDictationProvisional();
     editor.commands.setContent(parseMarkdownToJSON(body));
-    setSaveState({ status: "idle" });
+    saveController.reset(snapshot.revision);
   }
 
   function handleKeepEditing() {
-    setSaveState({ status: "dirty" });
-    scheduleAutosave();
+    // Clear conflict latch and treat buffer as dirty so autosave can retry.
+    saveController.reset(revisionRef.current);
+    markDocumentDirty();
   }
 
   return (

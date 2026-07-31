@@ -41,7 +41,7 @@ export function PageResourceRenderer({
           onSaveStateChange={callbacks.onSaveStateChange}
           onOpenWiki={callbacks.onOpenWiki}
           onCreateTable={callbacks.onCreateTable}
-          wikiTargets={[...context.wikiTargets]}
+          wikiTargets={context.wikiTargets}
           onSearchWiki={callbacks.onSearchWiki}
           onImportAsset={callbacks.onImportAsset}
           autosaveDelayMs={settings.editor.autosaveDelayMs}

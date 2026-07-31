@@ -20,26 +20,50 @@ export type LatticeAgentProviderProps = {
   children: ReactNode;
 };
 
-function LatticeAgentRuntimeProvider({
+/**
+ * Ensures a workspace thread id exists without updating the store during render.
+ * Updating zustand inside render trips React #185 (maximum update depth).
+ */
+function LatticeAgentThreadGate({
   workspaceRoot,
   children,
 }: {
   workspaceRoot: string;
-  children: ReactNode;
+  children: (threadId: string) => ReactNode;
 }) {
   const ensureThreadId = useAgentSessionStore((state) => state.ensureThreadId);
   const activeThreadId = useAgentSessionStore((state) => state.threadIds[workspaceRoot]);
+
+  useEffect(() => {
+    ensureThreadId(workspaceRoot);
+  }, [workspaceRoot, ensureThreadId]);
+
+  if (!activeThreadId) {
+    return (
+      <div className="agent-thread-placeholder" role="status">
+        <p>Starting agent…</p>
+      </div>
+    );
+  }
+
+  return <>{children(activeThreadId)}</>;
+}
+
+function LatticeAgentRuntimeProvider({
+  workspaceRoot,
+  threadId,
+  children,
+}: {
+  workspaceRoot: string;
+  threadId: string;
+  children: ReactNode;
+}) {
   const recordAgentEvent = useAgentSessionStore((state) => state.recordAgentEvent);
   const setHealthSnapshot = useAgentSessionStore((state) => state.setHealthSnapshot);
   const applyProfileAiDefaults = useAgentSessionStore((state) => state.applyProfileAiDefaults);
   const setByoOpenaiKeyPresent = useAgentSessionStore((state) => state.setByoOpenaiKeyPresent);
   const bumpThreadListEpoch = useAgentSessionStore((state) => state.bumpThreadListEpoch);
   const aiMode = useAgentSessionStore((state) => state.aiMode);
-
-  const threadId = useMemo(
-    () => activeThreadId ?? ensureThreadId(workspaceRoot),
-    [activeThreadId, ensureThreadId, workspaceRoot],
-  );
 
   useEffect(() => {
     let cancelled = false;
@@ -229,5 +253,13 @@ export function LatticeAgentProvider({ workspaceRoot, children }: LatticeAgentPr
     return <>{children}</>;
   }
 
-  return <LatticeAgentRuntimeProvider workspaceRoot={root}>{children}</LatticeAgentRuntimeProvider>;
+  return (
+    <LatticeAgentThreadGate workspaceRoot={root}>
+      {(threadId) => (
+        <LatticeAgentRuntimeProvider workspaceRoot={root} threadId={threadId}>
+          {children}
+        </LatticeAgentRuntimeProvider>
+      )}
+    </LatticeAgentThreadGate>
+  );
 }

@@ -1430,6 +1430,7 @@ function fontPackSummaries(): FontPackSummaryPayload[] {
     name: pack.name,
     source: "builtin",
     path: `builtin:${id}.font-pack.yaml`,
+    fonts: pack.fonts,
   }));
 }
 
