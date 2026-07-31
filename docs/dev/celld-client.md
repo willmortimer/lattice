@@ -103,6 +103,19 @@ scripts/cell-mac-oci-dogfood.sh --dry-run   # CI-safe
 scripts/cell-mac-oci-dogfood.sh --live …    # Apple Silicon lab
 ```
 
+This is the **product** loop (`GuestSessionService.Invoke` →
+`lattice.runtime.v1` HydrateProjection / RunTask / CollectOutput). It is **not**
+the same as Cell’s `cellctl exec` live-bind demo: VirtioFS agent-share can PASS
+via Exec while RunTask still fails if Invoke framing or CellOS lattice agent
+media is wrong.
+
+**Invoke framing (required):** `lattice-cell-client` must send Connect
+**enveloped** bodies for `/cell.v1.GuestSessionService/Invoke`
+(`application/connect+json`). Raw JSON under that content type makes celld
+reject the call with
+`protocol error: promised N bytes in enveloped message` (often N≈576939372 from
+misreading `{"cel…` as a length). Unary Apply/Start stay `application/json`.
+
 KernelFS role **host** directories for OCI live must sit under the ivisor worker
 `agent-share` tree (same contract as Cell live-bind):
 
@@ -113,11 +126,26 @@ ${CELL_VZ_RUNTIME_DIR}/ivisor-worker-<cell-id>/agent-share/{input,output[,work]}
 The dogfood binary creates those dirs and passes them as `VolumeAttachment.source`
 when `--execution-mode=oci`. MicroVM live still uses an ephemeral temp tree.
 
+**CellOS lattice artifacts (required for RunTask):** ivisor-interim boots a
+CellOS VZ worker that runs `cell-agent`. Stage **lattice** aarch64 media under
+`CELL_VZ_IMAGES_DIR` so `profile-manifest.json` has `"profile":"lattice"` and
+advertises `lattice.runtime.v1` / `cell.mirror.v1` (see Cell
+`docs/10-macos-local-backend.md` § Lattice profile prove). Spec profile default
+`lattice-runtime` matches staged `lattice` (`ProfileMatchesSpec`). A busybox OCI
+bundle (`cell/scripts/macos-oci-bundle.sh`) is fine as the **container** rootfs;
+it does **not** replace CellOS — without lattice worker artifacts, Invoke cannot
+serve RunTask. Live-bind demos that only `cellctl exec` never exercise this path.
+
 Live-bind / VirtioFS proof and helper wiring: Cell
 [`docs/mac-live-bind-demo.md`](https://github.com/willmortimer/cell/blob/main/docs/mac-live-bind-demo.md)
 (agent-share layout, `CELL_VZ_RUNTIME_DIR` must match `cell-host-macos`). Image
 staging: Cell `docs/virtiofs-cellos-image.md`. Backend runbook: Cell
 `docs/10-macos-local-backend.md` § OCI mode smoke.
+
+**Guest OCI sync:** Prefer `CELL_OCI_IVISOR_SYNC=guest` when the staged CellOS
+image has `tar`/`gzip` on PATH. If StartCell fails mid guest-channel sync
+(missing gzip/tar), use `CELL_OCI_IVISOR_SYNC=orbctl` (OrbStack ext4 path) until
+the image is restaged — VirtioFS live-bind still works either way.
 
 **Live flags (hardware; not required in CI):**
 
@@ -125,11 +153,12 @@ staging: Cell `docs/virtiofs-cellos-image.md`. Backend runbook: Cell
 | --- | --- |
 | `CELLD_BASE_URL` | Running `celld --backend=vz --http-dev` |
 | `LATTICE_API_BASE_URL` + `LATTICE_AUTH_TOKEN` | latticed propose |
-| `--oci-bundle-path PATH` | Host OCI bundle (`config.json` + rootfs) |
+| `--oci-bundle-path PATH` | Host OCI bundle (`config.json` + rootfs); busybox OK |
 | `CELL_VZ_RUNTIME_DIR` or `--vz-runtime-dir` | Parent of `ivisor-worker-*/agent-share` (or derive `$CELL_OCI_IVISOR_WORKSPACE/vz-runtime`) |
 | `CELL_OCI_IVISOR_INTERIM=1` | On celld — select ivisor-interim provider |
 | `CELL_OCI_IVISOR_WORKSPACE` | Parent of the bundle dir |
-| `CELL_VZ_HELPER_SOCKET` / `CELL_VZ_IMAGES_DIR` | Helper + staged CellOS lattice artifacts |
+| `CELL_OCI_IVISOR_SYNC` | `guest` (preferred) or `orbctl` fallback when guest lacks gzip/tar |
+| `CELL_VZ_HELPER_SOCKET` / `CELL_VZ_IMAGES_DIR` | Helper + staged **lattice** CellOS artifacts |
 | `--with-work` | Also mount `agent-share/work` |
 | `--allow-network` | Explicit OCI egress (`with_network_deny_all(false)`) |
 | Do **not** set `CELL_OCI_AGENT_MOUNT_COPY=1` | Forces copy-into-rootfs and hides live-bind |
@@ -149,8 +178,10 @@ inject secrets or enable ambient network — see `crates/lattice-agentd/README.m
 ```sh
 # Cell side (separate terminals / prior steps):
 #   ./scripts/macos-oci-bundle.sh   # → /tmp/cell-oci-bundles/cell_mac_live_bind
+#   # stage lattice CellOS under CELL_VZ_IMAGES_DIR (profile-manifest profile=lattice)
 #   CELL_OCI_IVISOR_INTERIM=1 CELL_OCI_IVISOR_WORKSPACE=/tmp/cell-oci-bundles \
 #     CELL_VZ_RUNTIME_DIR=/tmp/cell-oci-bundles/vz-runtime \
+#     CELL_OCI_IVISOR_SYNC="${CELL_OCI_IVISOR_SYNC:-guest}" \
 #     cell-host-macos --socket /tmp/cell-host-macos.sock &
 #   celld --backend=vz --http-dev --vz-helper-socket /tmp/cell-host-macos.sock
 

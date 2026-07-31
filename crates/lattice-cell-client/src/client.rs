@@ -8,8 +8,8 @@ use serde_json::Value;
 
 use crate::config::{celld_base_url, require_celld_base_url};
 use crate::connect::{
-    decode_connect_stream, decode_unary_json, encode_unary_json, CELL_APPLY, CELL_START,
-    CONNECT_PROTOCOL_VERSION, GUEST_INVOKE,
+    decode_connect_stream, decode_unary_json, encode_connect_message, encode_unary_json,
+    CELL_APPLY, CELL_START, CONNECT_PROTOCOL_VERSION, GUEST_INVOKE,
 };
 use crate::error::{CellClientError, Result};
 use crate::hydrate::{
@@ -446,6 +446,10 @@ impl<H: CelldHttpClient> CelldClient<H> {
         payload: &[u8],
         content_type: &str,
     ) -> Result<Vec<u8>> {
+        // GuestSessionService.Invoke is server-streaming Connect: Content-Type is
+        // application/connect+json, so the request body must be enveloped. Sending
+        // raw JSON makes connect-go read `{"cel…` as a length prefix and fail with
+        // "promised N bytes in enveloped message".
         let invoke_body = serde_json::json!({
             "cellId": cell_id,
             "service": service,
@@ -453,7 +457,7 @@ impl<H: CelldHttpClient> CelldClient<H> {
             "payload": base64::engine::general_purpose::STANDARD.encode(payload),
             "contentType": content_type,
         });
-        let body = serde_json::to_vec(&invoke_body)?;
+        let body = encode_connect_message(&invoke_body)?;
         let (status, bytes) = self.http.stream_json(&self.base_url, GUEST_INVOKE, &body)?;
         if !(200..300).contains(&status) {
             return Err(CellClientError::Status {
@@ -519,6 +523,7 @@ pub fn celld_configured() -> bool {
 mod tests {
     use super::*;
     use crate::connect::encode_connect_message;
+    use crate::hydrate::{is_oci_execution_mode, EXECUTION_MODE_OCI};
     use crate::types::CollectedFile;
     use std::collections::VecDeque;
     use std::sync::Mutex;
@@ -580,8 +585,26 @@ mod tests {
             &self,
             _base_url: &str,
             procedure: &str,
-            _body: &[u8],
+            body: &[u8],
         ) -> Result<(u16, Vec<u8>)> {
+            // Live celld rejects unframed connect+json bodies; keep the mock honest.
+            assert!(
+                body.len() >= 5 && body[0] == 0,
+                "Invoke request must be Connect-enveloped, got {} bytes (first={:?})",
+                body.len(),
+                body.first()
+            );
+            let req_len = u32::from_be_bytes([body[1], body[2], body[3], body[4]]) as usize;
+            assert!(
+                body.len() >= 5 + req_len,
+                "Connect envelope length {req_len} exceeds body {}",
+                body.len()
+            );
+            let req: Value = serde_json::from_slice(&body[5..5 + req_len])?;
+            assert_eq!(req["cellId"], "cell_demo");
+            assert!(req["service"].as_str().is_some());
+            assert!(req["method"].as_str().is_some());
+
             let (expected, value) = self
                 .stream
                 .lock()
@@ -684,5 +707,27 @@ mod tests {
         };
         let map = collected_to_map(&collect).unwrap();
         assert_eq!(map["output/a.bin"].content, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn projection_run_defaults_keep_lattice_runtime_for_oci() {
+        // Staged CellOS profile-manifest "lattice" matches spec "lattice-runtime"
+        // (cell ProfileMatchesSpec). OCI dogfood must not invent a different default;
+        // busybox OCI bundles still rely on the CellOS worker cell-agent.
+        let req = ProjectionRunRequest {
+            execution_mode: EXECUTION_MODE_OCI.to_string(),
+            oci_bundle_path: "/tmp/cell-oci-bundles/cell_mac_live_bind".into(),
+            ..ProjectionRunRequest::default()
+        };
+        assert_eq!(req.profile, "lattice-runtime");
+        assert!(req
+            .advertise_services
+            .iter()
+            .any(|s| s == LATTICE_RUNTIME_V1));
+        assert!(req
+            .advertise_services
+            .iter()
+            .any(|s| s == CELL_MIRROR_V1));
+        assert!(is_oci_execution_mode(&req.execution_mode));
     }
 }

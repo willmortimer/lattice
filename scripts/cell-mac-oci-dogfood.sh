@@ -2,6 +2,13 @@
 # Mac OCI Lattice dogfood: CELLD_BASE_URL → hydrate/run/collect → ≥1 proposal.
 # Places KernelFS role dirs under ivisor agent-share (Cell mac-live-bind contract).
 # Default (--dry-run): mocked celld + latticed; no live celld / hardware (CI-safe).
+#
+# Live product path is GuestSessionService.Invoke → lattice.runtime.v1 (not cellctl
+# exec). Requires staged CellOS *lattice* artifacts (cell-agent) under
+# CELL_VZ_IMAGES_DIR; busybox OCI bundles are only the container rootfs.
+# Prefer CELL_OCI_IVISOR_SYNC=guest when the image has tar/gzip; use orbctl if
+# StartCell fails on guest-channel sync until the image is restaged.
+# See docs/dev/celld-client.md § Lattice uses Cells on a Mac.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -45,8 +52,11 @@ Live celld / helper (Apple Silicon lab — not run by this script):
   CELL_OCI_IVISOR_WORKSPACE=<parent of OCI bundle>
   CELL_VZ_RUNTIME_DIR=<same runtime as cell-host-macos>   # agent-share parent
   CELL_VZ_HELPER_SOCKET / CELL_VZ_IMAGES_DIR as needed
+  # CELL_VZ_IMAGES_DIR must stage lattice profile-manifest (lattice.runtime.v1)
+  # CELL_OCI_IVISOR_SYNC=guest|orbctl  # guest needs tar/gzip; orbctl = OrbStack fallback
   celld --backend=vz --http-dev
   Do NOT set CELL_OCI_AGENT_MOUNT_COPY=1 (hides live-bind).
+  Note: cellctl exec live-bind PASS ≠ RunTask; this script exercises Invoke.
 
 Secrets stay opt-in via existing agentd env (LATTICE_WASI_SECRET_HANDLES /
 secretHandlesJson); this dogfood does not inject secrets or ambient network.

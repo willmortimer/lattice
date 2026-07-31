@@ -97,4 +97,18 @@ mod tests {
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0]["done"], true);
     }
+
+    #[test]
+    fn unframed_json_is_not_a_valid_connect_stream() {
+        // Regression for Mac OCI dogfood: raw `{"cellId":…}` under
+        // application/connect+json makes servers read `"cel` as a uint32 length
+        // (576939372) and reject the Invoke with invalid_argument.
+        let raw = br#"{"cellId":"cell_dogfood","service":"lattice.runtime.v1","method":"RunTask"}"#;
+        let err = decode_connect_stream(raw).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("truncated") || msg.contains("need"),
+            "expected truncation error from misread length, got {msg}"
+        );
+    }
 }
