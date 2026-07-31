@@ -102,8 +102,8 @@ they are not exposed inside the guest.
 
 `kernelfs_export::export_oci_roles_under_agent_share` materializes a run under
 `{CELL_VZ_RUNTIME_DIR}/ivisor-worker-<cell>/agent-share/.kernelfs-runs/{run_id}`
-and live-exports flat role symlinks at `agent-share/{input,work,output}` for
-Cell VirtioFS volume `source` paths (roles directly under the share). macOS only
+and returns nested role dirs at `…/.kernelfs-runs/{run_id}/{input,work,output}`
+for Cell VirtioFS volume `source` paths (per-run, concurrent-safe). macOS only
 this sprint; other targets return `UnsupportedPlatform`. Dogfood /
 `run_cell_task` wiring is separate.
 

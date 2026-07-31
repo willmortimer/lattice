@@ -1,23 +1,24 @@
-//! Materialize + live-export KernelFS roles under a Mac OCI VirtioFS `agent-share`.
+//! Materialize KernelFS roles under a Mac OCI VirtioFS `agent-share`.
 //!
-//! Locked layout (Cell live-bind expects role dirs **directly** under the share):
+//! Locked layout (per-run volume sources under `.kernelfs-runs/{run_id}/`):
 //!
 //! ```text
 //! {CELL_VZ_RUNTIME_DIR}/ivisor-worker-<cell>/agent-share/
-//!   .kernelfs-runs/{run_id}/     ← materialize RunDir
-//!   input/  → symlink → .kernelfs-runs/{run_id}/input
-//!   work/   → symlink → .kernelfs-runs/{run_id}/work
-//!   output/ → symlink → .kernelfs-runs/{run_id}/output
+//!   .kernelfs-runs/{run_id}/
+//!     input/
+//!     work/
+//!     output/
 //! ```
 //!
-//! Volume `source` paths are `{agent-share}/{input,work,output}` — not nested
-//! under `{run_id}/`. Callers (dogfood / `run_cell_task`) own wiring those into
-//! Cell; this module only stages the tree.
+//! Volume `source` paths are
+//! `{agent-share}/.kernelfs-runs/{run_id}/{input,work,output}` — nested by
+//! `run_id` so concurrent runs on one cell do not race on flat symlink names.
+//! Callers (dogfood / `run_cell_task`) wire those into Cell; this module only
+//! stages the tree.
 //!
-//! **Platform:** macOS materializes via kernelfs then creates flat role symlinks
-//! (Lattice glue for Cell’s agent-share contract; does not call
-//! `kernelfs_mac::export_live`, which nests `{run_id}/`). Other targets return
-//! [`OciKernelfsExportError::UnsupportedPlatform`].
+//! **Platform:** macOS materializes via kernelfs (does not call
+//! `kernelfs_mac::export_live`, which nests under a different parent). Other
+//! targets return [`OciKernelfsExportError::UnsupportedPlatform`].
 
 use std::path::PathBuf;
 
@@ -30,7 +31,7 @@ use kernelfs::{InputMount, MaterializeError};
 #[cfg(target_os = "macos")]
 use kernelfs::{
     materialize_with_options, ExecutionManifest, HostPathPolicy, MaterializeOptions, Mounts,
-    SecretHandlePolicy, ROLE_INPUT, ROLE_OUTPUT, ROLE_WORK, SECRETS_REL,
+    SecretHandlePolicy, ROLE_INPUT, ROLE_OUTPUT, ROLE_WORK,
 };
 #[cfg(target_os = "macos")]
 use lattice_cell_client::oci_ivisor_agent_share_dir;
@@ -38,17 +39,19 @@ use thiserror::Error;
 
 /// Host paths produced by [`export_oci_roles_under_agent_share`].
 ///
-/// `input` / `output` (and `work` when requested) are suitable as
-/// `VolumeAttachment.source` values and stay under [`Self::agent_share`].
+/// `input` / `output` (and `work` when requested) are materialized role
+/// directories suitable as `VolumeAttachment.source` values. Paths stay under
+/// [`Self::agent_share`] and use the lexical share prefix (no `/tmp` →
+/// `/private/tmp` rewrite).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OciKernelfsExport {
-    /// Flat export root: same as [`Self::agent_share`] (role symlinks live here).
+    /// Per-run export root: `{agent_share}/.kernelfs-runs/{run_id}`.
     pub export_root: PathBuf,
-    /// Symlink to the materialized input role.
+    /// Materialized input role dir.
     pub input: PathBuf,
-    /// Symlink to the materialized work role when [`OciKernelfsExportRequest::with_work`].
+    /// Materialized work role dir when [`OciKernelfsExportRequest::with_work`].
     pub work: Option<PathBuf>,
-    /// Symlink to the materialized output role.
+    /// Materialized output role dir.
     pub output: PathBuf,
     /// VirtioFS share root (same lexical form Cell reports for the share —
     /// do not rewrite via `canonicalize`, or macOS `/tmp` → `/private/tmp`
@@ -56,7 +59,7 @@ pub struct OciKernelfsExport {
     pub agent_share: PathBuf,
 }
 
-/// Request to materialize a run and export live role dirs under agent-share.
+/// Request to materialize a run and export role dirs under agent-share.
 #[derive(Debug, Clone)]
 pub struct OciKernelfsExportRequest {
     /// Host `CELL_VZ_RUNTIME_DIR` (parent of `ivisor-worker-<cell>/`).
@@ -73,7 +76,7 @@ pub struct OciKernelfsExportRequest {
     pub host_path_roots: Vec<PathBuf>,
     /// When true, return the work role path for volume attachment.
     pub with_work: bool,
-    /// When true, also symlink `run/secrets` under agent-share if materialized.
+    /// When true, materialize may include `run/secrets` under the run dir.
     pub include_secrets: bool,
 }
 
@@ -97,8 +100,8 @@ pub enum OciKernelfsExportError {
     },
 }
 
-/// Materialize a KernelFS run under `agent-share/.kernelfs-runs` and export live
-/// role symlinks directly under `agent-share` for Cell VirtioFS volume sources.
+/// Materialize a KernelFS run under `agent-share/.kernelfs-runs/{run_id}` and
+/// return nested role dirs for Cell VirtioFS volume sources.
 pub fn export_oci_roles_under_agent_share(
     req: &OciKernelfsExportRequest,
 ) -> Result<OciKernelfsExport, OciKernelfsExportError> {
@@ -150,7 +153,7 @@ fn export_oci_roles_under_agent_share_macos(
         capabilities: Default::default(),
     };
 
-    let run_dir = materialize_with_options(
+    let _run_dir = materialize_with_options(
         &run_parent,
         &manifest,
         &MaterializeOptions {
@@ -159,88 +162,49 @@ fn export_oci_roles_under_agent_share_macos(
         },
     )?;
 
-    // Flat Cell contract: roles at agent-share/{input,work,output}, not under {run_id}/.
-    // Skip kernelfs_mac::export_live (always nests export_parent/{run_id}/).
-    link_flat_roles_macos(req, &run_dir.root, &agent_share)
+    nested_role_paths(&agent_share, &req.run_id, req.with_work)
 }
 
 #[cfg(target_os = "macos")]
-fn link_flat_roles_macos(
-    req: &OciKernelfsExportRequest,
-    run_root: &Path,
+fn nested_role_paths(
     agent_share: &Path,
+    run_id: &str,
+    with_work: bool,
 ) -> Result<OciKernelfsExport, OciKernelfsExportError> {
-    // Wipe prior flat role links (and legacy nested {run_id}/ export) for idempotent re-runs.
-    for role in [ROLE_INPUT, ROLE_WORK, ROLE_OUTPUT] {
-        remove_path_if_exists(&agent_share.join(role))?;
-    }
-    remove_path_if_exists(&agent_share.join("run"))?;
-    remove_path_if_exists(&agent_share.join(&req.run_id))?;
+    let export_root = agent_share.join(".kernelfs-runs").join(run_id);
+    let input = export_root.join(ROLE_INPUT);
+    let work = export_root.join(ROLE_WORK);
+    let output = export_root.join(ROLE_OUTPUT);
 
-    let run_root = canonicalize(run_root)?;
-    let input = agent_share.join(ROLE_INPUT);
-    let work = agent_share.join(ROLE_WORK);
-    let output = agent_share.join(ROLE_OUTPUT);
-
-    link_role(&run_root.join(ROLE_INPUT), &input)?;
-    link_role(&run_root.join(ROLE_WORK), &work)?;
-    link_role(&run_root.join(ROLE_OUTPUT), &output)?;
-
-    if req.include_secrets {
-        let secrets_src = run_root.join(SECRETS_REL);
-        if secrets_src.is_dir() {
-            let secrets_link = agent_share.join(SECRETS_REL);
-            if let Some(parent) = secrets_link.parent() {
-                create_dir_all(parent)?;
-            }
-            link_role(&secrets_src, &secrets_link)?;
+    for role_path in [input.as_path(), output.as_path()] {
+        if !role_path.is_dir() {
+            return Err(OciKernelfsExportError::Export(format!(
+                "materialized role dir missing: {}",
+                role_path.display()
+            )));
         }
+    }
+
+    if with_work && !work.is_dir() {
+        return Err(OciKernelfsExportError::Export(format!(
+            "materialized work role dir missing: {}",
+            work.display()
+        )));
     }
 
     ensure_under_share(agent_share, &input)?;
     ensure_under_share(agent_share, &output)?;
-    ensure_under_share(agent_share, &work)?;
+    if with_work {
+        ensure_under_share(agent_share, &work)?;
+    }
 
     Ok(OciKernelfsExport {
-        export_root: agent_share.to_path_buf(),
+        export_root: export_root.clone(),
         input,
-        work: if req.with_work { Some(work) } else { None },
+        work: if with_work { Some(work) } else { None },
         output,
         agent_share: agent_share.to_path_buf(),
     })
-}
-
-#[cfg(target_os = "macos")]
-fn link_role(target: &Path, link: &Path) -> Result<(), OciKernelfsExportError> {
-    std::os::unix::fs::symlink(target, link).map_err(|source| OciKernelfsExportError::Io {
-        path: link.to_path_buf(),
-        source,
-    })
-}
-
-#[cfg(target_os = "macos")]
-fn remove_path_if_exists(path: &Path) -> Result<(), OciKernelfsExportError> {
-    let meta = match path.symlink_metadata() {
-        Ok(meta) => meta,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(source) => {
-            return Err(OciKernelfsExportError::Io {
-                path: path.to_path_buf(),
-                source,
-            });
-        }
-    };
-    if meta.file_type().is_symlink() || meta.is_file() {
-        fs::remove_file(path).map_err(|source| OciKernelfsExportError::Io {
-            path: path.to_path_buf(),
-            source,
-        })
-    } else {
-        fs::remove_dir_all(path).map_err(|source| OciKernelfsExportError::Io {
-            path: path.to_path_buf(),
-            source,
-        })
-    }
 }
 
 #[cfg(target_os = "macos")]
@@ -281,8 +245,32 @@ mod tests {
         path
     }
 
+    fn nested_role(agent_share: &Path, run_id: &str, role: &str) -> PathBuf {
+        agent_share
+            .join(".kernelfs-runs")
+            .join(run_id)
+            .join(role)
+    }
+
+    fn assert_lexical_tmp_prefix(agent_share: &Path, path: &Path) {
+        if agent_share.starts_with("/tmp/") {
+            assert!(
+                path.starts_with("/tmp/"),
+                "volume source must not rewrite /tmp via canonicalize: {}",
+                path.display()
+            );
+            assert!(
+                !path
+                    .to_string_lossy()
+                    .starts_with("/private/tmp/"),
+                "volume source must not use /private/tmp when share is under /tmp: {}",
+                path.display()
+            );
+        }
+    }
+
     #[test]
-    fn export_layout_under_agent_share_with_resolving_symlinks() {
+    fn export_layout_nested_under_kernelfs_runs() {
         let vz = tempfile::tempdir().expect("vz runtime");
         let sources = tempfile::tempdir().expect("sources");
         let host_input = write_input(sources.path(), "hello.txt", b"hello from hydrate\n");
@@ -305,62 +293,38 @@ mod tests {
 
         let expected_share = oci_ivisor_agent_share_dir(vz.path(), cell_id);
         assert_eq!(exported.agent_share, expected_share);
-        assert_eq!(exported.export_root, exported.agent_share);
-        assert_eq!(exported.input, exported.agent_share.join("input"));
-        assert_eq!(exported.output, exported.agent_share.join("output"));
+        assert_eq!(
+            exported.export_root,
+            exported.agent_share.join(".kernelfs-runs").join(run_id)
+        );
+        assert_eq!(exported.input, nested_role(&exported.agent_share, run_id, ROLE_INPUT));
+        assert_eq!(exported.output, nested_role(&exported.agent_share, run_id, ROLE_OUTPUT));
         assert!(exported.work.is_none());
-        // Flat roles must not nest under {run_id}/.
-        assert!(!exported.agent_share.join(run_id).exists());
-        // Volume sources must keep the helper's lexical share prefix (no
-        // /tmp → /private/tmp rewrite) so Cell VirtioFS coverage matches.
-        if expected_share.starts_with("/tmp/") {
-            assert!(
-                exported.input.starts_with("/tmp/"),
-                "input source must not rewrite /tmp via canonicalize: {}",
-                exported.input.display()
-            );
-        } else {
-            assert!(
-                !exported
-                    .input
-                    .to_string_lossy()
-                    .starts_with("/private/tmp/"),
-                "unexpected /private/tmp rewrite for share {}: {}",
-                expected_share.display(),
-                exported.input.display()
-            );
-        }
 
-        assert!(exported.input.is_symlink());
-        assert!(exported.output.is_symlink());
+        assert!(exported.input.is_dir());
+        assert!(exported.output.is_dir());
+        assert!(!exported.input.is_symlink());
+        assert!(!exported.output.is_symlink());
         assert!(exported.input.starts_with(&exported.agent_share));
         assert!(exported.output.starts_with(&exported.agent_share));
 
+        assert_lexical_tmp_prefix(&exported.agent_share, &exported.input);
+
         let via_export = fs::read(exported.input.join("hello.txt")).expect("read via export");
         assert_eq!(via_export, b"hello from hydrate\n");
-
-        let run_input = exported
-            .agent_share
-            .join(".kernelfs-runs")
-            .join(run_id)
-            .join("input");
-        assert!(run_input.is_dir());
-        assert_eq!(
-            fs::canonicalize(&exported.input).expect("canonical input"),
-            fs::canonicalize(&run_input).expect("canonical run input")
-        );
     }
 
     #[test]
-    fn export_with_work_returns_work_symlink() {
+    fn export_with_work_returns_work_dir() {
         let vz = tempfile::tempdir().expect("vz runtime");
         let sources = tempfile::tempdir().expect("sources");
         let host_input = write_input(sources.path(), "a.txt", b"a\n");
 
+        let run_id = "run_work";
         let exported = export_oci_roles_under_agent_share(&OciKernelfsExportRequest {
             vz_runtime_dir: vz.path().to_path_buf(),
             cell_id: "cell_work".into(),
-            run_id: "run_work".into(),
+            run_id: run_id.into(),
             input_mounts: vec![InputMount {
                 host_path: host_input,
                 guest_path: "a.txt".into(),
@@ -372,10 +336,10 @@ mod tests {
         .expect("export");
 
         let work = exported.work.expect("work path");
-        assert_eq!(work, exported.agent_share.join("work"));
-        assert!(work.is_symlink());
-        assert!(work.starts_with(&exported.agent_share));
+        assert_eq!(work, nested_role(&exported.agent_share, run_id, ROLE_WORK));
         assert!(work.is_dir());
+        assert!(!work.is_symlink());
+        assert!(work.starts_with(&exported.agent_share));
     }
 
     #[test]
@@ -410,22 +374,68 @@ mod tests {
     }
 
     #[test]
-    fn export_wipes_legacy_nested_run_id_export() {
+    fn export_distinct_run_ids_do_not_clobber() {
         let vz = tempfile::tempdir().expect("vz runtime");
         let sources = tempfile::tempdir().expect("sources");
-        let host_input = write_input(sources.path(), "hello.txt", b"hello\n");
+        let host_a = write_input(sources.path(), "a.txt", b"run-a\n");
+        let host_b = write_input(sources.path(), "b.txt", b"run-b\n");
 
-        let cell_id = "cell_legacy";
-        let run_id = "run_legacy";
-        let share = oci_ivisor_agent_share_dir(vz.path(), cell_id);
-        fs::create_dir_all(share.join(run_id).join("input")).expect("legacy nest");
-        fs::write(share.join(run_id).join("input").join("stale.txt"), b"stale\n")
-            .expect("stale");
-
-        let exported = export_oci_roles_under_agent_share(&OciKernelfsExportRequest {
+        let cell_id = "cell_concurrent";
+        let base = |run_id: &str, host_path: PathBuf, guest: &str| OciKernelfsExportRequest {
             vz_runtime_dir: vz.path().to_path_buf(),
             cell_id: cell_id.into(),
             run_id: run_id.into(),
+            input_mounts: vec![InputMount {
+                host_path,
+                guest_path: guest.into(),
+            }],
+            host_path_roots: vec![sources.path().to_path_buf()],
+            with_work: false,
+            include_secrets: false,
+        };
+
+        let run_a = export_oci_roles_under_agent_share(&base("run_a", host_a, "a.txt"))
+            .expect("export run_a");
+        let run_b = export_oci_roles_under_agent_share(&base("run_b", host_b, "b.txt"))
+            .expect("export run_b");
+
+        assert_ne!(run_a.input, run_b.input);
+        assert_ne!(run_a.output, run_b.output);
+        assert_ne!(run_a.export_root, run_b.export_root);
+
+        assert_eq!(
+            fs::read(run_a.input.join("a.txt")).expect("read a"),
+            b"run-a\n"
+        );
+        assert_eq!(
+            fs::read(run_b.input.join("b.txt")).expect("read b"),
+            b"run-b\n"
+        );
+
+        let share = oci_ivisor_agent_share_dir(vz.path(), cell_id);
+        assert!(!share.join(ROLE_INPUT).exists());
+        assert!(!share.join(ROLE_OUTPUT).exists());
+        assert!(nested_role(&share, "run_a", ROLE_INPUT).is_dir());
+        assert!(nested_role(&share, "run_b", ROLE_INPUT).is_dir());
+    }
+
+    #[test]
+    fn export_under_tmp_keeps_lexical_prefix() {
+        let run_id = format!(
+            "run_lexical_{}",
+            std::process::id()
+        );
+        let vz_runtime = PathBuf::from(format!("/tmp/lattice-kernelfs-export-{run_id}"));
+        let _ = fs::remove_dir_all(&vz_runtime);
+        fs::create_dir_all(&vz_runtime).expect("mkdir vz runtime");
+
+        let sources = tempfile::tempdir().expect("sources");
+        let host_input = write_input(sources.path(), "hello.txt", b"hello\n");
+
+        let exported = export_oci_roles_under_agent_share(&OciKernelfsExportRequest {
+            vz_runtime_dir: vz_runtime.clone(),
+            cell_id: "cell_tmp".into(),
+            run_id: run_id.clone(),
             input_mounts: vec![InputMount {
                 host_path: host_input,
                 guest_path: "hello.txt".into(),
@@ -436,8 +446,15 @@ mod tests {
         })
         .expect("export");
 
-        assert!(!exported.agent_share.join(run_id).exists());
-        assert_eq!(exported.input, exported.agent_share.join("input"));
+        assert!(
+            exported.agent_share.starts_with("/tmp/"),
+            "share should stay under lexical /tmp: {}",
+            exported.agent_share.display()
+        );
+        assert_lexical_tmp_prefix(&exported.agent_share, &exported.input);
+        assert_lexical_tmp_prefix(&exported.agent_share, &exported.output);
+
+        let _ = fs::remove_dir_all(&vz_runtime);
     }
 
     #[test]

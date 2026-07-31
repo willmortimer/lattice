@@ -337,7 +337,7 @@ async fn dispatch_run_wasi_guest_tool_proposes_outputs() {
     })
     .to_string();
 
-    let out = dispatch_tool(Some(&client), &ctx, "run_wasi_guest", &args).await;
+    let out = dispatch_tool(Some(&client), &ctx, None, "run_wasi_guest", &args).await;
     let parsed: Value = serde_json::from_str(&out).expect("tool result json");
     assert!(
         parsed.get("error").is_none(),

@@ -253,8 +253,7 @@ fn resolve_workspace(cli: &Cli) -> Result<(Option<TempDir>, String), String> {
 /// Resolve KernelFS role host dirs.
 ///
 /// MicroVM: ephemeral temp tree. OCI (Mac ivisor): materialize + kernelfs export
-/// under `{agent-share}/.kernelfs-runs/{run_id}/` with flat volume sources at
-/// `{agent-share}/{input,work?,output}`.
+/// under `{agent-share}/.kernelfs-runs/{run_id}/{input,work?,output}`.
 fn resolve_role_host_dirs(
     cli: &Cli,
     execution_mode: &str,
@@ -453,7 +452,7 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
-    fn oci_export_volume_sources_flat_under_agent_share() {
+    fn oci_export_volume_sources_nested_under_kernelfs_runs() {
         let vz = tempfile::tempdir().expect("vz runtime");
         let workspace = tempfile::tempdir().expect("workspace");
         let rel = "input/hello.txt";
@@ -477,10 +476,14 @@ mod tests {
         })
         .expect("export");
 
-        assert_eq!(exported.export_root, exported.agent_share);
-        assert_eq!(exported.input, exported.agent_share.join("input"));
-        assert_eq!(exported.output, exported.agent_share.join("output"));
-        assert!(!exported.agent_share.join(run_id).exists());
+        let run_root = exported
+            .agent_share
+            .join(".kernelfs-runs")
+            .join(run_id);
+        assert_eq!(exported.export_root, run_root);
+        assert_eq!(exported.input, run_root.join("input"));
+        assert_eq!(exported.output, run_root.join("output"));
+        assert!(!exported.agent_share.join("input").exists());
         assert!(exported.input.starts_with(&exported.agent_share));
         assert!(exported.output.starts_with(&exported.agent_share));
     }
