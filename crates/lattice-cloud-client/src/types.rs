@@ -15,9 +15,32 @@ pub struct AuthTokenResponse {
     pub user: CloudUser,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AiAccess {
+    None,
+    Allowlisted,
+    Paid,
+}
+
+impl AiAccess {
+    pub fn allows_ai(self) -> bool {
+        matches!(self, Self::Allowlisted | Self::Paid)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EntitlementsView {
+    pub ai_access: AiAccess,
+    pub ai_daily_request_budget: i64,
+    pub ai_daily_requests_used: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct MeResponse {
     pub user: CloudUser,
+    #[serde(default)]
+    pub entitlements: Option<EntitlementsView>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -26,6 +49,9 @@ pub struct CloudSessionStatus {
     pub signed_in: bool,
     pub cloud_url: String,
     pub user: Option<CloudUser>,
+    /// Present when `/v1/me` returned entitlements; omitted on older servers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entitlements: Option<EntitlementsView>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
@@ -36,16 +62,38 @@ impl CloudSessionStatus {
             signed_in: false,
             cloud_url,
             user: None,
+            entitlements: None,
             error: None,
         }
     }
 
     pub fn signed_in(cloud_url: String, user: CloudUser) -> Self {
+        Self::signed_in_with_entitlements(cloud_url, user, None)
+    }
+
+    pub fn signed_in_with_entitlements(
+        cloud_url: String,
+        user: CloudUser,
+        entitlements: Option<EntitlementsView>,
+    ) -> Self {
         Self {
             signed_in: true,
             cloud_url,
             user: Some(user),
+            entitlements,
             error: None,
+        }
+    }
+
+    /// Lattice paid AI is runnable when signed in and either entitlements are
+    /// missing (legacy `/v1/me`) or `ai_access` allows AI.
+    pub fn ai_entitled(&self) -> bool {
+        if !self.signed_in {
+            return false;
+        }
+        match self.entitlements.as_ref() {
+            None => true,
+            Some(view) => view.ai_access.allows_ai(),
         }
     }
 }

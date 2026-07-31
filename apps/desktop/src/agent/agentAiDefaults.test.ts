@@ -17,6 +17,7 @@ describe("resolveAgentDefaultsFromAiSettings", () => {
       provider: "openai",
       model: "gpt-4o-mini",
       accountAiDisabled: false,
+      accountAiBlockReason: null,
     });
   });
 
@@ -42,6 +43,7 @@ describe("resolveAgentDefaultsFromAiSettings", () => {
       provider: "local",
       model: "local-qwen",
       accountAiDisabled: false,
+      accountAiBlockReason: null,
     });
   });
 
@@ -55,7 +57,7 @@ describe("resolveAgentDefaultsFromAiSettings", () => {
     expect(resolveAgentDefaultsFromAiSettings(ai).model).toBe(DEFAULT_LOCAL_MODEL);
   });
 
-  it("enables account mode when cloud session is signed in", () => {
+  it("enables account mode when cloud session is signed in and entitled", () => {
     const ai = {
       ...defaultDesktopSettings().ai,
       mode: "account" as const,
@@ -63,12 +65,16 @@ describe("resolveAgentDefaultsFromAiSettings", () => {
     };
 
     expect(
-      resolveAgentDefaultsFromAiSettings(ai, { cloudSignedIn: true }),
+      resolveAgentDefaultsFromAiSettings(ai, {
+        cloudSignedIn: true,
+        cloudAiEntitled: true,
+      }),
     ).toEqual({
       aiMode: "account",
       provider: "openai",
       model: "gpt-4o-mini",
       accountAiDisabled: false,
+      accountAiBlockReason: null,
     });
   });
 
@@ -84,6 +90,28 @@ describe("resolveAgentDefaultsFromAiSettings", () => {
       provider: null,
       model: "gpt-5.6-luna",
       accountAiDisabled: true,
+      accountAiBlockReason: "unsigned",
+    });
+  });
+
+  it("disables account mode when signed in but not entitled", () => {
+    const ai = {
+      ...defaultDesktopSettings().ai,
+      mode: "account" as const,
+      preferredModel: null,
+    };
+
+    expect(
+      resolveAgentDefaultsFromAiSettings(ai, {
+        cloudSignedIn: true,
+        cloudAiEntitled: false,
+      }),
+    ).toEqual({
+      aiMode: "account",
+      provider: null,
+      model: null,
+      accountAiDisabled: true,
+      accountAiBlockReason: "not_entitled",
     });
   });
 
@@ -99,6 +127,7 @@ describe("resolveAgentDefaultsFromAiSettings", () => {
       provider: null,
       model: null,
       accountAiDisabled: true,
+      accountAiBlockReason: "unsigned",
     });
   });
 });

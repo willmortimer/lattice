@@ -773,7 +773,10 @@ export function DesktopShell({ model }: DesktopShellProps) {
             {agentPanelOpen && (
               <AgentPanelShell>
                 <LatticeAgentProvider workspaceRoot={inBrowser ? null : snapshot.root}>
-                  <AgentHeader onClose={() => setAgentPanelOpen(false)} />
+                  <AgentHeader
+                    onClose={() => setAgentPanelOpen(false)}
+                    workspaceRoot={inBrowser ? null : snapshot.root}
+                  />
                   <AgentTrail />
                   <AgentThread workspaceRoot={inBrowser ? null : snapshot.root} />
                 </LatticeAgentProvider>

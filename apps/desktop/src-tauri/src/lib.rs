@@ -343,6 +343,8 @@ pub fn run() {
             agent::agent_cancel_run,
             agent_threads::agent_thread_ensure,
             agent_threads::agent_thread_append_message,
+            agent_threads::agent_thread_list,
+            agent_threads::agent_thread_get,
             ai::set_openai_api_key,
             ai::clear_openai_api_key,
             ai::has_openai_api_key,
