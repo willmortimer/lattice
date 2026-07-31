@@ -9,14 +9,15 @@ use kernelfs::{
     SecretHandleEntry, WasmtimeLimits,
 };
 use lattice_cell_client::{
-    celld_configured, require_celld_base_url, CelldClient, HttpCelldClient, HydrateFile,
-    KernelFSHydrationPlan, ProjectionRunRequest,
+    celld_configured, is_oci_execution_mode, require_celld_base_url, CelldClient, HttpCelldClient,
+    HydrateFile, KernelFSHydrationPlan, ProjectionRunRequest, EXECUTION_MODE_OCI,
 };
 use serde_json::{json, Value};
 
 use crate::cell_host::{
     hydration_inputs_from_files, run_cell_task_and_propose, CellProposalProvenance,
 };
+use crate::kernelfs_export::{export_oci_roles_under_agent_share, OciKernelfsExportRequest};
 use crate::lattice_client::LatticeToolClient;
 use crate::secret_handles::secret_handles_for_run;
 use crate::wasi_host::{
@@ -53,7 +54,7 @@ Tool use:
 8. Never claim a workspace change was applied. You may only create proposals (`propose_*`, `create_proposal`); the user reviews and applies them in the Proposals inbox. There is no apply tool.
 9. Use `propose_page` to create or edit pages via proposals — pass the path and new content to update an existing page.
 10. Use `run_wasi_guest` only for sandboxed guest WASM that should write `/output` artifacts as proposals. Prefer preset `copy_hello` (expects `Tools/guests/copy_hello.wasm`) or pass `resourcePaths` instead of raw `inputsJson`. It requires `workspaceRoot` and does not apply changes.
-11. When `CELLD_BASE_URL` is configured, use `run_cell_task` to hydrate → run → collect on celld and propose collected `/output` files. Requires `workspaceRoot`. Does not apply.
+11. When `CELLD_BASE_URL` is configured, use `run_cell_task` to hydrate → run → collect on celld and propose collected `/output` files. Optional `executionMode=oci` + `ociBundlePath` live-binds Mac OCI (needs `CELL_VZ_RUNTIME_DIR` or `CELL_OCI_IVISOR_WORKSPACE`). Requires `workspaceRoot`. Does not apply.
 12. Keep proposals narrow, validated, reviewable, and reversible.
 13. Never request, reveal, or place secrets in model-visible content.
 14. If a tool errors, explain briefly and continue with what you know.
@@ -122,7 +123,7 @@ pub fn openai_tool_definitions() -> Vec<Value> {
 fn run_cell_task_tool_definition() -> Value {
     function_tool(
         "run_cell_task",
-        "Run a celld guest projection (hydrate → run → collect) and propose collected /output files via propose_resource. Requires CELLD_BASE_URL and workspaceRoot. Does not apply.",
+        "Run a celld guest projection (hydrate → run → collect) and propose collected /output files via propose_resource. Default is microVM temp role dirs. Set executionMode=oci with ociBundlePath for Mac OCI live-bind (requires CELL_VZ_RUNTIME_DIR or CELL_OCI_IVISOR_WORKSPACE). Requires CELLD_BASE_URL and workspaceRoot. Does not apply.",
         json!({
             "type": "object",
             "properties": {
@@ -153,6 +154,18 @@ fn run_cell_task_tool_definition() -> Value {
                     "description": "Cell profile name (default lattice-runtime)"
                 },
                 "taskId": opt_str(),
+                "executionMode": {
+                    "type": "string",
+                    "description": "Empty/microvm (default) or oci for Mac OCI live-bind under agent-share"
+                },
+                "ociBundlePath": {
+                    "type": "string",
+                    "description": "Host OCI bundle path; required when executionMode=oci"
+                },
+                "withWork": {
+                    "type": "boolean",
+                    "description": "When true, attach a /work role volume (microVM temp dir or OCI export work symlink)"
+                },
                 "inputResourceIds": {
                     "type": "object",
                     "additionalProperties": { "type": "string" },
@@ -482,6 +495,18 @@ fn string_arg(args: &Value, key: &str) -> Option<String> {
     args.get(key).and_then(|v| match v {
         Value::String(s) if !s.trim().is_empty() => Some(s.clone()),
         Value::Null => None,
+        _ => None,
+    })
+}
+
+fn bool_arg(args: &Value, key: &str) -> Option<bool> {
+    args.get(key).and_then(|v| match v {
+        Value::Bool(b) => Some(*b),
+        Value::String(s) => match s.trim().to_ascii_lowercase().as_str() {
+            "true" | "1" | "yes" => Some(true),
+            "false" | "0" | "no" => Some(false),
+            _ => None,
+        },
         _ => None,
     })
 }
@@ -1147,26 +1172,65 @@ async fn dispatch_run_cell_task(
     }
     let profile = string_arg(args, "profile").unwrap_or_else(|| "lattice-runtime".into());
     let task_id = string_arg(args, "taskId").unwrap_or_else(|| projection_id.clone());
+    let with_work = bool_arg(args, "withWork").unwrap_or(false);
+
+    let execution_mode = normalize_run_cell_execution_mode(
+        string_arg(args, "executionMode").as_deref().unwrap_or(""),
+    )?;
+    let oci_bundle_path = string_arg(args, "ociBundlePath").unwrap_or_default();
+    if is_oci_execution_mode(&execution_mode) && oci_bundle_path.trim().is_empty() {
+        return Err(
+            "ociBundlePath is required when executionMode=oci (Mac OCI live-bind)"
+                .into(),
+        );
+    }
+
+    // Fail closed on missing VZ runtime before contacting celld so chat gets an
+    // actionable env error instead of a late hydrate/plan failure.
+    let oci_vz_runtime = if is_oci_execution_mode(&execution_mode) {
+        Some(resolve_vz_runtime_dir_for_tool()?)
+    } else {
+        None
+    };
 
     let base_url = require_celld_base_url().map_err(|err| err.to_string())?;
     let celld = CelldClient::new(base_url, HttpCelldClient);
 
     let hydrate_files = hydrate_files_from_workspace(workspace_root, args)?;
 
-    let plan_parent = tempfile::tempdir().map_err(|err| err.to_string())?;
-    let input_host = plan_parent.path().join("input");
-    let output_host = plan_parent.path().join("output");
-    std::fs::create_dir_all(&input_host).map_err(|err| err.to_string())?;
-    std::fs::create_dir_all(&output_host).map_err(|err| err.to_string())?;
+    let (_temp_roles, input_host, work_host, output_host) =
+        if let Some(vz_runtime_dir) = oci_vz_runtime {
+            let input_mounts = input_mounts_from_hydrate_paths(workspace_root, args)?;
+            let exported = export_oci_roles_under_agent_share(&OciKernelfsExportRequest {
+                vz_runtime_dir,
+                cell_id: cell_id.clone(),
+                run_id: task_id.clone(),
+                input_mounts,
+                host_path_roots: vec![PathBuf::from(workspace_root)],
+                with_work,
+                include_secrets: false,
+            })
+            .map_err(|err| err.to_string())?;
+            (
+                None::<tempfile::TempDir>,
+                exported.input,
+                exported.work,
+                exported.output,
+            )
+        } else {
+            resolve_microvm_role_host_dirs(with_work)?
+        };
 
     let request = ProjectionRunRequest {
         cell_id: cell_id.clone(),
         projection_id: projection_id.clone(),
         profile,
-        plan: KernelFSHydrationPlan::from_role_paths(input_host, None, output_host),
+        plan: KernelFSHydrationPlan::from_role_paths(input_host, work_host, output_host),
         hydrate_files,
         argv,
         task_id: task_id.clone(),
+        execution_mode,
+        oci_bundle_path,
         ..ProjectionRunRequest::default()
     };
 
@@ -1220,6 +1284,80 @@ async fn dispatch_run_cell_task(
         "draftCount": drafts.len(),
         "proposals": proposal_summaries,
     }))
+}
+
+fn normalize_run_cell_execution_mode(raw: &str) -> Result<String, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("microvm") {
+        return Ok(String::new());
+    }
+    if is_oci_execution_mode(trimmed) {
+        return Ok(EXECUTION_MODE_OCI.to_string());
+    }
+    Err(format!(
+        "unsupported executionMode {raw:?} (use oci or leave empty/microvm for default)"
+    ))
+}
+
+/// Resolve host VZ runtime dir for Mac OCI agent-share export (fail closed).
+fn resolve_vz_runtime_dir_for_tool() -> Result<PathBuf, String> {
+    if let Ok(path) = std::env::var("CELL_VZ_RUNTIME_DIR") {
+        let trimmed = path.trim();
+        if !trimmed.is_empty() {
+            return Ok(PathBuf::from(trimmed));
+        }
+    }
+    if let Ok(workspace) = std::env::var("CELL_OCI_IVISOR_WORKSPACE") {
+        let trimmed = workspace.trim();
+        if !trimmed.is_empty() {
+            return Ok(PathBuf::from(trimmed).join("vz-runtime"));
+        }
+    }
+    Err(
+        "executionMode=oci requires CELL_VZ_RUNTIME_DIR or CELL_OCI_IVISOR_WORKSPACE \
+         (agent-share under ivisor-worker-<cellId>/agent-share; see Cell docs/mac-live-bind-demo.md)"
+            .into(),
+    )
+}
+
+fn resolve_microvm_role_host_dirs(
+    with_work: bool,
+) -> Result<(Option<tempfile::TempDir>, PathBuf, Option<PathBuf>, PathBuf), String> {
+    let plan_parent = tempfile::tempdir().map_err(|err| err.to_string())?;
+    let input_host = plan_parent.path().join("input");
+    let output_host = plan_parent.path().join("output");
+    std::fs::create_dir_all(&input_host).map_err(|err| err.to_string())?;
+    std::fs::create_dir_all(&output_host).map_err(|err| err.to_string())?;
+    let work_host = if with_work {
+        let work = plan_parent.path().join("work");
+        std::fs::create_dir_all(&work).map_err(|err| err.to_string())?;
+        Some(work)
+    } else {
+        None
+    };
+    Ok((Some(plan_parent), input_host, work_host, output_host))
+}
+
+fn input_mounts_from_hydrate_paths(
+    workspace_root: &str,
+    args: &Value,
+) -> Result<Vec<InputMount>, String> {
+    let resource_paths = string_array_arg(args, "hydrateResourcePaths");
+    let mut mounts = Vec::with_capacity(resource_paths.len());
+    for host_path_rel in resource_paths {
+        let host_abs = resolve_workspace_path(workspace_root, &host_path_rel)?;
+        let guest_name = std::path::Path::new(&host_path_rel)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| format!("hydrateResourcePaths entry {host_path_rel:?} has no file name"))?
+            .to_string();
+        normalize_guest_path(&guest_name).map_err(|err| err.to_string())?;
+        mounts.push(InputMount {
+            host_path: host_abs,
+            guest_path: guest_name,
+        });
+    }
+    Ok(mounts)
 }
 
 fn hydrate_files_from_workspace(workspace_root: &str, args: &Value) -> Result<Vec<HydrateFile>, String> {
@@ -1421,6 +1559,193 @@ pub fn chat_messages_from_start(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, MutexGuard};
+
+    /// Serialize env mutation across parallel tests in this module.
+    fn env_lock() -> MutexGuard<'static, ()> {
+        static LOCK: Mutex<()> = Mutex::new(());
+        LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    struct RuntimeEnvGuard {
+        previous_vz: Option<String>,
+        previous_workspace: Option<String>,
+        _lock: MutexGuard<'static, ()>,
+    }
+
+    impl RuntimeEnvGuard {
+        fn clear() -> Self {
+            let lock = env_lock();
+            let previous_vz = std::env::var("CELL_VZ_RUNTIME_DIR").ok();
+            let previous_workspace = std::env::var("CELL_OCI_IVISOR_WORKSPACE").ok();
+            unsafe {
+                std::env::remove_var("CELL_VZ_RUNTIME_DIR");
+                std::env::remove_var("CELL_OCI_IVISOR_WORKSPACE");
+            }
+            Self {
+                previous_vz,
+                previous_workspace,
+                _lock: lock,
+            }
+        }
+
+        fn set_vz(path: &str) -> Self {
+            let guard = Self::clear();
+            unsafe {
+                std::env::set_var("CELL_VZ_RUNTIME_DIR", path);
+            }
+            guard
+        }
+    }
+
+    impl Drop for RuntimeEnvGuard {
+        fn drop(&mut self) {
+            unsafe {
+                match &self.previous_vz {
+                    Some(value) => std::env::set_var("CELL_VZ_RUNTIME_DIR", value),
+                    None => std::env::remove_var("CELL_VZ_RUNTIME_DIR"),
+                }
+                match &self.previous_workspace {
+                    Some(value) => std::env::set_var("CELL_OCI_IVISOR_WORKSPACE", value),
+                    None => std::env::remove_var("CELL_OCI_IVISOR_WORKSPACE"),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn normalize_run_cell_execution_mode_defaults_and_oci() {
+        assert_eq!(normalize_run_cell_execution_mode("").unwrap(), "");
+        assert_eq!(normalize_run_cell_execution_mode("microvm").unwrap(), "");
+        assert_eq!(
+            normalize_run_cell_execution_mode("oci").unwrap(),
+            EXECUTION_MODE_OCI
+        );
+        assert_eq!(
+            normalize_run_cell_execution_mode("EXECUTION_MODE_OCI").unwrap(),
+            EXECUTION_MODE_OCI
+        );
+        let err = normalize_run_cell_execution_mode("wasm").unwrap_err();
+        assert!(err.contains("unsupported executionMode"), "{err}");
+    }
+
+    #[test]
+    fn resolve_vz_runtime_dir_fail_closed_without_env() {
+        let _guard = RuntimeEnvGuard::clear();
+        let err = resolve_vz_runtime_dir_for_tool().unwrap_err();
+        assert!(err.contains("CELL_VZ_RUNTIME_DIR"), "{err}");
+        assert!(err.contains("CELL_OCI_IVISOR_WORKSPACE"), "{err}");
+    }
+
+    #[test]
+    fn resolve_vz_runtime_dir_from_env() {
+        let _guard = RuntimeEnvGuard::set_vz("/tmp/vz-runtime-test");
+        assert_eq!(
+            resolve_vz_runtime_dir_for_tool().unwrap(),
+            PathBuf::from("/tmp/vz-runtime-test")
+        );
+    }
+
+    #[test]
+    fn resolve_vz_runtime_dir_from_ivisor_workspace() {
+        let _guard = RuntimeEnvGuard::clear();
+        unsafe {
+            std::env::set_var("CELL_OCI_IVISOR_WORKSPACE", "/tmp/ivisor-ws");
+        }
+        assert_eq!(
+            resolve_vz_runtime_dir_for_tool().unwrap(),
+            PathBuf::from("/tmp/ivisor-ws/vz-runtime")
+        );
+    }
+
+    #[tokio::test]
+    async fn dispatch_run_cell_task_rejects_oci_without_bundle() {
+        let ctx = ToolRunContext {
+            workspace_id: Some("ws".into()),
+            workspace_root: Some("/tmp".into()),
+        };
+        let args = json!({
+            "cellId": "cell_demo",
+            "projectionId": "proj_demo",
+            "argv": ["true"],
+            "outputProposalTarget": "Reports",
+            "executionMode": "oci",
+        });
+        let err = dispatch_run_cell_task(
+            &LatticeToolClient::new("http://127.0.0.1:9", "tok").expect("client"),
+            &ctx,
+            &args,
+        )
+        .await
+        .unwrap_err();
+        assert!(err.contains("ociBundlePath"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn dispatch_run_cell_task_rejects_oci_without_runtime_dir() {
+        let _guard = RuntimeEnvGuard::clear();
+        let workspace = tempfile::tempdir().expect("workspace");
+        let ctx = ToolRunContext {
+            workspace_id: Some("ws".into()),
+            workspace_root: Some(workspace.path().to_string_lossy().into_owned()),
+        };
+        let args = json!({
+            "cellId": "cell_demo",
+            "projectionId": "proj_demo",
+            "argv": ["true"],
+            "outputProposalTarget": "Reports",
+            "executionMode": "oci",
+            "ociBundlePath": "/tmp/bundle",
+        });
+        let err = dispatch_run_cell_task(
+            &LatticeToolClient::new("http://127.0.0.1:9", "tok").expect("client"),
+            &ctx,
+            &args,
+        )
+        .await
+        .unwrap_err();
+        assert!(err.contains("CELL_VZ_RUNTIME_DIR"), "{err}");
+    }
+
+    #[test]
+    fn run_cell_task_schema_includes_oci_fields_when_celld_configured() {
+        let _lock = env_lock();
+        let previous = std::env::var("CELLD_BASE_URL").ok();
+        unsafe {
+            std::env::set_var("CELLD_BASE_URL", "http://127.0.0.1:8080");
+        }
+        let defs = openai_tool_definitions();
+        if let Some(value) = previous {
+            unsafe {
+                std::env::set_var("CELLD_BASE_URL", value);
+            }
+        } else {
+            unsafe {
+                std::env::remove_var("CELLD_BASE_URL");
+            }
+        }
+
+        let tool = defs
+            .iter()
+            .find(|t| {
+                t.pointer("/function/name")
+                    .and_then(|v| v.as_str())
+                    == Some("run_cell_task")
+            })
+            .expect("run_cell_task tool");
+        let props = tool
+            .pointer("/function/parameters/properties")
+            .and_then(|v| v.as_object())
+            .expect("properties");
+        assert!(props.contains_key("executionMode"));
+        assert!(props.contains_key("ociBundlePath"));
+        assert!(props.contains_key("withWork"));
+        let desc = tool
+            .pointer("/function/description")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        assert!(desc.contains("executionMode=oci"), "{desc}");
+    }
 
     #[test]
     fn search_tool_description_mentions_hybrid() {
