@@ -3,6 +3,12 @@
 //! Speaks the Phase A JSONL agent protocol over stdio. Desktop / latticed
 //! auto-discover this binary; override with `LATTICE_AGENTD_BIN`.
 
+// L-EXPORT will call `kernelfs_mac::export_live`; keep the macOS dep linked until then.
+#[cfg(target_os = "macos")]
+mod kernelfs_mac_dep {
+    use kernelfs_mac as _;
+}
+
 pub mod cell_host;
 pub mod fake;
 pub mod local;
