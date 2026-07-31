@@ -1405,4 +1405,40 @@ components:
         assert_eq!(stat.hydration_inputs[0].content_hash, digest.content_hash);
         assert_eq!(stat.hydration_inputs[0].resource_id, digest.resource_id);
     }
+
+    /// Propose helper → persist → accept → `resource_stat` within lattice-commands.
+    /// Daemon/HTTP propose entrypoints are covered in handler integration tests.
+    #[test]
+    fn propose_accept_stat_attaches_hydration_lineage() {
+        let dir = workspace();
+        let target_path = "Reports/out.txt";
+        let digest = crate::HydrationInputDigest {
+            path: "hello.txt".into(),
+            content_hash: "0f328ae687eb8fd2acfa3a910bb6722eff43f8a7dbd08e53e572ae37a0c5d7a5"
+                .into(),
+            resource_id: Some("res-1".into()),
+        };
+        let stored = crate::propose_helpers::propose_resource(target_path, "exported bytes\n")
+            .unwrap()
+            .create(
+                dir.path(),
+                ProposalSource {
+                    source_type: ProposalSourceType::Mcp,
+                    resource: Some("wasi://run_1/guest.wasm".into()),
+                    execution_id: None,
+                    step_id: None,
+                    hydration_inputs: vec![digest.clone()],
+                },
+            )
+            .unwrap();
+        assert_eq!(stored.status, ProposalStatus::Pending);
+        apply_proposal(dir.path(), &stored.id, &[0]).unwrap();
+
+        let stat = latticefs_core::resource_stat(dir.path(), target_path).unwrap();
+        assert!(stat.version_id.is_some());
+        assert_eq!(stat.hydration_inputs.len(), 1);
+        assert_eq!(stat.hydration_inputs[0].path, digest.path);
+        assert_eq!(stat.hydration_inputs[0].content_hash, digest.content_hash);
+        assert_eq!(stat.hydration_inputs[0].resource_id, digest.resource_id);
+    }
 }
