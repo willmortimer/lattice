@@ -11,6 +11,12 @@ fn main() {
     println!("cargo:rerun-if-env-changed=LATTICE_VOICE_BRIDGE_LIB");
     println!("cargo:rerun-if-changed=swift/Package.swift");
     println!("cargo:rerun-if-changed=include/lattice_voice_bridge.h");
+    // Stale dylibs omit new @_cdecl exports; rebuild when Swift sources change.
+    println!("cargo:rerun-if-changed=swift/Sources/LatticeVoiceBridge/BridgeExports.swift");
+    println!("cargo:rerun-if-changed=swift/Sources/LatticeVoiceBridge/VoiceEngine.swift");
+    println!("cargo:rerun-if-changed=swift/Sources/LatticeVoiceBridge/VoiceSession.swift");
+    println!("cargo:rerun-if-changed=swift/Sources/LatticeVoiceBridge/BridgeErrors.swift");
+    println!("cargo:rerun-if-changed=swift/Sources/LatticeVoiceBridgeC/include/lattice_voice_bridge.h");
 
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     if target_os != "macos" {
@@ -45,10 +51,18 @@ fn main() {
         swift_dir.join(".build/release"),
     ];
 
+    // Prefer an existing dylib only when it is not older than Swift sources.
+    // Otherwise `swift build` is skipped and new @_cdecl symbols stay missing.
     for products in &default_products {
         if let Some(lib_dir) = resolve_lib_dir(products) {
-            emit_link(&lib_dir);
-            return;
+            if !swift_sources_newer_than_dylib(&swift_dir, &lib_dir) {
+                emit_link(&lib_dir);
+                return;
+            }
+            println!(
+                "cargo:warning=LatticeVoiceBridge dylib is older than Swift sources; rebuilding"
+            );
+            break;
         }
     }
 
@@ -85,6 +99,30 @@ fn resolve_lib_dir(default_products: &Path) -> Option<PathBuf> {
 
 fn dylib_exists(dir: &Path) -> bool {
     dir.join("libLatticeVoiceBridge.dylib").is_file()
+}
+
+fn swift_sources_newer_than_dylib(swift_dir: &Path, lib_dir: &Path) -> bool {
+    let dylib = lib_dir.join("libLatticeVoiceBridge.dylib");
+    let Ok(dylib_meta) = std::fs::metadata(&dylib) else {
+        return true;
+    };
+    let Ok(dylib_mtime) = dylib_meta.modified() else {
+        return true;
+    };
+    let sources = [
+        swift_dir.join("Package.swift"),
+        swift_dir.join("Sources/LatticeVoiceBridge/BridgeExports.swift"),
+        swift_dir.join("Sources/LatticeVoiceBridge/VoiceEngine.swift"),
+        swift_dir.join("Sources/LatticeVoiceBridge/VoiceSession.swift"),
+        swift_dir.join("Sources/LatticeVoiceBridge/BridgeErrors.swift"),
+        swift_dir.join("Sources/LatticeVoiceBridgeC/include/lattice_voice_bridge.h"),
+    ];
+    sources.iter().any(|path| {
+        std::fs::metadata(path)
+            .and_then(|meta| meta.modified())
+            .map(|mtime| mtime > dylib_mtime)
+            .unwrap_or(false)
+    })
 }
 
 fn should_link_bridge() -> bool {
@@ -148,6 +186,13 @@ fn try_swift_build(swift_dir: &Path) -> bool {
         return false;
     }
 
+    // Canonicalize so SwiftPM/Clang do not see the same tree via both
+    // `~/Developer/lattice` (symlink) and `lattice-ecosystem/lattice` and then
+    // fail with duplicate `_Builtin_stddef` module-cache entries.
+    let swift_dir = swift_dir
+        .canonicalize()
+        .unwrap_or_else(|_| swift_dir.to_path_buf());
+
     let swift = if Path::new("/usr/bin/swift").is_file() {
         "/usr/bin/swift"
     } else {
@@ -159,7 +204,7 @@ fn try_swift_build(swift_dir: &Path) -> bool {
         .arg("build")
         .arg("-c")
         .arg("release")
-        .current_dir(swift_dir);
+        .current_dir(&swift_dir);
 
     if Path::new("/Applications/Xcode.app/Contents/Developer").is_dir() {
         command.env(

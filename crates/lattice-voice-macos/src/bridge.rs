@@ -20,7 +20,6 @@ use crate::ffi::{
 };
 #[cfg(any(link_bridge, test))]
 use crate::LATTICE_VOICE_BRIDGE_ABI_VERSION;
-#[cfg(any(test, not(link_bridge)))]
 use lattice_voice::SpeechError;
 
 /// Owned bridge event copied off the FluidAudio callback thread.
