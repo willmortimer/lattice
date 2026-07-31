@@ -31,7 +31,7 @@ pub struct AgentThreadAppendMessageArgs {
     pub message_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ThreadDto {
     id: String,
@@ -99,10 +99,10 @@ pub struct GetAgentThreadResult {
 
 fn http_base() -> Result<(String, u16), String> {
     let token = std::env::var(ENV_AUTH_TOKEN).map_err(|_| {
-        "daemon auth token is unavailable; agent thread persistence requires latticed".into()
+        "daemon auth token is unavailable; agent thread persistence requires latticed".to_string()
     })?;
     if token.trim().is_empty() {
-        return Err("daemon auth token is empty".into());
+        return Err("daemon auth token is empty".to_string());
     }
     let port = std::env::var(ENV_API_PORT)
         .ok()

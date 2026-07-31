@@ -312,6 +312,13 @@ export function PacksSettings({ workspaceRoot, onSemanticEnabledChange }: PacksS
             <div className="diagnostics-card" role="alert">
               <strong>Pack error</strong>
               <span>{error}</span>
+              {error.includes("auth token") || error.includes("LATTICE_AUTH_TOKEN") ? (
+                <span>
+                  Quit other Lattice / latticed processes, or remove{" "}
+                  <code>~/Library/Application Support/Lattice/run/latticed.sock</code> and reopen
+                  Packs. A fresh desktop launch writes <code>latticed.token</code> beside the socket.
+                </span>
+              ) : null}
             </div>
           ) : null}
         </>

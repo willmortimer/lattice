@@ -2,8 +2,10 @@
 //!
 //! Voice and semantic each keep their own state and optional child handle.
 //! The first feature to spawn owns the child; a later feature connects to the
-//! existing socket using `LATTICE_AUTH_TOKEN` (set in-process when spawning).
+//! existing socket using `LATTICE_AUTH_TOKEN` (set in-process when spawning,
+//! and persisted beside the socket so relaunches can reattach).
 
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
@@ -56,6 +58,11 @@ pub fn socket_path() -> PathBuf {
         .filter(|v| !v.is_empty())
         .map(PathBuf::from)
         .unwrap_or_else(default_socket_path)
+}
+
+/// Persisted auth token path for a given socket (`latticed.sock` → `latticed.token`).
+pub fn auth_token_path(socket: &Path) -> PathBuf {
+    socket.with_file_name("latticed.token")
 }
 
 pub fn which_bin(name: &str) -> std::io::Result<PathBuf> {
@@ -118,6 +125,72 @@ pub fn wait_for_socket(socket: &Path, timeout: Duration) -> Result<(), String> {
     ))
 }
 
+fn read_persisted_auth_token(socket: &Path) -> Option<String> {
+    let path = auth_token_path(socket);
+    let raw = std::fs::read_to_string(path).ok()?;
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn write_persisted_auth_token(socket: &Path, token: &str) -> Result<(), String> {
+    let path = auth_token_path(socket);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&path)
+            .map_err(|err| format!("failed to write {}: {err}", path.display()))?;
+        file.write_all(token.as_bytes())
+            .map_err(|err| format!("failed to write {}: {err}", path.display()))?;
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(&path, token)
+            .map_err(|err| format!("failed to write {}: {err}", path.display()))?;
+    }
+    Ok(())
+}
+
+/// True when a process appears to be accepting connections on `socket`.
+fn socket_accepts_connections(socket: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        std::os::unix::net::UnixStream::connect(socket).is_ok()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = socket;
+        true
+    }
+}
+
+fn clear_stale_socket(socket: &Path) {
+    let _ = std::fs::remove_file(socket);
+    let _ = std::fs::remove_file(auth_token_path(socket));
+}
+
+fn resolve_auth_token(socket: &Path) -> Option<String> {
+    std::env::var(ENV_AUTH_TOKEN)
+        .ok()
+        .filter(|t| !t.is_empty())
+        .or_else(|| read_persisted_auth_token(socket))
+}
+
+fn install_process_auth_token(token: &str) {
+    std::env::set_var(ENV_AUTH_TOKEN, token);
+}
+
 fn spawn_latticed(
     binary: &Path,
     socket: &Path,
@@ -155,26 +228,45 @@ fn spawn_latticed(
 
 /// Connect to an existing latticed, or spawn one with `host_env.extra_env`.
 ///
-/// When spawning, always `set_var(LATTICE_AUTH_TOKEN, …)` so other desktop
-/// features in this process can attach to the same daemon.
+/// When spawning, always `set_var(LATTICE_AUTH_TOKEN, …)` and persist the token
+/// beside the socket so other desktop modules / relaunches can attach.
 pub async fn connect_or_spawn(
     host_env: SpawnHostEnv,
 ) -> Result<(Arc<DaemonClient>, Option<SpawnedDaemon>), String> {
     let socket = socket_path();
-    let env_token = std::env::var(ENV_AUTH_TOKEN).ok().filter(|t| !t.is_empty());
+    let mut token = resolve_auth_token(&socket);
 
     if socket.exists() {
-        let token = env_token.ok_or_else(|| {
-            format!(
-                "latticed socket exists at {} but {ENV_AUTH_TOKEN} is unset; \
-                 pass the daemon auth token or unset the stale socket",
-                socket.display()
-            )
-        })?;
-        let client = DaemonClient::connect(&socket, &token)
-            .await
-            .map_err(|err| format!("connect to latticed at {}: {err}", socket.display()))?;
-        return Ok((Arc::new(client), None));
+        if let Some(existing_token) = token.clone() {
+            match DaemonClient::connect(&socket, &existing_token).await {
+                Ok(client) => {
+                    install_process_auth_token(&existing_token);
+                    let _ = write_persisted_auth_token(&socket, &existing_token);
+                    return Ok((Arc::new(client), None));
+                }
+                Err(_) if !socket_accepts_connections(&socket) => {
+                    // Dead socket left behind after a crash / kill.
+                    clear_stale_socket(&socket);
+                    token = None;
+                }
+                Err(err) => {
+                    return Err(format!(
+                        "connect to latticed at {}: {err}",
+                        socket.display()
+                    ));
+                }
+            }
+        } else if socket_accepts_connections(&socket) {
+            return Err(format!(
+                "latticed is running at {} but no auth token is available \
+                 (missing {ENV_AUTH_TOKEN} and {}); quit the other Lattice/latticed \
+                 instance or remove the socket to recover",
+                socket.display(),
+                auth_token_path(&socket).display()
+            ));
+        } else {
+            clear_stale_socket(&socket);
+        }
     }
 
     let binary = resolve_latticed_bin().ok_or_else(|| {
@@ -184,9 +276,9 @@ pub async fn connect_or_spawn(
             socket.display()
         )
     })?;
-    let token = env_token.unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
-    // Share the token with other desktop modules in this process.
-    std::env::set_var(ENV_AUTH_TOKEN, &token);
+    let token = token.unwrap_or_else(|| uuid::Uuid::now_v7().to_string());
+    install_process_auth_token(&token);
+    write_persisted_auth_token(&socket, &token)?;
     let child = spawn_latticed(&binary, &socket, &token, &host_env)?;
     wait_for_socket(&socket, Duration::from_secs(8))?;
     let client = DaemonClient::connect(&socket, &token)
@@ -201,4 +293,29 @@ pub async fn connect_or_spawn(
             )
         })?;
     Ok((Arc::new(client), Some(SpawnedDaemon { child })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn auth_token_path_sits_beside_socket() {
+        let socket = PathBuf::from("/tmp/Lattice/run/latticed.sock");
+        assert_eq!(
+            auth_token_path(&socket),
+            PathBuf::from("/tmp/Lattice/run/latticed.token")
+        );
+    }
+
+    #[test]
+    fn persisted_token_round_trips() {
+        let directory = tempfile::tempdir().unwrap();
+        let socket = directory.path().join("latticed.sock");
+        write_persisted_auth_token(&socket, "secret-token").unwrap();
+        assert_eq!(
+            read_persisted_auth_token(&socket).as_deref(),
+            Some("secret-token")
+        );
+    }
 }
