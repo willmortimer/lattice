@@ -50,7 +50,9 @@ pub struct OciKernelfsExport {
     pub work: Option<PathBuf>,
     /// Symlink to the materialized output role.
     pub output: PathBuf,
-    /// Canonical VirtioFS share root.
+    /// VirtioFS share root (same lexical form Cell reports for the share —
+    /// do not rewrite via `canonicalize`, or macOS `/tmp` → `/private/tmp`
+    /// breaks live-bind prefix checks).
     pub agent_share: PathBuf,
 }
 
@@ -116,16 +118,18 @@ pub fn export_oci_roles_under_agent_share(
 fn export_oci_roles_under_agent_share_macos(
     req: &OciKernelfsExportRequest,
 ) -> Result<OciKernelfsExport, OciKernelfsExportError> {
+    // Keep the lexical share path Cell's helper uses (often `/tmp/...` on macOS).
+    // Canonicalizing to `/private/tmp/...` makes GuestMountPathForHost miss the share.
     let agent_share = oci_ivisor_agent_share_dir(&req.vz_runtime_dir, &req.cell_id);
     create_dir_all(&agent_share)?;
 
     let run_parent = agent_share.join(".kernelfs-runs");
     create_dir_all(&run_parent)?;
 
-    let agent_share = canonicalize(&agent_share)?;
+    let agent_share_canon = canonicalize(&agent_share)?;
 
     let mut allow_roots = Vec::with_capacity(1 + req.host_path_roots.len());
-    allow_roots.push(agent_share.clone());
+    allow_roots.push(agent_share_canon);
     for root in &req.host_path_roots {
         if !root.exists() {
             create_dir_all(root)?;
@@ -299,10 +303,7 @@ mod tests {
         })
         .expect("export");
 
-        let expected_share = fs::canonicalize(
-            oci_ivisor_agent_share_dir(vz.path(), cell_id),
-        )
-        .expect("canonical share");
+        let expected_share = oci_ivisor_agent_share_dir(vz.path(), cell_id);
         assert_eq!(exported.agent_share, expected_share);
         assert_eq!(exported.export_root, exported.agent_share);
         assert_eq!(exported.input, exported.agent_share.join("input"));
@@ -310,6 +311,25 @@ mod tests {
         assert!(exported.work.is_none());
         // Flat roles must not nest under {run_id}/.
         assert!(!exported.agent_share.join(run_id).exists());
+        // Volume sources must keep the helper's lexical share prefix (no
+        // /tmp → /private/tmp rewrite) so Cell VirtioFS coverage matches.
+        if expected_share.starts_with("/tmp/") {
+            assert!(
+                exported.input.starts_with("/tmp/"),
+                "input source must not rewrite /tmp via canonicalize: {}",
+                exported.input.display()
+            );
+        } else {
+            assert!(
+                !exported
+                    .input
+                    .to_string_lossy()
+                    .starts_with("/private/tmp/"),
+                "unexpected /private/tmp rewrite for share {}: {}",
+                expected_share.display(),
+                exported.input.display()
+            );
+        }
 
         assert!(exported.input.is_symlink());
         assert!(exported.output.is_symlink());
