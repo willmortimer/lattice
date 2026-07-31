@@ -80,7 +80,9 @@
             desktop = "Native Tauri window without Vite (reuses apps/desktop/dist)";
             desktop-build = "Release binary, unbundled (tauri build --no-bundle)";
             desktop-ui-build = "Build the desktop Vite frontend only";
-            desktop-install = "macOS: signed .app with voice → /Applications (Apple Development)";
+            desktop-install = "macOS: SIWA dogfood → /Applications (Apple Development + profile)";
+            desktop-install-dev = "Same as desktop-install (Apple Development + SIWA)";
+            desktop-install-dist = "macOS: local Developer ID install (no native SIWA; optional notarize)";
             desktop-release = "macOS release DAG join (env → build → sign → notary → dmg)";
             desktop-release-internal = "Internal channel app (bundle id dev.lattice.desktop.dev)";
             release-env-validate = "Validate Apple Developer ID + notarytool env";
@@ -91,7 +93,7 @@
             build-voice-host = "Release-build lattice-voice-host";
             verify-sidecars = "Verify release sidecar binaries + embed backends";
             assemble-app = "Copy sidecars/dylibs into Lattice.app";
-            codesign-app = "Developer ID codesign (hardened runtime)";
+            codesign-app = "codesign Lattice.app (development|release profile)";
             notarize-app = "Submit Lattice.app to Apple notarytool";
             staple-app = "Staple notarization ticket onto Lattice.app";
             build-dmg = "Build UDZO DMG from stapled app";
@@ -238,139 +240,13 @@
               exec target/debug/lattice-agentd "$@"
             '';
             desktop-install = ''
-              if [ "$(uname -s)" != "Darwin" ]; then
-                echo "desktop-install: macOS only" >&2
-                exit 1
-              fi
-
-              # Support `nix run ./lattice#…` from ecosystem root (Cargo workspace is nested).
-              if [ -f ./lattice/Cargo.toml ] && [ -d ./lattice/apps/daemon ]; then
-                cd ./lattice
-              elif [ ! -f ./Cargo.toml ] || [ ! -d ./apps/daemon ]; then
-                echo "desktop-install: run from lattice repo root (or ecosystem root with ./lattice)" >&2
-                exit 1
-              fi
-
-              : "''${APPLE_SIGNING_IDENTITY:?Set APPLE_SIGNING_IDENTITY (see .env.example / docs/dev/environment.md)}"
-
-              if [ -z "''${APPLE_TEAM_ID:-}" ]; then
-                echo "desktop-install: warning: APPLE_TEAM_ID unset (ok for local Apple Development; needed later for notarization)" >&2
-              fi
-
-              pnpm install --frozen-lockfile --prefer-offline
-              # Keep the Nix apple-sdk DEVELOPER_DIR/SDKROOT for the Cargo build.
-              # Overriding to Xcode.app here mixes Xcode's MacOSX.sdk headers with
-              # Nix libcxx and breaks libduckdb-sys (uint8_t / intmax_t / _CTYPE_*).
-              # Same voice path as `nxr desktop-dev` / `pnpm tauri:dev` — without this,
-              # Settings → Voice reports Unavailable (Cargo default features are empty).
-              pnpm --filter @lattice/desktop exec tauri build --bundles app --features voice-embedded
-
-              # Thin-client sidecars (semantic + voice + agent) must sit beside lattice-desktop.
-              echo "desktop-install: building latticed / lattice-agentd / lattice-wasi-seatbelt / lattice-embed-host / lattice-voice-host"
-              cargo build --release -p lattice-daemon --bin latticed
-              cargo build --release -p lattice-agentd --bin lattice-agentd
-              cargo build --release -p lattice-agentd --bin lattice-wasi-seatbelt
-              # Align llama-cpp cmake with Nix apple-sdk (avoids MTLResidencySetDescriptor
-              # link failures when cmake picks Xcode 26.x headers).
-              # Runtime path relative to repo cwd; not a writeShellApplication input.
-              # shellcheck disable=SC1091
-              . scripts/macos/llama-cpp-nix-sdk.sh
-              cargo build --release -p lattice-embed-host --bin lattice-embed-host --features llama-cpp
-              cargo build --release -p lattice-voice-host --bin lattice-voice-host --features fluidaudio || \
-                cargo build --release -p lattice-voice-host --bin lattice-voice-host
-
-              echo "desktop-install: verifying production sidecars"
-              for bin in latticed lattice-agentd lattice-wasi-seatbelt lattice-embed-host lattice-voice-host; do
-                if [ ! -f "target/release/$bin" ]; then
-                  echo "desktop-install: missing target/release/$bin after build" >&2
-                  exit 1
-                fi
-              done
-              backends="$(target/release/lattice-embed-host backends || true)"
-              echo "desktop-install: lattice-embed-host backends:"$'\n'"$backends"
-              if ! printf '%s\n' "$backends" | grep -qx 'llama-cpp'; then
-                echo "desktop-install: lattice-embed-host must list llama-cpp (build with --features llama-cpp)" >&2
-                exit 1
-              fi
-
-              # Prefer real Xcode for codesign when the Nix shell points xcode-select
-              # at the SDK stub (codesign itself does not need the Nix C++ toolchain).
-              if [ -d /Applications/Xcode.app/Contents/Developer ]; then
-                export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
-              elif [ -d /Library/Developer/CommandLineTools ]; then
-                export DEVELOPER_DIR=/Library/Developer/CommandLineTools
-              fi
-
-              # Cargo workspace target dir is repo-root `target/`, not src-tauri/target.
-              app_src="target/release/bundle/macos/Lattice.app"
-              if [ ! -d "$app_src" ]; then
-                # Older / alternate layouts may still use the crate-local target.
-                alt_src="apps/desktop/src-tauri/target/release/bundle/macos/Lattice.app"
-                if [ -d "$alt_src" ]; then
-                  app_src="$alt_src"
-                else
-                  echo "desktop-install: missing bundle at $app_src (also checked $alt_src)" >&2
-                  exit 1
-                fi
-              fi
-
-              # Swift bridges use @loader_path; copy dylibs next to the Mach-O in the bundle.
-              macos_dir="$app_src/Contents/MacOS"
-              for dylib in libLatticeVoiceBridge.dylib libLatticeAudioBridge.dylib libLatticeApprovalBridge.dylib libLatticeAppleSignInBridge.dylib; do
-                src="target/release/$dylib"
-                if [ -f "$src" ]; then
-                  cp -f "$src" "$macos_dir/$dylib"
-                  echo "desktop-install: bundled $dylib"
-                else
-                  echo "desktop-install: warning: missing $src" >&2
-                fi
-              done
-
-              # Quick Look appex (best-effort; requires Xcode).
-              appex_out="$PWD/target/macos/LatticeQuickLook.appex"
-              if bash scripts/macos/build-quicklook-appex.sh "$appex_out"; then
-                mkdir -p "$app_src/Contents/PlugIns"
-                rm -rf "$app_src/Contents/PlugIns/LatticeQuickLook.appex"
-                cp -R "$appex_out" "$app_src/Contents/PlugIns/LatticeQuickLook.appex"
-                echo "desktop-install: bundled LatticeQuickLook.appex"
-              fi
-
-              # Semantic search + voice + agent thin-clients expect sidecars
-              # as MacOS siblings of the app binary (see docs/search/…).
-              for bin in latticed lattice-agentd lattice-wasi-seatbelt lattice-embed-host lattice-voice-host; do
-                src="target/release/$bin"
-                if [ ! -f "$src" ]; then
-                  echo "desktop-install: missing $src (required production sidecar)" >&2
-                  exit 1
-                fi
-                cp -f "$src" "$macos_dir/$bin"
-                chmod +x "$macos_dir/$bin"
-                echo "desktop-install: bundled $bin"
-              done
-
-              # Ensure the identity we expect is on the bundle (Tauri may already have signed).
-              # Match desktop-release: per-binary hardened runtime + entitlements, then
-              # notarize + staple. Re-signing after Tauri's notarize invalidates the ticket;
-              # Gatekeeper then SIGKILLs CLI/Finder launches (spctl: Unnotarized Developer ID).
-              bash scripts/release/codesign-app.sh
-              if [ -n "''${APPLE_ID:-}" ] && [ -n "''${APPLE_PASSWORD:-}" ] && [ -n "''${APPLE_TEAM_ID:-}" ]; then
-                bash scripts/release/notarize-app.sh
-                bash scripts/release/staple-app.sh
-              else
-                echo "desktop-install: warning: APPLE_ID/PASSWORD/TEAM_ID unset — skipping notarize; Gatekeeper may kill the app" >&2
-              fi
-
-              dest="''${LATTICE_INSTALL_DIR:-/Applications}/Lattice.app"
-              echo "desktop-install: installing → $dest"
-              rm -rf "$dest"
-              ditto "$app_src" "$dest"
-              codesign -dv --verbose=2 "$dest" || true
-              if command -v spctl >/dev/null 2>&1; then
-                spctl --assess --verbose=4 --type execute "$dest" || true
-              fi
-              echo "desktop-install: done. Open with: open \"$dest\""
-              echo "desktop-install: for OpenAI agent env, do not use Finder/open alone — from ecosystem root:"
-              echo "  ./scripts/exec-for-dev.sh -- \"$dest/Contents/MacOS/lattice-desktop\""
+              exec bash scripts/macos/desktop-install.sh --profile development "$@"
+            '';
+            desktop-install-dev = ''
+              exec bash scripts/macos/desktop-install.sh --profile development "$@"
+            '';
+            desktop-install-dist = ''
+              exec bash scripts/macos/desktop-install.sh --profile distribution "$@"
             '';
             # Distribution DAG leaves live under scripts/release/.
             # `nxr task desktop-release` orchestrates; apple-release context only on sign/notary.
@@ -631,6 +507,7 @@
             };
           };
 
+          # NXR process supervisor currently only implements restart = "never".
           nxr.processes = {
             desktop-web = {
               app = "desktop-web";
@@ -639,16 +516,16 @@
                   url = "http://127.0.0.1:5173";
                 };
               };
-              restart = "on-failure";
+              restart = "never";
             };
             latticed = {
               app = "latticed";
-              restart = "on-failure";
+              restart = "never";
             };
             agentd = {
               app = "agentd";
               dependsOn = [ "latticed" ];
-              restart = "on-failure";
+              restart = "never";
             };
           };
 
@@ -983,11 +860,30 @@
                 };
               };
               desktop-install = {
-                description = "Sign and install Lattice.app locally (macOS)";
+                description = "Local SIWA dogfood install (Apple Development + provision profile)";
                 app = "desktop-install";
                 category = "release";
-                aliases = [ "install" ];
+                aliases = [
+                  "install"
+                  "desktop-install-dev"
+                ];
                 context = "apple-development";
+                resources = {
+                  cpu = 4;
+                  memory = "8GiB";
+                  exclusive = [
+                    "cargo-target"
+                    "pnpm-install"
+                    "xcode-derived-data"
+                    "apple-keychain"
+                  ];
+                };
+              };
+              desktop-install-dist = {
+                description = "Local Developer ID install (no native SIWA; optional notarize)";
+                app = "desktop-install-dist";
+                category = "release";
+                context = "apple-release";
                 resources = {
                   cpu = 4;
                   memory = "8GiB";

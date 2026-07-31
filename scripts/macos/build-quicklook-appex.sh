@@ -93,7 +93,9 @@ cat >"$OUT_DIR/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-cp "$ENTITLEMENTS" "$OUT_DIR/Contents/LatticeQuickLook.entitlements"
+# Entitlements stay outside the bundle: codesign treats files under Contents/
+# (other than Info.plist / MacOS / Resources / _CodeSignature) as nested code
+# and fails Developer ID signing with "code object is not signed at all".
 
 # Ad-hoc sign so the bundle is loadable in local installs; release re-signs with Developer ID.
 codesign --force --sign - \

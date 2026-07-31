@@ -12,7 +12,11 @@
 	<array>
 		<string>group.dev.lattice.shared</string>
 	</array>
-	<!-- No com.apple.developer.applesignin: unsupported for Developer ID (outside Mac App Store).
-	     Local SIWA dogfood uses Entitlements.dev.plist + desktop-install-dev. -->
+	<!-- Native SIWA: Apple Development + Mac Development provisioning profile only.
+	     Developer ID / notarized builds must NOT claim this entitlement (posix spawn 163). -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
 </dict>
 </plist>

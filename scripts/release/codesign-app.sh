@@ -1,4 +1,11 @@
 #!/usr/bin/env bash
+# Sign Lattice.app for either local Apple Development (SIWA) or Developer ID release.
+#
+# Env:
+#   APPLE_SIGNING_IDENTITY   required
+#   LATTICE_CODESIGN_PROFILE development | release   (default: release)
+#   LATTICE_ENTITLEMENTS_PLIST           optional override path
+#   LATTICE_EMBEDDED_PROVISION_PROFILE  required for development (Mac Development profile)
 set -euo pipefail
 # shellcheck source=scripts/release/_common.sh
 source "$(cd "$(dirname "$0")" && pwd)/_common.sh"
@@ -10,15 +17,51 @@ app_src="$(lattice_release_app_path)"
 macos_dir="$app_src/Contents/MacOS"
 plugins_dir="$app_src/Contents/PlugIns"
 root="$(cd "$(dirname "$0")/../.." && pwd)"
-entitlements="$root/apps/desktop/src-tauri/Entitlements.plist"
+
+profile="${LATTICE_CODESIGN_PROFILE:-release}"
+case "$profile" in
+  development)
+    default_ents="$root/apps/desktop/src-tauri/Entitlements.dev.plist"
+    ;;
+  release)
+    default_ents="$root/apps/desktop/src-tauri/Entitlements.plist"
+    ;;
+  *)
+    echo "codesign-app: unknown LATTICE_CODESIGN_PROFILE=$profile (use development|release)" >&2
+    exit 2
+    ;;
+esac
+
+entitlements="${LATTICE_ENTITLEMENTS_PLIST:-$default_ents}"
 ql_entitlements="$root/apps/desktop/macos/LatticeQuickLook/LatticeQuickLook.entitlements"
 if [ ! -f "$entitlements" ]; then
   echo "codesign-app: missing entitlements: $entitlements" >&2
   exit 1
 fi
 
-echo "codesign-app: Developer ID, hardened runtime + entitlements → $app_src"
-echo "codesign-app: entitlements=$entitlements"
+if [ "$profile" = "development" ]; then
+  if [[ "$APPLE_SIGNING_IDENTITY" == Developer\ ID* ]]; then
+    echo "codesign-app: development profile requires an Apple Development identity, not Developer ID" >&2
+    echo "  got: $APPLE_SIGNING_IDENTITY" >&2
+    exit 1
+  fi
+  provision="${LATTICE_EMBEDDED_PROVISION_PROFILE:-}"
+  if [ -z "$provision" ]; then
+    echo "codesign-app: development requires LATTICE_EMBEDDED_PROVISION_PROFILE" >&2
+    exit 1
+  fi
+  if [ ! -f "$provision" ]; then
+    echo "codesign-app: missing provisioning profile: $provision" >&2
+    exit 1
+  fi
+  cp -f "$provision" "$app_src/Contents/embedded.provisionprofile"
+  echo "codesign-app: embedded $(basename "$provision")"
+else
+  rm -f "$app_src/Contents/embedded.provisionprofile"
+fi
+
+echo "codesign-app: profile=$profile identity=$APPLE_SIGNING_IDENTITY"
+echo "codesign-app: entitlements=$entitlements → $app_src"
 
 # Nix-shell builds link libiconv from the store; rewrite before signing or
 # Gatekeeper SIGKILLs the notarized app (posix spawn 163).

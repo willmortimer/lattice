@@ -46,6 +46,11 @@ result
 .env
 .env.*
 !.env.example
+
+# Local-only Apple Development provisioning profiles (SIWA dogfood)
+secrets/apple/*.provisionprofile
+secrets/apple/*.mobileprovision
+!secrets/apple/README.md
 # Accidental plaintext dumps from sops / manual decrypt
 secrets/*.decrypted
 secrets/*.plain
