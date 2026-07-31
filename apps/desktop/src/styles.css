@@ -3065,6 +3065,18 @@ html[data-page-width="full"] {
   font-size: 11.5px;
 }
 
+.proposal-hydration-provenance {
+  margin-top: 4px;
+}
+
+.proposal-hydration-list {
+  margin: 4px 0 0;
+  padding-left: 1.1rem;
+  font-family: var(--lt-font-mono);
+  font-size: 11.5px;
+  color: var(--lt-muted);
+}
+
 .proposal-partial-warn,
 .proposal-subset-error {
   color: var(--lt-warning);

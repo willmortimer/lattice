@@ -3,7 +3,9 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   CommandPreview,
   CommandPreviewDetail,
+  HydrationInputDigest,
   ProposalPreview,
+  ProposalSource,
   ProposalSourceType,
   ProposalStatus,
   TransactionProposal,
@@ -13,6 +15,7 @@ import type {
 export type {
   CommandPreview,
   CommandPreviewDetail,
+  HydrationInputDigest,
   ProposalPreview,
   ProposalSource,
   ProposalSourceType,
@@ -20,6 +23,21 @@ export type {
   TransactionProposal,
   TransactionProposalSummary,
 } from "./executionContracts";
+
+/** Compact hash label for provenance lists (first 8 hex chars). */
+export function shortContentHash(hash: string): string {
+  const trimmed = hash.trim();
+  if (trimmed.length <= 8) return trimmed;
+  return `${trimmed.slice(0, 8)}…`;
+}
+
+export function hasHydrationProvenance(source: ProposalSource): boolean {
+  return (source.hydrationInputs?.length ?? 0) > 0;
+}
+
+export function hydrationProvenanceLabel(input: HydrationInputDigest): string {
+  return `${input.path} · ${shortContentHash(input.contentHash)}`;
+}
 
 export type ProposalInboxStatusFilter = "all" | ProposalStatus;
 export type ProposalInboxSourceFilter = "all" | ProposalSourceType;

@@ -60,11 +60,19 @@ export type ProposalSourceType =
   | "mcp"
   | "external";
 
+/** KernelFS hydration input digest carried in proposal provenance (camelCase on wire). */
+export interface HydrationInputDigest {
+  path: string;
+  contentHash: string;
+  resourceId?: string;
+}
+
 export interface ProposalSource {
   type: ProposalSourceType;
   resource?: string;
   executionId?: string;
   stepId?: string;
+  hydrationInputs?: HydrationInputDigest[];
 }
 
 export type ProposalStatus = "pending" | "accepted" | "rejected";

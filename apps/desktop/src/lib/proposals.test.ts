@@ -8,9 +8,12 @@ import {
   detailExcerptDisplay,
   filterProposalSummaries,
   formatTextDiffExcerpt,
+  hasHydrationProvenance,
+  hydrationProvenanceLabel,
   pathsFromSelectedCommands,
   previewCommandLabel,
   proposalStatusLabel,
+  shortContentHash,
 } from "./proposals";
 
 const sampleProposal: TransactionProposal = {
@@ -25,6 +28,34 @@ const sampleProposal: TransactionProposal = {
   affectedPaths: ["Notes/A.md", "Notes/B.md", "Notes/C.md"],
   warnings: [],
   createdAt: "2026-07-21T17:00:00Z",
+};
+
+/** Typed fixture matching daemon `hydrationInputs` wire shape (camelCase). */
+export const PROPOSAL_WITH_HYDRATION_FIXTURE: TransactionProposal = {
+  id: "prop-hydration",
+  source: {
+    type: "mcp",
+    resource: "wasi://run_1/guest.wasm",
+    hydrationInputs: [
+      {
+        path: "hello.txt",
+        contentHash:
+          "0f328ae687eb8fd2acfa3a910bb6722eff43f8a7dbd08e53e572ae37a0c5d7a5",
+        resourceId: "res-1",
+      },
+    ],
+  },
+  summary: "WASI guest output",
+  commands: [],
+  affectedPaths: ["Pages/Output.md"],
+  warnings: [],
+  createdAt: "2026-07-21T16:30:00Z",
+};
+
+export const PROPOSAL_WITHOUT_HYDRATION_FIXTURE: TransactionProposal = {
+  ...PROPOSAL_WITH_HYDRATION_FIXTURE,
+  id: "prop-plain",
+  source: { type: "external" },
 };
 
 describe("defaultAcceptedCommandIndices", () => {
@@ -216,5 +247,32 @@ describe("proposalStatusLabel", () => {
   it("labels known statuses", () => {
     expect(proposalStatusLabel("pending")).toBe("Pending");
     expect(proposalStatusLabel("accepted")).toBe("Accepted");
+  });
+});
+
+describe("hydration provenance helpers", () => {
+  it("shortens long content hashes for display", () => {
+    expect(shortContentHash("0f328ae687eb8fd2acfa3a910bb6722eff43f8a7dbd08e53e572ae37a0c5d7a5")).toBe(
+      "0f328ae6…",
+    );
+    expect(shortContentHash("abc")).toBe("abc");
+  });
+
+  it("detects hydration inputs on proposal source", () => {
+    expect(hasHydrationProvenance(PROPOSAL_WITH_HYDRATION_FIXTURE.source)).toBe(true);
+    expect(hasHydrationProvenance(PROPOSAL_WITHOUT_HYDRATION_FIXTURE.source)).toBe(false);
+    expect(hasHydrationProvenance({ type: "task", hydrationInputs: [] })).toBe(false);
+  });
+
+  it("formats path and short hash labels for review UI", () => {
+    const [input] = PROPOSAL_WITH_HYDRATION_FIXTURE.source.hydrationInputs!;
+    expect(hydrationProvenanceLabel(input)).toBe("hello.txt · 0f328ae6…");
+  });
+
+  it("gates provenance visibility the same way as ProposalReviewModal", () => {
+    const showWith = hasHydrationProvenance(PROPOSAL_WITH_HYDRATION_FIXTURE.source);
+    const showWithout = hasHydrationProvenance(PROPOSAL_WITHOUT_HYDRATION_FIXTURE.source);
+    expect(showWith).toBe(true);
+    expect(showWithout).toBe(false);
   });
 });

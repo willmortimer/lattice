@@ -13,6 +13,8 @@ import { useEffect, useMemo, useState } from "react";
 import {
   defaultAcceptedCommandIndices,
   detailExcerptDisplay,
+  hasHydrationProvenance,
+  hydrationProvenanceLabel,
   previewCommandLabel,
   previewProposal,
   type CommandPreview,
@@ -134,6 +136,23 @@ export function ProposalReviewModal({
             <p className="modal-copy proposal-affected-paths">
               Affected: {proposal.affectedPaths.join(", ")}
             </p>
+          )}
+          {hasHydrationProvenance(proposal.source) && (
+            <div
+              className="proposal-hydration-provenance"
+              role="group"
+              aria-label="Hydration input digests"
+            >
+              <p className="modal-copy">Hydration inputs:</p>
+              <ul className="proposal-hydration-list">
+                {proposal.source.hydrationInputs!.map((input) => (
+                  <li key={`${input.path}:${input.contentHash}`}>
+                    {hydrationProvenanceLabel(input)}
+                    {input.resourceId ? ` · ${input.resourceId}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
           {partialAccept && (
             <p className="modal-copy proposal-partial-warn" role="status">
