@@ -70,5 +70,7 @@ Cells, and candid sequencing — lives in the private umbrella:
 - [ADR 0051: Rust embedded agent harness replaces Node `agentd`](0051-rust-embedded-agent-harness.md)
 - [ADR 0052: Universal capture engine with native hot paths](0052-universal-capture-engine.md)
 - [ADR 0053: Lattice media asset model](0053-lattice-media-asset-model.md)
+- [ADR 0054: Desktop UI store and renderer-session save state](0054-desktop-ui-store-and-renderer-session-save.md)
+- [ADR 0055: Per-resource Yrs collaboration with Markdown materialization](0055-per-resource-yrs-collaboration.md)
 
 Voice subsystem ADRs: [`docs/voice/adr/`](../voice/adr/).

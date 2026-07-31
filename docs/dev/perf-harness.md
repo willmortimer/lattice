@@ -34,7 +34,24 @@ Default CI budgets (overridable via env):
 | Page scroll | 1000 ms (`LATTICE_PERF_PAGE_SCROLL_MS`) |
 
 Documented product target remains warm shell in 300–500 ms on representative
-hardware (`documentedTargets.shellWarmMs`).
+hardware (`documentedTargets.shellWarmMs`). Current CI warm-shell (1.5 s) and
+page-open (2.5 s) budgets are **intermediate smoke gates**, not evidence that
+the product target is met.
+
+### Measurement roadmap (beyond smoke budgets)
+
+Add harness coverage for:
+
+| Signal | Why |
+| --- | --- |
+| Keystroke-to-paint p50/p95 | Proves editor hot path, not just open latency |
+| React commits per 100 characters | Catches shell re-render leaks |
+| Long tasks over 50 ms | Main-thread jank |
+| File-tree scroll at 10k and 100k entries | Catalog/virtualization scale |
+| Agent thread at 1k messages | Transcript/virtualization scale |
+| Heap retained after closing editors | Suspension / leak |
+| Initial JS, CSS, font bytes by entry | Startup payload |
+| Cold process launch vs warm process launch | Separate process vs reload |
 
 When profiling regressions, prefer First Look tree virtualization, theme
 resolve IPC, font-pack CSS (only the active pack loads at startup), and

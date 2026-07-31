@@ -24,18 +24,40 @@ React coordinates; it does not mediate per-frame or per-keystroke internals.
 
 ## State model
 
-- Local React state for ephemeral shell UI.
-- Fine-grained external store for resource summaries and cross-surface state.
+```text
+LatticeFS / KernelFS / files / Yrs journals
+        canonical + execution state
+Tiptap / Pixi / Glide / CodeMirror / xterm / Yjs docs
+        surface runtime state
+TanStack Query
+        daemon-owned async projections
+Zustand vanilla (per window)
+        shell + cross-surface control state
+React
+        composition, lifecycle, accessible UI
+```
+
+- Local React state for ephemeral shell UI only.
 - Per-window Zustand vanilla store (`desktopUiStore`) for shell chrome and
-  save-status indicators — not documents, Pixi scenes, or transcripts.
-- ProseMirror transactions for pages.
+  **per-renderer-session** save indicators — not documents, Pixi scenes,
+  transcripts, or Arrow buffers.
+- TanStack Query (adopt next) for agent threads, cloud/AI entitlement, remote
+  access, voice, semantic search, catalogs, workspace summaries — refreshed by
+  daemon events, not focus polling.
+- ProseMirror transactions for pages; Yjs for collaborative live structure when
+  authority is `Collaborative` ([ADR 0055](decisions/0055-per-resource-yrs-collaboration.md)).
 - Imperative scene graph for canvas.
 - Rust core for canonical resource state.
 - Arrow buffers for tabular results.
 - Typed semantic events between surfaces.
 
-Zustand is the React-facing control-state layer. Avoid one giant global
-Redux-style object and avoid lifting per-keystroke editor state into the shell.
+Do **not** put Tiptap/Yjs documents, Arrow buffers, or Pixi scenes into Query or
+Zustand. Avoid one giant global Redux-style object and avoid lifting
+per-keystroke editor state into the shell.
+
+See also private synthesis
+`lattice-ecosystem/docs/architecture/desktop-hotpath-review-2026-07.md` and
+[ADR 0054](decisions/0054-desktop-ui-store-and-renderer-session-save.md).
 
 ## Quick-note performance
 
@@ -47,11 +69,14 @@ quick-note.tsx
 artifact-host.ts
 ```
 
-Quick note loads only shell, one editor, save bridge, theme, and basic open/search. No DuckDB, canvas, Jupyter, charting, or plugin host before typing.
+Quick note loads only shell, one editor, save bridge, theme, and basic
+open/search. Native `prepare_quick_note` must not scan the full resource
+catalog. No DuckDB, canvas, Jupyter, charting, or plugin host before typing.
+Quick Note stays React (not a SwiftUI rewrite).
 
 ## Performance budgets
 
-Initial targets:
+Product targets:
 
 - Warm shell visible in 300–500 ms on representative hardware.
 - Quick-note editor interactive as close to native-editor latency as practical.
@@ -62,17 +87,34 @@ Initial targets:
 - Workspace open time independent of total resource count.
 - Inactive resources release substantial memory.
 
+CI smoke budgets may be looser as intermediate gates. They do **not** prove
+product targets. Required measurement additions:
+
+- Keystroke-to-paint p50/p95.
+- React commits per 100 characters.
+- Long tasks over 50 ms.
+- File-tree scrolling at 10k and 100k entries.
+- Agent thread at 1k messages.
+- Memory retained after closing editors.
+- Initial JS/CSS/font bytes by entry.
+- Cold process launch vs warm process launch separately.
+
 ## Mandatory optimizations
 
-- Lazy capability loading.
+- Lazy capability loading (optional panels already: Settings, agent, terminal,
+  search, etc.).
 - Resource suspension states.
 - Virtualized pages, tables, and canvases.
+- Daemon catalog deltas + metadata-first workspace open.
 - Incremental parsing/indexing/sync/builds.
 - Bounded queries.
 - Native and columnar data paths.
 - Worker-based parsing and layout.
 - Preview caches.
 - Cancellation and backpressure.
+- Serialized save with paused failure (no retry-spin); collaborative mode uses
+  Yrs journal + Markdown materialization checkpoints — not per-keystroke
+  Markdown writes.
 
 ## Resource suspension
 

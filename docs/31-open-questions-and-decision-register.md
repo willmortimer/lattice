@@ -87,7 +87,11 @@ The ADR directory records accepted decisions. Major accepted choices include:
 
 ### Sync
 
-- Yrs/Yjs versus another first implementation.
+- ~~Yrs/Yjs versus another first implementation.~~ **Decided:** Yrs/Yjs per
+  resource with Markdown materialization —
+  [ADR 0055](decisions/0055-per-resource-yrs-collaboration.md) /
+  private [ADR 0078](../../../docs/decisions/0078-per-resource-yrs-collaboration.md).
+  Local pilot before remote provider.
 - Exact audit-trigger and compaction schema for the collaborative SQLite profile.
 - End-to-end encryption feature tradeoffs.
 - Snapshot and compaction cadence.

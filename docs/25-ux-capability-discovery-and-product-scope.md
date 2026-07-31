@@ -221,6 +221,37 @@ Avoid branded mini-products such as separate CRM, Mail, Calendar, AI, or Project
 - Forms and buttons.
 - Automation discoverability.
 
+## Settings information architecture
+
+Settings is lazy-loaded and must not sit on the initial shell path. Navigation
+should be **grouped**, not a flat list of ~18 sections:
+
+```text
+GENERAL — Appearance, Editor, Files & autosave, Keybindings
+WORKSPACE — Workspaces & startup, Data, Capabilities
+INTELLIGENCE — Search, AI, Voice
+EXTENSIONS — Features / Labs, Packs, Plugins
+ACCOUNT & CONNECTIVITY — Cloud account, Remote access
+SYSTEM — Privacy & security, Performance & lifecycle, Diagnostics
+```
+
+Required product behaviors:
+
+- Settings search over title, description, keywords; selecting a result opens
+  and briefly highlights the row.
+- Explicit scope labels: `APP`, `WORKSPACE`, `ACCOUNT`, `DEVICE`.
+- Deep links such as `lattice://settings/ai/provider`.
+- Daemon-backed panes (cloud, voice, remote access, semantic search, packs)
+  use TanStack Query so switching sections does not needlessly reload.
+- Safer persistence: explicit Apply for destructive values, per-section Reset,
+  confirmed Reset all, unsaved drafts, inline status/error beside the failing
+  setting.
+
+Guidance tours and remediation links should target semantic anchors (for
+example `settings.ai.provider`), not brittle CSS selectors. See private
+[ADR 0080](../../docs/decisions/0080-semantic-guidance-engine.md) when working
+in the umbrella workspace.
+
 ## Performance UX
 
 - Loading states explain what is loading.

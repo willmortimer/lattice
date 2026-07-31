@@ -142,6 +142,21 @@ The agent UI builds on the existing Lattice frontend plus [assistant-ui](https:/
 
 Do not introduce a second design system. Lattice theme tokens style both assistant-ui primitives and `@lattice/ui` shells.
 
+### 3.1.1 Post hot-path ownership (2026-07)
+
+Keep React + assistant-ui + Zustand control store. Adopt TanStack Query for
+daemon-owned thread/run/cloud state. Gaps and sequencing:
+
+- Resumable streams (`reconnectToStream`) via durable ordered run-event log —
+  [ADR 0082](../../../docs/decisions/0082-agent-workbench-and-resumable-runs.md).
+- Gate composer until transcript hydration is safe (P0).
+- Semantic tool renderer registry; Dock / Workbench / Detached layouts.
+- Thread browser (not HTML `<select>`); assistant-ui-supported message
+  virtualization for long threads.
+- Sprint: [sprint-agent-workbench-dag.md](../../../docs/internal/sprint-agent-workbench-dag.md).
+
+Full review: [desktop-hotpath-review-2026-07.md](../../../docs/architecture/desktop-hotpath-review-2026-07.md).
+
 ### 3.2 New runtime package
 
 Create:

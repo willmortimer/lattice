@@ -54,9 +54,25 @@ A future sync implementation can replace the first without invalidating files.
 
 ## Text and canvas collaboration
 
-Yjs/Yrs is a practical initial candidate for rich text and canvas structures due to editor integrations and Rust compatibility. Partition by resource rather than one global document.
+**Decision:** Yrs/Yjs for page (then canvas) collaboration —
+[ADR 0055](decisions/0055-per-resource-yrs-collaboration.md).
 
-Possible future Automerge support remains behind a replication interface.
+Model:
+
+```text
+Tiptap ↔ Y.Doc(resource_id) ↔ Yrs in latticed
+  ├── local update journal / snapshots
+  ├── awareness (ephemeral)
+  └── Markdown materializer (checkpoint / idle / close / export)
+```
+
+- Partition by stable resource ID, not one global document and not by path.
+- Do not serialize Markdown on every collaborative keystroke.
+- Awareness stays outside the durable document.
+- Pages first; canvas second (Pixi owns drag motion; coalesce position
+  broadcasts); SQLite later via semantic row/schema operations.
+- Possible future Automerge support remains behind the same replication
+  interface (ADR 0012).
 
 ## SQLite collaboration
 
