@@ -101,7 +101,8 @@ pub use voice_host::{
     ENV_VOICE_HOST_SOCKET, ENV_VOICE_MODEL_CACHE,
 };
 pub use workspace_api::{
-    api_workspace_set_remote_access, WorkspaceRemoteAccessParams, WorkspaceRemoteAccessResponse,
+    api_workspace_list_remote_access, api_workspace_set_remote_access,
+    WorkspaceRemoteAccessListResponse, WorkspaceRemoteAccessParams, WorkspaceRemoteAccessResponse,
 };
 pub use workspace_registry::{
     default_workspace_registry_path, register_workspace, sync_remote_access_lease,

@@ -22,6 +22,15 @@ pub struct WorkspaceRemoteAccessResponse {
     pub remote_access_lease_active: bool,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceRemoteAccessListResponse {
+    pub workspaces: Vec<WorkspaceRegistryRecord>,
+    pub remote_access_lease_active: bool,
+    /// True when `LATTICE_CLOUD_URL` / token / device id are set for the relay client.
+    pub relay_configured: bool,
+}
+
 fn load_registry() -> Result<WorkspaceRegistry, ApiError> {
     WorkspaceRegistry::load_default().map_err(|err| ApiError::Internal(err.to_string()))
 }
@@ -32,10 +41,32 @@ fn save_registry(registry: &WorkspaceRegistry) -> Result<(), ApiError> {
         .map_err(|err| ApiError::Internal(err.to_string()))
 }
 
+fn relay_configured() -> bool {
+    crate::cloud_relay::CloudRelayConfig::from_env().is_some()
+}
+
 async fn sync_lease(state: &DaemonState, registry: &WorkspaceRegistry) {
     if let Some(connections) = state.connections() {
         sync_remote_access_lease(connections, registry).await;
     }
+}
+
+/// List registered workspaces and whether the remote-access idle lease is held.
+pub async fn api_workspace_list_remote_access(
+    state: &DaemonState,
+) -> Result<WorkspaceRemoteAccessListResponse, ApiError> {
+    let registry = load_registry()?;
+    // Re-sync so the response matches the live ConnectionTracker after restarts.
+    sync_lease(state, &registry).await;
+    let lease_active = state
+        .connections()
+        .map(|tracker| tracker.remote_access_lease_held())
+        .unwrap_or_else(|| registry.remote_access_any());
+    Ok(WorkspaceRemoteAccessListResponse {
+        workspaces: registry.list().to_vec(),
+        remote_access_lease_active: lease_active,
+        relay_configured: relay_configured(),
+    })
 }
 
 /// Enable or disable remote MCP/relay access for a registered workspace.
