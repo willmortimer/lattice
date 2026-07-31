@@ -1,49 +1,123 @@
 # celld client (Lattice → Cell)
 
-Minimal Connect/HTTP client in `crates/lattice-cell-client` for the guest
-hydrate → run → collect loop against a running `celld`. Prefer this path over
-VirtioFS live binds; Cell already materializes KernelFS trees under the guest
-data volume via `lattice.runtime.v1` / `cell.mirror.v1`.
+Connect/HTTP client in `crates/lattice-cell-client` and agentd host glue for the
+guest **hydrate → run → collect → propose** loop against a running `celld`.
+Roles follow KernelFS vocabulary only: `input` / `work` / `output` (guest mounts
+`/input`, `/work`, `/output`).
+
+## Overview
+
+```text
+KernelFS role host paths → KernelFSHydrationPlan
+  → ApplyCell + StartCell (volumes from plan; optional OCI bundle)
+  → Invoke lattice.runtime.v1 HydrateProjection   (mirror inputs into guest)
+  → Invoke lattice.runtime.v1 RunTask
+  → Invoke cell.mirror.v1 CollectOutput           (mirror /output back)
+  → OutputFileMap (path → bytes/sha256)
+  → propose_resource drafts (agentd run_cell_task / dogfood binaries)
+```
+
+Dogfood and `run_cell_task` end in **≥1** reviewable `propose_resource` draft
+under a workspace prefix (default `Reports/`). Nothing applies silently — ADR
+0063.
+
+## Mirror vs live-bind
+
+Two layers stack; do not conflate them.
+
+| Layer | Mechanism | What moves |
+| --- | --- | --- |
+| **Mirror (guest protocol)** | `HydrateProjection` + `CollectOutput` | File bytes cross the guest session boundary via `lattice.runtime.v1` / `cell.mirror.v1`. Always used by `lattice-cell-client::run_projection`. |
+| **Live-bind (host volume sources)** | `VolumeAttachment.source` on Apply/Start | Host directories the OCI runtime or microVM provider bind-mounts at `/input`, `/work`, `/output`. Writes land on the host immediately — no copy-back at task end. |
+
+**Firecracker / microVM (default):** Lattice creates an ephemeral temp tree
+(`{tmpdir}/input`, `{tmpdir}/output`, optional `work`). Hydrate still mirrors
+workspace files into the guest; collect mirrors `/output` back. Volume sources
+point at the temp dirs.
+
+**Mac OCI (`execution_mode: oci`):** Volume `source` paths must sit under the
+ivisor worker VirtioFS share root (Cell
+[`docs/28-oci-agent-mount-contract.md`](https://github.com/willmortimer/cell/blob/main/docs/28-oci-agent-mount-contract.md)).
+Lattice **materializes + live-exports** KernelFS roles under `agent-share` via
+`lattice-agentd::kernelfs_export::export_oci_roles_under_agent_share` (macOS
+only this sprint). Hydrate/Collect mirror semantics are unchanged — live-bind
+only affects where the guest's role mounts are rooted on the host.
+
+Do **not** set `CELL_OCI_AGENT_MOUNT_COPY=1` when proving live-bind; that forces
+copy-into-rootfs and hides VirtioFS behavior.
 
 ## Environment
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `CELLD_BASE_URL` | **yes** | celld Connect/HTTP origin (no trailing slash), e.g. `http://127.0.0.1:8080` |
+| `CELLD_BASE_URL` | **yes** (client + `run_cell_task`) | celld Connect/HTTP origin (no trailing slash), e.g. `http://127.0.0.1:8080`. Fails closed when unset — no localhost guess. |
+| `LATTICE_API_BASE_URL` | live dogfood / agent tools | latticed HTTP API (e.g. `http://127.0.0.1:18787`). Injected when `latticed` supervises `lattice-agentd`. |
+| `LATTICE_AUTH_TOKEN` | live dogfood / agent tools | Bearer token for `propose_resource` (same as daemon handshake). |
+| `CELL_VZ_RUNTIME_DIR` | Mac OCI live | Parent of `ivisor-worker-<cellId>/agent-share`. Must match `cell-host-macos` runtime. |
+| `CELL_OCI_IVISOR_WORKSPACE` | Mac OCI alt | When `CELL_VZ_RUNTIME_DIR` unset, runtime resolves to `$CELL_OCI_IVISOR_WORKSPACE/vz-runtime`. |
+| `CELL_OCI_IVISOR_INTERIM` | celld (Mac lab) | Set `1` on celld to select ivisor-interim OCI provider (`celld --backend=vz`). |
+| `CELL_OCI_IVISOR_SYNC` | celld (Mac lab) | `guest` (preferred when CellOS has `tar`/`gzip`) or `orbctl` fallback. |
+| `CELL_VZ_HELPER_SOCKET` | celld (Mac lab) | Path to `cell-host-macos` helper socket. |
+| `CELL_VZ_IMAGES_DIR` | celld (Mac lab) | Staged **lattice** aarch64 CellOS artifacts (`profile-manifest.json` → `"profile":"lattice"`). |
+| `CELL_FC_*` / `DEVCELL_FC_*` | Firecracker lab | Guest kernel, rootfs, jailer, vsock paths — see `scripts/cell-firecracker-dogfood.sh --help`. |
+| `CELL_DOGFOOD_WORKSPACE` | optional | Default workspace root for live dogfood when `--workspace` omitted. |
 
-The client **fails closed** when `CELLD_BASE_URL` is unset or blank — there is
-no default localhost guess.
+## KernelFS export under agent-share (Mac OCI)
 
-## Public loop
+Helper: `export_oci_roles_under_agent_share` in
+`crates/lattice-agentd/src/kernelfs_export.rs`. Used by
+`scripts/cell-mac-oci-dogfood.sh`, `cell-firecracker-dogfood` (OCI branch), and
+`run_cell_task` when `executionMode=oci`.
+
+Locked layout (volume sources stay under the VirtioFS share root so Cell remap
+works without API changes):
 
 ```text
-KernelFS role paths → KernelFSHydrationPlan
-  → ApplyCell (volumes/networks from plan) + StartCell
-  → Invoke lattice.runtime.v1 HydrateProjection
-  → Invoke lattice.runtime.v1 RunTask
-  → Invoke cell.mirror.v1 CollectOutput
-  → OutputFileMap (path → bytes/sha256)
-  → propose_resource drafts (agentd `run_cell_task`)
+{CELL_VZ_RUNTIME_DIR}/ivisor-worker-<cell-id>/agent-share/
+  .kernelfs-runs/{run_id}/          ← materialized RunDir (symlink targets)
+  {run_id}/                         ← export_root
+    input/   work?/   output/       ← symlinks → .kernelfs-runs/{run_id}/…
 ```
 
-Roles are KernelFS only: `input` / `work` / `output` (guest mounts `/input`,
-`/work`, `/output`). Do not invent parallel mount vocabulary.
+- `run_id` defaults to `--projection-id` / `taskId` in dogfood and tool paths.
+- `VolumeAttachment.source` values are the **export** paths:
+  `agent-share/{run_id}/input`, `…/output`, optional `…/work`.
+- Re-export for the same `run_id` wipes the prior export tree (idempotent
+  dogfood retries).
+- Non-macOS targets return `OciKernelfsExportError::UnsupportedPlatform` (Linux
+  `export_live_from_run` not wired this sprint).
 
-### Network egress (microVM vs OCI)
+Implementation sketch:
 
-`KernelFSHydrationPlan` defaults to `network_deny_all: true`, which maps to
-`networks[].egress: none` on Apply. That policy is **enforced on Linux
-Firecracker** (guest launched without a NIC) and is the right default for
-microVM / Firecracker dogfood.
+```rust
+// crates/lattice-agentd/src/kernelfs_export.rs
+export_oci_roles_under_agent_share(&OciKernelfsExportRequest {
+    vz_runtime_dir,
+    cell_id,
+    run_id,
+    input_mounts,      // workspace files → /input
+    host_path_roots,   // workspace + agent_share in allow_roots
+    with_work,
+    include_secrets: false,
+})?;
+```
+
+## Network egress (microVM vs OCI)
+
+`KernelFSHydrationPlan` defaults to `network_deny_all: true` → `networks[].egress:
+none` on Apply. Enforced on **Linux Firecracker** (guest without a NIC).
 
 OCI backends (`execution_mode: oci` / `EXECUTION_MODE_OCI`) **reject**
-`egress: none` at Apply. The client never silently sends deny-all networks to
+`egress: none` at Apply. `lattice-cell-client` never silently sends deny-all to
 OCI:
 
-- Unset `execution_mode` (microVM): deny-all networks are attached as today.
-- `execution_mode: oci`: network attachments are **omitted** when
-  `network_deny_all` is true (stderr warning). Call
-  `with_network_deny_all(false)` explicitly when OCI egress is acceptable.
+| Mode | `network_deny_all: true` (default) |
+| --- | --- |
+| microVM / Firecracker | Attach deny-all network |
+| OCI | **Omit** network attachments (stderr warning) |
+
+Use `with_network_deny_all(false)` or dogfood `--allow-network` only when OCI
+egress is explicitly acceptable.
 
 Set `ProjectionRunRequest.execution_mode` to `EXECUTION_MODE_OCI` (or `"oci"`)
 for OCI cells. Optional `oci_bundle_path` is forwarded to `CellSpec`.
@@ -54,28 +128,28 @@ cargo test -p lattice-cell-client
 cargo test -p lattice-agentd --test cell_propose
 ```
 
-## Firecracker dogfood script
+## Firecracker dogfood (`scripts/cell-firecracker-dogfood.sh`)
 
-`scripts/cell-firecracker-dogfood.sh` exercises the full loop (hydrate → run →
-collect → `propose_resource`) and asserts **≥1** reviewable proposal.
+Default lane: Firecracker microVM temp role dirs. Same loop as agentd
+`run_cell_task` / `run_cell_task_and_propose`. Default guest argv copies
+`input/hello.txt` → `/output/out.txt` and proposes under `Reports/`.
 
 | Mode | Command | Requires |
 | --- | --- | --- |
-| CI / default | `scripts/cell-firecracker-dogfood.sh` or `--dry-run` | Rust toolchain only (mocked celld + latticed via `cell_propose` tests) |
-| Lab / live (microVM) | `scripts/cell-firecracker-dogfood.sh --live` | Running celld (`CELLD_BASE_URL`), latticed (`LATTICE_API_BASE_URL`, `LATTICE_AUTH_TOKEN`), Firecracker guest media |
-| Lab / live (OCI, Mac) | `scripts/cell-mac-oci-dogfood.sh --live …` | `celld --backend=vz` + ivisor-interim + agent-share under `CELL_VZ_RUNTIME_DIR` (see § Lattice uses Cells on a Mac) |
+| CI / default | `scripts/cell-firecracker-dogfood.sh` or `--dry-run` | Rust toolchain (mocked celld + latticed via `cell_propose` tests) |
+| Lab / live (microVM) | `… --live` | `CELLD_BASE_URL`, `LATTICE_API_*`, Firecracker guest media, `celld --backend=firecracker` |
+| Lab / live (OCI, Mac) | `scripts/cell-mac-oci-dogfood.sh --live …` or `… --live --execution-mode=oci` | `celld --backend=vz` + kernelfs export under `CELL_VZ_RUNTIME_DIR` (§ Mac OCI) |
 
 **Dry-run (no live celld):**
 
 ```sh
 scripts/cell-firecracker-dogfood.sh --dry-run
-# or Mac-named alias (same mocked tests):
-scripts/cell-mac-oci-dogfood.sh --dry-run
+scripts/cell-mac-oci-dogfood.sh --dry-run   # same mocked tests
 ```
 
 **Live Firecracker lab** — start celld with `--backend=firecracker` and
-`lattice-runtime` profile (see Cell `scripts/lattice-cell-loop.sh` for guest
-kernel/rootfs env: `CELL_FC_KERNEL`, `CELL_FC_ROOTFS`, jailer/vsock vars), then:
+`lattice-runtime` profile (Cell `scripts/lattice-cell-loop.sh` for
+`CELL_FC_KERNEL`, `CELL_FC_ROOTFS`, jailer/vsock vars), then:
 
 ```sh
 export CELLD_BASE_URL=http://127.0.0.1:8080
@@ -86,105 +160,44 @@ scripts/cell-firecracker-dogfood.sh --live \
   --hydrate input/hello.txt
 ```
 
-Live mode runs `cell-firecracker-dogfood` (same path as agentd
-`run_cell_task` / `run_cell_task_and_propose`). Default guest argv copies
-`input/hello.txt` to `/output/out.txt` and proposes under `Reports/`.
-Override with `--` and guest `argv`, or set `CELL_DOGFOOD_WORKSPACE` instead of
-`--workspace`.
+## Mac OCI (`scripts/cell-mac-oci-dogfood.sh`)
 
-### Lattice uses Cells on a Mac
+First product beat: Lattice drives a Mac Cell through `CELLD_BASE_URL` →
+hydrate → run → collect → **≥1** `propose_resource`, using OCI + VirtioFS
+agent-share (not Firecracker). Wrapper always sets `--execution-mode=oci` and
+calls the shared `cell-firecracker-dogfood` binary.
 
-First product beat: Lattice drives a Mac Cell through `CELLD_BASE_URL` → hydrate
-→ run → collect → **≥1** `propose_resource` draft, using OCI + VirtioFS
-agent-share (not Firecracker). Prefer the dedicated wrapper:
+This exercises **`GuestSessionService.Invoke`** → `lattice.runtime.v1` (not
+`cellctl exec` alone). VirtioFS agent-share can PASS via Exec while RunTask
+still fails if Invoke framing or CellOS lattice agent media is wrong.
 
-```sh
-scripts/cell-mac-oci-dogfood.sh --dry-run   # CI-safe
-scripts/cell-mac-oci-dogfood.sh --live …    # Apple Silicon lab
-```
-
-This is the **product** loop (`GuestSessionService.Invoke` →
-`lattice.runtime.v1` HydrateProjection / RunTask / CollectOutput). It is **not**
-the same as Cell’s `cellctl exec` live-bind demo: VirtioFS agent-share can PASS
-via Exec while RunTask still fails if Invoke framing or CellOS lattice agent
-media is wrong.
-
-**Invoke framing (required):** `lattice-cell-client` must send Connect
-**enveloped** bodies for `/cell.v1.GuestSessionService/Invoke`
-(`application/connect+json`). Raw JSON under that content type makes celld
-reject the call with
-`protocol error: promised N bytes in enveloped message` (often N≈576939372 from
-misreading `{"cel…` as a length). The request is a single data envelope
-(flags=0); HTTP body EOF ends the stream — do not append a zero-length
-end-stream frame (connect-go fails with `unexpected end of JSON input`). Unary
-Apply/Start stay `application/json`.
-
-KernelFS role **host** directories for OCI live must sit under the ivisor worker
-`agent-share` tree (same contract as Cell live-bind):
-
-```text
-${CELL_VZ_RUNTIME_DIR}/ivisor-worker-<cell-id>/agent-share/{input,output[,work]}
-```
-
-The dogfood binary creates those dirs and passes them as `VolumeAttachment.source`
-when `--execution-mode=oci`. MicroVM live still uses an ephemeral temp tree.
+**Invoke framing:** `lattice-cell-client` sends Connect **enveloped** bodies for
+`/cell.v1.GuestSessionService/Invoke` (`application/connect+json`). Raw JSON
+under that content type makes celld reject with
+`protocol error: promised N bytes in enveloped message`. Unary Apply/Start stay
+`application/json`.
 
 **CellOS lattice artifacts (required for RunTask):** ivisor-interim boots a
-CellOS VZ worker that runs `cell-agent`. Stage **lattice** aarch64 media under
+CellOS VZ worker running `cell-agent`. Stage **lattice** aarch64 media under
 `CELL_VZ_IMAGES_DIR` so `profile-manifest.json` has `"profile":"lattice"` and
-advertises `lattice.runtime.v1` / `cell.mirror.v1` (see Cell
-`docs/10-macos-local-backend.md` § Lattice profile prove). Spec profile default
-`lattice-runtime` matches staged `lattice` (`ProfileMatchesSpec`). A busybox OCI
-bundle (`cell/scripts/macos-oci-bundle.sh`) is fine as the **container** rootfs;
-it does **not** replace CellOS — without lattice worker artifacts, Invoke cannot
-serve RunTask. Live-bind demos that only `cellctl exec` never exercise this path.
+advertises `lattice.runtime.v1` / `cell.mirror.v1` (Cell
+[`docs/10-macos-local-backend.md`](https://github.com/willmortimer/cell/blob/main/docs/10-macos-local-backend.md)
+§ Lattice profile prove). A busybox OCI bundle is fine as the **container**
+rootfs; it does not replace CellOS lattice worker artifacts.
 
-Live-bind / VirtioFS proof and helper wiring: Cell
-[`docs/mac-live-bind-demo.md`](https://github.com/willmortimer/cell/blob/main/docs/mac-live-bind-demo.md)
-(agent-share layout, `CELL_VZ_RUNTIME_DIR` must match `cell-host-macos`). Image
-staging: Cell `docs/virtiofs-cellos-image.md`. Backend runbook: Cell
-`docs/10-macos-local-backend.md` § OCI mode smoke.
+Live-bind proof and helper wiring: Cell
+[`docs/mac-live-bind-demo.md`](https://github.com/willmortimer/cell/blob/main/docs/mac-live-bind-demo.md).
+OCI bind remap at Start: Cell
+[`docs/28-oci-agent-mount-contract.md`](https://github.com/willmortimer/cell/blob/main/docs/28-oci-agent-mount-contract.md).
 
-**Guest OCI sync:** Prefer `CELL_OCI_IVISOR_SYNC=guest` when the staged CellOS
-image has `tar`/`gzip` on PATH. If StartCell fails mid guest-channel sync
-(missing gzip/tar), use `CELL_OCI_IVISOR_SYNC=orbctl` (OrbStack ext4 path) until
-the image is restaged — VirtioFS live-bind still works either way.
-
-**Live flags (hardware; not required in CI):**
-
-| Flag / env | Role |
-| --- | --- |
-| `CELLD_BASE_URL` | Running `celld --backend=vz --http-dev` |
-| `LATTICE_API_BASE_URL` + `LATTICE_AUTH_TOKEN` | latticed propose |
-| `--oci-bundle-path PATH` | Host OCI bundle (`config.json` + rootfs); busybox OK |
-| `CELL_VZ_RUNTIME_DIR` or `--vz-runtime-dir` | Parent of `ivisor-worker-*/agent-share` (or derive `$CELL_OCI_IVISOR_WORKSPACE/vz-runtime`) |
-| `CELL_OCI_IVISOR_INTERIM=1` | On celld — select ivisor-interim provider |
-| `CELL_OCI_IVISOR_WORKSPACE` | Parent of the bundle dir |
-| `CELL_OCI_IVISOR_SYNC` | `guest` (preferred) or `orbctl` fallback when guest lacks gzip/tar |
-| `CELL_VZ_HELPER_SOCKET` / `CELL_VZ_IMAGES_DIR` | Helper + staged **lattice** CellOS artifacts |
-| `--with-work` | Also mount `agent-share/work` |
-| `--allow-network` | Explicit OCI egress (`with_network_deny_all(false)`) |
-| Do **not** set `CELL_OCI_AGENT_MOUNT_COPY=1` | Forces copy-into-rootfs and hides live-bind |
-
-**Network egress on OCI:** `KernelFSHydrationPlan` defaults to
-`network_deny_all: true`. OCI backends reject `egress: none` at Apply. With
-`execution_mode: oci`, `lattice-cell-client` **omits** network attachments when
-deny-all is still true (stderr warning). Use `--allow-network` only when OCI
-egress is explicitly acceptable.
-
-**Secrets:** remain opt-in via existing agentd env
-(`LATTICE_WASI_SECRET_HANDLES` / tool arg `secretHandlesJson`). Dogfood does not
-inject secrets or enable ambient network — see `crates/lattice-agentd/README.md`.
-
-**Live OCI one-liner sketch (Apple Silicon lab):**
+**Live OCI sketch (Apple Silicon lab):**
 
 ```sh
-# Cell side (separate terminals / prior steps):
+# Cell side (separate terminals):
 #   ./scripts/macos-oci-bundle.sh   # → /tmp/cell-oci-bundles/cell_mac_live_bind
-#   # stage lattice CellOS under CELL_VZ_IMAGES_DIR (profile-manifest profile=lattice)
+#   # stage lattice CellOS under CELL_VZ_IMAGES_DIR
 #   CELL_OCI_IVISOR_INTERIM=1 CELL_OCI_IVISOR_WORKSPACE=/tmp/cell-oci-bundles \
 #     CELL_VZ_RUNTIME_DIR=/tmp/cell-oci-bundles/vz-runtime \
-#     CELL_OCI_IVISOR_SYNC="${CELL_OCI_IVISOR_SYNC:-guest}" \
 #     cell-host-macos --socket /tmp/cell-host-macos.sock &
 #   celld --backend=vz --http-dev --vz-helper-socket /tmp/cell-host-macos.sock
 
@@ -199,49 +212,47 @@ scripts/cell-mac-oci-dogfood.sh --live \
   --hydrate input/hello.txt
 ```
 
-Equivalent via the Firecracker script:
+| Flag / env | Role |
+| --- | --- |
+| `--oci-bundle-path` | Host OCI bundle (`config.json` + rootfs) |
+| `CELL_VZ_RUNTIME_DIR` or `--vz-runtime-dir` | Parent of `ivisor-worker-*/agent-share` |
+| `--with-work` | Export and mount `agent-share/{run_id}/work` |
+| `--allow-network` | `with_network_deny_all(false)` when OCI egress is OK |
 
-```sh
-scripts/cell-firecracker-dogfood.sh --live \
-  --execution-mode=oci \
-  --oci-bundle-path /tmp/cell-oci-bundles/cell_mac_live_bind \
-  --vz-runtime-dir /tmp/cell-oci-bundles/vz-runtime \
-  --workspace /path/to/workspace
-```
-
-**Out of scope for this beat:** `kernelfs-mac` packaging; full hardware proof is
-lab-only (document live flags above). Dry-run stays green without Apple Silicon.
+Secrets stay opt-in via `LATTICE_WASI_SECRET_HANDLES` / tool `secretHandlesJson`.
+Dogfood does not inject secrets or enable ambient network.
 
 ## agentd tool: `run_cell_task`
 
-When `CELLD_BASE_URL` is set, Rust `lattice-agentd` registers an extra host
-tool:
+When `CELLD_BASE_URL` is set, `lattice-agentd` registers an extra host tool.
 
 | Tool | When available | What it does |
 | --- | --- | --- |
-| `run_cell_task` | `CELLD_BASE_URL` configured | Apply/start cell → hydrate → run → collect → `propose_resource` for each collected `/output` file |
+| `run_cell_task` | `CELLD_BASE_URL` configured | Apply/start → hydrate → run → collect → `propose_resource` per collected `/output` file |
 
-Required arguments: `cellId`, `projectionId`, `argv`, `outputProposalTarget`.
-Optional: `hydrateResourcePaths` (workspace-relative files hydrated under
-`input/`), `profile` (default `lattice-runtime`), `taskId`.
+Required: `cellId`, `projectionId`, `argv`, `outputProposalTarget`, and
+`workspaceRoot` on `start_run`. Optional: `hydrateResourcePaths`, `profile`
+(default `lattice-runtime`), `taskId`, `withWork`, `inputResourceIds`.
+
+**Mac OCI live-bind** (chat path):
+
+| Argument | Purpose |
+| --- | --- |
+| `executionMode` | `"oci"` (or empty / `"microvm"` for temp dirs) |
+| `ociBundlePath` | Host OCI bundle; required when `executionMode=oci` |
+| (env) `CELL_VZ_RUNTIME_DIR` or `CELL_OCI_IVISOR_WORKSPACE` | Required for OCI — fails closed before contacting celld |
+
+OCI mode calls `export_oci_roles_under_agent_share` with `run_id = taskId`
+(defaults to `projectionId`), then passes export paths into
+`KernelFSHydrationPlan::from_role_paths`. Default microVM behavior is unchanged.
 
 The tool is **absent** from the model tool list when `CELLD_BASE_URL` is unset.
-Direct calls return a clear error naming the env var.
+Collected mirror paths like `output/out.txt` map to workspace proposal paths
+under `outputProposalTarget`. Provenance: `sourceResource`
+`cell://{cellId}/{projectionId}` with structured `hydrationInputs` digests.
 
-Collected mirror paths like `output/out.txt` are mapped to workspace proposal
-paths under `outputProposalTarget` (e.g. `Reports/out.txt`). Provenance uses
-`sourceResource` `cell://{cellId}/{projectionId}` — same propose/overlay path
-as WASI `run_wasi_guest`. Non-UTF-8 collected bytes use `contentBase64` on
-`propose_resource` (via shared `propose_output_drafts*` / `ContentKind::Bytes`).
-
-Structured `hydrationInputs` (`path` + `contentHash` + optional `resourceId`)
-persist on the proposal source. When the user accepts/applies the proposal,
-LatticeFS mints a `ResourceVersionId` for each accepted path and copies those
-digests onto the resource registry entry. Inspect surfaces them via
-`lattice resource stat` / `--json` (`hydration_inputs`) and the desktop Inspect
-properties panel.
-
-Implementation: `crates/lattice-agentd/src/cell_host.rs` +
+Implementation: `crates/lattice-agentd/src/cell_host.rs`,
+`crates/lattice-agentd/src/kernelfs_export.rs`,
 `crates/lattice-agentd/src/tools.rs` (`dispatch_run_cell_task`).
 
 ## Non-goals
@@ -249,14 +260,16 @@ Implementation: `crates/lattice-agentd/src/cell_host.rs` +
 - Desktop UI / Settings wiring
 - `apply_proposal` tool (user reviews in Proposals inbox)
 - Fleet / multi-host cell scheduling
-- Requiring VirtioFS or host bind mounts into the guest
 - CellOS image builds or OCI bundle packaging
+- kernelfs-mac FUSE daemon; Linux OCI export under agent-share
 
 ## Related
 
-- Cell `docs/04-api.md` — Connect host services
-- Cell `docs/27-kernelfs-cellspec-hydration.md` — plan → `VolumeAttachment`
-- Cell `docs/mac-live-bind-demo.md` — Mac VirtioFS agent-share live-bind contract
-- Cell `docs/28-oci-agent-mount-contract.md` — OCI bind remap at Start
-- Cell `docs/lattice-runtime.md` / `docs/mirror-broker.md` — guest invoke JSON
+- Cell [`docs/04-api.md`](https://github.com/willmortimer/cell/blob/main/docs/04-api.md) — Connect host services
+- Cell [`docs/27-kernelfs-cellspec-hydration.md`](https://github.com/willmortimer/cell/blob/main/docs/27-kernelfs-cellspec-hydration.md) — plan → `VolumeAttachment`
+- Cell [`docs/mac-live-bind-demo.md`](https://github.com/willmortimer/cell/blob/main/docs/mac-live-bind-demo.md) — VirtioFS agent-share live-bind
+- Cell [`docs/28-oci-agent-mount-contract.md`](https://github.com/willmortimer/cell/blob/main/docs/28-oci-agent-mount-contract.md) — OCI bind remap at Start
+- Cell [`docs/10-macos-local-backend.md`](https://github.com/willmortimer/cell/blob/main/docs/10-macos-local-backend.md) — VZ backend + lattice profile
+- Cell [`docs/lattice-runtime.md`](https://github.com/willmortimer/cell/blob/main/docs/lattice-runtime.md) / [`mirror-broker.md`](https://github.com/willmortimer/cell/blob/main/docs/mirror-broker.md) — guest invoke JSON
+- `crates/lattice-agentd/README.md` — Pioneer tools, WASI guests, OCI export note
 - ADR 0063 — governed propose/overlay (no silent canonical writes)
