@@ -77,12 +77,26 @@ private final class SignInBox: NSObject, ASAuthorizationControllerDelegate,
             controller.performRequests()
         }
 
+        // ASAuthorizationController delivers UI + delegate callbacks on the main
+        // run loop. Blocking main with semaphore.wait freezes the sheet (beachball).
         if Thread.isMainThread {
             work()
-        } else {
-            DispatchQueue.main.async(execute: work)
+            let deadline = Date().addingTimeInterval(180)
+            while true {
+                lock.lock()
+                let current = outcome
+                lock.unlock()
+                if let current {
+                    return current
+                }
+                if Date() >= deadline {
+                    return .failure(.timeout, "Sign in with Apple timed out")
+                }
+                RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.05))
+            }
         }
 
+        DispatchQueue.main.async(execute: work)
         let waitResult = semaphore.wait(timeout: .now() + 180)
         if waitResult == .timedOut {
             return .failure(.timeout, "Sign in with Apple timed out")
