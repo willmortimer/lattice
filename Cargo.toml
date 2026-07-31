@@ -86,6 +86,7 @@ lattice-approval-macos = { path = "crates/lattice-approval-macos" }
 lattice-mcp-catalog = { path = "crates/lattice-mcp-catalog" }
 lattice-apple-signin-macos = { path = "crates/lattice-apple-signin-macos" }
 kernelfs = { path = "../kernelfs/crates/kernelfs" }
+kernelfs-linux = { path = "../kernelfs/crates/kernelfs-linux" }
 kernelfs-mac = { path = "../kernelfs/crates/kernelfs-mac" }
 lattice-daemon = { path = "apps/daemon" }
 prost = "0.14"

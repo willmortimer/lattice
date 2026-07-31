@@ -5096,6 +5096,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "kernelfs-linux"
+version = "0.2.0"
+dependencies = [
+ "kernelfs-core",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "kernelfs-wasmwasi"
 version = "0.2.0"
 dependencies = [
@@ -5797,6 +5805,7 @@ dependencies = [
  "futures-util",
  "hex",
  "kernelfs",
+ "kernelfs-linux",
  "lattice-cell-client",
  "reqwest 0.12.28",
  "serde",
