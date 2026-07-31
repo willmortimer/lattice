@@ -6,7 +6,7 @@
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
-use axum::extract::State;
+use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -18,6 +18,10 @@ use tracing::{info, warn};
 
 use crate::agent_memory_api::{
     api_delete_memory, api_recall, api_remember, DeleteMemoryParams, RecallParams, RememberParams,
+};
+use crate::agent_threads_api::{
+    api_append_message, api_create_thread, api_get_thread, api_list_threads, AppendMessageParams,
+    CreateThreadParams, WorkspaceScopeParams,
 };
 use crate::api::{
     api_build_context, api_cancel_job, api_create_proposal, api_get_dataset_schema, api_get_job,
@@ -33,6 +37,9 @@ use crate::mcp;
 use crate::scheduler_api::{
     api_scheduler_list, api_scheduler_register, api_scheduler_set_enabled,
     api_scheduler_unregister, SchedulerSetEnabledParams, SchedulerWorkspaceParams,
+};
+use crate::workspace_api::{
+    api_workspace_list_remote_access, api_workspace_set_remote_access, WorkspaceRemoteAccessParams,
 };
 use crate::server::DaemonState;
 
@@ -177,6 +184,64 @@ async fn route_agent_memory_delete(
         return resp;
     }
     match api_delete_memory(&state.daemon.runtime, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_agent_threads_list(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Query(params): Query<WorkspaceScopeParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_list_threads(&state.daemon.runtime, params) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_agent_threads_create(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<CreateThreadParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_create_thread(&state.daemon.runtime, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_agent_thread_get(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Path(thread_id): Path<String>,
+    Query(params): Query<WorkspaceScopeParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_get_thread(&state.daemon.runtime, &thread_id, params) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_agent_thread_append_message(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Path(thread_id): Path<String>,
+    Json(body): Json<AppendMessageParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_append_message(&state.daemon.runtime, &thread_id, body) {
         Ok(value) => (StatusCode::OK, Json(value)).into_response(),
         Err(err) => err.into_response(),
     }
@@ -468,6 +533,33 @@ async fn route_scheduler_list(State(state): State<HttpState>, headers: HeaderMap
     }
 }
 
+async fn route_workspace_list_remote_access(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_workspace_list_remote_access(&state.daemon).await {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_workspace_set_remote_access(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<WorkspaceRemoteAccessParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_workspace_set_remote_access(&state.daemon, body).await {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
 async fn route_mcp(
     State(state): State<HttpState>,
     headers: HeaderMap,
@@ -508,6 +600,15 @@ pub fn router(daemon: DaemonState) -> Router {
         .route("/v1/agent_memory/remember", post(route_agent_memory_remember))
         .route("/v1/agent_memory/recall", post(route_agent_memory_recall))
         .route("/v1/agent_memory/delete", post(route_agent_memory_delete))
+        .route(
+            "/v1/agent_threads",
+            get(route_agent_threads_list).post(route_agent_threads_create),
+        )
+        .route("/v1/agent_threads/{id}", get(route_agent_thread_get))
+        .route(
+            "/v1/agent_threads/{id}/messages",
+            post(route_agent_thread_append_message),
+        )
         .route("/v1/read", post(route_read))
         .route("/v1/related", post(route_related))
         .route("/v1/build_context", post(route_build_context))
@@ -524,6 +625,14 @@ pub fn router(daemon: DaemonState) -> Router {
             post(route_scheduler_set_enabled),
         )
         .route("/v1/scheduler/list", post(route_scheduler_list))
+        .route(
+            "/v1/workspace/list_remote_access",
+            post(route_workspace_list_remote_access),
+        )
+        .route(
+            "/v1/workspace/set_remote_access",
+            post(route_workspace_set_remote_access),
+        )
         .route("/v1/proposals/create", post(route_create_proposal))
         .route("/v1/proposals/list", post(route_list_proposals))
         .route("/v1/proposals/get", post(route_get_proposal))

@@ -1,4 +1,5 @@
 mod agent;
+mod agent_threads;
 mod ai;
 mod app_lock;
 mod app_menu;
@@ -29,6 +30,7 @@ mod proposals;
 mod relationship;
 mod resource_links;
 mod resource_stat;
+mod remote_access;
 mod revisions;
 mod scheduler;
 mod search;
@@ -334,9 +336,15 @@ pub fn run() {
             semantic::semantic_disable,
             scheduler::get_background_schedule_status,
             scheduler::set_background_schedules_enabled,
+            remote_access::get_remote_access_status,
+            remote_access::set_workspace_remote_access,
             agent::agent_health,
             agent::agent_start_run,
             agent::agent_cancel_run,
+            agent_threads::agent_thread_ensure,
+            agent_threads::agent_thread_append_message,
+            agent_threads::agent_thread_list,
+            agent_threads::agent_thread_get,
             ai::set_openai_api_key,
             ai::clear_openai_api_key,
             ai::has_openai_api_key,

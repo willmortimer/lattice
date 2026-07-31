@@ -1,6 +1,10 @@
 import { Channel } from "@tauri-apps/api/core";
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
 
+import {
+  persistAgentRunTranscript,
+  RunTranscriptAccumulator,
+} from "../agent/agentTranscriptPersistence";
 import { invoke } from "./ipc";
 
 export type AgentHealth = {
@@ -61,7 +65,32 @@ export type TauriAgentChatTransportOptions = {
   /** Resolve provider/model at send time (UI selectors). */
   resolveRunOptions?: () => { provider?: string; model?: string };
   onAgentEvent?: AgentEventHandler;
+  /** When false, skip durable thread persistence (tests). Defaults to true. */
+  persistTranscripts?: boolean;
 };
+
+function scheduleAgentRunTranscriptPersistence(args: {
+  workspaceRoot: string;
+  threadId: string;
+  messages: UIMessage[];
+  accumulator: RunTranscriptAccumulator;
+  runId: string;
+  error?: string;
+}): void {
+  const snapshot = args.accumulator.snapshot();
+  const runId = snapshot.runId ?? args.runId;
+  const error = args.error ?? snapshot.streamError ?? undefined;
+  void persistAgentRunTranscript({
+    workspaceRoot: args.workspaceRoot,
+    threadId: args.threadId,
+    messages: args.messages,
+    chunks: snapshot.chunks,
+    runId,
+    error,
+  }).catch(() => {
+    // Persistence must not block or surface in the composer.
+  });
+}
 
 /** Map one ordered Tauri channel payload into UI chunks and side effects. */
 export function applyAgentStreamMessage(
@@ -151,6 +180,9 @@ export class TauriAgentChatTransport implements ChatTransport<UIMessage> {
         abortSignal?.addEventListener("abort", onAbort);
 
         void (async () => {
+          const persistTranscripts = this.options.persistTranscripts !== false;
+          const transcript = new RunTranscriptAccumulator();
+          let completedRunId = crypto.randomUUID();
           try {
             const resolved = this.options.resolveRunOptions?.() ?? {};
             const result = await startAgentRun(
@@ -162,12 +194,16 @@ export class TauriAgentChatTransport implements ChatTransport<UIMessage> {
                 messagesJson,
               },
               (message) => {
+                if (persistTranscripts) {
+                  transcript.observe(message);
+                }
                 const outcome = applyAgentStreamMessage(message, (chunk) => {
                   controller.enqueue(chunk);
                 }, {
                   onAgentEvent: this.options.onAgentEvent,
                   onRunId: (runId) => {
                     this.activeRunId = runId;
+                    completedRunId = runId;
                   },
                   onTerminalError: (message) => {
                     failOnce(new Error(message));
@@ -181,12 +217,33 @@ export class TauriAgentChatTransport implements ChatTransport<UIMessage> {
                 }
               },
             );
+            completedRunId = result.runId;
+            if (persistTranscripts) {
+              scheduleAgentRunTranscriptPersistence({
+                workspaceRoot: this.options.workspaceRoot,
+                threadId,
+                messages,
+                accumulator: transcript,
+                runId: result.runId,
+                error: result.error,
+              });
+            }
             if (result.error) {
               failOnce(new Error(result.error));
             } else {
               closeOnce();
             }
           } catch (error) {
+            if (persistTranscripts) {
+              scheduleAgentRunTranscriptPersistence({
+                workspaceRoot: this.options.workspaceRoot,
+                threadId,
+                messages,
+                accumulator: transcript,
+                runId: completedRunId,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
             failOnce(error);
           } finally {
             abortSignal?.removeEventListener("abort", onAbort);

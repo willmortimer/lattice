@@ -186,6 +186,7 @@ type AgentSessionStore = {
   lastEventBackend: string | null;
   aiMode: AiMode | null;
   accountAiDisabled: boolean;
+  accountAiBlockReason: "unsigned" | "not_entitled" | null;
   /** `null` until BYO key presence is checked; only meaningful when `aiMode === "byoOpenai"`. */
   byoOpenaiKeyPresent: boolean | null;
   selectedProvider: SelectableAgentProvider | null;
@@ -195,7 +196,12 @@ type AgentSessionStore = {
   activeOverlays: Record<string, ActiveOverlay>;
   trailSteps: TrailStep[];
   evidence: AgentEvidence[];
+  /** Bumps when the durable thread list should reload (new thread / resume). */
+  threadListEpoch: number;
   ensureThreadId: (workspaceRoot: string) => string;
+  selectThreadId: (workspaceRoot: string, threadId: string) => void;
+  startNewThread: (workspaceRoot: string) => string;
+  bumpThreadListEpoch: () => void;
   setHealthBackend: (backend: string | null) => void;
   setHealthSnapshot: (snapshot: {
     backend: string | null;
@@ -451,6 +457,7 @@ export const initialAgentSessionState = {
   lastEventBackend: null as string | null,
   aiMode: null as AiMode | null,
   accountAiDisabled: false,
+  accountAiBlockReason: null as "unsigned" | "not_entitled" | null,
   byoOpenaiKeyPresent: null as boolean | null,
   ...readStoredSelection(),
   trailLabels: [] as string[],
@@ -458,6 +465,7 @@ export const initialAgentSessionState = {
   activeOverlays: {},
   trailSteps: [] as TrailStep[],
   evidence: [] as AgentEvidence[],
+  threadListEpoch: 0,
 };
 
 export const useAgentSessionStore = create<AgentSessionStore>((set, get) => ({
@@ -473,6 +481,33 @@ export const useAgentSessionStore = create<AgentSessionStore>((set, get) => ({
     }));
     return threadId;
   },
+  selectThreadId: (workspaceRoot, threadId) => {
+    const trimmed = threadId.trim();
+    if (!trimmed) {
+      return;
+    }
+    set((state) => ({
+      threadIds: { ...state.threadIds, [workspaceRoot]: trimmed },
+      trailLabels: [],
+      activeOverlays: {},
+      trailSteps: [],
+      evidence: [],
+    }));
+  },
+  startNewThread: (workspaceRoot) => {
+    const threadId = crypto.randomUUID();
+    set((state) => ({
+      threadIds: { ...state.threadIds, [workspaceRoot]: threadId },
+      trailLabels: [],
+      activeOverlays: {},
+      trailSteps: [],
+      evidence: [],
+      threadListEpoch: state.threadListEpoch + 1,
+    }));
+    return threadId;
+  },
+  bumpThreadListEpoch: () =>
+    set((state) => ({ threadListEpoch: state.threadListEpoch + 1 })),
   setHealthBackend: (backend) => set({ healthBackend: backend }),
   setHealthSnapshot: (snapshot) =>
     set((state) => {
@@ -506,6 +541,7 @@ export const useAgentSessionStore = create<AgentSessionStore>((set, get) => ({
       const base = {
         aiMode: defaults.aiMode,
         accountAiDisabled: defaults.accountAiDisabled,
+        accountAiBlockReason: defaults.accountAiBlockReason,
         byoOpenaiKeyPresent: null,
       };
       if (hasStoredSelection) {

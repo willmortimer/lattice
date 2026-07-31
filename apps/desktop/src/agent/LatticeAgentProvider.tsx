@@ -1,10 +1,14 @@
 import { useChat } from "@ai-sdk/react";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk";
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 
 import { getAgentHealth, TauriAgentChatTransport } from "../lib/agent";
-import { getCloudSessionStatus } from "../lib/cloud";
+import {
+  getAgentThread,
+  uiMessagesFromThreadMessages,
+} from "../lib/agentThreads";
+import { getCloudSessionStatus, isCloudAiEntitled } from "../lib/cloud";
 import { loadProfile } from "../lib/profile";
 import { hasOpenaiApiKey } from "../lib/openaiKey";
 import { resolveAgentDefaultsFromAiSettings } from "./agentAiDefaults";
@@ -24,13 +28,18 @@ function LatticeAgentRuntimeProvider({
   children: ReactNode;
 }) {
   const ensureThreadId = useAgentSessionStore((state) => state.ensureThreadId);
+  const activeThreadId = useAgentSessionStore((state) => state.threadIds[workspaceRoot]);
   const recordAgentEvent = useAgentSessionStore((state) => state.recordAgentEvent);
   const setHealthSnapshot = useAgentSessionStore((state) => state.setHealthSnapshot);
   const applyProfileAiDefaults = useAgentSessionStore((state) => state.applyProfileAiDefaults);
   const setByoOpenaiKeyPresent = useAgentSessionStore((state) => state.setByoOpenaiKeyPresent);
+  const bumpThreadListEpoch = useAgentSessionStore((state) => state.bumpThreadListEpoch);
   const aiMode = useAgentSessionStore((state) => state.aiMode);
 
-  const threadId = useMemo(() => ensureThreadId(workspaceRoot), [ensureThreadId, workspaceRoot]);
+  const threadId = useMemo(
+    () => activeThreadId ?? ensureThreadId(workspaceRoot),
+    [activeThreadId, ensureThreadId, workspaceRoot],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -43,9 +52,11 @@ function LatticeAgentRuntimeProvider({
         if (cancelled) {
           return;
         }
+        const signedIn = cloudStatus?.signedIn === true;
         applyProfileAiDefaults(
           resolveAgentDefaultsFromAiSettings(profile.settings.desktop.ai, {
-            cloudSignedIn: cloudStatus?.signedIn === true,
+            cloudSignedIn: signedIn,
+            cloudAiEntitled: cloudStatus ? isCloudAiEntitled(cloudStatus) : false,
           }),
         );
       } catch {
@@ -108,6 +119,50 @@ function LatticeAgentRuntimeProvider({
     id: threadId,
     transport: transport as never,
   });
+
+  const hydratedThreadRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    hydratedThreadRef.current = null;
+
+    const loadTranscript = async () => {
+      try {
+        const result = await getAgentThread({ workspaceRoot, threadId });
+        if (cancelled) {
+          return;
+        }
+        chat.setMessages(uiMessagesFromThreadMessages(result.messages) as never);
+        hydratedThreadRef.current = threadId;
+      } catch {
+        if (cancelled) {
+          return;
+        }
+        // Fresh / not-yet-persisted threads start empty.
+        chat.setMessages([]);
+        hydratedThreadRef.current = threadId;
+      }
+    };
+
+    void loadTranscript();
+    return () => {
+      cancelled = true;
+    };
+    // Reload only when the active thread changes; chat.setMessages is stable enough.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceRoot, threadId]);
+
+  const previousStatusRef = useRef(chat.status);
+  useEffect(() => {
+    const previous = previousStatusRef.current;
+    previousStatusRef.current = chat.status;
+    if (
+      (previous === "streaming" || previous === "submitted") &&
+      chat.status === "ready"
+    ) {
+      bumpThreadListEpoch();
+    }
+  }, [chat.status, bumpThreadListEpoch]);
 
   const runtime = useAISDKRuntime(chat);
   const isStreaming = chat.status === "streaming" || chat.status === "submitted";

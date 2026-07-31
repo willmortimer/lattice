@@ -101,13 +101,18 @@ pub fn cloud_session_status<C: CloudHttpClient>(
         return Ok(CloudSessionStatus::signed_out(base));
     };
     match client.me(&token) {
-        Ok(me) => Ok(CloudSessionStatus::signed_in(base, me.user)),
+        Ok(me) => Ok(CloudSessionStatus::signed_in_with_entitlements(
+            base,
+            me.user,
+            me.entitlements,
+        )),
         Err(err) if err.api_status() == Some(401) => {
             let _ = store.clear_token();
             Ok(CloudSessionStatus {
                 signed_in: false,
                 cloud_url: base,
                 user: None,
+                entitlements: None,
                 error: Some(err.to_string()),
             })
         }
@@ -115,6 +120,7 @@ pub fn cloud_session_status<C: CloudHttpClient>(
             signed_in: false,
             cloud_url: base,
             user: None,
+            entitlements: None,
             error: Some(err.to_string()),
         }),
     }
@@ -178,6 +184,7 @@ pub fn sign_out<C: CloudHttpClient>(
                     signed_in: false,
                     cloud_url: base,
                     user: None,
+                    entitlements: None,
                     error: Some(err.to_string()),
                 });
             }

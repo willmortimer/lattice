@@ -21,6 +21,9 @@ function resetStore() {
   useAgentSessionStore.setState({
     ...initialAgentSessionState,
     ensureThreadId: useAgentSessionStore.getState().ensureThreadId,
+    selectThreadId: useAgentSessionStore.getState().selectThreadId,
+    startNewThread: useAgentSessionStore.getState().startNewThread,
+    bumpThreadListEpoch: useAgentSessionStore.getState().bumpThreadListEpoch,
     setHealthBackend: useAgentSessionStore.getState().setHealthBackend,
     setHealthSnapshot: useAgentSessionStore.getState().setHealthSnapshot,
     applyProfileAiDefaults: useAgentSessionStore.getState().applyProfileAiDefaults,
@@ -374,8 +377,22 @@ describe("useAgentSessionStore", () => {
 
     const state = useAgentSessionStore.getState();
     expect(state.accountAiDisabled).toBe(true);
+    expect(state.accountAiBlockReason).toBe("unsigned");
     expect(state.selectedProvider).toBeNull();
     expect(state.selectedModel).toBeNull();
+  });
+
+  it("selectThreadId and startNewThread switch the active workspace thread", () => {
+    const root = "/tmp/ws";
+    const first = useAgentSessionStore.getState().ensureThreadId(root);
+    useAgentSessionStore.getState().selectThreadId(root, "persisted-thread");
+    expect(useAgentSessionStore.getState().threadIds[root]).toBe("persisted-thread");
+
+    const created = useAgentSessionStore.getState().startNewThread(root);
+    expect(created).not.toBe(first);
+    expect(created).not.toBe("persisted-thread");
+    expect(useAgentSessionStore.getState().threadIds[root]).toBe(created);
+    expect(useAgentSessionStore.getState().threadListEpoch).toBeGreaterThan(0);
   });
 
   it("isAgentComposerDisabled blocks BYO without key", () => {

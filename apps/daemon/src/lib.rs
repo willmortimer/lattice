@@ -9,6 +9,8 @@
 
 mod agent;
 mod agent_memory_api;
+mod agent_threads_api;
+mod agent_threads_store;
 mod api;
 mod cloud_relay;
 mod config;
@@ -26,6 +28,8 @@ mod scheduler_api;
 mod server;
 mod spawn;
 mod voice_host;
+mod workspace_api;
+mod workspace_registry;
 
 pub use agent::{
     resolve_agentd_bin, AgentCommand, AgentController, AgentEvent, AgentEventSink,
@@ -37,6 +41,11 @@ pub use agent::{
 pub use agent_memory_api::{
     api_delete_memory, api_recall, api_remember, AgentMemoryHitDto, DeleteMemoryParams,
     DeleteMemoryResponse, RecallParams, RecallResponse, RememberParams, RememberResponse,
+};
+pub use agent_threads_api::{
+    api_append_message, api_create_thread, api_get_thread, api_list_threads, AppendMessageParams,
+    AppendMessageResponse, CreateThreadParams, CreateThreadResponse, GetThreadResponse,
+    ListThreadsResponse, MessageDto, ThreadDto, WorkspaceScopeParams,
 };
 pub use api::{
     api_get_proposal, api_list_active_jobs, api_list_proposals, api_list_recent_jobs,
@@ -90,4 +99,12 @@ pub use spawn::{spawn_latticed, wait_for_ready, SpawnOptions, SpawnedDaemon};
 pub use voice_host::{
     resolve_voice_host_bin, VoiceController, VoiceProviderMode, ENV_VOICE_FAKE, ENV_VOICE_HOST_BIN,
     ENV_VOICE_HOST_SOCKET, ENV_VOICE_MODEL_CACHE,
+};
+pub use workspace_api::{
+    api_workspace_list_remote_access, api_workspace_set_remote_access,
+    WorkspaceRemoteAccessListResponse, WorkspaceRemoteAccessParams, WorkspaceRemoteAccessResponse,
+};
+pub use workspace_registry::{
+    default_workspace_registry_path, register_workspace, sync_remote_access_lease,
+    WorkspaceRegistry, WorkspaceRegistryRecord,
 };

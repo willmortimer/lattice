@@ -6,13 +6,20 @@ export type AgentAiDefaults = {
   /** Preferred provider for live runs; null defers to health / fake backend. */
   provider: SelectableAgentProvider | null;
   model: string | null;
-  /** Lattice paid AI requires a signed-in cloud session. */
+  /** Lattice paid AI requires a signed-in, entitled cloud session. */
   accountAiDisabled: boolean;
+  /** Why paid mode is blocked; null when runnable or not in account mode. */
+  accountAiBlockReason: "unsigned" | "not_entitled" | null;
 };
 
 export type ResolveAgentDefaultsOptions = {
-  /** When true, Lattice paid mode is runnable (cloud session present). */
+  /** When true, Lattice paid mode has a signed-in cloud session. */
   cloudSignedIn?: boolean;
+  /**
+   * When false, signed-in account lacks AI entitlement.
+   * Defaults to true when omitted (legacy `/v1/me` without entitlements).
+   */
+  cloudAiEntitled?: boolean;
 };
 
 /** Map profile `ai` settings to agent panel defaults (no secrets). */
@@ -32,14 +39,35 @@ export function resolveAgentDefaultsFromAiSettings(
         provider: "openai",
         model: preferredModel ?? DEFAULT_OPENAI_MODEL,
         accountAiDisabled: false,
+        accountAiBlockReason: null,
       };
     case "account": {
       const cloudSignedIn = options?.cloudSignedIn === true;
+      const cloudAiEntitled = options?.cloudAiEntitled !== false;
+      if (!cloudSignedIn) {
+        return {
+          aiMode: "account",
+          provider: null,
+          model: preferredModel,
+          accountAiDisabled: true,
+          accountAiBlockReason: "unsigned",
+        };
+      }
+      if (!cloudAiEntitled) {
+        return {
+          aiMode: "account",
+          provider: null,
+          model: preferredModel,
+          accountAiDisabled: true,
+          accountAiBlockReason: "not_entitled",
+        };
+      }
       return {
         aiMode: "account",
-        provider: cloudSignedIn ? "openai" : null,
-        model: cloudSignedIn ? (preferredModel ?? DEFAULT_OPENAI_MODEL) : preferredModel,
-        accountAiDisabled: !cloudSignedIn,
+        provider: "openai",
+        model: preferredModel ?? DEFAULT_OPENAI_MODEL,
+        accountAiDisabled: false,
+        accountAiBlockReason: null,
       };
     }
     case "local":
@@ -48,6 +76,7 @@ export function resolveAgentDefaultsFromAiSettings(
         provider: "local",
         model: preferredModel ?? DEFAULT_LOCAL_MODEL,
         accountAiDisabled: false,
+        accountAiBlockReason: null,
       };
     default: {
       const _exhaustive: never = ai.mode;

@@ -106,6 +106,7 @@ describe("TauriAgentChatTransport", () => {
     const transport = new TauriAgentChatTransport({
       workspaceRoot: "/tmp/workspace",
       threadId: "thread-1",
+      persistTranscripts: false,
     });
 
     const stream = await transport.sendMessages({
@@ -171,6 +172,7 @@ describe("TauriAgentChatTransport", () => {
     const transport = new TauriAgentChatTransport({
       workspaceRoot: "/tmp/workspace",
       threadId: "thread-1",
+      persistTranscripts: false,
     });
 
     const stream = await transport.sendMessages({
@@ -217,6 +219,7 @@ describe("TauriAgentChatTransport", () => {
     const transport = new TauriAgentChatTransport({
       workspaceRoot: "/tmp/workspace",
       threadId: "thread-1",
+      persistTranscripts: false,
     });
 
     void transport.sendMessages({
