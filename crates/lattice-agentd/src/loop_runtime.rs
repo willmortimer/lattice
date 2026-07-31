@@ -16,6 +16,32 @@ use crate::protocol::{AgentCommand, AgentEvent, ProviderKind, PROTOCOL_VERSION};
 use crate::responses::{self, OpenaiRunOptions};
 use crate::tools::chat_messages_from_start;
 
+/// Env override for the max assistant→tool→assistant rounds (all providers).
+pub const ENV_MAX_TOOL_ROUNDS: &str = "LATTICE_AGENT_MAX_TOOL_ROUNDS";
+
+/// Default max tool rounds when `ENV_MAX_TOOL_ROUNDS` is unset or invalid.
+pub const DEFAULT_MAX_TOOL_ROUNDS: usize = 32;
+
+/// Lower clamp for `ENV_MAX_TOOL_ROUNDS`.
+pub const MIN_TOOL_ROUNDS: usize = 1;
+
+/// Upper clamp for `ENV_MAX_TOOL_ROUNDS`.
+pub const MAX_TOOL_ROUNDS_CAP: usize = 128;
+
+/// Max assistant→tool→assistant rounds, read from `LATTICE_AGENT_MAX_TOOL_ROUNDS`.
+pub fn max_tool_rounds() -> usize {
+    max_tool_rounds_from_env(std::env::var(ENV_MAX_TOOL_ROUNDS).ok().as_deref())
+}
+
+/// Parse + clamp a max-tool-rounds override; falls back to `DEFAULT_MAX_TOOL_ROUNDS`
+/// when `value` is absent, empty, or not a valid integer.
+pub fn max_tool_rounds_from_env(value: Option<&str>) -> usize {
+    value
+        .and_then(|raw| raw.trim().parse::<usize>().ok())
+        .map(|n| n.clamp(MIN_TOOL_ROUNDS, MAX_TOOL_ROUNDS_CAP))
+        .unwrap_or(DEFAULT_MAX_TOOL_ROUNDS)
+}
+
 /// Runtime knobs for the JSONL loop (chunk delay helps cancel tests).
 #[derive(Debug, Clone)]
 pub struct LoopConfig {
@@ -457,6 +483,16 @@ mod tests {
         );
         assert!(out.contains("run_failed"));
         assert!(out.contains("run_started"));
+    }
+
+    #[test]
+    fn max_tool_rounds_defaults_and_clamps() {
+        assert_eq!(max_tool_rounds_from_env(None), DEFAULT_MAX_TOOL_ROUNDS);
+        assert_eq!(max_tool_rounds_from_env(Some("")), DEFAULT_MAX_TOOL_ROUNDS);
+        assert_eq!(max_tool_rounds_from_env(Some("not-a-number")), DEFAULT_MAX_TOOL_ROUNDS);
+        assert_eq!(max_tool_rounds_from_env(Some("16")), 16);
+        assert_eq!(max_tool_rounds_from_env(Some("0")), MIN_TOOL_ROUNDS);
+        assert_eq!(max_tool_rounds_from_env(Some("9999")), MAX_TOOL_ROUNDS_CAP);
     }
 
     #[tokio::test]
