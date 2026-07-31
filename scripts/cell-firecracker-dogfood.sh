@@ -42,6 +42,11 @@ Mac OCI live (execution-mode=oci) also needs:
     $CELL_VZ_RUNTIME_DIR/ivisor-worker-<id>/agent-share/.kernelfs-runs/{run_id}/{input,output[,work]}
   Prefer scripts/cell-mac-oci-dogfood.sh; see docs/dev/celld-client.md § Mac OCI.
 
+Linux OCI live (execution-mode=oci) needs:
+  --oci-bundle-path only (no CELL_VZ_RUNTIME_DIR)
+  KernelFS export under /run/kernelfs or $XDG_RUNTIME_DIR/kernelfs/{run_id}/{input,output[,work]}
+  Prefer scripts/cell-linux-oci-dogfood.sh; see docs/dev/celld-client.md § Linux OCI.
+
 Firecracker lab (celld guest media — see cell/scripts/lattice-cell-loop.sh):
   CELL_FC_KERNEL / DEVCELL_FC_KERNEL       Guest kernel (vmlinux)
   CELL_FC_ROOTFS / DEVCELL_FC_ROOTFS       Guest rootfs (cellos.ext4)

@@ -72,7 +72,7 @@ Tool use:
 8. Never claim a workspace change was applied. You may only create proposals (`propose_*`, `create_proposal`); the user reviews and applies them in the Proposals inbox. There is no apply tool.
 9. Use `propose_page` to create or edit pages via proposals — pass the path and new content to update an existing page.
 10. Use `run_wasi_guest` only for sandboxed guest WASM that should write `/output` artifacts as proposals. Prefer preset `copy_hello` (expects `Tools/guests/copy_hello.wasm`) or pass `resourcePaths` instead of raw `inputsJson`. It requires `workspaceRoot` and does not apply changes.
-11. When `CELLD_BASE_URL` is configured, use `run_cell_task` to hydrate → run → collect on celld and propose collected `/output` files. Optional `executionMode=oci` + `ociBundlePath` live-binds Mac OCI (needs `CELL_VZ_RUNTIME_DIR` or `CELL_OCI_IVISOR_WORKSPACE`). Requires `workspaceRoot`. Does not apply.
+11. When `CELLD_BASE_URL` is configured, use `run_cell_task` to hydrate → run → collect on celld and propose collected `/output` files. Optional `executionMode=oci` + `ociBundlePath` live-binds OCI (Mac: `CELL_VZ_RUNTIME_DIR` or `CELL_OCI_IVISOR_WORKSPACE`; Linux: kernelfs export under `/run/kernelfs` or `$XDG_RUNTIME_DIR/kernelfs`, no VZ env). Requires `workspaceRoot`. Does not apply.
 12. Keep proposals narrow, validated, reviewable, and reversible.
 13. Never request, reveal, or place secrets in model-visible content.
 14. If a tool errors, explain briefly and continue with what you know.
@@ -142,7 +142,7 @@ pub fn openai_tool_definitions() -> Vec<Value> {
 fn run_cell_task_tool_definition() -> Value {
     function_tool(
         "run_cell_task",
-        "Run a celld guest projection (hydrate → run → collect) and propose collected /output files via propose_resource. Default is microVM temp role dirs. Set executionMode=oci with ociBundlePath for Mac OCI live-bind (requires CELL_VZ_RUNTIME_DIR or CELL_OCI_IVISOR_WORKSPACE). Requires CELLD_BASE_URL and workspaceRoot. Does not apply.",
+        "Run a celld guest projection (hydrate → run → collect) and propose collected /output files via propose_resource. Default is microVM temp role dirs. Set executionMode=oci with ociBundlePath for OCI live-bind (Mac: CELL_VZ_RUNTIME_DIR or CELL_OCI_IVISOR_WORKSPACE; Linux: no VZ env). Requires CELLD_BASE_URL and workspaceRoot. Does not apply.",
         json!({
             "type": "object",
             "properties": {
@@ -175,7 +175,7 @@ fn run_cell_task_tool_definition() -> Value {
                 "taskId": opt_str(),
                 "executionMode": {
                     "type": "string",
-                    "description": "Empty/microvm (default) or oci for Mac OCI live-bind under agent-share"
+                    "description": "Empty/microvm (default) or oci for OCI live-bind (Mac agent-share or Linux kernelfs export parent)"
                 },
                 "ociBundlePath": {
                     "type": "string",
@@ -1461,15 +1461,15 @@ async fn dispatch_run_cell_task(
     let oci_bundle_path = string_arg(args, "ociBundlePath").unwrap_or_default();
     if is_oci_execution_mode(&execution_mode) && oci_bundle_path.trim().is_empty() {
         return Err(
-            "ociBundlePath is required when executionMode=oci (Mac OCI live-bind)"
+            "ociBundlePath is required when executionMode=oci (OCI live-bind)"
                 .into(),
         );
     }
 
-    // Fail closed on missing VZ runtime before contacting celld so chat gets an
-    // actionable env error instead of a late hydrate/plan failure.
+    // macOS OCI: fail closed on missing VZ runtime before contacting celld.
+    // Linux OCI uses kernelfs export under /run/kernelfs (no VZ env).
     let oci_vz_runtime = if is_oci_execution_mode(&execution_mode) {
-        Some(resolve_vz_runtime_dir_for_tool()?)
+        Some(resolve_oci_vz_runtime_dir_for_export()?)
     } else {
         None
     };
@@ -1580,7 +1580,23 @@ fn normalize_run_cell_execution_mode(raw: &str) -> Result<String, String> {
     ))
 }
 
+/// Resolve `vz_runtime_dir` for OCI KernelFS export.
+///
+/// macOS requires `CELL_VZ_RUNTIME_DIR` or `CELL_OCI_IVISOR_WORKSPACE`. Linux
+/// ignores the field (kernelfs export uses `/run/kernelfs` or `$XDG_RUNTIME_DIR`).
+fn resolve_oci_vz_runtime_dir_for_export() -> Result<PathBuf, String> {
+    #[cfg(target_os = "macos")]
+    {
+        resolve_vz_runtime_dir_for_tool()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(PathBuf::from("/unused"))
+    }
+}
+
 /// Resolve host VZ runtime dir for Mac OCI agent-share export (fail closed).
+#[cfg(target_os = "macos")]
 fn resolve_vz_runtime_dir_for_tool() -> Result<PathBuf, String> {
     if let Ok(path) = std::env::var("CELL_VZ_RUNTIME_DIR") {
         let trimmed = path.trim();
@@ -1911,6 +1927,32 @@ mod tests {
     }
 
     #[test]
+    fn resolve_oci_vz_runtime_dir_for_export_platform_branch() {
+        #[cfg(target_os = "macos")]
+        {
+            {
+                let _guard = RuntimeEnvGuard::clear();
+                let err = resolve_oci_vz_runtime_dir_for_export().unwrap_err();
+                assert!(err.contains("CELL_VZ_RUNTIME_DIR"), "{err}");
+                assert!(err.contains("CELL_OCI_IVISOR_WORKSPACE"), "{err}");
+            }
+            let _guard = RuntimeEnvGuard::set_vz("/tmp/oci-export-vz");
+            assert_eq!(
+                resolve_oci_vz_runtime_dir_for_export().unwrap(),
+                PathBuf::from("/tmp/oci-export-vz")
+            );
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            assert_eq!(
+                resolve_oci_vz_runtime_dir_for_export().unwrap(),
+                PathBuf::from("/unused")
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
     fn resolve_vz_runtime_dir_fail_closed_without_env() {
         let _guard = RuntimeEnvGuard::clear();
         let err = resolve_vz_runtime_dir_for_tool().unwrap_err();
@@ -1919,6 +1961,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn resolve_vz_runtime_dir_from_env() {
         let _guard = RuntimeEnvGuard::set_vz("/tmp/vz-runtime-test");
         assert_eq!(
@@ -1928,6 +1971,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn resolve_vz_runtime_dir_from_ivisor_workspace() {
         let _guard = RuntimeEnvGuard::clear();
         unsafe {
@@ -1963,6 +2007,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(target_os = "macos")]
     async fn dispatch_run_cell_task_rejects_oci_without_runtime_dir() {
         let _guard = RuntimeEnvGuard::clear();
         let workspace = tempfile::tempdir().expect("workspace");

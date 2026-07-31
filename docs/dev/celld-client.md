@@ -40,8 +40,14 @@ ivisor worker VirtioFS share root (Cell
 [`docs/28-oci-agent-mount-contract.md`](https://github.com/willmortimer/cell/blob/main/docs/28-oci-agent-mount-contract.md)).
 Lattice **materializes + live-exports** KernelFS roles under `agent-share` via
 `lattice-agentd::kernelfs_export::export_oci_roles_under_agent_share` (macOS
-only this sprint). Hydrate/Collect mirror semantics are unchanged — live-bind
-only affects where the guest's role mounts are rooted on the host.
+path). Hydrate/Collect mirror semantics are unchanged — live-bind only affects
+where the guest's role mounts are rooted on the host.
+
+**Linux OCI (`execution_mode: oci`):** Same helper exports role dirs under
+`/run/kernelfs` or `$XDG_RUNTIME_DIR/kernelfs/{run_id}/{input,work,output}` via
+`kernelfs_linux::export_live`. No `CELL_VZ_RUNTIME_DIR` — gVisor/`runsc` binds
+host paths directly at Prepare (Cell § gVisor row in
+[`docs/28-oci-agent-mount-contract.md`](https://github.com/willmortimer/cell/blob/main/docs/28-oci-agent-mount-contract.md)).
 
 Do **not** set `CELL_OCI_AGENT_MOUNT_COPY=1` when proving live-bind; that forces
 copy-into-rootfs and hides VirtioFS behavior.
@@ -53,8 +59,9 @@ copy-into-rootfs and hides VirtioFS behavior.
 | `CELLD_BASE_URL` | **yes** (client + `run_cell_task`) | celld Connect/HTTP origin (no trailing slash), e.g. `http://127.0.0.1:8080`. Fails closed when unset — no localhost guess. |
 | `LATTICE_API_BASE_URL` | live dogfood / agent tools | latticed HTTP API (e.g. `http://127.0.0.1:18787`). Injected when `latticed` supervises `lattice-agentd`. |
 | `LATTICE_AUTH_TOKEN` | live dogfood / agent tools | Bearer token for `propose_resource` (same as daemon handshake). |
-| `CELL_VZ_RUNTIME_DIR` | Mac OCI live | Parent of `ivisor-worker-<cellId>/agent-share`. Must match `cell-host-macos` runtime. |
-| `CELL_OCI_IVISOR_WORKSPACE` | Mac OCI alt | When `CELL_VZ_RUNTIME_DIR` unset, runtime resolves to `$CELL_OCI_IVISOR_WORKSPACE/vz-runtime`. |
+| `CELL_VZ_RUNTIME_DIR` | Mac OCI live | Parent of `ivisor-worker-<cellId>/agent-share`. Must match `cell-host-macos` runtime. **Not used on Linux OCI.** |
+| `CELL_OCI_IVISOR_WORKSPACE` | Mac OCI alt | When `CELL_VZ_RUNTIME_DIR` unset, runtime resolves to `$CELL_OCI_IVISOR_WORKSPACE/vz-runtime`. **Mac only.** |
+| `XDG_RUNTIME_DIR` | Linux OCI optional | When set, kernelfs export parent is `$XDG_RUNTIME_DIR/kernelfs`; else `/run/kernelfs`. |
 | `CELL_OCI_IVISOR_INTERIM` | celld (Mac lab) | Set `1` on celld to select ivisor-interim OCI provider (`celld --backend=vz`). |
 | `CELL_OCI_IVISOR_SYNC` | celld (Mac lab) | `guest` (preferred when CellOS has `tar`/`gzip`) or `orbctl` fallback. |
 | `CELL_VZ_HELPER_SOCKET` | celld (Mac lab) | Path to `cell-host-macos` helper socket. |
@@ -62,12 +69,15 @@ copy-into-rootfs and hides VirtioFS behavior.
 | `CELL_FC_*` / `DEVCELL_FC_*` | Firecracker lab | Guest kernel, rootfs, jailer, vsock paths — see `scripts/cell-firecracker-dogfood.sh --help`. |
 | `CELL_DOGFOOD_WORKSPACE` | optional | Default workspace root for live dogfood when `--workspace` omitted. |
 
-## KernelFS export under agent-share (Mac OCI)
+## KernelFS export for OCI live-bind
 
 Helper: `export_oci_roles_under_agent_share` in
 `crates/lattice-agentd/src/kernelfs_export.rs`. Used by
-`scripts/cell-mac-oci-dogfood.sh`, `cell-firecracker-dogfood` (OCI branch), and
-`run_cell_task` when `executionMode=oci`.
+`scripts/cell-mac-oci-dogfood.sh`, `scripts/cell-linux-oci-dogfood.sh`,
+`cell-firecracker-dogfood` (OCI branch), and `run_cell_task` when
+`executionMode=oci`.
+
+### macOS (VirtioFS agent-share)
 
 Locked layout (volume sources stay under the VirtioFS share root so Cell remap
 works without API changes):
@@ -86,10 +96,25 @@ works without API changes):
   Concurrent runs on one cell do not share flat symlink names.
 - Re-export for the same `run_id` is idempotent (materialize refreshes that
   run tree only).
-- Non-macOS targets return `OciKernelfsExportError::UnsupportedPlatform` (Linux
-  `export_live_from_run` not wired this sprint).
 
-Implementation sketch:
+### Linux (gVisor / runsc)
+
+Export parent defaults to `/run/kernelfs` or `$XDG_RUNTIME_DIR/kernelfs`:
+
+```text
+{export_parent}/{run_id}/
+  input/
+  work/
+  output/
+```
+
+- `run_id` defaults to `--projection-id` / `taskId` (same as macOS).
+- `CELL_VZ_RUNTIME_DIR` is **not** required; `vz_runtime_dir` on
+  `OciKernelfsExportRequest` is ignored.
+- Volume `source` values are `layout.input`, `layout.work`, `layout.output` from
+  `kernelfs_linux::export_live`.
+
+Implementation sketch (both platforms):
 
 ```rust
 // crates/lattice-agentd/src/kernelfs_export.rs
@@ -140,13 +165,15 @@ Default lane: Firecracker microVM temp role dirs. Same loop as agentd
 | --- | --- | --- |
 | CI / default | `scripts/cell-firecracker-dogfood.sh` or `--dry-run` | Rust toolchain (mocked celld + latticed via `cell_propose` tests) |
 | Lab / live (microVM) | `… --live` | `CELLD_BASE_URL`, `LATTICE_API_*`, Firecracker guest media, `celld --backend=firecracker` |
-| Lab / live (OCI, Mac) | `scripts/cell-mac-oci-dogfood.sh --live …` or `… --live --execution-mode=oci` | `celld --backend=vz` + kernelfs export under `CELL_VZ_RUNTIME_DIR` (§ Mac OCI) |
+| Lab / live (OCI, Mac) | `scripts/cell-mac-oci-dogfood.sh --live …` or `… --live --execution-mode=oci` | `celld --backend=vz` + kernelfs export under `CELL_VZ_RUNTIME_DIR` (§ macOS OCI) |
+| Lab / live (OCI, Linux) | `scripts/cell-linux-oci-dogfood.sh --live …` | `celld` gVisor/`runsc` + kernelfs export under `/run/kernelfs` (no VZ env) |
 
 **Dry-run (no live celld):**
 
 ```sh
 scripts/cell-firecracker-dogfood.sh --dry-run
 scripts/cell-mac-oci-dogfood.sh --dry-run   # same mocked tests
+scripts/cell-linux-oci-dogfood.sh --dry-run
 ```
 
 **Live Firecracker lab** — start celld with `--backend=firecracker` and
@@ -161,6 +188,33 @@ scripts/cell-firecracker-dogfood.sh --live \
   --workspace /path/to/workspace \
   --hydrate input/hello.txt
 ```
+
+## Linux OCI (`scripts/cell-linux-oci-dogfood.sh`)
+
+Linux product beat: same hydrate → run → collect → **≥1** `propose_resource`
+loop as Mac OCI, but KernelFS role dirs export under `/run/kernelfs` (or
+`$XDG_RUNTIME_DIR/kernelfs`) via `kernelfs_linux::export_live`. Wrapper always
+sets `--execution-mode=oci` and does **not** require `CELL_VZ_RUNTIME_DIR`.
+
+**Live OCI sketch (Linux lab / gVisor):**
+
+```sh
+export CELLD_BASE_URL=http://127.0.0.1:8080
+export LATTICE_API_BASE_URL=http://127.0.0.1:18787 LATTICE_AUTH_TOKEN=…
+# optional: export XDG_RUNTIME_DIR=/run/user/$UID
+# start celld with Linux gVisor OCI backend (runsc on PATH)
+scripts/cell-linux-oci-dogfood.sh --live \
+  --oci-bundle-path /path/to/oci-bundle \
+  --workspace /path/to/ws --hydrate input/hello.txt
+```
+
+| Flag / env | Purpose |
+| --- | --- |
+| `--oci-bundle-path` | Host OCI bundle (`config.json` + rootfs) |
+| `CELLD_BASE_URL` | celld Connect/HTTP origin |
+| `XDG_RUNTIME_DIR` | Optional export parent override (`$XDG_RUNTIME_DIR/kernelfs`) |
+| `--with-work` | Export and mount `{run_id}/work` |
+| `--allow-network` | `with_network_deny_all(false)` when OCI egress is OK |
 
 ## Mac OCI (`scripts/cell-mac-oci-dogfood.sh`)
 
@@ -236,13 +290,14 @@ Required: `cellId`, `projectionId`, `argv`, `outputProposalTarget`, and
 `workspaceRoot` on `start_run`. Optional: `hydrateResourcePaths`, `profile`
 (default `lattice-runtime`), `taskId`, `withWork`, `inputResourceIds`.
 
-**Mac OCI live-bind** (chat path):
+**OCI live-bind** (chat path):
 
 | Argument | Purpose |
 | --- | --- |
 | `executionMode` | `"oci"` (or empty / `"microvm"` for temp dirs) |
 | `ociBundlePath` | Host OCI bundle; required when `executionMode=oci` |
-| (env) `CELL_VZ_RUNTIME_DIR` or `CELL_OCI_IVISOR_WORKSPACE` | Required for OCI — fails closed before contacting celld |
+| (env, Mac only) `CELL_VZ_RUNTIME_DIR` or `CELL_OCI_IVISOR_WORKSPACE` | Required on macOS — fails closed before contacting celld |
+| (env, Linux) `XDG_RUNTIME_DIR` | Optional — export parent `$XDG_RUNTIME_DIR/kernelfs`; else `/run/kernelfs` |
 
 OCI mode calls `export_oci_roles_under_agent_share` with `run_id = taskId`
 (defaults to `projectionId`), then passes export paths into
@@ -296,7 +351,7 @@ Registry API: [`resource_stat`](../crates/latticefs-core/README.md) /
 - `apply_proposal` tool (user reviews in Proposals inbox)
 - Fleet / multi-host cell scheduling
 - CellOS image builds or OCI bundle packaging
-- kernelfs-mac FUSE daemon; Linux OCI export under agent-share
+- kernelfs-mac FUSE daemon
 
 ## Related
 

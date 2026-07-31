@@ -65,7 +65,7 @@ async fn run() -> Result<(), String> {
     let execution_mode = normalize_execution_mode(&cli.execution_mode)?;
     if is_oci_execution_mode(&execution_mode) && cli.oci_bundle_path.trim().is_empty() {
         return Err(
-            "--oci-bundle-path is required when --execution-mode=oci (live Mac OCI dogfood)"
+            "--oci-bundle-path is required when --execution-mode=oci (live OCI dogfood)"
                 .into(),
         );
     }
@@ -252,8 +252,8 @@ fn resolve_workspace(cli: &Cli) -> Result<(Option<TempDir>, String), String> {
 
 /// Resolve KernelFS role host dirs.
 ///
-/// MicroVM: ephemeral temp tree. OCI (Mac ivisor): materialize + kernelfs export
-/// under `{agent-share}/.kernelfs-runs/{run_id}/{input,work?,output}`.
+/// MicroVM: ephemeral temp tree. OCI: materialize + kernelfs export under the
+/// platform export parent (macOS agent-share or Linux `/run/kernelfs`).
 fn resolve_role_host_dirs(
     cli: &Cli,
     execution_mode: &str,
@@ -261,7 +261,7 @@ fn resolve_role_host_dirs(
     hydrate_paths: &[String],
 ) -> Result<(Option<TempDir>, PathBuf, Option<PathBuf>, PathBuf), String> {
     if is_oci_execution_mode(execution_mode) {
-        let runtime = resolve_vz_runtime_dir(cli)?;
+        let runtime = resolve_oci_export_vz_runtime_dir(cli)?;
         let input_mounts = input_mounts_from_hydrate_paths(workspace_root, hydrate_paths)?;
         let workspace_root_path = PathBuf::from(workspace_root);
         let run_id = oci_run_id_from_projection(&cli.projection_id);
@@ -274,7 +274,7 @@ fn resolve_role_host_dirs(
             with_work: cli.with_work,
             include_secrets: false,
         })
-        .map_err(|err| format!("kernelfs OCI export under agent-share: {err}"))?;
+        .map_err(|err| format!("kernelfs OCI export: {err}"))?;
         return Ok((None, exported.input, exported.work, exported.output));
     }
 
@@ -293,6 +293,20 @@ fn resolve_role_host_dirs(
     Ok((Some(plan_parent), input_host, work_host, output_host))
 }
 
+/// VZ runtime dir for OCI export on macOS; ignored on Linux.
+fn resolve_oci_export_vz_runtime_dir(cli: &Cli) -> Result<PathBuf, String> {
+    #[cfg(target_os = "macos")]
+    {
+        resolve_vz_runtime_dir(cli)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = cli;
+        Ok(PathBuf::from("/unused"))
+    }
+}
+
+#[cfg(target_os = "macos")]
 fn resolve_vz_runtime_dir(cli: &Cli) -> Result<PathBuf, String> {
     if let Some(path) = &cli.vz_runtime_dir {
         return Ok(path.clone());
@@ -486,5 +500,67 @@ mod tests {
         assert!(!exported.agent_share.join("input").exists());
         assert!(exported.input.starts_with(&exported.agent_share));
         assert!(exported.output.starts_with(&exported.agent_share));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn oci_export_volume_sources_nested_under_kernelfs_parent() {
+        let workspace = tempfile::tempdir().expect("workspace");
+        let rel = "input/hello.txt";
+        let host = workspace.path().join(rel);
+        std::fs::create_dir_all(host.parent().expect("parent")).expect("mkdir");
+        std::fs::write(&host, "hello from hydrate\n").expect("write");
+
+        let xdg = tempfile::tempdir().expect("xdg runtime");
+        unsafe {
+            std::env::set_var("XDG_RUNTIME_DIR", xdg.path());
+        }
+
+        let run_id = "proj_dogfood";
+        let exported = export_oci_roles_under_agent_share(&OciKernelfsExportRequest {
+            vz_runtime_dir: PathBuf::from("/unused"),
+            cell_id: "cell_dogfood".into(),
+            run_id: run_id.into(),
+            input_mounts: input_mounts_from_hydrate_paths(
+                &workspace.path().to_string_lossy(),
+                &[rel.into()],
+            )
+            .expect("mounts"),
+            host_path_roots: vec![workspace.path().to_path_buf()],
+            with_work: false,
+            include_secrets: false,
+        })
+        .expect("export");
+
+        let export_parent = xdg.path().join("kernelfs");
+        let run_root = export_parent.join(run_id);
+        assert_eq!(exported.agent_share, export_parent);
+        assert_eq!(exported.export_root, run_root);
+        assert_eq!(exported.input, run_root.join("input"));
+        assert_eq!(exported.output, run_root.join("output"));
+        assert!(exported.input.starts_with(&export_parent));
+        assert!(exported.output.starts_with(&export_parent));
+
+        unsafe {
+            std::env::remove_var("XDG_RUNTIME_DIR");
+        }
+    }
+
+    #[test]
+    fn resolve_oci_export_vz_runtime_dir_skips_vz_off_macos() {
+        #[cfg(not(target_os = "macos"))]
+        {
+            let cli = Cli::default();
+            assert_eq!(
+                resolve_oci_export_vz_runtime_dir(&cli).unwrap(),
+                PathBuf::from("/unused")
+            );
+        }
+        #[cfg(target_os = "macos")]
+        {
+            let cli = Cli::default();
+            let err = resolve_oci_export_vz_runtime_dir(&cli).unwrap_err();
+            assert!(err.contains("CELL_VZ_RUNTIME_DIR"), "{err}");
+        }
     }
 }
