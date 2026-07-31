@@ -130,26 +130,23 @@ impl AgentThreadsStore {
         let thread_id = id
             .filter(|value| !value.trim().is_empty())
             .unwrap_or_else(|| Uuid::new_v4().to_string());
+        let title = title.filter(|value| !value.trim().is_empty());
         let now = current_time_ms();
         self.connection.execute(
             "INSERT INTO threads(id, title, created_at, updated_at) VALUES (?1, ?2, ?3, ?4)",
-            params![
-                thread_id,
-                title.filter(|value| !value.trim().is_empty()),
-                now,
-                now
-            ],
+            params![thread_id, title, now, now],
         )?;
         Ok(ThreadRow {
             id: thread_id,
-            title: title.filter(|value| !value.trim().is_empty()),
+            title,
             created_at: now,
             updated_at: now,
         })
     }
 
     pub fn get_thread(&self, thread_id: &str) -> Result<Option<ThreadRow>> {
-        self.connection
+        let row = self
+            .connection
             .query_row(
                 "SELECT id, title, created_at, updated_at FROM threads WHERE id = ?1",
                 params![thread_id],
@@ -162,9 +159,8 @@ impl AgentThreadsStore {
                     })
                 },
             )
-            .optional()?
-            .map(Ok)
-            .unwrap_or(Ok(None))
+            .optional()?;
+        Ok(row)
     }
 
     pub fn list_messages(&self, thread_id: &str) -> Result<Vec<MessageRow>> {
@@ -203,6 +199,7 @@ impl AgentThreadsStore {
         let message_id = id
             .filter(|value| !value.trim().is_empty())
             .unwrap_or_else(|| Uuid::new_v4().to_string());
+        let run_id = run_id.filter(|value| !value.trim().is_empty());
         let now = current_time_ms();
         let transaction = self.connection.transaction()?;
         transaction.execute(
@@ -213,7 +210,7 @@ impl AgentThreadsStore {
                 thread_id,
                 role,
                 content_json,
-                run_id.filter(|value| !value.trim().is_empty()),
+                run_id,
                 now
             ],
         )?;
@@ -227,7 +224,7 @@ impl AgentThreadsStore {
             thread_id: thread_id.to_string(),
             role: role.to_string(),
             content_json: content_json.to_string(),
-            run_id: run_id.filter(|value| !value.trim().is_empty()),
+            run_id,
             created_at: now,
         })
     }
