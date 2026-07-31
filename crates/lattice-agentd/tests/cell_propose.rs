@@ -429,7 +429,7 @@ async fn dispatch_run_cell_task_tool_end_to_end() {
     })
     .to_string();
 
-    let out = dispatch_tool(Some(&lattice), &ctx, "run_cell_task", &args).await;
+    let out = dispatch_tool(Some(&lattice), &ctx, None, "run_cell_task", &args).await;
     let parsed: Value = serde_json::from_str(&out).expect("tool json");
     assert!(
         parsed.get("error").is_none(),
@@ -543,6 +543,7 @@ async fn dispatch_run_cell_task_errors_without_celld_url() {
     let out = dispatch_tool(
         Some(&client),
         &ctx,
+        None,
         "run_cell_task",
         &json!({
             "cellId": "c",
