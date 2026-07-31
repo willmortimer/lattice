@@ -6042,6 +6042,7 @@ dependencies = [
  "lattice-runtime",
  "lattice-voice",
  "lattice-voice-host",
+ "rusqlite",
  "serde",
  "serde_json",
  "tempfile",

@@ -9,6 +9,8 @@
 
 mod agent;
 mod agent_memory_api;
+mod agent_threads_api;
+mod agent_threads_store;
 mod api;
 mod cloud_relay;
 mod config;
@@ -37,6 +39,11 @@ pub use agent::{
 pub use agent_memory_api::{
     api_delete_memory, api_recall, api_remember, AgentMemoryHitDto, DeleteMemoryParams,
     DeleteMemoryResponse, RecallParams, RecallResponse, RememberParams, RememberResponse,
+};
+pub use agent_threads_api::{
+    api_append_message, api_create_thread, api_get_thread, api_list_threads, AppendMessageParams,
+    AppendMessageResponse, CreateThreadParams, CreateThreadResponse, GetThreadResponse,
+    ListThreadsResponse, MessageDto, ThreadDto, WorkspaceScopeParams,
 };
 pub use api::{
     api_get_proposal, api_list_active_jobs, api_list_proposals, api_list_recent_jobs,

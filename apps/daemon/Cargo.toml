@@ -39,6 +39,7 @@ lattice-runtime.workspace = true
 lattice-voice.workspace = true
 lattice-voice-host.workspace = true
 serde.workspace = true
+rusqlite.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time", "process"] }
