@@ -60,6 +60,9 @@ impl CloudRelayConfig {
 }
 
 /// Spawn a background reconnect loop. Returns immediately.
+///
+/// TODO(H6): call [`crate::workspace_registry::sync_remote_access_lease`] when the
+/// relay connects/disconnects so remote MCP access toggles the idle-shutdown lease.
 pub fn spawn_cloud_relay(runtime: Arc<LatticeRuntime>, config: CloudRelayConfig) {
     tokio::spawn(async move {
         loop {

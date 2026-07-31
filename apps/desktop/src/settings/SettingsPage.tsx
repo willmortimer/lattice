@@ -5,6 +5,7 @@ import {
   Database,
   Files,
   Gauge,
+  HardDrives,
   Keyboard,
   Lock,
   MagnifyingGlass,
@@ -47,6 +48,14 @@ import {
   type CloudSessionStatus,
 } from "../lib/cloud";
 import {
+  getRemoteAccessStatus,
+  relayConnectionLabel,
+  remoteAccessLeaseLabel,
+  setWorkspaceRemoteAccess,
+  workspaceDisplayName,
+  type RemoteAccessStatus,
+} from "../lib/remoteAccess";
+import {
   disableSemanticSearch,
   enableSemanticSearch,
   getSemanticStatus,
@@ -75,6 +84,7 @@ import { TOGGLEABLE_WORKSPACE_CAPABILITIES } from "./workspaceCapabilities";
 type SettingsSection =
   | "appearance"
   | "cloud"
+  | "remote"
   | "editor"
   | "files"
   | "workspaces"
@@ -113,6 +123,7 @@ interface SettingsPageProps {
 const SECTIONS = [
   { id: "appearance" as const, label: "Appearance", icon: Palette },
   { id: "cloud" as const, label: "Cloud account", icon: Cloud },
+  { id: "remote" as const, label: "Remote access", icon: HardDrives },
   { id: "editor" as const, label: "Editor behavior", icon: CursorText },
   { id: "files" as const, label: "Files, links & autosave", icon: Files },
   { id: "workspaces" as const, label: "Workspaces & startup", icon: Rocket },
@@ -329,6 +340,10 @@ export function SettingsPage({
         )}
 
         {section === "cloud" && <CloudAccountSettings />}
+
+        {section === "remote" && (
+          <RemoteAccessSettings onOpenCloud={() => setSection("cloud")} />
+        )}
 
         {section === "editor" && (
           <>
@@ -1456,6 +1471,139 @@ function PrivacySettingsPanel({
           {error ? (
             <div className="diagnostics-card" role="alert">
               <strong>App lock error</strong>
+              <span>{error}</span>
+            </div>
+          ) : null}
+        </>
+      )}
+    </>
+  );
+}
+
+function RemoteAccessSettings({ onOpenCloud }: { onOpenCloud: () => void }) {
+  const [status, setStatus] = useState<RemoteAccessStatus | null>(null);
+  const [cloudStatus, setCloudStatus] = useState<CloudSessionStatus | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (inBrowser) return;
+    let cancelled = false;
+    void Promise.all([getRemoteAccessStatus(), getCloudSessionStatus()])
+      .then(([remote, cloud]) => {
+        if (!cancelled) {
+          setStatus(remote);
+          setCloudStatus(cloud);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleToggle(workspaceId: string, enabled: boolean) {
+    if (inBrowser) return;
+    setBusyId(workspaceId);
+    setError(null);
+    try {
+      const next = await setWorkspaceRemoteAccess(workspaceId, enabled);
+      setStatus(next);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const cloudLabel = cloudStatus
+    ? cloudStatus.signedIn
+      ? cloudStatus.user?.email ?? cloudStatus.user?.display_name ?? "Signed in"
+      : "Not signed in"
+    : inBrowser
+      ? "Unavailable in browser"
+      : "Checking…";
+
+  return (
+    <>
+      <h1>Remote access</h1>
+      <p className="settings-copy">
+        Control which local workspaces this device may advertise to Lattice Cloud for remote MCP
+        tools. Enabling remote access holds a daemon lease so idle shutdown cannot drop the relay.
+      </p>
+      {inBrowser ? (
+        <div className="diagnostics-card">
+          <strong>Unavailable in browser demo</strong>
+          <span>Remote access controls require the native desktop shell and latticed.</span>
+        </div>
+      ) : (
+        <>
+          <SettingRow
+            title="Cloud account"
+            description="Remote MCP through Lattice Cloud requires a signed-in session on this device."
+          >
+            <div className="ai-account-actions">
+              <span>{cloudLabel}</span>
+              <Button size="sm" variant="secondary" onClick={onOpenCloud}>
+                {cloudStatus?.signedIn ? "Open Cloud account" : "Sign in to Cloud"}
+              </Button>
+            </div>
+          </SettingRow>
+          <SettingRow
+            title="Remote-access lease"
+            description="When any workspace has remote access on, latticed stays alive for outbound relay."
+          >
+            <span>{status ? remoteAccessLeaseLabel(status) : "Loading…"}</span>
+          </SettingRow>
+          <SettingRow
+            title="Relay connection"
+            description="Outbound WebSocket from latticed to lattice-server. Live socket state is not yet exposed."
+          >
+            <span>{status ? relayConnectionLabel(status) : "Loading…"}</span>
+          </SettingRow>
+          <h2 className="settings-subsection">Workspace authority</h2>
+          {!status ? (
+            <p className="settings-copy">Loading registered workspaces…</p>
+          ) : status.workspaces.length === 0 ? (
+            <div className="diagnostics-card">
+              <strong>No registered workspaces</strong>
+              <span>
+                Open a workspace in Lattice so latticed can register it, then return here to grant
+                remote access.
+              </span>
+            </div>
+          ) : (
+            status.workspaces.map((workspace) => (
+              <SettingRow
+                key={workspace.workspaceId}
+                title={workspaceDisplayName(workspace)}
+                description={`${workspace.workspaceId} · ${workspace.root}`}
+              >
+                <Toggle
+                  label={`Remote access for ${workspaceDisplayName(workspace)}`}
+                  checked={workspace.remoteAccessEnabled}
+                  onChange={(enabled) => {
+                    if (busyId) return;
+                    void handleToggle(workspace.workspaceId, enabled);
+                  }}
+                />
+                {busyId === workspace.workspaceId ? (
+                  <span className="settings-copy">Updating…</span>
+                ) : null}
+              </SettingRow>
+            ))
+          )}
+          {status?.via === "file" ? (
+            <p className="settings-copy" role="status">
+              Showing registry file state (latticed HTTP unreachable). Lease sync applies when the
+              daemon is running.
+            </p>
+          ) : null}
+          {error ? (
+            <div className="diagnostics-card" role="alert">
+              <strong>Remote access error</strong>
               <span>{error}</span>
             </div>
           ) : null}
