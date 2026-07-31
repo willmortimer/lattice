@@ -27,13 +27,14 @@ pub fn resource_stat_or_register(workspace_root: &Path, path: &str) -> Result<Re
 
 /// On proposal accept, mint a [`crate::ResourceVersionId`] per path and store hydration digests.
 ///
-/// No-op when `hydration_inputs` is empty. Paths are normalized registry keys.
+/// No-op when `paths` is empty. `hydration_inputs` may be empty for ordinary accepts.
+/// Paths are normalized registry keys.
 pub fn attach_accept_hydration_lineage(
     workspace_root: &Path,
     paths: &[String],
     hydration_inputs: &[HydrationInputDigest],
 ) -> Result<()> {
-    if hydration_inputs.is_empty() || paths.is_empty() {
+    if paths.is_empty() {
         return Ok(());
     }
     let mut registry = NamespaceRegistry::open(workspace_root)?;
@@ -195,6 +196,15 @@ mod tests {
         let err =
             open_cloud_authoritative_bytes(dir.path(), "notes/a.md", &client).unwrap_err();
         assert!(matches!(err, Error::NotCloudAuthoritative { .. }));
+    }
+
+    #[test]
+    fn attach_accept_hydration_lineage_mints_version_without_hydration_inputs() {
+        let dir = tempdir().unwrap();
+        attach_accept_hydration_lineage(dir.path(), &["Reports/out.txt".into()], &[]).unwrap();
+        let stat = resource_stat(dir.path(), "Reports/out.txt").unwrap();
+        assert!(stat.version_id.is_some());
+        assert!(stat.hydration_inputs.is_empty());
     }
 
     #[test]

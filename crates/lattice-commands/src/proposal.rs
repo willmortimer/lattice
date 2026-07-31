@@ -357,9 +357,6 @@ fn attach_proposal_hydration_lineage(
     proposal: &TransactionProposal,
     selected_indices: &[usize],
 ) -> Result<()> {
-    if proposal.source.hydration_inputs.is_empty() {
-        return Ok(());
-    }
     let mut paths = BTreeSet::new();
     for &index in selected_indices {
         let Some(command) = proposal.commands.get(index) else {
