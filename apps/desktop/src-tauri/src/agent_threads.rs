@@ -49,6 +49,54 @@ struct AppendMessageResponse {
     message: Value,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentThreadListArgs {
+    pub workspace_root: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentThreadGetArgs {
+    pub workspace_root: String,
+    pub thread_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentThreadSummary {
+    pub id: String,
+    pub title: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentThreadMessage {
+    pub id: String,
+    pub thread_id: String,
+    pub role: String,
+    pub content: Value,
+    pub run_id: Option<String>,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListAgentThreadsResult {
+    pub workspace_id: String,
+    pub threads: Vec<AgentThreadSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetAgentThreadResult {
+    pub workspace_id: String,
+    pub thread: AgentThreadSummary,
+    pub messages: Vec<AgentThreadMessage>,
+}
+
 fn http_base() -> Result<(String, u16), String> {
     let token = std::env::var(ENV_AUTH_TOKEN).map_err(|_| {
         "daemon auth token is unavailable; agent thread persistence requires latticed".into()
@@ -188,4 +236,45 @@ pub fn agent_thread_append_message(args: AgentThreadAppendMessageArgs) -> Result
     let _: AppendMessageResponse = serde_json::from_value(http_post_json(&path, &body)?)
         .map_err(|err| format!("unexpected append message response: {err}"))?;
     Ok(())
+}
+
+/// List workspace-local agent threads (metadata only).
+#[tauri::command]
+pub fn agent_thread_list(args: AgentThreadListArgs) -> Result<ListAgentThreadsResult, String> {
+    if args.workspace_root.trim().is_empty() {
+        return Err("workspace root is required".into());
+    }
+    let path = format!(
+        "/v1/agent_threads?root={}",
+        percent_encode_query(&args.workspace_root),
+    );
+    let (status, value) = http_get_json(&path)?;
+    if status < 200 || status >= 300 {
+        return Err(format!("agent thread HTTP {status}: {value}"));
+    }
+    serde_json::from_value(value).map_err(|err| format!("unexpected list threads response: {err}"))
+}
+
+/// Fetch one workspace-local agent thread and its messages.
+#[tauri::command]
+pub fn agent_thread_get(args: AgentThreadGetArgs) -> Result<GetAgentThreadResult, String> {
+    if args.workspace_root.trim().is_empty() {
+        return Err("workspace root is required".into());
+    }
+    if args.thread_id.trim().is_empty() {
+        return Err("thread id is required".into());
+    }
+    let path = format!(
+        "/v1/agent_threads/{}?root={}",
+        args.thread_id,
+        percent_encode_query(&args.workspace_root),
+    );
+    let (status, value) = http_get_json(&path)?;
+    if status == 404 {
+        return Err(format!("thread not found: {}", args.thread_id));
+    }
+    if status < 200 || status >= 300 {
+        return Err(format!("agent thread HTTP {status}: {value}"));
+    }
+    serde_json::from_value(value).map_err(|err| format!("unexpected get thread response: {err}"))
 }

@@ -27,4 +27,6 @@ pub use session::{
     cloud_session_status, resolve_cloud_bearer, resolved_cloud_url, MemoryCloudSessionStore,
     sign_in, sign_in_with_apple, sign_out,
 };
-pub use types::{AuthTokenResponse, CloudSessionStatus, CloudUser, MeResponse};
+pub use types::{
+    AiAccess, AuthTokenResponse, CloudSessionStatus, CloudUser, EntitlementsView, MeResponse,
+};

@@ -67,23 +67,48 @@ function AgentAssistantMessage() {
   );
 }
 
+function accountAiCtaCopy(reason: "unsigned" | "not_entitled" | null): {
+  title: string;
+  body: string;
+} {
+  if (reason === "not_entitled") {
+    return {
+      title: "Lattice paid AI not entitled",
+      body: "Your cloud account is signed in but does not include AI access. Check Settings → Cloud account, or switch AI mode under Settings → AI.",
+    };
+  }
+  return {
+    title: "Sign in for Lattice paid AI",
+    body: "Sign in under Settings → Cloud account to use Lattice paid AI, or switch to BYO / on-device under Settings → AI.",
+  };
+}
+
 function AgentThreadView({
   accountAiDisabled,
+  accountAiBlockReason,
   byoOpenaiKeyMissing,
 }: {
   accountAiDisabled: boolean;
+  accountAiBlockReason: "unsigned" | "not_entitled" | null;
   byoOpenaiKeyMissing: boolean;
 }) {
   const composerDisabled = accountAiDisabled || byoOpenaiKeyMissing;
+  const paidCta = accountAiDisabled ? accountAiCtaCopy(accountAiBlockReason) : null;
 
   return (
     <ThreadPrimitive.Root className="agent-thread">
       <ThreadPrimitive.Viewport className="agent-thread-viewport">
+        {paidCta ? (
+          <div className="agent-paid-cta" role="status">
+            <strong>{paidCta.title}</strong>
+            <p>{paidCta.body}</p>
+          </div>
+        ) : null}
         <ThreadPrimitive.Empty>
           <div className="agent-thread-empty">
             <p>
               {accountAiDisabled
-                ? "Sign in under Settings → Cloud account to use Lattice paid AI."
+                ? paidCta?.body
                 : byoOpenaiKeyMissing
                   ? "Add your OpenAI API key in Settings → AI to use the agent in BYO mode."
                   : "Ask the agent about this workspace."}
@@ -120,6 +145,7 @@ function AgentThreadView({
 export function AgentThread({ workspaceRoot }: AgentThreadProps) {
   const session = useAgentSessionStore((state) => ({
     accountAiDisabled: state.accountAiDisabled,
+    accountAiBlockReason: state.accountAiBlockReason,
     aiMode: state.aiMode,
     byoOpenaiKeyPresent: state.byoOpenaiKeyPresent,
   }));
@@ -137,6 +163,7 @@ export function AgentThread({ workspaceRoot }: AgentThreadProps) {
   return (
     <AgentThreadView
       accountAiDisabled={session.accountAiDisabled}
+      accountAiBlockReason={session.accountAiBlockReason}
       byoOpenaiKeyMissing={byoOpenaiKeyMissing}
     />
   );
