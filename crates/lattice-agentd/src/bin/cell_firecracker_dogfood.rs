@@ -6,13 +6,14 @@
 
 use std::path::{Path, PathBuf};
 
+use kernelfs::{normalize_guest_path, InputMount};
 use lattice_agentd::cell_host::{run_cell_task_and_propose, CellProposalProvenance};
+use lattice_agentd::kernelfs_export::{export_oci_roles_under_agent_share, OciKernelfsExportRequest};
 use lattice_agentd::lattice_client::lattice_client_from_env;
 use lattice_agentd::wasi_host::WorkspaceBinding;
 use lattice_cell_client::{
-    ensure_oci_agent_share_roles, is_oci_execution_mode, oci_ivisor_agent_share_dir,
-    require_celld_base_url, CelldClient, HttpCelldClient, HydrateFile, KernelFSHydrationPlan,
-    ProjectionRunRequest, EXECUTION_MODE_OCI,
+    is_oci_execution_mode, require_celld_base_url, CelldClient, HttpCelldClient, HydrateFile,
+    KernelFSHydrationPlan, ProjectionRunRequest, EXECUTION_MODE_OCI,
 };
 use serde_json::json;
 use tempfile::TempDir;
@@ -70,7 +71,7 @@ async fn run() -> Result<(), String> {
     }
 
     let (_temp_roles, input_host, work_host, output_host) =
-        resolve_role_host_dirs(&cli, &execution_mode)?;
+        resolve_role_host_dirs(&cli, &execution_mode, &workspace_root, &cli.hydrate_paths)?;
     let mut plan = KernelFSHydrationPlan::from_role_paths(input_host, work_host, output_host);
     if cli.allow_network {
         plan = plan.with_network_deny_all(false);
@@ -251,18 +252,31 @@ fn resolve_workspace(cli: &Cli) -> Result<(Option<TempDir>, String), String> {
 
 /// Resolve KernelFS role host dirs.
 ///
-/// MicroVM: ephemeral temp tree. OCI (Mac ivisor): live-bind contract under
-/// `{CELL_VZ_RUNTIME_DIR}/ivisor-worker-<id>/agent-share/{input,output}`.
+/// MicroVM: ephemeral temp tree. OCI (Mac ivisor): materialize + kernelfs export
+/// under `{agent-share}/.kernelfs-runs/{run_id}/` with volume sources at
+/// `{agent-share}/{run_id}/{input,work?,output}`.
 fn resolve_role_host_dirs(
     cli: &Cli,
     execution_mode: &str,
+    workspace_root: &str,
+    hydrate_paths: &[String],
 ) -> Result<(Option<TempDir>, PathBuf, Option<PathBuf>, PathBuf), String> {
     if is_oci_execution_mode(execution_mode) {
         let runtime = resolve_vz_runtime_dir(cli)?;
-        let share = oci_ivisor_agent_share_dir(&runtime, &cli.cell_id);
-        let (input, work, output) = ensure_oci_agent_share_roles(&share, cli.with_work)
-            .map_err(|err| format!("create agent-share roles under {}: {err}", share.display()))?;
-        return Ok((None, input, work, output));
+        let input_mounts = input_mounts_from_hydrate_paths(workspace_root, hydrate_paths)?;
+        let workspace_root_path = PathBuf::from(workspace_root);
+        let run_id = oci_run_id_from_projection(&cli.projection_id);
+        let exported = export_oci_roles_under_agent_share(&OciKernelfsExportRequest {
+            vz_runtime_dir: runtime,
+            cell_id: cli.cell_id.clone(),
+            run_id,
+            input_mounts,
+            host_path_roots: vec![workspace_root_path],
+            with_work: cli.with_work,
+            include_secrets: false,
+        })
+        .map_err(|err| format!("kernelfs OCI export under agent-share: {err}"))?;
+        return Ok((None, exported.input, exported.work, exported.output));
     }
 
     let plan_parent = tempfile::tempdir().map_err(|err| err.to_string())?;
@@ -333,6 +347,63 @@ fn load_hydrate_files(workspace_root: &str, hydrate_paths: &[String]) -> Result<
     Ok(files)
 }
 
+/// Map workspace hydrate paths to KernelFS [`InputMount`] entries for materialize.
+///
+/// Host paths are absolute under `workspace_root`; guest paths use the hydrate
+/// file basename (e.g. `input/hello.txt` → guest `hello.txt`).
+fn input_mounts_from_hydrate_paths(
+    workspace_root: &str,
+    hydrate_paths: &[String],
+) -> Result<Vec<InputMount>, String> {
+    let mut mounts = Vec::with_capacity(hydrate_paths.len());
+    for rel in hydrate_paths {
+        let host = Path::new(workspace_root).join(rel);
+        let guest_path = host
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| format!("hydrate path {rel:?} has no file name"))?
+            .to_string();
+        normalize_guest_path(&guest_path).map_err(|err| err.to_string())?;
+        mounts.push(InputMount {
+            host_path: host,
+            guest_path,
+        });
+    }
+    Ok(mounts)
+}
+
+/// Derive a kernelfs run id from the dogfood projection id.
+fn oci_run_id_from_projection(projection_id: &str) -> String {
+    let trimmed = projection_id.trim();
+    if is_valid_oci_run_id(trimmed) {
+        return trimmed.to_string();
+    }
+    let mut out = String::with_capacity(trimmed.len());
+    for ch in trimmed.chars() {
+        if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
+            out.push(ch);
+        } else {
+            out.push('_');
+        }
+    }
+    let collapsed = out.trim_matches('_');
+    if collapsed.is_empty() {
+        "dogfood_run".into()
+    } else {
+        collapsed.to_string()
+    }
+}
+
+fn is_valid_oci_run_id(id: &str) -> bool {
+    !id.is_empty()
+        && !id.contains('/')
+        && !id.contains('\\')
+        && id != "."
+        && id != ".."
+        && id.chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
+}
+
 fn normalize_execution_mode(raw: &str) -> Result<String, String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("microvm") {
@@ -344,4 +415,72 @@ fn normalize_execution_mode(raw: &str) -> Result<String, String> {
     Err(format!(
         "unsupported --execution-mode {raw:?} (use oci or leave empty for microVM)"
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hydrate_paths_map_to_input_mounts_by_basename() {
+        let workspace = tempfile::tempdir().expect("workspace");
+        let rel = "input/hello.txt";
+        let host = workspace.path().join(rel);
+        std::fs::create_dir_all(host.parent().expect("parent")).expect("mkdir");
+        std::fs::write(&host, "hello").expect("write");
+
+        let mounts = input_mounts_from_hydrate_paths(
+            &workspace.path().to_string_lossy(),
+            &[rel.into()],
+        )
+        .expect("mounts");
+
+        assert_eq!(mounts.len(), 1);
+        assert_eq!(mounts[0].guest_path, "hello.txt");
+        assert_eq!(mounts[0].host_path, host);
+    }
+
+    #[test]
+    fn oci_run_id_uses_projection_id_when_valid() {
+        assert_eq!(oci_run_id_from_projection("proj_dogfood"), "proj_dogfood");
+    }
+
+    #[test]
+    fn oci_run_id_sanitizes_invalid_projection_id() {
+        assert_eq!(oci_run_id_from_projection("ns/proj#1"), "ns_proj_1");
+        assert_eq!(oci_run_id_from_projection("///"), "dogfood_run");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn oci_export_volume_sources_under_agent_share_run_id() {
+        let vz = tempfile::tempdir().expect("vz runtime");
+        let workspace = tempfile::tempdir().expect("workspace");
+        let rel = "input/hello.txt";
+        let host = workspace.path().join(rel);
+        std::fs::create_dir_all(host.parent().expect("parent")).expect("mkdir");
+        std::fs::write(&host, "hello from hydrate\n").expect("write");
+
+        let run_id = "proj_dogfood";
+        let exported = export_oci_roles_under_agent_share(&OciKernelfsExportRequest {
+            vz_runtime_dir: vz.path().to_path_buf(),
+            cell_id: "cell_dogfood".into(),
+            run_id: run_id.into(),
+            input_mounts: input_mounts_from_hydrate_paths(
+                &workspace.path().to_string_lossy(),
+                &[rel.into()],
+            )
+            .expect("mounts"),
+            host_path_roots: vec![workspace.path().to_path_buf()],
+            with_work: false,
+            include_secrets: false,
+        })
+        .expect("export");
+
+        assert_eq!(exported.export_root, exported.agent_share.join(run_id));
+        assert_eq!(exported.input, exported.export_root.join("input"));
+        assert_eq!(exported.output, exported.export_root.join("output"));
+        assert!(exported.input.starts_with(&exported.agent_share));
+        assert!(exported.output.starts_with(&exported.agent_share));
+    }
 }
