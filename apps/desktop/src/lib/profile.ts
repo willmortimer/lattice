@@ -94,6 +94,7 @@ export interface DesktopSettings {
     embeddingMode: EmbeddingMode;
     passiveEmbeddingEnabled: boolean;
     preferredModel: string | null;
+    preferredEmbeddingModel: string | null;
   };
   privacy: {
     appLockEnabled: boolean;
@@ -183,6 +184,7 @@ export function defaultDesktopSettings(): DesktopSettings {
       embeddingMode: "followAi",
       passiveEmbeddingEnabled: false,
       preferredModel: null,
+      preferredEmbeddingModel: null,
     },
     privacy: {
       appLockEnabled: false,

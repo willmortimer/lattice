@@ -4,6 +4,7 @@ import {
   DEFAULT_OPENAI_MODEL,
   DEFAULT_PIONEER_MODEL,
   defaultModelForProvider,
+  modelsForAiMode,
   modelsForProvider,
 } from "./modelCatalog";
 
@@ -27,5 +28,17 @@ describe("modelCatalog", () => {
       "gpt-5.6-luna",
       "gpt-5.6-terra",
     ]);
+  });
+
+  it("modelsForAiMode maps account/byo to openai and local to local", () => {
+    expect(modelsForAiMode("account").map((option) => option.id)).toEqual(
+      modelsForProvider("openai").map((option) => option.id),
+    );
+    expect(modelsForAiMode("byoOpenai").map((option) => option.id)).toEqual(
+      modelsForProvider("openai").map((option) => option.id),
+    );
+    expect(modelsForAiMode("local").map((option) => option.id)).toEqual(
+      modelsForProvider("local").map((option) => option.id),
+    );
   });
 });

@@ -36,9 +36,16 @@ export const OPENAI_EMBEDDING_MODELS = [
   "text-embedding-ada-002",
 ] as const;
 
+/** Cloud / remote embedding choices exposed in Settings → AI. */
+export const OPENAI_EMBEDDING_MODEL_OPTIONS: readonly AgentModelOption[] = [
+  { id: "text-embedding-3-small", label: "text-embedding-3-small" },
+  { id: "text-embedding-3-large", label: "text-embedding-3-large" },
+] as const;
+
 export const DEFAULT_OPENAI_MODEL = "gpt-5-nano";
 export const DEFAULT_PIONEER_MODEL = "gpt-5.6-luna";
 export const DEFAULT_LOCAL_MODEL = "local";
+export const DEFAULT_OPENAI_EMBEDDING_MODEL = "text-embedding-3-small";
 
 export function modelsForProvider(provider: SelectableAgentProvider): readonly AgentModelOption[] {
   switch (provider) {
@@ -50,6 +57,21 @@ export function modelsForProvider(provider: SelectableAgentProvider): readonly A
       return LOCAL_MODEL_OPTIONS;
     default: {
       const _exhaustive: never = provider;
+      return _exhaustive;
+    }
+  }
+}
+
+/** Agent model options for Settings → AI, driven by AI mode. */
+export function modelsForAiMode(mode: "local" | "byoOpenai" | "account"): readonly AgentModelOption[] {
+  switch (mode) {
+    case "byoOpenai":
+    case "account":
+      return OPENAI_MODEL_OPTIONS;
+    case "local":
+      return LOCAL_MODEL_OPTIONS;
+    default: {
+      const _exhaustive: never = mode;
       return _exhaustive;
     }
   }

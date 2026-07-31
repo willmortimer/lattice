@@ -10,6 +10,7 @@ describe("defaultDesktopSettings ai", () => {
       embeddingMode: "followAi",
       passiveEmbeddingEnabled: false,
       preferredModel: null,
+      preferredEmbeddingModel: null,
     });
   });
 });

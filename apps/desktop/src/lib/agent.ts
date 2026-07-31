@@ -182,7 +182,8 @@ export class TauriAgentChatTransport implements ChatTransport<UIMessage> {
         void (async () => {
           const persistTranscripts = this.options.persistTranscripts !== false;
           const transcript = new RunTranscriptAccumulator();
-          let completedRunId = crypto.randomUUID();
+          // Explicit `string`: crypto.randomUUID() is a branded template type in TS DOM libs.
+          let completedRunId: string = crypto.randomUUID();
           try {
             const resolved = this.options.resolveRunOptions?.() ?? {};
             const result = await startAgentRun(

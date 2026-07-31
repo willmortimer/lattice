@@ -458,6 +458,9 @@ pub struct AiSettings {
     pub passive_embedding_enabled: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preferred_model: Option<String>,
+    /// Preferred remote embedding model id (OpenAI text-embedding-3-*).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preferred_embedding_model: Option<String>,
 }
 
 impl Default for AiSettings {
@@ -467,6 +470,7 @@ impl Default for AiSettings {
             embedding_mode: EmbeddingMode::default(),
             passive_embedding_enabled: false,
             preferred_model: None,
+            preferred_embedding_model: None,
         }
     }
 }
@@ -935,12 +939,13 @@ mod tests {
         );
         assert!(!DesktopSettings::default().ai.passive_embedding_enabled);
         assert!(DesktopSettings::default().ai.preferred_model.is_none());
+        assert!(DesktopSettings::default().ai.preferred_embedding_model.is_none());
 
         let directory = tempfile::tempdir().unwrap();
         let store = SettingsStore::new(directory.path());
         std::fs::write(
             store.path(DESKTOP_SETTINGS_SPEC),
-            "format: lattice-desktop-settings\nversion: 1\nai:\n  mode: byoOpenai\n  embeddingMode: remote\n  passiveEmbeddingEnabled: true\n  preferredModel: gpt-4o-mini\n",
+            "format: lattice-desktop-settings\nversion: 1\nai:\n  mode: byoOpenai\n  embeddingMode: remote\n  passiveEmbeddingEnabled: true\n  preferredModel: gpt-4o-mini\n  preferredEmbeddingModel: text-embedding-3-small\n",
         )
         .unwrap();
         let loaded = store
@@ -952,6 +957,10 @@ mod tests {
         assert_eq!(
             loaded.value.ai.preferred_model.as_deref(),
             Some("gpt-4o-mini")
+        );
+        assert_eq!(
+            loaded.value.ai.preferred_embedding_model.as_deref(),
+            Some("text-embedding-3-small")
         );
 
         // Older documents without `ai:` keep defaults.
@@ -978,6 +987,7 @@ mod tests {
         settings.ai.embedding_mode = EmbeddingMode::FollowAi;
         settings.ai.passive_embedding_enabled = true;
         settings.ai.preferred_model = Some("gpt-4.1".into());
+        settings.ai.preferred_embedding_model = Some("text-embedding-3-large".into());
         store
             .save(DESKTOP_SETTINGS_SPEC, &settings, None)
             .unwrap();
@@ -986,6 +996,7 @@ mod tests {
         assert!(materialized.contains("embeddingMode: followAi"));
         assert!(materialized.contains("passiveEmbeddingEnabled: true"));
         assert!(materialized.contains("preferredModel: gpt-4.1"));
+        assert!(materialized.contains("preferredEmbeddingModel: text-embedding-3-large"));
         let loaded = store
             .load::<DesktopSettings>(DESKTOP_SETTINGS_SPEC)
             .unwrap();

@@ -45,8 +45,16 @@ import {
   cloudSignInApple,
   cloudSignOut,
   getCloudSessionStatus,
+  isCloudAiEntitled,
   type CloudSessionStatus,
 } from "../lib/cloud";
+import {
+  DEFAULT_OPENAI_EMBEDDING_MODEL,
+  DEFAULT_OPENAI_MODEL,
+  DEFAULT_LOCAL_MODEL,
+  modelsForAiMode,
+  OPENAI_EMBEDDING_MODEL_OPTIONS,
+} from "../agent/modelCatalog";
 import {
   getRemoteAccessStatus,
   relayConnectionLabel,
@@ -310,27 +318,69 @@ export function SettingsPage({
             <Button variant="secondary" onClick={onFollowSystem}>
               Follow system appearance
             </Button>
-            <SettingRow
-              title="Font pack"
-              description="Typography stacks for display, UI, and mono. Follow theme uses each theme’s default pack (Cupertino → Apple)."
-            >
-              <select
-                aria-label="Font pack"
-                value={themeCatalog?.resolved.settings.fontPack ?? "theme"}
-                onChange={(event) => onFontPackChange(event.target.value)}
+
+            <h2 className="settings-subsection">Font pack</h2>
+            <p className="settings-copy">
+              Typography stacks for display, UI, and mono. Follow theme uses each theme’s default
+              pack (Cupertino → Apple).
+            </p>
+            <div className="font-pack-gallery" role="listbox" aria-label="Font pack">
+              <button
+                type="button"
+                role="option"
+                aria-selected={(themeCatalog?.resolved.settings.fontPack ?? "theme") === "theme"}
+                className={
+                  (themeCatalog?.resolved.settings.fontPack ?? "theme") === "theme"
+                    ? "font-pack-card font-pack-card-active"
+                    : "font-pack-card"
+                }
+                onClick={() => onFontPackChange("theme")}
               >
-                <option value="theme">Follow theme</option>
-                {(themeCatalog?.fontPacks ?? []).map((pack) => (
-                  <option key={pack.id} value={pack.id}>
-                    {pack.name}
-                    {themeCatalog?.resolved.fontPack === pack.id &&
-                    themeCatalog.resolved.settings.fontPack !== "theme"
-                      ? " (active)"
-                      : ""}
-                  </option>
-                ))}
-              </select>
-            </SettingRow>
+                <strong>Follow theme</strong>
+                <span className="font-pack-sample-display" style={{ fontFamily: "var(--lt-font-display)" }}>
+                  Lattice
+                </span>
+                <span className="font-pack-sample-ui" style={{ fontFamily: "var(--lt-font-ui)" }}>
+                  UI · from active theme
+                </span>
+                <span className="font-pack-sample-mono" style={{ fontFamily: "var(--lt-font-mono)" }}>
+                  mono ← {themeCatalog?.resolved.fontPack ?? "theme"}
+                </span>
+              </button>
+              {(themeCatalog?.fontPacks ?? []).map((pack) => {
+                const selected = themeCatalog?.resolved.settings.fontPack === pack.id;
+                return (
+                  <button
+                    type="button"
+                    role="option"
+                    key={pack.id}
+                    aria-selected={selected}
+                    className={selected ? "font-pack-card font-pack-card-active" : "font-pack-card"}
+                    onClick={() => onFontPackChange(pack.id)}
+                  >
+                    <strong>{pack.name}</strong>
+                    <span
+                      className="font-pack-sample-display"
+                      style={{ fontFamily: pack.fonts?.display }}
+                    >
+                      Lattice
+                    </span>
+                    <span
+                      className="font-pack-sample-ui"
+                      style={{ fontFamily: pack.fonts?.ui }}
+                    >
+                      Workspace agent · settings
+                    </span>
+                    <span
+                      className="font-pack-sample-mono"
+                      style={{ fontFamily: pack.fonts?.mono }}
+                    >
+                      const root = workspace;
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
             {themeCatalog?.resolved.settings.fontPack === "theme" && (
               <p className="settings-copy">
                 Active pack: <strong>{themeCatalog.resolved.fontPack}</strong> (from theme)
@@ -339,7 +389,10 @@ export function SettingsPage({
           </>
         )}
 
-        {section === "cloud" && <CloudAccountSettings />}
+        {/* Keep mounted so SIWA/session state survives nav away/back. */}
+        <div hidden={section !== "cloud"}>
+          <CloudAccountSettings />
+        </div>
 
         {section === "remote" && (
           <RemoteAccessSettings onOpenCloud={() => setSection("cloud")} />
@@ -850,12 +903,7 @@ function AiSettingsPanel({
   const [keyDraft, setKeyDraft] = useState("");
   const [keyBusy, setKeyBusy] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
-  const [preferredModelDraft, setPreferredModelDraft] = useState(ai.preferredModel ?? "");
   const [cloudStatus, setCloudStatus] = useState<CloudSessionStatus | null>(null);
-
-  useEffect(() => {
-    setPreferredModelDraft(ai.preferredModel ?? "");
-  }, [ai.preferredModel]);
 
   useEffect(() => {
     if (inBrowser) {
@@ -922,19 +970,37 @@ function AiSettingsPanel({
     }
   }
 
-  function commitPreferredModel() {
-    const trimmed = preferredModelDraft.trim();
-    onChange({ preferredModel: trimmed.length > 0 ? trimmed : null });
-  }
+  const agentModels = modelsForAiMode(ai.mode);
+  const preferredModelValue =
+    ai.preferredModel && agentModels.some((option) => option.id === ai.preferredModel)
+      ? ai.preferredModel
+      : "";
+  const usesRemoteEmbeddings =
+    ai.embeddingMode === "remote" ||
+    (ai.embeddingMode === "followAi" && (ai.mode === "byoOpenai" || ai.mode === "account"));
+  const preferredEmbeddingValue =
+    ai.preferredEmbeddingModel &&
+    OPENAI_EMBEDDING_MODEL_OPTIONS.some((option) => option.id === ai.preferredEmbeddingModel)
+      ? ai.preferredEmbeddingModel
+      : "";
+  const cloudAiEntitled = cloudStatus ? isCloudAiEntitled(cloudStatus) : false;
+  const accountAccessLabel = !cloudStatus
+    ? "Checking cloud session…"
+    : !cloudStatus.signedIn
+      ? "Not signed in — Lattice paid AI needs a cloud session."
+      : cloudAiEntitled
+        ? `Signed in with AI access (${cloudStatus.entitlements?.ai_access ?? "legacy"}).`
+        : "Signed in, but this account does not include AI access.";
 
   return (
     <>
       <h1>AI</h1>
       <p className="settings-copy">
-        Choose how the agent and related features reach a model. Embedding and voice downloads are
-        managed under Packs; feature toggles under Features.
+        Pick how the workspace agent reaches a model. Pack downloads (local embeddings, voice) live
+        under Packs; feature toggles under Features.
       </p>
 
+      <h2 className="settings-subsection">How to reach a model</h2>
       <div className="ai-mode-choices" role="radiogroup" aria-label="AI mode">
         {AI_MODE_OPTIONS.map((option) => {
           const active = ai.mode === option.id;
@@ -945,7 +1011,15 @@ function AiSettingsPanel({
               role="radio"
               aria-checked={active}
               className={`ai-mode-choice${active ? " ai-mode-choice-active" : ""}`}
-              onClick={() => onChange({ mode: option.id })}
+              onClick={() => {
+                const nextMode = option.id;
+                const nextModels = modelsForAiMode(nextMode);
+                const keepPreferred =
+                  ai.preferredModel && nextModels.some((model) => model.id === ai.preferredModel)
+                    ? ai.preferredModel
+                    : null;
+                onChange({ mode: nextMode, preferredModel: keepPreferred });
+              }}
             >
               <span className="ai-mode-choice-indicator" aria-hidden="true" />
               <span>
@@ -1028,11 +1102,23 @@ function AiSettingsPanel({
       {ai.mode === "account" ? (
         <div className="diagnostics-card" role="status">
           <strong>Lattice paid mode</strong>
-          <span>
-            {cloudStatus?.signedIn
-              ? "Uses Lattice-mediated OpenAI through your cloud account. Requests go to lattice-server; your OpenAI key is not required."
-              : "Sign in under Cloud account to enable Lattice-mediated OpenAI. Your BYO OpenAI key is not used in this mode."}
-          </span>
+          <span>{accountAccessLabel}</span>
+          {!cloudStatus?.signedIn ? (
+            <span>
+              Sign in under Cloud account to enable Lattice-mediated OpenAI. Your BYO OpenAI key is
+              not used in this mode.
+            </span>
+          ) : cloudAiEntitled ? (
+            <span>
+              Requests go to lattice-server with your entitled cloud session. Your BYO OpenAI key is
+              not required.
+            </span>
+          ) : (
+            <span>
+              This cloud account is signed in but not entitled for AI. Ask for allowlist/paid access,
+              or switch to BYO / on-device.
+            </span>
+          )}
           <div className="ai-account-actions">
             <Button size="sm" variant="secondary" onClick={onOpenCloud}>
               {cloudStatus?.signedIn ? "Open Cloud account" : "Sign in to Cloud"}
@@ -1041,24 +1127,43 @@ function AiSettingsPanel({
         </div>
       ) : null}
 
-      <h2 className="settings-subsection">Model preference</h2>
+      <h2 className="settings-subsection">Agent model</h2>
       <SettingRow
         title="Preferred model"
-        description="Optional model id hint for the agent (for example gpt-4o-mini). Leave blank to use the runtime default."
+        description={
+          ai.mode === "local"
+            ? "On-device model id for the agent. Runtime default is used when left on Default."
+            : "Allowlisted chat model for the agent. Runtime default is used when left on Default."
+        }
       >
-        <input
-          value={preferredModelDraft}
-          placeholder="Runtime default"
-          aria-label="Preferred model"
-          onChange={(event) => setPreferredModelDraft(event.currentTarget.value)}
-          onBlur={() => commitPreferredModel()}
-        />
+        <select
+          aria-label="Preferred agent model"
+          value={preferredModelValue}
+          onChange={(event) => {
+            const next = event.currentTarget.value;
+            onChange({ preferredModel: next.length > 0 ? next : null });
+          }}
+        >
+          <option value="">
+            Default (
+            {ai.mode === "local" ? DEFAULT_LOCAL_MODEL : DEFAULT_OPENAI_MODEL})
+          </option>
+          {agentModels.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+            </option>
+          ))}
+          {ai.preferredModel &&
+          !agentModels.some((option) => option.id === ai.preferredModel) ? (
+            <option value={ai.preferredModel}>{ai.preferredModel} (saved)</option>
+          ) : null}
+        </select>
       </SettingRow>
 
-      <h2 className="settings-subsection">Embedding defaults</h2>
+      <h2 className="settings-subsection">Embeddings</h2>
       <SettingRow
         title="Embedding mode"
-        description="Follow AI uses the same provider family as the AI mode. Local and remote override that choice."
+        description="Follow AI uses the same provider family as the AI mode. Local uses the on-device pack; Remote uses cloud embeddings."
       >
         <select
           aria-label="Embedding mode"
@@ -1068,13 +1173,51 @@ function AiSettingsPanel({
           }
         >
           <option value="followAi">Follow AI mode</option>
-          <option value="local">Local</option>
-          <option value="remote">Remote</option>
+          <option value="local">Local pack</option>
+          <option value="remote">Remote (OpenAI)</option>
         </select>
       </SettingRow>
+      {usesRemoteEmbeddings ? (
+        <SettingRow
+          title="Remote embedding model"
+          description="OpenAI embedding models allowed for cloud / BYO remote indexing."
+        >
+          <select
+            aria-label="Preferred embedding model"
+            value={preferredEmbeddingValue}
+            onChange={(event) => {
+              const next = event.currentTarget.value;
+              onChange({ preferredEmbeddingModel: next.length > 0 ? next : null });
+            }}
+          >
+            <option value="">Default ({DEFAULT_OPENAI_EMBEDDING_MODEL})</option>
+            {OPENAI_EMBEDDING_MODEL_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+            {ai.preferredEmbeddingModel &&
+            !OPENAI_EMBEDDING_MODEL_OPTIONS.some(
+              (option) => option.id === ai.preferredEmbeddingModel,
+            ) ? (
+              <option value={ai.preferredEmbeddingModel}>
+                {ai.preferredEmbeddingModel} (saved)
+              </option>
+            ) : null}
+          </select>
+        </SettingRow>
+      ) : (
+        <div className="diagnostics-card" role="status">
+          <strong>Local embeddings</strong>
+          <span>
+            Uses the on-device embedding pack from Packs (Qwen3). Download and vector freshness are
+            below.
+          </span>
+        </div>
+      )}
       <SettingRow
         title="Passive embedding"
-        description="Allow background embedding when the workspace is idle. Pack download and vector freshness are under Embeddings below."
+        description="Allow background embedding when the workspace is idle."
       >
         <Toggle
           label="Passive embedding"
@@ -1091,11 +1234,10 @@ function AiSettingsPanel({
         passiveEmbeddingEnabled={ai.passiveEmbeddingEnabled}
       />
 
-      <h2 className="settings-subsection">Optional packs</h2>
-      <p className="settings-copy">Managed under Packs and Features.</p>
+      <h2 className="settings-subsection">Related</h2>
       <SettingRow
-        title="Embedding & voice packs"
-        description="Download status, clear, and feature enablement live in the Packs and Features panels."
+        title="Packs & features"
+        description="Download embedding/voice packs and toggle the features that use them."
       >
         <div className="history-retention-actions">
           <Button size="sm" variant="secondary" onClick={onOpenPacks}>
@@ -1688,16 +1830,36 @@ function CloudAccountSettings() {
 
   const statusText = status
     ? status.signedIn
-      ? status.user?.email ?? status.user?.display_name ?? "Signed in"
+      ? status.user?.email ??
+        status.user?.display_name ??
+        (status.error ? "Signed in (session refresh failed)" : "Signed in")
       : "Not signed in"
     : "Checking…";
+
+  const aiAccessLabel = !status
+    ? "Checking…"
+    : !status.signedIn
+      ? "Sign in to check"
+      : isCloudAiEntitled(status)
+        ? status.entitlements
+          ? status.entitlements.ai_access
+          : "legacy"
+        : (status.entitlements?.ai_access ?? "none");
+
+  const aiAccessDetail =
+    status?.signedIn && status.entitlements
+      ? `${status.entitlements.ai_daily_requests_used} / ${status.entitlements.ai_daily_request_budget} AI requests today`
+      : status?.signedIn && isCloudAiEntitled(status)
+        ? "Entitled (no daily budget in session payload)"
+        : status?.signedIn
+          ? "This account cannot use Lattice paid AI yet"
+          : "Cloud sync and Lattice paid AI use this session";
 
   return (
     <>
       <h1>Cloud account</h1>
       <p className="settings-copy">
-        Optional lattice-server sign-in for cloud sync features. Credentials stay in the OS
-        keychain; the bearer token never reaches browser storage.
+        Sign in to lattice-server for sync and Lattice paid AI. Credentials stay in the OS keychain.
       </p>
       {inBrowser ? (
         <div className="diagnostics-card">
@@ -1706,53 +1868,88 @@ function CloudAccountSettings() {
         </div>
       ) : (
         <>
-          <SettingRow
-            title="Server"
-            description="Resolved lattice-server origin for this desktop build."
+          <div
+            className={`cloud-account-hero${status?.signedIn ? " cloud-account-hero-signed-in" : ""}`}
+            role="status"
           >
-            <span>{status?.cloudUrl ?? "https://cloud.lattice-notes.com"}</span>
-          </SettingRow>
-          <SettingRow title="Status" description="Current cloud session for this device.">
-            <span>{busy ? "Updating…" : statusText}</span>
-          </SettingRow>
-          {!status?.signedIn ? (
-            <>
-              <SettingRow title="Apple" description="Same Sign in with Apple account as the web app.">
-                <Button size="sm" disabled={busy} onClick={() => void handleAppleSignIn()}>
-                  {busy ? "Signing in…" : "Sign in with Apple"}
-                </Button>
-              </SettingRow>
-              <SettingRow title="Email" description="Account email for password login.">
-                <input
-                  type="email"
-                  autoComplete="username"
-                  value={email}
-                  disabled={busy}
-                  onChange={(event) => setEmail(event.currentTarget.value)}
-                />
-              </SettingRow>
-              <SettingRow title="Password" description="Password for your lattice-server account.">
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  disabled={busy}
-                  onChange={(event) => setPassword(event.currentTarget.value)}
-                />
-              </SettingRow>
-              <Button
-                size="sm"
-                disabled={busy || !email.trim() || !password}
-                onClick={() => void handleSignIn()}
+            <p className="cloud-account-eyebrow">
+              {status?.cloudUrl ?? "https://cloud.lattice-notes.com"}
+            </p>
+            <strong className="cloud-account-identity">
+              {busy ? "Updating…" : statusText}
+            </strong>
+            <div className="cloud-account-meta">
+              <span
+                className={`cloud-ai-pill${
+                  status?.signedIn && isCloudAiEntitled(status)
+                    ? " cloud-ai-pill-ok"
+                    : status?.signedIn
+                      ? " cloud-ai-pill-blocked"
+                      : ""
+                }`}
               >
-                {busy ? "Signing in…" : "Sign in with password"}
-              </Button>
-            </>
-          ) : (
-            <Button size="sm" variant="secondary" disabled={busy} onClick={() => void handleSignOut()}>
-              {busy ? "Signing out…" : "Sign out"}
-            </Button>
-          )}
+                AI · {busy ? "…" : aiAccessLabel}
+              </span>
+              <span className="cloud-account-meta-copy">{aiAccessDetail}</span>
+            </div>
+            {status?.signedIn ? (
+              <div className="cloud-account-actions">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => void handleSignOut()}
+                >
+                  {busy ? "Signing out…" : "Sign out"}
+                </Button>
+              </div>
+            ) : null}
+          </div>
+
+          {!status?.signedIn ? (
+            <div className="cloud-signin-panel">
+              <h2 className="settings-subsection">Sign in</h2>
+              <div className="cloud-signin-primary">
+                <Button size="sm" disabled={busy} onClick={() => void handleAppleSignIn()}>
+                  {busy ? "Signing in…" : "Continue with Apple"}
+                </Button>
+                <p className="settings-copy">Same Apple ID as the Lattice web app.</p>
+              </div>
+              <div className="cloud-signin-divider" role="presentation">
+                <span>or password</span>
+              </div>
+              <div className="cloud-signin-password">
+                <label className="cloud-signin-field">
+                  <span>Email</span>
+                  <input
+                    type="email"
+                    autoComplete="username"
+                    value={email}
+                    disabled={busy}
+                    onChange={(event) => setEmail(event.currentTarget.value)}
+                  />
+                </label>
+                <label className="cloud-signin-field">
+                  <span>Password</span>
+                  <input
+                    type="password"
+                    autoComplete="current-password"
+                    value={password}
+                    disabled={busy}
+                    onChange={(event) => setPassword(event.currentTarget.value)}
+                  />
+                </label>
+                <Button
+                  size="sm"
+                  disabled={busy || !email.trim() || !password}
+                  onClick={() => void handleSignIn()}
+                >
+                  {busy ? "Signing in…" : "Sign in with password"}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
           {error ? (
             <div className="diagnostics-card" role="alert">
               <strong>Cloud sign-in error</strong>

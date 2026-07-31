@@ -22,6 +22,7 @@ export function AgentProviderBadge() {
   const selectedModel = useAgentSessionStore((state) => state.selectedModel);
   const aiMode = useAgentSessionStore((state) => state.aiMode);
   const accountAiDisabled = useAgentSessionStore((state) => state.accountAiDisabled);
+  const accountAiBlockReason = useAgentSessionStore((state) => state.accountAiBlockReason);
   const setSelectedProvider = useAgentSessionStore((state) => state.setSelectedProvider);
   const setSelectedModel = useAgentSessionStore((state) => state.setSelectedModel);
 
@@ -31,13 +32,16 @@ export function AgentProviderBadge() {
   );
 
   if (accountAiDisabled) {
+    const notEntitled = accountAiBlockReason === "not_entitled";
     return (
       <div className="agent-runtime-controls" aria-label="Agent runtime">
         <span className="agent-provider-badge agent-provider-badge-unknown">
-          Lattice paid · Sign in required
+          {notEntitled ? "Lattice paid · No AI access" : "Lattice paid · Sign in required"}
         </span>
         <span className="agent-runtime-hint">
-          Sign in under Settings → Cloud account to use Lattice-mediated OpenAI.
+          {notEntitled
+            ? "Signed in, but this cloud account is not entitled for AI. Check Settings → Cloud account, or switch AI mode."
+            : "Sign in under Settings → Cloud account to use Lattice-mediated OpenAI."}
         </span>
       </div>
     );
@@ -65,7 +69,7 @@ export function AgentProviderBadge() {
     aiMode === "byoOpenai"
       ? "Add your OpenAI API key in Settings → AI"
       : aiMode === "account"
-        ? "Sign in under Settings → Cloud account"
+        ? "Sign in with an AI-entitled cloud account under Settings → Cloud account"
         : "Launch with secrets/ai.env via nxr desktop-dev";
 
   return (

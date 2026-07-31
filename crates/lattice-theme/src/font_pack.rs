@@ -43,7 +43,7 @@ pub enum FontPackSource {
     User,
 }
 
-/// Summary for Settings / CLI listing.
+/// Summary for Settings / CLI listing (includes stacks for live previews).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FontPackSummary {
@@ -51,6 +51,7 @@ pub struct FontPackSummary {
     pub name: String,
     pub source: FontPackSource,
     pub path: String,
+    pub fonts: ThemeFonts,
 }
 
 const BUILTIN_PACKS: &[(&str, &str)] = &[
@@ -225,6 +226,7 @@ pub fn discover_font_packs(
                         name: doc.name.clone(),
                         source: FontPackSource::Builtin,
                         path: format!("builtin:{}{}", doc.id, FONT_PACK_FILE_SUFFIX),
+                        fonts: doc.fonts.clone(),
                     },
                 );
             }
@@ -256,6 +258,7 @@ pub fn discover_font_packs(
                             name: doc.name.clone(),
                             source: FontPackSource::User,
                             path: path.to_string_lossy().replace('\\', "/"),
+                            fonts: doc.fonts.clone(),
                         },
                     );
                 }

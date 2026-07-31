@@ -116,12 +116,14 @@ pub fn cloud_session_status<C: CloudHttpClient>(
                 error: Some(err.to_string()),
             })
         }
+        // Keep local session when /v1/me is unreachable; otherwise Settings remount
+        // flashes "Sign in with Apple" despite a valid keychain token.
         Err(err) => Ok(CloudSessionStatus {
-            signed_in: false,
+            signed_in: true,
             cloud_url: base,
             user: None,
             entitlements: None,
-            error: Some(err.to_string()),
+            error: Some(format!("could not refresh cloud session: {err}")),
         }),
     }
 }
@@ -255,5 +257,16 @@ mod tests {
         let status = cloud_session_status(&client, &store).unwrap();
         assert!(!status.signed_in);
         assert_eq!(status.cloud_url, "https://cloud.test");
+    }
+
+    #[test]
+    fn token_kept_when_me_unreachable() {
+        let client = CloudApiClient::with_base_url(EmptyHttp, "https://cloud.test");
+        let store = MemoryCloudSessionStore::new();
+        store.save_token("bearer-token").unwrap();
+        let status = cloud_session_status(&client, &store).unwrap();
+        assert!(status.signed_in);
+        assert!(status.error.as_deref().unwrap_or("").contains("could not refresh"));
+        assert_eq!(store.load_token().unwrap().as_deref(), Some("bearer-token"));
     }
 }
