@@ -46,6 +46,22 @@ impl FromStr for ResourceId {
     }
 }
 
+/// One KernelFS hydration input retained as LatticeFS accept lineage.
+///
+/// Shape matches proposal `hydrationInputs` (`path` + `contentHash` + optional
+/// `resourceId`) so Inspect/CLI can show the same digests after accept.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HydrationInputDigest {
+    /// Guest-relative input path (KernelFS `/input/...` basename or relative path).
+    pub path: String,
+    /// SHA-256 hex digest of the hydrated input bytes.
+    pub content_hash: String,
+    /// Optional LatticeFS [`ResourceId`] string when the caller supplies one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource_id: Option<String>,
+}
+
 /// Identity of one accepted version of a resource.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -153,6 +169,9 @@ pub struct ResourceStat {
     pub materialization: MaterializationState,
     pub content_hash: Option<ContentHash>,
     pub version_id: Option<ResourceVersionId>,
+    /// Hydration digests attached when a proposal with `hydrationInputs` was accepted.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hydration_inputs: Vec<HydrationInputDigest>,
 }
 
 #[cfg(test)]

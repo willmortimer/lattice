@@ -16,9 +16,10 @@ pub use cloud::{
 pub use error::{Error, Result};
 pub use registry::{NamespaceRegistry, OPERATIONAL_DIR, REGISTRY_FILENAME};
 pub use stat::{
-    materialize_to_cloud, open_cloud_authoritative_bytes, resource_stat, resource_stat_or_register,
+    attach_accept_hydration_lineage, materialize_to_cloud, open_cloud_authoritative_bytes,
+    resource_stat, resource_stat_or_register,
 };
 pub use types::{
-    AuthorityMode, ContentHash, MaterializationState, NamespaceEntry, ResourceId, ResourceStat,
-    ResourceVersionId,
+    AuthorityMode, ContentHash, HydrationInputDigest, MaterializationState, NamespaceEntry,
+    ResourceId, ResourceStat, ResourceVersionId,
 };

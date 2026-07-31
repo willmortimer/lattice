@@ -3,7 +3,7 @@ use std::path::Path;
 use crate::cloud::{fetch_cloud_blob, roundtrip_verify_blob, CloudBlobClient};
 use crate::error::{Error, Result};
 use crate::registry::NamespaceRegistry;
-use crate::types::{AuthorityMode, ResourceStat};
+use crate::types::{AuthorityMode, HydrationInputDigest, ResourceStat};
 
 /// Inspect authority and materialization for a workspace-relative path.
 pub fn resource_stat(workspace_root: &Path, path: &str) -> Result<ResourceStat> {
@@ -23,6 +23,26 @@ pub fn resource_stat_or_register(workspace_root: &Path, path: &str) -> Result<Re
         }
         Err(err) => Err(err),
     }
+}
+
+/// On proposal accept, mint a [`crate::ResourceVersionId`] per path and store hydration digests.
+///
+/// No-op when `hydration_inputs` is empty. Paths are normalized registry keys.
+pub fn attach_accept_hydration_lineage(
+    workspace_root: &Path,
+    paths: &[String],
+    hydration_inputs: &[HydrationInputDigest],
+) -> Result<()> {
+    if hydration_inputs.is_empty() || paths.is_empty() {
+        return Ok(());
+    }
+    let mut registry = NamespaceRegistry::open(workspace_root)?;
+    let digests = hydration_inputs.to_vec();
+    for path in paths {
+        registry.record_accepted_version(path, digests.clone())?;
+    }
+    registry.save()?;
+    Ok(())
 }
 
 /// PUT → GET verify against cloud, then record [`AuthorityMode::Cloud`] in the registry.
@@ -175,5 +195,24 @@ mod tests {
         let err =
             open_cloud_authoritative_bytes(dir.path(), "notes/a.md", &client).unwrap_err();
         assert!(matches!(err, Error::NotCloudAuthoritative { .. }));
+    }
+
+    #[test]
+    fn attach_accept_hydration_lineage_writes_inspectable_digests() {
+        let dir = tempdir().unwrap();
+        let digests = vec![crate::HydrationInputDigest {
+            path: "input/hello.txt".into(),
+            content_hash: "abc123".into(),
+            resource_id: None,
+        }];
+        attach_accept_hydration_lineage(
+            dir.path(),
+            &["Reports/out.txt".into()],
+            &digests,
+        )
+        .unwrap();
+        let stat = resource_stat(dir.path(), "Reports/out.txt").unwrap();
+        assert!(stat.version_id.is_some());
+        assert_eq!(stat.hydration_inputs, digests);
     }
 }

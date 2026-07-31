@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{normalize_path_key, Error, Result};
 use crate::types::{
-    AuthorityMode, ContentHash, MaterializationState, NamespaceEntry, ResourceId, ResourceStat,
-    ResourceVersionId,
+    AuthorityMode, ContentHash, HydrationInputDigest, MaterializationState, NamespaceEntry,
+    ResourceId, ResourceStat, ResourceVersionId,
 };
 
 pub const OPERATIONAL_DIR: &str = ".lattice";
@@ -27,6 +27,9 @@ struct ResourceRecord {
     content_hash: Option<ContentHash>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     version_id: Option<ResourceVersionId>,
+    /// Provenance stub: KernelFS hydration digests from the accepted proposal.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    hydration_inputs: Vec<HydrationInputDigest>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -98,6 +101,7 @@ impl NamespaceRegistry {
             materialization: MaterializationState::Pinned,
             content_hash: None,
             version_id: None,
+            hydration_inputs: Vec::new(),
         };
         let resource_id = record.resource_id;
         self.document.entries.insert(key, record);
@@ -145,6 +149,7 @@ impl NamespaceRegistry {
             materialization: derive_materialization(record.authority),
             content_hash: record.content_hash.clone(),
             version_id: record.version_id,
+            hydration_inputs: record.hydration_inputs.clone(),
         })
     }
 
@@ -165,6 +170,29 @@ impl NamespaceRegistry {
             .ok_or_else(|| Error::ResourceNotFound { path: key.clone() })?;
         record.content_hash = Some(content_hash);
         Ok(())
+    }
+
+    /// Mint a [`ResourceVersionId`] and attach hydration digests as accept lineage.
+    ///
+    /// Registers the path when missing. Replaces any prior version stub for this path.
+    pub fn record_accepted_version(
+        &mut self,
+        path: &str,
+        hydration_inputs: Vec<HydrationInputDigest>,
+    ) -> Result<ResourceVersionId> {
+        let key = normalize_path_key(path)?;
+        if !self.document.entries.contains_key(&key) {
+            self.ensure_local_file(&key)?;
+        }
+        let version_id = ResourceVersionId::new();
+        let record = self
+            .document
+            .entries
+            .get_mut(&key)
+            .ok_or_else(|| Error::ResourceNotFound { path: key.clone() })?;
+        record.version_id = Some(version_id);
+        record.hydration_inputs = hydration_inputs;
+        Ok(version_id)
     }
 
     pub fn update_content_hash_from_bytes(&mut self, path: &str, data: &[u8]) -> Result<ContentHash> {
@@ -244,6 +272,30 @@ mod tests {
         let err = registry.rename("a.md", "b.md").unwrap_err();
         assert!(matches!(err, Error::RenameDestinationExists { .. }));
         assert!(registry.resource_stat("a.md").is_ok());
+    }
+
+    #[test]
+    fn record_accepted_version_sets_version_and_hydration_inputs() {
+        let dir = tempdir().unwrap();
+        let mut registry = NamespaceRegistry::open(dir.path()).unwrap();
+        let digests = vec![HydrationInputDigest {
+            path: "hello.txt".into(),
+            content_hash: "0f328ae687eb8fd2acfa3a910bb6722eff43f8a7dbd08e53e572ae37a0c5d7a5"
+                .into(),
+            resource_id: Some("res-1".into()),
+        }];
+        let version_id = registry
+            .record_accepted_version("Reports/out.txt", digests.clone())
+            .unwrap();
+        registry.save().unwrap();
+
+        let reopened = NamespaceRegistry::open(dir.path()).unwrap();
+        let stat = reopened.resource_stat("Reports/out.txt").unwrap();
+        assert_eq!(stat.version_id, Some(version_id));
+        assert_eq!(stat.hydration_inputs, digests);
+        let raw = fs::read_to_string(NamespaceRegistry::registry_path(dir.path())).unwrap();
+        assert!(raw.contains("hydration_inputs") || raw.contains("contentHash"));
+        assert!(raw.contains("0f328ae687eb8fd2acfa3a910bb6722eff43f8a7dbd08e53e572ae37a0c5d7a5"));
     }
 
     #[test]
