@@ -1,4 +1,5 @@
 mod agent;
+mod agent_threads;
 mod ai;
 mod app_lock;
 mod app_menu;
@@ -337,6 +338,8 @@ pub fn run() {
             agent::agent_health,
             agent::agent_start_run,
             agent::agent_cancel_run,
+            agent_threads::agent_thread_ensure,
+            agent_threads::agent_thread_append_message,
             ai::set_openai_api_key,
             ai::clear_openai_api_key,
             ai::has_openai_api_key,
