@@ -3,14 +3,9 @@
 //! Speaks the Phase A JSONL agent protocol over stdio. Desktop / latticed
 //! auto-discover this binary; override with `LATTICE_AGENTD_BIN`.
 
-// L-EXPORT will call `kernelfs_mac::export_live`; keep the macOS dep linked until then.
-#[cfg(target_os = "macos")]
-mod kernelfs_mac_dep {
-    use kernelfs_mac as _;
-}
-
 pub mod cell_host;
 pub mod fake;
+pub mod kernelfs_export;
 pub mod local;
 pub mod lattice_client;
 pub mod loop_runtime;
@@ -22,6 +17,10 @@ pub mod secret_handles;
 pub mod tools;
 pub mod wasi_host;
 
+pub use kernelfs_export::{
+    export_oci_roles_under_agent_share, OciKernelfsExport, OciKernelfsExportError,
+    OciKernelfsExportRequest,
+};
 pub use lattice_client::{lattice_client_from_env, LatticeToolClient};
 pub use local::{emit_local_run, LocalRunOptions};
 pub use loop_runtime::{run_jsonl_loop, LoopConfig};
