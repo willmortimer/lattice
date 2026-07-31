@@ -22,10 +22,10 @@ First “Lattice uses Cells on a Mac” beat: same hydrate → run → collect �
 propose loop as scripts/cell-firecracker-dogfood.sh, forced to
 --execution-mode=oci with KernelFS role volume sources from kernelfs export:
 
-  ${CELL_VZ_RUNTIME_DIR}/ivisor-worker-<cell-id>/agent-share/{run_id}/{input,output[,work]}
+  ${CELL_VZ_RUNTIME_DIR}/ivisor-worker-<cell-id>/agent-share/{input,output[,work]}
 
 Materialize lands under agent-share/.kernelfs-runs/{run_id}/; export symlinks
-role dirs at agent-share/{run_id}/… (run_id defaults to --projection-id).
+role dirs flat at agent-share/{input,work,output} (run_id is materialize leaf only).
 Contract: Cell docs/mac-live-bind-demo.md (agent-share + VirtioFS live-bind).
 
 Modes:
@@ -40,7 +40,7 @@ Live options (forwarded; --execution-mode=oci is always set):
   --hydrate REL             (repeatable)
   --oci-bundle-path PATH    required for --live
   --vz-runtime-dir PATH     or set CELL_VZ_RUNTIME_DIR / CELL_OCI_IVISOR_WORKSPACE
-  --with-work               also export/mount agent-share/{run_id}/work
+  --with-work               also export/mount agent-share/work
   --allow-network           with_network_deny_all(false) when OCI egress is OK
   --                        guest argv (default: copy input → output)
 

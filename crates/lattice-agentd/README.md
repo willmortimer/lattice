@@ -86,9 +86,10 @@ they are not exposed inside the guest.
 
 `kernelfs_export::export_oci_roles_under_agent_share` materializes a run under
 `{CELL_VZ_RUNTIME_DIR}/ivisor-worker-<cell>/agent-share/.kernelfs-runs/{run_id}`
-and live-exports role symlinks at `agent-share/{run_id}/{input,work,output}` for
-Cell VirtioFS volume `source` paths. macOS only this sprint; other targets return
-`UnsupportedPlatform`. Dogfood / `run_cell_task` wiring is separate.
+and live-exports flat role symlinks at `agent-share/{input,work,output}` for
+Cell VirtioFS volume `source` paths (roles directly under the share). macOS only
+this sprint; other targets return `UnsupportedPlatform`. Dogfood /
+`run_cell_task` wiring is separate.
 
 Convention: place guest modules under **`Tools/guests/`** in the First Look
 workspace (for example `Tools/guests/copy_hello.wasm`, matching the private

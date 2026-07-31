@@ -39,8 +39,8 @@ Live environment (required):
 Mac OCI live (execution-mode=oci) also needs:
   CELL_VZ_RUNTIME_DIR or CELL_OCI_IVISOR_WORKSPACE (→ <workspace>/vz-runtime)
   KernelFS export under agent-share:
-    $CELL_VZ_RUNTIME_DIR/ivisor-worker-<id>/agent-share/{run_id}/{input,output[,work]}
-  (materialize: agent-share/.kernelfs-runs/{run_id}/)
+    $CELL_VZ_RUNTIME_DIR/ivisor-worker-<id>/agent-share/{input,output[,work]}
+  (materialize: agent-share/.kernelfs-runs/{run_id}/; flat role symlinks)
   Prefer scripts/cell-mac-oci-dogfood.sh; see docs/dev/celld-client.md § Mac OCI.
 
 Firecracker lab (celld guest media — see cell/scripts/lattice-cell-loop.sh):

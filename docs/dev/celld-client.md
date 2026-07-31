@@ -75,15 +75,18 @@ works without API changes):
 ```text
 {CELL_VZ_RUNTIME_DIR}/ivisor-worker-<cell-id>/agent-share/
   .kernelfs-runs/{run_id}/          ← materialized RunDir (symlink targets)
-  {run_id}/                         ← export_root
-    input/   work?/   output/       ← symlinks → .kernelfs-runs/{run_id}/…
+  input/   → symlink → .kernelfs-runs/{run_id}/input
+  work/    → symlink → .kernelfs-runs/{run_id}/work
+  output/  → symlink → .kernelfs-runs/{run_id}/output
 ```
 
-- `run_id` defaults to `--projection-id` / `taskId` in dogfood and tool paths.
-- `VolumeAttachment.source` values are the **export** paths:
-  `agent-share/{run_id}/input`, `…/output`, optional `…/work`.
-- Re-export for the same `run_id` wipes the prior export tree (idempotent
-  dogfood retries).
+- `run_id` defaults to `--projection-id` / `taskId` in dogfood and tool paths
+  (materialize leaf only; not part of volume `source` paths).
+- `VolumeAttachment.source` values are the **flat** export paths:
+  `agent-share/input`, `agent-share/output`, optional `agent-share/work`
+  (Cell VirtioFS live-bind contract — roles directly under the share).
+- Re-export wipes prior flat role symlinks (and any legacy nested
+  `agent-share/{run_id}/` tree) for idempotent dogfood retries.
 - Non-macOS targets return `OciKernelfsExportError::UnsupportedPlatform` (Linux
   `export_live_from_run` not wired this sprint).
 
@@ -216,7 +219,7 @@ scripts/cell-mac-oci-dogfood.sh --live \
 | --- | --- |
 | `--oci-bundle-path` | Host OCI bundle (`config.json` + rootfs) |
 | `CELL_VZ_RUNTIME_DIR` or `--vz-runtime-dir` | Parent of `ivisor-worker-*/agent-share` |
-| `--with-work` | Export and mount `agent-share/{run_id}/work` |
+| `--with-work` | Export and mount `agent-share/work` |
 | `--allow-network` | `with_network_deny_all(false)` when OCI egress is OK |
 
 Secrets stay opt-in via `LATTICE_WASI_SECRET_HANDLES` / tool `secretHandlesJson`.
