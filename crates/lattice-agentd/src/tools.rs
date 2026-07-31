@@ -1,6 +1,9 @@
 //! OpenAI-compatible Lattice workspace tools + dispatch to latticed HTTP.
 //!
-//! Lattice HTTP tool dispatch for the agent sidecar (HTTP tools only; no spatial overlays).
+//! Lattice HTTP tool dispatch for the agent sidecar. Spatial tools
+//! (`focus_anchor` / `highlight_anchors`) do not require the Lattice HTTP
+//! client; they validate a C1 workspace anchor and emit `overlay_show` on the
+//! run's JSONL event bus for the shell to render.
 
 use std::path::PathBuf;
 
@@ -13,12 +16,14 @@ use lattice_cell_client::{
     HydrateFile, KernelFSHydrationPlan, ProjectionRunRequest, EXECUTION_MODE_OCI,
 };
 use serde_json::{json, Value};
+use tokio::sync::mpsc;
 
 use crate::cell_host::{
     hydration_inputs_from_files, run_cell_task_and_propose, CellProposalProvenance,
 };
 use crate::kernelfs_export::{export_oci_roles_under_agent_share, OciKernelfsExportRequest};
 use crate::lattice_client::LatticeToolClient;
+use crate::protocol::AgentEvent;
 use crate::secret_handles::secret_handles_for_run;
 use crate::wasi_host::{
     hydration_inputs_from_record, propose_output_drafts_with_provenance, run_wasi_guest_with_options,
@@ -29,6 +34,19 @@ use crate::wasi_host::{
 /// Cap tool JSON returned to the model so long search/read payloads do not
 /// blow the next Pioneer round.
 pub const MAX_TOOL_RESULT_CHARS: usize = 10_000;
+
+/// Max anchors accepted by `highlight_anchors` per call (Phase C MVP cap;
+/// matches `@lattice/agent-protocol` `MAX_OVERLAY_ANCHORS`).
+pub const MAX_OVERLAY_ANCHORS: usize = 20;
+
+/// Per-run JSONL event bus handle for tools that emit spatial overlay events
+/// (`focus_anchor` / `highlight_anchors`). `None` when the run has no active
+/// event sink (e.g. unit tests exercising other tools).
+#[derive(Debug, Clone)]
+pub struct ToolEventSink {
+    pub run_id: String,
+    pub events: mpsc::Sender<AgentEvent>,
+}
 
 /// Max array elements kept when summarizing oversized tool results.
 const MAX_ARRAY_PREVIEW: usize = 25;
@@ -44,7 +62,7 @@ pub const WORKSPACE_AGENT_INSTRUCTIONS: &str = "\
 You are the embedded agent for a local-first Lattice workspace.
 
 Tool use:
-1. For questions about the workspace, call tools before answering. Prefer `search` or `build_context` first; then `related` when you already know a path; then `read` specific paths for details.
+1. For questions about the workspace, call tools before answering. Prefer `search` or `build_context` first; then `related` when you already know a path; then `read` specific paths for details. For multi-document writes, call `build_context` once to gather context, then use `propose_*` per document instead of re-reading per file.
 2. Do not call `get_current_context` unless the user asks about the binding — the host already binds tools to this workspace.
 3. Never invent tool XML or pretend a tool ran. Never claim filesystem or shell access.
 4. Prefer `get_dataset_schema` / `profile_dataset` for `.dataset` packages; use search/read for pages and markdown.
@@ -58,7 +76,8 @@ Tool use:
 12. Keep proposals narrow, validated, reviewable, and reversible.
 13. Never request, reveal, or place secrets in model-visible content.
 14. If a tool errors, explain briefly and continue with what you know.
-15. Omit workspaceId/root tool arguments — the host injects them.";
+15. Omit workspaceId/root tool arguments — the host injects them.
+16. Use `focus_anchor` to open and highlight a single workspace anchor (markdown block or dataset region); use `highlight_anchors` (purpose: attention|evidence|warning|change) to highlight up to 20 anchors without changing the active resource. Neither mutates workspace content.";
 
 /// Per-run workspace binding for tool dispatch.
 #[derive(Debug, Clone, Default)]
@@ -186,6 +205,43 @@ fn base_openai_tool_definitions() -> Vec<Value> {
             json!({
                 "type": "object",
                 "properties": {},
+                "additionalProperties": false,
+            }),
+        ),
+        function_tool(
+            "focus_anchor",
+            "Request the shell to open and highlight a single workspace anchor (markdown block or dataset region). Does not mutate workspace content.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "anchorJson": {
+                        "type": "string",
+                        "description": "JSON object matching a workspace anchor (markdown-block or dataset-region)"
+                    },
+                    "commentary": opt_str(),
+                },
+                "required": ["anchorJson"],
+                "additionalProperties": false,
+            }),
+        ),
+        function_tool(
+            "highlight_anchors",
+            "Highlight one or more workspace anchors without changing the active resource. Up to 20 anchors per call.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "anchorsJson": {
+                        "type": "string",
+                        "description": "JSON array of workspace anchor objects (markdown-block or dataset-region)"
+                    },
+                    "purpose": {
+                        "type": "string",
+                        "enum": ["attention", "evidence", "warning", "change"],
+                        "description": "Overlay purpose"
+                    },
+                    "commentary": opt_str(),
+                },
+                "required": ["anchorsJson", "purpose"],
                 "additionalProperties": false,
             }),
         ),
@@ -740,14 +796,208 @@ fn truncate_tool_result_json(value: &Value) -> String {
     .to_string()
 }
 
+/// Generate a locally-unique id for spatial tool events (no external UUID dep).
+fn new_spatial_id(prefix: &str) -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    format!("{prefix}-{millis}-{seq}")
+}
+
+fn non_empty_str(value: &Value, key: &str) -> Option<String> {
+    value
+        .get(key)
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
+fn non_empty_str_array(value: &Value, key: &str) -> Option<Vec<String>> {
+    let items = value.get(key)?.as_array()?;
+    let mut out = Vec::with_capacity(items.len());
+    for item in items {
+        let s = item.as_str()?.trim();
+        if s.is_empty() {
+            return None;
+        }
+        out.push(s.to_string());
+    }
+    Some(out)
+}
+
+/// Validate a `markdown-block` workspace anchor, stripping unrecognized keys.
+fn validate_markdown_block_anchor(anchor: &Value) -> Result<Value, String> {
+    let resource_id = non_empty_str(anchor, "resourceId")
+        .ok_or_else(|| "markdown-block anchor requires non-empty resourceId".to_string())?;
+    let block_id = non_empty_str(anchor, "blockId")
+        .ok_or_else(|| "markdown-block anchor requires non-empty blockId".to_string())?;
+    let mut out = json!({
+        "kind": "markdown-block",
+        "resourceId": resource_id,
+        "blockId": block_id,
+    });
+    if let Some(revision) = non_empty_str(anchor, "revision") {
+        out["revision"] = json!(revision);
+    }
+    Ok(out)
+}
+
+/// Validate a `dataset-region` workspace anchor, stripping unrecognized keys.
+fn validate_dataset_region_anchor(anchor: &Value) -> Result<Value, String> {
+    let resource_id = non_empty_str(anchor, "resourceId")
+        .ok_or_else(|| "dataset-region anchor requires non-empty resourceId".to_string())?;
+    let row_keys = non_empty_str_array(anchor, "rowKeys")
+        .filter(|keys| !keys.is_empty())
+        .ok_or_else(|| "dataset-region anchor requires a non-empty rowKeys array of strings".to_string())?;
+    let mut out = json!({
+        "kind": "dataset-region",
+        "resourceId": resource_id,
+        "rowKeys": row_keys,
+    });
+    if let Some(revision) = non_empty_str(anchor, "revision") {
+        out["revision"] = json!(revision);
+    }
+    if anchor.get("columns").is_some() {
+        let columns = non_empty_str_array(anchor, "columns")
+            .ok_or_else(|| "dataset-region anchor columns must be non-empty strings".to_string())?;
+        out["columns"] = json!(columns);
+    }
+    Ok(out)
+}
+
+/// Validate a Phase C MVP workspace anchor (`markdown-block` | `dataset-region`).
+fn validate_workspace_anchor(anchor: &Value) -> Result<Value, String> {
+    match anchor.get("kind").and_then(|v| v.as_str()) {
+        Some("markdown-block") => validate_markdown_block_anchor(anchor),
+        Some("dataset-region") => validate_dataset_region_anchor(anchor),
+        Some(other) => Err(format!("unsupported anchor kind: {other}")),
+        None => Err("workspace anchor requires a kind".into()),
+    }
+}
+
+fn parse_anchor_json(anchor_json: &str) -> Result<Value, String> {
+    let value: Value = serde_json::from_str(anchor_json)
+        .map_err(|_| "anchorJson must be a JSON object".to_string())?;
+    validate_workspace_anchor(&value)
+}
+
+fn parse_anchors_json(anchors_json: &str) -> Result<Vec<Value>, String> {
+    let value: Value = serde_json::from_str(anchors_json)
+        .map_err(|_| "anchorsJson must be a JSON array".to_string())?;
+    let items = value
+        .as_array()
+        .ok_or_else(|| "anchorsJson must be a JSON array".to_string())?;
+    if items.is_empty() {
+        return Err("anchorsJson must contain at least one anchor".into());
+    }
+    if items.len() > MAX_OVERLAY_ANCHORS {
+        return Err(format!(
+            "anchorsJson may contain at most {MAX_OVERLAY_ANCHORS} anchors"
+        ));
+    }
+    items
+        .iter()
+        .enumerate()
+        .map(|(index, anchor)| {
+            validate_workspace_anchor(anchor)
+                .map_err(|_| format!("anchorsJson[{index}] is not a valid workspace anchor"))
+        })
+        .collect()
+}
+
+fn parse_overlay_purpose(args: &Value) -> Result<String, String> {
+    let purpose = string_arg(args, "purpose").ok_or_else(|| "purpose is required".to_string())?;
+    match purpose.as_str() {
+        "attention" | "evidence" | "warning" | "change" => Ok(purpose),
+        other => Err(format!(
+            "invalid purpose {other:?} (expected attention, evidence, warning, or change)"
+        )),
+    }
+}
+
+/// Emit a `step_started` / `step_completed` pair for pure navigation (no overlay).
+async fn emit_navigation_step(sink: &ToolEventSink, label: &str) {
+    let step_id = new_spatial_id("step");
+    let started = std::time::Instant::now();
+    let _ = sink
+        .events
+        .send(AgentEvent::StepStarted {
+            run_id: sink.run_id.clone(),
+            step_id: step_id.clone(),
+            kind: "navigation".into(),
+            label: label.to_string(),
+        })
+        .await;
+    let _ = sink
+        .events
+        .send(AgentEvent::StepCompleted {
+            run_id: sink.run_id.clone(),
+            step_id,
+            duration_ms: started.elapsed().as_millis() as u64,
+            summary: None,
+        })
+        .await;
+}
+
+/// Emit `step_started` → `overlay_show` → `step_completed` on the run's JSONL
+/// event bus. Returns `{ ok: true, overlayId }` for the tool result.
+pub async fn emit_overlay_show_sequence(
+    sink: &ToolEventSink,
+    anchors: Vec<Value>,
+    purpose: &str,
+    commentary: Option<String>,
+    label: &str,
+) -> Value {
+    let overlay_id = new_spatial_id("overlay");
+    let step_id = new_spatial_id("step");
+    let started = std::time::Instant::now();
+
+    let _ = sink
+        .events
+        .send(AgentEvent::StepStarted {
+            run_id: sink.run_id.clone(),
+            step_id: step_id.clone(),
+            kind: "tool".into(),
+            label: label.to_string(),
+        })
+        .await;
+    let _ = sink
+        .events
+        .send(AgentEvent::OverlayShow {
+            run_id: sink.run_id.clone(),
+            overlay_id: overlay_id.clone(),
+            anchors,
+            purpose: purpose.to_string(),
+            commentary,
+        })
+        .await;
+    let _ = sink
+        .events
+        .send(AgentEvent::StepCompleted {
+            run_id: sink.run_id.clone(),
+            step_id,
+            duration_ms: started.elapsed().as_millis() as u64,
+            summary: None,
+        })
+        .await;
+
+    json!({ "ok": true, "overlayId": overlay_id })
+}
+
 /// Execute one Lattice tool by name; returns JSON string content for the tool message.
 pub async fn dispatch_tool(
     client: Option<&LatticeToolClient>,
     ctx: &ToolRunContext,
+    sink: Option<&ToolEventSink>,
     name: &str,
     arguments: &str,
 ) -> String {
-    match dispatch_tool_inner(client, ctx, name, arguments).await {
+    match dispatch_tool_inner(client, ctx, sink, name, arguments).await {
         Ok(value) => truncate_tool_result_json(&value),
         Err(err) => json!({ "error": err }).to_string(),
     }
@@ -756,6 +1006,7 @@ pub async fn dispatch_tool(
 async fn dispatch_tool_inner(
     client: Option<&LatticeToolClient>,
     ctx: &ToolRunContext,
+    sink: Option<&ToolEventSink>,
     name: &str,
     arguments: &str,
 ) -> Result<Value, String> {
@@ -768,6 +1019,36 @@ async fn dispatch_tool_inner(
             "latticeApiConfigured": client.is_some(),
             "celldConfigured": celld_configured(),
         }));
+    }
+
+    if name == "focus_anchor" {
+        let sink = sink.ok_or_else(|| {
+            "focus_anchor requires an active agent run (event sink missing)".to_string()
+        })?;
+        let anchor_json =
+            string_arg(&args, "anchorJson").ok_or_else(|| "anchorJson is required".to_string())?;
+        let anchor = parse_anchor_json(&anchor_json)?;
+        let commentary = string_arg(&args, "commentary");
+        emit_navigation_step(sink, "Open anchored resource").await;
+        return Ok(
+            emit_overlay_show_sequence(sink, vec![anchor], "attention", commentary, "Focus anchor")
+                .await,
+        );
+    }
+
+    if name == "highlight_anchors" {
+        let sink = sink.ok_or_else(|| {
+            "highlight_anchors requires an active agent run (event sink missing)".to_string()
+        })?;
+        let anchors_json = string_arg(&args, "anchorsJson")
+            .ok_or_else(|| "anchorsJson is required".to_string())?;
+        let anchors = parse_anchors_json(&anchors_json)?;
+        let purpose = parse_overlay_purpose(&args)?;
+        let commentary = string_arg(&args, "commentary");
+        return Ok(
+            emit_overlay_show_sequence(sink, anchors, &purpose, commentary, "Highlight anchors")
+                .await,
+        );
     }
 
     if name == "run_cell_task" && !celld_configured() {
@@ -1846,7 +2127,8 @@ mod tests {
             .enable_all()
             .build()
             .unwrap();
-        let out = runtime.block_on(dispatch_tool(None, &ctx, "get_current_context", "{}"));
+        let out =
+            runtime.block_on(dispatch_tool(None, &ctx, None, "get_current_context", "{}"));
         let value: Value = serde_json::from_str(&out).unwrap();
         assert_eq!(value["workspaceId"], "ws-1");
     }
@@ -1900,6 +2182,159 @@ mod tests {
         assert_eq!(parsed["originalHitCount"], 40);
         assert!(parsed["hits"].as_array().unwrap().len() <= MAX_ARRAY_PREVIEW);
         assert!(out.len() <= MAX_TOOL_RESULT_CHARS);
+    }
+
+    #[test]
+    fn tool_defs_include_focus_and_highlight_names() {
+        let defs = openai_tool_definitions();
+        let names: Vec<_> = defs
+            .iter()
+            .filter_map(|t| t.pointer("/function/name").and_then(|v| v.as_str()))
+            .collect();
+        assert!(names.contains(&"focus_anchor"), "missing focus_anchor");
+        assert!(names.contains(&"highlight_anchors"), "missing highlight_anchors");
+    }
+
+    #[tokio::test]
+    async fn focus_anchor_emits_overlay_sequence() {
+        let ctx = ToolRunContext::default();
+        let (tx, mut rx) = mpsc::channel(16);
+        let sink = ToolEventSink {
+            run_id: "r1".into(),
+            events: tx,
+        };
+        let anchor_json = json!({
+            "kind": "markdown-block",
+            "resourceId": "page:notes",
+            "blockId": "blk-1",
+        })
+        .to_string();
+        let args = json!({ "anchorJson": anchor_json }).to_string();
+
+        let out = dispatch_tool(None, &ctx, Some(&sink), "focus_anchor", &args).await;
+        let value: Value = serde_json::from_str(&out).expect("json");
+        assert_eq!(value["ok"], true);
+        assert!(value["overlayId"].as_str().unwrap().starts_with("overlay-"));
+
+        drop(sink);
+        let mut events = Vec::new();
+        while let Some(event) = rx.recv().await {
+            events.push(event);
+        }
+        assert_eq!(events.len(), 5, "expected nav + tool step/overlay events: {events:?}");
+        assert!(matches!(&events[0], AgentEvent::StepStarted { kind, .. } if kind == "navigation"));
+        assert!(matches!(&events[1], AgentEvent::StepCompleted { .. }));
+        assert!(matches!(&events[2], AgentEvent::StepStarted { kind, .. } if kind == "tool"));
+        assert!(matches!(
+            &events[3],
+            AgentEvent::OverlayShow { purpose, anchors, .. }
+                if purpose == "attention" && anchors.len() == 1
+        ));
+        assert!(matches!(&events[4], AgentEvent::StepCompleted { .. }));
+    }
+
+    #[tokio::test]
+    async fn highlight_anchors_emits_overlay_sequence() {
+        let ctx = ToolRunContext::default();
+        let (tx, mut rx) = mpsc::channel(16);
+        let sink = ToolEventSink {
+            run_id: "r2".into(),
+            events: tx,
+        };
+        let anchors_json = json!([
+            {
+                "kind": "markdown-block",
+                "resourceId": "page:notes",
+                "blockId": "blk-1",
+            },
+            {
+                "kind": "dataset-region",
+                "resourceId": "ds:sales",
+                "rowKeys": ["1", "2"],
+            },
+        ])
+        .to_string();
+        let args = json!({ "anchorsJson": anchors_json, "purpose": "evidence" }).to_string();
+
+        let out = dispatch_tool(None, &ctx, Some(&sink), "highlight_anchors", &args).await;
+        let value: Value = serde_json::from_str(&out).expect("json");
+        assert_eq!(value["ok"], true);
+
+        drop(sink);
+        let mut events = Vec::new();
+        while let Some(event) = rx.recv().await {
+            events.push(event);
+        }
+        assert_eq!(events.len(), 3, "expected tool step/overlay events: {events:?}");
+        assert!(matches!(&events[0], AgentEvent::StepStarted { kind, .. } if kind == "tool"));
+        assert!(matches!(
+            &events[1],
+            AgentEvent::OverlayShow { purpose, anchors, .. }
+                if purpose == "evidence" && anchors.len() == 2
+        ));
+        assert!(matches!(&events[2], AgentEvent::StepCompleted { .. }));
+    }
+
+    #[tokio::test]
+    async fn highlight_anchors_rejects_too_many_anchors() {
+        let ctx = ToolRunContext::default();
+        let (tx, _rx) = mpsc::channel(16);
+        let sink = ToolEventSink {
+            run_id: "r3".into(),
+            events: tx,
+        };
+        let anchors: Vec<Value> = (0..MAX_OVERLAY_ANCHORS + 1)
+            .map(|i| {
+                json!({
+                    "kind": "markdown-block",
+                    "resourceId": "page:notes",
+                    "blockId": format!("blk-{i}"),
+                })
+            })
+            .collect();
+        let args = json!({
+            "anchorsJson": serde_json::to_string(&anchors).unwrap(),
+            "purpose": "attention",
+        })
+        .to_string();
+
+        let out = dispatch_tool(None, &ctx, Some(&sink), "highlight_anchors", &args).await;
+        let value: Value = serde_json::from_str(&out).expect("json");
+        assert!(value.get("error").is_some(), "expected error: {value}");
+    }
+
+    #[tokio::test]
+    async fn focus_anchor_requires_event_sink() {
+        let ctx = ToolRunContext::default();
+        let anchor_json = json!({
+            "kind": "markdown-block",
+            "resourceId": "page:notes",
+            "blockId": "blk-1",
+        })
+        .to_string();
+        let args = json!({ "anchorJson": anchor_json }).to_string();
+        let out = dispatch_tool(None, &ctx, None, "focus_anchor", &args).await;
+        let value: Value = serde_json::from_str(&out).expect("json");
+        assert!(value.get("error").is_some(), "expected error: {value}");
+    }
+
+    #[test]
+    fn overlay_show_event_json_round_trip() {
+        let event = AgentEvent::OverlayShow {
+            run_id: "r1".into(),
+            overlay_id: "overlay-1".into(),
+            anchors: vec![json!({
+                "kind": "dataset-region",
+                "resourceId": "ds:sales",
+                "rowKeys": ["1", "2"],
+            })],
+            purpose: "evidence".into(),
+            commentary: Some("Highlight".into()),
+        };
+        let line = event.to_line().expect("encode");
+        let parsed = AgentEvent::from_line(&line).expect("decode");
+        assert_eq!(parsed, event);
+        assert_eq!(parsed.event_type(), "overlay_show");
     }
 
     #[test]

@@ -73,6 +73,22 @@ When both are set, Pioneer uses Chat Completions with a Lattice tool loop
 workspace when arguments omit them. Without the Lattice env pair, Pioneer
 falls back to chat-only streaming and prints a one-time stderr warning.
 
+Tool loop rounds default to 32 and are configurable via
+`LATTICE_AGENT_MAX_TOOL_ROUNDS` (clamped 1–128), shared by Pioneer, OpenAI
+Responses, and the local provider. Exhausting the loop fails the run with
+`Hit {N} tool rounds — try a narrower ask or raise LATTICE_AGENT_MAX_TOOL_ROUNDS
+(default 32, max 128)`.
+
+### Spatial tools (focus / highlight)
+
+`focus_anchor` and `highlight_anchors` validate a Phase C workspace anchor
+(`markdown-block` or `dataset-region`, up to `MAX_OVERLAY_ANCHORS` = 20 for
+`highlight_anchors`) and emit `step_started` → `overlay_show` →
+`step_completed` on the run's JSONL event bus instead of calling latticed
+HTTP — they work even when `LATTICE_API_BASE_URL` / `LATTICE_AUTH_TOKEN` are
+unset. `focus_anchor` also emits a `navigation` step before the overlay.
+Both tools return `{ ok: true, overlayId }`.
+
 ### KernelFS WASI → proposals
 
 Sandboxed WASI guests write under KernelFS `/output` (and optional
@@ -185,9 +201,10 @@ export OPENAI_API_KEY=sk-...
 When `LATTICE_API_BASE_URL` and `LATTICE_AUTH_TOKEN` are set, OpenAI uses the
 Responses API with a Lattice tool loop (same tools as Pioneer: search / read /
 related / proposals / `run_wasi_guest` / …). Tool defs are mapped to Responses
-flat function shape (`type` / `name` / `description` / `parameters`). Max 8
-assistant→tool rounds; `step_started` / `step_completed` mark model and tool
-waits; final answers stream as AI SDK `text-*` chunks.
+flat function shape (`type` / `name` / `description` / `parameters`). Max
+tool rounds default to 32 (see `LATTICE_AGENT_MAX_TOOL_ROUNDS` above);
+`step_started` / `step_completed` mark model and tool waits; final answers
+stream as AI SDK `text-*` chunks.
 
 `start_run` may include `workspaceId` / `workspaceRoot`; tools bind to that
 workspace when arguments omit them. Without the Lattice env pair, OpenAI falls

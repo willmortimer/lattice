@@ -23,11 +23,17 @@ pub use kernelfs_export::{
 };
 pub use lattice_client::{lattice_client_from_env, LatticeToolClient};
 pub use local::{emit_local_run, LocalRunOptions};
-pub use loop_runtime::{run_jsonl_loop, LoopConfig};
+pub use loop_runtime::{
+    max_tool_rounds, max_tool_rounds_from_env, run_jsonl_loop, LoopConfig, DEFAULT_MAX_TOOL_ROUNDS,
+    ENV_MAX_TOOL_ROUNDS, MAX_TOOL_ROUNDS_CAP, MIN_TOOL_ROUNDS,
+};
 pub use pioneer::{emit_pioneer_run, PioneerRunOptions};
 pub use protocol::{AgentCommand, AgentEvent, ProviderKind, PROTOCOL_VERSION};
 pub use responses::{emit_openai_run, OpenaiRunOptions, ResponsesError};
-pub use tools::{openai_tool_definitions, ToolRunContext, WORKSPACE_AGENT_INSTRUCTIONS};
+pub use tools::{
+    emit_overlay_show_sequence, openai_tool_definitions, ToolEventSink, ToolRunContext,
+    MAX_OVERLAY_ANCHORS, WORKSPACE_AGENT_INSTRUCTIONS,
+};
 pub use secret_handles::{parse_secret_handle_allowlist, secret_handles_from_env, SECRET_HANDLES_ENV};
 pub use wasi_host::{
     hydration_inputs_from_record, propose_output_drafts, propose_output_drafts_with_provenance,

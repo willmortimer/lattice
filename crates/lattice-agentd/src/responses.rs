@@ -4,8 +4,10 @@
 //! text deltas into AI SDK–style UI chunks (`text-start` / `text-delta` /
 //! `text-end`) carried by agent-protocol `message_chunk` events.
 //!
-//! When a Lattice HTTP client is configured, runs a thin tool loop (max 8
-//! rounds) using Responses function tools; otherwise streams text-only.
+//! When a Lattice HTTP client is configured, runs a thin tool loop (default
+//! [`crate::loop_runtime::max_tool_rounds`] rounds, override via
+//! `LATTICE_AGENT_MAX_TOOL_ROUNDS`) using Responses function tools; otherwise
+//! streams text-only.
 //!
 //! Tool continuations use `previous_response_id` and send only
 //! `function_call_output` items. Re-sending bare `function_call` items without
@@ -24,9 +26,11 @@ use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
 use crate::lattice_client::LatticeToolClient;
+use crate::loop_runtime::max_tool_rounds;
 use crate::protocol::{AgentEvent, ProviderKind};
 use crate::tools::{
-    dispatch_tool, openai_tool_definitions, ToolRunContext, WORKSPACE_AGENT_INSTRUCTIONS,
+    dispatch_tool, openai_tool_definitions, ToolEventSink, ToolRunContext,
+    WORKSPACE_AGENT_INSTRUCTIONS,
 };
 
 /// Default OpenAI API root (includes `/v1`).
@@ -34,9 +38,6 @@ pub const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
 
 /// Default model when `start_run.model` is empty (matches Node agentd openai path).
 pub const DEFAULT_OPENAI_MODEL: &str = "gpt-5-nano";
-
-/// Max assistant→tool→assistant rounds when Lattice tools are enabled.
-pub const MAX_TOOL_ROUNDS: usize = 8;
 
 /// Errors from the OpenAI Responses client.
 #[derive(Debug, Error)]
@@ -53,7 +54,7 @@ pub enum ResponsesError {
     Transport(String),
     #[error("openai stream ended without completion")]
     Incomplete,
-    #[error("openai tool loop exceeded {0} rounds")]
+    #[error("Hit {0} tool rounds — try a narrower ask or raise LATTICE_AGENT_MAX_TOOL_ROUNDS (default 32, max 128)")]
     ToolLoopExhausted(usize),
 }
 
@@ -284,8 +285,13 @@ async fn run_tool_loop(
     // function_call (required for gpt-5 / o-series reasoning models).
     let mut input: Vec<Value> = vec![json!({ "role": "user", "content": prompt })];
     let mut previous_response_id: Option<String> = None;
+    let sink = ToolEventSink {
+        run_id: run_id.to_string(),
+        events: events.clone(),
+    };
+    let max_rounds = max_tool_rounds();
 
-    for round in 0..MAX_TOOL_ROUNDS {
+    for round in 0..max_rounds {
         if cancel.load(Ordering::SeqCst) {
             return Err(ResponsesError::Cancelled);
         }
@@ -373,8 +379,14 @@ async fn run_tool_loop(
                     };
                     let tool_started = std::time::Instant::now();
                     emit_step_started(run_id, &step_id, "tool", &label, events).await;
-                    let content =
-                        dispatch_tool(lattice, tool_ctx, &call.name, &call.arguments).await;
+                    let content = dispatch_tool(
+                        lattice,
+                        tool_ctx,
+                        Some(&sink),
+                        &call.name,
+                        &call.arguments,
+                    )
+                    .await;
                     emit_step_completed(
                         run_id,
                         &step_id,
@@ -394,7 +406,7 @@ async fn run_tool_loop(
         }
     }
 
-    Err(ResponsesError::ToolLoopExhausted(MAX_TOOL_ROUNDS))
+    Err(ResponsesError::ToolLoopExhausted(max_rounds))
 }
 
 #[derive(Debug, Clone)]

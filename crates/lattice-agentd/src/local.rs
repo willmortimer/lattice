@@ -15,15 +15,14 @@ use tokio::sync::mpsc;
 use tracing::warn;
 
 use crate::lattice_client::LatticeToolClient;
+use crate::loop_runtime::max_tool_rounds;
 use crate::protocol::{AgentEvent, ProviderKind};
 use crate::tools::{
-    dispatch_tool, openai_tool_definitions, ToolRunContext, WORKSPACE_AGENT_INSTRUCTIONS,
+    dispatch_tool, openai_tool_definitions, ToolEventSink, ToolRunContext,
+    WORKSPACE_AGENT_INSTRUCTIONS,
 };
 
 pub const DEFAULT_LOCAL_MODEL: &str = "local";
-
-/// Max assistant→tool→assistant rounds when Lattice tools are enabled.
-pub const MAX_TOOL_ROUNDS: usize = 8;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum LocalError {
@@ -39,7 +38,7 @@ pub enum LocalError {
     Transport(String),
     #[error("local LLM stream ended without completion")]
     Incomplete,
-    #[error("local LLM tool loop exceeded {0} rounds")]
+    #[error("Hit {0} tool rounds — try a narrower ask or raise LATTICE_AGENT_MAX_TOOL_ROUNDS (default 32, max 128)")]
     ToolLoopExhausted(usize),
 }
 
@@ -253,8 +252,13 @@ async fn run_tool_loop(
     );
     let mut messages = vec![json!({ "role": "system", "content": system })];
     messages.extend(chat_messages.iter().cloned());
+    let sink = ToolEventSink {
+        run_id: run_id.to_string(),
+        events: events.clone(),
+    };
+    let max_rounds = max_tool_rounds();
 
-    for round in 0..MAX_TOOL_ROUNDS {
+    for round in 0..max_rounds {
         if cancel.load(Ordering::SeqCst) {
             return Err(LocalError::Cancelled);
         }
@@ -309,8 +313,14 @@ async fn run_tool_loop(
                     };
                     let tool_started = std::time::Instant::now();
                     emit_step_started(run_id, &step_id, "tool", &label, events).await;
-                    let content =
-                        dispatch_tool(lattice, tool_ctx, &call.name, &call.arguments).await;
+                    let content = dispatch_tool(
+                        lattice,
+                        tool_ctx,
+                        Some(&sink),
+                        &call.name,
+                        &call.arguments,
+                    )
+                    .await;
                     emit_step_completed(
                         run_id,
                         &step_id,
@@ -329,7 +339,7 @@ async fn run_tool_loop(
         }
     }
 
-    Err(LocalError::ToolLoopExhausted(MAX_TOOL_ROUNDS))
+    Err(LocalError::ToolLoopExhausted(max_rounds))
 }
 
 #[derive(Debug, Clone)]

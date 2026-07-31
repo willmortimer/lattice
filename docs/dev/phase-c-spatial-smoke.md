@@ -22,6 +22,6 @@ Send this exact prompt to the fake agent provider (agentd or daemon
 
 ```sh
 pnpm --filter @lattice/desktop test apps/desktop/src/agent/agentStore.test.ts apps/desktop/src/agent/agentTrailReplay.test.ts
-pnpm --filter @lattice/agentd test apps/agentd/src/fake-spatial.test.ts
+cargo test -p lattice-agentd fake_spatial_prompt_emits_overlay_sequence
 cargo test -p lattice-daemon fake_spatial_prompt_emits_overlay_sequence
 ```

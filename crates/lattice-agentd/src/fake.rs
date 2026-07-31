@@ -103,7 +103,49 @@ pub async fn emit_fake_run(options: FakeRunOptions, events: mpsc::Sender<AgentEv
     })
     .await;
 
+    if prompt.trim().eq_ignore_ascii_case("spatial-demo") {
+        emit_fake_spatial_sequence(&run_id, &events).await;
+    }
+
     send(AgentEvent::RunCompleted { run_id }).await;
+}
+
+/// Deterministic `step_started` → `overlay_show` → `step_completed` sequence
+/// for the `spatial-demo` fixture prompt (Phase C smoke / CI).
+async fn emit_fake_spatial_sequence(run_id: &str, events: &mpsc::Sender<AgentEvent>) {
+    let step_id = "fake-spatial-step";
+    let overlay_id = "fake-spatial-overlay";
+    let started = std::time::Instant::now();
+
+    let _ = events
+        .send(AgentEvent::StepStarted {
+            run_id: run_id.to_string(),
+            step_id: step_id.into(),
+            kind: "search".into(),
+            label: "Search demo page".into(),
+        })
+        .await;
+    let _ = events
+        .send(AgentEvent::OverlayShow {
+            run_id: run_id.to_string(),
+            overlay_id: overlay_id.into(),
+            anchors: vec![serde_json::json!({
+                "kind": "markdown-block",
+                "resourceId": "fake-demo-page",
+                "blockId": "fake-demo-block",
+            })],
+            purpose: "attention".into(),
+            commentary: Some("Fake spatial fixture".into()),
+        })
+        .await;
+    let _ = events
+        .send(AgentEvent::StepCompleted {
+            run_id: run_id.to_string(),
+            step_id: step_id.into(),
+            duration_ms: started.elapsed().as_millis() as u64,
+            summary: Some("Highlighted demo block".into()),
+        })
+        .await;
 }
 
 /// Build a single text-delta Value (test helper / golden fixtures).
@@ -170,6 +212,58 @@ mod tests {
             events.last(),
             Some(AgentEvent::RunCompleted { run_id }) if run_id == "r1"
         ));
+    }
+
+    #[tokio::test]
+    async fn fake_spatial_prompt_emits_overlay_sequence() {
+        let (tx, mut rx) = mpsc::channel(32);
+        emit_fake_run(
+            FakeRunOptions {
+                run_id: "run-spatial".into(),
+                thread_id: "t1".into(),
+                prompt: "spatial-demo".into(),
+                chunk_delay: Duration::ZERO,
+                cancel: Arc::new(AtomicBool::new(false)),
+            },
+            tx,
+        )
+        .await;
+
+        let mut events = Vec::new();
+        while let Some(event) = rx.recv().await {
+            let terminal = matches!(
+                event,
+                AgentEvent::RunCompleted { .. } | AgentEvent::RunFailed { .. }
+            );
+            events.push(event);
+            if terminal {
+                break;
+            }
+        }
+
+        assert!(
+            events.iter().any(|event| matches!(
+                event,
+                AgentEvent::StepStarted { kind, label, .. }
+                    if kind == "search" && label == "Search demo page"
+            )),
+            "expected search step_started, got {events:?}"
+        );
+        assert!(
+            events.iter().any(|event| matches!(
+                event,
+                AgentEvent::OverlayShow { overlay_id, .. } if overlay_id == "fake-spatial-overlay"
+            )),
+            "expected overlay_show, got {events:?}"
+        );
+        assert!(
+            events.iter().any(|event| matches!(
+                event,
+                AgentEvent::StepCompleted { step_id, .. } if step_id == "fake-spatial-step"
+            )),
+            "expected step_completed, got {events:?}"
+        );
+        assert!(matches!(events.last(), Some(AgentEvent::RunCompleted { .. })));
     }
 
     #[tokio::test]
