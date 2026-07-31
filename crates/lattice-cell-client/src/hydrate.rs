@@ -224,6 +224,45 @@ pub fn is_oci_execution_mode(execution_mode: &str) -> bool {
     trimmed.eq_ignore_ascii_case("oci") || trimmed.eq_ignore_ascii_case(EXECUTION_MODE_OCI)
 }
 
+/// Sanitize a cell id for the ivisor worker directory name (slashes → underscores).
+pub fn oci_ivisor_worker_id(cell_id: &str) -> String {
+    format!("ivisor-worker-{}", cell_id.trim().replace('/', "_"))
+}
+
+/// Host `agent-share` root for a Mac ivisor-interim OCI worker.
+///
+/// Layout matches Cell `docs/mac-live-bind-demo.md`:
+/// `{runtime_dir}/ivisor-worker-{cell_id}/agent-share`.
+pub fn oci_ivisor_agent_share_dir(runtime_dir: impl AsRef<Path>, cell_id: &str) -> PathBuf {
+    runtime_dir
+        .as_ref()
+        .join(oci_ivisor_worker_id(cell_id))
+        .join("agent-share")
+}
+
+/// Ensure KernelFS role dirs exist under an ivisor `agent-share` tree.
+///
+/// Returns `(input, work, output)`. `work` is created only when `with_work` is
+/// true (live-bind demos typically mount input + output only).
+pub fn ensure_oci_agent_share_roles(
+    agent_share: impl AsRef<Path>,
+    with_work: bool,
+) -> std::io::Result<(PathBuf, Option<PathBuf>, PathBuf)> {
+    let share = agent_share.as_ref();
+    let input = share.join(ROLE_INPUT);
+    let output = share.join(ROLE_OUTPUT);
+    std::fs::create_dir_all(&input)?;
+    std::fs::create_dir_all(&output)?;
+    let work = if with_work {
+        let work = share.join(ROLE_WORK);
+        std::fs::create_dir_all(&work)?;
+        Some(work)
+    } else {
+        None
+    };
+    Ok((input, work, output))
+}
+
 /// True when OCI execution suppresses a deny-all network attachment.
 pub fn oci_suppresses_network_deny_all(
     plan: &KernelFSHydrationPlan,
@@ -420,5 +459,43 @@ mod tests {
         assert_eq!(files.len(), 2);
         assert_eq!(files[0].path, "input/hello.txt");
         assert_eq!(files[1].path, "input/nested/a.txt");
+    }
+
+    #[test]
+    fn oci_agent_share_layout_matches_live_bind() {
+        assert_eq!(
+            oci_ivisor_worker_id("cell_mac_live_bind"),
+            "ivisor-worker-cell_mac_live_bind"
+        );
+        assert_eq!(
+            oci_ivisor_worker_id("ns/cell_a"),
+            "ivisor-worker-ns_cell_a"
+        );
+        let share = oci_ivisor_agent_share_dir("/tmp/vz-runtime", "cell_dogfood");
+        assert_eq!(
+            share,
+            PathBuf::from("/tmp/vz-runtime/ivisor-worker-cell_dogfood/agent-share")
+        );
+
+        let root = tempfile::tempdir().unwrap();
+        let share = oci_ivisor_agent_share_dir(root.path(), "cell_x");
+        let (input, work, output) = ensure_oci_agent_share_roles(&share, false).unwrap();
+        assert!(input.is_dir());
+        assert!(output.is_dir());
+        assert!(work.is_none());
+        assert!(!share.join(ROLE_WORK).exists());
+
+        let (input, work, output) = ensure_oci_agent_share_roles(&share, true).unwrap();
+        assert_eq!(input, share.join("input"));
+        assert_eq!(output, share.join("output"));
+        assert_eq!(work, Some(share.join("work")));
+        assert!(share.join(ROLE_WORK).is_dir());
+
+        let plan = KernelFSHydrationPlan::from_role_paths(input, work, output);
+        let volumes = cell_spec_volume_attachments(&plan);
+        assert_eq!(volumes.len(), 3);
+        assert!(volumes[0].source.ends_with("/agent-share/input"));
+        assert!(volumes[1].source.ends_with("/agent-share/work"));
+        assert!(volumes[2].source.ends_with("/agent-share/output"));
     }
 }

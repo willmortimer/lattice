@@ -1,7 +1,8 @@
 //! One-shot celld dogfood: hydrate → run → collect → propose_resource.
 //!
-//! Invoked by `scripts/cell-firecracker-dogfood.sh --live`. Requires `CELLD_BASE_URL`,
-//! `LATTICE_API_BASE_URL`, and `LATTICE_AUTH_TOKEN`.
+//! Invoked by `scripts/cell-firecracker-dogfood.sh --live` (and the Mac OCI
+//! wrapper). Requires `CELLD_BASE_URL`, `LATTICE_API_BASE_URL`, and
+//! `LATTICE_AUTH_TOKEN`.
 
 use std::path::{Path, PathBuf};
 
@@ -9,8 +10,9 @@ use lattice_agentd::cell_host::{run_cell_task_and_propose, CellProposalProvenanc
 use lattice_agentd::lattice_client::lattice_client_from_env;
 use lattice_agentd::wasi_host::WorkspaceBinding;
 use lattice_cell_client::{
-    is_oci_execution_mode, require_celld_base_url, CelldClient, HttpCelldClient, HydrateFile,
-    KernelFSHydrationPlan, ProjectionRunRequest, EXECUTION_MODE_OCI,
+    ensure_oci_agent_share_roles, is_oci_execution_mode, oci_ivisor_agent_share_dir,
+    require_celld_base_url, CelldClient, HttpCelldClient, HydrateFile, KernelFSHydrationPlan,
+    ProjectionRunRequest, EXECUTION_MODE_OCI,
 };
 use serde_json::json;
 use tempfile::TempDir;
@@ -35,6 +37,8 @@ struct Cli {
     argv: Vec<String>,
     execution_mode: String,
     oci_bundle_path: String,
+    vz_runtime_dir: Option<PathBuf>,
+    with_work: bool,
     allow_network: bool,
 }
 
@@ -57,23 +61,19 @@ async fn run() -> Result<(), String> {
     seed_default_input(&workspace_root, &cli.hydrate_paths)?;
 
     let hydrate_files = load_hydrate_files(&workspace_root, &cli.hydrate_paths)?;
-    let plan_parent = tempfile::tempdir().map_err(|err| err.to_string())?;
-    let input_host = plan_parent.path().join("input");
-    let output_host = plan_parent.path().join("output");
-    std::fs::create_dir_all(&input_host).map_err(|err| err.to_string())?;
-    std::fs::create_dir_all(&output_host).map_err(|err| err.to_string())?;
-
-    let mut plan = KernelFSHydrationPlan::from_role_paths(input_host, None, output_host);
-    if cli.allow_network {
-        plan = plan.with_network_deny_all(false);
-    }
-
     let execution_mode = normalize_execution_mode(&cli.execution_mode)?;
     if is_oci_execution_mode(&execution_mode) && cli.oci_bundle_path.trim().is_empty() {
         return Err(
             "--oci-bundle-path is required when --execution-mode=oci (live Mac OCI dogfood)"
                 .into(),
         );
+    }
+
+    let (_temp_roles, input_host, work_host, output_host) =
+        resolve_role_host_dirs(&cli, &execution_mode)?;
+    let mut plan = KernelFSHydrationPlan::from_role_paths(input_host, work_host, output_host);
+    if cli.allow_network {
+        plan = plan.with_network_deny_all(false);
     }
 
     let request = ProjectionRunRequest {
@@ -87,6 +87,14 @@ async fn run() -> Result<(), String> {
         oci_bundle_path: cli.oci_bundle_path.clone(),
         ..ProjectionRunRequest::default()
     };
+
+    let role_input = request
+        .plan
+        .input
+        .first()
+        .map(|path| path.host_path.clone());
+    let role_work = request.plan.work.as_ref().map(|path| path.host_path.clone());
+    let role_output = request.plan.output.host_path.clone();
 
     let provenance = CellProposalProvenance {
         cell_id: cli.cell_id.clone(),
@@ -125,6 +133,11 @@ async fn run() -> Result<(), String> {
         "draftCount": proposals.len(),
         "sourceResource": source_resource,
         "proposals": proposals,
+        "roleHostDirs": {
+            "input": role_input,
+            "work": role_work,
+            "output": role_output,
+        },
     });
     println!(
         "{}",
@@ -182,6 +195,14 @@ fn parse_cli(args: Vec<String>) -> Result<Cli, String> {
                 index += 1;
                 cli.oci_bundle_path = next_value(&args, &mut index, "--oci-bundle-path")?;
             }
+            "--vz-runtime-dir" => {
+                index += 1;
+                let path = next_value(&args, &mut index, "--vz-runtime-dir")?;
+                cli.vz_runtime_dir = Some(PathBuf::from(path));
+            }
+            "--with-work" => {
+                cli.with_work = true;
+            }
             "--allow-network" => {
                 cli.allow_network = true;
             }
@@ -226,6 +247,61 @@ fn resolve_workspace(cli: &Cli) -> Result<(Option<TempDir>, String), String> {
     let temp = tempfile::tempdir().map_err(|err| err.to_string())?;
     let root = temp.path().to_string_lossy().into_owned();
     Ok((Some(temp), root))
+}
+
+/// Resolve KernelFS role host dirs.
+///
+/// MicroVM: ephemeral temp tree. OCI (Mac ivisor): live-bind contract under
+/// `{CELL_VZ_RUNTIME_DIR}/ivisor-worker-<id>/agent-share/{input,output}`.
+fn resolve_role_host_dirs(
+    cli: &Cli,
+    execution_mode: &str,
+) -> Result<(Option<TempDir>, PathBuf, Option<PathBuf>, PathBuf), String> {
+    if is_oci_execution_mode(execution_mode) {
+        let runtime = resolve_vz_runtime_dir(cli)?;
+        let share = oci_ivisor_agent_share_dir(&runtime, &cli.cell_id);
+        let (input, work, output) = ensure_oci_agent_share_roles(&share, cli.with_work)
+            .map_err(|err| format!("create agent-share roles under {}: {err}", share.display()))?;
+        return Ok((None, input, work, output));
+    }
+
+    let plan_parent = tempfile::tempdir().map_err(|err| err.to_string())?;
+    let input_host = plan_parent.path().join("input");
+    let output_host = plan_parent.path().join("output");
+    std::fs::create_dir_all(&input_host).map_err(|err| err.to_string())?;
+    std::fs::create_dir_all(&output_host).map_err(|err| err.to_string())?;
+    let work_host = if cli.with_work {
+        let work = plan_parent.path().join("work");
+        std::fs::create_dir_all(&work).map_err(|err| err.to_string())?;
+        Some(work)
+    } else {
+        None
+    };
+    Ok((Some(plan_parent), input_host, work_host, output_host))
+}
+
+fn resolve_vz_runtime_dir(cli: &Cli) -> Result<PathBuf, String> {
+    if let Some(path) = &cli.vz_runtime_dir {
+        return Ok(path.clone());
+    }
+    if let Ok(path) = std::env::var("CELL_VZ_RUNTIME_DIR") {
+        let trimmed = path.trim();
+        if !trimmed.is_empty() {
+            return Ok(PathBuf::from(trimmed));
+        }
+    }
+    if let Ok(workspace) = std::env::var("CELL_OCI_IVISOR_WORKSPACE") {
+        let trimmed = workspace.trim();
+        if !trimmed.is_empty() {
+            return Ok(PathBuf::from(trimmed).join("vz-runtime"));
+        }
+    }
+    Err(
+        "Mac OCI dogfood requires --vz-runtime-dir, CELL_VZ_RUNTIME_DIR, or \
+         CELL_OCI_IVISOR_WORKSPACE (agent-share under ivisor-worker-<id>/agent-share; \
+         see Cell docs/mac-live-bind-demo.md)"
+            .into(),
+    )
 }
 
 fn seed_default_input(workspace_root: &str, hydrate_paths: &[String]) -> Result<(), String> {

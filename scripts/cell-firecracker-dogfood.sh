@@ -26,6 +26,8 @@ Live options (passed to cell-firecracker-dogfood binary):
   --hydrate REL        Workspace-relative file to hydrate under input/ (repeatable)
   --execution-mode MODE  oci (EXECUTION_MODE_OCI) or empty/microvm (default)
   --oci-bundle-path PATH OCI bundle directory (required for live OCI)
+  --vz-runtime-dir PATH  Mac OCI: CELL_VZ_RUNTIME_DIR override (agent-share parent)
+  --with-work          Also create/mount KernelFS work role dir
   --allow-network      Set with_network_deny_all(false) on hydration plan
   --                  Remaining args become guest argv (default: copy input → output)
 
@@ -33,6 +35,11 @@ Live environment (required):
   CELLD_BASE_URL           celld Connect/HTTP origin (no trailing slash)
   LATTICE_API_BASE_URL     latticed HTTP API (e.g. http://127.0.0.1:18787)
   LATTICE_AUTH_TOKEN       Bearer token for propose_resource
+
+Mac OCI live (execution-mode=oci) also needs:
+  CELL_VZ_RUNTIME_DIR or CELL_OCI_IVISOR_WORKSPACE (→ <workspace>/vz-runtime)
+  Role dirs: $CELL_VZ_RUNTIME_DIR/ivisor-worker-<id>/agent-share/{input,output}
+  Prefer scripts/cell-mac-oci-dogfood.sh; see docs/dev/celld-client.md § Mac.
 
 Firecracker lab (celld guest media — see cell/scripts/lattice-cell-loop.sh):
   CELL_FC_KERNEL / DEVCELL_FC_KERNEL       Guest kernel (vmlinux)
@@ -46,7 +53,8 @@ Firecracker lab (celld guest media — see cell/scripts/lattice-cell-loop.sh):
 
 Start celld with --backend=firecracker (microVM) or --backend=vz (Mac OCI) and
 lattice-runtime profile before --live. Cell repo: scripts/lattice-cell-loop.sh
-documents a full apply/start/invoke loop; Mac OCI: docs/10-macos-local-backend.md.
+documents a full apply/start/invoke loop; Mac OCI live-bind:
+cell/docs/mac-live-bind-demo.md.
 
 Examples:
   scripts/cell-firecracker-dogfood.sh
@@ -54,8 +62,8 @@ Examples:
   export CELLD_BASE_URL=http://127.0.0.1:8080
   export LATTICE_API_BASE_URL=http://127.0.0.1:18787 LATTICE_AUTH_TOKEN=...
   scripts/cell-firecracker-dogfood.sh --live --workspace /path/to/ws --hydrate input/hello.txt
-  scripts/cell-firecracker-dogfood.sh --live --execution-mode=oci \
-    --oci-bundle-path /tmp/cell-oci-bundles/cell_oci01 --workspace /path/to/ws
+  scripts/cell-mac-oci-dogfood.sh --live \
+    --oci-bundle-path /tmp/cell-oci-bundles/cell_mac_live_bind --workspace /path/to/ws
 EOF
 }
 
@@ -121,6 +129,34 @@ while [[ $# -gt 0 ]]; do
         exit 2
       fi
       live_args+=("--allow-network")
+      shift
+      ;;
+    --vz-runtime-dir)
+      if [[ "$mode" != "live" ]]; then
+        echo "unknown argument (use --live first): $1" >&2
+        usage >&2
+        exit 2
+      fi
+      shift
+      live_args+=("--vz-runtime-dir" "${1:-}")
+      shift
+      ;;
+    --vz-runtime-dir=*)
+      if [[ "$mode" != "live" ]]; then
+        echo "unknown argument (use --live first): $1" >&2
+        usage >&2
+        exit 2
+      fi
+      live_args+=("--vz-runtime-dir" "${1#*=}")
+      shift
+      ;;
+    --with-work)
+      if [[ "$mode" != "live" ]]; then
+        echo "unknown argument (use --live first): $1" >&2
+        usage >&2
+        exit 2
+      fi
+      live_args+=("--with-work")
       shift
       ;;
     *)
