@@ -475,7 +475,8 @@ impl Default for AiSettings {
     }
 }
 
-/// Session privacy controls (app lock). Not workspace encryption.
+/// Session privacy controls (app lock) and account consent flags.
+/// Not workspace encryption.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PrivacySettings {
@@ -486,6 +487,12 @@ pub struct PrivacySettings {
     /// `0` disables idle auto-lock (launch, manual, and sleep locks still apply).
     #[serde(default = "default_idle_lock_minutes")]
     pub idle_lock_minutes: u32,
+    /// When true, cloud AI requests are recorded in the account audit log.
+    #[serde(default = "default_true")]
+    pub ai_audit_enabled: bool,
+    /// When true, coarse product events may be reported under an install id.
+    #[serde(default = "default_true")]
+    pub anonymous_telemetry_enabled: bool,
 }
 
 impl Default for PrivacySettings {
@@ -493,12 +500,18 @@ impl Default for PrivacySettings {
         Self {
             app_lock_enabled: false,
             idle_lock_minutes: default_idle_lock_minutes(),
+            ai_audit_enabled: true,
+            anonymous_telemetry_enabled: true,
         }
     }
 }
 
 fn default_idle_lock_minutes() -> u32 {
     5
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

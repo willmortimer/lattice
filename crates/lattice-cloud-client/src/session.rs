@@ -105,6 +105,7 @@ pub fn cloud_session_status<C: CloudHttpClient>(
             base,
             me.user,
             me.entitlements,
+            me.preferences,
         )),
         Err(err) if err.api_status() == Some(401) => {
             let _ = store.clear_token();
@@ -113,6 +114,7 @@ pub fn cloud_session_status<C: CloudHttpClient>(
                 cloud_url: base,
                 user: None,
                 entitlements: None,
+                preferences: None,
                 error: Some(err.to_string()),
             })
         }
@@ -123,6 +125,7 @@ pub fn cloud_session_status<C: CloudHttpClient>(
             cloud_url: base,
             user: None,
             entitlements: None,
+            preferences: None,
             error: Some(format!("could not refresh cloud session: {err}")),
         }),
     }
@@ -187,6 +190,7 @@ pub fn sign_out<C: CloudHttpClient>(
                     cloud_url: base,
                     user: None,
                     entitlements: None,
+                    preferences: None,
                     error: Some(err.to_string()),
                 });
             }

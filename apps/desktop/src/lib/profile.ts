@@ -99,6 +99,8 @@ export interface DesktopSettings {
   privacy: {
     appLockEnabled: boolean;
     idleLockMinutes: number;
+    aiAuditEnabled: boolean;
+    anonymousTelemetryEnabled: boolean;
   };
 }
 
@@ -189,6 +191,8 @@ export function defaultDesktopSettings(): DesktopSettings {
     privacy: {
       appLockEnabled: false,
       idleLockMinutes: 5,
+      aiAuditEnabled: true,
+      anonymousTelemetryEnabled: true,
     },
   };
 }

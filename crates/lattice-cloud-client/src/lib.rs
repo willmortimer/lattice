@@ -29,4 +29,5 @@ pub use session::{
 };
 pub use types::{
     AiAccess, AuthTokenResponse, CloudSessionStatus, CloudUser, EntitlementsView, MeResponse,
+    PreferencesView,
 };

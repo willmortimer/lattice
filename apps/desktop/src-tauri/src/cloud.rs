@@ -1,6 +1,9 @@
 //! Cloud account bearer auth Tauri commands (ADR 0067).
 
-use lattice_cloud_client::CloudSessionStatus;
+use lattice_cloud_client::{CloudSessionStatus, PreferencesView};
+use lattice_core::ensure_lattice_home;
+use lattice_profile::{DesktopSettings, DESKTOP_SETTINGS_SPEC};
+use serde_json::Value;
 
 #[tauri::command]
 pub fn cloud_session_status() -> Result<CloudSessionStatus, String> {
@@ -25,4 +28,29 @@ pub async fn cloud_sign_in_apple() -> Result<CloudSessionStatus, String> {
 #[tauri::command]
 pub fn cloud_sign_out() -> Result<CloudSessionStatus, String> {
     lattice_handlers::cloud_sign_out()
+}
+
+#[tauri::command]
+pub fn cloud_update_preferences(
+    ai_audit_enabled: Option<bool>,
+    anonymous_telemetry_enabled: Option<bool>,
+) -> Result<PreferencesView, String> {
+    lattice_handlers::cloud_update_preferences(ai_audit_enabled, anonymous_telemetry_enabled)
+}
+
+#[tauri::command]
+pub fn product_telemetry_emit(
+    name: String,
+    properties: Option<Value>,
+) -> Result<(), String> {
+    let enabled = ensure_lattice_home()
+        .ok()
+        .and_then(|home| {
+            home.settings_store()
+                .load::<DesktopSettings>(DESKTOP_SETTINGS_SPEC)
+                .ok()
+                .map(|loaded| loaded.value.privacy.anonymous_telemetry_enabled)
+        })
+        .unwrap_or(true);
+    lattice_handlers::product_telemetry_emit(name, properties, enabled)
 }

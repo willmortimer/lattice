@@ -36,11 +36,29 @@ pub struct EntitlementsView {
     pub ai_daily_requests_used: i64,
 }
 
+/// Account-level consent flags mirrored from `/v1/me` (ADR 0064 / 0073).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PreferencesView {
+    pub ai_audit_enabled: bool,
+    pub anonymous_telemetry_enabled: bool,
+}
+
+impl Default for PreferencesView {
+    fn default() -> Self {
+        Self {
+            ai_audit_enabled: true,
+            anonymous_telemetry_enabled: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct MeResponse {
     pub user: CloudUser,
     #[serde(default)]
     pub entitlements: Option<EntitlementsView>,
+    #[serde(default)]
+    pub preferences: Option<PreferencesView>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -52,6 +70,9 @@ pub struct CloudSessionStatus {
     /// Present when `/v1/me` returned entitlements; omitted on older servers.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub entitlements: Option<EntitlementsView>,
+    /// Present when `/v1/me` returned preferences; omitted on older servers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preferences: Option<PreferencesView>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
@@ -63,24 +84,27 @@ impl CloudSessionStatus {
             cloud_url,
             user: None,
             entitlements: None,
+            preferences: None,
             error: None,
         }
     }
 
     pub fn signed_in(cloud_url: String, user: CloudUser) -> Self {
-        Self::signed_in_with_entitlements(cloud_url, user, None)
+        Self::signed_in_with_entitlements(cloud_url, user, None, None)
     }
 
     pub fn signed_in_with_entitlements(
         cloud_url: String,
         user: CloudUser,
         entitlements: Option<EntitlementsView>,
+        preferences: Option<PreferencesView>,
     ) -> Self {
         Self {
             signed_in: true,
             cloud_url,
             user: Some(user),
             entitlements,
+            preferences,
             error: None,
         }
     }

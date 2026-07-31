@@ -17,6 +17,7 @@ lattice-connectors.workspace = true
 lattice-cloud-client.workspace = true
 latticefs-core.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 serde_yaml.workspace = true
 getrandom = "0.3"
 hex.workspace = true

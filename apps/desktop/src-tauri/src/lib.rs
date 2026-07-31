@@ -357,6 +357,8 @@ pub fn run() {
             cloud::cloud_sign_in,
             cloud::cloud_sign_in_apple,
             cloud::cloud_sign_out,
+            cloud::cloud_update_preferences,
+            cloud::product_telemetry_emit,
             spotlight::spotlight_index_workspace,
             #[cfg(feature = "capture")]
             capture::shelf::capture_shelf_snapshot,

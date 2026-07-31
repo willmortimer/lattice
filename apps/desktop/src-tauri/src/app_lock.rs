@@ -449,6 +449,7 @@ mod tests {
         settings.privacy = PrivacySettings {
             app_lock_enabled: enabled,
             idle_lock_minutes: idle,
+            ..PrivacySettings::default()
         };
         settings
     }

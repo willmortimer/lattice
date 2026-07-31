@@ -44,6 +44,8 @@ import {
   cloudSignIn,
   cloudSignInApple,
   cloudSignOut,
+  cloudUpdatePreferences,
+  emitProductTelemetry,
   getCloudSessionStatus,
   isCloudAiEntitled,
   type CloudSessionStatus,
@@ -1508,9 +1510,16 @@ function PrivacySettingsPanel({
   onRefreshProfile?: () => void;
 }) {
   const [lockStatus, setLockStatus] = useState<AppLockStatus | null>(null);
+  const [cloudStatus, setCloudStatus] = useState<CloudSessionStatus | null>(null);
   const [busy, setBusy] = useState(false);
+  const [prefsBusy, setPrefsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const privacy = settings.privacy ?? { appLockEnabled: false, idleLockMinutes: 5 };
+  const privacy = settings.privacy ?? {
+    appLockEnabled: false,
+    idleLockMinutes: 5,
+    aiAuditEnabled: true,
+    anonymousTelemetryEnabled: true,
+  };
 
   useEffect(() => {
     if (inBrowser) return;
@@ -1522,13 +1531,72 @@ function PrivacySettingsPanel({
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
       });
+    void getCloudSessionStatus()
+      .then((status) => {
+        if (cancelled) return;
+        setCloudStatus(status);
+        if (status.signedIn && status.preferences) {
+          onChange({
+            ...settings,
+            privacy: {
+              ...privacy,
+              aiAuditEnabled: status.preferences.ai_audit_enabled,
+              anonymousTelemetryEnabled: status.preferences.anonymous_telemetry_enabled,
+            },
+          });
+        }
+      })
+      .catch(() => {
+        /* local-only privacy still works when signed out / unreachable */
+      });
+    void emitProductTelemetry("settings_opened");
     return () => {
       cancelled = true;
     };
+    // Seed cloud prefs once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const platformSupported = lockStatus?.platformSupported ?? false;
   const presenceAvailable = lockStatus?.presenceAvailable ?? false;
+  const signedIn = cloudStatus?.signedIn === true;
+
+  const syncPreference = async (patch: {
+    aiAuditEnabled?: boolean;
+    anonymousTelemetryEnabled?: boolean;
+  }) => {
+    const nextPrivacy = {
+      ...privacy,
+      ...(patch.aiAuditEnabled !== undefined
+        ? { aiAuditEnabled: patch.aiAuditEnabled }
+        : {}),
+      ...(patch.anonymousTelemetryEnabled !== undefined
+        ? { anonymousTelemetryEnabled: patch.anonymousTelemetryEnabled }
+        : {}),
+    };
+    onChange({
+      ...settings,
+      privacy: nextPrivacy,
+    });
+    if (!signedIn || inBrowser) return;
+    setPrefsBusy(true);
+    setError(null);
+    try {
+      const updated = await cloudUpdatePreferences(patch);
+      onChange({
+        ...settings,
+        privacy: {
+          ...nextPrivacy,
+          aiAuditEnabled: updated.ai_audit_enabled,
+          anonymousTelemetryEnabled: updated.anonymous_telemetry_enabled,
+        },
+      });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPrefsBusy(false);
+    }
+  };
 
   return (
     <>
@@ -1570,8 +1638,6 @@ function PrivacySettingsPanel({
                 void enableAppLock(privacy.idleLockMinutes)
                   .then((status) => {
                     setLockStatus(status);
-                    // Rust already persisted privacy settings; reload revision
-                    // instead of writing again through the debounced settings save.
                     onRefreshProfile?.();
                   })
                   .catch((err: unknown) => {
@@ -1610,14 +1676,47 @@ function PrivacySettingsPanel({
             </p>
           ) : null}
           {busy ? <p className="settings-copy">Waiting for authentication…</p> : null}
-          {error ? (
-            <div className="diagnostics-card" role="alert">
-              <strong>App lock error</strong>
-              <span>{error}</span>
-            </div>
-          ) : null}
         </>
       )}
+
+      <h2>Product data</h2>
+      <p className="settings-copy">
+        {signedIn
+          ? "These preferences sync to your Lattice account when signed in."
+          : "Signed out — toggles stay local only until you sign in."}
+      </p>
+      <SettingRow
+        title="AI request audit"
+        description="When using Lattice paid AI, record metadata-only request rows (model/status/bytes). Never stores prompts or responses."
+      >
+        <Toggle
+          label="AI request audit"
+          checked={privacy.aiAuditEnabled}
+          onChange={(enabled) => {
+            if (prefsBusy) return;
+            void syncPreference({ aiAuditEnabled: enabled });
+          }}
+        />
+      </SettingRow>
+      <SettingRow
+        title="Anonymous product telemetry"
+        description="Coarse product events only (app launch, settings, agent panel). No paths, prompts, excerpts, or filenames."
+      >
+        <Toggle
+          label="Anonymous product telemetry"
+          checked={privacy.anonymousTelemetryEnabled}
+          onChange={(enabled) => {
+            if (prefsBusy) return;
+            void syncPreference({ anonymousTelemetryEnabled: enabled });
+          }}
+        />
+      </SettingRow>
+      {error ? (
+        <div className="diagnostics-card" role="alert">
+          <strong>Privacy error</strong>
+          <span>{error}</span>
+        </div>
+      ) : null}
     </>
   );
 }

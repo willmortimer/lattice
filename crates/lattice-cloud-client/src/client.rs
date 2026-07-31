@@ -5,7 +5,7 @@ use latticefs_core::{ContentHash, ResourceId};
 
 use crate::config::cloud_url;
 use crate::error::{CloudError, Result};
-use crate::types::{AuthTokenResponse, MeResponse};
+use crate::types::{AuthTokenResponse, MeResponse, PreferencesView};
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 pub struct BlobPutResponse {
@@ -67,6 +67,7 @@ impl CloudHttpClient for HttpCloudClient {
         let mut request = match method {
             "GET" => ureq::get(&url),
             "POST" => ureq::post(&url),
+            "PUT" => ureq::put(&url),
             other => {
                 return Err(CloudError::Http(format!("unsupported method {other}")));
             }
@@ -219,6 +220,54 @@ impl<C: CloudHttpClient> CloudApiClient<C> {
         self.get_json("/v1/me", Some(bearer))
     }
 
+    /// Patch account consent flags; omitted fields keep their server-side value.
+    pub fn update_preferences(
+        &self,
+        bearer: &str,
+        ai_audit_enabled: Option<bool>,
+        anonymous_telemetry_enabled: Option<bool>,
+    ) -> Result<PreferencesView> {
+        let mut body = serde_json::Map::new();
+        if let Some(value) = ai_audit_enabled {
+            body.insert("ai_audit_enabled".into(), Value::Bool(value));
+        }
+        if let Some(value) = anonymous_telemetry_enabled {
+            body.insert("anonymous_telemetry_enabled".into(), Value::Bool(value));
+        }
+        if body.is_empty() {
+            return Err(CloudError::Http(
+                "at least one preference field is required".into(),
+            ));
+        }
+        self.put_json("/v1/me/preferences", Some(&Value::Object(body)), Some(bearer))
+    }
+
+    /// Best-effort anonymous product telemetry batch. The bearer is optional:
+    /// signed-out installs still report coarse events under `install_id`.
+    pub fn post_telemetry_events(
+        &self,
+        bearer: Option<&str>,
+        install_id: &str,
+        events: &[(&str, Option<Value>)],
+    ) -> Result<()> {
+        let payload = serde_json::json!({
+            "install_id": install_id,
+            "events": events
+                .iter()
+                .map(|(name, properties)| {
+                    serde_json::json!({ "name": name, "properties": properties })
+                })
+                .collect::<Vec<_>>(),
+        });
+        let response = self
+            .http
+            .request(&self.base_url, "POST", "/v1/telemetry/events", Some(&payload), bearer)?;
+        if (200..300).contains(&response.status) {
+            return Ok(());
+        }
+        Err(api_error(response.status, &response.body))
+    }
+
     pub fn put_blob(
         &self,
         bearer: &str,
@@ -287,6 +336,18 @@ impl<C: CloudHttpClient> CloudApiClient<C> {
         let response = self
             .http
             .request(&self.base_url, "POST", path, body, bearer)?;
+        decode_json(response.status, &response.body)
+    }
+
+    fn put_json<T: DeserializeOwned>(
+        &self,
+        path: &str,
+        body: Option<&Value>,
+        bearer: Option<&str>,
+    ) -> Result<T> {
+        let response = self
+            .http
+            .request(&self.base_url, "PUT", path, body, bearer)?;
         decode_json(response.status, &response.body)
     }
 

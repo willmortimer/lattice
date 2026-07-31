@@ -16,11 +16,17 @@ export interface CloudEntitlements {
   ai_daily_requests_used: number;
 }
 
+export interface CloudPreferences {
+  ai_audit_enabled: boolean;
+  anonymous_telemetry_enabled: boolean;
+}
+
 export interface CloudSessionStatus {
   signedIn: boolean;
   cloudUrl: string;
   user?: CloudUser;
   entitlements?: CloudEntitlements;
+  preferences?: CloudPreferences;
   error?: string;
 }
 
@@ -51,4 +57,21 @@ export async function cloudSignInApple(): Promise<CloudSessionStatus> {
 
 export async function cloudSignOut(): Promise<CloudSessionStatus> {
   return invoke<CloudSessionStatus>("cloud_sign_out");
+}
+
+export async function cloudUpdatePreferences(input: {
+  aiAuditEnabled?: boolean;
+  anonymousTelemetryEnabled?: boolean;
+}): Promise<CloudPreferences> {
+  return invoke<CloudPreferences>("cloud_update_preferences", {
+    aiAuditEnabled: input.aiAuditEnabled ?? null,
+    anonymousTelemetryEnabled: input.anonymousTelemetryEnabled ?? null,
+  });
+}
+
+export async function emitProductTelemetry(
+  name: string,
+  properties?: Record<string, string | number | boolean | null>,
+): Promise<void> {
+  await invoke("product_telemetry_emit", { name, properties: properties ?? null });
 }

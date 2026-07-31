@@ -27,7 +27,7 @@ pub use authoritative::{read_authoritative_bytes, read_authoritative_string};
 pub use capture::{create_inbox_capture, capture_page_path, InboxCaptureResult, MAX_INBOX_CAPTURE_BYTES};
 pub use cloud::{
     cloud_session_status_cmd, cloud_sign_in, cloud_sign_in_apple, cloud_sign_out,
-    resolve_cloud_bearer_cmd,
+    cloud_update_preferences, product_telemetry_emit, resolve_cloud_bearer_cmd,
 };
 pub use error::{command_error_to_string, STALE_REVISION_PREFIX};
 pub use github::{

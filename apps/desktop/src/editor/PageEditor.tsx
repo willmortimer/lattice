@@ -131,7 +131,7 @@ interface PageEditorProps {
   /** Create and open a canonical `.data` table package. */
   onCreateTable?: () => Promise<void> | void;
   /** Typed workspace resource targets offered after typing `[[`. */
-  wikiTargets?: ResourceLinkTarget[];
+  wikiTargets?: readonly ResourceLinkTarget[];
   /** Native bounded catalog query used instead of hydrating all targets. */
   onSearchWiki?: (query: string) => Promise<ResourceLinkTarget[]>;
   /** Import a pasted/dropped file through the semantic command boundary. */
