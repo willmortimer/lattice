@@ -58,6 +58,22 @@ resolve IPC, font-pack CSS (only the active pack loads at startup), and
 `ensure_home` / `open_workspace` / `prepare_quick_note` scan cost over expanding
 the Playwright harness itself.
 
+### Sprint stubs (hotpath + agent workbench)
+
+Explicit harness stubs and planned coverage from the desktop hotpath and agent
+workbench sprints. **Unit** = Vitest today; **Playwright** = perf or smoke stub
+not yet automated (no new CI budget claimed).
+
+| Signal | Automation today | Notes |
+| --- | --- | --- |
+| Serialized save failure / `retry()` (no retry-spin) | Unit (`serializedSave.test.ts`) | Playwright stub: inject save fault, assert latch + Cmd+S recovery |
+| Per-session save chrome (`saveStatusBySessionId`) | Unit (`desktopUiStore.test.ts`) | Covered at store boundary; no Playwright stub yet |
+| Agent hydration / composer gate | Not yet automated | Playwright stub: open thread, assert composer disabled until hydration ready |
+| Agent thread at 1k messages | Playwright stub | Transcript / assistant-ui virtualization scale (sharpen when harness exists) |
+| File-tree scroll at 10k entries | Playwright stub | Catalog / First Look virtualization scale (100k remains roadmap) |
+| Workbench layout resize smoke | Playwright stub (optional) | Agent panel `react-resizable-panels` drag without jank regression |
+| Query-backed shell panes (threads, settings) | Playwright stub | `@tanstack/react-query` adoption — stub only, not in CI |
+
 ## Run — browser
 
 ```sh
