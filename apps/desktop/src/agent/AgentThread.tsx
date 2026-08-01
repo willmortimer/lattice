@@ -1,4 +1,4 @@
-import { useAgentChatControls } from "./agentChatControls";
+import { isAgentComposerBlockedByHydration, useAgentChatControls } from "./agentChatControls";
 import { useAgentSessionStore } from "./agentStore";
 import { VirtualizedAgentThreadView } from "./VirtualizedAgentThreadView";
 
@@ -37,8 +37,9 @@ export function AgentThread({
   const byoOpenaiKeyPresent = useAgentSessionStore((state) => state.byoOpenaiKeyPresent);
   const byoOpenaiKeyMissing = aiMode === "byoOpenai" && byoOpenaiKeyPresent === false;
   const chatControls = useAgentChatControls();
-  const transcriptHydrating = chatControls?.hydrationStatus === "loading";
-  const reconnecting = chatControls?.isReconnecting === true;
+  const hydrationBlocked = chatControls
+    ? isAgentComposerBlockedByHydration(chatControls)
+    : false;
 
   if (!workspaceRoot?.trim()) {
     return (
@@ -49,7 +50,7 @@ export function AgentThread({
   }
 
   const composerDisabled =
-    accountAiDisabled || byoOpenaiKeyMissing || transcriptHydrating || reconnecting;
+    accountAiDisabled || byoOpenaiKeyMissing || hydrationBlocked;
   const paidCta = accountAiDisabled ? accountAiCtaCopy(accountAiBlockReason) : null;
   const emptyMessage = accountAiDisabled
     ? paidCta?.body ?? ""

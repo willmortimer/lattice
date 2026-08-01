@@ -16,6 +16,10 @@ export interface PerfBudgets {
   pageOpenMs: number;
   /** Scroll the open page content pane (smoke; demo pages are short). */
   pageScrollMs: number;
+  /** Scroll a large agent transcript when the perf harness can inject messages. */
+  agentThreadScrollMs: number;
+  /** Drag the agent workbench split handle (react-resizable-panels smoke). */
+  agentWorkbenchResizeMs: number;
 }
 
 /** Documented local targets — logged for comparison, not asserted by default. */
@@ -40,6 +44,8 @@ export const perfBudgets: PerfBudgets = {
   shellWarmMs: readBudget("LATTICE_PERF_SHELL_WARM_MS", 1_500),
   pageOpenMs: readBudget("LATTICE_PERF_PAGE_OPEN_MS", 2_500),
   pageScrollMs: readBudget("LATTICE_PERF_PAGE_SCROLL_MS", 1_000),
+  agentThreadScrollMs: readBudget("LATTICE_PERF_AGENT_THREAD_SCROLL_MS", 3_000),
+  agentWorkbenchResizeMs: readBudget("LATTICE_PERF_AGENT_WORKBENCH_RESIZE_MS", 1_500),
 };
 
 export interface NavigationMetrics {

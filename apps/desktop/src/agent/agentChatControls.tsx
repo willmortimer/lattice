@@ -27,3 +27,10 @@ export function AgentChatControlsProvider({
 export function useAgentChatControls(): AgentChatControls | null {
   return useContext(AgentChatControlsContext);
 }
+
+/** True when the composer must stay hidden until thread hydration / reconnect finishes. */
+export function isAgentComposerBlockedByHydration(
+  controls: Pick<AgentChatControls, "hydrationStatus" | "isReconnecting">,
+): boolean {
+  return controls.hydrationStatus === "loading" || controls.isReconnecting;
+}

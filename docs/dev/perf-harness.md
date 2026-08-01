@@ -68,10 +68,10 @@ not yet automated (no new CI budget claimed).
 | --- | --- | --- |
 | Serialized save failure / `retry()` (no retry-spin) | Unit (`serializedSave.test.ts`) | Playwright stub: inject save fault, assert latch + Cmd+S recovery |
 | Per-session save chrome (`saveStatusBySessionId`) | Unit (`desktopUiStore.test.ts`) | Covered at store boundary; no Playwright stub yet |
-| Agent hydration / composer gate | Not yet automated | Playwright stub: open thread, assert composer disabled until hydration ready |
-| Agent thread at 1k messages | Playwright stub | Transcript / assistant-ui virtualization scale (sharpen when harness exists) |
+| Agent hydration / composer gate | Unit (`agentHydrationGate.test.tsx`) | `isAgentComposerBlockedByHydration` + `AgentThread` mock gate |
+| Agent thread at 1k messages | Playwright (`agent-thread.perf.spec.ts`) | Skips in browser demo until harness can inject messages; soft budget |
 | File-tree scroll at 10k entries | Playwright stub | Catalog / First Look virtualization scale (100k remains roadmap) |
-| Workbench layout resize smoke | Playwright stub (optional) | Agent panel `react-resizable-panels` drag without jank regression |
+| Workbench layout resize smoke | Playwright (`agent-workbench.perf.spec.ts`) | Agent panel `react-resizable-panels` drag; soft CI budget |
 | Query-backed shell panes (threads, settings) | Playwright stub | `@tanstack/react-query` adoption — stub only, not in CI |
 
 ## Run — browser
@@ -111,6 +111,8 @@ Nix: `nix run .#desktop-perf-tauri`
 | --- | --- |
 | `shell.perf.spec.ts` / `shell.tauri.perf.spec.ts` | Cold/ready shell chrome + warm reload |
 | `page.perf.spec.ts` / `page.tauri.perf.spec.ts` | Open `Home.md` until ProseMirror; scroll smoke |
+| `agent-thread.perf.spec.ts` | 1k-message transcript scroll when `__latticePerfHarness` can inject (skips in browser demo) |
+| `agent-workbench.perf.spec.ts` | Agent workbench split resize drag smoke |
 
 Related (not a perf budget / not CI):
 
@@ -135,6 +137,8 @@ heap via CDP.
 | `LATTICE_PERF_SHELL_WARM_MS` | `3000` | `500` (doc target) |
 | `LATTICE_PERF_PAGE_OPEN_MS` | `4000` | `1000` |
 | `LATTICE_PERF_PAGE_SCROLL_MS` | `2000` | `500` |
+| `LATTICE_PERF_AGENT_THREAD_SCROLL_MS` | `3000` | `1000` |
+| `LATTICE_PERF_AGENT_WORKBENCH_RESIZE_MS` | `1500` | `500` |
 
 ```sh
 LATTICE_PERF_SHELL_WARM_MS=500 pnpm --filter @lattice/desktop test:perf
@@ -142,8 +146,13 @@ LATTICE_PERF_SHELL_WARM_MS=500 pnpm --filter @lattice/desktop test:perf
 
 ## Vitest boundary
 
-Unit tests remain `pnpm --filter @lattice/desktop test` (Vitest). Perf specs are
-Playwright-only via `test:perf` / `test:perf:tauri`.
+Unit tests remain `pnpm --filter @lattice/desktop test` (Vitest). Key perf-adjacent
+unit coverage:
+
+- `serializedSave.test.ts` — failure latch, `retry()`, no retry-spin
+- `agentHydrationGate.test.tsx` — composer blocked until hydration / reconnect ready
+
+Perf specs are Playwright-only via `test:perf` / `test:perf:tauri`.
 
 ## CI
 
