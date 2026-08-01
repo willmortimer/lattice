@@ -38,6 +38,7 @@ export function AgentThread({
   const byoOpenaiKeyMissing = aiMode === "byoOpenai" && byoOpenaiKeyPresent === false;
   const chatControls = useAgentChatControls();
   const transcriptHydrating = chatControls?.hydrationStatus === "loading";
+  const reconnecting = chatControls?.isReconnecting === true;
 
   if (!workspaceRoot?.trim()) {
     return (
@@ -48,7 +49,7 @@ export function AgentThread({
   }
 
   const composerDisabled =
-    accountAiDisabled || byoOpenaiKeyMissing || transcriptHydrating;
+    accountAiDisabled || byoOpenaiKeyMissing || transcriptHydrating || reconnecting;
   const paidCta = accountAiDisabled ? accountAiCtaCopy(accountAiBlockReason) : null;
   const emptyMessage = accountAiDisabled
     ? paidCta?.body ?? ""
