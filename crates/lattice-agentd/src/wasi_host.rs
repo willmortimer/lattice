@@ -124,6 +124,38 @@ pub fn hydration_inputs_from_record(
         .collect()
 }
 
+/// Resolve guest-path → ResourceId for hydration provenance.
+///
+/// Explicit `inputResourceIds` win. Otherwise, when `workspace_root` is set, look up
+/// workspace-relative paths in the LatticeFS registry (`.lattice/resource-registry.json`).
+pub fn resolve_hydration_resource_ids(
+    workspace_root: Option<&str>,
+    explicit: &BTreeMap<String, String>,
+    guest_to_workspace: &BTreeMap<String, String>,
+) -> BTreeMap<String, String> {
+    let mut resolved = explicit.clone();
+    let Some(root) = workspace_root.filter(|s| !s.trim().is_empty()) else {
+        return resolved;
+    };
+    let root_path = Path::new(root);
+
+    for (guest_path, workspace_path) in guest_to_workspace {
+        if resolved.contains_key(guest_path) {
+            continue;
+        }
+        if let Ok(stat) = latticefs_core::resource_stat(root_path, workspace_path) {
+            resolved.insert(guest_path.clone(), stat.resource_id.to_string());
+            continue;
+        }
+        if workspace_path != guest_path {
+            if let Ok(stat) = latticefs_core::resource_stat(root_path, guest_path) {
+                resolved.insert(guest_path.clone(), stat.resource_id.to_string());
+            }
+        }
+    }
+    resolved
+}
+
 /// Provenance attached to proposed WASI `/output` drafts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WasiProposalProvenance {
@@ -338,6 +370,7 @@ pub fn run_wasi_guest_with_options(
         &MaterializeOptions {
             host_path_policy: HostPathPolicy::AllowRoots(&options.host_path_roots),
             secret_handle_policy,
+            ..Default::default()
         },
     )?;
 
@@ -485,6 +518,7 @@ mod tests {
             &MaterializeOptions {
                 host_path_policy: HostPathPolicy::UnrestrictedForTests,
                 secret_handle_policy: SecretHandlePolicy::DenyAll,
+                ..Default::default()
             },
         )
         .expect_err("deny by default");
@@ -588,5 +622,85 @@ mod tests {
         assert_eq!(digests[0].path, "hello.txt");
         assert_eq!(digests[0].content_hash, "deadbeef");
         assert_eq!(digests[0].resource_id.as_deref(), Some("res-42"));
+    }
+
+    #[test]
+    fn resolve_hydration_resource_ids_looks_up_registry_by_workspace_path() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workspace_path = "input/hello.txt";
+        let mut registry = latticefs_core::NamespaceRegistry::open(dir.path()).unwrap();
+        let resource_id = registry.ensure_local_file(workspace_path).unwrap();
+        registry.save().unwrap();
+
+        let mut guest_to_workspace = BTreeMap::new();
+        guest_to_workspace.insert("hello.txt".into(), workspace_path.into());
+
+        let resolved = resolve_hydration_resource_ids(
+            Some(dir.path().to_str().unwrap()),
+            &BTreeMap::new(),
+            &guest_to_workspace,
+        );
+        assert_eq!(
+            resolved.get("hello.txt").map(String::as_str),
+            Some(resource_id.to_string().as_str())
+        );
+    }
+
+    #[test]
+    fn resolve_hydration_resource_ids_explicit_input_wins_over_registry() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workspace_path = "input/hello.txt";
+        let mut registry = latticefs_core::NamespaceRegistry::open(dir.path()).unwrap();
+        registry.ensure_local_file(workspace_path).unwrap();
+        registry.save().unwrap();
+
+        let mut guest_to_workspace = BTreeMap::new();
+        guest_to_workspace.insert("hello.txt".into(), workspace_path.into());
+        let mut explicit = BTreeMap::new();
+        explicit.insert("hello.txt".into(), "explicit-res-id".into());
+
+        let resolved = resolve_hydration_resource_ids(
+            Some(dir.path().to_str().unwrap()),
+            &explicit,
+            &guest_to_workspace,
+        );
+        assert_eq!(
+            resolved.get("hello.txt").map(String::as_str),
+            Some("explicit-res-id")
+        );
+    }
+
+    #[test]
+    fn resolve_hydration_resource_ids_populates_hydration_digest_resource_id() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let workspace_path = "input/hello.txt";
+        let mut registry = latticefs_core::NamespaceRegistry::open(dir.path()).unwrap();
+        let resource_id = registry.ensure_local_file(workspace_path).unwrap();
+        registry.save().unwrap();
+
+        let mut guest_to_workspace = BTreeMap::new();
+        guest_to_workspace.insert("hello.txt".into(), workspace_path.into());
+        let resource_ids = resolve_hydration_resource_ids(
+            Some(dir.path().to_str().unwrap()),
+            &BTreeMap::new(),
+            &guest_to_workspace,
+        );
+
+        let record = HydrationRecord {
+            run_id: "run_registry".into(),
+            base_snapshot: "snap".into(),
+            root: std::path::PathBuf::from("/tmp/run_registry"),
+            sources: vec![kernelfs::HydrationSource {
+                guest_path: "hello.txt".into(),
+                host_path: std::path::PathBuf::from("/tmp/hello.txt"),
+                sha256: "0f328ae687eb8fd2acfa3a910bb6722eff43f8a7dbd08e53e572ae37a0c5d7a5".into(),
+            }],
+        };
+        let digests = hydration_inputs_from_record(&record, &resource_ids);
+        assert_eq!(digests.len(), 1);
+        assert_eq!(
+            digests[0].resource_id.as_deref(),
+            Some(resource_id.to_string().as_str())
+        );
     }
 }

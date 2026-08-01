@@ -37,8 +37,8 @@ pub use tools::{
 pub use secret_handles::{parse_secret_handle_allowlist, secret_handles_from_env, SECRET_HANDLES_ENV};
 pub use wasi_host::{
     hydration_inputs_from_record, propose_output_drafts, propose_output_drafts_with_provenance,
-    run_wasi_guest, run_wasi_guest_with_options, unsupported_capability_error_json,
-    wasi_host_error_json, wasi_materialize_error_json, wasi_run_error_json, DraftProvenance,
-    HydrationInputDigest, WorkspaceBinding, WasiGuestHostOptions, WasiGuestRunResult, WasiHostError,
-    WasiProposalProvenance,
+    resolve_hydration_resource_ids, run_wasi_guest, run_wasi_guest_with_options,
+    unsupported_capability_error_json, wasi_host_error_json, wasi_materialize_error_json,
+    wasi_run_error_json, DraftProvenance, HydrationInputDigest, WorkspaceBinding,
+    WasiGuestHostOptions, WasiGuestRunResult, WasiHostError, WasiProposalProvenance,
 };

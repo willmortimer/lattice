@@ -5807,6 +5807,7 @@ dependencies = [
  "kernelfs",
  "kernelfs-linux",
  "lattice-cell-client",
+ "latticefs-core",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

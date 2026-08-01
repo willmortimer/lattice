@@ -11,7 +11,8 @@ use base64::Engine;
 use lattice_agentd::lattice_client::LatticeToolClient;
 use lattice_agentd::tools::{dispatch_tool, openai_tool_definitions, ToolRunContext};
 use lattice_agentd::wasi_host::{
-    propose_output_drafts, run_wasi_guest_with_options, WasiGuestHostOptions, WorkspaceBinding,
+    hydration_inputs_from_record, propose_output_drafts, resolve_hydration_resource_ids,
+    run_wasi_guest_with_options, WasiGuestHostOptions, WorkspaceBinding,
 };
 use serde_json::{json, Value};
 use wiremock::matchers::{method, path};
@@ -245,6 +246,108 @@ async fn wasi_propose_includes_hydration_digest_with_known_hash() {
     assert_eq!(inputs[0]["path"], "hello.txt");
     assert_eq!(inputs[0]["contentHash"], HELLO_FROM_INPUT_SHA256);
     assert_eq!(inputs[0]["resourceId"], "res-fixture-1");
+}
+
+#[tokio::test]
+async fn wasi_propose_resolves_resource_id_from_registry_without_explicit_map() {
+    ensure_seatbelt_runner();
+    let temp = tempfile::tempdir().expect("tempdir");
+    let workspace_path = "input/hello.txt";
+    std::fs::create_dir_all(temp.path().join("input")).expect("input dir");
+    std::fs::write(temp.path().join(workspace_path), "hello from input").expect("write hello");
+
+    let mut registry = latticefs_core::NamespaceRegistry::open(temp.path()).expect("registry");
+    let resource_id = registry
+        .ensure_local_file(workspace_path)
+        .expect("register input");
+    registry.save().expect("save registry");
+
+    let manifest = ExecutionManifest {
+        run_id: "run_prov_registry".into(),
+        base_snapshot: "snap_1".into(),
+        mounts: Mounts {
+            input: vec![InputMount {
+                host_path: temp.path().join(workspace_path),
+                guest_path: "hello.txt".into(),
+            }],
+            output_proposal_target: Some("Reports".into()),
+            work_promote_paths: Vec::new(),
+        },
+        capabilities: Default::default(),
+    };
+
+    let run_parent = temp.path().to_path_buf();
+    let host_roots = vec![temp.path().to_path_buf()];
+    let result = tokio::task::spawn_blocking(move || {
+        run_wasi_guest_with_options(
+            &run_parent,
+            &manifest,
+            copy_hello_wasm(),
+            &WasiGuestHostOptions {
+                limits: WasmtimeLimits::default(),
+                host_path_roots: host_roots,
+                ..Default::default()
+            },
+        )
+    })
+    .await
+    .expect("join wasi")
+    .expect("run wasi guest");
+
+    let mut guest_to_workspace = std::collections::BTreeMap::new();
+    guest_to_workspace.insert("hello.txt".into(), workspace_path.into());
+    let resource_ids = resolve_hydration_resource_ids(
+        Some(temp.path().to_str().expect("workspace path")),
+        &std::collections::BTreeMap::new(),
+        &guest_to_workspace,
+    );
+    assert_eq!(
+        resource_ids.get("hello.txt").map(String::as_str),
+        Some(resource_id.to_string().as_str())
+    );
+
+    let provenance = lattice_agentd::WasiProposalProvenance {
+        run_id: "run_prov_registry".into(),
+        wasm_path: "Tools/guests/copy_hello.wasm".into(),
+        output_proposal_target: "Reports".into(),
+        hydration_inputs: hydration_inputs_from_record(&result.hydration, &resource_ids),
+    };
+
+    let latticed = MockServer::start().await;
+    let bodies = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let capture = ProposeResourceCapture {
+        bodies: Arc::clone(&bodies),
+    };
+
+    Mock::given(method("POST"))
+        .and(path("/v1/proposals/propose_resource"))
+        .respond_with(capture)
+        .expect(1)
+        .mount(&latticed)
+        .await;
+
+    let client = LatticeToolClient::new(latticed.uri(), "test-token").expect("client");
+    lattice_agentd::propose_output_drafts_with_provenance(
+        &client,
+        &WorkspaceBinding::new(Some("ws-prov".into()), Some(temp.path().to_string_lossy().into())),
+        &result.drafts,
+        Some(&provenance),
+    )
+    .await
+    .expect("propose with provenance");
+
+    let captured = bodies.lock().expect("lock bodies");
+    let inputs = captured[0]
+        .get("hydrationInputs")
+        .and_then(|v| v.as_array())
+        .expect("hydrationInputs array");
+    assert_eq!(inputs.len(), 1);
+    assert_eq!(inputs[0]["path"], "hello.txt");
+    assert_eq!(inputs[0]["contentHash"], HELLO_FROM_INPUT_SHA256);
+    assert_eq!(
+        inputs[0]["resourceId"].as_str(),
+        Some(resource_id.to_string().as_str())
+    );
 }
 
 #[tokio::test]

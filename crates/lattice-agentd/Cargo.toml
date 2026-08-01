@@ -29,6 +29,7 @@ base64.workspace = true
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 kernelfs.workspace = true
 lattice-cell-client.workspace = true
+latticefs-core.workspace = true
 reqwest = { version = "0.12", default-features = false, features = [
     "json",
     "rustls-tls",
@@ -58,6 +59,7 @@ kernelfs-linux.workspace = true
 
 [dev-dependencies]
 base64.workspace = true
+latticefs-core.workspace = true
 tempfile = "3"
 tokio = { workspace = true, features = [
     "io-std",

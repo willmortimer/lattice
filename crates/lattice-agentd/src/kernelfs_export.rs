@@ -289,6 +289,8 @@ fn export_oci_roles_under_agent_share_macos(
         &MaterializeOptions {
             host_path_policy: HostPathPolicy::AllowRoots(&allow_roots),
             secret_handle_policy: SecretHandlePolicy::DenyAll,
+            allow_replace: true,
+            ..Default::default()
         },
     )?;
 

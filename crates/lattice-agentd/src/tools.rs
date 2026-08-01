@@ -5,6 +5,7 @@
 //! client; they validate a C1 workspace anchor and emit `overlay_show` on the
 //! run's JSONL event bus for the shell to render.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use kernelfs::{
@@ -26,9 +27,10 @@ use crate::lattice_client::LatticeToolClient;
 use crate::protocol::AgentEvent;
 use crate::secret_handles::secret_handles_for_run;
 use crate::wasi_host::{
-    hydration_inputs_from_record, propose_output_drafts_with_provenance, run_wasi_guest_with_options,
-    wasi_host_error_json, wasi_materialize_error_json, wasi_run_error_json, DraftProvenance,
-    WorkspaceBinding, WasiGuestHostOptions, WasiHostError, WasiProposalProvenance,
+    hydration_inputs_from_record, propose_output_drafts_with_provenance,
+    resolve_hydration_resource_ids, run_wasi_guest_with_options, wasi_host_error_json,
+    wasi_materialize_error_json, wasi_run_error_json, DraftProvenance, WorkspaceBinding,
+    WasiGuestHostOptions, WasiHostError, WasiProposalProvenance,
 };
 
 /// Cap tool JSON returned to the model so long search/read payloads do not
@@ -1403,7 +1405,13 @@ async fn dispatch_run_wasi_guest(
         }
     };
 
-    let resource_ids = input_resource_ids_arg(args);
+    let explicit_resource_ids = input_resource_ids_arg(args);
+    let guest_to_workspace = guest_to_workspace_from_wasi_args(args);
+    let resource_ids = resolve_hydration_resource_ids(
+        Some(workspace_root),
+        &explicit_resource_ids,
+        &guest_to_workspace,
+    );
     let provenance = WasiProposalProvenance {
         run_id: run_id.clone(),
         wasm_path: wasm_path_rel.clone(),
@@ -1529,7 +1537,13 @@ async fn dispatch_run_cell_task(
         ..ProjectionRunRequest::default()
     };
 
-    let resource_ids = input_resource_ids_arg(args);
+    let explicit_resource_ids = input_resource_ids_arg(args);
+    let guest_to_workspace = guest_to_workspace_from_hydrate_paths(args);
+    let resource_ids = resolve_hydration_resource_ids(
+        Some(workspace_root),
+        &explicit_resource_ids,
+        &guest_to_workspace,
+    );
     let provenance = CellProposalProvenance {
         cell_id: cell_id.clone(),
         projection_id: projection_id.clone(),
@@ -1707,9 +1721,9 @@ fn string_array_arg(args: &Value, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn input_resource_ids_arg(args: &Value) -> std::collections::BTreeMap<String, String> {
+fn input_resource_ids_arg(args: &Value) -> BTreeMap<String, String> {
     let Some(Value::Object(map)) = args.get("inputResourceIds") else {
-        return std::collections::BTreeMap::new();
+        return BTreeMap::new();
     };
     map.iter()
         .filter_map(|(key, value)| {
@@ -1721,6 +1735,53 @@ fn input_resource_ids_arg(args: &Value) -> std::collections::BTreeMap<String, St
             }
         })
         .collect()
+}
+
+/// Map WASI guest paths to workspace-relative resource paths from tool args.
+fn guest_to_workspace_from_wasi_args(args: &Value) -> BTreeMap<String, String> {
+    let mut map = BTreeMap::new();
+    for host_path_rel in string_array_arg(args, "resourcePaths") {
+        let guest_path = std::path::Path::new(&host_path_rel)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("")
+            .to_string();
+        if !guest_path.is_empty() {
+            map.insert(guest_path, host_path_rel);
+        }
+    }
+
+    let inputs_json = string_arg(args, "inputsJson").unwrap_or_else(|| "[]".to_string());
+    if let Ok(inputs) = serde_json::from_str::<Value>(&inputs_json) {
+        if let Some(items) = inputs.as_array() {
+            for item in items {
+                let Some(host_path_rel) = item.get("hostPath").and_then(|v| v.as_str()) else {
+                    continue;
+                };
+                let Some(guest_path) = item.get("guestPath").and_then(|v| v.as_str()) else {
+                    continue;
+                };
+                map.insert(guest_path.to_string(), host_path_rel.to_string());
+            }
+        }
+    }
+    map
+}
+
+/// Map Cell hydrate guest basenames to workspace-relative resource paths.
+fn guest_to_workspace_from_hydrate_paths(args: &Value) -> BTreeMap<String, String> {
+    let mut map = BTreeMap::new();
+    for host_path_rel in string_array_arg(args, "hydrateResourcePaths") {
+        let guest_name = std::path::Path::new(&host_path_rel)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("")
+            .to_string();
+        if !guest_name.is_empty() {
+            map.insert(guest_name, host_path_rel);
+        }
+    }
+    map
 }
 
 fn resolve_wasi_input_mounts(
