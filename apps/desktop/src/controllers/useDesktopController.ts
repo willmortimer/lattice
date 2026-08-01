@@ -323,9 +323,9 @@ export function useDesktopController() {
     onWorkspaceUnavailable,
     openResource: (resource) => resourceSelectRef.current(resource),
   });
-  const { snapshot, snapshotRef, setSnapshot, workspacesDir, templates, adoptWorkspace,
+  const { snapshot, snapshotRef, setSnapshot, catalog, catalogDelta, getCatalog, workspacesDir, templates, adoptWorkspace,
     handleGetStarted, handleOpenWorkspace, openRecent, openWorkspaceById, handleCreateWorkspace,
-    openNewWorkspaceDialog, pickWorkspaceFolder, applyCatalogDeltaEvent, refreshResources } = workspaceController;
+    openNewWorkspaceDialog, pickWorkspaceFolder, applyCatalogDeltaEvent, refreshResources, seedCatalogFromResources } = workspaceController;
   workspaceSnapshotRef.current = snapshot;
   useEffect(() => {
     workspaceSnapshotRef.current = snapshot;
@@ -517,6 +517,7 @@ export function useDesktopController() {
     snapshot,
     snapshotRef,
     setSnapshot,
+    getCatalog,
     hasCapability,
     onError: setError,
     onBusy: setBusy,
@@ -536,15 +537,36 @@ export function useDesktopController() {
     },
     onReplaceHistoryPath: navigationController.replacePath,
     refreshResources,
+    seedCatalogFromResources,
     onPageReady: () => setActiveSaveStatus(IDLE_SAVE_STATE),
     onLinkRepairReview,
   });
   resourceResetRef.current = resourceController.resetResources;
   resourceSelectRef.current = resourceController.handleSelect;
   resourceClearRef.current = resourceController.clearSelection;
-  const { selected, selectedPaths, session, pageRef, currentPageRevisionRef, reloadToken, handleSelect, setSession } = resourceController;
+  const {
+    selected,
+    selectedResourceIds,
+    selectedPaths,
+    session,
+    pageRef,
+    currentPageRevisionRef,
+    reloadToken,
+    handleSelect,
+    setSession,
+    syncSelectionWithCatalog,
+  } = resourceController;
   const page = session?.kind === "page" ? session : null;
   useEffect(() => { selectedRef.current = selected; }, [selected]);
+
+  const previousCatalogRef = useRef(catalog);
+  useEffect(() => {
+    const previous = previousCatalogRef.current;
+    if (previous !== catalog) {
+      syncSelectionWithCatalog(previous, catalog);
+      previousCatalogRef.current = catalog;
+    }
+  }, [catalog, syncSelectionWithCatalog]);
 
   const openProposalResourcePath = useCallback(async (path: string) => {
     let current = snapshotRef.current;
@@ -1132,7 +1154,7 @@ export function useDesktopController() {
   }, [settings.keybindings]);
 
   return {
-    profile, profileReady, settings, startup, snapshot, snapshotRef, selected, selectedPaths, session, error, busy,
+    profile, profileReady, settings, startup, snapshot, snapshotRef, catalog, catalogDelta, selected, selectedResourceIds, selectedPaths, session, error, busy,
     externalConflict, reloadToken, newWorkspaceOpen, workspacesDir, templates, statusToast, runtimeNotice,
     profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth, treeCollapsedPaths, revealPath, linkPicker,
     settingsDeepLinkTarget, clearSettingsDeepLink,

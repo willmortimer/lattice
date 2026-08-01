@@ -7,6 +7,8 @@ import {
   isSyntheticResourceId,
   parentPathOf,
   pathForResourceId,
+  pathsForResourceIds,
+  remapSelectedResourceIds,
   resourceIdForPath,
   resourceIdForPathOrSynthetic,
   resourcesFromCatalog,
@@ -101,6 +103,35 @@ describe("resourceCatalog", () => {
     expect(resourceIdForPathOrSynthetic(catalog, "Notes/a.md")).toBe("uuid-1");
     expect(resourceIdForPathOrSynthetic(catalog, "missing.md")).toBe(
       syntheticResourceId("missing.md"),
+    );
+    expect(pathsForResourceIds(catalog, new Set(["uuid-1", "missing"]))).toEqual([
+      "Notes/a.md",
+    ]);
+  });
+
+  it("remapSelectedResourceIds keeps UUID selection across path rename", () => {
+    const before = applyCatalogDelta(new Map(), {
+      type: "replace",
+      entries: [entry("uuid-1", "old.md")],
+    });
+    const after = applyCatalogDelta(before, {
+      type: "upsert",
+      entries: [entry("uuid-1", "new.md")],
+    });
+    expect(remapSelectedResourceIds(new Set(["uuid-1"]), before, after)).toEqual(
+      new Set(["uuid-1"]),
+    );
+  });
+
+  it("remapSelectedResourceIds migrates synthetic selection onto registry UUID", () => {
+    const before = catalogMapFromResources([resource("note.md")]);
+    const synthetic = syntheticResourceId("note.md");
+    const after = applyCatalogDelta(before, {
+      type: "upsert",
+      entries: [entry("stable-id", "note.md")],
+    });
+    expect(remapSelectedResourceIds(new Set([synthetic]), before, after)).toEqual(
+      new Set(["stable-id"]),
     );
   });
 });

@@ -8,6 +8,14 @@ import { readNativeCanvas } from "../canvas/adapter";
 import { previewBatchLinkRepair, previewLinkRepair, type BatchLinkRepairPlan, type LinkRepairPlan, type LinkRepairPathChange } from "../lib/linkRepair";
 import { applyPathRemaps, type PathRemap } from "../lib/pathRemap";
 import { moveResource, moveResources } from "../lib/resourceMutations";
+import {
+  isSyntheticResourceId,
+  pathForResourceId,
+  pathsForResourceIds,
+  remapSelectedResourceIds,
+  resourceIdForPathOrSynthetic,
+  type CatalogEntry,
+} from "../lib/resourceCatalog";
 import { loadArtifactManifest } from "../lib/artifactRun";
 import { loadDeckSession } from "../lib/deckRun";
 import { loadDerivedManifest, loadDerivedStatus } from "../lib/derivedRun";
@@ -35,6 +43,8 @@ export interface ResourceControllerOptions {
   snapshot: WorkspaceSnapshot | null;
   snapshotRef: MutableRefObject<WorkspaceSnapshot | null>;
   setSnapshot: Dispatch<SetStateAction<WorkspaceSnapshot | null>>;
+  /** Current id-keyed catalog for selection identity (path↔id). */
+  getCatalog: () => ReadonlyMap<string, CatalogEntry>;
   hasCapability: (capability: string) => boolean;
   onError: (message: string | null) => void;
   onBusy: (busy: boolean) => void;
@@ -46,12 +56,16 @@ export interface ResourceControllerOptions {
   onReplaceTab: (from: string, to: Resource) => void;
   onReplaceHistoryPath: (from: string, to: string) => void;
   refreshResources: () => Promise<void>;
+  /** Keep catalog in sync when browser demo mutates snapshot.resources directly. */
+  seedCatalogFromResources: (resources: readonly Resource[]) => void;
   onPageReady: () => void;
   onLinkRepairReview: (review: LinkRepairReviewRequest) => Promise<"accepted" | "deferred" | "cancelled">;
 }
 
 export interface ResourceController {
   selected: Resource | null;
+  selectedResourceIds: ReadonlySet<string>;
+  /** Path projection of the current id selection (for delete/move call sites). */
   selectedPaths: ReadonlySet<string>;
   setSelected: Dispatch<SetStateAction<Resource | null>>;
   session: OpenResourceSession | null;
@@ -67,10 +81,15 @@ export interface ResourceController {
     anchor?: string;
   }) => Promise<void>;
   applyTreeSelection: (detail: {
-    paths: ReadonlySet<string>;
+    resourceIds: ReadonlySet<string>;
     primary: Resource | null;
     open: boolean;
   }) => void;
+  /** Remap selection when the catalog replaces synthetic ids or drops entries. */
+  syncSelectionWithCatalog: (
+    previous: ReadonlyMap<string, CatalogEntry>,
+    next: ReadonlyMap<string, CatalogEntry>,
+  ) => void;
   reloadPageFromDisk: () => Promise<void>;
   applyPageContent: (raw: string, revision: string | null) => void;
   saveLocalPage: (raw: string) => Promise<void>;
@@ -84,6 +103,38 @@ export interface ResourceController {
   moveResourcesToFolder: (fromPaths: readonly string[], toDir: string) => Promise<void>;
   reconcilePathRemaps: (remaps: PathRemap[]) => Promise<void>;
   resetResources: () => void;
+}
+
+function remapSelectedIdsForPathChanges(
+  selected: ReadonlySet<string>,
+  catalog: ReadonlyMap<string, CatalogEntry>,
+  remaps: readonly PathRemap[],
+): Set<string> {
+  if (selected.size === 0 || remaps.length === 0) return new Set(selected);
+  const next = new Set<string>();
+  for (const id of selected) {
+    if (catalog.has(id) && !isSyntheticResourceId(id)) {
+      // Registry UUID survives renames; path alias updates in the catalog.
+      next.add(id);
+      continue;
+    }
+    if (catalog.has(id)) {
+      next.add(id);
+      continue;
+    }
+    if (isSyntheticResourceId(id)) {
+      const oldPath = id.slice("path:".length);
+      const newPath = applyPathRemaps(oldPath, remaps);
+      next.add(resourceIdForPathOrSynthetic(catalog, newPath));
+      continue;
+    }
+    const currentPath = pathForResourceId(catalog, id);
+    if (currentPath) {
+      next.add(id);
+      continue;
+    }
+  }
+  return next;
 }
 
 export function fileTitle(path: string): string {
@@ -106,12 +157,12 @@ export function renamedPath(path: string, title: string): string {
  * stale native reads cannot publish into a later renderer session. */
 export function useResourceController(options: ResourceControllerOptions): ResourceController {
   const {
-    snapshot, snapshotRef, setSnapshot, hasCapability, onError, onBusy,
+    snapshot, snapshotRef, setSnapshot, getCatalog, hasCapability, onError, onBusy,
     onActivity, onTitle, onSelectionChanged, onRecordNavigation, onOpenTab,
-    onReplaceTab, onReplaceHistoryPath, refreshResources, onPageReady, onLinkRepairReview,
+    onReplaceTab, onReplaceHistoryPath, refreshResources, seedCatalogFromResources, onPageReady, onLinkRepairReview,
   } = options;
   const [selected, setSelected] = useState<Resource | null>(null);
-  const [selectedPaths, setSelectedPaths] = useState<ReadonlySet<string>>(() => new Set());
+  const [selectedResourceIds, setSelectedResourceIds] = useState<ReadonlySet<string>>(() => new Set());
   const [session, setSession] = useState<OpenResourceSession | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const pageRef = useRef<Extract<OpenResourceSession, { kind: "page" }> | null>(null);
@@ -119,6 +170,10 @@ export function useResourceController(options: ResourceControllerOptions): Resou
   const sessionRef = useRef<OpenResourceSession | null>(null);
   const currentPageRevisionRef = useRef<string | null>(null);
   const loadGateRef = useRef<ResourceLoadGate>(createResourceLoadGate());
+
+  const selectedPaths: ReadonlySet<string> = new Set(
+    pathsForResourceIds(getCatalog(), selectedResourceIds),
+  );
 
   useEffect(() => {
     selectedRef.current = selected;
@@ -143,7 +198,7 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     pageRef.current = null;
     currentPageRevisionRef.current = null;
     setSelected(null);
-    setSelectedPaths(new Set());
+    setSelectedResourceIds(new Set());
     setSession(null);
     setReloadToken(0);
   }, [resetLoad]);
@@ -153,26 +208,37 @@ export function useResourceController(options: ResourceControllerOptions): Resou
   }, [resetResources]);
 
   const clearSelectionIf = useCallback((path: string) => {
-    setSelectedPaths((previous) => {
-      const next = new Set(
-        [...previous].filter((entry) => entry !== path && !entry.startsWith(`${path}/`)),
-      );
+    const catalog = getCatalog();
+    setSelectedResourceIds((previous) => {
+      const next = new Set<string>();
+      for (const id of previous) {
+        const entryPath = pathForResourceId(catalog, id);
+        if (!entryPath) continue;
+        if (entryPath === path || entryPath.startsWith(`${path}/`)) continue;
+        next.add(id);
+      }
       return next.size === previous.size ? previous : next;
     });
     const current = selectedRef.current;
     if (current && (current.path === path || current.path.startsWith(`${path}/`))) clearSelection();
-  }, [clearSelection]);
+  }, [clearSelection, getCatalog]);
 
   const clearSelectionPaths = useCallback((paths: readonly string[]) => {
     if (paths.length === 0) return;
     const doomed = new Set(paths);
-    setSelectedPaths((previous) => {
-      const next = new Set([...previous].filter((entry) => !doomed.has(entry)));
+    const catalog = getCatalog();
+    setSelectedResourceIds((previous) => {
+      const next = new Set<string>();
+      for (const id of previous) {
+        const entryPath = pathForResourceId(catalog, id);
+        if (entryPath && doomed.has(entryPath)) continue;
+        next.add(id);
+      }
       return next.size === previous.size ? previous : next;
     });
     const current = selectedRef.current;
     if (current && doomed.has(current.path)) clearSelection();
-  }, [clearSelection]);
+  }, [clearSelection, getCatalog]);
 
   const openCreatedResource = useCallback((resource: Resource, nextSession: OpenResourceSession) => {
     resetLoad();
@@ -181,14 +247,14 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     pageRef.current = nextSession.kind === "page" ? nextSession : null;
     currentPageRevisionRef.current = nextSession.kind === "page" ? nextSession.revision : null;
     setSelected(resource);
-    setSelectedPaths(new Set([resource.path]));
+    setSelectedResourceIds(new Set([resourceIdForPathOrSynthetic(getCatalog(), resource.path)]));
     setSession(nextSession);
     setReloadToken((token) => token + 1);
     onOpenTab(resource);
     onActivity("files");
     onTitle(fileTitle(resource.path));
     onSelectionChanged();
-  }, [onActivity, onOpenTab, onSelectionChanged, onTitle, resetLoad]);
+  }, [getCatalog, onActivity, onOpenTab, onSelectionChanged, onTitle, resetLoad]);
 
   const handleSelect = useCallback(async (
     resource: Resource,
@@ -212,7 +278,7 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     currentPageRevisionRef.current = null;
     setSelected(resource);
     if (selectionOptions.syncTreeSelection !== false) {
-      setSelectedPaths(new Set([resource.path]));
+      setSelectedResourceIds(new Set([resourceIdForPathOrSynthetic(getCatalog(), resource.path)]));
     }
     onTitle(fileTitle(resource.path));
     onError(null);
@@ -608,18 +674,39 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     } finally {
       if (isCurrentLoad(ticket)) onBusy(false);
     }
-  }, [beginLoad, hasCapability, isCurrentLoad, onActivity, onBusy, onError, onOpenTab, onPageReady, onRecordNavigation, onSelectionChanged, onTitle, resetLoad, snapshot, snapshotRef]);
+  }, [beginLoad, getCatalog, hasCapability, isCurrentLoad, onActivity, onBusy, onError, onOpenTab, onPageReady, onRecordNavigation, onSelectionChanged, onTitle, resetLoad, snapshot, snapshotRef]);
 
   const applyTreeSelection = useCallback((detail: {
-    paths: ReadonlySet<string>;
+    resourceIds: ReadonlySet<string>;
     primary: Resource | null;
     open: boolean;
   }) => {
-    setSelectedPaths(detail.paths);
+    setSelectedResourceIds(detail.resourceIds);
     if (detail.open && detail.primary) {
       void handleSelect(detail.primary, { syncTreeSelection: false });
     }
   }, [handleSelect]);
+
+  const syncSelectionWithCatalog = useCallback((
+    previous: ReadonlyMap<string, CatalogEntry>,
+    next: ReadonlyMap<string, CatalogEntry>,
+  ) => {
+    setSelectedResourceIds((selected) => {
+      if (selected.size === 0) return selected;
+      const remapped = remapSelectedResourceIds(selected, previous, next);
+      if (remapped.size === selected.size) {
+        let unchanged = true;
+        for (const id of selected) {
+          if (!remapped.has(id)) {
+            unchanged = false;
+            break;
+          }
+        }
+        if (unchanged) return selected;
+      }
+      return remapped;
+    });
+  }, []);
 
   const reloadPageFromDisk = useCallback(async () => {
     const current = pageRef.current;
@@ -681,11 +768,9 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     }
     onReplaceHistoryPath(from, to);
 
-    setSelectedPaths((previous) => {
-      if (previous.size === 0) return previous;
-      const next = new Set([...previous].map((path) => applyPathRemaps(path, [{ from, to }])));
-      return next;
-    });
+    setSelectedResourceIds((previous) =>
+      remapSelectedIdsForPathChanges(previous, getCatalog(), [{ from, to }]),
+    );
 
     const selected = selectedRef.current;
     if (!selected || !remappedSelectedPath || remappedSelectedPath === selected.path) return;
@@ -698,7 +783,7 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     selectedRef.current = resolved;
     onTitle(fileTitle(resolved.path));
     await handleSelect(resolved, { recordHistory: false, syncTreeSelection: false });
-  }, [handleSelect, onReplaceHistoryPath, onReplaceTab, onTitle, snapshotRef]);
+  }, [getCatalog, handleSelect, onReplaceHistoryPath, onReplaceTab, onTitle, snapshotRef]);
 
   const reconcilePathRemaps = useCallback(async (remaps: PathRemap[]) => {
     if (remaps.length === 0) return;
@@ -713,11 +798,9 @@ export function useResourceController(options: ResourceControllerOptions): Resou
       onReplaceHistoryPath(remap.from, remap.to);
     }
 
-    setSelectedPaths((previous) => {
-      if (previous.size === 0) return previous;
-      const next = new Set([...previous].map((path) => applyPathRemaps(path, remaps)));
-      return next;
-    });
+    setSelectedResourceIds((previous) =>
+      remapSelectedIdsForPathChanges(previous, getCatalog(), remaps),
+    );
 
     const selected = selectedRef.current;
     if (!selected) return;
@@ -730,7 +813,7 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     selectedRef.current = resolved;
     onTitle(fileTitle(resolved.path));
     await handleSelect(resolved, { recordHistory: false, syncTreeSelection: false });
-  }, [handleSelect, onReplaceHistoryPath, onReplaceTab, onTitle, snapshotRef]);
+  }, [getCatalog, handleSelect, onReplaceHistoryPath, onReplaceTab, onTitle, snapshotRef]);
 
   const renameResource = useCallback(async (resource: Resource, title: string) => {
     const current = snapshotRef.current ?? snapshot;
@@ -742,10 +825,17 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     }
     const nextResource = { ...resource, path: nextPath };
     if (inBrowser) {
-      setSnapshot((workspace) => workspace ? {
-        ...workspace,
-        resources: workspace.resources.map((entry) => entry.path === resource.path ? nextResource : entry),
-      } : workspace);
+      setSnapshot((workspace) => {
+        if (!workspace) return workspace;
+        const resources = workspace.resources.map((entry) =>
+          entry.path === resource.path ? nextResource : entry,
+        );
+        seedCatalogFromResources(resources);
+        return { ...workspace, resources };
+      });
+      setSelectedResourceIds((previous) =>
+        remapSelectedIdsForPathChanges(previous, getCatalog(), [{ from: resource.path, to: nextPath }]),
+      );
       if (selectedRef.current?.path === resource.path) {
         setSelected(nextResource);
         selectedRef.current = nextResource;
@@ -787,6 +877,7 @@ export function useResourceController(options: ResourceControllerOptions): Resou
       onBusy(false);
     }
   }, [
+    getCatalog,
     onBusy,
     onError,
     onLinkRepairReview,
@@ -795,6 +886,7 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     onTitle,
     reconcileAfterPathChange,
     refreshResources,
+    seedCatalogFromResources,
     setSnapshot,
     snapshot,
     snapshotRef,
@@ -828,21 +920,19 @@ export function useResourceController(options: ResourceControllerOptions): Resou
       if (inBrowser) {
         setSnapshot((workspace) => {
           if (!workspace) return workspace;
-          return {
-            ...workspace,
-            resources: workspace.resources.map((entry) => {
-              if (entry.path === from) return { ...entry, path: destination };
-              if (entry.path.startsWith(`${from}/`)) {
-                return { ...entry, path: destination + entry.path.slice(from.length) };
-              }
-              return entry;
-            }),
-          };
+          const resources = workspace.resources.map((entry) => {
+            if (entry.path === from) return { ...entry, path: destination };
+            if (entry.path.startsWith(`${from}/`)) {
+              return { ...entry, path: destination + entry.path.slice(from.length) };
+            }
+            return entry;
+          });
+          seedCatalogFromResources(resources);
+          return { ...workspace, resources };
         });
-        setSelectedPaths((previous) => {
-          const next = new Set([...previous].map((path) => applyPathRemaps(path, [{ from, to: destination }])));
-          return next;
-        });
+        setSelectedResourceIds((previous) =>
+          remapSelectedIdsForPathChanges(previous, getCatalog(), [{ from, to: destination }]),
+        );
         await reconcileAfterPathChange(from, destination, nextResource);
         return;
       }
@@ -864,10 +954,9 @@ export function useResourceController(options: ResourceControllerOptions): Resou
         await refreshResources();
         const refreshed = snapshotRef.current;
         const moved = refreshed?.resources.find((entry) => entry.path === destination) ?? nextResource;
-        setSelectedPaths((previous) => {
-          const next = new Set([...previous].map((path) => applyPathRemaps(path, [{ from, to: destination }])));
-          return next;
-        });
+        setSelectedResourceIds((previous) =>
+          remapSelectedIdsForPathChanges(previous, getCatalog(), [{ from, to: destination }]),
+        );
         await reconcileAfterPathChange(from, destination, moved);
       } catch (error) {
         onError(String(error));
@@ -889,18 +978,17 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     if (inBrowser) {
       setSnapshot((workspace) => {
         if (!workspace) return workspace;
-        return {
-          ...workspace,
-          resources: workspace.resources.map((entry) => {
-            for (const remap of remaps) {
-              if (entry.path === remap.from) return { ...entry, path: remap.to };
-              if (entry.path.startsWith(`${remap.from}/`)) {
-                return { ...entry, path: remap.to + entry.path.slice(remap.from.length) };
-              }
+        const resources = workspace.resources.map((entry) => {
+          for (const remap of remaps) {
+            if (entry.path === remap.from) return { ...entry, path: remap.to };
+            if (entry.path.startsWith(`${remap.from}/`)) {
+              return { ...entry, path: remap.to + entry.path.slice(remap.from.length) };
             }
-            return entry;
-          }),
-        };
+          }
+          return entry;
+        });
+        seedCatalogFromResources(resources);
+        return { ...workspace, resources };
       });
       await reconcilePathRemaps(remaps);
       return;
@@ -938,12 +1026,14 @@ export function useResourceController(options: ResourceControllerOptions): Resou
       onBusy(false);
     }
   }, [
+    getCatalog,
     onBusy,
     onError,
     onLinkRepairReview,
     reconcileAfterPathChange,
     reconcilePathRemaps,
     refreshResources,
+    seedCatalogFromResources,
     setSnapshot,
     snapshot,
     snapshotRef,
@@ -960,8 +1050,8 @@ export function useResourceController(options: ResourceControllerOptions): Resou
   }, [renameResource]);
 
   return {
-    selected, selectedPaths, setSelected, session, setSession, pageRef, currentPageRevisionRef, reloadToken,
-    handleSelect, applyTreeSelection, reloadPageFromDisk, applyPageContent, saveLocalPage, openCreatedResource,
+    selected, selectedResourceIds, selectedPaths, setSelected, session, setSession, pageRef, currentPageRevisionRef, reloadToken,
+    handleSelect, applyTreeSelection, syncSelectionWithCatalog, reloadPageFromDisk, applyPageContent, saveLocalPage, openCreatedResource,
     clearSelection, clearSelectionIf, clearSelectionPaths,
     commitTitle, renameResource, moveResourceToFolder, moveResourcesToFolder, reconcilePathRemaps, resetResources,
   };

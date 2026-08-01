@@ -5,20 +5,30 @@ import { KindMark, KIND_LABELS } from "./KindMark";
 import { hasLatticeResourceDrag, readResourceDragPayload, writeResourceDragPayload } from "./lib/resourceDrag";
 import { folderTreeIcon, resourceTreeIcon } from "./lib/resourceIcons";
 import {
-  buildResourceTree,
+  pathsForResourceIds,
+  type CatalogDelta,
+  type CatalogEntry,
+} from "./lib/resourceCatalog";
+import {
+  applyCatalogDeltaToForest,
+  buildResourceTreeFromCatalog,
   flattenVisibleTree,
   RESOURCE_TREE_ROW_HEIGHT,
   type FlatRow,
+  type TreeNode,
 } from "./lib/resourceTree";
-import { nextTreeSelection, pathsForTreeDrag, type TreeSelectMode } from "./lib/treeSelection";
+import { nextTreeSelection, resourceIdsForTreeDrag, type TreeSelectMode } from "./lib/treeSelection";
 import { validateMoveResources } from "./lib/treeOps";
 import type { Resource } from "./types";
 
 interface ResourceTreeProps {
-  resources: readonly Resource[];
-  selectedPaths: ReadonlySet<string>;
+  /** Id-keyed workspace catalog (preferred over flat resources). */
+  catalog: ReadonlyMap<string, CatalogEntry>;
+  /** Latest catalog-delta applied to `catalog` (null on full replace/seed). */
+  catalogDelta?: CatalogDelta | null;
+  selectedResourceIds: ReadonlySet<string>;
   onTreeSelect: (detail: {
-    paths: ReadonlySet<string>;
+    resourceIds: ReadonlySet<string>;
     primary: Resource | null;
     open: boolean;
   }) => void;
@@ -128,21 +138,19 @@ function useResourceListScroll() {
 }
 
 /**
- * Collapsible folder tree over a flat resource listing — replaces the
- * former flat `resource-list`. Folders group by path segment (sorted
- * before files, both alphabetically within a level; see
- * `lib/resourceTree`). Collapse state persists per workspace in the
- * Lattice profile when `workspaceKey` and change handlers are provided.
+ * Collapsible folder tree over the workspace catalog — keyed by resourceId
+ * for selection so renames and synthetic→UUID upgrades keep identity.
  *
- * Visible rows are flattened and windowed so large workspaces only mount
- * rows near the `.resource-list` scroll viewport.
+ * Forest updates prefer incremental `catalog-delta` patches; replace/seed
+ * rebuilds from the catalog map (not a path-derived Resource[] scan).
  *
  * Multi-select: plain click replaces; ⌘/Ctrl-click toggles; Shift-click
  * selects a contiguous range of visible file rows.
  */
 export function ResourceTree({
-  resources,
-  selectedPaths,
+  catalog,
+  catalogDelta = null,
+  selectedResourceIds,
   onTreeSelect,
   onResourceContextMenu,
   onFolderContextMenu,
@@ -162,17 +170,49 @@ export function ResourceTree({
   const [renameDraft, setRenameDraft] = useState("");
   const [dropTargetPath, setDropTargetPath] = useState<string | null>(null);
   const selectionAnchorRef = useRef<string | null>(null);
-  const selectedPathsRef = useRef(selectedPaths);
+  const selectedResourceIdsRef = useRef(selectedResourceIds);
   /** Paths captured at dragstart — dragover cannot read DataTransfer payloads. */
   const dragPathsRef = useRef<string[] | null>(null);
-  selectedPathsRef.current = selectedPaths;
+  selectedResourceIdsRef.current = selectedResourceIds;
   const collapsed = collapsedPaths ?? localCollapsed;
   const { rootRef, scrollParentRef, scrollTop, viewportHeight } = useResourceListScroll();
 
-  const tree = useMemo(() => buildResourceTree(resources), [resources]);
-  const rows = useMemo(() => flattenVisibleTree(tree, collapsed), [collapsed, tree]);
-  const visibleFilePaths = useMemo(
-    () => rows.filter((row) => row.type === "file").map((row) => row.path),
+  const appliedCatalogRef = useRef<ReadonlyMap<string, CatalogEntry> | null>(null);
+  const forestRef = useRef<TreeNode[]>([]);
+  const [forest, setForest] = useState<TreeNode[]>([]);
+
+  useEffect(() => {
+    // Skip when React re-runs with the same catalog map instance.
+    if (appliedCatalogRef.current === catalog) return;
+    const previous = appliedCatalogRef.current;
+    let nextForest: TreeNode[];
+    if (
+      !previous
+      || !catalogDelta
+      || catalogDelta.type === "replace"
+      || catalogDelta.type === "reorder"
+    ) {
+      nextForest = buildResourceTreeFromCatalog(catalog);
+    } else {
+      nextForest = applyCatalogDeltaToForest(
+        forestRef.current,
+        previous,
+        catalogDelta,
+        catalog,
+      ).forest;
+    }
+    forestRef.current = nextForest;
+    appliedCatalogRef.current = catalog;
+    setForest(nextForest);
+  }, [catalog, catalogDelta]);
+
+  const resources = useMemo(
+    () => [...catalog.values()].map((entry) => ({ path: entry.path, kind: entry.kind })),
+    [catalog],
+  );
+  const rows = useMemo(() => flattenVisibleTree(forest, collapsed), [collapsed, forest]);
+  const visibleResourceIds = useMemo(
+    () => rows.filter((row) => row.type === "file").map((row) => row.resourceId),
     [rows],
   );
 
@@ -224,7 +264,7 @@ export function ResourceTree({
     setRenameDraft(fileTitle(renameRequest.path));
   }, [renameRequest]);
 
-  if (resources.length === 0) {
+  if (catalog.size === 0) {
     return (
       <div className="resource-list-empty">This folder is empty. Files you add appear here.</div>
     );
@@ -260,26 +300,27 @@ export function ResourceTree({
     setRenameDraft(fileTitle(resource.path));
   }
 
-  function handleFileClick(event: MouseEvent, resource: Resource) {
+  function handleFileClick(event: MouseEvent, resourceId: string, resource: Resource) {
     const mode = selectModeFromEvent(event);
     const result = nextTreeSelection({
-      previous: selectedPaths,
+      previous: selectedResourceIds,
       anchor: selectionAnchorRef.current,
-      clicked: resource.path,
-      visibleFilePaths,
+      clicked: resourceId,
+      visibleResourceIds,
       mode,
     });
     selectionAnchorRef.current = result.anchor;
-    const open = mode !== "toggle" || result.selected.has(resource.path);
+    const open = mode !== "toggle" || result.selected.has(resourceId);
     onTreeSelect({
-      paths: result.selected,
-      primary: result.selected.has(resource.path) ? resource : null,
+      resourceIds: result.selected,
+      primary: result.selected.has(resourceId) ? resource : null,
       open,
     });
   }
 
-  function dragPathsFor(from: string): string[] {
-    return pathsForTreeDrag(from, selectedPathsRef.current);
+  function dragPathsFor(resourceId: string): string[] {
+    const ids = resourceIdsForTreeDrag(resourceId, selectedResourceIdsRef.current);
+    return pathsForResourceIds(catalog, ids);
   }
 
   function handleFolderDragOver(event: DragEvent, folderPath: string) {
@@ -295,7 +336,12 @@ export function ResourceTree({
     event.preventDefault();
     setDropTargetPath(null);
     const payload = readResourceDragPayload(event.dataTransfer);
-    const fromPaths = payload ? dragPathsFor(payload.path) : dragPathsRef.current;
+    const fromPaths = payload
+      ? (() => {
+          const id = [...catalog.values()].find((entry) => entry.path === payload.path)?.resourceId;
+          return id ? dragPathsFor(id) : dragPathsRef.current;
+        })()
+      : dragPathsRef.current;
     dragPathsRef.current = null;
     if (!fromPaths || fromPaths.length === 0) return;
     if (!validateMoveResources(fromPaths, folderPath, resources).ok) return;
@@ -310,12 +356,12 @@ export function ResourceTree({
     };
 
     if (row.type === "file") {
-      const { resource } = row;
+      const { resource, resourceId } = row;
       const isEditing = editingPath === resource.path;
-      const isSelected = selectedPaths.has(resource.path);
+      const isSelected = selectedResourceIds.has(resourceId);
       return (
         <button
-          key={`file:${resource.path}`}
+          key={`file:${resourceId}`}
           className={
             "resource-item resource-tree-row"
             + (isSelected ? " resource-item-active" : "")
@@ -327,19 +373,19 @@ export function ResourceTree({
           draggable={!isEditing}
           onDragStart={(event) => {
             writeResourceDragPayload(event.dataTransfer, resource);
-            dragPathsRef.current = dragPathsFor(resource.path);
+            dragPathsRef.current = dragPathsFor(resourceId);
           }}
           onDragEnd={() => {
             dragPathsRef.current = null;
             setDropTargetPath(null);
           }}
-          onClick={(event) => handleFileClick(event, resource)}
+          onClick={(event) => handleFileClick(event, resourceId, resource)}
           onContextMenu={(event) => {
             event.preventDefault();
-            if (!selectedPaths.has(resource.path)) {
-              selectionAnchorRef.current = resource.path;
+            if (!selectedResourceIds.has(resourceId)) {
+              selectionAnchorRef.current = resourceId;
               onTreeSelect({
-                paths: new Set([resource.path]),
+                resourceIds: new Set([resourceId]),
                 primary: resource,
                 open: true,
               });
@@ -380,7 +426,7 @@ export function ResourceTree({
     if (row.type === "empty-folder") {
       return (
         <div
-          key={`empty:${row.path}`}
+          key={`empty:${row.resourceId}`}
           className="resource-list-empty resource-tree-empty-row resource-tree-row"
           style={style}
         >
@@ -394,7 +440,7 @@ export function ResourceTree({
     const isActiveFolder = activeFolderPath === row.path;
     return (
       <button
-        key={`folder:${row.path}`}
+        key={`folder:${row.resourceId}`}
         className={
           "tree-folder-row resource-tree-row"
           + (isActiveFolder ? " tree-folder-row-active" : "")
