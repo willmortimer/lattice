@@ -108,6 +108,7 @@ export default defineConfig(async () => ({
         main: resolve(__dirname, "index.html"),
         "quick-note": resolve(__dirname, "quick-note.html"),
         "capture-shelf": resolve(__dirname, "capture-shelf.html"),
+        "agent-detached": resolve(__dirname, "agent-detached.html"),
       },
     },
   },

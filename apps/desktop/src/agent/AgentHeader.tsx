@@ -38,7 +38,7 @@ export function AgentHeader({ onClose, workspaceRoot }: AgentHeaderProps) {
         </IconButton>
       </header>
       <div className="agent-panel-layout-row">
-        <AgentLayoutToggle />
+        <AgentLayoutToggle workspaceRoot={root} />
       </div>
       {root ? <AgentThreadHistory workspaceRoot={root} /> : null}
     </div>
