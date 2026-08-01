@@ -115,7 +115,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [browserActiveFolderPath, setBrowserActiveFolderPath] = useState<string | null>(null);
   const {
-    profile, profileReady, settings, startup, snapshot, selected, selectedPaths, session, error, busy,
+    profile, profileReady, settings, startup, snapshot, catalog, catalogDelta, selected, selectedResourceIds, session, error, busy,
     externalConflict, reloadToken, newWorkspaceOpen, workspacesDir, templates, statusToast,
     setStatusToast,
     profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth,
@@ -501,8 +501,9 @@ export function DesktopShell({ model }: DesktopShellProps) {
           </div>
           <nav className="resource-list">
             <ResourceTree
-              resources={snapshot.resources}
-              selectedPaths={selectedPaths}
+              catalog={catalog}
+              catalogDelta={catalogDelta}
+              selectedResourceIds={selectedResourceIds}
               onTreeSelect={applyTreeSelection}
               directoryPurposes={directoryPurposes}
               workspaceKey={snapshot.id}

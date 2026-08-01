@@ -137,6 +137,43 @@ export function resourceIdForPathOrSynthetic(
   return resourceIdForPath(catalog, path) ?? syntheticResourceId(path);
 }
 
+/** Resolve selection ids to current workspace paths (skips missing ids). */
+export function pathsForResourceIds(
+  catalog: ReadonlyMap<string, CatalogEntry>,
+  resourceIds: ReadonlySet<string> | readonly string[],
+): string[] {
+  const paths: string[] = [];
+  for (const resourceId of resourceIds) {
+    const path = pathForResourceId(catalog, resourceId);
+    if (path) paths.push(path);
+  }
+  return paths;
+}
+
+/**
+ * Keep tree/tab selection identity across catalog deltas: preserve ids that
+ * still exist, and remap synthetic→registry (same path, new id). Dropped
+ * entries are removed from the set.
+ */
+export function remapSelectedResourceIds(
+  selected: ReadonlySet<string>,
+  previous: ReadonlyMap<string, CatalogEntry>,
+  next: ReadonlyMap<string, CatalogEntry>,
+): Set<string> {
+  const remapped = new Set<string>();
+  for (const id of selected) {
+    if (next.has(id)) {
+      remapped.add(id);
+      continue;
+    }
+    const previousEntry = previous.get(id);
+    if (!previousEntry) continue;
+    const replacement = resourceIdForPath(next, previousEntry.path);
+    if (replacement) remapped.add(replacement);
+  }
+  return remapped;
+}
+
 /** Apply a catalog delta to an id-keyed catalog map. */
 export function applyCatalogDelta(
   current: ReadonlyMap<string, CatalogEntry>,

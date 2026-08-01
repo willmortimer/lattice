@@ -1,16 +1,50 @@
 import { describe, expect, it } from "vitest";
 
 import type { Resource } from "../types";
-import { buildResourceTree, flattenVisibleTree, type TreeFolder } from "./resourceTree";
+import {
+  applyCatalogDelta,
+  catalogMapFromResources,
+  parentPathOf,
+  syntheticResourceId,
+  type CatalogEntry,
+} from "./resourceCatalog";
+import {
+  applyCatalogDeltaToForest,
+  buildResourceTree,
+  buildResourceTreeFromCatalog,
+  flattenVisibleTree,
+  type TreeFile,
+  type TreeFolder,
+} from "./resourceTree";
 
 function page(path: string): Resource {
   return { path, kind: "page" };
 }
 
+function catalogEntry(
+  resourceId: string,
+  path: string,
+  kind: Resource["kind"] = "page",
+): CatalogEntry {
+  const parent = parentPathOf(path);
+  return {
+    resourceId,
+    path,
+    kind,
+    parentId: parent ? syntheticResourceId(parent) : undefined,
+    childCount: 0,
+  };
+}
+
 describe("buildResourceTree", () => {
   it("keeps a top-level file as a direct child, with no folders", () => {
     const tree = buildResourceTree([page("README.md")]);
-    expect(tree).toEqual([{ type: "file", name: "README.md", resource: page("README.md") }]);
+    expect(tree).toEqual([{
+      type: "file",
+      name: "README.md",
+      resourceId: syntheticResourceId("README.md"),
+      resource: page("README.md"),
+    }]);
   });
 
   it("groups nested paths into folders", () => {
@@ -53,7 +87,12 @@ describe("buildResourceTree", () => {
     const b = a.children[0] as TreeFolder;
     const c = b.children[0] as TreeFolder;
     expect([a.path, b.path, c.path]).toEqual(["A", "A/B", "A/B/C"]);
-    expect(c.children).toEqual([{ type: "file", name: "Deep.md", resource: page("A/B/C/Deep.md") }]);
+    expect(c.children).toEqual([{
+      type: "file",
+      name: "Deep.md",
+      resourceId: syntheticResourceId("A/B/C/Deep.md"),
+      resource: page("A/B/C/Deep.md"),
+    }]);
   });
 
   it("returns an empty tree for no resources", () => {
@@ -123,6 +162,92 @@ describe("flattenVisibleTree", () => {
     expect(projects.children.map((node) => node.name)).toEqual([
       "Browser Demo",
       "Example Project.md",
+    ]);
+  });
+
+  it("assigns synthetic resourceIds on path-built nodes", () => {
+    const tree = buildResourceTree([page("Notes/A.md")]);
+    const notes = tree[0] as TreeFolder;
+    const file = notes.children[0] as TreeFile;
+    expect(notes.resourceId).toBe(syntheticResourceId("Notes"));
+    expect(file.resourceId).toBe(syntheticResourceId("Notes/A.md"));
+  });
+});
+
+describe("buildResourceTreeFromCatalog", () => {
+  it("keys file nodes by catalog resourceId", () => {
+    const catalog = applyCatalogDelta(new Map(), {
+      type: "replace",
+      entries: [catalogEntry("uuid-a", "Notes/A.md")],
+    });
+    const tree = buildResourceTreeFromCatalog(catalog);
+    const notes = tree[0] as TreeFolder;
+    const file = notes.children[0] as TreeFile;
+    expect(file.resourceId).toBe("uuid-a");
+    expect(file.resource.path).toBe("Notes/A.md");
+  });
+});
+
+describe("applyCatalogDeltaToForest", () => {
+  it("upserts without a full rebuild and updates path on rename", () => {
+    const seeded = catalogMapFromResources([page("a.md"), page("b.md")]);
+    const forest = buildResourceTreeFromCatalog(seeded);
+    const nextCatalog = applyCatalogDelta(seeded, {
+      type: "upsert",
+      entries: [catalogEntry(syntheticResourceId("a.md"), "renamed.md")],
+    });
+    const result = applyCatalogDeltaToForest(
+      forest,
+      seeded,
+      { type: "upsert", entries: [catalogEntry(syntheticResourceId("a.md"), "renamed.md")] },
+      nextCatalog,
+    );
+    expect(result.rebuilt).toBe(false);
+    expect(result.forest.map((node) => (node.type === "file" ? node.resource.path : node.path))).toEqual([
+      "b.md",
+      "renamed.md",
+    ]);
+    const renamed = result.forest.find(
+      (node): node is TreeFile => node.type === "file" && node.resource.path === "renamed.md",
+    );
+    expect(renamed?.resourceId).toBe(syntheticResourceId("a.md"));
+  });
+
+  it("replaces synthetic id with registry UUID without rebuilding", () => {
+    const seeded = catalogMapFromResources([page("note.md")]);
+    const forest = buildResourceTreeFromCatalog(seeded);
+    const stable = catalogEntry("stable-id", "note.md");
+    const nextCatalog = applyCatalogDelta(seeded, { type: "upsert", entries: [stable] });
+    const result = applyCatalogDeltaToForest(
+      forest,
+      seeded,
+      { type: "upsert", entries: [stable] },
+      nextCatalog,
+    );
+    expect(result.rebuilt).toBe(false);
+    expect(result.forest).toHaveLength(1);
+    const file = result.forest[0] as TreeFile;
+    expect(file.resourceId).toBe("stable-id");
+    expect(file.resource.path).toBe("note.md");
+  });
+
+  it("removes nodes incrementally", () => {
+    const seeded = catalogMapFromResources([page("keep.md"), page("drop.md")]);
+    const forest = buildResourceTreeFromCatalog(seeded);
+    const dropId = syntheticResourceId("drop.md");
+    const nextCatalog = applyCatalogDelta(seeded, {
+      type: "remove",
+      resourceIds: [dropId],
+    });
+    const result = applyCatalogDeltaToForest(
+      forest,
+      seeded,
+      { type: "remove", resourceIds: [dropId] },
+      nextCatalog,
+    );
+    expect(result.rebuilt).toBe(false);
+    expect(result.forest.map((node) => (node.type === "file" ? node.resource.path : node.path))).toEqual([
+      "keep.md",
     ]);
   });
 });

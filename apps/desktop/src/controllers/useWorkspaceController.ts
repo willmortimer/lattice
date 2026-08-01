@@ -15,6 +15,7 @@ import {
   applyCatalogDelta,
   catalogMapFromResources,
   resourcesFromCatalog,
+  type CatalogDelta,
   type CatalogDeltaEvent,
   type CatalogEntry,
 } from "../lib/resourceCatalog";
@@ -57,12 +58,19 @@ export interface WorkspaceController {
   snapshot: WorkspaceSnapshot | null;
   snapshotRef: MutableRefObject<WorkspaceSnapshot | null>;
   setSnapshot: Dispatch<SetStateAction<WorkspaceSnapshot | null>>;
+  /** Id-keyed catalog projection (source of truth for the resource tree). */
+  catalog: ReadonlyMap<string, CatalogEntry>;
+  /** Delta that produced the current `catalog` (null after seed/replace). */
+  catalogDelta: CatalogDelta | null;
+  getCatalog: () => ReadonlyMap<string, CatalogEntry>;
   workspacesDir: string | null;
   templates: TemplateDescriptor[];
   adoptWorkspace: (snapshot: WorkspaceSnapshot) => Promise<void>;
   handleWorkspaceChanged: (event: WorkspaceChangeEvent) => Promise<void>;
   applyCatalogDeltaEvent: (event: CatalogDeltaEvent) => void;
   refreshResources: () => Promise<void>;
+  /** Replace catalog from a flat resource list (browser demo mutations / full scan). */
+  seedCatalogFromResources: (resources: readonly Resource[]) => void;
   handleGetStarted: () => Promise<void>;
   handleOpenWorkspace: () => Promise<void>;
   openRecent: (root: string) => Promise<void>;
@@ -89,10 +97,14 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
     onWorkspaceUnavailable, openResource,
   } = options;
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot | null>(initialSnapshot);
+  const [catalog, setCatalog] = useState<ReadonlyMap<string, CatalogEntry>>(() =>
+    catalogMapFromResources(initialSnapshot?.resources ?? []),
+  );
+  const [catalogDelta, setCatalogDelta] = useState<CatalogDelta | null>(null);
   const [workspacesDir, setWorkspacesDir] = useState<string | null>(null);
   const [templates, setTemplates] = useState<TemplateDescriptor[]>([]);
   const snapshotRef = useRef(snapshot);
-  const catalogRef = useRef(catalogMapFromResources(snapshot?.resources ?? []));
+  const catalogRef = useRef(catalog);
   const startupAttemptedRef = useRef(false);
   const watchingRootRef = useRef<string | null>(null);
   const sessionRestoredWorkspaceIdRef = useRef<string | null>(null);
@@ -112,10 +124,22 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
     setSnapshot((prev) => (prev ? { ...prev, resources } : prev));
   }, []);
 
-  const seedCatalogFromResources = useCallback((resources: readonly Resource[]) => {
-    catalogRef.current = catalogMapFromResources(resources);
-    syncSnapshotResources(resourcesFromCatalog(catalogRef.current));
+  const publishCatalog = useCallback((
+    next: Map<string, CatalogEntry>,
+    delta: CatalogDelta | null,
+  ) => {
+    catalogRef.current = next;
+    setCatalog(next);
+    setCatalogDelta(delta);
+    syncSnapshotResources(resourcesFromCatalog(next));
   }, [syncSnapshotResources]);
+
+  const getCatalog = useCallback(() => catalogRef.current, []);
+
+  const seedCatalogFromResources = useCallback((resources: readonly Resource[]) => {
+    const next = catalogMapFromResources(resources);
+    publishCatalog(next, { type: "replace", entries: [...next.values()] });
+  }, [publishCatalog]);
 
   useEffect(() => {
     snapshotRef.current = snapshot;
@@ -139,7 +163,10 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
     await persistOutgoingWorkspaceUiSession();
     if (watchingRootRef.current && watchingRootRef.current !== next.root) await stopWatching();
     snapshotRef.current = next;
-    catalogRef.current = catalogMapFromResources(next.resources);
+    const nextCatalog = catalogMapFromResources(next.resources);
+    catalogRef.current = nextCatalog;
+    setCatalog(nextCatalog);
+    setCatalogDelta({ type: "replace", entries: [...nextCatalog.values()] });
     sessionRestoredWorkspaceIdRef.current = null;
     useWorkspaceUiSessionStore.getState().setActiveWorkspaceId(next.id);
     setSnapshot(next);
@@ -163,9 +190,9 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
   const applyCatalogDeltaEvent = useCallback((event: CatalogDeltaEvent) => {
     const root = snapshotRef.current?.root;
     if (!root || event.workspaceRoot !== root) return;
-    catalogRef.current = applyCatalogDelta(catalogRef.current, event.delta);
-    syncSnapshotResources(resourcesFromCatalog(catalogRef.current));
-  }, [syncSnapshotResources]);
+    const next = applyCatalogDelta(catalogRef.current, event.delta);
+    publishCatalog(next, event.delta);
+  }, [publishCatalog]);
 
   const refreshResources = useCallback(async () => {
     const root = snapshotRef.current?.root;
@@ -197,6 +224,8 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
       const reset = workspaceUnavailableState(root);
       snapshotRef.current = reset.snapshot;
       catalogRef.current = new Map();
+      setCatalog(new Map());
+      setCatalogDelta({ type: "replace", entries: [] });
       sessionRestoredWorkspaceIdRef.current = null;
       useWorkspaceUiSessionStore.getState().setActiveWorkspaceId(null);
       setSnapshot(reset.snapshot);
@@ -454,7 +483,7 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
   }, [getWorkspaceUiSession, snapshot, snapshot?.id]);
 
   return {
-    snapshot, snapshotRef, setSnapshot, workspacesDir, templates, adoptWorkspace,
-    handleWorkspaceChanged, applyCatalogDeltaEvent, refreshResources, handleGetStarted, handleOpenWorkspace,
+    snapshot, snapshotRef, setSnapshot, catalog, catalogDelta, getCatalog, workspacesDir, templates, adoptWorkspace,
+    handleWorkspaceChanged, applyCatalogDeltaEvent, refreshResources, seedCatalogFromResources, handleGetStarted, handleOpenWorkspace,
     openRecent, openWorkspaceById: openWorkspaceByIdHandler, handleCreateWorkspace, openNewWorkspaceDialog, pickWorkspaceFolder,  };
 }
