@@ -11,6 +11,10 @@ import { createContext, createElement, useContext, useRef, type ReactNode } from
 import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
+import {
+  DEFAULT_DATA_TABLE_PANEL_SIZES,
+  type DataTablePanelSizes,
+} from "../data/dataTableLayout";
 import type { SaveState } from "../editor/saveState";
 import { DIRTY_SAVE_STATE, IDLE_SAVE_STATE } from "../editor/saveState";
 
@@ -45,6 +49,7 @@ export type DesktopUiState = {
   agentPanelOpen: boolean;
   agentLayoutMode: AgentLayoutMode;
   agentWorkbenchPanelSizes: AgentWorkbenchPanelSizes;
+  dataTablePanelSizes: DataTablePanelSizes;
   paletteOpen: boolean;
   searchPaneOpen: boolean;
   setSaveStatus: (
@@ -59,6 +64,7 @@ export type DesktopUiState = {
   setAgentPanelOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
   setAgentLayoutMode: (mode: AgentLayoutMode) => void;
   setAgentWorkbenchPanelSizes: (sizes: AgentWorkbenchPanelSizes) => void;
+  setDataTablePanelSizes: (sizes: DataTablePanelSizes) => void;
   setPaletteOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
   setSearchPaneOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
 };
@@ -97,6 +103,7 @@ export function createDesktopUiStore(
     agentPanelOpen: false,
     agentLayoutMode: "dock",
     agentWorkbenchPanelSizes: DEFAULT_AGENT_WORKBENCH_PANEL_SIZES,
+    dataTablePanelSizes: DEFAULT_DATA_TABLE_PANEL_SIZES,
     paletteOpen: false,
     searchPaneOpen: false,
     setSaveStatus: (sessionId, state) => {
@@ -143,6 +150,7 @@ export function createDesktopUiStore(
       }),
     setAgentLayoutMode: (agentLayoutMode) => set({ agentLayoutMode }),
     setAgentWorkbenchPanelSizes: (agentWorkbenchPanelSizes) => set({ agentWorkbenchPanelSizes }),
+    setDataTablePanelSizes: (dataTablePanelSizes) => set({ dataTablePanelSizes }),
     setPaletteOpen: (open) =>
       set({
         paletteOpen: typeof open === "function" ? open(get().paletteOpen) : open,

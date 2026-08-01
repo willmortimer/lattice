@@ -1,0 +1,33 @@
+.data-table-split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.data-table-split-grid,
+.data-table-split-detail {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.data-table-split-handle {
+  flex: 0 0 5px;
+  background: var(--lt-line);
+  transition: background 120ms ease;
+}
+
+.data-table-split-handle:hover,
+.data-table-split-handle[data-separator="active"] {
+  background: color-mix(in oklch, var(--lt-accent-deep) 45%, var(--lt-line));
+}
+
+.data-table-split-detail .record-detail-panel {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  flex: 1 1 auto;
+}

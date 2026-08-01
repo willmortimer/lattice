@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { DEFAULT_DATA_TABLE_PANEL_SIZES } from "../data/dataTableLayout";
 import { DIRTY_SAVE_STATE, IDLE_SAVE_STATE } from "../editor/saveState";
 import {
   createDesktopUiStore,
@@ -88,5 +89,14 @@ describe("desktopUiStore agent layout", () => {
 
     store.getState().setAgentLayoutMode("detached");
     expect(store.getState().agentLayoutMode).toBe("detached");
+  });
+
+  it("persists data table panel sizes", () => {
+    const store = createDesktopUiStore();
+
+    expect(store.getState().dataTablePanelSizes).toEqual(DEFAULT_DATA_TABLE_PANEL_SIZES);
+
+    store.getState().setDataTablePanelSizes({ table: 55, detail: 45 });
+    expect(store.getState().dataTablePanelSizes).toEqual({ table: 55, detail: 45 });
   });
 });
