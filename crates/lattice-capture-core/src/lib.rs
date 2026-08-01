@@ -9,6 +9,7 @@ mod image;
 mod permission;
 mod plan;
 mod recording;
+mod rendition;
 mod source;
 
 pub use backend::CaptureBackend;
@@ -21,6 +22,7 @@ pub use permission::{
 };
 pub use plan::{CapturePlan, ScreenshotPlan};
 pub use recording::RecordingSession;
+pub use rendition::{encode_storage_image, png_bytes_from_capture};
 pub use source::{
     CaptureSource, CaptureSourceInfo, DisplayHandle, RegionHandle, WindowHandle,
 };

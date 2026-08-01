@@ -4,6 +4,9 @@ import Foundation
 import ScreenCaptureKit
 
 /// ScreenCaptureKit-oriented capture helpers (no `/usr/sbin/screencapture`).
+///
+/// PNG encoding here is FFI transport only (SCK → C ABI bytes). Clipboard,
+/// WebP storage, and Capture Inbox ingest are owned by Rust command core.
 @available(macOS 14.0, *)
 enum ScreenCaptureSession {
     struct CapturedPng: Sendable {

@@ -25,7 +25,10 @@ mod search;
 mod workspace;
 
 pub use authoritative::{read_authoritative_bytes, read_authoritative_string};
-pub use capture::{create_inbox_capture, capture_page_path, InboxCaptureResult, MAX_INBOX_CAPTURE_BYTES};
+pub use capture::{
+    capture_page_path, create_inbox_capture, ingest_captured_image, ingest_png_capture,
+    InboxCaptureResult, MAX_INBOX_CAPTURE_BYTES,
+};
 pub use catalog::{
     apply_catalog_delta, catalog_delta_for_workspace_event, catalog_entries_from_resources,
     is_direct_child, list_children, list_children_from_workspace, list_children_with_runtime,
