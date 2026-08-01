@@ -21,3 +21,15 @@ export {
   seedGuidanceAnchors,
   type DefaultGuidanceAnchorId,
 } from "./seedAnchors";
+export {
+  getAnchorRectForAriaLabel,
+  queryGuidanceAnchorElementForAriaLabel,
+  resolveGuidanceAnchorFromAriaLabel,
+  resolveGuidanceAnchorIdFromAriaLabel,
+  revealGuidanceAnchorForAriaLabel,
+} from "./demoBridge";
+export { GuidanceTourController, startGuidanceTour, startSampleGuidanceTour } from "./tour/controller";
+export { GuidanceTourHost } from "./tour/GuidanceTourHost";
+export { guidanceTourMachine, resolveStepAnchor } from "./tour/machine";
+export { sampleShellTour } from "./tour/sampleTour";
+export type { TourDefinition, TourPlacement, TourSkipRules, TourStep } from "./tour/types";

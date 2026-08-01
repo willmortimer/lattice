@@ -2,14 +2,19 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { useEffect } from "react";
 
 import { useDesktopController } from "./controllers/useDesktopController";
-import { seedGuidanceAnchors } from "./guidance";
+import { GuidanceTourController, seedGuidanceAnchors } from "./guidance";
 import { queryClient } from "./query/queryClient";
 import { DesktopShell } from "./shell/DesktopShell";
 import { DesktopUiStoreProvider } from "./shell/desktopUiStore";
 
 function DesktopAppInner() {
   useEffect(() => seedGuidanceAnchors(), []);
-  return <DesktopShell model={useDesktopController()} />;
+  return (
+    <>
+      <DesktopShell model={useDesktopController()} />
+      <GuidanceTourController />
+    </>
+  );
 }
 
 export default function DesktopApp() {
