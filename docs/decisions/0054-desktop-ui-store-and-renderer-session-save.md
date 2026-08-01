@@ -20,7 +20,8 @@ selection.
    save indicators) — never documents, Pixi scenes, transcripts, or Arrow
    buffers.
 2. **Save state is keyed by renderer session ID** before split views /
-   resizable panels ship: `saveStatusBySessionId`.
+   resizable panels ship: `saveStatusBySessionId` (implemented; tabs and
+   header chrome subscribe per session).
 3. **Exactly one owner** for activity area, active resource, and open tabs
    (either the UI store or the navigation hook — remove duplicates).
 4. **Serialized save failure semantics:** pause on unknown errors; optional
@@ -37,3 +38,5 @@ selection.
 
 - Extends ADR 0006 without abandoning React/Zustand.
 - Required tests listed in the private synthesis and hotpath P0 sprint DAG.
+- Singular `saveState` is retired; callers use `setSaveStatus(sessionId, …)`
+  / `clearSaveStatus` and narrow Zustand selectors per session.

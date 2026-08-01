@@ -50,7 +50,7 @@ import {
   listenAppLock,
   type AppLockStatus,
 } from "../lib/appLock";
-import { useDesktopUiStore, useDesktopUiStoreApi } from "../shell/desktopUiStore";
+import { useDesktopUiStore, useDesktopUiStoreApi, rendererSessionIdForPath, saveStatusForSession } from "../shell/desktopUiStore";
 export function useDesktopController() {
   const {
     profile,
@@ -69,12 +69,18 @@ export function useDesktopController() {
     resetSettings,
   } = useAppSettings();
   const uiStore = useDesktopUiStoreApi();
-  const setSaveState = useCallback(
+  const selectedRef = useRef<Resource | null>(null);
+  const setActiveSaveStatus = useCallback(
     (state: SaveState | ((prev: SaveState) => SaveState)) => {
-      uiStore.getState().setSaveState(state);
+      const path = selectedRef.current?.path;
+      if (!path) return;
+      uiStore.getState().setSaveStatus(rendererSessionIdForPath(path), state);
     },
     [uiStore],
   );
+  const clearAllSaveStatuses = useCallback(() => {
+    uiStore.getState().clearAllSaveStatuses();
+  }, [uiStore]);
   const sidebarWidth = useDesktopUiStore((state) => state.sidebarWidth);
   const setSidebarWidth = useDesktopUiStore((state) => state.setSidebarWidth);
   const inspectorOpen = useDesktopUiStore((state) => state.inspectorOpen);
@@ -124,11 +130,10 @@ export function useDesktopController() {
   const resourceResetRef = useRef<() => void>(() => undefined);
   const resourceSelectRef = useRef<(resource: Resource, options?: { recordHistory?: boolean }) => Promise<void>>(async () => undefined);
   const resourceClearRef = useRef<() => void>(() => undefined);
-  const selectedRef = useRef<Resource | null>(null);
-  const saveStateRef = useRef(uiStore.getState().saveState);
+  const saveStatusBySessionIdRef = useRef(uiStore.getState().saveStatusBySessionId);
   useEffect(() => {
     return uiStore.subscribe((state) => {
-      saveStateRef.current = state.saveState;
+      saveStatusBySessionIdRef.current = state.saveStatusBySessionId;
     });
   }, [uiStore]);
   const workspaceSnapshotRef = useRef<WorkspaceSnapshot | null>(inBrowser && !demoStartEmpty ? demoSnapshot : null);
@@ -144,11 +149,28 @@ export function useDesktopController() {
     maxOpenTabs: settings.performance.maxOpenTabs,
     getResource: (path) => workspaceSnapshotRef.current?.resources.find((resource) => resource.path === path) ?? null,
     getSelectedPath: () => selectedRef.current?.path ?? null,
-    canCloseTab: (path) => path !== selectedRef.current?.path || !saveStateRef.current ||
-      !(saveStateRef.current.status === "dirty" || saveStateRef.current.status === "saving" || saveStateRef.current.status === "conflict") ||
-      !settings.files.confirmCloseWithUnsavedChanges || window.confirm("Close this tab with unsaved changes?"),
+    canCloseTab: (path) => {
+      const status = saveStatusForSession(
+        saveStatusBySessionIdRef.current,
+        rendererSessionIdForPath(path),
+      );
+      if (
+        !(
+          status.status === "dirty" ||
+          status.status === "saving" ||
+          status.status === "conflict"
+        )
+      ) {
+        return true;
+      }
+      if (!settings.files.confirmCloseWithUnsavedChanges) return true;
+      return window.confirm("Close this tab with unsaved changes?");
+    },
     onSelect: (resource, options) => resourceSelectRef.current(resource, options),
     onClearSelection: () => resourceClearRef.current(),
+    onTabClosed: (path) => {
+      uiStore.getState().clearSaveStatus(rendererSessionIdForPath(path));
+    },
   });
   const {
     state: navigation,
@@ -185,17 +207,17 @@ export function useDesktopController() {
 
   const onAdopt = useCallback(async () => {
     resourceResetRef.current();
-    setSaveState(IDLE_SAVE_STATE);
+    clearAllSaveStatuses();
     reconciliationRef.current.clearConflict();
     setRuntimeNotice(null);
     resetNavigation();
-  }, [resetNavigation, setSaveState]);
+  }, [clearAllSaveStatuses, resetNavigation]);
 
   const onWorkspaceUnavailable = useCallback(async (root: string) => {
     resourceResetRef.current();
     resetNavigation();
     reconciliationRef.current.clearConflict();
-    setSaveState(IDLE_SAVE_STATE);
+    clearAllSaveStatuses();
     setRuntimeNotice({
       code: "open-workspace-unavailable",
       title: "Workspace unavailable",
@@ -203,7 +225,7 @@ export function useDesktopController() {
         "The open workspace was moved or deleted outside Lattice. It was closed without recreating any content; create a workspace or open its new location.",
       path: root,
     });
-  }, [resetNavigation, setSaveState]);
+  }, [clearAllSaveStatuses, resetNavigation]);
 
   const getSession = useCallback((): Omit<DesktopSession, "root"> => {
     const current = getNavigationSessionState();
@@ -450,10 +472,18 @@ export function useDesktopController() {
     onSelectionChanged: () => reconciliationRef.current.clearConflict(),
     onRecordNavigation: navigationController.record,
     onOpenTab: navigationController.openTab,
-    onReplaceTab: navigationController.replaceTab,
+    onReplaceTab: (from, to) => {
+      navigationController.replaceTab(from, to);
+      if (from !== to.path) {
+        uiStore.getState().remapSaveStatus(
+          rendererSessionIdForPath(from),
+          rendererSessionIdForPath(to.path),
+        );
+      }
+    },
     onReplaceHistoryPath: navigationController.replacePath,
     refreshResources,
-    onPageReady: () => setSaveState(IDLE_SAVE_STATE),
+    onPageReady: () => setActiveSaveStatus(IDLE_SAVE_STATE),
     onLinkRepairReview,
   });
   resourceResetRef.current = resourceController.resetResources;
@@ -549,7 +579,13 @@ export function useDesktopController() {
     pageRef,
     currentPageRevisionRef,
     getSelected: () => selectedRef.current,
-    getSaveState: () => saveStateRef.current,
+    getSaveState: () =>
+      saveStatusForSession(
+        saveStatusBySessionIdRef.current,
+        selectedRef.current?.path
+          ? rendererSessionIdForPath(selectedRef.current.path)
+          : null,
+      ),
     pageEditorRef,
     refreshResources,
     handleWorkspaceUnavailable: workspaceController.handleWorkspaceChanged,
@@ -559,7 +595,7 @@ export function useDesktopController() {
     clearSelectionIf: resourceController.clearSelectionIf,
     removeTabs: navigationController.removeTabs,
     onError: setError,
-    setSaveStateIdle: () => setSaveState(IDLE_SAVE_STATE),
+    setSaveStateIdle: () => setActiveSaveStatus(IDLE_SAVE_STATE),
     onExternalLinkRepairProposal: (proposalId, from, to) => {
       void openExternalLinkRepairProposal(proposalId, from, to);
     },
@@ -568,7 +604,7 @@ export function useDesktopController() {
   const { externalConflict, handleKeepIncoming, handleKeepLocal, handleKeepBoth } = reconciliationController;
   const actions = useDesktopActionsController({
     snapshot, snapshotRef, setSnapshot, selected, pageRef, wikiTargets,
-    setError, setBusy, setStatusToast, setSaveStateIdle: () => setSaveState(IDLE_SAVE_STATE),
+    setError, setBusy, setStatusToast, setSaveStateIdle: () => setActiveSaveStatus(IDLE_SAVE_STATE),
     setActivityArea: (area) => navigationController.setActivityArea(area),
     setRevealPath, setLinkPicker, refreshResources, handleSelect,
     openCreatedResource: resourceController.openCreatedResource,
@@ -1024,7 +1060,7 @@ export function useDesktopController() {
     openTabs, navigation, inspectorOpen, agentPanelOpen, editingTitle, titleDraft, assetRoot, wikiTargets, pageEditorRef,
     recents, page, currentPageRevisionRef,
     paletteItems, hasCapability, setSettings, setStartup, setError,
-    setSaveState, setNewWorkspaceOpen, setSearchPaneOpen, setPaletteOpen,
+    setSaveStatus: setActiveSaveStatus, setNewWorkspaceOpen, setSearchPaneOpen, setPaletteOpen,
     setActivityArea, setInspectorOpen, setAgentPanelOpen, setDismissedNoticeCodes, setEditingTitle, setTitleDraft, setSidebarWidth,
     handleTreeCollapsedPathsChange,
     setLinkPicker,

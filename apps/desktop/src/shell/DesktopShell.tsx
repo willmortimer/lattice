@@ -153,7 +153,10 @@ export function DesktopShell({ model }: DesktopShellProps) {
     [browserActiveFolderPath, selected],
   );
 
+  const activeRendererSessionId = selected?.path ?? null;
+
   const rendererContext = useRendererServices({
+    sessionId: activeRendererSessionId,
     assetRoot,
     workspaceRoot: inBrowser || !snapshot ? null : snapshot.root,
     resources: snapshot?.resources ?? [],
@@ -550,7 +553,10 @@ export function DesktopShell({ model }: DesktopShellProps) {
             </div>
             <div className="header-actions">
               {selected?.kind === "page" && page && (
-                <SaveStatusIndicator externalConflict={Boolean(externalConflict)} />
+                <SaveStatusIndicator
+                  sessionId={activeRendererSessionId}
+                  externalConflict={Boolean(externalConflict)}
+                />
               )}
               {selected?.kind === "page" && page && !inBrowser && (
                 <DictationControls
@@ -637,7 +643,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
                 >
                   <KindMark kind={tab.kind} size={12} />
                   <span>{fileTitle(tab.path)}</span>
-                  {tab.path === selected?.path && <TabUnsavedDot active />}
+                  <TabUnsavedDot path={tab.path} />
                   <span
                     className="tab-close"
                     role="button"
