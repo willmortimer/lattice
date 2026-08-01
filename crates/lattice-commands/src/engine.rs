@@ -1410,6 +1410,7 @@ impl CommandEngine {
             }
             Command::ResourceRename { from, to } => {
                 self.store.rename(from, to)?;
+                self.sync_registry_rename(from, to)?;
                 let hash = self.store.metadata(to)?.revision.hash;
                 Ok(AppliedOp {
                     forward: command.clone(),
@@ -1425,6 +1426,7 @@ impl CommandEngine {
             Command::ResourceMove { from, to_dir } => {
                 let dest = to_dir.join(file_name(from));
                 self.store.rename(from, &dest)?;
+                self.sync_registry_rename(from, &dest)?;
                 let hash = self.store.metadata(&dest)?.revision.hash;
                 Ok(AppliedOp {
                     forward: command.clone(),
@@ -1459,6 +1461,7 @@ impl CommandEngine {
                     Some(self.store.read(path)?)
                 };
                 dispose(&self.root, &self.root.join(path), self.trash_policy)?;
+                self.sync_registry_remove(path)?;
                 let content = prior
                     .as_ref()
                     .map(|bytes| String::from_utf8_lossy(bytes).into_owned())
@@ -1956,6 +1959,7 @@ impl CommandEngine {
             // created content is preserved in history and restorable by redo.
             Command::ResourceDelete { path } => {
                 self.store.remove(path)?;
+                self.sync_registry_remove(path)?;
                 Ok(())
             }
             // Inverse of PageUpdate: restore the displaced bytes.
@@ -2002,11 +2006,14 @@ impl CommandEngine {
             // Inverse of ResourceRename / ResourceMove.
             Command::ResourceRename { from, to } => {
                 self.store.rename(from, to)?;
+                self.sync_registry_rename(from, to)?;
                 Ok(())
             }
             // Inverses are always expressed as renames, but stay exhaustive.
             Command::ResourceMove { from, to_dir } => {
-                self.store.rename(from, &to_dir.join(file_name(from)))?;
+                let dest = to_dir.join(file_name(from));
+                self.store.rename(from, &dest)?;
+                self.sync_registry_rename(from, &dest)?;
                 Ok(())
             }
             Command::TableCreate {
@@ -2604,6 +2611,36 @@ impl CommandEngine {
     fn read_form_opt(&self, form_path: &Path) -> Result<Option<String>> {
         self.read_view_opt(form_path)
     }
+
+    fn sync_registry_rename(&self, from: &Path, to: &Path) -> Result<()> {
+        let mut registry = latticefs_core::NamespaceRegistry::open(&self.root)?;
+        let from_key = registry_path_key(from);
+        let to_key = registry_path_key(to);
+        let dirty = match registry.rename(&from_key, &to_key) {
+            Ok(_) => true,
+            Err(latticefs_core::Error::RenameSourceNotFound { .. }) => {
+                registry.ensure_local_file(&to_key)?;
+                true
+            }
+            Err(err) => return Err(err.into()),
+        };
+        if dirty {
+            registry.save()?;
+        }
+        Ok(())
+    }
+
+    fn sync_registry_remove(&self, path: &Path) -> Result<()> {
+        let mut registry = latticefs_core::NamespaceRegistry::open(&self.root)?;
+        if registry.remove(&registry_path_key(path))?.is_some() {
+            registry.save()?;
+        }
+        Ok(())
+    }
+}
+
+fn registry_path_key(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
 }
 
 fn row_values_without_id(row: &Row) -> std::collections::BTreeMap<String, lattice_data::CellValue> {
