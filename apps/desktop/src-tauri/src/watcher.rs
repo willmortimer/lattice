@@ -17,6 +17,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
 const WORKSPACE_CHANGED_EVENT: &str = "workspace-changed";
+const CATALOG_DELTA_EVENT: &str = "catalog-delta";
 
 /// Tauri-managed slot for the watcher of the currently open workspace. Only
 /// one workspace is open at a time in v0, so this holds at most one entry;
@@ -137,6 +138,21 @@ fn start(app: AppHandle, state: &WatcherState, root: PathBuf) {
             let payload = WorkspaceChangePayload::from_event(&event);
             if let Err(err) = app.emit(WORKSPACE_CHANGED_EVENT, payload) {
                 eprintln!("lattice: failed to emit workspace-changed: {err}");
+            }
+            match lattice_handlers::catalog_delta_for_workspace_event(&root, &event) {
+                Ok(Some(delta)) => {
+                    let catalog_payload = lattice_handlers::CatalogDeltaEvent {
+                        workspace_root: path_string(&root),
+                        delta,
+                    };
+                    if let Err(err) = app.emit(CATALOG_DELTA_EVENT, catalog_payload) {
+                        eprintln!("lattice: failed to emit catalog-delta: {err}");
+                    }
+                }
+                Ok(None) => {}
+                Err(err) => {
+                    eprintln!("lattice: failed to build catalog-delta: {err}");
+                }
             }
         }
     });

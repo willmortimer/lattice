@@ -9,6 +9,7 @@ const STALE_REVISION_PREFIX = "STALE_REVISION:";
 export const BRIDGE_COMMANDS = new Set([
   "open_workspace",
   "list_resources",
+  "list_children",
   "read_page",
   "apply_page_update",
   "create_page",

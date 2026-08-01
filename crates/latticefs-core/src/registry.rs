@@ -221,6 +221,25 @@ impl NamespaceRegistry {
             resource_id: record.resource_id,
         })
     }
+
+    /// Resolve a stable [`ResourceId`] back to its registered path key.
+    pub fn path_for_resource_id(&self, resource_id: ResourceId) -> Option<String> {
+        self.document
+            .entries
+            .iter()
+            .find(|(_, record)| record.resource_id == resource_id)
+            .map(|(path, _)| path.clone())
+    }
+
+    /// Drop a path registration, returning the prior id when present.
+    pub fn remove(&mut self, path: &str) -> Result<Option<ResourceId>> {
+        let key = normalize_path_key(path)?;
+        Ok(self
+            .document
+            .entries
+            .remove(&key)
+            .map(|record| record.resource_id))
+    }
 }
 
 fn derive_materialization(authority: AuthorityMode) -> MaterializationState {
@@ -245,6 +264,20 @@ mod tests {
         assert!(registry.resource_stat("notes/a.md").is_err());
         let stat = registry.resource_stat("notes/b.md").unwrap();
         assert_eq!(stat.resource_id, id);
+    }
+
+    #[test]
+    fn path_for_resource_id_and_remove_round_trip() {
+        let dir = tempdir().unwrap();
+        let mut registry = NamespaceRegistry::open(dir.path()).unwrap();
+        let id = registry.ensure_local_file("notes/a.md").unwrap();
+        assert_eq!(
+            registry.path_for_resource_id(id).as_deref(),
+            Some("notes/a.md")
+        );
+        assert_eq!(registry.remove("notes/a.md").unwrap(), Some(id));
+        assert!(registry.path_for_resource_id(id).is_none());
+        assert_eq!(registry.remove("notes/a.md").unwrap(), None);
     }
 
     #[test]
