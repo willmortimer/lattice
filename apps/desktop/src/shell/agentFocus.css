@@ -1,0 +1,33 @@
+/*
+ * Same-window agent focus: hide resource tree + editor chrome so the agent
+ * panel fills the main workspace. Activity rail stays for exit/navigation.
+ */
+
+.shell.shell-agent-focus > .sidebar {
+  display: none;
+}
+
+.shell.shell-agent-focus .main-head,
+.shell.shell-agent-focus .tab-strip,
+.shell.shell-agent-focus .content-pane,
+.shell.shell-agent-focus .inspector {
+  display: none;
+}
+
+.shell.shell-agent-focus .main-pane {
+  min-width: 0;
+}
+
+.shell.shell-agent-focus .workspace-content {
+  flex: 1;
+  min-height: 0;
+}
+
+.shell.shell-agent-focus .agent-panel,
+.shell.shell-agent-focus .agent-panel.agent-panel-workbench,
+.shell.shell-agent-focus .agent-panel.agent-panel-focus {
+  width: auto;
+  flex: 1 1 auto;
+  max-width: none;
+  border-left: none;
+}

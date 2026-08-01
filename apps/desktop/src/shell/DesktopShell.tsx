@@ -56,6 +56,7 @@ import { readConnectedCheckoutFile } from "../ConnectedRoots";
 import { GithubFileViewer } from "../GithubFileViewer";
 import { NewWorkspaceDialog } from "../NewWorkspaceDialog";
 import { useDesktopUiStore } from "./desktopUiStore";
+import "./agentFocus.css";
 import { ResourceTree } from "../ResourceTree";
 import { KindMark } from "../KindMark";
 import { QUICK_NOTE_SHORTCUT } from "../quickNoteWindow";
@@ -146,15 +147,37 @@ export function DesktopShell({ model }: DesktopShellProps) {
 
   const agentLayoutMode = useDesktopUiStore((state) => state.agentLayoutMode);
   const setAgentLayoutMode = useDesktopUiStore((state) => state.setAgentLayoutMode);
+  const exitAgentFocus = useDesktopUiStore((state) => state.exitAgentFocus);
   const selectThreadId = useAgentSessionStore((state) => state.selectThreadId);
+  const agentFocusActive = agentPanelOpen && agentLayoutMode === "focus";
   const reviewInWorkbench =
-    Boolean(proposalReview) && agentPanelOpen && agentLayoutMode === "workbench";
+    Boolean(proposalReview) &&
+    agentPanelOpen &&
+    (agentLayoutMode === "workbench" || agentLayoutMode === "focus");
 
   useEffect(() => {
     void emitProductTelemetry("app_launch");
   }, []);
 
   useEffect(() => seedGuidanceAnchors(), []);
+
+  useEffect(() => {
+    if (!agentFocusActive) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) {
+        return;
+      }
+      if (paletteOpen || searchPaneOpen) {
+        return;
+      }
+      event.preventDefault();
+      exitAgentFocus();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [agentFocusActive, exitAgentFocus, paletteOpen, searchPaneOpen]);
 
   useEffect(() => {
     if (!hasTauri) {
@@ -359,7 +382,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
 
   return (
     <TooltipProvider>
-      <div className="shell">
+      <div className={agentFocusActive ? "shell shell-agent-focus" : "shell"}>
         <div className="native-titlebar" data-tauri-drag-region />
         <aside className="activity-rail" aria-label="Workspace areas">
           <div className="activity-brand">

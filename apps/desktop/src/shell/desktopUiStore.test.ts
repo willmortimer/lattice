@@ -70,6 +70,7 @@ describe("desktopUiStore agent layout", () => {
     const store = createDesktopUiStore();
 
     expect(store.getState().agentLayoutMode).toBe("dock");
+    expect(store.getState().agentFocusReturnMode).toBe("dock");
     expect(store.getState().agentWorkbenchPanelSizes).toEqual({
       conversation: 58,
       side: 42,
@@ -98,5 +99,26 @@ describe("desktopUiStore agent layout", () => {
 
     store.getState().setDataTablePanelSizes({ table: 55, detail: 45 });
     expect(store.getState().dataTablePanelSizes).toEqual({ table: 55, detail: 45 });
+  });
+
+  it("remembers prior in-window layout when entering and exiting focus", () => {
+    const store = createDesktopUiStore();
+
+    store.getState().setAgentLayoutMode("workbench");
+    store.getState().setAgentLayoutMode("focus");
+    expect(store.getState().agentLayoutMode).toBe("focus");
+    expect(store.getState().agentFocusReturnMode).toBe("workbench");
+
+    store.getState().exitAgentFocus();
+    expect(store.getState().agentLayoutMode).toBe("workbench");
+
+    store.getState().setAgentLayoutMode("dock");
+    store.getState().setAgentLayoutMode("focus");
+    expect(store.getState().agentFocusReturnMode).toBe("dock");
+    store.getState().exitAgentFocus();
+    expect(store.getState().agentLayoutMode).toBe("dock");
+
+    store.getState().exitAgentFocus();
+    expect(store.getState().agentLayoutMode).toBe("dock");
   });
 });
