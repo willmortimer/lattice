@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Group, Panel, Separator } from "react-resizable-panels";
 import type { TopLevelSpec } from "vega-lite";
 import { demoNotebooks, inBrowser } from "../demo";
 import { VegaLiteChart } from "../components/VegaLiteChart";
@@ -20,6 +21,13 @@ import {
   packagesForNotebookCode,
   prepareWorkspaceBridge,
 } from "./pyodideWorkspaceBridge";
+import {
+  DEFAULT_NOTEBOOK_OUTPUTS_LAYOUT,
+  NOTEBOOK_CELLS_PANEL_ID,
+  NOTEBOOK_OUTPUTS_PANEL_ID,
+  shouldShowNotebookOutputsPane,
+  type NotebookOutputsLayout,
+} from "./notebookOutputsPane";
 import "./notebookViewer.css";
 
 type KernelBackend = "native" | "pyodide";
@@ -163,13 +171,45 @@ function NotebookOutputView({ output }: { output: NotebookOutput }) {
   }
 }
 
+function NotebookOutputsTray({
+  cell,
+  isRunning,
+}: {
+  cell: NotebookCell;
+  isRunning: boolean;
+}) {
+  return (
+    <section className="lattice-notebook-outputs-pane" aria-label="Cell outputs">
+      <header className="lattice-notebook-outputs-pane-header">
+        <span>{cellLabel(cell)} outputs</span>
+        {isRunning && <span className="lattice-notebook-outputs-pane-status">Running…</span>}
+      </header>
+      <div className="lattice-notebook-outputs-pane-body">
+        {cell.outputs.length > 0 ? (
+          <div className="lattice-notebook-outputs">
+            {cell.outputs.map((output, outputIndex) => (
+              <NotebookOutputView key={`${cell.id}-output-${outputIndex}`} output={output} />
+            ))}
+          </div>
+        ) : (
+          <p className="lattice-notebook-outputs-pane-empty">
+            {isRunning ? "Waiting for output…" : "No output yet."}
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function NotebookCellView({
   cell,
   language,
   index,
   path,
+  focused,
   runDisabled,
   runTitle,
+  onFocus,
   onRun,
   onOpenWiki,
 }: {
@@ -177,13 +217,23 @@ function NotebookCellView({
   language: string;
   index: number;
   path: string;
+  focused: boolean;
   runDisabled: boolean;
   runTitle: string;
+  onFocus: (index: number) => void;
   onRun: (index: number) => void;
   onOpenWiki?: (target: string) => void;
 }) {
   return (
-    <article className={`lattice-notebook-cell lattice-notebook-cell-${cell.cellType}`} aria-label={`${cellLabel(cell)} cell`}>
+    <article
+      className={`lattice-notebook-cell lattice-notebook-cell-${cell.cellType}${
+        focused ? " lattice-notebook-cell-focused" : ""
+      }`}
+      aria-label={`${cellLabel(cell)} cell`}
+      onClick={() => {
+        if (cell.cellType === "code") onFocus(index);
+      }}
+    >
       <header className="lattice-notebook-cell-header">
         <span>{cellLabel(cell)}</span>
         {cell.cellType === "code" && (
@@ -192,7 +242,11 @@ function NotebookCellView({
             className="lattice-notebook-run lattice-notebook-run-active"
             disabled={runDisabled}
             title={runTitle}
-            onClick={() => onRun(index)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onFocus(index);
+              onRun(index);
+            }}
           >
             Run
           </button>
@@ -206,25 +260,16 @@ function NotebookCellView({
         )}
         {cell.cellType === "raw" && <pre className="lattice-notebook-raw">{cell.source}</pre>}
         {cell.cellType === "code" && (
-          <>
-            <div className="lattice-notebook-code">
-              <TextCodeMirror
-                initialValue={cell.source}
-                syntax="code"
-                language={language}
-                readOnly
-                resetKey={`${path}:${index}:${cell.source.length}:${cell.executionCount ?? "x"}:${cell.outputs.length}`}
-                onChange={() => {}}
-              />
-            </div>
-            {cell.outputs.length > 0 && (
-              <div className="lattice-notebook-outputs" aria-label="Cell outputs">
-                {cell.outputs.map((output, outputIndex) => (
-                  <NotebookOutputView key={`${cell.id}-output-${outputIndex}`} output={output} />
-                ))}
-              </div>
-            )}
-          </>
+          <div className="lattice-notebook-code">
+            <TextCodeMirror
+              initialValue={cell.source}
+              syntax="code"
+              language={language}
+              readOnly
+              resetKey={`${path}:${index}:${cell.source.length}:${cell.executionCount ?? "x"}:${cell.outputs.length}`}
+              onChange={() => {}}
+            />
+          </div>
         )}
       </div>
     </article>
@@ -269,6 +314,10 @@ export function NotebookViewer({
   const [notebookContent, setNotebookContent] = useState(content);
   const [notebookRevision, setNotebookRevision] = useState(revision);
   const [status, setStatus] = useState<RunStatus>({ kind: "idle" });
+  const [focusedCellIndex, setFocusedCellIndex] = useState<number | null>(null);
+  const [outputsLayout, setOutputsLayout] = useState<NotebookOutputsLayout>(
+    DEFAULT_NOTEBOOK_OUTPUTS_LAYOUT,
+  );
   const [bridgeNotice, setBridgeNotice] = useState<string | null>(null);
   const [fallbackNotice, setFallbackNotice] = useState<string | null>(null);
   const [kernelBackend, setKernelBackend] = useState<KernelBackend>(() =>
@@ -299,6 +348,18 @@ export function NotebookViewer({
     setNotebookRevision(revision);
     contentRef.current = content;
     revisionRef.current = revision;
+    const nextParsed = parseNotebook(content);
+    if (!nextParsed.ok) {
+      setFocusedCellIndex(null);
+      return;
+    }
+    let lastCellWithOutputs: number | null = null;
+    nextParsed.notebook.cells.forEach((cell, index) => {
+      if (cell.cellType === "code" && cell.outputs.length > 0) {
+        lastCellWithOutputs = index;
+      }
+    });
+    setFocusedCellIndex(lastCellWithOutputs);
   }, [content, revision, path]);
 
   useEffect(
@@ -433,6 +494,7 @@ export function NotebookViewer({
         if (source === null) continue;
 
         setStatus({ kind: "running", cellIndex });
+        setFocusedCellIndex(cellIndex);
         executionCounterRef.current += 1;
         const executionCount = executionCounterRef.current;
 
@@ -508,6 +570,38 @@ export function NotebookViewer({
 
   const message = statusMessage(status, kernelBackend);
   const codeCells = parsed.notebook.cells.filter((cell) => cell.cellType === "code").length;
+  const runningCellIndex = status.kind === "running" ? status.cellIndex : null;
+  const activeCellIndex = runningCellIndex ?? focusedCellIndex;
+  const activeCell =
+    activeCellIndex === null ? undefined : parsed.notebook.cells[activeCellIndex];
+  const showOutputsPane = shouldShowNotebookOutputsPane(
+    activeCell,
+    runningCellIndex !== null && runningCellIndex === activeCellIndex,
+  );
+
+  const cellsPanel = (
+    <div className="lattice-notebook-cells">
+      {parsed.notebook.cells.map((cell, index) => (
+        <NotebookCellView
+          key={cell.id}
+          cell={cell}
+          language={language}
+          index={index}
+          path={path}
+          focused={activeCellIndex === index}
+          runDisabled={busy || cell.cellType !== "code"}
+          runTitle={runTitle}
+          onFocus={setFocusedCellIndex}
+          onOpenWiki={onOpenWiki}
+          onRun={(cellIndex) => {
+            if (status.kind === "degraded") setStatus({ kind: "idle" });
+            setFocusedCellIndex(cellIndex);
+            void beginRun([cellIndex]);
+          }}
+        />
+      ))}
+    </div>
+  );
 
   return (
     <section className="lattice-notebook-viewer" aria-label="Notebook viewer">
@@ -539,6 +633,9 @@ export function NotebookViewer({
               const indices = parsed.notebook.cells
                 .map((cell, index) => (cell.cellType === "code" ? index : -1))
                 .filter((index) => index >= 0);
+              if (indices.length > 0) {
+                setFocusedCellIndex(indices[0] ?? null);
+              }
               void beginRun(indices);
             }}
           >
@@ -569,24 +666,48 @@ export function NotebookViewer({
           {message}
         </p>
       )}
-      <div className="lattice-notebook-cells">
-        {parsed.notebook.cells.map((cell, index) => (
-          <NotebookCellView
-            key={cell.id}
-            cell={cell}
-            language={language}
-            index={index}
-            path={path}
-            runDisabled={busy || cell.cellType !== "code"}
-            runTitle={runTitle}
-            onOpenWiki={onOpenWiki}
-            onRun={(cellIndex) => {
-              if (status.kind === "degraded") setStatus({ kind: "idle" });
-              void beginRun([cellIndex]);
-            }}
-          />
-        ))}
-      </div>
+      {showOutputsPane && activeCell?.cellType === "code" ? (
+        <Group
+          id="notebook-outputs-layout"
+          className="lattice-notebook-layout"
+          orientation="vertical"
+          defaultLayout={{
+            [NOTEBOOK_CELLS_PANEL_ID]: outputsLayout.cells,
+            [NOTEBOOK_OUTPUTS_PANEL_ID]: outputsLayout.outputs,
+          }}
+          onLayoutChanged={(layout) => {
+            const nextCells = layout[NOTEBOOK_CELLS_PANEL_ID];
+            const nextOutputs = layout[NOTEBOOK_OUTPUTS_PANEL_ID];
+            if (nextCells == null || nextOutputs == null) {
+              return;
+            }
+            setOutputsLayout({ cells: nextCells, outputs: nextOutputs });
+          }}
+        >
+          <Panel
+            id={NOTEBOOK_CELLS_PANEL_ID}
+            className="lattice-notebook-layout-cells"
+            minSize="25%"
+            defaultSize={`${outputsLayout.cells}%`}
+          >
+            {cellsPanel}
+          </Panel>
+          <Separator className="lattice-notebook-resize-handle" />
+          <Panel
+            id={NOTEBOOK_OUTPUTS_PANEL_ID}
+            className="lattice-notebook-layout-outputs"
+            minSize="15%"
+            defaultSize={`${outputsLayout.outputs}%`}
+          >
+            <NotebookOutputsTray
+              cell={activeCell}
+              isRunning={runningCellIndex === activeCellIndex}
+            />
+          </Panel>
+        </Group>
+      ) : (
+        cellsPanel
+      )}
     </section>
   );
 }
