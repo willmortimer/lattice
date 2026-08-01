@@ -134,6 +134,48 @@ export function useAppSettings() {
     [],
   );
 
+  const applyDesktopSettings = useCallback(async (value: AppSettings) => {
+    if (desktopSaveTimer.current) {
+      window.clearTimeout(desktopSaveTimer.current);
+      desktopSaveTimer.current = null;
+    }
+    const base = profileRef.current;
+    setProfile((current) => ({
+      ...current,
+      settings: { ...current.settings, desktop: value },
+    }));
+    const saved = await saveDesktopSettings(base, value);
+    setProfile((latest) =>
+      latest.settings.desktop === value
+        ? saved
+        : {
+            ...saved,
+            settings: { ...saved.settings, desktop: latest.settings.desktop },
+          },
+    );
+  }, []);
+
+  const applyStartupSettings = useCallback(async (value: WorkspaceStartupSettings) => {
+    if (startupSaveTimer.current) {
+      window.clearTimeout(startupSaveTimer.current);
+      startupSaveTimer.current = null;
+    }
+    const base = profileRef.current;
+    setProfile((current) => ({
+      ...current,
+      settings: { ...current.settings, workspaces: value },
+    }));
+    const saved = await saveWorkspaceStartupSettings(base, value);
+    setProfile((latest) =>
+      latest.settings.workspaces === value
+        ? saved
+        : {
+            ...saved,
+            settings: { ...saved.settings, workspaces: latest.settings.workspaces },
+          },
+    );
+  }, []);
+
   const rememberWorkspace = useCallback((workspace: WorkspaceSnapshot) => {
     setProfile((current) => {
       void persistRecentWorkspace(current, workspace)
@@ -181,6 +223,8 @@ export function useAppSettings() {
     clearSaveError: () => setSaveError(null),
     setSettings,
     setStartup,
+    applyDesktopSettings,
+    applyStartupSettings,
     rememberWorkspace,
     clearRecents,
     removeRecent,

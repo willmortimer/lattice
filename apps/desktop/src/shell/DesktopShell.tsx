@@ -109,7 +109,8 @@ export function DesktopShell({ model }: DesktopShellProps) {
     handleProposalAccept, handleProposalReject, handleProposalCancel, handleCreateDemoProposal,
     openProposalResourcePath, dismissProposalApplyOutcome,
     openTabs, navigation, inspectorOpen, agentPanelOpen, editingTitle, titleDraft, assetRoot,
-    wikiTargets, pageEditorRef, paletteItems, hasCapability, setSettings, setStartup, setError,
+    wikiTargets, pageEditorRef, paletteItems, hasCapability, setSettings,
+    applyDesktopSettings, applyStartupSettings, setError,
     recents, page, setLinkPicker, handleImportEditorAsset,
     setNewWorkspaceOpen, setSearchPaneOpen, setPaletteOpen, setActivityArea, setInspectorOpen, setAgentPanelOpen,
     setDismissedNoticeCodes, setEditingTitle, setTitleDraft, applyThemeCatalog,
@@ -121,7 +122,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
     handleNewFolderInFolder,
     treeRenameRequest,
     navigateHistory, closeTab, reorderTab, beginSidebarResize, commitTitle, updateWorkspaceSettings,
-    handleOpenWiki, openLinkTarget,     handleNotebookContentChange, handleRevisionChange,
+    applyWorkspaceSettings, handleOpenWiki, openLinkTarget,     handleNotebookContentChange, handleRevisionChange,
     setSession,
     appLock, setAppLock,
   } = model;
@@ -691,8 +692,10 @@ export function DesktopShell({ model }: DesktopShellProps) {
                     workspace={snapshot}
                     themeCatalog={themeCatalog}
                     onChange={setSettings}
-                    onStartupChange={setStartup}
+                    onApplySettings={applyDesktopSettings}
+                    onApplyStartup={applyStartupSettings}
                     onWorkspaceChange={(next) => void updateWorkspaceSettings(next)}
+                    onApplyWorkspaceChange={applyWorkspaceSettings}
                     onClearRecents={clearRecents}
                     onReset={resetSettings}
                     onRefreshProfile={refreshProfile}
