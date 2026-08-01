@@ -20,10 +20,12 @@ const markdownAnchor = {
 function resetStore() {
   useAgentSessionStore.setState({
     ...initialAgentSessionState,
+    pinnedThreadIds: {},
     ensureThreadId: useAgentSessionStore.getState().ensureThreadId,
     selectThreadId: useAgentSessionStore.getState().selectThreadId,
     startNewThread: useAgentSessionStore.getState().startNewThread,
     bumpThreadListEpoch: useAgentSessionStore.getState().bumpThreadListEpoch,
+    togglePinnedThread: useAgentSessionStore.getState().togglePinnedThread,
     setHealthBackend: useAgentSessionStore.getState().setHealthBackend,
     setHealthSnapshot: useAgentSessionStore.getState().setHealthSnapshot,
     applyProfileAiDefaults: useAgentSessionStore.getState().applyProfileAiDefaults,
@@ -435,5 +437,12 @@ describe("useAgentSessionStore", () => {
         healthOk: true,
       }),
     ).toBe(false);
+  });
+
+  it("togglePinnedThread persists local pin preference", () => {
+    useAgentSessionStore.getState().togglePinnedThread("/tmp/ws", "thread-1");
+    expect(useAgentSessionStore.getState().pinnedThreadIds["/tmp/ws"]).toEqual(["thread-1"]);
+    useAgentSessionStore.getState().togglePinnedThread("/tmp/ws", "thread-1");
+    expect(useAgentSessionStore.getState().pinnedThreadIds["/tmp/ws"]).toBeUndefined();
   });
 });

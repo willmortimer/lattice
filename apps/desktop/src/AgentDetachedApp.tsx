@@ -25,6 +25,8 @@ import { AgentPanelShell } from "./agent/AgentPanelShell";
 import { AgentThread } from "./agent/AgentThread";
 import { LatticeAgentProvider } from "./agent/LatticeAgentProvider";
 import { useAgentSessionStore } from "./agent/agentStore";
+import { useAgentProposalReview } from "./agent/useAgentProposalReview";
+import { hasTauri } from "./lib/ipc";
 import { queryClient } from "./query/queryClient";
 import {
   createDesktopUiStore,
@@ -41,6 +43,47 @@ type DetachedSession = {
 function seedFromHandoff(handoff: AgentDetachedHandoff): void {
   applyAgentDetachedHandoffToSession(handoff);
   useAgentSessionStore.getState().selectThreadId(handoff.workspaceRoot, handoff.threadId);
+}
+
+function AgentDetachedSession({
+  session,
+  onClose,
+}: {
+  session: DetachedSession;
+  onClose: () => void;
+}) {
+  const {
+    proposalSummaries,
+    proposalInboxLoading,
+    proposalReview,
+    proposalReviewBusy,
+    openProposalReview,
+    handleProposalAccept,
+    handleProposalReject,
+    handleProposalCancel,
+  } = useAgentProposalReview(session.workspaceRoot);
+
+  return (
+    <AgentPanelShell>
+      <LatticeAgentProvider workspaceRoot={session.workspaceRoot}>
+        <AgentHeader onClose={onClose} workspaceRoot={session.workspaceRoot} />
+        <AgentPanelBody
+          thread={<AgentThread workspaceRoot={session.workspaceRoot} activeResourcePath={null} />}
+          proposals={hasTauri ? proposalSummaries : []}
+          proposalLoading={hasTauri ? proposalInboxLoading : false}
+          onOpenProposal={hasTauri ? openProposalReview : undefined}
+          proposalReview={proposalReview}
+          proposalReviewBusy={proposalReviewBusy}
+          workspaceRoot={session.workspaceRoot}
+          onProposalAccept={(selectedCommandIndices) =>
+            void handleProposalAccept(selectedCommandIndices)
+          }
+          onProposalReject={() => void handleProposalReject()}
+          onProposalCancel={handleProposalCancel}
+        />
+      </LatticeAgentProvider>
+    </AgentPanelShell>
+  );
 }
 
 function AgentDetachedInner() {
@@ -166,19 +209,13 @@ function AgentDetachedInner() {
   return (
     <div className="agent-detached-shell">
       <div className="agent-detached-native-titlebar" data-tauri-drag-region />
-      <AgentPanelShell>
-        <LatticeAgentProvider workspaceRoot={session.workspaceRoot}>
-          <AgentHeader
-            onClose={() => {
-              void yieldAndHide();
-            }}
-            workspaceRoot={session.workspaceRoot}
-          />
-          <AgentPanelBody
-            thread={<AgentThread workspaceRoot={session.workspaceRoot} activeResourcePath={null} />}
-          />
-        </LatticeAgentProvider>
-      </AgentPanelShell>
+      <AgentDetachedSession
+        key={session.workspaceRoot}
+        session={session}
+        onClose={() => {
+          void yieldAndHide();
+        }}
+      />
     </div>
   );
 }

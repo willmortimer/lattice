@@ -12,6 +12,12 @@ import { create } from "zustand";
 import type { AiMode } from "../lib/profile";
 import type { AgentAiDefaults } from "./agentAiDefaults";
 import {
+  persistPinnedThreads,
+  readPinnedThreads,
+  togglePinnedThreadId,
+  type PinnedThreadsByWorkspace,
+} from "./agentThreadPins";
+import {
   defaultModelForProvider,
   type SelectableAgentProvider,
 } from "./modelCatalog";
@@ -198,10 +204,13 @@ type AgentSessionStore = {
   evidence: AgentEvidence[];
   /** Bumps when the durable thread list should reload (new thread / resume). */
   threadListEpoch: number;
+  /** Local-only pin preference keyed by workspace root. */
+  pinnedThreadIds: PinnedThreadsByWorkspace;
   ensureThreadId: (workspaceRoot: string) => string;
   selectThreadId: (workspaceRoot: string, threadId: string) => void;
   startNewThread: (workspaceRoot: string) => string;
   bumpThreadListEpoch: () => void;
+  togglePinnedThread: (workspaceRoot: string, threadId: string) => void;
   setHealthBackend: (backend: string | null) => void;
   setHealthSnapshot: (snapshot: {
     backend: string | null;
@@ -466,6 +475,7 @@ export const initialAgentSessionState = {
   trailSteps: [] as TrailStep[],
   evidence: [] as AgentEvidence[],
   threadListEpoch: 0,
+  pinnedThreadIds: readPinnedThreads(),
 };
 
 export const useAgentSessionStore = create<AgentSessionStore>((set, get) => ({
@@ -508,6 +518,16 @@ export const useAgentSessionStore = create<AgentSessionStore>((set, get) => ({
   },
   bumpThreadListEpoch: () =>
     set((state) => ({ threadListEpoch: state.threadListEpoch + 1 })),
+  togglePinnedThread: (workspaceRoot, threadId) =>
+    set((state) => {
+      const pinnedThreadIds = togglePinnedThreadId(
+        state.pinnedThreadIds,
+        workspaceRoot,
+        threadId,
+      );
+      persistPinnedThreads(pinnedThreadIds);
+      return { pinnedThreadIds };
+    }),
   setHealthBackend: (backend) => set({ healthBackend: backend }),
   setHealthSnapshot: (snapshot) =>
     set((state) => {
