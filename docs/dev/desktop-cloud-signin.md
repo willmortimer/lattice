@@ -17,6 +17,10 @@ Contract: desktop uses API bearer auth (ADR 0067); browser uses Next cookie BFF.
 Settings → **Cloud account**: Sign in with Apple (native), email/password, sign-out, and session status.
 Rust owns HTTP (`lattice-cloud-client`); React invokes Tauri commands only.
 
+Settings → **Features → Labs**: cloud blob put/get for a workspace-relative path
+(`cloud_blob_materialize` / `cloud_blob_open`). Unsigned sessions fail closed with a clear
+error (sign in via Cloud account, or set `LATTICE_CLOUD_TOKEN`).
+
 ## Manual smoke (live VPS)
 
 After password auth is enabled on the VPS:
@@ -32,6 +36,7 @@ After password auth is enabled on the VPS:
 
 ```sh
 cargo test -p lattice-cloud-client -p lattice-handlers -p latticefs-core
+cargo test -p lattice-desktop --lib cloud::tests
 cargo check -p lattice-desktop
 ```
 

@@ -386,6 +386,8 @@ pub fn run() {
             cloud::cloud_sign_out,
             cloud::cloud_update_preferences,
             cloud::product_telemetry_emit,
+            cloud::cloud_blob_materialize,
+            cloud::cloud_blob_open,
             spotlight::spotlight_index_workspace,
             #[cfg(feature = "capture")]
             capture::shelf::capture_shelf_snapshot,

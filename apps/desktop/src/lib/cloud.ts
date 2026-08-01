@@ -1,4 +1,5 @@
 import { invoke } from "./ipc";
+import type { ResourceStat } from "./resourceStat";
 
 export interface CloudUser {
   id: string;
@@ -74,4 +75,17 @@ export async function emitProductTelemetry(
   properties?: Record<string, string | number | boolean | null>,
 ): Promise<void> {
   await invoke("product_telemetry_emit", { name, properties: properties ?? null });
+}
+
+/** Labs: PUT→GET verify and mark the workspace path cloud-authoritative. */
+export async function cloudBlobMaterialize(
+  root: string,
+  relPath: string,
+): Promise<ResourceStat> {
+  return invoke<ResourceStat>("cloud_blob_materialize", { root, relPath });
+}
+
+/** Labs: reopen canonical bytes from cloud (fails closed when unsigned / not cloud). */
+export async function cloudBlobOpen(root: string, relPath: string): Promise<number[]> {
+  return invoke<number[]>("cloud_blob_open", { root, relPath });
 }
