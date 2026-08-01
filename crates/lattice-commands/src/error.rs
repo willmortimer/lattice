@@ -139,6 +139,9 @@ pub enum Error {
 
     #[error(transparent)]
     Dataset(#[from] lattice_datasets::Error),
+
+    #[error(transparent)]
+    LatticeFs(#[from] latticefs_core::Error),
 }
 
 impl Error {

@@ -847,7 +847,40 @@ fn update_undo_restores_prior_bytes_and_redo_reapplies() {
     assert_eq!(read(&dir, "A.md"), b"version two\n");
 }
 
-// 4a. rename + undo.
+// 4a. rename preserves stable ResourceId in the namespace registry.
+#[test]
+fn rename_preserves_resource_id_in_registry() {
+    use latticefs_core::NamespaceRegistry;
+
+    let (dir, mut engine) = engine();
+    engine.apply(create("Old.md", "content\n")).unwrap();
+
+    let mut registry = NamespaceRegistry::open(dir.path()).unwrap();
+    let resource_id = registry.ensure_local_file("Old.md").unwrap();
+    registry.save().unwrap();
+
+    engine
+        .apply(Transaction::new(
+            "Rename Old.md to New.md",
+            vec![Command::ResourceRename {
+                from: PathBuf::from("Old.md"),
+                to: PathBuf::from("New.md"),
+            }],
+        ))
+        .unwrap();
+
+    let stat = latticefs_core::resource_stat(dir.path(), "New.md").unwrap();
+    assert_eq!(stat.resource_id, resource_id);
+
+    let registry = NamespaceRegistry::open(dir.path()).unwrap();
+    assert_eq!(
+        registry.path_for_resource_id(resource_id).as_deref(),
+        Some("New.md")
+    );
+    assert!(latticefs_core::resource_stat(dir.path(), "Old.md").is_err());
+}
+
+// 4b. rename + undo.
 #[test]
 fn rename_and_undo() {
     let (dir, mut engine) = engine();
@@ -869,7 +902,7 @@ fn rename_and_undo() {
     assert!(!exists(&dir, "New.md"));
 }
 
-// 4b. move-into-dir + undo.
+// 4c. move-into-dir + undo.
 #[test]
 fn move_into_directory_and_undo() {
     let (dir, mut engine) = engine();
