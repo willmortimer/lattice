@@ -43,6 +43,7 @@ mod tray;
 mod voice;
 mod watcher;
 mod workflow;
+mod workspace_catalog;
 
 use tauri::{Emitter, Manager};
 
@@ -339,6 +340,8 @@ pub fn run() {
             scheduler::set_background_schedules_enabled,
             remote_access::get_remote_access_status,
             remote_access::set_workspace_remote_access,
+            workspace_catalog::list_workspace_catalog,
+            workspace_catalog::get_workspace_summary,
             agent::agent_health,
             agent::agent_start_run,
             agent::agent_cancel_run,
