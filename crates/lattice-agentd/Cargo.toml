@@ -57,6 +57,9 @@ wasmtime-wasi.workspace = true
 [target.'cfg(target_os = "linux")'.dependencies]
 kernelfs-linux.workspace = true
 
+[target.'cfg(target_os = "macos")'.dependencies]
+kernelfs-mac.workspace = true
+
 [dev-dependencies]
 base64.workspace = true
 latticefs-core.workspace = true

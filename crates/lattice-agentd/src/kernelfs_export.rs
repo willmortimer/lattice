@@ -10,8 +10,9 @@
 //!     output/
 //! ```
 //!
-//! Volume `source` paths are
-//! `{agent-share}/.kernelfs-runs/{run_id}/{input,work,output}`.
+//! Volume `source` paths are `layout.input`, `layout.work`, and
+//! `layout.output` from [`kernelfs_mac::export_live`]. Callers wire those
+//! into Cell; this module only stages the tree.
 //!
 //! **Linux** — nested layout under `/run/kernelfs` or
 //! `$XDG_RUNTIME_DIR/kernelfs`:
@@ -40,11 +41,13 @@ use kernelfs::{
     materialize_with_options, ExecutionManifest, HostPathPolicy, MaterializeOptions, Mounts,
     SecretHandlePolicy, ROLE_INPUT, ROLE_OUTPUT, ROLE_WORK,
 };
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use kernelfs::{
     materialize_with_options, ExecutionManifest, HostPathPolicy, MaterializeOptions, Mounts,
     SecretHandlePolicy, ROLE_INPUT, ROLE_OUTPUT, ROLE_WORK,
 };
+#[cfg(target_os = "macos")]
+use kernelfs_mac::{export_live, MacExportError, MacExportOptions};
 #[cfg(target_os = "macos")]
 use lattice_cell_client::oci_ivisor_agent_share_dir;
 #[cfg(target_os = "linux")]
@@ -282,7 +285,10 @@ fn export_oci_roles_under_agent_share_macos(
     let agent_share = oci_ivisor_agent_share_dir(&req.vz_runtime_dir, &req.cell_id);
     create_dir_all(&agent_share)?;
 
-    let run_parent = agent_share.join(".kernelfs-runs");
+    let export_parent = agent_share.join(".kernelfs-runs");
+    create_dir_all(&export_parent)?;
+
+    let run_parent = export_parent.join("runs");
     create_dir_all(&run_parent)?;
 
     let agent_share_canon = canonicalize(&agent_share)?;
@@ -309,48 +315,86 @@ fn export_oci_roles_under_agent_share_macos(
         capabilities: Default::default(),
     };
 
+    let options = MacExportOptions {
+        export_parent: export_parent.clone(),
+        allow_roots,
+        include_secrets: req.include_secrets,
+    };
+
     let lease_registry = export_lease_registry();
-    let _run_dir = materialize_with_options(
+    let run = materialize_with_options(
         &run_parent,
         &manifest,
         &MaterializeOptions {
-            host_path_policy: HostPathPolicy::AllowRoots(&allow_roots),
+            host_path_policy: HostPathPolicy::AllowRoots(&options.allow_roots),
             secret_handle_policy: SecretHandlePolicy::DenyAll,
             lease_registry: Some(lease_registry),
             allow_replace: materialize_allow_replace(false),
         },
     )?;
+    remove_stale_macos_export_root(&export_parent, &req.run_id)?;
+    let live = export_live(&run, &options).map_err(map_mac_export_error)?;
     let lease = HeldExportLease::hold(&req.run_id).map_err(map_lease_hold_error)?;
-
-    nested_role_paths(&agent_share, &req.run_id, req.with_work, lease)
+    macos_role_paths(&live.layout, &req.run_id, req.with_work, &agent_share, lease)
 }
 
 #[cfg(target_os = "macos")]
-fn nested_role_paths(
-    agent_share: &Path,
+fn remove_stale_macos_export_root(
+    export_parent: &Path,
+    run_id: &str,
+) -> Result<(), OciKernelfsExportError> {
+    let export_root = export_parent.join(run_id);
+    if !export_root.exists() {
+        return Ok(());
+    }
+    let refcount = export_lease_registry()
+        .refcount(run_id)
+        .map_err(map_lease_hold_error)?;
+    if refcount > 0 {
+        return Ok(());
+    }
+    fs::remove_dir_all(&export_root).map_err(|source| OciKernelfsExportError::Io {
+        path: export_root,
+        source,
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn macos_role_paths(
+    layout: &kernelfs::ExportLayout,
     run_id: &str,
     with_work: bool,
+    agent_share: &Path,
     lease: HeldExportLease,
 ) -> Result<OciKernelfsExport, OciKernelfsExportError> {
+    // Volume sources must stay lexical (VirtioFS / GuestMountPathForHost); export_layout
+    // returns canonical paths under /private/var on macOS.
     let export_root = agent_share.join(".kernelfs-runs").join(run_id);
     let input = export_root.join(ROLE_INPUT);
     let work = export_root.join(ROLE_WORK);
     let output = export_root.join(ROLE_OUTPUT);
 
-    for role_path in [input.as_path(), output.as_path()] {
-        if !role_path.is_dir() {
+    for (lexical, exported) in [
+        (input.as_path(), layout.input.as_path()),
+        (output.as_path(), layout.output.as_path()),
+    ] {
+        if !lexical.is_dir() {
             return Err(OciKernelfsExportError::Export(format!(
-                "materialized role dir missing: {}",
-                role_path.display()
+                "exported role dir missing: {}",
+                lexical.display()
             )));
         }
+        assert_same_export_path(lexical, exported)?;
     }
 
-    if with_work && !work.is_dir() {
-        return Err(OciKernelfsExportError::Export(format!(
-            "materialized work role dir missing: {}",
-            work.display()
-        )));
+    if with_work {
+        if !work.is_dir() {
+            return Err(OciKernelfsExportError::Export(format!(
+                "exported work role dir missing: {}",
+                work.display()
+            )));
+        }
+        assert_same_export_path(&work, &layout.work)?;
     }
 
     ensure_under_parent(agent_share, &input)?;
@@ -360,13 +404,43 @@ fn nested_role_paths(
     }
 
     Ok(OciKernelfsExport {
-        export_root: export_root.clone(),
+        export_root,
         input,
         work: if with_work { Some(work) } else { None },
         output,
         agent_share: agent_share.to_path_buf(),
         _lease: lease,
     })
+}
+
+#[cfg(target_os = "macos")]
+fn assert_same_export_path(
+    lexical: &Path,
+    exported: &Path,
+) -> Result<(), OciKernelfsExportError> {
+    let lexical_canon = canonicalize(lexical)?;
+    let exported_canon = canonicalize(exported)?;
+    if lexical_canon != exported_canon {
+        return Err(OciKernelfsExportError::Export(format!(
+            "lexical export path {} does not match staged export {}",
+            lexical.display(),
+            exported.display()
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn map_mac_export_error(err: MacExportError) -> OciKernelfsExportError {
+    match err {
+        MacExportError::Layout(e) => OciKernelfsExportError::Export(e.to_string()),
+        MacExportError::Io { path, source } => OciKernelfsExportError::Io { path, source },
+        MacExportError::ExportPathExists { path } => OciKernelfsExportError::Export(format!(
+            "export path {} already exists",
+            path.display()
+        )),
+        MacExportError::UnsupportedPlatform => OciKernelfsExportError::UnsupportedPlatform,
+    }
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -465,8 +539,8 @@ mod tests {
 
         assert!(exported.input.is_dir());
         assert!(exported.output.is_dir());
-        assert!(!exported.input.is_symlink());
-        assert!(!exported.output.is_symlink());
+        assert!(exported.input.is_symlink());
+        assert!(exported.output.is_symlink());
         assert!(exported.input.starts_with(&exported.agent_share));
         assert!(exported.output.starts_with(&exported.agent_share));
 
@@ -500,7 +574,7 @@ mod tests {
         let work = exported.work.expect("work path");
         assert_eq!(work, nested_role(&exported.agent_share, run_id, ROLE_WORK));
         assert!(work.is_dir());
-        assert!(!work.is_symlink());
+        assert!(work.is_symlink());
         assert!(work.starts_with(&exported.agent_share));
     }
 
@@ -539,6 +613,11 @@ mod tests {
 
     #[test]
     fn export_same_run_id_different_inputs_fails_without_allow_replace() {
+        // SAFETY: isolate from parallel tests that toggle allow-replace env.
+        unsafe {
+            std::env::remove_var(crate::kernelfs_lease::ALLOW_REPLACE_ENV);
+        }
+
         let vz = tempfile::tempdir().expect("vz runtime");
         let sources = tempfile::tempdir().expect("sources");
         let host_input = write_input(sources.path(), "hello.txt", b"v1\n");
@@ -573,10 +652,14 @@ mod tests {
         .expect_err("collision");
         drop(first);
 
-        assert!(matches!(
-            err,
-            OciKernelfsExportError::Materialize(MaterializeError::RunIdCollision { .. })
-        ));
+        assert!(
+            matches!(
+                err,
+                OciKernelfsExportError::Materialize(MaterializeError::RunIdCollision { .. })
+                    | OciKernelfsExportError::Materialize(MaterializeError::ExportLeased { .. })
+            ),
+            "unexpected error: {err:?}"
+        );
     }
 
     #[test]
@@ -621,7 +704,9 @@ mod tests {
     ) -> Result<PathBuf, OciKernelfsExportError> {
         let agent_share = oci_ivisor_agent_share_dir(&req.vz_runtime_dir, &req.cell_id);
         create_dir_all(&agent_share)?;
-        let run_parent = agent_share.join(".kernelfs-runs");
+        let export_parent = agent_share.join(".kernelfs-runs");
+        create_dir_all(&export_parent)?;
+        let run_parent = export_parent.join("runs");
         create_dir_all(&run_parent)?;
         let agent_share_canon = canonicalize(&agent_share)?;
         let mut allow_roots = vec![agent_share_canon];

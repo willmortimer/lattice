@@ -5104,6 +5104,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "kernelfs-mac"
+version = "0.2.0"
+dependencies = [
+ "kernelfs-core",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "kernelfs-wasmwasi"
 version = "0.2.0"
 dependencies = [
@@ -5806,6 +5814,7 @@ dependencies = [
  "hex",
  "kernelfs",
  "kernelfs-linux",
+ "kernelfs-mac",
  "lattice-cell-client",
  "latticefs-core",
  "reqwest 0.12.28",
