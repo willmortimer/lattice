@@ -7,6 +7,7 @@ import {
 } from "@assistant-ui/react";
 import { Button } from "@lattice/ui";
 
+import { useAgentChatControls } from "./agentChatControls";
 import { useAgentSessionStore } from "./agentStore";
 
 export interface AgentThreadProps {
@@ -87,12 +88,15 @@ function AgentThreadView({
   accountAiDisabled,
   accountAiBlockReason,
   byoOpenaiKeyMissing,
+  transcriptHydrating,
 }: {
   accountAiDisabled: boolean;
   accountAiBlockReason: "unsigned" | "not_entitled" | null;
   byoOpenaiKeyMissing: boolean;
+  transcriptHydrating: boolean;
 }) {
-  const composerDisabled = accountAiDisabled || byoOpenaiKeyMissing;
+  const composerDisabled =
+    accountAiDisabled || byoOpenaiKeyMissing || transcriptHydrating;
   const paidCta = accountAiDisabled ? accountAiCtaCopy(accountAiBlockReason) : null;
 
   return (
@@ -150,6 +154,8 @@ export function AgentThread({ workspaceRoot }: AgentThreadProps) {
   const aiMode = useAgentSessionStore((state) => state.aiMode);
   const byoOpenaiKeyPresent = useAgentSessionStore((state) => state.byoOpenaiKeyPresent);
   const byoOpenaiKeyMissing = aiMode === "byoOpenai" && byoOpenaiKeyPresent === false;
+  const chatControls = useAgentChatControls();
+  const transcriptHydrating = chatControls?.hydrationStatus === "loading";
 
   if (!workspaceRoot?.trim()) {
     return (
@@ -164,6 +170,7 @@ export function AgentThread({ workspaceRoot }: AgentThreadProps) {
       accountAiDisabled={accountAiDisabled}
       accountAiBlockReason={accountAiBlockReason}
       byoOpenaiKeyMissing={byoOpenaiKeyMissing}
+      transcriptHydrating={transcriptHydrating}
     />
   );
 }
