@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { CommandPreviewDetail, TransactionProposal } from "./executionContracts";
 import {
   commandSummaryLabel,
+  compareSidesFromDetail,
   defaultAcceptedCommandIndices,
   detailExcerpt,
   detailExcerptDisplay,
@@ -12,6 +13,7 @@ import {
   hydrationProvenanceLabel,
   pathsFromSelectedCommands,
   previewCommandLabel,
+  proposalCompareSections,
   proposalStatusLabel,
   shortContentHash,
 } from "./proposals";
@@ -176,6 +178,77 @@ describe("detailExcerpt text-diff", () => {
         truncated: false,
       }),
     ).toBe("- old\n+ new");
+  });
+});
+
+describe("compareSidesFromDetail", () => {
+  it("maps text-diff to current and proposed", () => {
+    expect(
+      compareSidesFromDetail({
+        kind: "text-diff",
+        path: "Notes/A.md",
+        beforeExcerpt: "# Before",
+        afterExcerpt: "# After",
+        truncated: false,
+      }),
+    ).toEqual({
+      path: "Notes/A.md",
+      current: "# Before",
+      proposed: "# After",
+    });
+  });
+
+  it("treats creates as proposed-only", () => {
+    expect(
+      compareSidesFromDetail({
+        kind: "text-create",
+        path: "Notes/A.md",
+        contentExcerpt: "# New",
+        truncated: false,
+        byteLen: 5,
+      }),
+    ).toEqual({
+      path: "Notes/A.md",
+      current: null,
+      proposed: "# New",
+    });
+  });
+});
+
+describe("proposalCompareSections", () => {
+  it("skips commands without detail and keeps labeled sides", () => {
+    expect(
+      proposalCompareSections([
+        {
+          index: 0,
+          commandType: "page-create",
+          summary: "Create A",
+          touchedPaths: ["Notes/A.md"],
+          warnings: [],
+          detail: {
+            kind: "text-create",
+            path: "Notes/A.md",
+            contentExcerpt: "# A",
+            truncated: false,
+            byteLen: 3,
+          },
+        },
+        {
+          index: 1,
+          commandType: "noop",
+          summary: "No detail",
+          touchedPaths: [],
+          warnings: [],
+        },
+      ]),
+    ).toEqual([
+      {
+        path: "Notes/A.md",
+        label: "Create A",
+        current: null,
+        proposed: "# A",
+      },
+    ]);
   });
 });
 

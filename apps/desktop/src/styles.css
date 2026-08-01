@@ -3057,7 +3057,157 @@ html[data-page-width="full"] {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: min(640px, calc(100vw - 24px));
+  width: min(920px, calc(100vw - 24px));
+  max-height: min(88vh, 900px);
+  overflow: auto;
+}
+
+.proposal-review-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.proposal-review-body-embedded {
+  height: 100%;
+  overflow: auto;
+  padding: 10px 12px 12px;
+  background: var(--lt-surface);
+}
+
+.proposal-review-body-title-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.proposal-review-body-title {
+  margin: 0;
+  color: var(--lt-text-soft);
+  font-family: var(--lt-font-ui);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.proposal-compare-panes {
+  display: flex;
+  min-height: 180px;
+  max-height: 320px;
+  margin: 8px 0 4px;
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius-sm);
+  overflow: hidden;
+  background: color-mix(in srgb, var(--lt-surface) 88%, var(--lt-text) 12%);
+}
+
+.proposal-review-body-embedded .proposal-compare-panes {
+  flex: 1 1 auto;
+  min-height: 220px;
+  max-height: none;
+}
+
+.proposal-compare-panes-status {
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  color: var(--lt-muted);
+  font-family: var(--lt-font-ui);
+  font-size: 12px;
+}
+
+.proposal-compare-panel {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+.proposal-compare-resize-handle {
+  flex: 0 0 5px;
+  background: var(--lt-line);
+  transition: background 120ms ease;
+}
+
+.proposal-compare-resize-handle:hover,
+.proposal-compare-resize-handle[data-separator="active"] {
+  background: color-mix(in oklch, var(--lt-accent-deep) 45%, var(--lt-line));
+}
+
+.proposal-compare-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+}
+
+.proposal-compare-column-head {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--lt-line);
+  background: color-mix(in srgb, var(--lt-bg) 70%, var(--lt-surface) 30%);
+}
+
+.proposal-compare-column-head h3 {
+  margin: 0;
+  color: var(--lt-faint);
+  font-family: var(--lt-font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.proposal-compare-column-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.proposal-compare-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.proposal-compare-section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.proposal-compare-section-head strong {
+  color: var(--lt-text-soft);
+  font-family: var(--lt-font-ui);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.proposal-compare-section-head code {
+  color: var(--lt-muted);
+  font-family: var(--lt-font-mono);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proposal-compare-excerpt {
+  max-height: none;
+}
+
+.proposal-compare-empty {
+  margin: 0;
+  padding: 6px 8px;
+  color: var(--lt-faint);
+  font-family: var(--lt-font-ui);
+  font-size: 11px;
 }
 
 .proposal-affected-paths {
@@ -8019,6 +8169,11 @@ html[data-motion="always"] *::after {
 .agent-workbench-approval-item:focus-visible {
   border-color: color-mix(in oklch, var(--lt-accent-deep) 45%, var(--lt-line));
   outline: none;
+}
+
+.agent-workbench-approval-item.is-active {
+  border-color: color-mix(in oklch, var(--lt-accent-deep) 55%, var(--lt-line));
+  background: color-mix(in oklch, var(--lt-accent-deep) 8%, var(--lt-surface));
 }
 
 .agent-workbench-approval-head {

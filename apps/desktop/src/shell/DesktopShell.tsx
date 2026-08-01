@@ -55,6 +55,7 @@ import { hasTauri } from "../lib/ipc";
 import { readConnectedCheckoutFile } from "../ConnectedRoots";
 import { GithubFileViewer } from "../GithubFileViewer";
 import { NewWorkspaceDialog } from "../NewWorkspaceDialog";
+import { useDesktopUiStore } from "./desktopUiStore";
 import { ResourceTree } from "../ResourceTree";
 import { KindMark } from "../KindMark";
 import { QUICK_NOTE_SHORTCUT } from "../quickNoteWindow";
@@ -143,6 +144,10 @@ export function DesktopShell({ model }: DesktopShellProps) {
     setSession,
     appLock, setAppLock,
   } = model;
+
+  const agentLayoutMode = useDesktopUiStore((state) => state.agentLayoutMode);
+  const reviewInWorkbench =
+    Boolean(proposalReview) && agentPanelOpen && agentLayoutMode === "workbench";
 
   useEffect(() => {
     void emitProductTelemetry("app_launch");
@@ -922,6 +927,14 @@ export function DesktopShell({ model }: DesktopShellProps) {
                         proposals={hasTauri ? proposalSummaries : []}
                         proposalLoading={hasTauri ? proposalInboxLoading : false}
                         onOpenProposal={hasTauri ? openProposalReview : undefined}
+                        proposalReview={reviewInWorkbench ? proposalReview : null}
+                        proposalReviewBusy={busy}
+                        workspaceRoot={inBrowser ? null : snapshot.root}
+                        onProposalAccept={(selectedCommandIndices) =>
+                          void handleProposalAccept(selectedCommandIndices)
+                        }
+                        onProposalReject={() => void handleProposalReject()}
+                        onProposalCancel={handleProposalCancel}
                       />
                     </LatticeAgentProvider>
                   )}
@@ -977,7 +990,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
           onDefer={() => void handleLinkRepairDefer()}
         />
       )}
-      {proposalReview && (
+      {proposalReview && !reviewInWorkbench && (
         <ProposalReviewModal
           proposal={proposalReview}
           workspaceRoot={snapshot.root}

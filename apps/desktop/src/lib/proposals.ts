@@ -202,6 +202,68 @@ export function detailExcerpt(detail: CommandPreviewDetail | undefined): string 
   return formatTextDiffExcerpt(display.before ?? undefined, display.after);
 }
 
+/** One resource (or command) row for the Current | Proposed compare panes. */
+export interface ProposalCompareSection {
+  path: string | null;
+  label: string;
+  current: string | null;
+  proposed: string | null;
+}
+
+/** Split a preview detail into current (before) vs proposed (after) text. */
+export function compareSidesFromDetail(
+  detail: CommandPreviewDetail | undefined,
+): Omit<ProposalCompareSection, "label"> | null {
+  if (!detail) return null;
+  switch (detail.kind) {
+    case "text-create":
+      return { path: detail.path, current: null, proposed: detail.contentExcerpt };
+    case "text-diff": {
+      const current = detail.beforeExcerpt?.trim() ? detail.beforeExcerpt : null;
+      return { path: detail.path, current, proposed: detail.afterExcerpt };
+    }
+    case "record-change":
+      return {
+        path: detail.path,
+        current: null,
+        proposed: detail.fieldSummary || null,
+      };
+    case "workflow-summary":
+    case "interface-summary":
+    case "artifact-summary":
+      return { path: detail.path, current: null, proposed: detail.excerpt };
+    case "file-op":
+      return {
+        path: detail.paths[0] ?? null,
+        current: null,
+        proposed: detail.paths.join(" → "),
+      };
+    default: {
+      const _exhaustive: never = detail;
+      return _exhaustive;
+    }
+  }
+}
+
+/** Build compare sections from selected command previews (skips empty sides). */
+export function proposalCompareSections(
+  commands: readonly CommandPreview[],
+): ProposalCompareSection[] {
+  const sections: ProposalCompareSection[] = [];
+  for (const command of commands) {
+    const sides = compareSidesFromDetail(command.detail);
+    if (!sides) continue;
+    if (!sides.current && !sides.proposed) continue;
+    sections.push({
+      path: sides.path,
+      label: command.summary || `Command ${command.index + 1}`,
+      current: sides.current,
+      proposed: sides.proposed,
+    });
+  }
+  return sections;
+}
+
 export async function createProposal(
   root: string,
   proposal: CreateProposalInput,

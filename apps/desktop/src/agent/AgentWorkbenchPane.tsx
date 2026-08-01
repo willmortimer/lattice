@@ -59,12 +59,15 @@ export interface AgentWorkbenchPaneProps {
   proposals?: readonly TransactionProposalSummary[];
   proposalLoading?: boolean;
   onOpenProposal?: (proposalId: string) => void | Promise<void>;
+  /** Highlight the proposal currently open in the Current|Proposed split. */
+  activeProposalId?: string | null;
 }
 
 export function AgentWorkbenchPane({
   proposals = [],
   proposalLoading = false,
   onOpenProposal,
+  activeProposalId = null,
 }: AgentWorkbenchPaneProps) {
   const trailSteps = useAgentSessionStore((state) => state.trailSteps);
   const evidence = useAgentSessionStore((state) => state.evidence);
@@ -133,7 +136,10 @@ export function AgentWorkbenchPane({
                       {canOpen ? (
                         <button
                           type="button"
-                          className="agent-workbench-approval-item"
+                          className={`agent-workbench-approval-item${
+                            activeProposalId === item.id ? " is-active" : ""
+                          }`}
+                          aria-pressed={activeProposalId === item.id}
                           onClick={() => void onOpenProposal?.(item.id)}
                         >
                           <span className="agent-workbench-approval-head">
