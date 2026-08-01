@@ -1,5 +1,6 @@
 import { Button } from "@lattice/ui";
-import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 
 import { inBrowser } from "../demo";
 import {
@@ -7,10 +8,13 @@ import {
   getPack,
   semanticStatusToPackStatus,
   voiceStatusToPackStatus,
-  type PackStatus,
 } from "../lib/packs";
-import { disableSemanticSearch, getSemanticStatus, listenSemanticEvents } from "../lib/semantic";
-import { getVoiceStatus, listenVoiceEvents } from "../lib/voice";
+import { disableSemanticSearch } from "../lib/semantic";
+import {
+  setSemanticStatusCache,
+  useSemanticStatusQuery,
+} from "../query/useSemanticStatusQuery";
+import { useVoiceStatusQuery } from "../query/useVoiceStatusQuery";
 import { packStatusLabel } from "./packStatusLabels";
 import { SettingRow } from "./SettingRow";
 
@@ -48,6 +52,11 @@ function Toggle({
   );
 }
 
+function queryErrorMessage(error: unknown): string | null {
+  if (!error) return null;
+  return error instanceof Error ? error.message : String(error);
+}
+
 /** First-party feature toggles with pack dependency prompts. */
 export function FeaturesSettings({
   workspaceRoot,
@@ -56,90 +65,27 @@ export function FeaturesSettings({
   onOpenPacks,
   onOpenCapabilities,
 }: FeaturesSettingsProps) {
+  const queryClient = useQueryClient();
   const embeddingPack = getPack("embeddings.qwen3-0.6b");
   const voicePack = getPack("voice.parakeet-unified");
-  const [embeddingStatus, setEmbeddingStatus] = useState<PackStatus>("missing");
-  const [voiceStatus, setVoiceStatus] = useState<PackStatus>("missing");
+  const { data: semanticStatus = null, error: semanticQueryError } =
+    useSemanticStatusQuery(workspaceRoot);
+  const { data: voice = null, error: voiceQueryError } = useVoiceStatusQuery();
+  const embeddingStatus = useMemo(
+    () => semanticStatusToPackStatus(semanticStatus),
+    [semanticStatus],
+  );
+  const voiceStatus = useMemo(
+    () =>
+      voiceStatusToPackStatus(voice, {
+        error: queryErrorMessage(voiceQueryError),
+      }),
+    [voice, voiceQueryError],
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (inBrowser || !workspaceRoot) {
-      setEmbeddingStatus("missing");
-      return;
-    }
-    let cancelled = false;
-    void getSemanticStatus(workspaceRoot)
-      .then((next) => {
-        if (!cancelled) setEmbeddingStatus(semanticStatusToPackStatus(next));
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [workspaceRoot]);
-
-  useEffect(() => {
-    if (inBrowser) return;
-    let cancelled = false;
-    void getVoiceStatus()
-      .then((next) => {
-        if (!cancelled) setVoiceStatus(voiceStatusToPackStatus(next));
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setVoiceStatus(voiceStatusToPackStatus(null, { error: String(err) }));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (inBrowser) return;
-    let unlisten: (() => void) | undefined;
-    void listenSemanticEvents((event) => {
-      if (event.type === "status") {
-        setEmbeddingStatus(
-          semanticStatusToPackStatus({
-            state: event.state,
-            pendingChunks: event.pendingChunks,
-            message: event.message,
-            progressPercent: event.progressPercent ?? null,
-          }),
-        );
-      }
-    }).then((fn) => {
-      unlisten = fn;
-    });
-    return () => {
-      unlisten?.();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (inBrowser) return;
-    let unlisten: (() => void) | undefined;
-    void listenVoiceEvents((event) => {
-      if (event.type === "status") {
-        if (event.state === "preparing") {
-          setVoiceStatus("downloading");
-        }
-        if (event.state === "ready") {
-          setVoiceStatus("ready");
-        }
-      }
-      if (event.type === "failed") {
-        setVoiceStatus(voiceStatusToPackStatus(null, { error: event.message }));
-      }
-    }).then((fn) => {
-      unlisten = fn;
-    });
-    return () => {
-      unlisten?.();
-    };
-  }, []);
+  const displayError = error ?? queryErrorMessage(semanticQueryError);
 
   function handleSemanticToggle(next: boolean) {
     if (busy) return;
@@ -149,7 +95,7 @@ export function FeaturesSettings({
         setBusy(true);
         setError(null);
         void disableSemanticSearch(workspaceRoot)
-          .then((status) => setEmbeddingStatus(semanticStatusToPackStatus(status)))
+          .then((status) => setSemanticStatusCache(queryClient, workspaceRoot, status))
           .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
           .finally(() => setBusy(false));
       }
@@ -170,7 +116,7 @@ export function FeaturesSettings({
     void downloadPack("embeddings.qwen3-0.6b", workspaceRoot)
       .then((result) => {
         if (result.kind === "semantic") {
-          setEmbeddingStatus(semanticStatusToPackStatus(result.status));
+          setSemanticStatusCache(queryClient, workspaceRoot, result.status);
         }
         onSemanticEnabledChange(true);
       })
@@ -239,10 +185,10 @@ export function FeaturesSettings({
               </Button>
           </SettingRow>
 
-          {error ? (
+          {displayError ? (
             <div className="diagnostics-card" role="alert">
               <strong>Feature error</strong>
-              <span>{error}</span>
+              <span>{displayError}</span>
             </div>
           ) : null}
         </>

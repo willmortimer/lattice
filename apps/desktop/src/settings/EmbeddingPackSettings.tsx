@@ -1,20 +1,22 @@
 import { Button } from "@lattice/ui";
-import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
 import { inBrowser } from "../demo";
 import type { EmbeddingMode } from "../lib/profile";
 import {
   enableSemanticSearch,
-  getSemanticStatus,
   isSemanticPackPrepared,
   isVectorsBehindStatus,
-  listenSemanticEvents,
   SEMANTIC_MODEL_CONFIRM,
   semanticProviderLabel,
   semanticStatusLabel,
   VECTORS_BEHIND_EXPLANATION,
-  type SemanticStatus,
 } from "../lib/semantic";
+import {
+  setSemanticStatusCache,
+  useSemanticStatusQuery,
+} from "../query/useSemanticStatusQuery";
 
 function embeddingModeLabel(mode: EmbeddingMode): string {
   switch (mode) {
@@ -29,6 +31,11 @@ function embeddingModeLabel(mode: EmbeddingMode): string {
       return _exhaustive;
     }
   }
+}
+
+function queryErrorMessage(error: unknown): string | null {
+  if (!error) return null;
+  return error instanceof Error ? error.message : String(error);
 }
 
 export interface EmbeddingPackSettingsProps {
@@ -47,93 +54,13 @@ export function EmbeddingPackSettings({
   embeddingMode,
   passiveEmbeddingEnabled,
 }: EmbeddingPackSettingsProps) {
-  const [status, setStatus] = useState<SemanticStatus | null>(null);
+  const queryClient = useQueryClient();
+  const { data: status = null, error: statusQueryError } =
+    useSemanticStatusQuery(workspaceRoot);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (inBrowser || !workspaceRoot) return;
-    let cancelled = false;
-    void getSemanticStatus(workspaceRoot)
-      .then((next) => {
-        if (!cancelled) setStatus(next);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [workspaceRoot]);
-
-  useEffect(() => {
-    if (inBrowser) return;
-    let unlisten: (() => void) | undefined;
-    void listenSemanticEvents((event) => {
-      if (event.type === "status") {
-        setStatus((prev) => {
-          const nextPercent = event.progressPercent ?? null;
-          const progressPercent =
-            event.state === "downloading" &&
-            prev?.state === "downloading" &&
-            prev.progressPercent != null &&
-            nextPercent != null
-              ? Math.max(prev.progressPercent, nextPercent)
-              : nextPercent;
-          return {
-            state: event.state,
-            pendingChunks: event.pendingChunks,
-            message: event.message,
-            progressPercent,
-            providerId: event.providerId ?? prev?.providerId ?? null,
-            modelId: event.modelId ?? prev?.modelId ?? null,
-            dimensions: event.dimensions ?? prev?.dimensions ?? null,
-          };
-        });
-      }
-    }).then((fn) => {
-      unlisten = fn;
-    });
-    return () => {
-      unlisten?.();
-    };
-  }, []);
-
-  // Poll while downloading / preparing / indexing so progress and stale detection stay fresh.
-  useEffect(() => {
-    if (inBrowser || !workspaceRoot || !semanticEnabled) return;
-    if (
-      !status ||
-      (status.state !== "downloading" &&
-        status.state !== "preparing" &&
-        status.state !== "indexing")
-    ) {
-      return;
-    }
-    const id = window.setInterval(() => {
-      void getSemanticStatus(workspaceRoot)
-        .then((next) => {
-          setStatus((prev) => {
-            if (
-              next.state === "downloading" &&
-              prev?.state === "downloading" &&
-              prev.progressPercent != null &&
-              next.progressPercent != null
-            ) {
-              return {
-                ...next,
-                progressPercent: Math.max(prev.progressPercent, next.progressPercent),
-              };
-            }
-            return next;
-          });
-        })
-        .catch(() => {
-          /* keep last status */
-        });
-    }, 750);
-    return () => window.clearInterval(id);
-  }, [workspaceRoot, semanticEnabled, status?.state]);
+  const displayError = error ?? queryErrorMessage(statusQueryError);
 
   function handleDownloadPack() {
     if (!workspaceRoot || busy || isSemanticPackPrepared(status)) return;
@@ -143,7 +70,7 @@ export function EmbeddingPackSettings({
     setError(null);
     void enableSemanticSearch(workspaceRoot)
       .then((next) => {
-        setStatus(next);
+        setSemanticStatusCache(queryClient, workspaceRoot, next);
         onSemanticEnabledChange(true);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
@@ -156,7 +83,7 @@ export function EmbeddingPackSettings({
     setError(null);
     void enableSemanticSearch(workspaceRoot)
       .then((next) => {
-        setStatus(next);
+        setSemanticStatusCache(queryClient, workspaceRoot, next);
         if (!semanticEnabled) onSemanticEnabledChange(true);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
@@ -255,10 +182,10 @@ export function EmbeddingPackSettings({
               </div>
             </div>
           ) : null}
-          {error ? (
+          {displayError ? (
             <div className="diagnostics-card" role="alert">
               <strong>Embedding pack error</strong>
-              <span>{error}</span>
+              <span>{displayError}</span>
             </div>
           ) : null}
           {status?.message && status.state === "failed" ? (

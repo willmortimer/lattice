@@ -1,5 +1,6 @@
 import { Button } from "@lattice/ui";
-import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
 import { inBrowser } from "../demo";
 import {
@@ -12,8 +13,13 @@ import {
   type PackId,
   type PackStatus,
 } from "../lib/packs";
-import { getSemanticStatus, listenSemanticEvents, type SemanticStatus } from "../lib/semantic";
-import { getVoiceStatus, listenVoiceEvents, type VoiceStatus } from "../lib/voice";
+import type { SemanticStatus } from "../lib/semantic";
+import type { VoiceStatus } from "../lib/voice";
+import {
+  setSemanticStatusCache,
+  useSemanticStatusQuery,
+} from "../query/useSemanticStatusQuery";
+import { setVoiceStatusCache, useVoiceStatusQuery } from "../query/useVoiceStatusQuery";
 import {
   isPackDownloadDisabled,
   packDownloadButtonLabel,
@@ -44,154 +50,25 @@ function packStatusForId(
   }
 }
 
+function queryErrorMessage(error: unknown): string | null {
+  if (!error) return null;
+  return error instanceof Error ? error.message : String(error);
+}
+
 /** Catalog of downloadable first-party packs with status, download, and clear. */
 export function PacksSettings({ workspaceRoot, onSemanticEnabledChange }: PacksSettingsProps) {
+  const queryClient = useQueryClient();
   const packs = listPacks();
-  const [semantic, setSemantic] = useState<SemanticStatus | null>(null);
-  const [voice, setVoice] = useState<VoiceStatus | null>(null);
-  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const { data: semantic = null, error: semanticQueryError } =
+    useSemanticStatusQuery(workspaceRoot);
+  const { data: voice = null, error: voiceQueryError } = useVoiceStatusQuery();
+  const voiceError = queryErrorMessage(voiceQueryError);
   const [busyId, setBusyId] = useState<PackId | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (inBrowser) return;
-    let cancelled = false;
-    void getVoiceStatus()
-      .then((next) => {
-        if (!cancelled) {
-          setVoice(next);
-          setVoiceError(null);
-        }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setVoiceError(err instanceof Error ? err.message : String(err));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (inBrowser || !workspaceRoot) {
-      setSemantic(null);
-      return;
-    }
-    let cancelled = false;
-    void getSemanticStatus(workspaceRoot)
-      .then((next) => {
-        if (!cancelled) setSemantic(next);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [workspaceRoot]);
-
-  useEffect(() => {
-    if (inBrowser) return;
-    let unlisten: (() => void) | undefined;
-    void listenSemanticEvents((event) => {
-      if (event.type === "status") {
-        setSemantic((prev) => ({
-          state: event.state,
-          pendingChunks: event.pendingChunks,
-          message: event.message,
-          progressPercent: event.progressPercent ?? null,
-          providerId: event.providerId ?? prev?.providerId ?? null,
-          modelId: event.modelId ?? prev?.modelId ?? null,
-          dimensions: event.dimensions ?? prev?.dimensions ?? null,
-        }));
-      }
-    }).then((fn) => {
-      unlisten = fn;
-    });
-    return () => {
-      unlisten?.();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (inBrowser) return;
-    let unlisten: (() => void) | undefined;
-    void listenVoiceEvents((event) => {
-      if (event.type === "status") {
-        if (event.state === "preparing") {
-          setVoiceError(null);
-          setVoice((prev) =>
-            prev
-              ? { ...prev, preparing: true, message: event.message }
-              : {
-                  available: true,
-                  prepared: false,
-                  preparing: true,
-                  listening: false,
-                  nativeCapture: false,
-                  platform: "macos",
-                  message: event.message,
-                },
-          );
-        }
-        if (event.state === "ready") {
-          setVoiceError(null);
-          setVoice((prev) =>
-            prev
-              ? { ...prev, prepared: true, preparing: false, message: event.message }
-              : {
-                  available: true,
-                  prepared: true,
-                  preparing: false,
-                  listening: false,
-                  nativeCapture: false,
-                  platform: "macos",
-                  message: event.message,
-                },
-          );
-        }
-      }
-      if (event.type === "failed") {
-        setVoiceError(event.message);
-      }
-    }).then((fn) => {
-      unlisten = fn;
-    });
-    return () => {
-      unlisten?.();
-    };
-  }, []);
-
-  // Poll while either pack is downloading so progress stays fresh.
-  useEffect(() => {
-    if (inBrowser) return;
-    const semanticBusy =
-      semantic?.state === "downloading" ||
-      semantic?.state === "preparing" ||
-      semantic?.state === "indexing";
-    const voiceBusy = voice?.preparing === true;
-    if (!semanticBusy && !voiceBusy) return;
-
-    const id = window.setInterval(() => {
-      if (workspaceRoot && semanticBusy) {
-        void getSemanticStatus(workspaceRoot)
-          .then(setSemantic)
-          .catch(() => {
-            /* keep last */
-          });
-      }
-      if (voiceBusy) {
-        void getVoiceStatus()
-          .then((next) => {
-            setVoice(next);
-            setVoiceError(null);
-          })
-          .catch(() => {
-            /* keep last */
-          });
-      }
-    }, 750);
-    return () => window.clearInterval(id);
-  }, [workspaceRoot, semantic?.state, voice?.preparing]);
+  const displayError =
+    error ??
+    queryErrorMessage(semanticQueryError);
 
   function handleDownload(id: PackId) {
     const pack = packs.find((item) => item.id === id);
@@ -209,11 +86,12 @@ export function PacksSettings({ workspaceRoot, onSemanticEnabledChange }: PacksS
     void downloadPack(id, workspaceRoot ?? "")
       .then((result) => {
         if (result.kind === "semantic") {
-          setSemantic(result.status);
+          if (workspaceRoot) {
+            setSemanticStatusCache(queryClient, workspaceRoot, result.status);
+          }
           onSemanticEnabledChange(true);
         } else {
-          setVoice(result.status);
-          setVoiceError(null);
+          setVoiceStatusCache(queryClient, result.status);
         }
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
@@ -234,7 +112,7 @@ export function PacksSettings({ workspaceRoot, onSemanticEnabledChange }: PacksS
     setError(null);
     void clearPack(id, workspaceRoot)
       .then((result) => {
-        setSemantic(result.status);
+        setSemanticStatusCache(queryClient, workspaceRoot, result.status);
         onSemanticEnabledChange(false);
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
@@ -310,11 +188,11 @@ export function PacksSettings({ workspaceRoot, onSemanticEnabledChange }: PacksS
               <span>The embedding pack needs an open workspace for status and download.</span>
             </div>
           ) : null}
-          {error ? (
+          {displayError ? (
             <div className="diagnostics-card" role="alert">
               <strong>Pack error</strong>
-              <span>{error}</span>
-              {error.includes("auth token") || error.includes("LATTICE_AUTH_TOKEN") ? (
+              <span>{displayError}</span>
+              {displayError.includes("auth token") || displayError.includes("LATTICE_AUTH_TOKEN") ? (
                 <span>
                   Quit other Lattice / latticed processes, or remove{" "}
                   <code>~/Library/Application Support/Lattice/run/latticed.sock</code> and reopen
