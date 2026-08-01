@@ -6,6 +6,7 @@
 pub mod cell_host;
 pub mod fake;
 pub mod kernelfs_export;
+pub mod kernelfs_lease;
 pub mod local;
 pub mod lattice_client;
 pub mod loop_runtime;
@@ -20,6 +21,10 @@ pub mod wasi_host;
 pub use kernelfs_export::{
     export_oci_roles_under_agent_share, OciKernelfsExport, OciKernelfsExportError,
     OciKernelfsExportRequest,
+};
+pub use kernelfs_lease::{
+    export_lease_registry, kernelfs_allow_replace, materialize_allow_replace, HeldExportLease,
+    ALLOW_REPLACE_ENV,
 };
 pub use lattice_client::{lattice_client_from_env, LatticeToolClient};
 pub use local::{emit_local_run, LocalRunOptions};

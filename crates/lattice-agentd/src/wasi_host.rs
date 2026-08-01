@@ -22,6 +22,7 @@ use thiserror::Error;
 
 use base64::Engine;
 
+use crate::kernelfs_lease::{export_lease_registry, materialize_allow_replace, HeldExportLease};
 use crate::lattice_client::{LatticeApiError, LatticeToolClient};
 use crate::seatbelt::{self, SeatbeltError};
 use crate::secret_handles::SECRET_HANDLES_ENV;
@@ -190,11 +191,12 @@ impl DraftProvenance for WasiProposalProvenance {
 }
 
 /// Result of a successful KernelFS WASI host run.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct WasiGuestRunResult {
     pub drafts: Vec<LatticeProposalDraft>,
     pub hydration: HydrationRecord,
     pub run: WasiRunResult,
+    _export_lease: HeldExportLease,
 }
 
 /// Map [`UnsupportedCapabilities`] into stable tool JSON for the model.
@@ -243,6 +245,17 @@ pub fn wasi_materialize_error_json(err: &MaterializeError) -> Value {
                 "host path {:?} is outside the allowed workspace roots {:?}",
                 path, allowed
             ),
+        }),
+        MaterializeError::RunIdCollision { run_id } => json!({
+            "kind": "run_id_collision",
+            "runId": run_id,
+            "message": err.to_string(),
+        }),
+        MaterializeError::ExportLeased { run_id, refcount } => json!({
+            "kind": "export_leased",
+            "runId": run_id,
+            "refcount": refcount,
+            "message": err.to_string(),
         }),
         other => json!({
             "kind": "materialize",
@@ -364,15 +377,23 @@ pub fn run_wasi_guest_with_options(
     } else {
         SecretHandlePolicy::AllowHandles(&options.secret_handle_allowlist)
     };
+    let lease_registry = export_lease_registry();
     let run_dir = materialize_with_options(
         run_parent,
         manifest,
         &MaterializeOptions {
             host_path_policy: HostPathPolicy::AllowRoots(&options.host_path_roots),
             secret_handle_policy,
-            ..Default::default()
+            lease_registry: Some(lease_registry),
+            allow_replace: materialize_allow_replace(false),
         },
     )?;
+    let _export_lease = HeldExportLease::hold(&manifest.run_id).map_err(|err| {
+        MaterializeError::Io {
+            path: run_parent.to_path_buf(),
+            source: std::io::Error::other(err.to_string()),
+        }
+    })?;
 
     let mut run_opts = WasiRunOptions {
         limits: options.limits.clone(),
@@ -417,6 +438,7 @@ pub fn run_wasi_guest_with_options(
         drafts: adapter.drafts(&plan),
         hydration: run_dir.hydration,
         run,
+        _export_lease,
     })
 }
 
@@ -495,6 +517,16 @@ pub async fn propose_output_drafts_with_provenance<P: DraftProvenance + Sync>(
 mod tests {
     use super::*;
     use kernelfs::{Capabilities, SecretHandle};
+
+    #[test]
+    fn maps_run_id_collision_to_structured_error() {
+        let err = MaterializeError::RunIdCollision {
+            run_id: "run_dup".into(),
+        };
+        let value = wasi_materialize_error_json(&err);
+        assert_eq!(value["kind"], "run_id_collision");
+        assert_eq!(value["runId"], "run_dup");
+    }
 
     #[test]
     fn deny_all_when_secret_allowlist_empty() {
