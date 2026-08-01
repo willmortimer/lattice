@@ -77,7 +77,69 @@ import {
 } from "./settingsCatalog";
 import { SettingsHighlightContext } from "./settingsHighlight";
 import { SettingsSearch } from "./SettingsSearch";
+import { SettingsSectionToolbar } from "./SettingsSectionToolbar";
+import { isDraftGatedSection } from "./settingsDraftGating";
 import { TOGGLEABLE_WORKSPACE_CAPABILITIES } from "./workspaceCapabilities";
+
+interface FilesSectionDraft {
+  autosaveDelayMs: number;
+  quickNoteDirectory: string;
+  confirmCloseWithUnsavedChanges: boolean;
+}
+
+interface WorkspacesSectionDraft {
+  defaultWorkspace: string;
+  reopenLastWorkspace: boolean;
+  restoreSession: boolean;
+  showStartupSplash: boolean;
+}
+
+type SettingFeedback = {
+  status?: string | null;
+  error?: string | null;
+};
+
+function filesDraftFromProps(
+  settings: AppSettings,
+  workspace: WorkspaceSnapshot,
+): FilesSectionDraft {
+  return {
+    autosaveDelayMs: settings.editor.autosaveDelayMs,
+    quickNoteDirectory: workspace.defaults.quickNoteDirectory,
+    confirmCloseWithUnsavedChanges: settings.files.confirmCloseWithUnsavedChanges,
+  };
+}
+
+function workspacesDraftFromProps(
+  startup: WorkspaceStartupSettings,
+): WorkspacesSectionDraft {
+  return {
+    defaultWorkspace: startup.defaultWorkspace ?? "",
+    reopenLastWorkspace: startup.reopenLastWorkspace,
+    restoreSession: startup.restoreSession,
+    showStartupSplash: startup.showStartupSplash,
+  };
+}
+
+function filesDraftDirty(draft: FilesSectionDraft, persisted: FilesSectionDraft): boolean {
+  return (
+    draft.autosaveDelayMs !== persisted.autosaveDelayMs ||
+    draft.quickNoteDirectory !== persisted.quickNoteDirectory ||
+    draft.confirmCloseWithUnsavedChanges !== persisted.confirmCloseWithUnsavedChanges
+  );
+}
+
+function workspacesDraftDirty(
+  draft: WorkspacesSectionDraft,
+  persisted: WorkspacesSectionDraft,
+): boolean {
+  return (
+    draft.defaultWorkspace !== persisted.defaultWorkspace ||
+    draft.reopenLastWorkspace !== persisted.reopenLastWorkspace ||
+    draft.restoreSession !== persisted.restoreSession ||
+    draft.showStartupSplash !== persisted.showStartupSplash
+  );
+}
 
 interface SettingsPageProps {
   settings: AppSettings;
@@ -85,11 +147,16 @@ interface SettingsPageProps {
   workspace: WorkspaceSnapshot;
   themeCatalog: ThemeCatalogPayload | null;
   onChange: (next: AppSettings) => void;
-  onStartupChange: (next: WorkspaceStartupSettings) => void;
+  onApplySettings: (next: AppSettings) => Promise<void>;
+  onApplyStartup: (next: WorkspaceStartupSettings) => Promise<void>;
   onWorkspaceChange: (next: {
     capabilities: string[];
     quickNoteDirectory: string;
   }) => void;
+  onApplyWorkspaceChange: (next: {
+    capabilities: string[];
+    quickNoteDirectory: string;
+  }) => Promise<void>;
   onClearRecents: () => void;
   onReset: () => void;
   onThemeChange: (themeId: string) => void;
@@ -127,8 +194,10 @@ export function SettingsPage({
   workspace,
   themeCatalog,
   onChange,
-  onStartupChange,
+  onApplySettings,
+  onApplyStartup,
   onWorkspaceChange,
+  onApplyWorkspaceChange,
   onClearRecents,
   onReset,
   onThemeChange,
@@ -138,22 +207,44 @@ export function SettingsPage({
 }: SettingsPageProps) {
   const [section, setSection] = useState<SettingsSection>("appearance");
   const [highlightedSettingId, setHighlightedSettingId] = useState<string | null>(null);
-  const [quickNoteDraft, setQuickNoteDraft] = useState(workspace.defaults.quickNoteDirectory);
-  const [defaultWorkspaceDraft, setDefaultWorkspaceDraft] = useState(
-    startup.defaultWorkspace ?? "",
+  const [filesDraft, setFilesDraft] = useState<FilesSectionDraft>(() =>
+    filesDraftFromProps(settings, workspace),
   );
+  const [workspacesDraft, setWorkspacesDraft] = useState<WorkspacesSectionDraft>(() =>
+    workspacesDraftFromProps(startup),
+  );
+  const [filesFeedback, setFilesFeedback] = useState<Record<string, SettingFeedback>>({});
+  const [workspacesFeedback, setWorkspacesFeedback] = useState<Record<string, SettingFeedback>>({});
+  const [filesApplying, setFilesApplying] = useState(false);
+  const [workspacesApplying, setWorkspacesApplying] = useState(false);
   const [backgroundSchedules, setBackgroundSchedules] = useState<BackgroundScheduleStatus | null>(
     null,
   );
   const [backgroundSchedulesError, setBackgroundSchedulesError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setQuickNoteDraft(workspace.defaults.quickNoteDirectory);
-  }, [workspace.defaults.quickNoteDirectory]);
+  const persistedFilesDraft = filesDraftFromProps(settings, workspace);
+  const persistedWorkspacesDraft = workspacesDraftFromProps(startup);
+  const filesHasDraft = filesDraftDirty(filesDraft, persistedFilesDraft);
+  const workspacesHasDraft = workspacesDraftDirty(workspacesDraft, persistedWorkspacesDraft);
 
   useEffect(() => {
-    setDefaultWorkspaceDraft(startup.defaultWorkspace ?? "");
-  }, [startup.defaultWorkspace]);
+    setFilesDraft(filesDraftFromProps(settings, workspace));
+    setFilesFeedback({});
+  }, [
+    settings.editor.autosaveDelayMs,
+    settings.files.confirmCloseWithUnsavedChanges,
+    workspace.defaults.quickNoteDirectory,
+  ]);
+
+  useEffect(() => {
+    setWorkspacesDraft(workspacesDraftFromProps(startup));
+    setWorkspacesFeedback({});
+  }, [
+    startup.defaultWorkspace,
+    startup.reopenLastWorkspace,
+    startup.restoreSession,
+    startup.showStartupSplash,
+  ]);
 
   useEffect(() => {
     if (inBrowser || !workspace.root) {
@@ -221,6 +312,145 @@ export function SettingsPage({
     }
   }
 
+  async function applyFilesSection() {
+    setFilesApplying(true);
+    setFilesFeedback({});
+    const nextSettings: AppSettings = {
+      ...settings,
+      editor: { ...settings.editor, autosaveDelayMs: filesDraft.autosaveDelayMs },
+      files: {
+        ...settings.files,
+        confirmCloseWithUnsavedChanges: filesDraft.confirmCloseWithUnsavedChanges,
+      },
+    };
+    const desktopDirty =
+      nextSettings.editor.autosaveDelayMs !== settings.editor.autosaveDelayMs ||
+      nextSettings.files.confirmCloseWithUnsavedChanges !== settings.files.confirmCloseWithUnsavedChanges;
+    const pathDirty =
+      filesDraft.quickNoteDirectory !== workspace.defaults.quickNoteDirectory;
+
+    if (desktopDirty) {
+      setFilesFeedback((current) => ({
+        ...current,
+        "files.autosave": { status: "Saving…" },
+        "files.unsaved-close": { status: "Saving…" },
+      }));
+      try {
+        await onApplySettings(nextSettings);
+        setFilesFeedback((current) => ({
+          ...current,
+          "files.autosave": { status: "Saved" },
+          "files.unsaved-close": { status: "Saved" },
+        }));
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        setFilesFeedback((current) => ({
+          ...current,
+          "files.autosave": { error: message },
+          "files.unsaved-close": { error: message },
+        }));
+        setFilesApplying(false);
+        return;
+      }
+    }
+
+    if (pathDirty) {
+      setFilesFeedback((current) => ({
+        ...current,
+        "files.quick-note": { status: "Saving…" },
+      }));
+      try {
+        await onApplyWorkspaceChange({
+          capabilities: workspace.capabilities,
+          quickNoteDirectory: filesDraft.quickNoteDirectory,
+        });
+        setFilesFeedback((current) => ({
+          ...current,
+          "files.quick-note": { status: "Saved" },
+        }));
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        setFilesFeedback((current) => ({
+          ...current,
+          "files.quick-note": { error: message },
+        }));
+      }
+    }
+
+    setFilesApplying(false);
+  }
+
+  function resetFilesSection() {
+    setFilesDraft(persistedFilesDraft);
+    setFilesFeedback({});
+  }
+
+  async function applyWorkspacesSection() {
+    setWorkspacesApplying(true);
+    setWorkspacesFeedback({});
+    const nextStartup: WorkspaceStartupSettings = {
+      ...startup,
+      defaultWorkspace: workspacesDraft.defaultWorkspace || null,
+      reopenLastWorkspace: workspacesDraft.reopenLastWorkspace,
+      restoreSession: workspacesDraft.restoreSession,
+      showStartupSplash: workspacesDraft.showStartupSplash,
+    };
+    const settingIds = [
+      "workspaces.default",
+      "workspaces.reopen",
+      "workspaces.restore-session",
+      "workspaces.splash",
+    ];
+    setWorkspacesFeedback((current) => {
+      const next = { ...current };
+      for (const id of settingIds) {
+        next[id] = { status: "Saving…" };
+      }
+      return next;
+    });
+    try {
+      await onApplyStartup(nextStartup);
+      setWorkspacesFeedback((current) => {
+        const next = { ...current };
+        for (const id of settingIds) {
+          next[id] = { status: "Saved" };
+        }
+        return next;
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setWorkspacesFeedback((current) => {
+        const next = { ...current };
+        for (const id of settingIds) {
+          next[id] = { error: message };
+        }
+        return next;
+      });
+    }
+    setWorkspacesApplying(false);
+  }
+
+  function resetWorkspacesSection() {
+    setWorkspacesDraft(persistedWorkspacesDraft);
+    setWorkspacesFeedback({});
+  }
+
+  function handleResetAll() {
+    const accepted = window.confirm(
+      "Reset all settings to factory defaults? Profile, startup, and desktop preferences will revert. This cannot be undone.",
+    );
+    if (!accepted) return;
+    onReset();
+    resetFilesSection();
+    resetWorkspacesSection();
+  }
+
+  function sectionHasDraft(id: SettingsSection): boolean {
+    if (id === "files") return filesHasDraft;
+    if (id === "workspaces") return workspacesHasDraft;
+    return false;
+  }
+
   return (
     <div className="settings-workbench">
       <aside className="settings-nav">
@@ -243,13 +473,16 @@ export function SettingsPage({
               >
                 <Icon size={15} />
                 {label}
+                {isDraftGatedSection(id) && sectionHasDraft(id) ? (
+                  <span className="settings-nav-draft-dot" aria-label="Unsaved changes" />
+                ) : null}
               </button>
             ))}
           </div>
         ))}
         <div className="settings-nav-spacer" />
-        <Button variant="ghost" size="sm" onClick={onReset}>
-          Reset defaults
+        <Button variant="ghost" size="sm" onClick={handleResetAll}>
+          Reset all defaults
         </Button>
       </aside>
 
@@ -422,11 +655,30 @@ export function SettingsPage({
         {section === "files" && (
           <>
             <h1>Files, links and autosave</h1>
-            <SettingRow settingId="files.autosave" title="Autosave delay" description="Debounce page writes while typing.">
+            <p className="settings-copy">
+              Path and file preferences stay as drafts until you apply. Other settings sections
+              still save immediately.
+            </p>
+            <SettingsSectionToolbar
+              hasDraft={filesHasDraft}
+              busy={filesApplying}
+              onApply={() => void applyFilesSection()}
+              onResetSection={resetFilesSection}
+            />
+            <SettingRow
+              settingId="files.autosave"
+              title="Autosave delay"
+              description="Debounce page writes while typing."
+              inlineStatus={filesFeedback["files.autosave"]?.status}
+              inlineError={filesFeedback["files.autosave"]?.error}
+            >
               <select
-                value={settings.editor.autosaveDelayMs}
+                value={filesDraft.autosaveDelayMs}
                 onChange={(event) =>
-                  update("editor", { autosaveDelayMs: Number(event.currentTarget.value) })
+                  setFilesDraft((current) => ({
+                    ...current,
+                    autosaveDelayMs: Number(event.currentTarget.value),
+                  }))
                 }
               >
                 <option value="300">300 ms</option>
@@ -435,24 +687,38 @@ export function SettingsPage({
                 <option value="3000">3 seconds</option>
               </select>
             </SettingRow>
-            <SettingRow settingId="files.quick-note" title="Quick Note folder" description="Workspace-relative directory for new captures.">
+            <SettingRow
+              settingId="files.quick-note"
+              title="Quick Note folder"
+              description="Workspace-relative directory for new captures."
+              inlineStatus={filesFeedback["files.quick-note"]?.status}
+              inlineError={filesFeedback["files.quick-note"]?.error}
+            >
               <input
-                value={quickNoteDraft}
-                onChange={(event) => setQuickNoteDraft(event.currentTarget.value)}
-                onBlur={() =>
-                  onWorkspaceChange({
-                    capabilities: workspace.capabilities,
-                    quickNoteDirectory: quickNoteDraft,
-                  })
+                value={filesDraft.quickNoteDirectory}
+                onChange={(event) =>
+                  setFilesDraft((current) => ({
+                    ...current,
+                    quickNoteDirectory: event.currentTarget.value,
+                  }))
                 }
               />
             </SettingRow>
-            <SettingRow settingId="files.unsaved-close" title="Unsaved close guard" description="Require confirmation before closing a resource with local edits.">
+            <SettingRow
+              settingId="files.unsaved-close"
+              title="Unsaved close guard"
+              description="Require confirmation before closing a resource with local edits."
+              inlineStatus={filesFeedback["files.unsaved-close"]?.status}
+              inlineError={filesFeedback["files.unsaved-close"]?.error}
+            >
               <Toggle
                 label="Confirm unsaved close"
-                checked={settings.files.confirmCloseWithUnsavedChanges}
+                checked={filesDraft.confirmCloseWithUnsavedChanges}
                 onChange={(confirmCloseWithUnsavedChanges) =>
-                  update("files", { confirmCloseWithUnsavedChanges })
+                  setFilesDraft((current) => ({
+                    ...current,
+                    confirmCloseWithUnsavedChanges,
+                  }))
                 }
               />
             </SettingRow>
@@ -462,34 +728,60 @@ export function SettingsPage({
         {section === "workspaces" && (
           <>
             <h1>Workspaces and startup</h1>
-            <SettingRow settingId="workspaces.default" title="Default workspace" description="Used when no valid session can be resumed.">
+            <p className="settings-copy">
+              Default workspace path and startup preferences require Apply before they persist.
+            </p>
+            <SettingsSectionToolbar
+              hasDraft={workspacesHasDraft}
+              busy={workspacesApplying}
+              onApply={() => void applyWorkspacesSection()}
+              onResetSection={resetWorkspacesSection}
+            />
+            <SettingRow
+              settingId="workspaces.default"
+              title="Default workspace"
+              description="Used when no valid session can be resumed."
+              inlineStatus={workspacesFeedback["workspaces.default"]?.status}
+              inlineError={workspacesFeedback["workspaces.default"]?.error}
+            >
               <input
-                value={defaultWorkspaceDraft}
+                value={workspacesDraft.defaultWorkspace}
                 placeholder="No configured default"
-                onChange={(event) => setDefaultWorkspaceDraft(event.currentTarget.value)}
-                onBlur={() =>
-                  onStartupChange({
-                    ...startup,
-                    defaultWorkspace: defaultWorkspaceDraft || null,
-                  })
+                onChange={(event) =>
+                  setWorkspacesDraft((current) => ({
+                    ...current,
+                    defaultWorkspace: event.currentTarget.value,
+                  }))
                 }
               />
             </SettingRow>
-            <SettingRow settingId="workspaces.reopen" title="Reopen last workspace" description="Try recent workspaces before the configured default.">
+            <SettingRow
+              settingId="workspaces.reopen"
+              title="Reopen last workspace"
+              description="Try recent workspaces before the configured default."
+              inlineStatus={workspacesFeedback["workspaces.reopen"]?.status}
+              inlineError={workspacesFeedback["workspaces.reopen"]?.error}
+            >
               <Toggle
                 label="Reopen last workspace"
-                checked={startup.reopenLastWorkspace}
+                checked={workspacesDraft.reopenLastWorkspace}
                 onChange={(reopenLastWorkspace) =>
-                  onStartupChange({ ...startup, reopenLastWorkspace })
+                  setWorkspacesDraft((current) => ({ ...current, reopenLastWorkspace }))
                 }
               />
             </SettingRow>
-            <SettingRow settingId="workspaces.restore-session" title="Restore session" description="Restore tabs, active resource, activity area, and inspector state.">
+            <SettingRow
+              settingId="workspaces.restore-session"
+              title="Restore session"
+              description="Restore tabs, active resource, activity area, and inspector state."
+              inlineStatus={workspacesFeedback["workspaces.restore-session"]?.status}
+              inlineError={workspacesFeedback["workspaces.restore-session"]?.error}
+            >
               <Toggle
                 label="Restore session"
-                checked={startup.restoreSession}
+                checked={workspacesDraft.restoreSession}
                 onChange={(restoreSession) =>
-                  onStartupChange({ ...startup, restoreSession })
+                  setWorkspacesDraft((current) => ({ ...current, restoreSession }))
                 }
               />
             </SettingRow>
@@ -497,12 +789,14 @@ export function SettingsPage({
               settingId="workspaces.splash"
               title="Startup splash"
               description="Hold the branded loading screen for about a second so theme colors can settle before the workspace appears."
+              inlineStatus={workspacesFeedback["workspaces.splash"]?.status}
+              inlineError={workspacesFeedback["workspaces.splash"]?.error}
             >
               <Toggle
                 label="Show startup splash"
-                checked={startup.showStartupSplash}
+                checked={workspacesDraft.showStartupSplash}
                 onChange={(showStartupSplash) =>
-                  onStartupChange({ ...startup, showStartupSplash })
+                  setWorkspacesDraft((current) => ({ ...current, showStartupSplash }))
                 }
               />
             </SettingRow>

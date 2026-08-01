@@ -4046,6 +4046,51 @@ html[data-motion="always"] *::after {
   font: 11.5px var(--lt-font-mono);
 }
 
+.setting-control {
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+}
+
+.setting-inline-status {
+  color: var(--lt-faint);
+  font-size: 11px;
+}
+
+.setting-inline-error {
+  color: var(--lt-danger, #c44);
+  font-size: 11px;
+  max-width: 28ch;
+  text-align: right;
+}
+
+.settings-section-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 20px;
+}
+
+.settings-draft-indicator {
+  color: var(--lt-accent);
+  font-size: 11.5px;
+}
+
+.settings-nav-draft-dot {
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--lt-accent);
+  flex-shrink: 0;
+}
+
+.settings-nav-group > button {
+  display: flex;
+  align-items: center;
+}
+
 .settings-toggle {
   position: relative;
   width: 34px;

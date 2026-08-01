@@ -414,12 +414,54 @@ export function useDesktopActionsController(options: DesktopActionsOptions) {
     }, 180);
   }, [setError, setSnapshot, setStatusToast, snapshotRef]);
 
+  const applyWorkspaceSettings = useCallback(
+    async (next: { capabilities: string[]; quickNoteDirectory: string }) => {
+      const current = snapshotRef.current;
+      if (!current) return;
+      if (workspaceSettingsTimerRef.current) {
+        window.clearTimeout(workspaceSettingsTimerRef.current);
+        workspaceSettingsTimerRef.current = null;
+      }
+      const optimistic = {
+        ...current,
+        capabilities: next.capabilities,
+        defaults: { quickNoteDirectory: next.quickNoteDirectory },
+      };
+      snapshotRef.current = optimistic;
+      setSnapshot(optimistic);
+      if (inBrowser) return;
+      try {
+        const updated = await updateWorkspaceManifest({
+          root: optimistic.root,
+          enabledCapabilities: optimistic.capabilities,
+          quickNoteDirectory: optimistic.defaults.quickNoteDirectory,
+          baseRevision: current.manifestRevision,
+        });
+        snapshotRef.current = updated;
+        setSnapshot(updated);
+        setStatusToast("Workspace settings saved");
+      } catch (error) {
+        try {
+          const reloaded = await coreInvoke<WorkspaceSnapshot>("open_workspace", { path: current.root });
+          snapshotRef.current = reloaded;
+          setSnapshot(reloaded);
+        } catch {
+          snapshotRef.current = current;
+          setSnapshot(current);
+        }
+        throw error;
+      }
+    },
+    [setSnapshot, setStatusToast, snapshotRef],
+  );
+
   return {
     createAndOpenPage, handleQuickNote, handleNewPage, handleUndo, handleImportTable, handleImportCsv,
     handlePromoteWorkspaceTable, handlePromoteWorkspaceCsv,
     handleNewTable,
     handleImportEditorAsset, handleOpenExternally, openLinkTarget, handleOpenWiki, handleOpenFile,
     updateWorkspaceSettings,
+    applyWorkspaceSettings,
     tabularImportReview, csvImportReview: tabularImportReview,
     handleCancelTabularImport, handleCancelCsvImport,
     handleConfirmTabularImport, handleConfirmCsvImport,

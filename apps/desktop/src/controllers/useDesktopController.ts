@@ -62,6 +62,8 @@ export function useDesktopController() {
     saveError: profileSaveError,
     setSettings,
     setStartup,
+    applyDesktopSettings,
+    applyStartupSettings,
     rememberWorkspace,
     clearRecents,
     removeRecent,
@@ -577,7 +579,7 @@ export function useDesktopController() {
   const {
     handleQuickNote, handleNewPage, handleNewTable, handleImportCsv, handlePromoteWorkspaceCsv, handleUndo,
     handleOpenExternally, handleOpenFile, handleImportEditorAsset, handleOpenWiki,
-    openLinkTarget, updateWorkspaceSettings, createAndOpenPage,
+    openLinkTarget, updateWorkspaceSettings, applyWorkspaceSettings, createAndOpenPage,
     csvImportReview, handleCancelCsvImport, handleConfirmCsvImport, handleCsvImportColumnTypeChange,
   } = actions;
 
@@ -1023,7 +1025,7 @@ export function useDesktopController() {
     openProposalResourcePath, dismissProposalApplyOutcome,
     openTabs, navigation, inspectorOpen, agentPanelOpen, editingTitle, titleDraft, assetRoot, wikiTargets, pageEditorRef,
     recents, page, currentPageRevisionRef,
-    paletteItems, hasCapability, setSettings, setStartup, setError,
+    paletteItems, hasCapability, setSettings, setStartup, applyDesktopSettings, applyStartupSettings, setError,
     setSaveState, setNewWorkspaceOpen, setSearchPaneOpen, setPaletteOpen,
     setActivityArea, setInspectorOpen, setAgentPanelOpen, setDismissedNoticeCodes, setEditingTitle, setTitleDraft, setSidebarWidth,
     handleTreeCollapsedPathsChange,
@@ -1036,7 +1038,7 @@ export function useDesktopController() {
     navigateHistory: navigationController.navigateHistory,
     closeTab: navigationController.closeTab,
     reorderTab: navigationController.reorderTab,
-    beginSidebarResize, commitTitle, updateWorkspaceSettings, handleOpenWiki, openLinkTarget,
+    beginSidebarResize, commitTitle, updateWorkspaceSettings, applyWorkspaceSettings, handleOpenWiki, openLinkTarget,
     handleKeepIncoming, handleKeepLocal, handleKeepBoth,
     handleTreeResourceContextMenu, handleTreeFolderContextMenu, handleTreeRename, handleMoveToFolder,
     handleNewFolderInFolder,
