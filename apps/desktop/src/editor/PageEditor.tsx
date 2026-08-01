@@ -612,7 +612,8 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     [editor, frontmatter],
   );
 
-  const flushSave = useCallback(() => saveController.flush(), [saveController]);
+  // retry() clears a generic-failure latch; when not failed it is equivalent to flush().
+  const flushSave = useCallback(() => saveController.retry(), [saveController]);
 
   const requestModeChange = useCallback(
     (targetMode: PageMode) => {
@@ -883,7 +884,8 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     function onKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
-        void saveControllerRef.current?.flush();
+        // retry() clears a generic-failure latch so Cmd+S recovers after error.
+        void saveControllerRef.current?.retry();
       }
     }
     window.addEventListener("keydown", onKeyDown);

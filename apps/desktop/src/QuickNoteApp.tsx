@@ -153,7 +153,8 @@ export function QuickNoteApp() {
   );
 
   async function flushDraft() {
-    await saveControllerRef.current?.flush();
+    // retry() clears a generic-failure latch; when not failed it is equivalent to flush().
+    await saveControllerRef.current?.retry();
   }
 
   const resetNoteState = useCallback(() => {

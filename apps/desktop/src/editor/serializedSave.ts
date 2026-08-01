@@ -3,6 +3,11 @@
  *
  * Prevents the lost-update race where a debounce fires while a save is in
  * flight, returns early, and never requeues edits made after the snapshot.
+ *
+ * Generic (non-conflict) save failures latch `failed` so the flush loop does
+ * not spin forever on persistent errors (permission, disk full, etc.). Call
+ * `retry()` to clear the latch and attempt another save. Conflicts latch
+ * separately and never auto-retry.
  */
 
 export type SerializedSaveStatus =
@@ -35,6 +40,11 @@ export interface SerializedSaveController<TRevision = unknown> {
   markDirty: (debounceMs: number) => void;
   /** Flush immediately (manual save, blur, window close). */
   flush: () => Promise<void>;
+  /**
+   * Clear a generic-failure latch and flush. Use after "error" status —
+   * `flush` alone is a no-op while `failed` is latched.
+   */
+  retry: () => Promise<void>;
   /** Cancel a pending debounce timer (does not abort an in-flight save). */
   clearTimer: () => void;
   /** Block further saves until conflict is resolved. */
@@ -43,7 +53,9 @@ export interface SerializedSaveController<TRevision = unknown> {
   reset: (nextRevision?: TRevision) => void;
   /** Whether a conflict is blocking saves. */
   isConflicted: () => boolean;
-  /** Dispose timers. */
+  /** Whether a generic failure is blocking autosave until `retry()`. */
+  isFailed: () => boolean;
+  /** Dispose timers; suppresses further status emissions. */
   dispose: () => void;
 }
 
@@ -74,6 +86,7 @@ export function createSerializedSaveController<TRevision>(
   let savedVersion = 0;
   let revision: TRevision = initialRevision;
   let conflicted = false;
+  let failed = false;
   let flushPromise: Promise<void> | null = null;
   let debounceTimer: number | null = null;
   let savedIndicatorTimer: number | null = null;
@@ -104,9 +117,9 @@ export function createSerializedSaveController<TRevision>(
   };
 
   const runFlush = async (): Promise<void> => {
-    if (conflicted) return;
+    if (conflicted || failed) return;
 
-    while (!disposed && !conflicted && savedVersion !== editVersion) {
+    while (!disposed && !conflicted && !failed && savedVersion !== editVersion) {
       const versionBeingSaved = editVersion;
       report("saving");
       try {
@@ -122,19 +135,21 @@ export function createSerializedSaveController<TRevision>(
           report("conflict", errorMessage(error));
           return;
         }
+        // Latch so finally / while do not spin on persistent errors.
+        failed = true;
         report("error", errorMessage(error));
         return;
       }
     }
 
-    if (disposed || conflicted) return;
+    if (disposed || conflicted || failed) return;
     if (savedVersion === editVersion) {
       report("saved");
       clearSavedIndicator();
       if (savedIndicatorMs > 0) {
         savedIndicatorTimer = globalThis.setTimeout(() => {
           savedIndicatorTimer = null;
-          if (!disposed && savedVersion === editVersion && !conflicted) {
+          if (!disposed && savedVersion === editVersion && !conflicted && !failed) {
             report("idle");
           }
         }, savedIndicatorMs) as unknown as number;
@@ -144,19 +159,26 @@ export function createSerializedSaveController<TRevision>(
 
   const flush = (): Promise<void> => {
     clearDebounce();
-    if (conflicted) return Promise.resolve();
+    if (conflicted || failed) return Promise.resolve();
     if (savedVersion === editVersion && !flushPromise) {
       return Promise.resolve();
     }
     if (flushPromise) return flushPromise;
     flushPromise = runFlush().finally(() => {
       flushPromise = null;
-      // Edits that arrived while the last save finished need another pass.
-      if (!disposed && !conflicted && savedVersion !== editVersion) {
+      // Edits that arrived while the last save finished need another pass —
+      // but never while latched failed/conflicted or after dispose.
+      if (!disposed && !conflicted && !failed && savedVersion !== editVersion) {
         void flush();
       }
     });
     return flushPromise;
+  };
+
+  const retry = (): Promise<void> => {
+    if (disposed || conflicted) return Promise.resolve();
+    failed = false;
+    return flush();
   };
 
   return {
@@ -165,6 +187,9 @@ export function createSerializedSaveController<TRevision>(
       editVersion += 1;
       clearSavedIndicator();
       report("dirty");
+      // After a generic failure, keep the latch until explicit retry(); still
+      // record dirtiness so the UI shows unsaved edits.
+      if (failed) return;
       clearDebounce();
       debounceTimer = globalThis.setTimeout(() => {
         debounceTimer = null;
@@ -172,6 +197,7 @@ export function createSerializedSaveController<TRevision>(
       }, debounceMs) as unknown as number;
     },
     flush,
+    retry,
     clearTimer: clearDebounce,
     setConflict(message: string) {
       conflicted = true;
@@ -180,6 +206,7 @@ export function createSerializedSaveController<TRevision>(
     },
     reset(nextRevision) {
       conflicted = false;
+      failed = false;
       editVersion = 0;
       savedVersion = 0;
       if (nextRevision !== undefined) {
@@ -192,6 +219,7 @@ export function createSerializedSaveController<TRevision>(
       onStatus("idle");
     },
     isConflicted: () => conflicted,
+    isFailed: () => failed,
     dispose() {
       disposed = true;
       clearDebounce();
