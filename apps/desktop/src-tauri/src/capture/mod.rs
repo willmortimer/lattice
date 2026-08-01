@@ -11,15 +11,13 @@ pub mod permission;
 use std::path::Path;
 
 use arboard::Clipboard;
-use image::codecs::webp::WebPEncoder;
-use image::{ExtendedColorType, ImageEncoder};
 use lattice_capture_core::{
-    CaptureBackend, CaptureDestination, CaptureError, CaptureSource, CapturedImage, ImageData,
-    ScreenshotPlan,
+    png_bytes_from_capture, CaptureBackend, CaptureDestination, CaptureError, CaptureSource,
+    CapturedImage, ScreenshotPlan,
 };
 use lattice_capture_macos::MacOsCaptureBackend;
 use lattice_core::Workspace;
-use lattice_handlers::create_inbox_capture;
+use lattice_handlers::ingest_captured_image;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
@@ -93,12 +91,10 @@ fn run_screen_clip_inner(app: &AppHandle) -> Result<(), String> {
     let inbox_directory = capture_inbox_directory(&root)?;
     let backend = MacOsCaptureBackend::new();
     let captured = capture_image(&backend)?;
-    let png_bytes = png_bytes_from_capture(captured)?;
-    let (storage_name, storage_bytes) = encode_storage_image(&png_bytes)?;
-    let result = create_inbox_capture(
+    let png_bytes = png_bytes_from_capture(&captured)?;
+    let result = ingest_captured_image(
         root.clone(),
-        storage_bytes,
-        storage_name,
+        &captured,
         Some(inbox_directory.clone()),
     )?;
     let page_path = result.page_path.clone();
@@ -161,42 +157,6 @@ fn capture_image(backend: &MacOsCaptureBackend) -> Result<CapturedImage, String>
             destination: CaptureDestination::CaptureInbox,
         })
         .map_err(|err| err.to_string())
-}
-
-fn png_bytes_from_capture(captured: CapturedImage) -> Result<Vec<u8>, String> {
-    match captured.data {
-        ImageData::Png(bytes) => Ok(bytes),
-        ImageData::Rgba { bytes, .. } => {
-            let mut buf = Vec::new();
-            let encoder = image::codecs::png::PngEncoder::new(&mut buf);
-            encoder
-                .write_image(
-                    &bytes,
-                    captured.width,
-                    captured.height,
-                    ExtendedColorType::Rgba8,
-                )
-                .map_err(|err| format!("failed to encode capture PNG: {err}"))?;
-            Ok(buf)
-        }
-    }
-}
-
-fn encode_storage_image(png_bytes: &[u8]) -> Result<(String, Vec<u8>), String> {
-    let image = image::load_from_memory(png_bytes)
-        .map_err(|err| format!("failed to decode capture image: {err}"))?;
-    let rgba = image.to_rgba8();
-    let (width, height) = rgba.dimensions();
-
-    let mut webp = Vec::new();
-    let encoder = WebPEncoder::new_lossless(&mut webp);
-    match encoder.write_image(rgba.as_raw(), width, height, ExtendedColorType::Rgba8) {
-        Ok(()) => Ok(("capture.webp".to_string(), webp)),
-        Err(err) => {
-            eprintln!("lattice: WebP encode failed, storing PNG: {err}");
-            Ok(("capture.png".to_string(), png_bytes.to_vec()))
-        }
-    }
 }
 
 fn copy_png_to_clipboard(png_bytes: &[u8]) -> Result<(), String> {

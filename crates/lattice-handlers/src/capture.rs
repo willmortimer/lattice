@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use lattice_capture_core::{encode_storage_image, png_bytes_from_capture, CapturedImage};
 use lattice_commands::{Command as SemanticCommand, CommandEngine, Transaction};
 use lattice_storage::{NativeWorkspaceStore, WorkspaceStore};
 
@@ -81,6 +82,26 @@ pub fn create_inbox_capture(
         page_path: relative_page.to_string_lossy().replace('\\', "/"),
         asset_path: asset_rel_to_page,
     })
+}
+
+/// Encode a clipboard PNG rendition and ingest it into the Capture Inbox.
+pub fn ingest_png_capture(
+    root: String,
+    png_bytes: Vec<u8>,
+    directory: Option<String>,
+) -> Result<InboxCaptureResult, String> {
+    let (storage_name, storage_bytes) = encode_storage_image(&png_bytes)?;
+    create_inbox_capture(root, storage_bytes, storage_name, directory)
+}
+
+/// Encode backend pixels and ingest into the Capture Inbox.
+pub fn ingest_captured_image(
+    root: String,
+    captured: &CapturedImage,
+    directory: Option<String>,
+) -> Result<InboxCaptureResult, String> {
+    let png_bytes = png_bytes_from_capture(captured)?;
+    ingest_png_capture(root, png_bytes, directory)
 }
 
 fn validate_asset_file_name(file_name: &str) -> Result<String, String> {
@@ -171,6 +192,44 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         Workspace::init(dir.path(), "Test Workspace").unwrap();
         dir
+    }
+
+    #[test]
+    fn ingest_png_capture_writes_page_and_asset() {
+        let dir = init_workspace();
+        let root = dir.path().to_string_lossy().into_owned();
+        let fake_png = minimal_test_png();
+
+        let result = ingest_png_capture(
+            root.clone(),
+            fake_png,
+            Some("Inbox".to_string()),
+        )
+        .unwrap();
+
+        assert!(result.page_path.starts_with("Inbox/"));
+        assert!(result.page_path.ends_with(".md"));
+        assert_eq!(result.asset_path, "assets/capture.webp");
+
+        let page_abs = dir.path().join(&result.page_path);
+        let asset_abs = page_abs.parent().unwrap().join(&result.asset_path);
+        assert!(page_abs.is_file());
+        assert!(asset_abs.is_file());
+
+        let markdown = std::fs::read_to_string(page_abs).unwrap();
+        assert!(markdown.contains("# Screen clip"));
+        assert!(markdown.contains("![](assets/capture.webp)"));
+    }
+
+    fn minimal_test_png() -> Vec<u8> {
+        use image::codecs::png::PngEncoder;
+        use image::{ExtendedColorType, ImageEncoder, Rgba, RgbaImage};
+        let img = RgbaImage::from_pixel(1, 1, Rgba([255, 0, 0, 255]));
+        let mut buf = Vec::new();
+        PngEncoder::new(&mut buf)
+            .write_image(img.as_raw(), 1, 1, ExtendedColorType::Rgba8)
+            .unwrap();
+        buf
     }
 
     #[test]
