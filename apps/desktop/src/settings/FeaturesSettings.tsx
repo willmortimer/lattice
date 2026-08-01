@@ -12,6 +12,7 @@ import {
 import { disableSemanticSearch, getSemanticStatus, listenSemanticEvents } from "../lib/semantic";
 import { getVoiceStatus, listenVoiceEvents } from "../lib/voice";
 import { packStatusLabel } from "./packStatusLabels";
+import { SettingRow } from "./SettingRow";
 
 export interface FeaturesSettingsProps {
   workspaceRoot: string | null;
@@ -191,71 +192,52 @@ export function FeaturesSettings({
         </div>
       ) : (
         <>
-          <div className="setting-row">
-            <div>
-              <strong>Semantic search</strong>
-              <span>
-                Include vector similarity alongside keyword matches. Needs{" "}
-                {embeddingPack.title} ({embeddingPack.approxSizeLabel}). Pack status:{" "}
-                {packStatusLabel(embeddingStatus)}.
-              </span>
-            </div>
-            <div className="setting-control">
-              <Toggle
-                label="Semantic search"
-                checked={semanticEnabled}
-                disabled={busy}
-                onChange={(checked) => void handleSemanticToggle(checked)}
-              />
-            </div>
-          </div>
+          <SettingRow
+            settingId="features.semantic"
+            title="Semantic search"
+            description={`Include vector similarity alongside keyword matches. Needs ${embeddingPack.title} (${embeddingPack.approxSizeLabel}). Pack status: ${packStatusLabel(embeddingStatus)}.`}
+          >
+            <Toggle
+              label="Semantic search"
+              checked={semanticEnabled}
+              disabled={busy}
+              onChange={(checked) => void handleSemanticToggle(checked)}
+            />
+          </SettingRow>
 
-          <div className="setting-row">
-            <div>
-              <strong>Voice dictation</strong>
-              <span>
-                Hold-to-talk speech-to-text once {voicePack.title} is ready. Pack status:{" "}
-                {packStatusLabel(voiceStatus)}. Enablement follows pack readiness — download under
-                Packs.
-              </span>
-            </div>
-            <div className="setting-control">
-              <Button size="sm" variant="secondary" onClick={onOpenPacks}>
-                Open Packs
-              </Button>
-            </div>
-          </div>
+          <SettingRow
+            settingId="features.voice"
+            title="Voice dictation"
+            description={`Hold-to-talk speech-to-text once ${voicePack.title} is ready. Pack status: ${packStatusLabel(voiceStatus)}. Enablement follows pack readiness — download under Packs.`}
+          >
+            <Button size="sm" variant="secondary" onClick={onOpenPacks}>
+              Open Packs
+            </Button>
+          </SettingRow>
 
-          <div className="setting-row">
-            <div>
-              <strong>Agent memory</strong>
-              <span>
-                Remember / recall for the embedded agent uses the same embedding pack when
-                available. No separate toggle yet — prepare embeddings under Packs.
-              </span>
-            </div>
-            <div className="setting-control">
-              <span className="settings-copy">
-                {embeddingStatus === "ready" ? "Pack ready" : packStatusLabel(embeddingStatus)}
-              </span>
-            </div>
-          </div>
+          <SettingRow
+            settingId="features.memory"
+            title="Agent memory"
+            description="Remember / recall for the embedded agent uses the same embedding pack when available. No separate toggle yet — prepare embeddings under Packs."
+          >
+            <span className="settings-copy">
+              {embeddingStatus === "ready" ? "Pack ready" : packStatusLabel(embeddingStatus)}
+            </span>
+          </SettingRow>
 
           <h2 className="settings-subsection">Shell capabilities</h2>
           <p className="settings-copy">
             Canvas, SQLite, and terminal toggles live under Enabled capabilities.
           </p>
-          <div className="setting-row">
-            <div>
-              <strong>Enabled capabilities</strong>
-              <span>Show or hide bundled shell surfaces without changing Pack downloads.</span>
-            </div>
-            <div className="setting-control">
+          <SettingRow
+            settingId="capabilities.canvas"
+            title="Enabled capabilities"
+            description="Show or hide bundled shell surfaces without changing Pack downloads."
+          >
               <Button size="sm" variant="secondary" onClick={onOpenCapabilities}>
                 Open Enabled capabilities
               </Button>
-            </div>
-          </div>
+          </SettingRow>
 
           {error ? (
             <div className="diagnostics-card" role="alert">

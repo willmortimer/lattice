@@ -54,7 +54,7 @@ export function HistoryRetentionSettings({
   }
 
   return (
-    <div className="history-retention-settings">
+    <div className="history-retention-settings" data-setting-id="performance.history">
       <div className="setting-row">
         <div>
           <strong>History payload age</strong>

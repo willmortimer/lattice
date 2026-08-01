@@ -1,24 +1,4 @@
 import { Button } from "@lattice/ui";
-import {
-  CursorText,
-  Cloud,
-  Database,
-  Files,
-  Gauge,
-  HardDrives,
-  Keyboard,
-  Lock,
-  MagnifyingGlass,
-  Microphone,
-  Package,
-  Palette,
-  Plugs,
-  Pulse,
-  PuzzlePiece,
-  Robot,
-  Rocket,
-  SquaresFour,
-} from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 
 import { inBrowser } from "../demo";
@@ -89,27 +69,15 @@ import { HistoryRetentionSettings } from "./HistoryRetentionSettings";
 import type { AppSettings } from "./model";
 import { PacksSettings } from "./PacksSettings";
 import { PluginsSettings } from "./PluginsSettings";
+import { SettingRow } from "./SettingRow";
+import {
+  sectionLabel,
+  SETTINGS_NAV_GROUPS,
+  type SettingsSection,
+} from "./settingsCatalog";
+import { SettingsHighlightContext } from "./settingsHighlight";
+import { SettingsSearch } from "./SettingsSearch";
 import { TOGGLEABLE_WORKSPACE_CAPABILITIES } from "./workspaceCapabilities";
-
-type SettingsSection =
-  | "appearance"
-  | "cloud"
-  | "remote"
-  | "editor"
-  | "files"
-  | "workspaces"
-  | "keybindings"
-  | "data"
-  | "capabilities"
-  | "features"
-  | "packs"
-  | "plugins"
-  | "ai"
-  | "search"
-  | "voice"
-  | "privacy"
-  | "performance"
-  | "diagnostics";
 
 interface SettingsPageProps {
   settings: AppSettings;
@@ -128,47 +96,6 @@ interface SettingsPageProps {
   onFollowSystem: () => void;
   onFontPackChange: (fontPack: string) => void;
   onRefreshProfile?: () => void;
-}
-
-const SECTIONS = [
-  { id: "appearance" as const, label: "Appearance", icon: Palette },
-  { id: "cloud" as const, label: "Cloud account", icon: Cloud },
-  { id: "remote" as const, label: "Remote access", icon: HardDrives },
-  { id: "editor" as const, label: "Editor behavior", icon: CursorText },
-  { id: "files" as const, label: "Files, links & autosave", icon: Files },
-  { id: "workspaces" as const, label: "Workspaces & startup", icon: Rocket },
-  { id: "keybindings" as const, label: "Keybindings", icon: Keyboard },
-  { id: "data" as const, label: "Data defaults", icon: Database },
-  { id: "capabilities" as const, label: "Enabled capabilities", icon: PuzzlePiece },
-  { id: "features" as const, label: "Features", icon: SquaresFour },
-  { id: "packs" as const, label: "Packs", icon: Package },
-  { id: "plugins" as const, label: "Plugins", icon: Plugs },
-  { id: "ai" as const, label: "AI", icon: Robot },
-  { id: "search" as const, label: "Search", icon: MagnifyingGlass },
-  { id: "voice" as const, label: "Voice dictation", icon: Microphone },
-  { id: "privacy" as const, label: "Privacy", icon: Lock },
-  { id: "performance" as const, label: "Performance & lifecycle", icon: Gauge },
-  { id: "diagnostics" as const, label: "Advanced diagnostics", icon: Pulse },
-];
-
-function SettingRow({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="setting-row">
-      <div>
-        <strong>{title}</strong>
-        <span>{description}</span>
-      </div>
-      <div className="setting-control">{children}</div>
-    </div>
-  );
 }
 
 function Toggle({
@@ -210,6 +137,7 @@ export function SettingsPage({
   onRefreshProfile,
 }: SettingsPageProps) {
   const [section, setSection] = useState<SettingsSection>("appearance");
+  const [highlightedSettingId, setHighlightedSettingId] = useState<string | null>(null);
   const [quickNoteDraft, setQuickNoteDraft] = useState(workspace.defaults.quickNoteDirectory);
   const [defaultWorkspaceDraft, setDefaultWorkspaceDraft] = useState(
     startup.defaultWorkspace ?? "",
@@ -252,6 +180,27 @@ export function SettingsPage({
     };
   }, [workspace.root]);
 
+  useEffect(() => {
+    if (!highlightedSettingId) return;
+    let element: Element | null = null;
+    const frame = window.requestAnimationFrame(() => {
+      element = document.querySelector(`[data-setting-id="${highlightedSettingId}"]`);
+      if (element && !element.classList.contains("setting-row")) {
+        element.classList.add("settings-target-highlight");
+      }
+      element?.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+    const timer = window.setTimeout(() => {
+      element?.classList.remove("settings-target-highlight");
+      setHighlightedSettingId(null);
+    }, 2200);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+      element?.classList.remove("settings-target-highlight");
+    };
+  }, [highlightedSettingId, section]);
+
   function update<K extends Exclude<keyof AppSettings, "format" | "version">>(
     group: K,
     patch: Partial<AppSettings[K]>,
@@ -276,16 +225,27 @@ export function SettingsPage({
     <div className="settings-workbench">
       <aside className="settings-nav">
         <p>Settings</p>
-        {SECTIONS.map(({ id, label, icon: Icon }) => (
-          <button
-            type="button"
-            key={id}
-            className={section === id ? "settings-nav-active" : ""}
-            onClick={() => setSection(id)}
-          >
-            <Icon size={15} />
-            {label}
-          </button>
+        <SettingsSearch
+          onSelect={(item) => {
+            setSection(item.section);
+            setHighlightedSettingId(item.id);
+          }}
+        />
+        {SETTINGS_NAV_GROUPS.map((group) => (
+          <div key={group.id} className="settings-nav-group">
+            <p className="settings-nav-group-label">{group.label}</p>
+            {group.items.map(({ id, label, icon: Icon }) => (
+              <button
+                type="button"
+                key={id}
+                className={section === id ? "settings-nav-active" : ""}
+                onClick={() => setSection(id)}
+              >
+                <Icon size={15} />
+                {label}
+              </button>
+            ))}
+          </div>
         ))}
         <div className="settings-nav-spacer" />
         <Button variant="ghost" size="sm" onClick={onReset}>
@@ -293,8 +253,9 @@ export function SettingsPage({
         </Button>
       </aside>
 
+      <SettingsHighlightContext.Provider value={highlightedSettingId}>
       <section className="settings-detail">
-        <p className="home-eyebrow">{SECTIONS.find((item) => item.id === section)?.label}</p>
+        <p className="home-eyebrow">{sectionLabel(section)}</p>
 
         {section === "appearance" && (
           <>
@@ -303,7 +264,7 @@ export function SettingsPage({
               Rust resolves semantic theme roles; shell components consume tokens rather than
               branching on a theme name.
             </p>
-            <div className="theme-settings-grid">
+            <div className="theme-settings-grid" data-setting-id="appearance.theme">
               {(themeCatalog?.themes ?? []).map((theme) => (
                 <button
                   type="button"
@@ -326,7 +287,7 @@ export function SettingsPage({
               Typography stacks for display, UI, and mono. Follow theme uses each theme’s default
               pack (Cupertino → Apple).
             </p>
-            <div className="font-pack-gallery" role="listbox" aria-label="Font pack">
+            <div className="font-pack-gallery" role="listbox" aria-label="Font pack" data-setting-id="appearance.font-pack">
               <button
                 type="button"
                 role="option"
@@ -403,28 +364,28 @@ export function SettingsPage({
         {section === "editor" && (
           <>
             <h1>Editor behavior</h1>
-            <SettingRow title="Slash commands" description="Show block commands after typing / on an empty line.">
+            <SettingRow settingId="editor.slash-commands" title="Slash commands" description="Show block commands after typing / on an empty line.">
               <Toggle
                 label="Slash commands"
                 checked={settings.editor.slashCommands}
                 onChange={(slashCommands) => update("editor", { slashCommands })}
               />
             </SettingRow>
-            <SettingRow title="Spellcheck" description="Use the platform WebView spellchecker while editing pages.">
+            <SettingRow settingId="editor.spellcheck" title="Spellcheck" description="Use the platform WebView spellchecker while editing pages.">
               <Toggle
                 label="Spellcheck"
                 checked={settings.editor.spellcheck}
                 onChange={(spellcheck) => update("editor", { spellcheck })}
               />
             </SettingRow>
-            <SettingRow title="Frontmatter" description="Expose raw YAML metadata above the page body.">
+            <SettingRow settingId="editor.frontmatter" title="Frontmatter" description="Expose raw YAML metadata above the page body.">
               <Toggle
                 label="Show frontmatter"
                 checked={settings.editor.showFrontmatter}
                 onChange={(showFrontmatter) => update("editor", { showFrontmatter })}
               />
             </SettingRow>
-            <SettingRow title="Link click" description="Choose whether a link navigates immediately or opens Inspect first.">
+            <SettingRow settingId="editor.link-click" title="Link click" description="Choose whether a link navigates immediately or opens Inspect first.">
               <select
                 value={settings.editor.linkClickBehavior}
                 onChange={(event) =>
@@ -438,6 +399,7 @@ export function SettingsPage({
               </select>
             </SettingRow>
             <SettingRow
+              settingId="editor.page-width"
               title="Page width"
               description="How wide the page column is. Standard keeps a readable measure; wide and full use more of the window."
             >
@@ -460,7 +422,7 @@ export function SettingsPage({
         {section === "files" && (
           <>
             <h1>Files, links and autosave</h1>
-            <SettingRow title="Autosave delay" description="Debounce page writes while typing.">
+            <SettingRow settingId="files.autosave" title="Autosave delay" description="Debounce page writes while typing.">
               <select
                 value={settings.editor.autosaveDelayMs}
                 onChange={(event) =>
@@ -473,7 +435,7 @@ export function SettingsPage({
                 <option value="3000">3 seconds</option>
               </select>
             </SettingRow>
-            <SettingRow title="Quick Note folder" description="Workspace-relative directory for new captures.">
+            <SettingRow settingId="files.quick-note" title="Quick Note folder" description="Workspace-relative directory for new captures.">
               <input
                 value={quickNoteDraft}
                 onChange={(event) => setQuickNoteDraft(event.currentTarget.value)}
@@ -485,7 +447,7 @@ export function SettingsPage({
                 }
               />
             </SettingRow>
-            <SettingRow title="Unsaved close guard" description="Require confirmation before closing a resource with local edits.">
+            <SettingRow settingId="files.unsaved-close" title="Unsaved close guard" description="Require confirmation before closing a resource with local edits.">
               <Toggle
                 label="Confirm unsaved close"
                 checked={settings.files.confirmCloseWithUnsavedChanges}
@@ -500,7 +462,7 @@ export function SettingsPage({
         {section === "workspaces" && (
           <>
             <h1>Workspaces and startup</h1>
-            <SettingRow title="Default workspace" description="Used when no valid session can be resumed.">
+            <SettingRow settingId="workspaces.default" title="Default workspace" description="Used when no valid session can be resumed.">
               <input
                 value={defaultWorkspaceDraft}
                 placeholder="No configured default"
@@ -513,7 +475,7 @@ export function SettingsPage({
                 }
               />
             </SettingRow>
-            <SettingRow title="Reopen last workspace" description="Try recent workspaces before the configured default.">
+            <SettingRow settingId="workspaces.reopen" title="Reopen last workspace" description="Try recent workspaces before the configured default.">
               <Toggle
                 label="Reopen last workspace"
                 checked={startup.reopenLastWorkspace}
@@ -522,7 +484,7 @@ export function SettingsPage({
                 }
               />
             </SettingRow>
-            <SettingRow title="Restore session" description="Restore tabs, active resource, activity area, and inspector state.">
+            <SettingRow settingId="workspaces.restore-session" title="Restore session" description="Restore tabs, active resource, activity area, and inspector state.">
               <Toggle
                 label="Restore session"
                 checked={startup.restoreSession}
@@ -532,6 +494,7 @@ export function SettingsPage({
               />
             </SettingRow>
             <SettingRow
+              settingId="workspaces.splash"
               title="Startup splash"
               description="Hold the branded loading screen for about a second so theme colors can settle before the workspace appears."
             >
@@ -543,7 +506,7 @@ export function SettingsPage({
                 }
               />
             </SettingRow>
-            <SettingRow title="Recent workspaces" description="Remove operational history without touching workspace files.">
+            <SettingRow settingId="workspaces.clear-recents" title="Recent workspaces" description="Remove operational history without touching workspace files.">
               <Button variant="secondary" onClick={onClearRecents}>
                 Clear recents
               </Button>
@@ -559,6 +522,7 @@ export function SettingsPage({
             >).map(([key, value]) => (
               <SettingRow
                 key={key}
+                settingId="keybindings.shortcuts"
                 title={key.replace(/([A-Z])/g, " $1")}
                 description="Use Mod for Command on macOS and Control elsewhere."
               >
@@ -575,7 +539,7 @@ export function SettingsPage({
         {section === "data" && (
           <>
             <h1>Data defaults</h1>
-            <SettingRow title="Row density" description="Default canvas-grid row height.">
+            <SettingRow settingId="data.row-density" title="Row density" description="Default canvas-grid row height.">
               <select
                 value={settings.data.rowHeight}
                 onChange={(event) =>
@@ -589,7 +553,7 @@ export function SettingsPage({
                 <option value="spacious">Spacious</option>
               </select>
             </SettingRow>
-            <SettingRow title="Query page size" description="Maximum rows requested in the current bounded table snapshot.">
+            <SettingRow settingId="data.page-size" title="Query page size" description="Maximum rows requested in the current bounded table snapshot.">
               <select
                 value={settings.data.pageSize}
                 onChange={(event) =>
@@ -603,14 +567,14 @@ export function SettingsPage({
                 <option value="500">500 rows</option>
               </select>
             </SettingRow>
-            <SettingRow title="Row numbers" description="Keep a stable visual index beside grid records.">
+            <SettingRow settingId="data.row-numbers" title="Row numbers" description="Keep a stable visual index beside grid records.">
               <Toggle
                 label="Show row numbers"
                 checked={settings.data.showRowNumbers}
                 onChange={(showRowNumbers) => update("data", { showRowNumbers })}
               />
             </SettingRow>
-            <SettingRow title="Zebra rows" description="Add a subtle alternating row tint.">
+            <SettingRow settingId="data.zebra-rows" title="Zebra rows" description="Add a subtle alternating row tint.">
               <Toggle
                 label="Zebra rows"
                 checked={settings.data.zebraRows}
@@ -629,7 +593,12 @@ export function SettingsPage({
               Features and Packs.
             </p>
             {TOGGLEABLE_WORKSPACE_CAPABILITIES.map(({ key, title, description }) => (
-              <SettingRow key={key} title={title} description={description}>
+              <SettingRow
+                key={key}
+                settingId={`capabilities.${key}`}
+                title={title}
+                description={description}
+              >
                 <Toggle
                   label={key}
                   checked={workspace.capabilities.includes(key)}
@@ -710,7 +679,7 @@ export function SettingsPage({
         {section === "performance" && (
           <>
             <h1>Performance and lifecycle</h1>
-            <SettingRow title="Maximum open tabs" description="Bound session state and renderer retention.">
+            <SettingRow settingId="performance.max-tabs" title="Maximum open tabs" description="Bound session state and renderer retention.">
               <input
                 type="number"
                 min="3"
@@ -723,7 +692,7 @@ export function SettingsPage({
                 }
               />
             </SettingRow>
-            <SettingRow title="Suspend inactive resources" description="Unmount specialized renderers when their tab is inactive.">
+            <SettingRow settingId="performance.suspend" title="Suspend inactive resources" description="Unmount specialized renderers when their tab is inactive.">
               <Toggle
                 label="Suspend inactive resources"
                 checked={settings.performance.suspendInactiveResources}
@@ -732,7 +701,7 @@ export function SettingsPage({
                 }
               />
             </SettingRow>
-            <SettingRow title="Motion" description="Override animation and transition behavior.">
+            <SettingRow settingId="performance.motion" title="Motion" description="Override animation and transition behavior.">
               <select
                 value={settings.performance.reducedMotion}
                 onChange={(event) =>
@@ -746,7 +715,7 @@ export function SettingsPage({
                 <option value="never">Allow motion</option>
               </select>
             </SettingRow>
-            <SettingRow title="Renderer cache" description="Retention policy for expensive lazy renderer modules and snapshots.">
+            <SettingRow settingId="performance.renderer-cache" title="Renderer cache" description="Retention policy for expensive lazy renderer modules and snapshots.">
               <select
                 value={settings.performance.rendererCache}
                 onChange={(event) =>
@@ -762,6 +731,7 @@ export function SettingsPage({
             </SettingRow>
             <h2 className="settings-subsection">Background services</h2>
             <SettingRow
+              settingId="performance.menu-bar"
               title="Keep app in menu bar"
               description="When enabled, closing the main window hides Lattice instead of quitting. Restore from the tray menu or Quit there to exit. This is not a login item."
             >
@@ -772,6 +742,7 @@ export function SettingsPage({
               />
             </SettingRow>
             <SettingRow
+              settingId="performance.services"
               title="Keep services running"
               description="Leave latticed running after the last desktop client disconnects so voice and search stay warm."
             >
@@ -782,6 +753,7 @@ export function SettingsPage({
               />
             </SettingRow>
             <SettingRow
+              settingId="performance.schedules"
               title="Allow background schedules"
               description="Opt this workspace into interval schedule runs while the desktop is closed. Requires latticed; holds a scheduler lease so idle shutdown does not stop the daemon. Cron is still deferred."
             >
@@ -814,7 +786,7 @@ export function SettingsPage({
         {section === "diagnostics" && (
           <>
             <h1>Advanced diagnostics</h1>
-            <SettingRow title="Native context menus" description="Replace the WebView inspector menu with platform edit menus.">
+            <SettingRow settingId="diagnostics.context-menus" title="Native context menus" description="Replace the WebView inspector menu with platform edit menus.">
               <Toggle
                 label="Native context menus"
                 checked={settings.diagnostics.nativeContextMenus}
@@ -823,21 +795,21 @@ export function SettingsPage({
                 }
               />
             </SettingRow>
-            <SettingRow title="Command timings" description="Record frontend-to-command duration in the developer console.">
+            <SettingRow settingId="diagnostics.timings" title="Command timings" description="Record frontend-to-command duration in the developer console.">
               <Toggle
                 label="Command timings"
                 checked={settings.diagnostics.commandTimings}
                 onChange={(commandTimings) => update("diagnostics", { commandTimings })}
               />
             </SettingRow>
-            <SettingRow title="Verbose errors" description="Show underlying command details in problems and diagnostics.">
+            <SettingRow settingId="diagnostics.verbose-errors" title="Verbose errors" description="Show underlying command details in problems and diagnostics.">
               <Toggle
                 label="Verbose errors"
                 checked={settings.diagnostics.verboseErrors}
                 onChange={(verboseErrors) => update("diagnostics", { verboseErrors })}
               />
             </SettingRow>
-            <SettingRow title="Renderer statistics" description="Expose loaded-row and visible-cell diagnostics on data surfaces.">
+            <SettingRow settingId="diagnostics.renderer-stats" title="Renderer statistics" description="Expose loaded-row and visible-cell diagnostics on data surfaces.">
               <Toggle
                 label="Renderer statistics"
                 checked={settings.diagnostics.showRendererStats}
@@ -854,6 +826,7 @@ export function SettingsPage({
           </>
         )}
       </section>
+      </SettingsHighlightContext.Provider>
     </div>
   );
 }
@@ -1003,7 +976,7 @@ function AiSettingsPanel({
       </p>
 
       <h2 className="settings-subsection">How to reach a model</h2>
-      <div className="ai-mode-choices" role="radiogroup" aria-label="AI mode">
+      <div className="ai-mode-choices" role="radiogroup" aria-label="AI mode" data-setting-id="ai.mode">
         {AI_MODE_OPTIONS.map((option) => {
           const active = ai.mode === option.id;
           return (
@@ -1046,6 +1019,7 @@ function AiSettingsPanel({
       {ai.mode === "byoOpenai" ? (
         <>
           <SettingRow
+            settingId="ai.openai-key"
             title="OpenAI API key"
             description="Stored in the OS keychain. Lattice only checks whether a key is present — the secret is never shown."
           >
@@ -1131,6 +1105,7 @@ function AiSettingsPanel({
 
       <h2 className="settings-subsection">Agent model</h2>
       <SettingRow
+        settingId="ai.preferred-model"
         title="Preferred model"
         description={
           ai.mode === "local"
@@ -1164,6 +1139,7 @@ function AiSettingsPanel({
 
       <h2 className="settings-subsection">Embeddings</h2>
       <SettingRow
+        settingId="ai.embedding-mode"
         title="Embedding mode"
         description="Follow AI uses the same provider family as the AI mode. Local uses the on-device pack; Remote uses cloud embeddings."
       >
@@ -1218,6 +1194,7 @@ function AiSettingsPanel({
         </div>
       )}
       <SettingRow
+        settingId="ai.passive-embedding"
         title="Passive embedding"
         description="Allow background embedding when the workspace is idle."
       >
@@ -1431,6 +1408,7 @@ function SemanticSearchSettings({
       ) : (
         <>
           <SettingRow
+            settingId="search.semantic"
             title="Semantic search"
             description="Include vector similarity alongside keyword matches when searching the workspace."
           >
@@ -1619,6 +1597,7 @@ function PrivacySettingsPanel({
       ) : (
         <>
           <SettingRow
+            settingId="privacy.app-lock"
             title="App lock"
             description="Require Touch ID or your device password when Lattice launches, after idle, and from Lattice → Lock."
           >
@@ -1648,6 +1627,7 @@ function PrivacySettingsPanel({
             />
           </SettingRow>
           <SettingRow
+            settingId="privacy.idle-lock"
             title="Idle lock (minutes)"
             description="Lock after the main window is unfocused for this many minutes. Use 0 to disable idle auto-lock (launch, manual Lock, and sleep still apply)."
           >
@@ -1686,6 +1666,7 @@ function PrivacySettingsPanel({
           : "Signed out — toggles stay local only until you sign in."}
       </p>
       <SettingRow
+        settingId="privacy.ai-audit"
         title="AI request audit"
         description="When using Lattice paid AI, record metadata-only request rows (model/status/bytes). Never stores prompts or responses."
       >
@@ -1699,6 +1680,7 @@ function PrivacySettingsPanel({
         />
       </SettingRow>
       <SettingRow
+        settingId="privacy.telemetry"
         title="Anonymous product telemetry"
         description="Coarse product events only (app launch, settings, agent panel). No paths, prompts, excerpts, or filenames."
       >
@@ -1782,6 +1764,7 @@ function RemoteAccessSettings({ onOpenCloud }: { onOpenCloud: () => void }) {
       ) : (
         <>
           <SettingRow
+            settingId="remote.access"
             title="Cloud account"
             description="Remote MCP through Lattice Cloud requires a signed-in session on this device."
           >
@@ -1970,6 +1953,7 @@ function CloudAccountSettings() {
           <div
             className={`cloud-account-hero${status?.signedIn ? " cloud-account-hero-signed-in" : ""}`}
             role="status"
+            data-setting-id="cloud.sign-in"
           >
             <p className="cloud-account-eyebrow">
               {status?.cloudUrl ?? "https://cloud.lattice-notes.com"}
@@ -2184,6 +2168,7 @@ function VoiceDictationSettings({ onOpenPacks }: { onOpenPacks: () => void }) {
       ) : (
         <>
           <SettingRow
+            settingId="voice.pack"
             title="Voice pack"
             description="Download Parakeet Unified (~608 MB) for local dictation. First prepare may take several minutes."
           >
