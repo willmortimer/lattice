@@ -6,6 +6,7 @@ import type { PageEditorHandle } from "../editor/PageEditor";
 import { createPage } from "../lib/pages";
 import type { OpenResourceSession } from "../resourceSession";
 import type { Resource, WorkspaceChangeEvent } from "../types";
+import type { CatalogDeltaEvent } from "../lib/resourceCatalog";
 import { conflictSiblingPath, dispositionForModifiedResource, pathIsRemoved, shouldClearRenamedPath } from "./reconciliationPolicy";
 import { listLinkRepairProposals } from "../lib/linkRepair";
 
@@ -23,6 +24,7 @@ export interface ResourceReconciliationOptions {
   getSelected: () => Resource | null;
   getSaveState: () => SaveState;
   pageEditorRef: RefObject<PageEditorHandle | null>;
+  applyCatalogDeltaEvent: (event: CatalogDeltaEvent) => void;
   refreshResources: () => Promise<void>;
   handleWorkspaceUnavailable: (event: WorkspaceChangeEvent) => Promise<void>;
   reloadPageFromDisk: () => Promise<void>;
@@ -60,7 +62,6 @@ export function useResourceReconciliation(options: ResourceReconciliationOptions
       return;
     }
 
-    await current.refreshResources();
     const selected = current.getSelected();
     const page = current.pageRef.current;
 
@@ -129,13 +130,22 @@ export function useResourceReconciliation(options: ResourceReconciliationOptions
 
   useEffect(() => {
     if (inBrowser) return;
-    let unlisten: (() => void) | undefined;
+    let unlistenWorkspace: (() => void) | undefined;
+    let unlistenCatalog: (() => void) | undefined;
     void listen<WorkspaceChangeEvent>("workspace-changed", (event) => {
       void handleWorkspaceChanged(event.payload);
     }).then((stop) => {
-      unlisten = stop;
+      unlistenWorkspace = stop;
     });
-    return () => unlisten?.();
+    void listen<CatalogDeltaEvent>("catalog-delta", (event) => {
+      optionsRef.current.applyCatalogDeltaEvent(event.payload);
+    }).then((stop) => {
+      unlistenCatalog = stop;
+    });
+    return () => {
+      unlistenWorkspace?.();
+      unlistenCatalog?.();
+    };
   }, [handleWorkspaceChanged]);
 
   const handleKeepIncoming = useCallback(async () => {
