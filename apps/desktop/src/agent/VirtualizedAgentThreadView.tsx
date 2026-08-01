@@ -18,6 +18,7 @@ import {
 } from "react";
 
 import { SemanticToolCall } from "./tools/semanticToolRegistry";
+import { AgentContextChips } from "./AgentContextChips";
 
 const ESTIMATED_TURN_HEIGHT = 160;
 const AT_BOTTOM_THRESHOLD = 4;
@@ -104,9 +105,22 @@ const MESSAGE_COMPONENTS: MessageComponents = {
   AssistantMessage: AgentAssistantMessage,
 };
 
-function AgentThreadComposer() {
+function AgentThreadComposer({
+  workspaceRoot,
+  activeResourcePath,
+  onNotify,
+}: {
+  workspaceRoot: string | null;
+  activeResourcePath: string | null;
+  onNotify?: (message: string) => void;
+}) {
   return (
     <ComposerPrimitive.Root className="agent-composer">
+      <AgentContextChips
+        workspaceRoot={workspaceRoot}
+        activeResourcePath={activeResourcePath}
+        onStubAction={onNotify}
+      />
       <ComposerPrimitive.Input
         className="agent-composer-input"
         placeholder="Message the agent…"
@@ -125,6 +139,9 @@ export type VirtualizedAgentThreadViewProps = {
   paidCta: { title: string; body: string } | null;
   emptyMessage: string;
   composerDisabled: boolean;
+  workspaceRoot: string | null;
+  activeResourcePath: string | null;
+  onNotify?: (message: string) => void;
   header?: ReactNode;
 };
 
@@ -132,6 +149,9 @@ export function VirtualizedAgentThreadView({
   paidCta,
   emptyMessage,
   composerDisabled,
+  workspaceRoot,
+  activeResourcePath,
+  onNotify,
   header,
 }: VirtualizedAgentThreadViewProps) {
   const messageRows = useThreadMessageRows();
@@ -303,7 +323,11 @@ export function VirtualizedAgentThreadView({
       </div>
       {!composerDisabled ? (
         <div className="agent-thread-footer">
-          <AgentThreadComposer />
+          <AgentThreadComposer
+            workspaceRoot={workspaceRoot}
+            activeResourcePath={activeResourcePath}
+            onNotify={onNotify}
+          />
         </div>
       ) : null}
     </ThreadPrimitive.Root>

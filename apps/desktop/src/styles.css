@@ -6846,6 +6846,45 @@ html[data-motion="always"] *::after {
   background: var(--lt-panel);
 }
 
+.agent-panel-workbench {
+  width: min(52vw, 720px);
+  flex: 1 1 min(52vw, 720px);
+  max-width: 720px;
+}
+
+.agent-panel-layout-row {
+  display: flex;
+  padding: 6px 10px 8px 12px;
+  border-bottom: 1px solid var(--lt-line);
+  background: color-mix(in oklch, var(--lt-bg) 90%, var(--lt-panel));
+}
+
+.agent-layout-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--lt-line);
+  border-radius: 8px;
+  background: var(--lt-surface);
+}
+
+.agent-layout-toggle .ltui-button {
+  min-height: 24px;
+  padding: 2px 8px;
+  font-size: 10.5px;
+}
+
+.agent-layout-toggle-active {
+  background: var(--lt-accent-wash);
+  color: var(--lt-text);
+}
+
+.agent-panel-provider-slot {
+  opacity: 0.82;
+  transform: scale(0.96);
+  transform-origin: center right;
+}
+
 .agent-panel-head {
   display: flex;
   min-height: 52px;
@@ -7615,6 +7654,159 @@ html[data-motion="always"] *::after {
 
 .agent-composer-send {
   justify-self: end;
+}
+
+.agent-context-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.agent-context-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 3px 8px;
+  border: 1px solid var(--lt-line);
+  border-radius: 999px;
+  background: var(--lt-surface);
+  color: var(--lt-muted);
+  cursor: default;
+  font-family: var(--lt-font-ui);
+  font-size: 10.5px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-context-chip-active {
+  border-color: color-mix(in oklch, var(--lt-accent-deep) 35%, var(--lt-line));
+  background: color-mix(in oklch, var(--lt-accent-wash) 65%, var(--lt-surface));
+  color: var(--lt-text-soft);
+}
+
+.agent-context-chip-stub,
+.agent-context-chip-add {
+  cursor: pointer;
+}
+
+.agent-context-chip-stub:hover,
+.agent-context-chip-add:hover {
+  border-color: var(--lt-line-strong);
+  background: var(--lt-hover);
+  color: var(--lt-text);
+}
+
+.agent-context-chip:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.agent-workbench {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+
+.agent-workbench-conversation,
+.agent-workbench-side {
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.agent-workbench-resize-handle {
+  flex: 0 0 5px;
+  background: var(--lt-line);
+  transition: background 120ms ease;
+}
+
+.agent-workbench-resize-handle:hover,
+.agent-workbench-resize-handle[data-separator="active"] {
+  background: color-mix(in oklch, var(--lt-accent-deep) 45%, var(--lt-line));
+}
+
+.agent-workbench-pane {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding: 10px 10px 12px;
+  background: color-mix(in oklch, var(--lt-bg) 92%, var(--lt-panel));
+}
+
+.agent-workbench-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agent-workbench-section-head h3 {
+  margin: 0;
+  color: var(--lt-faint);
+  font-family: var(--lt-font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.agent-workbench-section-body {
+  min-width: 0;
+}
+
+.agent-workbench-empty {
+  margin: 0;
+  color: var(--lt-faint);
+  font-family: var(--lt-font-ui);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.agent-workbench-evidence-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-workbench-evidence-item {
+  display: grid;
+  gap: 4px;
+  padding: 8px 9px;
+  border: 1px solid var(--lt-line);
+  border-radius: 6px;
+  background: var(--lt-surface);
+}
+
+.agent-workbench-evidence-path {
+  color: var(--lt-text-soft);
+  font-family: var(--lt-font-mono);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-workbench-evidence-excerpt {
+  margin: 0;
+  color: var(--lt-muted);
+  font-family: var(--lt-font-ui);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.agent-workbench-pane .agent-trail {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
 }
 
 @media (max-width: 980px) {
