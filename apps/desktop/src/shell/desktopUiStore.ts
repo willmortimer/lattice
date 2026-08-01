@@ -23,10 +23,17 @@ export type RendererSessionId = string;
 
 export type AgentLayoutMode = "dock" | "workbench" | "focus" | "detached";
 
+/** Non-focus in-window layout restored when leaving focus (Escape / Focus toggle). */
+export type AgentFocusReturnMode = "dock" | "workbench";
+
 export type AgentWorkbenchPanelSizes = {
   conversation: number;
   side: number;
 };
+
+function focusReturnModeFrom(mode: AgentLayoutMode): AgentFocusReturnMode {
+  return mode === "workbench" ? "workbench" : "dock";
+}
 
 const DEFAULT_AGENT_WORKBENCH_PANEL_SIZES: AgentWorkbenchPanelSizes = {
   conversation: 58,
@@ -44,6 +51,7 @@ export type DesktopUiState = {
   inspectorOpen: boolean;
   agentPanelOpen: boolean;
   agentLayoutMode: AgentLayoutMode;
+  agentFocusReturnMode: AgentFocusReturnMode;
   agentWorkbenchPanelSizes: AgentWorkbenchPanelSizes;
   paletteOpen: boolean;
   searchPaneOpen: boolean;
@@ -58,6 +66,7 @@ export type DesktopUiState = {
   setInspectorOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
   setAgentPanelOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
   setAgentLayoutMode: (mode: AgentLayoutMode) => void;
+  exitAgentFocus: () => void;
   setAgentWorkbenchPanelSizes: (sizes: AgentWorkbenchPanelSizes) => void;
   setPaletteOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
   setSearchPaneOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
@@ -96,6 +105,7 @@ export function createDesktopUiStore(
     inspectorOpen: false,
     agentPanelOpen: false,
     agentLayoutMode: "dock",
+    agentFocusReturnMode: "dock",
     agentWorkbenchPanelSizes: DEFAULT_AGENT_WORKBENCH_PANEL_SIZES,
     paletteOpen: false,
     searchPaneOpen: false,
@@ -141,7 +151,21 @@ export function createDesktopUiStore(
       set({
         agentPanelOpen: typeof open === "function" ? open(get().agentPanelOpen) : open,
       }),
-    setAgentLayoutMode: (agentLayoutMode) => set({ agentLayoutMode }),
+    setAgentLayoutMode: (agentLayoutMode) =>
+      set((state) => {
+        if (agentLayoutMode === "focus" && state.agentLayoutMode !== "focus") {
+          return {
+            agentLayoutMode,
+            agentFocusReturnMode: focusReturnModeFrom(state.agentLayoutMode),
+          };
+        }
+        return { agentLayoutMode };
+      }),
+    exitAgentFocus: () =>
+      set((state) => {
+        if (state.agentLayoutMode !== "focus") return state;
+        return { agentLayoutMode: state.agentFocusReturnMode };
+      }),
     setAgentWorkbenchPanelSizes: (agentWorkbenchPanelSizes) => set({ agentWorkbenchPanelSizes }),
     setPaletteOpen: (open) =>
       set({

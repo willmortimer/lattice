@@ -17,11 +17,13 @@ export function AgentPanelShell({ children }: AgentPanelShellProps) {
   return (
     <aside
       className={`agent-panel${
-        layoutMode === "workbench" || layoutMode === "focus"
-          ? " agent-panel-workbench"
-          : layoutMode === "detached"
-            ? " agent-panel-detached"
-            : ""
+        layoutMode === "focus"
+          ? " agent-panel-workbench agent-panel-focus"
+          : layoutMode === "workbench"
+            ? " agent-panel-workbench"
+            : layoutMode === "detached"
+              ? " agent-panel-detached"
+              : ""
       }`}
       data-agent-layout={layoutMode}
       aria-label="Agent"

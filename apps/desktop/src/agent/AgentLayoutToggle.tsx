@@ -50,6 +50,7 @@ function isDetachedAgentWindow(): boolean {
 export function AgentLayoutToggle({ workspaceRoot }: AgentLayoutToggleProps) {
   const layoutMode = useDesktopUiStore((state) => state.agentLayoutMode);
   const setLayoutMode = useDesktopUiStore((state) => state.setAgentLayoutMode);
+  const exitAgentFocus = useDesktopUiStore((state) => state.exitAgentFocus);
   const threadId = useAgentSessionStore((state) =>
     workspaceRoot ? (state.threadIds[workspaceRoot] ?? "") : "",
   );
@@ -102,9 +103,14 @@ export function AgentLayoutToggle({ workspaceRoot }: AgentLayoutToggleProps) {
         return;
       }
 
+      if (mode === "focus" && layoutMode === "focus") {
+        exitAgentFocus();
+        return;
+      }
+
       setLayoutMode(mode);
     },
-    [inDetachedWindow, layoutMode, setLayoutMode, threadId, workspaceRoot],
+    [exitAgentFocus, inDetachedWindow, layoutMode, setLayoutMode, threadId, workspaceRoot],
   );
 
   return (
@@ -142,7 +148,7 @@ export function AgentLayoutToggle({ workspaceRoot }: AgentLayoutToggleProps) {
         className={
           layoutMode === "focus" && !inDetachedWindow ? "agent-layout-toggle-active" : undefined
         }
-        title="Focus layout (agent-first)"
+        title="Focus layout (agent fills this window)"
         aria-pressed={layoutMode === "focus" && !inDetachedWindow}
         onClick={() => selectMode("focus")}
       >
