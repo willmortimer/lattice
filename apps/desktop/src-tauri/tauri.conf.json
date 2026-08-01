@@ -48,6 +48,7 @@
         "height": 360,
         "visible": false,
         "alwaysOnTop": true,
+        "visibleOnAllWorkspaces": true,
         "resizable": false,
         "skipTaskbar": true,
         "decorations": false,

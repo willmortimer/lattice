@@ -92,8 +92,11 @@ pub fn run() {
             tray::install_tray(app.handle())?;
             app_lock::install_sleep_lock_observer(app.handle());
             #[cfg(feature = "capture")]
-            if let Err(err) = capture::install_global_shortcut(app.handle()) {
-                eprintln!("lattice: screen clip shortcut unavailable: {err}");
+            {
+                capture::install_shelf_window(app.handle());
+                if let Err(err) = capture::install_global_shortcut(app.handle()) {
+                    eprintln!("lattice: screen clip shortcut unavailable: {err}");
+                }
             }
             // Custom scheme + Universal Links: oauth callback and open-resource.
             use tauri_plugin_deep_link::DeepLinkExt;
@@ -373,6 +376,8 @@ pub fn run() {
             spotlight::spotlight_index_workspace,
             #[cfg(feature = "capture")]
             capture::shelf::capture_shelf_snapshot,
+            #[cfg(feature = "capture")]
+            capture::shelf::capture_shelf_hide,
         ]))
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
