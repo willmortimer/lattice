@@ -24,6 +24,13 @@ pub struct WorkspaceRemoteAccessResponse {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct WorkspaceRegistryListResponse {
+    pub version: u32,
+    pub workspaces: Vec<WorkspaceRegistryRecord>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkspaceRemoteAccessListResponse {
     pub workspaces: Vec<WorkspaceRegistryRecord>,
     pub remote_access_lease_active: bool,
@@ -49,6 +56,15 @@ async fn sync_lease(state: &DaemonState, registry: &WorkspaceRegistry) {
     if let Some(connections) = state.connections() {
         sync_remote_access_lease(connections, registry).await;
     }
+}
+
+/// List durable workspace-id registry entries (metadata only; no workspace open).
+pub fn api_workspace_list_registry() -> Result<WorkspaceRegistryListResponse, ApiError> {
+    let registry = load_registry()?;
+    Ok(WorkspaceRegistryListResponse {
+        version: registry.version,
+        workspaces: registry.list().to_vec(),
+    })
 }
 
 /// List registered workspaces and whether the remote-access idle lease is held.
