@@ -3,7 +3,9 @@ import type { SaveState } from "../editor/saveState";
 import { IDLE_SAVE_STATE } from "../editor/saveState";
 import type { PageEditorHandle } from "../editor/PageEditor";
 import { saveResourceTreeCollapsed, saveSidebarWidth } from "../lib/profile";
+import { resourceIdForPathOrSynthetic, type CatalogEntry } from "../lib/resourceCatalog";
 import {
+  migrateWorkspaceUiSessionResourceIds,
   normalizeWorkspaceUiSession,
   resourcesForWorkspaceUiSession,
   type WorkspaceUiSession,
@@ -252,28 +254,41 @@ export function useDesktopController() {
     });
   }, [clearAllSaveStatuses, resetNavigation]);
 
-  const getWorkspaceUiSession = useCallback((): Omit<WorkspaceUiSession, "workspaceId"> => {
-    const current = getNavigationSessionState();
-    const workspaceRoot = workspaceSnapshotRef.current?.root;
-    const agentThreadId =
-      workspaceRoot
-        ? useAgentSessionStore.getState().threadIds[workspaceRoot] ?? null
-        : null;
-    return {
-      openTabIds: current.tabs.map((tab) => tab.path),
-      activeResourceId: selectedRef.current?.path ?? null,
-      activityArea: current.activity,
-      inspectorOpen,
-      agentThreadId,
-      paneLayout: { version: 0 },
-      resourceViewState: {},
-    };
-  }, [getNavigationSessionState, inspectorOpen, openTabs, activityArea]);
+  const getWorkspaceUiSession = useCallback(
+    (catalog: ReadonlyMap<string, CatalogEntry>): Omit<WorkspaceUiSession, "workspaceId"> => {
+      const current = getNavigationSessionState();
+      const workspaceRoot = workspaceSnapshotRef.current?.root;
+      const agentThreadId =
+        workspaceRoot
+          ? useAgentSessionStore.getState().threadIds[workspaceRoot] ?? null
+          : null;
+      const selected = selectedRef.current;
+      return {
+        openTabIds: current.tabs.map((tab) => resourceIdForPathOrSynthetic(catalog, tab.path)),
+        activeResourceId: selected
+          ? resourceIdForPathOrSynthetic(catalog, selected.path)
+          : null,
+        activityArea: current.activity,
+        inspectorOpen,
+        agentThreadId,
+        paneLayout: { version: 0 },
+        resourceViewState: {},
+      };
+    },
+    [getNavigationSessionState, inspectorOpen, openTabs, activityArea],
+  );
 
   const restoreWorkspaceUiSession = useCallback(
-    (stored: WorkspaceUiSession, workspace: WorkspaceSnapshot) => {
-      const session = normalizeWorkspaceUiSession(workspace.id, stored);
-      const { tabs, active } = resourcesForWorkspaceUiSession(session, workspace);
+    (
+      stored: WorkspaceUiSession,
+      workspace: WorkspaceSnapshot,
+      catalog: ReadonlyMap<string, CatalogEntry>,
+    ) => {
+      const session = migrateWorkspaceUiSessionResourceIds(
+        normalizeWorkspaceUiSession(workspace.id, stored),
+        catalog,
+      );
+      const { tabs, active } = resourcesForWorkspaceUiSession(session, workspace, catalog);
       restoreNavigationSession({
         tabs,
         activity: session.activityArea ?? (tabs.length > 0 ? "files" : "home"),

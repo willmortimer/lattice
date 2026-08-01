@@ -2,8 +2,15 @@ import type { ActivityArea } from "../controllers/useNavigationController";
 import type { Resource, WorkspaceSnapshot } from "../types";
 import { hasTauri, invoke } from "./ipc";
 import type { DesktopSession } from "./profile";
+import {
+  isSyntheticResourceId,
+  pathForResourceId,
+  resourceFromCatalogEntry,
+  resourceIdForPath,
+  type CatalogEntry,
+} from "./resourceCatalog";
 
-/** Stable resource identity; today workspace-relative paths until LatticeFS ids ship. */
+/** LatticeFS ResourceId (UUID) or synthetic `path:` placeholder until registry assigns one. */
 export type ResourceId = string;
 
 /** Placeholder until resizable pane layouts land (W2 out of scope). */
@@ -90,6 +97,83 @@ export function normalizeWorkspaceUiSession(
   };
 }
 
+/**
+ * Map a legacy path / synthetic id / UUID token onto a catalog ResourceId.
+ * Returns null when the token cannot be resolved (dropped on migrate).
+ * UUID-shaped tokens unknown to the catalog are retained (best-effort) so a
+ * later registry-backed catalog can resolve id→path.
+ */
+export function resolveSessionResourceId(
+  token: string,
+  catalog: ReadonlyMap<string, CatalogEntry>,
+): ResourceId | null {
+  if (!token) return null;
+  if (catalog.has(token)) return token;
+
+  const byPath = resourceIdForPath(catalog, token);
+  if (byPath) return byPath;
+
+  if (isSyntheticResourceId(token)) {
+    const path = token.slice("path:".length);
+    if (!path) return null;
+    return resourceIdForPath(catalog, path) ?? null;
+  }
+
+  // Bare path with no catalog hit → drop. Stable UUID not yet projected → keep.
+  if (looksLikeLatticeResourceId(token)) return token;
+  return null;
+}
+
+/** LatticeFS ResourceId wire form is a UUID string. */
+export function looksLikeLatticeResourceId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
+/**
+ * Migrate path-valued (or synthetic) session fields onto catalog ResourceIds.
+ * Unknown tokens are dropped; active falls back to the first open tab.
+ */
+export function migrateWorkspaceUiSessionResourceIds(
+  session: WorkspaceUiSession,
+  catalog: ReadonlyMap<string, CatalogEntry>,
+): WorkspaceUiSession {
+  const seen = new Set<string>();
+  const openTabIds: ResourceId[] = [];
+  for (const token of session.openTabIds) {
+    const id = resolveSessionResourceId(token, catalog);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    openTabIds.push(id);
+  }
+
+  let activeResourceId: ResourceId | null = null;
+  if (session.activeResourceId) {
+    activeResourceId = resolveSessionResourceId(session.activeResourceId, catalog);
+  }
+  if (activeResourceId && openTabIds.length > 0 && !openTabIds.includes(activeResourceId)) {
+    activeResourceId = openTabIds[0] ?? null;
+  }
+  if (!activeResourceId) {
+    activeResourceId = openTabIds[0] ?? null;
+  }
+
+  const resourceViewState: Record<ResourceId, SerializedViewState> = {};
+  for (const [token, viewState] of Object.entries(session.resourceViewState)) {
+    const id = resolveSessionResourceId(token, catalog);
+    if (!id) continue;
+    resourceViewState[id] = viewState;
+  }
+
+  return {
+    ...session,
+    openTabIds,
+    activeResourceId,
+    resourceViewState,
+  };
+}
+
 /** Migrate root-keyed legacy session rows into workspace-id shape. */
 export function workspaceUiSessionFromLegacyDesktopSession(
   workspaceId: string,
@@ -110,15 +194,40 @@ export function workspaceUiSessionFromLegacyDesktopSession(
   });
 }
 
+function resourceForSessionId(
+  id: ResourceId,
+  workspace: WorkspaceSnapshot,
+  catalog?: ReadonlyMap<string, CatalogEntry>,
+): Resource | null {
+  if (catalog) {
+    const entry = catalog.get(id);
+    if (entry) {
+      return (
+        workspace.resources.find((resource) => resource.path === entry.path) ??
+        resourceFromCatalogEntry(entry)
+      );
+    }
+    const path = pathForResourceId(catalog, id);
+    if (path) {
+      return workspace.resources.find((resource) => resource.path === path) ?? null;
+    }
+  }
+  // Legacy path-valued sessions (and tests without a catalog).
+  return workspace.resources.find((resource) => resource.path === id) ?? null;
+}
+
 export function resourcesForWorkspaceUiSession(
   session: WorkspaceUiSession,
   workspace: WorkspaceSnapshot,
+  catalog?: ReadonlyMap<string, CatalogEntry>,
 ): { tabs: Resource[]; active: Resource | null } {
   const tabs = session.openTabIds
-    .map((id) => workspace.resources.find((resource) => resource.path === id))
+    .map((id) => resourceForSessionId(id, workspace, catalog))
     .filter((resource): resource is Resource => Boolean(resource));
   const active =
-    workspace.resources.find((resource) => resource.path === session.activeResourceId) ??
+    (session.activeResourceId
+      ? resourceForSessionId(session.activeResourceId, workspace, catalog)
+      : null) ??
     tabs[0] ??
     null;
   return { tabs, active };

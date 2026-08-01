@@ -1,12 +1,28 @@
 import { describe, expect, it } from "vitest";
 
 import type { WorkspaceSnapshot } from "../types";
+import { applyCatalogDelta, syntheticResourceId, type CatalogEntry } from "./resourceCatalog";
 import {
   defaultWorkspaceUiSession,
+  migrateWorkspaceUiSessionResourceIds,
   normalizeWorkspaceUiSession,
   resourcesForWorkspaceUiSession,
   workspaceUiSessionFromLegacyDesktopSession,
 } from "./workspaceUiSession";
+
+function catalogWith(
+  entries: Array<{ resourceId: string; path: string; kind?: CatalogEntry["kind"] }>,
+): Map<string, CatalogEntry> {
+  return applyCatalogDelta(new Map(), {
+    type: "replace",
+    entries: entries.map((entry) => ({
+      resourceId: entry.resourceId,
+      path: entry.path,
+      kind: entry.kind ?? "page",
+      childCount: 0,
+    })),
+  });
+}
 
 describe("workspaceUiSession", () => {
   it("defaultWorkspaceUiSession returns a stable empty shape", () => {
@@ -58,7 +74,7 @@ describe("workspaceUiSession", () => {
     expect(session.inspectorOpen).toBe(true);
   });
 
-  it("resourcesForWorkspaceUiSession resolves workspace resources", () => {
+  it("resourcesForWorkspaceUiSession resolves workspace resources by path (legacy)", () => {
     const workspace: WorkspaceSnapshot = {
       root: "/tmp/demo",
       title: "Demo",
@@ -79,5 +95,62 @@ describe("workspaceUiSession", () => {
     const { tabs, active } = resourcesForWorkspaceUiSession(session, workspace);
     expect(tabs.map((tab) => tab.path)).toEqual(["a.page"]);
     expect(active?.path).toBe("b.page");
+  });
+
+  it("migrateWorkspaceUiSessionResourceIds maps path tokens onto catalog UUIDs", () => {
+    const catalog = catalogWith([
+      { resourceId: "11111111-1111-1111-1111-111111111111", path: "a.page" },
+      { resourceId: "22222222-2222-2222-2222-222222222222", path: "b.page" },
+    ]);
+    const legacy = normalizeWorkspaceUiSession("ws-1", {
+      openTabIds: ["a.page", "missing.page", syntheticResourceId("b.page")],
+      activeResourceId: "b.page",
+      resourceViewState: {
+        "a.page": { scrollY: 10 },
+        "gone.page": { scrollY: 99 },
+      },
+    });
+    const migrated = migrateWorkspaceUiSessionResourceIds(legacy, catalog);
+    expect(migrated.openTabIds).toEqual([
+      "11111111-1111-1111-1111-111111111111",
+      "22222222-2222-2222-2222-222222222222",
+    ]);
+    expect(migrated.activeResourceId).toBe("22222222-2222-2222-2222-222222222222");
+    expect(migrated.resourceViewState).toEqual({
+      "11111111-1111-1111-1111-111111111111": { scrollY: 10 },
+    });
+  });
+
+  it("resourcesForWorkspaceUiSession round-trips after rename via stable ResourceId", () => {
+    const resourceId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    const before = catalogWith([{ resourceId, path: "old-name.page" }]);
+    const workspaceBefore: WorkspaceSnapshot = {
+      root: "/tmp/demo",
+      title: "Demo",
+      id: "ws-1",
+      resources: [{ path: "old-name.page", kind: "page" }],
+      capabilities: [],
+      defaults: { quickNoteDirectory: "Quick Notes" },
+      manifestRevision: "rev-1",
+    };
+    const session = migrateWorkspaceUiSessionResourceIds(
+      normalizeWorkspaceUiSession("ws-1", {
+        openTabIds: ["old-name.page"],
+        activeResourceId: "old-name.page",
+      }),
+      before,
+    );
+    expect(session.openTabIds).toEqual([resourceId]);
+
+    const after = catalogWith([{ resourceId, path: "renamed.page" }]);
+    const workspaceAfter: WorkspaceSnapshot = {
+      ...workspaceBefore,
+      resources: [{ path: "renamed.page", kind: "page" }],
+      manifestRevision: "rev-2",
+    };
+    const { tabs, active } = resourcesForWorkspaceUiSession(session, workspaceAfter, after);
+    expect(tabs.map((tab) => tab.path)).toEqual(["renamed.page"]);
+    expect(active?.path).toBe("renamed.page");
+    expect(session.openTabIds).toEqual([resourceId]);
   });
 });
