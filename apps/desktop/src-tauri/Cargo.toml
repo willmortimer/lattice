@@ -114,7 +114,7 @@ objc2-foundation = { version = "0.3", features = [
     "NSOperation",
 ] }
 objc2-local-authentication = "0.3"
-objc2-app-kit = { version = "0.3", features = ["NSWorkspace"] }
+objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSWindow"] }
 lattice-approval-macos = { workspace = true, features = ["link-bridge"] }
 lattice-apple-signin-macos = { workspace = true, features = ["link-bridge"] }
 
