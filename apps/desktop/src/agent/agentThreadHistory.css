@@ -1,0 +1,40 @@
+/* Virtualization + pin affordances for AgentThreadHistory. */
+
+.agent-thread-browser-list-virtual {
+  position: relative;
+  outline: none;
+}
+
+.agent-thread-browser-list-virtual:focus-visible {
+  outline: 2px solid var(--lt-focus-ring);
+  outline-offset: 1px;
+}
+
+.agent-thread-browser-virtual-spacer {
+  position: relative;
+  width: 100%;
+}
+
+.agent-thread-browser-virtual-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+
+.agent-thread-browser-row-focused:not(.agent-thread-browser-row-active) {
+  border-color: color-mix(in oklch, var(--lt-accent) 45%, var(--lt-line));
+}
+
+.agent-thread-browser-pin-icon {
+  flex: 0 0 auto;
+  margin-right: 4px;
+  color: var(--lt-accent-deep);
+  vertical-align: -1px;
+}
+
+.agent-thread-browser-row-title {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}

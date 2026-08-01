@@ -9,6 +9,7 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from "@lattice/ui";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   Archive,
   DotsThree,
@@ -19,7 +20,15 @@ import {
   Trash,
 } from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useId, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 
 import {
   displayTitleForThread,
@@ -34,10 +43,15 @@ import {
 import { useWorkspaceCatalogQuery } from "../query/useWorkspaceCatalog";
 import { useAgentChatControls } from "./agentChatControls";
 import { useAgentSessionStore } from "./agentStore";
+import { sortThreadsWithPins } from "./agentThreadPins";
+import "./agentThreadHistory.css";
 
 export interface AgentThreadHistoryProps {
   workspaceRoot: string;
 }
+
+const ESTIMATED_ROW_HEIGHT = 48;
+const EMPTY_PINNED: readonly string[] = [];
 
 function normalizeWorkspaceRoot(root: string): string {
   return root.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -62,32 +76,58 @@ function threadActivityIso(thread: AgentThreadSummary): string {
 type AgentThreadRowProps = {
   thread: AgentThreadSummary;
   selected: boolean;
+  focused: boolean;
+  pinned: boolean;
   isActiveRun: boolean;
   disabled: boolean;
   onSelect: () => void;
+  onTogglePin: () => void;
+  onFocusRow: () => void;
 };
 
 function AgentThreadRow({
   thread,
   selected,
+  focused,
+  pinned,
   isActiveRun,
   disabled,
   onSelect,
+  onTogglePin,
+  onFocusRow,
 }: AgentThreadRowProps) {
   const title = displayTitleForThread(thread);
   const activityIso = threadActivityIso(thread);
 
   return (
-    <li className="agent-thread-browser-item">
+    <div
+      className="agent-thread-browser-item"
+      role="option"
+      aria-selected={selected}
+      id={`agent-thread-option-${thread.id}`}
+    >
       <button
         type="button"
-        className={`agent-thread-browser-row${selected ? " agent-thread-browser-row-active" : ""}`}
-        aria-current={selected ? "true" : undefined}
+        className={`agent-thread-browser-row${selected ? " agent-thread-browser-row-active" : ""}${
+          focused ? " agent-thread-browser-row-focused" : ""
+        }`}
+        tabIndex={focused ? 0 : -1}
         disabled={disabled}
         onClick={onSelect}
+        onFocus={onFocusRow}
       >
         <span className="agent-thread-browser-row-main">
-          <span className="agent-thread-browser-row-title">{title}</span>
+          <span className="agent-thread-browser-row-title">
+            {pinned ? (
+              <PushPin
+                size={11}
+                weight="fill"
+                className="agent-thread-browser-pin-icon"
+                aria-hidden="true"
+              />
+            ) : null}
+            {title}
+          </span>
           <span className="agent-thread-browser-row-meta">
             <time dateTime={activityIso} title={formatAbsoluteTime(activityIso)}>
               {formatRelativeTime(activityIso)}
@@ -107,6 +147,7 @@ function AgentThreadRow({
               label={`Thread actions for ${title}`}
               className="agent-thread-browser-actions-trigger"
               disabled={disabled}
+              tabIndex={focused ? 0 : -1}
             >
               <DotsThree size={14} weight="bold" />
             </IconButton>
@@ -119,9 +160,15 @@ function AgentThreadRow({
                 <PencilSimple size={14} />
                 Rename…
               </MenuItem>
-              <MenuItem className="ltui-menu-item" disabled>
-                <PushPin size={14} />
-                Pin
+              <MenuItem
+                className="ltui-menu-item"
+                disabled={disabled}
+                onClick={() => {
+                  onTogglePin();
+                }}
+              >
+                <PushPin size={14} weight={pinned ? "fill" : "regular"} />
+                {pinned ? "Unpin" : "Pin"}
               </MenuItem>
               <MenuItem className="ltui-menu-item" disabled>
                 <Archive size={14} />
@@ -136,7 +183,7 @@ function AgentThreadRow({
           </MenuPositioner>
         </MenuPortal>
       </MenuRoot>
-    </li>
+    </div>
   );
 }
 
@@ -144,11 +191,17 @@ export function AgentThreadHistory({ workspaceRoot }: AgentThreadHistoryProps) {
   const listId = useId();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
+  const [focusIndex, setFocusIndex] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const threadId = useAgentSessionStore((state) => state.threadIds[workspaceRoot] ?? "");
   const threadListEpoch = useAgentSessionStore((state) => state.threadListEpoch);
+  const pinnedIds = useAgentSessionStore(
+    (state) => state.pinnedThreadIds[normalizeWorkspaceRoot(workspaceRoot)] ?? EMPTY_PINNED,
+  );
   const selectThreadId = useAgentSessionStore((state) => state.selectThreadId);
   const startNewThread = useAgentSessionStore((state) => state.startNewThread);
+  const togglePinnedThread = useAgentSessionStore((state) => state.togglePinnedThread);
 
   const controls = useAgentChatControls();
   const isStreaming = controls?.isStreaming === true;
@@ -177,7 +230,7 @@ export function AgentThreadHistory({ workspaceRoot }: AgentThreadHistoryProps) {
   }, [workspaceCatalog, workspaceRoot]);
 
   const allThreads = useMemo(() => {
-    const options = threads.slice().sort((a, b) => b.updatedAt - a.updatedAt);
+    const options = threads.slice();
     const knownIds = new Set(options.map((thread) => thread.id));
     if (threadId && !knownIds.has(threadId)) {
       options.unshift({
@@ -190,12 +243,103 @@ export function AgentThreadHistory({ workspaceRoot }: AgentThreadHistoryProps) {
     return options;
   }, [threadId, threads]);
 
-  const visibleThreads = useMemo(
-    () => allThreads.filter((thread) => threadMatchesQuery(thread, searchQuery)),
-    [allThreads, searchQuery],
-  );
+  const visibleThreads = useMemo(() => {
+    const filtered = allThreads.filter((thread) => threadMatchesQuery(thread, searchQuery));
+    return sortThreadsWithPins(filtered, pinnedIds);
+  }, [allThreads, pinnedIds, searchQuery]);
+
+  useEffect(() => {
+    setFocusIndex((current) => {
+      if (visibleThreads.length === 0) {
+        return 0;
+      }
+      const selectedIndex = visibleThreads.findIndex((thread) => thread.id === threadId);
+      if (selectedIndex >= 0) {
+        return selectedIndex;
+      }
+      return Math.min(current, visibleThreads.length - 1);
+    });
+  }, [threadId, visibleThreads]);
+
+  const virtualizer = useVirtualizer({
+    count: visibleThreads.length,
+    estimateSize: () => ESTIMATED_ROW_HEIGHT,
+    getItemKey: (index) => visibleThreads[index]!.id,
+    getScrollElement: () => listRef.current,
+    overscan: 6,
+  });
 
   const interactionsDisabled = isStreaming;
+
+  const moveFocus = useCallback(
+    (nextIndex: number) => {
+      if (visibleThreads.length === 0) {
+        return;
+      }
+      const clamped = Math.max(0, Math.min(visibleThreads.length - 1, nextIndex));
+      setFocusIndex(clamped);
+      virtualizer.scrollToIndex(clamped, { align: "auto" });
+      requestAnimationFrame(() => {
+        const option = listRef.current?.querySelector<HTMLElement>(
+          `#agent-thread-option-${CSS.escape(visibleThreads[clamped]!.id)} button`,
+        );
+        option?.focus();
+      });
+    },
+    [virtualizer, visibleThreads],
+  );
+
+  const onListKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (interactionsDisabled || visibleThreads.length === 0) {
+        return;
+      }
+      switch (event.key) {
+        case "ArrowDown":
+          event.preventDefault();
+          moveFocus(focusIndex + 1);
+          break;
+        case "ArrowUp":
+          event.preventDefault();
+          moveFocus(focusIndex - 1);
+          break;
+        case "Home":
+          event.preventDefault();
+          moveFocus(0);
+          break;
+        case "End":
+          event.preventDefault();
+          moveFocus(visibleThreads.length - 1);
+          break;
+        case "Enter":
+        case " ": {
+          event.preventDefault();
+          const thread = visibleThreads[focusIndex];
+          if (thread && thread.id !== threadId) {
+            selectThreadId(workspaceRoot, thread.id);
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    },
+    [
+      focusIndex,
+      interactionsDisabled,
+      moveFocus,
+      selectThreadId,
+      threadId,
+      visibleThreads,
+      workspaceRoot,
+    ],
+  );
+
+  const virtualItems = virtualizer.getVirtualItems();
+  const activeDescendant =
+    visibleThreads[focusIndex] != null
+      ? `agent-thread-option-${visibleThreads[focusIndex]!.id}`
+      : undefined;
 
   return (
     <section className="agent-thread-browser" aria-label="Agent threads">
@@ -233,28 +377,62 @@ export function AgentThreadHistory({ workspaceRoot }: AgentThreadHistoryProps) {
         </Button>
       </div>
 
-      <ul id={listId} className="agent-thread-browser-list" role="list">
+      <div
+        ref={listRef}
+        id={listId}
+        className="agent-thread-browser-list agent-thread-browser-list-virtual"
+        role="listbox"
+        aria-label="Thread list"
+        aria-activedescendant={activeDescendant}
+        tabIndex={visibleThreads.length === 0 ? -1 : 0}
+        onKeyDown={onListKeyDown}
+      >
         {visibleThreads.length === 0 ? (
-          <li className="agent-thread-browser-empty" role="status">
+          <div className="agent-thread-browser-empty" role="status">
             {searchQuery.trim() ? "No matching threads" : "No threads yet"}
-          </li>
+          </div>
         ) : (
-          visibleThreads.map((thread) => (
-            <AgentThreadRow
-              key={thread.id}
-              thread={thread}
-              selected={thread.id === threadId}
-              isActiveRun={isStreaming && thread.id === threadId}
-              disabled={interactionsDisabled}
-              onSelect={() => {
-                if (thread.id !== threadId) {
-                  selectThreadId(workspaceRoot, thread.id);
-                }
-              }}
-            />
-          ))
+          <div
+            className="agent-thread-browser-virtual-spacer"
+            style={{ height: virtualizer.getTotalSize() }}
+          >
+            {virtualItems.map((item) => {
+              const thread = visibleThreads[item.index]!;
+              return (
+                <div
+                  key={item.key}
+                  className="agent-thread-browser-virtual-row"
+                  data-index={item.index}
+                  ref={virtualizer.measureElement}
+                  style={{
+                    transform: `translateY(${item.start}px)`,
+                  }}
+                >
+                  <AgentThreadRow
+                    thread={thread}
+                    selected={thread.id === threadId}
+                    focused={item.index === focusIndex}
+                    pinned={pinnedIds.includes(thread.id)}
+                    isActiveRun={isStreaming && thread.id === threadId}
+                    disabled={interactionsDisabled}
+                    onSelect={() => {
+                      if (thread.id !== threadId) {
+                        selectThreadId(workspaceRoot, thread.id);
+                      }
+                    }}
+                    onTogglePin={() => {
+                      togglePinnedThread(workspaceRoot, thread.id);
+                    }}
+                    onFocusRow={() => {
+                      setFocusIndex(item.index);
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
         )}
-      </ul>
+      </div>
 
       {loadError ? (
         <p className="agent-thread-browser-error" role="status">
