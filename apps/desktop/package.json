@@ -105,6 +105,7 @@
     "@tiptap/pm": "^3.28.0",
     "@tiptap/react": "^3.28.0",
     "@tiptap/starter-kit": "^3.28.0",
+    "@xstate/react": "^6.1.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "ai": "^7.0.36",
@@ -124,6 +125,7 @@
     "vega-embed": "^7.1.0",
     "vega-interpreter": "^2.2.1",
     "vega-lite": "^6.4.3",
+    "xstate": "^5.32.5",
     "yaml": "^2.9.0",
     "zod": "4.4.3",
     "zustand": "^5.0.14"

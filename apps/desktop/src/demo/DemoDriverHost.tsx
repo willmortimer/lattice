@@ -1,4 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+
+import {
+  getAnchorRectForAriaLabel,
+  queryGuidanceAnchorElementForAriaLabel,
+  revealGuidanceAnchorForAriaLabel,
+} from "../guidance";
 import { invoke } from "../lib/ipc";
 import "./demoDriver.css";
 
@@ -50,6 +56,12 @@ function sleep(ms: number): Promise<void> {
 }
 
 async function scrollTreeUntilLabel(label: string): Promise<HTMLElement | null> {
+  const guidanceElement = queryGuidanceAnchorElementForAriaLabel(label);
+  if (guidanceElement) {
+    await revealGuidanceAnchorForAriaLabel(label);
+    return guidanceElement;
+  }
+
   const selector = `[aria-label=${JSON.stringify(label)}]`;
   const list = document.querySelector(".resource-list");
   if (list instanceof HTMLElement) list.scrollTop = 0;
@@ -100,14 +112,12 @@ function showCallout(callout: SceneCallout, anchorLabel: string): void {
   else body.hidden = true;
   root.appendChild(node);
 
-  const anchor = document.querySelector(
-    `[aria-label=${JSON.stringify(anchorLabel)}]`,
-  );
+  const anchorRect = getAnchorRectForAriaLabel(anchorLabel);
   const margin = 16;
   let left = margin;
   let top = window.innerHeight * 0.58;
-  if (anchor instanceof HTMLElement) {
-    const rect = anchor.getBoundingClientRect();
+  if (anchorRect) {
+    const rect = anchorRect;
     const placement = callout.placement ?? "right";
     if (placement === "right") {
       left = Math.min(window.innerWidth - 300, rect.right + 14);

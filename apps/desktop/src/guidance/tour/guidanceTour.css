@@ -1,0 +1,33 @@
+.guidance-tour-popover {
+  width: min(320px, calc(100vw - 32px));
+  padding: 14px 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.guidance-tour-popover__eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted, #7a8494);
+}
+
+.guidance-tour-popover__title {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.guidance-tour-popover__body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary, #c7ced9);
+}
+
+.guidance-tour-popover__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 4px;
+}

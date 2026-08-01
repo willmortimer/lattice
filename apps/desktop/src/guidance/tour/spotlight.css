@@ -1,0 +1,21 @@
+.guidance-spotlight {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1200;
+}
+
+.guidance-spotlight::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgb(8 10 14 / 0.45);
+}
+
+.guidance-spotlight__frame {
+  position: fixed;
+  border-radius: 8px;
+  box-shadow:
+    0 0 0 2px rgb(120 170 255 / 0.95),
+    0 0 0 9999px rgb(8 10 14 / 0.45);
+}
