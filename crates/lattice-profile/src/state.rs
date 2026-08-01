@@ -28,6 +28,37 @@ pub struct DesktopSession {
     pub inspector: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaneLayoutStub {
+    #[serde(default)]
+    pub version: u32,
+}
+
+impl Default for PaneLayoutStub {
+    fn default() -> Self {
+        Self { version: 0 }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceUiSession {
+    pub workspace_id: String,
+    #[serde(default)]
+    pub open_tab_ids: Vec<String>,
+    pub active_resource_id: Option<String>,
+    #[serde(default)]
+    pub activity_area: String,
+    #[serde(default)]
+    pub inspector_open: bool,
+    pub agent_thread_id: Option<String>,
+    #[serde(default)]
+    pub pane_layout: PaneLayoutStub,
+    #[serde(default)]
+    pub resource_view_state: serde_json::Map<String, serde_json::Value>,
+}
+
 pub struct ProfileStateStore {
     path: PathBuf,
     connection: Connection,
@@ -60,6 +91,11 @@ impl ProfileStateStore {
              );
              CREATE TABLE IF NOT EXISTS sessions (
                 root TEXT PRIMARY KEY,
+                payload TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS workspace_ui_sessions (
+                workspace_id TEXT PRIMARY KEY,
                 payload TEXT NOT NULL,
                 updated_at INTEGER NOT NULL
              );
@@ -159,6 +195,38 @@ impl ProfileStateStore {
             .transpose()
     }
 
+    pub fn save_workspace_ui_session(&self, session: &WorkspaceUiSession) -> Result<()> {
+        let payload = serde_json::to_string(session).map_err(|error| Error::Io {
+            path: self.path.clone(),
+            source: std::io::Error::other(error),
+        })?;
+        self.connection.execute(
+            "INSERT INTO workspace_ui_sessions(workspace_id, payload, updated_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT(workspace_id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at",
+            params![session.workspace_id, payload, now() as i64],
+        )?;
+        Ok(())
+    }
+
+    pub fn load_workspace_ui_session(&self, workspace_id: &str) -> Result<Option<WorkspaceUiSession>> {
+        let payload = self
+            .connection
+            .query_row(
+                "SELECT payload FROM workspace_ui_sessions WHERE workspace_id = ?1",
+                params![workspace_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        payload
+            .map(|payload| {
+                serde_json::from_str(&payload).map_err(|error| Error::Io {
+                    path: self.path.clone(),
+                    source: std::io::Error::other(error),
+                })
+            })
+            .transpose()
+    }
+
     pub fn set_ui_value(&self, key: &str, value: &str) -> Result<()> {
         self.connection.execute(
             "INSERT INTO ui_state(key, value, updated_at) VALUES (?1, ?2, ?3)
@@ -235,6 +303,27 @@ mod tests {
         };
         store.save_session(&session).unwrap();
         assert_eq!(store.load_session(&session.root).unwrap(), Some(session));
+    }
+
+    #[test]
+    fn workspace_ui_sessions_round_trip_by_workspace_id() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = ProfileStateStore::open(directory.path().join("desktop.sqlite")).unwrap();
+        let session = WorkspaceUiSession {
+            workspace_id: "ws-9".into(),
+            open_tab_ids: vec!["Home.md".into()],
+            active_resource_id: Some("Home.md".into()),
+            activity_area: "files".into(),
+            inspector_open: true,
+            agent_thread_id: Some("thread-1".into()),
+            pane_layout: PaneLayoutStub { version: 0 },
+            resource_view_state: serde_json::Map::new(),
+        };
+        store.save_workspace_ui_session(&session).unwrap();
+        assert_eq!(
+            store.load_workspace_ui_session(&session.workspace_id).unwrap(),
+            Some(session)
+        );
     }
 
     #[test]

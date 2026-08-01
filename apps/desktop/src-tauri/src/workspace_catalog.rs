@@ -222,6 +222,26 @@ pub fn get_workspace_summary(workspace_id: String) -> Result<WorkspaceSummary, S
     Ok(summary_from_registry_entry(entry, &via))
 }
 
+/// Resolve a registered workspace id to its root path for `open_workspace`.
+pub fn resolve_workspace_root(workspace_id: &str) -> Result<String, String> {
+    let workspace_id = workspace_id.trim();
+    if workspace_id.is_empty() {
+        return Err("workspaceId is required".into());
+    }
+    let (registry, _, _) = load_registry_with_via()?;
+    let entry = registry
+        .workspaces
+        .iter()
+        .find(|entry| entry.workspace_id == workspace_id)
+        .ok_or_else(|| format!("workspace not registered: {workspace_id}"))?;
+    Ok(normalize_root_path(&entry.root))
+}
+
+#[tauri::command]
+pub fn open_workspace_by_id(workspace_id: String) -> Result<String, String> {
+    resolve_workspace_root(&workspace_id)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

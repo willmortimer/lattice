@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use lattice_core::{effective_default_workspace, ensure_lattice_home, Workspace};
 use lattice_profile::{
     DesktopSession, DesktopSettings, ProfileStateStore, RecentWorkspace, SettingsSnapshot,
-    WorkspaceStartupSettings, DESKTOP_SETTINGS_SPEC, WORKSPACE_SETTINGS_SPEC,
+    WorkspaceStartupSettings, WorkspaceUiSession, DESKTOP_SETTINGS_SPEC, WORKSPACE_SETTINGS_SPEC,
 };
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
@@ -230,6 +230,31 @@ pub fn save_desktop_session(session: DesktopSession) -> Result<(), String> {
     home.state_store()
         .map_err(err)?
         .save_session(&session)
+        .map_err(err)
+}
+
+#[tauri::command]
+pub fn load_workspace_ui_session(workspace_id: String) -> Result<Option<WorkspaceUiSession>, String> {
+    let workspace_id = workspace_id.trim();
+    if workspace_id.is_empty() {
+        return Err("workspaceId is required".into());
+    }
+    let home = ensure_lattice_home().map_err(err)?;
+    home.state_store()
+        .map_err(err)?
+        .load_workspace_ui_session(workspace_id)
+        .map_err(err)
+}
+
+#[tauri::command]
+pub fn save_workspace_ui_session(session: WorkspaceUiSession) -> Result<(), String> {
+    if session.workspace_id.trim().is_empty() {
+        return Err("workspaceId is required".into());
+    }
+    let home = ensure_lattice_home().map_err(err)?;
+    home.state_store()
+        .map_err(err)?
+        .save_workspace_ui_session(&session)
         .map_err(err)
 }
 

@@ -2,7 +2,13 @@ import { demoSnapshot, demoStartEmpty, inBrowser } from "../demo";
 import type { SaveState } from "../editor/saveState";
 import { IDLE_SAVE_STATE } from "../editor/saveState";
 import type { PageEditorHandle } from "../editor/PageEditor";
-import { saveResourceTreeCollapsed, saveSidebarWidth, type DesktopSession } from "../lib/profile";
+import { saveResourceTreeCollapsed, saveSidebarWidth } from "../lib/profile";
+import {
+  normalizeWorkspaceUiSession,
+  resourcesForWorkspaceUiSession,
+  type WorkspaceUiSession,
+} from "../lib/workspaceUiSession";
+import { useAgentSessionStore } from "../agent/agentStore";
 import {
   collapsedPathsForWorkspace,
   serializeResourceTreeCollapseState,
@@ -246,28 +252,40 @@ export function useDesktopController() {
     });
   }, [clearAllSaveStatuses, resetNavigation]);
 
-  const getSession = useCallback((): Omit<DesktopSession, "root"> => {
+  const getWorkspaceUiSession = useCallback((): Omit<WorkspaceUiSession, "workspaceId"> => {
     const current = getNavigationSessionState();
+    const workspaceRoot = workspaceSnapshotRef.current?.root;
+    const agentThreadId =
+      workspaceRoot
+        ? useAgentSessionStore.getState().threadIds[workspaceRoot] ?? null
+        : null;
     return {
-      tabs: current.tabs.map((tab) => tab.path),
-      active: selectedRef.current?.path ?? null,
-      activity: current.activity,
-      inspector: inspectorOpen,
+      openTabIds: current.tabs.map((tab) => tab.path),
+      activeResourceId: selectedRef.current?.path ?? null,
+      activityArea: current.activity,
+      inspectorOpen,
+      agentThreadId,
+      paneLayout: { version: 0 },
+      resourceViewState: {},
     };
-  }, [getNavigationSessionState, inspectorOpen]);
+  }, [getNavigationSessionState, inspectorOpen, openTabs, activityArea]);
 
-  const restoreSession = useCallback((stored: DesktopSession, workspace: WorkspaceSnapshot) => {
-    const tabs = (stored.tabs ?? [])
-      .map((path) => workspace.resources.find((resource) => resource.path === path))
-      .filter((resource): resource is Resource => Boolean(resource));
-    restoreNavigationSession({
-      tabs,
-      activity: (stored.activity as import("./useNavigationController").ActivityArea | null) ?? (tabs.length > 0 ? "files" : "home"),
-    });
-    setInspectorOpen(Boolean(stored.inspector));
-    const active = workspace.resources.find((resource) => resource.path === stored.active) ?? tabs[0] ?? null;
-    if (active) void resourceSelectRef.current(active, { recordHistory: false });
-  }, [restoreNavigationSession]);
+  const restoreWorkspaceUiSession = useCallback(
+    (stored: WorkspaceUiSession, workspace: WorkspaceSnapshot) => {
+      const session = normalizeWorkspaceUiSession(workspace.id, stored);
+      const { tabs, active } = resourcesForWorkspaceUiSession(session, workspace);
+      restoreNavigationSession({
+        tabs,
+        activity: session.activityArea ?? (tabs.length > 0 ? "files" : "home"),
+      });
+      setInspectorOpen(session.inspectorOpen);
+      if (session.agentThreadId) {
+        useAgentSessionStore.getState().selectThreadId(workspace.root, session.agentThreadId);
+      }
+      if (active) void resourceSelectRef.current(active, { recordHistory: false });
+    },
+    [restoreNavigationSession, setInspectorOpen],
+  );
 
   const workspaceController = useWorkspaceController({
     initialSnapshot: inBrowser && !demoStartEmpty ? demoSnapshot : null,
@@ -283,8 +301,8 @@ export function useDesktopController() {
     rememberWorkspace,
     removeRecent,
     refreshProfile,
-    getSession,
-    restoreSession,
+    getWorkspaceUiSession,
+    restoreWorkspaceUiSession,
     onAdopt,
     onWorkspaceUnavailable,
     openResource: (resource) => resourceSelectRef.current(resource),
