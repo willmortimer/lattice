@@ -1,8 +1,9 @@
 import { BrandMark } from "../shell/BrandMark";
 import { DictationControls } from "../shell/DictationControls";
 import { voiceHintsFromPage } from "../lib/voice";
-import { HomeDashboard } from "../shell/HomeDashboard";
+import { AllWorkspacesHome } from "../shell/AllWorkspacesHome";
 import { ResourceInspector } from "../shell/ResourceInspector";
+import { WorkspaceSwitcher } from "../shell/WorkspaceSwitcher";
 import { ResourceSurface } from "../shell/ResourceSurface";
 import { SaveStatusIndicator, TabUnsavedDot } from "../shell/SaveStatusIndicator";
 import { StartupSplash } from "../shell/StartupSplash";
@@ -101,6 +102,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
   const {
     profile, profileReady, settings, startup, snapshot, selected, selectedPaths, session, error, busy,
     externalConflict, reloadToken, newWorkspaceOpen, workspacesDir, templates, statusToast,
+    setStatusToast,
     profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth,
     treeCollapsedPaths, revealPath, linkPicker, csvImportReview,
     settingsDeepLinkTarget, clearSettingsDeepLink,
@@ -116,7 +118,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
     setNewWorkspaceOpen, setSearchPaneOpen, setPaletteOpen, setActivityArea, setInspectorOpen, setAgentPanelOpen,
     setDismissedNoticeCodes, setEditingTitle, setTitleDraft, applyThemeCatalog,
     clearRecents, resetSettings, refreshProfile, handleGetStarted, handleOpenWorkspace, openRecent,
-    handleCreateWorkspace, openNewWorkspaceDialog, pickWorkspaceFolder, handleNewPage, handleQuickNote,
+    openWorkspaceById, handleCreateWorkspace, openNewWorkspaceDialog, pickWorkspaceFolder, handleNewPage, handleQuickNote,
     handleNewTable, handleImportCsv, handlePromoteWorkspaceCsv, handleSelect, applyTreeSelection, handleOpenExternally, handleOpenFile,
     handleKeepIncoming, handleKeepLocal, handleKeepBoth, handleTreeCollapsedPathsChange,
     handleTreeResourceContextMenu, handleTreeFolderContextMenu, handleTreeRename, handleMoveToFolder,
@@ -352,9 +354,23 @@ export function DesktopShell({ model }: DesktopShellProps) {
 
         <aside className="sidebar" style={{ width: sidebarWidth }}>
           <header className="sidebar-head">
-            <div className="workspace-title-row" data-guidance-anchor="shell.workspace-switcher">
+            <div className="workspace-title-row">
               <div className="workspace-title" title={snapshot.root}>
-                {snapshot.title}
+                <WorkspaceSwitcher
+                  title={snapshot.title}
+                  activeWorkspaceId={snapshot.id}
+                  pinnedRoot={profile.effectiveDefaultWorkspace}
+                  recents={recents}
+                  busy={busy}
+                  markGuidanceAnchor
+                  onOpenById={(workspaceId) => void openWorkspaceById(workspaceId)}
+                  onCreate={() => void openNewWorkspaceDialog()}
+                  onOpenFolder={() => void handleOpenWorkspace()}
+                  onOpenInNewWindow={() => {
+                    setStatusToast("Open in new window is not available yet.");
+                  }}
+                  onManage={() => setActivityArea("home")}
+                />
               </div>
               <IconButton label="Workspace menu" onClick={() => setPaletteOpen(true)}>
                 <DotsThree size={15} />
@@ -514,9 +530,20 @@ export function DesktopShell({ model }: DesktopShellProps) {
               </IconButton>
             </div>
             <div className="breadcrumbs">
-              <button type="button" onClick={() => setActivityArea("home")}>
-                {snapshot.title}
-              </button>
+              <WorkspaceSwitcher
+                title={snapshot.title}
+                activeWorkspaceId={snapshot.id}
+                pinnedRoot={profile.effectiveDefaultWorkspace}
+                recents={recents}
+                busy={busy}
+                onOpenById={(workspaceId) => void openWorkspaceById(workspaceId)}
+                onCreate={() => void openNewWorkspaceDialog()}
+                onOpenFolder={() => void handleOpenWorkspace()}
+                onOpenInNewWindow={() => {
+                  setStatusToast("Open in new window is not available yet.");
+                }}
+                onManage={() => setActivityArea("home")}
+              />
               {selected?.path.split("/").slice(0, -1).map((part, index) => (
                 <span key={`${part}:${index}`}>
                   <CaretDown size={11} />
@@ -674,14 +701,18 @@ export function DesktopShell({ model }: DesktopShellProps) {
             </Suspense>
             <section className="content-pane">
               {activityArea === "home" && (
-                <HomeDashboard
-                  title={snapshot.title}
-                  resourceCount={snapshot.resources.length}
-                  onNewPage={handleNewPage}
-                  onQuickCapture={handleQuickNote}
-                  onFiles={() => setActivityArea("files")}
-                  onSearch={() => setSearchPaneOpen(true)}
-                  onInspect={() => setInspectorOpen(true)}
+                <AllWorkspacesHome
+                  activeWorkspaceId={snapshot.id}
+                  activeWorkspaceTitle={snapshot.title}
+                  pinnedRoot={profile.effectiveDefaultWorkspace}
+                  recents={recents}
+                  busy={busy}
+                  onOpenById={(workspaceId) => void openWorkspaceById(workspaceId)}
+                  onCreate={() => void openNewWorkspaceDialog()}
+                  onOpenFolder={() => void handleOpenWorkspace()}
+                  onImport={() => {
+                    setStatusToast("Workspace import is not available yet.");
+                  }}
                 />
               )}
 

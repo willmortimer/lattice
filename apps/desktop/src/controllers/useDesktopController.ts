@@ -308,7 +308,7 @@ export function useDesktopController() {
     openResource: (resource) => resourceSelectRef.current(resource),
   });
   const { snapshot, snapshotRef, setSnapshot, workspacesDir, templates, adoptWorkspace,
-    handleGetStarted, handleOpenWorkspace, openRecent, handleCreateWorkspace,
+    handleGetStarted, handleOpenWorkspace, openRecent, openWorkspaceById, handleCreateWorkspace,
     openNewWorkspaceDialog, pickWorkspaceFolder, applyCatalogDeltaEvent, refreshResources } = workspaceController;
   workspaceSnapshotRef.current = snapshot;
   useEffect(() => {
@@ -1124,7 +1124,7 @@ export function useDesktopController() {
     handleTreeCollapsedPathsChange,
     setLinkPicker,
     setStatusToast, applyThemeCatalog, rememberWorkspace, clearRecents, resetSettings, refreshProfile, handleGetStarted,
-    handleOpenWorkspace, openRecent, handleCreateWorkspace, openNewWorkspaceDialog, pickWorkspaceFolder,
+    handleOpenWorkspace, openRecent, openWorkspaceById, handleCreateWorkspace, openNewWorkspaceDialog, pickWorkspaceFolder,
     handleNewPage, handleQuickNote, handleNewTable, handleImportCsv, handlePromoteWorkspaceCsv, handleUndo, handleSelect,
     applyTreeSelection: resourceController.applyTreeSelection,
     handleOpenExternally, handleOpenFile, handleImportEditorAsset,
