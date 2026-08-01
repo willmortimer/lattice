@@ -13,8 +13,10 @@ import DataEditor, {
   type Theme,
 } from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
+import { Group, Panel, Separator } from "react-resizable-panels";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { registerDatasetAnchorSurface } from "../agent/adapters/surfaces";
+import { useDesktopUiStore } from "../shell/desktopUiStore";
 import { AddColumnPanel } from "./AddColumnPanel";
 import { DataActionsMenu } from "./DataActionsMenu";
 import { RecordDetailPanel } from "./RecordDetailPanel";
@@ -69,6 +71,12 @@ import {
   type FormSummary,
   type SaveFormRequest,
 } from "./forms";
+import {
+  DATA_TABLE_DETAIL_PANEL_ID,
+  DATA_TABLE_GRID_PANEL_ID,
+  DATA_TABLE_SPLIT_GROUP_ID,
+} from "./dataTableLayout";
+import "./DataTableView.css";
 
 const STALE_REVISION_PREFIX = "STALE_REVISION:";
 
@@ -235,6 +243,8 @@ export function DataTableView({
   const visibleColumnsRef = useRef<DataColumn[]>([]);
   const layoutTypeRef = useRef<ViewLayoutType>(layoutType);
   const rowFetchLimit = preferences.pageSize;
+  const panelSizes = useDesktopUiStore((state) => state.dataTablePanelSizes);
+  const setPanelSizes = useDesktopUiStore((state) => state.setDataTablePanelSizes);
 
   useEffect(() => {
     const next = cloneSnapshot(initialSnapshot);
@@ -1217,6 +1227,130 @@ export function DataTableView({
 
 
 
+  const dataViewBody =
+    layoutType === "form" ? (
+      <DataFormView
+        columns={snapshot.columns}
+        rows={displayRows}
+        root={root}
+        packageRelPath={relPath}
+        nativeFileOps={!demoMutate}
+        readOnly={busy || stale}
+        busy={busy}
+        onSubmit={createRecord}
+        onRowOpen={openRecordDetail}
+      />
+    ) : displayRows.length === 0 ? (
+      <div className="data-table-empty">No rows match this view.</div>
+    ) : layoutType === "list" ? (
+      <DataListView
+        rows={displayRows}
+        columns={visibleColumns}
+        relationLabelIndex={relationLabelIndex}
+        selectedRowId={detailRowId}
+        zebraRows={preferences.zebraRows}
+        onRowOpen={openRecordDetail}
+      />
+    ) : layoutType === "board" ? (
+      <DataBoardView
+        rows={displayRows}
+        columns={visibleColumns}
+        relationLabelIndex={relationLabelIndex}
+        groupBy={groupBy}
+        selectedRowId={detailRowId}
+        onRowOpen={openRecordDetail}
+      />
+    ) : layoutType === "gallery" ? (
+      <DataGalleryView
+        root={root}
+        rows={displayRows}
+        columns={visibleColumns}
+        relationLabelIndex={relationLabelIndex}
+        coverField={coverField}
+        selectedRowId={detailRowId}
+        onRowOpen={openRecordDetail}
+      />
+    ) : layoutType === "calendar" ? (
+      <DataCalendarView
+        rows={displayRows}
+        columns={visibleColumns}
+        relationLabelIndex={relationLabelIndex}
+        dateField={dateField}
+        selectedRowId={detailRowId}
+        onRowOpen={openRecordDetail}
+      />
+    ) : (
+      <DataEditor
+        ref={gridEditorRef}
+        provideEditor={provideEditor}
+        width="100%"
+        height="100%"
+        columns={gridColumns}
+        rows={gridDisplayRows.length}
+        getCellContent={getCellContent}
+        onCellEdited={handleCellEdited}
+        gridSelection={gridSelection}
+        onGridSelectionChange={handleGridSelectionChange}
+        onCellActivated={([columnIndex, rowIndex]) => {
+          editingColumnRef.current = visibleColumns[columnIndex] ?? null;
+          const row = dataRowAtGridIndex(gridDisplayRows, rowIndex);
+          if (row) openRecordDetail(row);
+        }}
+        onRowAppended={async () => {
+          await addRow();
+          return "bottom" as const;
+        }}
+        trailingRowOptions={{ hint: "Add row", sticky: true }}
+        rowMarkers={preferences.showRowNumbers ? "both" : "checkbox-visible"}
+        rowHeight={
+          preferences.rowHeight === "compact"
+            ? 26
+            : preferences.rowHeight === "spacious"
+              ? 42
+              : 34
+        }
+        headerHeight={34}
+        freezeColumns={visibleColumns[0]?.name === "id" ? 1 : 0}
+        smoothScrollX
+        smoothScrollY
+        rangeSelect="multi-rect"
+        rowSelect="multi"
+        getCellsForSelection
+        onDelete={(selection) => {
+          void deleteSelectedRows(selection);
+          return false;
+        }}
+        onHeaderClicked={(columnIndex) => {
+          const column = visibleColumns[columnIndex];
+          if (column) handleSort(column.name);
+        }}
+        onHeaderContextMenu={(columnIndex, event) => {
+          event.preventDefault();
+          const column = visibleColumns[columnIndex];
+          if (column?.name !== "id") {
+            setHiddenColumns((current) => new Set([...current, column.name]));
+          }
+        }}
+        onColumnResize={(column, newSize) => {
+          const id = column.id;
+          if (id) setColumnWidths((current) => ({ ...current, [id]: newSize }));
+        }}
+        onVisibleRegionChanged={
+          showRendererStats
+            ? (range) => {
+                visibleCellCountRef.current = range.width * range.height;
+                if (visibleStatsRafRef.current !== null) return;
+                visibleStatsRafRef.current = window.requestAnimationFrame(() => {
+                  visibleStatsRafRef.current = null;
+                  setVisibleCellCount(visibleCellCountRef.current);
+                });
+              }
+            : undefined
+        }
+        theme={theme}
+      />
+    );
+
   return (
     <div className="data-table-pane">
       <header className="data-table-head">
@@ -1490,147 +1624,61 @@ export function DataTableView({
       <div
         className={`data-table-main${detailRow ? " data-table-main--detail-open" : ""}`}
       >
-        <div className="data-grid-frame">
-          {layoutType === "form" ? (
-            <DataFormView
-              columns={snapshot.columns}
-              rows={displayRows}
-              root={root}
-              packageRelPath={relPath}
-              nativeFileOps={!demoMutate}
-              readOnly={busy || stale}
-              busy={busy}
-              onSubmit={createRecord}
-              onRowOpen={openRecordDetail}
-            />
-          ) : displayRows.length === 0 ? (
-            <div className="data-table-empty">No rows match this view.</div>
-          ) : layoutType === "list" ? (
-            <DataListView
-              rows={displayRows}
-              columns={visibleColumns}
-              relationLabelIndex={relationLabelIndex}
-              selectedRowId={detailRowId}
-              zebraRows={preferences.zebraRows}
-              onRowOpen={openRecordDetail}
-            />
-          ) : layoutType === "board" ? (
-            <DataBoardView
-              rows={displayRows}
-              columns={visibleColumns}
-              relationLabelIndex={relationLabelIndex}
-              groupBy={groupBy}
-              selectedRowId={detailRowId}
-              onRowOpen={openRecordDetail}
-            />
-          ) : layoutType === "gallery" ? (
-            <DataGalleryView
-              root={root}
-              rows={displayRows}
-              columns={visibleColumns}
-              relationLabelIndex={relationLabelIndex}
-              coverField={coverField}
-              selectedRowId={detailRowId}
-              onRowOpen={openRecordDetail}
-            />
-          ) : layoutType === "calendar" ? (
-            <DataCalendarView
-              rows={displayRows}
-              columns={visibleColumns}
-              relationLabelIndex={relationLabelIndex}
-              dateField={dateField}
-              selectedRowId={detailRowId}
-              onRowOpen={openRecordDetail}
-            />
-          ) : (
-            <DataEditor
-              ref={gridEditorRef}
-              provideEditor={provideEditor}
-              width="100%"
-              height="100%"
-              columns={gridColumns}
-              rows={gridDisplayRows.length}
-              getCellContent={getCellContent}
-              onCellEdited={handleCellEdited}
-              gridSelection={gridSelection}
-              onGridSelectionChange={handleGridSelectionChange}
-              onCellActivated={([columnIndex, rowIndex]) => {
-                editingColumnRef.current = visibleColumns[columnIndex] ?? null;
-                const row = dataRowAtGridIndex(gridDisplayRows, rowIndex);
-                if (row) openRecordDetail(row);
-              }}
-              onRowAppended={async () => {
-                await addRow();
-                return "bottom" as const;
-              }}
-              trailingRowOptions={{ hint: "Add row", sticky: true }}
-              rowMarkers={preferences.showRowNumbers ? "both" : "checkbox-visible"}
-              rowHeight={
-                preferences.rowHeight === "compact"
-                  ? 26
-                  : preferences.rowHeight === "spacious"
-                    ? 42
-                    : 34
+        {detailRow ? (
+          <Group
+            id={DATA_TABLE_SPLIT_GROUP_ID}
+            className="data-table-split"
+            orientation="horizontal"
+            defaultLayout={{
+              [DATA_TABLE_GRID_PANEL_ID]: panelSizes.table,
+              [DATA_TABLE_DETAIL_PANEL_ID]: panelSizes.detail,
+            }}
+            onLayoutChanged={(layout) => {
+              const nextTable = layout[DATA_TABLE_GRID_PANEL_ID];
+              const nextDetail = layout[DATA_TABLE_DETAIL_PANEL_ID];
+              if (nextTable == null || nextDetail == null) {
+                return;
               }
-              headerHeight={34}
-              freezeColumns={visibleColumns[0]?.name === "id" ? 1 : 0}
-              smoothScrollX
-              smoothScrollY
-              rangeSelect="multi-rect"
-              rowSelect="multi"
-              getCellsForSelection
-              onDelete={(selection) => {
-                void deleteSelectedRows(selection);
-                return false;
-              }}
-              onHeaderClicked={(columnIndex) => {
-                const column = visibleColumns[columnIndex];
-                if (column) handleSort(column.name);
-              }}
-              onHeaderContextMenu={(columnIndex, event) => {
-                event.preventDefault();
-                const column = visibleColumns[columnIndex];
-                if (column?.name !== "id") {
-                  setHiddenColumns((current) => new Set([...current, column.name]));
-                }
-              }}
-              onColumnResize={(column, newSize) => {
-                const id = column.id;
-                if (id) setColumnWidths((current) => ({ ...current, [id]: newSize }));
-              }}
-              onVisibleRegionChanged={
-                showRendererStats
-                  ? (range) => {
-                      visibleCellCountRef.current = range.width * range.height;
-                      if (visibleStatsRafRef.current !== null) return;
-                      visibleStatsRafRef.current = window.requestAnimationFrame(() => {
-                        visibleStatsRafRef.current = null;
-                        setVisibleCellCount(visibleCellCountRef.current);
-                      });
-                    }
-                  : undefined
-              }
-              theme={theme}
+              setPanelSizes({ table: nextTable, detail: nextDetail });
+            }}
+          >
+            <Panel
+              id={DATA_TABLE_GRID_PANEL_ID}
+              className="data-table-split-grid"
+              minSize="35%"
+              defaultSize={`${panelSizes.table}%`}
+            >
+              <div className="data-grid-frame">{dataViewBody}</div>
+            </Panel>
+            <Separator
+              className="data-table-split-handle"
+              aria-label="Resize table and record detail"
             />
-          )}
-        </div>
-
-        {detailRow && (
-          <RecordDetailPanel
-            row={detailRow}
-            columns={snapshot.columns}
-            activeTable={snapshot.default_table}
-            rows={snapshot.rows}
-            relationTargets={snapshot.relation_targets}
-            root={root}
-            packageRelPath={relPath}
-            nativeFileOps={!demoMutate}
-            readOnly={busy || stale}
-            saving={busy}
-            onClose={() => setDetailRowId(null)}
-            onSave={(values) => updateRecordValues(detailRow, values)}
-            onOpenRecord={openRecordDetail}
-          />
+            <Panel
+              id={DATA_TABLE_DETAIL_PANEL_ID}
+              className="data-table-split-detail"
+              minSize="25%"
+              defaultSize={`${panelSizes.detail}%`}
+            >
+              <RecordDetailPanel
+                row={detailRow}
+                columns={snapshot.columns}
+                activeTable={snapshot.default_table}
+                rows={snapshot.rows}
+                relationTargets={snapshot.relation_targets}
+                root={root}
+                packageRelPath={relPath}
+                nativeFileOps={!demoMutate}
+                readOnly={busy || stale}
+                saving={busy}
+                onClose={() => setDetailRowId(null)}
+                onSave={(values) => updateRecordValues(detailRow, values)}
+                onOpenRecord={openRecordDetail}
+              />
+            </Panel>
+          </Group>
+        ) : (
+          <div className="data-grid-frame">{dataViewBody}</div>
         )}
 
         {formPanelOpen && (
