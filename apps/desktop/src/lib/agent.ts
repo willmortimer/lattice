@@ -5,6 +5,17 @@ import {
   persistAgentRunTranscript,
   RunTranscriptAccumulator,
 } from "../agent/agentTranscriptPersistence";
+import {
+  clearActiveAgentRun,
+  loadActiveAgentRun,
+  persistActiveAgentRun,
+  updateActiveAgentRunSequence,
+} from "./agentActiveRun";
+import {
+  getAgentRunStatus,
+  isTerminalAgentRunStatus,
+  subscribeAgentRun,
+} from "./agentRunEvents";
 import { invoke } from "./ipc";
 
 export type AgentHealth = {
@@ -67,6 +78,8 @@ export type TauriAgentChatTransportOptions = {
   onAgentEvent?: AgentEventHandler;
   /** When false, skip durable thread persistence (tests). Defaults to true. */
   persistTranscripts?: boolean;
+  /** When false, skip active-run sessionStorage (tests). Defaults to true. */
+  persistActiveRun?: boolean;
 };
 
 function scheduleAgentRunTranscriptPersistence(args: {
@@ -138,11 +151,54 @@ export function applyAgentStreamMessage(
  */
 export class TauriAgentChatTransport implements ChatTransport<UIMessage> {
   private activeRunId: string | null = null;
+  private afterSequence = 0;
 
   constructor(private readonly options: TauriAgentChatTransportOptions) {}
 
   getActiveRunId(): string | null {
     return this.activeRunId;
+  }
+
+  private shouldPersistActiveRun(): boolean {
+    return this.options.persistActiveRun !== false;
+  }
+
+  private rememberActiveRun(runId: string, afterSequence = this.afterSequence): void {
+    this.activeRunId = runId;
+    this.afterSequence = afterSequence;
+    if (!this.shouldPersistActiveRun()) {
+      return;
+    }
+    persistActiveAgentRun({
+      workspaceRoot: this.options.workspaceRoot,
+      threadId: this.options.threadId,
+      runId,
+      afterSequence,
+    });
+  }
+
+  private clearRememberedActiveRun(): void {
+    this.activeRunId = null;
+    this.afterSequence = 0;
+    if (!this.shouldPersistActiveRun()) {
+      return;
+    }
+    clearActiveAgentRun(this.options.workspaceRoot, this.options.threadId);
+  }
+
+  private advanceAckCursor(afterSequence: number): void {
+    if (afterSequence <= this.afterSequence) {
+      return;
+    }
+    this.afterSequence = afterSequence;
+    if (!this.activeRunId || !this.shouldPersistActiveRun()) {
+      return;
+    }
+    updateActiveAgentRunSequence(
+      this.options.workspaceRoot,
+      this.options.threadId,
+      afterSequence,
+    );
   }
 
   async sendMessages({
@@ -203,8 +259,8 @@ export class TauriAgentChatTransport implements ChatTransport<UIMessage> {
                 }, {
                   onAgentEvent: this.options.onAgentEvent,
                   onRunId: (runId) => {
-                    this.activeRunId = runId;
                     completedRunId = runId;
+                    this.rememberActiveRun(runId, 0);
                   },
                   onTerminalError: (message) => {
                     failOnce(new Error(message));
@@ -219,6 +275,7 @@ export class TauriAgentChatTransport implements ChatTransport<UIMessage> {
               },
             );
             completedRunId = result.runId;
+            this.rememberActiveRun(result.runId, this.afterSequence);
             if (persistTranscripts) {
               scheduleAgentRunTranscriptPersistence({
                 workspaceRoot: this.options.workspaceRoot,
@@ -230,8 +287,10 @@ export class TauriAgentChatTransport implements ChatTransport<UIMessage> {
               });
             }
             if (result.error) {
+              this.clearRememberedActiveRun();
               failOnce(new Error(result.error));
             } else {
+              this.clearRememberedActiveRun();
               closeOnce();
             }
           } catch (error) {
@@ -245,18 +304,113 @@ export class TauriAgentChatTransport implements ChatTransport<UIMessage> {
                 error: error instanceof Error ? error.message : String(error),
               });
             }
+            this.clearRememberedActiveRun();
             failOnce(error);
           } finally {
             abortSignal?.removeEventListener("abort", onAbort);
-            this.activeRunId = null;
           }
         })();
       },
     });
   }
 
+  /**
+   * Resume an in-flight run: status → subscribe(after_sequence) → replay → live-tail.
+   * Returns null when there is no active run (or nothing left to stream).
+   */
   async reconnectToStream(): Promise<ReadableStream<UIMessageChunk> | null> {
-    return null;
+    const persisted = this.shouldPersistActiveRun()
+      ? loadActiveAgentRun(this.options.workspaceRoot, this.options.threadId)
+      : null;
+    const runId = this.activeRunId ?? persisted?.runId ?? null;
+    if (!runId) {
+      return null;
+    }
+    const afterSequence = Math.max(
+      this.afterSequence,
+      persisted?.afterSequence ?? 0,
+    );
+
+    let status;
+    try {
+      status = await getAgentRunStatus({
+        workspaceRoot: this.options.workspaceRoot,
+        runId,
+      });
+    } catch {
+      return null;
+    }
+    if (!status.run) {
+      this.clearRememberedActiveRun();
+      return null;
+    }
+
+    // Nothing left to deliver when terminal and cursor is caught up.
+    if (
+      isTerminalAgentRunStatus(status.run.status) &&
+      afterSequence >= status.run.lastSequence
+    ) {
+      this.clearRememberedActiveRun();
+      return null;
+    }
+
+    this.rememberActiveRun(runId, afterSequence);
+
+    return new ReadableStream<UIMessageChunk>({
+      start: (controller) => {
+        let closed = false;
+        const closeOnce = () => {
+          if (!closed) {
+            closed = true;
+            controller.close();
+          }
+        };
+        const failOnce = (error: unknown) => {
+          if (!closed) {
+            closed = true;
+            controller.error(error);
+          }
+        };
+
+        void (async () => {
+          try {
+            const result = await subscribeAgentRun(
+              {
+                workspaceRoot: this.options.workspaceRoot,
+                runId,
+                afterSequence,
+              },
+              (message) => {
+                const outcome = applyAgentStreamMessage(message, (chunk) => {
+                  controller.enqueue(chunk);
+                }, {
+                  onAgentEvent: this.options.onAgentEvent,
+                  onRunId: (id) => {
+                    this.rememberActiveRun(id, this.afterSequence);
+                  },
+                  onTerminalError: (message) => {
+                    failOnce(new Error(message));
+                  },
+                });
+                if (outcome === "done") {
+                  closeOnce();
+                }
+              },
+            );
+            this.advanceAckCursor(result.lastSequence);
+            if (result.error) {
+              this.clearRememberedActiveRun();
+              failOnce(new Error(result.error));
+            } else {
+              this.clearRememberedActiveRun();
+              closeOnce();
+            }
+          } catch (error) {
+            failOnce(error);
+          }
+        })();
+      },
+    });
   }
 
   /** Cancel the active run when `useChat` stop() aborts the transport. */
