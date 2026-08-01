@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { createNativePageIO, StaleRevisionError } from "./editor/pageIO";
 import { createSerializedSaveController } from "./editor/serializedSave";
-import { prepareQuickNote } from "./lib/pages";
+import { prepareQuickNote, type QuickNotePrepared } from "./lib/pages";
 import { mergeDictationPlainText } from "./lib/mergeDictationPlainText";
 import { loadProfile } from "./lib/profile";
 import { deleteResource } from "./lib/resourceMutations";
@@ -31,6 +31,7 @@ interface QuickNotePage {
 
 interface OpenPayload {
   root: string | null;
+  prepared?: QuickNotePrepared | null;
 }
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
@@ -61,6 +62,75 @@ export function QuickNoteApp() {
     saveControllerRef.current = null;
   }, []);
 
+  const bootstrapPrepared = useCallback(
+    async (prepared: QuickNotePrepared): Promise<boolean> => {
+      if (creatingRef.current) return false;
+      if (page) return true;
+      const profile = await loadProfile();
+      autosaveDelayRef.current = profile.settings.desktop.editor.autosaveDelayMs;
+      document.documentElement.dataset.pageWidth = profile.settings.desktop.editor.pageWidth;
+      creatingRef.current = true;
+      setLoading(true);
+      setError(null);
+      try {
+        const catalog = await invoke<ThemeCatalogPayload>("list_themes", {
+          system: detectSystemAppearance(),
+          workspaceRoot: prepared.root,
+        });
+        applyResolvedTheme(catalog.resolved);
+
+        disposeSaveController();
+        const io = createNativePageIO(prepared.root, prepared.path);
+        saveControllerRef.current = createSerializedSaveController<string | null>({
+          initialRevision: prepared.revision,
+          save: async (baseRevision) => io.save(draftRef.current, baseRevision),
+          onStatus: (status) => {
+            switch (status) {
+              case "idle":
+                setSaveState("idle");
+                break;
+              case "dirty":
+                setSaveState("dirty");
+                break;
+              case "saving":
+                setSaveState("saving");
+                break;
+              case "saved":
+                setSaveState("saved");
+                break;
+              case "conflict":
+              case "error":
+                setSaveState("error");
+                break;
+              default:
+                status satisfies never;
+            }
+          },
+          isConflict: (err) => err instanceof StaleRevisionError,
+          savedIndicatorMs: 1200,
+        });
+
+        setPage({
+          root: prepared.root,
+          workspaceTitle: prepared.workspaceTitle,
+          path: prepared.path,
+        });
+        setDraft(prepared.content);
+        initialDraftRef.current = prepared.content;
+        userEditedRef.current = false;
+        setSaveState("idle");
+        return true;
+      } catch (err) {
+        setError(String(err));
+        return false;
+      } finally {
+        creatingRef.current = false;
+        setLoading(false);
+      }
+    },
+    [disposeSaveController, page],
+  );
+
   const prepare = useCallback(async (requestedRoot?: string | null): Promise<boolean> => {
     if (creatingRef.current) return false;
     if (page) return true;
@@ -77,66 +147,14 @@ export function QuickNoteApp() {
       return false;
     }
 
-    creatingRef.current = true;
-    setLoading(true);
-    setError(null);
     try {
       const prepared = await prepareQuickNote(root);
-      const catalog = await invoke<ThemeCatalogPayload>("list_themes", {
-        system: detectSystemAppearance(),
-        workspaceRoot: root,
-      });
-      applyResolvedTheme(catalog.resolved);
-
-      disposeSaveController();
-      const io = createNativePageIO(prepared.root, prepared.path);
-      saveControllerRef.current = createSerializedSaveController<string | null>({
-        initialRevision: prepared.revision,
-        save: async (baseRevision) => io.save(draftRef.current, baseRevision),
-        onStatus: (status) => {
-          switch (status) {
-            case "idle":
-              setSaveState("idle");
-              break;
-            case "dirty":
-              setSaveState("dirty");
-              break;
-            case "saving":
-              setSaveState("saving");
-              break;
-            case "saved":
-              setSaveState("saved");
-              break;
-            case "conflict":
-            case "error":
-              setSaveState("error");
-              break;
-            default:
-              status satisfies never;
-          }
-        },
-        isConflict: (err) => err instanceof StaleRevisionError,
-        savedIndicatorMs: 1200,
-      });
-
-      setPage({
-        root: prepared.root,
-        workspaceTitle: prepared.workspaceTitle,
-        path: prepared.path,
-      });
-      setDraft(prepared.content);
-      initialDraftRef.current = prepared.content;
-      userEditedRef.current = false;
-      setSaveState("idle");
-      return true;
+      return await bootstrapPrepared(prepared);
     } catch (err) {
       setError(String(err));
       return false;
-    } finally {
-      creatingRef.current = false;
-      setLoading(false);
     }
-  }, [disposeSaveController, page]);
+  }, [bootstrapPrepared, page]);
 
   function updateDraft(value: string) {
     userEditedRef.current = true;
@@ -224,13 +242,17 @@ export function QuickNoteApp() {
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     void listen<OpenPayload>("quick-note-open", (event) => {
+      if (event.payload.prepared) {
+        void bootstrapPrepared(event.payload.prepared);
+        return;
+      }
       pendingRootRef.current = event.payload.root;
       void prepare(event.payload.root);
     }).then((stop) => {
       unlisten = stop;
     });
     return () => unlisten?.();
-  }, [prepare]);
+  }, [bootstrapPrepared, prepare]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {

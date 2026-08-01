@@ -176,6 +176,16 @@ pub fn prepare_quick_note(root: String) -> Result<lattice_handlers::QuickNotePre
     lattice_handlers::prepare_quick_note(root)
 }
 
+/// Route a notification action stub into the desktop semantic command surface.
+#[tauri::command]
+pub fn dispatch_notification_action_stub(
+    app: tauri::AppHandle,
+    action: String,
+    context: serde_json::Value,
+) {
+    crate::notification_actions::handle_action(&app, &action, &context);
+}
+
 /// Import a pasted or dropped editor asset beside its containing page.
 ///
 /// Assets are stored in an `assets/` directory relative to the page, receive
