@@ -6,6 +6,8 @@ export type AgentChatControls = {
   stop: () => void;
   isStreaming: boolean;
   hydrationStatus: HydrationStatus;
+  /** True while resuming a persisted in-flight run after remount. */
+  isReconnecting: boolean;
 };
 
 const AgentChatControlsContext = createContext<AgentChatControls | null>(null);

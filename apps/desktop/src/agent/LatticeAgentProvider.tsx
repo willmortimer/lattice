@@ -13,6 +13,7 @@ import { invalidateAgentThreads } from "../query/useAgentThreadsQuery";
 import { useAgentThreadQuery } from "../query/useAgentThreadQuery";
 import { useCloudSessionQuery } from "../query/useCloudSessionQuery";
 import { resolveAgentDefaultsFromAiSettings } from "./agentAiDefaults";
+import { hasPersistedActiveAgentRun } from "./agentReconnect";
 import {
   AgentChatControlsProvider,
   type HydrationStatus,
@@ -122,6 +123,8 @@ function LatticeAgentRuntimeProvider({
   }, [aiMode, setByoOpenaiKeyPresent]);
 
   const [hydrationStatus, setHydrationStatus] = useState<HydrationStatus>("loading");
+  const [isReconnecting, setIsReconnecting] = useState(false);
+  const reconnectAttemptedRef = useRef<string | null>(null);
   const localGenerationRef = useRef(0);
   const {
     data: threadData,
@@ -176,6 +179,33 @@ function LatticeAgentRuntimeProvider({
     // Reload only when the active thread changes; chat.setMessages is stable enough.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceRoot, threadId, threadPending, threadError, threadData]);
+
+  useEffect(() => {
+    if (hydrationStatus !== "ready") {
+      return;
+    }
+    const sessionKey = `${workspaceRoot}:${threadId}`;
+    if (reconnectAttemptedRef.current === sessionKey) {
+      return;
+    }
+    reconnectAttemptedRef.current = sessionKey;
+    if (!hasPersistedActiveAgentRun(workspaceRoot, threadId)) {
+      return;
+    }
+
+    let cancelled = false;
+    setIsReconnecting(true);
+    void chat.resumeStream().finally(() => {
+      if (!cancelled) {
+        setIsReconnecting(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      setIsReconnecting(false);
+    };
+  }, [hydrationStatus, workspaceRoot, threadId, chat.resumeStream]);
 
   const previousStatusRef = useRef(chat.status);
   useEffect(() => {
@@ -245,7 +275,7 @@ function LatticeAgentRuntimeProvider({
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <AgentChatControlsProvider
-        value={{ stop: chat.stop, isStreaming, hydrationStatus }}
+        value={{ stop: chat.stop, isStreaming, hydrationStatus, isReconnecting }}
       >
         {children}
       </AgentChatControlsProvider>
