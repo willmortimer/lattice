@@ -7,6 +7,7 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use kernelfs::{
     normalize_guest_path, Capabilities, ExecutionManifest, InputMount, Mounts, SecretHandle,
@@ -25,6 +26,9 @@ use crate::cell_host::{
 use crate::kernelfs_export::{export_oci_roles_under_agent_share, OciKernelfsExportRequest};
 use crate::lattice_client::LatticeToolClient;
 use crate::protocol::AgentEvent;
+use crate::run_events::{
+    KernelfsLifecycleCollector, KernelfsLifecycleContext, KernelfsLifecycleEmitter,
+};
 use crate::secret_handles::secret_handles_for_run;
 use crate::wasi_host::{
     hydration_inputs_from_record, propose_output_drafts_with_provenance,
@@ -86,9 +90,20 @@ Tool use:
 pub struct ToolRunContext {
     pub workspace_id: Option<String>,
     pub workspace_root: Option<String>,
+    /// Agent thread id for durable run-event correlation (optional).
+    pub thread_id: Option<String>,
 }
 
 impl ToolRunContext {
+    /// Thread id for KernelFS lifecycle events; falls back when the agent omitted one.
+    pub fn thread_id_for_kernelfs(&self, kernelfs_run_id: &str) -> String {
+        self.thread_id
+            .as_ref()
+            .filter(|s| !s.trim().is_empty())
+            .cloned()
+            .unwrap_or_else(|| format!("kernelfs:{kernelfs_run_id}"))
+    }
+
     /// System-prompt appendix so the model skips a wasted `get_current_context` round.
     pub fn binding_instructions(&self) -> String {
         let id = self
@@ -1270,6 +1285,38 @@ async fn dispatch_tool_inner(
     }
 }
 
+fn kernelfs_lifecycle_emitter(
+    client: &LatticeToolClient,
+    ctx: &ToolRunContext,
+    kernelfs_run_id: &str,
+    base_snapshot_id: &str,
+    backend: &'static str,
+) -> KernelfsLifecycleEmitter {
+    KernelfsLifecycleEmitter::new(
+        client.clone(),
+        KernelfsLifecycleContext {
+            kernelfs_run_id: kernelfs_run_id.to_string(),
+            thread_id: ctx.thread_id_for_kernelfs(kernelfs_run_id),
+            workspace_id: ctx.workspace_id.clone(),
+            workspace_root: ctx.workspace_root.clone(),
+            base_snapshot_id: base_snapshot_id.to_string(),
+            backend,
+        },
+    )
+}
+
+async fn finish_kernelfs_lifecycle(
+    emitter: &KernelfsLifecycleEmitter,
+    collector: &KernelfsLifecycleCollector,
+    proposal_count: Option<usize>,
+) {
+    emitter.flush_stages(collector.drain()).await;
+    if let Some(count) = proposal_count {
+        emitter.proposal_ready(count).await;
+    }
+    emitter.released().await;
+}
+
 async fn dispatch_run_wasi_guest(
     client: &LatticeToolClient,
     ctx: &ToolRunContext,
@@ -1356,6 +1403,11 @@ async fn dispatch_run_wasi_guest(
     let limits = WasmtimeLimits::default();
     let host_roots = vec![std::path::PathBuf::from(workspace_root)];
 
+    let lifecycle_collector = Arc::new(KernelfsLifecycleCollector::default());
+    let lifecycle_hook = Some(lifecycle_collector.hook());
+    let lifecycle_emitter =
+        kernelfs_lifecycle_emitter(client, ctx, &run_id, &manifest.base_snapshot, "wasi");
+
     let guest_result = tokio::task::spawn_blocking(move || {
         run_wasi_guest_with_options(
             &run_parent_path,
@@ -1365,6 +1417,7 @@ async fn dispatch_run_wasi_guest(
                 limits,
                 host_path_roots: host_roots,
                 secret_handle_allowlist,
+                lifecycle_hook,
                 ..Default::default()
             },
         )
@@ -1375,6 +1428,7 @@ async fn dispatch_run_wasi_guest(
     let guest_result = match guest_result {
         Ok(result) => result,
         Err(WasiHostError::Materialize(err)) => {
+            finish_kernelfs_lifecycle(&lifecycle_emitter, &lifecycle_collector, None).await;
             return Ok(json!({
                 "error": wasi_materialize_error_json(&err),
                 "runId": run_id,
@@ -1382,6 +1436,7 @@ async fn dispatch_run_wasi_guest(
             }));
         }
         Err(WasiHostError::Run(err)) => {
+            finish_kernelfs_lifecycle(&lifecycle_emitter, &lifecycle_collector, None).await;
             return Ok(json!({
                 "error": wasi_run_error_json(&err),
                 "runId": run_id,
@@ -1389,6 +1444,7 @@ async fn dispatch_run_wasi_guest(
             }));
         }
         Err(WasiHostError::Seatbelt(crate::seatbelt::SeatbeltError::Guest(err))) => {
+            finish_kernelfs_lifecycle(&lifecycle_emitter, &lifecycle_collector, None).await;
             return Ok(json!({
                 "error": wasi_run_error_json(&err),
                 "runId": run_id,
@@ -1396,6 +1452,7 @@ async fn dispatch_run_wasi_guest(
             }));
         }
         Err(err) => {
+            finish_kernelfs_lifecycle(&lifecycle_emitter, &lifecycle_collector, None).await;
             let structured = wasi_host_error_json(&err);
             let message = structured["message"]
                 .as_str()
@@ -1424,6 +1481,13 @@ async fn dispatch_run_wasi_guest(
         propose_output_drafts_with_provenance(client, &workspace, &guest_result.drafts, Some(&provenance))
             .await
             .map_err(|err| err.to_string())?;
+
+    finish_kernelfs_lifecycle(
+        &lifecycle_emitter,
+        &lifecycle_collector,
+        Some(proposals.len()),
+    )
+    .await;
 
     let proposal_summaries: Vec<Value> = proposals
         .iter()
@@ -1553,13 +1617,22 @@ async fn dispatch_run_cell_task(
     let provenance = CellProposalProvenance {
         cell_id: cell_id.clone(),
         projection_id: projection_id.clone(),
-        task_id,
+        task_id: task_id.clone(),
         output_proposal_target: output_proposal_target.clone(),
         hydration_inputs: hydration_inputs_from_files(&request.hydrate_files, &resource_ids),
     };
 
+    let lifecycle_emitter =
+        kernelfs_lifecycle_emitter(client, ctx, &task_id, "agentd", "cell");
+    lifecycle_emitter.created().await;
+    lifecycle_emitter
+        .hydrating(request.hydrate_files.len())
+        .await;
+    lifecycle_emitter.ready().await;
+    lifecycle_emitter.executing().await;
+
     let workspace = WorkspaceBinding::new(ctx.workspace_id.clone(), ctx.workspace_root.clone());
-    let (run_result, proposals) = run_cell_task_and_propose(
+    let (run_result, proposals) = match run_cell_task_and_propose(
         &celld,
         client,
         &workspace,
@@ -1568,7 +1641,16 @@ async fn dispatch_run_cell_task(
         &provenance,
     )
     .await
-    .map_err(|err| err.to_string())?;
+    {
+        Ok(result) => result,
+        Err(err) => {
+            lifecycle_emitter
+                .failed("cell", &err.to_string())
+                .await;
+            lifecycle_emitter.released().await;
+            return Err(err.to_string());
+        }
+    };
 
     drop(oci_export);
 
@@ -1577,6 +1659,12 @@ async fn dispatch_run_cell_task(
         &output_proposal_target,
         &run_result.projection_id,
     );
+
+    lifecycle_emitter
+        .output_available(run_result.run.exit_code, drafts.len())
+        .await;
+    lifecycle_emitter.proposal_ready(proposals.len()).await;
+    lifecycle_emitter.released().await;
 
     let proposal_summaries: Vec<Value> = proposals
         .iter()
@@ -2071,6 +2159,7 @@ mod tests {
         let ctx = ToolRunContext {
             workspace_id: Some("ws".into()),
             workspace_root: Some("/tmp".into()),
+            thread_id: None,
         };
         let args = json!({
             "cellId": "cell_demo",
@@ -2097,6 +2186,7 @@ mod tests {
         let ctx = ToolRunContext {
             workspace_id: Some("ws".into()),
             workspace_root: Some(workspace.path().to_string_lossy().into_owned()),
+            thread_id: None,
         };
         let args = json!({
             "cellId": "cell_demo",
@@ -2250,6 +2340,7 @@ mod tests {
         let ctx = ToolRunContext {
             workspace_id: Some("ws-1".into()),
             workspace_root: Some("/tmp/ws".into()),
+            thread_id: None,
         };
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()

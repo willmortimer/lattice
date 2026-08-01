@@ -181,6 +181,16 @@ impl LatticeToolClient {
     pub async fn propose_artifact(&self, body: Value) -> Result<Value, LatticeApiError> {
         self.post("/v1/proposals/propose_artifact", body).await
     }
+
+    /// Append a durable ordered event to a KernelFS or agent run log.
+    pub async fn append_run_event(
+        &self,
+        run_id: &str,
+        body: Value,
+    ) -> Result<Value, LatticeApiError> {
+        let path = format!("/v1/agent_runs/{run_id}/events");
+        self.post(&path, body).await
+    }
 }
 
 /// Build a client from env when Lattice HTTP tools are configured.

@@ -24,6 +24,7 @@ use base64::Engine;
 
 use crate::kernelfs_lease::{export_lease_registry, materialize_allow_replace, HeldExportLease};
 use crate::lattice_client::{LatticeApiError, LatticeToolClient};
+use crate::run_events::KernelfsLifecycleStage;
 use crate::seatbelt::{self, SeatbeltError};
 use crate::secret_handles::SECRET_HANDLES_ENV;
 
@@ -78,7 +79,7 @@ pub enum ProposeDraftsError {
 }
 
 /// Options for [`run_wasi_guest`] beyond the KernelFS defaults.
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 pub struct WasiGuestHostOptions {
     pub limits: WasmtimeLimits,
     pub max_wall_time: Option<Duration>,
@@ -87,6 +88,8 @@ pub struct WasiGuestHostOptions {
     pub host_path_roots: Vec<std::path::PathBuf>,
     /// Host paths allowed for manifest secret handles (`/run/secrets/<id>`).
     pub secret_handle_allowlist: Vec<SecretHandleEntry>,
+    /// Optional sync hook for KernelFS lifecycle stages (flush async after join).
+    pub lifecycle_hook: Option<Arc<dyn Fn(KernelfsLifecycleStage) + Send + Sync>>,
 }
 
 /// Provenance attached to proposed KernelFS output drafts.
@@ -372,6 +375,17 @@ pub fn run_wasi_guest_with_options(
     wasm_bytes: &[u8],
     options: &WasiGuestHostOptions,
 ) -> Result<WasiGuestRunResult, WasiHostError> {
+    let emit_stage = |stage: KernelfsLifecycleStage| {
+        if let Some(hook) = &options.lifecycle_hook {
+            hook(stage);
+        }
+    };
+
+    emit_stage(KernelfsLifecycleStage::Created);
+    emit_stage(KernelfsLifecycleStage::Hydrating {
+        input_count: manifest.mounts.input.len(),
+    });
+
     let secret_handle_policy = if options.secret_handle_allowlist.is_empty() {
         SecretHandlePolicy::DenyAll
     } else {
@@ -387,13 +401,28 @@ pub fn run_wasi_guest_with_options(
             lease_registry: Some(lease_registry),
             allow_replace: materialize_allow_replace(false),
         },
-    )?;
+    )
+    .map_err(|err| {
+        emit_stage(KernelfsLifecycleStage::Failed {
+            kind: "materialize".into(),
+            message: err.to_string(),
+        });
+        err
+    })?;
     let _export_lease = HeldExportLease::hold(&manifest.run_id).map_err(|err| {
-        MaterializeError::Io {
+        let mapped = MaterializeError::Io {
             path: run_parent.to_path_buf(),
             source: std::io::Error::other(err.to_string()),
-        }
+        };
+        emit_stage(KernelfsLifecycleStage::Failed {
+            kind: "export_lease".into(),
+            message: mapped.to_string(),
+        });
+        mapped
     })?;
+
+    emit_stage(KernelfsLifecycleStage::Ready);
+    emit_stage(KernelfsLifecycleStage::Executing);
 
     let mut run_opts = WasiRunOptions {
         limits: options.limits.clone(),
@@ -407,8 +436,18 @@ pub fn run_wasi_guest_with_options(
     let run = if seatbelt::seatbelt_enabled() {
         match seatbelt::run_wasi_in_seatbelt(&run_dir.root, wasm_bytes, &run_opts) {
             Ok(result) => result,
-            Err(SeatbeltError::Guest(err)) => return Err(WasiHostError::Run(err)),
+            Err(SeatbeltError::Guest(err)) => {
+                emit_stage(KernelfsLifecycleStage::Failed {
+                    kind: "wasi_run".into(),
+                    message: err.to_string(),
+                });
+                return Err(WasiHostError::Run(err));
+            }
             Err(SeatbeltError::Cancelled) => {
+                emit_stage(KernelfsLifecycleStage::Failed {
+                    kind: "cancelled".into(),
+                    message: "wasi run cancelled".into(),
+                });
                 return Err(WasiHostError::Run(WasiRunError::Cancelled {
                     stdout: Vec::new(),
                     stderr: Vec::new(),
@@ -421,21 +460,54 @@ pub fn run_wasi_guest_with_options(
                     target: "lattice_agentd",
                     "Seatbelt enabled but lattice-wasi-seatbelt missing; falling back to in-process Wasmtime"
                 );
-                kernelfs_run(&run_dir.root, wasm_bytes, &run_opts)?
+                kernelfs_run(&run_dir.root, wasm_bytes, &run_opts).map_err(|err| {
+                    emit_stage(KernelfsLifecycleStage::Failed {
+                        kind: "wasi_run".into(),
+                        message: err.to_string(),
+                    });
+                    err
+                })?
             }
             Err(SeatbeltError::UnsupportedPlatform) => {
+                emit_stage(KernelfsLifecycleStage::Failed {
+                    kind: "seatbelt".into(),
+                    message: "seatbelt unsupported on this platform".into(),
+                });
                 return Err(WasiHostError::Seatbelt(SeatbeltError::UnsupportedPlatform));
             }
-            Err(err) => return Err(WasiHostError::Seatbelt(err)),
+            Err(err) => {
+                emit_stage(KernelfsLifecycleStage::Failed {
+                    kind: "seatbelt".into(),
+                    message: err.to_string(),
+                });
+                return Err(WasiHostError::Seatbelt(err));
+            }
         }
     } else {
-        kernelfs_run(&run_dir.root, wasm_bytes, &run_opts)?
+        kernelfs_run(&run_dir.root, wasm_bytes, &run_opts).map_err(|err| {
+            emit_stage(KernelfsLifecycleStage::Failed {
+                kind: "wasi_run".into(),
+                message: err.to_string(),
+            });
+            err
+        })?
     };
 
-    let plan = collect_output_commit_plan(&run_dir.root, manifest)?;
+    let plan = collect_output_commit_plan(&run_dir.root, manifest).map_err(|err| {
+        emit_stage(KernelfsLifecycleStage::Failed {
+            kind: "output_plan".into(),
+            message: err.to_string(),
+        });
+        err
+    })?;
     let adapter = LatticeProposalAdapter::from_manifest(manifest);
+    let drafts = adapter.drafts(&plan);
+    emit_stage(KernelfsLifecycleStage::OutputAvailable {
+        exit_code: run.exit_code,
+        draft_count: drafts.len(),
+    });
     Ok(WasiGuestRunResult {
-        drafts: adapter.drafts(&plan),
+        drafts,
         hydration: run_dir.hydration,
         run,
         _export_lease,

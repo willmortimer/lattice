@@ -37,6 +37,30 @@ struct ProposeResourceCapture {
     bodies: Arc<std::sync::Mutex<Vec<Value>>>,
 }
 
+struct RunEventCapture {
+    bodies: Arc<std::sync::Mutex<Vec<Value>>>,
+}
+
+impl Respond for RunEventCapture {
+    fn respond(&self, request: &Request) -> ResponseTemplate {
+        if let Ok(body) = serde_json::from_slice::<Value>(&request.body) {
+            if let Ok(mut guard) = self.bodies.lock() {
+                guard.push(body);
+            }
+        }
+        ResponseTemplate::new(200)
+            .insert_header("content-type", "application/json")
+            .set_body_json(json!({
+                "workspaceId": "ws-dispatch",
+                "event": {
+                    "eventSequence": 1,
+                    "eventType": "run.created",
+                },
+                "run": { "status": "running" },
+            }))
+    }
+}
+
 impl Respond for ProposeResourceCapture {
     fn respond(&self, request: &Request) -> ResponseTemplate {
         if let Ok(body) = serde_json::from_slice::<Value>(&request.body) {
@@ -430,6 +454,7 @@ async fn dispatch_run_wasi_guest_tool_proposes_outputs() {
     let ctx = ToolRunContext {
         workspace_id: Some("ws-dispatch".into()),
         workspace_root: Some(workspace.path().to_string_lossy().into_owned()),
+        thread_id: None,
     };
 
     let args = json!({
@@ -478,6 +503,95 @@ async fn dispatch_run_wasi_guest_tool_proposes_outputs() {
     assert!(summary.contains("runId=run_dispatch_test"));
     assert!(summary.contains("target=Reports"));
     assert!(summary.contains("hello.txt@"));
+}
+
+#[tokio::test]
+async fn dispatch_run_wasi_guest_emits_lifecycle_events() {
+    ensure_seatbelt_runner();
+    let workspace = tempfile::tempdir().expect("workspace tempdir");
+    let wasm_dest = workspace.path().join("Tools/guests/copy_hello.wasm");
+    fs::create_dir_all(wasm_dest.parent().expect("wasm parent")).expect("wasm dir");
+    fs::write(&wasm_dest, copy_hello_wasm()).expect("write wasm");
+
+    let input_path = workspace.path().join("input/hello.txt");
+    fs::create_dir_all(input_path.parent().expect("input parent")).expect("input dir");
+    fs::write(&input_path, "hello from input").expect("write input");
+
+    let latticed = MockServer::start().await;
+    let event_bodies = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let event_capture = RunEventCapture {
+        bodies: Arc::clone(&event_bodies),
+    };
+
+    Mock::given(method("POST"))
+        .and(path("/v1/agent_runs/run_lifecycle_test/events"))
+        .respond_with(event_capture)
+        .mount(&latticed)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(path("/v1/proposals/propose_resource"))
+        .respond_with(ProposeResourceCapture {
+            bodies: Arc::new(std::sync::Mutex::new(Vec::new())),
+        })
+        .mount(&latticed)
+        .await;
+
+    let client = LatticeToolClient::new(latticed.uri(), "test-token").expect("client");
+    let ctx = ToolRunContext {
+        workspace_id: Some("ws-dispatch".into()),
+        workspace_root: Some(workspace.path().to_string_lossy().into_owned()),
+        thread_id: Some("thread-lifecycle".into()),
+    };
+
+    let args = json!({
+        "preset": "copy_hello",
+        "resourcePaths": ["input/hello.txt"],
+        "outputProposalTarget": "Reports",
+        "runId": "run_lifecycle_test",
+    })
+    .to_string();
+
+    let out = dispatch_tool(Some(&client), &ctx, None, "run_wasi_guest", &args).await;
+    let parsed: Value = serde_json::from_str(&out).expect("tool result json");
+    assert!(
+        parsed.get("error").is_none(),
+        "unexpected tool error: {parsed}"
+    );
+
+    let captured = event_bodies.lock().expect("lock event bodies");
+    let event_types: Vec<&str> = captured
+        .iter()
+        .filter_map(|body| body.get("eventType").and_then(|v| v.as_str()))
+        .collect();
+    assert!(
+        event_types.contains(&"run.created"),
+        "missing run.created: {event_types:?}"
+    );
+    assert!(
+        event_types.contains(&"run.hydrating"),
+        "missing run.hydrating: {event_types:?}"
+    );
+    assert!(
+        event_types.contains(&"run.executing"),
+        "missing run.executing: {event_types:?}"
+    );
+    assert!(
+        event_types.contains(&"run.output_available"),
+        "missing run.output_available: {event_types:?}"
+    );
+    assert!(
+        event_types.contains(&"run.proposal_ready"),
+        "missing run.proposal_ready: {event_types:?}"
+    );
+    assert!(
+        event_types.contains(&"run.released"),
+        "missing run.released: {event_types:?}"
+    );
+    assert_eq!(
+        captured[0].get("threadId").and_then(|v| v.as_str()),
+        Some("thread-lifecycle")
+    );
 }
 
 #[test]
