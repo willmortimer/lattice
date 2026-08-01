@@ -6817,6 +6817,119 @@ html[data-motion="always"] *::after {
   font-size: 10.5px;
 }
 
+.agent-semantic-tool {
+  margin-top: 6px;
+  border: 1px solid var(--lt-line);
+  border-radius: 6px;
+  background: var(--lt-hover);
+  color: var(--lt-text-soft);
+  font-size: 11px;
+}
+
+.agent-semantic-tool--inline .agent-semantic-tool-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.agent-semantic-tool--standalone .agent-semantic-tool-head {
+  display: grid;
+  gap: 4px;
+  padding: 10px 11px;
+}
+
+.agent-semantic-tool-label {
+  color: var(--lt-faint);
+  font-family: var(--lt-font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.agent-semantic-tool-detail {
+  color: var(--lt-text);
+  font-family: var(--lt-font-mono);
+  font-size: 10.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-semantic-tool--standalone .agent-semantic-tool-detail {
+  white-space: pre-wrap;
+}
+
+.agent-semantic-tool-status {
+  margin-left: auto;
+  color: var(--lt-faint);
+  font-family: var(--lt-font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.agent-semantic-tool--standalone .agent-semantic-tool-status {
+  margin-left: 0;
+}
+
+.agent-tool-raw-json {
+  margin-top: 6px;
+  border: 1px solid var(--lt-line);
+  border-radius: 6px;
+  background: var(--lt-hover);
+  color: var(--lt-text-soft);
+  font-size: 11px;
+}
+
+.agent-tool-raw-json-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.agent-tool-raw-json-summary::-webkit-details-marker {
+  display: none;
+}
+
+.agent-tool-raw-json-label {
+  color: var(--lt-faint);
+  font-family: var(--lt-font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.agent-tool-raw-json-status {
+  margin-left: auto;
+  color: var(--lt-faint);
+  font-family: var(--lt-font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.agent-tool-raw-json-body {
+  margin: 0;
+  padding: 0 10px 10px;
+  overflow-x: auto;
+  color: var(--lt-text);
+  font-family: var(--lt-font-mono);
+  font-size: 10px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.agent-tool-raw-json code {
+  color: var(--lt-text);
+  font-family: var(--lt-font-mono);
+  font-size: 10.5px;
+}
+
 .agent-composer {
   display: grid;
   gap: 8px;
