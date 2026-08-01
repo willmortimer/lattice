@@ -6583,24 +6583,23 @@ html[data-motion="always"] *::after {
   border-bottom: none;
 }
 
-.agent-thread-history {
+.agent-thread-browser {
   display: flex;
   min-width: 0;
-  align-items: center;
+  flex-direction: column;
   gap: 6px;
-  padding: 6px 10px 8px 12px;
+  padding: 8px 10px 10px 12px;
   background: color-mix(in oklch, var(--lt-bg) 90%, var(--lt-panel));
 }
 
-.agent-thread-history-field {
-  display: inline-flex;
+.agent-thread-browser-context {
+  display: flex;
   min-width: 0;
-  flex: 1;
-  align-items: center;
+  align-items: baseline;
   gap: 6px;
 }
 
-.agent-thread-history-label {
+.agent-thread-browser-eyebrow {
   flex: 0 0 auto;
   color: var(--lt-faint);
   font-family: var(--lt-font-mono);
@@ -6609,11 +6608,42 @@ html[data-motion="always"] *::after {
   text-transform: uppercase;
 }
 
-.agent-thread-history-select {
+.agent-thread-browser-workspace {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--lt-muted);
+  font-family: var(--lt-font-ui);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-thread-browser-toolbar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.agent-thread-browser-search {
+  position: relative;
+  display: flex;
   min-width: 0;
   flex: 1;
-  max-width: 100%;
-  padding: 3px 6px;
+  align-items: center;
+}
+
+.agent-thread-browser-search-icon {
+  position: absolute;
+  left: 7px;
+  color: var(--lt-faint);
+  pointer-events: none;
+}
+
+.agent-thread-browser-search-input {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 8px 4px 26px;
   border: 1px solid var(--lt-line);
   border-radius: 6px;
   background: var(--lt-surface);
@@ -6622,12 +6652,123 @@ html[data-motion="always"] *::after {
   font-size: 11px;
 }
 
-.agent-thread-history-new {
+.agent-thread-browser-search-input:focus {
+  outline: none;
+  border-color: var(--lt-accent);
+}
+
+.agent-thread-browser-new {
   flex: 0 0 auto;
 }
 
-.agent-thread-history-error {
+.agent-thread-browser-list {
+  display: flex;
+  max-height: 168px;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.agent-thread-browser-item {
+  display: grid;
+  align-items: stretch;
+  gap: 2px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.agent-thread-browser-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--lt-text-soft);
+  cursor: pointer;
+  font-family: var(--lt-font-ui);
+  text-align: left;
+}
+
+.agent-thread-browser-row:hover:not(:disabled) {
+  background: var(--lt-hover);
+  border-color: var(--lt-line);
+  color: var(--lt-text);
+}
+
+.agent-thread-browser-row:focus-visible {
+  outline: 2px solid var(--lt-focus-ring);
+  outline-offset: 1px;
+}
+
+.agent-thread-browser-row-active,
+.agent-thread-browser-row-active:hover {
+  border-color: var(--lt-accent-deep);
+  background: var(--lt-accent-wash);
+  color: var(--lt-text);
+}
+
+.agent-thread-browser-row:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.agent-thread-browser-row-main {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.agent-thread-browser-row-title {
+  overflow: hidden;
+  font-size: 11.5px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-thread-browser-row-meta {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--lt-faint);
+  font-family: var(--lt-font-mono);
+  font-size: 9px;
+}
+
+.agent-thread-browser-run-badge {
   flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--lt-accent) 18%, transparent);
+  color: var(--lt-accent-deep);
+  font-size: 8.5px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.agent-thread-browser-actions-trigger {
+  align-self: center;
+}
+
+.agent-thread-browser-actions-menu {
+  min-width: 148px;
+}
+
+.agent-thread-browser-empty {
+  padding: 8px 6px;
+  color: var(--lt-faint);
+  font-family: var(--lt-font-ui);
+  font-size: 11px;
+}
+
+.agent-thread-browser-error,
+.agent-thread-browser-status {
+  margin: 0;
   color: var(--lt-faint);
   font-family: var(--lt-font-mono);
   font-size: 9.5px;
