@@ -7565,6 +7565,97 @@ html[data-motion="always"] *::after {
   margin-left: 0;
 }
 
+.agent-semantic-tool-status-detail {
+  margin: 0;
+  padding: 0 10px 6px;
+  color: var(--lt-faint);
+  font-family: var(--lt-font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.agent-semantic-tool--standalone .agent-semantic-tool-status-detail {
+  padding: 0 11px 6px;
+}
+
+.agent-semantic-tool-args {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0 10px 8px;
+  border-top: 1px solid var(--lt-line);
+}
+
+.agent-semantic-tool--standalone .agent-semantic-tool-args {
+  padding: 8px 11px;
+}
+
+.agent-semantic-tool-arg {
+  display: grid;
+  grid-template-columns: minmax(72px, 28%) 1fr;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.agent-semantic-tool-arg dt {
+  margin: 0;
+  color: var(--lt-faint);
+  font-family: var(--lt-font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.agent-semantic-tool-arg dd {
+  margin: 0;
+  color: var(--lt-text);
+  font-family: var(--lt-font-mono);
+  font-size: 10.5px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.agent-semantic-tool-raw {
+  border-top: 1px solid var(--lt-line);
+  color: var(--lt-text-soft);
+  font-size: 11px;
+}
+
+.agent-semantic-tool-raw-summary {
+  padding: 6px 10px;
+  cursor: pointer;
+  color: var(--lt-faint);
+  font-family: var(--lt-font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  list-style: none;
+  text-transform: uppercase;
+}
+
+.agent-semantic-tool--standalone .agent-semantic-tool-raw-summary {
+  padding: 6px 11px;
+}
+
+.agent-semantic-tool-raw-summary::-webkit-details-marker {
+  display: none;
+}
+
+.agent-semantic-tool-raw-body {
+  margin: 0;
+  padding: 0 10px 10px;
+  overflow-x: auto;
+  color: var(--lt-text);
+  font-family: var(--lt-font-mono);
+  font-size: 10px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.agent-semantic-tool--standalone .agent-semantic-tool-raw-body {
+  padding: 0 11px 10px;
+}
+
 .agent-tool-raw-json {
   margin-top: 6px;
   border: 1px solid var(--lt-line);
