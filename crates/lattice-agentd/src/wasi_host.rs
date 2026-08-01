@@ -13,7 +13,8 @@ use kernelfs::{
     collect_output_commit_plan, materialize_with_options, run_wasi_guest as kernelfs_run,
     ContentKind, ExecutionManifest, HostPathPolicy, HydrationRecord, LatticeProposalAdapter,
     LatticeProposalDraft, MaterializeError, MaterializeOptions, SecretHandleEntry,
-    SecretHandlePolicy, WasmtimeLimits, WasiRunError, WasiRunOptions, WasiRunResult,
+    SecretHandlePolicy, UnsupportedCapabilities, WasmtimeLimits, WasiRunError, WasiRunOptions,
+    WasiRunResult,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -23,6 +24,7 @@ use base64::Engine;
 
 use crate::lattice_client::{LatticeApiError, LatticeToolClient};
 use crate::seatbelt::{self, SeatbeltError};
+use crate::secret_handles::SECRET_HANDLES_ENV;
 
 /// Max characters of stdout/stderr tails embedded in structured tool errors.
 pub const WASI_STDIO_TAIL_CHARS: usize = 2_000;
@@ -161,6 +163,72 @@ pub struct WasiGuestRunResult {
     pub drafts: Vec<LatticeProposalDraft>,
     pub hydration: HydrationRecord,
     pub run: WasiRunResult,
+}
+
+/// Map [`UnsupportedCapabilities`] into stable tool JSON for the model.
+pub fn unsupported_capability_error_json(err: &UnsupportedCapabilities) -> Value {
+    match err {
+        UnsupportedCapabilities::NetworkAllow { hosts } => json!({
+            "kind": "unsupported_capability",
+            "capability": "network.allow",
+            "requestedHosts": hosts,
+            "message": format!(
+                "run_wasi_guest does not support capabilities.network.allow \
+                 (requested hosts: {hosts:?}); preview1 guests only receive preopens and fuel/epoch limits \
+                 — use host tools for network I/O"
+            ),
+        }),
+    }
+}
+
+/// Map [`MaterializeError`] into structured tool JSON (`kind` + policy/capability detail).
+pub fn wasi_materialize_error_json(err: &MaterializeError) -> Value {
+    match err {
+        MaterializeError::UnsupportedCapabilities(inner) => unsupported_capability_error_json(inner),
+        MaterializeError::SecretHandleNotAllowed { id } => json!({
+            "kind": "secret_not_allowed",
+            "secretId": id,
+            "message": format!(
+                "manifest secret handle {:?} is not allowed by the host secret policy; \
+                 configure secretHandlesJson or {SECRET_HANDLES_ENV} to map ids to host files \
+                 under /run/secrets/<id>",
+                id
+            ),
+        }),
+        MaterializeError::EmptyHostPathAllowlist => json!({
+            "kind": "host_path_policy",
+            "message": "host path allowlist is empty: input mounts require paths under workspaceRoot \
+                        (pass resourcePaths or inputsJson resolved within the workspace)",
+        }),
+        MaterializeError::HostPathNotAllowed { path, allowed } => json!({
+            "kind": "host_path_policy",
+            "path": path.to_string_lossy(),
+            "allowedRoots": allowed
+                .iter()
+                .map(|root| root.to_string_lossy().into_owned())
+                .collect::<Vec<_>>(),
+            "message": format!(
+                "host path {:?} is outside the allowed workspace roots {:?}",
+                path, allowed
+            ),
+        }),
+        other => json!({
+            "kind": "materialize",
+            "message": other.to_string(),
+        }),
+    }
+}
+
+/// Map [`WasiHostError`] into structured tool JSON.
+pub fn wasi_host_error_json(err: &WasiHostError) -> Value {
+    match err {
+        WasiHostError::Materialize(inner) => wasi_materialize_error_json(inner),
+        WasiHostError::Run(inner) => wasi_run_error_json(inner),
+        WasiHostError::Seatbelt(inner) => json!({
+            "kind": "seatbelt",
+            "message": inner.to_string(),
+        }),
+    }
 }
 
 /// Map [`WasiRunError`] into structured tool JSON (`kind` + stdio tails).
@@ -424,6 +492,46 @@ mod tests {
             err,
             MaterializeError::SecretHandleNotAllowed { .. }
         ));
+    }
+
+    #[test]
+    fn maps_network_allow_to_structured_capability_error() {
+        let err = MaterializeError::UnsupportedCapabilities(
+            UnsupportedCapabilities::NetworkAllow {
+                hosts: vec!["example.com".into()],
+            },
+        );
+        let value = wasi_materialize_error_json(&err);
+        assert_eq!(value["kind"], "unsupported_capability");
+        assert_eq!(value["capability"], "network.allow");
+        let message = value["message"].as_str().expect("message");
+        assert!(message.contains("network.allow"), "{message}");
+        assert!(message.contains("example.com"), "{message}");
+        assert!(message.contains("host tools"), "{message}");
+    }
+
+    #[test]
+    fn maps_secret_deny_to_structured_error() {
+        let err = MaterializeError::SecretHandleNotAllowed {
+            id: "api-key".into(),
+        };
+        let value = wasi_materialize_error_json(&err);
+        assert_eq!(value["kind"], "secret_not_allowed");
+        assert_eq!(value["secretId"], "api-key");
+        let message = value["message"].as_str().expect("message");
+        assert!(message.contains("secret"), "{message}");
+        assert!(message.contains("api-key"), "{message}");
+        assert!(message.contains("secretHandlesJson"), "{message}");
+    }
+
+    #[test]
+    fn maps_empty_host_path_allowlist_to_structured_error() {
+        let err = MaterializeError::EmptyHostPathAllowlist;
+        let value = wasi_materialize_error_json(&err);
+        assert_eq!(value["kind"], "host_path_policy");
+        let message = value["message"].as_str().expect("message");
+        assert!(message.contains("allowlist"), "{message}");
+        assert!(message.contains("workspaceRoot"), "{message}");
     }
 
     #[test]

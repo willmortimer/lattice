@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use kernelfs::{
     Capabilities, ContentKind, ExecutionManifest, InputMount, LatticeProposalDraft, Mounts,
-    SecretHandle, SecretHandleEntry, WasmtimeLimits,
+    NetworkPolicy, SecretHandle, SecretHandleEntry, WasmtimeLimits,
 };
 use base64::Engine;
 use lattice_agentd::lattice_client::LatticeToolClient;
@@ -441,10 +441,63 @@ async fn secret_handles_deny_by_default() {
     .expect("join")
     .expect_err("secret without allowlist should fail");
 
-    assert!(
-        matches!(err, lattice_agentd::WasiHostError::Materialize(_)),
-        "expected materialize failure, got {err:?}"
-    );
+    let materialize_err = match err {
+        lattice_agentd::WasiHostError::Materialize(inner) => inner,
+        other => panic!("expected materialize failure, got {other:?}"),
+    };
+    let error_json = lattice_agentd::wasi_materialize_error_json(&materialize_err);
+    assert_eq!(error_json["kind"], "secret_not_allowed");
+    assert_eq!(error_json["secretId"], "api-key");
+    let message = error_json["message"].as_str().expect("message");
+    assert!(message.contains("secret"), "{message}");
+    assert!(message.contains("api-key"), "{message}");
+    assert!(message.contains("secretHandlesJson"), "{message}");
+}
+
+#[tokio::test]
+async fn network_allow_rejects_with_clear_capability_error() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let manifest = ExecutionManifest {
+        run_id: "run_network_deny".into(),
+        base_snapshot: "snap".into(),
+        mounts: Default::default(),
+        capabilities: Capabilities {
+            network: NetworkPolicy {
+                allow: vec!["example.com".into()],
+            },
+            ..Default::default()
+        },
+    };
+
+    let run_parent = temp.path().to_path_buf();
+    let host_roots = vec![temp.path().to_path_buf()];
+    let err = tokio::task::spawn_blocking(move || {
+        run_wasi_guest_with_options(
+            &run_parent,
+            &manifest,
+            copy_hello_wasm(),
+            &WasiGuestHostOptions {
+                limits: WasmtimeLimits::default(),
+                host_path_roots: host_roots,
+                ..Default::default()
+            },
+        )
+    })
+    .await
+    .expect("join")
+    .expect_err("network.allow should fail closed at materialize");
+
+    let materialize_err = match err {
+        lattice_agentd::WasiHostError::Materialize(inner) => inner,
+        other => panic!("expected materialize failure, got {other:?}"),
+    };
+    let error_json = lattice_agentd::wasi_materialize_error_json(&materialize_err);
+    assert_eq!(error_json["kind"], "unsupported_capability");
+    assert_eq!(error_json["capability"], "network.allow");
+    let message = error_json["message"].as_str().expect("message");
+    assert!(message.contains("network.allow"), "{message}");
+    assert!(message.contains("example.com"), "{message}");
+    assert!(message.contains("host tools"), "{message}");
 }
 
 #[tokio::test]

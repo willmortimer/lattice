@@ -27,8 +27,8 @@ use crate::protocol::AgentEvent;
 use crate::secret_handles::secret_handles_for_run;
 use crate::wasi_host::{
     hydration_inputs_from_record, propose_output_drafts_with_provenance, run_wasi_guest_with_options,
-    wasi_run_error_json, DraftProvenance, WorkspaceBinding, WasiGuestHostOptions, WasiHostError,
-    WasiProposalProvenance,
+    wasi_host_error_json, wasi_materialize_error_json, wasi_run_error_json, DraftProvenance,
+    WorkspaceBinding, WasiGuestHostOptions, WasiHostError, WasiProposalProvenance,
 };
 
 /// Cap tool JSON returned to the model so long search/read payloads do not
@@ -1372,6 +1372,13 @@ async fn dispatch_run_wasi_guest(
 
     let guest_result = match guest_result {
         Ok(result) => result,
+        Err(WasiHostError::Materialize(err)) => {
+            return Ok(json!({
+                "error": wasi_materialize_error_json(&err),
+                "runId": run_id,
+                "wasmPath": wasm_path_rel,
+            }));
+        }
         Err(WasiHostError::Run(err)) => {
             return Ok(json!({
                 "error": wasi_run_error_json(&err),
@@ -1386,7 +1393,14 @@ async fn dispatch_run_wasi_guest(
                 "wasmPath": wasm_path_rel,
             }));
         }
-        Err(err) => return Err(err.to_string()),
+        Err(err) => {
+            let structured = wasi_host_error_json(&err);
+            let message = structured["message"]
+                .as_str()
+                .map(str::to_string)
+                .unwrap_or_else(|| err.to_string());
+            return Err(message);
+        }
     };
 
     let resource_ids = input_resource_ids_arg(args);
