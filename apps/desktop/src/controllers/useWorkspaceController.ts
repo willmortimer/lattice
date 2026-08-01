@@ -3,7 +3,13 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { demoSnapshot, inBrowser } from "../demo";
 import { bridgeWorkspacePath, hasTauri, inBridgeMode, invoke } from "../lib/ipc";
 import { listTemplates, provisionWorkspace, type TemplateDescriptor } from "../lib/templates";
-import { loadSession, saveSession, type DesktopSession } from "../lib/profile";
+import {
+  loadWorkspaceUiSession,
+  saveWorkspaceUiSession,
+  type WorkspaceUiSession,
+} from "../lib/workspaceUiSession";
+import { openWorkspaceById } from "../lib/workspaceCatalog";
+import { useWorkspaceUiSessionStore } from "../shell/workspaceUiSessionStore";
 import { refreshResourceCatalog } from "../lib/resourceLinks";
 import type { Resource, WorkspaceChangeEvent, WorkspaceSnapshot } from "../types";
 import { workspaceUnavailableState } from "./workspacePolicy";
@@ -26,8 +32,11 @@ export interface WorkspaceControllerOptions {
   rememberWorkspace: (snapshot: WorkspaceSnapshot) => void;
   removeRecent: (root: string) => void;
   refreshProfile: () => void | Promise<void>;
-  getSession: () => Omit<DesktopSession, "root">;
-  restoreSession: (session: DesktopSession, snapshot: WorkspaceSnapshot) => void | Promise<void>;
+  getWorkspaceUiSession: () => Omit<WorkspaceUiSession, "workspaceId">;
+  restoreWorkspaceUiSession: (
+    session: WorkspaceUiSession,
+    snapshot: WorkspaceSnapshot,
+  ) => void | Promise<void>;
   onAdopt: (snapshot: WorkspaceSnapshot) => void | Promise<void>;
   onWorkspaceUnavailable: (root: string) => void | Promise<void>;
   /** Opens a seeded resource after create_workspace when the template sets openOnCreate. */
@@ -46,6 +55,7 @@ export interface WorkspaceController {
   handleGetStarted: () => Promise<void>;
   handleOpenWorkspace: () => Promise<void>;
   openRecent: (root: string) => Promise<void>;
+  openWorkspaceById: (workspaceId: string) => Promise<void>;
   handleCreateWorkspace: (args: {
     path: string;
     title: string;
@@ -64,7 +74,7 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
   const {
     initialSnapshot, profile, profileReady, startup, recents, demoStartEmpty,
     setError, setBusy, setStatusToast, setNewWorkspaceOpen, rememberWorkspace,
-    removeRecent, refreshProfile, getSession, restoreSession, onAdopt,
+    removeRecent, refreshProfile, getWorkspaceUiSession, restoreWorkspaceUiSession, onAdopt,
     onWorkspaceUnavailable, openResource,
   } = options;
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot | null>(initialSnapshot);
@@ -73,7 +83,18 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
   const snapshotRef = useRef(snapshot);
   const startupAttemptedRef = useRef(false);
   const watchingRootRef = useRef<string | null>(null);
-  const sessionRestoredRootRef = useRef<string | null>(null);
+  const sessionRestoredWorkspaceIdRef = useRef<string | null>(null);
+
+  const persistOutgoingWorkspaceUiSession = useCallback(async () => {
+    const current = snapshotRef.current;
+    if (!current || sessionRestoredWorkspaceIdRef.current !== current.id) return;
+    const session: WorkspaceUiSession = {
+      workspaceId: current.id,
+      ...getWorkspaceUiSession(),
+    };
+    useWorkspaceUiSessionStore.getState().setWarmSession(session);
+    await saveWorkspaceUiSession(session).catch(() => undefined);
+  }, [getWorkspaceUiSession]);
 
   useEffect(() => {
     snapshotRef.current = snapshot;
@@ -94,9 +115,11 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
   }, [stopWatching]);
 
   const adoptWorkspace = useCallback(async (next: WorkspaceSnapshot) => {
+    await persistOutgoingWorkspaceUiSession();
     if (watchingRootRef.current && watchingRootRef.current !== next.root) await stopWatching();
     snapshotRef.current = next;
-    sessionRestoredRootRef.current = null;
+    sessionRestoredWorkspaceIdRef.current = null;
+    useWorkspaceUiSessionStore.getState().setActiveWorkspaceId(next.id);
     setSnapshot(next);
     await onAdopt(next);
     rememberWorkspace(next);
@@ -113,7 +136,7 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
     if (hasTauri || inBridgeMode) {
       void invoke("rebuild_index", { root: next.root }).catch(() => undefined);
     }
-  }, [onAdopt, rememberWorkspace, stopWatching]);
+  }, [onAdopt, persistOutgoingWorkspaceUiSession, rememberWorkspace, stopWatching]);
 
   const refreshResources = useCallback(async () => {
     const root = snapshotRef.current?.root;
@@ -144,7 +167,8 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
       await stopWatching();
       const reset = workspaceUnavailableState(root);
       snapshotRef.current = reset.snapshot;
-      sessionRestoredRootRef.current = null;
+      sessionRestoredWorkspaceIdRef.current = null;
+      useWorkspaceUiSessionStore.getState().setActiveWorkspaceId(null);
       setSnapshot(reset.snapshot);
       await onWorkspaceUnavailable(root);
       await refreshProfile();
@@ -236,6 +260,22 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
       setBusy(false);
     }
   }, [adoptWorkspace, removeRecent, setBusy, setError]);
+
+  const openWorkspaceByIdHandler = useCallback(async (workspaceId: string) => {
+    setError(null);
+    if (inBrowser) {
+      await adoptWorkspace(demoSnapshot);
+      return;
+    }
+    setBusy(true);
+    try {
+      await adoptWorkspace(await openWorkspaceById(workspaceId));
+    } catch (error) {
+      setError(String(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [adoptWorkspace, setBusy, setError]);
 
   const handleCreateWorkspace = useCallback(async (args: {
     path: string; title: string; template: string; setDefault: boolean; initializeExisting: boolean;
@@ -353,25 +393,39 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
   }, [adoptWorkspace, demoStartEmpty, profile.effectiveDefaultWorkspace, profileReady, recents, removeRecent, setError, setStatusToast, snapshot, startup.reopenLastWorkspace]);
 
   useEffect(() => {
-    if (!snapshot || sessionRestoredRootRef.current === snapshot.root) return;
-    sessionRestoredRootRef.current = snapshot.root;
+    if (!snapshot || sessionRestoredWorkspaceIdRef.current === snapshot.id) return;
+    sessionRestoredWorkspaceIdRef.current = snapshot.id;
     if (!startup.restoreSession) return;
-    void loadSession(snapshot.root).then((stored) => {
-      if (stored) void restoreSession(stored, snapshot);
-    }).catch(() => undefined);
-  }, [restoreSession, snapshot, startup.restoreSession]);
+
+    const warm = useWorkspaceUiSessionStore.getState().getWarmSession(snapshot.id);
+    if (warm) {
+      void restoreWorkspaceUiSession(warm, snapshot);
+      return;
+    }
+
+    void loadWorkspaceUiSession(snapshot.id, snapshot.root)
+      .then((stored) => {
+        if (stored) void restoreWorkspaceUiSession(stored, snapshot);
+      })
+      .catch(() => undefined);
+  }, [restoreWorkspaceUiSession, snapshot, startup.restoreSession]);
 
   useEffect(() => {
-    if (!snapshot || sessionRestoredRootRef.current !== snapshot.root) return;
+    if (!snapshot || sessionRestoredWorkspaceIdRef.current !== snapshot.id) return;
     const timer = window.setTimeout(() => {
-      void saveSession({ root: snapshot.root, ...getSession() }).catch(() => undefined);
+      const session: WorkspaceUiSession = {
+        workspaceId: snapshot.id,
+        ...getWorkspaceUiSession(),
+      };
+      useWorkspaceUiSessionStore.getState().setWarmSession(session);
+      void saveWorkspaceUiSession(session).catch(() => undefined);
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [getSession, snapshot, snapshot?.root]);
+  }, [getWorkspaceUiSession, snapshot, snapshot?.id]);
 
   return {
     snapshot, snapshotRef, setSnapshot, workspacesDir, templates, adoptWorkspace,
     handleWorkspaceChanged, refreshResources, handleGetStarted, handleOpenWorkspace,
-    openRecent, handleCreateWorkspace, openNewWorkspaceDialog, pickWorkspaceFolder,
+    openRecent, openWorkspaceById: openWorkspaceByIdHandler, handleCreateWorkspace, openNewWorkspaceDialog, pickWorkspaceFolder,
   };
 }

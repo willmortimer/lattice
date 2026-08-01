@@ -16,7 +16,9 @@ pub use settings::{
     WorkspaceStartupSettings, DESKTOP_SETTINGS_FILENAME, DESKTOP_SETTINGS_SPEC,
     WORKSPACE_SETTINGS_FILENAME, WORKSPACE_SETTINGS_SPEC,
 };
-pub use state::{DesktopSession, ProfileStateStore, RecentWorkspace};
+pub use state::{
+    DesktopSession, PaneLayoutStub, ProfileStateStore, RecentWorkspace, WorkspaceUiSession,
+};
 
 pub const LATTICE_DEV_HOME_ENV: &str = "LATTICE_DEV_HOME";
 pub const LATTICE_HOME_ENV: &str = "LATTICE_HOME";
