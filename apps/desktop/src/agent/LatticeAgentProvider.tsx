@@ -1,7 +1,7 @@
 import { useChat } from "@ai-sdk/react";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk";
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { getAgentHealth, TauriAgentChatTransport } from "../lib/agent";
 import {
@@ -12,7 +12,10 @@ import { getCloudSessionStatus, isCloudAiEntitled } from "../lib/cloud";
 import { loadProfile } from "../lib/profile";
 import { hasOpenaiApiKey } from "../lib/openaiKey";
 import { resolveAgentDefaultsFromAiSettings } from "./agentAiDefaults";
-import { AgentChatControlsProvider } from "./agentChatControls";
+import {
+  AgentChatControlsProvider,
+  type HydrationStatus,
+} from "./agentChatControls";
 import { isAgentComposerDisabled, useAgentSessionStore } from "./agentStore";
 
 export type LatticeAgentProviderProps = {
@@ -119,6 +122,9 @@ function LatticeAgentRuntimeProvider({
     };
   }, [aiMode, setByoOpenaiKeyPresent]);
 
+  const [hydrationStatus, setHydrationStatus] = useState<HydrationStatus>("loading");
+  const localGenerationRef = useRef(0);
+
   const transport = useMemo(
     () =>
       new TauriAgentChatTransport({
@@ -144,11 +150,20 @@ function LatticeAgentRuntimeProvider({
     transport: transport as never,
   });
 
-  const hydratedThreadRef = useRef<string | null>(null);
-
   useEffect(() => {
     let cancelled = false;
-    hydratedThreadRef.current = null;
+    setHydrationStatus("loading");
+    const beforeLoadGeneration = localGenerationRef.current;
+
+    const applyHydratedMessages = (messages: Parameters<typeof chat.setMessages>[0]) => {
+      if (
+        !cancelled &&
+        localGenerationRef.current === beforeLoadGeneration &&
+        chat.messages.length === 0
+      ) {
+        chat.setMessages(messages);
+      }
+    };
 
     const loadTranscript = async () => {
       try {
@@ -156,15 +171,15 @@ function LatticeAgentRuntimeProvider({
         if (cancelled) {
           return;
         }
-        chat.setMessages(uiMessagesFromThreadMessages(result.messages) as never);
-        hydratedThreadRef.current = threadId;
+        applyHydratedMessages(uiMessagesFromThreadMessages(result.messages) as never);
+        setHydrationStatus("ready");
       } catch {
         if (cancelled) {
           return;
         }
         // Fresh / not-yet-persisted threads start empty.
-        chat.setMessages([]);
-        hydratedThreadRef.current = threadId;
+        applyHydratedMessages([]);
+        setHydrationStatus("error");
       }
     };
 
@@ -180,6 +195,9 @@ function LatticeAgentRuntimeProvider({
   useEffect(() => {
     const previous = previousStatusRef.current;
     previousStatusRef.current = chat.status;
+    if (previous !== "submitted" && chat.status === "submitted") {
+      localGenerationRef.current += 1;
+    }
     if (
       (previous === "streaming" || previous === "submitted") &&
       chat.status === "ready"
@@ -240,7 +258,9 @@ function LatticeAgentRuntimeProvider({
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <AgentChatControlsProvider value={{ stop: chat.stop, isStreaming }}>
+      <AgentChatControlsProvider
+        value={{ stop: chat.stop, isStreaming, hydrationStatus }}
+      >
         {children}
       </AgentChatControlsProvider>
     </AssistantRuntimeProvider>

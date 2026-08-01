@@ -1,8 +1,11 @@
 import { createContext, useContext, type ReactNode } from "react";
 
+export type HydrationStatus = "loading" | "ready" | "error";
+
 export type AgentChatControls = {
   stop: () => void;
   isStreaming: boolean;
+  hydrationStatus: HydrationStatus;
 };
 
 const AgentChatControlsContext = createContext<AgentChatControls | null>(null);
