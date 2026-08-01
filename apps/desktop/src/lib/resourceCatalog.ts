@@ -96,6 +96,47 @@ export function catalogMapFromResources(resources: readonly Resource[]): Map<str
   return applyCatalogDelta(new Map(), { type: "replace", entries });
 }
 
+/** Reverse index: workspace-relative path → catalog resourceId. */
+export function catalogPathToIdMap(
+  catalog: ReadonlyMap<string, CatalogEntry>,
+): Map<string, string> {
+  const byPath = new Map<string, string>();
+  for (const entry of catalog.values()) {
+    byPath.set(entry.path, entry.resourceId);
+  }
+  return byPath;
+}
+
+/** Resolve a path alias to its catalog ResourceId when present. */
+export function resourceIdForPath(
+  catalog: ReadonlyMap<string, CatalogEntry>,
+  path: string,
+): string | undefined {
+  for (const entry of catalog.values()) {
+    if (entry.path === path) return entry.resourceId;
+  }
+  return undefined;
+}
+
+/** Resolve a ResourceId to its current path alias (survives renames). */
+export function pathForResourceId(
+  catalog: ReadonlyMap<string, CatalogEntry>,
+  resourceId: string,
+): string | undefined {
+  return catalog.get(resourceId)?.path;
+}
+
+/**
+ * Persistable id for a path: prefer registry/catalog UUID, else synthetic
+ * `path:` placeholder until a stable id arrives.
+ */
+export function resourceIdForPathOrSynthetic(
+  catalog: ReadonlyMap<string, CatalogEntry>,
+  path: string,
+): string {
+  return resourceIdForPath(catalog, path) ?? syntheticResourceId(path);
+}
+
 /** Apply a catalog delta to an id-keyed catalog map. */
 export function applyCatalogDelta(
   current: ReadonlyMap<string, CatalogEntry>,

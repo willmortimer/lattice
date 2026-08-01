@@ -6,6 +6,9 @@ import {
   catalogMapFromResources,
   isSyntheticResourceId,
   parentPathOf,
+  pathForResourceId,
+  resourceIdForPath,
+  resourceIdForPathOrSynthetic,
   resourcesFromCatalog,
   syntheticResourceId,
   type CatalogEntry,
@@ -86,5 +89,18 @@ describe("resourceCatalog", () => {
     expect(updated.has(syntheticResourceId("note.md"))).toBe(false);
     expect(updated.get("stable-id")?.kind).toBe("file");
     expect(resourcesFromCatalog(updated).map((item) => item.path)).toEqual(["note.md"]);
+  });
+
+  it("resourceIdForPath and pathForResourceId round-trip", () => {
+    const catalog = applyCatalogDelta(new Map(), {
+      type: "replace",
+      entries: [entry("uuid-1", "Notes/a.md")],
+    });
+    expect(resourceIdForPath(catalog, "Notes/a.md")).toBe("uuid-1");
+    expect(pathForResourceId(catalog, "uuid-1")).toBe("Notes/a.md");
+    expect(resourceIdForPathOrSynthetic(catalog, "Notes/a.md")).toBe("uuid-1");
+    expect(resourceIdForPathOrSynthetic(catalog, "missing.md")).toBe(
+      syntheticResourceId("missing.md"),
+    );
   });
 });

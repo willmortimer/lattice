@@ -16,6 +16,7 @@ import {
   catalogMapFromResources,
   resourcesFromCatalog,
   type CatalogDeltaEvent,
+  type CatalogEntry,
 } from "../lib/resourceCatalog";
 import type { Resource, WorkspaceChangeEvent, WorkspaceSnapshot } from "../types";
 import { workspaceUnavailableState } from "./workspacePolicy";
@@ -38,10 +39,13 @@ export interface WorkspaceControllerOptions {
   rememberWorkspace: (snapshot: WorkspaceSnapshot) => void;
   removeRecent: (root: string) => void;
   refreshProfile: () => void | Promise<void>;
-  getWorkspaceUiSession: () => Omit<WorkspaceUiSession, "workspaceId">;
+  getWorkspaceUiSession: (
+    catalog: ReadonlyMap<string, CatalogEntry>,
+  ) => Omit<WorkspaceUiSession, "workspaceId">;
   restoreWorkspaceUiSession: (
     session: WorkspaceUiSession,
     snapshot: WorkspaceSnapshot,
+    catalog: ReadonlyMap<string, CatalogEntry>,
   ) => void | Promise<void>;
   onAdopt: (snapshot: WorkspaceSnapshot) => void | Promise<void>;
   onWorkspaceUnavailable: (root: string) => void | Promise<void>;
@@ -98,7 +102,7 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
     if (!current || sessionRestoredWorkspaceIdRef.current !== current.id) return;
     const session: WorkspaceUiSession = {
       workspaceId: current.id,
-      ...getWorkspaceUiSession(),
+      ...getWorkspaceUiSession(catalogRef.current),
     };
     useWorkspaceUiSessionStore.getState().setWarmSession(session);
     await saveWorkspaceUiSession(session).catch(() => undefined);
@@ -425,13 +429,13 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
 
     const warm = useWorkspaceUiSessionStore.getState().getWarmSession(snapshot.id);
     if (warm) {
-      void restoreWorkspaceUiSession(warm, snapshot);
+      void restoreWorkspaceUiSession(warm, snapshot, catalogRef.current);
       return;
     }
 
     void loadWorkspaceUiSession(snapshot.id, snapshot.root)
       .then((stored) => {
-        if (stored) void restoreWorkspaceUiSession(stored, snapshot);
+        if (stored) void restoreWorkspaceUiSession(stored, snapshot, catalogRef.current);
       })
       .catch(() => undefined);
   }, [restoreWorkspaceUiSession, snapshot, startup.restoreSession]);
@@ -441,7 +445,7 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
     const timer = window.setTimeout(() => {
       const session: WorkspaceUiSession = {
         workspaceId: snapshot.id,
-        ...getWorkspaceUiSession(),
+        ...getWorkspaceUiSession(catalogRef.current),
       };
       useWorkspaceUiSessionStore.getState().setWarmSession(session);
       void saveWorkspaceUiSession(session).catch(() => undefined);
