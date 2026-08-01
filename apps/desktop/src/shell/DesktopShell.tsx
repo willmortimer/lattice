@@ -103,6 +103,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
     externalConflict, reloadToken, newWorkspaceOpen, workspacesDir, templates, statusToast,
     profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth,
     treeCollapsedPaths, revealPath, linkPicker, csvImportReview,
+    settingsDeepLinkTarget, clearSettingsDeepLink,
     handleCancelCsvImport, handleConfirmCsvImport, handleCsvImportColumnTypeChange,
     linkRepairReview, handleLinkRepairAccept, handleLinkRepairDefer,
     proposalSummaries, proposalInboxLoading, proposalApplyOutcome, proposalReview, refreshProposalInbox, openProposalReview,
@@ -714,6 +715,8 @@ export function DesktopShell({ model }: DesktopShellProps) {
                         .then(applyThemeCatalog)
                         .catch((err) => setError(String(err)))
                     }
+                    deepLinkTarget={settingsDeepLinkTarget}
+                    onDeepLinkConsumed={clearSettingsDeepLink}
                   />
                 </Suspense>
               )}
