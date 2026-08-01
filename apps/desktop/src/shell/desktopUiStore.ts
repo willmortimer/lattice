@@ -12,19 +12,13 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 import type { SaveState } from "../editor/saveState";
 import { DIRTY_SAVE_STATE, IDLE_SAVE_STATE } from "../editor/saveState";
 
-export type ActivityArea = "home" | "files" | "settings" | "search";
-
 export type DesktopUiState = {
-  activityArea: ActivityArea;
-  activeResourcePath: string | null;
   saveState: SaveState;
   sidebarWidth: number;
   inspectorOpen: boolean;
   agentPanelOpen: boolean;
   paletteOpen: boolean;
   searchPaneOpen: boolean;
-  setActivityArea: (area: ActivityArea) => void;
-  setActiveResourcePath: (path: string | null) => void;
   setSaveState: (state: SaveState | ((prev: SaveState) => SaveState)) => void;
   setSidebarWidth: (width: number) => void;
   setInspectorOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
@@ -36,19 +30,15 @@ export type DesktopUiState = {
 export type DesktopUiStore = StoreApi<DesktopUiState>;
 
 export function createDesktopUiStore(
-  initial?: Partial<Pick<DesktopUiState, "sidebarWidth" | "activityArea">>,
+  initial?: Partial<Pick<DesktopUiState, "sidebarWidth">>,
 ): DesktopUiStore {
   return createStore<DesktopUiState>((set, get) => ({
-    activityArea: initial?.activityArea ?? "home",
-    activeResourcePath: null,
     saveState: IDLE_SAVE_STATE,
     sidebarWidth: initial?.sidebarWidth ?? 272,
     inspectorOpen: false,
     agentPanelOpen: false,
     paletteOpen: false,
     searchPaneOpen: false,
-    setActivityArea: (activityArea) => set({ activityArea }),
-    setActiveResourcePath: (activeResourcePath) => set({ activeResourcePath }),
     setSaveState: (state) => {
       const next = typeof state === "function" ? state(get().saveState) : state;
       if (next === get().saveState) return;
