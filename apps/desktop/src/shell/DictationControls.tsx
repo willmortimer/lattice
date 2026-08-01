@@ -1,4 +1,5 @@
 import { CircleNotch, Microphone } from "@phosphor-icons/react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { RefObject } from "react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
@@ -8,13 +9,12 @@ import {
   cancelActiveVoiceSession,
   cancelVoiceSession,
   DictationCapture,
-  getVoiceStatus,
   listenVoiceEvents,
   prepareVoiceModel,
   startVoiceSession,
   type VoiceSessionContextHints,
-  type VoiceStatus,
 } from "../lib/voice";
+import { setVoiceStatusCache, useVoiceStatusQuery } from "../query/useVoiceStatusQuery";
 
 type DictationPhase = "idle" | "preparing" | "listening" | "finalizing" | "unavailable";
 
@@ -38,8 +38,9 @@ export function DictationControls({
   onError,
 }: DictationControlsProps) {
   const labelId = useId();
+  const queryClient = useQueryClient();
+  const { data: status = null } = useVoiceStatusQuery({ enabled });
   const [phase, setPhase] = useState<DictationPhase>("idle");
-  const [status, setStatus] = useState<VoiceStatus | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const captureRef = useRef(new DictationCapture());
   const sessionIdRef = useRef<string | null>(null);
@@ -66,23 +67,10 @@ export function DictationControls({
       setPhase("unavailable");
       return;
     }
-    let cancelled = false;
-    void getVoiceStatus()
-      .then((next) => {
-        if (cancelled) return;
-        setStatus(next);
-        setPhase(next.available ? (next.preparing ? "preparing" : "idle") : "unavailable");
-        if (next.message) setHint(next.message);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setPhase("unavailable");
-        setHint(err instanceof Error ? err.message : String(err));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [enabled]);
+    if (!status) return;
+    setPhase(status.available ? (status.preparing ? "preparing" : "idle") : "unavailable");
+    if (status.message) setHint(status.message);
+  }, [enabled, status]);
 
   useEffect(() => {
     if (inBrowser || !enabled) return;
@@ -117,11 +105,15 @@ export function DictationControls({
         }
         if (event.state === "preparing") setPhase("preparing");
         if (event.state === "ready") {
-          setStatus((prev) =>
-            prev
-              ? { ...prev, prepared: true, preparing: false, message: event.message }
-              : prev,
-          );
+          setVoiceStatusCache(queryClient, {
+            available: true,
+            prepared: true,
+            preparing: false,
+            listening: false,
+            nativeCapture: status?.nativeCapture ?? false,
+            platform: status?.platform ?? "macos",
+            message: event.message,
+          });
           if (!holdingRef.current) setPhase("idle");
         }
         if (event.state === "idle" && !holdingRef.current) {
@@ -144,7 +136,7 @@ export function DictationControls({
     return () => {
       unlisten?.();
     };
-  }, [enabled, onError, pageEditorRef]);
+  }, [enabled, onError, pageEditorRef, queryClient, status]);
 
   const voiceContextRef = useRef(voiceContext);
   useEffect(() => {
@@ -171,7 +163,7 @@ export function DictationControls({
             setPhase("idle");
             return;
           }
-          setStatus(prepared);
+          setVoiceStatusCache(queryClient, prepared);
         }
         if (!holdingRef.current || generation !== startGenerationRef.current) {
           await cancelActiveVoiceSession().catch(() => undefined);
@@ -211,7 +203,7 @@ export function DictationControls({
         onError(err instanceof Error ? err.message : String(err));
       }
     });
-  }, [enabled, enqueue, onError, pageEditorRef, status?.prepared]);
+  }, [enabled, enqueue, onError, pageEditorRef, queryClient, status?.prepared]);
 
   const endHold = useCallback(() => {
     if (!holdingRef.current) return;

@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { invoke } from "./lib/ipc";
 import {
   enableSemanticSearch,
-  getSemanticStatus,
-  listenSemanticEvents,
-  type SemanticStatus,
 } from "./lib/semantic";
+import {
+  setSemanticStatusCache,
+  useSemanticStatusQuery,
+} from "./query/useSemanticStatusQuery";
 import {
   formatSearchHitScore,
   looksFtsOnlyWhileSemanticEnabled,
@@ -52,72 +54,16 @@ export function SearchPane({
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [semanticStatus, setSemanticStatus] = useState<SemanticStatus | null>(null);
   const [refreshingVectors, setRefreshingVectors] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
+  const { data: semanticStatus = null } = useSemanticStatusQuery(
+    root && semanticEnabled ? root : null,
+  );
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
-
-  useEffect(() => {
-    if (!root || !semanticEnabled) {
-      setSemanticStatus(null);
-      return;
-    }
-
-    let cancelled = false;
-    void getSemanticStatus(root)
-      .then((status) => {
-        if (!cancelled) setSemanticStatus(status);
-      })
-      .catch(() => {
-        /* keep last status */
-      });
-
-    let unlisten: (() => void) | undefined;
-    void listenSemanticEvents((event) => {
-      if (event.type !== "status") return;
-      setSemanticStatus({
-        state: event.state,
-        pendingChunks: event.pendingChunks,
-        message: event.message,
-        progressPercent: event.progressPercent,
-        providerId: event.providerId,
-        modelId: event.modelId,
-        dimensions: event.dimensions,
-      });
-    }).then((fn) => {
-      unlisten = fn;
-    });
-
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
-  }, [root, semanticEnabled]);
-
-  useEffect(() => {
-    if (!root || !semanticEnabled) return;
-    if (
-      !semanticStatus ||
-      (semanticStatus.state !== "downloading" &&
-        semanticStatus.state !== "preparing" &&
-        semanticStatus.state !== "indexing")
-    ) {
-      return;
-    }
-
-    const id = window.setInterval(() => {
-      void getSemanticStatus(root)
-        .then((next) => setSemanticStatus(next))
-        .catch(() => {
-          /* keep last status */
-        });
-    }, 750);
-
-    return () => window.clearInterval(id);
-  }, [root, semanticEnabled, semanticStatus?.state]);
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -171,7 +117,7 @@ export function SearchPane({
     if (!root || refreshingVectors) return;
     setRefreshingVectors(true);
     void enableSemanticSearch(root)
-      .then((next) => setSemanticStatus(next))
+      .then((next) => setSemanticStatusCache(queryClient, root, next))
       .finally(() => setRefreshingVectors(false));
   }
 

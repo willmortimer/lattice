@@ -1,16 +1,17 @@
 import { useChat } from "@ai-sdk/react";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { useAISDKRuntime } from "@assistant-ui/react-ai-sdk";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { getAgentHealth, TauriAgentChatTransport } from "../lib/agent";
-import {
-  getAgentThread,
-  uiMessagesFromThreadMessages,
-} from "../lib/agentThreads";
-import { getCloudSessionStatus, isCloudAiEntitled } from "../lib/cloud";
+import { uiMessagesFromThreadMessages } from "../lib/agentThreads";
+import { isCloudAiEntitled } from "../lib/cloud";
 import { loadProfile } from "../lib/profile";
 import { hasOpenaiApiKey } from "../lib/openaiKey";
+import { invalidateAgentThreads } from "../query/useAgentThreadsQuery";
+import { useAgentThreadQuery } from "../query/useAgentThreadQuery";
+import { useCloudSessionQuery } from "../query/useCloudSessionQuery";
 import { resolveAgentDefaultsFromAiSettings } from "./agentAiDefaults";
 import {
   AgentChatControlsProvider,
@@ -61,21 +62,19 @@ function LatticeAgentRuntimeProvider({
   threadId: string;
   children: ReactNode;
 }) {
+  const queryClient = useQueryClient();
   const recordAgentEvent = useAgentSessionStore((state) => state.recordAgentEvent);
   const setHealthSnapshot = useAgentSessionStore((state) => state.setHealthSnapshot);
   const applyProfileAiDefaults = useAgentSessionStore((state) => state.applyProfileAiDefaults);
   const setByoOpenaiKeyPresent = useAgentSessionStore((state) => state.setByoOpenaiKeyPresent);
-  const bumpThreadListEpoch = useAgentSessionStore((state) => state.bumpThreadListEpoch);
   const aiMode = useAgentSessionStore((state) => state.aiMode);
+  const { data: cloudStatus } = useCloudSessionQuery();
 
   useEffect(() => {
     let cancelled = false;
     const applyDefaults = async () => {
       try {
-        const [profile, cloudStatus] = await Promise.all([
-          loadProfile(),
-          getCloudSessionStatus().catch(() => null),
-        ]);
+        const profile = await loadProfile();
         if (cancelled) {
           return;
         }
@@ -94,7 +93,7 @@ function LatticeAgentRuntimeProvider({
     return () => {
       cancelled = true;
     };
-  }, [applyProfileAiDefaults]);
+  }, [applyProfileAiDefaults, cloudStatus]);
 
   useEffect(() => {
     let cancelled = false;
@@ -124,6 +123,11 @@ function LatticeAgentRuntimeProvider({
 
   const [hydrationStatus, setHydrationStatus] = useState<HydrationStatus>("loading");
   const localGenerationRef = useRef(0);
+  const {
+    data: threadData,
+    isPending: threadPending,
+    isError: threadError,
+  } = useAgentThreadQuery(workspaceRoot, threadId);
 
   const transport = useMemo(
     () =>
@@ -151,45 +155,27 @@ function LatticeAgentRuntimeProvider({
   });
 
   useEffect(() => {
-    let cancelled = false;
-    setHydrationStatus("loading");
+    if (threadPending) {
+      setHydrationStatus("loading");
+      return;
+    }
     const beforeLoadGeneration = localGenerationRef.current;
-
     const applyHydratedMessages = (messages: Parameters<typeof chat.setMessages>[0]) => {
-      if (
-        !cancelled &&
-        localGenerationRef.current === beforeLoadGeneration &&
-        chat.messages.length === 0
-      ) {
+      if (localGenerationRef.current === beforeLoadGeneration && chat.messages.length === 0) {
         chat.setMessages(messages);
       }
     };
-
-    const loadTranscript = async () => {
-      try {
-        const result = await getAgentThread({ workspaceRoot, threadId });
-        if (cancelled) {
-          return;
-        }
-        applyHydratedMessages(uiMessagesFromThreadMessages(result.messages) as never);
-        setHydrationStatus("ready");
-      } catch {
-        if (cancelled) {
-          return;
-        }
-        // Fresh / not-yet-persisted threads start empty.
-        applyHydratedMessages([]);
-        setHydrationStatus("error");
-      }
-    };
-
-    void loadTranscript();
-    return () => {
-      cancelled = true;
-    };
+    if (threadError || !threadData) {
+      // Fresh / not-yet-persisted threads start empty.
+      applyHydratedMessages([]);
+      setHydrationStatus(threadError ? "error" : "ready");
+      return;
+    }
+    applyHydratedMessages(uiMessagesFromThreadMessages(threadData.messages) as never);
+    setHydrationStatus("ready");
     // Reload only when the active thread changes; chat.setMessages is stable enough.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceRoot, threadId]);
+  }, [workspaceRoot, threadId, threadPending, threadError, threadData]);
 
   const previousStatusRef = useRef(chat.status);
   useEffect(() => {
@@ -202,9 +188,9 @@ function LatticeAgentRuntimeProvider({
       (previous === "streaming" || previous === "submitted") &&
       chat.status === "ready"
     ) {
-      bumpThreadListEpoch();
+      void invalidateAgentThreads(queryClient, workspaceRoot);
     }
-  }, [chat.status, bumpThreadListEpoch]);
+  }, [chat.status, queryClient, workspaceRoot]);
 
   const runtime = useAISDKRuntime(chat);
   const isStreaming = chat.status === "streaming" || chat.status === "submitted";
