@@ -102,6 +102,9 @@ export interface DesktopSettings {
     aiAuditEnabled: boolean;
     anonymousTelemetryEnabled: boolean;
   };
+  guidance: {
+    shellTourFinished: boolean;
+  };
 }
 
 export interface WorkspaceStartupSettings {
@@ -193,6 +196,9 @@ export function defaultDesktopSettings(): DesktopSettings {
       idleLockMinutes: 5,
       aiAuditEnabled: true,
       anonymousTelemetryEnabled: true,
+    },
+    guidance: {
+      shellTourFinished: false,
     },
   };
 }
@@ -308,6 +314,10 @@ function normalizeProfile(profile: ProfileSnapshot): ProfileSnapshot {
         privacy: {
           ...desktopDefaults.privacy,
           ...profile.settings.desktop?.privacy,
+        },
+        guidance: {
+          ...desktopDefaults.guidance,
+          ...profile.settings.desktop?.guidance,
         },
       },
       workspaces: {

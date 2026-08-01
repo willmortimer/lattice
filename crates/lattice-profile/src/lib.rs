@@ -10,7 +10,8 @@ pub use scheduler::{
     LATTICE_SCHEDULER_REGISTRY_ENV, SCHEDULER_DIR_NAME, WORKSPACES_REGISTRY_FILENAME,
 };
 pub use settings::{
-    AiMode, AiSettings, DesktopSettings, EmbeddingMode, PrivacySettings, SearchSettings,
+    AiMode, AiSettings, DesktopSettings, EmbeddingMode, GuidanceSettings, PrivacySettings,
+    SearchSettings,
     ServicesSettings, SettingsDiagnostic,
     SettingsDiagnosticSeverity, SettingsLoad, SettingsSnapshot, SettingsSpec, SettingsStore,
     WorkspaceStartupSettings, DESKTOP_SETTINGS_FILENAME, DESKTOP_SETTINGS_SPEC,

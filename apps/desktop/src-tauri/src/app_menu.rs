@@ -30,6 +30,7 @@ pub const ACTION_OPEN_WORKSPACE: &str = "app.open-workspace";
 pub const ACTION_UNDO: &str = "app.undo";
 pub const ACTION_HOME: &str = "app.home";
 pub const ACTION_FILES: &str = "app.files";
+pub const ACTION_SHELL_TOUR: &str = "app.shell-tour";
 pub const ACTION_QUIT: &str = "app.quit";
 
 pub const ACTION_WORKFLOW_OPEN_LATEST: &str = "workflow.open-latest";
@@ -139,7 +140,8 @@ pub fn handle_action(app: &AppHandle, id: &str) {
         | ACTION_OPEN_WORKSPACE
         | ACTION_UNDO
         | ACTION_HOME
-        | ACTION_FILES => emit_ui_action(app, id),
+        | ACTION_FILES
+        | ACTION_SHELL_TOUR => emit_ui_action(app, id),
         #[cfg(debug_assertions)]
         ACTION_OPEN_INSPECTOR => {
             if let Some(window) = app.get_webview_window("main") {
@@ -224,6 +226,13 @@ pub fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     )?;
     let home = MenuItem::with_id(app, ACTION_HOME, "Home", true, None::<&str>)?;
     let files = MenuItem::with_id(app, ACTION_FILES, "Files", true, None::<&str>)?;
+    let help_workspace_tour = MenuItem::with_id(
+        app,
+        ACTION_SHELL_TOUR,
+        "Workspace Tour",
+        true,
+        None::<&str>,
+    )?;
     let quit = MenuItem::with_id(app, ACTION_QUIT, "Quit Lattice", true, Some("CmdOrCtrl+Q"))?;
 
     let file_sep1 = PredefinedMenuItem::separator(app)?;
@@ -367,6 +376,8 @@ pub fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         &[&search, &palette, &view_sep1, &home, &files],
     )?;
 
+    let help = Submenu::with_items(app, "Help", true, &[&help_workspace_tour])?;
+
     let win_sep = PredefinedMenuItem::separator(app)?;
     let win_min = PredefinedMenuItem::minimize(app, None)?;
     let win_max = PredefinedMenuItem::maximize(app, None)?;
@@ -412,14 +423,14 @@ pub fn build_app_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     #[cfg(all(target_os = "macos", debug_assertions))]
     let menu = Menu::with_items(
         app,
-        &[&app_submenu, &file, &edit, &view, &window, &developer],
+        &[&app_submenu, &file, &edit, &view, &window, &help, &developer],
     )?;
     #[cfg(all(target_os = "macos", not(debug_assertions)))]
-    let menu = Menu::with_items(app, &[&app_submenu, &file, &edit, &view, &window])?;
+    let menu = Menu::with_items(app, &[&app_submenu, &file, &edit, &view, &window, &help])?;
     #[cfg(all(not(target_os = "macos"), debug_assertions))]
-    let menu = Menu::with_items(app, &[&file, &edit, &view, &window, &developer])?;
+    let menu = Menu::with_items(app, &[&file, &edit, &view, &window, &help, &developer])?;
     #[cfg(all(not(target_os = "macos"), not(debug_assertions)))]
-    let menu = Menu::with_items(app, &[&file, &edit, &view, &window])?;
+    let menu = Menu::with_items(app, &[&file, &edit, &view, &window, &help])?;
 
     Ok(menu)
 }

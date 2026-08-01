@@ -37,9 +37,10 @@ import {
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import type { useDesktopController } from "../controllers/useDesktopController";
-import { GuidanceTourController, seedGuidanceAnchors } from "../guidance";
+import { GuidanceTourController, requestShellTourStart, seedGuidanceAnchors } from "../guidance";
+import { markShellTourFinished, shouldAutoStartShellTour } from "../guidance/tour/shellTourPersistence";
 import { emitProductTelemetry } from "../lib/cloud";
 import { inBrowser } from "../demo";
 import { demoSearch } from "../demo";
@@ -144,6 +145,23 @@ export function DesktopShell({ model }: DesktopShellProps) {
     profileReady,
     themeReady: themeCatalog !== null,
   });
+
+  const shellTourAutoStarted = useRef(false);
+  useEffect(() => {
+    if (shellTourAutoStarted.current) return;
+    if (
+      !shouldAutoStartShellTour({
+        profileReady,
+        splashVisible,
+        workspaceLoaded: snapshot !== null,
+        settings,
+      })
+    ) {
+      return;
+    }
+    shellTourAutoStarted.current = true;
+    requestShellTourStart();
+  }, [profileReady, settings, snapshot, splashVisible]);
 
   // Manifest-authored purposes (editable in lattice.yaml) win over the
   // catalog hints derived from the provisioning template.
@@ -964,7 +982,11 @@ export function DesktopShell({ model }: DesktopShellProps) {
         />
       )}
       {statusToast && <div className="status-toast">{statusToast}</div>}
-      <GuidanceTourController />
+      <GuidanceTourController
+        onShellTourFinished={() => {
+          setSettings((current) => markShellTourFinished(current));
+        }}
+      />
       <DemoDriverHost />
     </div>
     </TooltipProvider>
