@@ -65,6 +65,7 @@ import {
   type BackgroundScheduleStatus,
 } from "../lib/backgroundSchedules";
 import { EmbeddingPackSettings } from "./EmbeddingPackSettings";
+import { CapturePermissionSettings } from "./CapturePermissionSettings";
 import { FeaturesSettings } from "./FeaturesSettings";
 import { HistoryRetentionSettings } from "./HistoryRetentionSettings";
 import type { AppSettings } from "./model";
@@ -1879,6 +1880,8 @@ function PrivacySettingsPanel({
           {busy ? <p className="settings-copy">Waiting for authentication…</p> : null}
         </>
       )}
+
+      <CapturePermissionSettings />
 
       <h2>Product data</h2>
       <p className="settings-copy">

@@ -13,6 +13,18 @@ pub const LATTICE_CAPTURE_ERR_INTERNAL: i32 = -5;
 pub const LATTICE_CAPTURE_ERR_UNSUPPORTED: i32 = -6;
 pub const LATTICE_CAPTURE_ERR_NOT_IMPLEMENTED: i32 = -7;
 
+pub const LATTICE_CAPTURE_PERM_UNSUPPORTED: u32 = 0;
+pub const LATTICE_CAPTURE_PERM_NOT_DETERMINED: u32 = 1;
+pub const LATTICE_CAPTURE_PERM_AUTHORIZED: u32 = 2;
+pub const LATTICE_CAPTURE_PERM_DENIED: u32 = 3;
+pub const LATTICE_CAPTURE_PERM_RESTRICTED: u32 = 4;
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct LatticeCapturePermissionStatus {
+    pub state: u32,
+}
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct LatticeCaptureDisplayInfo {
@@ -70,6 +82,16 @@ extern "C" {
         -> i32;
 
     pub fn lattice_capture_image_release(image: *mut LatticeCaptureImageOut);
+
+    pub fn lattice_capture_permission_status(
+        out_status: *mut LatticeCapturePermissionStatus,
+    ) -> i32;
+
+    pub fn lattice_capture_permission_request(
+        out_status: *mut LatticeCapturePermissionStatus,
+    ) -> i32;
+
+    pub fn lattice_capture_permission_open_settings() -> i32;
 }
 
 /// Copy PNG bytes from a bridge-owned image and release native memory.
