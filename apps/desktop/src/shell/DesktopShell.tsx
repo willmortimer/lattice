@@ -37,6 +37,7 @@ import {
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
+import { listen } from "@tauri-apps/api/event";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import type { useDesktopController } from "../controllers/useDesktopController";
 import { GuidanceTourController, seedGuidanceAnchors } from "../guidance";
@@ -58,6 +59,17 @@ import { KindMark } from "../KindMark";
 import { QUICK_NOTE_SHORTCUT } from "../quickNoteWindow";
 import { directoryPurposesFromCatalog } from "../lib/templates";
 import { newFolderParentPath } from "../lib/treeOps";
+import {
+  applyAgentDetachedHandoffToSession,
+  readAgentDetachedHandoff,
+} from "../agent/agentDetachedHandoff";
+import {
+  AGENT_DETACHED_CLOSED_EVENT,
+  requestCloseDetachedAgent,
+  type AgentDetachedClosedPayload,
+} from "../agent/agentDetachedWindow";
+import { useAgentSessionStore } from "../agent/agentStore";
+import { useDesktopUiStore } from "./desktopUiStore";
 
 const SettingsPage = lazy(() =>
   import("../settings/SettingsPage").then((module) => ({ default: module.SettingsPage })),
@@ -136,6 +148,38 @@ export function DesktopShell({ model }: DesktopShellProps) {
   }, []);
 
   useEffect(() => seedGuidanceAnchors(), []);
+
+  const agentLayoutMode = useDesktopUiStore((state) => state.agentLayoutMode);
+  const setAgentLayoutMode = useDesktopUiStore((state) => state.setAgentLayoutMode);
+  const selectThreadId = useAgentSessionStore((state) => state.selectThreadId);
+
+  useEffect(() => {
+    if (!hasTauri) {
+      return;
+    }
+    let cancelled = false;
+    const unlistenPromise = listen<AgentDetachedClosedPayload>(
+      AGENT_DETACHED_CLOSED_EVENT,
+      (event) => {
+        if (cancelled) {
+          return;
+        }
+        const handoff = readAgentDetachedHandoff();
+        if (handoff) {
+          applyAgentDetachedHandoffToSession(handoff);
+          selectThreadId(handoff.workspaceRoot, handoff.threadId);
+        } else {
+          selectThreadId(event.payload.workspaceRoot, event.payload.threadId);
+        }
+        setAgentLayoutMode(event.payload.returnLayoutMode);
+        setAgentPanelOpen(true);
+      },
+    );
+    return () => {
+      cancelled = true;
+      void unlistenPromise.then((stop) => stop());
+    };
+  }, [selectThreadId, setAgentLayoutMode, setAgentPanelOpen]);
 
   const sessionLocked = Boolean(appLock.enabled && appLock.locked);
 
@@ -827,24 +871,42 @@ export function DesktopShell({ model }: DesktopShellProps) {
             {agentPanelOpen && (
               <Suspense fallback={<div className="surface-loading">Loading agent…</div>}>
                 <AgentPanelShell>
-                  <LatticeAgentProvider workspaceRoot={inBrowser ? null : snapshot.root}>
-                    <AgentHeader
-                      onClose={() => setAgentPanelOpen(false)}
-                      workspaceRoot={inBrowser ? null : snapshot.root}
-                    />
-                    <AgentPanelBody
-                      thread={
-                        <AgentThread
-                          workspaceRoot={inBrowser ? null : snapshot.root}
-                          activeResourcePath={selected?.path ?? null}
-                          onNotify={setStatusToast}
-                        />
-                      }
-                      proposals={hasTauri ? proposalSummaries : []}
-                      proposalLoading={hasTauri ? proposalInboxLoading : false}
-                      onOpenProposal={hasTauri ? openProposalReview : undefined}
-                    />
-                  </LatticeAgentProvider>
+                  {agentLayoutMode === "detached" ? (
+                    <>
+                      <AgentHeader
+                        onClose={() => {
+                          void requestCloseDetachedAgent();
+                          setAgentPanelOpen(false);
+                        }}
+                        workspaceRoot={inBrowser ? null : snapshot.root}
+                      />
+                      <AgentPanelBody
+                        thread={null}
+                        proposals={hasTauri ? proposalSummaries : []}
+                        proposalLoading={hasTauri ? proposalInboxLoading : false}
+                        onOpenProposal={hasTauri ? openProposalReview : undefined}
+                      />
+                    </>
+                  ) : (
+                    <LatticeAgentProvider workspaceRoot={inBrowser ? null : snapshot.root}>
+                      <AgentHeader
+                        onClose={() => setAgentPanelOpen(false)}
+                        workspaceRoot={inBrowser ? null : snapshot.root}
+                      />
+                      <AgentPanelBody
+                        thread={
+                          <AgentThread
+                            workspaceRoot={inBrowser ? null : snapshot.root}
+                            activeResourcePath={selected?.path ?? null}
+                            onNotify={setStatusToast}
+                          />
+                        }
+                        proposals={hasTauri ? proposalSummaries : []}
+                        proposalLoading={hasTauri ? proposalInboxLoading : false}
+                        onOpenProposal={hasTauri ? openProposalReview : undefined}
+                      />
+                    </LatticeAgentProvider>
+                  )}
                 </AgentPanelShell>
               </Suspense>
             )}

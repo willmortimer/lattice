@@ -82,5 +82,8 @@ describe("desktopUiStore agent layout", () => {
       conversation: 64,
       side: 36,
     });
+
+    store.getState().setAgentLayoutMode("detached");
+    expect(store.getState().agentLayoutMode).toBe("detached");
   });
 });

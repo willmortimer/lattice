@@ -56,6 +56,21 @@
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
         "backgroundColor": "#0a0d13"
+      },
+      {
+        "label": "agent-detached",
+        "title": "Lattice Agent",
+        "url": "agent-detached.html",
+        "width": 420,
+        "height": 720,
+        "minWidth": 360,
+        "minHeight": 480,
+        "center": true,
+        "visible": false,
+        "resizable": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "backgroundColor": "#0a0d13"
       }
     ],
     "security": {

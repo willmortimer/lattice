@@ -1,7 +1,9 @@
+import { Button } from "@lattice/ui";
 import type { ReactNode } from "react";
 
 import type { TransactionProposalSummary } from "../lib/proposals";
 import { useDesktopUiStore } from "../shell/desktopUiStore";
+import { requestCloseDetachedAgent } from "./agentDetachedWindow";
 import { AgentTrail } from "./AgentTrail";
 import { AgentWorkbenchLayout } from "./AgentWorkbenchLayout";
 
@@ -19,6 +21,7 @@ export function AgentPanelBody({
   onOpenProposal,
 }: AgentPanelBodyProps) {
   const layoutMode = useDesktopUiStore((state) => state.agentLayoutMode);
+  const setLayoutMode = useDesktopUiStore((state) => state.setAgentLayoutMode);
 
   switch (layoutMode) {
     case "dock":
@@ -36,6 +39,23 @@ export function AgentPanelBody({
           proposalLoading={proposalLoading}
           onOpenProposal={onOpenProposal}
         />
+      );
+    case "detached":
+      return (
+        <div className="agent-detached-placeholder" role="status">
+          <p>Agent is open in a separate window.</p>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setLayoutMode("dock");
+              void requestCloseDetachedAgent();
+            }}
+          >
+            Return to Dock
+          </Button>
+        </div>
       );
     default: {
       const _exhaustive: never = layoutMode;
