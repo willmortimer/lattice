@@ -1,5 +1,6 @@
 import { Button } from "@lattice/ui";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { inBrowser } from "../demo";
 import type { ThemeCatalogPayload } from "../theme";
@@ -12,13 +13,10 @@ import {
   setOpenaiApiKey,
 } from "../lib/openaiKey";
 import {
-  getVoiceStatus,
-  listenVoiceEvents,
   prepareVoiceModel,
   VOICE_MODEL_CONFIRM,
   voicePackProviderLabel,
   voiceStatusLabel,
-  type VoiceStatus,
 } from "../lib/voice";
 import {
   cloudSignIn,
@@ -26,9 +24,7 @@ import {
   cloudSignOut,
   cloudUpdatePreferences,
   emitProductTelemetry,
-  getCloudSessionStatus,
   isCloudAiEntitled,
-  type CloudSessionStatus,
 } from "../lib/cloud";
 import {
   DEFAULT_OPENAI_EMBEDDING_MODEL,
@@ -38,25 +34,30 @@ import {
   OPENAI_EMBEDDING_MODEL_OPTIONS,
 } from "../agent/modelCatalog";
 import {
-  getRemoteAccessStatus,
   relayConnectionLabel,
   remoteAccessLeaseLabel,
   setWorkspaceRemoteAccess,
   workspaceDisplayName,
-  type RemoteAccessStatus,
 } from "../lib/remoteAccess";
 import {
   disableSemanticSearch,
   enableSemanticSearch,
-  getSemanticStatus,
   isVectorsBehindStatus,
-  listenSemanticEvents,
   SEMANTIC_MODEL_CONFIRM,
   semanticProviderLabel,
   semanticStatusLabel,
   VECTORS_BEHIND_EXPLANATION,
-  type SemanticStatus,
 } from "../lib/semantic";
+import {
+  setCloudSessionCache,
+  useCloudSessionQuery,
+} from "../query/useCloudSessionQuery";
+import { setRemoteAccessCache, useRemoteAccessQuery } from "../query/useRemoteAccessQuery";
+import {
+  setSemanticStatusCache,
+  useSemanticStatusQuery,
+} from "../query/useSemanticStatusQuery";
+import { setVoiceStatusCache, useVoiceStatusQuery } from "../query/useVoiceStatusQuery";
 import type { WorkspaceSnapshot } from "../types";
 import {
   getBackgroundScheduleStatus,
@@ -878,7 +879,7 @@ function AiSettingsPanel({
   const [keyDraft, setKeyDraft] = useState("");
   const [keyBusy, setKeyBusy] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
-  const [cloudStatus, setCloudStatus] = useState<CloudSessionStatus | null>(null);
+  const { data: cloudStatus = null } = useCloudSessionQuery();
 
   useEffect(() => {
     if (inBrowser) {
@@ -897,21 +898,6 @@ function AiSettingsPanel({
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    if (inBrowser || ai.mode !== "account") return;
-    let cancelled = false;
-    void getCloudSessionStatus()
-      .then((next) => {
-        if (!cancelled) setCloudStatus(next);
-      })
-      .catch(() => {
-        if (!cancelled) setCloudStatus(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [ai.mode]);
 
   async function handleSaveKey() {
     if (inBrowser) return;
@@ -1255,24 +1241,10 @@ function SemanticSearchSettings({
   onOpenFeatures: () => void;
   onOpenPacks: () => void;
 }) {
-  const [status, setStatus] = useState<SemanticStatus | null>(null);
+  const queryClient = useQueryClient();
+  const { data: status = null } = useSemanticStatusQuery(workspaceRoot);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (inBrowser || !workspaceRoot) return;
-    let cancelled = false;
-    void getSemanticStatus(workspaceRoot)
-      .then((next) => {
-        if (!cancelled) setStatus(next);
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [workspaceRoot]);
 
   // Single owner for enable/disable — do not also invoke from the toggle handler
   // (that raced two downloads on the same .partial and produced jumpy % / missing artifact).
@@ -1286,7 +1258,7 @@ function SemanticSearchSettings({
       : disableSemanticSearch(workspaceRoot);
     void op
       .then((next) => {
-        if (!cancelled) setStatus(next);
+        if (!cancelled) setSemanticStatusCache(queryClient, workspaceRoot, next);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -1304,77 +1276,7 @@ function SemanticSearchSettings({
     };
     // Intentionally omit onSemanticEnabledChange — parent passes an inline lambda.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- preference + root only
-  }, [workspaceRoot, semanticEnabled]);
-
-  useEffect(() => {
-    if (inBrowser) return;
-    let unlisten: (() => void) | undefined;
-    void listenSemanticEvents((event) => {
-      if (event.type === "status") {
-        setStatus((prev) => {
-          const nextPercent = event.progressPercent ?? null;
-          // Keep progress monotonic while downloading so polling / events cannot flicker backward.
-          const progressPercent =
-            event.state === "downloading" &&
-            prev?.state === "downloading" &&
-            prev.progressPercent != null &&
-            nextPercent != null
-              ? Math.max(prev.progressPercent, nextPercent)
-              : nextPercent;
-          return {
-            state: event.state,
-            pendingChunks: event.pendingChunks,
-            message: event.message,
-            progressPercent,
-            providerId: event.providerId ?? prev?.providerId ?? null,
-            modelId: event.modelId ?? prev?.modelId ?? null,
-            dimensions: event.dimensions ?? prev?.dimensions ?? null,
-          };
-        });
-      }
-    }).then((fn) => {
-      unlisten = fn;
-    });
-    return () => {
-      unlisten?.();
-    };
-  }, []);
-
-  // Poll while downloading/preparing/indexing so progress stays fresh.
-  useEffect(() => {
-    if (inBrowser || !workspaceRoot || !semanticEnabled) return;
-    if (
-      !status ||
-      (status.state !== "downloading" &&
-        status.state !== "preparing" &&
-        status.state !== "indexing")
-    ) {
-      return;
-    }
-    const id = window.setInterval(() => {
-      void getSemanticStatus(workspaceRoot)
-        .then((next) => {
-          setStatus((prev) => {
-            if (
-              next.state === "downloading" &&
-              prev?.state === "downloading" &&
-              prev.progressPercent != null &&
-              next.progressPercent != null
-            ) {
-              return {
-                ...next,
-                progressPercent: Math.max(prev.progressPercent, next.progressPercent),
-              };
-            }
-            return next;
-          });
-        })
-        .catch(() => {
-          /* keep last status */
-        });
-    }, 750);
-    return () => window.clearInterval(id);
-  }, [workspaceRoot, semanticEnabled, status?.state]);
+  }, [workspaceRoot, semanticEnabled, queryClient]);
 
   function handleToggle(next: boolean) {
     if (next) {
@@ -1494,7 +1396,7 @@ function PrivacySettingsPanel({
   onRefreshProfile?: () => void;
 }) {
   const [lockStatus, setLockStatus] = useState<AppLockStatus | null>(null);
-  const [cloudStatus, setCloudStatus] = useState<CloudSessionStatus | null>(null);
+  const { data: cloudStatus = null } = useCloudSessionQuery();
   const [busy, setBusy] = useState(false);
   const [prefsBusy, setPrefsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1504,6 +1406,7 @@ function PrivacySettingsPanel({
     aiAuditEnabled: true,
     anonymousTelemetryEnabled: true,
   };
+  const seededCloudPrefsRef = useRef(false);
 
   useEffect(() => {
     if (inBrowser) return;
@@ -1515,31 +1418,32 @@ function PrivacySettingsPanel({
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
       });
-    void getCloudSessionStatus()
-      .then((status) => {
-        if (cancelled) return;
-        setCloudStatus(status);
-        if (status.signedIn && status.preferences) {
-          onChange({
-            ...settings,
-            privacy: {
-              ...privacy,
-              aiAuditEnabled: status.preferences.ai_audit_enabled,
-              anonymousTelemetryEnabled: status.preferences.anonymous_telemetry_enabled,
-            },
-          });
-        }
-      })
-      .catch(() => {
-        /* local-only privacy still works when signed out / unreachable */
-      });
     void emitProductTelemetry("settings_opened");
     return () => {
       cancelled = true;
     };
-    // Seed cloud prefs once on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (
+      seededCloudPrefsRef.current ||
+      !cloudStatus?.signedIn ||
+      !cloudStatus.preferences
+    ) {
+      return;
+    }
+    seededCloudPrefsRef.current = true;
+    onChange({
+      ...settings,
+      privacy: {
+        ...privacy,
+        aiAuditEnabled: cloudStatus.preferences.ai_audit_enabled,
+        anonymousTelemetryEnabled: cloudStatus.preferences.anonymous_telemetry_enabled,
+      },
+    });
+    // Seed cloud prefs once when session first loads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cloudStatus?.signedIn, cloudStatus?.preferences]);
 
   const platformSupported = lockStatus?.platformSupported ?? false;
   const presenceAvailable = lockStatus?.presenceAvailable ?? false;
@@ -1710,28 +1614,11 @@ function PrivacySettingsPanel({
 }
 
 function RemoteAccessSettings({ onOpenCloud }: { onOpenCloud: () => void }) {
-  const [status, setStatus] = useState<RemoteAccessStatus | null>(null);
-  const [cloudStatus, setCloudStatus] = useState<CloudSessionStatus | null>(null);
+  const queryClient = useQueryClient();
+  const { data: status = null } = useRemoteAccessQuery();
+  const { data: cloudStatus = null } = useCloudSessionQuery();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (inBrowser) return;
-    let cancelled = false;
-    void Promise.all([getRemoteAccessStatus(), getCloudSessionStatus()])
-      .then(([remote, cloud]) => {
-        if (!cancelled) {
-          setStatus(remote);
-          setCloudStatus(cloud);
-        }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   async function handleToggle(workspaceId: string, enabled: boolean) {
     if (inBrowser) return;
@@ -1739,7 +1626,7 @@ function RemoteAccessSettings({ onOpenCloud }: { onOpenCloud: () => void }) {
     setError(null);
     try {
       const next = await setWorkspaceRemoteAccess(workspaceId, enabled);
-      setStatus(next);
+      setRemoteAccessCache(queryClient, next);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1844,29 +1731,18 @@ function RemoteAccessSettings({ onOpenCloud }: { onOpenCloud: () => void }) {
 }
 
 function CloudAccountSettings() {
-  const [status, setStatus] = useState<CloudSessionStatus | null>(null);
+  const queryClient = useQueryClient();
+  const { data: status = null } = useCloudSessionQuery();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (inBrowser) return;
-    let cancelled = false;
-    void getCloudSessionStatus()
-      .then((next) => {
-        if (!cancelled) {
-          setStatus(next);
-          if (next.user?.email) setEmail(next.user.email);
-        }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (status?.user?.email) {
+      setEmail(status.user.email);
+    }
+  }, [status?.user?.email]);
 
   async function handleSignIn() {
     if (inBrowser) return;
@@ -1874,7 +1750,7 @@ function CloudAccountSettings() {
     setError(null);
     try {
       const next = await cloudSignIn(email.trim(), password);
-      setStatus(next);
+      setCloudSessionCache(queryClient, next);
       setPassword("");
       if (next.error) setError(next.error);
     } catch (err: unknown) {
@@ -1890,7 +1766,7 @@ function CloudAccountSettings() {
     setError(null);
     try {
       const next = await cloudSignInApple();
-      setStatus(next);
+      setCloudSessionCache(queryClient, next);
       if (next.user?.email) setEmail(next.user.email);
       if (next.error) setError(next.error);
     } catch (err: unknown) {
@@ -1906,7 +1782,7 @@ function CloudAccountSettings() {
     setError(null);
     try {
       const next = await cloudSignOut();
-      setStatus(next);
+      setCloudSessionCache(queryClient, next);
       setPassword("");
       if (next.error) setError(next.error);
     } catch (err: unknown) {
@@ -2052,82 +1928,27 @@ function CloudAccountSettings() {
 }
 
 function VoiceDictationSettings({ onOpenPacks }: { onOpenPacks: () => void }) {
-  const [status, setStatus] = useState<VoiceStatus | null>(null);
+  const queryClient = useQueryClient();
+  const { data: status = null } = useVoiceStatusQuery();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (inBrowser) return;
-    let cancelled = false;
-    void getVoiceStatus()
-      .then((next) => {
-        if (!cancelled) {
-          setStatus(next);
-          if (next.preparing) setBusy(true);
-        }
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (inBrowser) return;
-    let unlisten: (() => void) | undefined;
-    void listenVoiceEvents((event) => {
-      if (event.type === "status") {
-        if (event.state === "preparing") {
-          setBusy(true);
-          setError(null);
-          setStatus((prev) =>
-            prev
-              ? { ...prev, preparing: true, message: event.message }
-              : {
-                  available: true,
-                  prepared: false,
-                  preparing: true,
-                  listening: false,
-                  nativeCapture: false,
-                  platform: "macos",
-                  message: event.message,
-                },
-          );
-        }
-        if (event.state === "ready") {
-          setBusy(false);
-          setError(null);
-          setStatus((prev) =>
-            prev
-              ? { ...prev, prepared: true, preparing: false, message: event.message }
-              : {
-                  available: true,
-                  prepared: true,
-                  preparing: false,
-                  listening: false,
-                  nativeCapture: false,
-                  platform: "macos",
-                  message: event.message,
-                },
-          );
-        }
-        if (event.state === "idle") {
-          setBusy(false);
-        }
-      }
-      if (event.type === "failed") {
-        setBusy(false);
-        setError(event.message);
-      }
-    }).then((fn) => {
-      unlisten = fn;
-    });
-    return () => {
-      unlisten?.();
-    };
-  }, []);
+    if (status?.preparing) {
+      setBusy(true);
+      setError(null);
+      return;
+    }
+    if (status?.prepared) {
+      setBusy(false);
+      setError(null);
+      return;
+    }
+    if (status && !status.available && status.message) {
+      setBusy(false);
+      setError(status.message);
+    }
+  }, [status]);
 
   function handleDownloadPack() {
     if (status?.prepared || busy || status?.available === false) return;
@@ -2136,7 +1957,7 @@ function VoiceDictationSettings({ onOpenPacks }: { onOpenPacks: () => void }) {
     setBusy(true);
     setError(null);
     void prepareVoiceModel()
-      .then((next) => setStatus(next))
+      .then((next) => setVoiceStatusCache(queryClient, next))
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setBusy(false));
   }

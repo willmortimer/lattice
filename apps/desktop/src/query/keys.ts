@@ -13,7 +13,12 @@
  * - ["kernelfs-run", runId]
  * - ["cloud-session"]
  * - ["voice-status", providerId]
+ * - ["remote-access"]
+ * - ["semantic-search", workspaceRoot]
  */
+/** Default voice provider id when the daemon does not expose one in status. */
+export const DEFAULT_VOICE_PROVIDER_ID = "default";
+
 export const queryKeys = {
   workspace: (workspaceId: string) => ["workspace", workspaceId] as const,
 
@@ -31,5 +36,10 @@ export const queryKeys = {
 
   cloudSession: () => ["cloud-session"] as const,
 
-  voiceStatus: (providerId: string) => ["voice-status", providerId] as const,
+  voiceStatus: (providerId: string = DEFAULT_VOICE_PROVIDER_ID) =>
+    ["voice-status", providerId] as const,
+
+  remoteAccess: () => ["remote-access"] as const,
+
+  semanticSearch: (workspaceRoot: string) => ["semantic-search", workspaceRoot] as const,
 } as const;

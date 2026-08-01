@@ -1,12 +1,11 @@
 import { Button } from "@lattice/ui";
 import { Plus } from "@phosphor-icons/react";
-import { useEffect, useState } from "react";
 
 import {
   displayTitleForThread,
-  listAgentThreads,
   type AgentThreadSummary,
 } from "../lib/agentThreads";
+import { useAgentThreadsQuery } from "../query/useAgentThreadsQuery";
 import { useAgentChatControls } from "./agentChatControls";
 import { useAgentSessionStore } from "./agentStore";
 
@@ -18,38 +17,13 @@ export function AgentThreadHistory({ workspaceRoot }: AgentThreadHistoryProps) {
   const threadId = useAgentSessionStore((state) => state.threadIds[workspaceRoot] ?? "");
   const selectThreadId = useAgentSessionStore((state) => state.selectThreadId);
   const startNewThread = useAgentSessionStore((state) => state.startNewThread);
-  const threadListEpoch = useAgentSessionStore((state) => state.threadListEpoch);
   const controls = useAgentChatControls();
   const isStreaming = controls?.isStreaming === true;
 
-  const [threads, setThreads] = useState<AgentThreadSummary[]>([]);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const { data: threads = [], error } = useAgentThreadsQuery(workspaceRoot);
+  const loadError = error instanceof Error ? error.message : error ? String(error) : null;
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const result = await listAgentThreads({ workspaceRoot });
-        if (cancelled) {
-          return;
-        }
-        setThreads(result.threads);
-        setLoadError(null);
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-        setThreads([]);
-        setLoadError(error instanceof Error ? error.message : String(error));
-      }
-    };
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [workspaceRoot, threadListEpoch]);
-
-  const options = threads.slice().sort((a, b) => b.updatedAt - a.updatedAt);
+  const options: AgentThreadSummary[] = threads.slice().sort((a, b) => b.updatedAt - a.updatedAt);
   const knownIds = new Set(options.map((thread) => thread.id));
   if (threadId && !knownIds.has(threadId)) {
     options.unshift({

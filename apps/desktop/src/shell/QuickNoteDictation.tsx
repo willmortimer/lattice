@@ -1,4 +1,5 @@
 import { CircleNotch, Microphone } from "@phosphor-icons/react";
+import { useQueryClient } from "@tanstack/react-query";
 import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useRef, useState } from "react";
 
 import { inBrowser } from "../demo";
@@ -6,13 +7,12 @@ import {
   cancelActiveVoiceSession,
   cancelVoiceSession,
   DictationCapture,
-  getVoiceStatus,
   listenVoiceEvents,
   prepareVoiceModel,
   startVoiceSession,
   type VoiceSessionContextHints,
-  type VoiceStatus,
 } from "../lib/voice";
+import { setVoiceStatusCache, useVoiceStatusQuery } from "../query/useVoiceStatusQuery";
 
 type DictationPhase = "idle" | "preparing" | "listening" | "finalizing" | "unavailable";
 
@@ -48,8 +48,9 @@ export const QuickNoteDictation = forwardRef<QuickNoteDictationHandle, QuickNote
     ref,
   ) {
     const labelId = useId();
+    const queryClient = useQueryClient();
+    const { data: status = null } = useVoiceStatusQuery({ enabled });
     const [phase, setPhase] = useState<DictationPhase>("idle");
-    const [status, setStatus] = useState<VoiceStatus | null>(null);
     const [hint, setHint] = useState<string | null>(null);
     const captureRef = useRef(new DictationCapture());
     const sessionIdRef = useRef<string | null>(null);
@@ -74,23 +75,10 @@ export const QuickNoteDictation = forwardRef<QuickNoteDictationHandle, QuickNote
         setPhase("unavailable");
         return;
       }
-      let cancelled = false;
-      void getVoiceStatus()
-        .then((next) => {
-          if (cancelled) return;
-          setStatus(next);
-          setPhase(next.available ? (next.preparing ? "preparing" : "idle") : "unavailable");
-          if (next.message) setHint(next.message);
-        })
-        .catch((err: unknown) => {
-          if (cancelled) return;
-          setPhase("unavailable");
-          setHint(err instanceof Error ? err.message : String(err));
-        });
-      return () => {
-        cancelled = true;
-      };
-    }, [enabled]);
+      if (!status) return;
+      setPhase(status.available ? (status.preparing ? "preparing" : "idle") : "unavailable");
+      if (status.message) setHint(status.message);
+    }, [enabled, status]);
 
     const voiceContextRef = useRef(voiceContext);
     useEffect(() => {
@@ -135,9 +123,15 @@ export const QuickNoteDictation = forwardRef<QuickNoteDictationHandle, QuickNote
           }
           if (event.state === "preparing") setPhase("preparing");
           if (event.state === "ready") {
-            setStatus((prev) =>
-              prev ? { ...prev, prepared: true, preparing: false, message: event.message } : prev,
-            );
+            setVoiceStatusCache(queryClient, {
+              available: true,
+              prepared: true,
+              preparing: false,
+              listening: false,
+              nativeCapture: status?.nativeCapture ?? false,
+              platform: status?.platform ?? "macos",
+              message: event.message,
+            });
             if (!holdingRef.current) setPhase("idle");
           }
           if (event.state === "idle" && !holdingRef.current) {
@@ -190,7 +184,7 @@ export const QuickNoteDictation = forwardRef<QuickNoteDictationHandle, QuickNote
               setPhase("idle");
               return;
             }
-            setStatus(prepared);
+            setVoiceStatusCache(queryClient, prepared);
           }
           if (!holdingRef.current || generation !== startGenerationRef.current) {
             await cancelActiveVoiceSession().catch(() => undefined);
@@ -229,7 +223,7 @@ export const QuickNoteDictation = forwardRef<QuickNoteDictationHandle, QuickNote
           onError(err instanceof Error ? err.message : String(err));
         }
       });
-    }, [clearProvisional, enabled, enqueue, ensurePageReady, getInsertPosition, onError, status?.prepared]);
+    }, [clearProvisional, enabled, enqueue, ensurePageReady, getInsertPosition, onError, queryClient, status?.prepared]);
 
     const endHold = useCallback(() => {
       if (!holdingRef.current) return;
