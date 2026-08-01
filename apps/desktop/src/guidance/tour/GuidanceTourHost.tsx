@@ -1,6 +1,9 @@
 import { useMachine } from "@xstate/react";
-import { Button, PopoverPortal, PopoverPopup, PopoverPositioner, PopoverRoot } from "@lattice/ui";
-import { useEffect, useMemo, useRef } from "react";
+import { Button, PopoverPortal, PopoverPopup, PopoverRoot } from "@lattice/ui";
+import { useEffect, useRef } from "react";
+
+import { FloatingPopoverPositioner } from "../../overlay/FloatingPopoverPositioner";
+import { tourSideToPlacement } from "../../overlay/floatingPosition";
 
 import "./guidanceTour.css";
 import { GuidanceSpotlight } from "./spotlight";
@@ -12,8 +15,6 @@ type GuidanceTourHostProps = {
   tour: TourDefinition | null;
   onFinished?: (outcome: ShellTourOutcome) => void;
 };
-
-const EMPTY_RECT = new DOMRect(0, 0, 0, 0);
 
 export function GuidanceTourHost({ tour, onFinished }: GuidanceTourHostProps) {
   const [snapshot, send] = useMachine(guidanceTourMachine);
@@ -35,13 +36,6 @@ export function GuidanceTourHost({ tour, onFinished }: GuidanceTourHostProps) {
     onFinished(outcome);
   }, [onFinished, snapshot.status, snapshot.value]);
 
-  const virtualAnchor = useMemo(
-    () => ({
-      getBoundingClientRect: () => snapshot.context.anchorRect ?? EMPTY_RECT,
-    }),
-    [snapshot.context.anchorRect],
-  );
-
   if (!active || !step) return null;
 
   return (
@@ -49,7 +43,13 @@ export function GuidanceTourHost({ tour, onFinished }: GuidanceTourHostProps) {
       <GuidanceSpotlight rect={snapshot.context.anchorRect} />
       <PopoverRoot open={showing}>
         <PopoverPortal>
-          <PopoverPositioner anchor={virtualAnchor} side={step.placement ?? "bottom"} sideOffset={12}>
+          <FloatingPopoverPositioner
+            rect={snapshot.context.anchorRect}
+            placement={tourSideToPlacement(step.placement ?? "bottom")}
+            sideOffset={12}
+            enabled={showing}
+            style={{ zIndex: 1201 }}
+          >
             <PopoverPopup className="guidance-tour-popover" role="dialog" aria-label={step.title}>
               <div className="guidance-tour-popover__eyebrow">Tour</div>
               <h2 className="guidance-tour-popover__title">{step.title}</h2>
@@ -66,7 +66,7 @@ export function GuidanceTourHost({ tour, onFinished }: GuidanceTourHostProps) {
                 </Button>
               </div>
             </PopoverPopup>
-          </PopoverPositioner>
+          </FloatingPopoverPositioner>
         </PopoverPortal>
       </PopoverRoot>
     </>
