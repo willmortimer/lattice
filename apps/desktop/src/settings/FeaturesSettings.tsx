@@ -3,12 +3,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import { inBrowser } from "../demo";
+import { cloudBlobMaterialize, cloudBlobOpen } from "../lib/cloud";
 import {
   downloadPack,
   getPack,
   semanticStatusToPackStatus,
   voiceStatusToPackStatus,
 } from "../lib/packs";
+import { formatAuthority, type ResourceStat } from "../lib/resourceStat";
 import { disableSemanticSearch } from "../lib/semantic";
 import {
   setSemanticStatusCache,
@@ -84,6 +86,11 @@ export function FeaturesSettings({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [labsPath, setLabsPath] = useState("Notes.md");
+  const [labsBusy, setLabsBusy] = useState(false);
+  const [labsError, setLabsError] = useState<string | null>(null);
+  const [labsStat, setLabsStat] = useState<ResourceStat | null>(null);
+  const [labsOpenBytes, setLabsOpenBytes] = useState<number | null>(null);
 
   const displayError = error ?? queryErrorMessage(semanticQueryError);
 
@@ -122,6 +129,55 @@ export function FeaturesSettings({
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setBusy(false));
+  }
+
+  async function handleLabsUpload() {
+    if (inBrowser || labsBusy) return;
+    if (!workspaceRoot) {
+      setLabsError("Open a workspace before uploading to cloud.");
+      return;
+    }
+    const relPath = labsPath.trim();
+    if (!relPath) {
+      setLabsError("Enter a workspace-relative path to upload.");
+      return;
+    }
+    setLabsBusy(true);
+    setLabsError(null);
+    setLabsOpenBytes(null);
+    try {
+      const stat = await cloudBlobMaterialize(workspaceRoot, relPath);
+      setLabsStat(stat);
+    } catch (err: unknown) {
+      setLabsStat(null);
+      setLabsError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLabsBusy(false);
+    }
+  }
+
+  async function handleLabsReopen() {
+    if (inBrowser || labsBusy) return;
+    if (!workspaceRoot) {
+      setLabsError("Open a workspace before reopening from cloud.");
+      return;
+    }
+    const relPath = labsPath.trim();
+    if (!relPath) {
+      setLabsError("Enter a workspace-relative path to reopen.");
+      return;
+    }
+    setLabsBusy(true);
+    setLabsError(null);
+    try {
+      const bytes = await cloudBlobOpen(workspaceRoot, relPath);
+      setLabsOpenBytes(bytes.length);
+    } catch (err: unknown) {
+      setLabsOpenBytes(null);
+      setLabsError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLabsBusy(false);
+    }
   }
 
   return (
@@ -170,6 +226,68 @@ export function FeaturesSettings({
               {embeddingStatus === "ready" ? "Pack ready" : packStatusLabel(embeddingStatus)}
             </span>
           </SettingRow>
+
+          <h2 className="settings-subsection">Labs</h2>
+          <p className="settings-copy">
+            Experimental cloud blob round-trip for a workspace-relative path. Requires Settings →
+            Cloud account sign-in; unsigned requests fail closed with a clear error.
+          </p>
+          <SettingRow
+            settingId="features.labs-cloud-blob"
+            title="Cloud blob put/get"
+            description="Upload local bytes (PUT→GET verify, authority becomes Cloud) or reopen canonical cloud bytes."
+          >
+            <div className="cloud-signin-password">
+              <label className="cloud-signin-field">
+                <span>Workspace-relative path</span>
+                <input
+                  type="text"
+                  value={labsPath}
+                  disabled={labsBusy}
+                  placeholder="Notes.md"
+                  onChange={(event) => setLabsPath(event.currentTarget.value)}
+                />
+              </label>
+              <div className="cloud-account-actions">
+                <Button
+                  size="sm"
+                  disabled={labsBusy}
+                  onClick={() => void handleLabsUpload()}
+                >
+                  {labsBusy ? "Working…" : "Upload selected/test path to cloud"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={labsBusy}
+                  onClick={() => void handleLabsReopen()}
+                >
+                  {labsBusy ? "Working…" : "Reopen from cloud"}
+                </Button>
+              </div>
+            </div>
+          </SettingRow>
+          {labsStat ? (
+            <div className="diagnostics-card" role="status">
+              <strong>Cloud materialize ok</strong>
+              <span>
+                {labsStat.path} · authority {formatAuthority(labsStat.authority)}
+                {labsStat.content_hash ? ` · ${labsStat.content_hash}` : ""}
+              </span>
+            </div>
+          ) : null}
+          {labsOpenBytes !== null ? (
+            <div className="diagnostics-card" role="status">
+              <strong>Reopened from cloud</strong>
+              <span>{labsOpenBytes} bytes</span>
+            </div>
+          ) : null}
+          {labsError ? (
+            <div className="diagnostics-card" role="alert">
+              <strong>Labs cloud blob error</strong>
+              <span>{labsError}</span>
+            </div>
+          ) : null}
 
           <h2 className="settings-subsection">Shell capabilities</h2>
           <p className="settings-copy">

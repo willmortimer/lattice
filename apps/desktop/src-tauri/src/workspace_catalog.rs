@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use lattice_core::{manifest_path, WorkspaceManifest};
+use lattice_core::{WorkspaceManifest, WORKSPACE_MANIFEST_FILENAME};
 use lattice_profile::{lattice_home_path, STATE_DIR_NAME};
 use serde::{Deserialize, Serialize};
 
@@ -150,7 +150,7 @@ fn title_from_root(root: &str) -> String {
 }
 
 fn manifest_head(root: &Path) -> Option<WorkspaceManifest> {
-    let manifest_file = manifest_path(root);
+    let manifest_file = root.join(WORKSPACE_MANIFEST_FILENAME);
     if !manifest_file.is_file() {
         return None;
     }

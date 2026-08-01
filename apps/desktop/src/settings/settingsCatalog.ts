@@ -382,6 +382,13 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
     keywords: ["recall", "embeddings"],
   },
   {
+    id: "features.labs-cloud-blob",
+    section: "features",
+    title: "Labs cloud blob",
+    description: "Upload a workspace path to cloud or reopen cloud-authoritative bytes.",
+    keywords: ["labs", "cloud", "blob", "materialize", "authority"],
+  },
+  {
     id: "packs.catalog",
     section: "packs",
     title: "Downloadable packs",

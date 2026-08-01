@@ -11,7 +11,7 @@ use crate::path::join_within_root;
 
 /// Lean payload for Quick Note: workspace identity and a freshly created page
 /// without scanning the full resource catalog.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QuickNotePrepared {
     pub root: String,
