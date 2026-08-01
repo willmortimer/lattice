@@ -71,7 +71,6 @@ import {
   type AgentDetachedClosedPayload,
 } from "../agent/agentDetachedWindow";
 import { useAgentSessionStore } from "../agent/agentStore";
-import { useDesktopUiStore } from "./desktopUiStore";
 
 const SettingsPage = lazy(() =>
   import("../settings/SettingsPage").then((module) => ({ default: module.SettingsPage })),
@@ -146,6 +145,8 @@ export function DesktopShell({ model }: DesktopShellProps) {
   } = model;
 
   const agentLayoutMode = useDesktopUiStore((state) => state.agentLayoutMode);
+  const setAgentLayoutMode = useDesktopUiStore((state) => state.setAgentLayoutMode);
+  const selectThreadId = useAgentSessionStore((state) => state.selectThreadId);
   const reviewInWorkbench =
     Boolean(proposalReview) && agentPanelOpen && agentLayoutMode === "workbench";
 
@@ -154,10 +155,6 @@ export function DesktopShell({ model }: DesktopShellProps) {
   }, []);
 
   useEffect(() => seedGuidanceAnchors(), []);
-
-  const agentLayoutMode = useDesktopUiStore((state) => state.agentLayoutMode);
-  const setAgentLayoutMode = useDesktopUiStore((state) => state.setAgentLayoutMode);
-  const selectThreadId = useAgentSessionStore((state) => state.selectThreadId);
 
   useEffect(() => {
     if (!hasTauri) {

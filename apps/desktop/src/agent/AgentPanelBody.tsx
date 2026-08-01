@@ -43,6 +43,7 @@ export function AgentPanelBody({
           {thread}
         </>
       );
+    case "focus":
     case "workbench":
       return (
         <AgentWorkbenchLayout

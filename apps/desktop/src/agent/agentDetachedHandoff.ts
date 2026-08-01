@@ -8,7 +8,7 @@ import {
 /** Shared across webviews (sessionStorage is not). */
 export const AGENT_DETACHED_HANDOFF_KEY = "lattice.agent.detached.handoff.v1";
 
-export type AgentDetachedReturnLayout = "dock" | "workbench";
+export type AgentDetachedReturnLayout = "dock" | "workbench" | "focus";
 
 export type AgentDetachedHandoff = {
   workspaceRoot: string;
@@ -26,7 +26,7 @@ function localStore(): Storage | null {
 }
 
 export function isAgentDetachedReturnLayout(value: unknown): value is AgentDetachedReturnLayout {
-  return value === "dock" || value === "workbench";
+  return value === "dock" || value === "workbench" || value === "focus";
 }
 
 export function parseAgentDetachedHandoff(raw: string | null): AgentDetachedHandoff | null {

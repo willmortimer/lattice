@@ -17,7 +17,7 @@ export function AgentPanelShell({ children }: AgentPanelShellProps) {
   return (
     <aside
       className={`agent-panel${
-        layoutMode === "workbench"
+        layoutMode === "workbench" || layoutMode === "focus"
           ? " agent-panel-workbench"
           : layoutMode === "detached"
             ? " agent-panel-detached"

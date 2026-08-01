@@ -70,6 +70,21 @@ describe("agentDetachedHandoff", () => {
         JSON.stringify({
           workspaceRoot: "/tmp/ws",
           threadId: "thread-1",
+          returnLayoutMode: "focus",
+          activeRun: null,
+        }),
+      ),
+    ).toEqual({
+      workspaceRoot: "/tmp/ws",
+      threadId: "thread-1",
+      returnLayoutMode: "focus",
+      activeRun: null,
+    });
+    expect(
+      parseAgentDetachedHandoff(
+        JSON.stringify({
+          workspaceRoot: "/tmp/ws",
+          threadId: "thread-1",
           returnLayoutMode: "detached",
         }),
       ),

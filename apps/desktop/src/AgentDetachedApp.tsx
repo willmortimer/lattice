@@ -44,7 +44,7 @@ function seedFromHandoff(handoff: AgentDetachedHandoff): void {
 }
 
 function AgentDetachedInner() {
-  // Dock chrome inside this window; main keeps layoutMode "detached".
+  // Workbench body layout inside this window; main keeps layoutMode "detached".
   const setLayoutMode = useDesktopUiStore((state) => state.setAgentLayoutMode);
   const [session, setSession] = useState<DetachedSession | null>(null);
   const sessionRef = useRef<DetachedSession | null>(null);
@@ -84,7 +84,7 @@ function AgentDetachedInner() {
         activeRun: fromStorage?.activeRun ?? null,
       };
       seedFromHandoff(handoff);
-      setLayoutMode("dock");
+      setLayoutMode("workbench");
       setSession({
         workspaceRoot: handoff.workspaceRoot,
         threadId: handoff.threadId,
@@ -186,7 +186,7 @@ function AgentDetachedInner() {
 export function AgentDetachedApp() {
   const [store] = useState(() => {
     const next = createDesktopUiStore();
-    next.getState().setAgentLayoutMode("dock");
+    next.getState().setAgentLayoutMode("workbench");
     next.getState().setAgentPanelOpen(true);
     return next;
   });

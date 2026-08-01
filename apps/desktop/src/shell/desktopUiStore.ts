@@ -21,7 +21,7 @@ import { DIRTY_SAVE_STATE, IDLE_SAVE_STATE } from "../editor/saveState";
  */
 export type RendererSessionId = string;
 
-export type AgentLayoutMode = "dock" | "workbench" | "detached";
+export type AgentLayoutMode = "dock" | "workbench" | "focus" | "detached";
 
 export type AgentWorkbenchPanelSizes = {
   conversation: number;

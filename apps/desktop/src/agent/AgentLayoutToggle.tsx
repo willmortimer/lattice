@@ -21,7 +21,19 @@ export interface AgentLayoutToggleProps {
 }
 
 function toReturnLayout(mode: AgentLayoutMode): AgentDetachedReturnLayout {
-  return mode === "workbench" ? "workbench" : "dock";
+  switch (mode) {
+    case "workbench":
+      return "workbench";
+    case "focus":
+      return "focus";
+    case "dock":
+    case "detached":
+      return "dock";
+    default: {
+      const _exhaustive: never = mode;
+      return _exhaustive;
+    }
+  }
 }
 
 function isDetachedAgentWindow(): boolean {
@@ -122,6 +134,19 @@ export function AgentLayoutToggle({ workspaceRoot }: AgentLayoutToggleProps) {
         onClick={() => selectMode("workbench")}
       >
         Workbench
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className={
+          layoutMode === "focus" && !inDetachedWindow ? "agent-layout-toggle-active" : undefined
+        }
+        title="Focus layout (agent-first)"
+        aria-pressed={layoutMode === "focus" && !inDetachedWindow}
+        onClick={() => selectMode("focus")}
+      >
+        Focus
       </Button>
       <Button
         type="button"

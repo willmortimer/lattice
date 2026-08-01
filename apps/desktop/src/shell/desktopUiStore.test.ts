@@ -83,6 +83,9 @@ describe("desktopUiStore agent layout", () => {
       side: 36,
     });
 
+    store.getState().setAgentLayoutMode("focus");
+    expect(store.getState().agentLayoutMode).toBe("focus");
+
     store.getState().setAgentLayoutMode("detached");
     expect(store.getState().agentLayoutMode).toBe("detached");
   });
