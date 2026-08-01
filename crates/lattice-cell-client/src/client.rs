@@ -14,7 +14,7 @@ use crate::connect::{
 use crate::error::{CellClientError, Result};
 use crate::hydrate::{
     cell_spec_network_attachments, cell_spec_volume_attachments, hydrate_files_under_role,
-    oci_suppresses_network_deny_all, KernelFSHydrationPlan, KernelFSRole,
+    is_oci_execution_mode, oci_suppresses_network_deny_all, KernelFSHydrationPlan, KernelFSRole,
 };
 use crate::types::{
     ApplyCellRequest, ApplyCellResponse, CellSpec, CollectOutputRequest, CollectOutputResponse,
@@ -328,22 +328,6 @@ impl<H: CelldHttpClient> CelldClient<H> {
             return Err(CellClientError::InvalidPlan("argv is required".into()));
         }
 
-        let hydrate_files = if request.hydrate_files.is_empty() {
-            let mut files = Vec::new();
-            for input in &request.plan.input {
-                if input.host_path.as_os_str().is_empty() {
-                    continue;
-                }
-                files.extend(hydrate_files_under_role(
-                    KernelFSRole::Input,
-                    &input.host_path,
-                )?);
-            }
-            files
-        } else {
-            request.hydrate_files.clone()
-        };
-
         let (apply, start) = self.apply_and_start_from_plan(
             &request.cell_id,
             &request.profile,
@@ -356,13 +340,40 @@ impl<H: CelldHttpClient> CelldClient<H> {
             &request.oci_bundle_path,
         )?;
 
-        let hydrate = self.hydrate_projection(
-            &request.cell_id,
-            &HydrateProjectionRequest {
+        let hydrate = if is_oci_execution_mode(&request.execution_mode) {
+            // KernelFS export already populated live binds; Cell ociHydrateProjection
+            // returns state "ok" for empty file lists (export-authoritative).
+            HydrateProjectionResponse {
+                service: LATTICE_RUNTIME_V1.to_string(),
+                method: "HydrateProjection".to_string(),
                 projection_id: request.projection_id.clone(),
-                files: hydrate_files,
-            },
-        )?;
+                state: "ok".to_string(),
+                ..HydrateProjectionResponse::default()
+            }
+        } else {
+            let hydrate_files = if request.hydrate_files.is_empty() {
+                let mut files = Vec::new();
+                for input in &request.plan.input {
+                    if input.host_path.as_os_str().is_empty() {
+                        continue;
+                    }
+                    files.extend(hydrate_files_under_role(
+                        KernelFSRole::Input,
+                        &input.host_path,
+                    )?);
+                }
+                files
+            } else {
+                request.hydrate_files.clone()
+            };
+            self.hydrate_projection(
+                &request.cell_id,
+                &HydrateProjectionRequest {
+                    projection_id: request.projection_id.clone(),
+                    files: hydrate_files,
+                },
+            )?
+        };
 
         let run = self.run_task(
             &request.cell_id,
@@ -707,6 +718,66 @@ mod tests {
         };
         let map = collected_to_map(&collect).unwrap();
         assert_eq!(map["output/a.bin"].content, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn run_projection_oci_skips_hydrate_invoke() {
+        let http = MockHttp::new();
+        http.push_unary(
+            CELL_APPLY,
+            serde_json::json!({
+                "cell": {"id": "cell_demo", "observedState": "OBSERVED_STATE_READY"},
+                "operation": {"operationId": "op_apply", "state": "OPERATION_STATE_SUCCEEDED"}
+            }),
+        );
+        http.push_unary(
+            CELL_START,
+            serde_json::json!({
+                "operation": {"operationId": "op_start", "state": "OPERATION_STATE_SUCCEEDED"}
+            }),
+        );
+        http.push_invoke_payload(serde_json::json!({
+            "state": "completed",
+            "exit_code": 0,
+            "projection_id": "proj_oci"
+        }));
+        let artifact = base64::engine::general_purpose::STANDARD.encode(b"oci out");
+        http.push_invoke_payload(serde_json::json!({
+            "state": "collected",
+            "file_count": 1,
+            "files": [{
+                "path": "output/out.txt",
+                "sha256": "abc",
+                "bytes": 7,
+                "content_base64": artifact
+            }]
+        }));
+
+        let client = CelldClient::new("http://celld.test", http);
+        let result = client
+            .run_projection(&ProjectionRunRequest {
+                cell_id: "cell_demo".into(),
+                projection_id: "proj_oci".into(),
+                execution_mode: EXECUTION_MODE_OCI.to_string(),
+                oci_bundle_path: "/tmp/cell-oci-bundles/cell_mac_live_bind".into(),
+                plan: KernelFSHydrationPlan::from_role_paths(
+                    "/nonexistent/input",
+                    None,
+                    "/tmp/out",
+                ),
+                hydrate_files: vec![HydrateFile::text("input/hello.txt", "hi")],
+                argv: vec!["/bin/true".into()],
+                ..ProjectionRunRequest::default()
+            })
+            .expect("run_projection");
+
+        assert_eq!(result.hydrate.state, "ok");
+        assert_eq!(result.hydrate.method, "HydrateProjection");
+        assert_eq!(result.hydrate.projection_id, "proj_oci");
+        assert_eq!(result.hydrate.file_count, 0);
+        assert_eq!(result.run.exit_code, 0);
+        let out = result.output_files.get("output/out.txt").unwrap();
+        assert_eq!(out.content, b"oci out");
     }
 
     #[test]
