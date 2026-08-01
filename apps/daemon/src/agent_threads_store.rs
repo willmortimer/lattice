@@ -202,16 +202,29 @@ impl AgentThreadsStore {
         let run_id = run_id.filter(|value| !value.trim().is_empty());
         let now = current_time_ms();
         let transaction = self.connection.transaction()?;
+        let created_at = transaction
+            .query_row(
+                "SELECT created_at FROM messages WHERE id = ?1",
+                params![message_id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .unwrap_or(now);
         transaction.execute(
             "INSERT INTO messages(id, thread_id, role, content_json, run_id, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(id) DO UPDATE SET
+                thread_id = excluded.thread_id,
+                role = excluded.role,
+                content_json = excluded.content_json,
+                run_id = excluded.run_id",
             params![
                 message_id,
                 thread_id,
                 role,
                 content_json,
                 run_id,
-                now
+                created_at
             ],
         )?;
         transaction.execute(
@@ -225,7 +238,7 @@ impl AgentThreadsStore {
             role: role.to_string(),
             content_json: content_json.to_string(),
             run_id,
-            created_at: now,
+            created_at,
         })
     }
 }
@@ -293,5 +306,42 @@ mod tests {
             store.append_message("missing", None, "user", "{}", None),
             Err(ThreadStoreError::ThreadNotFound(_))
         ));
+    }
+
+    #[test]
+    fn append_message_upserts_when_id_reused() {
+        let dir = TempDir::new().expect("tempdir");
+        let mut store = AgentThreadsStore::open(dir.path()).expect("open");
+        store
+            .create_thread(Some("thread-1".into()), None)
+            .expect("create");
+
+        let first = serde_json::to_string(&json!({ "type": "text", "text": "partial" }))
+            .expect("json");
+        let second = serde_json::to_string(&json!({ "type": "text", "text": "partial reply" }))
+            .expect("json");
+
+        store
+            .append_message(
+                "thread-1",
+                Some("msg-assistant".into()),
+                "assistant",
+                &first,
+                Some("run-1".into()),
+            )
+            .expect("first append");
+        store
+            .append_message(
+                "thread-1",
+                Some("msg-assistant".into()),
+                "assistant",
+                &second,
+                Some("run-1".into()),
+            )
+            .expect("upsert");
+
+        let messages = store.list_messages("thread-1").expect("messages");
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].content_json, second);
     }
 }

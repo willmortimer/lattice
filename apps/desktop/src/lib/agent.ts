@@ -2,8 +2,8 @@ import { Channel } from "@tauri-apps/api/core";
 import type { ChatTransport, UIMessage, UIMessageChunk } from "ai";
 
 import {
-  persistAgentRunTranscript,
   RunTranscriptAccumulator,
+  TranscriptPersistenceBatcher,
 } from "../agent/agentTranscriptPersistence";
 import { invoke } from "./ipc";
 
@@ -67,30 +67,12 @@ export type TauriAgentChatTransportOptions = {
   onAgentEvent?: AgentEventHandler;
   /** When false, skip durable thread persistence (tests). Defaults to true. */
   persistTranscripts?: boolean;
+  /**
+   * When true (default), raw stream events are durable in the daemon run-event log;
+   * the client batches compacted thread transcript rows only.
+   */
+  daemonAuthoritativeRunEvents?: boolean;
 };
-
-function scheduleAgentRunTranscriptPersistence(args: {
-  workspaceRoot: string;
-  threadId: string;
-  messages: UIMessage[];
-  accumulator: RunTranscriptAccumulator;
-  runId: string;
-  error?: string;
-}): void {
-  const snapshot = args.accumulator.snapshot();
-  const runId = snapshot.runId ?? args.runId;
-  const error = args.error ?? snapshot.streamError ?? undefined;
-  void persistAgentRunTranscript({
-    workspaceRoot: args.workspaceRoot,
-    threadId: args.threadId,
-    messages: args.messages,
-    chunks: snapshot.chunks,
-    runId,
-    error,
-  }).catch(() => {
-    // Persistence must not block or surface in the composer.
-  });
-}
 
 /** Map one ordered Tauri channel payload into UI chunks and side effects. */
 export function applyAgentStreamMessage(
@@ -182,8 +164,11 @@ export class TauriAgentChatTransport implements ChatTransport<UIMessage> {
         void (async () => {
           const persistTranscripts = this.options.persistTranscripts !== false;
           const transcript = new RunTranscriptAccumulator();
+          const daemonAuthoritativeRunEvents =
+            this.options.daemonAuthoritativeRunEvents !== false;
           // Explicit `string`: crypto.randomUUID() is a branded template type in TS DOM libs.
           let completedRunId: string = crypto.randomUUID();
+          let persistenceBatcher: TranscriptPersistenceBatcher | null = null;
           try {
             const resolved = this.options.resolveRunOptions?.() ?? {};
             const result = await startAgentRun(
@@ -196,7 +181,7 @@ export class TauriAgentChatTransport implements ChatTransport<UIMessage> {
               },
               (message) => {
                 if (persistTranscripts) {
-                  transcript.observe(message);
+                  persistenceBatcher?.observe(message);
                 }
                 const outcome = applyAgentStreamMessage(message, (chunk) => {
                   controller.enqueue(chunk);
@@ -205,6 +190,17 @@ export class TauriAgentChatTransport implements ChatTransport<UIMessage> {
                   onRunId: (runId) => {
                     this.activeRunId = runId;
                     completedRunId = runId;
+                    if (persistTranscripts && persistenceBatcher === null) {
+                      persistenceBatcher = new TranscriptPersistenceBatcher({
+                        workspaceRoot: this.options.workspaceRoot,
+                        threadId,
+                        messages,
+                        accumulator: transcript,
+                        runId,
+                        daemonAuthoritativeRunEvents,
+                      });
+                      persistenceBatcher.persistUserTurn();
+                    }
                   },
                   onTerminalError: (message) => {
                     failOnce(new Error(message));
@@ -220,14 +216,18 @@ export class TauriAgentChatTransport implements ChatTransport<UIMessage> {
             );
             completedRunId = result.runId;
             if (persistTranscripts) {
-              scheduleAgentRunTranscriptPersistence({
-                workspaceRoot: this.options.workspaceRoot,
-                threadId,
-                messages,
-                accumulator: transcript,
-                runId: result.runId,
-                error: result.error,
-              });
+              if (persistenceBatcher === null) {
+                persistenceBatcher = new TranscriptPersistenceBatcher({
+                  workspaceRoot: this.options.workspaceRoot,
+                  threadId,
+                  messages,
+                  accumulator: transcript,
+                  runId: result.runId,
+                  daemonAuthoritativeRunEvents,
+                });
+                persistenceBatcher.persistUserTurn();
+              }
+              persistenceBatcher.dispose(result.error);
             }
             if (result.error) {
               failOnce(new Error(result.error));
@@ -236,14 +236,20 @@ export class TauriAgentChatTransport implements ChatTransport<UIMessage> {
             }
           } catch (error) {
             if (persistTranscripts) {
-              scheduleAgentRunTranscriptPersistence({
-                workspaceRoot: this.options.workspaceRoot,
-                threadId,
-                messages,
-                accumulator: transcript,
-                runId: completedRunId,
-                error: error instanceof Error ? error.message : String(error),
-              });
+              if (persistenceBatcher === null) {
+                persistenceBatcher = new TranscriptPersistenceBatcher({
+                  workspaceRoot: this.options.workspaceRoot,
+                  threadId,
+                  messages,
+                  accumulator: transcript,
+                  runId: completedRunId,
+                  daemonAuthoritativeRunEvents,
+                });
+                persistenceBatcher.persistUserTurn();
+              }
+              persistenceBatcher.dispose(
+                error instanceof Error ? error.message : String(error),
+              );
             }
             failOnce(error);
           } finally {
