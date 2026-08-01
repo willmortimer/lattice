@@ -4,11 +4,16 @@ import { hasTauri, invoke } from "./ipc";
 import type { DesktopSession } from "./profile";
 import {
   isSyntheticResourceId,
+  looksLikeConnectedRootPath,
+  looksLikeLatticeResourceId,
   pathForResourceId,
   resourceFromCatalogEntry,
   resourceIdForPath,
+  syntheticResourceId,
   type CatalogEntry,
 } from "./resourceCatalog";
+
+export { looksLikeLatticeResourceId } from "./resourceCatalog";
 
 /** LatticeFS ResourceId (UUID) or synthetic `path:` placeholder until registry assigns one. */
 export type ResourceId = string;
@@ -102,6 +107,10 @@ export function normalizeWorkspaceUiSession(
  * Returns null when the token cannot be resolved (dropped on migrate).
  * UUID-shaped tokens unknown to the catalog are retained (best-effort) so a
  * later registry-backed catalog can resolve id→path.
+ *
+ * Browser-demo / connected-root edges: unresolved `path:` tokens and
+ * `github://` / `gitlab://` paths are kept as honest synthetics — never
+ * replaced with invented UUIDs.
  */
 export function resolveSessionResourceId(
   token: string,
@@ -116,19 +125,18 @@ export function resolveSessionResourceId(
   if (isSyntheticResourceId(token)) {
     const path = token.slice("path:".length);
     if (!path) return null;
-    return resourceIdForPath(catalog, path) ?? null;
+    // Prefer catalog remap (synthetic→UUID); otherwise keep the honest placeholder.
+    return resourceIdForPath(catalog, path) ?? token;
+  }
+
+  // Connected-root virtual paths are not in the workspace catalog yet.
+  if (looksLikeConnectedRootPath(token)) {
+    return syntheticResourceId(token);
   }
 
   // Bare path with no catalog hit → drop. Stable UUID not yet projected → keep.
   if (looksLikeLatticeResourceId(token)) return token;
   return null;
-}
-
-/** LatticeFS ResourceId wire form is a UUID string. */
-export function looksLikeLatticeResourceId(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-    value,
-  );
 }
 
 /**

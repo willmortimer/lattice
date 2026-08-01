@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { WorkspaceSnapshot } from "../types";
-import { applyCatalogDelta, syntheticResourceId, type CatalogEntry } from "./resourceCatalog";
+import {
+  applyCatalogDelta,
+  catalogMapFromResources,
+  syntheticResourceId,
+  type CatalogEntry,
+} from "./resourceCatalog";
 import {
   defaultWorkspaceUiSession,
   migrateWorkspaceUiSessionResourceIds,
@@ -152,5 +157,83 @@ describe("workspaceUiSession", () => {
     expect(tabs.map((tab) => tab.path)).toEqual(["renamed.page"]);
     expect(active?.path).toBe("renamed.page");
     expect(session.openTabIds).toEqual([resourceId]);
+  });
+
+  it("migrate keeps browser-demo synthetic ids without inventing UUIDs", () => {
+    const catalog = catalogMapFromResources([
+      { path: "Home.md", kind: "page" },
+      { path: "Notes/Plan.md", kind: "page" },
+    ]);
+    const homeId = syntheticResourceId("Home.md");
+    const planId = syntheticResourceId("Notes/Plan.md");
+    const migrated = migrateWorkspaceUiSessionResourceIds(
+      normalizeWorkspaceUiSession("ws-demo", {
+        openTabIds: ["Home.md", homeId, planId],
+        activeResourceId: "Notes/Plan.md",
+        resourceViewState: {
+          "Home.md": { scrollY: 1 },
+          [planId]: { scrollY: 2 },
+        },
+      }),
+      catalog,
+    );
+    expect(migrated.openTabIds).toEqual([homeId, planId]);
+    expect(migrated.activeResourceId).toBe(planId);
+    expect(migrated.resourceViewState).toEqual({
+      [homeId]: { scrollY: 1 },
+      [planId]: { scrollY: 2 },
+    });
+    for (const id of migrated.openTabIds) {
+      expect(id.startsWith("path:")).toBe(true);
+    }
+  });
+
+  it("migrate keeps connected-root paths as honest synthetics", () => {
+    const catalog = catalogWith([
+      { resourceId: "11111111-1111-1111-1111-111111111111", path: "Notes.md" },
+    ]);
+    const connected = "github://acme/demo/README.md";
+    const gitlab = "gitlab://group/proj/src/main.rs";
+    const migrated = migrateWorkspaceUiSessionResourceIds(
+      normalizeWorkspaceUiSession("ws-1", {
+        openTabIds: [connected, syntheticResourceId(gitlab), "Notes.md", "missing.page"],
+        activeResourceId: connected,
+      }),
+      catalog,
+    );
+    expect(migrated.openTabIds).toEqual([
+      syntheticResourceId(connected),
+      syntheticResourceId(gitlab),
+      "11111111-1111-1111-1111-111111111111",
+    ]);
+    expect(migrated.activeResourceId).toBe(syntheticResourceId(connected));
+  });
+
+  it("migrate remaps synthetic onto registry UUID when catalog upgrades", () => {
+    const uuid = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+    const catalog = catalogWith([{ resourceId: uuid, path: "Home.md" }]);
+    const migrated = migrateWorkspaceUiSessionResourceIds(
+      normalizeWorkspaceUiSession("ws-1", {
+        openTabIds: [syntheticResourceId("Home.md")],
+        activeResourceId: syntheticResourceId("Home.md"),
+      }),
+      catalog,
+    );
+    expect(migrated.openTabIds).toEqual([uuid]);
+    expect(migrated.activeResourceId).toBe(uuid);
+  });
+
+  it("migrate retains unknown registry UUIDs for later catalog projection", () => {
+    const pending = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+    const catalog = catalogWith([]);
+    const migrated = migrateWorkspaceUiSessionResourceIds(
+      normalizeWorkspaceUiSession("ws-1", {
+        openTabIds: [pending],
+        activeResourceId: pending,
+      }),
+      catalog,
+    );
+    expect(migrated.openTabIds).toEqual([pending]);
+    expect(migrated.activeResourceId).toBe(pending);
   });
 });

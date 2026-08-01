@@ -1,5 +1,9 @@
-import { IconButton } from "@lattice/ui";
+import { Button, IconButton } from "@lattice/ui";
 import { invoke } from "../lib/ipc";
+import { cloudBlobMaterialize, cloudBlobOpen } from "../lib/cloud";
+import {
+  displayResourceIdForPath,
+} from "../lib/resourceCatalog";
 import {
   formatAuthority,
   formatMaterialization,
@@ -85,6 +89,15 @@ export function ResourceInspector({
   const [graphMode, setGraphMode] = useState<RelationshipMode>("all");
   const [resourceStat, setResourceStat] = useState<ResourceStat | null>(null);
   const [loading, setLoading] = useState(false);
+  const [cloudBusy, setCloudBusy] = useState(false);
+  const [cloudError, setCloudError] = useState<string | null>(null);
+  const [cloudOpenBytes, setCloudOpenBytes] = useState<number | null>(null);
+
+  useEffect(() => {
+    setResourceStat(null);
+    setCloudError(null);
+    setCloudOpenBytes(null);
+  }, [resource?.path, root]);
 
   useEffect(() => {
     if (!root || inBrowser) return;
@@ -146,6 +159,45 @@ export function ResourceInspector({
     };
   }, [resource, root, section, graphMode]);
 
+  const displayId = resource
+    ? displayResourceIdForPath(resource.path, resourceStat?.resource_id)
+    : null;
+
+  async function handleCloudBackup() {
+    if (inBrowser || cloudBusy || !root || !resource) return;
+    setCloudBusy(true);
+    setCloudError(null);
+    setCloudOpenBytes(null);
+    try {
+      const stat = await cloudBlobMaterialize(root, resource.path);
+      setResourceStat(stat);
+    } catch (err: unknown) {
+      setCloudError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCloudBusy(false);
+    }
+  }
+
+  async function handleCloudReopen() {
+    if (inBrowser || cloudBusy || !root || !resource) return;
+    setCloudBusy(true);
+    setCloudError(null);
+    try {
+      const bytes = await cloudBlobOpen(root, resource.path);
+      setCloudOpenBytes(bytes.length);
+      const stat = await getResourceStat(root, resource.path);
+      setResourceStat(stat);
+    } catch (err: unknown) {
+      setCloudOpenBytes(null);
+      setCloudError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCloudBusy(false);
+    }
+  }
+
+  const canCloudBackup = Boolean(root && resource && !inBrowser);
+  const isCloudAuthority = resourceStat?.authority === "cloud";
+
   return (
     <aside className="inspector">
       <header className="inspector-head">
@@ -172,47 +224,106 @@ export function ResourceInspector({
       <div className="inspector-body">
         {loading && <p className="inspector-empty">Loading…</p>}
         {!loading && section === "properties" && (
-          <dl className="property-list">
-            <div><dt>Kind</dt><dd>{resource ? KIND_LABELS[resource.kind] : "Workspace"}</dd></div>
-            <div><dt>Path</dt><dd>{resource?.path ?? "—"}</dd></div>
-            <div><dt>Format</dt><dd>{resource?.formatId ?? "—"}</dd></div>
-            <div><dt>Canonical state</dt><dd>{resource ? "Workspace file" : "Directory"}</dd></div>
-            {resource && resourceStat && (
-              <>
-                <div><dt>Resource ID</dt><dd><code>{resourceStat.resource_id}</code></dd></div>
-                <div><dt>Authority</dt><dd>{formatAuthority(resourceStat.authority)}</dd></div>
-                <div><dt>Materialization</dt><dd>{formatMaterialization(resourceStat.materialization)}</dd></div>
-                {resourceStat.content_hash && (
-                  <div><dt>Content hash</dt><dd><code>{resourceStat.content_hash}</code></dd></div>
-                )}
-                {resourceStat.version_id && (
-                  <div><dt>Version ID</dt><dd><code>{resourceStat.version_id}</code></dd></div>
-                )}
-                {resourceStat.hydration_inputs && resourceStat.hydration_inputs.length > 0 && (
-                  <div>
-                    <dt>Hydration inputs</dt>
-                    <dd>
-                      <ul className="inspector-hydration-list">
-                        {resourceStat.hydration_inputs.map((digest) => (
-                          <li key={`${digest.path}:${digest.contentHash}:${digest.resourceId ?? ""}`}>
-                            <code>{digest.path}</code>
-                            {" @ "}
-                            <code>{digest.contentHash}</code>
-                            {digest.resourceId ? (
-                              <>
-                                {" "}
-                                (<code>{digest.resourceId}</code>)
-                              </>
-                            ) : null}
-                          </li>
-                        ))}
-                      </ul>
-                    </dd>
-                  </div>
-                )}
-              </>
+          <>
+            <dl className="property-list">
+              <div><dt>Kind</dt><dd>{resource ? KIND_LABELS[resource.kind] : "Workspace"}</dd></div>
+              <div><dt>Path</dt><dd>{resource?.path ?? "—"}</dd></div>
+              <div><dt>Format</dt><dd>{resource?.formatId ?? "—"}</dd></div>
+              <div><dt>Canonical state</dt><dd>{resource ? "Workspace file" : "Directory"}</dd></div>
+              {resource && displayId && (
+                <div>
+                  <dt>Resource ID</dt>
+                  <dd>
+                    <code>{displayId.resourceId}</code>
+                    {displayId.isSynthetic ? (
+                      <span className="inspector-id-note"> placeholder until registry assigns one</span>
+                    ) : null}
+                  </dd>
+                </div>
+              )}
+              {resource && resourceStat && (
+                <>
+                  <div><dt>Authority</dt><dd>{formatAuthority(resourceStat.authority)}</dd></div>
+                  <div><dt>Materialization</dt><dd>{formatMaterialization(resourceStat.materialization)}</dd></div>
+                  {resourceStat.content_hash && (
+                    <div><dt>Content hash</dt><dd><code>{resourceStat.content_hash}</code></dd></div>
+                  )}
+                  {resourceStat.version_id && (
+                    <div><dt>Version ID</dt><dd><code>{resourceStat.version_id}</code></dd></div>
+                  )}
+                  {resourceStat.hydration_inputs && resourceStat.hydration_inputs.length > 0 && (
+                    <div>
+                      <dt>Hydration inputs</dt>
+                      <dd>
+                        <ul className="inspector-hydration-list">
+                          {resourceStat.hydration_inputs.map((digest) => (
+                            <li key={`${digest.path}:${digest.contentHash}:${digest.resourceId ?? ""}`}>
+                              <code>{digest.path}</code>
+                              {" @ "}
+                              <code>{digest.contentHash}</code>
+                              {digest.resourceId ? (
+                                <>
+                                  {" "}
+                                  (<code>{digest.resourceId}</code>)
+                                </>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      </dd>
+                    </div>
+                  )}
+                </>
+              )}
+              {resource && !resourceStat && inBrowser && (
+                <div>
+                  <dt>Authority</dt>
+                  <dd>Local (browser demo)</dd>
+                </div>
+              )}
+            </dl>
+            {canCloudBackup && (
+              <div className="inspector-cloud-actions">
+                <p className="inspector-cloud-copy">
+                  Back up this resource to Lattice Cloud (requires Settings → Cloud account).
+                  Authority becomes Cloud after a successful upload.
+                </p>
+                <div className="cloud-account-actions">
+                  <Button
+                    size="sm"
+                    disabled={cloudBusy}
+                    onClick={() => void handleCloudBackup()}
+                  >
+                    {cloudBusy ? "Working…" : "Back up to Lattice Cloud"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={cloudBusy || !isCloudAuthority}
+                    onClick={() => void handleCloudReopen()}
+                  >
+                    {cloudBusy ? "Working…" : "Reopen from cloud"}
+                  </Button>
+                </div>
+                {isCloudAuthority ? (
+                  <p className="inspector-cloud-status" role="status">
+                    Authority {formatAuthority("cloud")}
+                    {resourceStat?.content_hash ? ` · ${resourceStat.content_hash}` : ""}
+                  </p>
+                ) : null}
+                {cloudOpenBytes !== null ? (
+                  <p className="inspector-cloud-status" role="status">
+                    Reopened from cloud · {cloudOpenBytes} bytes
+                  </p>
+                ) : null}
+                {cloudError ? (
+                  <p className="inspector-cloud-error" role="alert">
+                    {cloudError}
+                  </p>
+                ) : null}
+              </div>
             )}
-          </dl>
+          </>
         )}
         {!loading && section === "links" && (
           <>
