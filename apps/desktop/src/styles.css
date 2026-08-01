@@ -7084,6 +7084,16 @@ html[data-motion="always"] *::after {
   padding: 12px 12px 0;
 }
 
+.agent-thread-virtual-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.agent-thread-turn {
+  display: flex;
+  flex-direction: column;
+}
+
 .agent-thread-empty {
   display: grid;
   flex: 1;
@@ -7101,10 +7111,8 @@ html[data-motion="always"] *::after {
 }
 
 .agent-thread-footer {
-  position: sticky;
-  bottom: 0;
   z-index: 1;
-  margin: 0 -12px;
+  flex-shrink: 0;
   padding: 10px 12px 12px;
   border-top: 1px solid var(--lt-line);
   background: color-mix(in oklch, var(--lt-bg) 88%, var(--lt-panel));

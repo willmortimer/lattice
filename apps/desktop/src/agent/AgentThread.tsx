@@ -1,44 +1,9 @@
-import {
-  ComposerPrimitive,
-  ErrorPrimitive,
-  MessagePrimitive,
-  ThreadPrimitive,
-} from "@assistant-ui/react";
-import { Button } from "@lattice/ui";
-
 import { useAgentChatControls } from "./agentChatControls";
 import { useAgentSessionStore } from "./agentStore";
-import { SemanticToolCall } from "./tools/semanticToolRegistry";
+import { VirtualizedAgentThreadView } from "./VirtualizedAgentThreadView";
 
 export interface AgentThreadProps {
   workspaceRoot: string | null;
-}
-
-function AgentUserMessage() {
-  return (
-    <MessagePrimitive.Root className="agent-message agent-message-user">
-      <MessagePrimitive.Parts />
-    </MessagePrimitive.Root>
-  );
-}
-
-function AgentAssistantMessage() {
-  return (
-    <MessagePrimitive.Root className="agent-message agent-message-assistant">
-      <MessagePrimitive.Parts
-        components={{
-          tools: {
-            Override: SemanticToolCall,
-          },
-        }}
-      />
-      <MessagePrimitive.Error>
-        <ErrorPrimitive.Root className="agent-message-error">
-          <ErrorPrimitive.Message />
-        </ErrorPrimitive.Root>
-      </MessagePrimitive.Error>
-    </MessagePrimitive.Root>
-  );
 }
 
 function accountAiCtaCopy(reason: "unsigned" | "not_entitled" | null): {
@@ -55,68 +20,6 @@ function accountAiCtaCopy(reason: "unsigned" | "not_entitled" | null): {
     title: "Sign in for Lattice paid AI",
     body: "Sign in under Settings → Cloud account to use Lattice paid AI, or switch to BYO / on-device under Settings → AI.",
   };
-}
-
-function AgentThreadView({
-  accountAiDisabled,
-  accountAiBlockReason,
-  byoOpenaiKeyMissing,
-  transcriptHydrating,
-}: {
-  accountAiDisabled: boolean;
-  accountAiBlockReason: "unsigned" | "not_entitled" | null;
-  byoOpenaiKeyMissing: boolean;
-  transcriptHydrating: boolean;
-}) {
-  const composerDisabled =
-    accountAiDisabled || byoOpenaiKeyMissing || transcriptHydrating;
-  const paidCta = accountAiDisabled ? accountAiCtaCopy(accountAiBlockReason) : null;
-
-  return (
-    <ThreadPrimitive.Root className="agent-thread">
-      <ThreadPrimitive.Viewport className="agent-thread-viewport">
-        {paidCta ? (
-          <div className="agent-paid-cta" role="status">
-            <strong>{paidCta.title}</strong>
-            <p>{paidCta.body}</p>
-          </div>
-        ) : null}
-        <ThreadPrimitive.Empty>
-          <div className="agent-thread-empty">
-            <p>
-              {accountAiDisabled
-                ? paidCta?.body
-                : byoOpenaiKeyMissing
-                  ? "Add your OpenAI API key in Settings → AI to use the agent in BYO mode."
-                  : "Ask the agent about this workspace."}
-            </p>
-          </div>
-        </ThreadPrimitive.Empty>
-        <ThreadPrimitive.Messages
-          components={{
-            UserMessage: AgentUserMessage,
-            AssistantMessage: AgentAssistantMessage,
-          }}
-        />
-        {!composerDisabled ? (
-          <ThreadPrimitive.ViewportFooter className="agent-thread-footer">
-            <ComposerPrimitive.Root className="agent-composer">
-              <ComposerPrimitive.Input
-                className="agent-composer-input"
-                placeholder="Message the agent…"
-                rows={3}
-              />
-              <ComposerPrimitive.Send asChild>
-                <Button variant="primary" size="sm" className="agent-composer-send">
-                  Send
-                </Button>
-              </ComposerPrimitive.Send>
-            </ComposerPrimitive.Root>
-          </ThreadPrimitive.ViewportFooter>
-        ) : null}
-      </ThreadPrimitive.Viewport>
-    </ThreadPrimitive.Root>
-  );
 }
 
 export function AgentThread({ workspaceRoot }: AgentThreadProps) {
@@ -138,12 +41,20 @@ export function AgentThread({ workspaceRoot }: AgentThreadProps) {
     );
   }
 
+  const composerDisabled =
+    accountAiDisabled || byoOpenaiKeyMissing || transcriptHydrating;
+  const paidCta = accountAiDisabled ? accountAiCtaCopy(accountAiBlockReason) : null;
+  const emptyMessage = accountAiDisabled
+    ? paidCta?.body ?? ""
+    : byoOpenaiKeyMissing
+      ? "Add your OpenAI API key in Settings → AI to use the agent in BYO mode."
+      : "Ask the agent about this workspace.";
+
   return (
-    <AgentThreadView
-      accountAiDisabled={accountAiDisabled}
-      accountAiBlockReason={accountAiBlockReason}
-      byoOpenaiKeyMissing={byoOpenaiKeyMissing}
-      transcriptHydrating={transcriptHydrating}
+    <VirtualizedAgentThreadView
+      paidCta={paidCta}
+      emptyMessage={emptyMessage}
+      composerDisabled={composerDisabled}
     />
   );
 }
