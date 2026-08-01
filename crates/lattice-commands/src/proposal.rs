@@ -385,7 +385,41 @@ fn attach_proposal_hydration_lineage(
             path: PathBuf::from(".lattice/resource-registry.json"),
             reason: format!("failed to attach hydration lineage on accept: {err}"),
         },
-    )
+    )?;
+    update_accepted_content_hashes(workspace_root, &path_list)
+}
+
+/// Record SHA-256 digests for accepted file bytes in the resource registry.
+fn update_accepted_content_hashes(workspace_root: &Path, paths: &[String]) -> Result<()> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+    let mut registry = latticefs_core::NamespaceRegistry::open(workspace_root).map_err(
+        |err| Error::InvalidResourceTarget {
+            path: PathBuf::from(".lattice/resource-registry.json"),
+            reason: format!("failed to open registry for content hash on accept: {err}"),
+        },
+    )?;
+    for path in paths {
+        let file_path = workspace_root.join(path);
+        if !file_path.is_file() {
+            continue;
+        }
+        let bytes = fs::read(&file_path).map_err(|err| Error::InvalidResourceTarget {
+            path: file_path.clone(),
+            reason: format!("failed to read accepted bytes for content hash: {err}"),
+        })?;
+        registry
+            .update_content_hash_from_bytes(path, &bytes)
+            .map_err(|err| Error::InvalidResourceTarget {
+                path: PathBuf::from(".lattice/resource-registry.json"),
+                reason: format!("failed to set content hash on accept for {path}: {err}"),
+            })?;
+    }
+    registry.save().map_err(|err| Error::InvalidResourceTarget {
+        path: PathBuf::from(".lattice/resource-registry.json"),
+        reason: format!("failed to save registry after content hash on accept: {err}"),
+    })
 }
 
 fn path_display(path: &Path) -> String {
@@ -1401,6 +1435,11 @@ components:
         assert_eq!(stat.hydration_inputs[0].path, digest.path);
         assert_eq!(stat.hydration_inputs[0].content_hash, digest.content_hash);
         assert_eq!(stat.hydration_inputs[0].resource_id, digest.resource_id);
+        let accepted_bytes = fs::read(dir.path().join("Reports/out.txt")).unwrap();
+        assert_eq!(
+            stat.content_hash,
+            Some(latticefs_core::ContentHash::from_bytes(&accepted_bytes).unwrap())
+        );
     }
 
     /// Propose helper → persist → accept → `resource_stat` within lattice-commands.
@@ -1437,5 +1476,10 @@ components:
         assert_eq!(stat.hydration_inputs[0].path, digest.path);
         assert_eq!(stat.hydration_inputs[0].content_hash, digest.content_hash);
         assert_eq!(stat.hydration_inputs[0].resource_id, digest.resource_id);
+        let accepted_bytes = fs::read(dir.path().join(target_path)).unwrap();
+        assert_eq!(
+            stat.content_hash,
+            Some(latticefs_core::ContentHash::from_bytes(&accepted_bytes).unwrap())
+        );
     }
 }
