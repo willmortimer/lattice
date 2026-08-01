@@ -224,6 +224,36 @@ pub fn is_oci_execution_mode(execution_mode: &str) -> bool {
     trimmed.eq_ignore_ascii_case("oci") || trimmed.eq_ignore_ascii_case(EXECUTION_MODE_OCI)
 }
 
+/// Derive a unique celld cell id for concurrent OCI runs.
+///
+/// One `cell_id` maps to one mount set / one OCI sandbox — ApplyCell `SpecDigest`
+/// includes `volumes[].source`, so concurrent dogfood with different projection
+/// volume trees must use distinct cell ids unless callers opt into
+/// [`resolve_oci_cell_id`] with `shared_cell_id: true`.
+pub fn oci_run_cell_id(base_cell_id: &str, projection_id: &str) -> String {
+    format!(
+        "{}_{}",
+        base_cell_id.trim(),
+        projection_id.trim()
+    )
+}
+
+/// Effective celld cell id for an OCI projection run.
+///
+/// When `shared_cell_id` is false (default for OCI dogfood), suffixes
+/// `projection_id` onto `base_cell_id` via [`oci_run_cell_id`].
+pub fn resolve_oci_cell_id(
+    base_cell_id: &str,
+    projection_id: &str,
+    shared_cell_id: bool,
+) -> String {
+    if shared_cell_id {
+        base_cell_id.trim().to_string()
+    } else {
+        oci_run_cell_id(base_cell_id, projection_id)
+    }
+}
+
 /// Sanitize a cell id for the ivisor worker directory name (slashes → underscores).
 pub fn oci_ivisor_worker_id(cell_id: &str) -> String {
     format!("ivisor-worker-{}", cell_id.trim().replace('/', "_"))
@@ -459,6 +489,22 @@ mod tests {
         assert_eq!(files.len(), 2);
         assert_eq!(files[0].path, "input/hello.txt");
         assert_eq!(files[1].path, "input/nested/a.txt");
+    }
+
+    #[test]
+    fn oci_run_cell_id_suffixes_projection() {
+        assert_eq!(
+            oci_run_cell_id("cell_dogfood", "proj_run_a"),
+            "cell_dogfood_proj_run_a"
+        );
+        assert_eq!(
+            resolve_oci_cell_id("cell_dogfood", "proj_run_a", false),
+            "cell_dogfood_proj_run_a"
+        );
+        assert_eq!(
+            resolve_oci_cell_id("cell_dogfood", "proj_run_a", true),
+            "cell_dogfood"
+        );
     }
 
     #[test]

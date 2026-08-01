@@ -38,6 +38,7 @@ Live options (forwarded; --execution-mode=oci is always set):
   --oci-bundle-path PATH    required for --live
   --with-work               also export/mount {run_id}/work
   --allow-network           with_network_deny_all(false) when OCI egress is OK
+  --shared-cell-id          reuse --cell-id (no {cell_id}_{projection_id} suffix)
   --                        guest argv (default: copy input → output)
 
 Live environment (required):

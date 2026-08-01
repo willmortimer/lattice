@@ -29,6 +29,8 @@ Live options (passed to cell-firecracker-dogfood binary):
   --vz-runtime-dir PATH  Mac OCI: CELL_VZ_RUNTIME_DIR override (agent-share parent)
   --with-work          Also create/mount KernelFS work role dir
   --allow-network      Set with_network_deny_all(false) on hydration plan
+  --shared-cell-id     OCI only: reuse --cell-id without {cell_id}_{projection_id} suffix
+                       (default: unique cell id per projection for concurrent runs)
   --                  Remaining args become guest argv (default: copy input → output)
 
 Live environment (required):

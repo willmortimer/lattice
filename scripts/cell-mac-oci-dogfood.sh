@@ -41,6 +41,7 @@ Live options (forwarded; --execution-mode=oci is always set):
   --vz-runtime-dir PATH     or set CELL_VZ_RUNTIME_DIR / CELL_OCI_IVISOR_WORKSPACE
   --with-work               also export/mount .kernelfs-runs/{run_id}/work
   --allow-network           with_network_deny_all(false) when OCI egress is OK
+  --shared-cell-id          reuse --cell-id (no {cell_id}_{projection_id} suffix)
   --                        guest argv (default: copy input → output)
 
 Live environment (required):

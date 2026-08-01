@@ -21,7 +21,8 @@ pub use hydrate::{
     AttachmentMode, HostGuestPath, KernelFSHydrationPlan, KernelFSRole, NetworkAttachment,
     VolumeAttachment, cell_spec_network_attachments, cell_spec_volume_attachments,
     ensure_oci_agent_share_roles, hydrate_files_under_role, is_oci_execution_mode,
-    oci_ivisor_agent_share_dir, oci_ivisor_worker_id, oci_suppresses_network_deny_all,
+    oci_ivisor_agent_share_dir, oci_ivisor_worker_id, oci_run_cell_id,
+    oci_suppresses_network_deny_all, resolve_oci_cell_id,
     DEFAULT_INPUT_MOUNT, DEFAULT_OUTPUT_MOUNT, DEFAULT_WORK_MOUNT, EXECUTION_MODE_OCI,
     ROLE_INPUT, ROLE_OUTPUT, ROLE_WORK,
 };

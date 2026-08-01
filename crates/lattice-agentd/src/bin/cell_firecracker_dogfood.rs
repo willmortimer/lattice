@@ -12,8 +12,9 @@ use lattice_agentd::kernelfs_export::{export_oci_roles_under_agent_share, OciKer
 use lattice_agentd::lattice_client::lattice_client_from_env;
 use lattice_agentd::wasi_host::WorkspaceBinding;
 use lattice_cell_client::{
-    is_oci_execution_mode, require_celld_base_url, CelldClient, HttpCelldClient, HydrateFile,
-    KernelFSHydrationPlan, ProjectionRunRequest, EXECUTION_MODE_OCI,
+    is_oci_execution_mode, require_celld_base_url, resolve_oci_cell_id, CelldClient,
+    HttpCelldClient, HydrateFile, KernelFSHydrationPlan, ProjectionRunRequest,
+    EXECUTION_MODE_OCI,
 };
 use serde_json::json;
 use tempfile::TempDir;
@@ -41,6 +42,7 @@ struct Cli {
     vz_runtime_dir: Option<PathBuf>,
     with_work: bool,
     allow_network: bool,
+    shared_cell_id: bool,
 }
 
 #[tokio::main]
@@ -70,15 +72,21 @@ async fn run() -> Result<(), String> {
         );
     }
 
+    let cell_id = if is_oci_execution_mode(&execution_mode) {
+        resolve_oci_cell_id(&cli.cell_id, &cli.projection_id, cli.shared_cell_id)
+    } else {
+        cli.cell_id.clone()
+    };
+
     let (_temp_roles, input_host, work_host, output_host) =
-        resolve_role_host_dirs(&cli, &execution_mode, &workspace_root, &cli.hydrate_paths)?;
+        resolve_role_host_dirs(&cli, &execution_mode, &workspace_root, &cli.hydrate_paths, &cell_id)?;
     let mut plan = KernelFSHydrationPlan::from_role_paths(input_host, work_host, output_host);
     if cli.allow_network {
         plan = plan.with_network_deny_all(false);
     }
 
     let request = ProjectionRunRequest {
-        cell_id: cli.cell_id.clone(),
+        cell_id: cell_id.clone(),
         projection_id: cli.projection_id.clone(),
         plan,
         hydrate_files,
@@ -98,7 +106,7 @@ async fn run() -> Result<(), String> {
     let role_output = request.plan.output.host_path.clone();
 
     let provenance = CellProposalProvenance {
-        cell_id: cli.cell_id.clone(),
+        cell_id: cell_id.clone(),
         projection_id: cli.projection_id.clone(),
         task_id: cli.projection_id.clone(),
         output_proposal_target: cli.output_target.clone(),
@@ -124,9 +132,10 @@ async fn run() -> Result<(), String> {
         return Err("expected >=1 proposal from collected /output files, got 0".into());
     }
 
-    let source_resource = format!("cell://{}/{}", cli.cell_id, cli.projection_id);
+    let source_resource = format!("cell://{}/{}", cell_id, cli.projection_id);
     let summary = json!({
-        "cellId": cli.cell_id,
+        "cellId": cell_id,
+        "baseCellId": cli.cell_id,
         "projectionId": cli.projection_id,
         "workspace": workspace_root,
         "celldBaseUrl": celld.base_url(),
@@ -207,6 +216,9 @@ fn parse_cli(args: Vec<String>) -> Result<Cli, String> {
             "--allow-network" => {
                 cli.allow_network = true;
             }
+            "--shared-cell-id" => {
+                cli.shared_cell_id = true;
+            }
             "--" => {
                 cli.argv = args[index + 1..].to_vec();
                 if cli.argv.is_empty() {
@@ -259,6 +271,7 @@ fn resolve_role_host_dirs(
     execution_mode: &str,
     workspace_root: &str,
     hydrate_paths: &[String],
+    cell_id: &str,
 ) -> Result<(Option<TempDir>, PathBuf, Option<PathBuf>, PathBuf), String> {
     if is_oci_execution_mode(execution_mode) {
         let runtime = resolve_oci_export_vz_runtime_dir(cli)?;
@@ -267,7 +280,7 @@ fn resolve_role_host_dirs(
         let run_id = oci_run_id_from_projection(&cli.projection_id);
         let exported = export_oci_roles_under_agent_share(&OciKernelfsExportRequest {
             vz_runtime_dir: runtime,
-            cell_id: cli.cell_id.clone(),
+            cell_id: cell_id.to_string(),
             run_id,
             input_mounts,
             host_path_roots: vec![workspace_root_path],
@@ -462,6 +475,18 @@ mod tests {
     fn oci_run_id_sanitizes_invalid_projection_id() {
         assert_eq!(oci_run_id_from_projection("ns/proj#1"), "ns_proj_1");
         assert_eq!(oci_run_id_from_projection("///"), "dogfood_run");
+    }
+
+    #[test]
+    fn oci_cell_id_suffixes_projection_by_default() {
+        assert_eq!(
+            resolve_oci_cell_id("cell_dogfood", "proj_run_a", false),
+            "cell_dogfood_proj_run_a"
+        );
+        assert_eq!(
+            resolve_oci_cell_id("cell_dogfood", "proj_run_a", true),
+            "cell_dogfood"
+        );
     }
 
     #[cfg(target_os = "macos")]

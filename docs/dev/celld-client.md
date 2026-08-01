@@ -278,6 +278,49 @@ scripts/cell-mac-oci-dogfood.sh --live \
 Secrets stay opt-in via `LATTICE_WASI_SECRET_HANDLES` / tool `secretHandlesJson`.
 Dogfood does not inject secrets or enable ambient network.
 
+## Concurrent OCI dogfood
+
+ApplyCell `SpecDigest` includes `volumes[].source`. Two OCI dogfood runs that share
+the same `cell_id` but export different projection volume trees will collide with
+HTTP 409 on the second Apply.
+
+**Rule:** one `cell_id` = one mount set = one OCI sandbox. Distinct concurrent
+runs need distinct cell ids.
+
+For OCI (`execution_mode: oci`), dogfood binaries default to a unique effective
+cell id:
+
+```text
+{base_cell_id}_{projection_id}
+```
+
+Example: `--cell-id cell_dogfood --projection-id proj_run_a` → celld cell id
+`cell_dogfood_proj_run_a`. Helper: `lattice_cell_client::oci_run_cell_id`.
+
+Pass `--shared-cell-id` to keep the literal `--cell-id` (legacy single-sandbox
+reuse — only when volume sources are unchanged or you accept Apply conflicts).
+
+**Concurrent recipe (Mac OCI lab):**
+
+```sh
+# Terminal A
+scripts/cell-mac-oci-dogfood.sh --live \
+  --oci-bundle-path /tmp/cell-oci-bundles/cell_mac_live_bind \
+  --workspace /path/to/ws_a --projection-id proj_run_a
+
+# Terminal B (same base --cell-id, different projection)
+scripts/cell-mac-oci-dogfood.sh --live \
+  --oci-bundle-path /tmp/cell-oci-bundles/cell_mac_live_bind \
+  --workspace /path/to/ws_b --projection-id proj_run_b
+```
+
+Effective cell ids: `cell_dogfood_proj_run_a` and `cell_dogfood_proj_run_b`.
+Each gets its own ivisor worker / kernelfs export tree under a distinct
+`ivisor-worker-<cellId>/agent-share` (Mac) or `{export_parent}/{run_id}/` tree
+(Linux). `run_id` still tracks the projection (`proj_run_a`, `proj_run_b`).
+
+Linux OCI uses the same suffix rule via `scripts/cell-linux-oci-dogfood.sh`.
+
 ## agentd tool: `run_cell_task`
 
 When `CELLD_BASE_URL` is set, `lattice-agentd` registers an extra host tool.
