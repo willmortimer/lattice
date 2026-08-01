@@ -1021,6 +1021,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
           className="slash-menu"
           role="listbox"
           aria-label="Block commands"
+          data-guidance-anchor="editor.slash-menu"
           style={{ left: slashMenu.left, top: slashMenu.top }}
         >
           {filteredSlashCommands.length === 0 ? (

@@ -123,7 +123,10 @@ export function ProposalReviewModal({
     <DialogRoot open onOpenChange={(open) => !open && !busy && onCancel()}>
       <DialogPortal>
         <DialogBackdrop className="modal-backdrop" />
-        <DialogPopup className="modal-panel proposal-review-panel">
+        <DialogPopup
+          className="modal-panel proposal-review-panel"
+          data-guidance-anchor="agent.proposal.review"
+        >
           <DialogTitle id="proposal-review-title">Review proposed changes</DialogTitle>
           <p className="modal-copy">
             {proposal.summary}. Source: {sourceLabel}. Select which commands to apply in one
