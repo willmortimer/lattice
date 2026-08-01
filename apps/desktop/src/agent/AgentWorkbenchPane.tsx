@@ -56,29 +56,11 @@ export function AgentWorkbenchPane() {
         ) : null}
       </WorkbenchSection>
 
+      {/* Plan / Changes / Outputs / Approvals / Errors land here when run data exists;
+          keep one quiet placeholder instead of five empty section stacks. */}
       <WorkbenchSection
-        title="Plan"
-        emptyMessage="Agent plan steps will appear here during runs."
-      />
-
-      <WorkbenchSection
-        title="Changes"
-        emptyMessage="Proposed file changes will appear here."
-      />
-
-      <WorkbenchSection
-        title="Outputs"
-        emptyMessage="Tool outputs and artifacts will appear here."
-      />
-
-      <WorkbenchSection
-        title="Approvals"
-        emptyMessage="Pending approvals will appear here."
-      />
-
-      <WorkbenchSection
-        title="Errors"
-        emptyMessage="Errors and retries will appear here."
+        title="Run details"
+        emptyMessage="Plan, proposed changes, outputs, approvals, and errors appear here during a run."
       />
     </aside>
   );

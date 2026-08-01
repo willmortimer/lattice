@@ -30,15 +30,6 @@ export function AgentLayoutToggle() {
       >
         Workbench
       </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        disabled
-        title="Detached agent window (coming soon)"
-      >
-        Detached
-      </Button>
     </div>
   );
 }
