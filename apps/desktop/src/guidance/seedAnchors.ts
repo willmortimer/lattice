@@ -1,6 +1,14 @@
+import { openSettingsDeepLink } from "../settings/settingsDeepLink";
+
 import { createDomGuidanceAnchor } from "./domAnchor";
 import { registerGuidanceAnchor } from "./registry";
 import type { GuidanceAnchor } from "./types";
+
+async function waitForDomPaint(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+}
 
 function resolveEditorSelection(): HTMLElement | null {
   const editor = document.querySelector(".ProseMirror-focused") as HTMLElement | null;
@@ -54,6 +62,12 @@ export function createDefaultGuidanceAnchors(): GuidanceAnchor[] {
     createDomGuidanceAnchor({
       id: "settings.ai.provider",
       describe: "Choose how the workspace agent reaches a model",
+      reveal: async () => {
+        openSettingsDeepLink("ai/provider");
+        await waitForDomPaint();
+        const element = document.querySelector('[data-guidance-anchor="settings.ai.provider"]');
+        element?.scrollIntoView({ block: "nearest", inline: "nearest" });
+      },
     }),
     createDomGuidanceAnchor({
       id: "agent.panel.toggle",

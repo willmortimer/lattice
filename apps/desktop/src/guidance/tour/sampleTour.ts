@@ -42,5 +42,21 @@ export const sampleShellTour: TourDefinition = {
       placement: "left",
       skipWhenUnavailable: true,
     },
+    {
+      id: "ai-provider",
+      anchor: "settings.ai.provider",
+      title: "AI provider",
+      body: "Choose how the workspace agent reaches a model — local, your API key, or a Lattice account.",
+      placement: "bottom",
+      skipWhenUnavailable: true,
+    },
+    {
+      id: "proposal-review",
+      anchor: "agent.proposal.review",
+      title: "Proposal review",
+      body: "When the agent proposes workspace changes, review and accept them here before they apply.",
+      placement: "bottom",
+      skipWhenUnavailable: true,
+    },
   ],
 };
