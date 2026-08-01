@@ -4,6 +4,7 @@ import {
   applyCatalogDelta,
   catalogEntriesFromResources,
   catalogMapFromResources,
+  displayResourceIdForPath,
   isSyntheticResourceId,
   parentPathOf,
   pathForResourceId,
@@ -133,5 +134,34 @@ describe("resourceCatalog", () => {
     expect(remapSelectedResourceIds(new Set([synthetic]), before, after)).toEqual(
       new Set(["stable-id"]),
     );
+  });
+
+  it("remapSelectedResourceIds keeps connected-root synthetics outside the catalog", () => {
+    const before = catalogMapFromResources([resource("note.md")]);
+    const connected = syntheticResourceId("github://acme/demo/README.md");
+    const after = applyCatalogDelta(before, {
+      type: "upsert",
+      entries: [entry("stable-id", "note.md")],
+    });
+    expect(
+      remapSelectedResourceIds(new Set([connected, syntheticResourceId("note.md")]), before, after),
+    ).toEqual(new Set([connected, "stable-id"]));
+  });
+
+  it("displayResourceIdForPath never invents a UUID", () => {
+    expect(displayResourceIdForPath("Notes.md", null)).toEqual({
+      resourceId: syntheticResourceId("Notes.md"),
+      isSynthetic: true,
+    });
+    expect(
+      displayResourceIdForPath("Notes.md", "11111111-1111-1111-1111-111111111111"),
+    ).toEqual({
+      resourceId: "11111111-1111-1111-1111-111111111111",
+      isSynthetic: false,
+    });
+    expect(displayResourceIdForPath("Notes.md", "not-a-uuid")).toEqual({
+      resourceId: syntheticResourceId("Notes.md"),
+      isSynthetic: true,
+    });
   });
 });

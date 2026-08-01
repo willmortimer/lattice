@@ -47,6 +47,32 @@ export function isSyntheticResourceId(resourceId: string): boolean {
   return resourceId.startsWith(SYNTHETIC_ID_PREFIX);
 }
 
+/** LatticeFS ResourceId wire form is a UUID string. */
+export function looksLikeLatticeResourceId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
+/** Connected-root virtual paths opened outside the workspace catalog. */
+export function looksLikeConnectedRootPath(path: string): boolean {
+  return /^(github|gitlab):\/\//i.test(path);
+}
+
+/**
+ * Inspect/session display id: prefer a registry UUID when known.
+ * Never invent a fake UUID — fall back to an honest `path:` placeholder.
+ */
+export function displayResourceIdForPath(
+  path: string,
+  registryResourceId?: string | null,
+): { resourceId: string; isSynthetic: boolean } {
+  if (registryResourceId && looksLikeLatticeResourceId(registryResourceId)) {
+    return { resourceId: registryResourceId, isSynthetic: false };
+  }
+  return { resourceId: syntheticResourceId(path), isSynthetic: true };
+}
+
 /** Immediate parent path key, or `undefined` for workspace-root entries. */
 export function parentPathOf(path: string): string | undefined {
   const trimmed = path.replace(/^\/+|\/+$/g, "");
@@ -154,6 +180,9 @@ export function pathsForResourceIds(
  * Keep tree/tab selection identity across catalog deltas: preserve ids that
  * still exist, and remap synthetic→registry (same path, new id). Dropped
  * entries are removed from the set.
+ *
+ * Honest `path:` placeholders for connected-root virtual paths (never present
+ * in the workspace catalog) are retained so selection does not invent UUIDs.
  */
 export function remapSelectedResourceIds(
   selected: ReadonlySet<string>,
@@ -167,7 +196,19 @@ export function remapSelectedResourceIds(
       continue;
     }
     const previousEntry = previous.get(id);
-    if (!previousEntry) continue;
+    if (!previousEntry) {
+      if (isSyntheticResourceId(id)) {
+        const path = id.slice(SYNTHETIC_ID_PREFIX.length);
+        const replacement = resourceIdForPath(next, path);
+        if (replacement) {
+          remapped.add(replacement);
+        } else if (looksLikeConnectedRootPath(path)) {
+          // Connected-root virtual paths are outside the workspace catalog.
+          remapped.add(id);
+        }
+      }
+      continue;
+    }
     const replacement = resourceIdForPath(next, previousEntry.path);
     if (replacement) remapped.add(replacement);
   }

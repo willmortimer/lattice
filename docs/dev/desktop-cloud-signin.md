@@ -21,6 +21,11 @@ Settings → **Features → Labs**: cloud blob put/get for a workspace-relative 
 (`cloud_blob_materialize` / `cloud_blob_open`). Unsigned sessions fail closed with a clear
 error (sign in via Cloud account, or set `LATTICE_CLOUD_TOKEN`).
 
+**Inspect → Properties** exposes the same round-trip for the selected resource:
+**Back up to Lattice Cloud** / **Reopen from cloud**, then shows Authority after a
+successful backup. Resource ID is the registry UUID when known; otherwise an honest
+`path:` placeholder (never a fabricated UUID).
+
 ## Manual smoke (live VPS)
 
 After password auth is enabled on the VPS:
