@@ -6852,6 +6852,48 @@ html[data-motion="always"] *::after {
   max-width: 720px;
 }
 
+.agent-panel-detached {
+  width: 280px;
+  flex: 0 0 280px;
+}
+
+.agent-detached-placeholder {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  color: var(--lt-text-muted);
+}
+
+.agent-detached-placeholder p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.agent-detached-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-height: 0;
+  background: var(--lt-bg);
+  color: var(--lt-text);
+}
+
+.agent-detached-native-titlebar {
+  height: 28px;
+  flex: 0 0 28px;
+}
+
+.agent-detached-shell .agent-panel {
+  width: 100%;
+  flex: 1 1 auto;
+  max-width: none;
+  border-left: none;
+}
+
 .agent-panel-layout-row {
   display: flex;
   padding: 6px 10px 8px 12px;
