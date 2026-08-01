@@ -1,4 +1,5 @@
 mod agent;
+mod agent_run_events;
 mod agent_threads;
 mod ai;
 mod app_lock;
@@ -365,6 +366,9 @@ pub fn run() {
             agent::agent_health,
             agent::agent_start_run,
             agent::agent_cancel_run,
+            agent::agent_subscribe_run,
+            agent_run_events::agent_run_status,
+            agent_run_events::agent_run_list_events,
             agent_threads::agent_thread_ensure,
             agent_threads::agent_thread_append_message,
             agent_threads::agent_thread_list,

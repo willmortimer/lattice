@@ -148,7 +148,8 @@ Keep React + assistant-ui + Zustand control store. Adopt TanStack Query for
 daemon-owned thread/run/cloud state. Gaps and sequencing:
 
 - Resumable streams (`reconnectToStream`) via durable ordered run-event log —
-  [ADR 0082](../../../docs/decisions/0082-agent-workbench-and-resumable-runs.md).
+  status → subscribe(after_sequence) → replay → live-tail
+  ([ADR 0082](../../../docs/decisions/0082-agent-workbench-and-resumable-runs.md)).
 - Gate composer until transcript hydration is safe (P0).
 - Semantic tool renderer registry; Dock / Workbench / Detached layouts.
 - Thread browser (not HTML `<select>`); assistant-ui-supported message

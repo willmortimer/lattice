@@ -1,8 +1,9 @@
 //! Agent run-event HTTP API (`/v1/agent_runs/*`).
 //!
 //! Workspace-local durable ordered event log behind latticed; desktop and
-//! agents use HTTP, not the DB file. Live-tail subscribe is A1; this MVP
-//! exposes append, list-after-sequence, and run status.
+//! agents use HTTP, not the DB file. Append/list/status are here; live-tail
+//! subscribe is implemented by the desktop thin client (bus wake + list-after-
+//! sequence) for gap-free reconnect.
 
 use std::path::PathBuf;
 

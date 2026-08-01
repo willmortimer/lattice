@@ -302,7 +302,7 @@ pub fn agent_event_messages(
     }
 
     let terminal = match event_type {
-        "run_completed" => {
+        "run_completed" | "run_cancelled" => {
             messages.push(AgentStreamMsg::Done {
                 run_id: run_id.to_string(),
             });
@@ -521,6 +521,247 @@ pub async fn agent_cancel_run(run_id: String, state: State<'_, AgentState>) -> R
     Ok(())
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSubscribeRunArgs {
+    pub workspace_root: String,
+    pub run_id: String,
+    #[serde(default)]
+    pub after_sequence: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentSubscribeRunResult {
+    pub run_id: String,
+    pub thread_id: String,
+    pub last_sequence: i64,
+    pub status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+fn is_terminal_run_status(status: &str) -> bool {
+    matches!(status, "completed" | "failed" | "cancelled")
+}
+
+async fn list_run_events_blocking(
+    workspace_root: String,
+    run_id: String,
+    after_sequence: i64,
+) -> Result<crate::agent_run_events::ListRunEventsResult, String> {
+    tokio::task::spawn_blocking(move || {
+        crate::agent_run_events::fetch_run_events_after(&workspace_root, &run_id, after_sequence)
+    })
+    .await
+    .map_err(|err| format!("list events join failed: {err}"))?
+}
+
+fn forward_run_event_rows(
+    channel: &Channel<AgentStreamMsg>,
+    events: &[crate::agent_run_events::RunEventDto],
+    after_sequence: &mut i64,
+) -> (bool, Option<String>) {
+    for event in events {
+        if event.event_sequence <= *after_sequence {
+            continue;
+        }
+        *after_sequence = event.event_sequence;
+        let terminal =
+            forward_agent_event(channel, &event.run_id, &event.event_type, &event.payload);
+        if terminal {
+            let error = if event.event_type == "run_failed" {
+                Some(
+                    event
+                        .payload
+                        .get("message")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("agent run failed")
+                        .to_string(),
+                )
+            } else {
+                None
+            };
+            return (true, error);
+        }
+    }
+    (false, None)
+}
+
+/// Replay durable events after `after_sequence`, then live-tail until terminal.
+///
+/// Gap-free handoff: wake on the daemon agent event bus, then always drain the
+/// authoritative SQLite log via HTTP list-after-sequence (never trust bus-only).
+#[tauri::command]
+pub async fn agent_subscribe_run(
+    args: AgentSubscribeRunArgs,
+    channel: Channel<AgentStreamMsg>,
+    state: State<'_, AgentState>,
+) -> Result<AgentSubscribeRunResult, String> {
+    if args.workspace_root.trim().is_empty() {
+        return Err("workspace root is required".into());
+    }
+    if args.run_id.trim().is_empty() {
+        return Err("run id is required".into());
+    }
+    let run_id = args.run_id.trim().to_string();
+    let workspace_root = args.workspace_root.clone();
+    let mut after_sequence = args.after_sequence.unwrap_or(0).max(0);
+
+    let mut inner = state.inner.lock().await;
+    let client = ensure_daemon(&mut inner).await?;
+    let workspace_id = ensure_workspace(client.as_ref(), &mut inner, &workspace_root).await?;
+    let client = Arc::clone(&client);
+    drop(inner);
+
+    let status = {
+        let root = workspace_root.clone();
+        let id = run_id.clone();
+        tokio::task::spawn_blocking(move || {
+            crate::agent_run_events::fetch_run_status(&root, Some(&id), None)
+        })
+        .await
+        .map_err(|err| format!("run status join failed: {err}"))??
+    };
+    if status.run.is_none() {
+        return Err(format!("run not found: {run_id}"));
+    }
+
+    let mut events = client
+        .subscribe(EventFilter {
+            workspace_id: Some(workspace_id),
+            agent_events_only: true,
+        })
+        .await
+        .map_err(|err| format!("subscribe agent events failed: {err}"))?;
+
+    // Initial replay from the durable log.
+    let replay = list_run_events_blocking(
+        workspace_root.clone(),
+        run_id.clone(),
+        after_sequence,
+    )
+    .await?;
+    let mut run = replay.run;
+    let (terminal, mut error) =
+        forward_run_event_rows(&channel, &replay.events, &mut after_sequence);
+    if terminal {
+        return Ok(AgentSubscribeRunResult {
+            run_id,
+            thread_id: run.thread_id,
+            last_sequence: after_sequence,
+            status: run.status,
+            error,
+        });
+    }
+    if is_terminal_run_status(&run.status) {
+        let catchup = list_run_events_blocking(
+            workspace_root.clone(),
+            run_id.clone(),
+            after_sequence,
+        )
+        .await?;
+        run = catchup.run;
+        let (terminal, err) =
+            forward_run_event_rows(&channel, &catchup.events, &mut after_sequence);
+        error = err;
+        if terminal || is_terminal_run_status(&run.status) {
+            if !terminal {
+                let _ = channel.send(AgentStreamMsg::Done {
+                    run_id: run_id.clone(),
+                });
+            }
+            return Ok(AgentSubscribeRunResult {
+                run_id,
+                thread_id: run.thread_id,
+                last_sequence: after_sequence,
+                status: run.status,
+                error,
+            });
+        }
+    }
+
+    // Live-tail: bus wake (or poll interval) then drain the durable log.
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(120);
+    loop {
+        if tokio::time::Instant::now() >= deadline {
+            let message = "agent subscribe timed out waiting for events".to_string();
+            let _ = channel.send(AgentStreamMsg::Error {
+                run_id: run_id.clone(),
+                message: message.clone(),
+            });
+            return Ok(AgentSubscribeRunResult {
+                run_id,
+                thread_id: run.thread_id,
+                last_sequence: after_sequence,
+                status: "failed".into(),
+                error: Some(message),
+            });
+        }
+
+        tokio::select! {
+            maybe = events.next() => {
+                match maybe {
+                    Some(Ok(event)) => {
+                        if let Some(event::Body::AgentEvent(agent_event)) = event.body {
+                            if agent_event.run_id != run_id {
+                                continue;
+                            }
+                        }
+                    }
+                    Some(Err(err)) => {
+                        let message = format!("agent event stream failed: {err}");
+                        let _ = channel.send(AgentStreamMsg::Error {
+                            run_id: run_id.clone(),
+                            message: message.clone(),
+                        });
+                        return Ok(AgentSubscribeRunResult {
+                            run_id,
+                            thread_id: run.thread_id,
+                            last_sequence: after_sequence,
+                            status: "failed".into(),
+                            error: Some(message),
+                        });
+                    }
+                    None => {}
+                }
+            }
+            _ = tokio::time::sleep(std::time::Duration::from_millis(150)) => {}
+        }
+
+        let listed = list_run_events_blocking(
+            workspace_root.clone(),
+            run_id.clone(),
+            after_sequence,
+        )
+        .await?;
+        run = listed.run;
+        let (terminal, err) =
+            forward_run_event_rows(&channel, &listed.events, &mut after_sequence);
+        if terminal {
+            return Ok(AgentSubscribeRunResult {
+                run_id,
+                thread_id: run.thread_id,
+                last_sequence: after_sequence,
+                status: run.status,
+                error: err,
+            });
+        }
+        if is_terminal_run_status(&run.status) && listed.events.is_empty() {
+            let _ = channel.send(AgentStreamMsg::Done {
+                run_id: run_id.clone(),
+            });
+            return Ok(AgentSubscribeRunResult {
+                run_id,
+                thread_id: run.thread_id,
+                last_sequence: after_sequence,
+                status: run.status,
+                error: None,
+            });
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -622,6 +863,20 @@ mod tests {
             Some(AgentStreamMsg::Error { message, .. }) => assert_eq!(message, "boom"),
             other => panic!("expected terminal error, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn agent_event_messages_maps_run_cancelled() {
+        let payload = serde_json::json!({
+            "type": "run_cancelled",
+            "runId": "run-3"
+        });
+        let (messages, terminal) = agent_event_messages("run-3", "run_cancelled", &payload);
+        assert!(terminal);
+        assert!(matches!(
+            messages.last(),
+            Some(AgentStreamMsg::Done { .. })
+        ));
     }
 
     struct EnvGuard {
