@@ -64,13 +64,23 @@ mod tests {
 
     impl BlobFakeHttp {
         fn with_blob(&self, resource_id: ResourceId, data: &[u8], hash_hex: &str) {
+            self.with_blob_put_status(resource_id, data, hash_hex, 201);
+        }
+
+        fn with_blob_put_status(
+            &self,
+            resource_id: ResourceId,
+            data: &[u8],
+            hash_hex: &str,
+            put_status: u16,
+        ) {
             let path = format!("/v1/blobs/{resource_id}");
             let put_key = format!("PUT {path}");
             let get_key = format!("GET {path}");
             self.bytes.lock().unwrap().insert(
                 put_key,
                 CloudHttpBytesResponse {
-                    status: 201,
+                    status: put_status,
                     body: format!(
                         r#"{{"resource_id":"{resource_id}","object_key":"blobs/u1/{resource_id}","size":{},"content_hash":"{hash_hex}","created_at":1}}"#,
                         data.len()
@@ -164,6 +174,21 @@ mod tests {
         let hash = ContentHash::from_bytes(data).unwrap();
         let hash_hex = hash.as_str().strip_prefix("sha256:").unwrap();
         http.with_blob(resource_id, data, hash_hex);
+
+        let client = CloudApiClient::with_base_url(http, "https://cloud.test");
+        let blob_client = HttpCloudBlobClient::new(client, "good-token");
+        let hash = roundtrip_verify_blob(&blob_client, resource_id, data).unwrap();
+        assert_eq!(hash, ContentHash::from_bytes(data).unwrap());
+    }
+
+    #[test]
+    fn http_blob_put_same_hash_retry_returns_200() {
+        let http = BlobFakeHttp::default();
+        let resource_id = ResourceId::new();
+        let data = b"opaque-cloud-bytes";
+        let hash = ContentHash::from_bytes(data).unwrap();
+        let hash_hex = hash.as_str().strip_prefix("sha256:").unwrap();
+        http.with_blob_put_status(resource_id, data, hash_hex, 200);
 
         let client = CloudApiClient::with_base_url(http, "https://cloud.test");
         let blob_client = HttpCloudBlobClient::new(client, "good-token");
