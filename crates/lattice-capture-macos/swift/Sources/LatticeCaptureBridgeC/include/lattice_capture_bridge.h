@@ -70,6 +70,28 @@ int32_t lattice_capture_capture_interactive_region(
 
 void lattice_capture_image_release(lattice_capture_image_out_t *image);
 
+enum {
+    LATTICE_CAPTURE_PERM_UNSUPPORTED = 0,
+    LATTICE_CAPTURE_PERM_NOT_DETERMINED = 1,
+    LATTICE_CAPTURE_PERM_AUTHORIZED = 2,
+    LATTICE_CAPTURE_PERM_DENIED = 3,
+    LATTICE_CAPTURE_PERM_RESTRICTED = 4
+};
+
+typedef struct lattice_capture_permission_status {
+    uint32_t state;
+} lattice_capture_permission_status_t;
+
+int32_t lattice_capture_permission_status(
+    lattice_capture_permission_status_t *out_status
+);
+
+int32_t lattice_capture_permission_request(
+    lattice_capture_permission_status_t *out_status
+);
+
+int32_t lattice_capture_permission_open_settings(void);
+
 #ifdef __cplusplus
 }
 #endif

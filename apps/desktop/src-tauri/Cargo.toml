@@ -40,7 +40,6 @@ voice-embedded = [
 default = []
 # ScreenCaptureKit capture → Capture Inbox ingest + clipboard (macOS).
 capture = [
-    "dep:lattice-capture-core",
     "dep:lattice-capture-macos",
     "dep:image",
     "dep:arboard",
@@ -96,7 +95,7 @@ base64.workspace = true
 image = { version = "0.25", default-features = false, features = ["png", "webp"], optional = true }
 arboard = { version = "3", optional = true }
 # Optional: enabled by the `capture` feature.
-lattice-capture-core = { workspace = true, optional = true }
+lattice-capture-core.workspace = true
 lattice-capture-macos = { workspace = true, optional = true }
 walkdir.workspace = true
 url = "2"

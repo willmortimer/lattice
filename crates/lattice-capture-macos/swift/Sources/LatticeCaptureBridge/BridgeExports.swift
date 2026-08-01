@@ -122,6 +122,43 @@ public func lattice_capture_image_release(image: UnsafeMutablePointer<lattice_ca
     }
 }
 
+@_cdecl("lattice_capture_permission_status")
+public func lattice_capture_permission_status(
+    outStatus: UnsafeMutablePointer<lattice_capture_permission_status_t>?
+) -> Int32 {
+    bridgeCatch {
+        guard let outStatus else {
+            throw BridgeFailure.invalidArgument("out_status is null")
+        }
+        outStatus.pointee = lattice_capture_permission_status_t(
+            state: ScreenCapturePermission.currentState().rawValue
+        )
+        return BridgeErrorCode.ok.rawValue
+    }
+}
+
+@_cdecl("lattice_capture_permission_request")
+public func lattice_capture_permission_request(
+    outStatus: UnsafeMutablePointer<lattice_capture_permission_status_t>?
+) -> Int32 {
+    bridgeCatch {
+        guard let outStatus else {
+            throw BridgeFailure.invalidArgument("out_status is null")
+        }
+        let state = ScreenCapturePermission.requestAccess()
+        outStatus.pointee = lattice_capture_permission_status_t(state: state.rawValue)
+        return BridgeErrorCode.ok.rawValue
+    }
+}
+
+@_cdecl("lattice_capture_permission_open_settings")
+public func lattice_capture_permission_open_settings() -> Int32 {
+    bridgeCatch {
+        try ScreenCapturePermission.openSystemSettings()
+        return BridgeErrorCode.ok.rawValue
+    }
+}
+
 @available(macOS 14.0, *)
 private func writeImage(
     _ captured: ScreenCaptureSession.CapturedPng,

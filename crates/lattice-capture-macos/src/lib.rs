@@ -9,12 +9,14 @@ mod backend;
 mod bridge;
 mod error;
 mod ffi;
+mod permission;
 
 /// ABI version expected from `lattice_capture_bridge_abi_version()`.
 pub const LATTICE_CAPTURE_BRIDGE_ABI_VERSION: u32 = 1;
 
 pub use backend::MacOsCaptureBackend;
 pub use error::ensure_abi_version;
+pub use permission::{platform_permission_provider, MacOsCapturePermissionProvider};
 
 /// Returns the ABI version this crate expects from the native bridge.
 #[must_use]

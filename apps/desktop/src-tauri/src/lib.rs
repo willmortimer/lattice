@@ -8,6 +8,8 @@ mod artifact;
 mod canvas;
 #[cfg(feature = "capture")]
 mod capture;
+#[cfg(not(feature = "capture"))]
+mod capture_permission_stub;
 mod cloud;
 mod commands;
 mod daemon_session;
@@ -362,6 +364,18 @@ pub fn run() {
             spotlight::spotlight_index_workspace,
             #[cfg(feature = "capture")]
             capture::shelf::capture_shelf_snapshot,
+            #[cfg(feature = "capture")]
+            capture::permission::capture_permission_status,
+            #[cfg(feature = "capture")]
+            capture::permission::capture_permission_request,
+            #[cfg(feature = "capture")]
+            capture::permission::capture_permission_open_settings,
+            #[cfg(not(feature = "capture"))]
+            capture_permission_stub::capture_permission_status,
+            #[cfg(not(feature = "capture"))]
+            capture_permission_stub::capture_permission_request,
+            #[cfg(not(feature = "capture"))]
+            capture_permission_stub::capture_permission_open_settings,
         ]))
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

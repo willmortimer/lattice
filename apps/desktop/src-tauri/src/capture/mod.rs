@@ -5,6 +5,9 @@
 
 pub mod shelf;
 
+#[cfg(feature = "capture")]
+pub mod permission;
+
 use std::path::Path;
 
 use arboard::Clipboard;

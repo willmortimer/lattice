@@ -96,6 +96,36 @@ int32_t lattice_capture_capture_interactive_region(
 /** Release PNG bytes allocated by capture entry points. */
 void lattice_capture_image_release(lattice_capture_image_out_t *image);
 
+/** Screen recording permission state values for `lattice_capture_permission_status_t`. */
+enum {
+    LATTICE_CAPTURE_PERM_UNSUPPORTED = 0,
+    LATTICE_CAPTURE_PERM_NOT_DETERMINED = 1,
+    LATTICE_CAPTURE_PERM_AUTHORIZED = 2,
+    LATTICE_CAPTURE_PERM_DENIED = 3,
+    LATTICE_CAPTURE_PERM_RESTRICTED = 4
+};
+
+typedef struct lattice_capture_permission_status {
+    uint32_t state;
+} lattice_capture_permission_status_t;
+
+/**
+ * Read current screen recording permission without prompting.
+ */
+int32_t lattice_capture_permission_status(
+    lattice_capture_permission_status_t *out_status
+);
+
+/**
+ * Request screen recording permission (may show the system prompt).
+ */
+int32_t lattice_capture_permission_request(
+    lattice_capture_permission_status_t *out_status
+);
+
+/** Open System Settings → Privacy & Security → Screen Recording. */
+int32_t lattice_capture_permission_open_settings(void);
+
 #ifdef __cplusplus
 }
 #endif
