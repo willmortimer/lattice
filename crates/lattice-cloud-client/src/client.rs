@@ -288,13 +288,8 @@ impl<C: CloudHttpClient> CloudApiClient<C> {
                 ("X-Lattice-Content-Hash", hash_hex),
             ],
         )?;
-        if response.status == 201 {
-            let body = std::str::from_utf8(&response.body)
-                .map_err(|err| CloudError::InvalidResponse(err.to_string()))?;
-            let metadata: BlobPutResponse = serde_json::from_str(body)
-                .map_err(|err| CloudError::InvalidResponse(err.to_string()))?;
-            return ContentHash::new(format!("sha256:{}", metadata.content_hash))
-                .map_err(|err| CloudError::InvalidResponse(err.to_string()));
+        if response.status == 201 || response.status == 200 {
+            return parse_blob_put_response(&response.body, hash_hex);
         }
         Err(bytes_api_error(response))
     }
@@ -398,6 +393,21 @@ fn content_hash_hex(hash: &ContentHash) -> &str {
     hash.as_str()
         .strip_prefix("sha256:")
         .unwrap_or(hash.as_str())
+}
+
+fn parse_blob_put_response(body: &[u8], expected_hash_hex: &str) -> Result<ContentHash> {
+    let body = std::str::from_utf8(body)
+        .map_err(|err| CloudError::InvalidResponse(err.to_string()))?;
+    let metadata: BlobPutResponse = serde_json::from_str(body)
+        .map_err(|err| CloudError::InvalidResponse(err.to_string()))?;
+    if metadata.content_hash != expected_hash_hex {
+        return Err(CloudError::InvalidResponse(format!(
+            "response hash mismatch: expected {expected_hash_hex}, got {}",
+            metadata.content_hash
+        )));
+    }
+    ContentHash::new(format!("sha256:{}", metadata.content_hash))
+        .map_err(|err| CloudError::InvalidResponse(err.to_string()))
 }
 
 fn bytes_api_error(response: CloudHttpBytesResponse) -> CloudError {
@@ -613,5 +623,86 @@ mod tests {
         assert!(!signed_out.signed_in);
         let status = cloud_session_status(&client, &store).unwrap();
         assert!(!status.signed_in);
+    }
+
+    #[test]
+    fn put_blob_accepts_201_created() {
+        let http = FakeCloudHttp::default();
+        let resource_id = ResourceId::new();
+        let data = b"opaque-cloud-bytes";
+        let hash = ContentHash::from_bytes(data).unwrap();
+        let hash_hex = content_hash_hex(&hash);
+        http.bytes_responses.lock().unwrap().insert(
+            format!("PUT /v1/blobs/{resource_id}"),
+            CloudHttpBytesResponse {
+                status: 201,
+                body: format!(
+                    r#"{{"resource_id":"{resource_id}","object_key":"blobs/u1/sha256/{hash_hex}","size":{},"content_hash":"{hash_hex}","created_at":1}}"#,
+                    data.len()
+                )
+                .into_bytes(),
+                content_hash: None,
+            },
+        );
+        let client = CloudApiClient::with_base_url(http, "https://cloud.test");
+        let returned = client
+            .put_blob("good-token", resource_id, data)
+            .unwrap();
+        assert_eq!(returned, hash);
+    }
+
+    #[test]
+    fn put_blob_accepts_200_same_hash_retry() {
+        let http = FakeCloudHttp::default();
+        let resource_id = ResourceId::new();
+        let data = b"opaque-cloud-bytes";
+        let hash = ContentHash::from_bytes(data).unwrap();
+        let hash_hex = content_hash_hex(&hash);
+        http.bytes_responses.lock().unwrap().insert(
+            format!("PUT /v1/blobs/{resource_id}"),
+            CloudHttpBytesResponse {
+                status: 200,
+                body: format!(
+                    r#"{{"resource_id":"{resource_id}","object_key":"blobs/u1/sha256/{hash_hex}","size":{},"content_hash":"{hash_hex}","created_at":1}}"#,
+                    data.len()
+                )
+                .into_bytes(),
+                content_hash: None,
+            },
+        );
+        let client = CloudApiClient::with_base_url(http, "https://cloud.test");
+        let returned = client
+            .put_blob("good-token", resource_id, data)
+            .unwrap();
+        assert_eq!(returned, hash);
+    }
+
+    #[test]
+    fn put_blob_rejects_200_hash_mismatch() {
+        let http = FakeCloudHttp::default();
+        let resource_id = ResourceId::new();
+        let data = b"opaque-cloud-bytes";
+        let hash = ContentHash::from_bytes(data).unwrap();
+        let hash_hex = content_hash_hex(&hash);
+        let wrong_hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+        http.bytes_responses.lock().unwrap().insert(
+            format!("PUT /v1/blobs/{resource_id}"),
+            CloudHttpBytesResponse {
+                status: 200,
+                body: format!(
+                    r#"{{"resource_id":"{resource_id}","object_key":"blobs/u1/sha256/{wrong_hash}","size":{},"content_hash":"{wrong_hash}","created_at":1}}"#,
+                    data.len()
+                )
+                .into_bytes(),
+                content_hash: None,
+            },
+        );
+        let client = CloudApiClient::with_base_url(http, "https://cloud.test");
+        let err = client
+            .put_blob("good-token", resource_id, data)
+            .unwrap_err();
+        assert!(matches!(err, CloudError::InvalidResponse(_)));
+        assert!(err.to_string().contains("hash mismatch"));
+        assert!(err.to_string().contains(hash_hex));
     }
 }
