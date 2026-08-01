@@ -330,6 +330,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
           <IconButton
             label={agentPanelOpen ? "Hide agent" : "Show agent"}
             className={agentPanelOpen ? "activity-button-active" : ""}
+            data-guidance-anchor="agent.panel.toggle"
             onClick={() => setAgentPanelOpen((open) => !open)}
           >
             <Robot size={17} />
@@ -346,7 +347,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
 
         <aside className="sidebar" style={{ width: sidebarWidth }}>
           <header className="sidebar-head">
-            <div className="workspace-title-row">
+            <div className="workspace-title-row" data-guidance-anchor="shell.workspace-switcher">
               <div className="workspace-title" title={snapshot.root}>
                 {snapshot.title}
               </div>
@@ -361,6 +362,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
               variant="ghost"
               size="sm"
               className="sidebar-search"
+              data-guidance-anchor="shell.search"
               onClick={() => setSearchPaneOpen(true)}
             >
               <MagnifyingGlass size={14} />
@@ -370,7 +372,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
             <MenuRoot>
               <MenuTrigger
                 render={
-                  <IconButton label="Create resource">
+                  <IconButton label="Create resource" data-guidance-anchor="resource-tree.new-page">
                     <Plus size={15} />
                   </IconButton>
                 }

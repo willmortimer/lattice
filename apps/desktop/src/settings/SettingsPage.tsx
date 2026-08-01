@@ -1003,7 +1003,12 @@ function AiSettingsPanel({
       </p>
 
       <h2 className="settings-subsection">How to reach a model</h2>
-      <div className="ai-mode-choices" role="radiogroup" aria-label="AI mode">
+      <div
+        className="ai-mode-choices"
+        role="radiogroup"
+        aria-label="AI mode"
+        data-guidance-anchor="settings.ai.provider"
+      >
         {AI_MODE_OPTIONS.map((option) => {
           const active = ai.mode === option.id;
           return (
