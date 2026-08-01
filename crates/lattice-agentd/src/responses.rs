@@ -169,7 +169,7 @@ pub async fn emit_openai_run(options: OpenaiRunOptions, events: mpsc::Sender<Age
 
     send(AgentEvent::RunStarted {
         run_id: run_id.clone(),
-        thread_id,
+        thread_id: thread_id.clone(),
         provider: Some(ProviderKind::Openai),
     })
     .await;
@@ -208,6 +208,7 @@ pub async fn emit_openai_run(options: OpenaiRunOptions, events: mpsc::Sender<Age
             &ToolRunContext {
                 workspace_id,
                 workspace_root,
+                thread_id: Some(thread_id),
             },
         )
         .await

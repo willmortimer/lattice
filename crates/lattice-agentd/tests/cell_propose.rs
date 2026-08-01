@@ -427,6 +427,7 @@ async fn dispatch_run_cell_task_tool_end_to_end() {
     let ctx = ToolRunContext {
         workspace_id: Some("ws-dispatch".into()),
         workspace_root: Some(workspace.path().to_string_lossy().into_owned()),
+        thread_id: None,
     };
 
     let args = json!({
