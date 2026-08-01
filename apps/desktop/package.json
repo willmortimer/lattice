@@ -118,6 +118,7 @@
     "prosemirror-markdown": "^1.13.5",
     "prosemirror-model": "^1.25.11",
     "react": "^19.2.7",
+    "react-arborist": "^3.16.0",
     "react-dom": "^19.2.7",
     "shiki": "^4.3.1",
     "vega": "^6.2.0",
