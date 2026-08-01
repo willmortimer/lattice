@@ -561,12 +561,12 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
         return true;
       },
     },
-    onUpdate: ({ editor: currentEditor }) => {
-      // Document path: dirty + autosave only. Floating menus wait for selection.
+    onUpdate: () => {
       markDocumentDirty();
-      scheduleEditorMenus(currentEditor);
     },
-    onSelectionUpdate: ({ editor: currentEditor }) => scheduleEditorMenus(currentEditor),
+    onSelectionUpdate: ({ editor }) => {
+      scheduleEditorMenus(editor);
+    },
   });
   editorRef.current = editor;
 
