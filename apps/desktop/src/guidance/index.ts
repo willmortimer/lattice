@@ -30,6 +30,12 @@ export {
 } from "./demoBridge";
 export { GuidanceTourController, startGuidanceTour, startSampleGuidanceTour, startSampleShellTour } from "./tour/controller";
 export { requestShellTourStart, subscribeShellTourStart } from "./tour/shellTourBridge";
+export {
+  isShellTourFinished,
+  markShellTourFinished,
+  shouldAutoStartShellTour,
+} from "./tour/shellTourPersistence";
+export type { ShellTourOutcome } from "./tour/shellTourPersistence";
 export { GuidanceTourHost } from "./tour/GuidanceTourHost";
 export { guidanceTourMachine, resolveStepAnchor } from "./tour/machine";
 export { sampleShellTour } from "./tour/sampleTour";

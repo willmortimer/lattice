@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { GuidanceTourHost } from "./GuidanceTourHost";
 import { sampleShellTour } from "./sampleTour";
 import { subscribeShellTourStart } from "./shellTourBridge";
+import type { ShellTourOutcome } from "./shellTourPersistence";
 import type { TourDefinition } from "./types";
 
 let startTourHandler: ((tour: TourDefinition) => void) | null = null;
@@ -21,7 +22,11 @@ export function startSampleGuidanceTour(): void {
   startSampleShellTour();
 }
 
-export function GuidanceTourController() {
+type GuidanceTourControllerProps = {
+  onShellTourFinished?: (outcome: ShellTourOutcome) => void;
+};
+
+export function GuidanceTourController({ onShellTourFinished }: GuidanceTourControllerProps) {
   const [activeTour, setActiveTour] = useState<TourDefinition | null>(null);
 
   useEffect(() => {
@@ -33,5 +38,15 @@ export function GuidanceTourController() {
 
   useEffect(() => subscribeShellTourStart(() => startSampleShellTour()), []);
 
-  return <GuidanceTourHost tour={activeTour} onFinished={() => setActiveTour(null)} />;
+  return (
+    <GuidanceTourHost
+      tour={activeTour}
+      onFinished={(outcome) => {
+        setActiveTour(null);
+        if (outcome === "completed" || outcome === "skipped") {
+          onShellTourFinished?.(outcome);
+        }
+      }}
+    />
+  );
 }

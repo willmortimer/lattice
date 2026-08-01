@@ -1,4 +1,5 @@
 import { demoSnapshot, demoStartEmpty, inBrowser } from "../demo";
+import { requestShellTourStart } from "../guidance";
 import type { SaveState } from "../editor/saveState";
 import { IDLE_SAVE_STATE } from "../editor/saveState";
 import type { PageEditorHandle } from "../editor/PageEditor";
@@ -835,6 +836,11 @@ export function useDesktopController() {
         run: () => setSearchPaneOpen(true),
       },
       {
+        id: "action:workspace-tour",
+        label: "Workspace tour",
+        run: () => requestShellTourStart(),
+      },
+      {
         id: "action:theme-follow-system",
         label: "Theme: Follow system",
         hint:
@@ -1051,6 +1057,9 @@ export function useDesktopController() {
           break;
         case "app.files":
           setActivityAreaRef.current("files");
+          break;
+        case "app.shell-tour":
+          requestShellTourStart();
           break;
         default:
           break;

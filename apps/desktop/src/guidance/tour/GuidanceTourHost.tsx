@@ -1,15 +1,16 @@
 import { useMachine } from "@xstate/react";
 import { Button, PopoverPortal, PopoverPopup, PopoverPositioner, PopoverRoot } from "@lattice/ui";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import "./guidanceTour.css";
 import { GuidanceSpotlight } from "./spotlight";
 import { currentTourStep, guidanceTourMachine, isTourActiveState } from "./machine";
 import type { TourDefinition } from "./types";
+import type { ShellTourOutcome } from "./shellTourPersistence";
 
 type GuidanceTourHostProps = {
   tour: TourDefinition | null;
-  onFinished?: () => void;
+  onFinished?: (outcome: ShellTourOutcome) => void;
 };
 
 const EMPTY_RECT = new DOMRect(0, 0, 0, 0);
@@ -19,18 +20,20 @@ export function GuidanceTourHost({ tour, onFinished }: GuidanceTourHostProps) {
   const active = isTourActiveState(snapshot.value);
   const step = currentTourStep(snapshot.context);
   const showing = snapshot.matches("stepShowing");
+  const finishedRef = useRef(false);
 
   useEffect(() => {
     if (!tour) return;
+    finishedRef.current = false;
     send({ type: "START", tour });
   }, [send, tour]);
 
   useEffect(() => {
-    if (!onFinished) return;
-    if (snapshot.status === "done") {
-      onFinished();
-    }
-  }, [onFinished, snapshot.status]);
+    if (!onFinished || snapshot.status !== "done" || finishedRef.current) return;
+    finishedRef.current = true;
+    const outcome: ShellTourOutcome = snapshot.value === "skipped" ? "skipped" : "completed";
+    onFinished(outcome);
+  }, [onFinished, snapshot.status, snapshot.value]);
 
   const virtualAnchor = useMemo(
     () => ({

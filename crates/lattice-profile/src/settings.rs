@@ -396,6 +396,8 @@ pub struct DesktopSettings {
     pub ai: AiSettings,
     #[serde(default)]
     pub privacy: PrivacySettings,
+    #[serde(default)]
+    pub guidance: GuidanceSettings,
 }
 
 impl Default for DesktopSettings {
@@ -413,6 +415,7 @@ impl Default for DesktopSettings {
             search: SearchSettings::default(),
             ai: AiSettings::default(),
             privacy: PrivacySettings::default(),
+            guidance: GuidanceSettings::default(),
         }
     }
 }
@@ -519,6 +522,14 @@ fn default_true() -> bool {
 pub struct SearchSettings {
     #[serde(default)]
     pub semantic_enabled: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GuidanceSettings {
+    /// Set after the workspace shell tour is completed or skipped.
+    #[serde(default)]
+    pub shell_tour_finished: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
