@@ -26,6 +26,7 @@ mod github;
 mod gitlab;
 mod kernel;
 mod link_repair;
+mod notification_actions;
 mod presence;
 mod profile;
 mod proposals;
@@ -46,6 +47,7 @@ mod voice;
 mod watcher;
 mod workflow;
 mod workspace_catalog;
+mod workspace_root;
 
 use tauri::{Emitter, Manager};
 
@@ -183,6 +185,7 @@ pub fn run() {
             commands::apply_resource_update,
             commands::create_page,
             commands::prepare_quick_note,
+            commands::dispatch_notification_action_stub,
             commands::create_asset,
             commands::rename_resource,
             commands::delete_resource,

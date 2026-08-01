@@ -18,7 +18,7 @@ use lattice_capture_core::{
     ScreenshotPlan,
 };
 use lattice_capture_macos::MacOsCaptureBackend;
-use lattice_core::{effective_default_workspace, ensure_lattice_home, Workspace};
+use lattice_core::Workspace;
 use lattice_handlers::create_inbox_capture;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
@@ -86,7 +86,8 @@ fn run_screen_clip(app: &AppHandle) -> Result<(), String> {
 }
 
 fn run_screen_clip_inner(app: &AppHandle) -> Result<(), String> {
-    let root = resolve_capture_workspace_root()?;
+    let root = crate::workspace_root::resolve_default_workspace_root()
+        .ok_or_else(|| "open a workspace before capturing".to_string())?;
     let inbox_directory = capture_inbox_directory(&root)?;
     let backend = MacOsCaptureBackend::new();
     let captured = capture_image(&backend)?;
@@ -100,25 +101,12 @@ fn run_screen_clip_inner(app: &AppHandle) -> Result<(), String> {
         CaptureIngestedPayload {
             page_path: page_path.clone(),
             asset_path: result.asset_path,
-            root,
+            root: root.clone(),
         },
     );
     shelf::on_ingested(app, page_path);
+    crate::notification_actions::post_capture_ingested(app, &root, &page_path);
     Ok(())
-}
-
-fn resolve_capture_workspace_root() -> Result<String, String> {
-    let home = ensure_lattice_home().map_err(|err| err.to_string())?;
-    let state = home.state_store().map_err(|err| err.to_string())?;
-    let recents = state.list_recents().map_err(|err| err.to_string())?;
-    if let Some(recent) = recents.first() {
-        if Workspace::open(Path::new(&recent.root)).is_ok() {
-            return Ok(recent.root.clone());
-        }
-    }
-    effective_default_workspace(&home)
-        .map(|path| path.to_string_lossy().into_owned())
-        .map_err(|err| err.to_string())
 }
 
 fn capture_inbox_directory(root: &str) -> Result<String, String> {
