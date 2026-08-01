@@ -4,6 +4,8 @@ import { VirtualizedAgentThreadView } from "./VirtualizedAgentThreadView";
 
 export interface AgentThreadProps {
   workspaceRoot: string | null;
+  activeResourcePath?: string | null;
+  onNotify?: (message: string) => void;
 }
 
 function accountAiCtaCopy(reason: "unsigned" | "not_entitled" | null): {
@@ -22,7 +24,11 @@ function accountAiCtaCopy(reason: "unsigned" | "not_entitled" | null): {
   };
 }
 
-export function AgentThread({ workspaceRoot }: AgentThreadProps) {
+export function AgentThread({
+  workspaceRoot,
+  activeResourcePath = null,
+  onNotify,
+}: AgentThreadProps) {
   // Primitive selectors only — returning a fresh object from the selector trips
   // React useSyncExternalStore (#185 maximum update depth).
   const accountAiDisabled = useAgentSessionStore((state) => state.accountAiDisabled);
@@ -55,6 +61,9 @@ export function AgentThread({ workspaceRoot }: AgentThreadProps) {
       paidCta={paidCta}
       emptyMessage={emptyMessage}
       composerDisabled={composerDisabled}
+      workspaceRoot={workspaceRoot}
+      activeResourcePath={activeResourcePath}
+      onNotify={onNotify}
     />
   );
 }

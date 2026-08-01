@@ -75,14 +75,14 @@ const LatticeAgentProvider = lazy(() =>
     default: module.LatticeAgentProvider,
   })),
 );
+const AgentPanelBody = lazy(() =>
+  import("../agent/AgentPanelBody").then((module) => ({ default: module.AgentPanelBody })),
+);
 const AgentThread = lazy(() =>
   import("../agent/AgentThread").then((module) => ({ default: module.AgentThread })),
 );
 const AgentHeader = lazy(() =>
   import("../agent/AgentHeader").then((module) => ({ default: module.AgentHeader })),
-);
-const AgentTrail = lazy(() =>
-  import("../agent/AgentTrail").then((module) => ({ default: module.AgentTrail })),
 );
 const AgentOverlayHost = lazy(() =>
   import("../agent/AgentOverlayHost").then((module) => ({ default: module.AgentOverlayHost })),
@@ -829,8 +829,15 @@ export function DesktopShell({ model }: DesktopShellProps) {
                       onClose={() => setAgentPanelOpen(false)}
                       workspaceRoot={inBrowser ? null : snapshot.root}
                     />
-                    <AgentTrail />
-                    <AgentThread workspaceRoot={inBrowser ? null : snapshot.root} />
+                    <AgentPanelBody
+                      thread={
+                        <AgentThread
+                          workspaceRoot={inBrowser ? null : snapshot.root}
+                          activeResourcePath={selected?.path ?? null}
+                          onNotify={setStatusToast}
+                        />
+                      }
+                    />
                   </LatticeAgentProvider>
                 </AgentPanelShell>
               </Suspense>

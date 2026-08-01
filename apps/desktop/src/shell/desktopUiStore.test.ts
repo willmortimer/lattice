@@ -63,3 +63,24 @@ describe("desktopUiStore saveStatusBySessionId", () => {
     expect(store.getState().saveStatusBySessionId).toEqual({});
   });
 });
+
+describe("desktopUiStore agent layout", () => {
+  it("defaults to dock layout and persists workbench panel sizes", () => {
+    const store = createDesktopUiStore();
+
+    expect(store.getState().agentLayoutMode).toBe("dock");
+    expect(store.getState().agentWorkbenchPanelSizes).toEqual({
+      conversation: 58,
+      side: 42,
+    });
+
+    store.getState().setAgentLayoutMode("workbench");
+    store.getState().setAgentWorkbenchPanelSizes({ conversation: 64, side: 36 });
+
+    expect(store.getState().agentLayoutMode).toBe("workbench");
+    expect(store.getState().agentWorkbenchPanelSizes).toEqual({
+      conversation: 64,
+      side: 36,
+    });
+  });
+});

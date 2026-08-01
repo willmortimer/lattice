@@ -21,6 +21,18 @@ import { DIRTY_SAVE_STATE, IDLE_SAVE_STATE } from "../editor/saveState";
  */
 export type RendererSessionId = string;
 
+export type AgentLayoutMode = "dock" | "workbench";
+
+export type AgentWorkbenchPanelSizes = {
+  conversation: number;
+  side: number;
+};
+
+const DEFAULT_AGENT_WORKBENCH_PANEL_SIZES: AgentWorkbenchPanelSizes = {
+  conversation: 58,
+  side: 42,
+};
+
 /** Map a resource path to today's default renderer session id. */
 export function rendererSessionIdForPath(path: string): RendererSessionId {
   return path;
@@ -31,6 +43,8 @@ export type DesktopUiState = {
   sidebarWidth: number;
   inspectorOpen: boolean;
   agentPanelOpen: boolean;
+  agentLayoutMode: AgentLayoutMode;
+  agentWorkbenchPanelSizes: AgentWorkbenchPanelSizes;
   paletteOpen: boolean;
   searchPaneOpen: boolean;
   setSaveStatus: (
@@ -43,6 +57,8 @@ export type DesktopUiState = {
   setSidebarWidth: (width: number) => void;
   setInspectorOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
   setAgentPanelOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
+  setAgentLayoutMode: (mode: AgentLayoutMode) => void;
+  setAgentWorkbenchPanelSizes: (sizes: AgentWorkbenchPanelSizes) => void;
   setPaletteOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
   setSearchPaneOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
 };
@@ -79,6 +95,8 @@ export function createDesktopUiStore(
     sidebarWidth: initial?.sidebarWidth ?? 272,
     inspectorOpen: false,
     agentPanelOpen: false,
+    agentLayoutMode: "dock",
+    agentWorkbenchPanelSizes: DEFAULT_AGENT_WORKBENCH_PANEL_SIZES,
     paletteOpen: false,
     searchPaneOpen: false,
     setSaveStatus: (sessionId, state) => {
@@ -123,6 +141,8 @@ export function createDesktopUiStore(
       set({
         agentPanelOpen: typeof open === "function" ? open(get().agentPanelOpen) : open,
       }),
+    setAgentLayoutMode: (agentLayoutMode) => set({ agentLayoutMode }),
+    setAgentWorkbenchPanelSizes: (agentWorkbenchPanelSizes) => set({ agentWorkbenchPanelSizes }),
     setPaletteOpen: (open) =>
       set({
         paletteOpen: typeof open === "function" ? open(get().paletteOpen) : open,
