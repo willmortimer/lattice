@@ -5,6 +5,12 @@ import { bridgeWorkspacePath, hasTauri, inBridgeMode, invoke } from "../lib/ipc"
 import { listTemplates, provisionWorkspace, type TemplateDescriptor } from "../lib/templates";
 import { loadSession, saveSession, type DesktopSession } from "../lib/profile";
 import { refreshResourceCatalog } from "../lib/resourceLinks";
+import {
+  applyCatalogDelta,
+  catalogMapFromResources,
+  resourcesFromCatalog,
+  type CatalogDeltaEvent,
+} from "../lib/resourceCatalog";
 import type { Resource, WorkspaceChangeEvent, WorkspaceSnapshot } from "../types";
 import { workspaceUnavailableState } from "./workspacePolicy";
 
@@ -42,6 +48,7 @@ export interface WorkspaceController {
   templates: TemplateDescriptor[];
   adoptWorkspace: (snapshot: WorkspaceSnapshot) => Promise<void>;
   handleWorkspaceChanged: (event: WorkspaceChangeEvent) => Promise<void>;
+  applyCatalogDeltaEvent: (event: CatalogDeltaEvent) => void;
   refreshResources: () => Promise<void>;
   handleGetStarted: () => Promise<void>;
   handleOpenWorkspace: () => Promise<void>;
@@ -71,9 +78,19 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
   const [workspacesDir, setWorkspacesDir] = useState<string | null>(null);
   const [templates, setTemplates] = useState<TemplateDescriptor[]>([]);
   const snapshotRef = useRef(snapshot);
+  const catalogRef = useRef(catalogMapFromResources(snapshot?.resources ?? []));
   const startupAttemptedRef = useRef(false);
   const watchingRootRef = useRef<string | null>(null);
   const sessionRestoredRootRef = useRef<string | null>(null);
+
+  const syncSnapshotResources = useCallback((resources: Resource[]) => {
+    setSnapshot((prev) => (prev ? { ...prev, resources } : prev));
+  }, []);
+
+  const seedCatalogFromResources = useCallback((resources: readonly Resource[]) => {
+    catalogRef.current = catalogMapFromResources(resources);
+    syncSnapshotResources(resourcesFromCatalog(catalogRef.current));
+  }, [syncSnapshotResources]);
 
   useEffect(() => {
     snapshotRef.current = snapshot;
@@ -96,6 +113,7 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
   const adoptWorkspace = useCallback(async (next: WorkspaceSnapshot) => {
     if (watchingRootRef.current && watchingRootRef.current !== next.root) await stopWatching();
     snapshotRef.current = next;
+    catalogRef.current = catalogMapFromResources(next.resources);
     sessionRestoredRootRef.current = null;
     setSnapshot(next);
     await onAdopt(next);
@@ -115,17 +133,24 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
     }
   }, [onAdopt, rememberWorkspace, stopWatching]);
 
+  const applyCatalogDeltaEvent = useCallback((event: CatalogDeltaEvent) => {
+    const root = snapshotRef.current?.root;
+    if (!root || event.workspaceRoot !== root) return;
+    catalogRef.current = applyCatalogDelta(catalogRef.current, event.delta);
+    syncSnapshotResources(resourcesFromCatalog(catalogRef.current));
+  }, [syncSnapshotResources]);
+
   const refreshResources = useCallback(async () => {
     const root = snapshotRef.current?.root;
     if (!root) return;
     try {
       const resources = await invoke<Resource[]>("list_resources", { root });
-      setSnapshot((prev) => (prev ? { ...prev, resources } : prev));
+      seedCatalogFromResources(resources);
       if (hasTauri) await refreshResourceCatalog(root);
     } catch {
       // A scan can briefly observe a file mid-write or a workspace closing.
     }
-  }, []);
+  }, [seedCatalogFromResources]);
 
   const handleWorkspaceChanged = useCallback(async (event: WorkspaceChangeEvent) => {
     const root = snapshotRef.current?.root;
@@ -144,6 +169,7 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
       await stopWatching();
       const reset = workspaceUnavailableState(root);
       snapshotRef.current = reset.snapshot;
+      catalogRef.current = new Map();
       sessionRestoredRootRef.current = null;
       setSnapshot(reset.snapshot);
       await onWorkspaceUnavailable(root);
@@ -371,7 +397,7 @@ export function useWorkspaceController(options: WorkspaceControllerOptions): Wor
 
   return {
     snapshot, snapshotRef, setSnapshot, workspacesDir, templates, adoptWorkspace,
-    handleWorkspaceChanged, refreshResources, handleGetStarted, handleOpenWorkspace,
+    handleWorkspaceChanged, applyCatalogDeltaEvent, refreshResources, handleGetStarted, handleOpenWorkspace,
     openRecent, handleCreateWorkspace, openNewWorkspaceDialog, pickWorkspaceFolder,
   };
 }

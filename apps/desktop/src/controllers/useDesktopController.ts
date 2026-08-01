@@ -291,7 +291,7 @@ export function useDesktopController() {
   });
   const { snapshot, snapshotRef, setSnapshot, workspacesDir, templates, adoptWorkspace,
     handleGetStarted, handleOpenWorkspace, openRecent, handleCreateWorkspace,
-    openNewWorkspaceDialog, pickWorkspaceFolder, refreshResources } = workspaceController;
+    openNewWorkspaceDialog, pickWorkspaceFolder, applyCatalogDeltaEvent, refreshResources } = workspaceController;
   workspaceSnapshotRef.current = snapshot;
   useEffect(() => {
     workspaceSnapshotRef.current = snapshot;
@@ -606,6 +606,7 @@ export function useDesktopController() {
           : null,
       ),
     pageEditorRef,
+    applyCatalogDeltaEvent,
     refreshResources,
     handleWorkspaceUnavailable: workspaceController.handleWorkspaceChanged,
     reloadPageFromDisk: resourceController.reloadPageFromDisk,
