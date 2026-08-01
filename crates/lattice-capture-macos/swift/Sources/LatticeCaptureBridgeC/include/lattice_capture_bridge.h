@@ -64,6 +64,11 @@ int32_t lattice_capture_capture_region(
     lattice_capture_image_out_t *out_image
 );
 
+int32_t lattice_capture_select_interactive_region(
+    uint32_t *out_display_id,
+    lattice_capture_region_t *out_region
+);
+
 int32_t lattice_capture_capture_interactive_region(
     lattice_capture_image_out_t *out_image
 );

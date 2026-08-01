@@ -61,6 +61,11 @@ extern "C" {
         out_image: *mut LatticeCaptureImageOut,
     ) -> i32;
 
+    pub fn lattice_capture_select_interactive_region(
+        out_display_id: *mut u32,
+        out_region: *mut LatticeCaptureRegion,
+    ) -> i32;
+
     pub fn lattice_capture_capture_interactive_region(out_image: *mut LatticeCaptureImageOut)
         -> i32;
 
