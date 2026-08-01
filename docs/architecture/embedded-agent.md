@@ -148,7 +148,8 @@ Keep React + assistant-ui + Zustand control store. Adopt TanStack Query for
 daemon-owned thread/run/cloud state. Gaps and sequencing:
 
 - Resumable streams (`reconnectToStream`) via durable ordered run-event log —
-  status → subscribe(after_sequence) → replay → live-tail
+  status → subscribe(after_sequence) → replay → live-tail (shipped; returns
+  `null` when no active run)
   ([ADR 0082](../../../docs/decisions/0082-agent-workbench-and-resumable-runs.md)).
 - Gate composer until transcript hydration is safe (P0).
 - Semantic tool renderer registry; Dock / Workbench / Detached layouts.
@@ -224,7 +225,9 @@ pnpm --filter @lattice/desktop add \
   zustand
 ```
 
-Defer `@tanstack/react-query` and `react-resizable-panels` to later phases (daemon-owned reloadable state and proposal split views).
+`react-resizable-panels` ships for agent workbench layouts (A6); defer
+`@tanstack/react-query` to later phases (daemon-owned reloadable state and
+proposal split views).
 
 Responsibilities:
 
@@ -236,7 +239,7 @@ Responsibilities:
 | `ai` | A | `UIMessage`, `UIMessageChunk`, and custom chat transport contracts |
 | `zustand` | A | Ephemeral run state, overlays, agent trail, follow mode, active draft |
 | `@tanstack/react-query` | D+ | Daemon-owned persisted state such as runs, threads, drafts, and proposals |
-| `react-resizable-panels` | D+ | Current/proposed resource split views |
+| `react-resizable-panels` | A6 (agent workbench) / D+ (proposal splits) | Agent panel layouts; later proposal/resource split views |
 
 Frontend data flow (Phase A onward):
 
