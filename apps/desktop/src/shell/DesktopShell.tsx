@@ -57,6 +57,7 @@ import { GithubFileViewer } from "../GithubFileViewer";
 import { NewWorkspaceDialog } from "../NewWorkspaceDialog";
 import { useDesktopUiStore } from "./desktopUiStore";
 import "./agentFocus.css";
+import { useResourceTreeBadgeHints } from "./useResourceTreeBadgeHints";
 import { ResourceTree } from "../ResourceTree";
 import { KindMark } from "../KindMark";
 import { QUICK_NOTE_SHORTCUT } from "../quickNoteWindow";
@@ -154,6 +155,11 @@ export function DesktopShell({ model }: DesktopShellProps) {
     Boolean(proposalReview) &&
     agentPanelOpen &&
     (agentLayoutMode === "workbench" || agentLayoutMode === "focus");
+  const resourceTreeBadgeHints = useResourceTreeBadgeHints(
+    proposalSummaries,
+    agentPanelOpen,
+    selected?.path,
+  );
 
   useEffect(() => {
     void emitProductTelemetry("app_launch");
@@ -535,6 +541,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
               onMoveToFolder={(fromPaths, toDir) => void handleMoveToFolder(fromPaths, toDir)}
               renameRequest={treeRenameRequest}
               revealPath={revealPath}
+              badgeHints={resourceTreeBadgeHints}
               activeFolderPath={inBrowser ? browserActiveFolderPath : null}
               onActiveFolderChange={inBrowser ? setBrowserActiveFolderPath : undefined}
             />
