@@ -9,6 +9,8 @@
 
 mod agent;
 mod agent_memory_api;
+mod agent_run_events_api;
+mod agent_run_events_store;
 mod agent_threads_api;
 mod agent_threads_store;
 mod api;
@@ -41,6 +43,14 @@ pub use agent::{
 pub use agent_memory_api::{
     api_delete_memory, api_recall, api_remember, AgentMemoryHitDto, DeleteMemoryParams,
     DeleteMemoryResponse, RecallParams, RecallResponse, RememberParams, RememberResponse,
+};
+pub use agent_run_events_api::{
+    api_append_run_event, api_get_run_status, api_list_run_events, AppendRunEventParams,
+    AppendRunEventResponse, GetRunStatusParams, GetRunStatusResponse, ListRunEventsParams,
+    ListRunEventsResponse, RunEventDto, RunStatusDto,
+};
+pub use agent_run_events_store::{
+    AgentRunEventsStore, RunEventRow, RunEventStoreError, RunRow, RunStatus,
 };
 pub use agent_threads_api::{
     api_append_message, api_create_thread, api_get_thread, api_list_threads, AppendMessageParams,

@@ -19,6 +19,10 @@ use tracing::{info, warn};
 use crate::agent_memory_api::{
     api_delete_memory, api_recall, api_remember, DeleteMemoryParams, RecallParams, RememberParams,
 };
+use crate::agent_run_events_api::{
+    api_append_run_event, api_get_run_status, api_list_run_events, AppendRunEventParams,
+    GetRunStatusParams, ListRunEventsParams,
+};
 use crate::agent_threads_api::{
     api_append_message, api_create_thread, api_get_thread, api_list_threads, AppendMessageParams,
     CreateThreadParams, WorkspaceScopeParams,
@@ -243,6 +247,65 @@ async fn route_agent_thread_append_message(
         return resp;
     }
     match api_append_message(&state.daemon.runtime, &thread_id, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_agent_run_status_by_thread(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Query(params): Query<GetRunStatusParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_get_run_status(&state.daemon.runtime, None, params) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_agent_run_get(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Path(run_id): Path<String>,
+    Query(params): Query<GetRunStatusParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_get_run_status(&state.daemon.runtime, Some(&run_id), params) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_agent_run_list_events(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Path(run_id): Path<String>,
+    Query(params): Query<ListRunEventsParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_list_run_events(&state.daemon.runtime, &run_id, params) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_agent_run_append_event(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Path(run_id): Path<String>,
+    Json(body): Json<AppendRunEventParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_append_run_event(&state.daemon.runtime, &run_id, body) {
         Ok(value) => (StatusCode::OK, Json(value)).into_response(),
         Err(err) => err.into_response(),
     }
@@ -622,6 +685,12 @@ pub fn router(daemon: DaemonState) -> Router {
         .route(
             "/v1/agent_threads/{id}/messages",
             post(route_agent_thread_append_message),
+        )
+        .route("/v1/agent_runs", get(route_agent_run_status_by_thread))
+        .route("/v1/agent_runs/{run_id}", get(route_agent_run_get))
+        .route(
+            "/v1/agent_runs/{run_id}/events",
+            get(route_agent_run_list_events).post(route_agent_run_append_event),
         )
         .route("/v1/read", post(route_read))
         .route("/v1/related", post(route_related))
