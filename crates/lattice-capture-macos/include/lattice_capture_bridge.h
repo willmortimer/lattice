@@ -86,8 +86,19 @@ int32_t lattice_capture_capture_region(
 );
 
 /**
- * Present an interactive region selector overlay (AppKit scaffold).
- * Currently returns `LATTICE_CAPTURE_ERR_NOT_IMPLEMENTED` in CI builds.
+ * Present an interactive AppKit region selector overlay.
+ * On success writes display id + display-local region (top-left origin, points).
+ * Escape / empty drag returns `LATTICE_CAPTURE_ERR_CANCELLED`.
+ */
+int32_t lattice_capture_select_interactive_region(
+    uint32_t *out_display_id,
+    lattice_capture_region_t *out_region
+);
+
+/**
+ * Select an interactive region then capture it as PNG via ScreenCaptureKit.
+ * Prefer composing `lattice_capture_select_interactive_region` +
+ * `lattice_capture_capture_region` from Rust when possible.
  */
 int32_t lattice_capture_capture_interactive_region(
     lattice_capture_image_out_t *out_image

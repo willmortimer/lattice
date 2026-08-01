@@ -52,7 +52,9 @@ export LATTICE_CAPTURE_BRIDGE_LIB="$(pwd)/crates/lattice-capture-macos/swift/.bu
 cargo test -p lattice-capture-macos --features live-capture -- --ignored
 ```
 
-Interactive overlay and live ScreenCaptureKit GUI flows are **manual** tests.
+Interactive overlay (`lattice_capture_select_interactive_region`) and live
+ScreenCaptureKit GUI flows are **manual** tests. Rust composes select → fixed
+region capture so encode/ingest stay outside Swift.
 
 ## Out of scope
 

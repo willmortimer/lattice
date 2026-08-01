@@ -99,16 +99,53 @@ public func lattice_capture_capture_region(
     }
 }
 
+@_cdecl("lattice_capture_select_interactive_region")
+public func lattice_capture_select_interactive_region(
+    outDisplayId: UnsafeMutablePointer<UInt32>?,
+    outRegion: UnsafeMutablePointer<lattice_capture_region_t>?
+) -> Int32 {
+    bridgeCatch {
+        guard let outDisplayId, let outRegion else {
+            throw BridgeFailure.invalidArgument("out_display_id or out_region is null")
+        }
+        let selected = try RegionSelectorOverlay.selectRegion()
+        let width = selected.rect.width.rounded(.towardZero)
+        let height = selected.rect.height.rounded(.towardZero)
+        guard width >= 1, height >= 1 else {
+            throw BridgeFailure.cancelled
+        }
+        outDisplayId.pointee = selected.displayID
+        outRegion.pointee = lattice_capture_region_t(
+            x: Int32(selected.rect.origin.x.rounded(.towardZero)),
+            y: Int32(selected.rect.origin.y.rounded(.towardZero)),
+            width: UInt32(width),
+            height: UInt32(height)
+        )
+        return BridgeErrorCode.ok.rawValue
+    }
+}
+
 @_cdecl("lattice_capture_capture_interactive_region")
 public func lattice_capture_capture_interactive_region(
     outImage: UnsafeMutablePointer<lattice_capture_image_out_t>?
 ) -> Int32 {
     bridgeCatch {
-        guard outImage != nil else {
+        guard let outImage else {
             throw BridgeFailure.invalidArgument("out_image is null")
         }
-        _ = try RegionSelectorOverlay.captureInteractiveRegion()
-        return BridgeErrorCode.ok.rawValue
+        // Selection is interaction-only; capture reuses the fixed-region SCK path.
+        let selected = try RegionSelectorOverlay.selectRegion()
+        if #available(macOS 14.0, *) {
+            let captured = try runCaptureBlocking {
+                try await ScreenCaptureSession.captureRegion(
+                    displayId: selected.displayID,
+                    region: selected.rect
+                )
+            }
+            try writeImage(captured, into: outImage)
+            return BridgeErrorCode.ok.rawValue
+        }
+        throw BridgeFailure.unsupported("ScreenCaptureKit requires macOS 14+")
     }
 }
 

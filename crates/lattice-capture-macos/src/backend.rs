@@ -89,6 +89,18 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(link_bridge))]
+    fn interactive_region_without_bridge_is_unsupported() {
+        let backend = MacOsCaptureBackend::new();
+        let plan = ScreenshotPlan {
+            source: CaptureSource::InteractiveRegion,
+            destination: CaptureDestination::CaptureInbox,
+        };
+        let err = backend.screenshot(plan).unwrap_err();
+        assert!(matches!(err, CaptureError::Unsupported(_)));
+    }
+
+    #[test]
     fn recording_default_is_unsupported() {
         let backend = MacOsCaptureBackend::new();
         let plan = CapturePlan {

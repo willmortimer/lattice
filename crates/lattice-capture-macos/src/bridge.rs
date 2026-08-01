@@ -114,22 +114,38 @@ impl NativeBridge {
         Err(CaptureError::Unsupported("bridge not linked".into()))
     }
 
+    /// Present the AppKit overlay and return display-local region geometry.
+    ///
+    /// Encode/ingest stay in Rust; this only performs interactive selection.
     #[cfg(link_bridge)]
-    pub fn capture_interactive_region() -> BridgeResult<BridgeImage> {
+    pub fn select_interactive_region() -> BridgeResult<(u32, LatticeCaptureRegion)> {
         Self::ensure_linked()?;
-        let mut out = LatticeCaptureImageOut {
+        let mut display_id = 0u32;
+        let mut region = LatticeCaptureRegion {
+            x: 0,
+            y: 0,
             width: 0,
             height: 0,
-            png_bytes: std::ptr::null_mut(),
-            png_len: 0,
         };
         unsafe {
             map_status(
-                ffi::lattice_capture_capture_interactive_region(&mut out),
-                "capture_interactive_region",
+                ffi::lattice_capture_select_interactive_region(&mut display_id, &mut region),
+                "select_interactive_region",
             )?;
-            Ok(ffi::take_png_image(out))
         }
+        Ok((display_id, region))
+    }
+
+    #[cfg(not(link_bridge))]
+    pub fn select_interactive_region() -> BridgeResult<(u32, LatticeCaptureRegion)> {
+        Err(CaptureError::Unsupported("bridge not linked".into()))
+    }
+
+    /// Select an interactive region, then capture via the fixed-region SCK path.
+    #[cfg(link_bridge)]
+    pub fn capture_interactive_region() -> BridgeResult<BridgeImage> {
+        let (display_id, region) = Self::select_interactive_region()?;
+        Self::capture_region(display_id, region)
     }
 
     #[cfg(not(link_bridge))]
