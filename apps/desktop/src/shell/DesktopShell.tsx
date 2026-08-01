@@ -837,6 +837,9 @@ export function DesktopShell({ model }: DesktopShellProps) {
                           onNotify={setStatusToast}
                         />
                       }
+                      proposals={hasTauri ? proposalSummaries : []}
+                      proposalLoading={hasTauri ? proposalInboxLoading : false}
+                      onOpenProposal={hasTauri ? openProposalReview : undefined}
                     />
                   </LatticeAgentProvider>
                 </AgentPanelShell>

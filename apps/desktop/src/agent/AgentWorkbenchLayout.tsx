@@ -2,16 +2,21 @@ import { Group, Panel, Separator } from "react-resizable-panels";
 import type { ReactNode } from "react";
 
 import { useDesktopUiStore } from "../shell/desktopUiStore";
-import { AgentWorkbenchPane } from "./AgentWorkbenchPane";
+import { AgentWorkbenchPane, type AgentWorkbenchPaneProps } from "./AgentWorkbenchPane";
 
 const CONVERSATION_PANEL_ID = "conversation";
 const SIDE_PANEL_ID = "side";
 
-export interface AgentWorkbenchLayoutProps {
+export interface AgentWorkbenchLayoutProps extends AgentWorkbenchPaneProps {
   conversation: ReactNode;
 }
 
-export function AgentWorkbenchLayout({ conversation }: AgentWorkbenchLayoutProps) {
+export function AgentWorkbenchLayout({
+  conversation,
+  proposals,
+  proposalLoading,
+  onOpenProposal,
+}: AgentWorkbenchLayoutProps) {
   const panelSizes = useDesktopUiStore((state) => state.agentWorkbenchPanelSizes);
   const setPanelSizes = useDesktopUiStore((state) => state.setAgentWorkbenchPanelSizes);
 
@@ -48,7 +53,11 @@ export function AgentWorkbenchLayout({ conversation }: AgentWorkbenchLayoutProps
         minSize="25%"
         defaultSize={`${panelSizes.side}%`}
       >
-        <AgentWorkbenchPane />
+        <AgentWorkbenchPane
+          proposals={proposals}
+          proposalLoading={proposalLoading}
+          onOpenProposal={onOpenProposal}
+        />
       </Panel>
     </Group>
   );
