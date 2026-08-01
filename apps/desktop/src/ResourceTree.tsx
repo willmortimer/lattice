@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
 
 import { fileTitle } from "./controllers/useResourceController";
 import { KindMark, KIND_LABELS } from "./KindMark";
@@ -10,6 +19,11 @@ import {
   type CatalogEntry,
 } from "./lib/resourceCatalog";
 import {
+  resourceTreeRowBadges,
+  type ResourceTreeBadgeHints,
+  type ResourceTreeRowBadge,
+} from "./lib/resourceTreeBadges";
+import {
   applyCatalogDeltaToForest,
   buildResourceTreeFromCatalog,
   flattenVisibleTree,
@@ -17,9 +31,16 @@ import {
   type FlatRow,
   type TreeNode,
 } from "./lib/resourceTree";
+import {
+  appendTreeTypeaheadPrefix,
+  findNextTypeaheadRowIndex,
+  isTreeTypeaheadKey,
+  TREE_TYPEAHEAD_RESET_MS,
+} from "./lib/resourceTreeTypeahead";
 import { nextTreeSelection, resourceIdsForTreeDrag, type TreeSelectMode } from "./lib/treeSelection";
 import { validateMoveResources } from "./lib/treeOps";
 import type { Resource } from "./types";
+import "./ResourceTree.css";
 
 interface ResourceTreeProps {
   /** Id-keyed workspace catalog (preferred over flat resources). */
@@ -47,6 +68,8 @@ interface ResourceTreeProps {
   /** Browser demo: highlight and target the last clicked folder row. */
   activeFolderPath?: string | null;
   onActiveFolderChange?: (folderPath: string) => void;
+  /** Optional dirty/proposal/agent/authority maps for row badges. */
+  badgeHints?: ResourceTreeBadgeHints;
 }
 
 const INDENT_BASE_PX = 9;
@@ -54,6 +77,7 @@ const INDENT_STEP_PX = 16;
 const TREE_ICON_SIZE = 15;
 const FOLDER_ICON_SIZE = 14;
 const OVERSCAN = 8;
+const REVEAL_FLASH_MS = 1200;
 
 function ResourceTreeRowIcon({ resource }: { resource: Resource }) {
   const decision = resourceTreeIcon(resource);
@@ -62,6 +86,23 @@ function ResourceTreeRowIcon({ resource }: { resource: Resource }) {
   }
   const Icon = decision.Icon;
   return <Icon size={TREE_ICON_SIZE} weight="regular" className="resource-tree-icon" aria-hidden />;
+}
+
+function ResourceTreeRowBadges({ badges }: { badges: readonly ResourceTreeRowBadge[] }) {
+  if (badges.length === 0) return null;
+  return (
+    <span className="resource-tree-badges" aria-hidden>
+      {badges.map((badge) => (
+        <i
+          key={badge.kind}
+          className={`resource-tree-badge resource-tree-badge-${badge.kind}`}
+          title={badge.title}
+        >
+          {badge.kind === "dirty" ? null : badge.label}
+        </i>
+      ))}
+    </span>
+  );
 }
 
 function selectModeFromEvent(event: MouseEvent): TreeSelectMode {
@@ -164,15 +205,20 @@ export function ResourceTree({
   onCollapsedPathsChange,
   activeFolderPath,
   onActiveFolderChange,
+  badgeHints,
 }: ResourceTreeProps) {
   const [localCollapsed, setLocalCollapsed] = useState<ReadonlySet<string>>(() => new Set());
   const [editingPath, setEditingPath] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [dropTargetPath, setDropTargetPath] = useState<string | null>(null);
+  const [revealActivePath, setRevealActivePath] = useState<string | null>(null);
   const selectionAnchorRef = useRef<string | null>(null);
   const selectedResourceIdsRef = useRef(selectedResourceIds);
   /** Paths captured at dragstart — dragover cannot read DataTransfer payloads. */
   const dragPathsRef = useRef<string[] | null>(null);
+  const typeaheadPrefixRef = useRef("");
+  const typeaheadResetTimerRef = useRef<number | null>(null);
+  const revealFlashTimerRef = useRef<number | null>(null);
   selectedResourceIdsRef.current = selectedResourceIds;
   const collapsed = collapsedPaths ?? localCollapsed;
   const { rootRef, scrollParentRef, scrollTop, viewportHeight } = useResourceListScroll();
@@ -230,6 +276,19 @@ export function ResourceTree({
     else setLocalCollapsed(next);
   }
 
+  const scrollRowIntoView = useCallback((index: number) => {
+    const parent = scrollParentRef.current;
+    if (!parent || index < 0) return;
+
+    const rowTop = index * RESOURCE_TREE_ROW_HEIGHT;
+    const rowBottom = rowTop + RESOURCE_TREE_ROW_HEIGHT;
+    if (rowTop < parent.scrollTop) {
+      parent.scrollTop = rowTop;
+    } else if (rowBottom > parent.scrollTop + parent.clientHeight) {
+      parent.scrollTop = rowBottom - parent.clientHeight;
+    }
+  }, [scrollParentRef]);
+
   useEffect(() => {
     if (!revealPath) return;
     const parts = revealPath.replace(/\/$/, "").split("/");
@@ -246,23 +305,108 @@ export function ResourceTree({
     const index = rows.findIndex((row) => row.type === "file" && row.resource.path === revealPath);
     if (index < 0) return;
 
-    const parent = scrollParentRef.current;
-    if (!parent) return;
-
-    const rowTop = index * RESOURCE_TREE_ROW_HEIGHT;
-    const rowBottom = rowTop + RESOURCE_TREE_ROW_HEIGHT;
-    if (rowTop < parent.scrollTop) {
-      parent.scrollTop = rowTop;
-    } else if (rowBottom > parent.scrollTop + parent.clientHeight) {
-      parent.scrollTop = rowBottom - parent.clientHeight;
+    scrollRowIntoView(index);
+    setRevealActivePath(revealPath);
+    if (revealFlashTimerRef.current !== null) {
+      window.clearTimeout(revealFlashTimerRef.current);
     }
-  }, [revealPath, rows, scrollParentRef]);
+    revealFlashTimerRef.current = window.setTimeout(() => {
+      revealFlashTimerRef.current = null;
+      setRevealActivePath((current) => (current === revealPath ? null : current));
+    }, REVEAL_FLASH_MS);
+  }, [revealPath, rows, scrollRowIntoView]);
+
+  useEffect(() => {
+    return () => {
+      if (typeaheadResetTimerRef.current !== null) {
+        window.clearTimeout(typeaheadResetTimerRef.current);
+      }
+      if (revealFlashTimerRef.current !== null) {
+        window.clearTimeout(revealFlashTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!renameRequest) return;
     setEditingPath(renameRequest.path);
     setRenameDraft(fileTitle(renameRequest.path));
   }, [renameRequest]);
+
+  const resetTypeaheadPrefix = useCallback(() => {
+    typeaheadPrefixRef.current = "";
+    if (typeaheadResetTimerRef.current !== null) {
+      window.clearTimeout(typeaheadResetTimerRef.current);
+      typeaheadResetTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleTypeaheadReset = useCallback(() => {
+    if (typeaheadResetTimerRef.current !== null) {
+      window.clearTimeout(typeaheadResetTimerRef.current);
+    }
+    typeaheadResetTimerRef.current = window.setTimeout(() => {
+      typeaheadResetTimerRef.current = null;
+      typeaheadPrefixRef.current = "";
+    }, TREE_TYPEAHEAD_RESET_MS);
+  }, []);
+
+  const currentTypeaheadStartIndex = useCallback((): number => {
+    const selectedIds = [...selectedResourceIds];
+    if (selectedIds.length === 0) return -1;
+    const lastId = selectedIds[selectedIds.length - 1];
+    return rows.findIndex((row) => row.resourceId === lastId);
+  }, [rows, selectedResourceIds]);
+
+  const jumpToTypeaheadRow = useCallback((index: number) => {
+    const row = rows[index];
+    if (!row) return;
+
+    scrollRowIntoView(index);
+    if (row.type === "file") {
+      selectionAnchorRef.current = row.resourceId;
+      onTreeSelect({
+        resourceIds: new Set([row.resourceId]),
+        primary: row.resource,
+        open: true,
+      });
+    } else if (row.type === "folder") {
+      onActiveFolderChange?.(row.path);
+    }
+  }, [onActiveFolderChange, onTreeSelect, rows, scrollRowIntoView]);
+
+  const handleTreeKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+    if (editingPath) return;
+    if (event.defaultPrevented) return;
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+
+    if (event.key === "Escape") {
+      resetTypeaheadPrefix();
+      return;
+    }
+
+    if (!isTreeTypeaheadKey(event.key)) return;
+
+    event.preventDefault();
+    const prefix = appendTreeTypeaheadPrefix(typeaheadPrefixRef.current, event.key);
+    typeaheadPrefixRef.current = prefix;
+    scheduleTypeaheadReset();
+
+    const matchIndex = findNextTypeaheadRowIndex(
+      rows,
+      prefix,
+      currentTypeaheadStartIndex(),
+    );
+    if (matchIndex === null) return;
+    jumpToTypeaheadRow(matchIndex);
+  }, [
+    currentTypeaheadStartIndex,
+    editingPath,
+    jumpToTypeaheadRow,
+    resetTypeaheadPrefix,
+    rows,
+    scheduleTypeaheadReset,
+  ]);
 
   if (catalog.size === 0) {
     return (
@@ -348,12 +492,28 @@ export function ResourceTree({
     onMoveToFolder?.(fromPaths, folderPath);
   }
 
+  function rowBadgesFor(row: FlatRow): readonly ResourceTreeRowBadge[] {
+    return resourceTreeRowBadges({
+      resourceId: row.resourceId,
+      path: row.path,
+      hints: badgeHints,
+    });
+  }
+
+  function isRevealActive(row: FlatRow): boolean {
+    if (!revealActivePath) return false;
+    if (row.type === "file") return row.resource.path === revealActivePath;
+    return row.path === revealActivePath;
+  }
+
   function renderRow(row: FlatRow, index: number) {
     const indent = INDENT_BASE_PX + row.depth * INDENT_STEP_PX;
     const style = {
       top: index * RESOURCE_TREE_ROW_HEIGHT,
       paddingLeft: indent,
     };
+    const badges = rowBadgesFor(row);
+    const revealActive = isRevealActive(row);
 
     if (row.type === "file") {
       const { resource, resourceId } = row;
@@ -365,6 +525,7 @@ export function ResourceTree({
           className={
             "resource-item resource-tree-row"
             + (isSelected ? " resource-item-active" : "")
+            + (revealActive ? " reveal-active" : "")
           }
           style={style}
           aria-label={`${KIND_LABELS[resource.kind]}: ${resource.path}`}
@@ -419,6 +580,7 @@ export function ResourceTree({
               {row.name}
             </span>
           )}
+          <ResourceTreeRowBadges badges={badges} />
         </button>
       );
     }
@@ -445,6 +607,7 @@ export function ResourceTree({
           "tree-folder-row resource-tree-row"
           + (isActiveFolder ? " tree-folder-row-active" : "")
           + (dropTargetPath === row.path ? " tree-folder-row-drop-target" : "")
+          + (revealActive ? " reveal-active" : "")
         }
         style={style}
         onClick={() => {
@@ -475,12 +638,21 @@ export function ResourceTree({
           aria-hidden
         />
         <span className="tree-folder-name">{row.name}</span>
+        <ResourceTreeRowBadges badges={badges} />
       </button>
     );
   }
 
   return (
-    <div ref={rootRef} className="resource-tree-virtual" role="tree" aria-multiselectable="true">
+    <div
+      ref={rootRef}
+      className="resource-tree-virtual"
+      role="tree"
+      aria-multiselectable="true"
+      tabIndex={0}
+      onKeyDown={handleTreeKeyDown}
+      onMouseDown={() => rootRef.current?.focus()}
+    >
       <div
         className="resource-tree-virtual-spacer"
         style={{ height: rows.length * RESOURCE_TREE_ROW_HEIGHT }}

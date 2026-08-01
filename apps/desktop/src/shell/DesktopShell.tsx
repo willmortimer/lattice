@@ -56,6 +56,7 @@ import { readConnectedCheckoutFile } from "../ConnectedRoots";
 import { GithubFileViewer } from "../GithubFileViewer";
 import { NewWorkspaceDialog } from "../NewWorkspaceDialog";
 import { useDesktopUiStore } from "./desktopUiStore";
+import { useResourceTreeBadgeHints } from "./useResourceTreeBadgeHints";
 import { ResourceTree } from "../ResourceTree";
 import { KindMark } from "../KindMark";
 import { QUICK_NOTE_SHORTCUT } from "../quickNoteWindow";
@@ -149,6 +150,11 @@ export function DesktopShell({ model }: DesktopShellProps) {
   const selectThreadId = useAgentSessionStore((state) => state.selectThreadId);
   const reviewInWorkbench =
     Boolean(proposalReview) && agentPanelOpen && agentLayoutMode === "workbench";
+  const resourceTreeBadgeHints = useResourceTreeBadgeHints(
+    proposalSummaries,
+    agentPanelOpen,
+    selected?.path,
+  );
 
   useEffect(() => {
     void emitProductTelemetry("app_launch");
@@ -512,6 +518,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
               onMoveToFolder={(fromPaths, toDir) => void handleMoveToFolder(fromPaths, toDir)}
               renameRequest={treeRenameRequest}
               revealPath={revealPath}
+              badgeHints={resourceTreeBadgeHints}
               activeFolderPath={inBrowser ? browserActiveFolderPath : null}
               onActiveFolderChange={inBrowser ? setBrowserActiveFolderPath : undefined}
             />
