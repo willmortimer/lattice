@@ -3,42 +3,15 @@ import {
   ErrorPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
-  type ToolCallMessagePartProps,
 } from "@assistant-ui/react";
 import { Button } from "@lattice/ui";
 
 import { useAgentChatControls } from "./agentChatControls";
 import { useAgentSessionStore } from "./agentStore";
+import { SemanticToolCall } from "./tools/semanticToolRegistry";
 
 export interface AgentThreadProps {
   workspaceRoot: string | null;
-}
-
-function toolStatusLabel(status: ToolCallMessagePartProps["status"]): string {
-  switch (status.type) {
-    case "running":
-      return "Running";
-    case "complete":
-      return "Done";
-    case "incomplete":
-      return "Failed";
-    case "requires-action":
-      return "Waiting";
-    default: {
-      const _exhaustive: never = status;
-      return _exhaustive;
-    }
-  }
-}
-
-function AgentToolFallback({ toolName, status }: ToolCallMessagePartProps) {
-  return (
-    <div className="agent-tool-fallback">
-      <span className="agent-tool-fallback-label">Tool</span>
-      <code>{toolName}</code>
-      <span className="agent-tool-fallback-status">{toolStatusLabel(status)}</span>
-    </div>
-  );
 }
 
 function AgentUserMessage() {
@@ -55,7 +28,7 @@ function AgentAssistantMessage() {
       <MessagePrimitive.Parts
         components={{
           tools: {
-            Fallback: AgentToolFallback,
+            Override: SemanticToolCall,
           },
         }}
       />
