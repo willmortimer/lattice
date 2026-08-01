@@ -21,6 +21,8 @@ export interface NavigationControllerOptions {
   canCloseTab: (path: string) => boolean;
   onSelect: (resource: Resource, options?: { recordHistory?: boolean }) => void | Promise<void>;
   onClearSelection: () => void;
+  /** Fired after a tab is removed from the open-tab list (close or bulk remove). */
+  onTabClosed?: (path: string) => void;
 }
 
 export interface NavigationController {
@@ -139,6 +141,7 @@ export function useNavigationController(options: NavigationControllerOptions): N
     const result = closeTabList(tabsRef.current, path, optionsRef.current.getSelectedPath());
     if (result.tabs === tabsRef.current) return;
     setOpenTabs(result.tabs);
+    optionsRef.current.onTabClosed?.(path);
     if (result.fallback) {
       void optionsRef.current.onSelect(result.fallback, { recordHistory: false });
     } else if (result.cleared) {
@@ -160,7 +163,12 @@ export function useNavigationController(options: NavigationControllerOptions): N
   }, []);
 
   const removeTabs = useCallback((predicate: (resource: Resource) => boolean) => {
+    const removed = tabsRef.current.filter(predicate);
+    if (removed.length === 0) return;
     setOpenTabs((tabs) => tabs.filter((tab) => !predicate(tab)));
+    for (const tab of removed) {
+      optionsRef.current.onTabClosed?.(tab.path);
+    }
   }, []);
 
   const restoreSession = useCallback((session: Pick<NavigationSessionState, "tabs" | "activity">) => {

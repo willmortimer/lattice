@@ -9,6 +9,8 @@ import type { ResourceRendererContext } from "../renderers/RendererContext";
 import { useDesktopUiStoreApi } from "./desktopUiStore";
 
 export type UseRendererServicesArgs = {
+  /** Active renderer session receiving save-status publishes. */
+  sessionId: string | null;
   assetRoot: string | null;
   workspaceRoot: string | null;
   resources: readonly Resource[];
@@ -48,6 +50,8 @@ export function useRendererServices(args: UseRendererServicesArgs): Omit<
   const uiStore = useDesktopUiStoreApi();
   const handlersRef = useRef(args.handlers);
   handlersRef.current = args.handlers;
+  const sessionIdRef = useRef(args.sessionId);
+  sessionIdRef.current = args.sessionId;
 
   const hasSearchWiki = Boolean(args.handlers.onSearchWiki);
   const hasImportAsset = Boolean(args.handlers.onImportAsset);
@@ -59,7 +63,11 @@ export function useRendererServices(args: UseRendererServicesArgs): Omit<
 
   const callbacks = useMemo(() => {
     const next: ResourceRendererContext["callbacks"] = {
-      onSaveStateChange: (state) => uiStore.getState().setSaveState(state),
+      onSaveStateChange: (state) => {
+        const sessionId = sessionIdRef.current;
+        if (!sessionId) return;
+        uiStore.getState().setSaveStatus(sessionId, state);
+      },
       onRevisionChange: (revision) => handlersRef.current.onRevisionChange(revision),
       onOpenWiki: (target) => {
         void handlersRef.current.onOpenWiki(target);
