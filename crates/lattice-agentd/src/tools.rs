@@ -1501,7 +1501,7 @@ async fn dispatch_run_cell_task(
 
     let hydrate_files = hydrate_files_from_workspace(workspace_root, args)?;
 
-    let (_temp_roles, input_host, work_host, output_host) =
+    let (_temp_roles, oci_export, input_host, work_host, output_host) =
         if let Some(vz_runtime_dir) = oci_vz_runtime {
             let input_mounts = input_mounts_from_hydrate_paths(workspace_root, args)?;
             let exported = export_oci_roles_under_agent_share(&OciKernelfsExportRequest {
@@ -1514,14 +1514,20 @@ async fn dispatch_run_cell_task(
                 include_secrets: false,
             })
             .map_err(|err| err.to_string())?;
+            let input_host = exported.input.clone();
+            let work_host = exported.work.clone();
+            let output_host = exported.output.clone();
             (
                 None::<tempfile::TempDir>,
-                exported.input,
-                exported.work,
-                exported.output,
+                Some(exported),
+                input_host,
+                work_host,
+                output_host,
             )
         } else {
-            resolve_microvm_role_host_dirs(with_work)?
+            let (temp_roles, input_host, work_host, output_host) =
+                resolve_microvm_role_host_dirs(with_work)?;
+            (temp_roles, None, input_host, work_host, output_host)
         };
 
     let request = ProjectionRunRequest {
@@ -1563,6 +1569,8 @@ async fn dispatch_run_cell_task(
     )
     .await
     .map_err(|err| err.to_string())?;
+
+    drop(oci_export);
 
     let drafts = crate::cell_host::output_map_to_drafts(
         &run_result.output_files,
