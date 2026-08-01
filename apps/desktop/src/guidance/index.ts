@@ -28,7 +28,8 @@ export {
   resolveGuidanceAnchorIdFromAriaLabel,
   revealGuidanceAnchorForAriaLabel,
 } from "./demoBridge";
-export { GuidanceTourController, startGuidanceTour, startSampleGuidanceTour } from "./tour/controller";
+export { GuidanceTourController, startGuidanceTour, startSampleGuidanceTour, startSampleShellTour } from "./tour/controller";
+export { requestShellTourStart, subscribeShellTourStart } from "./tour/shellTourBridge";
 export { GuidanceTourHost } from "./tour/GuidanceTourHost";
 export { guidanceTourMachine, resolveStepAnchor } from "./tour/machine";
 export { sampleShellTour } from "./tour/sampleTour";

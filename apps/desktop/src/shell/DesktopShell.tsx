@@ -39,6 +39,7 @@ import {
 } from "@phosphor-icons/react";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import type { useDesktopController } from "../controllers/useDesktopController";
+import { GuidanceTourController, seedGuidanceAnchors } from "../guidance";
 import { emitProductTelemetry } from "../lib/cloud";
 import { inBrowser } from "../demo";
 import { demoSearch } from "../demo";
@@ -133,6 +134,8 @@ export function DesktopShell({ model }: DesktopShellProps) {
   useEffect(() => {
     void emitProductTelemetry("app_launch");
   }, []);
+
+  useEffect(() => seedGuidanceAnchors(), []);
 
   const sessionLocked = Boolean(appLock.enabled && appLock.locked);
 
@@ -961,6 +964,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
         />
       )}
       {statusToast && <div className="status-toast">{statusToast}</div>}
+      <GuidanceTourController />
       <DemoDriverHost />
     </div>
     </TooltipProvider>
