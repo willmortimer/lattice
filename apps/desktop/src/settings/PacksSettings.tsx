@@ -255,6 +255,7 @@ export function PacksSettings({ workspaceRoot, onSemanticEnabledChange }: PacksS
         </div>
       ) : (
         <>
+          <div data-setting-id="packs.catalog">
           {packs.map((pack) => {
             const status = packStatusForId(pack.id, semantic, voice, voiceError);
             const busy = busyId === pack.id;
@@ -302,6 +303,7 @@ export function PacksSettings({ workspaceRoot, onSemanticEnabledChange }: PacksS
               </div>
             );
           })}
+          </div>
           {!workspaceRoot ? (
             <div className="diagnostics-card" role="status">
               <strong>Open a workspace</strong>
