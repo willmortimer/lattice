@@ -11,6 +11,7 @@
 
 mod authoritative;
 mod capture;
+mod catalog;
 mod cloud;
 mod error;
 mod github;
@@ -25,6 +26,12 @@ mod workspace;
 
 pub use authoritative::{read_authoritative_bytes, read_authoritative_string};
 pub use capture::{create_inbox_capture, capture_page_path, InboxCaptureResult, MAX_INBOX_CAPTURE_BYTES};
+pub use catalog::{
+    apply_catalog_delta, catalog_delta_for_workspace_event, catalog_entries_from_resources,
+    is_direct_child, list_children, list_children_from_workspace, list_children_with_runtime,
+    list_children_with_session, paginate_children, parent_path_of, CatalogDelta, CatalogDeltaEvent,
+    CatalogEntry, ListChildrenPage, DEFAULT_LIST_CHILDREN_LIMIT, MAX_LIST_CHILDREN_LIMIT,
+};
 pub use cloud::{
     cloud_session_status_cmd, cloud_sign_in, cloud_sign_in_apple, cloud_sign_out,
     cloud_update_preferences, product_telemetry_emit, resolve_cloud_bearer_cmd,

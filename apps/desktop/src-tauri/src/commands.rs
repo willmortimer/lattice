@@ -30,6 +30,18 @@ pub fn list_resources(root: String) -> Result<Vec<lattice_core::Resource>, Strin
     lattice_handlers::list_resources(root)
 }
 
+/// Paginated direct children for a catalog parent (stable id and/or path).
+#[tauri::command]
+pub fn list_children(
+    root: String,
+    parent_id: Option<String>,
+    parent_path: Option<String>,
+    cursor: Option<String>,
+    limit: Option<usize>,
+) -> Result<lattice_handlers::ListChildrenPage, String> {
+    lattice_handlers::list_children(root, parent_id, parent_path, cursor, limit)
+}
+
 /// Read a text resource by path relative to `root`.
 ///
 /// `root` and the resolved candidate path are both canonicalized and the

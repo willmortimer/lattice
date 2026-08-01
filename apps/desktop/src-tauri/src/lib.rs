@@ -172,6 +172,7 @@ pub fn run() {
         .invoke_handler(app_lock::gated_invoke_handler(tauri::generate_handler![
             commands::open_workspace,
             commands::list_resources,
+            commands::list_children,
             commands::read_file,
             commands::read_binary_file,
             commands::inspect_resource,

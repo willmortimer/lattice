@@ -21,8 +21,8 @@ use axum::{
     Json, Router,
 };
 use lattice_handlers::{
-    apply_page_update, create_page, create_workspace, ensure_home, get_backlinks, list_resources,
-    list_templates, open_workspace, read_page, rebuild_index, search_workspace_ui,
+    apply_page_update, create_page, create_workspace, ensure_home, get_backlinks, list_children,
+    list_resources, list_templates, open_workspace, read_page, rebuild_index, search_workspace_ui,
     STALE_REVISION_PREFIX,
 };
 use serde::{Deserialize, Serialize};
@@ -77,6 +77,21 @@ struct OpenWorkspaceRequest {
 struct RootRequest {
     #[serde(default)]
     root: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ListChildrenRequest {
+    #[serde(default)]
+    root: Option<String>,
+    #[serde(default)]
+    parent_id: Option<String>,
+    #[serde(default)]
+    parent_path: Option<String>,
+    #[serde(default)]
+    cursor: Option<String>,
+    #[serde(default)]
+    limit: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -234,6 +249,27 @@ async fn route_list_resources(
         Err(response) => return response,
     };
     handler_result(list_resources(root))
+}
+
+async fn route_list_children(
+    State(state): State<BridgeState>,
+    headers: HeaderMap,
+    Json(body): Json<ListChildrenRequest>,
+) -> Response {
+    if let Err(resp) = require_bridge_auth(&state, &headers) {
+        return resp;
+    }
+    let root = match resolve_root(&state, body.root) {
+        Ok(root) => root,
+        Err(response) => return response,
+    };
+    handler_result(list_children(
+        root,
+        body.parent_id,
+        body.parent_path,
+        body.cursor,
+        body.limit,
+    ))
 }
 
 async fn route_read_page(
@@ -413,6 +449,7 @@ pub fn router(state: BridgeState) -> Router {
         .route("/health", get(health))
         .route("/open_workspace", post(route_open_workspace))
         .route("/list_resources", post(route_list_resources))
+        .route("/list_children", post(route_list_children))
         .route("/read_page", post(route_read_page))
         .route("/apply_page_update", post(route_apply_page_update))
         .route("/create_page", post(route_create_page))
