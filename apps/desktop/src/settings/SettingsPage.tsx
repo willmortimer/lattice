@@ -72,11 +72,14 @@ import { PluginsSettings } from "./PluginsSettings";
 import { SettingRow } from "./SettingRow";
 import {
   sectionLabel,
+  sectionScope,
   SETTINGS_NAV_GROUPS,
+  type SettingsDeepLinkTarget,
   type SettingsSection,
 } from "./settingsCatalog";
 import { SettingsHighlightContext } from "./settingsHighlight";
 import { SettingsSearch } from "./SettingsSearch";
+import { SettingsScopeLabel } from "./SettingsScopeLabel";
 import { TOGGLEABLE_WORKSPACE_CAPABILITIES } from "./workspaceCapabilities";
 
 interface SettingsPageProps {
@@ -96,6 +99,8 @@ interface SettingsPageProps {
   onFollowSystem: () => void;
   onFontPackChange: (fontPack: string) => void;
   onRefreshProfile?: () => void;
+  deepLinkTarget?: SettingsDeepLinkTarget | null;
+  onDeepLinkConsumed?: () => void;
 }
 
 function Toggle({
@@ -135,6 +140,8 @@ export function SettingsPage({
   onFollowSystem,
   onFontPackChange,
   onRefreshProfile,
+  deepLinkTarget,
+  onDeepLinkConsumed,
 }: SettingsPageProps) {
   const [section, setSection] = useState<SettingsSection>("appearance");
   const [highlightedSettingId, setHighlightedSettingId] = useState<string | null>(null);
@@ -179,6 +186,13 @@ export function SettingsPage({
       cancelled = true;
     };
   }, [workspace.root]);
+
+  useEffect(() => {
+    if (!deepLinkTarget) return;
+    setSection(deepLinkTarget.section);
+    setHighlightedSettingId(deepLinkTarget.settingId);
+    onDeepLinkConsumed?.();
+  }, [deepLinkTarget, onDeepLinkConsumed]);
 
   useEffect(() => {
     if (!highlightedSettingId) return;
@@ -255,7 +269,10 @@ export function SettingsPage({
 
       <SettingsHighlightContext.Provider value={highlightedSettingId}>
       <section className="settings-detail">
-        <p className="home-eyebrow">{sectionLabel(section)}</p>
+        <p className="home-eyebrow settings-detail-eyebrow">
+          <span>{sectionLabel(section)}</span>
+          <SettingsScopeLabel scope={sectionScope(section)} />
+        </p>
 
         {section === "appearance" && (
           <>

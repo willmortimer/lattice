@@ -120,6 +120,14 @@ pub fn run() {
                                 let _ = main.set_focus();
                             }
                         }
+                        Some(deep_link::DeepLinkAction::OpenSettings(payload)) => {
+                            let _ = handle.emit("open-settings", &payload);
+                            if let Some(main) = handle.get_webview_window("main") {
+                                let _ = main.unminimize();
+                                let _ = main.show();
+                                let _ = main.set_focus();
+                            }
+                        }
                         None => {}
                     }
                 }

@@ -2,8 +2,15 @@
 //!
 //! OAuth callbacks stay on `lattice://oauth/…`. Workspace open links use
 //! `lattice://open?root=…&path=…` (and matching https hosts once AASA is live).
+//! Settings links use `lattice://settings/…` (section and optional row slug).
 
 use serde::Serialize;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenSettingsPayload {
+    pub path: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -16,6 +23,7 @@ pub struct OpenResourcePayload {
 pub enum DeepLinkAction {
     OAuthCallback(String),
     OpenResource(OpenResourcePayload),
+    OpenSettings(OpenSettingsPayload),
 }
 
 /// Classify a URL delivered by `tauri-plugin-deep-link` (custom scheme or https).
@@ -29,7 +37,28 @@ pub fn classify_deep_link(url: &str) -> Option<DeepLinkAction> {
         return Some(DeepLinkAction::OAuthCallback(trimmed.to_string()));
     }
 
+    if let Some(path) = parse_lattice_settings(trimmed) {
+        return Some(DeepLinkAction::OpenSettings(OpenSettingsPayload { path }));
+    }
+
     parse_open_resource(trimmed).map(DeepLinkAction::OpenResource)
+}
+
+fn parse_lattice_settings(url: &str) -> Option<String> {
+    let parsed = url::Url::parse(url).ok()?;
+    if parsed.scheme() != "lattice" {
+        return None;
+    }
+    let host = parsed.host_str().unwrap_or("");
+    if host == "settings" {
+        let path = path_from_segments(&parsed);
+        return Some(path);
+    }
+    let path = parsed.path().trim_start_matches('/');
+    if path == "settings" || path.starts_with("settings/") {
+        return Some(path.trim_start_matches("settings/").trim_matches('/').to_string());
+    }
+    None
 }
 
 fn parse_open_resource(url: &str) -> Option<OpenResourcePayload> {
@@ -184,6 +213,22 @@ mod tests {
             Some(DeepLinkAction::OpenResource(OpenResourcePayload {
                 root: "/tmp/ws".into(),
                 path: "a.md".into(),
+            }))
+        );
+    }
+
+    #[test]
+    fn classifies_settings_paths() {
+        assert_eq!(
+            classify_deep_link("lattice://settings/ai/provider"),
+            Some(DeepLinkAction::OpenSettings(OpenSettingsPayload {
+                path: "ai/provider".into(),
+            }))
+        );
+        assert_eq!(
+            classify_deep_link("lattice://settings/remote-access"),
+            Some(DeepLinkAction::OpenSettings(OpenSettingsPayload {
+                path: "remote-access".into(),
             }))
         );
     }

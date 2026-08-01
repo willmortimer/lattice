@@ -34,6 +34,12 @@ import { applyResolvedTheme, loadThemeCatalog, setAppearanceMode, setFixedTheme,
 import type { Resource, WorkspaceSnapshot } from "../types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { matchesKeybinding, useAppSettings } from "../settings/model";
+import type { SettingsDeepLinkTarget } from "../settings/settingsCatalog";
+import { resolveSettingsDeepLink } from "../settings/settingsCatalog";
+import {
+  openSettingsDeepLinkUrl,
+  subscribeSettingsDeepLink,
+} from "../settings/settingsDeepLink";
 import { useNavigationController } from "./useNavigationController";
 import { useResourceController, type LinkRepairReviewRequest } from "./useResourceController";
 import { useResourceReconciliation, type ResourceReconciliationController } from "./useResourceReconciliation";
@@ -118,6 +124,8 @@ export function useDesktopController() {
   const [titleDraft, setTitleDraft] = useState("");
   const [treeRenameRequest, setTreeRenameRequest] = useState<{ path: string; token: number } | null>(null);
   const [appLock, setAppLock] = useState<AppLockStatus>(defaultAppLockStatus);
+  const [settingsDeepLinkTarget, setSettingsDeepLinkTarget] =
+    useState<SettingsDeepLinkTarget | null>(null);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const pageEditorRef = useRef<PageEditorHandle>(null);
@@ -159,6 +167,15 @@ export function useDesktopController() {
   const resetNavigation = navigationController.reset;
   const getNavigationSessionState = navigationController.getSessionState;
   const restoreNavigationSession = navigationController.restoreSession;
+
+  const applySettingsDeepLink = useCallback((target: SettingsDeepLinkTarget) => {
+    setSettingsDeepLinkTarget(target);
+    navigationController.setActivityArea("settings");
+  }, [navigationController]);
+
+  const clearSettingsDeepLink = useCallback(() => {
+    setSettingsDeepLinkTarget(null);
+  }, []);
 
   useEffect(() => installNativeContextMenus(() => settingsRef.current.diagnostics.nativeContextMenus), []);
   useEffect(() => {
@@ -699,6 +716,27 @@ export function useDesktopController() {
   }, []);
 
   useEffect(() => {
+    return subscribeSettingsDeepLink(applySettingsDeepLink);
+  }, [applySettingsDeepLink]);
+
+  useEffect(() => {
+    if (!hasTauri) return;
+    let unlisten: (() => void) | undefined;
+    void listen<{ path: string }>("open-settings", (event) => {
+      const target = resolveSettingsDeepLink(event.payload.path);
+      if (target) applySettingsDeepLink(target);
+    }).then((stop) => {
+      unlisten = stop;
+    });
+    return () => unlisten?.();
+  }, [applySettingsDeepLink]);
+
+  useEffect(() => {
+    if (!inBrowser || !window.location.hash) return;
+    openSettingsDeepLinkUrl(window.location.hash);
+  }, []);
+
+  useEffect(() => {
     if (!hasTauri) return;
     void register(QUICK_NOTE_SHORTCUT, () => {
       void showQuickNote(snapshotRef.current?.root).catch((err) => setError(String(err)));
@@ -1016,6 +1054,7 @@ export function useDesktopController() {
     profile, profileReady, settings, startup, snapshot, snapshotRef, selected, selectedPaths, session, error, busy,
     externalConflict, reloadToken, newWorkspaceOpen, workspacesDir, templates, statusToast, runtimeNotice,
     profileNotices, paletteOpen, searchPaneOpen, themeCatalog, activityArea, sidebarWidth, treeCollapsedPaths, revealPath, linkPicker,
+    settingsDeepLinkTarget, clearSettingsDeepLink,
     csvImportReview, handleCancelCsvImport, handleConfirmCsvImport, handleCsvImportColumnTypeChange,
     linkRepairReview, handleLinkRepairAccept, handleLinkRepairDefer,
     proposalSummaries, proposalInboxLoading, proposalApplyOutcome, proposalReview, refreshProposalInbox, openProposalReview,

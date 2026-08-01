@@ -20,6 +20,8 @@ import {
   SquaresFour,
 } from "@phosphor-icons/react";
 
+export type SettingsScope = "APP" | "WORKSPACE" | "ACCOUNT" | "DEVICE";
+
 export type SettingsSection =
   | "appearance"
   | "cloud"
@@ -138,6 +140,55 @@ export const SETTINGS_SECTIONS: SettingsNavItem[] = SETTINGS_NAV_GROUPS.flatMap(
 
 export function sectionLabel(section: SettingsSection): string {
   return SETTINGS_SECTIONS.find((item) => item.id === section)?.label ?? section;
+}
+
+export const SECTION_DEFAULT_SCOPE: Record<SettingsSection, SettingsScope> = {
+  appearance: "APP",
+  editor: "APP",
+  files: "APP",
+  keybindings: "APP",
+  workspaces: "APP",
+  data: "WORKSPACE",
+  capabilities: "WORKSPACE",
+  search: "WORKSPACE",
+  ai: "APP",
+  voice: "DEVICE",
+  features: "WORKSPACE",
+  packs: "DEVICE",
+  plugins: "APP",
+  cloud: "ACCOUNT",
+  remote: "WORKSPACE",
+  privacy: "APP",
+  performance: "APP",
+  diagnostics: "APP",
+};
+
+const SETTING_SCOPE_OVERRIDES: Record<string, SettingsScope> = {
+  "files.quick-note": "WORKSPACE",
+  "performance.schedules": "WORKSPACE",
+  "performance.history": "WORKSPACE",
+  "ai.openai-key": "DEVICE",
+  "privacy.app-lock": "DEVICE",
+  "privacy.idle-lock": "DEVICE",
+  "privacy.ai-audit": "ACCOUNT",
+  "privacy.telemetry": "ACCOUNT",
+  "remote.access": "WORKSPACE",
+};
+
+export function sectionScope(section: SettingsSection): SettingsScope {
+  return SECTION_DEFAULT_SCOPE[section];
+}
+
+export function settingScopeForId(settingId: string | undefined): SettingsScope | null {
+  if (!settingId) return null;
+  if (SETTING_SCOPE_OVERRIDES[settingId]) return SETTING_SCOPE_OVERRIDES[settingId];
+  const section = settingId.split(".")[0] as SettingsSection;
+  return SECTION_DEFAULT_SCOPE[section] ?? "APP";
+}
+
+export interface SettingsDeepLinkTarget {
+  section: SettingsSection;
+  settingId: string | null;
 }
 
 export const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
@@ -522,4 +573,62 @@ export function filterSettingsSearch(query: string): SettingsSearchItem[] {
     const haystack = [item.title, item.description, ...item.keywords].join(" ").toLowerCase();
     return terms.every((term) => haystack.includes(term));
   });
+}
+
+const SETTINGS_DEEP_LINK_ALIASES: Record<string, string> = {
+  "ai/provider": "ai.mode",
+  "search/semantic": "search.semantic",
+  "remote-access": "remote.access",
+};
+
+function catalogItemById(id: string) {
+  return SETTINGS_SEARCH_INDEX.find((item) => item.id === id) ?? null;
+}
+
+function sectionBySlug(slug: string): SettingsSection | null {
+  const normalized = slug.trim().toLowerCase();
+  const match = SETTINGS_SECTIONS.find((item) => item.id === normalized);
+  return match?.id ?? null;
+}
+
+/** Map a settings path (from lattice://settings/…) to a nav section and optional row id. */
+export function resolveSettingsDeepLink(path: string): SettingsDeepLinkTarget | null {
+  const normalized = path.trim().replace(/^\/+/, "").replace(/\/+$/, "").toLowerCase();
+  if (!normalized) return null;
+
+  const aliasId = SETTINGS_DEEP_LINK_ALIASES[normalized];
+  if (aliasId) {
+    const item = catalogItemById(aliasId);
+    if (item) return { section: item.section, settingId: item.id };
+  }
+
+  const dotId = normalized.replace(/\//g, ".");
+  const byDotId = catalogItemById(dotId);
+  if (byDotId) return { section: byDotId.section, settingId: byDotId.id };
+
+  const sectionOnly = sectionBySlug(normalized);
+  if (sectionOnly) return { section: sectionOnly, settingId: null };
+
+  const [first, ...rest] = normalized.split("/");
+  const section = sectionBySlug(first);
+  if (!section) return null;
+  if (rest.length === 0) return { section, settingId: null };
+
+  const nestedSlug = rest.join("/");
+  const nestedAlias = SETTINGS_DEEP_LINK_ALIASES[`${first}/${nestedSlug}`];
+  if (nestedAlias) {
+    const item = catalogItemById(nestedAlias);
+    if (item) return { section: item.section, settingId: item.id };
+  }
+
+  const nestedDotId = `${first}.${rest.join("-")}`;
+  const nestedItem = catalogItemById(nestedDotId);
+  if (nestedItem) return { section: nestedItem.section, settingId: nestedItem.id };
+
+  const suffixMatch = SETTINGS_SEARCH_INDEX.find(
+    (item) => item.section === section && item.id.endsWith(`.${rest.join("-")}`),
+  );
+  if (suffixMatch) return { section: suffixMatch.section, settingId: suffixMatch.id };
+
+  return { section, settingId: null };
 }
