@@ -1,4 +1,7 @@
-import type { CSSProperties } from "react";
+import { useMemo } from "react";
+
+import { inflateRect } from "../../overlay/floatingPosition";
+import { useVirtualFloatingPosition } from "../../overlay/useVirtualFloatingPosition";
 
 import "./spotlight.css";
 
@@ -9,18 +12,30 @@ type GuidanceSpotlightProps = {
 };
 
 export function GuidanceSpotlight({ rect }: GuidanceSpotlightProps) {
-  if (!rect) return null;
+  const paddedRect = useMemo(
+    () => (rect ? inflateRect(rect, SPOTLIGHT_PADDING) : null),
+    [rect],
+  );
 
-  const frameStyle: CSSProperties = {
-    top: rect.top - SPOTLIGHT_PADDING,
-    left: rect.left - SPOTLIGHT_PADDING,
-    width: rect.width + SPOTLIGHT_PADDING * 2,
-    height: rect.height + SPOTLIGHT_PADDING * 2,
-  };
+  const { refs, floatingStyles } = useVirtualFloatingPosition({
+    rect: paddedRect,
+    enabled: paddedRect !== null,
+    mode: "spotlight",
+  });
+
+  if (!paddedRect) return null;
 
   return (
     <div className="guidance-spotlight" aria-hidden="true">
-      <div className="guidance-spotlight__frame" style={frameStyle} />
+      <div
+        ref={refs.setFloating}
+        className="guidance-spotlight__frame"
+        style={{
+          ...floatingStyles,
+          width: paddedRect.width,
+          height: paddedRect.height,
+        }}
+      />
     </div>
   );
 }

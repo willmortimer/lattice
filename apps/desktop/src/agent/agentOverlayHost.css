@@ -1,0 +1,20 @@
+.agent-overlay-callout__popup {
+  width: min(280px, calc(100vw - 32px));
+  padding: 12px 14px;
+  display: grid;
+  gap: 6px;
+}
+
+.agent-overlay-callout__eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted, #7a8494);
+}
+
+.agent-overlay-callout__body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary, #c7ced9);
+}
