@@ -8,6 +8,7 @@ use crate::error::{CellClientError, Result};
 pub const CONNECT_PROTOCOL_VERSION: &str = "1";
 
 pub const CELL_APPLY: &str = "/cell.v1.CellService/ApplyCell";
+pub const CELL_GET: &str = "/cell.v1.CellService/GetCell";
 pub const CELL_START: &str = "/cell.v1.CellService/StartCell";
 pub const GUEST_INVOKE: &str = "/cell.v1.GuestSessionService/Invoke";
 

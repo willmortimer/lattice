@@ -9,7 +9,7 @@ use serde_json::Value;
 use crate::config::{celld_base_url, require_celld_base_url};
 use crate::connect::{
     decode_connect_stream, decode_unary_json, encode_connect_message, encode_unary_json,
-    CELL_APPLY, CELL_START, CONNECT_PROTOCOL_VERSION, GUEST_INVOKE,
+    CELL_APPLY, CELL_GET, CELL_START, CONNECT_PROTOCOL_VERSION, GUEST_INVOKE,
 };
 use crate::error::{CellClientError, Result};
 use crate::hydrate::{
@@ -17,9 +17,10 @@ use crate::hydrate::{
     is_oci_execution_mode, oci_suppresses_network_deny_all, KernelFSHydrationPlan, KernelFSRole,
 };
 use crate::types::{
-    ApplyCellRequest, ApplyCellResponse, CellSpec, CollectOutputRequest, CollectOutputResponse,
-    HydrateFile, HydrateProjectionRequest, HydrateProjectionResponse, ProfileRef, ResourceSpec,
-    RunTaskRequest, RunTaskResponse, StartCellRequest, StartCellResponse,
+    ApplyCellRequest, ApplyCellResponse, Cell, CellSpec, CollectOutputRequest, CollectOutputResponse,
+    GetCellRequest, GetCellResponse, HydrateFile, HydrateProjectionRequest, HydrateProjectionResponse,
+    Operation, ProfileRef, ResourceSpec, RunTaskRequest, RunTaskResponse, StartCellRequest,
+    StartCellResponse,
 };
 
 /// Default guest services advertised for Lattice agent loops.
@@ -169,13 +170,15 @@ fn post_connect(
     accept: &str,
 ) -> Result<(u16, Vec<u8>)> {
     let url = format!("{}{}", base_url.trim_end_matches('/'), procedure);
-    let response = ureq::post(&url)
+    let request = ureq::post(&url)
         .set("Content-Type", content_type)
         .set("Accept", accept)
-        .set("Connect-Protocol-Version", CONNECT_PROTOCOL_VERSION)
-        .send_bytes(body)
-        .map_err(|err| CellClientError::Http(err.to_string()))?;
-    let status = response.status();
+        .set("Connect-Protocol-Version", CONNECT_PROTOCOL_VERSION);
+    let (status, response) = match request.send_bytes(body) {
+        Ok(response) => (response.status(), response),
+        Err(ureq::Error::Status(status, response)) => (status, response),
+        Err(err) => return Err(CellClientError::Http(err.to_string())),
+    };
     let mut bytes = Vec::new();
     response
         .into_reader()
@@ -213,6 +216,13 @@ impl<H: CelldHttpClient> CelldClient<H> {
     /// Base URL in use.
     pub fn base_url(&self) -> &str {
         &self.base_url
+    }
+
+    /// `CellService.GetCell`.
+    pub fn get_cell(&self, cell_id: &str) -> Result<GetCellResponse> {
+        self.unary(CELL_GET, &GetCellRequest {
+            cell_id: cell_id.to_string(),
+        })
     }
 
     /// `CellService.ApplyCell`.
@@ -261,6 +271,32 @@ impl<H: CelldHttpClient> CelldClient<H> {
         self.invoke_json(cell_id, CELL_MIRROR_V1, "CollectOutput", request)
     }
 
+    /// Build a CellSpec from a KernelFS hydration plan (ApplyCell surface).
+    pub fn cell_spec_from_plan(
+        cell_id: &str,
+        profile: &str,
+        plan: &KernelFSHydrationPlan,
+        resources: ResourceSpec,
+        advertise_services: &[String],
+        execution_mode: &str,
+        oci_bundle_path: &str,
+    ) -> CellSpec {
+        CellSpec {
+            id: cell_id.to_string(),
+            display_name: cell_id.to_string(),
+            profile: Some(ProfileRef {
+                name: profile.to_string(),
+                digest: String::new(),
+            }),
+            resources: Some(resources),
+            volumes: cell_spec_volume_attachments(plan),
+            networks: cell_spec_network_attachments(plan, execution_mode),
+            advertise_services: advertise_services.to_vec(),
+            execution_mode: execution_mode.to_string(),
+            oci_bundle_path: oci_bundle_path.to_string(),
+        }
+    }
+
     /// Build CellSpec volumes/networks from a KernelFS plan and Apply + Start.
     pub fn apply_and_start_from_plan(
         &self,
@@ -281,20 +317,20 @@ impl<H: CelldHttpClient> CelldClient<H> {
                  with_network_deny_all(false) when OCI egress is acceptable"
             );
         }
-        let spec = CellSpec {
-            id: cell_id.to_string(),
-            display_name: cell_id.to_string(),
-            profile: Some(ProfileRef {
-                name: profile.to_string(),
-                digest: String::new(),
-            }),
-            resources: Some(resources),
-            volumes: cell_spec_volume_attachments(plan),
-            networks: cell_spec_network_attachments(plan, execution_mode),
-            advertise_services: advertise_services.to_vec(),
-            execution_mode: execution_mode.to_string(),
-            oci_bundle_path: oci_bundle_path.to_string(),
-        };
+        let spec = Self::cell_spec_from_plan(
+            cell_id,
+            profile,
+            plan,
+            resources,
+            advertise_services,
+            execution_mode,
+            oci_bundle_path,
+        );
+
+        if let Some((apply, start)) = self.try_skip_apply_start(cell_id, &spec)? {
+            return Ok((apply, start));
+        }
+
         let apply = self.apply_cell(&ApplyCellRequest {
             idempotency_key: idempotency_key.to_string(),
             spec,
@@ -433,6 +469,47 @@ impl<H: CelldHttpClient> CelldClient<H> {
         })
     }
 
+    fn try_skip_apply_start(
+        &self,
+        cell_id: &str,
+        desired_spec: &CellSpec,
+    ) -> Result<Option<(ApplyCellResponse, StartCellResponse)>> {
+        let existing = match self.get_cell(cell_id) {
+            Ok(response) => response,
+            Err(CellClientError::Status { status: 404, .. }) => return Ok(None),
+            Err(err) => return Err(err),
+        };
+        let Some(cell) = existing.cell else {
+            return Ok(None);
+        };
+        if is_cell_destroyed(&cell) {
+            return Ok(None);
+        }
+        let Some(existing_spec) = existing.spec else {
+            return Ok(None);
+        };
+        if !cell_specs_apply_equivalent(&existing_spec, desired_spec) {
+            return Ok(None);
+        }
+        if !is_cell_observed_running(&cell) {
+            return Ok(None);
+        }
+
+        Ok(Some((
+            ApplyCellResponse {
+                cell: Some(cell.clone()),
+                operation: Some(skipped_operation("cell.apply", cell_id, "spec unchanged; skipped apply")),
+            },
+            StartCellResponse {
+                operation: Some(skipped_operation(
+                    "cell.start",
+                    cell_id,
+                    "cell already running; skipped start",
+                )),
+            },
+        )))
+    }
+
     fn unary<Req: serde::Serialize, Resp: serde::de::DeserializeOwned>(
         &self,
         procedure: &str,
@@ -508,6 +585,32 @@ impl<H: CelldHttpClient> CelldClient<H> {
     }
 }
 
+fn is_cell_destroyed(cell: &Cell) -> bool {
+    cell.observed_state
+        .eq_ignore_ascii_case("OBSERVED_STATE_DESTROYED")
+}
+
+fn is_cell_observed_running(cell: &Cell) -> bool {
+    cell.observed_state
+        .eq_ignore_ascii_case("OBSERVED_STATE_RUNNING")
+        || cell.observed_state.eq_ignore_ascii_case("running")
+}
+
+/// Compare ApplyCell surfaces for SpecDigest identity (celld `SpecDigest` input).
+fn cell_specs_apply_equivalent(existing: &CellSpec, desired: &CellSpec) -> bool {
+    existing == desired
+}
+
+fn skipped_operation(kind: &str, target_id: &str, detail: &str) -> Operation {
+    Operation {
+        operation_id: format!("skipped-{kind}"),
+        kind: kind.to_string(),
+        state: "OPERATION_STATE_SUCCEEDED".to_string(),
+        target_id: target_id.to_string(),
+        detail: detail.to_string(),
+    }
+}
+
 fn collected_to_map(collect: &CollectOutputResponse) -> Result<OutputFileMap> {
     let mut map = OutputFileMap::new();
     for file in &collect.files {
@@ -541,7 +644,7 @@ mod tests {
 
     #[derive(Debug)]
     struct MockHttp {
-        unary: Mutex<VecDeque<(String, Value)>>,
+        unary: Mutex<VecDeque<(String, u16, Value)>>,
         stream: Mutex<VecDeque<(String, Value)>>,
     }
 
@@ -554,10 +657,14 @@ mod tests {
         }
 
         fn push_unary(&self, procedure: &str, response: Value) {
+            self.push_unary_status(procedure, 200, response);
+        }
+
+        fn push_unary_status(&self, procedure: &str, status: u16, response: Value) {
             self.unary
                 .lock()
                 .unwrap()
-                .push_back((procedure.to_string(), response));
+                .push_back((procedure.to_string(), status, response));
         }
 
         fn push_invoke_payload(&self, payload: Value) {
@@ -582,14 +689,23 @@ mod tests {
             procedure: &str,
             _body: &[u8],
         ) -> Result<(u16, Vec<u8>)> {
-            let (expected, value) = self
-                .unary
-                .lock()
-                .unwrap()
+            let mut queue = self.unary.lock().unwrap();
+            if procedure == CELL_GET
+                && queue
+                    .front()
+                    .map(|(expected, _, _)| expected.as_str())
+                    != Some(CELL_GET)
+            {
+                return Ok((
+                    404,
+                    br#"{"code":"not_found","message":"cell not found"}"#.to_vec(),
+                ));
+            }
+            let (expected, status, value) = queue
                 .pop_front()
                 .ok_or_else(|| CellClientError::Http("unexpected unary call".into()))?;
             assert_eq!(expected, procedure);
-            Ok((200, serde_json::to_vec(&value)?))
+            Ok((status, serde_json::to_vec(&value)?))
         }
 
         fn stream_json(
@@ -800,5 +916,170 @@ mod tests {
             .iter()
             .any(|s| s == CELL_MIRROR_V1));
         assert!(is_oci_execution_mode(&req.execution_mode));
+    }
+
+    fn demo_projection_plan() -> KernelFSHydrationPlan {
+        KernelFSHydrationPlan::from_role_paths("/tmp/in", None, "/tmp/out")
+    }
+
+    fn demo_matching_spec() -> CellSpec {
+        CelldClient::<MockHttp>::cell_spec_from_plan(
+            "cell_demo",
+            "lattice-runtime",
+            &demo_projection_plan(),
+            ResourceSpec::new(1, 256 << 20),
+            &ProjectionRunRequest::default().advertise_services,
+            "",
+            "",
+        )
+    }
+
+    fn push_get_cell_running(http: &MockHttp, spec: &CellSpec) {
+        http.push_unary(
+            CELL_GET,
+            serde_json::json!({
+                "cell": {
+                    "id": "cell_demo",
+                    "observedState": "OBSERVED_STATE_RUNNING",
+                    "specDigest": "sha256:deadbeef"
+                },
+                "spec": spec,
+            }),
+        );
+    }
+
+    #[test]
+    fn run_projection_skips_apply_when_matching_running() {
+        let http = MockHttp::new();
+        let spec = demo_matching_spec();
+        push_get_cell_running(&http, &spec);
+        http.push_invoke_payload(serde_json::json!({
+            "state": "hydrated",
+            "file_count": 1,
+            "projection_id": "proj_demo"
+        }));
+        http.push_invoke_payload(serde_json::json!({
+            "state": "completed",
+            "exit_code": 0,
+            "projection_id": "proj_demo"
+        }));
+        let artifact = base64::engine::general_purpose::STANDARD.encode(b"hello out");
+        http.push_invoke_payload(serde_json::json!({
+            "state": "collected",
+            "file_count": 1,
+            "files": [{
+                "path": "output/out.txt",
+                "sha256": "abc",
+                "bytes": 9,
+                "content_base64": artifact
+            }]
+        }));
+
+        let client = CelldClient::new("http://celld.test", http);
+        let result = client
+            .run_projection(&ProjectionRunRequest {
+                cell_id: "cell_demo".into(),
+                projection_id: "proj_demo".into(),
+                plan: demo_projection_plan(),
+                hydrate_files: vec![HydrateFile::text("input/hello.txt", "hi")],
+                argv: vec!["/bin/true".into()],
+                ..ProjectionRunRequest::default()
+            })
+            .expect("run_projection");
+
+        assert_eq!(
+            result.apply.operation.as_ref().map(|op| op.detail.as_str()),
+            Some("spec unchanged; skipped apply")
+        );
+        assert_eq!(
+            result.start.operation.as_ref().map(|op| op.detail.as_str()),
+            Some("cell already running; skipped start")
+        );
+        assert_eq!(result.run.exit_code, 0);
+    }
+
+    #[test]
+    fn apply_still_attempted_when_spec_differs() {
+        let http = MockHttp::new();
+        let mut mismatched = demo_matching_spec();
+        mismatched.volumes[0].source = "/other/input".into();
+        push_get_cell_running(&http, &mismatched);
+        http.push_unary_status(
+            CELL_APPLY,
+            409,
+            serde_json::json!({
+                "code": "already_exists",
+                "message": "cell cell_demo already exists with a different spec"
+            }),
+        );
+
+        let client = CelldClient::new("http://celld.test", http);
+        let err = client
+            .apply_and_start_from_plan(
+                "cell_demo",
+                "lattice-runtime",
+                &demo_projection_plan(),
+                ResourceSpec::new(1, 256 << 20),
+                &ProjectionRunRequest::default().advertise_services,
+                "idem-1",
+                false,
+                "",
+                "",
+            )
+            .unwrap_err();
+        assert!(matches!(err, CellClientError::Status { status: 409, .. }));
+    }
+
+    #[test]
+    fn apply_still_attempted_when_matching_but_not_running() {
+        let http = MockHttp::new();
+        let spec = demo_matching_spec();
+        http.push_unary(
+            CELL_GET,
+            serde_json::json!({
+                "cell": {
+                    "id": "cell_demo",
+                    "observedState": "OBSERVED_STATE_READY",
+                    "specDigest": "sha256:deadbeef"
+                },
+                "spec": spec,
+            }),
+        );
+        http.push_unary(
+            CELL_APPLY,
+            serde_json::json!({
+                "cell": {"id": "cell_demo", "observedState": "OBSERVED_STATE_READY"},
+                "operation": {"operationId": "op_apply", "state": "OPERATION_STATE_SUCCEEDED"}
+            }),
+        );
+        http.push_unary(
+            CELL_START,
+            serde_json::json!({
+                "operation": {"operationId": "op_start", "state": "OPERATION_STATE_SUCCEEDED"}
+            }),
+        );
+
+        let client = CelldClient::new("http://celld.test", http);
+        let (apply, start) = client
+            .apply_and_start_from_plan(
+                "cell_demo",
+                "lattice-runtime",
+                &demo_projection_plan(),
+                ResourceSpec::new(1, 256 << 20),
+                &ProjectionRunRequest::default().advertise_services,
+                "idem-2",
+                false,
+                "",
+                "",
+            )
+            .expect("apply_and_start");
+        assert_eq!(
+            apply.operation.as_ref().map(|op| op.operation_id.as_str()),
+            Some("op_apply")
+        );
+        assert_eq!(
+            start.operation.as_ref().map(|op| op.operation_id.as_str()),
+            Some("op_start")
+        );
     }
 }

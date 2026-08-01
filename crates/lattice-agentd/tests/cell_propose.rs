@@ -8,7 +8,7 @@ use lattice_agentd::cell_host::{output_map_to_drafts, run_cell_task_and_propose,
 use lattice_agentd::lattice_client::LatticeToolClient;
 use lattice_agentd::tools::{dispatch_tool, openai_tool_definitions, ToolRunContext};
 use lattice_agentd::wasi_host::WorkspaceBinding;
-use lattice_cell_client::connect::{encode_connect_message, CELL_APPLY, CELL_START, GUEST_INVOKE};
+use lattice_cell_client::connect::{encode_connect_message, CELL_APPLY, CELL_GET, CELL_START, GUEST_INVOKE};
 use lattice_cell_client::{
     celld_configured, CelldClient, CelldHttpClient, HydrateFile, KernelFSHydrationPlan,
     ProjectionRunRequest,
@@ -60,10 +60,19 @@ impl CelldHttpClient for MockCelldHttp {
         procedure: &str,
         _body: &[u8],
     ) -> lattice_cell_client::Result<(u16, Vec<u8>)> {
-        let (expected, value) = self
-            .unary
-            .lock()
-            .unwrap()
+        let mut queue = self.unary.lock().unwrap();
+        if procedure == CELL_GET
+            && queue
+                .front()
+                .map(|(expected, _)| expected.as_str())
+                != Some(CELL_GET)
+        {
+            return Ok((
+                404,
+                br#"{"code":"not_found","message":"cell not found"}"#.to_vec(),
+            ));
+        }
+        let (expected, value) = queue
             .pop_front()
             .ok_or_else(|| lattice_cell_client::CellClientError::Http("unexpected unary".into()))?;
         assert_eq!(expected, procedure);
@@ -451,7 +460,16 @@ async fn dispatch_run_cell_task_tool_end_to_end() {
 }
 
 async fn mount_celld_mocks(server: &MockServer) {
-    use lattice_cell_client::connect::{encode_connect_message, encode_unary_json, CELL_START};
+    use lattice_cell_client::connect::{encode_connect_message, encode_unary_json, CELL_GET, CELL_START};
+
+    Mock::given(method("POST"))
+        .and(path(CELL_GET))
+        .respond_with(ResponseTemplate::new(404).set_body_json(json!({
+            "code": "not_found",
+            "message": "cell not found"
+        })))
+        .mount(server)
+        .await;
 
     let apply_body = encode_unary_json(&json!({
         "cell": {"id": "cell_demo", "observedState": "OBSERVED_STATE_READY"},

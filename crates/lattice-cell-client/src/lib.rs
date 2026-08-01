@@ -28,7 +28,7 @@ pub use hydrate::{
 };
 pub use types::{
     ApplyCellRequest, ApplyCellResponse, Cell, CellSpec, CollectOutputRequest,
-    CollectOutputResponse, HydrateFile, HydrateProjectionRequest, HydrateProjectionResponse,
-    Operation, ProfileRef, ResourceSpec, RunTaskRequest, RunTaskResponse, StartCellRequest,
-    StartCellResponse,
+    CollectOutputResponse, GetCellRequest, GetCellResponse, HydrateFile,
+    HydrateProjectionRequest, HydrateProjectionResponse, Operation, ProfileRef, ResourceSpec,
+    RunTaskRequest, RunTaskResponse, StartCellRequest, StartCellResponse,
 };

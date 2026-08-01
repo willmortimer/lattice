@@ -106,6 +106,25 @@ pub struct Cell {
     pub observed_state: String,
     #[serde(default)]
     pub desired_state: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub spec_digest: String,
+}
+
+/// `cell.v1.CellService/GetCell` request.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetCellRequest {
+    pub cell_id: String,
+}
+
+/// GetCell response.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct GetCellResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cell: Option<Cell>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spec: Option<CellSpec>,
 }
 
 /// Operation summary.
