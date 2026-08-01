@@ -1,5 +1,6 @@
 //! Daemon-facing agent controller (wraps Fake / Sidecar backends).
 
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -18,6 +19,7 @@ use super::sidecar::{
     default_model_from_env, default_provider_from_env, env_truthy, resolve_agentd_bin,
     SidecarAgentBackend, ENV_AGENT_FAKE,
 };
+use crate::agent_run_events_store::AgentRunEventsStore;
 
 /// How the daemon obtains an agent runtime.
 #[derive(Debug, Clone)]
@@ -102,7 +104,8 @@ impl AgentController {
             .unwrap_or(false)
     }
 
-    /// Start an agent run; events are pushed to the optional daemon event bus.
+    /// Start an agent run; events are pushed to the optional daemon event bus
+    /// and persisted to the workspace run-event log when `workspace_root` is set.
     pub async fn start_run(
         &self,
         mut request: StartAgentRunRequest,
@@ -118,41 +121,76 @@ impl AgentController {
         }
 
         let workspace_id = request.workspace_id.clone();
+        let workspace_root = request.workspace_root.clone().map(PathBuf::from);
+        let thread_id = request.thread_id.clone();
         let (tx, mut rx) = mpsc::channel::<AgentEvent>(1024);
         let handle = self.backend.start_run(request, tx).await?;
 
-        if let Some((event_tx, next_seq)) = self
+        let run_id = handle.run_id.as_str().to_string();
+        let fanout = self
             .event_fanout
             .lock()
             .expect("event_fanout poisoned")
-            .clone()
-        {
-            let run_id = handle.run_id.as_str().to_string();
-            tokio::spawn(async move {
-                while let Some(event) = rx.recv().await {
-                    let payload_json = match serde_json::to_string(&event) {
-                        Ok(json) => json,
-                        Err(err) => {
-                            warn!(error = %err, "failed to serialize agent event");
-                            continue;
-                        }
-                    };
+            .clone();
+
+        tokio::spawn(async move {
+            let mut store = match workspace_root.as_ref() {
+                Some(root) => match AgentRunEventsStore::open(root) {
+                    Ok(store) => Some(store),
+                    Err(err) => {
+                        warn!(error = %err, "failed to open agent run-event store");
+                        None
+                    }
+                },
+                None => None,
+            };
+            if let Some(store) = store.as_mut() {
+                if let Err(err) = store.ensure_run(&run_id, &thread_id) {
+                    warn!(error = %err, run_id = %run_id, "failed to ensure run row");
+                }
+            }
+
+            while let Some(event) = rx.recv().await {
+                let payload_json = match serde_json::to_string(&event) {
+                    Ok(json) => json,
+                    Err(err) => {
+                        warn!(error = %err, "failed to serialize agent event");
+                        continue;
+                    }
+                };
+                let event_type = event.event_type().to_string();
+                let event_run_id = event.run_id().unwrap_or(&run_id).to_string();
+
+                if let Some(store) = store.as_mut() {
+                    if let Err(err) = store.append_event(
+                        &event_run_id,
+                        &thread_id,
+                        &event_type,
+                        &payload_json,
+                        None,
+                    ) {
+                        warn!(
+                            error = %err,
+                            run_id = %event_run_id,
+                            "failed to persist agent run event"
+                        );
+                    }
+                }
+
+                if let Some((event_tx, next_seq)) = &fanout {
                     let sequenced = Event {
                         sequence: next_seq.fetch_add(1, Ordering::Relaxed),
                         workspace_id: workspace_id.clone(),
                         body: Some(event::Body::AgentEvent(lattice_protocol::AgentEvent {
-                            run_id: event.run_id().unwrap_or(&run_id).to_string(),
-                            event_type: event.event_type().to_string(),
+                            run_id: event_run_id,
+                            event_type,
                             payload_json,
                         })),
                     };
                     let _ = event_tx.send(sequenced);
                 }
-            });
-        } else {
-            // No fan-out attached (unit tests): drain so the sender does not block.
-            tokio::spawn(async move { while rx.recv().await.is_some() {} });
-        }
+            }
+        });
 
         Ok(handle)
     }
