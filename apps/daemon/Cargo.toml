@@ -23,8 +23,10 @@ bytes.workspace = true
 clap.workspace = true
 dirs.workspace = true
 lattice-client.workspace = true
+lattice-cloud-client.workspace = true
 lattice-commands.workspace = true
 lattice-core.workspace = true
+latticefs-core.workspace = true
 lattice-datasets.workspace = true
 lattice-duckdb.workspace = true
 lattice-embed-host.workspace = true
@@ -54,6 +56,7 @@ tokio-util = { workspace = true }
 [dev-dependencies]
 http-body-util = "0.1"
 lattice-handlers.workspace = true
+latticefs-core.workspace = true
 serde_json.workspace = true
 tempfile = "3"
 tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "time", "process"] }

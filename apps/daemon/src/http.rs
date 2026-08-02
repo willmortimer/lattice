@@ -28,13 +28,14 @@ use crate::agent_threads_api::{
     CreateThreadParams, WorkspaceScopeParams,
 };
 use crate::api::{
-    api_build_context, api_cancel_job, api_create_proposal, api_get_dataset_schema, api_get_job,
-    api_get_proposal, api_list_active_jobs, api_list_proposals, api_list_recent_jobs,
-    api_profile_dataset, api_propose_artifact, api_propose_interface, api_propose_page,
-    api_propose_resource, api_propose_workflow, api_read, api_related, api_search, ApiError,
-    BuildContextParams, CancelJobParams, CreateProposalParams, DatasetInspectParams, GetJobParams,
-    GetProposalParams, ListJobsParams, ListProposalsParams, ProposePageParams,
-    ProposeResourceParams, ProposeYamlParams, ReadParams, RelatedParams, SearchParams,
+    api_build_context, api_cancel_job, api_cloud_blob_open, api_create_proposal,
+    api_get_dataset_schema, api_get_job, api_get_proposal, api_list_active_jobs,
+    api_list_proposals, api_list_recent_jobs, api_profile_dataset, api_propose_artifact,
+    api_propose_interface, api_propose_page, api_propose_resource, api_propose_workflow,
+    api_read, api_related, api_resource_stat, api_search, ApiError, BuildContextParams,
+    CancelJobParams, CreateProposalParams, DatasetInspectParams, GetJobParams, GetProposalParams,
+    ListJobsParams, ListProposalsParams, ProposePageParams, ProposeResourceParams,
+    ProposeYamlParams, ReadParams, RelatedParams, ResourcePathParams, SearchParams,
 };
 use crate::config::DaemonConfig;
 use crate::mcp;
@@ -493,6 +494,34 @@ async fn route_profile_dataset(
     }
 }
 
+async fn route_resource_stat(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<ResourcePathParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_resource_stat(&state.daemon.runtime, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn route_cloud_blob_open(
+    State(state): State<HttpState>,
+    headers: HeaderMap,
+    Json(body): Json<ResourcePathParams>,
+) -> Response {
+    if let Err(resp) = require_auth(&state, &headers) {
+        return resp;
+    }
+    match api_cloud_blob_open(&state.daemon.runtime, body) {
+        Ok(value) => (StatusCode::OK, Json(value)).into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
 async fn route_list_active_jobs(State(state): State<HttpState>, headers: HeaderMap) -> Response {
     if let Err(resp) = require_auth(&state, &headers) {
         return resp;
@@ -697,6 +726,8 @@ pub fn router(daemon: DaemonState) -> Router {
         .route("/v1/build_context", post(route_build_context))
         .route("/v1/datasets/schema", post(route_get_dataset_schema))
         .route("/v1/datasets/profile", post(route_profile_dataset))
+        .route("/v1/resource/stat", post(route_resource_stat))
+        .route("/v1/cloud/blob_open", post(route_cloud_blob_open))
         .route("/v1/jobs/list_active", post(route_list_active_jobs))
         .route("/v1/jobs/list_recent", post(route_list_recent_jobs))
         .route("/v1/jobs/get", post(route_get_job))
