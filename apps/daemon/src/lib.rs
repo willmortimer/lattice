@@ -25,6 +25,7 @@ pub mod jobs;
 mod lease;
 pub mod mcp;
 mod preferences;
+mod resource_api;
 mod tool_executor;
 mod schedule;
 mod scheduler_api;
@@ -62,6 +63,7 @@ pub use api::{
     api_get_proposal, api_list_active_jobs, api_list_proposals, api_list_recent_jobs,
     api_profile_dataset, api_propose_artifact, api_propose_interface, api_propose_page,
     api_propose_resource, api_propose_workflow, api_read, api_related, api_search, ApiError,
+    api_cloud_blob_open, api_resource_stat, ResourcePathParams, WorkspaceRefParams,
     BuildContextParams, BuildContextResponse, CancelJobParams, CreateProposalParams,
     DatasetInspectParams, GetJobParams, GetProposalParams, JobResponse, ListJobsParams,
     ListJobsResponse, ListProposalsParams, ListProposalsResponse, ProposalResponse,

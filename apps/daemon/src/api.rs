@@ -1296,6 +1296,42 @@ pub fn api_profile_dataset(
     )
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourcePathParams {
+    #[serde(flatten)]
+    pub workspace: WorkspaceRefParams,
+    pub path: String,
+}
+
+pub fn api_resource_stat(
+    runtime: &LatticeRuntime,
+    params: ResourcePathParams,
+) -> Result<latticefs_core::ResourceStat, ApiError> {
+    let session = resolve_session(
+        runtime,
+        params.workspace.workspace_id.as_deref(),
+        params.workspace.root.as_deref(),
+    )?;
+    crate::resource_api::resource_stat_at(session.root(), &params.path)
+}
+
+pub fn api_cloud_blob_open(
+    runtime: &LatticeRuntime,
+    params: ResourcePathParams,
+) -> Result<crate::resource_api::CloudBlobOpenResponse, ApiError> {
+    let session = resolve_session(
+        runtime,
+        params.workspace.workspace_id.as_deref(),
+        params.workspace.root.as_deref(),
+    )?;
+    crate::resource_api::open_cloud_blob_with_session(
+        session.root(),
+        session.workspace_id().as_str(),
+        &params.path,
+    )
+}
+
 trait BacklinkKindStr {
     fn as_str(&self) -> &'static str;
 }
