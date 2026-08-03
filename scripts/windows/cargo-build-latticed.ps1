@@ -24,11 +24,13 @@ if (Test-Path $protocBin) {
 }
 
 Write-Host "lattice-winbuild-latticed: CARGO_TARGET_DIR=$env:CARGO_TARGET_DIR"
-Write-Host "lattice-winbuild-latticed: packages=latticed,lattice-client (release)"
+Write-Host "lattice-winbuild-latticed: packages=lattice-daemon (bin latticed),lattice-client (release)"
 
+# Package name is lattice-daemon; binary is latticed.
 & cargo.exe build --release `
-  -p latticed `
+  -p lattice-daemon `
   -p lattice-client `
+  --bin latticed `
   --target x86_64-pc-windows-msvc
 $code = $LASTEXITCODE
 if ($code -ne 0) {

@@ -26,7 +26,7 @@ if (Test-Path $protocBin) {
 }
 
 Write-Host "lattice-winbuild-check: CARGO_TARGET_DIR=$env:CARGO_TARGET_DIR"
-Write-Host "lattice-winbuild-check: packages=lattice-cli,lattice-storage,lattice-core,lattice-protocol,lattice-cloud-client,latticed,lattice-client"
+Write-Host "lattice-winbuild-check: packages=lattice-cli,lattice-storage,lattice-core,lattice-protocol,lattice-cloud-client,lattice-daemon,lattice-client"
 
 & cargo.exe check `
   -p lattice-cli `
@@ -34,7 +34,7 @@ Write-Host "lattice-winbuild-check: packages=lattice-cli,lattice-storage,lattice
   -p lattice-core `
   -p lattice-protocol `
   -p lattice-cloud-client `
-  -p latticed `
+  -p lattice-daemon `
   -p lattice-client `
   --target x86_64-pc-windows-msvc
 $code = $LASTEXITCODE
