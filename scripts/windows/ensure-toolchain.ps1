@@ -69,6 +69,9 @@ foreach ($dir in $nodeDirs) {
 }
 $pnpm = Get-Command pnpm.exe -ErrorAction SilentlyContinue
 if (-not $pnpm) {
+  $pnpm = Get-Command pnpm.cmd -ErrorAction SilentlyContinue
+}
+if (-not $pnpm) {
   Write-Host "lattice-winbuild-toolchain: installing pnpm via npm…"
   $npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
   if (-not $npm) {
@@ -76,13 +79,17 @@ if (-not $pnpm) {
   }
   & npm.cmd install -g pnpm@9.15.0
   $env:Path = "$(Join-Path $env:APPDATA 'npm');$env:Path"
-  if (-not (Get-Command pnpm.exe -ErrorAction SilentlyContinue)) {
-    throw "pnpm install finished but pnpm.exe still not on PATH"
+  if (-not (Get-Command pnpm.exe -ErrorAction SilentlyContinue) -and -not (Get-Command pnpm.cmd -ErrorAction SilentlyContinue)) {
+    throw "pnpm install finished but pnpm still not on PATH"
   }
 } else {
   Write-Host "lattice-winbuild-toolchain: pnpm already present => $($pnpm.Source)"
 }
-& pnpm.exe --version
+if (Get-Command pnpm.exe -ErrorAction SilentlyContinue) {
+  & pnpm.exe --version
+} else {
+  & pnpm.cmd --version
+}
 
 Write-Host "lattice-winbuild-toolchain: OK"
 exit 0

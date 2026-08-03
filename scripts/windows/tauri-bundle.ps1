@@ -4,26 +4,42 @@ $ErrorActionPreference = "Stop"
 Ensure-LatticeWindowsRoot
 Initialize-LatticeWindowsCargoEnv
 
-if (-not (Get-Command pnpm.exe -ErrorAction SilentlyContinue)) {
-  throw "pnpm.exe missing — install Node.js + pnpm on the Windows host"
+if (-not (Get-Command pnpm.exe -ErrorAction SilentlyContinue) -and -not (Get-Command pnpm.cmd -ErrorAction SilentlyContinue) -and -not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
+  throw "pnpm missing — install Node.js + pnpm on the Windows host (winbuild ensure-toolchain)"
+}
+
+function Invoke-LatticePnpm {
+  param([Parameter(ValueFromRemainingArguments = $true)][string[]]$PnpmArgs)
+  if (Get-Command pnpm.exe -ErrorAction SilentlyContinue) {
+    & pnpm.exe @PnpmArgs
+  } elseif (Get-Command pnpm.cmd -ErrorAction SilentlyContinue) {
+    & pnpm.cmd @PnpmArgs
+  } else {
+    & pnpm @PnpmArgs
+  }
+  return $LASTEXITCODE
 }
 
 $tauriConfig = "src-tauri/tauri.windows.conf.json"
 
 if (-not (Test-Path "node_modules")) {
   Write-Host "tauri-bundle: pnpm install --frozen-lockfile --prefer-offline"
-  & pnpm.exe install --frozen-lockfile --prefer-offline
-  if ($LASTEXITCODE -ne 0) {
-    throw "tauri-bundle: pnpm install failed (exit $LASTEXITCODE)"
+  $code = Invoke-LatticePnpm @("install", "--frozen-lockfile", "--prefer-offline")
+  if ($code -ne 0) {
+    throw "tauri-bundle: pnpm install failed (exit $code)"
   }
 }
 
 Write-Host "tauri-bundle: tauri build --no-bundle (windows config, no voice)"
 Push-Location "apps/desktop"
 try {
-  & pnpm.exe exec tauri build --no-bundle --config $tauriConfig -- --target $script:LatticeWindowsTriple
-  if ($LASTEXITCODE -ne 0) {
-    throw "tauri-bundle: tauri build --no-bundle failed (exit $LASTEXITCODE)"
+  $code = Invoke-LatticePnpm @(
+    "exec", "tauri", "build", "--no-bundle",
+    "--config", $tauriConfig,
+    "--", "--target", $script:LatticeWindowsTriple
+  )
+  if ($code -ne 0) {
+    throw "tauri-bundle: tauri build --no-bundle failed (exit $code)"
   }
 }
 finally {
@@ -38,9 +54,13 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "tauri-bundle: tauri bundle --bundles nsis"
 Push-Location "apps/desktop"
 try {
-  & pnpm.exe exec tauri bundle --bundles nsis --config $tauriConfig -- --target $script:LatticeWindowsTriple
-  if ($LASTEXITCODE -ne 0) {
-    throw "tauri-bundle: tauri bundle nsis failed (exit $LASTEXITCODE)"
+  $code = Invoke-LatticePnpm @(
+    "exec", "tauri", "bundle", "--bundles", "nsis",
+    "--config", $tauriConfig,
+    "--", "--target", $script:LatticeWindowsTriple
+  )
+  if ($code -ne 0) {
+    throw "tauri-bundle: tauri bundle nsis failed (exit $code)"
   }
 }
 finally {
