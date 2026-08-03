@@ -5,6 +5,8 @@ import { IDLE_SAVE_STATE } from "../editor/saveState";
 import type { PageEditorHandle } from "../editor/PageEditor";
 import { saveResourceTreeCollapsed, saveSidebarWidth } from "../lib/profile";
 import { resourceIdForPathOrSynthetic, type CatalogEntry } from "../lib/resourceCatalog";
+import type { ResourceStat } from "../lib/resourceStat";
+import { isCloudBackupResource } from "../lib/cloudBackup";
 import {
   migrateWorkspaceUiSessionResourceIds,
   normalizeWorkspaceUiSession,
@@ -98,6 +100,15 @@ export function useDesktopController() {
   const clearAllSaveStatuses = useCallback(() => {
     uiStore.getState().clearAllSaveStatuses();
   }, [uiStore]);
+  const clearAuthorityBadges = useCallback(() => {
+    uiStore.getState().clearAuthorityBadges();
+  }, [uiStore]);
+  const recordAuthorityStat = useCallback(
+    (stat: ResourceStat) => {
+      uiStore.getState().recordAuthorityStat(stat);
+    },
+    [uiStore],
+  );
   const sidebarWidth = useDesktopUiStore((state) => state.sidebarWidth);
   const setSidebarWidth = useDesktopUiStore((state) => state.setSidebarWidth);
   const inspectorOpen = useDesktopUiStore((state) => state.inspectorOpen);
@@ -236,16 +247,18 @@ export function useDesktopController() {
   const onAdopt = useCallback(async () => {
     resourceResetRef.current();
     clearAllSaveStatuses();
+    clearAuthorityBadges();
     reconciliationRef.current.clearConflict();
     setRuntimeNotice(null);
     resetNavigation();
-  }, [clearAllSaveStatuses, resetNavigation]);
+  }, [clearAllSaveStatuses, clearAuthorityBadges, resetNavigation]);
 
   const onWorkspaceUnavailable = useCallback(async (root: string) => {
     resourceResetRef.current();
     resetNavigation();
     reconciliationRef.current.clearConflict();
     clearAllSaveStatuses();
+    clearAuthorityBadges();
     setRuntimeNotice({
       code: "open-workspace-unavailable",
       title: "Workspace unavailable",
@@ -253,7 +266,7 @@ export function useDesktopController() {
         "The open workspace was moved or deleted outside Lattice. It was closed without recreating any content; create a workspace or open its new location.",
       path: root,
     });
-  }, [clearAllSaveStatuses, resetNavigation]);
+  }, [clearAllSaveStatuses, clearAuthorityBadges, resetNavigation]);
 
   const getWorkspaceUiSession = useCallback(
     (catalog: ReadonlyMap<string, CatalogEntry>): Omit<WorkspaceUiSession, "workspaceId"> => {
@@ -719,6 +732,7 @@ export function useDesktopController() {
     createAndOpenPage,
     requestTreeRename,
     handleOpenExternally,
+    recordAuthorityStat,
   });
   const {
     handleTreeResourceContextMenu,
@@ -727,6 +741,7 @@ export function useDesktopController() {
     handleMoveToFolder,
     handleNewFolderInFolder,
     handleDeleteResources,
+    handleCloudBackupResource,
   } = treeActions;
 
   function beginSidebarResize(event: React.PointerEvent<HTMLDivElement>) {
@@ -989,6 +1004,15 @@ export function useDesktopController() {
         run: () => {
           setStatusToast(`Drop ${selected.path} onto the canvas, or use Place on Canvas`);
         },
+      });
+    }
+
+    if (selected && isCloudBackupResource(selected.kind) && !inBrowser) {
+      actions.push({
+        id: "action:cloud-backup",
+        label: `Back up ${selected.path} to Lattice Cloud`,
+        hint: "cloud",
+        run: () => void handleCloudBackupResource(selected),
       });
     }
 

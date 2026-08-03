@@ -17,6 +17,11 @@ import {
 } from "../data/dataTableLayout";
 import type { SaveState } from "../editor/saveState";
 import { DIRTY_SAVE_STATE, IDLE_SAVE_STATE } from "../editor/saveState";
+import type { ResourceStat } from "../lib/resourceStat";
+import {
+  authorityBadgeForMode,
+  type ResourceTreeAuthorityBadge,
+} from "../lib/resourceTreeBadges";
 
 /**
  * Opaque id for a mounted resource renderer session.
@@ -51,6 +56,7 @@ export function rendererSessionIdForPath(path: string): RendererSessionId {
 
 export type DesktopUiState = {
   saveStatusBySessionId: Record<string, SaveState>;
+  authorityBadgeByPath: Record<string, ResourceTreeAuthorityBadge>;
   sidebarWidth: number;
   inspectorOpen: boolean;
   agentPanelOpen: boolean;
@@ -67,6 +73,8 @@ export type DesktopUiState = {
   clearSaveStatus: (sessionId: RendererSessionId) => void;
   clearAllSaveStatuses: () => void;
   remapSaveStatus: (fromSessionId: RendererSessionId, toSessionId: RendererSessionId) => void;
+  recordAuthorityStat: (stat: ResourceStat) => void;
+  clearAuthorityBadges: () => void;
   setSidebarWidth: (width: number) => void;
   setInspectorOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
   setAgentPanelOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
@@ -107,6 +115,7 @@ export function createDesktopUiStore(
 ): DesktopUiStore {
   return createStore<DesktopUiState>((set, get) => ({
     saveStatusBySessionId: {},
+    authorityBadgeByPath: {},
     sidebarWidth: initial?.sidebarWidth ?? 272,
     inspectorOpen: false,
     agentPanelOpen: false,
@@ -136,6 +145,20 @@ export function createDesktopUiStore(
     clearAllSaveStatuses: () => {
       if (Object.keys(get().saveStatusBySessionId).length === 0) return;
       set({ saveStatusBySessionId: {} });
+    },
+    recordAuthorityStat: (stat) => {
+      const badge = authorityBadgeForMode(stat.authority);
+      if (!badge) return;
+      set({
+        authorityBadgeByPath: {
+          ...get().authorityBadgeByPath,
+          [stat.path]: badge,
+        },
+      });
+    },
+    clearAuthorityBadges: () => {
+      if (Object.keys(get().authorityBadgeByPath).length === 0) return;
+      set({ authorityBadgeByPath: {} });
     },
     remapSaveStatus: (fromSessionId, toSessionId) => {
       if (fromSessionId === toSessionId) return;

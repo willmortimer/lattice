@@ -114,4 +114,17 @@ describe("buildResourceTreeBadgeHints", () => {
 
     expect([...hints.agentByPath ?? []]).toEqual(["Focus.md"]);
   });
+
+  it("merges authority badges from shell cache", () => {
+    const hints = buildResourceTreeBadgeHints({
+      saveStatusBySessionId: {},
+      proposalSummaries: [],
+      authorityByPath: { "Notes/Cloud.md": "cloud", "Import/Ext.md": "external" },
+    });
+
+    expect(hints.authorityByPath).toEqual({
+      "Notes/Cloud.md": "cloud",
+      "Import/Ext.md": "external",
+    });
+  });
 });

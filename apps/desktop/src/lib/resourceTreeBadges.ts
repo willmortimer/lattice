@@ -115,6 +115,7 @@ export interface BuildResourceTreeBadgeHintsInput {
   proposalSummaries: readonly TransactionProposalSummary[];
   agentPanelOpen?: boolean;
   selectedPath?: string | null;
+  authorityByPath?: Readonly<Record<string, ResourceTreeAuthorityBadge>>;
 }
 
 /** Build sidebar badge maps from controller / shell state. */
@@ -146,5 +147,8 @@ export function buildResourceTreeBadgeHints(
   if (dirtyByPath.size > 0) hints.dirtyByPath = dirtyByPath;
   if (proposalByPath.size > 0) hints.proposalByPath = proposalByPath;
   if (agentByPath.size > 0) hints.agentByPath = agentByPath;
+  if (input.authorityByPath && Object.keys(input.authorityByPath).length > 0) {
+    hints.authorityByPath = input.authorityByPath;
+  }
   return hints;
 }

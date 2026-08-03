@@ -3,7 +3,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import { inBrowser } from "../demo";
-import { cloudBlobMaterialize, cloudBlobOpen } from "../lib/cloud";
+import { cloudBlobOpen } from "../lib/cloud";
+import {
+  backupResourceToCloud,
+  openCloudAccountSettings,
+} from "../lib/cloudBackup";
 import {
   downloadPack,
   getPack,
@@ -146,11 +150,16 @@ export function FeaturesSettings({
     setLabsError(null);
     setLabsOpenBytes(null);
     try {
-      const stat = await cloudBlobMaterialize(workspaceRoot, relPath);
-      setLabsStat(stat);
-    } catch (err: unknown) {
-      setLabsStat(null);
-      setLabsError(err instanceof Error ? err.message : String(err));
+      const result = await backupResourceToCloud(workspaceRoot, relPath);
+      if (!result.ok) {
+        if (result.reason === "signed_out") {
+          openCloudAccountSettings();
+        }
+        setLabsStat(null);
+        setLabsError(result.message);
+        return;
+      }
+      setLabsStat(result.stat);
     } finally {
       setLabsBusy(false);
     }
@@ -229,13 +238,14 @@ export function FeaturesSettings({
 
           <h2 className="settings-subsection">Labs</h2>
           <p className="settings-copy">
-            Experimental cloud blob round-trip for a workspace-relative path. Requires Settings →
-            Cloud account sign-in; unsigned requests fail closed with a clear error.
+            Advanced cloud blob round-trip for any workspace-relative path. For day-to-day backup,
+            use Inspect, the Files tree context menu, or the command palette on a selected resource.
+            Requires Settings → Cloud account sign-in.
           </p>
           <SettingRow
             settingId="features.labs-cloud-blob"
-            title="Cloud blob put/get"
-            description="Upload local bytes (PUT→GET verify, authority becomes Cloud) or reopen canonical cloud bytes."
+            title="Labs cloud blob put/get"
+            description="Experimental path-based upload and reopen — prefer tree or Inspect for normal backup."
           >
             <div className="cloud-signin-password">
               <label className="cloud-signin-field">
@@ -251,10 +261,11 @@ export function FeaturesSettings({
               <div className="cloud-account-actions">
                 <Button
                   size="sm"
+                  variant="secondary"
                   disabled={labsBusy}
                   onClick={() => void handleLabsUpload()}
                 >
-                  {labsBusy ? "Working…" : "Upload selected/test path to cloud"}
+                  {labsBusy ? "Working…" : "Labs: upload path to cloud"}
                 </Button>
                 <Button
                   size="sm"

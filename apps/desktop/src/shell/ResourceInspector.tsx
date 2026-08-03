@@ -1,6 +1,11 @@
 import { Button, IconButton } from "@lattice/ui";
 import { invoke } from "../lib/ipc";
-import { cloudBlobMaterialize, cloudBlobOpen } from "../lib/cloud";
+import { cloudBlobOpen } from "../lib/cloud";
+import {
+  backupResourceToCloud,
+  isCloudBackupResource,
+  openCloudAccountSettings,
+} from "../lib/cloudBackup";
 import {
   displayResourceIdForPath,
 } from "../lib/resourceCatalog";
@@ -24,6 +29,7 @@ import { inBrowser } from "../demo";
 import { KIND_LABELS } from "../KindMark";
 import type { Backlink, Resource } from "../types";
 import { InspectorHistoryPanel } from "./InspectorHistoryPanel";
+import { useDesktopUiStore } from "./desktopUiStore";
 
 const SECTIONS = [
   "properties",
@@ -92,6 +98,7 @@ export function ResourceInspector({
   const [cloudBusy, setCloudBusy] = useState(false);
   const [cloudError, setCloudError] = useState<string | null>(null);
   const [cloudOpenBytes, setCloudOpenBytes] = useState<number | null>(null);
+  const recordAuthorityStat = useDesktopUiStore((state) => state.recordAuthorityStat);
 
   useEffect(() => {
     setResourceStat(null);
@@ -112,7 +119,10 @@ export function ResourceInspector({
     if (section === "properties" && resource) {
       tasks.push(
         getResourceStat(root, resource.path).then((stat) => {
-          if (!cancelled) setResourceStat(stat);
+          if (!cancelled) {
+            setResourceStat(stat);
+            recordAuthorityStat(stat);
+          }
         }),
       );
     }
@@ -157,7 +167,7 @@ export function ResourceInspector({
     return () => {
       cancelled = true;
     };
-  }, [resource, root, section, graphMode]);
+  }, [resource, root, section, graphMode, recordAuthorityStat]);
 
   const displayId = resource
     ? displayResourceIdForPath(resource.path, resourceStat?.resource_id)
@@ -169,10 +179,16 @@ export function ResourceInspector({
     setCloudError(null);
     setCloudOpenBytes(null);
     try {
-      const stat = await cloudBlobMaterialize(root, resource.path);
-      setResourceStat(stat);
-    } catch (err: unknown) {
-      setCloudError(err instanceof Error ? err.message : String(err));
+      const result = await backupResourceToCloud(root, resource.path);
+      if (!result.ok) {
+        if (result.reason === "signed_out") {
+          openCloudAccountSettings();
+        }
+        setCloudError(result.message);
+        return;
+      }
+      setResourceStat(result.stat);
+      recordAuthorityStat(result.stat);
     } finally {
       setCloudBusy(false);
     }
@@ -187,6 +203,7 @@ export function ResourceInspector({
       setCloudOpenBytes(bytes.length);
       const stat = await getResourceStat(root, resource.path);
       setResourceStat(stat);
+      recordAuthorityStat(stat);
     } catch (err: unknown) {
       setCloudOpenBytes(null);
       setCloudError(err instanceof Error ? err.message : String(err));
@@ -195,7 +212,9 @@ export function ResourceInspector({
     }
   }
 
-  const canCloudBackup = Boolean(root && resource && !inBrowser);
+  const canCloudBackup = Boolean(
+    root && resource && isCloudBackupResource(resource.kind) && !inBrowser,
+  );
   const isCloudAuthority = resourceStat?.authority === "cloud";
 
   return (
@@ -285,8 +304,9 @@ export function ResourceInspector({
             {canCloudBackup && (
               <div className="inspector-cloud-actions">
                 <p className="inspector-cloud-copy">
-                  Back up this resource to Lattice Cloud (requires Settings → Cloud account).
-                  Authority becomes Cloud after a successful upload.
+                  Back up this resource to Lattice Cloud. Requires Settings → Cloud account.
+                  Authority becomes Cloud after a successful upload. You can also back up from the
+                  Files tree context menu or command palette.
                 </p>
                 <div className="cloud-account-actions">
                   <Button
