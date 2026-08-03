@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use lattice_core::{Resource, Workspace, WorkspaceDefaults};
+use lattice_profile::register_workspace;
 use lattice_runtime::{default_runtime, LatticeRuntime, WorkspaceSession};
 use lattice_storage::{NativeWorkspaceStore, WorkspaceStore};
 use serde::Serialize;
@@ -46,7 +47,11 @@ pub fn open_workspace_with_runtime(
 pub fn open_workspace_with_session(
     session: &WorkspaceSession,
 ) -> Result<WorkspaceSnapshot, String> {
-    snapshot_from_workspace(session.workspace())
+    let workspace_id = session.workspace_id().to_string();
+    let root = session.root().to_path_buf();
+    let snapshot = snapshot_from_workspace(session.workspace())?;
+    let _ = register_workspace(&workspace_id, &root);
+    Ok(snapshot)
 }
 
 /// Re-scan a workspace's resource listing without re-reading its manifest.
@@ -109,7 +114,14 @@ pub(crate) fn snapshot_from_parts(
 mod tests {
     use super::*;
     use lattice_core::Workspace;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex, OnceLock};
+
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 
     fn init_workspace() -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
@@ -119,6 +131,7 @@ mod tests {
 
     #[test]
     fn open_workspace_returns_snapshot_with_resources() {
+        let _guard = env_lock();
         let dir = init_workspace();
         std::fs::write(dir.path().join("Notes.md"), "# Hi\n").unwrap();
 
@@ -132,12 +145,14 @@ mod tests {
 
     #[test]
     fn open_workspace_rejects_missing_manifest() {
+        let _guard = env_lock();
         let dir = tempfile::tempdir().unwrap();
         assert!(open_workspace(dir.path().to_string_lossy().into_owned()).is_err());
     }
 
     #[test]
     fn list_resources_matches_open_workspace_scan() {
+        let _guard = env_lock();
         let dir = init_workspace();
         std::fs::write(dir.path().join("Notes.md"), "# Hi\n").unwrap();
         let root = dir.path().to_string_lossy().into_owned();
@@ -148,6 +163,7 @@ mod tests {
 
     #[test]
     fn open_workspace_registers_runtime_session() {
+        let _guard = env_lock();
         let dir = init_workspace();
         let runtime = Arc::new(LatticeRuntime::new());
         let snapshot =
@@ -156,5 +172,24 @@ mod tests {
         assert_eq!(runtime.session_count(), 1);
         let session = runtime.get_session_by_id(&snapshot.id).unwrap();
         assert_eq!(session.workspace_id().as_str(), snapshot.id);
+    }
+
+    #[test]
+    fn open_workspace_persists_registry_entry() {
+        use lattice_profile::{WorkspaceRegistry, LATTICE_WORKSPACE_REGISTRY_PATH_ENV};
+
+        let _guard = env_lock();
+        let registry_dir = tempfile::tempdir().unwrap();
+        let registry_path = registry_dir.path().join("workspace-registry.json");
+        std::env::set_var(LATTICE_WORKSPACE_REGISTRY_PATH_ENV, &registry_path);
+
+        let dir = init_workspace();
+        let snapshot = open_workspace(dir.path().to_string_lossy().into_owned()).unwrap();
+
+        let registry = WorkspaceRegistry::load_or_default(&registry_path).unwrap();
+        assert_eq!(registry.list().len(), 1);
+        assert_eq!(registry.list()[0].workspace_id, snapshot.id);
+
+        std::env::remove_var(LATTICE_WORKSPACE_REGISTRY_PATH_ENV);
     }
 }

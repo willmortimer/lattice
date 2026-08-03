@@ -1,6 +1,7 @@
 mod scheduler;
 mod settings;
 mod state;
+mod workspace_registry;
 
 use std::path::{Path, PathBuf};
 
@@ -19,6 +20,10 @@ pub use settings::{
 };
 pub use state::{
     DesktopSession, PaneLayoutStub, ProfileStateStore, RecentWorkspace, WorkspaceUiSession,
+};
+pub use workspace_registry::{
+    default_workspace_registry_path, register_workspace, WorkspaceRegistry,
+    WorkspaceRegistryRecord, LATTICE_WORKSPACE_REGISTRY_PATH_ENV, WORKSPACE_REGISTRY_FILENAME,
 };
 
 pub const LATTICE_DEV_HOME_ENV: &str = "LATTICE_DEV_HOME";
@@ -170,7 +175,9 @@ pub fn lattice_home_path() -> Result<PathBuf> {
     if cfg!(debug_assertions) && !lattice_force_prod_home_enabled() {
         return default_debug_home_path();
     }
-    let home = dirs::home_dir().ok_or_else(|| Error::HomeUnavailable)?;
+    let home = dirs::home_dir()
+        .or_else(|| std::env::var_os("USERPROFILE").map(PathBuf::from))
+        .ok_or_else(|| Error::HomeUnavailable)?;
     Ok(home.join(LATTICE_HOME_NAME))
 }
 

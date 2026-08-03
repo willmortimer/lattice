@@ -1,206 +1,13 @@
-//! Durable mapping from stable [`WorkspaceId`] to filesystem roots.
-//!
-//! Enables MCP/HTTP open-by-id when no warm in-memory session exists. Remote
-//! access lease hooks (H4) read [`WorkspaceRegistryRecord::remote_access_enabled`].
+//! Daemon re-exports for the shared workspace registry plus remote-access lease sync.
 
-use std::fs;
-use std::io::Write;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
+pub use lattice_profile::{
+    default_workspace_registry_path, register_workspace, WorkspaceRegistry,
+    WorkspaceRegistryRecord, LATTICE_WORKSPACE_REGISTRY_PATH_ENV,
+};
 
 use crate::idle::ConnectionTracker;
-
-/// Environment override for the registry JSON path (tests).
-pub const LATTICE_WORKSPACE_REGISTRY_PATH_ENV: &str = "LATTICE_WORKSPACE_REGISTRY_PATH";
-
-const REGISTRY_VERSION: u32 = 1;
-const REGISTRY_FILENAME: &str = "workspace-registry.json";
-
-/// Default path: `{lattice_home}/State/workspace-registry.json`.
-pub fn default_workspace_registry_path() -> PathBuf {
-    if let Ok(path) = std::env::var(LATTICE_WORKSPACE_REGISTRY_PATH_ENV) {
-        let trimmed = path.trim();
-        if !trimmed.is_empty() {
-            return PathBuf::from(trimmed);
-        }
-    }
-    lattice_profile::lattice_home_path()
-        .unwrap_or_else(|_| {
-            dirs::data_dir()
-                .unwrap_or_else(std::env::temp_dir)
-                .join(lattice_profile::LATTICE_HOME_NAME)
-        })
-        .join(lattice_profile::STATE_DIR_NAME)
-        .join(REGISTRY_FILENAME)
-}
-
-/// One durable workspace registration.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WorkspaceRegistryRecord {
-    pub workspace_id: String,
-    pub root: PathBuf,
-    #[serde(default)]
-    pub remote_access_enabled: bool,
-}
-
-/// On-disk workspace-id → root registry.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WorkspaceRegistry {
-    pub version: u32,
-    #[serde(default)]
-    pub workspaces: Vec<WorkspaceRegistryRecord>,
-}
-
-impl Default for WorkspaceRegistry {
-    fn default() -> Self {
-        Self {
-            version: REGISTRY_VERSION,
-            workspaces: Vec::new(),
-        }
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum WorkspaceRegistryError {
-    #[error("I/O error at {path}: {source}")]
-    Io {
-        path: PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
-    #[error("failed to parse workspace registry at {path}: {source}")]
-    Json {
-        path: PathBuf,
-        #[source]
-        source: serde_json::Error,
-    },
-}
-
-pub type Result<T> = std::result::Result<T, WorkspaceRegistryError>;
-
-impl WorkspaceRegistry {
-    pub fn load_or_default(path: &Path) -> Result<Self> {
-        if !path.is_file() {
-            return Ok(Self::default());
-        }
-        let raw = fs::read_to_string(path).map_err(|source| WorkspaceRegistryError::Io {
-            path: path.to_path_buf(),
-            source,
-        })?;
-        if raw.trim().is_empty() {
-            return Ok(Self::default());
-        }
-        serde_json::from_str(&raw).map_err(|source| WorkspaceRegistryError::Json {
-            path: path.to_path_buf(),
-            source,
-        })
-    }
-
-    pub fn load_default() -> Result<Self> {
-        Self::load_or_default(&default_workspace_registry_path())
-    }
-
-    pub fn save(&self, path: &Path) -> Result<()> {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|source| WorkspaceRegistryError::Io {
-                path: parent.to_path_buf(),
-                source,
-            })?;
-        }
-        let body = serde_json::to_vec_pretty(self).map_err(|source| WorkspaceRegistryError::Json {
-            path: path.to_path_buf(),
-            source,
-        })?;
-        let tmp = path.with_extension("json.tmp");
-        {
-            let mut file = fs::File::create(&tmp).map_err(|source| WorkspaceRegistryError::Io {
-                path: tmp.clone(),
-                source,
-            })?;
-            file.write_all(&body).map_err(|source| WorkspaceRegistryError::Io {
-                path: tmp.clone(),
-                source,
-            })?;
-            file.write_all(b"\n").map_err(|source| WorkspaceRegistryError::Io {
-                path: tmp.clone(),
-                source,
-            })?;
-            file.sync_all().map_err(|source| WorkspaceRegistryError::Io {
-                path: tmp.clone(),
-                source,
-            })?;
-        }
-        fs::rename(&tmp, path).map_err(|source| WorkspaceRegistryError::Io {
-            path: path.to_path_buf(),
-            source,
-        })?;
-        Ok(())
-    }
-
-    pub fn save_default(&self) -> Result<()> {
-        self.save(&default_workspace_registry_path())
-    }
-
-    fn normalize_root(root: &Path) -> PathBuf {
-        root.canonicalize().unwrap_or_else(|_| root.to_path_buf())
-    }
-
-    fn find_index(&self, workspace_id: &str) -> Option<usize> {
-        self.workspaces
-            .iter()
-            .position(|entry| entry.workspace_id == workspace_id)
-    }
-
-    /// Register or refresh a workspace id → root mapping.
-    pub fn register(&mut self, workspace_id: &str, root: &Path) -> &WorkspaceRegistryRecord {
-        let root = Self::normalize_root(root);
-        if let Some(idx) = self.find_index(workspace_id) {
-            let entry = &mut self.workspaces[idx];
-            entry.root = root;
-            return entry;
-        }
-        self.workspaces.push(WorkspaceRegistryRecord {
-            workspace_id: workspace_id.to_string(),
-            root,
-            remote_access_enabled: false,
-        });
-        self.workspaces.last().expect("just pushed")
-    }
-
-    pub fn resolve_root(&self, workspace_id: &str) -> Option<PathBuf> {
-        self.find_index(workspace_id)
-            .map(|idx| self.workspaces[idx].root.clone())
-    }
-
-    pub fn set_remote_access(&mut self, workspace_id: &str, enabled: bool) -> bool {
-        let Some(idx) = self.find_index(workspace_id) else {
-            return false;
-        };
-        self.workspaces[idx].remote_access_enabled = enabled;
-        true
-    }
-
-    pub fn list(&self) -> &[WorkspaceRegistryRecord] {
-        &self.workspaces
-    }
-
-    pub fn remote_access_any(&self) -> bool {
-        self.workspaces
-            .iter()
-            .any(|entry| entry.remote_access_enabled)
-    }
-}
-
-/// Persist a workspace registration at the default registry path.
-pub fn register_workspace(workspace_id: &str, root: &Path) -> Result<()> {
-    let mut registry = WorkspaceRegistry::load_default()?;
-    registry.register(workspace_id, root);
-    registry.save_default()
-}
 
 /// Sync the connection tracker's remote-access lease from registry state.
 ///
@@ -225,14 +32,14 @@ mod tests {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    fn registry_fixture() -> (TempDir, PathBuf) {
+    fn registry_fixture() -> (TempDir, std::path::PathBuf) {
         let dir = TempDir::new().expect("tempdir");
         let path = dir.path().join("workspace-registry.json");
         std::env::set_var(LATTICE_WORKSPACE_REGISTRY_PATH_ENV, &path);
         (dir, path)
     }
 
-    fn init_workspace(dir: &TempDir) -> (PathBuf, String) {
+    fn init_workspace(dir: &TempDir) -> (std::path::PathBuf, String) {
         Workspace::init(dir.path(), "Registry Fixture").expect("init workspace");
         let runtime = lattice_runtime::LatticeRuntime::new();
         let session = runtime
