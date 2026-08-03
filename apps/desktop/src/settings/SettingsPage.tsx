@@ -6,7 +6,7 @@ import { inBrowser } from "../demo";
 import type { ThemeCatalogPayload } from "../theme";
 import type { AiMode, EmbeddingMode, WorkspaceStartupSettings } from "../lib/profile";
 import type { PageWidth } from "../lib/pageWidth";
-import { enableAppLock, getAppLockStatus, type AppLockStatus } from "../lib/appLock";
+import { enableAppLock, getAppLockStatus, appLockAuthMethodLabel, type AppLockStatus } from "../lib/appLock";
 import {
   clearOpenaiApiKey,
   hasOpenaiApiKey,
@@ -1764,6 +1764,7 @@ function PrivacySettingsPanel({
   const platformSupported = lockStatus?.platformSupported ?? false;
   const presenceAvailable = lockStatus?.presenceAvailable ?? false;
   const signedIn = cloudStatus?.signedIn === true;
+  const authLabel = appLockAuthMethodLabel();
 
   const syncPreference = async (patch: {
     aiAuditEnabled?: boolean;
@@ -1813,19 +1814,23 @@ function PrivacySettingsPanel({
       {inBrowser ? (
         <div className="diagnostics-card">
           <strong>Unavailable in browser demo</strong>
-          <span>App lock requires the native macOS desktop build with Touch ID or device password.</span>
+          <span>
+            App lock requires the native desktop build with {authLabel} (macOS or Windows).
+          </span>
         </div>
       ) : !platformSupported ? (
         <div className="diagnostics-card">
-          <strong>macOS only</strong>
-          <span>App lock uses LocalAuthentication and is not available on this platform.</span>
+          <strong>Not available on this platform</strong>
+          <span>
+            App lock uses Touch ID / device password on macOS and Windows Hello / PIN on Windows.
+          </span>
         </div>
       ) : (
         <>
           <SettingRow
             settingId="privacy.app-lock"
             title="App lock"
-            description="Require Touch ID or your device password when Lattice launches, after idle, and from Lattice → Lock."
+            description={`Require ${authLabel} when Lattice launches, after idle, and from Lattice → Lock.`}
           >
             <Toggle
               label="App lock"
@@ -1877,8 +1882,8 @@ function PrivacySettingsPanel({
           </SettingRow>
           {!presenceAvailable ? (
             <p className="settings-copy" role="status">
-              Device authentication is not available right now. Enroll Touch ID or set a
-              password in System Settings.
+              Device authentication is not available right now. Set up {authLabel} in system
+              settings, then try again.
             </p>
           ) : null}
           {busy ? <p className="settings-copy">Waiting for authentication…</p> : null}

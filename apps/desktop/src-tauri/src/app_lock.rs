@@ -57,7 +57,7 @@ impl AppLockInner {
             locked: self.locked,
             idle_lock_minutes: self.idle_lock_minutes,
             presence_available: presence_available(),
-            platform_supported: cfg!(target_os = "macos"),
+            platform_supported: cfg!(any(target_os = "macos", target_os = "windows")),
         }
     }
 }
@@ -347,7 +347,7 @@ pub fn app_lock_enable(
     state: State<'_, AppLockState>,
     idle_lock_minutes: Option<u32>,
 ) -> Result<AppLockStatus, String> {
-    if !cfg!(target_os = "macos") {
+    if !cfg!(any(target_os = "macos", target_os = "windows")) {
         return Err(PresenceError::Unsupported.to_string());
     }
     if !presence_available() {
@@ -508,5 +508,15 @@ mod tests {
         assert_eq!(clamp_idle_minutes(0), 0);
         assert_eq!(clamp_idle_minutes(5), 5);
         assert_eq!(clamp_idle_minutes(999), 120);
+    }
+
+    #[test]
+    fn platform_supported_matches_presence_backends() {
+        let state = AppLockState::default();
+        let supported = state.status().platform_supported;
+        assert_eq!(
+            supported,
+            cfg!(any(target_os = "macos", target_os = "windows"))
+        );
     }
 }
