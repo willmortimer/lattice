@@ -10,14 +10,19 @@ if (-not (Get-Command pnpm.exe -ErrorAction SilentlyContinue) -and -not (Get-Com
 
 function Invoke-LatticePnpm {
   param([Parameter(ValueFromRemainingArguments = $true)][string[]]$PnpmArgs)
+  # Do not let pnpm stdout become the function return value when callers assign `$code = …`.
+  # Out-Host keeps the console stream separate from the success/output stream.
   if (Get-Command pnpm.exe -ErrorAction SilentlyContinue) {
-    & pnpm.exe @PnpmArgs
+    & pnpm.exe @PnpmArgs | Out-Host
   } elseif (Get-Command pnpm.cmd -ErrorAction SilentlyContinue) {
-    & pnpm.cmd @PnpmArgs
+    & pnpm.cmd @PnpmArgs | Out-Host
   } else {
-    & pnpm @PnpmArgs
+    & pnpm @PnpmArgs | Out-Host
   }
-  return $LASTEXITCODE
+  if ($null -eq $LASTEXITCODE) {
+    return 0
+  }
+  return [int]$LASTEXITCODE
 }
 
 $tauriConfig = "src-tauri/tauri.windows.conf.json"
