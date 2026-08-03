@@ -11,7 +11,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use std::time::Duration;
 
-use lattice_client::DaemonClient;
+use lattice_client::{default_endpoint, DaemonClient};
 
 pub const ENV_SOCKET: &str = "LATTICE_SOCKET";
 pub const ENV_AUTH_TOKEN: &str = "LATTICE_AUTH_TOKEN";
@@ -46,11 +46,7 @@ impl Drop for SpawnedDaemon {
 }
 
 pub fn default_socket_path() -> PathBuf {
-    dirs::data_dir()
-        .unwrap_or_else(std::env::temp_dir)
-        .join("Lattice")
-        .join("run")
-        .join("latticed.sock")
+    default_endpoint()
 }
 
 pub fn socket_path() -> PathBuf {
@@ -60,9 +56,27 @@ pub fn socket_path() -> PathBuf {
         .unwrap_or_else(default_socket_path)
 }
 
-/// Persisted auth token path for a given socket (`latticed.sock` → `latticed.token`).
+/// Persisted auth token path for the daemon endpoint.
+///
+/// Unix: beside the UDS (`latticed.sock` → `latticed.token`).
+/// Windows: `{data}/Lattice/run/latticed.token` (named pipes have no filesystem sibling).
 pub fn auth_token_path(socket: &Path) -> PathBuf {
-    socket.with_file_name("latticed.token")
+    #[cfg(unix)]
+    {
+        socket.with_file_name("latticed.token")
+    }
+    #[cfg(windows)]
+    {
+        let _ = socket;
+        default_run_dir().join("latticed.token")
+    }
+}
+
+fn default_run_dir() -> PathBuf {
+    dirs::data_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("Lattice")
+        .join("run")
 }
 
 pub fn which_bin(name: &str) -> std::io::Result<PathBuf> {
@@ -111,16 +125,17 @@ pub fn resolve_latticed_bin() -> Option<PathBuf> {
     candidates.into_iter().find(|p| p.is_file())
 }
 
-pub fn wait_for_socket(socket: &Path, timeout: Duration) -> Result<(), String> {
-    let deadline = std::time::Instant::now() + timeout;
-    while std::time::Instant::now() < deadline {
-        if socket.exists() {
+/// Wait until the daemon endpoint accepts connections (not filesystem presence on Windows).
+pub async fn wait_for_socket(socket: &Path, timeout: Duration) -> Result<(), String> {
+    let deadline = tokio::time::Instant::now() + timeout;
+    while tokio::time::Instant::now() < deadline {
+        if endpoint_accepts_connections(socket).await {
             return Ok(());
         }
-        std::thread::sleep(Duration::from_millis(25));
+        tokio::time::sleep(Duration::from_millis(25)).await;
     }
     Err(format!(
-        "timed out waiting for latticed socket {}",
+        "timed out waiting for latticed endpoint {}",
         socket.display()
     ))
 }
@@ -162,21 +177,50 @@ fn write_persisted_auth_token(socket: &Path, token: &str) -> Result<(), String> 
     Ok(())
 }
 
-/// True when a process appears to be accepting connections on `socket`.
-fn socket_accepts_connections(socket: &Path) -> bool {
+/// True when a process appears to be accepting connections on `endpoint`.
+async fn endpoint_accepts_connections(endpoint: &Path) -> bool {
     #[cfg(unix)]
     {
-        std::os::unix::net::UnixStream::connect(socket).is_ok()
+        tokio::net::UnixStream::connect(endpoint).await.is_ok()
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
-        let _ = socket;
-        true
+        windows_endpoint_accepts_connections(endpoint)
+    }
+}
+
+#[cfg(windows)]
+fn windows_endpoint_accepts_connections(endpoint: &Path) -> bool {
+    use tokio::net::windows::named_pipe::ClientOptions;
+
+    // ERROR_PIPE_BUSY — server exists but has no free instance yet.
+    const ERROR_PIPE_BUSY: i32 = 231;
+
+    match ClientOptions::new().open(endpoint) {
+        Ok(_client) => true,
+        Err(err) if err.raw_os_error() == Some(ERROR_PIPE_BUSY) => true,
+        Err(_) => false,
+    }
+}
+
+/// Unix: stale socket file left on disk. Windows named pipes are never filesystem paths.
+fn endpoint_file_present(endpoint: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        endpoint.exists()
+    }
+    #[cfg(windows)]
+    {
+        let _ = endpoint;
+        false
     }
 }
 
 fn clear_stale_socket(socket: &Path) {
-    let _ = std::fs::remove_file(socket);
+    #[cfg(unix)]
+    {
+        let _ = std::fs::remove_file(socket);
+    }
     let _ = std::fs::remove_file(auth_token_path(socket));
 }
 
@@ -197,11 +241,14 @@ fn spawn_latticed(
     auth_token: &str,
     host_env: &SpawnHostEnv,
 ) -> Result<Child, String> {
-    if let Some(parent) = socket.parent() {
-        std::fs::create_dir_all(parent).map_err(|err| err.to_string())?;
-    }
-    if socket.exists() {
-        let _ = std::fs::remove_file(socket);
+    #[cfg(unix)]
+    {
+        if let Some(parent) = socket.parent() {
+            std::fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+        }
+        if socket.exists() {
+            let _ = std::fs::remove_file(socket);
+        }
     }
     let mut command = Command::new(binary);
     command
@@ -235,8 +282,10 @@ pub async fn connect_or_spawn(
 ) -> Result<(Arc<DaemonClient>, Option<SpawnedDaemon>), String> {
     let socket = socket_path();
     let mut token = resolve_auth_token(&socket);
+    let accepts = endpoint_accepts_connections(&socket).await;
+    let file_present = endpoint_file_present(&socket);
 
-    if socket.exists() {
+    if accepts || file_present {
         if let Some(existing_token) = token.clone() {
             match DaemonClient::connect(&socket, &existing_token).await {
                 Ok(client) => {
@@ -244,7 +293,7 @@ pub async fn connect_or_spawn(
                     let _ = write_persisted_auth_token(&socket, &existing_token);
                     return Ok((Arc::new(client), None));
                 }
-                Err(_) if !socket_accepts_connections(&socket) => {
+                Err(_) if !accepts => {
                     // Dead socket left behind after a crash / kill.
                     clear_stale_socket(&socket);
                     token = None;
@@ -256,7 +305,7 @@ pub async fn connect_or_spawn(
                     ));
                 }
             }
-        } else if socket_accepts_connections(&socket) {
+        } else if accepts {
             return Err(format!(
                 "latticed is running at {} but no auth token is available \
                  (missing {ENV_AUTH_TOKEN} and {}); quit the other Lattice/latticed \
@@ -280,7 +329,7 @@ pub async fn connect_or_spawn(
     install_process_auth_token(&token);
     write_persisted_auth_token(&socket, &token)?;
     let child = spawn_latticed(&binary, &socket, &token, &host_env)?;
-    wait_for_socket(&socket, Duration::from_secs(8))?;
+    wait_for_socket(&socket, Duration::from_secs(8)).await?;
     let client = DaemonClient::connect(&socket, &token)
         .await
         .map_err(|err| {
@@ -308,6 +357,19 @@ mod tests {
         );
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn auth_token_path_uses_run_dir_on_windows() {
+        let socket = PathBuf::from(r"\\.\pipe\lattice-latticed-alice");
+        let path = auth_token_path(&socket);
+        assert_eq!(path.file_name().and_then(|n| n.to_str()), Some("latticed.token"));
+        assert!(
+            path.to_string_lossy().contains("Lattice"),
+            "expected Lattice run dir, got {}",
+            path.display()
+        );
+    }
+
     #[test]
     fn persisted_token_round_trips() {
         let directory = tempfile::tempdir().unwrap();
@@ -317,5 +379,10 @@ mod tests {
             read_persisted_auth_token(&socket).as_deref(),
             Some("secret-token")
         );
+    }
+
+    #[test]
+    fn default_socket_path_matches_client_default() {
+        assert_eq!(default_socket_path(), default_endpoint());
     }
 }
