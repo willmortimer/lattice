@@ -10,19 +10,24 @@ if (-not (Get-Command pnpm.exe -ErrorAction SilentlyContinue) -and -not (Get-Com
 
 function Invoke-LatticePnpm {
   param([Parameter(ValueFromRemainingArguments = $true)][string[]]$PnpmArgs)
-  # Do not let pnpm stdout become the function return value when callers assign `$code = …`.
-  # Out-Host keeps the console stream separate from the success/output stream.
+  # Capture exit code before any pipeline/host write (those clobber $LASTEXITCODE).
+  # Write-Host so callers assigning `$code = Invoke-LatticePnpm …` only get the int.
+  $lines = $null
   if (Get-Command pnpm.exe -ErrorAction SilentlyContinue) {
-    & pnpm.exe @PnpmArgs | Out-Host
+    $lines = & pnpm.exe @PnpmArgs 2>&1
   } elseif (Get-Command pnpm.cmd -ErrorAction SilentlyContinue) {
-    & pnpm.cmd @PnpmArgs | Out-Host
+    $lines = & pnpm.cmd @PnpmArgs 2>&1
   } else {
-    & pnpm @PnpmArgs | Out-Host
+    $lines = & pnpm @PnpmArgs 2>&1
   }
-  if ($null -eq $LASTEXITCODE) {
-    return 0
+  $exitCode = 0
+  if ($null -ne $LASTEXITCODE) {
+    $exitCode = [int]$LASTEXITCODE
   }
-  return [int]$LASTEXITCODE
+  foreach ($line in @($lines)) {
+    Write-Host $line
+  }
+  return $exitCode
 }
 
 $tauriConfig = "src-tauri/tauri.windows.conf.json"
@@ -41,7 +46,7 @@ try {
   $code = Invoke-LatticePnpm @(
     "exec", "tauri", "build", "--no-bundle",
     "--config", $tauriConfig,
-    "--", "--target", $script:LatticeWindowsTriple
+    "--target", $script:LatticeWindowsTriple
   )
   if ($code -ne 0) {
     throw "tauri-bundle: tauri build --no-bundle failed (exit $code)"
@@ -51,10 +56,8 @@ finally {
   Pop-Location
 }
 
+# Nested `&` script — assemble-app must not call `exit` or NSIS never runs.
 & "$PSScriptRoot\assemble-app.ps1"
-if ($LASTEXITCODE -ne 0) {
-  exit $LASTEXITCODE
-}
 
 Write-Host "tauri-bundle: tauri bundle --bundles nsis"
 Push-Location "apps/desktop"
@@ -62,7 +65,7 @@ try {
   $code = Invoke-LatticePnpm @(
     "exec", "tauri", "bundle", "--bundles", "nsis",
     "--config", $tauriConfig,
-    "--", "--target", $script:LatticeWindowsTriple
+    "--target", $script:LatticeWindowsTriple
   )
   if ($code -ne 0) {
     throw "tauri-bundle: tauri bundle nsis failed (exit $code)"

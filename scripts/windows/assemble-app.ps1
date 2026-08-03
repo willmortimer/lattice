@@ -18,4 +18,4 @@ foreach ($name in Get-LatticeWindowsSidecarNames) {
 }
 
 Write-Host "assemble-app: ok → $destDir"
-exit 0
+# Do not `exit` here — tauri-bundle.ps1 invokes this script with `&` and must continue to NSIS.

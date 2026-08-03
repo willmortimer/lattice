@@ -59,7 +59,7 @@ PowerShell scripts under `scripts/windows/` mirror the macOS release leaves in
 | `build-sidecar.ps1` | Release-build `latticed`, `lattice-agentd`, `lattice-embed-host` |
 | `verify-sidecars.ps1` | Assert sidecars exist; embed-host lists `fake` only (no llama-cpp) |
 | `assemble-app.ps1` | Copy sidecars beside `Lattice.exe` (called from `tauri-bundle`) |
-| `tauri-bundle.ps1` | `tauri build --no-bundle` → assemble → `tauri bundle --bundles nsis` |
+| `tauri-bundle.ps1` | `tauri build --no-bundle --target …` → assemble → `tauri bundle --bundles nsis --target …` (assemble must not `exit`, or NSIS is skipped) |
 
 Windows sidecars **exclude** seatbelt, voice, and llama-cpp/Metal backends.
 Authenticode signing is deferred — installers are unsigned.
