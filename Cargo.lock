@@ -5907,6 +5907,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "lattice-capture-windows"
+version = "0.1.0"
+dependencies = [
+ "lattice-capture-core",
+]
+
+[[package]]
 name = "lattice-cell-client"
 version = "0.1.0"
 dependencies = [
@@ -6134,6 +6141,7 @@ dependencies = [
  "lattice-audio-macos",
  "lattice-capture-core",
  "lattice-capture-macos",
+ "lattice-capture-windows",
  "lattice-client",
  "lattice-cloud-client",
  "lattice-commands",

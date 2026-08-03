@@ -18,8 +18,9 @@ nxr desktop-dev -- --features capture
 pnpm --filter @lattice/desktop exec tauri dev --features capture
 ```
 
-The `capture` Cargo feature links `lattice-capture-macos` and registers the
-global shortcut. Linux CI builds stay featureless and skip this path.
+The `capture` Cargo feature links the host platform backend (`lattice-capture-macos`
+on macOS; `lattice-capture-windows` stub on Windows) and registers the global
+shortcut. Linux CI builds stay featureless and skip this path.
 
 ## Prerequisites
 

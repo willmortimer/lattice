@@ -1,6 +1,6 @@
 //! Provider-neutral screen capture types for Lattice clipper.
 //!
-//! Platform capture (ScreenCaptureKit, AppKit) lives in `lattice-capture-macos`.
+//! Platform capture lives in `lattice-capture-macos` and `lattice-capture-windows`.
 
 mod backend;
 mod destination;
