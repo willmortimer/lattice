@@ -52,6 +52,12 @@ export function ResourceSurface({
     return () => controller.abort();
   }, [resolution]);
 
+  // Must stay above early returns — otherwise React #310 when the viewer finishes loading.
+  const renderContext = useMemo(
+    () => ({ ...context, missingCapabilities: resolution.missingCapabilities }),
+    [context, resolution.missingCapabilities],
+  );
+
   if (loadError) {
     return <div className="placeholder"><p className="placeholder-copy">Couldn't load this viewer.</p><p className="placeholder-sub"><code>{loadError}</code></p></div>;
   }
@@ -60,9 +66,5 @@ export function ResourceSurface({
   }
 
   const Renderer = component;
-  const renderContext = useMemo(
-    () => ({ ...context, missingCapabilities: resolution.missingCapabilities }),
-    [context, resolution.missingCapabilities],
-  );
   return <Renderer context={renderContext} session={session} />;
 }
