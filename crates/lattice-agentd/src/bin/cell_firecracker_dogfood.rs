@@ -8,7 +8,9 @@ use std::path::{Path, PathBuf};
 
 use kernelfs::{normalize_guest_path, InputMount};
 use lattice_agentd::cell_host::{run_cell_task_and_propose, CellProposalProvenance};
-use lattice_agentd::kernelfs_export::{export_oci_roles_under_agent_share, OciKernelfsExportRequest};
+use lattice_agentd::kernelfs_export::{
+    export_oci_roles_under_agent_share, OciKernelfsExport, OciKernelfsExportRequest,
+};
 use lattice_agentd::lattice_client::lattice_client_from_env;
 use lattice_agentd::wasi_host::WorkspaceBinding;
 use lattice_cell_client::{
@@ -78,7 +80,7 @@ async fn run() -> Result<(), String> {
         cli.cell_id.clone()
     };
 
-    let (_temp_roles, input_host, work_host, output_host) =
+    let (_temp_roles, _oci_export, input_host, work_host, output_host) =
         resolve_role_host_dirs(&cli, &execution_mode, &workspace_root, &cli.hydrate_paths, &cell_id)?;
     let mut plan = KernelFSHydrationPlan::from_role_paths(input_host, work_host, output_host);
     if cli.allow_network {
@@ -127,6 +129,8 @@ async fn run() -> Result<(), String> {
     )
     .await
     .map_err(|err| err.to_string())?;
+
+    drop(_oci_export);
 
     if proposals.is_empty() {
         return Err("expected >=1 proposal from collected /output files, got 0".into());
@@ -272,7 +276,16 @@ fn resolve_role_host_dirs(
     workspace_root: &str,
     hydrate_paths: &[String],
     cell_id: &str,
-) -> Result<(Option<TempDir>, PathBuf, Option<PathBuf>, PathBuf), String> {
+) -> Result<
+    (
+        Option<TempDir>,
+        Option<OciKernelfsExport>,
+        PathBuf,
+        Option<PathBuf>,
+        PathBuf,
+    ),
+    String,
+> {
     if is_oci_execution_mode(execution_mode) {
         let runtime = resolve_oci_export_vz_runtime_dir(cli)?;
         let input_mounts = input_mounts_from_hydrate_paths(workspace_root, hydrate_paths)?;
@@ -288,7 +301,10 @@ fn resolve_role_host_dirs(
             include_secrets: false,
         })
         .map_err(|err| format!("kernelfs OCI export: {err}"))?;
-        return Ok((None, exported.input, exported.work, exported.output));
+        let input_host = exported.input.clone();
+        let work_host = exported.work.clone();
+        let output_host = exported.output.clone();
+        return Ok((None, Some(exported), input_host, work_host, output_host));
     }
 
     let plan_parent = tempfile::tempdir().map_err(|err| err.to_string())?;
@@ -303,7 +319,7 @@ fn resolve_role_host_dirs(
     } else {
         None
     };
-    Ok((Some(plan_parent), input_host, work_host, output_host))
+    Ok((Some(plan_parent), None, input_host, work_host, output_host))
 }
 
 /// VZ runtime dir for OCI export on macOS; ignored on Linux.
