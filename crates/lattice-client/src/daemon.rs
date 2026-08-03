@@ -1,7 +1,7 @@
-//! Unix-domain socket [`LatticeClient`] for daemon mode.
+//! Daemon-mode [`LatticeClient`] over a transport-neutral IPC stream.
 //!
 //! Connection flow:
-//! 1. Connect to the socket path.
+//! 1. Connect to the platform endpoint (Unix UDS or Windows named pipe).
 //! 2. Exchange a length-delimited handshake (auth token + protocol version).
 //! 3. Spawn a reader task that demultiplexes responses and push events.
 //! 4. Send/receive framed [`lattice_protocol::Envelope`] messages.
@@ -24,9 +24,7 @@ use lattice_protocol::{
     encode_frame, envelope, event, request_envelope, Event, FrameDecoder, Request, Response,
     PROTOCOL_VERSION,
 };
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
-use tokio::net::UnixStream;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf};
 use tokio::sync::{broadcast, mpsc, oneshot, Mutex};
 
 use crate::client::LatticeClient;
@@ -35,12 +33,13 @@ use crate::events::{event_matches_filter, EventFilter, EventStream};
 use crate::handshake::{
     decode_handshake_frame, encode_handshake_frame, HandshakeRequest, HandshakeResponse,
 };
+use crate::transport::{self, DaemonStream};
 
-/// Client connected to a private Unix-domain daemon socket.
+/// Client connected to a private daemon IPC endpoint.
 pub struct DaemonClient {
     socket_path: PathBuf,
     instance_id: String,
-    writer: Mutex<OwnedWriteHalf>,
+    writer: Mutex<WriteHalf<DaemonStream>>,
     pending: Arc<Mutex<HashMap<String, oneshot::Sender<Result<Response, ClientError>>>>>,
     event_tx: broadcast::Sender<Event>,
     agent_event_tx: broadcast::Sender<Event>,
@@ -49,14 +48,17 @@ pub struct DaemonClient {
 
 impl DaemonClient {
     /// Connect to `socket_path`, authenticate with `auth_token`, and verify protocol version.
+    ///
+    /// `socket_path` is a UDS filesystem path on Unix, or a named-pipe path
+    /// (`\\.\pipe\…`) on Windows.
     pub async fn connect(
         socket_path: impl AsRef<Path>,
         auth_token: impl Into<String>,
     ) -> Result<Self, ClientError> {
         let socket_path = socket_path.as_ref().to_path_buf();
-        let mut stream = UnixStream::connect(&socket_path).await?;
+        let mut stream = transport::connect(&socket_path).await?;
         let instance_id = perform_handshake(&mut stream, auth_token.into()).await?;
-        let (reader, writer) = stream.into_split();
+        let (reader, writer) = tokio::io::split(stream);
 
         let pending: Arc<Mutex<HashMap<String, oneshot::Sender<Result<Response, ClientError>>>>> =
             Arc::new(Mutex::new(HashMap::new()));
@@ -82,7 +84,7 @@ impl DaemonClient {
         })
     }
 
-    /// Socket path used for this connection.
+    /// Endpoint path used for this connection (UDS or named pipe).
     pub fn socket_path(&self) -> &Path {
         &self.socket_path
     }
@@ -99,7 +101,7 @@ impl DaemonClient {
 }
 
 fn spawn_reader(
-    mut reader: OwnedReadHalf,
+    mut reader: ReadHalf<DaemonStream>,
     pending: Arc<Mutex<HashMap<String, oneshot::Sender<Result<Response, ClientError>>>>>,
     event_tx: broadcast::Sender<Event>,
     agent_event_tx: broadcast::Sender<Event>,
@@ -148,8 +150,8 @@ fn spawn_reader(
     });
 }
 
-async fn read_envelope(
-    reader: &mut OwnedReadHalf,
+async fn read_envelope<R: AsyncRead + Unpin>(
+    reader: &mut R,
     read_buf: &mut BytesMut,
     decoder: &mut FrameDecoder,
 ) -> Result<lattice_protocol::Envelope, ClientError> {
@@ -169,10 +171,10 @@ async fn read_envelope(
     }
 }
 
-async fn perform_handshake(
-    stream: &mut UnixStream,
-    auth_token: String,
-) -> Result<String, ClientError> {
+async fn perform_handshake<S>(stream: &mut S, auth_token: String) -> Result<String, ClientError>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     let request = HandshakeRequest::new(auth_token);
     let frame = encode_handshake_frame(&request)?;
     stream.write_all(&frame).await?;
@@ -197,9 +199,10 @@ async fn perform_handshake(
     Ok(response.instance_id)
 }
 
-async fn read_handshake_response(
-    stream: &mut UnixStream,
-) -> Result<HandshakeResponse, ClientError> {
+async fn read_handshake_response<S>(stream: &mut S) -> Result<HandshakeResponse, ClientError>
+where
+    S: AsyncRead + Unpin,
+{
     let mut buf = BytesMut::new();
     let mut tmp = [0u8; 4096];
     loop {

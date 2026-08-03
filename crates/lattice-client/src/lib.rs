@@ -10,6 +10,7 @@ mod embedded;
 mod error;
 mod events;
 mod handshake;
+mod transport;
 
 pub use client::LatticeClient;
 pub use daemon::DaemonClient;
@@ -18,6 +19,10 @@ pub use error::ClientError;
 pub use events::{EventFilter, EventStream};
 pub use handshake::{
     decode_handshake_frame, encode_handshake_frame, HandshakeRequest, HandshakeResponse,
+};
+pub use transport::{
+    connect as connect_daemon_transport, default_endpoint, format_unix_socket_endpoint,
+    format_windows_pipe_endpoint, DaemonStream,
 };
 
 // Re-export protocol types callers need for request construction.
