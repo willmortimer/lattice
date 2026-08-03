@@ -27,9 +27,9 @@ voice = []
 voice-embedded = ["voice"]
 # Voice is opt-in so Linux CI and machines without the Swift dylib still build.
 # Dev with fallback (macOS): `cargo tauri dev --features voice-embedded`.
-# Native screen capture (ScreenCaptureKit, macOS only): `--features capture`.
+# Native screen capture (ScreenCaptureKit on macOS; Windows WGC stub): `--features capture`.
 default = []
-# ScreenCaptureKit capture → Capture Inbox ingest + clipboard (macOS).
+# Screen capture → Capture Inbox ingest + clipboard (macOS SCK; Windows stub until WGC).
 capture = []
 
 [dependencies]
@@ -78,7 +78,7 @@ bytes = { workspace = true, optional = true }
 base64.workspace = true
 image = { version = "0.25", default-features = false, features = ["png", "webp"], optional = true }
 arboard = { version = "3", optional = true }
-# Optional: enabled by the `capture` feature (macOS only).
+# Always linked for permission stubs; platform backends enabled via target features.
 lattice-capture-core.workspace = true
 walkdir.workspace = true
 url = "2"
@@ -109,6 +109,7 @@ windows = { version = "0.61", features = [
     "Foundation",
     "Security_Credentials_UI",
 ] }
+lattice-capture-windows = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "macos")'.features]
 lattice-desktop = [
@@ -123,6 +124,13 @@ lattice-desktop = [
     "capture?/dep:image",
     "capture?/dep:arboard",
     "capture?/lattice-capture-macos/link-bridge",
+]
+
+[target.'cfg(target_os = "windows")'.features]
+lattice-desktop = [
+    "capture?/dep:lattice-capture-windows",
+    "capture?/dep:image",
+    "capture?/dep:arboard",
 ]
 
 [dev-dependencies]

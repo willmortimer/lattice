@@ -1,7 +1,8 @@
 //! Screen recording permission Tauri commands (feature `capture`).
 
 use lattice_capture_core::{CapturePermissionProvider, CapturePermissionStatus};
-use lattice_capture_macos::platform_permission_provider;
+
+use super::platform::platform_permission_provider;
 
 #[tauri::command]
 pub fn capture_permission_status() -> Result<CapturePermissionStatus, String> {

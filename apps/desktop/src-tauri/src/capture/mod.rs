@@ -1,8 +1,10 @@
 //! Native screen capture → Capture Inbox ingest (feature `capture`).
 //!
-//! Manual smoke: build/run desktop with `--features capture`, grant Screen Recording
-//! in System Settings, then press **⌘⇧2** or choose **Screen Clip** from the menu/tray.
+//! Manual smoke (macOS): build/run desktop with `--features capture`, grant Screen
+//! Recording in System Settings, then press **⌘⇧2** or choose **Screen Clip** from
+//! the menu/tray. Windows builds select the capture stub until WGC lands.
 
+pub mod platform;
 pub mod shelf;
 
 #[cfg(feature = "capture")]
@@ -15,12 +17,13 @@ use lattice_capture_core::{
     png_bytes_from_capture, CaptureBackend, CaptureDestination, CaptureError, CaptureSource,
     CapturedImage, ScreenshotPlan,
 };
-use lattice_capture_macos::MacOsCaptureBackend;
 use lattice_core::Workspace;
 use lattice_handlers::ingest_captured_image;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+
+use platform::PlatformCaptureBackend;
 
 pub const SCREEN_CLIP_SHORTCUT: &str = "CommandOrControl+Shift+2";
 pub const CAPTURE_INGESTED_EVENT: &str = "capture-ingested";
@@ -89,7 +92,7 @@ fn run_screen_clip_inner(app: &AppHandle) -> Result<(), String> {
     let root = crate::workspace_root::resolve_default_workspace_root()
         .ok_or_else(|| "open a workspace before capturing".to_string())?;
     let inbox_directory = capture_inbox_directory(&root)?;
-    let backend = MacOsCaptureBackend::new();
+    let backend = PlatformCaptureBackend::new();
     let captured = capture_image(&backend)?;
     let png_bytes = png_bytes_from_capture(&captured)?;
     let result = ingest_captured_image(
@@ -134,7 +137,7 @@ fn capture_inbox_directory(root: &str) -> Result<String, String> {
     }
 }
 
-fn capture_image(backend: &MacOsCaptureBackend) -> Result<CapturedImage, String> {
+fn capture_image(backend: &impl CaptureBackend) -> Result<CapturedImage, String> {
     let interactive = ScreenshotPlan {
         source: CaptureSource::InteractiveRegion,
         destination: CaptureDestination::CaptureInbox,

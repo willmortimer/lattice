@@ -1,0 +1,20 @@
+[package]
+name = "lattice-capture-windows"
+description = "Windows Graphics Capture stub for Lattice clipper (WGC lands in a follow-up)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "lattice_capture_windows"
+path = "src/lib.rs"
+
+[dependencies]
+lattice-capture-core.workspace = true
+
+[dev-dependencies]
+lattice-capture-core.workspace = true
+
+[package.metadata.docs.rs]
+targets = ["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"]
