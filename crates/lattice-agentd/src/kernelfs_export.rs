@@ -24,9 +24,10 @@
 //!   output/
 //! ```
 //!
-//! Volume `source` paths are `layout.input`, `layout.work`, and
-//! `layout.output` from [`kernelfs_linux::export_live`]. Callers wire those
-//! into Cell; this module only stages the tree.
+//! Volume `source` paths are the **canonicalized** role dirs from
+//! [`kernelfs_linux::export_live`] (export-tree symlinks under
+//! `{export_parent}/{run_id}/` resolved to the materialized run dirs).
+//! Callers wire those into Cell; this module only stages the tree.
 
 use std::path::PathBuf;
 
@@ -36,11 +37,6 @@ use std::fs;
 use std::path::Path;
 
 use kernelfs::{InputMount, MaterializeError};
-#[cfg(target_os = "linux")]
-use kernelfs::{
-    materialize_with_options, ExecutionManifest, HostPathPolicy, MaterializeOptions, Mounts,
-    SecretHandlePolicy, ROLE_INPUT, ROLE_OUTPUT, ROLE_WORK,
-};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use kernelfs::{
     materialize_with_options, ExecutionManifest, HostPathPolicy, MaterializeOptions, Mounts,
@@ -68,10 +64,18 @@ pub struct OciKernelfsExport {
     /// Linux: `{export_parent}/{run_id}`.
     pub export_root: PathBuf,
     /// Materialized input role dir.
+    ///
+    /// Linux: canonicalized (export symlink resolved). macOS: lexical under
+    /// the VirtioFS share.
     pub input: PathBuf,
     /// Materialized work role dir when [`OciKernelfsExportRequest::with_work`].
+    ///
+    /// Linux: canonicalized when present. macOS: lexical under the share.
     pub work: Option<PathBuf>,
     /// Materialized output role dir.
+    ///
+    /// Linux: canonicalized (export symlink resolved). macOS: lexical under
+    /// the VirtioFS share.
     pub output: PathBuf,
     /// macOS: VirtioFS share root (lexical — do not `canonicalize` for volume
     /// sources). Linux: KernelFS export parent (`/run/kernelfs` or
@@ -224,11 +228,7 @@ fn linux_role_paths(
     export_parent: &Path,
     lease: HeldExportLease,
 ) -> Result<OciKernelfsExport, OciKernelfsExportError> {
-    let input = layout.input.clone();
-    let work = layout.work.clone();
-    let output = layout.output.clone();
-
-    for role_path in [input.as_path(), output.as_path()] {
+    for role_path in [layout.input.as_path(), layout.output.as_path()] {
         if !role_path.is_dir() {
             return Err(OciKernelfsExportError::Export(format!(
                 "exported role dir missing: {}",
@@ -237,23 +237,39 @@ fn linux_role_paths(
         }
     }
 
-    if with_work && !work.is_dir() {
+    if with_work && !layout.work.is_dir() {
         return Err(OciKernelfsExportError::Export(format!(
             "exported work role dir missing: {}",
-            work.display()
+            layout.work.display()
         )));
     }
 
-    ensure_under_parent(export_parent, &input)?;
-    ensure_under_parent(export_parent, &output)?;
+    ensure_under_parent(export_parent, &layout.input)?;
+    ensure_under_parent(export_parent, &layout.output)?;
     if with_work {
-        ensure_under_parent(export_parent, &work)?;
+        ensure_under_parent(export_parent, &layout.work)?;
+    }
+
+    // Resolve export-tree symlinks so gVisor bind + host collect see real dirs.
+    let input = canonicalize(&layout.input)?;
+    let output = canonicalize(&layout.output)?;
+    let work = if with_work {
+        Some(canonicalize(&layout.work)?)
+    } else {
+        None
+    };
+
+    let export_parent_canon = canonicalize(export_parent)?;
+    ensure_under_parent(&export_parent_canon, &input)?;
+    ensure_under_parent(&export_parent_canon, &output)?;
+    if let Some(ref work_path) = work {
+        ensure_under_parent(&export_parent_canon, work_path)?;
     }
 
     Ok(OciKernelfsExport {
         export_root: layout.export_root.clone(),
         input,
-        work: if with_work { Some(work) } else { None },
+        work,
         output,
         agent_share: export_parent.to_path_buf(),
         _lease: lease,
@@ -832,6 +848,17 @@ mod tests {
         let err = ensure_under_parent(&share, Path::new("/etc")).expect_err("escape");
         assert!(matches!(err, OciKernelfsExportError::Export(_)));
     }
+
+    #[test]
+    fn canonicalize_missing_path_returns_io() {
+        let missing = PathBuf::from("/tmp/lattice-kernelfs-export-missing-canon-xyz");
+        let _ = fs::remove_dir_all(&missing);
+        let err = canonicalize(&missing).expect_err("missing");
+        match err {
+            OciKernelfsExportError::Io { path, .. } => assert_eq!(path, missing),
+            other => panic!("expected Io error, got {other:?}"),
+        }
+    }
 }
 
 #[cfg(all(test, target_os = "linux"))]
@@ -846,6 +873,10 @@ mod tests_linux {
 
     fn nested_role(export_parent: &Path, run_id: &str, role: &str) -> PathBuf {
         export_parent.join(run_id).join(role)
+    }
+
+    fn run_role(export_parent: &Path, run_id: &str, role: &str) -> PathBuf {
+        export_parent.join("runs").join(run_id).join(role)
     }
 
     /// Isolate `$XDG_RUNTIME_DIR` so tests do not touch `/run/kernelfs`.
@@ -885,24 +916,77 @@ mod tests_linux {
             .expect("export");
 
             assert_eq!(exported.agent_share, export_parent);
-            assert_eq!(exported.export_root, export_parent.join(run_id));
-            assert_eq!(
-                exported.input,
-                nested_role(&export_parent, run_id, ROLE_INPUT)
-            );
-            assert_eq!(
-                exported.output,
-                nested_role(&export_parent, run_id, ROLE_OUTPUT)
-            );
+            assert_eq!(exported.export_root, fs::canonicalize(export_parent.join(run_id)).expect("export root"));
+            let expected_input =
+                fs::canonicalize(run_role(&export_parent, run_id, ROLE_INPUT)).expect("input");
+            let expected_output =
+                fs::canonicalize(run_role(&export_parent, run_id, ROLE_OUTPUT)).expect("output");
+            assert_eq!(exported.input, expected_input);
+            assert_eq!(exported.output, expected_output);
             assert!(exported.work.is_none());
 
             assert!(exported.input.is_dir());
             assert!(exported.output.is_dir());
-            assert!(exported.input.starts_with(&export_parent));
-            assert!(exported.output.starts_with(&export_parent));
+            assert!(exported.input.starts_with(fs::canonicalize(&export_parent).expect("parent")));
+            assert!(exported.output.starts_with(fs::canonicalize(&export_parent).expect("parent")));
 
             let via_export = fs::read(exported.input.join("hello.txt")).expect("read via export");
             assert_eq!(via_export, b"hello from hydrate\n");
+        });
+    }
+
+    #[test]
+    fn export_role_paths_canonicalize_export_symlinks() {
+        with_xdg_runtime(|xdg| {
+            let sources = tempfile::tempdir().expect("sources");
+            let host_input = write_input(sources.path(), "hello.txt", b"canon\n");
+            let run_id = "run_linux_canon";
+            let export_parent = xdg.join("kernelfs");
+
+            let exported = export_oci_roles_under_agent_share(&OciKernelfsExportRequest {
+                vz_runtime_dir: PathBuf::from("/unused"),
+                cell_id: "unused".into(),
+                run_id: run_id.into(),
+                input_mounts: vec![InputMount {
+                    host_path: host_input,
+                    guest_path: "hello.txt".into(),
+                }],
+                host_path_roots: vec![sources.path().to_path_buf()],
+                with_work: true,
+                include_secrets: false,
+            })
+            .expect("export");
+
+            let symlink_input = nested_role(&export_parent, run_id, ROLE_INPUT);
+            let symlink_work = nested_role(&export_parent, run_id, ROLE_WORK);
+            let symlink_output = nested_role(&export_parent, run_id, ROLE_OUTPUT);
+            assert!(
+                symlink_input
+                    .symlink_metadata()
+                    .expect("input meta")
+                    .file_type()
+                    .is_symlink(),
+                "export tree should stage role symlinks"
+            );
+            assert_ne!(exported.input, symlink_input);
+            assert_eq!(
+                exported.input,
+                fs::canonicalize(&symlink_input).expect("canonical input")
+            );
+            assert_eq!(
+                exported.work.expect("work"),
+                fs::canonicalize(&symlink_work).expect("canonical work")
+            );
+            assert_eq!(
+                exported.output,
+                fs::canonicalize(&symlink_output).expect("canonical output")
+            );
+            assert!(exported.input.starts_with(
+                fs::canonicalize(export_parent.join("runs")).expect("runs parent")
+            ));
+            assert!(exported.output.starts_with(
+                fs::canonicalize(export_parent.join("runs")).expect("runs parent")
+            ));
         });
     }
 
@@ -929,9 +1013,12 @@ mod tests_linux {
             .expect("export");
 
             let work = exported.work.expect("work path");
-            assert_eq!(work, nested_role(&export_parent, run_id, ROLE_WORK));
+            assert_eq!(
+                work,
+                fs::canonicalize(run_role(&export_parent, run_id, ROLE_WORK)).expect("work")
+            );
             assert!(work.is_dir());
-            assert!(work.starts_with(&export_parent));
+            assert!(work.starts_with(fs::canonicalize(&export_parent).expect("parent")));
         });
     }
 
@@ -975,6 +1062,17 @@ mod tests_linux {
                 b"run-b\n"
             );
         });
+    }
+
+    #[test]
+    fn canonicalize_missing_role_path_returns_io() {
+        let missing = PathBuf::from("/tmp/lattice-kernelfs-export-missing-role-xyz");
+        let _ = fs::remove_dir_all(&missing);
+        let err = canonicalize(&missing).expect_err("missing");
+        match err {
+            OciKernelfsExportError::Io { path, .. } => assert_eq!(path, missing),
+            other => panic!("expected Io error, got {other:?}"),
+        }
     }
 }
 
