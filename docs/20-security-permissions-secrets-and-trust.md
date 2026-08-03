@@ -126,6 +126,49 @@ credentials:
   key: production-postgres-readonly
 ```
 
+### OS credential store (desktop production)
+
+OAuth, cloud bearer, and BYO API keys persist through the Rust
+[`keyring`](https://github.com/hwchen/keyring-rs) crate. On Windows this maps to
+**Credential Manager** (Generic credentials); on macOS to Keychain (App Group
+SecItem when the desktop bundle has entitlements, otherwise legacy keyring); on
+Linux to Secret Service when available.
+
+Handlers call [`production_token_store`](../../crates/lattice-connectors/src/credentials/mod.rs)
+once at startup. A dedicated **probe** account (never the user-session key) tests
+write/delete; failure falls back to in-process [`MemoryTokenStore`](../../crates/lattice-connectors/src/credentials/mod.rs)
+for CI/sandbox only.
+
+| Service (target) | Account (user name) | Purpose |
+| --- | --- | --- |
+| `lattice.github` | `lattice.github.user` | GitHub OAuth user token |
+| `lattice.github` | `lattice.github.{binding_id}` | Per-repo binding token |
+| `lattice.github` | `lattice.github.probe` | Startup keyring probe (ephemeral) |
+| `lattice.gitlab` | `lattice.gitlab.user` | GitLab OAuth user token |
+| `lattice.gitlab` | `lattice.gitlab.{binding_id}` | Per-project binding token |
+| `lattice.gitlab` | `lattice.gitlab.probe` | Startup keyring probe (ephemeral) |
+| `lattice.cloud` | `lattice.cloud.user` | Lattice cloud bearer session |
+| `lattice.cloud` | `lattice.cloud.probe` | Startup keyring probe (ephemeral) |
+| `lattice.ai.openai` | `api-key` | BYO OpenAI API key (desktop) |
+
+Additional connector providers use `lattice.{provider}` / `lattice.{provider}.user`
+via `token_service_for` / `user_token_key_for` in `lattice-connectors`.
+
+Values are JSON-serialized [`TokenMaterial`](../../crates/lattice-connectors/src/credentials/mod.rs)
+(access token, optional refresh, expiry, type).
+
+**Windows manual smoke** (release build, interactive session):
+
+1. Sign in to Lattice cloud (or connect GitHub/GitLab) once.
+2. Open **Credential Manager → Windows Credentials** and confirm a Generic
+   credential whose target matches `lattice.cloud` / `lattice.github` / etc.
+3. Quit and relaunch the desktop app; session should restore without re-auth.
+4. Run `cargo test -p lattice-connectors keychain_round_trip_when_writable`
+   on the same machine to confirm the probe passes (skips when keyring is
+   unavailable, e.g. headless CI).
+
+See also [environment.md](dev/environment.md).
+
 ## Remote databases
 
 - Read-only default.

@@ -11,6 +11,8 @@ use crate::types::CloudSessionStatus;
 pub const CLOUD_TOKEN_SERVICE: &str = "lattice.cloud";
 /// Keychain account for the desktop cloud bearer token.
 pub const CLOUD_USER_TOKEN_KEY: &str = "lattice.cloud.user";
+/// Ephemeral probe account; must not overlap [`CLOUD_USER_TOKEN_KEY`].
+pub const CLOUD_PROBE_KEY: &str = "lattice.cloud.probe";
 
 pub trait CloudSessionStore: Send + Sync {
     fn load_token(&self) -> Result<Option<String>>;
@@ -265,6 +267,8 @@ mod tests {
     fn keychain_store_uses_cloud_service_constants() {
         assert_eq!(CLOUD_TOKEN_SERVICE, "lattice.cloud");
         assert_eq!(CLOUD_USER_TOKEN_KEY, "lattice.cloud.user");
+        assert_eq!(CLOUD_PROBE_KEY, "lattice.cloud.probe");
+        assert_ne!(CLOUD_PROBE_KEY, CLOUD_USER_TOKEN_KEY);
         let _store = KeychainCloudSessionStore::new();
     }
 

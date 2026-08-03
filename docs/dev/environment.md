@@ -35,6 +35,28 @@ dev shell (`use flake`) and, when present, a gitignored `.env` via
 | `RUST_BACKTRACE` | your shell | n/a (`1` or `full`) | Backtraces on Rust panics in CLI/desktop dev | No | Works today (std behavior) |
 | `RUST_LOG` | your shell | n/a (e.g. `debug`) | Log-level filter | No | **Not yet wired** — takes effect once tracing/env-logger lands (observability workstream) |
 
+## OS credential store (tokens)
+
+Desktop production builds persist OAuth/cloud/API tokens via the OS credential
+store (`keyring` → Windows Credential Manager, macOS Keychain, Linux Secret
+Service). Service and account names are listed in
+[20-security-permissions-secrets-and-trust.md](../20-security-permissions-secrets-and-trust.md#os-credential-store-desktop-production).
+
+**Windows smoke checklist** (manual; not run in CI):
+
+1. Install or run a **release** desktop build (debug may use isolated dev home).
+2. Sign in to cloud or connect GitHub/GitLab.
+3. In **Credential Manager → Windows Credentials**, verify Generic credentials
+   for `lattice.cloud`, `lattice.github`, or `lattice.gitlab` (target name
+   includes service + account).
+4. Restart the app; tokens should survive without silent fallback to memory.
+5. Optional: `cargo test -p lattice-connectors keychain_round_trip_when_writable`
+   on the same machine (passes when Credential Manager is writable; skips in
+   sandbox/headless environments).
+
+Automated coverage: `cargo test -p lattice-connectors` (memory + conditional
+keyring round-trip), `cargo test -p lattice-cloud-client`, `cargo test -p lattice-handlers --lib`.
+
 ## Local macOS signing (`desktop-install`)
 
 Used by `nxr desktop-install` / `nix run .#desktop-install`. Prefer

@@ -2,10 +2,13 @@
 
 use std::sync::OnceLock;
 
+use lattice_connectors::probe_token_store_writable;
+
 use lattice_cloud_client::{
     resolve_cloud_bearer, CloudApiClient, CloudSessionStatus, CloudSessionStore, HttpCloudClient,
     KeychainCloudSessionStore, MemoryCloudSessionStore, PreferencesView, cloud_session_status,
     default_client, sign_in, sign_in_with_apple, sign_in_with_desktop_handoff, sign_out,
+    CLOUD_PROBE_KEY, CLOUD_TOKEN_SERVICE,
 };
 
 fn session_store() -> &'static dyn CloudSessionStore {
@@ -14,14 +17,7 @@ fn session_store() -> &'static dyn CloudSessionStore {
     static USE_MEMORY: OnceLock<bool> = OnceLock::new();
 
     let use_memory = *USE_MEMORY.get_or_init(|| {
-        let store = KeychainCloudSessionStore::new();
-        match store.save_token("probe") {
-            Ok(()) => {
-                let _ = store.clear_token();
-                false
-            }
-            Err(_) => true,
-        }
+        !probe_token_store_writable(CLOUD_TOKEN_SERVICE, CLOUD_PROBE_KEY)
     });
     if use_memory {
         MEMORY.get_or_init(MemoryCloudSessionStore::new)

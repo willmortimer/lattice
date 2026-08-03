@@ -10,12 +10,12 @@ use std::time::Duration;
 
 use lattice_connectors::{
     connect_gitlab_repo, disconnect_gitlab_repo, list_gitlab_bindings, list_gitlab_checkout_tree,
-    list_gitlab_projects_for_token, oauth_begin, oauth_finish_http, production_token_store,
-    read_gitlab_checkout_file, refresh_gitlab_repo, CheckoutEntry, CheckoutFile,
-    ConnectGitLabRepoInput, ConnectedGitLabRepoSummary, GitLabProjectSummary, HttpGitLabApiClient,
-    MemoryTokenStore, OAuthClientConfig, OAuthRedirectMode, OAuthSessionStart, TokenMaterial,
-    TokenStore, GITLAB_AUTHORIZE_URL, GITLAB_OAUTH_TOKEN_URL, GITLAB_TOKEN_SERVICE,
-    GITLAB_USER_TOKEN_KEY, DEFAULT_OAUTH_LOOPBACK_PORT,
+    list_gitlab_projects_for_token, oauth_begin, oauth_finish_http, probe_token_store_writable,
+    production_token_store, read_gitlab_checkout_file, refresh_gitlab_repo, CheckoutEntry,
+    CheckoutFile, ConnectGitLabRepoInput, ConnectedGitLabRepoSummary, GitLabProjectSummary,
+    HttpGitLabApiClient, MemoryTokenStore, OAuthClientConfig, OAuthRedirectMode, OAuthSessionStart,
+    TokenStore, GITLAB_AUTHORIZE_URL, GITLAB_OAUTH_TOKEN_URL, GITLAB_PROBE_KEY,
+    GITLAB_TOKEN_SERVICE, GITLAB_USER_TOKEN_KEY, DEFAULT_OAUTH_LOOPBACK_PORT,
 };
 use serde::{Deserialize, Serialize};
 
@@ -25,23 +25,7 @@ fn token_store() -> &'static dyn TokenStore {
     static USE_MEMORY: OnceLock<bool> = OnceLock::new();
 
     let use_memory = *USE_MEMORY.get_or_init(|| {
-        let store = production_token_store(GITLAB_TOKEN_SERVICE);
-        let probe_key = "lattice.gitlab.probe";
-        match store.set(
-            probe_key,
-            &TokenMaterial {
-                access_token: "probe".into(),
-                refresh_token: None,
-                expires_in: None,
-                token_type: None,
-            },
-        ) {
-            Ok(()) => {
-                let _ = store.delete(probe_key);
-                false
-            }
-            Err(_) => true,
-        }
+        !probe_token_store_writable(GITLAB_TOKEN_SERVICE, GITLAB_PROBE_KEY)
     });
     if use_memory {
         MEMORY.get_or_init(MemoryTokenStore::new)
