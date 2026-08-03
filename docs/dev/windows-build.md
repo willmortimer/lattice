@@ -9,12 +9,14 @@ the near-term goal.
 From the Lattice repo (or umbrella with `--flake ./lattice`):
 
 ```sh
-# Probe + rustup ensure + headless cargo check (no Tauri)
+# Probe + rustup ensure + headless cargo check (includes latticed + lattice-client)
 nxr task windows-cargo-check
 # or:
 ./scripts/winbuild/remote-windows-check.sh
 
-# Intentionally fail to surface latticed IPC compile errors:
+# Release build latticed + lattice-client on Windows MSVC:
+nxr task windows-latticed-check
+# or:
 WINBUILD_TASKS='probe ensure-toolchain cargo-build-latticed' \
   ./scripts/winbuild/remote-windows-check.sh
 ```
@@ -26,6 +28,7 @@ On nixdev itself (already synced):
 winbuild.exe run probe --file 'D:\lattice\.winbuild.json'
 winbuild.exe run ensure-toolchain --file 'D:\lattice\.winbuild.json'
 winbuild.exe run cargo-check-core --file 'D:\lattice\.winbuild.json'
+winbuild.exe run cargo-build-latticed --file 'D:\lattice\.winbuild.json'
 ```
 
 | Env | Default | Purpose |
@@ -37,32 +40,11 @@ winbuild.exe run cargo-check-core --file 'D:\lattice\.winbuild.json'
 
 ## Current blockers (ranked)
 
-### P0 — Daemon IPC is Unix-domain only
-
-`apps/daemon/src/server.rs` still uses `tokio::net::{UnixListener,UnixStream}`
-with no `cfg(windows)` path. The client crate now connects via a
-transport-neutral layer (`crates/lattice-client/src/transport.rs`); Windows
-desktop still cannot talk to `latticed` until the daemon server accepts named
-pipes.
-
-**Direction (locked for beta):**
-
-1. Introduce a thin framed transport over `AsyncRead + AsyncWrite` shared by
-   client + server (handshake + length-delimited envelopes stay unchanged).
-2. **Windows only:** named pipe `\\.\pipe\lattice-latticed-<user>` (from
-   `USERNAME` / equivalent). No TCP interim.
-3. Keep Unix domain sockets on macOS/Linux
-   (`…/Lattice/run/latticed.sock`).
-
-Touched surfaces: `apps/daemon/src/server.rs`, `crates/lattice-client/src/daemon.rs`,
-`apps/daemon/src/spawn.rs`, desktop `daemon_session` connect/spawn, default
-endpoint path helpers.
-
 ### P0 — No Windows Rust toolchain on PATH (host has MSVC)
 
 **Update (probe 2026-08-03):** rustc/cargo/rustup **already present** under
 `C:\Users\Will Mortimer\.cargo\bin`; MSVC BuildTools + `cl.exe` present; Node/pnpm
-present. DevDrive `D:` ~90 GiB free.
+present. DevDrive `D:` ~90 GiB free.
 
 `ensure-toolchain` still installs rustup if missing and now installs **protoc**
 (needed by `lance` / `prost-build`) under `%LOCALAPPDATA%\NixPlane\protoc`.
@@ -71,6 +53,12 @@ present. DevDrive `D:` ~90 GiB free.
 
 `cargo check` of headless crates pulls `lance` → build scripts require `protoc`.
 Fixed by `ensure-toolchain` + `PROTOC` in `cargo-check-core.ps1`.
+
+### Resolved — Daemon IPC (named pipes on Windows)
+
+Named-pipe transport landed in T2 (`apps/daemon` + `lattice-client`). Winbuild
+`cargo-check-core` and `cargo-build-latticed` now include `latticed` and
+`lattice-client` and are expected to succeed on Windows MSVC.
 
 ### P1 — Tauri / NSIS packaging not wired
 
