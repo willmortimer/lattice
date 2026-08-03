@@ -31,6 +31,10 @@ mod schedule;
 mod scheduler_api;
 mod server;
 mod spawn;
+#[cfg(target_os = "macos")]
+mod voice_host;
+#[cfg(not(target_os = "macos"))]
+#[path = "voice_host_stub.rs"]
 mod voice_host;
 mod workspace_api;
 mod workspace_registry;

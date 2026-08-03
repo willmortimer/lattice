@@ -9,13 +9,13 @@ use lattice_embedding::{
     EmbeddingVector,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::UnixStream;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::error::EmbedHostError;
 use crate::framing::{encode_frame, try_decode_frame};
 use crate::spec::embedding_spec_from_proto;
+use crate::transport::{self, EmbedHostStream};
 use crate::{
     envelope, request, request_envelope, CancelRequest, EmbedDocument, EmbedDocumentsRequest,
     EmbedQueryRequest as ProtoEmbedQueryRequest, HealthRequest, InstallModelRequest,
@@ -34,21 +34,21 @@ enum ClientLane {
     Index,
 }
 
-/// Client that speaks the embed-host UDS protocol.
+/// Client that speaks the embed-host IPC protocol.
 ///
-/// Opens two connections to the same socket so document indexing cannot block
+/// Opens two connections to the same endpoint so document indexing cannot block
 /// query/control RPCs (the server already accepts concurrent connections).
 pub struct EmbedHostClient {
-    query_stream: Mutex<UnixStream>,
-    index_stream: Mutex<UnixStream>,
+    query_stream: Mutex<EmbedHostStream>,
+    index_stream: Mutex<EmbedHostStream>,
 }
 
 impl EmbedHostClient {
-    /// Connect to a running embed-host socket.
+    /// Connect to a running embed-host endpoint (UDS or Windows named pipe).
     pub async fn connect(socket_path: impl AsRef<Path>) -> Result<Self, EmbedHostError> {
         let path = socket_path.as_ref();
-        let query_stream = UnixStream::connect(path).await?;
-        let index_stream = UnixStream::connect(path).await?;
+        let query_stream = transport::connect(path).await?;
+        let index_stream = transport::connect(path).await?;
         Ok(Self {
             query_stream: Mutex::new(query_stream),
             index_stream: Mutex::new(index_stream),

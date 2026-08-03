@@ -7,8 +7,7 @@ use bytes::BytesMut;
 use lattice_embedding::{
     EmbedDocumentRequest, EmbedQueryRequest, EmbeddingInstallState, EmbeddingSpecification,
 };
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{UnixListener, UnixStream};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::Mutex;
 use tracing::{info, warn};
 use uuid::Uuid;
@@ -79,37 +78,75 @@ impl HostState {
     }
 }
 
-/// Serve embed-host RPCs on a Unix-domain socket until the listener fails.
+/// Serve embed-host RPCs until the listener fails.
+///
+/// Unix: UDS. Windows: named pipe (`ServerOptions` multi-instance).
 pub async fn run_server(state: Arc<HostState>) -> Result<(), EmbedHostError> {
-    if let Some(parent) = state.config.socket_path.parent() {
-        tokio::fs::create_dir_all(parent).await?;
-    }
-    if state.config.socket_path.exists() {
-        tokio::fs::remove_file(&state.config.socket_path).await?;
+    #[cfg(unix)]
+    {
+        if let Some(parent) = state.config.socket_path.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        if state.config.socket_path.exists() {
+            tokio::fs::remove_file(&state.config.socket_path).await?;
+        }
+
+        use tokio::net::UnixListener;
+        let listener = UnixListener::bind(&state.config.socket_path)?;
+        info!(
+            socket = %state.config.socket_path.display(),
+            backend = state.backend_name(),
+            "embed-host listening"
+        );
+
+        loop {
+            let (stream, _) = listener.accept().await?;
+            let state = Arc::clone(&state);
+            tokio::spawn(async move {
+                if let Err(error) = handle_connection(state, stream).await {
+                    warn!(error = %error, "embed-host connection closed with error");
+                }
+            });
+        }
     }
 
-    let listener = UnixListener::bind(&state.config.socket_path)?;
-    info!(
-        socket = %state.config.socket_path.display(),
-        backend = state.backend_name(),
-        "embed-host listening"
-    );
+    #[cfg(windows)]
+    {
+        use tokio::net::windows::named_pipe::ServerOptions;
 
-    loop {
-        let (stream, _) = listener.accept().await?;
-        let state = Arc::clone(&state);
-        tokio::spawn(async move {
-            if let Err(error) = handle_connection(state, stream).await {
-                warn!(error = %error, "embed-host connection closed with error");
-            }
-        });
+        let pipe_path = state.config.socket_path.clone();
+        let mut server = ServerOptions::new()
+            .first_pipe_instance(true)
+            .create(&pipe_path)?;
+        info!(
+            socket = %pipe_path.display(),
+            backend = state.backend_name(),
+            "embed-host listening"
+        );
+
+        loop {
+            server.connect().await?;
+            let connected = std::mem::replace(
+                &mut server,
+                ServerOptions::new().create(&pipe_path)?,
+            );
+            let state = Arc::clone(&state);
+            tokio::spawn(async move {
+                if let Err(error) = handle_connection(state, connected).await {
+                    warn!(error = %error, "embed-host connection closed with error");
+                }
+            });
+        }
     }
 }
 
-async fn handle_connection(
+async fn handle_connection<S>(
     state: Arc<HostState>,
-    mut stream: UnixStream,
-) -> Result<(), EmbedHostError> {
+    mut stream: S,
+) -> Result<(), EmbedHostError>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     let mut buffer = BytesMut::with_capacity(4096);
     let mut read_buf = [0u8; 8192];
 

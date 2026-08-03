@@ -12,6 +12,7 @@ mod framing;
 mod install;
 mod server;
 mod spec;
+mod transport;
 
 pub use backend::BackendKind;
 pub use client::{
