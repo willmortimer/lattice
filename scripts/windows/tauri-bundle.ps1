@@ -40,11 +40,12 @@ if (-not (Test-Path "node_modules")) {
   }
 }
 
-Write-Host "tauri-bundle: tauri build --no-bundle (windows config, no voice)"
+Write-Host "tauri-bundle: tauri build --no-bundle (windows config, capture, no voice)"
 Push-Location "apps/desktop"
 try {
   $code = Invoke-LatticePnpm @(
     "exec", "tauri", "build", "--no-bundle",
+    "--features", "capture",
     "--config", $tauriConfig,
     "--target", $script:LatticeWindowsTriple
   )
@@ -64,6 +65,7 @@ Push-Location "apps/desktop"
 try {
   $code = Invoke-LatticePnpm @(
     "exec", "tauri", "bundle", "--bundles", "nsis",
+    "--features", "capture",
     "--config", $tauriConfig,
     "--target", $script:LatticeWindowsTriple
   )

@@ -1,9 +1,9 @@
 //! Native screen capture → Capture Inbox ingest (feature `capture`).
 //!
-//! Manual smoke (macOS): build/run desktop with `--features capture`, grant Screen
-//! Recording in System Settings, then press **⌘⇧2** or choose **Screen Clip** from
-//! the menu/tray. Windows builds select the WGC backend via
-//! `lattice-capture-windows`.
+//! Manual smoke: build/run desktop with `--features capture`, then press
+//! **Ctrl+Shift+2** (Windows) or **⌘⇧2** (macOS), or choose **Screen Clip** from
+//! the menu/tray. macOS: grant Screen Recording in System Settings. Windows: WGC via
+//! `lattice-capture-windows` (Graphics capture privacy when applicable).
 
 pub mod platform;
 pub mod shelf;
