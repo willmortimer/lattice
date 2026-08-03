@@ -2,6 +2,11 @@ import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction 
 
 import { inBrowser } from "../demo";
 import {
+  backupResourceToCloud,
+  isCloudBackupResource,
+  openCloudAccountSettings,
+} from "../lib/cloudBackup";
+import {
   createFolder,
   deleteResources,
   duplicateResource,
@@ -12,6 +17,7 @@ import {
 } from "../lib/nativeMenus";
 import { fileTimestamp } from "../lib/timestamp";
 import { joinWorkspacePath, resourcePathExists, validateMoveResources } from "../lib/treeOps";
+import type { ResourceStat } from "../lib/resourceStat";
 import type { Resource, WorkspaceSnapshot } from "../types";
 
 function pageFileName(raw: string): string {
@@ -46,6 +52,7 @@ export interface TreeActionsOptions {
   ) => Promise<void>;
   requestTreeRename: (resource: Resource) => void;
   handleOpenExternally: (resource: Resource) => Promise<void>;
+  recordAuthorityStat: (stat: ResourceStat) => void;
 }
 
 export function useTreeActionsController(options: TreeActionsOptions) {
@@ -68,6 +75,7 @@ export function useTreeActionsController(options: TreeActionsOptions) {
     createAndOpenPage,
     requestTreeRename,
     handleOpenExternally,
+    recordAuthorityStat,
   } = options;
 
   const copyPath = useCallback(async (path: string) => {
@@ -236,7 +244,41 @@ export function useTreeActionsController(options: TreeActionsOptions) {
     }
   }, [refreshResources, setBusy, setError, setRevealPath, setSnapshot, snapshot, snapshotRef]);
 
+  const handleCloudBackupResource = useCallback(async (resource: Resource) => {
+    if (!isCloudBackupResource(resource.kind)) return;
+    const workspace = snapshotRef.current ?? snapshot;
+    if (!workspace) return;
+
+    setBusy(true);
+    try {
+      const result = await backupResourceToCloud(workspace.root, resource.path);
+      if (!result.ok) {
+        if (result.reason === "signed_out") {
+          openCloudAccountSettings();
+        }
+        setError(result.message);
+        return;
+      }
+      recordAuthorityStat(result.stat);
+      setStatusToast(`Backed up ${resource.path} to Lattice Cloud`);
+      window.setTimeout(() => setStatusToast(null), 3200);
+      setError(null);
+    } finally {
+      setBusy(false);
+    }
+  }, [
+    recordAuthorityStat,
+    setBusy,
+    setError,
+    setStatusToast,
+    snapshot,
+    snapshotRef,
+  ]);
+
   const handleTreeResourceContextMenu = useCallback((resource: Resource) => {
+    const cloudBackup = isCloudBackupResource(resource.kind) && !inBrowser
+      ? () => void handleCloudBackupResource(resource)
+      : undefined;
     void showNativeTreeResourceMenu({
       open: () => void handleSelect(resource),
       inspect: () => {
@@ -244,6 +286,7 @@ export function useTreeActionsController(options: TreeActionsOptions) {
         setInspectorOpen(true);
       },
       openExternally: !inBrowser ? () => void handleOpenExternally(resource) : undefined,
+      backUpToCloud: cloudBackup,
       copyPath: () => void copyPath(resource.path),
       rename: () => requestTreeRename(resource),
       duplicate: () => void handleDuplicateResource(resource),
@@ -251,6 +294,7 @@ export function useTreeActionsController(options: TreeActionsOptions) {
     });
   }, [
     copyPath,
+    handleCloudBackupResource,
     handleDeleteResource,
     handleDuplicateResource,
     handleOpenExternally,
@@ -281,6 +325,7 @@ export function useTreeActionsController(options: TreeActionsOptions) {
     handleDuplicateResource,
     handleNewPageInFolder,
     handleNewFolderInFolder,
+    handleCloudBackupResource,
     copyPath,
   };
 }

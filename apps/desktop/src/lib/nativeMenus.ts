@@ -38,6 +38,7 @@ export interface TreeResourceMenuActions {
   open: () => void;
   inspect: () => void;
   openExternally?: () => void;
+  backUpToCloud?: () => void;
   copyPath: () => void;
   rename: () => void;
   duplicate: () => void;
@@ -75,6 +76,12 @@ export async function showNativeTreeResourceMenu(actions: TreeResourceMenuAction
         ? [
             { item: "Separator" as const },
             { text: "Open Externally", action: actions.openExternally },
+          ]
+        : []),
+      ...(actions.backUpToCloud
+        ? [
+            { item: "Separator" as const },
+            { text: "Back up to Lattice Cloud", action: actions.backUpToCloud },
           ]
         : []),
       { item: "Separator" },
