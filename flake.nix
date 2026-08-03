@@ -101,6 +101,8 @@
             latticed = "Build and run local latticed (debug)";
             agentd = "Build and run local lattice-agentd (debug)";
             ok = "No-op success (nxr task DAG join)";
+            windows-cargo-check = "Mac→nixdev winbuild: probe + rustup + headless cargo check";
+            windows-latticed-check = "Mac→nixdev winbuild: latticed release build";
           };
 
           scripts = {
@@ -302,6 +304,13 @@
             '';
             ok = ''
               true
+            '';
+            windows-cargo-check = ''
+              exec bash scripts/winbuild/remote-windows-check.sh "$@"
+            '';
+            windows-latticed-check = ''
+              export WINBUILD_TASKS="''${WINBUILD_TASKS:-probe ensure-toolchain cargo-build-latticed}"
+              exec bash scripts/winbuild/remote-windows-check.sh "$@"
             '';
           };
 
@@ -845,6 +854,32 @@
                     "pnpm-install"
                   ];
                 };
+              };
+              windows-cargo-check = {
+                description = "Windows headless cargo check via nixdev winbuild";
+                app = "windows-cargo-check";
+                category = "validation";
+                paths = [
+                  "Cargo.toml"
+                  "Cargo.lock"
+                  "apps/**/*.rs"
+                  "crates/**/*.rs"
+                  "scripts/windows/**"
+                  "scripts/winbuild/**"
+                  ".winbuild.json"
+                ];
+              };
+              windows-latticed-check = {
+                description = "Windows latticed release build via nixdev winbuild";
+                app = "windows-latticed-check";
+                category = "validation";
+                paths = [
+                  "apps/daemon/**"
+                  "crates/lattice-client/**"
+                  "scripts/windows/**"
+                  "scripts/winbuild/**"
+                  ".winbuild.json"
+                ];
               };
               desktop-ui-build = {
                 description = "Build desktop frontend (Vite)";

@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "tasks": {
+    "probe": {
+      "description": "Report Windows toolchain + DevDrive readiness for Lattice",
+      "workingDirectory": ".",
+      "runner": "powershell",
+      "script": "scripts\\windows\\probe.ps1",
+      "timeoutSeconds": 120
+    },
+    "ensure-toolchain": {
+      "description": "Install rustup MSVC toolchain if missing; print cargo/rustc versions",
+      "workingDirectory": ".",
+      "runner": "powershell",
+      "script": "scripts\\windows\\ensure-toolchain.ps1",
+      "timeoutSeconds": 900,
+      "requires": ["powershell.exe"]
+    },
+    "cargo-check-core": {
+      "description": "cargo check headless Lattice crates on Windows (no Tauri)",
+      "workingDirectory": ".",
+      "runner": "powershell",
+      "script": "scripts\\windows\\cargo-check-core.ps1",
+      "timeoutSeconds": 3600,
+      "requires": ["cargo.exe"]
+    },
+    "cargo-build-latticed": {
+      "description": "cargo build -p latticed --release (+ lattice-client) on Windows MSVC",
+      "workingDirectory": ".",
+      "runner": "powershell",
+      "script": "scripts\\windows\\cargo-build-latticed.ps1",
+      "timeoutSeconds": 3600,
+      "requires": ["cargo.exe"]
+    }
+  }
+}
