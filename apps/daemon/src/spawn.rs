@@ -122,11 +122,15 @@ impl Drop for SpawnedDaemon {
 
 /// Spawn `latticed`, wait until a client can connect and health-check.
 pub async fn spawn_latticed(opts: SpawnOptions) -> Result<SpawnedDaemon> {
-    if let Some(parent) = opts.socket_path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    if opts.socket_path.exists() {
-        std::fs::remove_file(&opts.socket_path)?;
+    // UDS paths need a parent dir and stale-socket cleanup; named pipes do not.
+    #[cfg(unix)]
+    {
+        if let Some(parent) = opts.socket_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        if opts.socket_path.exists() {
+            std::fs::remove_file(&opts.socket_path)?;
+        }
     }
 
     let prefs = DaemonPreferences::load();
@@ -137,7 +141,7 @@ pub async fn spawn_latticed(opts: SpawnOptions) -> Result<SpawnedDaemon> {
         .idle_shutdown_secs
         .unwrap_or_else(|| prefs.idle_shutdown_timeout.as_secs().max(1));
 
-    let stderr_path = opts.socket_path.with_extension("spawn.stderr");
+    let stderr_path = spawn_stderr_path(&opts.socket_path);
     let stderr_file = std::fs::File::create(&stderr_path).map_err(|err| {
         Error::Spawn(format!(
             "failed to create stderr log {}: {err}",
@@ -150,7 +154,7 @@ pub async fn spawn_latticed(opts: SpawnOptions) -> Result<SpawnedDaemon> {
         .arg(&opts.socket_path)
         .arg("--auth-token")
         .arg(&opts.auth_token)
-        // Spawned helpers are for the Unix socket control plane; disable the
+        // Spawned helpers are for the IPC control plane; disable the
         // localhost HTTP API unless a caller starts latticed directly.
         .arg("--api-port")
         .arg("0")
@@ -213,7 +217,29 @@ pub async fn spawn_latticed(opts: SpawnOptions) -> Result<SpawnedDaemon> {
     }
 }
 
+/// Stderr log path for a spawned child.
+///
+/// Named-pipe endpoints are not filesystem paths, so use the temp dir on Windows.
+fn spawn_stderr_path(socket_path: &Path) -> PathBuf {
+    #[cfg(windows)]
+    {
+        let _ = socket_path;
+        std::env::temp_dir().join(format!(
+            "latticed-spawn-{}.stderr",
+            std::process::id()
+        ))
+    }
+    #[cfg(unix)]
+    {
+        socket_path.with_extension("spawn.stderr")
+    }
+}
+
 /// Poll until `DaemonClient` can connect and complete a Health request.
+///
+/// On Unix, `socket_path.exists()` is a fast path before attempting connect.
+/// On Windows named pipes, existence is not meaningful — readiness is connect
+/// + health only.
 pub async fn wait_for_ready(
     socket_path: impl AsRef<Path>,
     auth_token: &str,
@@ -224,7 +250,12 @@ pub async fn wait_for_ready(
     let mut last_err = None;
 
     while Instant::now() < deadline {
-        if socket_path.exists() {
+        #[cfg(unix)]
+        let endpoint_may_be_ready = socket_path.exists();
+        #[cfg(windows)]
+        let endpoint_may_be_ready = true;
+
+        if endpoint_may_be_ready {
             let remaining = deadline.saturating_duration_since(Instant::now());
             match tokio::time::timeout(remaining, try_health(socket_path, auth_token)).await {
                 Ok(Ok(instance_id)) => return Ok(instance_id),
@@ -254,7 +285,7 @@ pub async fn wait_for_ready(
         path: format!(
             "{} ({})",
             socket_path.display(),
-            last_err.unwrap_or_else(|| "socket never became ready".into())
+            last_err.unwrap_or_else(|| "endpoint never became ready".into())
         ),
     })
 }
@@ -290,6 +321,7 @@ mod tests {
     use tempfile::tempdir;
     use tokio::sync::oneshot;
 
+    #[cfg(unix)]
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn wait_for_ready_against_in_process_server() {
         let dir = tempdir().unwrap();

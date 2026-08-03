@@ -1,6 +1,6 @@
 [package]
 name = "lattice-daemon"
-description = "latticed: long-lived Lattice daemon over a private Unix-domain socket"
+description = "latticed: long-lived Lattice daemon over private IPC (UDS / named pipe)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

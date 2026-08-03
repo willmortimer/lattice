@@ -1,6 +1,10 @@
-//! Unix-domain socket server for framed control-plane envelopes.
+//! Platform IPC server for framed control-plane envelopes.
+//!
+//! Unix: Unix-domain socket. Windows: named pipe (`ServerOptions` multi-instance).
 
 use std::path::PathBuf;
+#[cfg(windows)]
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -23,9 +27,7 @@ use lattice_runtime::{
     IdempotentOutcome, LatticeRuntime, RuntimeEvent, RuntimeIndexProgress, RuntimeResourceChanged,
     SemanticStatus,
 };
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::unix::OwnedReadHalf;
-use tokio::net::{UnixListener, UnixStream};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::{broadcast, oneshot, Mutex};
 use tracing::{debug, info, warn};
 
@@ -189,14 +191,29 @@ pub async fn serve_with_shutdown_and_controllers(
     shutdown: oneshot::Receiver<()>,
 ) -> Result<()> {
     let socket_path = config.socket_path.clone();
-    prepare_socket_path(&socket_path)?;
-    let listener = UnixListener::bind(&socket_path)?;
+
     #[cfg(unix)]
-    {
+    prepare_socket_path(&socket_path)?;
+
+    #[cfg(unix)]
+    let listener = {
+        use tokio::net::UnixListener;
+        let listener = UnixListener::bind(&socket_path)?;
         use std::os::unix::fs::PermissionsExt;
         let perms = std::fs::Permissions::from_mode(0o600);
         let _ = std::fs::set_permissions(&socket_path, perms);
-    }
+        listener
+    };
+
+    #[cfg(windows)]
+    let mut pipe_server = {
+        use tokio::net::windows::named_pipe::ServerOptions;
+        // first_pipe_instance fails fast if another latticed already owns the pipe.
+        ServerOptions::new()
+            .first_pipe_instance(true)
+            .create(&socket_path)?
+    };
+
     info!(path = %socket_path.display(), "latticed listening");
 
     let (idle_shutdown_tx, idle_shutdown_rx) = oneshot::channel();
@@ -234,29 +251,65 @@ pub async fn serve_with_shutdown_and_controllers(
         .map(|port| crate::http::spawn_localhost_api(state.clone(), port));
     let mut shutdown = shutdown;
     let mut idle_shutdown = idle_shutdown_rx;
-    loop {
-        tokio::select! {
-            _ = &mut shutdown => {
-                info!("latticed shutting down");
-                break;
-            }
-            _ = &mut idle_shutdown => {
-                info!("latticed idle shutdown after last client disconnected");
-                break;
-            }
-            accepted = listener.accept() => {
-                match accepted {
-                    Ok((stream, _)) => {
-                        let state = state.clone();
-                        tokio::spawn(async move {
-                            if let Err(err) = serve_connection(stream, state).await {
-                                warn!(error = %err, "connection closed with error");
-                            }
-                        });
+
+    #[cfg(unix)]
+    {
+        loop {
+            tokio::select! {
+                _ = &mut shutdown => {
+                    info!("latticed shutting down");
+                    break;
+                }
+                _ = &mut idle_shutdown => {
+                    info!("latticed idle shutdown after last client disconnected");
+                    break;
+                }
+                accepted = listener.accept() => {
+                    match accepted {
+                        Ok((stream, _)) => {
+                            let state = state.clone();
+                            tokio::spawn(async move {
+                                if let Err(err) = serve_connection(stream, state).await {
+                                    warn!(error = %err, "connection closed with error");
+                                }
+                            });
+                        }
+                        Err(err) => {
+                            warn!(error = %err, "accept failed");
+                            break;
+                        }
                     }
-                    Err(err) => {
-                        warn!(error = %err, "accept failed");
-                        break;
+                }
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        loop {
+            tokio::select! {
+                _ = &mut shutdown => {
+                    info!("latticed shutting down");
+                    break;
+                }
+                _ = &mut idle_shutdown => {
+                    info!("latticed idle shutdown after last client disconnected");
+                    break;
+                }
+                accepted = accept_named_pipe_client(&mut pipe_server, &socket_path) => {
+                    match accepted {
+                        Ok(stream) => {
+                            let state = state.clone();
+                            tokio::spawn(async move {
+                                if let Err(err) = serve_connection(stream, state).await {
+                                    warn!(error = %err, "connection closed with error");
+                                }
+                            });
+                        }
+                        Err(err) => {
+                            warn!(error = %err, "named pipe accept failed");
+                            break;
+                        }
                     }
                 }
             }
@@ -277,11 +330,14 @@ pub async fn serve_with_shutdown_and_controllers(
         agent.shutdown().await;
     }
     state.runtime.shutdown_all_sessions();
-    let _ = std::fs::remove_file(&socket_path);
+    #[cfg(unix)]
+    {
+        let _ = std::fs::remove_file(&socket_path);
+    }
     Ok(())
 }
 
-/// Bind and serve until SIGINT or SIGTERM.
+/// Bind and serve until a platform shutdown signal.
 pub async fn serve(config: DaemonConfig, runtime: Arc<LatticeRuntime>) -> Result<()> {
     let (tx, rx) = oneshot::channel();
     tokio::spawn(async move {
@@ -294,15 +350,25 @@ pub async fn serve(config: DaemonConfig, runtime: Arc<LatticeRuntime>) -> Result
 }
 
 async fn wait_for_shutdown_signal() -> std::io::Result<()> {
-    let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
-    let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
-    tokio::select! {
-        _ = sigterm.recv() => {}
-        _ = sigint.recv() => {}
+    #[cfg(unix)]
+    {
+        let mut sigterm =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+        let mut sigint =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
+        tokio::select! {
+            _ = sigterm.recv() => {}
+            _ = sigint.recv() => {}
+        }
+        Ok(())
     }
-    Ok(())
+    #[cfg(windows)]
+    {
+        tokio::signal::ctrl_c().await
+    }
 }
 
+#[cfg(unix)]
 fn prepare_socket_path(path: &PathBuf) -> Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -313,8 +379,24 @@ fn prepare_socket_path(path: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-async fn serve_connection(stream: UnixStream, state: DaemonState) -> Result<()> {
-    let (mut reader, mut writer) = stream.into_split();
+/// Wait for a client, then replace `server` with the next unbound instance.
+#[cfg(windows)]
+async fn accept_named_pipe_client(
+    server: &mut tokio::net::windows::named_pipe::NamedPipeServer,
+    pipe_path: &Path,
+) -> std::io::Result<tokio::net::windows::named_pipe::NamedPipeServer> {
+    use tokio::net::windows::named_pipe::ServerOptions;
+
+    server.connect().await?;
+    let connected = std::mem::replace(server, ServerOptions::new().create(pipe_path)?);
+    Ok(connected)
+}
+
+async fn serve_connection<S>(stream: S, state: DaemonState) -> Result<()>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    let (mut reader, mut writer) = tokio::io::split(stream);
     let handshake = read_handshake(&mut reader).await?;
     let accepted = handshake.auth_token == state.config.auth_token
         && handshake.protocol_version == PROTOCOL_VERSION;
@@ -1005,7 +1087,10 @@ fn runtime_error_to_wire(err: lattice_runtime::Error) -> WireError {
     }
 }
 
-async fn read_handshake(reader: &mut OwnedReadHalf) -> Result<HandshakeRequest> {
+async fn read_handshake<R>(reader: &mut R) -> Result<HandshakeRequest>
+where
+    R: AsyncRead + Unpin,
+{
     let mut buf = BytesMut::new();
     let mut tmp = [0u8; 4096];
     loop {
@@ -1037,11 +1122,14 @@ async fn read_handshake(reader: &mut OwnedReadHalf) -> Result<HandshakeRequest> 
     }
 }
 
-async fn read_envelope(
-    reader: &mut OwnedReadHalf,
+async fn read_envelope<R>(
+    reader: &mut R,
     read_buf: &mut BytesMut,
     decoder: &mut FrameDecoder,
-) -> Result<lattice_protocol::Envelope> {
+) -> Result<lattice_protocol::Envelope>
+where
+    R: AsyncRead + Unpin,
+{
     loop {
         if let Some(envelope) = decoder.decode(read_buf)? {
             return Ok(envelope);

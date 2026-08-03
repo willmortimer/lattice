@@ -12,7 +12,7 @@ pub const DEFAULT_IDLE_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(30);
 /// Runtime configuration for a `latticed` instance.
 #[derive(Debug, Clone)]
 pub struct DaemonConfig {
-    /// Unix-domain socket path clients connect to.
+    /// IPC endpoint clients connect to (Unix UDS path or Windows named-pipe name).
     pub socket_path: PathBuf,
     /// Shared secret required by the first-frame handshake.
     pub auth_token: String,
@@ -81,9 +81,12 @@ pub fn default_run_dir() -> PathBuf {
         .join("run")
 }
 
-/// Default socket path: `{data}/Lattice/run/latticed.sock`.
+/// Default IPC endpoint for this platform.
+///
+/// Unix: `{data}/Lattice/run/latticed.sock`.
+/// Windows: `\\.\pipe\lattice-latticed-<user>` (via [`lattice_client::default_endpoint`]).
 pub fn default_socket_path() -> PathBuf {
-    default_run_dir().join("latticed.sock")
+    lattice_client::default_endpoint()
 }
 
 pub(crate) fn unix_now_secs() -> u64 {
@@ -97,6 +100,7 @@ pub(crate) fn unix_now_secs() -> u64 {
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
     #[test]
     fn default_socket_ends_with_latticed_sock() {
         let path = default_socket_path();
@@ -104,6 +108,14 @@ mod tests {
             path.file_name().and_then(|n| n.to_str()),
             Some("latticed.sock")
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn default_socket_is_named_pipe() {
+        let path = default_socket_path();
+        let s = path.to_string_lossy();
+        assert!(s.starts_with(r"\\.\pipe\lattice-latticed-"));
     }
 
     #[test]

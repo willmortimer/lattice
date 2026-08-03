@@ -16,13 +16,13 @@ use uuid::Uuid;
 #[command(
     name = "latticed",
     version,
-    about = "Lattice daemon: private Unix-domain control plane + localhost API/MCP"
+    about = "Lattice daemon: private IPC control plane + localhost API/MCP"
 )]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
 
-    /// Unix-domain socket path.
+    /// IPC endpoint (Unix UDS path or Windows named-pipe name).
     #[arg(long, default_value_os_t = default_socket_path())]
     socket: PathBuf,
 
@@ -177,11 +177,20 @@ async fn main() -> Result<()> {
 }
 
 async fn wait_for_shutdown_signal() -> std::io::Result<()> {
-    let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
-    let mut sigint = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
-    tokio::select! {
-        _ = sigterm.recv() => {}
-        _ = sigint.recv() => {}
+    #[cfg(unix)]
+    {
+        let mut sigterm =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+        let mut sigint =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
+        tokio::select! {
+            _ = sigterm.recv() => {}
+            _ = sigint.recv() => {}
+        }
+        Ok(())
     }
-    Ok(())
+    #[cfg(windows)]
+    {
+        tokio::signal::ctrl_c().await
+    }
 }

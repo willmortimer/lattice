@@ -1,8 +1,8 @@
 //! `latticed` — long-lived Lattice daemon shell (phase D2 / D6).
 //!
-//! Serves framed [`lattice_protocol::Envelope`] messages over a private
-//! Unix-domain socket after a length-delimited handshake that matches
-//! [`lattice_client::handshake`].
+//! Serves framed [`lattice_protocol::Envelope`] messages over a private IPC
+//! endpoint (Unix-domain socket or Windows named pipe) after a length-delimited
+//! handshake that matches [`lattice_client::handshake`].
 //!
 //! Also exposes an authenticated localhost HTTP API (`127.0.0.1` only) and an
 //! optional MCP stdio adapter for governed search/read/context and proposal tools.
