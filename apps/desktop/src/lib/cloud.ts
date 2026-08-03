@@ -56,6 +56,27 @@ export async function cloudSignInApple(): Promise<CloudSessionStatus> {
   return invoke<CloudSessionStatus>("cloud_sign_in_apple");
 }
 
+/** Begin browser SIWA (public Mac / Windows). Opens via AuthPresenter. */
+export async function cloudBeginBrowserSiwa(
+  appBaseUrl?: string,
+): Promise<string> {
+  return invoke<string>("cloud_begin_browser_siwa", {
+    appBaseUrl: appBaseUrl ?? null,
+  });
+}
+
+export async function cloudCompleteDesktopHandoff(input: {
+  code?: string | null;
+  state?: string | null;
+  error?: string | null;
+}): Promise<CloudSessionStatus> {
+  return invoke<CloudSessionStatus>("cloud_complete_desktop_handoff", {
+    code: input.code ?? null,
+    state: input.state ?? null,
+    error: input.error ?? null,
+  });
+}
+
 export async function cloudSignOut(): Promise<CloudSessionStatus> {
   return invoke<CloudSessionStatus>("cloud_sign_out");
 }

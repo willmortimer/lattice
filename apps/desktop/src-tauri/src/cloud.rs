@@ -32,6 +32,21 @@ pub async fn cloud_sign_in_apple() -> Result<CloudSessionStatus, String> {
         .map_err(|err| format!("Sign in with Apple task failed: {err}"))?
 }
 
+/// Open browser SIWA for Developer ID / Windows builds (no native SIWA entitlement).
+#[tauri::command]
+pub fn cloud_begin_browser_siwa(app_base_url: Option<String>) -> Result<String, String> {
+    lattice_handlers::cloud_begin_browser_siwa(app_base_url)
+}
+
+#[tauri::command]
+pub fn cloud_complete_desktop_handoff(
+    code: Option<String>,
+    state: Option<String>,
+    error: Option<String>,
+) -> Result<CloudSessionStatus, String> {
+    lattice_handlers::cloud_complete_desktop_handoff(code, state, error)
+}
+
 #[tauri::command]
 pub fn cloud_sign_out() -> Result<CloudSessionStatus, String> {
     lattice_handlers::cloud_sign_out()

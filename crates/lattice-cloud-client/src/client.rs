@@ -188,6 +188,15 @@ impl<C: CloudHttpClient> CloudApiClient<C> {
         self.post_json("/v1/auth/oauth/apple", Some(&body), None)
     }
 
+    /// Exchange a one-time desktop handoff code for a bearer session.
+    pub fn desktop_exchange(&self, code: &str, redirect_uri: &str) -> Result<AuthTokenResponse> {
+        let body = serde_json::json!({
+            "code": code,
+            "redirect_uri": redirect_uri,
+        });
+        self.post_json("/v1/auth/desktop/exchange", Some(&body), None)
+    }
+
     pub fn password_register(
         &self,
         email: &str,

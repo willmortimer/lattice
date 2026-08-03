@@ -21,11 +21,15 @@ import {
 import {
   cloudSignIn,
   cloudSignInApple,
+  cloudBeginBrowserSiwa,
   cloudSignOut,
   cloudUpdatePreferences,
   emitProductTelemetry,
   isCloudAiEntitled,
+  type CloudSessionStatus,
 } from "../lib/cloud";
+import { presentAuthorizeUrl } from "../lib/authPresenter";
+import { listen } from "@tauri-apps/api/event";
 import {
   DEFAULT_OPENAI_EMBEDDING_MODEL,
   DEFAULT_OPENAI_MODEL,
@@ -2058,6 +2062,28 @@ function CloudAccountSettings() {
     }
   }, [status?.user?.email]);
 
+  useEffect(() => {
+    if (inBrowser) return;
+    let cancelled = false;
+    const unlistenSession = listen<CloudSessionStatus>("cloud-session-changed", (event) => {
+      if (cancelled) return;
+      setCloudSessionCache(queryClient, event.payload);
+      if (event.payload.user?.email) setEmail(event.payload.user.email);
+      if (event.payload.error) setError(event.payload.error);
+      setBusy(false);
+    });
+    const unlistenError = listen<string>("cloud-sign-in-error", (event) => {
+      if (cancelled) return;
+      setError(event.payload);
+      setBusy(false);
+    });
+    return () => {
+      cancelled = true;
+      void unlistenSession.then((unlisten) => unlisten());
+      void unlistenError.then((unlisten) => unlisten());
+    };
+  }, [queryClient]);
+
   async function handleSignIn() {
     if (inBrowser) return;
     setBusy(true);
@@ -2086,6 +2112,20 @@ function CloudAccountSettings() {
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleBrowserAppleSignIn() {
+    if (inBrowser) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const authorizeUrl = await cloudBeginBrowserSiwa();
+      await presentAuthorizeUrl(authorizeUrl);
+      // Session lands via deep-link → cloud-session-changed; keep UI waiting.
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
       setBusy(false);
     }
   }
@@ -2189,10 +2229,24 @@ function CloudAccountSettings() {
             <div className="cloud-signin-panel">
               <h2 className="settings-subsection">Sign in</h2>
               <div className="cloud-signin-primary">
-                <Button size="sm" disabled={busy} onClick={() => void handleAppleSignIn()}>
-                  {busy ? "Signing in…" : "Continue with Apple"}
+                <Button size="sm" disabled={busy} onClick={() => void handleBrowserAppleSignIn()}>
+                  {busy ? "Waiting for browser…" : "Continue with Apple"}
                 </Button>
-                <p className="settings-copy">Same Apple ID as the Lattice web app.</p>
+                <p className="settings-copy">
+                  Opens the Lattice web sign-in in your browser, then returns here via deep link.
+                  Works on public Mac builds and Windows (no App Store SIWA entitlement required).
+                </p>
+                {typeof navigator !== "undefined" &&
+                /Mac|iPhone|iPad/.test(navigator.platform) ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={busy}
+                    onClick={() => void handleAppleSignIn()}
+                  >
+                    {busy ? "Signing in…" : "Continue with Apple (native)"}
+                  </Button>
+                ) : null}
               </div>
               <div className="cloud-signin-divider" role="presentation">
                 <span>or password</span>

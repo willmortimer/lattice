@@ -161,6 +161,20 @@ pub fn sign_in_with_apple<C: CloudHttpClient>(
     ))
 }
 
+/// Complete browser SIWA handoff: exchange one-time code for a desktop bearer.
+pub fn sign_in_with_desktop_handoff<C: CloudHttpClient>(
+    client: &CloudApiClient<C>,
+    store: &dyn CloudSessionStore,
+    code: &str,
+) -> Result<CloudSessionStatus> {
+    let response = client.desktop_exchange(code, "lattice://oauth/cloud/callback")?;
+    store.save_token(&response.token)?;
+    Ok(CloudSessionStatus::signed_in(
+        client.base_url().to_string(),
+        response.user,
+    ))
+}
+
 /// Bearer for cloud API calls: `LATTICE_CLOUD_TOKEN` wins, else keychain/session store.
 pub fn resolve_cloud_bearer(store: &dyn CloudSessionStore) -> Result<String> {
     if let Some(token) = crate::config::cloud_token_from_env() {

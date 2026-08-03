@@ -1,0 +1,34 @@
+# Lattice open formats
+
+> Public, agent-oriented index of Lattice workspace formats.
+> Human docs: https://lattice-notes.com/docs/
+> This pack: https://lattice-notes.com/open/
+
+## Contracts
+
+- CLI: /docs/cli-contract/
+- MCP: /docs/mcp/
+- HTTP API: /docs/api/
+- Format support matrix: /docs/formats-support/
+- Integrations: /docs/integrations/
+
+## Open format layouts
+
+- Workspace: /open/workspace/README.md
+- Page (Markdown): /open/page/README.md
+- Canvas (JSON Canvas): /open/canvas/README.md
+- Data app (SQLite package): /open/data/README.md
+- Dataset (Parquet): /open/dataset/README.md
+- Notebook (Jupyter): /open/notebook/README.md
+- Chart (Vega-Lite): /open/chart/README.md
+- Artifact: /open/artifact/README.md
+- Task package: /open/task/README.md
+- Docs project: /open/docs-project/README.md
+- Pack index: /open/README.md
+
+## Invariants for agents
+
+1. A workspace is an ordinary directory; canonical content remains inspectable outside Lattice.
+2. Prefer proposal-based writes through CLI, MCP, or HTTP API.
+3. `.lattice/` holds caches and operational state — not the user's canonical documents.
+4. Use the format support matrix for shipped vs near-roadmap honesty.

@@ -36,8 +36,9 @@ pub use catalog::{
     CatalogEntry, ListChildrenPage, DEFAULT_LIST_CHILDREN_LIMIT, MAX_LIST_CHILDREN_LIMIT,
 };
 pub use cloud::{
-    cloud_session_status_cmd, cloud_sign_in, cloud_sign_in_apple, cloud_sign_out,
-    cloud_update_preferences, product_telemetry_emit, resolve_cloud_bearer_cmd,
+    cloud_begin_browser_siwa, cloud_complete_desktop_handoff, cloud_session_status_cmd,
+    cloud_sign_in, cloud_sign_in_apple, cloud_sign_out, cloud_update_preferences,
+    product_telemetry_emit, resolve_cloud_bearer_cmd,
 };
 pub use error::{command_error_to_string, STALE_REVISION_PREFIX};
 pub use github::{

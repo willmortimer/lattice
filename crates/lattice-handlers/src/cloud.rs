@@ -5,7 +5,7 @@ use std::sync::OnceLock;
 use lattice_cloud_client::{
     resolve_cloud_bearer, CloudApiClient, CloudSessionStatus, CloudSessionStore, HttpCloudClient,
     KeychainCloudSessionStore, MemoryCloudSessionStore, PreferencesView, cloud_session_status,
-    default_client, sign_in, sign_in_with_apple, sign_out,
+    default_client, sign_in, sign_in_with_apple, sign_in_with_desktop_handoff, sign_out,
 };
 
 fn session_store() -> &'static dyn CloudSessionStore {
@@ -74,8 +74,72 @@ pub fn cloud_sign_in_apple() -> Result<CloudSessionStatus, String> {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        Err("Sign in with Apple is only available on macOS".into())
+        Err("Native Sign in with Apple is only available on macOS; use browser SIWA".into())
     }
+}
+
+/// Begin browser SIWA for public / Windows / Developer ID builds.
+///
+/// Returns the URL the desktop shell should open in the system browser. The
+/// expected `state` is stored until [`cloud_complete_desktop_handoff`] runs.
+pub fn cloud_begin_browser_siwa(app_base_url: Option<String>) -> Result<String, String> {
+    let state = random_nonce();
+    store_pending_desktop_state(state.clone())?;
+    let base = app_base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("https://app.lattice-notes.com")
+        .trim_end_matches('/');
+    Ok(format!("{base}/auth/desktop?state={state}"))
+}
+
+/// Finish browser SIWA after `lattice://oauth/cloud/callback?code=&state=`.
+pub fn cloud_complete_desktop_handoff(
+    code: Option<String>,
+    state: Option<String>,
+    error: Option<String>,
+) -> Result<CloudSessionStatus, String> {
+    if let Some(message) = error.map(|value| value.trim().to_string()).filter(|value| !value.is_empty())
+    {
+        let _ = take_pending_desktop_state();
+        return Err(message);
+    }
+    let expected = take_pending_desktop_state()?
+        .ok_or_else(|| "no pending desktop cloud sign-in; start browser SIWA again".to_string())?;
+    let provided = state
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "desktop cloud callback missing state".to_string())?;
+    if provided != expected {
+        return Err("desktop cloud sign-in state mismatch; try again".into());
+    }
+    let code = code
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "desktop cloud callback missing handoff code".to_string())?;
+    sign_in_with_desktop_handoff(&api_client(), session_store(), code).map_err(map_err)
+}
+
+fn pending_desktop_state() -> &'static std::sync::Mutex<Option<String>> {
+    static PENDING: OnceLock<std::sync::Mutex<Option<String>>> = OnceLock::new();
+    PENDING.get_or_init(|| std::sync::Mutex::new(None))
+}
+
+fn store_pending_desktop_state(state: String) -> Result<(), String> {
+    *pending_desktop_state()
+        .lock()
+        .map_err(|_| "desktop cloud state lock poisoned".to_string())? = Some(state);
+    Ok(())
+}
+
+fn take_pending_desktop_state() -> Result<Option<String>, String> {
+    Ok(pending_desktop_state()
+        .lock()
+        .map_err(|_| "desktop cloud state lock poisoned".to_string())?
+        .take())
 }
 
 fn random_nonce() -> String {

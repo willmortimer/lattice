@@ -1,8 +1,8 @@
 //! Deep-link URL parsing for custom scheme and Universal Links.
 //!
-//! OAuth callbacks stay on `lattice://oauth/…`. Workspace open links use
-//! `lattice://open?root=…&path=…` (and matching https hosts once AASA is live).
-//! Settings links use `lattice://settings/…` (section and optional row slug).
+//! Connector OAuth stays on `lattice://oauth/…` (not cloud). Cloud account
+//! browser SIWA returns on `lattice://oauth/cloud/callback`. Workspace open
+//! links use `lattice://open?root=…&path=…`. Settings use `lattice://settings/…`.
 
 use serde::Serialize;
 
@@ -19,9 +19,20 @@ pub struct OpenResourcePayload {
     pub path: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudAuthCallbackPayload {
+    pub code: Option<String>,
+    pub state: Option<String>,
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DeepLinkAction {
+    /// Connector OAuth (`lattice://oauth/callback…`), not cloud account.
     OAuthCallback(String),
+    /// Browser SIWA handoff (`lattice://oauth/cloud/callback…`).
+    CloudAuthCallback(CloudAuthCallbackPayload),
     OpenResource(OpenResourcePayload),
     OpenSettings(OpenSettingsPayload),
 }
@@ -33,6 +44,10 @@ pub fn classify_deep_link(url: &str) -> Option<DeepLinkAction> {
         return None;
     }
 
+    if let Some(payload) = parse_cloud_auth_callback(trimmed) {
+        return Some(DeepLinkAction::CloudAuthCallback(payload));
+    }
+
     if trimmed.starts_with("lattice://oauth/") {
         return Some(DeepLinkAction::OAuthCallback(trimmed.to_string()));
     }
@@ -42,6 +57,19 @@ pub fn classify_deep_link(url: &str) -> Option<DeepLinkAction> {
     }
 
     parse_open_resource(trimmed).map(DeepLinkAction::OpenResource)
+}
+
+fn parse_cloud_auth_callback(url: &str) -> Option<CloudAuthCallbackPayload> {
+    let lower = url.to_ascii_lowercase();
+    if !lower.starts_with("lattice://oauth/cloud/callback") {
+        return None;
+    }
+    let parsed = url::Url::parse(url).ok()?;
+    Some(CloudAuthCallbackPayload {
+        code: query_value(&parsed, "code"),
+        state: query_value(&parsed, "state"),
+        error: query_value(&parsed, "error"),
+    })
 }
 
 fn parse_lattice_settings(url: &str) -> Option<String> {
@@ -169,6 +197,28 @@ mod tests {
         assert_eq!(
             classify_deep_link(url),
             Some(DeepLinkAction::OAuthCallback(url.into()))
+        );
+    }
+
+    #[test]
+    fn classifies_cloud_auth_callback() {
+        let url = "lattice://oauth/cloud/callback?code=ldh_abc&state=desk1";
+        assert_eq!(
+            classify_deep_link(url),
+            Some(DeepLinkAction::CloudAuthCallback(CloudAuthCallbackPayload {
+                code: Some("ldh_abc".into()),
+                state: Some("desk1".into()),
+                error: None,
+            }))
+        );
+        let err = "lattice://oauth/cloud/callback?state=desk1&error=nope";
+        assert_eq!(
+            classify_deep_link(err),
+            Some(DeepLinkAction::CloudAuthCallback(CloudAuthCallbackPayload {
+                code: None,
+                state: Some("desk1".into()),
+                error: Some("nope".into()),
+            }))
         );
     }
 

@@ -25,7 +25,7 @@ pub use openai_key::{
 pub use session::{
     CLOUD_TOKEN_SERVICE, CLOUD_USER_TOKEN_KEY, CloudSessionStore, KeychainCloudSessionStore,
     cloud_session_status, resolve_cloud_bearer, resolved_cloud_url, MemoryCloudSessionStore,
-    sign_in, sign_in_with_apple, sign_out,
+    sign_in, sign_in_with_apple, sign_in_with_desktop_handoff, sign_out,
 };
 pub use types::{
     AiAccess, AuthTokenResponse, CloudSessionStatus, CloudUser, EntitlementsView, MeResponse,
