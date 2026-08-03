@@ -56,5 +56,33 @@ if (-not $protoc) {
 & rustc.exe --version
 & cargo.exe --version
 & protoc.exe --version
+
+# Node + pnpm for Tauri/NSIS (optional for cargo-only tasks).
+$nodeDirs = @(
+  "${env:ProgramFiles}\nodejs",
+  (Join-Path $env:APPDATA "npm")
+)
+foreach ($dir in $nodeDirs) {
+  if (Test-Path $dir) {
+    $env:Path = "$dir;$env:Path"
+  }
+}
+$pnpm = Get-Command pnpm.exe -ErrorAction SilentlyContinue
+if (-not $pnpm) {
+  Write-Host "lattice-winbuild-toolchain: installing pnpm via npm…"
+  $npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
+  if (-not $npm) {
+    throw "npm.cmd missing — install Node.js before Windows NSIS packaging"
+  }
+  & npm.cmd install -g pnpm@9.15.0
+  $env:Path = "$(Join-Path $env:APPDATA 'npm');$env:Path"
+  if (-not (Get-Command pnpm.exe -ErrorAction SilentlyContinue)) {
+    throw "pnpm install finished but pnpm.exe still not on PATH"
+  }
+} else {
+  Write-Host "lattice-winbuild-toolchain: pnpm already present => $($pnpm.Source)"
+}
+& pnpm.exe --version
+
 Write-Host "lattice-winbuild-toolchain: OK"
 exit 0

@@ -36,6 +36,12 @@ function Initialize-LatticeWindowsCargoEnv {
     $env:Path = "$protocBin;$env:Path"
     $env:PROTOC = Join-Path $protocBin "protoc.exe"
   }
+
+  foreach ($dir in @("${env:ProgramFiles}\nodejs", (Join-Path $env:APPDATA "npm"))) {
+    if (Test-Path $dir) {
+      $env:Path = "$dir;$env:Path"
+    }
+  }
 }
 
 function Get-LatticeWindowsReleaseDir {

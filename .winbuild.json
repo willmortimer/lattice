@@ -62,7 +62,7 @@
       "runner": "powershell",
       "script": "scripts\\windows\\tauri-bundle.ps1",
       "timeoutSeconds": 10800,
-      "requires": ["cargo.exe", "pnpm.exe"]
+      "requires": ["cargo.exe"]
     }
   }
 }
