@@ -2,10 +2,12 @@
 //!
 //! Manual smoke (macOS): build/run desktop with `--features capture`, grant Screen
 //! Recording in System Settings, then press **⌘⇧2** or choose **Screen Clip** from
-//! the menu/tray. Windows builds select the capture stub until WGC lands.
+//! the menu/tray. Windows builds select the WGC backend via
+//! `lattice-capture-windows`.
 
 pub mod platform;
 pub mod shelf;
+mod shelf_platform;
 
 #[cfg(feature = "capture")]
 pub mod permission;

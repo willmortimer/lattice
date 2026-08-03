@@ -27,10 +27,17 @@ voice = []
 voice-embedded = ["voice"]
 # Voice is opt-in so Linux CI and machines without the Swift dylib still build.
 # Dev with fallback (macOS): `cargo tauri dev --features voice-embedded`.
-# Native screen capture (ScreenCaptureKit on macOS; Windows WGC stub): `--features capture`.
+# Native screen capture (ScreenCaptureKit on macOS; Windows WGC): `--features capture`.
 default = []
-# Screen capture → Capture Inbox ingest + clipboard (macOS SCK; Windows stub until WGC).
-capture = []
+# Screen capture → Capture Inbox ingest + clipboard.
+# Platform backends are optional target deps; enabling a missing-target dep is a no-op.
+capture = [
+    "dep:image",
+    "dep:arboard",
+    "dep:lattice-capture-macos",
+    "lattice-capture-macos/link-bridge",
+    "dep:lattice-capture-windows",
+]
 
 [dependencies]
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
@@ -120,18 +127,11 @@ lattice-desktop = [
     "voice?/lattice-audio-macos/link-bridge",
     "voice-embedded?/dep:lattice-voice-macos",
     "voice-embedded?/lattice-voice-macos/link-bridge",
-    "capture?/dep:lattice-capture-macos",
-    "capture?/dep:image",
-    "capture?/dep:arboard",
-    "capture?/lattice-capture-macos/link-bridge",
 ]
 
-[target.'cfg(target_os = "windows")'.features]
-lattice-desktop = [
-    "capture?/dep:lattice-capture-windows",
-    "capture?/dep:image",
-    "capture?/dep:arboard",
-]
+# NOTE: Cargo ignores `target.*.features` for package feature activation (see
+# unused-manifest-key warnings). Capture deps are wired via the top-level
+# `capture` feature instead.
 
 [dev-dependencies]
 tempfile = "3"

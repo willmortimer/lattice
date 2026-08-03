@@ -5,7 +5,7 @@ Provider-neutral screen capture types for Lattice clipper / screenshot flows.
 This crate owns [`CaptureBackend`](src/backend.rs), destination enums, source
 handles, and [`CapturedImage`](src/image.rs). Platform capture lives in
 `lattice-capture-macos` (ScreenCaptureKit) and `lattice-capture-windows`
-(WGC stub until real capture lands).
+(Windows Graphics Capture stills).
 
 ## Tests
 
