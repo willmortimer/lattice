@@ -103,6 +103,7 @@
             ok = "No-op success (nxr task DAG join)";
             windows-cargo-check = "Mac→nixdev winbuild: probe + rustup + headless cargo check";
             windows-latticed-check = "Mac→nixdev winbuild: latticed release build";
+            windows-nsis-bundle = "Mac→nixdev winbuild: unsigned NSIS installer DAG";
           };
 
           scripts = {
@@ -310,6 +311,10 @@
             '';
             windows-latticed-check = ''
               export WINBUILD_TASKS="''${WINBUILD_TASKS:-probe ensure-toolchain cargo-build-latticed}"
+              exec bash scripts/winbuild/remote-windows-check.sh "$@"
+            '';
+            windows-nsis-bundle = ''
+              export WINBUILD_TASKS="''${WINBUILD_TASKS:-probe ensure-toolchain build-sidecar verify-sidecars tauri-bundle}"
               exec bash scripts/winbuild/remote-windows-check.sh "$@"
             '';
           };
@@ -880,6 +885,24 @@
                   "scripts/winbuild/**"
                   ".winbuild.json"
                 ];
+              };
+              windows-nsis-bundle = {
+                description = "Unsigned Windows NSIS installer via nixdev winbuild";
+                app = "windows-nsis-bundle";
+                category = "release";
+                paths = [
+                  "apps/**"
+                  "crates/**"
+                  "packages/**"
+                  "scripts/windows/**"
+                  "scripts/winbuild/**"
+                  ".winbuild.json"
+                  "pnpm-lock.yaml"
+                ];
+                resources = {
+                  cpu = 4;
+                  memory = "8GiB";
+                };
               };
               desktop-ui-build = {
                 description = "Build desktop frontend (Vite)";
