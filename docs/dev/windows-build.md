@@ -19,6 +19,12 @@ nxr task windows-latticed-check
 # or:
 WINBUILD_TASKS='probe ensure-toolchain cargo-build-latticed' \
   ./scripts/winbuild/remote-windows-check.sh
+
+# Unsigned NSIS installer (sidecars + Tauri bundle):
+nxr task windows-nsis-bundle
+# or:
+WINBUILD_TASKS='probe ensure-toolchain build-sidecar verify-sidecars tauri-bundle' \
+  ./scripts/winbuild/remote-windows-check.sh
 ```
 
 On nixdev itself (already synced):
@@ -29,6 +35,11 @@ winbuild.exe run probe --file 'D:\lattice\.winbuild.json'
 winbuild.exe run ensure-toolchain --file 'D:\lattice\.winbuild.json'
 winbuild.exe run cargo-check-core --file 'D:\lattice\.winbuild.json'
 winbuild.exe run cargo-build-latticed --file 'D:\lattice\.winbuild.json'
+
+# NSIS chain (unsigned)
+winbuild.exe run build-sidecar --file 'D:\lattice\.winbuild.json'
+winbuild.exe run verify-sidecars --file 'D:\lattice\.winbuild.json'
+winbuild.exe run tauri-bundle --file 'D:\lattice\.winbuild.json'
 ```
 
 | Env | Default | Purpose |
@@ -37,6 +48,31 @@ winbuild.exe run cargo-build-latticed --file 'D:\lattice\.winbuild.json'
 | `LATTICE_REMOTE` | `/home/will/Developer/lattice-ecosystem/lattice` | Remote Linux tree |
 | `WINBUILD_DEST` | `/mnt/d/lattice` | Native DevDrive sync root (`D:\lattice`) |
 | `WINBUILD_TASKS` | `probe ensure-toolchain cargo-check-core` | Tasks to run |
+
+## NSIS packaging (T6)
+
+PowerShell scripts under `scripts/windows/` mirror the macOS release leaves in
+`scripts/release/`:
+
+| Script | Role |
+| --- | --- |
+| `build-sidecar.ps1` | Release-build `latticed`, `lattice-agentd`, `lattice-embed-host` |
+| `verify-sidecars.ps1` | Assert sidecars exist; embed-host lists `fake` only (no llama-cpp) |
+| `assemble-app.ps1` | Copy sidecars beside `Lattice.exe` (called from `tauri-bundle`) |
+| `tauri-bundle.ps1` | `tauri build --no-bundle` → assemble → `tauri bundle --bundles nsis` |
+
+Windows sidecars **exclude** seatbelt, voice, and llama-cpp/Metal backends.
+Authenticode signing is deferred — installers are unsigned.
+
+Output (when `CARGO_TARGET_DIR=D:\lattice-target\windows-msvc`):
+
+```text
+D:\lattice-target\windows-msvc\x86_64-pc-windows-msvc\release\Lattice.exe
+D:\lattice-target\windows-msvc\x86_64-pc-windows-msvc\release\bundle\nsis\*-setup.exe
+```
+
+`tauri.windows.conf.json` sets `bundle.targets = "nsis"`. Frontend builds use
+`pnpm tauri:build:windows` semantics (no `voice-embedded`).
 
 ## Current blockers (ranked)
 
@@ -60,12 +96,11 @@ Named-pipe transport landed in T2 (`apps/daemon` + `lattice-client`). Winbuild
 `cargo-check-core` and `cargo-build-latticed` now include `latticed` and
 `lattice-client` and are expected to succeed on Windows MSVC.
 
-### P1 — Tauri / NSIS packaging not wired
+### Resolved — NSIS packaging scaffold (T6)
 
-- No `scripts/release/*windows*`, no NSIS/MSI flake apps, no CI Windows job.
-- `tauri.conf.json` `bundle.targets = "all"` is generic only.
-- Release scripts hard-require Darwin.
-- Azure / Authenticode signing deferred — ship unsigned NSIS/`exe` first.
+- `scripts/windows/{build-sidecar,verify-sidecars,assemble-app,tauri-bundle}.ps1`
+- `.winbuild.json` tasks + `nxr task windows-nsis-bundle`
+- Unsigned NSIS only; Authenticode deferred
 
 ### P1 — macOS-only desktop features
 
@@ -75,8 +110,8 @@ macOS-only Cargo features for `voice` / `voice-embedded` / `capture`).
 
 ### P2 — Frontend toolchain on Windows host
 
-`node` / `pnpm` not on Windows PATH for full Tauri UI builds. Headless Rust can
-proceed first; Tauri needs Node on the Windows side or a prebuilt `dist/`.
+`node` / `pnpm` must be on Windows PATH for `tauri-bundle`. Headless Rust can
+proceed first; NSIS needs Node on the Windows side or a prebuilt `apps/desktop/dist/`.
 
 ## Target layout on DevDrive
 

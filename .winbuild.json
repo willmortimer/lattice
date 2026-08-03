@@ -31,6 +31,38 @@
       "script": "scripts\\windows\\cargo-build-latticed.ps1",
       "timeoutSeconds": 3600,
       "requires": ["cargo.exe"]
+    },
+    "build-sidecar": {
+      "description": "Release-build Windows sidecars (latticed, lattice-agentd, lattice-embed-host)",
+      "workingDirectory": ".",
+      "runner": "powershell",
+      "script": "scripts\\windows\\build-sidecar.ps1",
+      "timeoutSeconds": 7200,
+      "requires": ["cargo.exe"]
+    },
+    "verify-sidecars": {
+      "description": "Verify Windows release sidecars (no seatbelt/voice/llama-cpp)",
+      "workingDirectory": ".",
+      "runner": "powershell",
+      "script": "scripts\\windows\\verify-sidecars.ps1",
+      "timeoutSeconds": 300,
+      "requires": ["cargo.exe"]
+    },
+    "assemble-app": {
+      "description": "Copy sidecars beside Lattice.exe before NSIS bundle",
+      "workingDirectory": ".",
+      "runner": "powershell",
+      "script": "scripts\\windows\\assemble-app.ps1",
+      "timeoutSeconds": 300,
+      "requires": ["cargo.exe"]
+    },
+    "tauri-bundle": {
+      "description": "Unsigned NSIS installer (frontend + desktop + sidecars)",
+      "workingDirectory": ".",
+      "runner": "powershell",
+      "script": "scripts\\windows\\tauri-bundle.ps1",
+      "timeoutSeconds": 10800,
+      "requires": ["cargo.exe", "pnpm.exe"]
     }
   }
 }
