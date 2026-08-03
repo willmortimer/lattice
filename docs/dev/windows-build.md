@@ -82,7 +82,8 @@ Fixed by `ensure-toolchain` + `PROTOC` in `cargo-check-core.ps1`.
 ### P1 — macOS-only desktop features
 
 Voice (`voice-embedded` / FluidAudio), Seatbelt, Quick Look, overlay title bars
-must be cfg’d off or degraded for Windows beta builds.
+are cfg’d off or degraded for Windows beta builds (`tauri.windows.conf.json`,
+macOS-only Cargo features for `voice` / `voice-embedded` / `capture`).
 
 ### P2 — Frontend toolchain on Windows host
 

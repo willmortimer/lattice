@@ -18,33 +18,19 @@ tauri-build = { version = "2", features = [] }
 # Enables the Playwright socket bridge for native WebView E2E / perf.
 # Keep off for normal runs; use `pnpm tauri:dev:e2e` or `--features e2e-testing`.
 e2e-testing = []
-# Native capture + latticed thin client (preferred M4 path). Does not link
-# FluidAudio; set LATTICE_VOICE_DAEMON=1 to require daemon-only operation.
-voice = [
-    "dep:lattice-voice",
-    "dep:lattice-audio",
-    "dep:lattice-audio-macos",
-    "dep:bytes",
-    "lattice-audio-macos/link-bridge",
-]
-# Transitional in-process FluidAudio fallback when latticed/voice-host is down.
-# Production daemon-only builds: `--features voice` (omit voice-embedded).
-voice-embedded = [
-    "voice",
-    "dep:lattice-voice-macos",
-    "lattice-voice-macos/link-bridge",
-]
+# Native capture + latticed thin client (macOS only). Does not link FluidAudio;
+# set LATTICE_VOICE_DAEMON=1 to require daemon-only operation.
+voice = []
+# Transitional in-process FluidAudio fallback when latticed/voice-host is down
+# (macOS only). Production daemon-only builds: `--features voice` (omit
+# voice-embedded).
+voice-embedded = ["voice"]
 # Voice is opt-in so Linux CI and machines without the Swift dylib still build.
-# Dev with fallback: `cargo tauri dev --features voice-embedded` (pnpm tauri:dev).
-# Native screen capture (ScreenCaptureKit): `cargo tauri dev --features capture`.
+# Dev with fallback (macOS): `cargo tauri dev --features voice-embedded`.
+# Native screen capture (ScreenCaptureKit, macOS only): `--features capture`.
 default = []
 # ScreenCaptureKit capture → Capture Inbox ingest + clipboard (macOS).
-capture = [
-    "dep:lattice-capture-macos",
-    "dep:image",
-    "dep:arboard",
-    "lattice-capture-macos/link-bridge",
-]
+capture = []
 
 [dependencies]
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
@@ -85,18 +71,15 @@ tokio.workspace = true
 dirs.workspace = true
 uuid.workspace = true
 ureq.workspace = true
-# Optional: enabled by the `voice` / `voice-embedded` features.
+# Optional: enabled by the `voice` / `voice-embedded` features (macOS only).
 lattice-voice = { workspace = true, optional = true }
-lattice-voice-macos = { workspace = true, optional = true }
 lattice-audio = { workspace = true, optional = true }
-lattice-audio-macos = { workspace = true, optional = true }
 bytes = { workspace = true, optional = true }
 base64.workspace = true
 image = { version = "0.25", default-features = false, features = ["png", "webp"], optional = true }
 arboard = { version = "3", optional = true }
-# Optional: enabled by the `capture` feature.
+# Optional: enabled by the `capture` feature (macOS only).
 lattice-capture-core.workspace = true
-lattice-capture-macos = { workspace = true, optional = true }
 walkdir.workspace = true
 url = "2"
 sha2 = "0.10"
@@ -117,6 +100,24 @@ objc2-local-authentication = "0.3"
 objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSWindow"] }
 lattice-approval-macos = { workspace = true, features = ["link-bridge"] }
 lattice-apple-signin-macos = { workspace = true, features = ["link-bridge"] }
+lattice-voice-macos = { workspace = true, optional = true }
+lattice-audio-macos = { workspace = true, optional = true }
+lattice-capture-macos = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "macos")'.features]
+lattice-desktop = [
+    "voice?/dep:lattice-voice",
+    "voice?/dep:lattice-audio",
+    "voice?/dep:lattice-audio-macos",
+    "voice?/dep:bytes",
+    "voice?/lattice-audio-macos/link-bridge",
+    "voice-embedded?/dep:lattice-voice-macos",
+    "voice-embedded?/lattice-voice-macos/link-bridge",
+    "capture?/dep:lattice-capture-macos",
+    "capture?/dep:image",
+    "capture?/dep:arboard",
+    "capture?/lattice-capture-macos/link-bridge",
+]
 
 [dev-dependencies]
 tempfile = "3"
