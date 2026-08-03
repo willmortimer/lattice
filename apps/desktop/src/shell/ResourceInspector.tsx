@@ -1,10 +1,10 @@
 import { Button, IconButton } from "@lattice/ui";
 import { invoke } from "../lib/ipc";
-import { cloudBlobOpen } from "../lib/cloud";
 import {
   backupResourceToCloud,
   isCloudBackupResource,
   openCloudAccountSettings,
+  reopenResourceFromCloud,
 } from "../lib/cloudBackup";
 import {
   displayResourceIdForPath,
@@ -79,6 +79,7 @@ export function ResourceInspector({
   error,
   onClose,
   onOpenFile,
+  onReloadActivePage,
 }: {
   root: string | null;
   resource: Resource | null;
@@ -87,6 +88,8 @@ export function ResourceInspector({
   error: string | null;
   onClose: () => void;
   onOpenFile: (path: string) => void;
+  /** Reload the open page editor after cloud bytes were written to the workspace file. */
+  onReloadActivePage?: () => void;
 }) {
   const [section, setSection] = useState<(typeof SECTIONS)[number]>("properties");
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -97,13 +100,13 @@ export function ResourceInspector({
   const [loading, setLoading] = useState(false);
   const [cloudBusy, setCloudBusy] = useState(false);
   const [cloudError, setCloudError] = useState<string | null>(null);
-  const [cloudOpenBytes, setCloudOpenBytes] = useState<number | null>(null);
+  const [cloudOpenStatus, setCloudOpenStatus] = useState<string | null>(null);
   const recordAuthorityStat = useDesktopUiStore((state) => state.recordAuthorityStat);
 
   useEffect(() => {
     setResourceStat(null);
     setCloudError(null);
-    setCloudOpenBytes(null);
+    setCloudOpenStatus(null);
   }, [resource?.path, root]);
 
   useEffect(() => {
@@ -177,7 +180,7 @@ export function ResourceInspector({
     if (inBrowser || cloudBusy || !root || !resource) return;
     setCloudBusy(true);
     setCloudError(null);
-    setCloudOpenBytes(null);
+    setCloudOpenStatus(null);
     try {
       const result = await backupResourceToCloud(root, resource.path);
       if (!result.ok) {
@@ -198,14 +201,28 @@ export function ResourceInspector({
     if (inBrowser || cloudBusy || !root || !resource) return;
     setCloudBusy(true);
     setCloudError(null);
+    setCloudOpenStatus(null);
     try {
-      const bytes = await cloudBlobOpen(root, resource.path);
-      setCloudOpenBytes(bytes.length);
+      const result = await reopenResourceFromCloud(root, resource.path);
+      if (!result.ok) {
+        setCloudError(result.message);
+        return;
+      }
+      if (result.hydrated) {
+        setCloudOpenStatus(
+          `Reopened from cloud · ${result.byteLength} bytes · workspace file updated`,
+        );
+        onReloadActivePage?.();
+      } else {
+        setCloudOpenStatus(
+          `Reopened from cloud · ${result.byteLength} bytes · ${result.reason}`,
+        );
+      }
       const stat = await getResourceStat(root, resource.path);
       setResourceStat(stat);
       recordAuthorityStat(stat);
     } catch (err: unknown) {
-      setCloudOpenBytes(null);
+      setCloudOpenStatus(null);
       setCloudError(err instanceof Error ? err.message : String(err));
     } finally {
       setCloudBusy(false);
@@ -331,9 +348,9 @@ export function ResourceInspector({
                     {resourceStat?.content_hash ? ` · ${resourceStat.content_hash}` : ""}
                   </p>
                 ) : null}
-                {cloudOpenBytes !== null ? (
+                {cloudOpenStatus ? (
                   <p className="inspector-cloud-status" role="status">
-                    Reopened from cloud · {cloudOpenBytes} bytes
+                    {cloudOpenStatus}
                   </p>
                 ) : null}
                 {cloudError ? (

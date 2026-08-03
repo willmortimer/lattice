@@ -1208,6 +1208,7 @@ export function useDesktopController() {
     treeRenameRequest,
     handleNotebookContentChange,
     handleRevisionChange,
+    reloadPageFromDisk: resourceController.reloadPageFromDisk,
     setSession,
     appLock,
     setAppLock,

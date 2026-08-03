@@ -3,10 +3,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import { inBrowser } from "../demo";
-import { cloudBlobOpen } from "../lib/cloud";
 import {
   backupResourceToCloud,
   openCloudAccountSettings,
+  reopenResourceFromCloud,
 } from "../lib/cloudBackup";
 import {
   downloadPack,
@@ -94,7 +94,7 @@ export function FeaturesSettings({
   const [labsBusy, setLabsBusy] = useState(false);
   const [labsError, setLabsError] = useState<string | null>(null);
   const [labsStat, setLabsStat] = useState<ResourceStat | null>(null);
-  const [labsOpenBytes, setLabsOpenBytes] = useState<number | null>(null);
+  const [labsOpenStatus, setLabsOpenStatus] = useState<string | null>(null);
 
   const displayError = error ?? queryErrorMessage(semanticQueryError);
 
@@ -148,7 +148,7 @@ export function FeaturesSettings({
     }
     setLabsBusy(true);
     setLabsError(null);
-    setLabsOpenBytes(null);
+    setLabsOpenStatus(null);
     try {
       const result = await backupResourceToCloud(workspaceRoot, relPath);
       if (!result.ok) {
@@ -178,12 +178,21 @@ export function FeaturesSettings({
     }
     setLabsBusy(true);
     setLabsError(null);
+    setLabsOpenStatus(null);
     try {
-      const bytes = await cloudBlobOpen(workspaceRoot, relPath);
-      setLabsOpenBytes(bytes.length);
-    } catch (err: unknown) {
-      setLabsOpenBytes(null);
-      setLabsError(err instanceof Error ? err.message : String(err));
+      const result = await reopenResourceFromCloud(workspaceRoot, relPath);
+      if (!result.ok) {
+        setLabsOpenStatus(null);
+        setLabsError(result.message);
+        return;
+      }
+      if (result.hydrated) {
+        setLabsOpenStatus(
+          `${result.byteLength} bytes · workspace file updated via semantic save`,
+        );
+      } else {
+        setLabsOpenStatus(`${result.byteLength} bytes · ${result.reason}`);
+      }
     } finally {
       setLabsBusy(false);
     }
@@ -287,10 +296,10 @@ export function FeaturesSettings({
               </span>
             </div>
           ) : null}
-          {labsOpenBytes !== null ? (
+          {labsOpenStatus ? (
             <div className="diagnostics-card" role="status">
               <strong>Reopened from cloud</strong>
-              <span>{labsOpenBytes} bytes</span>
+              <span>{labsOpenStatus}</span>
             </div>
           ) : null}
           {labsError ? (

@@ -142,6 +142,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
     treeRenameRequest,
     navigateHistory, closeTab, reorderTab, beginSidebarResize, commitTitle, updateWorkspaceSettings,
     applyWorkspaceSettings, handleOpenWiki, openLinkTarget,     handleNotebookContentChange, handleRevisionChange,
+    reloadPageFromDisk,
     setSession,
     appLock, setAppLock,
   } = model;
@@ -916,6 +917,9 @@ export function DesktopShell({ model }: DesktopShellProps) {
                 error={error}
                 onClose={() => setInspectorOpen(false)}
                 onOpenFile={handleOpenFile}
+                onReloadActivePage={() => {
+                  void reloadPageFromDisk();
+                }}
               />
             )}
 
