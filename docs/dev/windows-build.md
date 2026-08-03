@@ -72,7 +72,7 @@ D:\lattice-target\windows-msvc\x86_64-pc-windows-msvc\release\bundle\nsis\*-setu
 ```
 
 `tauri.windows.conf.json` sets `bundle.targets = "nsis"`. Frontend builds use
-`pnpm tauri:build:windows` semantics (no `voice-embedded`).
+`pnpm tauri:build:windows` semantics (`--features capture`, no `voice-embedded`).
 
 ## Current blockers (ranked)
 
@@ -104,9 +104,12 @@ Named-pipe transport landed in T2 (`apps/daemon` + `lattice-client`). Winbuild
 
 ### P1 — macOS-only desktop features
 
-Voice (`voice-embedded` / FluidAudio), Seatbelt, Quick Look, overlay title bars
+Voice (`voice-embedded` / FluidAudio), Seatbelt, Quick Look, and overlay title bars
 are cfg’d off or degraded for Windows beta builds (`tauri.windows.conf.json`,
-macOS-only Cargo features for `voice` / `voice-embedded` / `capture`).
+macOS-only Cargo features for `voice` / `voice-embedded`). Screen capture
+(`capture` / WGC) is enabled on Windows NSIS builds via `--features capture` in
+`tauri-bundle.ps1` and `tauri:build:windows`. Manual smoke:
+[capture-smoke.md](./capture-smoke.md).
 
 ### P2 — Frontend toolchain on Windows host
 

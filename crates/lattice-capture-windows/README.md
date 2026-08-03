@@ -35,4 +35,3 @@ cargo check -p lattice-desktop --features capture
 - Window capture
 - Screen recording sessions
 - Shelf always-on `WDA_EXCLUDEFROMCAPTURE` polish (B1)
-- NSIS / installer feature flip (A2)

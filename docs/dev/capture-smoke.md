@@ -1,14 +1,17 @@
 # Screen capture smoke (R1)
 
-Manual verification for macOS still capture (ScreenCaptureKit → clipboard +
-Capture Inbox). Automated tests cover path helpers, ingest validation, and event
-constants only — **CI does not run interactive ScreenCaptureKit overlays**.
+Manual verification for still capture (clipboard + Capture Inbox). macOS uses
+ScreenCaptureKit; Windows uses Windows Graphics Capture (WGC). Automated tests
+cover path helpers, ingest validation, and event constants only — **CI does not
+run interactive capture overlays**.
 
 Related: [capture and media roadmap §R1](../architecture/capture-and-media.md).
 
 ## Build
 
-From the `lattice` repo root (macOS only):
+### macOS
+
+From the `lattice` repo root:
 
 ```sh
 # Nix / NXR (preferred)
@@ -18,34 +21,65 @@ nxr desktop-dev -- --features capture
 pnpm --filter @lattice/desktop exec tauri dev --features capture
 ```
 
-The `capture` Cargo feature links the host platform backend (`lattice-capture-macos`
-on macOS; `lattice-capture-windows` stub on Windows) and registers the global
-shortcut. Linux CI builds stay featureless and skip this path.
+### Windows
+
+Dev (unsigned):
+
+```sh
+pnpm --filter @lattice/desktop exec tauri dev --features capture
+```
+
+Release / NSIS (unsigned beta chain):
+
+```sh
+pnpm --filter @lattice/desktop run tauri:build:windows
+# or winbuild:
+WINBUILD_TASKS='probe ensure-toolchain build-sidecar verify-sidecars tauri-bundle' \
+  ./scripts/winbuild/remote-windows-check.sh
+```
+
+Windows NSIS / `tauri-bundle.ps1` pass `--features capture` (no `voice-embedded`).
+
+The `capture` Cargo feature links platform backends (`lattice-capture-macos` or
+`lattice-capture-windows`) and registers the global shortcut. Linux CI builds
+stay featureless and skip this path.
 
 ## Prerequisites
+
+### macOS
 
 1. Open **System Settings → Privacy & Security → Screen Recording**.
 2. Enable **Lattice** (or the dev `lattice-desktop` binary).
 3. Restart the app if permission was just granted.
 
+### Windows
+
+1. Windows 10 1903+ or Windows 11 with WGC support.
+2. If capture fails, open **Settings → Privacy & security → Graphics capture**
+   (or run Settings from the app if a permission command is exposed) and ensure
+   desktop apps may capture.
+3. Open a workspace in Lattice before clipping (capture requires a workspace root).
+
 ## Happy path
 
 1. Focus any app (Lattice may be in the background).
-2. Press **⌘⇧2** or choose **Screen Clip** from the app menu / tray.
+2. Press **Ctrl+Shift+2** (Windows) or **⌘⇧2** (macOS), or choose **Screen Clip**
+   from the app menu / tray.
 3. If the interactive region overlay appears, drag a rectangle and confirm
    (or dismiss to test cancel — see below).
 4. Expect:
-   - **Clipboard:** PNG image (paste into Preview or another app).
+   - **Clipboard:** PNG image (paste into Preview, Paint, or another app).
    - **Workspace:** new page under the configured quick-note directory
      (default `Inbox/`) titled **Screen clip** with an embedded asset.
    - **Asset file:** `assets/capture.webp` (lossless WebP) or `assets/capture.png`
      if WebP encode fails.
 5. In the Lattice UI, open the new inbox page and confirm the image renders.
 
-## Cancel / interactive stub
+## Cancel / interactive overlay
 
-1. Trigger **⌘⇧2** / **Screen Clip**.
-2. Press **Esc** or click outside the overlay without confirming a region.
+1. Trigger the shortcut or **Screen Clip**.
+2. Press **Esc** or click outside the overlay without confirming a region
+   (Windows: right-click also cancels).
 3. Expect:
    - No new inbox page.
    - No clipboard change.
@@ -62,14 +96,16 @@ back to the primary display without user interaction.
 3. Confirm the clipped pixels match the chosen region (not a cropped primary
    display).
 
-## Automated checks (no Screen Recording)
+## Automated checks (no Screen Recording / WGC)
 
 ```sh
 cargo test -p lattice-capture-core
+cargo test -p lattice-capture-windows
 cargo test -p lattice-handlers capture::
+cargo check -p lattice-desktop --features capture
 pnpm --filter @lattice/desktop test src/screenClip.test.ts
 ```
 
 These tests validate destination/source/plan types, inbox ingest limits,
 filename sanitization, collision renames, and stable event constants. They do
-**not** invoke ScreenCaptureKit or require Screen Recording permission.
+**not** invoke ScreenCaptureKit or WGC overlays or require capture permission.

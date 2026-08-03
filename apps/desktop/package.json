@@ -20,7 +20,7 @@
     "tauri:dev:novoice": "bash ../../scripts/run-with-dotenv.sh env LATTICE_DEV_HOME=\"$(cd ../.. && pwd)/target/dev-home\" LATTICE_DEV_RESET_DEMO=1 tauri dev",
     "tauri:dev:keep": "bash ../../scripts/run-with-dotenv.sh env LATTICE_DEV_HOME=\"$(cd ../.. && pwd)/target/dev-home\" tauri dev --features voice-embedded",
     "tauri:build": "tauri build --features voice-embedded",
-    "tauri:build:windows": "tauri build --bundles nsis",
+    "tauri:build:windows": "tauri build --bundles nsis --features capture",
     "tauri:build:novoice": "tauri build",
     "test": "vitest run",
     "test:perf": "playwright test --project=browser",
