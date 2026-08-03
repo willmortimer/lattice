@@ -3,6 +3,11 @@
   padding: 14px 16px;
   display: grid;
   gap: 8px;
+  border: 1px solid var(--lt-line, var(--lt-line-strong, #3a4150));
+  border-radius: var(--lt-radius, 8px);
+  color: var(--lt-text-soft, inherit);
+  background: var(--lt-panel, #1b1f27);
+  box-shadow: var(--lt-shadow-md, 0 16px 44px rgba(0, 0, 0, 0.35));
 }
 
 .guidance-tour-popover__eyebrow {

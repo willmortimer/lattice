@@ -1,6 +1,5 @@
 import "./agentOverlayHost.css";
 
-import { PopoverPopup } from "@lattice/ui";
 import { useCallback, useEffect, useRef } from "react";
 
 import { useAgentSessionStore } from "./agentStore";
@@ -30,10 +29,11 @@ function AgentOverlayCallout({ overlay }: AgentOverlayCalloutProps) {
       className="agent-overlay-callout"
       style={{ zIndex: 1201 }}
     >
-      <PopoverPopup className="agent-overlay-callout__popup" role="note">
+      {/* Plain surface: Base UI Popover.Popup requires <Popover.Positioner>. */}
+      <div className="agent-overlay-callout__popup" role="note">
         <div className="agent-overlay-callout__eyebrow">Agent</div>
         <p className="agent-overlay-callout__body">{overlay.commentary}</p>
-      </PopoverPopup>
+      </div>
     </FloatingPopoverPositioner>
   );
 }

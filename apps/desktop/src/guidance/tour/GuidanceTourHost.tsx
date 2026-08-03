@@ -1,5 +1,5 @@
 import { useMachine } from "@xstate/react";
-import { Button, PopoverPortal, PopoverPopup, PopoverRoot } from "@lattice/ui";
+import { Button } from "@lattice/ui";
 import { useEffect, useRef } from "react";
 
 import { FloatingPopoverPositioner } from "../../overlay/FloatingPopoverPositioner";
@@ -41,34 +41,30 @@ export function GuidanceTourHost({ tour, onFinished }: GuidanceTourHostProps) {
   return (
     <>
       <GuidanceSpotlight rect={snapshot.context.anchorRect} />
-      <PopoverRoot open={showing}>
-        <PopoverPortal>
-          <FloatingPopoverPositioner
-            rect={snapshot.context.anchorRect}
-            placement={tourSideToPlacement(step.placement ?? "bottom")}
-            sideOffset={12}
-            enabled={showing}
-            style={{ zIndex: 1201 }}
-          >
-            <PopoverPopup className="guidance-tour-popover" role="dialog" aria-label={step.title}>
-              <div className="guidance-tour-popover__eyebrow">Tour</div>
-              <h2 className="guidance-tour-popover__title">{step.title}</h2>
-              {step.body ? <p className="guidance-tour-popover__body">{step.body}</p> : null}
-              <div className="guidance-tour-popover__actions">
-                <Button variant="ghost" size="sm" onClick={() => send({ type: "SKIP" })}>
-                  Skip tour
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => send({ type: "SKIP_STEP" })}>
-                  Skip step
-                </Button>
-                <Button variant="primary" size="sm" onClick={() => send({ type: "NEXT" })}>
-                  Next
-                </Button>
-              </div>
-            </PopoverPopup>
-          </FloatingPopoverPositioner>
-        </PopoverPortal>
-      </PopoverRoot>
+      <FloatingPopoverPositioner
+        rect={snapshot.context.anchorRect}
+        placement={tourSideToPlacement(step.placement ?? "bottom")}
+        sideOffset={12}
+        enabled={showing}
+        style={{ zIndex: 1201 }}
+      >
+        <div className="guidance-tour-popover" role="dialog" aria-label={step.title}>
+          <div className="guidance-tour-popover__eyebrow">Tour</div>
+          <h2 className="guidance-tour-popover__title">{step.title}</h2>
+          {step.body ? <p className="guidance-tour-popover__body">{step.body}</p> : null}
+          <div className="guidance-tour-popover__actions">
+            <Button variant="ghost" size="sm" onClick={() => send({ type: "SKIP" })}>
+              Skip tour
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => send({ type: "SKIP_STEP" })}>
+              Skip step
+            </Button>
+            <Button variant="primary" size="sm" onClick={() => send({ type: "NEXT" })}>
+              Next
+            </Button>
+          </div>
+        </div>
+      </FloatingPopoverPositioner>
     </>
   );
 }

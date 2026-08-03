@@ -1,5 +1,6 @@
 import type { Placement } from "@floating-ui/react-dom";
 import type { CSSProperties, ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 import { useVirtualFloatingPosition } from "./useVirtualFloatingPosition";
 import type { RectSource } from "./floatingPosition";
@@ -13,8 +14,14 @@ type FloatingPopoverPositionerProps = {
   className?: string;
   style?: CSSProperties;
   children: ReactNode;
+  /** Portal to `document.body` so overflow clipping cannot hide the callout. */
+  portal?: boolean;
 };
 
+/**
+ * Positions callout content against a virtual rect (not a DOM trigger).
+ * Do not nest Base UI `Popover.Popup` here — that requires `<Popover.Positioner>`.
+ */
 export function FloatingPopoverPositioner({
   rect,
   placement = "bottom",
@@ -24,6 +31,7 @@ export function FloatingPopoverPositioner({
   className,
   style,
   children,
+  portal = true,
 }: FloatingPopoverPositionerProps) {
   const { refs, floatingStyles } = useVirtualFloatingPosition({
     rect,
@@ -36,7 +44,7 @@ export function FloatingPopoverPositioner({
 
   if (!enabled) return null;
 
-  return (
+  const node = (
     <div
       ref={refs.setFloating}
       className={className}
@@ -45,4 +53,9 @@ export function FloatingPopoverPositioner({
       {children}
     </div>
   );
+
+  if (portal && typeof document !== "undefined") {
+    return createPortal(node, document.body);
+  }
+  return node;
 }
