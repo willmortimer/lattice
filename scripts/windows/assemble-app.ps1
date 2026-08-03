@@ -13,7 +13,14 @@ foreach ($name in Get-LatticeWindowsSidecarNames) {
     throw "assemble-app: missing $src (required production sidecar)"
   }
   $dest = Join-Path $destDir "$name.exe"
-  Copy-Item -Force -Path $src -Destination $dest
+  $srcFull = (Get-Item -LiteralPath $src).FullName
+  $destFull = [System.IO.Path]::GetFullPath($dest)
+  # Sidecars and desktop share CARGO_TARGET_DIR/release — skip no-op self-copy.
+  if ($srcFull -eq $destFull) {
+    Write-Host "assemble-app: $name.exe already in place → $destDir"
+    continue
+  }
+  Copy-Item -Force -LiteralPath $src -Destination $dest
   Write-Host "assemble-app: bundled $name.exe → $destDir"
 }
 
