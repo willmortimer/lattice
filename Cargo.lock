@@ -6260,6 +6260,7 @@ dependencies = [
  "lattice-core",
  "lattice-embedding",
  "lattice-index",
+ "lattice-profile",
  "lattice-runtime",
  "lattice-storage",
  "latticefs-core",
