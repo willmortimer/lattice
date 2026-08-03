@@ -18,10 +18,14 @@ pub use secitem_macos::{
 pub const GITHUB_TOKEN_SERVICE: &str = "lattice.github";
 /// Keychain account for the CLI/desktop user access token from GitHub login.
 pub const GITHUB_USER_TOKEN_KEY: &str = "lattice.github.user";
+/// Ephemeral probe account; must not overlap user or binding keys.
+pub const GITHUB_PROBE_KEY: &str = "lattice.github.probe";
 
 pub const GITLAB_TOKEN_SERVICE: &str = "lattice.gitlab";
 /// Keychain account for the CLI/desktop user access token from GitLab login.
 pub const GITLAB_USER_TOKEN_KEY: &str = "lattice.gitlab.user";
+/// Ephemeral probe account; must not overlap user or binding keys.
+pub const GITLAB_PROBE_KEY: &str = "lattice.gitlab.probe";
 
 /// Keychain service name for a connector provider id (`github`, `gitlab`, …).
 pub fn token_service_for(provider: &str) -> String {
@@ -53,6 +57,27 @@ pub trait TokenStore: Send + Sync {
     fn set(&self, key: &str, material: &TokenMaterial) -> Result<()>;
     fn get(&self, key: &str) -> Result<Option<TokenMaterial>>;
     fn delete(&self, key: &str) -> Result<()>;
+}
+
+/// Returns `true` when the OS credential store accepts a write/delete cycle for `probe_key`.
+///
+/// Handlers use this once per process to decide between [`production_token_store`] and
+/// [`MemoryTokenStore`]. The probe key must be dedicated (never a user-session account).
+pub fn probe_token_store_writable(service: &str, probe_key: &str) -> bool {
+    let store = production_token_store(service);
+    let material = TokenMaterial {
+        access_token: "probe".into(),
+        refresh_token: None,
+        expires_in: None,
+        token_type: None,
+    };
+    match store.set(probe_key, &material) {
+        Ok(()) => {
+            let _ = store.delete(probe_key);
+            true
+        }
+        Err(_) => false,
+    }
 }
 
 /// Preferred production store: App Group SecItem on macOS (with legacy migrate),
@@ -171,18 +196,61 @@ impl TokenStore for KeychainTokenStore {
 mod tests {
     use super::*;
 
-    #[test]
-    fn memory_round_trip() {
-        let store = MemoryTokenStore::new();
-        let material = TokenMaterial {
+    const TEST_SERVICE: &str = "lattice.test.credentials";
+    const TEST_KEY: &str = "round-trip";
+
+    fn sample_material() -> TokenMaterial {
+        TokenMaterial {
             access_token: "tok".into(),
             refresh_token: Some("ref".into()),
             expires_in: Some(3600),
             token_type: Some("bearer".into()),
-        };
+        }
+    }
+
+    #[test]
+    fn memory_round_trip() {
+        let store = MemoryTokenStore::new();
+        let material = sample_material();
         store.set("k1", &material).unwrap();
         assert_eq!(store.get("k1").unwrap().unwrap().access_token, "tok");
         store.delete("k1").unwrap();
         assert!(store.get("k1").unwrap().is_none());
+    }
+
+    #[test]
+    fn keychain_round_trip_when_writable() {
+        if !probe_token_store_writable(TEST_SERVICE, "lattice.test.probe") {
+            eprintln!("skipping keychain_round_trip_when_writable: OS keyring not writable");
+            return;
+        }
+        let store = KeychainTokenStore::with_service(TEST_SERVICE);
+        let material = sample_material();
+        store.set(TEST_KEY, &material).unwrap();
+        let loaded = store.get(TEST_KEY).unwrap().expect("stored token");
+        assert_eq!(loaded, material);
+        store.delete(TEST_KEY).unwrap();
+        assert!(store.get(TEST_KEY).unwrap().is_none());
+    }
+
+    #[test]
+    fn production_token_store_round_trip_when_writable() {
+        if !probe_token_store_writable(TEST_SERVICE, "lattice.test.probe") {
+            eprintln!("skipping production_token_store_round_trip_when_writable: OS keyring not writable");
+            return;
+        }
+        let store = production_token_store(TEST_SERVICE);
+        let material = sample_material();
+        store.set(TEST_KEY, &material).unwrap();
+        let loaded = store.get(TEST_KEY).unwrap().expect("stored token");
+        assert_eq!(loaded, material);
+        store.delete(TEST_KEY).unwrap();
+        assert!(store.get(TEST_KEY).unwrap().is_none());
+    }
+
+    #[test]
+    fn probe_uses_dedicated_key_not_user_accounts() {
+        assert_ne!(GITHUB_PROBE_KEY, GITHUB_USER_TOKEN_KEY);
+        assert_ne!(GITLAB_PROBE_KEY, GITLAB_USER_TOKEN_KEY);
     }
 }

@@ -34,9 +34,10 @@ pub use clone::{
     shallow_clone_repo, shallow_clone_repo_for, CloneOutcome, GitForge,
 };
 pub use credentials::{
-    binding_token_key_for, production_token_store, token_service_for, user_token_key_for,
-    KeychainTokenStore, MemoryTokenStore, TokenMaterial, TokenStore, GITHUB_TOKEN_SERVICE,
-    GITHUB_USER_TOKEN_KEY, GITLAB_TOKEN_SERVICE, GITLAB_USER_TOKEN_KEY,
+    binding_token_key_for, probe_token_store_writable, production_token_store, token_service_for,
+    user_token_key_for, KeychainTokenStore, MemoryTokenStore, TokenMaterial, TokenStore,
+    GITHUB_PROBE_KEY, GITHUB_TOKEN_SERVICE, GITHUB_USER_TOKEN_KEY, GITLAB_PROBE_KEY,
+    GITLAB_TOKEN_SERVICE, GITLAB_USER_TOKEN_KEY,
 };
 #[cfg(target_os = "macos")]
 pub use credentials::{

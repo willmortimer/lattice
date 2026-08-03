@@ -9,10 +9,11 @@ use std::time::Duration;
 
 use lattice_connectors::{
     connect_repo, disconnect_repo, list_bindings, list_checkout_tree, list_repos_for_token,
-    oauth_loopback_begin, oauth_loopback_finish_http, production_token_store, read_checkout_file,
-    refresh_repo, CheckoutEntry, CheckoutFile, ConnectRepoInput, ConnectedRepoSummary,
-    GitHubRepoSummary, HttpGitHubApiClient, MemoryTokenStore, OAuthLoopbackStart, TokenMaterial,
-    TokenStore, GITHUB_TOKEN_SERVICE, GITHUB_USER_TOKEN_KEY,
+    oauth_loopback_begin, oauth_loopback_finish_http, probe_token_store_writable,
+    production_token_store, read_checkout_file, refresh_repo, CheckoutEntry, CheckoutFile,
+    ConnectRepoInput, ConnectedRepoSummary, GitHubRepoSummary, HttpGitHubApiClient,
+    MemoryTokenStore, OAuthLoopbackStart, TokenStore, GITHUB_PROBE_KEY, GITHUB_TOKEN_SERVICE,
+    GITHUB_USER_TOKEN_KEY,
 };
 use serde::{Deserialize, Serialize};
 
@@ -22,23 +23,7 @@ fn token_store() -> &'static dyn TokenStore {
     static USE_MEMORY: OnceLock<bool> = OnceLock::new();
 
     let use_memory = *USE_MEMORY.get_or_init(|| {
-        let store = production_token_store(GITHUB_TOKEN_SERVICE);
-        let probe_key = "lattice.github.probe";
-        match store.set(
-            probe_key,
-            &TokenMaterial {
-                access_token: "probe".into(),
-                refresh_token: None,
-                expires_in: None,
-                token_type: None,
-            },
-        ) {
-            Ok(()) => {
-                let _ = store.delete(probe_key);
-                false
-            }
-            Err(_) => true,
-        }
+        !probe_token_store_writable(GITHUB_TOKEN_SERVICE, GITHUB_PROBE_KEY)
     });
     if use_memory {
         MEMORY.get_or_init(MemoryTokenStore::new)

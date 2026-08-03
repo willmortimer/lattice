@@ -1,8 +1,9 @@
 //! Authoritative resource bytes: local disk or cloud GET (no silent fallback).
 
+use lattice_connectors::probe_token_store_writable;
 use lattice_cloud_client::{
     default_client, HttpCloudBlobClient, KeychainCloudSessionStore, MemoryCloudSessionStore,
-    resolve_cloud_bearer, CloudSessionStore,
+    resolve_cloud_bearer, CloudSessionStore, CLOUD_PROBE_KEY, CLOUD_TOKEN_SERVICE,
 };
 use latticefs_core::{
     open_cloud_authoritative_bytes, resource_stat_or_register, AuthorityMode,
@@ -17,14 +18,7 @@ fn session_store() -> &'static dyn CloudSessionStore {
     static USE_MEMORY: OnceLock<bool> = OnceLock::new();
 
     let use_memory = *USE_MEMORY.get_or_init(|| {
-        let store = KeychainCloudSessionStore::new();
-        match store.save_token("probe") {
-            Ok(()) => {
-                let _ = store.clear_token();
-                false
-            }
-            Err(_) => true,
-        }
+        !probe_token_store_writable(CLOUD_TOKEN_SERVICE, CLOUD_PROBE_KEY)
     });
     if use_memory {
         MEMORY.get_or_init(MemoryCloudSessionStore::new)
