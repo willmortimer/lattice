@@ -5910,7 +5910,9 @@ dependencies = [
 name = "lattice-capture-windows"
 version = "0.1.0"
 dependencies = [
+ "image",
  "lattice-capture-core",
+ "windows 0.61.3",
 ]
 
 [[package]]

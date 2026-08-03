@@ -2,8 +2,6 @@
 //!
 //! Windows `WDA_EXCLUDEFROMCAPTURE` exclusion is deferred (see ADR-0052).
 
-mod shelf_platform;
-
 use std::collections::VecDeque;
 use std::path::Path;
 use std::sync::Mutex;
@@ -137,7 +135,7 @@ pub fn install_shelf_window(app: &AppHandle) {
     };
     let _ = window.set_always_on_top(true);
     let _ = window.set_visible_on_all_workspaces(true);
-    shelf_platform::configure_floating_panel(&window);
+    super::shelf_platform::configure_floating_panel(&window);
     position_shelf_window(&window);
 }
 
@@ -168,7 +166,7 @@ fn reveal_shelf_window(app: &AppHandle, snapshot: &CaptureShelfSnapshot, mode: S
     let _ = window.emit(CAPTURE_SHELF_UPDATED_EVENT, snapshot);
     match mode {
         ShelfRevealMode::Passive => {
-            shelf_platform::show_without_activation(&window);
+            super::shelf_platform::show_without_activation(&window);
         }
         ShelfRevealMode::Activating => {
             let _ = window.show();
