@@ -46,6 +46,9 @@ Live environment (required):
   LATTICE_API_BASE_URL
   LATTICE_AUTH_TOKEN
 
+Binary selection (delegates to cell-firecracker-dogfood.sh --live):
+  LATTICE_CELL_DOGFOOD_BIN, LATTICE_DOGFOOD_PROFILE — see that script's usage
+
 Live celld / runsc (Linux lab — not run by this script):
   # celld with Linux gVisor OCI backend; runsc on PATH
   # Optional: export XDG_RUNTIME_DIR=/run/user/$UID for per-user export parent

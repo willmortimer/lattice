@@ -38,6 +38,12 @@ Live environment (required):
   LATTICE_API_BASE_URL     latticed HTTP API (e.g. http://127.0.0.1:18787)
   LATTICE_AUTH_TOKEN       Bearer token for propose_resource
 
+Live binary selection (--live only; dry-run always uses cargo test):
+  LATTICE_CELL_DOGFOOD_BIN  Prebuilt dogfood binary (takes precedence when executable)
+  LATTICE_DOGFOOD_PROFILE   Set to release to force cargo run --release when no prebuilt
+                            binary exists (default: debug cargo run; also prefers
+                            target/release/cell-firecracker-dogfood when present)
+
 Mac OCI live (execution-mode=oci) also needs:
   CELL_VZ_RUNTIME_DIR or CELL_OCI_IVISOR_WORKSPACE (→ <workspace>/vz-runtime)
   KernelFS export under agent-share:
@@ -197,4 +203,14 @@ if ((${#missing[@]} > 0)); then
 fi
 
 echo "==> cell firecracker dogfood (live celld at $CELLD_BASE_URL)"
+if [[ -n "${LATTICE_CELL_DOGFOOD_BIN:-}" && -x "${LATTICE_CELL_DOGFOOD_BIN}" ]]; then
+  exec "${LATTICE_CELL_DOGFOOD_BIN}" "${live_args[@]}"
+fi
+release_bin="$root/target/release/cell-firecracker-dogfood"
+if [[ -x "$release_bin" ]]; then
+  exec "$release_bin" "${live_args[@]}"
+fi
+if [[ "${LATTICE_DOGFOOD_PROFILE:-}" == "release" ]]; then
+  exec cargo run -q --release -p lattice-agentd --bin cell-firecracker-dogfood -- "${live_args[@]}"
+fi
 exec cargo run -q -p lattice-agentd --bin cell-firecracker-dogfood -- "${live_args[@]}"
