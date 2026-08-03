@@ -104,6 +104,12 @@ lattice-voice-macos = { workspace = true, optional = true }
 lattice-audio-macos = { workspace = true, optional = true }
 lattice-capture-macos = { workspace = true, optional = true }
 
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.61", features = [
+    "Foundation",
+    "Security_Credentials_UI",
+] }
+
 [target.'cfg(target_os = "macos")'.features]
 lattice-desktop = [
     "voice?/dep:lattice-voice",

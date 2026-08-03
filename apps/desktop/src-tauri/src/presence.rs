@@ -1,4 +1,4 @@
-//! User-presence prompts via platform LocalAuthentication.
+//! User-presence prompts via platform LocalAuthentication / Windows Hello.
 //!
 //! This is a session gate (and future privileged-action approval hook), not
 //! encryption. See ADR 0049 and ADR 0038.
@@ -53,7 +53,10 @@ impl fmt::Display for PresenceError {
             Self::Failed => write!(f, "Authentication failed"),
             Self::NotAvailable => write!(f, "Biometric or device authentication is not available"),
             Self::Unsupported => {
-                write!(f, "App lock authentication is only available on macOS")
+                write!(
+                    f,
+                    "App lock authentication is not available on this platform"
+                )
             }
         }
     }
@@ -61,14 +64,14 @@ impl fmt::Display for PresenceError {
 
 impl std::error::Error for PresenceError {}
 
-/// Prompt for device owner authentication (Touch ID with password fallback on macOS).
+/// Prompt for device owner authentication (Touch ID / Windows Hello with PIN fallback).
 pub fn request_user_presence(reason: PresenceReason) -> Result<(), PresenceError> {
     request_user_presence_with_reason(reason.as_localized())
 }
 
 /// Require presence for a privileged mutation (approve / apply).
 ///
-/// - macOS: fail closed on cancel / failure / unavailable biometrics.
+/// - macOS / Windows: fail closed on cancel / failure / unavailable biometrics.
 /// - Other platforms: allow until a presence backend exists ([`PresenceError::Unsupported`]).
 /// - Automated runs: skip when `LATTICE_SKIP_PRESENCE=1` or the `e2e-testing` feature is on.
 pub fn require_approval_presence(reason: PresenceReason) -> Result<(), String> {
@@ -92,7 +95,11 @@ pub fn request_user_presence_with_reason(reason: &str) -> Result<(), PresenceErr
     {
         macos::evaluate(reason)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        windows_hello::evaluate(reason)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = reason;
         Err(PresenceError::Unsupported)
@@ -105,10 +112,37 @@ pub fn presence_available() -> bool {
     {
         macos::can_evaluate()
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        windows_hello::can_evaluate()
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         false
     }
+}
+
+/// Map WinRT `UserConsentVerificationResult` discriminant (stable ABI values).
+///
+/// Kept platform-agnostic so Darwin CI can cover Windows Hello error mapping
+/// without a live verifier.
+#[cfg(any(test, target_os = "windows"))]
+pub(crate) fn map_user_consent_verification_result(code: i32) -> Result<(), PresenceError> {
+    match code {
+        0 => Ok(()),                                  // Verified
+        6 => Err(PresenceError::Cancelled),           // Canceled
+        1 | 2 | 3 => Err(PresenceError::NotAvailable), // DeviceNotPresent / NotConfigured / DisabledByPolicy
+        _ => Err(PresenceError::Failed),              // DeviceBusy / RetriesExhausted / unknown
+    }
+}
+
+/// Map WinRT `UserConsentVerifierAvailability` discriminant (stable ABI values).
+#[cfg(any(test, target_os = "windows"))]
+pub(crate) fn map_user_consent_availability(code: i32) -> bool {
+    matches!(
+        code,
+        0 | 4 // Available | DeviceBusy
+    )
 }
 
 #[cfg(target_os = "macos")]
@@ -188,6 +222,74 @@ mod macos {
     }
 }
 
+#[cfg(target_os = "windows")]
+mod windows_hello {
+    use windows::core::HSTRING;
+    use windows::Security::Credentials::UI::UserConsentVerifier;
+
+    use super::{
+        map_user_consent_availability, map_user_consent_verification_result, PresenceError,
+    };
+
+    pub(super) fn can_evaluate() -> bool {
+        match check_availability() {
+            Ok(availability) => map_user_consent_availability(availability.0),
+            Err(_) => false,
+        }
+    }
+
+    pub(super) fn evaluate(reason: &str) -> Result<(), PresenceError> {
+        if reason.trim().is_empty() {
+            return Err(PresenceError::Failed);
+        }
+
+        match check_availability() {
+            Ok(availability) if map_user_consent_availability(availability.0) => {}
+            Ok(_) => return Err(PresenceError::NotAvailable),
+            Err(_) => return Err(PresenceError::NotAvailable),
+        }
+
+        // Prefer RequestVerificationAsync (ADR 0049 / H1). For Win32 hosts this
+        // still routes through Windows Hello / device PIN when configured.
+        let operation = UserConsentVerifier::RequestVerificationAsync(&HSTRING::from(reason))
+            .map_err(|_| PresenceError::Failed)?;
+        let result = operation.get().map_err(|_| PresenceError::Failed)?;
+        map_user_consent_verification_result(result.0)
+    }
+
+    fn check_availability(
+    ) -> windows::core::Result<
+        windows::Security::Credentials::UI::UserConsentVerifierAvailability,
+    > {
+        UserConsentVerifier::CheckAvailabilityAsync()?.get()
+    }
+
+    #[cfg(test)]
+    mod win_abi_smoke {
+        use windows::Security::Credentials::UI::{
+            UserConsentVerificationResult, UserConsentVerifierAvailability,
+        };
+
+        use super::super::{map_user_consent_availability, map_user_consent_verification_result};
+
+        #[test]
+        fn verification_result_abi_matches_mapper() {
+            assert_eq!(UserConsentVerificationResult::Verified.0, 0);
+            assert_eq!(UserConsentVerificationResult::Canceled.0, 6);
+            assert_eq!(UserConsentVerificationResult::DeviceNotPresent.0, 1);
+            assert!(map_user_consent_verification_result(0).is_ok());
+        }
+
+        #[test]
+        fn availability_abi_matches_mapper() {
+            assert_eq!(UserConsentVerifierAvailability::Available.0, 0);
+            assert_eq!(UserConsentVerifierAvailability::DeviceBusy.0, 4);
+            assert!(map_user_consent_availability(0));
+            assert!(map_user_consent_availability(4));
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -206,9 +308,54 @@ mod tests {
         assert_eq!(PresenceError::Unsupported.code(), "presence-unsupported");
     }
 
-    #[cfg(not(target_os = "macos"))]
     #[test]
-    fn non_macos_presence_is_unsupported() {
+    fn unsupported_message_is_platform_neutral() {
+        let message = PresenceError::Unsupported.to_string();
+        assert!(!message.to_lowercase().contains("macos only"));
+        assert!(message.contains("not available on this platform"));
+    }
+
+    #[test]
+    fn windows_hello_verification_mapping() {
+        assert_eq!(map_user_consent_verification_result(0), Ok(()));
+        assert_eq!(
+            map_user_consent_verification_result(6),
+            Err(PresenceError::Cancelled)
+        );
+        assert_eq!(
+            map_user_consent_verification_result(1),
+            Err(PresenceError::NotAvailable)
+        );
+        assert_eq!(
+            map_user_consent_verification_result(2),
+            Err(PresenceError::NotAvailable)
+        );
+        assert_eq!(
+            map_user_consent_verification_result(3),
+            Err(PresenceError::NotAvailable)
+        );
+        assert_eq!(
+            map_user_consent_verification_result(4),
+            Err(PresenceError::Failed)
+        );
+        assert_eq!(
+            map_user_consent_verification_result(5),
+            Err(PresenceError::Failed)
+        );
+    }
+
+    #[test]
+    fn windows_hello_availability_mapping() {
+        assert!(map_user_consent_availability(0));
+        assert!(map_user_consent_availability(4));
+        assert!(!map_user_consent_availability(1));
+        assert!(!map_user_consent_availability(2));
+        assert!(!map_user_consent_availability(3));
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[test]
+    fn unsupported_platforms_report_unavailable() {
         assert!(!presence_available());
         assert_eq!(
             request_user_presence(PresenceReason::UnlockApp),

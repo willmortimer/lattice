@@ -3,7 +3,7 @@ import { Lock } from "@phosphor-icons/react";
 import { useState } from "react";
 
 import { BrandMark } from "./BrandMark";
-import { unlockApp } from "../lib/appLock";
+import { appLockAuthMethodLabel, unlockApp } from "../lib/appLock";
 
 interface AppLockOverlayProps {
   onUnlocked: () => void;
@@ -13,6 +13,7 @@ interface AppLockOverlayProps {
 export function AppLockOverlay({ onUnlocked }: AppLockOverlayProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const authLabel = appLockAuthMethodLabel();
 
   async function handleUnlock() {
     setBusy(true);
@@ -33,7 +34,7 @@ export function AppLockOverlay({ onUnlocked }: AppLockOverlayProps) {
     <div className="app-lock-overlay" role="dialog" aria-modal="true" aria-label="Lattice is locked">
       <BrandMark size={56} />
       <h1 className="empty-wordmark">Lattice</h1>
-      <p className="app-lock-copy">Session locked. Unlock with Touch ID or your device password.</p>
+      <p className="app-lock-copy">Session locked. Unlock with {authLabel}.</p>
       <Button type="button" onClick={() => void handleUnlock()} disabled={busy}>
         <Lock size={16} aria-hidden />
         {busy ? "Waiting…" : "Unlock"}

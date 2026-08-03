@@ -462,8 +462,8 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
     id: "privacy.app-lock",
     section: "privacy",
     title: "App lock",
-    description: "Require Touch ID or device password when Lattice launches.",
-    keywords: ["touch id", "authentication", "security"],
+    description: "Require Touch ID, Windows Hello, or device PIN/password when Lattice launches.",
+    keywords: ["touch id", "windows hello", "pin", "authentication", "security"],
   },
   {
     id: "privacy.idle-lock",
