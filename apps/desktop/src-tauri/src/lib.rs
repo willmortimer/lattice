@@ -120,6 +120,25 @@ pub fn run() {
                                 let _ = main.set_focus();
                             }
                         }
+                        Some(deep_link::DeepLinkAction::CloudAuthCallback(payload)) => {
+                            match lattice_handlers::cloud_complete_desktop_handoff(
+                                payload.code,
+                                payload.state,
+                                payload.error,
+                            ) {
+                                Ok(status) => {
+                                    let _ = handle.emit("cloud-session-changed", &status);
+                                }
+                                Err(err) => {
+                                    let _ = handle.emit("cloud-sign-in-error", err);
+                                }
+                            }
+                            if let Some(main) = handle.get_webview_window("main") {
+                                let _ = main.unminimize();
+                                let _ = main.show();
+                                let _ = main.set_focus();
+                            }
+                        }
                         Some(deep_link::DeepLinkAction::OpenResource(payload)) => {
                             let _ = handle.emit("open-resource", &payload);
                             if let Some(main) = handle.get_webview_window("main") {
@@ -383,6 +402,8 @@ pub fn run() {
             cloud::cloud_session_status,
             cloud::cloud_sign_in,
             cloud::cloud_sign_in_apple,
+            cloud::cloud_begin_browser_siwa,
+            cloud::cloud_complete_desktop_handoff,
             cloud::cloud_sign_out,
             cloud::cloud_update_preferences,
             cloud::product_telemetry_emit,
@@ -409,6 +430,8 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
+            // `RunEvent::Opened` is macOS-only (Finder / document reopen).
+            #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Opened { urls } = event {
                 for url in urls {
                     if let Ok(path) = url.to_file_path() {
@@ -422,6 +445,10 @@ pub fn run() {
                         }
                     }
                 }
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = (app, event);
             }
         });
 }
