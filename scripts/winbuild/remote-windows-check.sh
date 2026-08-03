@@ -77,7 +77,9 @@ cd $(printf '%q' "$dest")
 for task in ${tasks}; do
   echo "lattice-winbuild-remote: run \$task" >&2
   # Windows .exe under WSL can drain SSH stdin; never let it see the heredoc.
-  "\$WB" doctor --file $(printf '%q' "$manifest") </dev/null
+  # Scope doctor to the task being run — global doctor fails when optional
+  # packaging tools (pnpm) are missing even for cargo-only tasks.
+  "\$WB" doctor "\$task" --file $(printf '%q' "$manifest") </dev/null
   "\$WB" run "\$task" --file $(printf '%q' "$manifest") </dev/null
 done
 
