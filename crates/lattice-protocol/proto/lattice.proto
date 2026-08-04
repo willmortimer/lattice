@@ -50,6 +50,11 @@ message Request {
     StartAgentRunRequest start_agent_run = 60;
     CancelAgentRunRequest cancel_agent_run = 61;
     GetAgentHealthRequest get_agent_health = 62;
+    // Yrs collab plane (field numbers 70–79; ADR 0055 / Y0).
+    OpenCollabDocRequest open_collab_doc = 70;
+    ApplyCollabUpdateRequest apply_collab_update = 71;
+    GetCollabStateRequest get_collab_state = 72;
+    CloseCollabDocRequest close_collab_doc = 73;
   }
 }
 
@@ -76,6 +81,10 @@ message Response {
     StartAgentRunResponse start_agent_run = 60;
     CancelAgentRunResponse cancel_agent_run = 61;
     GetAgentHealthResponse get_agent_health = 62;
+    OpenCollabDocResponse open_collab_doc = 70;
+    ApplyCollabUpdateResponse apply_collab_update = 71;
+    GetCollabStateResponse get_collab_state = 72;
+    CloseCollabDocResponse close_collab_doc = 73;
   }
 }
 
@@ -579,4 +588,65 @@ message AgentEvent {
   string event_type = 2;
   // Full JSON object for the event (Phase A opaque payload).
   string payload_json = 3;
+}
+
+// ---------------------------------------------------------------------------
+// Yrs collab plane (field numbers 70–79; ADR 0055, local pilot Y0)
+// Documents are keyed by LatticeFS ResourceId UUID — never by path.
+// ---------------------------------------------------------------------------
+
+message OpenCollabDocRequest {
+  string workspace_id = 1;
+  // Registry ResourceId UUID string (rejects synthetic path: ids).
+  string doc_id = 2;
+  // Optional workspace-relative path; when set, daemon registers/stats and
+  // requires the resolved ResourceId to match doc_id.
+  optional string path = 3;
+}
+
+message OpenCollabDocResponse {
+  string doc_id = 1;
+  // lib0 v1 state vector of the server doc after open.
+  bytes state_vector = 2;
+  // Full document state as a lib0 v1 update (empty doc → empty/minimal update).
+  bytes update = 3;
+  // True when this open created a new in-memory Yrs doc.
+  bool created = 4;
+}
+
+message ApplyCollabUpdateRequest {
+  string workspace_id = 1;
+  string doc_id = 2;
+  // lib0 v1 Yrs update bytes.
+  bytes update = 3;
+}
+
+message ApplyCollabUpdateResponse {
+  string doc_id = 1;
+  bytes state_vector = 2;
+}
+
+message GetCollabStateRequest {
+  string workspace_id = 1;
+  string doc_id = 2;
+  // Client's lib0 v1 state vector; server returns missing updates.
+  bytes state_vector = 3;
+}
+
+message GetCollabStateResponse {
+  string doc_id = 1;
+  // Server state vector after computing the diff.
+  bytes state_vector = 2;
+  // lib0 v1 update encoding everything the client is missing.
+  bytes update = 3;
+}
+
+message CloseCollabDocRequest {
+  string workspace_id = 1;
+  string doc_id = 2;
+}
+
+message CloseCollabDocResponse {
+  // True when the in-memory session was dropped (last open reference closed).
+  bool closed = 1;
 }

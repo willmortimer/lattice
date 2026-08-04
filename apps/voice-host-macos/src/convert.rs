@@ -56,7 +56,11 @@ pub fn voice_request_from_proto(
         | Body::GetSemanticStatus(_)
         | Body::StartAgentRun(_)
         | Body::CancelAgentRun(_)
-        | Body::GetAgentHealth(_) => Ok(None),
+        | Body::GetAgentHealth(_)
+        | Body::OpenCollabDoc(_)
+        | Body::ApplyCollabUpdate(_)
+        | Body::GetCollabState(_)
+        | Body::CloseCollabDoc(_) => Ok(None),
     }
 }
 

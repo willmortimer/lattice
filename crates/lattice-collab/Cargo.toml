@@ -1,0 +1,15 @@
+[package]
+name = "lattice-collab"
+description = "In-memory Yrs collaborative document sessions keyed by LatticeFS ResourceId"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+latticefs-core.workspace = true
+thiserror.workspace = true
+yrs = "0.21"
+
+[dev-dependencies]
+tempfile = "3"

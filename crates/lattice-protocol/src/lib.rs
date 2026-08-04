@@ -6,8 +6,9 @@
 //! voice session plane (PrepareModel / StartVoiceSession / PushAudioChunk /
 //! transcripts / AudioGap) on the same Envelope (ADR 0043), the semantic
 //! search plane (EnableSemanticSearch / GetSemanticStatus / SemanticStatusChanged),
-//! and the embedded agent plane (StartAgentRun / CancelAgentRun / GetAgentHealth /
-//! AgentEvent; ADR 0044).
+//! the embedded agent plane (StartAgentRun / CancelAgentRun / GetAgentHealth /
+//! AgentEvent; ADR 0044), and the Yrs collab plane (OpenCollabDoc /
+//! ApplyCollabUpdate / GetCollabState / CloseCollabDoc; ADR 0055).
 
 mod error;
 mod framing;

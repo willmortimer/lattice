@@ -38,6 +38,7 @@ lattice-mcp-catalog.workspace = true
 lattice-relay-protocol.workspace = true
 lattice-profile.workspace = true
 lattice-protocol.workspace = true
+lattice-collab.workspace = true
 lattice-runtime.workspace = true
 lattice-voice.workspace = true
 serde.workspace = true

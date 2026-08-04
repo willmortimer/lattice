@@ -1,17 +1,19 @@
 use lattice_protocol::{
     decode_frame, encode_frame, event_envelope, request_envelope, response_envelope,
-    ApplyPageUpdateRequest, ApplyPageUpdateResponse, AudioGap, AudioSampleFormat,
-    CancelAgentRunRequest, CancelAgentRunResponse, CancelVoiceSessionRequest,
-    CancelVoiceSessionResponse, Event, FinalTranscript, FinalizationMode, FinishUtteranceRequest,
-    FinishUtteranceResponse, GetAgentHealthRequest, GetAgentHealthResponse, HealthRequest,
+    ApplyCollabUpdateRequest, ApplyCollabUpdateResponse, ApplyPageUpdateRequest,
+    ApplyPageUpdateResponse, AudioGap, AudioSampleFormat, CancelAgentRunRequest,
+    CancelAgentRunResponse, CancelVoiceSessionRequest, CancelVoiceSessionResponse,
+    CloseCollabDocRequest, CloseCollabDocResponse, Event, FinalTranscript, FinalizationMode,
+    FinishUtteranceRequest, FinishUtteranceResponse, GetAgentHealthRequest,
+    GetAgentHealthResponse, GetCollabStateRequest, GetCollabStateResponse, HealthRequest,
     HealthResponse, IndexProgress, ModelState, ModelStatus, ModelStatusChanged,
-    OpenWorkspaceRequest, OpenWorkspaceResponse, PartialTranscript, PingRequest,
-    PrepareModelRequest, PrepareModelResponse, PushAudioChunkRequest, PushAudioChunkResponse,
-    Request, ResourceChanged, Response, SearchHit, SearchRequest, SearchResponse, SessionContext,
-    SessionFailed, SpeechCapabilities, SpeechSessionConfig, StartAgentRunRequest,
-    StartAgentRunResponse, StartVoiceSessionRequest, StartVoiceSessionResponse,
-    TranscriptionSessionState, UpdateSessionContextRequest, UpdateSessionContextResponse,
-    WorkspaceLease, WorkspaceLeaseChanged, PROTOCOL_VERSION,
+    OpenCollabDocRequest, OpenCollabDocResponse, OpenWorkspaceRequest, OpenWorkspaceResponse,
+    PartialTranscript, PingRequest, PrepareModelRequest, PrepareModelResponse,
+    PushAudioChunkRequest, PushAudioChunkResponse, Request, ResourceChanged, Response, SearchHit,
+    SearchRequest, SearchResponse, SessionContext, SessionFailed, SpeechCapabilities,
+    SpeechSessionConfig, StartAgentRunRequest, StartAgentRunResponse, StartVoiceSessionRequest,
+    StartVoiceSessionResponse, TranscriptionSessionState, UpdateSessionContextRequest,
+    UpdateSessionContextResponse, WorkspaceLease, WorkspaceLeaseChanged, PROTOCOL_VERSION,
 };
 use prost::Message;
 use std::path::PathBuf;
@@ -652,6 +654,129 @@ fn agent_event() -> lattice_protocol::Envelope {
     )
 }
 
+fn open_collab_doc_request() -> lattice_protocol::Envelope {
+    request_envelope(
+        "golden-open-collab",
+        Request {
+            deadline_unix_ms: None,
+            idempotency_key: None,
+            body: Some(lattice_protocol::request::Body::OpenCollabDoc(
+                OpenCollabDocRequest {
+                    workspace_id: "ws-1".into(),
+                    doc_id: "0190abcdef0123456789abcdef012345".into(),
+                    path: Some("Notes.md".into()),
+                },
+            )),
+        },
+    )
+}
+
+fn open_collab_doc_response() -> lattice_protocol::Envelope {
+    response_envelope(
+        "golden-open-collab",
+        Response {
+            body: Some(lattice_protocol::response::Body::OpenCollabDoc(
+                OpenCollabDocResponse {
+                    doc_id: "0190abcdef0123456789abcdef012345".into(),
+                    state_vector: vec![0x00],
+                    update: vec![0x00, 0x00],
+                    created: true,
+                },
+            )),
+        },
+    )
+}
+
+fn apply_collab_update_request() -> lattice_protocol::Envelope {
+    request_envelope(
+        "golden-apply-collab",
+        Request {
+            deadline_unix_ms: None,
+            idempotency_key: Some("idem-collab-1".into()),
+            body: Some(lattice_protocol::request::Body::ApplyCollabUpdate(
+                ApplyCollabUpdateRequest {
+                    workspace_id: "ws-1".into(),
+                    doc_id: "0190abcdef0123456789abcdef012345".into(),
+                    update: vec![0x01, 0x02, 0x03, 0x04],
+                },
+            )),
+        },
+    )
+}
+
+fn apply_collab_update_response() -> lattice_protocol::Envelope {
+    response_envelope(
+        "golden-apply-collab",
+        Response {
+            body: Some(lattice_protocol::response::Body::ApplyCollabUpdate(
+                ApplyCollabUpdateResponse {
+                    doc_id: "0190abcdef0123456789abcdef012345".into(),
+                    state_vector: vec![0x00, 0x01],
+                },
+            )),
+        },
+    )
+}
+
+fn get_collab_state_request() -> lattice_protocol::Envelope {
+    request_envelope(
+        "golden-get-collab",
+        Request {
+            deadline_unix_ms: None,
+            idempotency_key: None,
+            body: Some(lattice_protocol::request::Body::GetCollabState(
+                GetCollabStateRequest {
+                    workspace_id: "ws-1".into(),
+                    doc_id: "0190abcdef0123456789abcdef012345".into(),
+                    state_vector: vec![0x00],
+                },
+            )),
+        },
+    )
+}
+
+fn get_collab_state_response() -> lattice_protocol::Envelope {
+    response_envelope(
+        "golden-get-collab",
+        Response {
+            body: Some(lattice_protocol::response::Body::GetCollabState(
+                GetCollabStateResponse {
+                    doc_id: "0190abcdef0123456789abcdef012345".into(),
+                    state_vector: vec![0x00, 0x01],
+                    update: vec![0xaa, 0xbb],
+                },
+            )),
+        },
+    )
+}
+
+fn close_collab_doc_request() -> lattice_protocol::Envelope {
+    request_envelope(
+        "golden-close-collab",
+        Request {
+            deadline_unix_ms: None,
+            idempotency_key: None,
+            body: Some(lattice_protocol::request::Body::CloseCollabDoc(
+                CloseCollabDocRequest {
+                    workspace_id: "ws-1".into(),
+                    doc_id: "0190abcdef0123456789abcdef012345".into(),
+                },
+            )),
+        },
+    )
+}
+
+fn close_collab_doc_response() -> lattice_protocol::Envelope {
+    response_envelope(
+        "golden-close-collab",
+        Response {
+            body: Some(lattice_protocol::response::Body::CloseCollabDoc(
+                CloseCollabDocResponse { closed: true },
+            )),
+        },
+    )
+}
+
 fn assert_golden(name: &str, envelope: &lattice_protocol::Envelope) {
     let path = fixtures_dir().join(name);
     let actual = envelope.encode_to_vec();
@@ -899,6 +1024,58 @@ fn golden_get_agent_health_response() {
 #[test]
 fn golden_agent_event() {
     assert_golden("agent_event.hex", &agent_event());
+}
+
+#[test]
+fn golden_open_collab_doc_request() {
+    assert_golden("open_collab_doc_request.hex", &open_collab_doc_request());
+}
+
+#[test]
+fn golden_open_collab_doc_response() {
+    assert_golden("open_collab_doc_response.hex", &open_collab_doc_response());
+}
+
+#[test]
+fn golden_apply_collab_update_request() {
+    assert_golden(
+        "apply_collab_update_request.hex",
+        &apply_collab_update_request(),
+    );
+}
+
+#[test]
+fn golden_apply_collab_update_response() {
+    assert_golden(
+        "apply_collab_update_response.hex",
+        &apply_collab_update_response(),
+    );
+}
+
+#[test]
+fn golden_get_collab_state_request() {
+    assert_golden("get_collab_state_request.hex", &get_collab_state_request());
+}
+
+#[test]
+fn golden_get_collab_state_response() {
+    assert_golden(
+        "get_collab_state_response.hex",
+        &get_collab_state_response(),
+    );
+}
+
+#[test]
+fn golden_close_collab_doc_request() {
+    assert_golden("close_collab_doc_request.hex", &close_collab_doc_request());
+}
+
+#[test]
+fn golden_close_collab_doc_response() {
+    assert_golden(
+        "close_collab_doc_response.hex",
+        &close_collab_doc_response(),
+    );
 }
 
 #[test]

@@ -14,19 +14,23 @@ use lattice_client::{
 };
 use lattice_protocol::{
     encode_frame, envelope, error_envelope, event, event_envelope, request, response,
-    response_envelope, ApplyPageUpdateRequest, ApplyPageUpdateResponse, CancelAgentRunRequest,
-    CancelAgentRunResponse, DisableSemanticSearchRequest, DisableSemanticSearchResponse,
+    response_envelope, ApplyCollabUpdateRequest, ApplyCollabUpdateResponse, ApplyPageUpdateRequest,
+    ApplyPageUpdateResponse, CancelAgentRunRequest, CancelAgentRunResponse, CloseCollabDocRequest,
+    CloseCollabDocResponse, DisableSemanticSearchRequest, DisableSemanticSearchResponse,
     EnableSemanticSearchRequest, EnableSemanticSearchResponse, Error as WireError, Event,
-    FrameDecoder, GetAgentHealthRequest, GetAgentHealthResponse, GetSemanticStatusRequest,
-    GetSemanticStatusResponse, HealthRequest, HealthResponse, IndexProgress, OpenWorkspaceRequest,
-    OpenWorkspaceResponse, PingRequest, PingResponse, Request, ResourceChanged, Response,
-    SearchRequest, SearchResponse, SemanticStatus as WireSemanticStatus, StartAgentRunRequest,
-    StartAgentRunResponse, WorkspaceLeaseChanged, PROTOCOL_VERSION,
+    FrameDecoder, GetAgentHealthRequest, GetAgentHealthResponse, GetCollabStateRequest,
+    GetCollabStateResponse, GetSemanticStatusRequest, GetSemanticStatusResponse, HealthRequest,
+    HealthResponse, IndexProgress, OpenCollabDocRequest, OpenCollabDocResponse,
+    OpenWorkspaceRequest, OpenWorkspaceResponse, PingRequest, PingResponse, Request,
+    ResourceChanged, Response, SearchRequest, SearchResponse,
+    SemanticStatus as WireSemanticStatus, StartAgentRunRequest, StartAgentRunResponse,
+    WorkspaceLeaseChanged, PROTOCOL_VERSION,
 };
 use lattice_runtime::{
     IdempotentOutcome, LatticeRuntime, RuntimeEvent, RuntimeIndexProgress, RuntimeResourceChanged,
     SemanticStatus,
 };
+use lattice_collab::CollabRegistry;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::sync::{broadcast, oneshot, Mutex};
 use tracing::{debug, info, warn};
@@ -46,6 +50,8 @@ pub struct DaemonState {
     pub semantic: Option<Arc<crate::embed_host::SemanticController>>,
     pub voice: Option<Arc<crate::voice_host::VoiceController>>,
     pub agent: Option<Arc<crate::agent::AgentController>>,
+    /// In-memory Yrs sessions (Y0); journal persistence is Y2.
+    pub collab: Arc<Mutex<CollabRegistry>>,
     connections: Option<Arc<ConnectionTracker>>,
     event_tx: broadcast::Sender<Event>,
     /// Quiet bus for agent run chunks; pumped with priority over `event_tx`.
@@ -92,6 +98,7 @@ impl DaemonState {
             semantic,
             voice,
             agent,
+            collab: Arc::new(Mutex::new(CollabRegistry::new())),
             connections: None,
             event_tx,
             agent_event_tx,
@@ -573,6 +580,27 @@ async fn handle_request(
         Some(request::Body::GetAgentHealth(GetAgentHealthRequest {})) => {
             handle_get_agent_health(state).await
         }
+        Some(request::Body::OpenCollabDoc(OpenCollabDocRequest {
+            workspace_id,
+            doc_id,
+            path,
+        })) => {
+            handle_open_collab_doc(state, workspace_id, doc_id, path).await
+        }
+        Some(request::Body::ApplyCollabUpdate(ApplyCollabUpdateRequest {
+            workspace_id,
+            doc_id,
+            update,
+        })) => handle_apply_collab_update(state, workspace_id, doc_id, update).await,
+        Some(request::Body::GetCollabState(GetCollabStateRequest {
+            workspace_id,
+            doc_id,
+            state_vector,
+        })) => handle_get_collab_state(state, workspace_id, doc_id, state_vector).await,
+        Some(request::Body::CloseCollabDoc(CloseCollabDocRequest {
+            workspace_id,
+            doc_id,
+        })) => handle_close_collab_doc(state, workspace_id, doc_id).await,
         Some(
             body @ (request::Body::PrepareModel(_)
             | request::Body::GetVoiceCapabilities(_)
@@ -1061,6 +1089,133 @@ fn handle_apply_page_update(
         Response {
             body: Some(response::Body::ApplyPageUpdate(ApplyPageUpdateResponse {
                 revision,
+            })),
+        },
+        None,
+    ))
+}
+
+fn require_workspace_session(
+    state: &DaemonState,
+    workspace_id: &str,
+) -> std::result::Result<std::sync::Arc<lattice_runtime::WorkspaceSession>, WireError> {
+    state
+        .runtime
+        .get_session_by_id(workspace_id)
+        .ok_or_else(|| WireError {
+            code: "workspace_not_found".into(),
+            message: format!("workspace session not found for id {workspace_id}"),
+            details: None,
+        })
+}
+
+fn collab_error_to_wire(err: lattice_collab::Error) -> WireError {
+    let code = match &err {
+        lattice_collab::Error::InvalidDocId { .. } => "invalid_collab_doc_id",
+        lattice_collab::Error::SessionNotOpen { .. } => "collab_session_not_open",
+        lattice_collab::Error::Yrs { .. } => "collab_yrs_error",
+        lattice_collab::Error::ResourceResolve { .. } => "collab_resource_resolve_failed",
+        lattice_collab::Error::ResourceIdMismatch { .. } => "collab_resource_id_mismatch",
+    };
+    WireError {
+        code: code.into(),
+        message: err.to_string(),
+        details: None,
+    }
+}
+
+async fn handle_open_collab_doc(
+    state: &DaemonState,
+    workspace_id: String,
+    doc_id: String,
+    path: Option<String>,
+) -> std::result::Result<(Response, Option<(String, lattice_protocol::WorkspaceLease)>), WireError>
+{
+    let session = require_workspace_session(state, &workspace_id)?;
+    let root = session.root().to_path_buf();
+    let mut collab = state.collab.lock().await;
+    let opened = collab
+        .open(
+            &doc_id,
+            Some(root.as_path()),
+            path.as_deref(),
+        )
+        .map_err(collab_error_to_wire)?;
+    Ok((
+        Response {
+            body: Some(response::Body::OpenCollabDoc(OpenCollabDocResponse {
+                doc_id: opened.snapshot.doc_id.to_string(),
+                state_vector: opened.snapshot.state_vector,
+                update: opened.snapshot.update,
+                created: opened.created,
+            })),
+        },
+        None,
+    ))
+}
+
+async fn handle_apply_collab_update(
+    state: &DaemonState,
+    workspace_id: String,
+    doc_id: String,
+    update: Vec<u8>,
+) -> std::result::Result<(Response, Option<(String, lattice_protocol::WorkspaceLease)>), WireError>
+{
+    let _session = require_workspace_session(state, &workspace_id)?;
+    let mut collab = state.collab.lock().await;
+    let snapshot = collab
+        .apply_update(&doc_id, &update)
+        .map_err(collab_error_to_wire)?;
+    Ok((
+        Response {
+            body: Some(response::Body::ApplyCollabUpdate(
+                ApplyCollabUpdateResponse {
+                    doc_id: snapshot.doc_id.to_string(),
+                    state_vector: snapshot.state_vector,
+                },
+            )),
+        },
+        None,
+    ))
+}
+
+async fn handle_get_collab_state(
+    state: &DaemonState,
+    workspace_id: String,
+    doc_id: String,
+    state_vector: Vec<u8>,
+) -> std::result::Result<(Response, Option<(String, lattice_protocol::WorkspaceLease)>), WireError>
+{
+    let _session = require_workspace_session(state, &workspace_id)?;
+    let collab = state.collab.lock().await;
+    let snapshot = collab
+        .get_state(&doc_id, &state_vector)
+        .map_err(collab_error_to_wire)?;
+    Ok((
+        Response {
+            body: Some(response::Body::GetCollabState(GetCollabStateResponse {
+                doc_id: snapshot.doc_id.to_string(),
+                state_vector: snapshot.state_vector,
+                update: snapshot.update,
+            })),
+        },
+        None,
+    ))
+}
+
+async fn handle_close_collab_doc(
+    state: &DaemonState,
+    workspace_id: String,
+    doc_id: String,
+) -> std::result::Result<(Response, Option<(String, lattice_protocol::WorkspaceLease)>), WireError>
+{
+    let _session = require_workspace_session(state, &workspace_id)?;
+    let mut collab = state.collab.lock().await;
+    let closed = collab.close(&doc_id).map_err(collab_error_to_wire)?;
+    Ok((
+        Response {
+            body: Some(response::Body::CloseCollabDoc(CloseCollabDocResponse {
+                closed,
             })),
         },
         None,
