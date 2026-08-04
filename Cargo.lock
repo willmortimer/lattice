@@ -6446,6 +6446,7 @@ dependencies = [
  "lattice-profile",
  "lattice-runtime",
  "lattice-storage",
+ "lattice-workspace-crypto",
  "latticefs-core",
  "serde",
  "serde_json",
@@ -6674,7 +6675,9 @@ version = "0.1.0"
 dependencies = [
  "aes-gcm",
  "keyring",
+ "lattice-core",
  "rand 0.8.7",
+ "tempfile",
  "thiserror 2.0.18",
  "zeroize",
 ]

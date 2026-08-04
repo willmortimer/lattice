@@ -75,7 +75,7 @@ lattice-data.workspace = true
 lattice-datasets.workspace = true
 lattice-duckdb.workspace = true
 lattice-arrow-transport.workspace = true
-lattice-handlers.workspace = true
+lattice-handlers = { workspace = true, features = ["keychain"] }
 lattice-cloud-client.workspace = true
 lattice-connectors.workspace = true
 lattice-runtime.workspace = true

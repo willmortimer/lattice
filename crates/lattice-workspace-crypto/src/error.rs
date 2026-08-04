@@ -28,6 +28,9 @@ pub enum Error {
 
     #[error("ciphertext too short")]
     CiphertextTooShort,
+
+    #[error("backup payload error: {message}")]
+    BackupPayload { message: String },
 }
 
 /// Result alias for this crate.

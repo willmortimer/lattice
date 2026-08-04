@@ -28,6 +28,6 @@ pub use session::{
     MemoryCloudSessionStore, sign_in, sign_in_with_apple, sign_in_with_desktop_handoff, sign_out,
 };
 pub use types::{
-    AiAccess, AuthTokenResponse, CloudSessionStatus, CloudUser, EntitlementsView, MeResponse,
-    PreferencesView,
+    AiAccess, AuthTokenResponse, BackupMetadataResponse, CloudSessionStatus, CloudUser,
+    CloudWorkspaceRecord, EntitlementsView, MeResponse, PreferencesView,
 };

@@ -9,6 +9,10 @@ import {
   reopenResourceFromCloud,
 } from "../lib/cloudBackup";
 import {
+  putEncryptedWorkspaceBackup,
+  type EncryptedBackupPutResult,
+} from "../lib/encryptedBackup";
+import {
   downloadPack,
   getPack,
   semanticStatusToPackStatus,
@@ -26,6 +30,7 @@ import { SettingRow } from "./SettingRow";
 
 export interface FeaturesSettingsProps {
   workspaceRoot: string | null;
+  workspaceId: string | null;
   semanticEnabled: boolean;
   onSemanticEnabledChange: (semanticEnabled: boolean) => void;
   collaborativePageEditor: boolean;
@@ -68,6 +73,7 @@ function queryErrorMessage(error: unknown): string | null {
 /** First-party feature toggles with pack dependency prompts. */
 export function FeaturesSettings({
   workspaceRoot,
+  workspaceId,
   semanticEnabled,
   onSemanticEnabledChange,
   collaborativePageEditor,
@@ -99,6 +105,9 @@ export function FeaturesSettings({
   const [labsError, setLabsError] = useState<string | null>(null);
   const [labsStat, setLabsStat] = useState<ResourceStat | null>(null);
   const [labsOpenStatus, setLabsOpenStatus] = useState<string | null>(null);
+  const [encBackupBusy, setEncBackupBusy] = useState(false);
+  const [encBackupError, setEncBackupError] = useState<string | null>(null);
+  const [encBackupResult, setEncBackupResult] = useState<EncryptedBackupPutResult | null>(null);
 
   const displayError = error ?? queryErrorMessage(semanticQueryError);
 
@@ -166,6 +175,29 @@ export function FeaturesSettings({
       setLabsStat(result.stat);
     } finally {
       setLabsBusy(false);
+    }
+  }
+
+  async function handleEncryptedBackup() {
+    if (inBrowser || encBackupBusy) return;
+    if (!workspaceRoot || !workspaceId) {
+      setEncBackupError("Open a workspace before uploading an encrypted backup.");
+      return;
+    }
+    setEncBackupBusy(true);
+    setEncBackupError(null);
+    setEncBackupResult(null);
+    try {
+      const result = await putEncryptedWorkspaceBackup(workspaceRoot, workspaceId);
+      setEncBackupResult(result);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes("Sign in under Settings")) {
+        openCloudAccountSettings();
+      }
+      setEncBackupError(message);
+    } finally {
+      setEncBackupBusy(false);
     }
   }
 
@@ -321,6 +353,36 @@ export function FeaturesSettings({
             <div className="diagnostics-card" role="alert">
               <strong>Labs cloud blob error</strong>
               <span>{labsError}</span>
+            </div>
+          ) : null}
+
+          <SettingRow
+            settingId="features.labs-encrypted-backup"
+            title="Labs encrypted workspace backup"
+            description="Unlock the workspace DEK in Rust, encrypt a backup payload, and PUT opaque ciphertext to lattice-server. Cloud stores metadata only."
+          >
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={encBackupBusy}
+              onClick={() => void handleEncryptedBackup()}
+            >
+              {encBackupBusy ? "Encrypting…" : "Encrypted backup to cloud"}
+            </Button>
+          </SettingRow>
+          {encBackupResult ? (
+            <div className="diagnostics-card" role="status">
+              <strong>Encrypted backup uploaded</strong>
+              <span>
+                {encBackupResult.backupId} · sha256:{encBackupResult.contentHash} ·{" "}
+                {encBackupResult.ciphertextBytes} bytes ciphertext
+              </span>
+            </div>
+          ) : null}
+          {encBackupError ? (
+            <div className="diagnostics-card" role="alert">
+              <strong>Encrypted backup error</strong>
+              <span>{encBackupError}</span>
             </div>
           ) : null}
 

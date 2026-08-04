@@ -940,6 +940,7 @@ export function SettingsPage({
         {section === "features" && (
           <FeaturesSettings
             workspaceRoot={workspace.root || null}
+            workspaceId={workspace.id || null}
             semanticEnabled={settings.search.semanticEnabled}
             onSemanticEnabledChange={(semanticEnabled) => update("search", { semanticEnabled })}
             collaborativePageEditor={settings.labs.collaborativePageEditor}
