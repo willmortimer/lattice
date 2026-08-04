@@ -6,6 +6,7 @@ import type { ResourceLinkTarget } from "../lib/resourceLinks";
 import type { AppSettings } from "../settings/model";
 import type { Resource } from "../types";
 import type { ResourceRendererContext } from "../renderers/RendererContext";
+import type { CatalogEntry } from "../lib/resourceCatalog";
 import { useDesktopUiStoreApi } from "./desktopUiStore";
 
 export type UseRendererServicesArgs = {
@@ -14,6 +15,7 @@ export type UseRendererServicesArgs = {
   assetRoot: string | null;
   workspaceRoot: string | null;
   resources: readonly Resource[];
+  catalog: ReadonlyMap<string, CatalogEntry>;
   settings: AppSettings;
   pageEditorRef: React.RefObject<PageEditorHandle | null>;
   wikiTargets: readonly ResourceLinkTarget[];
@@ -126,6 +128,7 @@ export function useRendererServices(args: UseRendererServicesArgs): Omit<
       assetRoot: args.assetRoot,
       workspaceRoot: args.workspaceRoot,
       resources: args.resources,
+      catalog: args.catalog,
       settings: args.settings,
       pageEditorRef: args.pageEditorRef,
       wikiTargets: args.wikiTargets,
@@ -139,6 +142,7 @@ export function useRendererServices(args: UseRendererServicesArgs): Omit<
       args.pageEditorRef,
       args.reloadToken,
       args.resources,
+      args.catalog,
       args.settings,
       args.wikiTargets,
       args.workspaceRoot,

@@ -398,6 +398,8 @@ pub struct DesktopSettings {
     pub privacy: PrivacySettings,
     #[serde(default)]
     pub guidance: GuidanceSettings,
+    #[serde(default)]
+    pub labs: LabsSettings,
 }
 
 impl Default for DesktopSettings {
@@ -416,6 +418,7 @@ impl Default for DesktopSettings {
             ai: AiSettings::default(),
             privacy: PrivacySettings::default(),
             guidance: GuidanceSettings::default(),
+            labs: LabsSettings::default(),
         }
     }
 }
@@ -530,6 +533,14 @@ pub struct GuidanceSettings {
     /// Set after the workspace shell tour is completed or skipped.
     #[serde(default)]
     pub shell_tour_finished: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LabsSettings {
+    /// Opt-in Yjs collaborative page editing (requires registry ResourceId).
+    #[serde(default)]
+    pub collaborative_page_editor: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

@@ -99,6 +99,7 @@
     "@tauri-apps/plugin-global-shortcut": "^2.3.1",
     "@tauri-apps/plugin-opener": "^2.5.4",
     "@tiptap/core": "^3.28.0",
+    "@tiptap/extension-collaboration": "^3.28.0",
     "@tiptap/extension-image": "^3.28.0",
     "@tiptap/extension-link": "^3.28.0",
     "@tiptap/extension-table": "^3.28.0",
@@ -131,6 +132,7 @@
     "vega-interpreter": "^2.2.1",
     "vega-lite": "^6.4.3",
     "xstate": "^5.32.5",
+    "yjs": "^13.6.27",
     "yaml": "^2.9.0",
     "zod": "4.4.3",
     "zustand": "^5.0.14"

@@ -261,6 +261,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
     assetRoot,
     workspaceRoot: inBrowser || !snapshot ? null : snapshot.root,
     resources: snapshot?.resources ?? [],
+    catalog,
     settings,
     pageEditorRef,
     wikiTargets,

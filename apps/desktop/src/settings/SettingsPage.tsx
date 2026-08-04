@@ -942,6 +942,10 @@ export function SettingsPage({
             workspaceRoot={workspace.root || null}
             semanticEnabled={settings.search.semanticEnabled}
             onSemanticEnabledChange={(semanticEnabled) => update("search", { semanticEnabled })}
+            collaborativePageEditor={settings.labs.collaborativePageEditor}
+            onCollaborativePageEditorChange={(collaborativePageEditor) =>
+              update("labs", { collaborativePageEditor })
+            }
             onOpenPacks={() => setSection("packs")}
             onOpenCapabilities={() => setSection("capabilities")}
           />

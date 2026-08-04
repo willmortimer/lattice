@@ -105,6 +105,10 @@ export interface DesktopSettings {
   guidance: {
     shellTourFinished: boolean;
   };
+  labs: {
+    /** Opt-in Yjs collaborative page editing (requires registry ResourceId). */
+    collaborativePageEditor: boolean;
+  };
 }
 
 export interface WorkspaceStartupSettings {
@@ -199,6 +203,9 @@ export function defaultDesktopSettings(): DesktopSettings {
     },
     guidance: {
       shellTourFinished: false,
+    },
+    labs: {
+      collaborativePageEditor: false,
     },
   };
 }
@@ -318,6 +325,10 @@ function normalizeProfile(profile: ProfileSnapshot): ProfileSnapshot {
         guidance: {
           ...desktopDefaults.guidance,
           ...profile.settings.desktop?.guidance,
+        },
+        labs: {
+          ...desktopDefaults.labs,
+          ...profile.settings.desktop?.labs,
         },
       },
       workspaces: {

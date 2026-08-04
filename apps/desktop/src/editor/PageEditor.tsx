@@ -31,7 +31,7 @@ import {
 
 import { registerPageAnchorSurface } from "../agent/adapters/surfaces";
 import { ConflictEnvelope } from "./ConflictEnvelope";
-import { liveEditorExtensions } from "./richEditorExtensions";
+import { liveEditorExtensions, collabLiveEditorExtensions } from "./richEditorExtensions";
 import {
   joinFrontmatter,
   parseMarkdownToJSON,
@@ -51,6 +51,12 @@ import { handleEditorLinkClick } from "./linkClick";
 import { applyModeSwitch, bodyForPersistence, type PageMode } from "./pageDraft";
 import { StaleRevisionError, type PageIO } from "./pageIO";
 import { createSerializedSaveController, type SerializedSaveController } from "./serializedSave";
+import {
+  openCollabSession,
+  shouldAutosavePlainMarkdown,
+  type CollabSessionHandle,
+  type PagePersistMode,
+} from "./collab/collabSession";
 import { DIRTY_SAVE_STATE, IDLE_SAVE_STATE, type SaveState } from "./saveState";
 import { KindMark } from "../KindMark";
 import type { PageWidth } from "../lib/pageWidth";
@@ -144,6 +150,14 @@ interface PageEditorProps {
   onPageWidthChange?: (width: PageWidth) => void;
   /** Workspace resource path used for agent anchor registration. */
   resourceId?: string;
+  /** Plain markdown file save vs daemon Yjs collab session. */
+  persistMode?: PagePersistMode;
+  workspaceRoot?: string;
+  pagePath?: string;
+  /** Registry ResourceId for collab open (never `path:` synthetic). */
+  collabDocId?: string;
+  collaborativeAvailable?: boolean;
+  onPersistModeChange?: (mode: PagePersistMode) => void;
 }
 
 /** Imperative escape hatch for a parent that needs the live buffer outside
@@ -190,6 +204,12 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     pageWidth = "standard",
     onPageWidthChange,
     resourceId,
+    persistMode = "plain",
+    workspaceRoot,
+    pagePath,
+    collabDocId,
+    collaborativeAvailable = false,
+    onPersistModeChange,
   },
   ref,
 ) {
@@ -209,7 +229,12 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
   const [wikiIndex, setWikiIndex] = useState(0);
   const [selectionToolbar, setSelectionToolbar] = useState<FloatingToolbarState | null>(null);
   const [blockToolbar, setBlockToolbar] = useState<FloatingToolbarState | null>(null);
+  const [collabYdoc, setCollabYdoc] = useState<import("yjs").Doc | null>(null);
+  const [collabCreated, setCollabCreated] = useState(false);
+  const [collabLoading, setCollabLoading] = useState(false);
+  const [collabError, setCollabError] = useState<string | null>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
+  const collabHandleRef = useRef<CollabSessionHandle | null>(null);
 
   const onCreateTableRef = useRef(onCreateTable);
   onCreateTableRef.current = onCreateTable;
@@ -443,8 +468,77 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
   const saveController = saveControllerRef.current;
 
   const markDocumentDirty = useCallback(() => {
+    if (!shouldAutosavePlainMarkdown(persistMode)) return;
     saveController.markDirty(autosaveDelayRef.current);
-  }, [saveController]);
+  }, [persistMode, saveController]);
+
+  useEffect(() => {
+    if (persistMode !== "collaborative") {
+      collabHandleRef.current?.dispose();
+      collabHandleRef.current = null;
+      setCollabYdoc(null);
+      setCollabCreated(false);
+      setCollabLoading(false);
+      setCollabError(null);
+      return;
+    }
+    if (!workspaceRoot || !pagePath || !collabDocId) {
+      setCollabError("Collaborative mode requires a registry resource id.");
+      return;
+    }
+
+    let cancelled = false;
+    setCollabLoading(true);
+    setCollabError(null);
+    void openCollabSession({
+      workspaceRoot,
+      docId: collabDocId,
+      pagePath,
+      onError: (message) => {
+        if (!cancelled) setCollabError(message);
+      },
+    })
+      .then((handle) => {
+        if (cancelled) {
+          handle.dispose();
+          return;
+        }
+        collabHandleRef.current = handle;
+        setCollabYdoc(handle.ydoc);
+        setCollabCreated(handle.created);
+        setCollabLoading(false);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setCollabError(String(error));
+          setCollabLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      collabHandleRef.current?.dispose();
+      collabHandleRef.current = null;
+      setCollabYdoc(null);
+    };
+  }, [collabDocId, pagePath, persistMode, workspaceRoot]);
+
+  const editorExtensions = useMemo(() => {
+    if (persistMode === "collaborative" && collabYdoc) {
+      return collabLiveEditorExtensions(collabYdoc);
+    }
+    return liveEditorExtensions;
+  }, [collabYdoc, persistMode]);
+
+  const editorContent = useMemo(() => {
+    if (persistMode === "collaborative") {
+      return collabCreated ? initialDoc : undefined;
+    }
+    return initialDoc;
+  }, [collabCreated, initialDoc, persistMode]);
+
+  const editorEnabled =
+    persistMode === "plain" || (persistMode === "collaborative" && collabYdoc !== null);
 
   // The initial revision (on mount) is a "revision change" too — the parent
   // must learn it even though nothing was saved or reloaded yet.
@@ -466,9 +560,11 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     [saveController],
   );
 
-  const editor = useEditor({
-    extensions: liveEditorExtensions,
-    content: initialDoc,
+  const editor = useEditor(
+    {
+      extensions: editorExtensions,
+      content: editorContent,
+      editable: editorEnabled,
     editorProps: {
       attributes: {
         spellcheck: spellcheck ? "true" : "false",
@@ -567,7 +663,9 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     onSelectionUpdate: ({ editor }) => {
       scheduleEditorMenus(editor);
     },
-  });
+  },
+    [editorContent, editorEnabled, editorExtensions],
+  );
   editorRef.current = editor;
 
   useEffect(() => {
@@ -649,8 +747,10 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     draftBodyRef.current = nextBody;
     setDraftBody(nextBody);
     setSourceParseError(null);
-    markDocumentDirty();
-  }, [markDocumentDirty]);
+    if (shouldAutosavePlainMarkdown(persistMode)) {
+      markDocumentDirty();
+    }
+  }, [markDocumentDirty, persistMode]);
 
   const filteredSlashCommands = useMemo(() => {
     const query = slashMenu?.query.toLowerCase() ?? "";
@@ -884,13 +984,14 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     function onKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
+        if (!shouldAutosavePlainMarkdown(persistMode)) return;
         // retry() clears a generic-failure latch so Cmd+S recovers after error.
         void saveControllerRef.current?.retry();
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [persistMode]);
 
   async function handleReload() {
     saveController.clearTimer();
@@ -941,7 +1042,17 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
         onModeChange={requestModeChange}
         pageWidth={pageWidth}
         onPageWidthChange={onPageWidthChange ?? (() => undefined)}
+        persistMode={persistMode}
+        onPersistModeChange={onPersistModeChange}
+        collaborativeAvailable={collaborativeAvailable}
       />
+
+      {collabLoading && persistMode === "collaborative" && (
+        <p className="page-editor-hint" role="status">Opening collaborative session…</p>
+      )}
+      {collabError && persistMode === "collaborative" && (
+        <p className="error-text" role="alert">{collabError}</p>
+      )}
 
       {mode === "source" && (
         <PageSourceEditor
