@@ -71,6 +71,19 @@ fi
 
 command -v winbuild.exe >/dev/null || command -v winbuild >/dev/null
 WB="\$(command -v winbuild.exe || command -v winbuild)"
+
+# WSL must be able to exec Windows PE via interop. When binfmt WSLInterop is
+# missing, every .exe returns "Exec format error" and the leaf cannot run.
+if ! "\$WB" --help </dev/null >/dev/null 2>&1; then
+  echo "lattice-winbuild-remote: cannot execute \$WB (Exec format error / interop broken)" >&2
+  echo "lattice-winbuild-remote: on nixdev, /proc/sys/fs/binfmt_misc/WSLInterop is required" >&2
+  echo "lattice-winbuild-remote: fix from Windows:  wsl --shutdown   then reopen the nixdev distro" >&2
+  echo "lattice-winbuild-remote: confirm:  ssh will@nixdev 'cat /proc/sys/fs/binfmt_misc/WSLInterop'" >&2
+  echo "lattice-winbuild-remote: or run winbuild from an elevated Windows PowerShell on the host:" >&2
+  echo "  cd /d D:\\lattice && D:\\NixPlane\\bin\\winbuild.exe run probe --file D:\\lattice\\.winbuild.json" >&2
+  exit 126
+fi
+
 cd $(printf '%q' "$dest")
 
 # Controller expands WINBUILD_TASKS into the remote for-loop word list.

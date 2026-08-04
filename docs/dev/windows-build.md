@@ -179,3 +179,40 @@ D:\NixPlane\bin\winbuild.exe
   via `tauri-plugin-deep-link`; on Windows, `tauri-plugin-single-instance`
   forwards `lattice://oauth/cloud/callback?…` argv into the running process
   (SIWA pending state is process-local).
+
+## Troubleshooting
+
+### `requests N CPU token(s) but the pool only provides 1`
+
+`windows-nsis-*` tasks are SSH orchestration leaves (no local CPU claim). If an
+older flake still declares `resources.cpu = 4`, either update to current `main`
+or pass a larger pool: `nxr task windows-nsis-demo-bundle -j 4`.
+
+### `winbuild.exe: cannot execute binary file: Exec format error`
+
+nixdev is WSL2; `winbuild.exe` is a Windows PE binary and needs **WSL interop**
+(`binfmt_misc` `WSLInterop`). If interop is down, every `.exe` fails the same way
+(including `cmd.exe` / `powershell.exe`).
+
+From **Windows** (PowerShell):
+
+```powershell
+wsl --shutdown
+# reopen nixdev (or: wsl -d nixdev), then:
+wsl -d nixdev -- cat /proc/sys/fs/binfmt_misc/WSLInterop
+# expect a registered handler, not "missing"
+wsl -d nixdev -- /mnt/d/NixPlane/bin/winbuild.exe --help
+```
+
+Until interop is restored, run the winbuild leaf natively on Windows:
+
+```powershell
+cd D:\lattice
+D:\NixPlane\bin\winbuild.exe run probe --file D:\lattice\.winbuild.json
+D:\NixPlane\bin\winbuild.exe run ensure-toolchain --file D:\lattice\.winbuild.json
+D:\NixPlane\bin\winbuild.exe run build-sidecar --file D:\lattice\.winbuild.json
+D:\NixPlane\bin\winbuild.exe run verify-sidecars --file D:\lattice\.winbuild.json
+D:\NixPlane\bin\winbuild.exe run tauri-bundle --file D:\lattice\.winbuild.json
+# demo First Look installer:
+D:\NixPlane\bin\winbuild.exe run tauri-bundle-demo --file D:\lattice\.winbuild.json
+```

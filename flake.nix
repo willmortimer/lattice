@@ -904,10 +904,8 @@
                   ".winbuild.json"
                   "pnpm-lock.yaml"
                 ];
-                resources = {
-                  cpu = 4;
-                  memory = "8GiB";
-                };
+                # SSH orchestration leaf — heavy work runs on Windows via winbuild.
+                # Keep cpu at 1 so `nxr task …` works when the local pool is small.
               };
               windows-nsis-demo-bundle = {
                 description = "Unsigned Windows NSIS First Look demo installer via nixdev winbuild";
@@ -922,10 +920,6 @@
                   ".winbuild.json"
                   "pnpm-lock.yaml"
                 ];
-                resources = {
-                  cpu = 4;
-                  memory = "8GiB";
-                };
               };
               desktop-ui-build = {
                 description = "Build desktop frontend (Vite)";
