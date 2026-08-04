@@ -91,5 +91,15 @@ if (Get-Command pnpm.exe -ErrorAction SilentlyContinue) {
   & pnpm.cmd --version
 }
 
+# llama-cpp (embed-host --features llama-cpp) needs cmake for the native build.
+$cmake = Get-Command cmake.exe -ErrorAction SilentlyContinue
+if (-not $cmake) {
+  Write-Host "lattice-winbuild-toolchain: cmake.exe not on PATH — install CMake for llama-cpp sidecar builds"
+  Write-Host "lattice-winbuild-toolchain: winget install Kitware.CMake  (or VS C++ CMake tools)"
+} else {
+  Write-Host "lattice-winbuild-toolchain: cmake already present => $($cmake.Source)"
+  & cmake.exe --version | Select-Object -First 1
+}
+
 Write-Host "lattice-winbuild-toolchain: OK"
 exit 0
