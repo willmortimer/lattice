@@ -28,6 +28,9 @@ export interface PageModeChromeProps {
   persistMode?: PagePersistMode;
   onPersistModeChange?: (mode: PagePersistMode) => void;
   collaborativeAvailable?: boolean;
+  /** Sticky comments panel (Collaborative mode only). */
+  commentsOpen?: boolean;
+  onCommentsOpenChange?: (open: boolean) => void;
 }
 
 export function PageModeChrome({
@@ -39,6 +42,8 @@ export function PageModeChrome({
   persistMode = "plain",
   onPersistModeChange,
   collaborativeAvailable = false,
+  commentsOpen = false,
+  onCommentsOpenChange,
 }: PageModeChromeProps) {
   return (
     <div className="page-mode-chrome">
@@ -73,6 +78,18 @@ export function PageModeChrome({
             </button>
           ))}
         </div>
+      ) : null}
+      {persistMode === "collaborative" && onCommentsOpenChange ? (
+        <button
+          type="button"
+          className={
+            commentsOpen ? "page-mode-tab page-mode-tab-active" : "page-mode-tab"
+          }
+          aria-pressed={commentsOpen}
+          onClick={() => onCommentsOpenChange(!commentsOpen)}
+        >
+          Comments
+        </button>
       ) : null}
       <div className="page-width-tabs" role="radiogroup" aria-label="Page width">
         {(Object.keys(WIDTH_LABELS) as PageWidth[]).map((candidate) => (
