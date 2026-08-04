@@ -29,6 +29,7 @@ members = [
     "crates/lattice-voice-macos",
     "crates/lattice-audio",
     "crates/lattice-audio-macos",
+    "crates/lattice-audio-windows",
     "crates/lattice-capture-core",
     "crates/lattice-capture-macos",
     "crates/lattice-capture-windows",
@@ -79,6 +80,7 @@ lattice-voice-macos = { path = "crates/lattice-voice-macos" }
 lattice-collab = { path = "crates/lattice-collab" }
 lattice-audio = { path = "crates/lattice-audio" }
 lattice-audio-macos = { path = "crates/lattice-audio-macos" }
+lattice-audio-windows = { path = "crates/lattice-audio-windows" }
 lattice-capture-core = { path = "crates/lattice-capture-core" }
 lattice-capture-macos = { path = "crates/lattice-capture-macos" }
 lattice-capture-windows = { path = "crates/lattice-capture-windows" }

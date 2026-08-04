@@ -18,13 +18,26 @@ tauri-build = { version = "2", features = [] }
 # Enables the Playwright socket bridge for native WebView E2E / perf.
 # Keep off for normal runs; use `pnpm tauri:dev:e2e` or `--features e2e-testing`.
 e2e-testing = []
-# Native capture + latticed thin client (macOS only). Does not link FluidAudio;
+# Native mic capture + latticed thin client. Does not link FluidAudio;
 # set LATTICE_VOICE_DAEMON=1 to require daemon-only operation.
-voice = []
+# Top-level feature deps (Cargo ignores `target.*.features` for activation).
+# Platform-optional crates are no-ops on the wrong target (same pattern as `capture`).
+voice = [
+    "dep:lattice-voice",
+    "dep:lattice-audio",
+    "dep:bytes",
+    "dep:lattice-audio-macos",
+    "lattice-audio-macos/link-bridge",
+    "dep:lattice-audio-windows",
+]
 # Transitional in-process FluidAudio fallback when latticed/voice-host is down
 # (macOS only). Production daemon-only builds: `--features voice` (omit
 # voice-embedded).
-voice-embedded = ["voice"]
+voice-embedded = [
+    "voice",
+    "dep:lattice-voice-macos",
+    "lattice-voice-macos/link-bridge",
+]
 # Voice is opt-in so Linux CI and machines without the Swift dylib still build.
 # Dev with fallback (macOS): `cargo tauri dev --features voice-embedded`.
 # Native screen capture (ScreenCaptureKit on macOS; Windows WGC): `--features capture`.
@@ -121,8 +134,11 @@ windows = { version = "0.61", features = [
     "Win32_UI_WindowsAndMessaging",
 ] }
 lattice-capture-windows = { workspace = true, optional = true }
+lattice-audio-windows = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "macos")'.features]
+# Historical weak-dep notes (Cargo ignores this section for feature activation).
+# Real activation lives in the top-level `voice` / `voice-embedded` / `capture` features.
 lattice-desktop = [
     "voice?/dep:lattice-voice",
     "voice?/dep:lattice-audio",
@@ -134,8 +150,8 @@ lattice-desktop = [
 ]
 
 # NOTE: Cargo ignores `target.*.features` for package feature activation (see
-# unused-manifest-key warnings). Capture deps are wired via the top-level
-# `capture` feature instead.
+# unused-manifest-key warnings). Voice + capture deps are wired via top-level
+# features; platform-optional crates are no-ops on the wrong target.
 
 [dev-dependencies]
 tempfile = "3"

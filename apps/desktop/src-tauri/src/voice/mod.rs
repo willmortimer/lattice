@@ -152,9 +152,18 @@ pub enum VoiceUiEvent {
 
 #[cfg(not(all(target_os = "macos", feature = "voice")))]
 fn unsupported() -> String {
-    "voice dictation requires macOS arm64 with `--features voice` (daemon thin client) \
-     or `--features voice-embedded` (transitional FluidAudio fallback), plus native capture"
-        .into()
+    #[cfg(all(target_os = "windows", feature = "voice"))]
+    {
+        "voice dictation ASR is deferred on Windows; mic capture (cpal/WASAPI) is available \
+         via voice_status.nativeCapture when a default input exists"
+            .into()
+    }
+    #[cfg(not(all(target_os = "windows", feature = "voice")))]
+    {
+        "voice dictation requires macOS arm64 with `--features voice` (daemon thin client) \
+         or `--features voice-embedded` (transitional FluidAudio fallback), plus native capture"
+            .into()
+    }
 }
 
 #[cfg(all(target_os = "macos", feature = "voice"))]
@@ -335,7 +344,33 @@ pub async fn voice_status(state: State<'_, VoiceState>) -> Result<VoiceStatus, S
             message,
         });
     }
-    #[cfg(not(all(target_os = "macos", feature = "voice")))]
+    #[cfg(all(target_os = "windows", feature = "voice"))]
+    {
+        let _ = state;
+        // Capture-only: cpal/WASAPI mic path exists; ASR/FluidAudio remains deferred.
+        let native_capture = lattice_audio_windows::default_input_available();
+        let message = if native_capture {
+            Some(
+                "Microphone capture ready (cpal/WASAPI); ASR/dictation host unavailable on Windows"
+                    .into(),
+            )
+        } else {
+            Some("No default microphone available".into())
+        };
+        return Ok(VoiceStatus {
+            available: false,
+            prepared: false,
+            preparing: false,
+            listening: false,
+            native_capture,
+            platform: "windows".into(),
+            message,
+        });
+    }
+    #[cfg(not(any(
+        all(target_os = "macos", feature = "voice"),
+        all(target_os = "windows", feature = "voice"),
+    )))]
     {
         let _ = state;
         Ok(VoiceStatus {
