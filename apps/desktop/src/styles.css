@@ -1017,6 +1017,131 @@ html[data-page-width="full"] {
   pointer-events: none;
 }
 
+.page-editor-with-comments {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  gap: 16px;
+  align-items: start;
+}
+
+.page-comments-panel {
+  position: sticky;
+  top: 8px;
+  max-height: calc(100vh - 120px);
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius-sm);
+  background: var(--lt-surface-raised);
+  font: 12px var(--lt-font-ui);
+}
+
+.page-comments-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  color: var(--lt-text);
+}
+
+.page-comments-count {
+  color: var(--lt-muted);
+}
+
+.page-comments-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.page-comments-compose textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 64px;
+  padding: 8px;
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius-sm);
+  background: var(--lt-bg);
+  color: var(--lt-text);
+  font: 12px var(--lt-font-ui);
+}
+
+.page-comments-action {
+  align-self: flex-start;
+  padding: 4px 10px;
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius-sm);
+  background: transparent;
+  color: var(--lt-text);
+  font: 12px var(--lt-font-ui);
+  cursor: pointer;
+}
+
+.page-comments-action:hover {
+  background: var(--lt-line);
+}
+
+.page-comments-error {
+  margin: 0 0 8px;
+  color: var(--lt-danger, #b42318);
+}
+
+.page-comments-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.page-comments-empty {
+  color: var(--lt-muted);
+}
+
+.page-comments-item {
+  padding: 8px;
+  border: 1px solid var(--lt-line);
+  border-radius: var(--lt-radius-sm);
+  background: var(--lt-bg);
+}
+
+.page-comments-item-resolved {
+  opacity: 0.65;
+}
+
+.page-comments-quote {
+  display: block;
+  width: 100%;
+  margin: 0 0 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--lt-muted);
+  font: italic 12px var(--lt-font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.page-comments-quote:hover {
+  color: var(--lt-text);
+}
+
+.page-comments-body {
+  margin: 0 0 8px;
+  color: var(--lt-text);
+  white-space: pre-wrap;
+}
+
+.page-comments-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--lt-muted);
+}
+
 .markdown-body table {
   border-collapse: collapse;
   width: 100%;

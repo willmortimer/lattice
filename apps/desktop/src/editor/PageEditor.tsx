@@ -15,6 +15,7 @@ import type { EditorView } from "@tiptap/pm/view";
 import {
   ArrowDown,
   ArrowUp,
+  ChatText,
   Code,
   CopySimple,
   Link as LinkIcon,
@@ -66,6 +67,8 @@ import {
   type CollabSessionHandle,
   type PagePersistMode,
 } from "./collab/collabSession";
+import { CommentsPanel } from "./comments";
+import { collabCaretUser } from "./collab/awarenessUser";
 import { DIRTY_SAVE_STATE, IDLE_SAVE_STATE, type SaveState } from "./saveState";
 import { KindMark } from "../KindMark";
 import type { PageWidth } from "../lib/pageWidth";
@@ -247,6 +250,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
   const [collabCreated, setCollabCreated] = useState(false);
   const [collabLoading, setCollabLoading] = useState(false);
   const [collabError, setCollabError] = useState<string | null>(null);
+  const [commentsOpen, setCommentsOpen] = useState(false);
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const collabHandleRef = useRef<CollabSessionHandle | null>(null);
 
@@ -533,6 +537,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
       setCollabCreated(false);
       setCollabLoading(false);
       setCollabError(null);
+      setCommentsOpen(false);
       return;
     }
     if (!workspaceRoot || !pagePath || !collabDocId) {
@@ -1119,6 +1124,8 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
         persistMode={persistMode}
         onPersistModeChange={onPersistModeChange}
         collaborativeAvailable={collaborativeAvailable}
+        commentsOpen={commentsOpen}
+        onCommentsOpenChange={persistMode === "collaborative" ? setCommentsOpen : undefined}
       />
 
       {collabLoading && persistMode === "collaborative" && (
@@ -1128,6 +1135,13 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
         <p className="error-text" role="alert">{collabError}</p>
       )}
 
+      <div
+        className={
+          persistMode === "collaborative" && commentsOpen
+            ? "page-editor-with-comments"
+            : undefined
+        }
+      >
       {mode === "source" && (
         <PageSourceEditor
           value={draftBody}
@@ -1154,6 +1168,16 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
         <EditorContent editor={editor} className="markdown-body page-editor-content" />
       </div>
       )}
+
+      {persistMode === "collaborative" && collabYdoc && collabAwareness ? (
+        <CommentsPanel
+          ydoc={collabYdoc}
+          editor={editor}
+          author={collabCaretUser(collabAwareness.clientID).name}
+          open={commentsOpen}
+        />
+      ) : null}
+      </div>
       {mode === "edit" && (
       <p className="page-editor-hint">
         Type / for blocks · [[ to link a page · paste or drop files · Alt+↑/↓ moves a block · ⌘S saves immediately
@@ -1181,6 +1205,16 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
           <button type="button" aria-label={editor.isActive("link") ? "Remove link" : "Add link"} title={editor.isActive("link") ? "Remove link" : "Add link"} onClick={setSelectionLink}>
             {editor.isActive("link") ? <LinkBreak size={14} /> : <LinkIcon size={14} />}
           </button>
+          {persistMode === "collaborative" ? (
+            <button
+              type="button"
+              aria-label="Comment on selection"
+              title="Comment on selection"
+              onClick={() => setCommentsOpen(true)}
+            >
+              <ChatText size={14} />
+            </button>
+          ) : null}
         </div>
       )}
       {mode === "edit" && blockToolbar && !slashMenu && !wikiMenu && (
