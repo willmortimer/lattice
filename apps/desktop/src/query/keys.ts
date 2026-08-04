@@ -10,6 +10,9 @@
  * - ["resource", workspaceId, resourceId, revision]
  * - ["agent-thread", workspaceId, threadId]
  * - ["agent-threads", workspaceId]
+ * - ["agent-run-status", workspaceRoot, runId]
+ * - ["agent-run-events", workspaceRoot, runId]
+ * - ["agent-run-active", workspaceRoot, threadId]
  * - ["kernelfs-run", runId]
  * - ["cloud-session"]
  * - ["voice-status", providerId]
@@ -32,6 +35,16 @@ export const queryKeys = {
 
   agentThreads: (workspaceId: string) => ["agent-threads", workspaceId] as const,
 
+  agentRunStatus: (workspaceRoot: string, runId: string) =>
+    ["agent-run-status", workspaceRoot, runId] as const,
+
+  agentRunEvents: (workspaceRoot: string, runId: string) =>
+    ["agent-run-events", workspaceRoot, runId] as const,
+
+  agentRunActive: (workspaceRoot: string, threadId: string) =>
+    ["agent-run-active", workspaceRoot, threadId] as const,
+
+  /** KernelFS-filtered lifecycle views (distinct from chat run id when correlated). */
   kernelfsRun: (runId: string) => ["kernelfs-run", runId] as const,
 
   cloudSession: () => ["cloud-session"] as const,

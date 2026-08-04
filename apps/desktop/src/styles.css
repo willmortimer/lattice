@@ -8071,6 +8071,14 @@ html[data-motion="always"] *::after {
   gap: 6px;
 }
 
+.agent-workbench-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 16px;
+}
+
 .agent-workbench-section-head h3 {
   margin: 0;
   color: var(--lt-faint);
@@ -8079,6 +8087,40 @@ html[data-motion="always"] *::after {
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.agent-workbench-run-chip {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-family: var(--lt-font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.agent-workbench-run-chip-running {
+  background: color-mix(in oklch, var(--lt-accent) 18%, transparent);
+  color: var(--lt-accent-deep);
+}
+
+.agent-workbench-run-chip-completed {
+  background: color-mix(in oklch, var(--lt-ok, #3d8f6e) 16%, transparent);
+  color: var(--lt-ok, #2f6b52);
+}
+
+.agent-workbench-run-chip-failed {
+  background: color-mix(in oklch, var(--lt-danger, #c44) 16%, transparent);
+  color: var(--lt-danger, #a33);
+}
+
+.agent-workbench-run-chip-cancelled {
+  background: color-mix(in oklch, var(--lt-faint) 18%, transparent);
+  color: var(--lt-muted);
+}
+
+.agent-workbench-lifecycle-list {
+  list-style: none;
 }
 
 .agent-workbench-section-body {

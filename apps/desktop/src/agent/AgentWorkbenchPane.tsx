@@ -13,21 +13,28 @@ import {
   trailStepKey,
   workbenchTrailDetail,
 } from "./agentWorkbenchSections";
+import {
+  formatAgentRunStatusLabel,
+  useAgentRunWorkbenchModel,
+} from "./useAgentRunWorkbenchModel";
 
 function WorkbenchSection({
   title,
   emptyMessage,
   children,
+  headerAside,
 }: {
   title: string;
   emptyMessage: string;
   children?: ReactNode;
+  headerAside?: ReactNode;
 }) {
   const hasContent = Boolean(children);
   return (
     <section className="agent-workbench-section">
       <header className="agent-workbench-section-head">
         <h3>{title}</h3>
+        {headerAside}
       </header>
       {hasContent ? (
         <div className="agent-workbench-section-body">{children}</div>
@@ -56,6 +63,8 @@ function WorkbenchTrailRows({ steps }: { steps: readonly TrailStep[] }) {
 }
 
 export interface AgentWorkbenchPaneProps {
+  workspaceRoot?: string | null;
+  threadId?: string | null;
   proposals?: readonly TransactionProposalSummary[];
   proposalLoading?: boolean;
   onOpenProposal?: (proposalId: string) => void | Promise<void>;
@@ -64,11 +73,19 @@ export interface AgentWorkbenchPaneProps {
 }
 
 export function AgentWorkbenchPane({
+  workspaceRoot = null,
+  threadId = null,
   proposals = [],
   proposalLoading = false,
   onOpenProposal,
   activeProposalId = null,
 }: AgentWorkbenchPaneProps) {
+  const storeThreadId = useAgentSessionStore((state) =>
+    workspaceRoot ? (state.threadIds[workspaceRoot] ?? null) : null,
+  );
+  const resolvedThreadId = threadId ?? storeThreadId;
+  const { status, projection } = useAgentRunWorkbenchModel(workspaceRoot, resolvedThreadId);
+
   const trailSteps = useAgentSessionStore((state) => state.trailSteps);
   const evidence = useAgentSessionStore((state) => state.evidence);
 
@@ -76,14 +93,44 @@ export function AgentWorkbenchPane({
   const changeSteps = changeTrailSteps(trailSteps);
   const approvalSteps = approvalTrailSteps(trailSteps);
   const pendingProposals = pendingApprovalProposals(proposals);
+  const lifecycle = projection?.lifecycle ?? [];
+  const statusLabel = formatAgentRunStatusLabel(status);
+  const statusChip = statusLabel ? (
+    <span
+      className={`agent-workbench-run-chip agent-workbench-run-chip-${status}`}
+      role="status"
+      aria-label={`Run status: ${statusLabel}`}
+    >
+      {statusLabel}
+    </span>
+  ) : null;
 
   return (
     <aside className="agent-workbench-pane" aria-label="Agent workbench">
       <WorkbenchSection
         title="Timeline"
         emptyMessage="Trail steps appear as the agent works."
+        headerAside={statusChip}
       >
         {trailSteps.length > 0 ? <AgentTrail /> : null}
+      </WorkbenchSection>
+
+      <WorkbenchSection
+        title="Execution"
+        emptyMessage="KernelFS run lifecycle events will appear here."
+      >
+        {lifecycle.length > 0 ? (
+          <ol className="agent-workbench-row-list agent-workbench-lifecycle-list">
+            {lifecycle.map((row) => (
+              <li key={row.eventId} className="agent-workbench-row">
+                <span className="agent-workbench-row-kind">
+                  {row.eventType.replace(/^run\./, "")}
+                </span>
+                <span className="agent-workbench-row-label">{row.label}</span>
+              </li>
+            ))}
+          </ol>
+        ) : null}
       </WorkbenchSection>
 
       <WorkbenchSection

@@ -27,6 +27,7 @@ export function AgentWorkbenchLayout({
   proposalReview = null,
   proposalReviewBusy = false,
   workspaceRoot = null,
+  threadId = null,
   onProposalAccept,
   onProposalReject,
   onProposalCancel,
@@ -86,6 +87,8 @@ export function AgentWorkbenchLayout({
         defaultSize={`${panelSizes.side}%`}
       >
         <AgentWorkbenchPane
+          workspaceRoot={workspaceRoot}
+          threadId={threadId}
           proposals={proposals}
           proposalLoading={proposalLoading}
           onOpenProposal={onOpenProposal}

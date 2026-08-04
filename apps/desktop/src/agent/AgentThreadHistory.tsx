@@ -40,6 +40,7 @@ import {
   invalidateAgentThreads,
   useAgentThreadsQuery,
 } from "../query/useAgentThreadsQuery";
+import { useAgentRunActiveQuery } from "../query/useAgentRunStatusQuery";
 import { useWorkspaceCatalogQuery } from "../query/useWorkspaceCatalog";
 import { useAgentChatControls } from "./agentChatControls";
 import { useAgentSessionStore } from "./agentStore";
@@ -205,6 +206,8 @@ export function AgentThreadHistory({ workspaceRoot }: AgentThreadHistoryProps) {
 
   const controls = useAgentChatControls();
   const isStreaming = controls?.isStreaming === true;
+  const { data: durableActiveRun } = useAgentRunActiveQuery(workspaceRoot, threadId || null);
+  const durableRunActive = durableActiveRun?.run?.status === "running";
 
   const { data: threads = [], error, isFetching } = useAgentThreadsQuery(workspaceRoot);
   const { data: workspaceCatalog } = useWorkspaceCatalogQuery();
@@ -413,7 +416,9 @@ export function AgentThreadHistory({ workspaceRoot }: AgentThreadHistoryProps) {
                     selected={thread.id === threadId}
                     focused={item.index === focusIndex}
                     pinned={pinnedIds.includes(thread.id)}
-                    isActiveRun={isStreaming && thread.id === threadId}
+                    isActiveRun={
+                      thread.id === threadId && (isStreaming || durableRunActive)
+                    }
                     disabled={interactionsDisabled}
                     onSelect={() => {
                       if (thread.id !== threadId) {

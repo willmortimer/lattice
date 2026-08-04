@@ -1,6 +1,29 @@
 export { queryKeys } from "./keys";
 export { queryClient, createDesktopQueryClient } from "./queryClient";
 export {
+  eventsAfterSequence,
+  formatKernelfsLifecycleLabel,
+  isKernelfsLifecycleEventType,
+  projectAgentRunEvents,
+  type AgentRunLifecycleRow,
+  type AgentRunProjection,
+} from "./agentRunProjection";
+export {
+  agentRunEventsQueryOptions,
+  invalidateAgentRunEvents,
+  setAgentRunEventsCache,
+  useAgentRunEventsQuery,
+} from "./useAgentRunEventsQuery";
+export {
+  agentRunActiveQueryOptions,
+  agentRunStatusQueryOptions,
+  invalidateAgentRunActive,
+  invalidateAgentRunStatus,
+  setAgentRunStatusCache,
+  useAgentRunActiveQuery,
+  useAgentRunStatusQuery,
+} from "./useAgentRunStatusQuery";
+export {
   cloudSessionQueryOptions,
   invalidateCloudSession,
   setCloudSessionCache,
