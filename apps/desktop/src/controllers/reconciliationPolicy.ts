@@ -6,9 +6,12 @@ export function dispositionForModifiedResource(args: {
   eventRevision: string | undefined;
   currentRevision: string | null;
   unsaved: boolean;
+  /** Collaborative pages compare against materialized_revision — never auto-reload disk into Y.Doc. */
+  collaborative?: boolean;
 }): ReconciliationDisposition {
   if (!args.currentPath || args.eventPath !== args.currentPath) return "ignore";
   if (args.eventRevision && args.eventRevision === args.currentRevision) return "ignore";
+  if (args.collaborative) return "conflict";
   return args.unsaved ? "conflict" : "reload";
 }
 

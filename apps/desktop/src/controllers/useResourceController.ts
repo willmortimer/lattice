@@ -22,6 +22,7 @@ import { loadDerivedManifest, loadDerivedStatus } from "../lib/derivedRun";
 import { loadTaskManifest } from "../lib/taskRun";
 import { loadWorkflow } from "../lib/workflowRun";
 import { destinationPath } from "../lib/treeOps";
+import type { PagePersistMode } from "../editor/collab/collabSession";
 import type { OpenResourceSession } from "../resourceSession";
 import { deriveResourceFormatId } from "../resourceRendererRegistry";
 import type { Resource, WorkspaceSnapshot } from "../types";
@@ -72,6 +73,7 @@ export interface ResourceController {
   setSession: Dispatch<SetStateAction<OpenResourceSession | null>>;
   pageRef: MutableRefObject<Extract<OpenResourceSession, { kind: "page" }> | null>;
   currentPageRevisionRef: MutableRefObject<string | null>;
+  pagePersistModeRef: MutableRefObject<PagePersistMode>;
   reloadToken: number;
   handleSelect: (resource: Resource, options?: {
     recordHistory?: boolean;
@@ -169,6 +171,7 @@ export function useResourceController(options: ResourceControllerOptions): Resou
   const selectedRef = useRef<Resource | null>(null);
   const sessionRef = useRef<OpenResourceSession | null>(null);
   const currentPageRevisionRef = useRef<string | null>(null);
+  const pagePersistModeRef = useRef<PagePersistMode>("plain");
   const loadGateRef = useRef<ResourceLoadGate>(createResourceLoadGate());
 
   const selectedPaths: ReadonlySet<string> = new Set(
@@ -197,6 +200,7 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     sessionRef.current = null;
     pageRef.current = null;
     currentPageRevisionRef.current = null;
+    pagePersistModeRef.current = "plain";
     setSelected(null);
     setSelectedResourceIds(new Set());
     setSession(null);
@@ -246,6 +250,7 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     sessionRef.current = nextSession;
     pageRef.current = nextSession.kind === "page" ? nextSession : null;
     currentPageRevisionRef.current = nextSession.kind === "page" ? nextSession.revision : null;
+    pagePersistModeRef.current = "plain";
     setSelected(resource);
     setSelectedResourceIds(new Set([resourceIdForPathOrSynthetic(getCatalog(), resource.path)]));
     setSession(nextSession);
@@ -276,6 +281,7 @@ export function useResourceController(options: ResourceControllerOptions): Resou
     sessionRef.current = null;
     pageRef.current = null;
     currentPageRevisionRef.current = null;
+    pagePersistModeRef.current = "plain";
     setSelected(resource);
     if (selectionOptions.syncTreeSelection !== false) {
       setSelectedResourceIds(new Set([resourceIdForPathOrSynthetic(getCatalog(), resource.path)]));
@@ -1050,7 +1056,7 @@ export function useResourceController(options: ResourceControllerOptions): Resou
   }, [renameResource]);
 
   return {
-    selected, selectedResourceIds, selectedPaths, setSelected, session, setSession, pageRef, currentPageRevisionRef, reloadToken,
+    selected, selectedResourceIds, selectedPaths, setSelected, session, setSession, pageRef, currentPageRevisionRef, pagePersistModeRef, reloadToken,
     handleSelect, applyTreeSelection, syncSelectionWithCatalog, reloadPageFromDisk, applyPageContent, saveLocalPage, openCreatedResource,
     clearSelection, clearSelectionIf, clearSelectionPaths,
     commitTitle, renameResource, moveResourceToFolder, moveResourcesToFolder, reconcilePathRemaps, resetResources,

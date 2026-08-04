@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { AssetContextProvider } from "../editor/AssetContext";
 import { ConflictEnvelope } from "../editor/ConflictEnvelope";
@@ -38,6 +38,13 @@ export function PageResourceRenderer({
     resolveRegistryResourceId(context.catalog, pagePath),
   );
   const [persistMode, setPersistMode] = useState<PagePersistMode>("plain");
+  const handlePersistModeChange = useCallback(
+    (mode: PagePersistMode) => {
+      setPersistMode(mode);
+      callbacks.onPersistModeChange?.(mode);
+    },
+    [callbacks],
+  );
 
   useEffect(() => {
     const fromCatalog = resolveRegistryResourceId(context.catalog, pagePath);
@@ -108,7 +115,7 @@ export function PageResourceRenderer({
           pagePath={pagePath}
           collabDocId={registryResourceId}
           collaborativeAvailable={collaborativeAvailable}
-          onPersistModeChange={setPersistMode}
+          onPersistModeChange={handlePersistModeChange}
           onSaveStateChange={callbacks.onSaveStateChange}
           onOpenWiki={callbacks.onOpenWiki}
           onCreateTable={callbacks.onCreateTable}

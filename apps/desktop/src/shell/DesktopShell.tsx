@@ -142,6 +142,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
     treeRenameRequest,
     navigateHistory, closeTab, reorderTab, beginSidebarResize, commitTitle, updateWorkspaceSettings,
     applyWorkspaceSettings, handleOpenWiki, openLinkTarget,     handleNotebookContentChange, handleRevisionChange,
+    handlePagePersistModeChange,
     reloadPageFromDisk,
     setSession,
     appLock, setAppLock,
@@ -292,6 +293,7 @@ export function DesktopShell({ model }: DesktopShellProps) {
           ...current,
           editor: { ...current.editor, pageWidth },
         })),
+      onPersistModeChange: handlePagePersistModeChange,
       openInspectorOnWiki: settings.editor.linkClickBehavior === "inspect",
     },
   });

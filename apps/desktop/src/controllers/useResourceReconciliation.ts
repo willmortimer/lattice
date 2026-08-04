@@ -7,6 +7,7 @@ import { createPage } from "../lib/pages";
 import type { OpenResourceSession } from "../resourceSession";
 import type { Resource, WorkspaceChangeEvent } from "../types";
 import type { CatalogDeltaEvent } from "../lib/resourceCatalog";
+import type { PagePersistMode } from "../editor/collab/collabSession";
 import { conflictSiblingPath, dispositionForModifiedResource, pathIsRemoved, shouldClearRenamedPath } from "./reconciliationPolicy";
 import { listLinkRepairProposals } from "../lib/linkRepair";
 
@@ -23,6 +24,7 @@ export interface ResourceReconciliationOptions {
   currentPageRevisionRef: MutableRefObject<string | null>;
   getSelected: () => Resource | null;
   getSaveState: () => SaveState;
+  getPagePersistMode: () => PagePersistMode;
   pageEditorRef: RefObject<PageEditorHandle | null>;
   applyCatalogDeltaEvent: (event: CatalogDeltaEvent) => void;
   refreshResources: () => Promise<void>;
@@ -117,15 +119,19 @@ export function useResourceReconciliation(options: ResourceReconciliationOptions
     }
 
     if (event.type !== "modified") return;
+    const collaborative = current.getPagePersistMode() === "collaborative";
     const disposition = dispositionForModifiedResource({
       eventPath: event.path,
       currentPath: page?.resource.path ?? null,
       eventRevision: event.revision,
       currentRevision: current.currentPageRevisionRef.current,
       unsaved: isUnsaved(current.getSaveState()),
+      collaborative,
     });
-    if (disposition === "conflict") setExternalConflict({ path: event.path });
-    else if (disposition === "reload") await current.reloadPageFromDisk();
+    if (disposition === "conflict") {
+      setExternalConflict({ path: event.path });
+      current.pageEditorRef.current?.latchExternalConflict();
+    } else if (disposition === "reload") await current.reloadPageFromDisk();
   }, []);
 
   useEffect(() => {

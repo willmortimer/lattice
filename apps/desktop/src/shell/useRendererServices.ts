@@ -1,5 +1,6 @@
 import { useMemo, useRef } from "react";
 
+import type { PagePersistMode } from "../editor/collab/collabSession";
 import type { PageEditorHandle } from "../editor/PageEditor";
 import type { PageWidth } from "../lib/pageWidth";
 import type { ResourceLinkTarget } from "../lib/resourceLinks";
@@ -36,6 +37,7 @@ export type UseRendererServicesArgs = {
     onOpenExternally?: (resource: Resource) => void;
     onPromoteWorkspaceCsv?: (resource: Resource) => void;
     onPageWidthChange?: (width: PageWidth) => void;
+    onPersistModeChange?: (mode: PagePersistMode) => void;
     openInspectorOnWiki?: boolean;
   };
 };
@@ -62,6 +64,7 @@ export function useRendererServices(args: UseRendererServicesArgs): Omit<
   const hasExternal = Boolean(args.handlers.onOpenExternally);
   const hasPromote = Boolean(args.handlers.onPromoteWorkspaceCsv);
   const hasPageWidth = Boolean(args.handlers.onPageWidthChange);
+  const hasPersistMode = Boolean(args.handlers.onPersistModeChange);
 
   const callbacks = useMemo(() => {
     const next: ResourceRendererContext["callbacks"] = {
@@ -111,12 +114,16 @@ export function useRendererServices(args: UseRendererServicesArgs): Omit<
     if (hasPageWidth) {
       next.onPageWidthChange = (width) => handlersRef.current.onPageWidthChange?.(width);
     }
+    if (hasPersistMode) {
+      next.onPersistModeChange = (mode) => handlersRef.current.onPersistModeChange?.(mode);
+    }
     return next;
   }, [
     hasExternal,
     hasImportAsset,
     hasNotebook,
     hasPageWidth,
+    hasPersistMode,
     hasPromote,
     hasProposal,
     hasSearchWiki,
