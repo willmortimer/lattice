@@ -25,6 +25,12 @@ nxr task windows-nsis-bundle
 # or:
 WINBUILD_TASKS='probe ensure-toolchain build-sidecar verify-sidecars tauri-bundle' \
   ./scripts/winbuild/remote-windows-check.sh
+
+# First Look demo NSIS (ships Lattice-FirstLook.cmd → LATTICE_SEED_FIRST_LOOK=1):
+nxr task windows-nsis-demo-bundle
+# or:
+WINBUILD_TASKS='probe ensure-toolchain build-sidecar verify-sidecars tauri-bundle-demo' \
+  ./scripts/winbuild/remote-windows-check.sh
 ```
 
 On nixdev itself (already synced):
@@ -61,6 +67,7 @@ PowerShell scripts under `scripts/windows/` mirror the macOS release leaves in
 | `bench-embed-llama.ps1` | Time `lattice-embed-host` llama-cpp query embeds; prints dims + p50/p95 |
 | `assemble-app.ps1` | Copy sidecars beside `Lattice.exe` (called from `tauri-bundle`) |
 | `tauri-bundle.ps1` | `tauri build --no-bundle --target …` → assemble → `tauri bundle --bundles nsis --target …` (assemble must not `exit`, or NSIS is skipped) |
+| `tauri-bundle-demo.ps1` | Same as `tauri-bundle`, but merges `tauri.windows.demo.conf.json` and ships `Lattice-FirstLook.cmd` (`LATTICE_SEED_FIRST_LOOK=1`) |
 
 Windows sidecars **exclude** seatbelt and FluidAudio/ASR. `lattice-embed-host` is built
 with **llama-cpp** (CPU on Windows; Metal feature is a no-op). The ~640MB GGUF is **not**

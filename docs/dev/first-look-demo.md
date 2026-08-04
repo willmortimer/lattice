@@ -380,6 +380,22 @@ template each launch. Use `tauri:dev:keep` to preserve edits. Installed
 `~/Lattice/Workspaces/First Look` folders stay sticky — create a new workspace
 from the template (or copy seeds) after template changes.
 
+### Release-safe First Look seed (`LATTICE_SEED_FIRST_LOOK`)
+
+Set `LATTICE_SEED_FIRST_LOOK=1` to seed the `demo` → **First Look** workspace under
+the **normal** Lattice home (`~/Lattice` / `%USERPROFILE%\Lattice`). This does
+**not** redirect via `LATTICE_DEV_HOME`. Default release installers still seed
+**Personal**; the Windows demo NSIS variant ships `Lattice-FirstLook.cmd` and is
+built with:
+
+```sh
+nxr task windows-nsis-demo-bundle
+# or: WINBUILD_TASKS='… tauri-bundle-demo' nxr task windows-nsis-bundle
+```
+
+After install, run **Lattice-FirstLook.cmd** (or set the env and launch `Lattice.exe`)
+once so first ensure provisions First Look.
+
 ## How to re-run
 
 ```sh
