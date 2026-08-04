@@ -1,11 +1,13 @@
-//! Optional llama.cpp + Metal backend (`--features llama-cpp`).
+//! Optional llama.cpp backend (`--features llama-cpp`).
 //!
 //! Loads a verified GGUF, runs embedding mode with last-token pooling, truncates
 //! to the requested Matryoshka dimensions, then L2-normalizes. Real inference
 //! tests are gated on `LATTICE_EMBED_LLAMA_GGUF` so CI stays offline.
 //!
-//! Keeps one reusable llama context on [`LlamaEngine`] and packs multiple
-//! document sequences into a single [`LlamaBatch`] when they fit.
+//! On Apple platforms, layers are offloaded to Metal when linked. On Windows and
+//! other hosts, `n_gpu_layers` stays 0 (CPU). Keeps one reusable llama context on
+//! [`LlamaEngine`] and packs multiple document sequences into a single
+//! [`LlamaBatch`] when they fit.
 
 use std::num::NonZeroU32;
 use std::path::{Path, PathBuf};
@@ -67,8 +69,13 @@ unsafe impl Send for LlamaEngine {}
 impl LlamaEngine {
     fn load(artifact_path: &Path) -> Result<Self, EmbedHostError> {
         let backend = shared_backend()?;
-        // Offload all layers to Metal when the metal feature is linked.
-        let model_params = LlamaModelParams::default().with_n_gpu_layers(1_000);
+        // Metal builds offload all layers; CPU (Windows / non-Apple) keeps layers on host.
+        let gpu_layers = if cfg!(any(target_os = "macos", target_os = "ios")) {
+            1_000
+        } else {
+            0
+        };
+        let model_params = LlamaModelParams::default().with_n_gpu_layers(gpu_layers);
         let model =
             LlamaModel::load_from_file(backend, artifact_path, &model_params).map_err(|error| {
                 EmbedHostError::BackendUnavailable(format!(

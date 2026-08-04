@@ -1,5 +1,6 @@
 # Release-build Windows sidecars (latticed, lattice-agentd, lattice-embed-host).
-# No seatbelt, voice, or llama-cpp/Metal backends on Windows beta.
+# embed-host is built with llama-cpp (CPU; Metal feature is a no-op on Windows).
+# GGUF weights are not bundled — Settings Enable downloads them.
 param(
   [string]$Package,
   [string]$Bin,
@@ -48,11 +49,11 @@ if ($Package -and $Bin) {
 }
 
 Write-Host "build-sidecar: CARGO_TARGET_DIR=$env:CARGO_TARGET_DIR"
-Write-Host "build-sidecar: packages=latticed,lattice-agentd,lattice-embed-host (release, no llama-cpp)"
+Write-Host "build-sidecar: packages=latticed,lattice-agentd,lattice-embed-host (release, llama-cpp)"
 
 Build-LatticeSidecar -Pkg "lattice-daemon" -Binary "latticed"
 Build-LatticeSidecar -Pkg "lattice-agentd" -Binary "lattice-agentd"
-Build-LatticeSidecar -Pkg "lattice-embed-host" -Binary "lattice-embed-host"
+Build-LatticeSidecar -Pkg "lattice-embed-host" -Binary "lattice-embed-host" -FeatureList "llama-cpp"
 
 Write-Host "build-sidecar: OK"
 exit 0

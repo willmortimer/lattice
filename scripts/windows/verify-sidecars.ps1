@@ -1,4 +1,4 @@
-# Verify Windows release sidecars (no seatbelt / voice / llama-cpp).
+# Verify Windows release sidecars (embed-host must list llama-cpp + fake).
 $ErrorActionPreference = "Stop"
 . "$PSScriptRoot\_common.ps1"
 Ensure-LatticeWindowsRoot
@@ -20,7 +20,10 @@ $backendLines = @(
   $backends -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ }
 )
 if ($backendLines -notcontains "fake") {
-  throw "verify-sidecars: lattice-embed-host must list fake backend on Windows (no llama-cpp)"
+  throw "verify-sidecars: lattice-embed-host must list fake backend"
+}
+if ($backendLines -notcontains "llama-cpp") {
+  throw "verify-sidecars: lattice-embed-host must list llama-cpp (build with --features llama-cpp)"
 }
 
 Write-Host "verify-sidecars: OK"

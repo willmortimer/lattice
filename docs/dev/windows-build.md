@@ -56,12 +56,15 @@ PowerShell scripts under `scripts/windows/` mirror the macOS release leaves in
 
 | Script | Role |
 | --- | --- |
-| `build-sidecar.ps1` | Release-build `latticed`, `lattice-agentd`, `lattice-embed-host` |
-| `verify-sidecars.ps1` | Assert sidecars exist; embed-host lists `fake` only (no llama-cpp) |
+| `build-sidecar.ps1` | Release-build `latticed`, `lattice-agentd`, `lattice-embed-host` (`--features llama-cpp`) |
+| `verify-sidecars.ps1` | Assert sidecars exist; embed-host lists `fake` and `llama-cpp` |
 | `assemble-app.ps1` | Copy sidecars beside `Lattice.exe` (called from `tauri-bundle`) |
 | `tauri-bundle.ps1` | `tauri build --no-bundle --target …` → assemble → `tauri bundle --bundles nsis --target …` (assemble must not `exit`, or NSIS is skipped) |
 
-Windows sidecars **exclude** seatbelt, voice, and llama-cpp/Metal backends.
+Windows sidecars **exclude** seatbelt and FluidAudio/ASR. `lattice-embed-host` is built
+with **llama-cpp** (CPU on Windows; Metal feature is a no-op). The ~640MB GGUF is **not**
+shipped in NSIS — Settings → Enable downloads it. `ensure-toolchain` warns if `cmake`
+is missing (required to compile llama.cpp).
 Authenticode signing is deferred — installers are unsigned.
 
 Output (when `CARGO_TARGET_DIR=D:\lattice-target\windows-msvc`):
