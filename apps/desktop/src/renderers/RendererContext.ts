@@ -3,6 +3,7 @@ import type { AppSettings } from "../settings/model";
 import type { ResourceLinkTarget } from "../lib/resourceLinks";
 import type { CatalogEntry } from "../lib/resourceCatalog";
 import type { PageWidth } from "../lib/pageWidth";
+import type { PagePersistMode } from "../editor/collab/collabSession";
 import type { PageEditorHandle } from "../editor/PageEditor";
 import type { SaveState } from "../editor/saveState";
 import type { Resource } from "../types";
@@ -33,6 +34,7 @@ export interface ResourceRendererContext {
     onOpenExternally?: (resource: Resource) => void;
     onPromoteWorkspaceCsv?: (resource: Resource) => void;
     onPageWidthChange?: (width: PageWidth) => void;
+    onPersistModeChange?: (mode: PagePersistMode) => void;
   };
   missingCapabilities?: readonly string[];
 }

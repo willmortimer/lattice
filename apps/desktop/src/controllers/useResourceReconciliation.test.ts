@@ -27,6 +27,29 @@ describe("resource reconciliation policy", () => {
     expect(dispositionForModifiedResource({ ...input, unsaved: false })).toBe("reload");
   });
 
+  it("collaborative pages always conflict on external revision change — never silent reload", () => {
+    const input = {
+      eventPath: "Notes/Idea.md",
+      currentPath: "Notes/Idea.md",
+      eventRevision: "rev-3",
+      currentRevision: "rev-2",
+      collaborative: true,
+    };
+    expect(dispositionForModifiedResource({ ...input, unsaved: true })).toBe("conflict");
+    expect(dispositionForModifiedResource({ ...input, unsaved: false })).toBe("conflict");
+  });
+
+  it("collaborative pages ignore watcher echoes at the materialized revision", () => {
+    expect(dispositionForModifiedResource({
+      eventPath: "Notes/Idea.md",
+      currentPath: "Notes/Idea.md",
+      eventRevision: "rev-2",
+      currentRevision: "rev-2",
+      unsaved: true,
+      collaborative: true,
+    })).toBe("ignore");
+  });
+
   it("clears exact renames and removes deleted descendants", () => {
     expect(shouldClearRenamedPath("Notes/Idea.md", "Notes/Idea.md")).toBe(true);
     expect(shouldClearRenamedPath("Notes/Idea.md", "Notes/Other.md")).toBe(false);

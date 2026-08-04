@@ -185,6 +185,8 @@ export interface PageEditorHandle {
   clearDictationProvisional(): void;
   /** Insert authoritative final transcript at the dictation anchor. */
   commitDictationFinal(text: string, from: number): void;
+  /** Block checkpoint materialize after an external disk edit (ADR 0028). */
+  latchExternalConflict: () => void;
 }
 
 /**
@@ -762,6 +764,11 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
         if (!editor) return;
         editor.commands.commitDictationFinal(text, from);
         editor.commands.focus();
+      },
+      latchExternalConflict: () => {
+        materializeControllerRef.current?.setConflict(
+          "This page changed on disk during collaborative editing.",
+        );
       },
     }),
     [editor, frontmatter],

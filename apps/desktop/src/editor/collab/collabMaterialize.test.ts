@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { parseMarkdownToJSON } from "../markdown";
+import { StaleRevisionError } from "../pageIO";
 import { createSerializedSaveController } from "../serializedSave";
 import type { PageIO } from "../pageIO";
 import {
@@ -109,6 +110,37 @@ describe("collabMaterialize", () => {
 
     await vi.advanceTimersByTimeAsync(700);
     await Promise.resolve();
+    await Promise.resolve();
+    expect(saveCount).toBe(1);
+    controller.dispose();
+  });
+
+  it("StaleRevisionError during materialize latches conflict and blocks further checkpoints", async () => {
+    let saveCount = 0;
+    const statuses: string[] = [];
+    const controller = createSerializedSaveController({
+      initialRevision: "rev-0",
+      save: async () => {
+        saveCount += 1;
+        throw new StaleRevisionError("disk revision moved");
+      },
+      onStatus: (status) => {
+        statuses.push(status);
+      },
+      isConflict: (error) => error instanceof StaleRevisionError,
+      savedIndicatorMs: 0,
+    });
+
+    controller.markDirty(0);
+    await vi.runAllTimersAsync();
+    await Promise.resolve();
+
+    expect(saveCount).toBe(1);
+    expect(controller.isConflicted()).toBe(true);
+    expect(statuses).toContain("conflict");
+
+    controller.markDirty(500);
+    await vi.advanceTimersByTimeAsync(500);
     await Promise.resolve();
     expect(saveCount).toBe(1);
     controller.dispose();

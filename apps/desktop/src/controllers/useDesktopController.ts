@@ -1,5 +1,6 @@
 import { demoSnapshot, demoStartEmpty, inBrowser } from "../demo";
 import { requestShellTourStart } from "../guidance";
+import type { PagePersistMode } from "../editor/collab/collabSession";
 import type { SaveState } from "../editor/saveState";
 import { IDLE_SAVE_STATE } from "../editor/saveState";
 import type { PageEditorHandle } from "../editor/PageEditor";
@@ -564,6 +565,7 @@ export function useDesktopController() {
     session,
     pageRef,
     currentPageRevisionRef,
+    pagePersistModeRef,
     reloadToken,
     handleSelect,
     setSession,
@@ -616,6 +618,10 @@ export function useDesktopController() {
         : previous,
     );
   }, [currentPageRevisionRef, setSession]);
+
+  const handlePagePersistModeChange = useCallback((mode: PagePersistMode) => {
+    pagePersistModeRef.current = mode;
+  }, [pagePersistModeRef]);
   const profileNotices = [runtimeNotice, ...profile.notices]
     .filter((notice): notice is NonNullable<typeof notice> => notice !== null)
     .filter((notice) => !dismissedNoticeCodes.includes(notice.code));
@@ -674,6 +680,7 @@ export function useDesktopController() {
           ? rendererSessionIdForPath(selectedRef.current.path)
           : null,
       ),
+    getPagePersistMode: () => pagePersistModeRef.current,
     pageEditorRef,
     applyCatalogDeltaEvent,
     refreshResources,
@@ -1208,6 +1215,7 @@ export function useDesktopController() {
     treeRenameRequest,
     handleNotebookContentChange,
     handleRevisionChange,
+    handlePagePersistModeChange,
     reloadPageFromDisk: resourceController.reloadPageFromDisk,
     setSession,
     appLock,
