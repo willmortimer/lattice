@@ -37,6 +37,8 @@ export interface FeaturesSettingsProps {
   onSemanticEnabledChange: (semanticEnabled: boolean) => void;
   collaborativePageEditor: boolean;
   onCollaborativePageEditorChange: (enabled: boolean) => void;
+  remoteYrsProvider: boolean;
+  onRemoteYrsProviderChange: (enabled: boolean) => void;
   onOpenPacks: () => void;
   onOpenCapabilities: () => void;
 }
@@ -80,6 +82,8 @@ export function FeaturesSettings({
   onSemanticEnabledChange,
   collaborativePageEditor,
   onCollaborativePageEditorChange,
+  remoteYrsProvider,
+  onRemoteYrsProviderChange,
   onOpenPacks,
   onOpenCapabilities,
 }: FeaturesSettingsProps) {
@@ -313,6 +317,18 @@ export function FeaturesSettings({
               checked={collaborativePageEditor}
               onChange={onCollaborativePageEditorChange}
               label="Enable collaborative page editor (Labs)"
+            />
+          </SettingRow>
+          <SettingRow
+            settingId="features.labs-remote-yrs"
+            title="Labs remote Yrs provider"
+            description="When collaborative editing is on and you are signed in to Cloud, exchange full Yrs snapshots via a cloud blob sidecar (local journal stays authoritative)."
+          >
+            <Toggle
+              checked={remoteYrsProvider}
+              onChange={onRemoteYrsProviderChange}
+              label="Enable remote Yrs provider (Labs)"
+              disabled={!collaborativePageEditor}
             />
           </SettingRow>
           <SettingRow

@@ -6,11 +6,16 @@
 //!
 //! Durable reopen uses an append-only update journal + snapshot under
 //! `.lattice/collab/<uuid>/` (see [`journal`]).
+//!
+//! Optional remote exchange (S8) stores opaque Yrs snapshots via
+//! [`remote::YrsRemoteStore`] on a sidecar ResourceId — see
+//! `docs/dev/yrs-remote-provider.md`.
 
 mod error;
 mod id;
 mod journal;
 mod registry;
+mod remote;
 mod session;
 
 pub use error::{Error, Result};
@@ -19,4 +24,9 @@ pub use journal::{
     journal_dir, journal_exists, COLLAB_SUBDIR, SNAPSHOT_FILENAME, UPDATES_FILENAME,
 };
 pub use registry::{CollabRegistry, CollabSnapshot, OpenedDoc};
+pub use remote::{
+    collab_snapshot_resource_id, decode_remote_snapshot, encode_remote_snapshot,
+    exchange_snapshot_roundtrip, MemoryYrsRemoteStore, RemotePullResult, RemotePutResult,
+    YrsRemoteStore, REMOTE_SNAPSHOT_MAGIC, REMOTE_SNAPSHOT_VERSION,
+};
 pub use session::CollabSession;

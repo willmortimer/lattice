@@ -108,6 +108,11 @@ export interface DesktopSettings {
   labs: {
     /** Opt-in Yjs collaborative page editing (requires registry ResourceId). */
     collaborativePageEditor: boolean;
+    /**
+     * When collaborative + cloud signed-in, exchange Yrs snapshots via cloud
+     * blob sidecar (does not replace local journal).
+     */
+    remoteYrsProvider: boolean;
   };
 }
 
@@ -206,6 +211,7 @@ export function defaultDesktopSettings(): DesktopSettings {
     },
     labs: {
       collaborativePageEditor: false,
+      remoteYrsProvider: false,
     },
   };
 }

@@ -947,6 +947,10 @@ export function SettingsPage({
             onCollaborativePageEditorChange={(collaborativePageEditor) =>
               update("labs", { collaborativePageEditor })
             }
+            remoteYrsProvider={settings.labs.remoteYrsProvider}
+            onRemoteYrsProviderChange={(remoteYrsProvider) =>
+              update("labs", { remoteYrsProvider })
+            }
             onOpenPacks={() => setSection("packs")}
             onOpenCapabilities={() => setSection("capabilities")}
           />

@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 latticefs-core.workspace = true
 thiserror.workspace = true
+uuid.workspace = true
 yrs = "0.21"
 
 [dev-dependencies]

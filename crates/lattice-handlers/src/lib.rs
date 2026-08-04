@@ -13,6 +13,7 @@ mod authoritative;
 mod capture;
 mod catalog;
 mod cloud;
+mod collab_remote;
 mod error;
 mod github;
 mod gitlab;
@@ -42,6 +43,11 @@ pub use cloud::{
     cloud_begin_browser_siwa, cloud_complete_desktop_handoff, cloud_session_status_cmd,
     cloud_sign_in, cloud_sign_in_apple, cloud_sign_out, cloud_update_preferences,
     product_telemetry_emit, resolve_cloud_bearer_cmd,
+};
+pub use collab_remote::{
+    pull_collab_remote_snapshot, pull_collab_remote_snapshot_with_client,
+    push_collab_remote_snapshot, push_collab_remote_snapshot_with_client, CollabRemotePullResult,
+    CollabRemotePushResult,
 };
 pub use error::{command_error_to_string, STALE_REVISION_PREFIX};
 pub use github::{

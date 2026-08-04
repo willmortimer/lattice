@@ -1,6 +1,7 @@
 import * as Y from "yjs";
 import { Awareness } from "y-protocols/awareness";
 
+import { getCloudSessionStatus } from "../../lib/cloud";
 import { wireCollabAwarenessFanout } from "./awarenessFanout";
 import { collabCaretUser } from "./awarenessUser";
 import {
@@ -9,17 +10,28 @@ import {
   getCollabState,
   openCollabDoc,
 } from "./collabRpc";
+import {
+  pullCollabRemoteSnapshot,
+  pushCollabRemoteSnapshot,
+} from "./collabRemoteRpc";
 
 export type PagePersistMode = "plain" | "collaborative";
 
 const REMOTE_ORIGIN = "lattice-collab-remote";
 export const COLLAB_PULL_INTERVAL_MS = 2000;
 export const COLLAB_PUSH_DEBOUNCE_MS = 80;
+/** How often to exchange full Yrs snapshots via cloud sidecar when enabled. */
+export const COLLAB_REMOTE_SYNC_INTERVAL_MS = 4000;
 
 export interface CollabSessionOptions {
   workspaceRoot: string;
   docId: string;
   pagePath: string;
+  /**
+   * Labs: exchange Yrs snapshots via cloud blob sidecar when signed in.
+   * Local daemon journal remains source of truth; remote is optional peer catch-up.
+   */
+  remoteProviderEnabled?: boolean;
   onError?: (message: string) => void;
 }
 
@@ -27,11 +39,13 @@ export interface CollabSessionHandle {
   readonly ydoc: Y.Doc;
   readonly awareness: Awareness;
   readonly created: boolean;
+  readonly remoteProviderActive: boolean;
   dispose: () => void;
 }
 
 /**
  * Open a daemon-backed Yrs session and wire push/pull over collab RPCs.
+ * Optionally mirrors full snapshots to a cloud blob sidecar (S8).
  */
 export async function openCollabSession(options: CollabSessionOptions): Promise<CollabSessionHandle> {
   const opened = await openCollabDoc(options.workspaceRoot, options.docId, options.pagePath);
@@ -61,6 +75,9 @@ export async function openCollabSession(options: CollabSessionOptions): Promise<
   let pushTimer: ReturnType<typeof setTimeout> | null = null;
   let pendingPush: Uint8Array | null = null;
   let disposed = false;
+  let remoteHash: string | null = null;
+  let remoteProviderActive = false;
+  let remoteSyncTimer: ReturnType<typeof setInterval> | null = null;
 
   const flushPush = () => {
     if (disposed || !pendingPush) return;
@@ -96,17 +113,70 @@ export async function openCollabSession(options: CollabSessionOptions): Promise<
       });
   }, COLLAB_PULL_INTERVAL_MS);
 
+  const syncRemote = async () => {
+    if (disposed || !remoteProviderActive) return;
+    try {
+      const pulled = await pullCollabRemoteSnapshot(options.workspaceRoot, options.docId);
+      if (disposed) return;
+      if (pulled && pulled.update.length > 0) {
+        remoteHash = pulled.contentHash;
+        Y.applyUpdate(ydoc, pulled.update, REMOTE_ORIGIN);
+        // Keep the local daemon journal aligned with merged remote state.
+        await applyCollabUpdate(options.workspaceRoot, options.docId, pulled.update);
+      }
+      if (disposed) return;
+      const full = Y.encodeStateAsUpdate(ydoc);
+      const pushed = await pushCollabRemoteSnapshot(
+        options.workspaceRoot,
+        options.docId,
+        full,
+        remoteHash,
+      );
+      remoteHash = pushed.contentHash;
+    } catch (error) {
+      // Soft-fail: local collab continues; surface for Labs diagnostics.
+      options.onError?.(String(error));
+    }
+  };
+
+  if (options.remoteProviderEnabled) {
+    try {
+      const status = await getCloudSessionStatus();
+      if (status.signedIn) {
+        remoteProviderActive = true;
+        await syncRemote();
+        remoteSyncTimer = setInterval(() => {
+          void syncRemote();
+        }, COLLAB_REMOTE_SYNC_INTERVAL_MS);
+      }
+    } catch (error) {
+      options.onError?.(String(error));
+    }
+  }
+
   return {
     ydoc,
     awareness,
     created: opened.created,
+    remoteProviderActive,
     dispose: () => {
       if (disposed) return;
       disposed = true;
       if (pushTimer !== null) clearTimeout(pushTimer);
       clearInterval(pullTimer);
+      if (remoteSyncTimer !== null) clearInterval(remoteSyncTimer);
       ydoc.off("update", onLocalUpdate);
       flushPush();
+      if (remoteProviderActive) {
+        void pushCollabRemoteSnapshot(
+          options.workspaceRoot,
+          options.docId,
+          Y.encodeStateAsUpdate(ydoc),
+          remoteHash,
+        ).catch((error) => {
+          options.onError?.(String(error));
+        });
+      }
       disposeAwarenessFanout?.();
       void closeCollabDoc(options.workspaceRoot, options.docId).catch((error) => {
         options.onError?.(String(error));

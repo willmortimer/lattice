@@ -115,6 +115,7 @@ export function PageResourceRenderer({
           pagePath={pagePath}
           collabDocId={registryResourceId}
           collaborativeAvailable={collaborativeAvailable}
+          remoteYrsProvider={settings.labs.remoteYrsProvider}
           onPersistModeChange={handlePersistModeChange}
           onSaveStateChange={callbacks.onSaveStateChange}
           onOpenWiki={callbacks.onOpenWiki}
