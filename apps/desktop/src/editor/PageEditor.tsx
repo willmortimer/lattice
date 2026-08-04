@@ -50,7 +50,16 @@ import { PageSourceEditor } from "./PageSourceEditor";
 import { handleEditorLinkClick } from "./linkClick";
 import { applyModeSwitch, bodyForPersistence, type PageMode } from "./pageDraft";
 import { StaleRevisionError, type PageIO } from "./pageIO";
-import { createSerializedSaveController, type SerializedSaveController } from "./serializedSave";
+import {
+  createSerializedSaveController,
+  type SerializedSaveController,
+  type SerializedSaveStatus,
+} from "./serializedSave";
+import {
+  materializeCollabPage,
+  shouldScheduleCollabCheckpoint,
+  type CollabMaterializeController,
+} from "./collab/collabMaterialize";
 import {
   openCollabSession,
   shouldAutosavePlainMarkdown,
@@ -398,6 +407,8 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
   }, [onSaveStateChange, saveState]);
 
   const revisionRef = useRef(revision);
+  const persistModeRef = useRef(persistMode);
+  persistModeRef.current = persistMode;
   const autosaveDelayRef = useRef(autosaveDelayMs);
   autosaveDelayRef.current = autosaveDelayMs;
 
@@ -421,6 +432,33 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
   const ioRef = useRef(io);
   ioRef.current = io;
 
+  const applySaveStatus = useCallback((status: SerializedSaveStatus, message?: string) => {
+    switch (status) {
+      case "idle":
+        setSaveState(IDLE_SAVE_STATE);
+        break;
+      case "dirty":
+        setSaveState((prev) =>
+          prev.status === "conflict" || prev.status === "dirty" ? prev : DIRTY_SAVE_STATE,
+        );
+        break;
+      case "saving":
+        setSaveState({ status: "saving" });
+        break;
+      case "saved":
+        setSaveState({ status: "saved" });
+        break;
+      case "conflict":
+        setSaveState({ status: "conflict", message: message ?? "Conflict" });
+        break;
+      case "error":
+        setSaveState({ status: "error", message: message ?? "Save failed" });
+        break;
+      default:
+        status satisfies never;
+    }
+  }, []);
+
   const saveControllerRef = useRef<SerializedSaveController<string | null> | null>(null);
   if (!saveControllerRef.current) {
     saveControllerRef.current = createSerializedSaveController<string | null>({
@@ -435,30 +473,8 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
         return ioRef.current.save(fullRaw, baseRevision);
       },
       onStatus: (status, message) => {
-        switch (status) {
-          case "idle":
-            setSaveState(IDLE_SAVE_STATE);
-            break;
-          case "dirty":
-            setSaveState((prev) =>
-              prev.status === "conflict" || prev.status === "dirty" ? prev : DIRTY_SAVE_STATE,
-            );
-            break;
-          case "saving":
-            setSaveState({ status: "saving" });
-            break;
-          case "saved":
-            setSaveState({ status: "saved" });
-            break;
-          case "conflict":
-            setSaveState({ status: "conflict", message: message ?? "Conflict" });
-            break;
-          case "error":
-            setSaveState({ status: "error", message: message ?? "Save failed" });
-            break;
-          default:
-            status satisfies never;
-        }
+        if (persistModeRef.current !== "plain") return;
+        applySaveStatus(status, message);
       },
       onRevision: (next) => setRevision(next),
       isConflict: (error) => error instanceof StaleRevisionError,
@@ -467,10 +483,41 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
   }
   const saveController = saveControllerRef.current;
 
+  const materializeControllerRef = useRef<CollabMaterializeController | null>(null);
+  if (!materializeControllerRef.current) {
+    materializeControllerRef.current = createSerializedSaveController<string | null>({
+      initialRevision: revision,
+      save: async (baseRevision) =>
+        materializeCollabPage(
+          {
+            getFrontmatter: () => frontmatterRef.current,
+            getMode: () => modeRef.current,
+            getDraftBody: () => draftBodyRef.current,
+            getEditJson: () => editorRef.current?.getJSON() ?? null,
+            io: ioRef.current,
+          },
+          baseRevision,
+        ),
+      onStatus: (status, message) => {
+        if (persistModeRef.current !== "collaborative") return;
+        applySaveStatus(status, message);
+      },
+      onRevision: (next) => setRevision(next),
+      isConflict: (error) => error instanceof StaleRevisionError,
+      savedIndicatorMs: SAVED_INDICATOR_MS,
+    });
+  }
+  const materializeController = materializeControllerRef.current;
+
   const markDocumentDirty = useCallback(() => {
-    if (!shouldAutosavePlainMarkdown(persistMode)) return;
-    saveController.markDirty(autosaveDelayRef.current);
-  }, [persistMode, saveController]);
+    if (shouldAutosavePlainMarkdown(persistMode)) {
+      saveController.markDirty(autosaveDelayRef.current);
+      return;
+    }
+    if (shouldScheduleCollabCheckpoint(persistMode)) {
+      materializeController.markDirty(autosaveDelayRef.current);
+    }
+  }, [materializeController, persistMode, saveController]);
 
   useEffect(() => {
     if (persistMode !== "collaborative") {
@@ -517,9 +564,11 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
 
     return () => {
       cancelled = true;
-      collabHandleRef.current?.dispose();
-      collabHandleRef.current = null;
-      setCollabYdoc(null);
+      void materializeControllerRef.current?.flush().finally(() => {
+        collabHandleRef.current?.dispose();
+        collabHandleRef.current = null;
+        setCollabYdoc(null);
+      });
     };
   }, [collabDocId, pagePath, persistMode, workspaceRoot]);
 
@@ -552,12 +601,14 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
 
   useEffect(
     () => () => {
+      void materializeController.flush();
       saveController.dispose();
+      materializeController.dispose();
       if (menuRafRef.current !== null) {
         window.cancelAnimationFrame(menuRafRef.current);
       }
     },
-    [saveController],
+    [materializeController, saveController],
   );
 
   const editor = useEditor(
@@ -711,7 +762,12 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
   );
 
   // retry() clears a generic-failure latch; when not failed it is equivalent to flush().
-  const flushSave = useCallback(() => saveController.retry(), [saveController]);
+  const flushSave = useCallback(() => {
+    if (persistModeRef.current === "collaborative") {
+      return materializeController.flush();
+    }
+    return saveController.retry();
+  }, [materializeController, saveController]);
 
   const requestModeChange = useCallback(
     (targetMode: PageMode) => {
@@ -747,10 +803,8 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     draftBodyRef.current = nextBody;
     setDraftBody(nextBody);
     setSourceParseError(null);
-    if (shouldAutosavePlainMarkdown(persistMode)) {
-      markDocumentDirty();
-    }
-  }, [markDocumentDirty, persistMode]);
+    markDocumentDirty();
+  }, [markDocumentDirty]);
 
   const filteredSlashCommands = useMemo(() => {
     const query = slashMenu?.query.toLowerCase() ?? "";
@@ -984,9 +1038,13 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     function onKeyDown(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
-        if (!shouldAutosavePlainMarkdown(persistMode)) return;
-        // retry() clears a generic-failure latch so Cmd+S recovers after error.
-        void saveControllerRef.current?.retry();
+        if (shouldAutosavePlainMarkdown(persistMode)) {
+          void saveControllerRef.current?.retry();
+          return;
+        }
+        if (shouldScheduleCollabCheckpoint(persistMode)) {
+          void materializeControllerRef.current?.flush();
+        }
       }
     }
     window.addEventListener("keydown", onKeyDown);
@@ -995,6 +1053,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
 
   async function handleReload() {
     saveController.clearTimer();
+    materializeController.clearTimer();
     const snapshot = await io.load();
     setRevision(snapshot.revision);
     const reloaded = splitFrontmatter(snapshot.raw);
@@ -1007,11 +1066,13 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     editor.commands.clearDictationProvisional();
     editor.commands.setContent(parseMarkdownToJSON(body));
     saveController.reset(snapshot.revision);
+    materializeController.reset(snapshot.revision);
   }
 
   function handleKeepEditing() {
     // Clear conflict latch and treat buffer as dirty so autosave can retry.
     saveController.reset(revisionRef.current);
+    materializeController.reset(revisionRef.current);
     markDocumentDirty();
   }
 
