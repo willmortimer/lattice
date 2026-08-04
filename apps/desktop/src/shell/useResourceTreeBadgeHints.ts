@@ -14,6 +14,7 @@ export function useResourceTreeBadgeHints(
 ): ResourceTreeBadgeHints {
   const saveStatusBySessionId = useDesktopUiStore((state) => state.saveStatusBySessionId);
   const authorityByPath = useDesktopUiStore((state) => state.authorityBadgeByPath);
+  const syncByPath = useDesktopUiStore((state) => state.syncBadgeByPath);
   return useMemo(
     () =>
       buildResourceTreeBadgeHints({
@@ -21,6 +22,7 @@ export function useResourceTreeBadgeHints(
         proposalSummaries,
         agentPanelOpen,
         selectedPath,
+        syncByPath,
         authorityByPath,
       }),
     [
@@ -29,6 +31,7 @@ export function useResourceTreeBadgeHints(
       proposalSummaries,
       saveStatusBySessionId,
       selectedPath,
+      syncByPath,
     ],
   );
 }

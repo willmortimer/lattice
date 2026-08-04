@@ -1,14 +1,25 @@
 import type { SaveState } from "../editor/saveState";
 import { isUnsaved } from "../editor/saveState";
 import type { TransactionProposalSummary } from "./executionContracts";
+import type {
+  ExecuteOutcome,
+  PlannerSyncStatus,
+  WorkspaceSyncExecuteResult,
+  WorkspaceSyncRunReport,
+} from "./cloudSync";
 import type { AuthorityMode } from "./resourceStat";
+import type { CatalogEntry } from "./resourceCatalog";
+import { pathForResourceId } from "./resourceCatalog";
 
 export type ResourceTreeAuthorityBadge = "cloud" | "external" | "immutable";
+
+export type ResourceTreeSyncBadge = "syncConflict" | "syncError";
 
 export type ResourceTreeBadgeKind =
   | "dirty"
   | "proposal"
   | "agent"
+  | ResourceTreeSyncBadge
   | ResourceTreeAuthorityBadge;
 
 export interface ResourceTreeRowBadge {
@@ -23,6 +34,7 @@ export interface ResourceTreeBadgeHints {
   proposalByPath?: ReadonlySet<string>;
   agentByResourceId?: ReadonlySet<string>;
   agentByPath?: ReadonlySet<string>;
+  syncByPath?: Readonly<Record<string, ResourceTreeSyncBadge>>;
   authorityByPath?: Readonly<Record<string, ResourceTreeAuthorityBadge>>;
 }
 
@@ -44,6 +56,51 @@ const AUTHORITY_BADGE_LABELS: Record<ResourceTreeAuthorityBadge, string> = {
   external: "Ext",
   immutable: "Lock",
 };
+
+const SYNC_BADGE_LABELS: Record<ResourceTreeSyncBadge, string> = {
+  syncConflict: "Conflict",
+  syncError: "Sync",
+};
+
+const SYNC_BADGE_TITLES: Record<ResourceTreeSyncBadge, string> = {
+  syncConflict: "Sync conflict — cloud and local versions disagree; nothing was overwritten",
+  syncError: "Cloud sync failed for this resource",
+};
+
+export function syncBadgeForExecuteResult(
+  result: Pick<WorkspaceSyncExecuteResult, "status" | "outcome">,
+): ResourceTreeSyncBadge | null {
+  if (result.outcome === "skipped_conflicted" || result.status === "conflicted") {
+    return "syncConflict";
+  }
+  if (result.outcome === "failed") {
+    return "syncError";
+  }
+  return null;
+}
+
+export function syncBadgesByPathFromReport(
+  report: WorkspaceSyncRunReport,
+  catalog: ReadonlyMap<string, CatalogEntry>,
+): Record<string, ResourceTreeSyncBadge> {
+  const badges: Record<string, ResourceTreeSyncBadge> = {};
+  for (const result of report.results) {
+    const badge = syncBadgeForExecuteResult(result);
+    if (!badge) continue;
+    const path = pathForResourceId(catalog, result.resourceId);
+    if (!path) continue;
+    badges[path] = badge;
+  }
+  return badges;
+}
+
+/** Test helper for planner status / outcome pairs. */
+export function syncBadgeForPlannerOutcome(
+  status: PlannerSyncStatus,
+  outcome: ExecuteOutcome,
+): ResourceTreeSyncBadge | null {
+  return syncBadgeForExecuteResult({ status, outcome });
+}
 
 export function authorityBadgeForMode(
   authority: AuthorityMode,
@@ -98,6 +155,15 @@ export function resourceTreeRowBadges(
     });
   }
 
+  const syncBadge = hints.syncByPath?.[input.path];
+  if (syncBadge) {
+    badges.push({
+      kind: syncBadge,
+      label: SYNC_BADGE_LABELS[syncBadge],
+      title: SYNC_BADGE_TITLES[syncBadge],
+    });
+  }
+
   const authority = hints.authorityByPath?.[input.path];
   if (authority) {
     badges.push({
@@ -115,6 +181,7 @@ export interface BuildResourceTreeBadgeHintsInput {
   proposalSummaries: readonly TransactionProposalSummary[];
   agentPanelOpen?: boolean;
   selectedPath?: string | null;
+  syncByPath?: Readonly<Record<string, ResourceTreeSyncBadge>>;
   authorityByPath?: Readonly<Record<string, ResourceTreeAuthorityBadge>>;
 }
 
@@ -147,6 +214,9 @@ export function buildResourceTreeBadgeHints(
   if (dirtyByPath.size > 0) hints.dirtyByPath = dirtyByPath;
   if (proposalByPath.size > 0) hints.proposalByPath = proposalByPath;
   if (agentByPath.size > 0) hints.agentByPath = agentByPath;
+  if (input.syncByPath && Object.keys(input.syncByPath).length > 0) {
+    hints.syncByPath = input.syncByPath;
+  }
   if (input.authorityByPath && Object.keys(input.authorityByPath).length > 0) {
     hints.authorityByPath = input.authorityByPath;
   }

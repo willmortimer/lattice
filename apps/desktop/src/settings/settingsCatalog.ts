@@ -396,6 +396,13 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchItem[] = [
     keywords: ["labs", "cloud", "backup", "encrypt", "dek", "ciphertext"],
   },
   {
+    id: "features.labs-cloud-sync",
+    section: "features",
+    title: "Labs open-format cloud sync",
+    description: "Background push/pull sync after saves and on cloud reconnect; conflicts are not overwritten.",
+    keywords: ["labs", "cloud", "sync", "push", "pull", "conflict"],
+  },
+  {
     id: "features.labs-collaborative-page",
     section: "features",
     title: "Labs collaborative page editor",

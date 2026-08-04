@@ -13,6 +13,7 @@ mod capture;
 mod capture_permission_stub;
 mod cloud;
 mod workspace_backup;
+mod workspace_sync;
 mod collab;
 mod commands;
 mod daemon_session;
@@ -393,6 +394,7 @@ pub fn run() {
             workspace_backup::workspace_crypto_unlock_cmd,
             workspace_backup::workspace_crypto_lock_cmd,
             workspace_backup::put_encrypted_workspace_backup_cmd,
+            workspace_sync::push_pull_workspace_sync_cmd,
             spotlight::spotlight_index_workspace,
             #[cfg(feature = "capture")]
             capture::shelf::capture_shelf_snapshot,

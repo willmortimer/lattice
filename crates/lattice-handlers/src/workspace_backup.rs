@@ -67,7 +67,8 @@ pub fn put_encrypted_workspace_backup_with_client<C: CloudHttpClient>(
     })
 }
 
-fn ensure_cloud_workspace<C: CloudHttpClient>(
+/// Resolve or create the cloud workspace row bound to a local manifest id.
+pub fn ensure_cloud_workspace<C: CloudHttpClient>(
     client: &CloudApiClient<C>,
     bearer: &str,
     local_workspace_id: &str,
