@@ -7,10 +7,13 @@ use crate::config::cloud_url;
 use crate::error::{CloudError, Result};
 use crate::types::{
     AuthTokenResponse, BackupMetadataResponse, CloudWorkspaceRecord, MeResponse, PreferencesView,
+    WorkspaceSyncHead,
 };
 
 pub const CONTENT_HASH_HEADER: &str = "x-lattice-content-hash";
 pub const DEVICE_ID_HEADER: &str = "x-lattice-device-id";
+pub const WORKSPACE_ID_HEADER: &str = "x-lattice-workspace-id";
+pub const IF_MATCH_HEADER: &str = "if-match";
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 pub struct BlobPutResponse {
@@ -288,24 +291,57 @@ impl<C: CloudHttpClient> CloudApiClient<C> {
         resource_id: ResourceId,
         data: &[u8],
     ) -> Result<ContentHash> {
+        self.put_workspace_blob(bearer, None, resource_id, data, None)
+    }
+
+    /// `PUT /v1/blobs/{resource_id}` with optional workspace sync-head and `If-Match`.
+    pub fn put_workspace_blob(
+        &self,
+        bearer: &str,
+        workspace_id: Option<&str>,
+        resource_id: ResourceId,
+        data: &[u8],
+        if_match: Option<&str>,
+    ) -> Result<ContentHash> {
         let hash = ContentHash::from_bytes(data).map_err(|err| CloudError::Http(err.to_string()))?;
         let hash_hex = content_hash_hex(&hash);
         let path = format!("/v1/blobs/{resource_id}");
+        let mut headers = vec![
+            ("Content-Type", "application/octet-stream"),
+            ("X-Lattice-Content-Hash", hash_hex),
+        ];
+        let workspace_header;
+        if let Some(workspace_id) = workspace_id.map(str::trim).filter(|id| !id.is_empty()) {
+            workspace_header = workspace_id.to_string();
+            headers.push((WORKSPACE_ID_HEADER, workspace_header.as_str()));
+        }
+        let if_match_header;
+        if let Some(expected) = if_match.map(str::trim).filter(|hash| !hash.is_empty()) {
+            if_match_header = normalize_if_match(expected);
+            headers.push((IF_MATCH_HEADER, if_match_header.as_str()));
+        }
         let response = self.http.request_bytes(
             &self.base_url,
             "PUT",
             &path,
             Some(data),
             Some(bearer),
-            &[
-                ("Content-Type", "application/octet-stream"),
-                ("X-Lattice-Content-Hash", hash_hex),
-            ],
+            &headers,
         )?;
         if response.status == 201 || response.status == 200 {
             return parse_blob_put_response(&response.body, hash_hex);
         }
         Err(bytes_api_error(response))
+    }
+
+    /// `GET /v1/workspaces/{id}/sync-heads` for planner input.
+    pub fn get_sync_heads(
+        &self,
+        bearer: &str,
+        workspace_id: &str,
+    ) -> Result<Vec<WorkspaceSyncHead>> {
+        let path = format!("/v1/workspaces/{workspace_id}/sync-heads");
+        self.get_json(&path, Some(bearer))
     }
 
     pub fn create_workspace(
@@ -470,6 +506,19 @@ fn content_hash_hex(hash: &ContentHash) -> &str {
     hash.as_str()
         .strip_prefix("sha256:")
         .unwrap_or(hash.as_str())
+}
+
+fn normalize_if_match(raw: &str) -> String {
+    let trimmed = raw.trim();
+    let unquoted = trimmed
+        .strip_prefix('"')
+        .and_then(|inner| inner.strip_suffix('"'))
+        .unwrap_or(trimmed);
+    unquoted
+        .strip_prefix("sha256:")
+        .or_else(|| unquoted.strip_prefix("SHA256:"))
+        .unwrap_or(unquoted)
+        .to_ascii_lowercase()
 }
 
 fn parse_blob_put_response(body: &[u8], expected_hash_hex: &str) -> Result<ContentHash> {
@@ -750,6 +799,67 @@ mod tests {
         let client = CloudApiClient::with_base_url(http, "https://cloud.test");
         let returned = client
             .put_blob("good-token", resource_id, data)
+            .unwrap();
+        assert_eq!(returned, hash);
+    }
+
+    #[test]
+    fn get_sync_heads_parses_workspace_manifest() {
+        let http = FakeCloudHttp::default();
+        let workspace_id = "cloud-ws-1";
+        http.insert(
+            "GET",
+            &format!("/v1/workspaces/{workspace_id}/sync-heads"),
+            CloudHttpResponse {
+                status: 200,
+                body: r#"[
+                    {
+                        "resource_id": "0195a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+                        "content_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                        "updated_at": 1753660800
+                    }
+                ]"#
+                .into(),
+            },
+        );
+        let client = CloudApiClient::with_base_url(http, "https://cloud.test");
+        let heads = client
+            .get_sync_heads("good-token", workspace_id)
+            .unwrap();
+        assert_eq!(heads.len(), 1);
+        assert_eq!(heads[0].updated_at, 1753660800);
+    }
+
+    #[test]
+    fn put_workspace_blob_accepts_workspace_scoped_put() {
+        let http = FakeCloudHttp::default();
+        let workspace_id = "cloud-ws-1";
+        let resource_id = ResourceId::new();
+        let data = b"sync-bytes";
+        let hash = ContentHash::from_bytes(data).unwrap();
+        let hash_hex = content_hash_hex(&hash);
+        let prior_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        http.bytes_responses.lock().unwrap().insert(
+            format!("PUT /v1/blobs/{resource_id}"),
+            CloudHttpBytesResponse {
+                status: 200,
+                body: format!(
+                    r#"{{"resource_id":"{resource_id}","object_key":"blobs/u1/sha256/{hash_hex}","size":{},"content_hash":"{hash_hex}","created_at":1}}"#,
+                    data.len()
+                )
+                .into_bytes(),
+                content_hash: None,
+            },
+        );
+        let client = CloudApiClient::with_base_url(http, "https://cloud.test");
+        let returned = client
+            .put_workspace_blob(
+                "good-token",
+                Some(workspace_id),
+                resource_id,
+                data,
+                Some(&format!("sha256:{prior_hash}")),
+            )
             .unwrap();
         assert_eq!(returned, hash);
     }

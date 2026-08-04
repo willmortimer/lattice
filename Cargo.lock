@@ -6446,6 +6446,7 @@ dependencies = [
  "lattice-profile",
  "lattice-runtime",
  "lattice-storage",
+ "lattice-sync",
  "lattice-workspace-crypto",
  "latticefs-core",
  "serde",
@@ -6598,8 +6599,14 @@ dependencies = [
 name = "lattice-sync"
 version = "0.1.0"
 dependencies = [
+ "lattice-cloud-client",
+ "lattice-storage",
+ "latticefs-core",
  "serde",
  "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "uuid",
 ]
 
 [[package]]

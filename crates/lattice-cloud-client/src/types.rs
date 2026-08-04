@@ -99,6 +99,14 @@ pub struct BackupMetadataResponse {
     pub created_at: i64,
 }
 
+/// Workspace sync-head row from `GET /v1/workspaces/{id}/sync-heads`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceSyncHead {
+    pub resource_id: String,
+    pub content_hash: String,
+    pub updated_at: i64,
+}
+
 impl CloudSessionStatus {
     pub fn signed_out(cloud_url: String) -> Self {
         Self {

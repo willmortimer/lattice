@@ -1,6 +1,6 @@
 [package]
 name = "lattice-sync"
-description = "Pure cloud sync planner: classify local registry vs sync-heads (no network I/O)"
+description = "Cloud sync planner and push/pull executor for workspace blob sync"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,7 +8,14 @@ license.workspace = true
 publish = false
 
 [dependencies]
+lattice-cloud-client.workspace = true
+lattice-storage.workspace = true
+latticefs-core.workspace = true
 serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+tempfile = "3"

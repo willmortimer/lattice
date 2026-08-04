@@ -17,6 +17,7 @@ lattice-embedding.workspace = true
 lattice-connectors.workspace = true
 lattice-cloud-client.workspace = true
 lattice-workspace-crypto.workspace = true
+lattice-sync.workspace = true
 latticefs-core.workspace = true
 lattice-capture-core.workspace = true
 serde.workspace = true

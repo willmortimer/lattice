@@ -25,6 +25,7 @@ mod search;
 mod workspace;
 mod workspace_backup;
 mod workspace_crypto;
+mod workspace_sync;
 
 pub use authoritative::{read_authoritative_bytes, read_authoritative_string};
 pub use capture::{
@@ -89,4 +90,7 @@ pub use workspace_backup::{
 pub use workspace_crypto::{
     workspace_crypto_lock, workspace_crypto_status, workspace_crypto_unlock,
     WorkspaceCryptoStatus,
+};
+pub use workspace_sync::{
+    push_pull_workspace_sync, push_pull_workspace_sync_with_client,
 };
