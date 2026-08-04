@@ -169,6 +169,8 @@ interface PageEditorProps {
   /** Registry ResourceId for collab open (never `path:` synthetic). */
   collabDocId?: string;
   collaborativeAvailable?: boolean;
+  /** Labs: cloud Yrs snapshot exchange when signed in. */
+  remoteYrsProvider?: boolean;
   onPersistModeChange?: (mode: PagePersistMode) => void;
 }
 
@@ -223,6 +225,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
     pagePath,
     collabDocId,
     collaborativeAvailable = false,
+    remoteYrsProvider = false,
     onPersistModeChange,
   },
   ref,
@@ -552,6 +555,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
       workspaceRoot,
       docId: collabDocId,
       pagePath,
+      remoteProviderEnabled: remoteYrsProvider,
       onError: (message) => {
         if (!cancelled) setCollabError(message);
       },
@@ -582,7 +586,7 @@ export const PageEditor = forwardRef<PageEditorHandle, PageEditorProps>(function
         setCollabYdoc(null);
       });
     };
-  }, [collabDocId, pagePath, persistMode, workspaceRoot]);
+  }, [collabDocId, pagePath, persistMode, remoteYrsProvider, workspaceRoot]);
 
   const editorExtensions = useMemo(() => {
     if (persistMode === "collaborative" && collabYdoc && collabAwareness) {

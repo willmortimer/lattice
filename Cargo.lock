@@ -6148,6 +6148,7 @@ dependencies = [
  "latticefs-core",
  "tempfile",
  "thiserror 2.0.18",
+ "uuid",
  "yrs",
 ]
 
@@ -6438,6 +6439,7 @@ dependencies = [
  "lattice-apple-signin-macos",
  "lattice-capture-core",
  "lattice-cloud-client",
+ "lattice-collab",
  "lattice-commands",
  "lattice-connectors",
  "lattice-core",
@@ -6453,6 +6455,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "tempfile",
+ "yrs",
 ]
 
 [[package]]

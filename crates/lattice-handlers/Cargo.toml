@@ -18,6 +18,7 @@ lattice-connectors.workspace = true
 lattice-cloud-client.workspace = true
 lattice-workspace-crypto.workspace = true
 lattice-sync.workspace = true
+lattice-collab.workspace = true
 latticefs-core.workspace = true
 lattice-capture-core.workspace = true
 serde.workspace = true
@@ -30,6 +31,7 @@ hex.workspace = true
 image = { version = "0.25", default-features = false, features = ["png", "webp"] }
 tempfile = "3"
 serde_json.workspace = true
+yrs = "0.21"
 
 [features]
 default = []

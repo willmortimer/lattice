@@ -36,4 +36,12 @@ pub enum Error {
     /// Journal / snapshot I/O under `.lattice/collab/`.
     #[error("collab journal I/O at {path}: {message}")]
     Io { path: String, message: String },
+
+    /// Remote snapshot payload could not be encoded/decoded.
+    #[error("collab remote payload: {message}")]
+    RemotePayload { message: String },
+
+    /// Optimistic concurrency failure on remote put (`If-Match`).
+    #[error("collab remote conflict: expected {expected}, actual {actual}")]
+    RemoteConflict { expected: String, actual: String },
 }
