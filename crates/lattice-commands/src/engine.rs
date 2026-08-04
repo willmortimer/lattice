@@ -1291,6 +1291,7 @@ impl CommandEngine {
         match command {
             Command::PageCreate { path, content } => {
                 let revision = self.writer().write(path, content.as_bytes(), None)?;
+                self.sync_registry_content_hash(path, content.as_bytes())?;
                 Ok(AppliedOp {
                     forward: command.clone(),
                     inverse: Command::ResourceDelete { path: path.clone() },
@@ -1301,6 +1302,7 @@ impl CommandEngine {
             }
             Command::ResourceCreate { path, content } => {
                 let revision = self.writer().write(path, content, None)?;
+                self.sync_registry_content_hash(path, content)?;
                 Ok(AppliedOp {
                     forward: command.clone(),
                     inverse: Command::ResourceDelete { path: path.clone() },
@@ -1329,6 +1331,7 @@ impl CommandEngine {
                 let revision =
                     self.writer()
                         .write(path, content.as_bytes(), Some(&meta.revision))?;
+                self.sync_registry_content_hash(path, content.as_bytes())?;
                 Ok(AppliedOp {
                     forward: command.clone(),
                     inverse: Command::PageUpdate {
@@ -1368,6 +1371,7 @@ impl CommandEngine {
                 }
                 let prior = self.store.read(path)?;
                 let revision = self.writer().write(path, content, Some(&meta.revision))?;
+                self.sync_registry_content_hash(path, content)?;
                 Ok(AppliedOp {
                     forward: command.clone(),
                     inverse: Command::ResourceUpdate {
@@ -1397,6 +1401,7 @@ impl CommandEngine {
                 let revision =
                     self.writer()
                         .write(&path, content.as_bytes(), Some(&meta.revision))?;
+                self.sync_registry_content_hash(&path, content.as_bytes())?;
                 Ok(AppliedOp {
                     forward: command.clone(),
                     inverse: Command::WorkspaceManifestUpdate {
@@ -1923,6 +1928,7 @@ impl CommandEngine {
         let after = canvas::patch(path, &prior, &edit)?;
         self.validate_edit_size(path, after.len())?;
         let revision = self.writer().write(path, &after, Some(&meta.revision))?;
+        self.sync_registry_content_hash(path, &after)?;
         Ok(AppliedOp {
             forward: command.clone(),
             inverse: Command::ResourceUpdate {
@@ -1969,6 +1975,7 @@ impl CommandEngine {
                     .unwrap_or_else(|| content.clone().into_bytes());
                 let meta = self.store.metadata(path)?;
                 self.writer().write(path, &bytes, Some(&meta.revision))?;
+                self.sync_registry_content_hash(path, &bytes)?;
                 Ok(())
             }
             Command::ResourceUpdate { path, content, .. } => {
@@ -1977,6 +1984,7 @@ impl CommandEngine {
                     .unwrap_or_else(|| content.clone());
                 let meta = self.store.metadata(path)?;
                 self.writer().write(path, &bytes, Some(&meta.revision))?;
+                self.sync_registry_content_hash(path, &bytes)?;
                 Ok(())
             }
             Command::WorkspaceManifestUpdate { content, .. } => {
@@ -1986,6 +1994,7 @@ impl CommandEngine {
                     .unwrap_or_else(|| content.clone().into_bytes());
                 let meta = self.store.metadata(&path)?;
                 self.writer().write(&path, &bytes, Some(&meta.revision))?;
+                self.sync_registry_content_hash(&path, &bytes)?;
                 Ok(())
             }
             // Inverse of ResourceDelete (file): re-materialize the bytes.
@@ -1994,6 +2003,7 @@ impl CommandEngine {
                     .map(<[u8]>::to_vec)
                     .unwrap_or_else(|| content.clone().into_bytes());
                 self.writer().write(path, &bytes, None)?;
+                self.sync_registry_content_hash(path, &bytes)?;
                 Ok(())
             }
             Command::ResourceCreate { path, content } => {
@@ -2001,6 +2011,7 @@ impl CommandEngine {
                     .map(<[u8]>::to_vec)
                     .unwrap_or_else(|| content.clone());
                 self.writer().write(path, &bytes, None)?;
+                self.sync_registry_content_hash(path, &bytes)?;
                 Ok(())
             }
             // Inverse of ResourceRename / ResourceMove.
@@ -2635,6 +2646,15 @@ impl CommandEngine {
         if registry.remove(&registry_path_key(path))?.is_some() {
             registry.save()?;
         }
+        Ok(())
+    }
+
+    fn sync_registry_content_hash(&self, path: &Path, bytes: &[u8]) -> Result<()> {
+        let mut registry = latticefs_core::NamespaceRegistry::open(&self.root)?;
+        let key = registry_path_key(path);
+        registry.ensure_local_file(&key)?;
+        registry.update_content_hash_from_bytes(&key, bytes)?;
+        registry.save()?;
         Ok(())
     }
 }

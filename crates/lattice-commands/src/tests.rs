@@ -847,7 +847,34 @@ fn update_undo_restores_prior_bytes_and_redo_reapplies() {
     assert_eq!(read(&dir, "A.md"), b"version two\n");
 }
 
-// 4a. rename preserves stable ResourceId in the namespace registry.
+// 4a. page update records SHA-256 in the resource registry.
+#[test]
+fn page_update_sets_registry_content_hash() {
+    use latticefs_core::{resource_stat, ContentHash};
+
+    let (dir, mut engine) = engine();
+    let created = engine.apply(create("Notes/Page.md", "draft\n")).unwrap();
+    let base = created.outcomes[0].resulting_revision.clone().unwrap();
+    let updated_content = "published\n";
+    engine
+        .apply(Transaction::new(
+            "Update Notes/Page.md",
+            vec![Command::PageUpdate {
+                path: PathBuf::from("Notes/Page.md"),
+                content: updated_content.into(),
+                base_revision: base,
+            }],
+        ))
+        .unwrap();
+
+    let file_bytes = read(&dir, "Notes/Page.md");
+    let expected_hash = ContentHash::from_bytes(&file_bytes).unwrap();
+    let stat = resource_stat(dir.path(), "Notes/Page.md").unwrap();
+    assert_eq!(stat.content_hash, Some(expected_hash));
+    assert_eq!(file_bytes, updated_content.as_bytes());
+}
+
+// 4b. rename preserves stable ResourceId in the namespace registry.
 #[test]
 fn rename_preserves_resource_id_in_registry() {
     use latticefs_core::NamespaceRegistry;
