@@ -18,8 +18,9 @@ struct AffinityRestore {
 /// Temporarily exclude this process's visible top-level windows from screen
 /// capture, run `f`, then restore prior display affinities.
 ///
-/// Shelf HWND polish (always-on exclusion) remains B1; this is capture-time
-/// minimum self-exclusion when `WDA_EXCLUDEFROMCAPTURE` is available.
+/// Desktop also applies always-on `WDA_EXCLUDEFROMCAPTURE` to shelf + main
+/// HWNDs at install; this is the capture-time second line when affinity is
+/// available.
 pub fn with_process_windows_excluded<T>(f: impl FnOnce() -> T) -> T {
     let restored = apply_exclusion();
     let result = f();

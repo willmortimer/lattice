@@ -1,7 +1,5 @@
 //! Platform hooks for the floating capture shelf utility window.
 
-use tauri::WebviewWindow;
-
 #[cfg(target_os = "macos")]
 mod macos {
     use objc2_app_kit::{
@@ -39,15 +37,78 @@ mod macos {
             ns_window.orderFrontRegardless();
         });
     }
+
+    pub fn exclude_from_capture(_window: &WebviewWindow) {}
+}
+
+#[cfg(target_os = "windows")]
+mod windows_impl {
+    use tauri::WebviewWindow;
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SetWindowDisplayAffinity, SetWindowPos, ShowWindow, HWND_TOPMOST, SWP_NOACTIVATE,
+        SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW, SW_SHOWNOACTIVATE, WDA_EXCLUDEFROMCAPTURE,
+    };
+
+    fn with_hwnd(window: &WebviewWindow, f: impl FnOnce(HWND)) {
+        let Ok(hwnd) = window.hwnd() else {
+            return;
+        };
+        f(hwnd);
+    }
+
+    fn exclude_hwnd(hwnd: HWND) {
+        unsafe {
+            let _ = SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE);
+        }
+    }
+
+    /// Keep the shelf above other apps and exclude it from screen capture.
+    pub fn configure_floating_panel(window: &WebviewWindow) {
+        let _ = window.set_always_on_top(true);
+        with_hwnd(window, |hwnd| {
+            unsafe {
+                let _ = SetWindowPos(
+                    hwnd,
+                    Some(HWND_TOPMOST),
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+                );
+            }
+            exclude_hwnd(hwnd);
+        });
+    }
+
+    /// Show the shelf without stealing focus (parity with macOS `orderFrontRegardless`).
+    pub fn show_without_activation(window: &WebviewWindow) {
+        with_hwnd(window, |hwnd| {
+            unsafe {
+                let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+                let _ = SetWindowPos(
+                    hwnd,
+                    Some(HWND_TOPMOST),
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                );
+            }
+            exclude_hwnd(hwnd);
+        });
+    }
+
+    /// Mark a Lattice chrome HWND so WGC / system capture omits it.
+    pub fn exclude_from_capture(window: &WebviewWindow) {
+        with_hwnd(window, exclude_hwnd);
+    }
 }
 
 #[cfg(target_os = "macos")]
-pub use macos::{configure_floating_panel, show_without_activation};
+pub use macos::{configure_floating_panel, exclude_from_capture, show_without_activation};
 
-#[cfg(not(target_os = "macos"))]
-pub fn configure_floating_panel(_window: &WebviewWindow) {}
-
-#[cfg(not(target_os = "macos"))]
-pub fn show_without_activation(window: &WebviewWindow) {
-    let _ = window.show();
-}
+#[cfg(target_os = "windows")]
+pub use windows_impl::{configure_floating_panel, exclude_from_capture, show_without_activation};

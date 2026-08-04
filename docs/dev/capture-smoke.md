@@ -75,6 +75,22 @@ stay featureless and skip this path.
      if WebP encode fails.
 5. In the Lattice UI, open the new inbox page and confirm the image renders.
 
+## Shelf exclusion (Windows chrome)
+
+Lattice chrome must not appear in clipped pixels.
+
+1. Leave the capture shelf open (or trigger a clip so it floats after ingest).
+2. Keep the main Lattice window visible on the display you are clipping.
+3. Press **Ctrl+Shift+2** and capture a region that would include the shelf
+   and/or main window chrome.
+4. Expect: the PNG clipboard image (and inbox asset) shows the underlying
+   desktop/apps only — **no** Lattice shelf or main window chrome.
+5. Passive that the shelf floated after ingest without stealing focus from the
+   app you were using before the clip.
+
+macOS exclusion continues to use ScreenCaptureKit content filters; this
+checklist is the Windows `WDA_EXCLUDEFROMCAPTURE` always-on verification.
+
 ## Cancel / interactive overlay
 
 1. Trigger the shortcut or **Screen Clip**.

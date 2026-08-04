@@ -1,6 +1,8 @@
 //! Non-activating capture shelf fed by `capture-ingested` events.
 //!
-//! Windows `WDA_EXCLUDEFROMCAPTURE` exclusion is deferred (see ADR-0052).
+//! On Windows, shelf + main chrome apply always-on `WDA_EXCLUDEFROMCAPTURE`
+//! so Lattice UI is omitted from screen clips (ADR-0052). Capture-time
+//! process-wide exclusion in `lattice-capture-windows` remains a second line.
 
 use std::collections::VecDeque;
 use std::path::Path;
@@ -137,6 +139,10 @@ pub fn install_shelf_window(app: &AppHandle) {
     let _ = window.set_visible_on_all_workspaces(true);
     super::shelf_platform::configure_floating_panel(&window);
     position_shelf_window(&window);
+    // Main window is not a floating panel; still exclude it from capture chrome.
+    if let Some(main) = app.get_webview_window("main") {
+        super::shelf_platform::exclude_from_capture(&main);
+    }
 }
 
 pub fn on_ingested(

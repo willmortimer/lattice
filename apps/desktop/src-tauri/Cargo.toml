@@ -115,6 +115,8 @@ lattice-capture-macos = { workspace = true, optional = true }
 windows = { version = "0.61", features = [
     "Foundation",
     "Security_Credentials_UI",
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
 ] }
 lattice-capture-windows = { workspace = true, optional = true }
 

@@ -14,7 +14,7 @@ Windows still-image capture for Lattice clipper via **Windows Graphics Capture (
 | Interactive region | Minimal Win32 layered overlay rubber-band (Esc / right-click cancels) |
 | Window sources | `CaptureError::Unsupported` (deferred) |
 | Recording | Trait default `Unsupported` |
-| Self-exclusion | Capture-time `WDA_EXCLUDEFROMCAPTURE` on this process's visible top-level HWNDs; picker HWND excluded too. Always-on shelf exclusion remains B1. |
+| Self-exclusion | Capture-time `WDA_EXCLUDEFROMCAPTURE` on this process's visible top-level HWNDs; picker HWND excluded too. Desktop always-on exclusion covers shelf + main chrome (B1). |
 | Permissions | Best-effort: `GraphicsCaptureSession::IsSupported` → Authorized / Unsupported. Win32 has no reliable macOS-style TCC query; capture is not blocked on an unreadable privacy toggle. Settings deep-link: `ms-settings:privacy-graphicscapture`. |
 
 Non-Windows hosts compile the public types and return `CaptureError::Unsupported` so CI/unit tests stay green without a Windows GPU.
@@ -34,4 +34,3 @@ cargo check -p lattice-desktop --features capture
 
 - Window capture
 - Screen recording sessions
-- Shelf always-on `WDA_EXCLUDEFROMCAPTURE` polish (B1)
