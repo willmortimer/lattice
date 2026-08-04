@@ -43,6 +43,7 @@ members = [
     "crates/lattice-agentd",
     "crates/lattice-mcp-catalog",
     "crates/lattice-relay-protocol",
+    "crates/lattice-workspace-crypto",
     "apps/desktop/src-tauri",
 ]
 
@@ -91,6 +92,7 @@ lattice-approval-macos = { path = "crates/lattice-approval-macos" }
 lattice-mcp-catalog = { path = "crates/lattice-mcp-catalog" }
 lattice-relay-protocol = { path = "crates/lattice-relay-protocol" }
 lattice-apple-signin-macos = { path = "crates/lattice-apple-signin-macos" }
+lattice-workspace-crypto = { path = "crates/lattice-workspace-crypto" }
 kernelfs = { path = "../kernelfs/crates/kernelfs" }
 kernelfs-linux = { path = "../kernelfs/crates/kernelfs-linux" }
 kernelfs-mac = { path = "../kernelfs/crates/kernelfs-mac" }
